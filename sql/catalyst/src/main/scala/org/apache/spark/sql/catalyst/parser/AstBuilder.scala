@@ -300,12 +300,21 @@ class AstBuilder extends DataTypeAstBuilder
         parsingCtx)
     } else {
       // If there is no compound body, then there must be a statement or set statement.
+      // Single-statement handler bodies need a label for the CompoundBody, just like
+      // BEGIN-END blocks do (see visitBeginEndCompoundBlockImpl). Generate a random UUID
+      // label since no explicit label is defined.
+      val labelText = parsingCtx.labelContext.enterLabeledScope(
+        beginLabelCtx = None,
+        endLabelCtx = None
+      )
       val statement = Option(ctx.statement().asInstanceOf[ParserRuleContext])
         .orElse(Option(ctx.setStatementInsideSqlScript().asInstanceOf[ParserRuleContext]))
         .map { s =>
           SingleStatement(parsedPlan = visit(s).asInstanceOf[LogicalPlan])
         }
-      CompoundBody(Seq(statement.get), None, isScope = false)
+      val compoundBody = CompoundBody(Seq(statement.get), Some(labelText), isScope = false)
+      parsingCtx.labelContext.exitLabeledScope(None)
+      compoundBody
     }
 
     ExceptionHandler(exceptionHandlerTriggers, body, handlerType)

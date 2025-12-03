@@ -72,6 +72,7 @@ if typing.TYPE_CHECKING:
         ArrowScalarUDFType,
         ArrowScalarIterUDFType,
         ArrowGroupedAggUDFType,
+        ArrowGroupedAggIterUDFType,
         ArrowWindowAggUDFType,
     )
     from pyspark.sql._typing import (
@@ -662,6 +663,7 @@ class PythonEvalType:
     SQL_SCALAR_ARROW_ITER_UDF: "ArrowScalarIterUDFType" = 251
     SQL_GROUPED_AGG_ARROW_UDF: "ArrowGroupedAggUDFType" = 252
     SQL_WINDOW_AGG_ARROW_UDF: "ArrowWindowAggUDFType" = 253
+    SQL_GROUPED_AGG_ARROW_ITER_UDF: "ArrowGroupedAggIterUDFType" = 254
 
     SQL_TABLE_UDF: "SQLTableUDFType" = 300
     SQL_ARROW_TABLE_UDF: "SQLArrowTableUDFType" = 301

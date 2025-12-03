@@ -181,7 +181,7 @@ class UtilsTestsMixin:
             },
         )
 
-    def test_series_error_assert_pandas_equal(self):
+    def test_series_error_assert_pandas_almost_equal_2(self):
         series1 = pd.Series([1, 2, 3])
         series2 = pd.Series([4, 5, 6])
 

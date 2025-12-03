@@ -2436,6 +2436,28 @@
     ],
     "sqlState" : "XX000"
   },
+  "INTERNAL_ERROR_HIVE_METASTORE_PARTITION_FILTER" : {
+    "message" : [
+      "Failed to get partition metadata by filter from Hive metastore.",
+      "To work around this issue, set '<hiveMetastorePartitionPruningFallbackOnException>' to true. Note that this may result in degraded performance as Spark will fetch all partition metadata instead of filtering at the metastore level.",
+      "To report this issue, visit: https://issues.apache.org/jira/browse/SPARK"
+    ],
+    "sqlState" : "XX000"
+  },
+  "INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE" : {
+    "message" : [
+      "Failed to convert Hive table to Spark catalog table.",
+      "Database: <dbName>",
+      "Table: <tableName>"
+    ],
+    "sqlState" : "XX000"
+  },
+  "INTERNAL_ERROR_INVALID_PARTITION_FILTER_VALUE" : {
+    "message" : [
+      "Partition filter value cannot contain both double quotes (\") and single quotes (')."
+    ],
+    "sqlState" : "XX000"
+  },
   "INTERNAL_ERROR_MEMORY" : {
     "message" : [
       "<message>"
@@ -2483,6 +2505,14 @@
   "INTERNAL_ERROR_NETWORK" : {
     "message" : [
       "<message>"
+    ],
+    "sqlState" : "XX000"
+  },
+  "INTERNAL_ERROR_SERDE_INTERFACE_NOT_FOUND" : {
+    "message" : [
+      "The SerDe interface was removed since Hive 2.3 (HIVE-15167).",
+      "Please migrate your custom SerDes to Hive 2.3 or later.",
+      "For more details, see: https://issues.apache.org/jira/browse/HIVE-15167"
     ],
     "sqlState" : "XX000"
   },
@@ -9011,26 +9041,6 @@
   "_LEGACY_ERROR_TEMP_2185" : {
     "message" : [
       "Cannot create staging directory: <message>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2186" : {
-    "message" : [
-      "The SerDe interface removed since Hive 2.3(HIVE-15167). Please migrate your custom SerDes to Hive 2.3. See HIVE-15167 for more details."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2187" : {
-    "message" : [
-      "<message>, db: <dbName>, table: <tableName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2192" : {
-    "message" : [
-      "Partition filter cannot have both `\"` and `'` characters."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2193" : {
-    "message" : [
-      "Caught Hive MetaException attempting to get partition metadata by filter from Hive. You can set the Spark configuration setting <hiveMetastorePartitionPruningFallbackOnException> to true to work around this problem, however this will result in degraded performance. Please report a bug: https://issues.apache.org/jira/browse/SPARK."
     ]
   },
   "_LEGACY_ERROR_TEMP_2194" : {

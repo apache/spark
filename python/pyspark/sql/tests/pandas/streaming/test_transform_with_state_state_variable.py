@@ -26,7 +26,6 @@ from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
 )
 
-from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state_state_variable import (
     TransformWithStateStateVariableTestsMixin,
 )

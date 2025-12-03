@@ -229,11 +229,6 @@ private[connect] object MLHandler extends Logging {
           } catch {
             case _: UnsupportedOperationException => ()
           }
-          if (estimator.getClass.getName == "org.apache.spark.ml.fpm.FPGrowth") {
-            throw MlUnsupportedException(
-              "FPGrowth algorithm is not supported " +
-                "if Spark Connect model cache offloading is enabled.")
-          }
           if (estimator.getClass.getName == "org.apache.spark.ml.clustering.LDA"
             && estimator
               .asInstanceOf[org.apache.spark.ml.clustering.LDA]

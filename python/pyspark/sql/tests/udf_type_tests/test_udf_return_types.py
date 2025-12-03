@@ -21,7 +21,6 @@ import os
 import platform
 import unittest
 from decimal import Decimal
-import numpy as np
 import pandas as pd
 
 from pyspark.sql import Row

@@ -1629,17 +1629,16 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def serDeInterfaceNotFoundError(e: NoClassDefFoundError): SparkClassNotFoundException = {
     new SparkClassNotFoundException(
-      errorClass = "_LEGACY_ERROR_TEMP_2186",
-      messageParameters = Map.empty,
+      errorClass = "INTERNAL_ERROR_SERDE_INTERFACE_NOT_FOUND",
+      messageParameters = Map.empty[String, String],
       cause = e)
   }
 
   def convertHiveTableToCatalogTableError(
       e: SparkException, dbName: String, tableName: String): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2187",
+      errorClass = "INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE",
       messageParameters = Map(
-        "message" -> e.getMessage,
         "dbName" -> dbName,
         "tableName" -> tableName),
       cause = e)
@@ -1661,13 +1660,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def invalidPartitionFilterError(): SparkUnsupportedOperationException = {
-    new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2192")
+    new SparkUnsupportedOperationException("INTERNAL_ERROR_INVALID_PARTITION_FILTER_VALUE")
   }
 
   def getPartitionMetadataByFilterError(e: Exception): SparkRuntimeException = {
     new SparkRuntimeException(
-      errorClass = "_LEGACY_ERROR_TEMP_2193",
+      errorClass = "INTERNAL_ERROR_HIVE_METASTORE_PARTITION_FILTER",
       messageParameters = Map(
         "hiveMetastorePartitionPruningFallbackOnException" ->
           SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key),

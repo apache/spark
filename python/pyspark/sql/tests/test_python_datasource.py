@@ -20,7 +20,6 @@ import tempfile
 import unittest
 import logging
 import json
-import os
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -852,9 +851,9 @@ class BasePythonDataSourceTestsMixin:
                             return "x string"
 
                         def reader(self, schema):
-                            return TestReader()
+                            return TestReader2()
 
-                    class TestReader(DataSourceReader):
+                    class TestReader2(DataSourceReader):
                         def read(self, partition):
                             ctypes.string_at(0)
                             yield "x",
@@ -894,9 +893,9 @@ class BasePythonDataSourceTestsMixin:
                             return "test"
 
                         def writer(self, schema, overwrite):
-                            return TestWriter()
+                            return TestWriter2()
 
-                    class TestWriter(DataSourceWriter):
+                    class TestWriter2(DataSourceWriter):
                         def write(self, iterator):
                             return WriterCommitMessage()
 

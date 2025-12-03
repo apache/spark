@@ -21,7 +21,6 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.analysis.AsOfVersion
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog, V2TableUtil}
@@ -32,27 +31,6 @@ import org.apache.spark.sql.util.SchemaValidationMode.ALLOW_NEW_FIELDS
 import org.apache.spark.sql.util.SchemaValidationMode.PROHIBIT_CHANGES
 
 private[sql] object V2TableRefreshUtil extends SQLConfHelper with Logging {
-  /**
-   * Pins table versions for all versioned tables in the plan.
-   *
-   * This method captures the current version of each versioned table by adding time travel
-   * specifications. Tables that already have time travel specifications or are not versioned
-   * are left unchanged.
-   *
-   * @param plan the logical plan to pin versions for
-   * @return plan with pinned table versions
-   */
-  def pinVersions(plan: LogicalPlan): LogicalPlan = {
-    plan transform {
-      case r @ ExtractV2CatalogAndIdentifier(catalog, ident)
-          if r.isVersioned && r.timeTravelSpec.isEmpty =>
-        val tableName = V2TableUtil.toQualifiedName(catalog, ident)
-        val version = r.table.version
-        logDebug(s"Pinning table version for $tableName to $version")
-        r.copy(timeTravelSpec = Some(AsOfVersion(version)))
-    }
-  }
-
   /**
    * Refreshes table metadata for tables in the plan.
    *
