@@ -1729,6 +1729,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         uniques = pd.Index(uniques_list)
 
         return codes, uniques
+
+
 def _test() -> None:
     import os
     import doctest
