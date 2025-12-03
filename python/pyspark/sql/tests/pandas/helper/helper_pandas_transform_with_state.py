@@ -1663,10 +1663,17 @@ class RowMinEventTimeStatefulProcessor(StatefulProcessor):
 
 # A stateful processor that contains composite python type inside Value, List and Map state variable
 class PandasStatefulProcessorCompositeType(StatefulProcessor):
+
+    from typing import NamedTuple
+    class Address(NamedTuple):
+        road_id: int
+        block_id: int
+
     TAGS = [["dummy1", "dummy2"], ["dummy3"]]
     METADATA = [{"key": "env", "value": "prod"}, {"key": "region", "value": "us-west"}]
     ATTRIBUTES_MAP = {"key1": [1], "key2": [10]}
     CONFS_MAP = {"e1": {"e2": 5, "e3": 10}}
+    ADDRESS = [Address(1, 2), Address(3, 4)]
 
     def init(self, handle: StatefulProcessorHandle) -> None:
         obj_schema = StructType(
@@ -1678,6 +1685,14 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
                     ArrayType(
                         StructType(
                             [StructField("key", StringType()), StructField("value", StringType())]
+                        )
+                    ),
+                ),
+                StructField(
+                    "address",
+                    ArrayType(
+                        StructType(
+                            [StructField("road_id", IntegerType()), StructField("block_id", IntegerType())]
                         )
                     ),
                 ),
@@ -1700,13 +1715,14 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
 
     def _update_obj_state(self, total_temperature):
         if self.obj_state.exists():
-            ids, tags, metadata = self.obj_state.get()
+            ids, tags, metadata, address = self.obj_state.get()
             assert tags == self.TAGS, f"Tag mismatch: {tags}"
             assert metadata == [Row(**m) for m in self.METADATA], f"Metadata mismatch: {metadata}"
+            assert address == [Row(**e) for e in self.ADDRESS], f"Address mismatch: {address}"
             ids = [int(x + total_temperature) for x in ids]
         else:
             ids = [0]
-        self.obj_state.update((ids, self.TAGS, self.METADATA))
+        self.obj_state.update((ids, self.TAGS, self.METADATA, self.ADDRESS))
         return ids
 
     def _update_list_state(self, total_temperature, initial_obj):
@@ -1767,10 +1783,17 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
 
 
 class RowStatefulProcessorCompositeType(StatefulProcessor):
+
+    from typing import NamedTuple
+    class Address(NamedTuple):
+        road_id: int
+        block_id: int
+
     TAGS = [["dummy1", "dummy2"], ["dummy3"]]
     METADATA = [{"key": "env", "value": "prod"}, {"key": "region", "value": "us-west"}]
     ATTRIBUTES_MAP = {"key1": [1], "key2": [10]}
     CONFS_MAP = {"e1": {"e2": 5, "e3": 10}}
+    ADDRESS = [Address(1, 2), Address(3, 4)]
 
     def init(self, handle: StatefulProcessorHandle) -> None:
         obj_schema = StructType(
@@ -1782,6 +1805,14 @@ class RowStatefulProcessorCompositeType(StatefulProcessor):
                     ArrayType(
                         StructType(
                             [StructField("key", StringType()), StructField("value", StringType())]
+                        )
+                    ),
+                ),
+                StructField(
+                    "address",
+                    ArrayType(
+                        StructType(
+                            [StructField("road_id", IntegerType()), StructField("block_id", IntegerType())]
                         )
                     ),
                 ),
@@ -1804,13 +1835,14 @@ class RowStatefulProcessorCompositeType(StatefulProcessor):
 
     def _update_obj_state(self, total_temperature):
         if self.obj_state.exists():
-            ids, tags, metadata = self.obj_state.get()
+            ids, tags, metadata, address = self.obj_state.get()
             assert tags == self.TAGS, f"Tag mismatch: {tags}"
             assert metadata == [Row(**m) for m in self.METADATA], f"Metadata mismatch: {metadata}"
+            assert address == [Row(**e) for e in self.ADDRESS], f"Metadata mismatch: {address}"
             ids = [int(x + total_temperature) for x in ids]
         else:
             ids = [0]
-        self.obj_state.update((ids, self.TAGS, self.METADATA))
+        self.obj_state.update((ids, self.TAGS, self.METADATA, self.ADDRESS))
         return ids
 
     def _update_list_state(self, total_temperature, initial_obj):
