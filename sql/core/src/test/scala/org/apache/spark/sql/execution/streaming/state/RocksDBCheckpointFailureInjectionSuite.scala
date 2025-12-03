@@ -70,6 +70,10 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
 
   implicit def toArray(str: String): Array[Byte] = if (str != null) str.getBytes else null
 
+  implicit def toStr(bytes: Array[Byte]): String = if (bytes != null) new String(bytes) else null
+
+  def toStr(kv: ByteArrayPair): (String, String) = (toStr(kv.key), toStr(kv.value))
+
   case class FailureConf(ifEnableStateStoreCheckpointIds: Boolean, fileType: String) {
     override def toString: String = {
       s"ifEnableStateStoreCheckpointIds = $ifEnableStateStoreCheckpointIds, " +
@@ -820,6 +824,73 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
           assert(verifyChangelogFileChecksumExists(4))
           assert((new File(checkpointDir, "commits/3")).exists())
         }
+      }
+    }
+  }
+
+  /**
+   * Test that verifies the fix when changelogWriter.abort() throws an exception
+   * during rollback(), the changelogWriter is still set to None, allowing subsequent put()
+   * calls to succeed.
+   *
+   * Before the fix, if abort() threw an exception, changelogWriter would remain set to a
+   * writer with null streams, causing assertion failures on the next put().
+   */
+  test("InterruptedException during rollback leaves changelogWriter in a valid state") {
+    val hadoopConf = new Configuration()
+    hadoopConf.set(
+      STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key,
+      fileManagerClassName
+    )
+    withTempDirAllowFailureInjection { (remoteDir, _) =>
+      val sqlConf = new SQLConf()
+      sqlConf.setConfString("spark.sql.streaming.checkpoint.fileChecksum.enabled", "true")
+      val rocksdbChangelogCheckpointingConfKey =
+        RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + ".changelogCheckpointing.enabled"
+      sqlConf.setConfString(rocksdbChangelogCheckpointingConfKey, "true")
+      val conf = RocksDBConf(StateStoreConf(sqlConf))
+
+      withDB(
+        remoteDir.getAbsolutePath,
+        version = 0,
+        conf = conf,
+        hadoopConf = hadoopConf
+      ) { db =>
+        db.put("key0", "value0")
+        val checkpointId1 = commitAndGetCheckpointId(db)
+
+        db.load(1, checkpointId1)
+        db.put("key1", "value1")
+        val checkpointId2 = commitAndGetCheckpointId(db)
+
+        db.load(2, checkpointId2)
+        db.put("key2", "value2")
+
+        // Simulate what happens when a task is killed, the thread's interrupt flag is set.
+        // This replicates the scenario where TaskContext.markTaskFailed() is called and
+        // the task failure listener invokes RocksDBStateStore.abort() -> rollback().
+        Thread.currentThread().interrupt()
+
+        // rollback() calls changelogWriter.foreach(_.abort())
+        // abort() calls backingFileStream.cancel() which calls awaitResult() in
+        // the ChecksumCheckpointFileManager
+        // awaitResult() sees the interrupt flag and throws InterruptedException
+        intercept[InterruptedException] {
+          db.rollback()
+        }
+
+        // Clear the interrupt flag for subsequent operations
+        Thread.interrupted()
+
+        // Before the fix, changelogWriter would still be Some(...) but with null streams,
+        // causing assertion failures on the next put() while replaying the changelog files.
+        // After the fix, changelogWriter should be None despite the exception.
+        db.load(2, checkpointId2)
+        db.put("key3", "value3")
+
+        // Verify the database has the correct values
+        assert(db.iterator().map(toStr).toSet ===
+          Set(("key0", "value0"), ("key1", "value1"), ("key3", "value3")))
       }
     }
   }
