@@ -27,6 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.SQL_TEXT
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.execution.datasources.{DataSourceMetricsMixin, ExternalEngineDatasourceRDD}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
@@ -306,7 +307,7 @@ class JDBCRDD(
     val part = thePart.asInstanceOf[JDBCPartition]
     conn = getConnection(part.idx)
     import scala.jdk.CollectionConverters._
-    dialect.beforeFetch(conn, options.asProperties.asScala.toMap)
+    dialect.beforeFetch(conn, CaseInsensitiveMap(options.asProperties.asScala.toMap))
 
     // This executes a generic SQL statement (or PL/SQL block) before reading
     // the table/query via JDBC. Use this feature to initialize the database
