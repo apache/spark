@@ -452,7 +452,34 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         if hasattr(series.array, "__arrow_array__"):
             mask = None
         else:
-            mask = series.isnull()
+            # For floating-point Arrow types, preserve NaN values instead of converting them to NULL.
+            # Only mask actual None values, not NaN values.
+            import pyarrow.types as types
+            
+            # Determine if this is a floating-point type
+            is_floating_type = False
+            if arrow_type is not None:
+                is_floating_type = types.is_floating(arrow_type)
+            elif pd.api.types.is_float_dtype(series.dtype):
+                is_floating_type = True
+            
+            if is_floating_type:
+                # For floating-point types, only mask None values, not NaN
+                if series.dtype == "object":
+                    # For object dtype, track None positions before conversion
+                    # Convert to float64 first (None becomes NaN, but we'll mask those positions)
+                    none_positions = [i for i, x in enumerate(series.values) if x is None]
+                    series = series.astype(float)
+                    # Create mask that only masks positions that were originally None
+                    mask = pd.Series([False] * len(series), dtype=bool)
+                    for i in none_positions:
+                        mask.iloc[i] = True
+                else:
+                    # For float dtype, don't mask NaN (pandas converts None to NaN anyway)
+                    mask = pd.Series([False] * len(series), dtype=bool)
+            else:
+                # For non-floating types, mask both None and NaN
+                mask = series.isnull()
         try:
             try:
                 return pa.Array.from_pandas(
@@ -1064,7 +1091,31 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
         if hasattr(series.array, "__arrow_array__"):
             mask = None
         else:
-            mask = series.isnull()
+            # SPARK-54579: Preserve NaN values as NaN (not NULL) for floating-point Arrow types.
+            # For floating-point Arrow types, preserve NaN values instead of converting them to NULL.
+            # Only mask actual None values, not NaN values.
+            import pyarrow.types as types
+            
+            is_floating_type = False
+            if arrow_type is not None:
+                is_floating_type = types.is_floating(arrow_type)
+            elif pd.api.types.is_float_dtype(series.dtype):
+                is_floating_type = True
+            
+            if is_floating_type:
+                mask = pd.Series([False] * len(series), dtype=bool)
+                # For floating-point types, only mask None values, not NaN
+                if series.dtype == "object":
+                    # For object dtype, track None positions before conversion
+                    # Convert to float64 first (None becomes NaN, but we'll mask those positions)
+                    none_positions = [i for i, x in enumerate(series.values) if x is None]
+                    series = series.astype(float)
+                    # Create mask that only masks positions that were originally None
+                    for i in none_positions:
+                        mask.iloc[i] = True
+            else:
+                # For non-floating types, mask both None and NaN as before
+                mask = series.isnull()
 
         try:
             try:
