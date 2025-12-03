@@ -973,7 +973,7 @@ class SparkConnectClient(object):
         return table, schema, ei
 
     def to_pandas(
-        self, plan: pb2.Plan, observations: Dict[str, Observation]
+        self, plan: pb2.Plan, observations: Dict[str, Observation], **kwargs
     ) -> Tuple["pd.DataFrame", "ExecutionInfo"]:
         """
         Return given plan as a pandas DataFrame.
@@ -995,6 +995,10 @@ class SparkConnectClient(object):
             "spark.sql.execution.pandas.structHandlingMode",
             "spark.sql.execution.arrow.pyspark.selfDestruct.enabled",
         )
+
+        # if pandasStructHandlingMode is explicitly set, override the runtime config
+        if "pandasStructHandlingMode" in kwargs:
+            structHandlingMode = str(kwargs["pandasStructHandlingMode"])
 
         table, schema, metrics, observed_metrics, _ = self._execute_and_fetch(
             req, observations, selfDestruct == "true"
