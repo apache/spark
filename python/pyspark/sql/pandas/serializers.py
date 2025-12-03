@@ -455,14 +455,14 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             # For floating-point Arrow types, preserve NaN values instead of converting them to NULL.
             # Only mask actual None values, not NaN values.
             import pyarrow.types as types
-            
+
             # Determine if this is a floating-point type
             is_floating_type = False
             if arrow_type is not None:
                 is_floating_type = types.is_floating(arrow_type)
             elif pd.api.types.is_float_dtype(series.dtype):
                 is_floating_type = True
-            
+
             if is_floating_type:
                 # For floating-point types, only mask None values, not NaN
                 if series.dtype == "object":
@@ -1095,13 +1095,13 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
             # For floating-point Arrow types, preserve NaN values instead of converting them to NULL.
             # Only mask actual None values, not NaN values.
             import pyarrow.types as types
-            
+
             is_floating_type = False
             if arrow_type is not None:
                 is_floating_type = types.is_floating(arrow_type)
             elif pd.api.types.is_float_dtype(series.dtype):
                 is_floating_type = True
-            
+
             if is_floating_type:
                 mask = pd.Series([False] * len(series), dtype=bool)
                 # For floating-point types, only mask None values, not NaN
