@@ -379,6 +379,7 @@ and tuples to strings can yield ambiguous results. Arrow Python UDFs, on the oth
 capabilities to standardize type coercion and address these issues effectively.
 
 Type coercion differences are introduced by the following changes:
+
 * Since Spark 4.2, Arrow optimization is enabled by default for regular Python UDFs.
 The full type coercion difference is summarized in the tables `here <https://github.com/apache/spark/pull/41706>`__.
 To disable Arrow optimization, set ``spark.sql.execution.pythonUDF.arrow.enabled`` to false.
