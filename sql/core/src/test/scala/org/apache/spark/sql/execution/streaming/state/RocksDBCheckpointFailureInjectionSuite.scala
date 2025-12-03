@@ -836,7 +836,7 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
    * Before the fix, if abort() threw an exception, changelogWriter would remain set to a
    * writer with null streams, causing assertion failures on the next put().
    */
-  test("InterruptedException during rollback leaves changelogWriter in a valid state") {
+  test("SPARK-54585: Interrupted task calling rollback leaves changelogWriter in a valid state") {
     val hadoopConf = new Configuration()
     hadoopConf.set(
       STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key,
