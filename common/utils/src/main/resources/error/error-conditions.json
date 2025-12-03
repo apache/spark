@@ -5515,6 +5515,11 @@
         "message" : [
           "Unsupported offset sequence version <version>. Please make sure the checkpoint is from a supported Spark version (Spark 4.0+)."
         ]
+      },
+      "UNSUPPORTED_PROVIDER" : {
+        "message" : [
+          "<provider> is not supported"
+        ]
       }
     },
     "sqlState" : "55019"
