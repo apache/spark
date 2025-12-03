@@ -202,7 +202,7 @@ class MapInPandasTestsMixin:
             PythonException,
             "PySparkRuntimeError: \\[RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF\\] "
             "Column names of the returned pandas.DataFrame do not match "
-            "specified schema. Missing: id. Unexpected: iid.\n",
+            "specified schema. Missing: id. Unexpected: iid.",
         ):
             (
                 self.spark.range(10, numPartitions=3)
@@ -224,7 +224,7 @@ class MapInPandasTestsMixin:
             PythonException,
             "PySparkRuntimeError: \\[RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF\\] "
             "Column names of the returned pandas.DataFrame do not match "
-            "specified schema. Missing: id2.\n",
+            "specified schema. Missing: id2.",
         ):
             (
                 self.spark.range(10, numPartitions=3)
@@ -245,7 +245,7 @@ class MapInPandasTestsMixin:
             PythonException,
             "PySparkRuntimeError: \\[RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF\\] "
             "Column names of the returned pandas.DataFrame do not match "
-            "specified schema. Missing: id2.\n",
+            "specified schema. Missing: id2.",
         ):
             f = self.identity_dataframes_iter("id", "value")
             (df.mapInPandas(f, "id int, id2 long, value int").collect())
@@ -254,7 +254,7 @@ class MapInPandasTestsMixin:
             PythonException,
             "PySparkRuntimeError: \\[RESULT_LENGTH_MISMATCH_FOR_PANDAS_UDF\\] "
             "Number of columns of the returned pandas.DataFrame doesn't match "
-            "specified schema. Expected: 3 Actual: 2\n",
+            "specified schema. Expected: 3 Actual: 2",
         ):
             f = self.identity_dataframes_wo_column_names_iter("id", "value")
             (df.mapInPandas(f, "id int, id2 long, value int").collect())
@@ -300,7 +300,7 @@ class MapInPandasTestsMixin:
                             "can be disabled by using SQL config "
                             "`spark.sql.execution.pandas.convertToArrowArraySafely`."
                         )
-                    with self.assertRaisesRegex(PythonException, expected + "\n"):
+                    with self.assertRaisesRegex(PythonException, expected):
                         (
                             self.spark.range(10, numPartitions=3)
                             .mapInPandas(func, "id double")
@@ -327,7 +327,7 @@ class MapInPandasTestsMixin:
                             "can be disabled by using SQL config "
                             "`spark.sql.execution.pandas.convertToArrowArraySafely`."
                         )
-                        with self.assertRaisesRegex(PythonException, expected + "\n"):
+                        with self.assertRaisesRegex(PythonException, expected):
                             df.collect()
                     else:
                         self.assertEqual(
@@ -363,7 +363,7 @@ class MapInPandasTestsMixin:
             PythonException,
             "PySparkRuntimeError: \\[RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF\\] "
             "Column names of the returned pandas.DataFrame do not match "
-            "specified schema. Missing: value.\n",
+            "specified schema. Missing: value.",
         ):
             f = self.dataframes_and_empty_dataframe_iter("id")
             (
@@ -392,7 +392,7 @@ class MapInPandasTestsMixin:
             PythonException,
             "PySparkRuntimeError: \\[RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF\\] "
             "Column names of the returned pandas.DataFrame do not match "
-            "specified schema. Missing: id. Unexpected: iid.\n",
+            "specified schema. Missing: id. Unexpected: iid.",
         ):
             (
                 self.spark.range(10, numPartitions=3)
