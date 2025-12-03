@@ -68,7 +68,6 @@ from google.rpc import error_details_pb2
 from pyspark.util import is_remote_only
 from pyspark.accumulators import SpecialAccumulatorIds
 from pyspark.version import __version__
-from pyspark import traceback_utils
 from pyspark.traceback_utils import CallSite
 from pyspark.resource.information import ResourceInformation
 from pyspark.sql.metrics import MetricValue, PlanMetrics, ExecutionInfo, ObservedMetrics
@@ -658,7 +657,8 @@ def _build_call_stack_trace() -> any_pb2.Any:
     Build a call stack trace for the current Spark Connect action
     Returns
     -------
-    FetchErrorDetailsResponse.Error: An Error object containing list of stack frames of the user code packed as Any protobuf.
+    FetchErrorDetailsResponse.Error: An Error object containing list of stack frames
+    of the user code packed as Any protobuf.
     """
     if os.getenv("SPARK_CONNECT_DEBUG_CLIENT_CALL_STACK", "false").lower() in ("true", "1"):
         stack_frames = _retrieve_stack_frames()
