@@ -26,7 +26,7 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRDD}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCDatabaseMetadata, JDBCOptions, JDBCPartition, JDBCRDD}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -40,7 +40,7 @@ class PostgresDialectSuite extends SparkFunSuite with MockitoSugar with SharedSp
       ("fetchsize", Some("0"), false),
       ("fetchsize", None, false)
     )
-  ) { case (optionKey: String, optionValue: Option[String], shouldSetAutoCommit: Boolean) =>
+  ) { case (optionKey, optionValue, shouldSetAutoCommit) =>
     val conn = mock[Connection]
     when(conn.prepareStatement(any[String], any[Int], any[Int]))
       .thenReturn(mock[java.sql.PreparedStatement])
@@ -50,7 +50,7 @@ class PostgresDialectSuite extends SparkFunSuite with MockitoSugar with SharedSp
       "dbtable" -> "test_table"
     ) ++ optionValue.map(v => Map(optionKey -> v)).getOrElse(Map.empty)
 
-    val options = new JDBCOptions(CaseInsensitiveMap(optionsMap), None)
+    val options = new JDBCOptions(CaseInsensitiveMap(optionsMap))
 
     val schema = StructType(Seq(StructField("id", IntegerType)))
     val partition = new JDBCPartition(null, 0)
@@ -63,7 +63,7 @@ class PostgresDialectSuite extends SparkFunSuite with MockitoSugar with SharedSp
       Array(partition),
       "jdbc:postgresql://localhost/test",
       options,
-      Some(PostgresDialect()),
+      JDBCDatabaseMetadata(None, None, None, None),
       None,
       None,
       0,
