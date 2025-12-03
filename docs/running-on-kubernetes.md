@@ -1990,9 +1990,7 @@ Note that currently only driver/job level PodGroup is supported in Volcano Featu
 Volcano defines PodGroup spec using [CRD yaml](https://volcano.sh/en/docs/podgroup/#example).
 
 Similar to [Pod template](#pod-template), Spark users can use Volcano PodGroup Template to define the PodGroup spec configurations.
-To do so, specify the Spark property `spark.kubernetes.scheduler.volcano.podGroupTemplateFile` to point to files accessible to the `spark-submit` process.
 Below is an example of PodGroup template:
-
 ```yaml
 apiVersion: scheduling.volcano.sh/v1beta1
 kind: PodGroup
@@ -2009,6 +2007,17 @@ spec:
   priorityClassName: system-node-critical
   # Specify the queue, indicates the resource queue which the job should be submitted to
   queue: default
+```
+
+You have two options to provide the PodGroup template in spark.
+1. Use `spark.kubernetes.scheduler.volcano.podGroupTemplateFile` to point to files accessible to the `spark-submit` process
+```bash
+--conf spark.kubernetes.scheduler.volcano.podGroupTemplateFile=/path/to/podgroup
+```
+
+2. Use `spark.kubernetes.scheduler.volcano.podGroupTemplateJson` to provide the template in json format.
+```bash
+--conf spark.kubernetes.scheduler.volcano.podGroupTemplateJson={"spec": {"minMember": 1,"minResources": {"cpu": "2","memory": "3Gi"},"priorityClassName": "system-node-critical","queue": "default"}}
 ```
 
 #### Using Apache YuniKorn as Customized Scheduler for Spark on Kubernetes
