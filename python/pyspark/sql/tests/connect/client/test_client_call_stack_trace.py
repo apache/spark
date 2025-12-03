@@ -16,13 +16,10 @@
 #
 
 import os
-import sys
 import unittest
 from unittest.mock import patch
 
 import pyspark
-from pyspark.sql import functions
-from pyspark.sql.connect.proto.base_pb2 import FetchErrorDetailsResponse
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
 
 if should_test_connect:
@@ -33,8 +30,6 @@ if should_test_connect:
         _retrieve_stack_frames,
         _build_call_stack_trace,
     )
-    from pyspark.traceback_utils import CallSite
-    from google.protobuf import any_pb2
 
     # The _cleanup_ml_cache invocation will hang in this test (no valid spark cluster)
     # and it blocks the test process exiting because it is registered as the atexit handler
@@ -51,9 +46,9 @@ class CallStackTraceTestCase(unittest.TestCase):
     """Test cases for call stack trace functionality in Spark Connect client."""
 
     def setUp(self):
-        # Since this test itself is under pyspark module path, stack frames for test functions inside
-        # this file - for example, user_function() - will normally be filtered out. So here we
-        # set the PYSPARK_ROOT to more specific pyspaark.sql.connect that doesn't include this
+        # Since this test itself is under pyspark module path, stack frames for test functions 
+        # inside this file - for example, user_function() - will normally be filtered out. So here
+        # we set the PYSPARK_ROOT to more specific pyspaark.sql.connect that doesn't include this
         # test file to ensure that the stack frames for user functions inside this test file are
         # not filtered out.
         self.original_pyspark_root = core.PYSPARK_ROOT
@@ -107,13 +102,14 @@ class CallStackTraceTestCase(unittest.TestCase):
         for frame in stack_frames:
             # Check that this frame is not from pyspark internal code
             self.assertFalse(
-                _is_pyspark_source(frame.file),
-                f"Expected frame from {frame.file} (function: {frame.function}) to be filtered out as PySpark internal frame",
+                _is_pyspark_source(frame.file),(
+                    f"Expected frame from {frame.file} (function: {frame.function})"   
+                    f"to be filtered out as PySpark internal frame"
+                ),
             )
 
         # Verify that user function names are present (confirming user frames are included)
         function_names = [frame.function for frame in stack_frames]
-        expected_functions = ["user_function", "test_retrieve_stack_frames_filters_pyspark_frames"]
         self.assertTrue(
             "user_function" in function_names,
             f"Expected user function names not found in: {function_names}",
@@ -269,9 +265,9 @@ class CallStackTraceIntegrationTestCase(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
         self.client = SparkConnectClient("sc://localhost:15002", use_reattachable_execute=False)
-        # Since this test itself is under pyspark module path, stack frames for test functions inside
-        # this file - for example, user_function() - will normally be filtered out. So here we
-        # set the PYSPARK_ROOT to more specific pyspaark.sql.connect that doesn't include this
+        # Since this test itself is under pyspark module path, stack frames for test functions 
+        # inside this file - for example, user_function() - will normally be filtered out. So here 
+        # we set the PYSPARK_ROOT to more specific pyspaark.sql.connect that doesn't include this
         # test file to ensure that the stack frames for user functions inside this test file are
         # not filtered out.
         self.original_pyspark_root = core.PYSPARK_ROOT
@@ -282,7 +278,7 @@ class CallStackTraceIntegrationTestCase(unittest.TestCase):
         core.PYSPARK_ROOT = self.original_pyspark_root
 
     def test_execute_plan_request_includes_call_stack_without_env_var(self):
-        """Test that _execute_plan_request_with_metadata doesn't include call stack without env var."""
+        """ _execute_plan_request_with_metadata doesn't include call stack without env var."""
         with patch.dict(os.environ, {}, clear=False):
             if "SPARK_CONNECT_DEBUG_CLIENT_CALL_STACK" in os.environ:
                 del os.environ["SPARK_CONNECT_DEBUG_CLIENT_CALL_STACK"]
@@ -330,7 +326,7 @@ class CallStackTraceIntegrationTestCase(unittest.TestCase):
             )
 
     def test_analyze_plan_request_includes_call_stack_without_env_var(self):
-        """Test that _analyze_plan_request_with_metadata doesn't include call stack without env var."""
+        """_analyze_plan_request_with_metadata doesn't include call stack without env var."""
         with patch.dict(os.environ, {}, clear=False):
             if "SPARK_CONNECT_DEBUG_CLIENT_CALL_STACK" in os.environ:
                 del os.environ["SPARK_CONNECT_DEBUG_CLIENT_CALL_STACK"]
@@ -460,7 +456,8 @@ class CallStackTraceIntegrationTestCase(unittest.TestCase):
                     self.assertGreater(
                         stack_trace_element.line_number,
                         0,
-                        f"Expected line number to be greater than 0, got: {stack_trace_element.line_number}",
+                        (f"Expected line number to be greater than 0,"
+                         f"got: {stack_trace_element.line_number}"),
                     )
 
         self.assertTrue(
