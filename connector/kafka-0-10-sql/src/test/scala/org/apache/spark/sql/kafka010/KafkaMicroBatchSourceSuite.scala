@@ -36,13 +36,13 @@ import org.scalatest.matchers.should._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkException, TestUtils}
-import org.apache.spark.sql.{Dataset, ForeachWriter, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Dataset, ForeachWriter, Row, SparkSession}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2ScanRelation
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqBase
+import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetSeqBase, TombstoneOffset}
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.execution.streaming.runtime.{MicroBatchExecution, StreamExecution, StreamingExecutionRelation}
 import org.apache.spark.sql.execution.streaming.runtime.AsyncProgressTrackingMicroBatchExecution.{ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS, ASYNC_PROGRESS_TRACKING_ENABLED}
@@ -125,7 +125,7 @@ abstract class KafkaSourceTest extends StreamTest with SharedSparkSession with K
 
       val sources: Seq[SparkDataStream] = {
         query.get.logicalPlan.collect {
-          case StreamingExecutionRelation(source: KafkaSource, _, _) => source
+          case StreamingExecutionRelation(source: KafkaSource, _, _, _) => source
           case r: StreamingDataSourceV2ScanRelation
             if r.stream.isInstanceOf[KafkaMicroBatchStream] ||
               r.stream.isInstanceOf[KafkaContinuousStream] =>
@@ -1615,7 +1615,7 @@ abstract class KafkaMicroBatchV1SourceSuite extends KafkaMicroBatchSourceSuiteBa
       makeSureGetOffsetCalled,
       AssertOnQuery { query =>
         query.logicalPlan.collectFirst {
-          case StreamingExecutionRelation(_: KafkaSource, _, _) => true
+          case StreamingExecutionRelation(_: KafkaSource, _, _, _) => true
         }.nonEmpty
       }
     )

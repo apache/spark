@@ -3019,6 +3019,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ENABLE_STREAMING_SOURCE_EVOLUTION =
+    buildConf("spark.sql.streaming.queryEvolution.enableSourceEvolution")
+      .internal()
+      .doc("When true, all streaming sources must be named using the name() API. This enables " +
+        "source evolution capability where sources can be added, removed, or reordered " +
+        "without losing checkpoint state.")
+      .version("4.2.0")
+      .owner("streaming-engine")
+      .booleanConf
+      .createWithDefault(false)
+
   val USE_DEPRECATED_KAFKA_OFFSET_FETCHING =
     buildConf("spark.sql.streaming.kafka.useDeprecatedOffsetFetching")
       .internal()
@@ -6992,6 +7003,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(STREAMING_CHECKPOINT_FILE_CHECKSUM_SKIP_CREATION_IF_FILE_MISSING_CHECKSUM)
 
   def isUnsupportedOperationCheckEnabled: Boolean = getConf(UNSUPPORTED_OPERATION_CHECK_ENABLED)
+
+  def enableStreamingSourceEvolution: Boolean = getConf(ENABLE_STREAMING_SOURCE_EVOLUTION)
 
   def useDeprecatedKafkaOffsetFetching: Boolean = getConf(USE_DEPRECATED_KAFKA_OFFSET_FETCHING)
 

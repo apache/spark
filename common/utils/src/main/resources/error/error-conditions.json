@@ -5940,6 +5940,44 @@
     ],
     "sqlState" : "42K03"
   },
+  "STREAMING_QUERY_EVOLUTION_ERROR" : {
+    "message" : [
+      "Streaming query evolution error:"
+    ],
+    "subClass" : {
+      "DUPLICATE_SOURCE_NAMES" : {
+        "message" : [
+          "Duplicate streaming source names detected: <duplicateNames>. Each streaming source must have a unique name. Please ensure all sources have distinct names using the name() method."
+        ]
+      },
+      "INVALID_SOURCE_NAME" : {
+        "message" : [
+          "Invalid streaming source name: '<sourceName>'. Source names must only contain ASCII letters ('a'-'z', 'A'-'Z'), digits ('0'-'9'), and underscores ('_'). Use backticks to quote names with special characters if needed."
+        ]
+      },
+      "NAMED_SOURCES_REQUIRE_ENFORCEMENT" : {
+        "message" : [
+          "Cannot use the name() method to name streaming sources when spark.sql.streaming.queryEvolution.enableSourceEvolution is disabled. Please enable source evolution by setting spark.sql.streaming.queryEvolution.enableSourceEvolution to true, or remove the name() call."
+        ]
+      },
+      "NAMED_SOURCES_REQUIRE_OFFSET_LOG_V2" : {
+        "message" : [
+          "Named streaming sources enforcement requires offset log format V2 (OffsetMap), but found V<version>. V2 format uses sourceId:offset pairs which support source evolution. Set spark.sql.streaming.offsetLog.version to 2, or disable named sources enforcement by setting spark.sql.streaming.queryEvolution.enableSourceEvolution to false"
+        ]
+      },
+      "TOMBSTONE_SOURCE_NAME_REUSE" : {
+        "message" : [
+          "Cannot reuse tombstoned source names: <sourceNames>. These source names were previously used and then removed from the streaming query at checkpoint location <checkpointLocation>. Reusing tombstoned source names can lead to data correctness issues. Please use different source names."
+        ]
+      },
+      "UNNAMED_STREAMING_SOURCES_WITH_ENFORCEMENT" : {
+        "message" : [
+          "All streaming sources must be named when spark.sql.streaming.queryEvolution.enableSourceEvolution is enabled. Unnamed sources found: <sourceInfo>. Use the name() method to assign names to all streaming sources."
+        ]
+      }
+    },
+    "sqlState" : "42000"
+  },
   "STREAMING_STATEFUL_OPERATOR_NOT_MATCH_IN_STATE_METADATA" : {
     "message" : [
       "Streaming stateful operator name does not match with the operator in state metadata. This likely to happen when user adds/removes/changes stateful operator of existing streaming query.",

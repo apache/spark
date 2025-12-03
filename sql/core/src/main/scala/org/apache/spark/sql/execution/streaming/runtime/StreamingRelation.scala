@@ -46,7 +46,11 @@ object StreamingRelation {
  * It should be used to create [[Source]] and converted to [[StreamingExecutionRelation]] when
  * passing to [[StreamExecution]] to run a query.
  */
-case class StreamingRelation(dataSource: DataSource, sourceName: String, output: Seq[Attribute])
+case class StreamingRelation(
+    dataSource: DataSource,
+    sourceName: String,
+    output: Seq[Attribute],
+    userProvidedSourceName: Option[String] = None)
   extends LeafNode with MultiInstanceRelation with ExposesMetadataColumns {
   override def isStreaming: Boolean = true
   override def toString: String = sourceName
@@ -88,7 +92,8 @@ case class StreamingRelation(dataSource: DataSource, sourceName: String, output:
 case class StreamingExecutionRelation(
     source: SparkDataStream,
     output: Seq[Attribute],
-    catalogTable: Option[CatalogTable])(session: SparkSession)
+    catalogTable: Option[CatalogTable],
+    userProvidedSourceName: Option[String] = None)(session: SparkSession)
   extends LeafNode with MultiInstanceRelation {
 
   override def otherCopyArgs: Seq[AnyRef] = session :: Nil

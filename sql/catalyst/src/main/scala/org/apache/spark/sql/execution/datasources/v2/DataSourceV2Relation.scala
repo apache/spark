@@ -207,7 +207,8 @@ case class StreamingDataSourceV2Relation(
     identifier: Option[Identifier],
     options: CaseInsensitiveStringMap,
     metadataPath: String,
-    realTimeModeDuration: Option[Long] = None)
+    realTimeModeDuration: Option[Long] = None,
+    userProvidedSourceName: Option[String] = None)
   extends DataSourceV2RelationBase(table, output, catalog, identifier, options) {
 
   override def isStreaming: Boolean = true

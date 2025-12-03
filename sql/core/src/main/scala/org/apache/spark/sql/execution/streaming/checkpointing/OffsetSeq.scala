@@ -35,6 +35,21 @@ import org.apache.spark.sql.execution.streaming.runtime.{MultipleWatermarkPolicy
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
 
+/**
+ * Represents an offset for a tombstoned (removed) source in source evolution.
+ * This explicit marker prevents confusion between removed sources and
+ * missing/uninitialized sources.
+ *
+ * When a source is removed from a streaming query but needs to be tracked in checkpoint metadata,
+ * it receives a TombstoneOffset instead of None. This allows the system to distinguish between:
+ * - Active sources with real offsets: OffsetV2 instances
+ * - Tombstoned sources (removed but tracked): TombstoneOffset
+ * - Missing/uninitialized: None (only in legacy OffsetSeq format)
+ */
+case object TombstoneOffset extends OffsetV2 {
+  override def json(): String = "{\"tombstone\": true}"
+}
+
 trait OffsetSeqBase {
   def offsets: Seq[Option[OffsetV2]]
 
@@ -43,7 +58,11 @@ trait OffsetSeqBase {
   override def toString: String = this match {
     case offsetMap: OffsetMap =>
       offsetMap.offsetsMap.map { case (sourceId, offsetOpt) =>
-        s"$sourceId: ${offsetOpt.map(_.json).getOrElse("-")}"
+        val offsetStr = offsetOpt match {
+          case Some(offset) => offset.json
+          case None => "-"
+        }
+        s"$sourceId: $offsetStr"
       }.mkString("{", ", ", "}")
     case _ =>
       offsets.map(_.map(_.json).getOrElse("-")).mkString("[", ", ", "]")
@@ -67,6 +86,7 @@ trait OffsetSeqBase {
   /**
    * Converts OffsetMap to StreamProgress using source ID mapping.
    * This method is specific to OffsetMap and requires a mapping from sourceId to SparkDataStream.
+   * Filters out tombstoned sources (TombstoneOffset) from the active stream progress.
    */
   def toStreamProgress(
       sources: Seq[SparkDataStream],
@@ -76,6 +96,7 @@ trait OffsetSeqBase {
         val streamProgressEntries = for {
           (sourceId, offsetOpt) <- offsetMap.offsetsMap
           offset <- offsetOpt
+          if !offset.isInstanceOf[TombstoneOffset.type]  // Filter out tombstones
           source <- sourceIdToSourceMap.get(sourceId)
         } yield source -> offset
         new StreamProgress ++ streamProgressEntries
@@ -169,7 +190,8 @@ object OffsetSeqMetadata extends Logging {
     STREAMING_JOIN_STATE_FORMAT_VERSION, STATE_STORE_COMPRESSION_CODEC,
     STATE_STORE_ROCKSDB_FORMAT_VERSION, STATEFUL_OPERATOR_USE_STRICT_DISTRIBUTION,
     PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN, STREAMING_STATE_STORE_ENCODING_FORMAT,
-    STATE_STORE_ROW_CHECKSUM_ENABLED, STREAMING_OFFSET_LOG_FORMAT_VERSION
+    STATE_STORE_ROW_CHECKSUM_ENABLED, STREAMING_OFFSET_LOG_FORMAT_VERSION,
+    ENABLE_STREAMING_SOURCE_EVOLUTION
   )
 
   /**
@@ -216,7 +238,8 @@ object OffsetSeqMetadata extends Logging {
     STATEFUL_OPERATOR_USE_STRICT_DISTRIBUTION.key -> "false",
     PRUNE_FILTERS_CAN_PRUNE_STREAMING_SUBPLAN.key -> "true",
     STREAMING_STATE_STORE_ENCODING_FORMAT.key -> "unsaferow",
-    STATE_STORE_ROW_CHECKSUM_ENABLED.key -> "false"
+    STATE_STORE_ROW_CHECKSUM_ENABLED.key -> "false",
+    ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "false"
   )
 
   def readValue[T](metadataLog: OffsetSeqMetadata, confKey: ConfigEntry[T]): String = {

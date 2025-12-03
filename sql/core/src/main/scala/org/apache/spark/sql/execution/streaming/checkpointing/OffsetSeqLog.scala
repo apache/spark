@@ -146,6 +146,8 @@ object OffsetSeqLog {
 
   private[checkpointing] def parseOffset(value: String): OffsetV2 = value match {
     case SERIALIZED_VOID_OFFSET => null
+    // Check for TombstoneOffset JSON: {"tombstone": true}
+    case json if json.trim == TombstoneOffset.json() => TombstoneOffset
     case json => SerializedOffset(json)
   }
 }
