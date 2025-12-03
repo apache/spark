@@ -361,7 +361,10 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         """
         Create a mask for floating-point Arrow types that preserves NaN values.
 
-        For floating-point types, only mask None values (convert to NULL), not NaN values.
+        SPARK-54579: For floating-point types, only mask None values (convert to NULL),
+        not NaN values. NaN should be preserved as NaN (a valid floating-point value),
+        while only None should be converted to NULL.
+
         For non-floating types, mask both None and NaN as before.
 
         Parameters
