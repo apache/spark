@@ -29,6 +29,7 @@ if TYPE_CHECKING:
         ArrowScalarUDFType,
         ArrowScalarIterUDFType,
         ArrowGroupedAggUDFType,
+        ArrowGroupedAggIterUDFType,
         ArrowGroupedMapIterUDFType,
         ArrowGroupedMapUDFType,
         ArrowGroupedMapFunction,
@@ -156,7 +157,14 @@ def infer_pandas_eval_type(
 
 def infer_arrow_eval_type(
     sig: Signature, type_hints: Dict[str, Any]
-) -> Optional[Union["ArrowScalarUDFType", "ArrowScalarIterUDFType", "ArrowGroupedAggUDFType"]]:
+) -> Optional[
+    Union[
+        "ArrowScalarUDFType",
+        "ArrowScalarIterUDFType",
+        "ArrowGroupedAggUDFType",
+        "ArrowGroupedAggIterUDFType",
+    ]
+]:
     """
     Infers the evaluation type in :class:`pyspark.util.PythonEvalType` from
     :class:`inspect.Signature` instance and type hints.
@@ -235,6 +243,41 @@ def infer_arrow_eval_type(
     if is_array_agg:
         return ArrowUDFType.GROUPED_AGG
 
+    # Iterator[Tuple[pa.Array, ...]] -> Any
+    is_iterator_tuple_array_agg = (
+        len(parameters_sig) == 1
+        and check_iterator_annotation(  # Iterator
+            parameters_sig[0],
+            parameter_check_func=lambda a: check_tuple_annotation(  # Tuple
+                a,
+                parameter_check_func=lambda ta: (ta == Ellipsis or ta == pa.Array),
+            ),
+        )
+        and (
+            return_annotation != pa.Array
+            and not check_iterator_annotation(return_annotation)
+            and not check_tuple_annotation(return_annotation)
+        )
+    )
+    if is_iterator_tuple_array_agg:
+        return ArrowUDFType.GROUPED_AGG_ITER
+
+    # Iterator[pa.Array] -> Any
+    is_iterator_array_agg = (
+        len(parameters_sig) == 1
+        and check_iterator_annotation(
+            parameters_sig[0],
+            parameter_check_func=lambda a: a == pa.Array,
+        )
+        and (
+            return_annotation != pa.Array
+            and not check_iterator_annotation(return_annotation)
+            and not check_tuple_annotation(return_annotation)
+        )
+    )
+    if is_iterator_array_agg:
+        return ArrowUDFType.GROUPED_AGG_ITER
+
     return None
 
 
@@ -249,6 +292,7 @@ def infer_eval_type(
     "ArrowScalarUDFType",
     "ArrowScalarIterUDFType",
     "ArrowGroupedAggUDFType",
+    "ArrowGroupedAggIterUDFType",
 ]:
     """
     Infers the evaluation type in :class:`pyspark.util.PythonEvalType` from
@@ -264,6 +308,7 @@ def infer_eval_type(
             "ArrowScalarUDFType",
             "ArrowScalarIterUDFType",
             "ArrowGroupedAggUDFType",
+            "ArrowGroupedAggIterUDFType",
         ]
     ] = None
     if kind == "pandas":
@@ -295,6 +340,7 @@ def infer_eval_type_for_udf(  # type: ignore[no-untyped-def]
         "ArrowScalarUDFType",
         "ArrowScalarIterUDFType",
         "ArrowGroupedAggUDFType",
+        "ArrowGroupedAggIterUDFType",
     ]
 ]:
     argspec = getfullargspec(f)

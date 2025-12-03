@@ -51,7 +51,8 @@ case class UserDefinedPythonFunction(
         || pythonEvalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
         || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
         || pythonEvalType == PythonEvalType.SQL_SCALAR_ARROW_UDF
-        || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF) {
+        || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF
+        || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF) {
       /*
        * Check if the named arguments:
        * - don't have duplicated names
@@ -63,7 +64,8 @@ case class UserDefinedPythonFunction(
     }
 
     if (pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
-      || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF) {
+      || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF
+      || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF) {
       PythonUDAF(name, func, dataType, e, udfDeterministic, pythonEvalType)
     } else {
       PythonUDF(name, func, dataType, e, pythonEvalType, udfDeterministic)
