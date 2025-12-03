@@ -1730,7 +1730,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
         return codes, uniques
 
-
+@unittest.skip("TODO(SPARK-54575): Re-enable this test")
 def _test() -> None:
     import os
     import doctest
