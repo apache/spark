@@ -501,6 +501,11 @@ class StatefulProcessorApiClient:
                 # Convert NumPy types to Python primitive types.
                 if isinstance(v, np.generic):
                     return v.tolist()
+                # Named tuples (collections.namedtuple or typing.NamedTuple) have a
+                # _fields attribute. Spark Row has __fields__. Both require positional
+                # arguments and cannot be instantiated with a generator expression.
+                if hasattr(v, '_fields') or hasattr(v, '__fields__'):
+                    return type(v)(*[normalize_value(e) for e in v])
                 # List / tuple: recursively normalize each element
                 if isinstance(v, (list, tuple)):
                     return type(v)(normalize_value(e) for e in v)
