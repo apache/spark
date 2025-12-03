@@ -36,7 +36,7 @@ import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.VersionUtils
+import org.apache.spark.util.{SizeEstimator, VersionUtils}
 
 /**
  * Common params for FPGrowth and FPGrowthModel
@@ -324,8 +324,13 @@ class FPGrowthModel private[ml] (
   }
 
   override def estimatedSize: Long = {
-    // TODO: Implement this method.
-    throw new UnsupportedOperationException
+    freqItemsets match {
+      case df: org.apache.spark.sql.classic.DataFrame =>
+        df.toArrowBatchRdd.map(_.length.toLong).reduce(_ + _) +
+          SizeEstimator.estimate(itemSupport)
+      case o => throw new UnsupportedOperationException(
+        s"Unsupported dataframe type: ${o.getClass.getName}")
+    }
   }
 }
 

@@ -2378,7 +2378,7 @@ class Dataset[T] private[sql](
       sparkSession.sessionState.conf.arrowUseLargeVarTypes)
   }
 
-  private[sql] def toArrowBatchRdd: RDD[Array[Byte]] = {
+  private[spark] def toArrowBatchRdd: RDD[Array[Byte]] = {
     toArrowBatchRdd(queryExecution.executedPlan)
   }
 }
