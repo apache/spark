@@ -18,14 +18,10 @@
 package org.apache.spark.sql.connect
 
 import java.util.UUID
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
-
-import scala.jdk.CollectionConverters._
 
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.connect.proto.{Command, StreamingQueryManagerCommand, StreamingQueryManagerCommandResult}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.streaming
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamingQueryListener}
 
