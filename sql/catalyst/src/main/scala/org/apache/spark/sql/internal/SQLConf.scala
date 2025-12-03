@@ -2997,6 +2997,19 @@ object SQLConf {
       .checkValue(v => Set(1).contains(v), "Valid version is 1")
       .createWithDefault(1)
 
+  val STREAMING_OFFSET_LOG_FORMAT_VERSION =
+    buildConf("spark.sql.streaming.offsetLog.formatVersion")
+      .doc("Offset log format version used in streaming query checkpoints. " +
+        "Version 1 uses sequence-based OffsetSeq format, version 2 uses map-based OffsetMap " +
+        "format which provides better flexibility for source management. " +
+        "Offset log format versions are incompatible, so this configuration only affects new " +
+        "streaming queries. Existing queries will continue using the format version from their " +
+        "checkpoint.")
+      .version("4.1.0")
+      .intConf
+      .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
+      .createWithDefault(1)
+
   val UNSUPPORTED_OPERATION_CHECK_ENABLED =
     buildConf("spark.sql.streaming.unsupportedOperationCheck")
       .internal()
