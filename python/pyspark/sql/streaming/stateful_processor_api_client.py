@@ -496,6 +496,7 @@ class StatefulProcessorApiClient:
 
         if have_numpy:
             import numpy as np
+            from pyspark.sql import Row
 
             def normalize_value(v: Any) -> Any:
                 # Convert NumPy types to Python primitive types.
@@ -504,7 +505,10 @@ class StatefulProcessorApiClient:
                 # Named tuples (collections.namedtuple or typing.NamedTuple) have a
                 # _fields attribute. Spark Row has __fields__. Both require positional
                 # arguments and cannot be instantiated with a generator expression.
-                if hasattr(v, '_fields') or hasattr(v, '__fields__'):
+                if (
+                    isinstance(v, Row) or
+                    (isinstance(v, tuple) and hasattr(v, "_fields"))
+                ):
                     return type(v)(*[normalize_value(e) for e in v])
                 # List / tuple: recursively normalize each element
                 if isinstance(v, (list, tuple)):
