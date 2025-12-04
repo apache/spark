@@ -19,7 +19,6 @@ from pathlib import Path
 from pyspark.errors import PySparkTypeError
 from pyspark.sql import SparkSession
 from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
-from pyspark.pipelines.block_connect_access import block_spark_connect_execution_and_analysis
 from pyspark.pipelines.output import (
     Output,
     MaterializedView,
@@ -115,8 +114,7 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
         with add_pipeline_analysis_context(
             spark=self._spark, dataflow_graph_id=self._dataflow_graph_id, flow_name=flow.name
         ):
-            with block_spark_connect_execution_and_analysis():
-                df = flow.func()
+            df = flow.func()
         relation = cast(ConnectDataFrame, df)._plan.plan(self._client)
 
         relation_flow_details = pb2.PipelineCommand.DefineFlow.WriteRelationFlowDetails(
