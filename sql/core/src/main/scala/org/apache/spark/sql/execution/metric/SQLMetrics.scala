@@ -230,14 +230,13 @@ object SQLMetrics {
         s"$METRICS_NAME_SUFFIX:\n($min, $med, $max $taskInfo)"
       }
     } else {
-      val strFormat: Long => String = if (metricsType == SIZE_METRIC) {
-        Utils.bytesToString
-      } else if (metricsType == TIMING_METRIC) {
-        Utils.msDurationToString
-      } else if (metricsType == NS_TIMING_METRIC) {
-        duration => Utils.msDurationToString(duration.nanos.toMillis)
-      } else {
-        throw new IllegalStateException(s"unexpected metrics type: $metricsType")
+      val strFormat: Long => String = metricsType match {
+        case SIZE_METRIC => Utils.bytesToString
+        case TIMING_METRIC => Utils.msDurationToString
+        case NS_TIMING_METRIC => duration => Utils.msDurationToString(duration.nanos.toMillis)
+        case _ =>
+          val numberFormat = NumberFormat.getIntegerInstance(Locale.US)
+          numberFormat.format _
       }
 
       val validValues = values.filter(_ >= 0)
