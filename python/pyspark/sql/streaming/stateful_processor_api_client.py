@@ -496,7 +496,6 @@ class StatefulProcessorApiClient:
 
         if have_numpy:
             import numpy as np
-            from pyspark.sql import Row
 
             def normalize_value(v: Any) -> Any:
                 # Convert NumPy types to Python primitive types.
