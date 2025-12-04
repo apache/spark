@@ -128,8 +128,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     val spark = dataframe.sparkSession
     val schema = dataframe.schema
     val geospatialEnabled = spark.sessionState.conf.geospatialEnabled
-    if (!geospatialEnabled && schema.fields.exists(field =>
-        STExpressionUtils.isGeoSpatialType(field.dataType))) {
+    if (!geospatialEnabled && schema.existsRecursively(STExpressionUtils.isGeoSpatialType)) {
       throw new org.apache.spark.sql.AnalysisException(
         errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",
         messageParameters = scala.collection.immutable.Map.empty)
