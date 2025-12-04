@@ -17,14 +17,22 @@
 
 try:
     import debugpy
-    import sys
+    import fcntl
     import os
+    import sys
     if "DEBUGPY_ADAPTER_ENDPOINTS" in os.environ and not any("debugpy" in arg for arg in sys.argv):
-        debugpy.listen(0)
-        debugpy.wait_for_client()
+        lock_file = os.getenv("DEBUGPY_ADAPTER_ENDPOINTS") + ".lock"
         try:
-            os.remove(os.getenv("DEBUGPY_ADAPTER_ENDPOINTS"))
-        except Exception:
-            pass
+            fd = os.open(lock_file, os.O_CREAT | os.O_RDWR, 0o600)
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            debugpy.listen(0)
+            debugpy.wait_for_client()
+            try:
+                os.remove(os.getenv("DEBUGPY_ADAPTER_ENDPOINTS"))
+            except Exception:
+                pass
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)
 except ImportError:
     pass
