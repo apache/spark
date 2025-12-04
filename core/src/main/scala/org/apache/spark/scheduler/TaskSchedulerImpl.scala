@@ -1129,11 +1129,6 @@ private[spark] class TaskSchedulerImpl(
     executorIdToRunningTaskIds.get(execId).exists(_.nonEmpty)
   }
 
-  def isExecutorAvailable(execId: String): Boolean = synchronized {
-    executorIdToHost.get(execId)
-      .exists(availableHostsToExecutors.get(_).exists(_.contains(execId)))
-  }
-
   // exposed for test
   protected final def isExecutorDecommissioned(execId: String): Boolean =
     getExecutorDecommissionState(execId).isDefined
