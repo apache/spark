@@ -35,30 +35,67 @@ import org.apache.spark.sql.execution.streaming.runtime.{MultipleWatermarkPolicy
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
 
+trait OffsetSeqBase {
+  def offsets: Seq[Option[OffsetV2]]
+
+  def metadataOpt: Option[OffsetSeqMetadata]
+
+  override def toString: String = this match {
+    case offsetMap: OffsetMap =>
+      offsetMap.offsetsMap.map { case (sourceId, offsetOpt) =>
+        s"$sourceId: ${offsetOpt.map(_.json).getOrElse("-")}"
+      }.mkString("{", ", ", "}")
+    case _ =>
+      offsets.map(_.map(_.json).getOrElse("-")).mkString("[", ", ", "]")
+  }
+
+  /**
+   * Unpacks an offset into [[StreamProgress]] by associating each offset with the
+   * ordered list of sources.
+   *
+   * This method is typically used to associate a serialized offset with actual
+   * sources (which cannot be serialized).
+   */
+  def toStreamProgress(sources: Seq[SparkDataStream]): StreamProgress = {
+    assert(!this.isInstanceOf[OffsetMap], "toStreamProgress must be called with map")
+    assert(sources.size == offsets.size, s"There are [${offsets.size}] sources in the " +
+      s"checkpoint offsets and now there are [${sources.size}] sources requested by " +
+      s"the query. Cannot continue.")
+    new StreamProgress ++ sources.zip(offsets).collect { case (s, Some(o)) => (s, o) }
+  }
+
+  /**
+   * Converts OffsetMap to StreamProgress using source ID mapping.
+   * This method is specific to OffsetMap and requires a mapping from sourceId to SparkDataStream.
+   */
+  def toStreamProgress(
+      sources: Seq[SparkDataStream],
+      sourceIdToSourceMap: Map[String, SparkDataStream]): StreamProgress = {
+    this match {
+      case offsetMap: OffsetMap =>
+        val streamProgressEntries = for {
+          (sourceId, offsetOpt) <- offsetMap.offsetsMap
+          offset <- offsetOpt
+          source <- sourceIdToSourceMap.get(sourceId)
+        } yield source -> offset
+        new StreamProgress ++ streamProgressEntries
+      case _ =>
+        // Fallback to original method for backward compatibility
+        toStreamProgress(sources)
+    }
+  }
+}
 
 /**
  * An ordered collection of offsets, used to track the progress of processing data from one or more
  * [[Source]]s that are present in a streaming query. This is similar to simplified, single-instance
  * vector clock that must progress linearly forward.
  */
-case class OffsetSeq(offsets: Seq[Option[OffsetV2]], metadata: Option[OffsetSeqMetadata] = None) {
+case class OffsetSeq(
+    offsets: Seq[Option[OffsetV2]],
+    metadata: Option[OffsetSeqMetadata] = None) extends OffsetSeqBase {
 
-  /**
-   * Unpacks an offset into [[StreamProgress]] by associating each offset with the ordered list of
-   * sources.
-   *
-   * This method is typically used to associate a serialized offset with actual sources (which
-   * cannot be serialized).
-   */
-  def toStreamProgress(sources: Seq[SparkDataStream]): StreamProgress = {
-    assert(sources.size == offsets.size, s"There are [${offsets.size}] sources in the " +
-      s"checkpoint offsets and now there are [${sources.size}] sources requested by the query. " +
-      s"Cannot continue.")
-    new StreamProgress ++ sources.zip(offsets).collect { case (s, Some(o)) => (s, o) }
-  }
-
-  override def toString: String =
-    offsets.map(_.map(_.json).getOrElse("-")).mkString("[", ", ", "]")
+  override def metadataOpt: Option[OffsetSeqMetadata] = metadata
 }
 
 object OffsetSeq {
@@ -80,6 +117,23 @@ object OffsetSeq {
 
 
 /**
+ * A map-based collection of offsets, used to track the progress of processing data from one or more
+ * streaming sources. Each source is identified by a string key (initially sourceId.toString()).
+ * This replaces the sequence-based approach with a more flexible map-based approach to support
+ * named source identities.
+ */
+case class OffsetMap(
+    offsetsMap: Map[String, Option[OffsetV2]],
+    metadataOpt: Option[OffsetSeqMetadata] = None) extends OffsetSeqBase {
+
+  // OffsetMap does not support sequence-based access
+  override def offsets: Seq[Option[OffsetV2]] = {
+    throw new UnsupportedOperationException(
+      "OffsetMap does not support sequence-based offsets access. Use offsetsMap directly.")
+  }
+}
+
+/**
  * Contains metadata associated with a [[OffsetSeq]]. This information is
  * persisted to the offset log in the checkpoint location via the [[OffsetSeq]] metadata field.
  *
@@ -97,7 +151,8 @@ object OffsetSeq {
 case class OffsetSeqMetadata(
     batchWatermarkMs: Long = 0,
     batchTimestampMs: Long = 0,
-    conf: Map[String, String] = Map.empty) {
+    conf: Map[String, String] = Map.empty,
+    version: Int = 1) {
   def json: String = Serialization.write(this)(OffsetSeqMetadata.format)
 }
 

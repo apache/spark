@@ -128,8 +128,7 @@ private[sql] object ArrowConverters extends Logging {
     }
 
     override def next(): Array[Byte] = {
-      val out = new ByteArrayOutputStream()
-      val writeChannel = new WriteChannel(Channels.newChannel(out))
+      var bytes: Array[Byte] = null
 
       Utils.tryWithSafeFinally {
         var rowCount = 0L
@@ -140,13 +139,13 @@ private[sql] object ArrowConverters extends Logging {
         }
         arrowWriter.finish()
         val batch = unloader.getRecordBatch()
-        MessageSerializer.serialize(writeChannel, batch)
+        bytes = serializeBatch(batch)
         batch.close()
       } {
         arrowWriter.reset()
       }
 
-      out.toByteArray
+      bytes
     }
 
     override def close(): Unit = {
@@ -548,6 +547,13 @@ private[sql] object ArrowConverters extends Logging {
       new ReadChannel(Channels.newChannel(in)), allocator)  // throws IOException
   }
 
+  private[arrow] def serializeBatch(batch: ArrowRecordBatch): Array[Byte] = {
+    val out = new ByteArrayOutputStream()
+    val writeChannel = new WriteChannel(Channels.newChannel(out))
+    MessageSerializer.serialize(writeChannel, batch)
+    out.toByteArray
+  }
+
   /**
    * Create a DataFrame from an iterator of serialized ArrowRecordBatches.
    */
@@ -555,25 +561,41 @@ private[sql] object ArrowConverters extends Logging {
       arrowBatches: Iterator[Array[Byte]],
       schemaString: String,
       session: SparkSession): DataFrame = {
-    val schema = DataType.fromJson(schemaString).asInstanceOf[StructType]
+    toDataFrame(
+      arrowBatches,
+      DataType.fromJson(schemaString).asInstanceOf[StructType],
+      session,
+      session.sessionState.conf.sessionLocalTimeZone,
+      false,
+      session.sessionState.conf.arrowUseLargeVarTypes)
+  }
+
+  /**
+   * Create a DataFrame from an iterator of serialized ArrowRecordBatches.
+   */
+  private[sql] def toDataFrame(
+      arrowBatches: Iterator[Array[Byte]],
+      schema: StructType,
+      session: SparkSession,
+      timeZoneId: String,
+      errorOnDuplicatedFieldNames: Boolean,
+      largeVarTypes: Boolean): DataFrame = {
     val attrs = toAttributes(schema)
     val batchesInDriver = arrowBatches.toArray
-    val largeVarTypes = session.sessionState.conf.arrowUseLargeVarTypes
     val shouldUseRDD = session.sessionState.conf
       .arrowLocalRelationThreshold < batchesInDriver.map(_.length.toLong).sum
 
     if (shouldUseRDD) {
       logDebug("Using RDD-based createDataFrame with Arrow optimization.")
-      val timezone = session.sessionState.conf.sessionLocalTimeZone
       val rdd = session.sparkContext
         .parallelize(batchesInDriver.toImmutableArraySeq, batchesInDriver.length)
         .mapPartitions { batchesInExecutors =>
           ArrowConverters.fromBatchIterator(
             batchesInExecutors,
             schema,
-            timezone,
-            errorOnDuplicatedFieldNames = false,
-            largeVarTypes = largeVarTypes,
+            timeZoneId,
+            errorOnDuplicatedFieldNames,
+            largeVarTypes,
             TaskContext.get())
         }
       session.internalCreateDataFrame(rdd.setName("arrow"), schema)
@@ -582,9 +604,9 @@ private[sql] object ArrowConverters extends Logging {
       val data = ArrowConverters.fromBatchIterator(
         batchesInDriver.iterator,
         schema,
-        session.sessionState.conf.sessionLocalTimeZone,
-        errorOnDuplicatedFieldNames = false,
-        largeVarTypes = largeVarTypes,
+        timeZoneId,
+        errorOnDuplicatedFieldNames,
+        largeVarTypes,
         TaskContext.get())
 
       // Project/copy it. Otherwise, the Arrow column vectors will be closed and released out.
