@@ -231,6 +231,60 @@ def ser_to_scalar_pandas_udf_example(spark: SparkSession) -> None:
     # +---+----+------+
 
 
+def iter_ser_to_scalar_pandas_udf_example(spark: SparkSession) -> None:
+    from typing import Iterator, Tuple
+
+    import pandas as pd
+    import numpy as np
+
+    from pyspark.sql.functions import pandas_udf
+
+    df = spark.createDataFrame(
+        [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
+        ("id", "v"))
+
+    # Iterator of Series to Scalar
+    @pandas_udf("double")  # type: ignore[call-overload]
+    def pandas_mean_iter(it: Iterator[pd.Series]) -> float:
+        sum_val = 0.0
+        cnt = 0
+        for v in it:
+            sum_val += v.sum()
+            cnt += len(v)
+        return sum_val / cnt
+
+    df.groupby("id").agg(pandas_mean_iter(df['v'])).show()
+    # +---+-------------------+
+    # | id|pandas_mean_iter(v)|
+    # +---+-------------------+
+    # |  1|                1.5|
+    # |  2|                6.0|
+    # +---+-------------------+
+
+    # Iterator of Multiple Series to Scalar
+    df2 = spark.createDataFrame(
+        [(1, 1.0, 1.0), (1, 2.0, 2.0), (2, 3.0, 1.0), (2, 5.0, 2.0), (2, 10.0, 3.0)],
+        ("id", "v", "w"))
+
+    @pandas_udf("double")  # type: ignore[call-overload]
+    def pandas_weighted_mean_iter(
+            it: Iterator[Tuple[pd.Series, pd.Series]]) -> float:
+        weighted_sum = 0.0
+        weight = 0.0
+        for v, w in it:
+            weighted_sum += np.dot(v, w)
+            weight += w.sum()
+        return weighted_sum / weight
+
+    df2.groupby("id").agg(pandas_weighted_mean_iter(df2["v"], df2["w"])).show()
+    # +---+-------------------------------+
+    # | id|pandas_weighted_mean_iter(v, w)|
+    # +---+-------------------------------+
+    # |  1|             1.6666666666666667|
+    # |  2|              7.166666666666667|
+    # +---+-------------------------------+
+
+
 def grouped_apply_in_pandas_example(spark: SparkSession) -> None:
     df = spark.createDataFrame(
         [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],

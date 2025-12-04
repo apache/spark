@@ -417,6 +417,9 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     .. versionchanged:: 4.1.0
         Supports iterator API in GROUPED_MAP type.
 
+    .. versionchanged:: 4.2.0
+        Supports iterator API in GROUPED_AGG type.
+
     Parameters
     ----------
     f : function, optional
@@ -674,6 +677,66 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         .. note:: For performance reasons, the input series to window functions are not copied.
             Therefore, mutating the input series is not allowed and will cause incorrect results.
             For the same reason, users should also not rely on the index of the input series.
+
+    * Iterator of Series to Scalar
+        `Iterator[pandas.Series]` -> `Any`
+
+        The function takes an iterator of `pandas.Series` and returns a scalar value. This is
+        useful for grouped aggregations where the UDF can process all batches for a group
+        iteratively, which is more memory-efficient than loading all data at once. The returned
+        scalar can be a python primitive type or a numpy data type.
+
+        .. note:: Only a single UDF is supported per aggregation.
+
+        >>> from typing import Iterator
+        >>> @pandas_udf("double")
+        ... def pandas_mean_iter(it: Iterator[pd.Series]) -> float:
+        ...     sum_val = 0.0
+        ...     cnt = 0
+        ...     for v in it:
+        ...         sum_val += v.sum()
+        ...         cnt += len(v)
+        ...     return sum_val / cnt
+        ...
+        >>> df = spark.createDataFrame(
+        ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v"))
+        >>> df.groupby("id").agg(pandas_mean_iter(df['v'])).show()
+        +---+-------------------+
+        | id|pandas_mean_iter(v)|
+        +---+-------------------+
+        |  1|                1.5|
+        |  2|                6.0|
+        +---+-------------------+
+
+    * Iterator of Multiple Series to Scalar
+        `Iterator[Tuple[pandas.Series, ...]]` -> `Any`
+
+        The function takes an iterator of a tuple of multiple `pandas.Series` and returns a
+        scalar value. This is useful for grouped aggregations with multiple input columns.
+
+        .. note:: Only a single UDF is supported per aggregation.
+
+        >>> from typing import Iterator, Tuple
+        >>> import numpy as np
+        >>> @pandas_udf("double")
+        ... def pandas_weighted_mean_iter(it: Iterator[Tuple[pd.Series, pd.Series]]) -> float:
+        ...     weighted_sum = 0.0
+        ...     weight = 0.0
+        ...     for v, w in it:
+        ...         weighted_sum += np.dot(v, w)
+        ...         weight += w.sum()
+        ...     return weighted_sum / weight
+        ...
+        >>> df = spark.createDataFrame(
+        ...     [(1, 1.0, 1.0), (1, 2.0, 2.0), (2, 3.0, 1.0), (2, 5.0, 2.0), (2, 10.0, 3.0)],
+        ...     ("id", "v", "w"))
+        >>> df.groupby("id").agg(pandas_weighted_mean_iter(df["v"], df["w"])).show()
+        +---+-------------------------------+
+        | id|pandas_weighted_mean_iter(v, w)|
+        +---+-------------------------------+
+        |  1|             1.6666666666666...|
+        |  2|              7.166666666666...|
+        +---+-------------------------------+
 
     Notes
     -----
