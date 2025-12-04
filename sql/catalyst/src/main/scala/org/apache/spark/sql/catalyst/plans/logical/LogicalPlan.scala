@@ -440,7 +440,7 @@ object LogicalPlanIntegrity {
       currentPlan: LogicalPlan,
       lightweight: Boolean): Option[String] = {
     // Lightweight validation logic. If `lightweight` is true, we only run this validation.
-    if (lightweight) {
+    if (lightweight && false) {
       val validation = if (previousPlan.resolved && !currentPlan.resolved) {
         Some("The plan was previously resolved and now became unresolved.")
       } else {

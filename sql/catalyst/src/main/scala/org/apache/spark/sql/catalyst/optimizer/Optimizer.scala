@@ -982,7 +982,13 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
       case s: PythonUDF =>
         s.toCatalyst() match {
           case None => s
-          case Some(catalystExpr) => catalystExpr
+          case Some(catalystExpr) =>
+            logWarning(f"Trying reo replace ${s} with ${catalystExpr} " +
+              f"which has children ${s.children} and ${catalystExpr.children} respectively.")
+            logWarning(f"New expr input data types checked: ${catalystExpr.checkInputDataTypes()}")
+            logWarning(f"Children res: ${s.childrenResolved}, " +
+              f"catalyst children res: ${catalystExpr.childrenResolved}")
+            catalystExpr
         }
     }
   }

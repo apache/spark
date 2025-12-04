@@ -169,6 +169,7 @@ case class PythonUDF(
         val constant_body = body(1).asInstanceOf[List[_]]
         val constant_value_ast = constant_body(0)
         val const_value = constant_value_ast.asInstanceOf[List[_]](1)
+        logWarning(f"Extracting constant ${const_value} of java type ${const_value.getClass}")
         Some(Literal(const_value))
       case Some("BinOp") =>
         val binop_body = body(1).asInstanceOf[List[_]]
