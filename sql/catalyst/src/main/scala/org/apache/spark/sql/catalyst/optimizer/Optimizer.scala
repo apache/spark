@@ -977,18 +977,29 @@ object LimitPushDown extends Rule[LogicalPlan] {
  * Attempt to convert UDFS to Catalyst expressions.
  */
 object ConvertToCatalyst extends Rule[LogicalPlan] {
+  val UDFTypeCoercesExpressionTypes = new resolver.UDFTypeCoercesExpressionTypes()
   def apply(plan: LogicalPlan): LogicalPlan = {
+    // TODO: We should avoid converting a UDF node where that would break
+    // pipelining.
+    // For example: (UDF -> UDF -> UDF) is often cheaper than UDF -> Catalyst -> UDF.
+    // But if we can convert the first or the last in a chain we should.
     plan.resolveExpressionsWithPruning(_.containsPattern(PYTHON_UDF)) {
       case s: PythonUDF =>
         s.toCatalyst() match {
           case None => s
           case Some(catalystExpr) =>
+            // Upgrade the types here since Python duct-typing means that
+            // in Python the types get automatically upgraded (e.g. 4 -> 4L or 4.0 automatically).
+            val catalystExprUpgraded = UDFTypeCoercesExpressionTypes.runCoercionTransformations(
+              catalystExpr, false)
             logWarning(f"Trying reo replace ${s} with ${catalystExpr} " +
               f"which has children ${s.children} and ${catalystExpr.children} respectively.")
             logWarning(f"New expr input data types checked: ${catalystExpr.checkInputDataTypes()}")
+            logWarning(f"New expr upgraded input data types checked: " +
+              f"${catalystExprUpgraded.checkInputDataTypes()}")
             logWarning(f"Children res: ${s.childrenResolved}, " +
               f"catalyst children res: ${catalystExpr.childrenResolved}")
-            catalystExpr
+            catalystExprUpgraded
         }
     }
   }
