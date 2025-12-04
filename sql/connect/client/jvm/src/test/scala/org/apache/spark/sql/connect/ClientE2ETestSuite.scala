@@ -20,10 +20,12 @@ import java.io.{ByteArrayOutputStream, PrintStream}
 import java.nio.file.Files
 import java.time.{DateTimeException, LocalTime}
 import java.util.Properties
+import java.util.UUID
+import java.util.concurrent.Executors
 
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
-import scala.concurrent.duration.{DurationInt, FiniteDuration}
+import scala.concurrent.duration.{Duration, DurationInt, FiniteDuration}
 import scala.jdk.CollectionConverters._
 
 import io.grpc.{CallOptions, Channel, ClientCall, ClientInterceptor, ForwardingClientCall, ForwardingClientCallListener, MethodDescriptor}
@@ -1786,6 +1788,53 @@ class ClientE2ETestSuite
     assert(observation.get.size === 1)
     assert(observation.get.contains("map"))
     assert(observation.get("map") === Map("count" -> 10))
+  }
+
+  test("SPARK-54279: delayed asynchronous metrics processing") {
+    val threadPool = Executors.newFixedThreadPool(2)
+    implicit val ec = ExecutionContext.fromExecutorService(threadPool)
+
+    val size = 10000000
+
+    def collectObservedMetrics(session: SparkSession): Map[String, Any] = {
+      val observation = Observation(s"delayed-${UUID.randomUUID().toString}")
+      session
+        .range(1)
+        .observe(
+          observation,
+          array_size(array_sort(sequence(max(col("id")) + size, lit(1)))).as("delayed"))
+        .collect()
+      observation.get
+    }
+
+    try {
+      // Ensure that the ObservationManager's QueryExecutionListener is registered in the parent
+      // session.
+      collectObservedMetrics(spark)
+
+      // Use a cloned session to simulate scenarios where asynchronous observed metrics processing
+      // by QueryExecutionListener may be delayed. The cloned session inherits listeners
+      // from the parent, which can delay its own metrics processing.
+      val sessions = List(spark, spark.cloneSession())
+
+      // Run 10 iterations with concurrent operations to increase the likelihood of triggering
+      // delays in asynchronous metrics processing.
+      for (i <- 0 until 10) {
+        val futures = sessions.map(session =>
+          Future {
+            collectObservedMetrics(session)
+          })
+
+        SparkThreadUtils.awaitResult(Future.sequence(futures), Duration.Inf).foreach { result =>
+          assert(result.size === 1)
+          assert(result.contains("delayed"))
+          assert(result("delayed") == size)
+        }
+      }
+    } finally {
+      ec.shutdown()
+      threadPool.shutdown()
+    }
   }
 
   test("SPARK-53553: null value handling in literals") {

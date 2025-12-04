@@ -52,8 +52,7 @@ private[sql] class ObservationManager(session: SparkSession) {
       observation
     })
 
-  private def tryComplete(qe: QueryExecution): Unit = {
-    val allMetrics = qe.observedMetrics
+  def tryComplete(qe: QueryExecution, allMetrics: Map[String, Row]): Unit = {
     qe.logical.foreach {
       case c: CollectMetrics =>
         val keyExists = observations.containsKey((c.name, c.dataframeId))
@@ -76,6 +75,10 @@ private[sql] class ObservationManager(session: SparkSession) {
         }
       case _ =>
     }
+  }
+
+  private def tryComplete(qe: QueryExecution): Unit = {
+    tryComplete(qe, qe.observedMetrics)
   }
 
   private object Listener extends QueryExecutionListener {
