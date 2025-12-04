@@ -89,14 +89,13 @@ def _dump_to_tree(node):
                 if value is None and getattr(cls, name, ...) is None:
                     continue
                 value, simple = _format(value, level)
-                allsimple = allsimple and simple
                 args.append((name, value))
             return (node.__class__.__name__, args), False
         elif isinstance(node, list):
             if not node:
                 return [], True
             return (list(_format(x, level)[0] for x in node)), False
-        return repr(node), True
+        return node, True
 
     if not isinstance(node, ast.AST):
         raise TypeError('expected AST, got %r' % node.__class__.__name__)
