@@ -323,7 +323,7 @@ class FPGrowthModel private[ml] (
     s"FPGrowthModel: uid=$uid, numTrainingRecords=$numTrainingRecords"
   }
 
-  override def estimatedSize: Long = {
+  private[spark] override def estimatedSize: Long = {
     freqItemsets match {
       case df: org.apache.spark.sql.classic.DataFrame =>
         df.toArrowBatchRdd.map(_.length.toLong).reduce(_ + _) +
