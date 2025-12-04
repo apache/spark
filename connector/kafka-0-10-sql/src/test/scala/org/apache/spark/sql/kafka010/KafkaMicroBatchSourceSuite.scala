@@ -42,7 +42,7 @@ import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2ScanRelation
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeq
+import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqBase
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.execution.streaming.runtime.{MicroBatchExecution, StreamExecution, StreamingExecutionRelation}
 import org.apache.spark.sql.execution.streaming.runtime.AsyncProgressTrackingMicroBatchExecution.{ASYNC_PROGRESS_TRACKING_CHECKPOINTING_INTERVAL_MS, ASYNC_PROGRESS_TRACKING_ENABLED}
@@ -854,7 +854,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase with 
         true
       },
       AssertOnQuery { q =>
-        val latestOffset: Option[(Long, OffsetSeq)] = q.offsetLog.getLatest()
+        val latestOffset: Option[(Long, OffsetSeqBase)] = q.offsetLog.getLatest()
         latestOffset.exists { offset =>
           !offset._2.offsets.exists(_.exists(_.json == "{}"))
         }

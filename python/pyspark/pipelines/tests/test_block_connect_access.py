@@ -17,7 +17,6 @@
 import unittest
 
 from pyspark.errors import PySparkException
-from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.connectutils import (
     ReusedConnectTestCase,
     should_test_connect,

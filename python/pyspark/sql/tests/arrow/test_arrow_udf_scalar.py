@@ -27,7 +27,7 @@ from typing import Iterator, Tuple
 from pyspark.util import PythonEvalType
 
 from pyspark.sql.functions import arrow_udf, ArrowUDFType
-from pyspark.sql import Row, functions as F
+from pyspark.sql import functions as F
 from pyspark.sql.types import (
     IntegerType,
     ByteType,

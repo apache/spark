@@ -21,6 +21,7 @@ pandas instances during the type conversion.
 """
 import datetime
 import itertools
+import functools
 from typing import Any, Callable, Iterable, List, Optional, Union, TYPE_CHECKING
 
 from pyspark.errors import PySparkTypeError, UnsupportedOperationException, PySparkValueError
@@ -855,6 +856,7 @@ def _to_corrected_pandas_type(dt: DataType) -> Optional[Any]:
         return None
 
 
+@functools.lru_cache(maxsize=64)
 def _create_converter_to_pandas(
     data_type: DataType,
     nullable: bool = True,
@@ -1216,6 +1218,7 @@ def _create_converter_to_pandas(
         return lambda pser: pser
 
 
+@functools.lru_cache(maxsize=64)
 def _create_converter_from_pandas(
     data_type: DataType,
     *,
