@@ -979,14 +979,22 @@ object LimitPushDown extends Rule[LogicalPlan] {
 object ConvertToCatalyst extends Rule[LogicalPlan] {
   val UDFTypeCoercesExpressionTypes = new resolver.UDFTypeCoercesExpressionTypes()
   def apply(plan: LogicalPlan): LogicalPlan = {
-    // TODO: We should avoid converting a UDF node where that would break
-    // pipelining.
+    // We should avoid converting a UDF node where that could break pipelining.
     // For example: (UDF -> UDF -> UDF) is often cheaper than UDF -> Catalyst -> UDF.
     // But if we can convert the first or the last in a chain we should.
-    plan.resolveExpressionsWithPruning(_.containsPattern(PYTHON_UDF)) {
-      case s: PythonUDF =>
+
+    // Short circuit if there is no Python UDFs in the plan.
+    if (!plan.containsPattern(PYTHON_UDF)) {
+      return plan
+    }
+    plan.mapExpressions(applyExpr(_, false))
+  }
+
+  def applyExpr(expression: Expression, parent_is_udf: Boolean = false): Expression = {
+    (expression, parent_is_udf) match {
+      case (s: PythonUDF, false) =>
         s.toCatalyst() match {
-          case None => s
+          case None => s.mapChildren(applyExpr(_, parent_is_udf = true))
           case Some(catalystExpr) =>
             // Upgrade the types here since Python duct-typing means that
             // in Python the types get automatically upgraded (e.g. 4 -> 4L or 4.0 automatically).
@@ -999,8 +1007,10 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
               f"${catalystExprUpgraded.checkInputDataTypes()}")
             logWarning(f"Children res: ${s.childrenResolved}, " +
               f"catalyst children res: ${catalystExpr.childrenResolved}")
-            catalystExprUpgraded
+            catalystExprUpgraded.mapChildren(applyExpr(_, parent_is_udf = false))
         }
+      case _ =>
+        expression.mapChildren(applyExpr(_, parent_is_udf = false))
     }
   }
 }
