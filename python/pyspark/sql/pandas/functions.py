@@ -40,6 +40,8 @@ class PandasUDFType:
 
     GROUPED_AGG = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
 
+    GROUPED_AGG_ITER = PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF
+
 
 class ArrowUDFType:
     """Arrow UDF Types. See :meth:`pyspark.sql.functions.arrow_udf`."""
@@ -761,6 +763,7 @@ def vectorized_udf(
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+        PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
@@ -823,6 +826,7 @@ def _validate_vectorized_udf(f, evalType, kind: str = "pandas") -> int:
         PythonEvalType.SQL_SCALAR_PANDAS_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+        PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
     ]:
         warnings.warn(
             "In Python 3.6+ and Spark 3.0+, it is preferred to specify type hints for "
