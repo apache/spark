@@ -81,7 +81,7 @@ sealed trait Source extends Validatable {
   def validate(): Try[Unit]
 }
 
-// Asset source, representing a UC table, view, or Metric View, etc.
+// Asset source, representing a catalog table, view, or Metric View, etc.
 case class AssetSource(name: String) extends Source {
   val sourceType: SourceType = SourceType.ASSET
 
