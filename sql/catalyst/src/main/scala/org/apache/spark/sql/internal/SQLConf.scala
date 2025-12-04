@@ -1609,6 +1609,12 @@ object SQLConf {
         "files at driver side must not be negative")
       .createWithDefault(32)
 
+  val MAX_BROADCAST_TABLE_SIZE = buildConf("spark.sql.maxBroadcastTableSize")
+    .doc("The maximum table size in bytes that can be broadcast in broadcast joins.")
+    .version("3.4.4")
+    .bytesConf(ByteUnit.BYTE)
+    .createWithDefault(8L << 30)
+
   val PARALLEL_PARTITION_DISCOVERY_PARALLELISM =
     buildConf("spark.sql.sources.parallelPartitionDiscovery.parallelism")
       .doc("The number of parallelism to list a collection of path recursively, Set the " +
@@ -5380,6 +5386,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyNegativeIndexInArrayInsert: Boolean = {
     getConf(SQLConf.LEGACY_NEGATIVE_INDEX_IN_ARRAY_INSERT)
   }
+
+  def maxBroadcastTableSizeInBytes: Long = getConf(MAX_BROADCAST_TABLE_SIZE)
 
   /** ********************** SQLConf functionality methods ************ */
 

@@ -83,7 +83,6 @@ trait BroadcastExchangeLike extends Exchange {
 case class BroadcastExchangeExec(
     mode: BroadcastMode,
     child: SparkPlan) extends BroadcastExchangeLike {
-  import BroadcastExchangeExec._
 
   override lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
@@ -160,10 +159,10 @@ case class BroadcastExchangeExec(
                   s"type: ${relation.getClass.getName}")
             }
 
-            longMetric("dataSize") += dataSize
-            if (dataSize >= MAX_BROADCAST_TABLE_BYTES) {
+            val maxBroadcastTableSizeInBytes = conf.maxBroadcastTableSizeInBytes
+            if (dataSize >= maxBroadcastTableSizeInBytes) {
               throw QueryExecutionErrors.cannotBroadcastTableOverMaxTableBytesError(
-                MAX_BROADCAST_TABLE_BYTES, dataSize)
+                maxBroadcastTableSizeInBytes, dataSize)
             }
 
             val beforeBroadcast = System.nanoTime()
@@ -226,7 +225,6 @@ case class BroadcastExchangeExec(
 }
 
 object BroadcastExchangeExec {
-  val MAX_BROADCAST_TABLE_BYTES = 8L << 30
 
   private[execution] val executionContext = ExecutionContext.fromExecutorService(
       ThreadUtils.newDaemonCachedThreadPool("broadcast-exchange",
