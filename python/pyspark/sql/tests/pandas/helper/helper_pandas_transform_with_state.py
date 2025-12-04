@@ -1667,13 +1667,13 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
     from typing import NamedTuple
     class Address(NamedTuple):
         road_id: int
-        block_id: int
+        city: str
 
     TAGS = [["dummy1", "dummy2"], ["dummy3"]]
     METADATA = [{"key": "env", "value": "prod"}, {"key": "region", "value": "us-west"}]
     ATTRIBUTES_MAP = {"key1": [1], "key2": [10]}
     CONFS_MAP = {"e1": {"e2": 5, "e3": 10}}
-    ADDRESS = [Address(1, 2), Address(3, 4)]
+    ADDRESS = [Address(1, "Seattle"), Address(3, "SF")]
 
     def init(self, handle: StatefulProcessorHandle) -> None:
         obj_schema = StructType(
@@ -1692,7 +1692,7 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
                     "address",
                     ArrayType(
                         StructType(
-                            [StructField("road_id", IntegerType()), StructField("block_id", IntegerType())]
+                            [StructField("road_id", IntegerType()), StructField("city", StringType())]
                         )
                     ),
                 ),
@@ -1787,13 +1787,13 @@ class RowStatefulProcessorCompositeType(StatefulProcessor):
     from typing import NamedTuple
     class Address(NamedTuple):
         road_id: int
-        block_id: int
+        city: str
 
     TAGS = [["dummy1", "dummy2"], ["dummy3"]]
     METADATA = [{"key": "env", "value": "prod"}, {"key": "region", "value": "us-west"}]
     ATTRIBUTES_MAP = {"key1": [1], "key2": [10]}
     CONFS_MAP = {"e1": {"e2": 5, "e3": 10}}
-    ADDRESS = [Address(1, 2), Address(3, 4)]
+    ADDRESS = [Address(1, "Seattle"), Address(3, "SF")]
 
     def init(self, handle: StatefulProcessorHandle) -> None:
         obj_schema = StructType(
@@ -1812,7 +1812,7 @@ class RowStatefulProcessorCompositeType(StatefulProcessor):
                     "address",
                     ArrayType(
                         StructType(
-                            [StructField("road_id", IntegerType()), StructField("block_id", IntegerType())]
+                            [StructField("road_id", IntegerType()), StructField("city", StringType())]
                         )
                     ),
                 ),
