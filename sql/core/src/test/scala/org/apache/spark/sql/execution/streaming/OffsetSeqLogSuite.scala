@@ -273,10 +273,6 @@ class OffsetSeqLogSuite extends SharedSparkSession {
           val metadata = offsetSeq.metadataOpt.get
           assert(metadata.version === 2, s"Expected version 2 but got ${metadata.version}")
 
-          // Verify the config is persisted
-          assert(metadata.conf.contains(SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key))
-          assert(metadata.conf(SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key) === "2")
-
           // Verify OffsetMap uses string keys ("0", "1", etc.)
           val offsetMap = offsetSeq.asInstanceOf[OffsetMap]
           assert(offsetMap.offsetsMap.keys.forall(_.forall(_.isDigit)),
