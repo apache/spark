@@ -180,7 +180,7 @@ class RocksDB(
 
   @volatile private var db: NativeRocksDB = _
   @volatile private var changelogWriter: Option[StateStoreChangelogWriter] = None
-  private val enableChangelogCheckpointing: Boolean = conf.enableChangelogCheckpointing
+  private var enableChangelogCheckpointing: Boolean = conf.enableChangelogCheckpointing
   @volatile protected var loadedVersion: Long = -1L   // -1 = nothing valid is loaded
 
   // Can be updated by whichever thread uploaded a snapshot, which could be either task,
@@ -555,30 +555,49 @@ class RocksDB(
 
   private def loadWithoutCheckpointId(
       version: Long,
-      readOnly: Boolean = false): RocksDB = {
+      readOnly: Boolean = false,
+      createEmpty: Boolean = false): RocksDB = {
+
     try {
-      if (loadedVersion != version) {
+      enableChangelogCheckpointing = if (createEmpty) false else conf.enableChangelogCheckpointing
+      // For createEmpty, always proceed; otherwise, only if version changed
+      if (createEmpty || loadedVersion != version) {
         closeDB(ignoreException = false)
 
-        // load the latest snapshot
-        loadSnapshotWithoutCheckpointId(version)
-
-        if (loadedVersion != version) {
-          val versionsAndUniqueIds: Array[(Long, Option[String])] =
-            (loadedVersion + 1 to version).map((_, None)).toArray
-          replayChangelog(versionsAndUniqueIds)
+        if (createEmpty) {
+          // Use version 0 logic to create empty directory with no SST files
+          val metadata = fileManager.loadCheckpointFromDfs(0, workingDir, rocksDBFileMapping, None)
           loadedVersion = version
+          fileManager.setMaxSeenVersion(version)
+          openLocalRocksDB(metadata)
+          // Empty store has no keys
+          numKeysOnLoadedVersion = 0
+          numInternalKeysOnLoadedVersion = 0
+        } else {
+          // load the latest snapshot
+          loadSnapshotWithoutCheckpointId(version)
+
+          if (loadedVersion != version) {
+            val versionsAndUniqueIds: Array[(Long, Option[String])] =
+              (loadedVersion + 1 to version).map((_, None)).toArray
+            replayChangelog(versionsAndUniqueIds)
+            loadedVersion = version
+          }
+          // After changelog replay the numKeysOnWritingVersion will be updated to
+          // the correct number of keys in the loaded version.
+          numKeysOnLoadedVersion = numKeysOnWritingVersion
+          numInternalKeysOnLoadedVersion = numInternalKeysOnWritingVersion
+          fileManagerMetrics = fileManager.latestLoadCheckpointMetrics
         }
-        // After changelog replay the numKeysOnWritingVersion will be updated to
-        // the correct number of keys in the loaded version.
-        numKeysOnLoadedVersion = numKeysOnWritingVersion
-        numInternalKeysOnLoadedVersion = numInternalKeysOnWritingVersion
-        fileManagerMetrics = fileManager.latestLoadCheckpointMetrics
       }
       if (conf.resetStatsOnLoad) {
         nativeStats.reset
       }
-      logInfo(log"Loaded ${MDC(LogKeys.VERSION_NUM, version)}")
+      if (createEmpty) {
+        logInfo(log"Created empty store at version ${MDC(LogKeys.VERSION_NUM, version)}")
+      } else {
+        logInfo(log"Loaded ${MDC(LogKeys.VERSION_NUM, version)}")
+      }
     } catch {
       case t: Throwable =>
         loadedVersion = -1  // invalidate loaded data
@@ -587,7 +606,17 @@ class RocksDB(
     if (enableChangelogCheckpointing && !readOnly) {
       // Make sure we don't leak resource.
       changelogWriter.foreach(_.abort())
-      changelogWriter = Some(fileManager.getChangeLogWriter(version + 1, useColumnFamilies))
+      if (createEmpty) {
+        // Empty lineage since this is a fresh start with forced snapshot
+        changelogWriter = Some(fileManager.getChangeLogWriter(
+          version + 1,
+          useColumnFamilies,
+          sessionStateStoreCkptId,
+          if (enableStateStoreCheckpointIds) Some(Array.empty[LineageItem]) else None
+        ))
+      } else {
+        changelogWriter = Some(fileManager.getChangeLogWriter(version + 1, useColumnFamilies))
+      }
     }
     this
   }
@@ -703,7 +732,8 @@ class RocksDB(
   def load(
       version: Long,
       stateStoreCkptId: Option[String] = None,
-      readOnly: Boolean = false): RocksDB = {
+      readOnly: Boolean = false,
+      createEmpty: Boolean = false): RocksDB = {
     val startTime = System.currentTimeMillis()
 
     assert(version >= 0)
@@ -715,9 +745,10 @@ class RocksDB(
     logInfo(log"Loading ${MDC(LogKeys.VERSION_NUM, version)} with stateStoreCkptId: ${
       MDC(LogKeys.UUID, stateStoreCkptId.getOrElse(""))}")
     if (stateStoreCkptId.isDefined || enableStateStoreCheckpointIds && version == 0) {
+      assert(createEmpty == false, "createEmpty not support for checkpointV2 yet")
       loadWithCheckpointId(version, stateStoreCkptId, readOnly)
     } else {
-      loadWithoutCheckpointId(version, readOnly)
+      loadWithoutCheckpointId(version, readOnly, createEmpty)
     }
 
     // Record the metrics after loading
@@ -727,91 +758,6 @@ class RocksDB(
     )
     // Register with memory manager after successful load
     updateMemoryUsageIfNeeded()
-
-    this
-  }
-
-  /**
-   * Create an empty RocksDB state store at the specified version without loading previous data.
-   *
-   * This method is useful when state will be completely rewritten and
-   * does not need to load previous states
-   *
-   * @param targetVersion The version to initialize the empty store at (must be >= 0)
-   * @param stateStoreCkptId Optional checkpoint ID (required if checkpoint IDs are enabled)
-   * @param readOnly Whether to open the store in read-only mode
-   * @return A RocksDB instance with an empty state at the target version
-   */
-  def loadEmpty(
-      targetVersion: Long,
-      stateStoreCkptId: Option[String] = None,
-      readOnly: Boolean = false): RocksDB = {
-
-    assert(targetVersion >= 0, s"Target version must be >= 0, got $targetVersion")
-    recordedMetrics = None
-    loadMetrics.clear()
-
-    logInfo(log"Creating empty store at version ${MDC(LogKeys.VERSION_NUM, targetVersion)} " +
-      log"with stateStoreCkptId: ${MDC(LogKeys.UUID, stateStoreCkptId.getOrElse(""))}")
-
-    try {
-      closeDB(ignoreException = false)
-
-      // Use version 0 logic to create empty directory with no SST files
-      val metadata = fileManager.loadCheckpointFromDfs(0, workingDir, rocksDBFileMapping, None)
-
-      // Set version tracking to target version
-      loadedVersion = targetVersion
-
-      // Handle checkpoint IDs if enabled
-      if (enableStateStoreCheckpointIds) {
-        require(stateStoreCkptId.isDefined,
-          "stateStoreCkptId must be defined when checkpoint IDs are enabled")
-
-        loadedStateStoreCkptId = stateStoreCkptId
-        sessionStateStoreCkptId = Some(java.util.UUID.randomUUID.toString)
-        lastCommitBasedStateStoreCkptId = None
-        lastCommittedStateStoreCkptId = None
-
-        // Clear lineage - targetVersion has no checkpoint, so no dependencies
-        lineageManager.clear()
-      }
-
-      // Initialize maxVersion to target version
-      fileManager.setMaxSeenVersion(targetVersion)
-
-      openLocalRocksDB(metadata)
-
-      // Empty store has no keys
-      numKeysOnLoadedVersion = 0
-      numInternalKeysOnLoadedVersion = 0
-
-      // Initialize changelog writer for next version with empty lineage
-      if (enableChangelogCheckpointing && !readOnly) {
-        changelogWriter.foreach(_.abort())
-
-        // Empty lineage since this is a fresh start with forced snapshot
-        changelogWriter = Some(fileManager.getChangeLogWriter(
-          targetVersion + 1,
-          useColumnFamilies,
-          sessionStateStoreCkptId,
-          if (enableStateStoreCheckpointIds) Some(Array.empty[LineageItem]) else None
-        ))
-      }
-
-      logInfo(log"Created empty store at version ${MDC(LogKeys.VERSION_NUM, targetVersion)}")
-    } catch {
-      case t: Throwable =>
-        loadedVersion = -1  // invalidate loaded data
-        if (enableStateStoreCheckpointIds) {
-          lastCommitBasedStateStoreCkptId = None
-          lastCommittedStateStoreCkptId = None
-          loadedStateStoreCkptId = None
-          sessionStateStoreCkptId = None
-          lineageManager.clear()
-        }
-        throw t
-    }
 
     this
   }
