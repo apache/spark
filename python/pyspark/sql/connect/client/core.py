@@ -652,13 +652,13 @@ def _retrieve_stack_frames() -> List[CallSite]:
     return filtered_stack_frames
 
 
-def _build_call_stack_trace() -> any_pb2.Any:
+def _build_call_stack_trace() -> Optional[any_pb2.Any]:
     """
     Build a call stack trace for the current Spark Connect action
     Returns
     -------
     FetchErrorDetailsResponse.Error: An Error object containing list of stack frames
-    of the user code packed as Any protobuf.
+    of the user code packed as Any protobuf.59
     """
     if os.getenv("SPARK_CONNECT_DEBUG_CLIENT_CALL_STACK", "false").lower() in ("true", "1"):
         stack_frames = _retrieve_stack_frames()
