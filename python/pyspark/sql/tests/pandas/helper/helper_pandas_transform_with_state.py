@@ -1663,8 +1663,8 @@ class RowMinEventTimeStatefulProcessor(StatefulProcessor):
 
 # A stateful processor that contains composite python type inside Value, List and Map state variable
 class PandasStatefulProcessorCompositeType(StatefulProcessor):
-
     from typing import NamedTuple
+
     class Address(NamedTuple):
         road_id: int
         city: str
@@ -1692,7 +1692,10 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
                     "address",
                     ArrayType(
                         StructType(
-                            [StructField("road_id", IntegerType()), StructField("city", StringType())]
+                            [
+                                StructField("road_id", IntegerType()),
+                                StructField("city", StringType()),
+                            ]
                         )
                     ),
                 ),
@@ -1718,7 +1721,9 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
             ids, tags, metadata, address = self.obj_state.get()
             assert tags == self.TAGS, f"Tag mismatch: {tags}"
             assert metadata == [Row(**m) for m in self.METADATA], f"Metadata mismatch: {metadata}"
-            assert address == [Row(**e._asdict()) for e in self.ADDRESS], f"Address mismatch: {address}"
+            assert address == [
+                Row(**e._asdict()) for e in self.ADDRESS
+            ], f"Address mismatch: {address}"
             ids = [int(x + total_temperature) for x in ids]
         else:
             ids = [0]
@@ -1783,8 +1788,8 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
 
 
 class RowStatefulProcessorCompositeType(StatefulProcessor):
-
     from typing import NamedTuple
+
     class Address(NamedTuple):
         road_id: int
         city: str
@@ -1812,7 +1817,10 @@ class RowStatefulProcessorCompositeType(StatefulProcessor):
                     "address",
                     ArrayType(
                         StructType(
-                            [StructField("road_id", IntegerType()), StructField("city", StringType())]
+                            [
+                                StructField("road_id", IntegerType()),
+                                StructField("city", StringType()),
+                            ]
                         )
                     ),
                 ),
@@ -1838,7 +1846,9 @@ class RowStatefulProcessorCompositeType(StatefulProcessor):
             ids, tags, metadata, address = self.obj_state.get()
             assert tags == self.TAGS, f"Tag mismatch: {tags}"
             assert metadata == [Row(**m) for m in self.METADATA], f"Metadata mismatch: {metadata}"
-            assert address == [Row(**e._asdict()) for e in self.ADDRESS], f"Address mismatch: {address}"
+            assert address == [
+                Row(**e._asdict()) for e in self.ADDRESS
+            ], f"Address mismatch: {address}"
             ids = [int(x + total_temperature) for x in ids]
         else:
             ids = [0]

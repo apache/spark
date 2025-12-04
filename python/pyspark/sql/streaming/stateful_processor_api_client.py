@@ -505,10 +505,7 @@ class StatefulProcessorApiClient:
                 # Named tuples (collections.namedtuple or typing.NamedTuple) and Row both
                 # require positional arguments and cannot be instantiated
                 # with a generator expression.
-                if (
-                    isinstance(v, Row) or
-                    (isinstance(v, tuple) and hasattr(v, "_fields"))
-                ):
+                if isinstance(v, Row) or (isinstance(v, tuple) and hasattr(v, "_fields")):
                     return type(v)(*[normalize_value(e) for e in v])
                 # List / tuple: recursively normalize each element
                 if isinstance(v, (list, tuple)):
