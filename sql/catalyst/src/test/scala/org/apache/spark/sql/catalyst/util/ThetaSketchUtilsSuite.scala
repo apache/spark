@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import org.apache.datasketches.theta.UpdateSketch
 import org.apache.datasketches.tuple.UpdatableSketchBuilder
 import org.apache.datasketches.tuple.adouble.{DoubleSummary, DoubleSummaryFactory}
+import org.apache.datasketches.tuple.aninteger.IntegerSummary
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -112,32 +113,6 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
       parameters = Map("function" -> "`test_function`"))
   }
 
-  test("checkSummaryType: accepts valid summary types") {
-    val validTypes = Seq(
-      ThetaSketchUtils.SUMMARY_TYPE_DOUBLE,
-      ThetaSketchUtils.SUMMARY_TYPE_INTEGER,
-      ThetaSketchUtils.SUMMARY_TYPE_STRING)
-    validTypes.foreach { summaryType =>
-      // Should not throw any exception
-      ThetaSketchUtils.checkSummaryType(summaryType, "test_function")
-    }
-  }
-
-  test("checkSummaryType: throws exception for invalid summary types") {
-    val invalidTypes = Seq("invalid", "float", "long", "boolean", "")
-    invalidTypes.foreach { summaryType =>
-      checkError(
-        exception = intercept[SparkRuntimeException] {
-          ThetaSketchUtils.checkSummaryType(summaryType, "test_function")
-        },
-        condition = "TUPLE_INVALID_SKETCH_SUMMARY_TYPE",
-        parameters = Map(
-          "function" -> "`test_function`",
-          "summaryType" -> summaryType,
-          "validTypes" -> ThetaSketchUtils.VALID_SUMMARY_TYPES.mkString(", ")))
-    }
-  }
-
   test("checkMode: accepts valid modes") {
     val validModes = Seq(
       ThetaSketchUtils.MODE_SUM,
@@ -165,7 +140,7 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("heapifyTupleSketch: successfully deserializes valid tuple sketch bytes") {
+  test("heapifyDoubleTupleSketch: successfully deserializes valid tuple sketch bytes") {
     // Create a valid tuple sketch and get its bytes
     val summaryFactory = new DoubleSummaryFactory(DoubleSummary.Mode.Sum)
     val updateSketch = new UpdatableSketchBuilder[java.lang.Double, DoubleSummary](summaryFactory)
@@ -178,98 +153,199 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
     val compactSketch = updateSketch.compact()
     val validBytes = compactSketch.toByteArray
 
-    // Test that heapifyTupleSketch can successfully deserialize the valid bytes
-    val heapifiedSketch = ThetaSketchUtils.heapifyTupleSketch(
-      validBytes,
-      ThetaSketchUtils.SUMMARY_TYPE_DOUBLE,
-      "test_function")
+    // Test that heapifyDoubleTupleSketch can successfully deserialize the valid bytes
+    val heapifiedSketch = ThetaSketchUtils.heapifyDoubleTupleSketch(validBytes, "test_function")
 
     assert(heapifiedSketch != null)
     assert(heapifiedSketch.getEstimate == compactSketch.getEstimate)
     assert(heapifiedSketch.getRetainedEntries == compactSketch.getRetainedEntries)
   }
 
-  test("heapifyTupleSketch: throws exception for invalid bytes") {
+  test("heapifyDoubleTupleSketch: throws exception for invalid bytes") {
     val invalidBytes = Array[Byte](1, 2, 3, 4, 5)
     checkError(
       exception = intercept[SparkRuntimeException] {
-        ThetaSketchUtils.heapifyTupleSketch(
-          invalidBytes,
-          ThetaSketchUtils.SUMMARY_TYPE_DOUBLE,
-          "test_function")
+        ThetaSketchUtils.heapifyDoubleTupleSketch(invalidBytes, "test_function")
       },
       condition = "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
-      parameters = Map("function" -> "`test_function`",
-        "reason" -> "Possible corruption: Invalid Family: COMPACT"
-      )
-    )
+      parameters = Map(
+        "function" -> "`test_function`",
+        "reason" -> "Possible corruption: Invalid Family: COMPACT"))
   }
 
-  test("getDoubleSummaryMode: converts mode strings to DoubleSummary.Mode enum") {
-    assert(ThetaSketchUtils.getDoubleSummaryMode(ThetaSketchUtils.MODE_SUM) ==
-      DoubleSummary.Mode.Sum)
-    assert(ThetaSketchUtils.getDoubleSummaryMode(ThetaSketchUtils.MODE_MIN) ==
-      DoubleSummary.Mode.Min)
-    assert(ThetaSketchUtils.getDoubleSummaryMode(ThetaSketchUtils.MODE_MAX) ==
-      DoubleSummary.Mode.Max)
-    assert(ThetaSketchUtils.getDoubleSummaryMode(ThetaSketchUtils.MODE_ALWAYSONE) ==
-      DoubleSummary.Mode.AlwaysOne)
+  test("getDoubleSummaryMode: returns correct mode for valid strings") {
+    assert(ThetaSketchUtils.getDoubleSummaryMode("sum") == DoubleSummary.Mode.Sum)
+    assert(ThetaSketchUtils.getDoubleSummaryMode("min") == DoubleSummary.Mode.Min)
+    assert(ThetaSketchUtils.getDoubleSummaryMode("max") == DoubleSummary.Mode.Max)
+    assert(ThetaSketchUtils.getDoubleSummaryMode("alwaysone") == DoubleSummary.Mode.AlwaysOne)
   }
 
-  test("getSummaryFactory: creates appropriate factory for each summary type") {
-    // Test double summary factory
-    val doubleFactory = ThetaSketchUtils.getSummaryFactory(
-      ThetaSketchUtils.SUMMARY_TYPE_DOUBLE,
-      ThetaSketchUtils.MODE_SUM)
-    assert(doubleFactory != null)
-
-    // Test integer summary factory
-    val integerFactory = ThetaSketchUtils.getSummaryFactory(
-      ThetaSketchUtils.SUMMARY_TYPE_INTEGER,
-      ThetaSketchUtils.MODE_SUM)
-    assert(integerFactory != null)
-
-    // Test string summary factory
-    val stringFactory = ThetaSketchUtils.getSummaryFactory(
-      ThetaSketchUtils.SUMMARY_TYPE_STRING,
-      ThetaSketchUtils.MODE_SUM)
-    assert(stringFactory != null)
+  test("getIntegerSummaryMode: returns correct mode for valid strings") {
+    assert(ThetaSketchUtils.getIntegerSummaryMode("sum") == IntegerSummary.Mode.Sum)
+    assert(ThetaSketchUtils.getIntegerSummaryMode("min") == IntegerSummary.Mode.Min)
+    assert(ThetaSketchUtils.getIntegerSummaryMode("max") == IntegerSummary.Mode.Max)
+    assert(ThetaSketchUtils.getIntegerSummaryMode("alwaysone") == IntegerSummary.Mode.AlwaysOne)
   }
 
-  test("getSummarySetOperations: creates appropriate operations for each summary type") {
-    // Test double summary set operations
-    val doubleOps = ThetaSketchUtils.getSummarySetOperations(
-      ThetaSketchUtils.SUMMARY_TYPE_DOUBLE,
-      ThetaSketchUtils.MODE_SUM)
-    assert(doubleOps != null)
+  test("heapifyIntegerTupleSketch: successfully deserializes valid tuple sketch bytes") {
+    import org.apache.datasketches.tuple.aninteger.{IntegerSummary, IntegerSummaryFactory}
+    // Create a valid integer tuple sketch and get its bytes
+    val summaryFactory = new IntegerSummaryFactory(IntegerSummary.Mode.Sum)
+    val updateSketch =
+      new UpdatableSketchBuilder[java.lang.Integer, IntegerSummary](summaryFactory)
+        .build()
 
-    // Test integer summary set operations
-    val integerOps = ThetaSketchUtils.getSummarySetOperations(
-      ThetaSketchUtils.SUMMARY_TYPE_INTEGER,
-      ThetaSketchUtils.MODE_SUM)
-    assert(integerOps != null)
+    updateSketch.update("test1", 1)
+    updateSketch.update("test2", 2)
+    updateSketch.update("test3", 3)
 
-    // Test string summary set operations
-    val stringOps = ThetaSketchUtils.getSummarySetOperations(
-      ThetaSketchUtils.SUMMARY_TYPE_STRING,
-      ThetaSketchUtils.MODE_SUM)
-    assert(stringOps != null)
+    val compactSketch = updateSketch.compact()
+    val validBytes = compactSketch.toByteArray
+
+    // Test that heapifyIntegerTupleSketch can successfully deserialize the valid bytes
+    val heapifiedSketch = ThetaSketchUtils.heapifyIntegerTupleSketch(validBytes, "test_function")
+
+    assert(heapifiedSketch != null)
+    assert(heapifiedSketch.getEstimate == compactSketch.getEstimate)
+    assert(heapifiedSketch.getRetainedEntries == compactSketch.getRetainedEntries)
   }
 
-  test("getSummaryDeserializer: creates appropriate deserializer for each summary type") {
-    // Test double summary deserializer
-    val doubleDeserializer = ThetaSketchUtils.getSummaryDeserializer(
-      ThetaSketchUtils.SUMMARY_TYPE_DOUBLE)
-    assert(doubleDeserializer != null)
+  test("heapifyIntegerTupleSketch: throws exception for invalid bytes") {
+    val invalidBytes = Array[Byte](1, 2, 3, 4, 5)
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        ThetaSketchUtils.heapifyIntegerTupleSketch(invalidBytes, "test_function")
+      },
+      condition = "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
+      parameters = Map(
+        "function" -> "`test_function`",
+        "reason" -> "Possible corruption: Invalid Family: COMPACT"))
+  }
 
-    // Test integer summary deserializer
-    val integerDeserializer = ThetaSketchUtils.getSummaryDeserializer(
-      ThetaSketchUtils.SUMMARY_TYPE_INTEGER)
-    assert(integerDeserializer != null)
+  test("heapifyStringTupleSketch: successfully deserializes valid tuple sketch bytes") {
+    import org.apache.datasketches.tuple.strings.{ArrayOfStringsSummary, ArrayOfStringsSummaryFactory}
+    // Create a valid string tuple sketch and get its bytes
+    val summaryFactory = new ArrayOfStringsSummaryFactory()
+    val updateSketch =
+      new UpdatableSketchBuilder[Array[String], ArrayOfStringsSummary](summaryFactory)
+        .build()
 
-    // Test string summary deserializer
-    val stringDeserializer = ThetaSketchUtils.getSummaryDeserializer(
-      ThetaSketchUtils.SUMMARY_TYPE_STRING)
-    assert(stringDeserializer != null)
+    updateSketch.update("test1", Array("a"))
+    updateSketch.update("test2", Array("b"))
+    updateSketch.update("test3", Array("c"))
+
+    val compactSketch = updateSketch.compact()
+    val validBytes = compactSketch.toByteArray
+
+    // Test that heapifyStringTupleSketch can successfully deserialize the valid bytes
+    val heapifiedSketch = ThetaSketchUtils.heapifyStringTupleSketch(validBytes, "test_function")
+
+    assert(heapifiedSketch != null)
+    assert(heapifiedSketch.getEstimate == compactSketch.getEstimate)
+    assert(heapifiedSketch.getRetainedEntries == compactSketch.getRetainedEntries)
+  }
+
+  test("heapifyStringTupleSketch: throws exception for invalid bytes") {
+    val invalidBytes = Array[Byte](1, 2, 3, 4, 5)
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        ThetaSketchUtils.heapifyStringTupleSketch(invalidBytes, "test_function")
+      },
+      condition = "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
+      parameters = Map(
+        "function" -> "`test_function`",
+        "reason" -> "Possible corruption: Invalid Family: COMPACT"))
+  }
+
+  test("aggregateNumericSummaries: sum mode aggregates correctly for Double") {
+    val summaryFactory = new DoubleSummaryFactory(DoubleSummary.Mode.Sum)
+    val updateSketch = new UpdatableSketchBuilder[java.lang.Double, DoubleSummary](summaryFactory)
+      .build()
+
+    updateSketch.update("test1", 1.0)
+    updateSketch.update("test2", 2.0)
+    updateSketch.update("test3", 3.0)
+
+    val compactSketch = updateSketch.compact()
+    val result = ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+      compactSketch.iterator(),
+      "sum",
+      it => it.getSummary.getValue)
+
+    assert(result == 6.0)
+  }
+
+  test("aggregateNumericSummaries: min mode finds minimum for Double") {
+    val summaryFactory = new DoubleSummaryFactory(DoubleSummary.Mode.Sum)
+    val updateSketch = new UpdatableSketchBuilder[java.lang.Double, DoubleSummary](summaryFactory)
+      .build()
+
+    updateSketch.update("test1", 5.0)
+    updateSketch.update("test2", 2.0)
+    updateSketch.update("test3", 8.0)
+
+    val compactSketch = updateSketch.compact()
+    val result = ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+      compactSketch.iterator(),
+      "min",
+      it => it.getSummary.getValue)
+
+    assert(result == 2.0)
+  }
+
+  test("aggregateNumericSummaries: max mode finds maximum for Double") {
+    val summaryFactory = new DoubleSummaryFactory(DoubleSummary.Mode.Sum)
+    val updateSketch = new UpdatableSketchBuilder[java.lang.Double, DoubleSummary](summaryFactory)
+      .build()
+
+    updateSketch.update("test1", 5.0)
+    updateSketch.update("test2", 2.0)
+    updateSketch.update("test3", 8.0)
+
+    val compactSketch = updateSketch.compact()
+    val result = ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+      compactSketch.iterator(),
+      "max",
+      it => it.getSummary.getValue)
+
+    assert(result == 8.0)
+  }
+
+  test("aggregateNumericSummaries: alwaysone mode counts entries for Double") {
+    val summaryFactory = new DoubleSummaryFactory(DoubleSummary.Mode.Sum)
+    val updateSketch = new UpdatableSketchBuilder[java.lang.Double, DoubleSummary](summaryFactory)
+      .build()
+
+    updateSketch.update("test1", 5.0)
+    updateSketch.update("test2", 2.0)
+    updateSketch.update("test3", 8.0)
+
+    val compactSketch = updateSketch.compact()
+    val result = ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+      compactSketch.iterator(),
+      "alwaysone",
+      it => it.getSummary.getValue)
+
+    assert(result == 3.0)
+  }
+
+  test("aggregateNumericSummaries: sum mode aggregates correctly for Long") {
+    import org.apache.datasketches.tuple.aninteger.{IntegerSummary, IntegerSummaryFactory}
+    val summaryFactory = new IntegerSummaryFactory(IntegerSummary.Mode.Sum)
+    val updateSketch =
+      new UpdatableSketchBuilder[java.lang.Integer, IntegerSummary](summaryFactory)
+        .build()
+
+    updateSketch.update("test1", 10)
+    updateSketch.update("test2", 20)
+    updateSketch.update("test3", 30)
+
+    val compactSketch = updateSketch.compact()
+    val result = ThetaSketchUtils.aggregateNumericSummaries[IntegerSummary, Long](
+      compactSketch.iterator(),
+      "sum",
+      it => it.getSummary.getValue.toLong)
+
+    assert(result == 60L)
   }
 }

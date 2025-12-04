@@ -5953,7 +5953,7 @@
   },
   "TUPLE_INVALID_INPUT_SKETCH_BUFFER" : {
     "message" : [
-      "Invalid call to <function>: <reason>. Only valid Tuple sketch buffers are supported as inputs (such as those produced by the `tuple_sketch_agg` function)."
+      "Invalid call to <function>: <reason>. Only valid Tuple sketch buffers are supported as inputs (such as those produced by the corresponding `tuple_sketch_agg_*` function)."
     ],
     "sqlState" : "22000"
   },
@@ -5963,21 +5963,9 @@
     ],
     "sqlState" : "22023"
   },
-  "TUPLE_INVALID_SKETCH_SUMMARY_TYPE" : {
-    "message" : [
-      "Invalid call to <function>: summary type '<summaryType>' is not supported. Valid summary types are: <validTypes>."
-    ],
-    "sqlState" : "22023"
-  },
   "TUPLE_INVALID_SKETCH_SUMMARY_VALUE_TYPE" : {
     "message" : [
-      "Invalid call to <function>: summary value type '<actualType>' is incompatible with configured summary type '<summaryType>'."
-    ],
-    "sqlState" : "22023"
-  },
-  "TUPLE_INVALID_SUMMARY_TYPE_OPERATION" : {
-    "message" : [
-      "Invalid call to <function>: summary type '<summaryType>' is not supported for this operation."
+      "Invalid call to <function>: summary value type '<actualType>' is incompatible with configured function summary type"
     ],
     "sqlState" : "22023"
   },

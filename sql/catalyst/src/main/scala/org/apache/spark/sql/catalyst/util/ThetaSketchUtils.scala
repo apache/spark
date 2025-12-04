@@ -20,13 +20,12 @@ package org.apache.spark.sql.catalyst.util
 import org.apache.datasketches.common.SketchesArgumentException
 import org.apache.datasketches.memory.{Memory, MemoryBoundsException}
 import org.apache.datasketches.theta.CompactSketch
-import org.apache.datasketches.tuple.{Sketch, Sketches, Summary, SummaryDeserializer, SummaryFactory, SummarySetOperations, UpdatableSummary}
-import org.apache.datasketches.tuple.adouble.{DoubleSummary, DoubleSummaryDeserializer, DoubleSummaryFactory, DoubleSummarySetOperations}
-import org.apache.datasketches.tuple.aninteger.{IntegerSummary, IntegerSummaryDeserializer, IntegerSummaryFactory, IntegerSummarySetOperations}
-import org.apache.datasketches.tuple.strings.{ArrayOfStringsSummaryDeserializer, ArrayOfStringsSummaryFactory, ArrayOfStringsSummarySetOperations}
+import org.apache.datasketches.tuple.{Sketch, Sketches, Summary, TupleSketchIterator}
+import org.apache.datasketches.tuple.adouble.{DoubleSummary, DoubleSummaryDeserializer}
+import org.apache.datasketches.tuple.aninteger.{IntegerSummary, IntegerSummaryDeserializer}
+import org.apache.datasketches.tuple.strings.{ArrayOfStringsSummary, ArrayOfStringsSummaryDeserializer}
 
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.unsafe.types.UTF8String
 
 object ThetaSketchUtils {
   /*
@@ -41,25 +40,17 @@ object ThetaSketchUtils {
   final val MAX_LG_NOM_LONGS = 26
   final val DEFAULT_LG_NOM_LONGS = 12
 
-  // Summary type constants
-  final val SUMMARY_TYPE_DOUBLE = "double"
-  final val SUMMARY_TYPE_INTEGER = "integer"
-  final val SUMMARY_TYPE_STRING = "string"
-
   // Mode constants
   final val MODE_SUM = "sum"
   final val MODE_MIN = "min"
   final val MODE_MAX = "max"
   final val MODE_ALWAYSONE = "alwaysone"
 
-  final val VALID_SUMMARY_TYPES: Seq[String] =
-    Seq(SUMMARY_TYPE_DOUBLE, SUMMARY_TYPE_INTEGER, SUMMARY_TYPE_STRING)
-
   final val VALID_MODES: Seq[String] = Seq(MODE_SUM, MODE_MIN, MODE_MAX, MODE_ALWAYSONE)
 
   /**
-   * Validates the lgNomLongs parameter for Theta sketch size. Throws a Spark SQL exception if the
-   * value is out of bounds.
+   * Validates the lgNomLongs parameter for Theta/Tuple sketch size. Throws a Spark SQL exception
+   * if the value is out of bounds.
    *
    * @param lgNomLongs
    *   Log2 of nominal entries
@@ -77,26 +68,7 @@ object ThetaSketchUtils {
   }
 
   /**
-   * Validates the summary type parameter. Throws a Spark SQL exception if the
-   * summary is invalid.
-   *
-   * @param summaryType
-   *   The summary type string to validate
-   * @param prettyName
-   *   The display name of the function/expression for error messages
-   */
-  def checkSummaryType(summaryType: String, prettyName: String): Unit = {
-    if (!VALID_SUMMARY_TYPES.contains(summaryType)) {
-      throw QueryExecutionErrors.tupleInvalidSummaryType(
-        prettyName,
-        summaryType,
-        VALID_SUMMARY_TYPES)
-    }
-  }
-
-  /**
-   * Validates the mode parameter. Throws a Spark SQL exception if the
-   * mode is invalid.
+   * Validates the mode parameter. Throws a Spark SQL exception if the mode is invalid.
    *
    * @param mode
    *   The mode string to validate
@@ -145,118 +117,61 @@ object ThetaSketchUtils {
     }
   }
 
-  /**
-   * Creates the appropriate SummaryFactory based on summary type and mode. Used for creating
-   * UpdatableSketch instances that need to construct new summary objects. For numeric types
-   * (double/integer), the factory is configured with the aggregation mode.
-   *
-   * Note: The return type uses UpdatableSummary[Any] with asInstanceOf cast because we need to
-   * handle multiple concrete summary types (DoubleSummary, IntegerSummary, ArrayOfStringsSummary)
-   * in a single method. The actual concrete type is determined by summaryTypeInput and remains
-   * consistent within a single aggregate operation. This approach avoids code duplication for
-   * each summary type.
-   *
-   * @param summaryTypeInput
-   *   The summary type string
-   * @param modeInput
-   *   The mode string
-   * @return
-   *   The appropriate SummaryFactory instance
-   */
-  def getSummaryFactory(
-      summaryTypeInput: String,
-      modeInput: String): SummaryFactory[UpdatableSummary[Any]] = {
-    val summaryFactory = summaryTypeInput match {
-      case SUMMARY_TYPE_DOUBLE =>
-        new DoubleSummaryFactory(getDoubleSummaryMode(modeInput))
-      case SUMMARY_TYPE_INTEGER =>
-        new IntegerSummaryFactory(getIntegerSummaryMode(modeInput))
-      case SUMMARY_TYPE_STRING =>
-        new ArrayOfStringsSummaryFactory()
+  def aggregateNumericSummaries[S <: Summary, V](
+      iterator: TupleSketchIterator[S],
+      mode: String,
+      getValue: TupleSketchIterator[S] => V)(implicit num: Numeric[V]): V = {
+
+    mode match {
+      case MODE_SUM =>
+        var sum = num.zero
+        while (iterator.next()) {
+          sum = num.plus(sum, getValue(iterator))
+        }
+        sum
+
+      case MODE_MIN =>
+        var min: Option[V] = None
+        while (iterator.next()) {
+          val value = getValue(iterator)
+          min = min match {
+            case Some(m) => Some(num.min(m, value))
+            case None => Some(value)
+          }
+        }
+        min.getOrElse(num.zero)
+
+      case MODE_MAX =>
+        var max: Option[V] = None
+        while (iterator.next()) {
+          val value = getValue(iterator)
+          max = max match {
+            case Some(m) => Some(num.max(m, value))
+            case None => Some(value)
+          }
+        }
+        max.getOrElse(num.zero)
+
+      case MODE_ALWAYSONE =>
+        var count = num.zero
+        while (iterator.next()) {
+          count = num.plus(count, num.one)
+        }
+        count
     }
-    summaryFactory.asInstanceOf[SummaryFactory[UpdatableSummary[Any]]]
   }
 
   /**
-   * Creates the appropriate SummarySetOperations based on summary type and mode. Used for Union
-   * and Intersection operations that need to merge summary values from multiple sketches
-   * according to the specified aggregation mode.
-   *
-   * Note: The return type uses Summary with asInstanceOf cast because we need to handle multiple
-   * concrete summary types in a single method. The cast is safe as long as all operations within
-   * a single aggregate use the same summaryTypeInput.
-   *
-   * @param summaryTypeInput
-   *   The summary type string
-   * @param modeInput
-   *   The mode string
-   * @return
-   *   The appropriate SummarySetOperations instance
-   */
-  def getSummarySetOperations(
-      summaryTypeInput: String,
-      modeInput: String): SummarySetOperations[Summary] = {
-    val ops = summaryTypeInput match {
-      case SUMMARY_TYPE_DOUBLE =>
-        new DoubleSummarySetOperations(getDoubleSummaryMode(modeInput))
-      case SUMMARY_TYPE_INTEGER =>
-        val mode = getIntegerSummaryMode(modeInput)
-        new IntegerSummarySetOperations(mode, mode)
-      case SUMMARY_TYPE_STRING =>
-        new ArrayOfStringsSummarySetOperations()
-    }
-
-    ops.asInstanceOf[SummarySetOperations[Summary]]
-  }
-
-  /**
-   * Creates the appropriate SummaryDeserializer based on summary type. Used for deserializing
-   * binary sketch representations back into CompactSketch objects.
-   *
-   * Note: The return type uses Summary with asInstanceOf cast to handle multiple concrete
-   * deserializer types in a single method. Type consistency is guaranteed by the caller passing
-   * the same summaryTypeInput used during serialization.
-   *
-   * @param summaryTypeInput
-   *   The summary type string
-   * @return
-   *   The appropriate SummaryDeserializer instance
-   */
-  def getSummaryDeserializer(summaryTypeInput: String): SummaryDeserializer[Summary] = {
-    val deserializer = summaryTypeInput match {
-      case SUMMARY_TYPE_DOUBLE =>
-        new DoubleSummaryDeserializer()
-      case SUMMARY_TYPE_INTEGER =>
-        new IntegerSummaryDeserializer()
-      case SUMMARY_TYPE_STRING =>
-        new ArrayOfStringsSummaryDeserializer()
-    }
-
-    deserializer.asInstanceOf[SummaryDeserializer[Summary]]
-  }
-
-  /**
-   * Deserializes a binary tuple sketch representation into a CompactSketch.
-   * If the buffer is empty, creates a new aggregation buffer. Uses
-   * the appropriate deserializer based on the configured summary type.
-   *
-   * Note: The return type Sketch[Summary] uses asInstanceOf because heapifySketch returns
-   * Sketch[_ <: Summary] with the concrete type determined by the deserializer. The cast is safe
-   * as type consistency is maintained through summaryTypeInput.
+   * Deserializes a Double summary type binary tuple sketch representation into a CompactSketch.
    *
    * @param bytes
    *   The binary sketch data to deserialize
-   * @param summaryTypeInput
-   *   The summary type string
    * @param prettyName
    *   The display name of the function/expression for error messages
    * @return
-   *   A TupleSketchState containing the deserialized sketch
+   *   A deserialized sketch
    */
-  def heapifyTupleSketch(
-      bytes: Array[Byte],
-      summaryTypeInput: String,
-      prettyName: String): Sketch[Summary] = {
+  def heapifyDoubleTupleSketch(bytes: Array[Byte], prettyName: String): Sketch[DoubleSummary] = {
     val memory =
       try {
         Memory.wrap(bytes)
@@ -267,46 +182,77 @@ object ThetaSketchUtils {
 
     val sketch =
       try {
-        Sketches.heapifySketch(memory, getSummaryDeserializer(summaryTypeInput))
+        Sketches.heapifySketch(memory, new DoubleSummaryDeserializer())
       } catch {
         case e: Exception =>
           throw QueryExecutionErrors.tupleInvalidInputSketchBuffer(prettyName, e.getMessage)
       }
 
-    sketch.asInstanceOf[Sketch[Summary]]
+    sketch
   }
 
   /**
-   * Converts and validates a summary value to the expected type based on the configured summary
-   * type. Performs type coercion where appropriate (e.g., Float to Double for double summaries).
+   * Deserializes a Integer summary type binary tuple sketch representation into a CompactSketch.
    *
-   * @param summaryTypeInput
-   *   The expected summary type (double, integer, or string)
-   * @param summaryValue
-   *   The actual summary value to convert
+   * @param bytes
+   *   The binary sketch data to deserialize
    * @param prettyName
    *   The display name of the function/expression for error messages
    * @return
-   *   The converted summary value as the appropriate type
+   *   A deserialized sketch
    */
-  def convertSummaryValue(
-      summaryTypeInput: String,
-      summaryValue: Any,
-      prettyName: String): Any = {
-    (summaryTypeInput, summaryValue) match {
-      case (SUMMARY_TYPE_DOUBLE, d: Double) => d
-      case (SUMMARY_TYPE_DOUBLE, f: Float) => f.toDouble
-      case (SUMMARY_TYPE_INTEGER, i: Integer) => i
-      case (SUMMARY_TYPE_STRING, arr: ArrayData) =>
-        (0 until arr.numElements()).map(i => arr.getUTF8String(i).toString).toArray
-      case (SUMMARY_TYPE_STRING, s: UTF8String) => Array(s.toString)
-      case _ =>
-        val actualType = summaryValue.getClass.getSimpleName
-        throw QueryExecutionErrors.tupleInvalidSummaryValueType(
-          prettyName,
-          summaryTypeInput,
-          actualType)
-    }
+  def heapifyIntegerTupleSketch(
+      bytes: Array[Byte],
+      prettyName: String): Sketch[IntegerSummary] = {
+    val memory =
+      try {
+        Memory.wrap(bytes)
+      } catch {
+        case _: NullPointerException | _: MemoryBoundsException =>
+          throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+      }
+
+    val sketch =
+      try {
+        Sketches.heapifySketch(memory, new IntegerSummaryDeserializer())
+      } catch {
+        case e: Exception =>
+          throw QueryExecutionErrors.tupleInvalidInputSketchBuffer(prettyName, e.getMessage)
+      }
+
+    sketch
+  }
+
+  /**
+   * Deserializes a String summary type binary tuple sketch representation into a CompactSketch.
+   *
+   * @param bytes
+   *   The binary sketch data to deserialize
+   * @param prettyName
+   *   The display name of the function/expression for error messages
+   * @return
+   *   A deserialized sketch
+   */
+  def heapifyStringTupleSketch(
+      bytes: Array[Byte],
+      prettyName: String): Sketch[ArrayOfStringsSummary] = {
+    val memory =
+      try {
+        Memory.wrap(bytes)
+      } catch {
+        case _: NullPointerException | _: MemoryBoundsException =>
+          throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+      }
+
+    val sketch =
+      try {
+        Sketches.heapifySketch(memory, new ArrayOfStringsSummaryDeserializer())
+      } catch {
+        case e: Exception =>
+          throw QueryExecutionErrors.tupleInvalidInputSketchBuffer(prettyName, e.getMessage)
+      }
+
+    sketch
   }
 
   /**

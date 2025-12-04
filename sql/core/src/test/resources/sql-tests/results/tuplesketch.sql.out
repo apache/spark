@@ -245,7 +245,7 @@ struct<>
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1))) AS result
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1)) AS result
 FROM t_int_double_1_5_through_7_11
 -- !query schema
 struct<result:double>
@@ -254,7 +254,7 @@ struct<result:double>
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, 'integer'), 'integer') AS result
+SELECT tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key1, val1, 12)) AS result
 FROM t_int_int_1_5_through_7_11
 -- !query schema
 struct<result:double>
@@ -263,907 +263,907 @@ struct<result:double>
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1))
 FROM t_array_int_double_1_3_through_4_6
 -- !query schema
-struct<tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12, sum)):double>
 -- !query output
 4.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key2, val2)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key2, val2))
 FROM t_array_long_double_1_3_through_4_6
 -- !query schema
-struct<tuple_sketch_estimate(tuple_sketch_agg(struct(key2, val2), 12, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_sketch_agg_double(key2, val2, 12, sum)):double>
 -- !query output
 4.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1))
 FROM t_binary_double_a_b_through_e_f
 -- !query schema
-struct<tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12, sum)):double>
 -- !query output
 5.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1))
 FROM t_double_double_1_1_1_4_through_1_5_1_8
 -- !query schema
-struct<tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12, sum)):double>
 -- !query output
 5.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key2, val2)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key2, val2))
 FROM t_float_double_1_1_1_4_through_1_5_1_8
 -- !query schema
-struct<tuple_sketch_estimate(tuple_sketch_agg(struct(key2, val2), 12, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_sketch_agg_double(key2, val2, 12, sum)):double>
 -- !query output
 5.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 22))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 22))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 22, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 22, sum)):double>
 -- !query output
 7.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1))
 FROM t_long_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12, sum)):double>
 -- !query output
 7.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1))
 FROM t_string_double_a_d_through_e_h
 -- !query schema
-struct<tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12, sum)):double>
 -- !query output
 5.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, 'double'))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12, sum)):double>
 -- !query output
 7.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, 'integer'), 'integer')
+SELECT tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key1, val1, 12))
 FROM t_int_int_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, integer, sum), integer):double>
+struct<tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key1, val1, 12, sum)):double>
 -- !query output
 7.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, 'string'), 'string')
+SELECT tuple_sketch_estimate_string(tuple_sketch_agg_string(key1, val1, 12))
 FROM t_string_string_a_d_through_e_h
 -- !query schema
-struct<tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, string, sum), string):double>
+struct<tuple_sketch_estimate_string(tuple_sketch_agg_string(key1, val1, 12)):double>
 -- !query output
 5.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, 'string'), 'string')
+SELECT tuple_sketch_estimate_string(tuple_sketch_agg_string(key1, val1, 12))
 FROM t_string_array_string_a_d_through_e_h
 -- !query schema
-struct<tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, string, sum), string):double>
+struct<tuple_sketch_estimate_string(tuple_sketch_agg_string(key1, val1, 12)):double>
 -- !query output
 5.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, 'double', 'sum'), 'double')
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12, 'sum'))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12, sum)):double>
 -- !query output
 7.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, 'double', 'min'))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12, 'min'))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, double, min), double):double>
+struct<tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12, min)):double>
 -- !query output
 7.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, 'double', 'max'))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12, 'max'))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, double, max), double):double>
+struct<tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12, max)):double>
 -- !query output
 7.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, 'double', 'alwaysone'))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12, 'alwaysone'))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, double, alwaysone), double):double>
+struct<tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12, alwaysone)):double>
 -- !query output
 7.0
 
 
 -- !query
-SELECT tuple_sketch_summary(tuple_sketch_agg(struct(key1, val1), 12, 'double', 'sum'))
+SELECT tuple_sketch_summary_double(tuple_sketch_agg_double(key1, val1, 12, 'sum'))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_summary(tuple_sketch_agg(struct(key1, val1), 12, double, sum), double, sum):double>
+struct<tuple_sketch_summary_double(tuple_sketch_agg_double(key1, val1, 12, sum), sum):double>
 -- !query output
 28.0
 
 
 -- !query
-SELECT tuple_sketch_summary(tuple_sketch_agg(struct(key1, val1), 12, 'double', 'min'))
+SELECT tuple_sketch_summary_double(tuple_sketch_agg_double(key1, val1, 12, 'min'))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_summary(tuple_sketch_agg(struct(key1, val1), 12, double, min), double, sum):double>
+struct<tuple_sketch_summary_double(tuple_sketch_agg_double(key1, val1, 12, min), sum):double>
 -- !query output
 28.0
 
 
 -- !query
-SELECT tuple_sketch_summary(tuple_sketch_agg(struct(key1, val1), 12, 'double', 'max'))
+SELECT tuple_sketch_summary_double(tuple_sketch_agg_double(key1, val1, 12, 'max'))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_summary(tuple_sketch_agg(struct(key1, val1), 12, double, max), double, sum):double>
+struct<tuple_sketch_summary_double(tuple_sketch_agg_double(key1, val1, 12, max), sum):double>
 -- !query output
 28.0
 
 
 -- !query
-SELECT tuple_sketch_summary(tuple_sketch_agg(struct(key1, val1), 12, 'double', 'alwaysone'))
+SELECT tuple_sketch_summary_double(tuple_sketch_agg_double(key1, val1, 12, 'alwaysone'))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_summary(tuple_sketch_agg(struct(key1, val1), 12, double, alwaysone), double, sum):double>
+struct<tuple_sketch_summary_double(tuple_sketch_agg_double(key1, val1, 12, alwaysone), sum):double>
 -- !query output
 7.0
 
 
 -- !query
-SELECT tuple_sketch_summary(tuple_sketch_agg(struct(key1, val1), 12, 'integer', 'sum'), 'integer', 'sum')
+SELECT tuple_sketch_summary_integer(tuple_sketch_agg_integer(key1, val1, 12, 'sum'), 'sum')
 FROM t_int_int_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_summary(tuple_sketch_agg(struct(key1, val1), 12, integer, sum), integer, sum):double>
+struct<tuple_sketch_summary_integer(tuple_sketch_agg_integer(key1, val1, 12, sum), sum):bigint>
 -- !query output
-28.0
+28
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_union(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate(tuple_union(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), 12, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_union_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 12, sum), 12, sum)):double>
 -- !query output
 11.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_union(
-    tuple_sketch_agg(struct(key1, val1), 15),
-    tuple_sketch_agg(struct(key2, val2)), 15))
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    tuple_sketch_agg_double(key1, val1, 15),
+    tuple_sketch_agg_double(key2, val2), 15))
 FROM t_long_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate(tuple_union(tuple_sketch_agg(struct(key1, val1), 15, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), 15, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_union_double(tuple_sketch_agg_double(key1, val1, 15, sum), tuple_sketch_agg_double(key2, val2, 12, sum), 15, sum)):double>
 -- !query output
 11.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_union(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_double_double_1_1_1_4_through_1_5_1_8
 -- !query schema
-struct<tuple_sketch_estimate(tuple_union(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), 12, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_union_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 12, sum), 12, sum)):double>
 -- !query output
 8.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_union(
-    tuple_sketch_agg(struct(key1, val1), 6),
-    tuple_sketch_agg(struct(key2, val2), 15), 15))
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    tuple_sketch_agg_double(key1, val1, 6),
+    tuple_sketch_agg_double(key2, val2, 15), 15))
 FROM t_float_double_1_1_1_4_through_1_5_1_8
 -- !query schema
-struct<tuple_sketch_estimate(tuple_union(tuple_sketch_agg(struct(key1, val1), 6, double, sum), tuple_sketch_agg(struct(key2, val2), 15, double, sum), 15, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_union_double(tuple_sketch_agg_double(key1, val1, 6, sum), tuple_sketch_agg_double(key2, val2, 15, sum), 15, sum)):double>
 -- !query output
 8.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_union(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_string_double_a_d_through_e_h
 -- !query schema
-struct<tuple_sketch_estimate(tuple_union(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), 12, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_union_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 12, sum), 12, sum)):double>
 -- !query output
 8.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_union(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2), 20), 20))
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2, 20), 20))
 FROM t_binary_double_a_b_through_e_f
 -- !query schema
-struct<tuple_sketch_estimate(tuple_union(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 20, double, sum), 20, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_union_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 20, sum), 20, sum)):double>
 -- !query output
 6.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_union(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_array_int_double_1_3_through_4_6
 -- !query schema
-struct<tuple_sketch_estimate(tuple_union(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), 12, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_union_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 12, sum), 12, sum)):double>
 -- !query output
 6.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_union(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2), 13), 13))
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2, 13), 13))
 FROM t_array_long_double_1_3_through_4_6
 -- !query schema
-struct<tuple_sketch_estimate(tuple_union(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 13, double, sum), 13, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_union_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 13, sum), 13, sum)):double>
 -- !query output
 6.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_union(
-    tuple_sketch_agg(struct(key1, val1), 12, 'double', 'sum'),
-    tuple_sketch_agg(struct(key2, val2), 12, 'double', 'sum'), 12, 'double', 'sum'))
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    tuple_sketch_agg_double(key1, val1, 12, 'sum'),
+    tuple_sketch_agg_double(key2, val2, 12, 'sum'), 12, 'sum'))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate(tuple_union(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), 12, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_union_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 12, sum), 12, sum)):double>
 -- !query output
 11.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_union_theta(
-    tuple_sketch_agg(struct(key1, val1)),
+SELECT tuple_sketch_estimate_double(
+  tuple_union_theta_double(
+    tuple_sketch_agg_double(key1, val1),
     theta_sketch_agg(key2)))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate(tuple_union_theta(tuple_sketch_agg(struct(key1, val1), 12, double, sum), theta_sketch_agg(key2, 12), 12, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12), 12, sum)):double>
 -- !query output
 11.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_union_theta(
-    tuple_sketch_agg(struct(key1, val1), 12, 'double', 'sum'),
-    theta_sketch_agg(key2, 12), 12, 'double', 'sum'))
+SELECT tuple_sketch_estimate_double(
+  tuple_union_theta_double(
+    tuple_sketch_agg_double(key1, val1, 12, 'sum'),
+    theta_sketch_agg(key2, 12), 12, 'sum'))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate(tuple_union_theta(tuple_sketch_agg(struct(key1, val1), 12, double, sum), theta_sketch_agg(key2, 12), 12, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12), 12, sum)):double>
 -- !query output
 11.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_intersection(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate(tuple_intersection(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_intersection_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 12, sum), sum)):double>
 -- !query output
 3.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_intersection(
-    tuple_sketch_agg(struct(key1, val1), 5),
-    tuple_sketch_agg(struct(key2, val2), 12)))
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_double(
+    tuple_sketch_agg_double(key1, val1, 5),
+    tuple_sketch_agg_double(key2, val2, 12)))
 FROM t_long_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate(tuple_intersection(tuple_sketch_agg(struct(key1, val1), 5, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_intersection_double(tuple_sketch_agg_double(key1, val1, 5, sum), tuple_sketch_agg_double(key2, val2, 12, sum), sum)):double>
 -- !query output
 3.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_intersection(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_double_double_1_1_1_4_through_1_5_1_8
 -- !query schema
-struct<tuple_sketch_estimate(tuple_intersection(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_intersection_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 12, sum), sum)):double>
 -- !query output
 2.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_intersection(
-    tuple_sketch_agg(struct(key1, val1), 5),
-    tuple_sketch_agg(struct(key2, val2))))
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_double(
+    tuple_sketch_agg_double(key1, val1, 5),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_float_double_1_1_1_4_through_1_5_1_8
 -- !query schema
-struct<tuple_sketch_estimate(tuple_intersection(tuple_sketch_agg(struct(key1, val1), 5, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_intersection_double(tuple_sketch_agg_double(key1, val1, 5, sum), tuple_sketch_agg_double(key2, val2, 12, sum), sum)):double>
 -- !query output
 2.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_intersection(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_string_double_a_d_through_e_h
 -- !query schema
-struct<tuple_sketch_estimate(tuple_intersection(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_intersection_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 12, sum), sum)):double>
 -- !query output
 2.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_intersection(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2), 22)))
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2, 22)))
 FROM t_binary_double_a_b_through_e_f
 -- !query schema
-struct<tuple_sketch_estimate(tuple_intersection(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 22, double, sum), double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_intersection_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 22, sum), sum)):double>
 -- !query output
 4.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_intersection(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_array_int_double_1_3_through_4_6
 -- !query schema
-struct<tuple_sketch_estimate(tuple_intersection(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_intersection_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 12, sum), sum)):double>
 -- !query output
 2.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_intersection(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2), 10)))
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2, 10)))
 FROM t_array_long_double_1_3_through_4_6
 -- !query schema
-struct<tuple_sketch_estimate(tuple_intersection(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 10, double, sum), double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_intersection_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 10, sum), sum)):double>
 -- !query output
 2.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_intersection(
-    tuple_sketch_agg(struct(key1, val1), 12, 'double', 'min'),
-    tuple_sketch_agg(struct(key2, val2), 12, 'double', 'min'), 'double', 'min'))
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_double(
+    tuple_sketch_agg_double(key1, val1, 12, 'min'),
+    tuple_sketch_agg_double(key2, val2, 12, 'min'), 'min'))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate(tuple_intersection(tuple_sketch_agg(struct(key1, val1), 12, double, min), tuple_sketch_agg(struct(key2, val2), 12, double, min), double, min), double):double>
+struct<tuple_sketch_estimate_double(tuple_intersection_double(tuple_sketch_agg_double(key1, val1, 12, min), tuple_sketch_agg_double(key2, val2, 12, min), min)):double>
 -- !query output
 3.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_intersection_theta(
-    tuple_sketch_agg(struct(key1, val1)),
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_theta_double(
+    tuple_sketch_agg_double(key1, val1),
     theta_sketch_agg(key2)))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate(tuple_intersection_theta(tuple_sketch_agg(struct(key1, val1), 12, double, sum), theta_sketch_agg(key2, 12), double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_intersection_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12), sum)):double>
 -- !query output
 3.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_intersection_theta(
-    tuple_sketch_agg(struct(key1, val1), 12, 'double', 'sum'),
-    theta_sketch_agg(key2, 12), 'double', 'sum'))
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_theta_double(
+    tuple_sketch_agg_double(key1, val1, 12, 'sum'),
+    theta_sketch_agg(key2, 12), 'sum'))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate(tuple_intersection_theta(tuple_sketch_agg(struct(key1, val1), 12, double, sum), theta_sketch_agg(key2, 12), double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_intersection_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12), sum)):double>
 -- !query output
 3.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_difference(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+SELECT tuple_sketch_estimate_double(
+  tuple_difference_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate(tuple_difference(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), double), double):double>
+struct<tuple_sketch_estimate_double(tuple_difference_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 12, sum))):double>
 -- !query output
 4.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_difference(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2), 5)))
+SELECT tuple_sketch_estimate_double(
+  tuple_difference_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2, 5)))
 FROM t_long_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate(tuple_difference(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 5, double, sum), double), double):double>
+struct<tuple_sketch_estimate_double(tuple_difference_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 5, sum))):double>
 -- !query output
 4.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_difference(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+SELECT tuple_sketch_estimate_double(
+  tuple_difference_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_double_double_1_1_1_4_through_1_5_1_8
 -- !query schema
-struct<tuple_sketch_estimate(tuple_difference(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), double), double):double>
+struct<tuple_sketch_estimate_double(tuple_difference_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 12, sum))):double>
 -- !query output
 3.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_difference(
-    tuple_sketch_agg(struct(key1, val1), 12),
-    tuple_sketch_agg(struct(key2, val2))))
+SELECT tuple_sketch_estimate_double(
+  tuple_difference_double(
+    tuple_sketch_agg_double(key1, val1, 12),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_float_double_1_1_1_4_through_1_5_1_8
 -- !query schema
-struct<tuple_sketch_estimate(tuple_difference(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), double), double):double>
+struct<tuple_sketch_estimate_double(tuple_difference_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 12, sum))):double>
 -- !query output
 3.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_difference(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+SELECT tuple_sketch_estimate_double(
+  tuple_difference_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_string_double_a_d_through_e_h
 -- !query schema
-struct<tuple_sketch_estimate(tuple_difference(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), double), double):double>
+struct<tuple_sketch_estimate_double(tuple_difference_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 12, sum))):double>
 -- !query output
 3.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_difference(
-    tuple_sketch_agg(struct(key1, val1), 6),
-    tuple_sketch_agg(struct(key2, val2), 8)))
+SELECT tuple_sketch_estimate_double(
+  tuple_difference_double(
+    tuple_sketch_agg_double(key1, val1, 6),
+    tuple_sketch_agg_double(key2, val2, 8)))
 FROM t_binary_double_a_b_through_e_f
 -- !query schema
-struct<tuple_sketch_estimate(tuple_difference(tuple_sketch_agg(struct(key1, val1), 6, double, sum), tuple_sketch_agg(struct(key2, val2), 8, double, sum), double), double):double>
+struct<tuple_sketch_estimate_double(tuple_difference_double(tuple_sketch_agg_double(key1, val1, 6, sum), tuple_sketch_agg_double(key2, val2, 8, sum))):double>
 -- !query output
 1.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_difference(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+SELECT tuple_sketch_estimate_double(
+  tuple_difference_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_array_int_double_1_3_through_4_6
 -- !query schema
-struct<tuple_sketch_estimate(tuple_difference(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), double), double):double>
+struct<tuple_sketch_estimate_double(tuple_difference_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 12, sum))):double>
 -- !query output
 2.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_difference(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2), 4)))
+SELECT tuple_sketch_estimate_double(
+  tuple_difference_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2, 4)))
 FROM t_array_long_double_1_3_through_4_6
 -- !query schema
-struct<tuple_sketch_estimate(tuple_difference(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 4, double, sum), double), double):double>
+struct<tuple_sketch_estimate_double(tuple_difference_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 4, sum))):double>
 -- !query output
 2.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_difference(
-    tuple_sketch_agg(struct(key1, val1), 12, 'integer', 'sum'),
-    tuple_sketch_agg(struct(key2, val2), 12, 'integer', 'sum'), 'integer'), 'integer')
+SELECT tuple_sketch_estimate_integer(
+  tuple_difference_integer(
+    tuple_sketch_agg_integer(key1, val1, 12, 'sum'),
+    tuple_sketch_agg_integer(key2, val2, 12, 'sum')))
 FROM t_int_int_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate(tuple_difference(tuple_sketch_agg(struct(key1, val1), 12, integer, sum), tuple_sketch_agg(struct(key2, val2), 12, integer, sum), integer), integer):double>
+struct<tuple_sketch_estimate_integer(tuple_difference_integer(tuple_sketch_agg_integer(key1, val1, 12, sum), tuple_sketch_agg_integer(key2, val2, 12, sum))):double>
 -- !query output
 4.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_difference_theta(
-    tuple_sketch_agg(struct(key1, val1)),
+SELECT tuple_sketch_estimate_double(
+  tuple_difference_theta_double(
+    tuple_sketch_agg_double(key1, val1),
     theta_sketch_agg(key2)))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate(tuple_difference_theta(tuple_sketch_agg(struct(key1, val1), 12, double, sum), theta_sketch_agg(key2, 12), double), double):double>
+struct<tuple_sketch_estimate_double(tuple_difference_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12))):double>
 -- !query output
 4.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_difference_theta(
-    tuple_sketch_agg(struct(key1, val1), 12, 'double', 'sum'),
-    theta_sketch_agg(key2, 12), 'double'))
+SELECT tuple_sketch_estimate_double(
+  tuple_difference_theta_double(
+    tuple_sketch_agg_double(key1, val1, 12, 'sum'),
+    theta_sketch_agg(key2, 12)))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
-struct<tuple_sketch_estimate(tuple_difference_theta(tuple_sketch_agg(struct(key1, val1), 12, double, sum), theta_sketch_agg(key2, 12), double), double):double>
+struct<tuple_sketch_estimate_double(tuple_difference_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12))):double>
 -- !query output
 4.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_union_agg(sketch, 15, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_int_double_1_5_through_7_11
+SELECT tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 15, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_int_double_1_5_through_7_11
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2), 20) as sketch FROM t_int_double_1_5_through_7_11)
+      SELECT tuple_sketch_agg_double(key2, val2, 20) as sketch FROM t_int_double_1_5_through_7_11)
 -- !query schema
-struct<tuple_sketch_estimate(tuple_union_agg(sketch, 15, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 15, sum)):double>
 -- !query output
 11.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_union_agg(sketch, 12, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_double_double_1_1_1_4_through_1_5_1_8
+SELECT tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 12, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_double_double_1_1_1_4_through_1_5_1_8
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_double_double_1_1_1_4_through_1_5_1_8)
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_double_double_1_1_1_4_through_1_5_1_8)
 -- !query schema
-struct<tuple_sketch_estimate(tuple_union_agg(sketch, 12, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 12, sum)):double>
 -- !query output
 8.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_union_agg(sketch, 14, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_string_double_a_d_through_e_h
+SELECT tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 14, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_string_double_a_d_through_e_h
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_string_double_a_d_through_e_h)
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_string_double_a_d_through_e_h)
 -- !query schema
-struct<tuple_sketch_estimate(tuple_union_agg(sketch, 14, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 14, sum)):double>
 -- !query output
 8.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_union_agg(sketch, 10, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_long_double_1_5_through_7_11
+SELECT tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 10, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_long_double_1_5_through_7_11
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_long_double_1_5_through_7_11)
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_long_double_1_5_through_7_11)
 -- !query schema
-struct<tuple_sketch_estimate(tuple_union_agg(sketch, 10, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 10, sum)):double>
 -- !query output
 11.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_union_agg(sketch, 6, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_float_double_1_1_1_4_through_1_5_1_8
+SELECT tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 6, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_float_double_1_1_1_4_through_1_5_1_8
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_float_double_1_1_1_4_through_1_5_1_8)
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_float_double_1_1_1_4_through_1_5_1_8)
 -- !query schema
-struct<tuple_sketch_estimate(tuple_union_agg(sketch, 6, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 6, sum)):double>
 -- !query output
 8.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_union_agg(sketch, 12, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_binary_double_a_b_through_e_f
+SELECT tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 12, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_binary_double_a_b_through_e_f
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_binary_double_a_b_through_e_f)
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_binary_double_a_b_through_e_f)
 -- !query schema
-struct<tuple_sketch_estimate(tuple_union_agg(sketch, 12, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 12, sum)):double>
 -- !query output
 6.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_union_agg(sketch, 12, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_array_int_double_1_3_through_4_6
+SELECT tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 12, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_array_int_double_1_3_through_4_6
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_array_int_double_1_3_through_4_6)
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_array_int_double_1_3_through_4_6)
 -- !query schema
-struct<tuple_sketch_estimate(tuple_union_agg(sketch, 12, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 12, sum)):double>
 -- !query output
 6.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_union_agg(sketch, 16, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_array_long_double_1_3_through_4_6
+SELECT tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 16, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_array_long_double_1_3_through_4_6
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_array_long_double_1_3_through_4_6)
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_array_long_double_1_3_through_4_6)
 -- !query schema
-struct<tuple_sketch_estimate(tuple_union_agg(sketch, 16, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 16, sum)):double>
 -- !query output
 6.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_union_agg(sketch, 12, 'integer', 'sum'), 'integer')
-FROM (SELECT tuple_sketch_agg(struct(key1, val1), 12, 'integer', 'sum') as sketch FROM t_int_int_1_5_through_7_11
+SELECT tuple_sketch_estimate_integer(tuple_union_agg_integer(sketch, 12, 'sum'))
+FROM (SELECT tuple_sketch_agg_integer(key1, val1, 12, 'sum') as sketch FROM t_int_int_1_5_through_7_11
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2), 12, 'integer', 'sum') as sketch FROM t_int_int_1_5_through_7_11)
+      SELECT tuple_sketch_agg_integer(key2, val2, 12, 'sum') as sketch FROM t_int_int_1_5_through_7_11)
 -- !query schema
-struct<tuple_sketch_estimate(tuple_union_agg(sketch, 12, integer, sum), integer):double>
+struct<tuple_sketch_estimate_integer(tuple_union_agg_integer(sketch, 12, sum)):double>
 -- !query output
 11.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_intersection_agg(sketch, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_int_double_1_5_through_7_11
+SELECT tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_int_double_1_5_through_7_11
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_int_double_1_5_through_7_11)
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_int_double_1_5_through_7_11)
 -- !query schema
-struct<tuple_sketch_estimate(tuple_intersection_agg(sketch, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, sum)):double>
 -- !query output
 3.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_intersection_agg(sketch, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_long_double_1_5_through_7_11
+SELECT tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_long_double_1_5_through_7_11
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_long_double_1_5_through_7_11)
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_long_double_1_5_through_7_11)
 -- !query schema
-struct<tuple_sketch_estimate(tuple_intersection_agg(sketch, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, sum)):double>
 -- !query output
 3.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_intersection_agg(sketch, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_float_double_1_1_1_4_through_1_5_1_8
+SELECT tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_float_double_1_1_1_4_through_1_5_1_8
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_float_double_1_1_1_4_through_1_5_1_8)
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_float_double_1_1_1_4_through_1_5_1_8)
 -- !query schema
-struct<tuple_sketch_estimate(tuple_intersection_agg(sketch, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, sum)):double>
 -- !query output
 2.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_intersection_agg(sketch, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_double_double_1_1_1_4_through_1_5_1_8
+SELECT tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_double_double_1_1_1_4_through_1_5_1_8
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_double_double_1_1_1_4_through_1_5_1_8)
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_double_double_1_1_1_4_through_1_5_1_8)
 -- !query schema
-struct<tuple_sketch_estimate(tuple_intersection_agg(sketch, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, sum)):double>
 -- !query output
 2.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_intersection_agg(sketch, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_string_double_a_d_through_e_h
+SELECT tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_string_double_a_d_through_e_h
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_string_double_a_d_through_e_h)
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_string_double_a_d_through_e_h)
 -- !query schema
-struct<tuple_sketch_estimate(tuple_intersection_agg(sketch, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, sum)):double>
 -- !query output
 2.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_intersection_agg(sketch, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_binary_double_a_b_through_e_f
+SELECT tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_binary_double_a_b_through_e_f
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_binary_double_a_b_through_e_f)
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_binary_double_a_b_through_e_f)
 -- !query schema
-struct<tuple_sketch_estimate(tuple_intersection_agg(sketch, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, sum)):double>
 -- !query output
 4.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_intersection_agg(sketch, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_array_int_double_1_3_through_4_6
+SELECT tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_array_int_double_1_3_through_4_6
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_array_int_double_1_3_through_4_6)
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_array_int_double_1_3_through_4_6)
 -- !query schema
-struct<tuple_sketch_estimate(tuple_intersection_agg(sketch, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, sum)):double>
 -- !query output
 2.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_intersection_agg(sketch, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_array_long_double_1_3_through_4_6
+SELECT tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_array_long_double_1_3_through_4_6
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_array_long_double_1_3_through_4_6)
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_array_long_double_1_3_through_4_6)
 -- !query schema
-struct<tuple_sketch_estimate(tuple_intersection_agg(sketch, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, sum)):double>
 -- !query output
 2.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_intersection_agg(sketch, 'integer', 'sum'), 'integer')
-FROM (SELECT tuple_sketch_agg(struct(key1, val1), 12, 'integer', 'sum') as sketch FROM t_int_int_1_5_through_7_11
+SELECT tuple_sketch_estimate_integer(tuple_intersection_agg_integer(sketch, 'sum'))
+FROM (SELECT tuple_sketch_agg_integer(key1, val1, 12, 'sum') as sketch FROM t_int_int_1_5_through_7_11
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2), 12, 'integer', 'sum') as sketch FROM t_int_int_1_5_through_7_11)
+      SELECT tuple_sketch_agg_integer(key2, val2, 12, 'sum') as sketch FROM t_int_int_1_5_through_7_11)
 -- !query schema
-struct<tuple_sketch_estimate(tuple_intersection_agg(sketch, integer, sum), integer):double>
+struct<tuple_sketch_estimate_integer(tuple_intersection_agg_integer(sketch, sum)):double>
 -- !query output
 3.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key, val)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES (1, 1.0D), (null, 2.0D), (2, 2.0D), (null, 3.0D), (3, 3.0D) tab(key, val)
 -- !query schema
-struct<tuple_sketch_estimate(tuple_sketch_agg(struct(key, val), 12, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, sum)):double>
 -- !query output
 3.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key, val)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES ('test', 1.0D), (null, 2.0D), ('null', 3.0D), (null, 4.0D) tab(key, val)
 -- !query schema
-struct<tuple_sketch_estimate(tuple_sketch_agg(struct(key, val), 12, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, sum)):double>
 -- !query output
 2.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key, val)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES (100L, 1.0D), (null, 2.0D), (200L, 3.0D), (null, 4.0D), (300L, 5.0D) tab(key, val)
 -- !query schema
-struct<tuple_sketch_estimate(tuple_sketch_agg(struct(key, val), 12, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, sum)):double>
 -- !query output
 3.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(CAST(key AS DOUBLE), val)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(CAST(key AS DOUBLE), val))
 FROM VALUES (1.1, 1.0D), (null, 2.0D), (2.2, 3.0D), (null, 4.0D), (3.3, 5.0D) tab(key, val)
 -- !query schema
-struct<tuple_sketch_estimate(tuple_sketch_agg(struct(CAST(key AS DOUBLE), val), 12, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_sketch_agg_double(CAST(key AS DOUBLE), val, 12, sum)):double>
 -- !query output
 3.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(CAST(key AS FLOAT), val)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(CAST(key AS FLOAT), val))
 FROM VALUES (1.5, 1.0D), (null, 2.0D), (2.5, 3.0D), (null, 4.0D), (3.5, 5.0D) tab(key, val)
 -- !query schema
-struct<tuple_sketch_estimate(tuple_sketch_agg(struct(CAST(key AS FLOAT), val), 12, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_sketch_agg_double(CAST(key AS FLOAT), val, 12, sum)):double>
 -- !query output
 3.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key, val)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES (X'AA', 1.0D), (null, 2.0D), (X'BB', 3.0D), (null, 4.0D), (X'CC', 5.0D) tab(key, val)
 -- !query schema
-struct<tuple_sketch_estimate(tuple_sketch_agg(struct(key, val), 12, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, sum)):double>
 -- !query output
 3.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key, val)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES (ARRAY(1, 2), 1.0D), (null, 2.0D), (ARRAY(3, 4), 3.0D), (null, 4.0D), (ARRAY(5, 6), 5.0D) tab(key, val)
 -- !query schema
-struct<tuple_sketch_estimate(tuple_sketch_agg(struct(key, val), 12, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, sum)):double>
 -- !query output
 3.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key, val)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES (ARRAY(10L, 20L), 1.0), (null, 2.0D), (ARRAY(30L, 40L), 3.0D), (null, 4.0D), (ARRAY(50L, 60L), 5.0D) tab(key, val)
 -- !query schema
-struct<tuple_sketch_estimate(tuple_sketch_agg(struct(key, val), 12, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, sum)):double>
 -- !query output
 3.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key, val)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES (ARRAY(1, null), 1.0), (ARRAY(1), 2.0D), (ARRAY(2, null, 3), 3.0D), (ARRAY(4), 4.0D) tab(key, val)
 -- !query schema
-struct<tuple_sketch_estimate(tuple_sketch_agg(struct(key, val), 12, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, sum)):double>
 -- !query output
 4.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key, val)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES (ARRAY(10L, null), 1.0D), (ARRAY(10L), 2.0D), (ARRAY(20L, null, 30L), 3.0D), (ARRAY(40L), 4.0D) tab(key, val)
 -- !query schema
-struct<tuple_sketch_estimate(tuple_sketch_agg(struct(key, val), 12, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, sum)):double>
 -- !query output
 4.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key, val)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES (ARRAY(), 1.0D), (ARRAY(1, 2), 2.0D), (ARRAY(), 3.0D), (ARRAY(3, 4), 4.0D) tab(key, val)
 -- !query schema
-struct<tuple_sketch_estimate(tuple_sketch_agg(struct(key, val), 12, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, sum)):double>
 -- !query output
 2.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key, val)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES ('', 1.0D), ('a', 2.0D), ('', 3.0D), ('b', 4.0D), ('c', 5.0D) tab(key, val)
 -- !query schema
-struct<tuple_sketch_estimate(tuple_sketch_agg(struct(key, val), 12, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, sum)):double>
 -- !query output
 3.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key, val)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES (X'', 1.0D), (X'01', 2.0D), (X'02', 3.0D), (X'03', 4.0D), (CAST('  ' AS BINARY), 5.0D), (X'e280', 6.0D), (X'c1', 7.0D), (X'c120', 8.0D) tab(key, val)
 -- !query schema
-struct<tuple_sketch_estimate(tuple_sketch_agg(struct(key, val), 12, double, sum), double):double>
+struct<tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, sum)):double>
 -- !query output
 7.0
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1))) utf8_b FROM t_string_collation
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1)) utf8_b FROM t_string_collation
 -- !query schema
 struct<utf8_b:double>
 -- !query output
@@ -1171,7 +1171,7 @@ struct<utf8_b:double>
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1 COLLATE UTF8_LCASE, val1))) utf8_lc FROM t_string_collation
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1 COLLATE UTF8_LCASE, val1)) utf8_lc FROM t_string_collation
 -- !query schema
 struct<utf8_lc:double>
 -- !query output
@@ -1179,7 +1179,7 @@ struct<utf8_lc:double>
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1 COLLATE UNICODE, val1))) unicode FROM t_string_collation
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1 COLLATE UNICODE, val1)) unicode FROM t_string_collation
 -- !query schema
 struct<unicode:double>
 -- !query output
@@ -1187,7 +1187,7 @@ struct<unicode:double>
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1 COLLATE UNICODE_CI, val1))) unicode_ci FROM t_string_collation
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1 COLLATE UNICODE_CI, val1)) unicode_ci FROM t_string_collation
 -- !query schema
 struct<unicode_ci:double>
 -- !query output
@@ -1195,7 +1195,7 @@ struct<unicode_ci:double>
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1 COLLATE UTF8_BINARY_RTRIM, val1))) utf8_b_rt FROM t_string_collation
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1 COLLATE UTF8_BINARY_RTRIM, val1)) utf8_b_rt FROM t_string_collation
 -- !query schema
 struct<utf8_b_rt:double>
 -- !query output
@@ -1203,7 +1203,7 @@ struct<utf8_b_rt:double>
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1 COLLATE UTF8_LCASE_RTRIM, val1))) utf8_lc_rt FROM t_string_collation
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1 COLLATE UTF8_LCASE_RTRIM, val1)) utf8_lc_rt FROM t_string_collation
 -- !query schema
 struct<utf8_lc_rt:double>
 -- !query output
@@ -1211,7 +1211,7 @@ struct<utf8_lc_rt:double>
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1 COLLATE UNICODE_RTRIM, val1))) unicode_rt FROM t_string_collation
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1 COLLATE UNICODE_RTRIM, val1)) unicode_rt FROM t_string_collation
 -- !query schema
 struct<unicode_rt:double>
 -- !query output
@@ -1219,7 +1219,7 @@ struct<unicode_rt:double>
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1 COLLATE UNICODE_CI_RTRIM, val1))) unicode_ci_rt FROM t_string_collation
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1 COLLATE UNICODE_CI_RTRIM, val1)) unicode_ci_rt FROM t_string_collation
 -- !query schema
 struct<unicode_ci_rt:double>
 -- !query output
@@ -1228,33 +1228,33 @@ struct<unicode_ci_rt:double>
 
 -- !query
 WITH sketches AS (
-  SELECT 'int_sketch' as sketch_type, tuple_sketch_agg(struct(key1, val1), 12, 'double', 'sum') as sketch
+  SELECT 'int_sketch' as sketch_type, tuple_sketch_agg_double(key1, val1, 12, 'sum') as sketch
   FROM t_int_double_1_5_through_7_11
   UNION ALL
-  SELECT 'long_sketch' as sketch_type, tuple_sketch_agg(struct(key1, val1), 15, 'double', 'sum') as sketch
+  SELECT 'long_sketch' as sketch_type, tuple_sketch_agg_double(key1, val1, 15, 'sum') as sketch
   FROM t_long_double_1_5_through_7_11
   UNION ALL
-  SELECT 'double_sketch' as sketch_type, tuple_sketch_agg(struct(key1, val1), 10, 'double', 'sum') as sketch
+  SELECT 'double_sketch' as sketch_type, tuple_sketch_agg_double(key1, val1, 10, 'sum') as sketch
   FROM t_double_double_1_1_1_4_through_1_5_1_8
   UNION ALL
-  SELECT 'string_sketch' as sketch_type, tuple_sketch_agg(struct(key1, val1), 14, 'double', 'sum') as sketch
+  SELECT 'string_sketch' as sketch_type, tuple_sketch_agg_double(key1, val1, 14, 'sum') as sketch
   FROM t_string_double_a_d_through_e_h
 ),
 union_result AS (
-  SELECT tuple_union_agg(sketch, 16, 'double', 'sum') as union_sketch FROM sketches
+  SELECT tuple_union_agg_double(sketch, 16, 'sum') as union_sketch FROM sketches
 ),
 individual_sketches AS (
   SELECT
-    tuple_sketch_agg(struct(key1, val1), 12, 'double', 'sum') as sketch1,
-    tuple_sketch_agg(struct(key2, val2), 12, 'double', 'sum') as sketch2
+    tuple_sketch_agg_double(key1, val1, 12, 'sum') as sketch1,
+    tuple_sketch_agg_double(key2, val2, 12, 'sum') as sketch2
   FROM t_int_double_1_5_through_7_11
 )
 SELECT
-  tuple_sketch_estimate((SELECT union_sketch FROM union_result)) as union_estimate,
-  tuple_sketch_summary((SELECT union_sketch FROM union_result), 'double', 'sum') as union_summary,
-  tuple_sketch_estimate(tuple_union(sketch1, sketch2, 15, 'double', 'sum')) as binary_union_estimate,
-  tuple_sketch_estimate(tuple_intersection(sketch1, sketch2, 'double', 'sum')) as intersection_estimate,
-  tuple_sketch_estimate(tuple_difference(sketch1, sketch2, 'double')) as difference_estimate
+  tuple_sketch_estimate_double((SELECT union_sketch FROM union_result)) as union_estimate,
+  tuple_sketch_summary_double((SELECT union_sketch FROM union_result), 'sum') as union_summary,
+  tuple_sketch_estimate_double(tuple_union_double(sketch1, sketch2, 15, 'sum')) as binary_union_estimate,
+  tuple_sketch_estimate_double(tuple_intersection_double(sketch1, sketch2, 'sum')) as intersection_estimate,
+  tuple_sketch_estimate_double(tuple_difference_double(sketch1, sketch2)) as difference_estimate
 FROM individual_sketches
 -- !query schema
 struct<union_estimate:double,union_summary:double,binary_union_estimate:double,intersection_estimate:double,difference_estimate:double>
@@ -1263,7 +1263,7 @@ struct<union_estimate:double,union_summary:double,binary_union_estimate:double,i
 
 
 -- !query
-SELECT tuple_sketch_agg(struct(col, val), 2)
+SELECT tuple_sketch_agg_double(col, val, 2)
 FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val)
 -- !query schema
 struct<>
@@ -1274,50 +1274,50 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "hint" : "",
-    "msg" : "[SKETCH_INVALID_LG_NOM_ENTRIES] Invalid call to `tuple_sketch_agg`; the `lgNomEntries` value must be between 4 and 26, inclusive: 2. SQLSTATE: 22003",
-    "sqlExpr" : "\"tuple_sketch_agg(struct(col, val), 2, double, sum)\""
+    "msg" : "[SKETCH_INVALID_LG_NOM_ENTRIES] Invalid call to `tuple_sketch_agg_double`; the `lgNomEntries` value must be between 4 and 26, inclusive: 2. SQLSTATE: 22003",
+    "sqlExpr" : "\"tuple_sketch_agg_double(col, val, 2, sum)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 43,
+    "fragment" : "tuple_sketch_agg_double(col, val, 2)"
+  } ]
+}
+
+
+-- !query
+SELECT tuple_sketch_agg_double(col, val, 40)
+FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "hint" : "",
+    "msg" : "[SKETCH_INVALID_LG_NOM_ENTRIES] Invalid call to `tuple_sketch_agg_double`; the `lgNomEntries` value must be between 4 and 26, inclusive: 40. SQLSTATE: 22003",
+    "sqlExpr" : "\"tuple_sketch_agg_double(col, val, 40, sum)\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
     "stopIndex" : 44,
-    "fragment" : "tuple_sketch_agg(struct(col, val), 2)"
+    "fragment" : "tuple_sketch_agg_double(col, val, 40)"
   } ]
 }
 
 
 -- !query
-SELECT tuple_sketch_agg(struct(col, val), 40)
-FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "hint" : "",
-    "msg" : "[SKETCH_INVALID_LG_NOM_ENTRIES] Invalid call to `tuple_sketch_agg`; the `lgNomEntries` value must be between 4 and 26, inclusive: 40. SQLSTATE: 22003",
-    "sqlExpr" : "\"tuple_sketch_agg(struct(col, val), 40, double, sum)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 45,
-    "fragment" : "tuple_sketch_agg(struct(col, val), 40)"
-  } ]
-}
-
-
--- !query
-SELECT tuple_union_agg(sketch, 3, 'double', 'sum')
-FROM (SELECT tuple_sketch_agg(struct(col, val), 12) as sketch
+SELECT tuple_union_agg_double(sketch, 3, 'sum')
+FROM (SELECT tuple_sketch_agg_double(col, val, 12) as sketch
         FROM VALUES (1, 1.0D) AS tab(col, val)
       UNION ALL
-      SELECT tuple_sketch_agg(struct(col, val), 20) as sketch
+      SELECT tuple_sketch_agg_double(col, val, 20) as sketch
         FROM VALUES (1, 1.0D) AS tab(col, val))
 -- !query schema
 struct<>
@@ -1328,25 +1328,25 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "hint" : "",
-    "msg" : "[SKETCH_INVALID_LG_NOM_ENTRIES] Invalid call to `tuple_union_agg`; the `lgNomEntries` value must be between 4 and 26, inclusive: 3. SQLSTATE: 22003",
-    "sqlExpr" : "\"tuple_union_agg(sketch, 3, double, sum)\""
+    "msg" : "[SKETCH_INVALID_LG_NOM_ENTRIES] Invalid call to `tuple_union_agg_double`; the `lgNomEntries` value must be between 4 and 26, inclusive: 3. SQLSTATE: 22003",
+    "sqlExpr" : "\"tuple_union_agg_double(sketch, 3, sum)\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
-    "stopIndex" : 50,
-    "fragment" : "tuple_union_agg(sketch, 3, 'double', 'sum')"
+    "stopIndex" : 47,
+    "fragment" : "tuple_union_agg_double(sketch, 3, 'sum')"
   } ]
 }
 
 
 -- !query
-SELECT tuple_union_agg(sketch, 27, 'double', 'sum')
-FROM (SELECT tuple_sketch_agg(struct(col, val), 12) as sketch
+SELECT tuple_union_agg_double(sketch, 27, 'sum')
+FROM (SELECT tuple_sketch_agg_double(col, val, 12) as sketch
         FROM VALUES (1, 1.0D) AS tab(col, val)
       UNION ALL
-      SELECT tuple_sketch_agg(struct(col, val), 20) as sketch
+      SELECT tuple_sketch_agg_double(col, val, 20) as sketch
         FROM VALUES (1, 1.0D) AS tab(col, val))
 -- !query schema
 struct<>
@@ -1357,21 +1357,21 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "hint" : "",
-    "msg" : "[SKETCH_INVALID_LG_NOM_ENTRIES] Invalid call to `tuple_union_agg`; the `lgNomEntries` value must be between 4 and 26, inclusive: 27. SQLSTATE: 22003",
-    "sqlExpr" : "\"tuple_union_agg(sketch, 27, double, sum)\""
+    "msg" : "[SKETCH_INVALID_LG_NOM_ENTRIES] Invalid call to `tuple_union_agg_double`; the `lgNomEntries` value must be between 4 and 26, inclusive: 27. SQLSTATE: 22003",
+    "sqlExpr" : "\"tuple_union_agg_double(sketch, 27, sum)\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
-    "stopIndex" : 51,
-    "fragment" : "tuple_union_agg(sketch, 27, 'double', 'sum')"
+    "stopIndex" : 48,
+    "fragment" : "tuple_union_agg_double(sketch, 27, 'sum')"
   } ]
 }
 
 
 -- !query
-SELECT tuple_sketch_agg(struct(col, val), CAST(NULL AS INT)) AS lg_nom_entries_is_null
+SELECT tuple_sketch_agg_double(col, val, CAST(NULL AS INT)) AS lg_nom_entries_is_null
 FROM VALUES (15, 1.0D), (16, 2.0D), (17, 3.0D) tab(col, val)
 -- !query schema
 struct<>
@@ -1382,20 +1382,20 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "exprName" : "lgNomEntries",
-    "sqlExpr" : "\"tuple_sketch_agg(struct(col, val), CAST(NULL AS INT), double, sum)\""
+    "sqlExpr" : "\"tuple_sketch_agg_double(col, val, CAST(NULL AS INT), sum)\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
-    "stopIndex" : 60,
-    "fragment" : "tuple_sketch_agg(struct(col, val), CAST(NULL AS INT))"
+    "stopIndex" : 59,
+    "fragment" : "tuple_sketch_agg_double(col, val, CAST(NULL AS INT))"
   } ]
 }
 
 
 -- !query
-SELECT tuple_sketch_agg(struct(col, val), CAST(col AS INT)) AS lg_nom_entries_non_constant
+SELECT tuple_sketch_agg_double(col, val, CAST(col AS INT)) AS lg_nom_entries_non_constant
 FROM VALUES (15, 1.0D), (16, 2.0D), (17, 3.0D) tab(col, val)
 -- !query schema
 struct<>
@@ -1408,20 +1408,20 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputExpr" : "CAST(tab.col AS INT)",
     "inputName" : "lgNomEntries",
     "inputType" : "int",
-    "sqlExpr" : "\"tuple_sketch_agg(struct(col, val), CAST(col AS INT), double, sum)\""
+    "sqlExpr" : "\"tuple_sketch_agg_double(col, val, CAST(col AS INT), sum)\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
-    "stopIndex" : 59,
-    "fragment" : "tuple_sketch_agg(struct(col, val), CAST(col AS INT))"
+    "stopIndex" : 58,
+    "fragment" : "tuple_sketch_agg_double(col, val, CAST(col AS INT))"
   } ]
 }
 
 
 -- !query
-SELECT tuple_sketch_agg(struct(col, val), '15')
+SELECT tuple_sketch_agg_double(col, val, '15')
 FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val)
 -- !query schema
 struct<>
@@ -1433,73 +1433,22 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"15\"",
     "inputType" : "\"STRING\"",
-    "paramIndex" : "second",
+    "paramIndex" : "third",
     "requiredType" : "\"INT\"",
-    "sqlExpr" : "\"tuple_sketch_agg(struct(col, val), 15, double, sum)\""
+    "sqlExpr" : "\"tuple_sketch_agg_double(col, val, 15, sum)\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
-    "stopIndex" : 47,
-    "fragment" : "tuple_sketch_agg(struct(col, val), '15')"
+    "stopIndex" : 46,
+    "fragment" : "tuple_sketch_agg_double(col, val, '15')"
   } ]
 }
 
 
 -- !query
-SELECT tuple_sketch_agg(struct(col, val), 12, CAST(col AS STRING))
-FROM VALUES (15, 1.0D), (16, 2.0D), (17, 3.0D) tab(col, val)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputExpr" : "CAST(tab.col AS STRING)",
-    "inputName" : "summaryType",
-    "inputType" : "string",
-    "sqlExpr" : "\"tuple_sketch_agg(struct(col, val), 12, CAST(col AS STRING), sum)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 66,
-    "fragment" : "tuple_sketch_agg(struct(col, val), 12, CAST(col AS STRING))"
-  } ]
-}
-
-
--- !query
-SELECT tuple_sketch_agg(struct(col, val), 12, 'invalid_type')
-FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "hint" : "",
-    "msg" : "[TUPLE_INVALID_SKETCH_SUMMARY_TYPE] Invalid call to `tuple_sketch_agg`: summary type 'invalid_type' is not supported. Valid summary types are: double, integer, string. SQLSTATE: 22023",
-    "sqlExpr" : "\"tuple_sketch_agg(struct(col, val), 12, invalid_type, sum)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 61,
-    "fragment" : "tuple_sketch_agg(struct(col, val), 12, 'invalid_type')"
-  } ]
-}
-
-
--- !query
-SELECT tuple_sketch_agg(struct(col, val), 12, 'double', CAST(col AS STRING))
+SELECT tuple_sketch_agg_double(col, val, 12, CAST(col AS STRING))
 FROM VALUES (15, 1.0D), (16, 2.0D), (17, 3.0D) tab(col, val)
 -- !query schema
 struct<>
@@ -1512,20 +1461,20 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputExpr" : "CAST(tab.col AS STRING)",
     "inputName" : "mode",
     "inputType" : "string",
-    "sqlExpr" : "\"tuple_sketch_agg(struct(col, val), 12, double, CAST(col AS STRING))\""
+    "sqlExpr" : "\"tuple_sketch_agg_double(col, val, 12, CAST(col AS STRING))\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
-    "stopIndex" : 76,
-    "fragment" : "tuple_sketch_agg(struct(col, val), 12, 'double', CAST(col AS STRING))"
+    "stopIndex" : 65,
+    "fragment" : "tuple_sketch_agg_double(col, val, 12, CAST(col AS STRING))"
   } ]
 }
 
 
 -- !query
-SELECT tuple_sketch_agg(struct(col, val), 12, 'double', 'invalid_mode')
+SELECT tuple_sketch_agg_double(col, val, 12, 'invalid_type')
 FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val)
 -- !query schema
 struct<>
@@ -1536,21 +1485,21 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "hint" : "",
-    "msg" : "[TUPLE_INVALID_SKETCH_MODE] Invalid call to `tuple_sketch_agg`: mode 'invalid_mode' is not supported. Valid modes are: sum, min, max, alwaysone. SQLSTATE: 22023",
-    "sqlExpr" : "\"tuple_sketch_agg(struct(col, val), 12, double, invalid_mode)\""
+    "msg" : "[TUPLE_INVALID_SKETCH_MODE] Invalid call to `tuple_sketch_agg_double`: mode 'invalid_type' is not supported. Valid modes are: sum, min, max, alwaysone. SQLSTATE: 22023",
+    "sqlExpr" : "\"tuple_sketch_agg_double(col, val, 12, invalid_type)\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
-    "stopIndex" : 71,
-    "fragment" : "tuple_sketch_agg(struct(col, val), 12, 'double', 'invalid_mode')"
+    "stopIndex" : 60,
+    "fragment" : "tuple_sketch_agg_double(col, val, 12, 'invalid_type')"
   } ]
 }
 
 
 -- !query
-SELECT tuple_sketch_agg(col, 15)
+SELECT tuple_sketch_agg_double(col, 15)
 FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val)
 -- !query schema
 struct<>
@@ -1560,49 +1509,51 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "inputSql" : "\"col\"",
+    "inputSql" : "\"15\"",
     "inputType" : "\"INT\"",
-    "paramIndex" : "first",
-    "requiredType" : "\"STRUCT\"",
-    "sqlExpr" : "\"tuple_sketch_agg(col, 15, double, sum)\""
+    "paramIndex" : "second",
+    "requiredType" : "(\"DOUBLE\" or \"FLOAT\")",
+    "sqlExpr" : "\"tuple_sketch_agg_double(col, 15, 12, sum)\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
-    "stopIndex" : 32,
-    "fragment" : "tuple_sketch_agg(col, 15)"
+    "stopIndex" : 39,
+    "fragment" : "tuple_sketch_agg_double(col, 15)"
   } ]
 }
 
 
 -- !query
-SELECT tuple_sketch_agg(struct(col, val, 2.0D), 15)
+SELECT tuple_sketch_agg_double(col, val, 2.0D, 15)
 FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val)
 -- !query schema
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "The struct input to tuple_sketch_agg must have exactly 2 fields (key, summary value), but got 3 fields",
-    "sqlExpr" : "\"tuple_sketch_agg(struct(col, val, 2.0), 15, double, sum)\""
+    "inputSql" : "\"2.0\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "third",
+    "requiredType" : "\"INT\"",
+    "sqlExpr" : "\"tuple_sketch_agg_double(col, val, 2.0, 15)\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
-    "stopIndex" : 51,
-    "fragment" : "tuple_sketch_agg(struct(col, val, 2.0D), 15)"
+    "stopIndex" : 50,
+    "fragment" : "tuple_sketch_agg_double(col, val, 2.0D, 15)"
   } ]
 }
 
 
 -- !query
-SELECT tuple_union(1, 2)
+SELECT tuple_union_double(1, 2)
 FROM VALUES
   (1, 4),
   (2, 5),
@@ -1619,50 +1570,20 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputType" : "\"INT\"",
     "paramIndex" : "first",
     "requiredType" : "\"BINARY\"",
-    "sqlExpr" : "\"tuple_union(1, 2, 12, double, sum)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 24,
-    "fragment" : "tuple_union(1, 2)"
-  } ]
-}
-
-
--- !query
-SELECT tuple_intersection(1, 2)
-FROM VALUES
-  (1, 4),
-  (2, 5),
-  (3, 6) AS tab(col1, col2)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"1\"",
-    "inputType" : "\"INT\"",
-    "paramIndex" : "first",
-    "requiredType" : "\"BINARY\"",
-    "sqlExpr" : "\"tuple_intersection(1, 2, double, sum)\""
+    "sqlExpr" : "\"tuple_union_double(1, 2, 12, sum)\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
     "stopIndex" : 31,
-    "fragment" : "tuple_intersection(1, 2)"
+    "fragment" : "tuple_union_double(1, 2)"
   } ]
 }
 
 
 -- !query
-SELECT tuple_difference(1, 2)
+SELECT tuple_intersection_double(1, 2)
 FROM VALUES
   (1, 4),
   (2, 5),
@@ -1679,22 +1600,52 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputType" : "\"INT\"",
     "paramIndex" : "first",
     "requiredType" : "\"BINARY\"",
-    "sqlExpr" : "\"tuple_difference(1, 2, double)\""
+    "sqlExpr" : "\"tuple_intersection_double(1, 2, sum)\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
-    "stopIndex" : 29,
-    "fragment" : "tuple_difference(1, 2)"
+    "stopIndex" : 38,
+    "fragment" : "tuple_intersection_double(1, 2)"
   } ]
 }
 
 
 -- !query
-SELECT tuple_union(
-    tuple_sketch_agg(struct(col1, 1.0D)),
-    tuple_sketch_agg(struct(col2, 2.0D)), 'invalid')
+SELECT tuple_difference_double(1, 2)
+FROM VALUES
+  (1, 4),
+  (2, 5),
+  (3, 6) AS tab(col1, col2)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"BINARY\"",
+    "sqlExpr" : "\"tuple_difference_double(1, 2)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "tuple_difference_double(1, 2)"
+  } ]
+}
+
+
+-- !query
+SELECT tuple_union_double(
+    tuple_sketch_agg_double(col1, 1.0D),
+    tuple_sketch_agg_double(col2, 2.0D), 'invalid')
 FROM VALUES
   (1, 4),
   (2, 5),
@@ -1711,21 +1662,21 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputType" : "\"STRING\"",
     "paramIndex" : "third",
     "requiredType" : "\"INT\"",
-    "sqlExpr" : "\"tuple_union(tuple_sketch_agg(struct(col1, 1.0), 12, double, sum), tuple_sketch_agg(struct(col2, 2.0), 12, double, sum), invalid, double, sum)\""
+    "sqlExpr" : "\"tuple_union_double(tuple_sketch_agg_double(col1, 1.0, 12, sum), tuple_sketch_agg_double(col2, 2.0, 12, sum), invalid, sum)\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
-    "stopIndex" : 114,
-    "fragment" : "tuple_union(\n    tuple_sketch_agg(struct(col1, 1.0D)),\n    tuple_sketch_agg(struct(col2, 2.0D)), 'invalid')"
+    "stopIndex" : 119,
+    "fragment" : "tuple_union_double(\n    tuple_sketch_agg_double(col1, 1.0D),\n    tuple_sketch_agg_double(col2, 2.0D), 'invalid')"
   } ]
 }
 
 
 -- !query
-SELECT tuple_intersection(
-    tuple_sketch_agg(struct(col1, 1.0)),
+SELECT tuple_intersection_double(
+    tuple_sketch_agg_double(col1, 1.0),
     'invalid_sketch')
 FROM VALUES
   (1, 4),
@@ -1739,24 +1690,24 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "inputSql" : "\"invalid_sketch\"",
-    "inputType" : "\"STRING\"",
+    "inputSql" : "\"1.0\"",
+    "inputType" : "\"DECIMAL(2,1)\"",
     "paramIndex" : "second",
-    "requiredType" : "\"BINARY\"",
-    "sqlExpr" : "\"tuple_intersection(tuple_sketch_agg(struct(col1, 1.0), 12, double, sum), invalid_sketch, double, sum)\""
+    "requiredType" : "(\"DOUBLE\" or \"FLOAT\")",
+    "sqlExpr" : "\"tuple_sketch_agg_double(col1, 1.0, 12, sum)\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 89,
-    "fragment" : "tuple_intersection(\n    tuple_sketch_agg(struct(col1, 1.0)),\n    'invalid_sketch')"
+    "startIndex" : 39,
+    "stopIndex" : 72,
+    "fragment" : "tuple_sketch_agg_double(col1, 1.0)"
   } ]
 }
 
 
 -- !query
-SELECT tuple_sketch_estimate(CAST('abc' AS BINARY))
+SELECT tuple_sketch_estimate_double(CAST('abc' AS BINARY))
 -- !query schema
 struct<>
 -- !query output
@@ -1765,14 +1716,14 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
   "sqlState" : "22000",
   "messageParameters" : {
-    "function" : "`tuple_sketch_estimate`",
+    "function" : "`tuple_sketch_estimate_double`",
     "reason" : "reqOffset: 3, reqLength: 1, (reqOff + reqLen): 4, allocSize: 3"
   }
 }
 
 
 -- !query
-SELECT tuple_union(CAST('abc' AS BINARY), CAST('def' AS BINARY))
+SELECT tuple_union_double(CAST('abc' AS BINARY), CAST('def' AS BINARY))
 -- !query schema
 struct<>
 -- !query output
@@ -1781,14 +1732,14 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
   "sqlState" : "22000",
   "messageParameters" : {
-    "function" : "`tuple_union`",
+    "function" : "`tuple_union_double`",
     "reason" : "reqOffset: 3, reqLength: 1, (reqOff + reqLen): 4, allocSize: 3"
   }
 }
 
 
 -- !query
-SELECT tuple_intersection(CAST('abc' AS BINARY), CAST('def' AS BINARY))
+SELECT tuple_intersection_double(CAST('abc' AS BINARY), CAST('def' AS BINARY))
 -- !query schema
 struct<>
 -- !query output
@@ -1797,14 +1748,14 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
   "sqlState" : "22000",
   "messageParameters" : {
-    "function" : "`tuple_intersection`",
+    "function" : "`tuple_intersection_double`",
     "reason" : "reqOffset: 3, reqLength: 1, (reqOff + reqLen): 4, allocSize: 3"
   }
 }
 
 
 -- !query
-SELECT tuple_difference(CAST('abc' AS BINARY), CAST('def' AS BINARY))
+SELECT tuple_difference_double(CAST('abc' AS BINARY), CAST('def' AS BINARY))
 -- !query schema
 struct<>
 -- !query output
@@ -1813,14 +1764,14 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
   "sqlState" : "22000",
   "messageParameters" : {
-    "function" : "`tuple_difference`",
+    "function" : "`tuple_difference_double`",
     "reason" : "reqOffset: 3, reqLength: 1, (reqOff + reqLen): 4, allocSize: 3"
   }
 }
 
 
 -- !query
-SELECT tuple_union_agg(buffer, 15, 'double', 'sum')
+SELECT tuple_union_agg_double(buffer, 15, 'sum')
 FROM (SELECT CAST('abc' AS BINARY) AS buffer)
 -- !query schema
 struct<>
@@ -1830,14 +1781,14 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
   "sqlState" : "22000",
   "messageParameters" : {
-    "function" : "`tuple_union_agg`",
+    "function" : "`tuple_union_agg_double`",
     "reason" : "reqOffset: 3, reqLength: 1, (reqOff + reqLen): 4, allocSize: 3"
   }
 }
 
 
 -- !query
-SELECT tuple_intersection_agg(buffer, 'double', 'sum')
+SELECT tuple_intersection_agg_double(buffer, 'sum')
 FROM (SELECT CAST('abc' AS BINARY) AS buffer)
 -- !query schema
 struct<>
@@ -1847,33 +1798,16 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
   "sqlState" : "22000",
   "messageParameters" : {
-    "function" : "`tuple_intersection_agg`",
+    "function" : "`tuple_intersection_agg_double`",
     "reason" : "reqOffset: 3, reqLength: 1, (reqOff + reqLen): 4, allocSize: 3"
   }
 }
 
 
 -- !query
-SELECT tuple_sketch_summary(tuple_sketch_agg(struct(key1, val1), 12, 'string', 'sum'), 'string', 'sum')
-FROM t_string_string_a_d_through_e_h
--- !query schema
-struct<>
--- !query output
-org.apache.spark.SparkRuntimeException
-{
-  "errorClass" : "TUPLE_INVALID_SUMMARY_TYPE_OPERATION",
-  "sqlState" : "22023",
-  "messageParameters" : {
-    "function" : "`tuple_sketch_summary`",
-    "summaryType" : "string"
-  }
-}
-
-
--- !query
-SELECT tuple_union_theta(
+SELECT tuple_union_theta_double(
     theta_sketch_agg(key1),
-    tuple_sketch_agg(struct(key2, val2)))
+    tuple_sketch_agg_double(key2, val2))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
 struct<>
@@ -1883,16 +1817,16 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
   "sqlState" : "22000",
   "messageParameters" : {
-    "function" : "`tuple_union_theta`",
+    "function" : "`tuple_union_theta_double`",
     "reason" : "Invalid Sketch Type 62"
   }
 }
 
 
 -- !query
-SELECT tuple_intersection_theta(
+SELECT tuple_intersection_theta_double(
     theta_sketch_agg(key1),
-    tuple_sketch_agg(struct(key2, val2)))
+    tuple_sketch_agg_double(key2, val2))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
 struct<>
@@ -1902,16 +1836,16 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
   "sqlState" : "22000",
   "messageParameters" : {
-    "function" : "`tuple_intersection_theta`",
+    "function" : "`tuple_intersection_theta_double`",
     "reason" : "Invalid Sketch Type 62"
   }
 }
 
 
 -- !query
-SELECT tuple_difference_theta(
+SELECT tuple_difference_theta_double(
     theta_sketch_agg(key1),
-    tuple_sketch_agg(struct(key2, val2)))
+    tuple_sketch_agg_double(key2, val2))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
 struct<>
@@ -1921,50 +1855,68 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
   "sqlState" : "22000",
   "messageParameters" : {
-    "function" : "`tuple_difference_theta`",
+    "function" : "`tuple_difference_theta_double`",
     "reason" : "Invalid Sketch Type 62"
   }
 }
 
 
 -- !query
-SELECT tuple_sketch_agg(struct(col1, col2), 12, 'double', 'sum')
+SELECT tuple_sketch_agg_double(col1, col2, 12, 'sum')
 FROM VALUES (1, 'invalid'), (2, 'invalid') AS tab(col1, col2)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkRuntimeException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TUPLE_INVALID_SKETCH_SUMMARY_VALUE_TYPE",
-  "sqlState" : "22023",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "actualType" : "UTF8String",
-    "function" : "`tuple_sketch_agg`",
-    "summaryType" : "double"
-  }
+    "inputSql" : "\"col2\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "second",
+    "requiredType" : "(\"DOUBLE\" or \"FLOAT\")",
+    "sqlExpr" : "\"tuple_sketch_agg_double(col1, col2, 12, sum)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 53,
+    "fragment" : "tuple_sketch_agg_double(col1, col2, 12, 'sum')"
+  } ]
 }
 
 
 -- !query
-SELECT tuple_sketch_agg(struct(col1, col2), 12, 'integer', 'sum')
+SELECT tuple_sketch_agg_integer(col1, col2, 12, 'sum')
 FROM VALUES (1, 1.5D), (2, 2.5D) AS tab(col1, col2)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkRuntimeException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "TUPLE_INVALID_SKETCH_SUMMARY_VALUE_TYPE",
-  "sqlState" : "22023",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
   "messageParameters" : {
-    "actualType" : "Double",
-    "function" : "`tuple_sketch_agg`",
-    "summaryType" : "integer"
-  }
+    "inputSql" : "\"col2\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"INT\"",
+    "sqlExpr" : "\"tuple_sketch_agg_integer(col1, col2, 12, sum)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 54,
+    "fragment" : "tuple_sketch_agg_integer(col1, col2, 12, 'sum')"
+  } ]
 }
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, 'double', 'sum'), 'integer')
+SELECT tuple_sketch_estimate_integer(tuple_sketch_agg_double(key1, val1, 12, 'sum'))
 FROM t_int_double_1_5_through_7_11
 -- !query schema
 struct<>
@@ -1974,7 +1926,7 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
   "sqlState" : "22000",
   "messageParameters" : {
-    "function" : "`tuple_sketch_estimate`",
+    "function" : "`tuple_sketch_estimate_integer`",
     "reason" : "Index 70 out of bounds for length 4"
   }
 }
@@ -2054,6 +2006,14 @@ struct<>
 
 -- !query
 DROP TABLE IF EXISTS t_string_string_a_d_through_e_h
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TABLE IF EXISTS t_string_array_string_a_d_through_e_h
 -- !query schema
 struct<>
 -- !query output

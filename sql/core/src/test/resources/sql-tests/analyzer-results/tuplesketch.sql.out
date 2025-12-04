@@ -235,1124 +235,1124 @@ CreateDataSourceTableAsSelectCommand `spark_catalog`.`default`.`t_string_collati
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1))) AS result
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1)) AS result
 FROM t_int_double_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), double) AS result#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0)) AS result#x]
 +- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
    +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, 'integer'), 'integer') AS result
+SELECT tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key1, val1, 12)) AS result
 FROM t_int_int_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), integer, sum, 0, 0), integer) AS result#x]
+Aggregate [tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key1#x, val1#x, 12, sum, 0, 0)) AS result#x]
 +- SubqueryAlias spark_catalog.default.t_int_int_1_5_through_7_11
    +- Relation spark_catalog.default.t_int_int_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1))
 FROM t_array_int_double_1_3_through_4_6
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12, sum))#x]
 +- SubqueryAlias spark_catalog.default.t_array_int_double_1_3_through_4_6
    +- Relation spark_catalog.default.t_array_int_double_1_3_through_4_6[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key2, val2)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key2, val2))
 FROM t_array_long_double_1_3_through_4_6
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_sketch_agg(struct(key2, val2), 12, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_sketch_agg_double(key2, val2, 12, sum))#x]
 +- SubqueryAlias spark_catalog.default.t_array_long_double_1_3_through_4_6
    +- Relation spark_catalog.default.t_array_long_double_1_3_through_4_6[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1))
 FROM t_binary_double_a_b_through_e_f
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12, sum))#x]
 +- SubqueryAlias spark_catalog.default.t_binary_double_a_b_through_e_f
    +- Relation spark_catalog.default.t_binary_double_a_b_through_e_f[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1))
 FROM t_double_double_1_1_1_4_through_1_5_1_8
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12, sum))#x]
 +- SubqueryAlias spark_catalog.default.t_double_double_1_1_1_4_through_1_5_1_8
    +- Relation spark_catalog.default.t_double_double_1_1_1_4_through_1_5_1_8[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key2, val2)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key2, val2))
 FROM t_float_double_1_1_1_4_through_1_5_1_8
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_sketch_agg(struct(key2, val2), 12, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_sketch_agg_double(key2, val2, 12, sum))#x]
 +- SubqueryAlias spark_catalog.default.t_float_double_1_1_1_4_through_1_5_1_8
    +- Relation spark_catalog.default.t_float_double_1_1_1_4_through_1_5_1_8[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 22))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 22))
 FROM t_int_double_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(22), double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 22, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(key1#x, val1#x, 22, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 22, sum))#x]
 +- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
    +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1))
 FROM t_long_double_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(key1, key1#xL, val1, val1#x), Some(12), double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(key1#xL, val1#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12, sum))#x]
 +- SubqueryAlias spark_catalog.default.t_long_double_1_5_through_7_11
    +- Relation spark_catalog.default.t_long_double_1_5_through_7_11[key1#xL,val1#x,key2#xL,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1))
 FROM t_string_double_a_d_through_e_h
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12, sum))#x]
 +- SubqueryAlias spark_catalog.default.t_string_double_a_d_through_e_h
    +- Relation spark_catalog.default.t_string_double_a_d_through_e_h[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, 'double'))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12))
 FROM t_int_double_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12, sum))#x]
 +- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
    +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, 'integer'), 'integer')
+SELECT tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key1, val1, 12))
 FROM t_int_int_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), integer, sum, 0, 0), integer) AS tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, integer, sum), integer)#x]
+Aggregate [tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key1#x, val1#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key1, val1, 12, sum))#x]
 +- SubqueryAlias spark_catalog.default.t_int_int_1_5_through_7_11
    +- Relation spark_catalog.default.t_int_int_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, 'string'), 'string')
+SELECT tuple_sketch_estimate_string(tuple_sketch_agg_string(key1, val1, 12))
 FROM t_string_string_a_d_through_e_h
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), string, sum, 0, 0), string) AS tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, string, sum), string)#x]
+Aggregate [tuple_sketch_estimate_string(tuple_sketch_agg_string(key1#x, val1#x, 12, 0, 0)) AS tuple_sketch_estimate_string(tuple_sketch_agg_string(key1, val1, 12))#x]
 +- SubqueryAlias spark_catalog.default.t_string_string_a_d_through_e_h
    +- Relation spark_catalog.default.t_string_string_a_d_through_e_h[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, 'string'), 'string')
+SELECT tuple_sketch_estimate_string(tuple_sketch_agg_string(key1, val1, 12))
 FROM t_string_array_string_a_d_through_e_h
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), string, sum, 0, 0), string) AS tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, string, sum), string)#x]
+Aggregate [tuple_sketch_estimate_string(tuple_sketch_agg_string(key1#x, val1#x, 12, 0, 0)) AS tuple_sketch_estimate_string(tuple_sketch_agg_string(key1, val1, 12))#x]
 +- SubqueryAlias spark_catalog.default.t_string_array_string_a_d_through_e_h
    +- Relation spark_catalog.default.t_string_array_string_a_d_through_e_h[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, 'double', 'sum'), 'double')
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12, 'sum'))
 FROM t_int_double_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12, sum))#x]
 +- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
    +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, 'double', 'min'))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12, 'min'))
 FROM t_int_double_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, min, 0, 0), double) AS tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, double, min), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(key1#x, val1#x, 12, min, 0, 0)) AS tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12, min))#x]
 +- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
    +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, 'double', 'max'))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12, 'max'))
 FROM t_int_double_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, max, 0, 0), double) AS tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, double, max), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(key1#x, val1#x, 12, max, 0, 0)) AS tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12, max))#x]
 +- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
    +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, 'double', 'alwaysone'))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12, 'alwaysone'))
 FROM t_int_double_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, alwaysone, 0, 0), double) AS tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, double, alwaysone), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(key1#x, val1#x, 12, alwaysone, 0, 0)) AS tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12, alwaysone))#x]
 +- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
    +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_summary(tuple_sketch_agg(struct(key1, val1), 12, 'double', 'sum'))
+SELECT tuple_sketch_summary_double(tuple_sketch_agg_double(key1, val1, 12, 'sum'))
 FROM t_int_double_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_sketch_summary(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), double, sum) AS tuple_sketch_summary(tuple_sketch_agg(struct(key1, val1), 12, double, sum), double, sum)#x]
+Aggregate [tuple_sketch_summary_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0), sum) AS tuple_sketch_summary_double(tuple_sketch_agg_double(key1, val1, 12, sum), sum)#x]
 +- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
    +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_summary(tuple_sketch_agg(struct(key1, val1), 12, 'double', 'min'))
+SELECT tuple_sketch_summary_double(tuple_sketch_agg_double(key1, val1, 12, 'min'))
 FROM t_int_double_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_sketch_summary(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, min, 0, 0), double, sum) AS tuple_sketch_summary(tuple_sketch_agg(struct(key1, val1), 12, double, min), double, sum)#x]
+Aggregate [tuple_sketch_summary_double(tuple_sketch_agg_double(key1#x, val1#x, 12, min, 0, 0), sum) AS tuple_sketch_summary_double(tuple_sketch_agg_double(key1, val1, 12, min), sum)#x]
 +- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
    +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_summary(tuple_sketch_agg(struct(key1, val1), 12, 'double', 'max'))
+SELECT tuple_sketch_summary_double(tuple_sketch_agg_double(key1, val1, 12, 'max'))
 FROM t_int_double_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_sketch_summary(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, max, 0, 0), double, sum) AS tuple_sketch_summary(tuple_sketch_agg(struct(key1, val1), 12, double, max), double, sum)#x]
+Aggregate [tuple_sketch_summary_double(tuple_sketch_agg_double(key1#x, val1#x, 12, max, 0, 0), sum) AS tuple_sketch_summary_double(tuple_sketch_agg_double(key1, val1, 12, max), sum)#x]
 +- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
    +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_summary(tuple_sketch_agg(struct(key1, val1), 12, 'double', 'alwaysone'))
+SELECT tuple_sketch_summary_double(tuple_sketch_agg_double(key1, val1, 12, 'alwaysone'))
 FROM t_int_double_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_sketch_summary(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, alwaysone, 0, 0), double, sum) AS tuple_sketch_summary(tuple_sketch_agg(struct(key1, val1), 12, double, alwaysone), double, sum)#x]
+Aggregate [tuple_sketch_summary_double(tuple_sketch_agg_double(key1#x, val1#x, 12, alwaysone, 0, 0), sum) AS tuple_sketch_summary_double(tuple_sketch_agg_double(key1, val1, 12, alwaysone), sum)#x]
 +- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
    +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_summary(tuple_sketch_agg(struct(key1, val1), 12, 'integer', 'sum'), 'integer', 'sum')
+SELECT tuple_sketch_summary_integer(tuple_sketch_agg_integer(key1, val1, 12, 'sum'), 'sum')
 FROM t_int_int_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_sketch_summary(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), integer, sum, 0, 0), integer, sum) AS tuple_sketch_summary(tuple_sketch_agg(struct(key1, val1), 12, integer, sum), integer, sum)#x]
+Aggregate [tuple_sketch_summary_integer(tuple_sketch_agg_integer(key1#x, val1#x, 12, sum, 0, 0), sum) AS tuple_sketch_summary_integer(tuple_sketch_agg_integer(key1, val1, 12, sum), sum)#xL]
 +- SubqueryAlias spark_catalog.default.t_int_int_1_5_through_7_11
    +- Relation spark_catalog.default.t_int_int_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_union(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_int_double_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_union(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0), 12, double, sum), double) AS tuple_sketch_estimate(tuple_union(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), 12, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_union_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0), tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0), 12, sum)) AS tuple_sketch_estimate_double(tuple_union_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 12, sum), 12, sum))#x]
 +- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
    +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_union(
-    tuple_sketch_agg(struct(key1, val1), 15),
-    tuple_sketch_agg(struct(key2, val2)), 15))
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    tuple_sketch_agg_double(key1, val1, 15),
+    tuple_sketch_agg_double(key2, val2), 15))
 FROM t_long_double_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_union(tuple_sketch_agg(struct(key1, key1#xL, val1, val1#x), Some(15), double, sum, 0, 0), tuple_sketch_agg(struct(key2, key2#xL, val2, val2#x), Some(12), double, sum, 0, 0), 15, double, sum), double) AS tuple_sketch_estimate(tuple_union(tuple_sketch_agg(struct(key1, val1), 15, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), 15, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_union_double(tuple_sketch_agg_double(key1#xL, val1#x, 15, sum, 0, 0), tuple_sketch_agg_double(key2#xL, val2#x, 12, sum, 0, 0), 15, sum)) AS tuple_sketch_estimate_double(tuple_union_double(tuple_sketch_agg_double(key1, val1, 15, sum), tuple_sketch_agg_double(key2, val2, 12, sum), 15, sum))#x]
 +- SubqueryAlias spark_catalog.default.t_long_double_1_5_through_7_11
    +- Relation spark_catalog.default.t_long_double_1_5_through_7_11[key1#xL,val1#x,key2#xL,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_union(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_double_double_1_1_1_4_through_1_5_1_8
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_union(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0), 12, double, sum), double) AS tuple_sketch_estimate(tuple_union(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), 12, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_union_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0), tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0), 12, sum)) AS tuple_sketch_estimate_double(tuple_union_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 12, sum), 12, sum))#x]
 +- SubqueryAlias spark_catalog.default.t_double_double_1_1_1_4_through_1_5_1_8
    +- Relation spark_catalog.default.t_double_double_1_1_1_4_through_1_5_1_8[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_union(
-    tuple_sketch_agg(struct(key1, val1), 6),
-    tuple_sketch_agg(struct(key2, val2), 15), 15))
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    tuple_sketch_agg_double(key1, val1, 6),
+    tuple_sketch_agg_double(key2, val2, 15), 15))
 FROM t_float_double_1_1_1_4_through_1_5_1_8
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_union(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(6), double, sum, 0, 0), tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(15), double, sum, 0, 0), 15, double, sum), double) AS tuple_sketch_estimate(tuple_union(tuple_sketch_agg(struct(key1, val1), 6, double, sum), tuple_sketch_agg(struct(key2, val2), 15, double, sum), 15, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_union_double(tuple_sketch_agg_double(key1#x, val1#x, 6, sum, 0, 0), tuple_sketch_agg_double(key2#x, val2#x, 15, sum, 0, 0), 15, sum)) AS tuple_sketch_estimate_double(tuple_union_double(tuple_sketch_agg_double(key1, val1, 6, sum), tuple_sketch_agg_double(key2, val2, 15, sum), 15, sum))#x]
 +- SubqueryAlias spark_catalog.default.t_float_double_1_1_1_4_through_1_5_1_8
    +- Relation spark_catalog.default.t_float_double_1_1_1_4_through_1_5_1_8[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_union(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_string_double_a_d_through_e_h
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_union(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0), 12, double, sum), double) AS tuple_sketch_estimate(tuple_union(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), 12, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_union_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0), tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0), 12, sum)) AS tuple_sketch_estimate_double(tuple_union_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 12, sum), 12, sum))#x]
 +- SubqueryAlias spark_catalog.default.t_string_double_a_d_through_e_h
    +- Relation spark_catalog.default.t_string_double_a_d_through_e_h[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_union(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2), 20), 20))
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2, 20), 20))
 FROM t_binary_double_a_b_through_e_f
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_union(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(20), double, sum, 0, 0), 20, double, sum), double) AS tuple_sketch_estimate(tuple_union(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 20, double, sum), 20, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_union_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0), tuple_sketch_agg_double(key2#x, val2#x, 20, sum, 0, 0), 20, sum)) AS tuple_sketch_estimate_double(tuple_union_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 20, sum), 20, sum))#x]
 +- SubqueryAlias spark_catalog.default.t_binary_double_a_b_through_e_f
    +- Relation spark_catalog.default.t_binary_double_a_b_through_e_f[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_union(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_array_int_double_1_3_through_4_6
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_union(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0), 12, double, sum), double) AS tuple_sketch_estimate(tuple_union(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), 12, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_union_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0), tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0), 12, sum)) AS tuple_sketch_estimate_double(tuple_union_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 12, sum), 12, sum))#x]
 +- SubqueryAlias spark_catalog.default.t_array_int_double_1_3_through_4_6
    +- Relation spark_catalog.default.t_array_int_double_1_3_through_4_6[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_union(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2), 13), 13))
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2, 13), 13))
 FROM t_array_long_double_1_3_through_4_6
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_union(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(13), double, sum, 0, 0), 13, double, sum), double) AS tuple_sketch_estimate(tuple_union(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 13, double, sum), 13, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_union_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0), tuple_sketch_agg_double(key2#x, val2#x, 13, sum, 0, 0), 13, sum)) AS tuple_sketch_estimate_double(tuple_union_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 13, sum), 13, sum))#x]
 +- SubqueryAlias spark_catalog.default.t_array_long_double_1_3_through_4_6
    +- Relation spark_catalog.default.t_array_long_double_1_3_through_4_6[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_union(
-    tuple_sketch_agg(struct(key1, val1), 12, 'double', 'sum'),
-    tuple_sketch_agg(struct(key2, val2), 12, 'double', 'sum'), 12, 'double', 'sum'))
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    tuple_sketch_agg_double(key1, val1, 12, 'sum'),
+    tuple_sketch_agg_double(key2, val2, 12, 'sum'), 12, 'sum'))
 FROM t_int_double_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_union(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0), 12, double, sum), double) AS tuple_sketch_estimate(tuple_union(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), 12, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_union_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0), tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0), 12, sum)) AS tuple_sketch_estimate_double(tuple_union_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 12, sum), 12, sum))#x]
 +- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
    +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_union_theta(
-    tuple_sketch_agg(struct(key1, val1)),
+SELECT tuple_sketch_estimate_double(
+  tuple_union_theta_double(
+    tuple_sketch_agg_double(key1, val1),
     theta_sketch_agg(key2)))
 FROM t_int_double_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_union_theta(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), theta_sketch_agg(key2#x, 12, 0, 0), 12, double, sum), double) AS tuple_sketch_estimate(tuple_union_theta(tuple_sketch_agg(struct(key1, val1), 12, double, sum), theta_sketch_agg(key2, 12), 12, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0), theta_sketch_agg(key2#x, 12, 0, 0), 12, sum)) AS tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12), 12, sum))#x]
 +- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
    +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_union_theta(
-    tuple_sketch_agg(struct(key1, val1), 12, 'double', 'sum'),
-    theta_sketch_agg(key2, 12), 12, 'double', 'sum'))
+SELECT tuple_sketch_estimate_double(
+  tuple_union_theta_double(
+    tuple_sketch_agg_double(key1, val1, 12, 'sum'),
+    theta_sketch_agg(key2, 12), 12, 'sum'))
 FROM t_int_double_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_union_theta(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), theta_sketch_agg(key2#x, 12, 0, 0), 12, double, sum), double) AS tuple_sketch_estimate(tuple_union_theta(tuple_sketch_agg(struct(key1, val1), 12, double, sum), theta_sketch_agg(key2, 12), 12, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0), theta_sketch_agg(key2#x, 12, 0, 0), 12, sum)) AS tuple_sketch_estimate_double(tuple_union_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12), 12, sum))#x]
 +- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
    +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_intersection(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_int_double_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_intersection(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0), double, sum), double) AS tuple_sketch_estimate(tuple_intersection(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_intersection_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0), tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0), sum)) AS tuple_sketch_estimate_double(tuple_intersection_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 12, sum), sum))#x]
 +- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
    +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_intersection(
-    tuple_sketch_agg(struct(key1, val1), 5),
-    tuple_sketch_agg(struct(key2, val2), 12)))
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_double(
+    tuple_sketch_agg_double(key1, val1, 5),
+    tuple_sketch_agg_double(key2, val2, 12)))
 FROM t_long_double_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_intersection(tuple_sketch_agg(struct(key1, key1#xL, val1, val1#x), Some(5), double, sum, 0, 0), tuple_sketch_agg(struct(key2, key2#xL, val2, val2#x), Some(12), double, sum, 0, 0), double, sum), double) AS tuple_sketch_estimate(tuple_intersection(tuple_sketch_agg(struct(key1, val1), 5, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_intersection_double(tuple_sketch_agg_double(key1#xL, val1#x, 5, sum, 0, 0), tuple_sketch_agg_double(key2#xL, val2#x, 12, sum, 0, 0), sum)) AS tuple_sketch_estimate_double(tuple_intersection_double(tuple_sketch_agg_double(key1, val1, 5, sum), tuple_sketch_agg_double(key2, val2, 12, sum), sum))#x]
 +- SubqueryAlias spark_catalog.default.t_long_double_1_5_through_7_11
    +- Relation spark_catalog.default.t_long_double_1_5_through_7_11[key1#xL,val1#x,key2#xL,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_intersection(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_double_double_1_1_1_4_through_1_5_1_8
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_intersection(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0), double, sum), double) AS tuple_sketch_estimate(tuple_intersection(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_intersection_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0), tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0), sum)) AS tuple_sketch_estimate_double(tuple_intersection_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 12, sum), sum))#x]
 +- SubqueryAlias spark_catalog.default.t_double_double_1_1_1_4_through_1_5_1_8
    +- Relation spark_catalog.default.t_double_double_1_1_1_4_through_1_5_1_8[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_intersection(
-    tuple_sketch_agg(struct(key1, val1), 5),
-    tuple_sketch_agg(struct(key2, val2))))
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_double(
+    tuple_sketch_agg_double(key1, val1, 5),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_float_double_1_1_1_4_through_1_5_1_8
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_intersection(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(5), double, sum, 0, 0), tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0), double, sum), double) AS tuple_sketch_estimate(tuple_intersection(tuple_sketch_agg(struct(key1, val1), 5, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_intersection_double(tuple_sketch_agg_double(key1#x, val1#x, 5, sum, 0, 0), tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0), sum)) AS tuple_sketch_estimate_double(tuple_intersection_double(tuple_sketch_agg_double(key1, val1, 5, sum), tuple_sketch_agg_double(key2, val2, 12, sum), sum))#x]
 +- SubqueryAlias spark_catalog.default.t_float_double_1_1_1_4_through_1_5_1_8
    +- Relation spark_catalog.default.t_float_double_1_1_1_4_through_1_5_1_8[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_intersection(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_string_double_a_d_through_e_h
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_intersection(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0), double, sum), double) AS tuple_sketch_estimate(tuple_intersection(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_intersection_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0), tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0), sum)) AS tuple_sketch_estimate_double(tuple_intersection_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 12, sum), sum))#x]
 +- SubqueryAlias spark_catalog.default.t_string_double_a_d_through_e_h
    +- Relation spark_catalog.default.t_string_double_a_d_through_e_h[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_intersection(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2), 22)))
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2, 22)))
 FROM t_binary_double_a_b_through_e_f
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_intersection(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(22), double, sum, 0, 0), double, sum), double) AS tuple_sketch_estimate(tuple_intersection(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 22, double, sum), double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_intersection_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0), tuple_sketch_agg_double(key2#x, val2#x, 22, sum, 0, 0), sum)) AS tuple_sketch_estimate_double(tuple_intersection_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 22, sum), sum))#x]
 +- SubqueryAlias spark_catalog.default.t_binary_double_a_b_through_e_f
    +- Relation spark_catalog.default.t_binary_double_a_b_through_e_f[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_intersection(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_array_int_double_1_3_through_4_6
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_intersection(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0), double, sum), double) AS tuple_sketch_estimate(tuple_intersection(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_intersection_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0), tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0), sum)) AS tuple_sketch_estimate_double(tuple_intersection_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 12, sum), sum))#x]
 +- SubqueryAlias spark_catalog.default.t_array_int_double_1_3_through_4_6
    +- Relation spark_catalog.default.t_array_int_double_1_3_through_4_6[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_intersection(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2), 10)))
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2, 10)))
 FROM t_array_long_double_1_3_through_4_6
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_intersection(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(10), double, sum, 0, 0), double, sum), double) AS tuple_sketch_estimate(tuple_intersection(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 10, double, sum), double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_intersection_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0), tuple_sketch_agg_double(key2#x, val2#x, 10, sum, 0, 0), sum)) AS tuple_sketch_estimate_double(tuple_intersection_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 10, sum), sum))#x]
 +- SubqueryAlias spark_catalog.default.t_array_long_double_1_3_through_4_6
    +- Relation spark_catalog.default.t_array_long_double_1_3_through_4_6[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_intersection(
-    tuple_sketch_agg(struct(key1, val1), 12, 'double', 'min'),
-    tuple_sketch_agg(struct(key2, val2), 12, 'double', 'min'), 'double', 'min'))
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_double(
+    tuple_sketch_agg_double(key1, val1, 12, 'min'),
+    tuple_sketch_agg_double(key2, val2, 12, 'min'), 'min'))
 FROM t_int_double_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_intersection(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, min, 0, 0), tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, min, 0, 0), double, min), double) AS tuple_sketch_estimate(tuple_intersection(tuple_sketch_agg(struct(key1, val1), 12, double, min), tuple_sketch_agg(struct(key2, val2), 12, double, min), double, min), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_intersection_double(tuple_sketch_agg_double(key1#x, val1#x, 12, min, 0, 0), tuple_sketch_agg_double(key2#x, val2#x, 12, min, 0, 0), min)) AS tuple_sketch_estimate_double(tuple_intersection_double(tuple_sketch_agg_double(key1, val1, 12, min), tuple_sketch_agg_double(key2, val2, 12, min), min))#x]
 +- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
    +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_intersection_theta(
-    tuple_sketch_agg(struct(key1, val1)),
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_theta_double(
+    tuple_sketch_agg_double(key1, val1),
     theta_sketch_agg(key2)))
 FROM t_int_double_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_intersection_theta(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), theta_sketch_agg(key2#x, 12, 0, 0), double, sum), double) AS tuple_sketch_estimate(tuple_intersection_theta(tuple_sketch_agg(struct(key1, val1), 12, double, sum), theta_sketch_agg(key2, 12), double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_intersection_theta_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0), theta_sketch_agg(key2#x, 12, 0, 0), sum)) AS tuple_sketch_estimate_double(tuple_intersection_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12), sum))#x]
 +- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
    +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_intersection_theta(
-    tuple_sketch_agg(struct(key1, val1), 12, 'double', 'sum'),
-    theta_sketch_agg(key2, 12), 'double', 'sum'))
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_theta_double(
+    tuple_sketch_agg_double(key1, val1, 12, 'sum'),
+    theta_sketch_agg(key2, 12), 'sum'))
 FROM t_int_double_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_intersection_theta(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), theta_sketch_agg(key2#x, 12, 0, 0), double, sum), double) AS tuple_sketch_estimate(tuple_intersection_theta(tuple_sketch_agg(struct(key1, val1), 12, double, sum), theta_sketch_agg(key2, 12), double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_intersection_theta_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0), theta_sketch_agg(key2#x, 12, 0, 0), sum)) AS tuple_sketch_estimate_double(tuple_intersection_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12), sum))#x]
 +- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
    +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_difference(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+SELECT tuple_sketch_estimate_double(
+  tuple_difference_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_int_double_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_difference(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0), double), double) AS tuple_sketch_estimate(tuple_difference(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), double), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_difference_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0), tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0))) AS tuple_sketch_estimate_double(tuple_difference_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 12, sum)))#x]
 +- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
    +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_difference(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2), 5)))
+SELECT tuple_sketch_estimate_double(
+  tuple_difference_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2, 5)))
 FROM t_long_double_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_difference(tuple_sketch_agg(struct(key1, key1#xL, val1, val1#x), Some(12), double, sum, 0, 0), tuple_sketch_agg(struct(key2, key2#xL, val2, val2#x), Some(5), double, sum, 0, 0), double), double) AS tuple_sketch_estimate(tuple_difference(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 5, double, sum), double), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_difference_double(tuple_sketch_agg_double(key1#xL, val1#x, 12, sum, 0, 0), tuple_sketch_agg_double(key2#xL, val2#x, 5, sum, 0, 0))) AS tuple_sketch_estimate_double(tuple_difference_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 5, sum)))#x]
 +- SubqueryAlias spark_catalog.default.t_long_double_1_5_through_7_11
    +- Relation spark_catalog.default.t_long_double_1_5_through_7_11[key1#xL,val1#x,key2#xL,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_difference(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+SELECT tuple_sketch_estimate_double(
+  tuple_difference_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_double_double_1_1_1_4_through_1_5_1_8
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_difference(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0), double), double) AS tuple_sketch_estimate(tuple_difference(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), double), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_difference_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0), tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0))) AS tuple_sketch_estimate_double(tuple_difference_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 12, sum)))#x]
 +- SubqueryAlias spark_catalog.default.t_double_double_1_1_1_4_through_1_5_1_8
    +- Relation spark_catalog.default.t_double_double_1_1_1_4_through_1_5_1_8[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_difference(
-    tuple_sketch_agg(struct(key1, val1), 12),
-    tuple_sketch_agg(struct(key2, val2))))
+SELECT tuple_sketch_estimate_double(
+  tuple_difference_double(
+    tuple_sketch_agg_double(key1, val1, 12),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_float_double_1_1_1_4_through_1_5_1_8
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_difference(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0), double), double) AS tuple_sketch_estimate(tuple_difference(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), double), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_difference_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0), tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0))) AS tuple_sketch_estimate_double(tuple_difference_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 12, sum)))#x]
 +- SubqueryAlias spark_catalog.default.t_float_double_1_1_1_4_through_1_5_1_8
    +- Relation spark_catalog.default.t_float_double_1_1_1_4_through_1_5_1_8[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_difference(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+SELECT tuple_sketch_estimate_double(
+  tuple_difference_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_string_double_a_d_through_e_h
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_difference(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0), double), double) AS tuple_sketch_estimate(tuple_difference(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), double), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_difference_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0), tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0))) AS tuple_sketch_estimate_double(tuple_difference_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 12, sum)))#x]
 +- SubqueryAlias spark_catalog.default.t_string_double_a_d_through_e_h
    +- Relation spark_catalog.default.t_string_double_a_d_through_e_h[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_difference(
-    tuple_sketch_agg(struct(key1, val1), 6),
-    tuple_sketch_agg(struct(key2, val2), 8)))
+SELECT tuple_sketch_estimate_double(
+  tuple_difference_double(
+    tuple_sketch_agg_double(key1, val1, 6),
+    tuple_sketch_agg_double(key2, val2, 8)))
 FROM t_binary_double_a_b_through_e_f
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_difference(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(6), double, sum, 0, 0), tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(8), double, sum, 0, 0), double), double) AS tuple_sketch_estimate(tuple_difference(tuple_sketch_agg(struct(key1, val1), 6, double, sum), tuple_sketch_agg(struct(key2, val2), 8, double, sum), double), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_difference_double(tuple_sketch_agg_double(key1#x, val1#x, 6, sum, 0, 0), tuple_sketch_agg_double(key2#x, val2#x, 8, sum, 0, 0))) AS tuple_sketch_estimate_double(tuple_difference_double(tuple_sketch_agg_double(key1, val1, 6, sum), tuple_sketch_agg_double(key2, val2, 8, sum)))#x]
 +- SubqueryAlias spark_catalog.default.t_binary_double_a_b_through_e_f
    +- Relation spark_catalog.default.t_binary_double_a_b_through_e_f[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_difference(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+SELECT tuple_sketch_estimate_double(
+  tuple_difference_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_array_int_double_1_3_through_4_6
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_difference(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0), double), double) AS tuple_sketch_estimate(tuple_difference(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 12, double, sum), double), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_difference_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0), tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0))) AS tuple_sketch_estimate_double(tuple_difference_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 12, sum)))#x]
 +- SubqueryAlias spark_catalog.default.t_array_int_double_1_3_through_4_6
    +- Relation spark_catalog.default.t_array_int_double_1_3_through_4_6[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_difference(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2), 4)))
+SELECT tuple_sketch_estimate_double(
+  tuple_difference_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2, 4)))
 FROM t_array_long_double_1_3_through_4_6
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_difference(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(4), double, sum, 0, 0), double), double) AS tuple_sketch_estimate(tuple_difference(tuple_sketch_agg(struct(key1, val1), 12, double, sum), tuple_sketch_agg(struct(key2, val2), 4, double, sum), double), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_difference_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0), tuple_sketch_agg_double(key2#x, val2#x, 4, sum, 0, 0))) AS tuple_sketch_estimate_double(tuple_difference_double(tuple_sketch_agg_double(key1, val1, 12, sum), tuple_sketch_agg_double(key2, val2, 4, sum)))#x]
 +- SubqueryAlias spark_catalog.default.t_array_long_double_1_3_through_4_6
    +- Relation spark_catalog.default.t_array_long_double_1_3_through_4_6[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_difference(
-    tuple_sketch_agg(struct(key1, val1), 12, 'integer', 'sum'),
-    tuple_sketch_agg(struct(key2, val2), 12, 'integer', 'sum'), 'integer'), 'integer')
+SELECT tuple_sketch_estimate_integer(
+  tuple_difference_integer(
+    tuple_sketch_agg_integer(key1, val1, 12, 'sum'),
+    tuple_sketch_agg_integer(key2, val2, 12, 'sum')))
 FROM t_int_int_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_difference(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), integer, sum, 0, 0), tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), integer, sum, 0, 0), integer), integer) AS tuple_sketch_estimate(tuple_difference(tuple_sketch_agg(struct(key1, val1), 12, integer, sum), tuple_sketch_agg(struct(key2, val2), 12, integer, sum), integer), integer)#x]
+Aggregate [tuple_sketch_estimate_integer(tuple_difference_integer(tuple_sketch_agg_integer(key1#x, val1#x, 12, sum, 0, 0), tuple_sketch_agg_integer(key2#x, val2#x, 12, sum, 0, 0))) AS tuple_sketch_estimate_integer(tuple_difference_integer(tuple_sketch_agg_integer(key1, val1, 12, sum), tuple_sketch_agg_integer(key2, val2, 12, sum)))#x]
 +- SubqueryAlias spark_catalog.default.t_int_int_1_5_through_7_11
    +- Relation spark_catalog.default.t_int_int_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_difference_theta(
-    tuple_sketch_agg(struct(key1, val1)),
+SELECT tuple_sketch_estimate_double(
+  tuple_difference_theta_double(
+    tuple_sketch_agg_double(key1, val1),
     theta_sketch_agg(key2)))
 FROM t_int_double_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_difference_theta(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), theta_sketch_agg(key2#x, 12, 0, 0), double), double) AS tuple_sketch_estimate(tuple_difference_theta(tuple_sketch_agg(struct(key1, val1), 12, double, sum), theta_sketch_agg(key2, 12), double), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_difference_theta_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0), theta_sketch_agg(key2#x, 12, 0, 0))) AS tuple_sketch_estimate_double(tuple_difference_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12)))#x]
 +- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
    +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(
-  tuple_difference_theta(
-    tuple_sketch_agg(struct(key1, val1), 12, 'double', 'sum'),
-    theta_sketch_agg(key2, 12), 'double'))
+SELECT tuple_sketch_estimate_double(
+  tuple_difference_theta_double(
+    tuple_sketch_agg_double(key1, val1, 12, 'sum'),
+    theta_sketch_agg(key2, 12)))
 FROM t_int_double_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_difference_theta(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), theta_sketch_agg(key2#x, 12, 0, 0), double), double) AS tuple_sketch_estimate(tuple_difference_theta(tuple_sketch_agg(struct(key1, val1), 12, double, sum), theta_sketch_agg(key2, 12), double), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_difference_theta_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0), theta_sketch_agg(key2#x, 12, 0, 0))) AS tuple_sketch_estimate_double(tuple_difference_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum), theta_sketch_agg(key2, 12)))#x]
 +- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
    +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_union_agg(sketch, 15, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_int_double_1_5_through_7_11
+SELECT tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 15, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_int_double_1_5_through_7_11
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2), 20) as sketch FROM t_int_double_1_5_through_7_11)
+      SELECT tuple_sketch_agg_double(key2, val2, 20) as sketch FROM t_int_double_1_5_through_7_11)
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_union_agg(sketch#x, Some(15), double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_union_agg(sketch, 15, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_union_agg_double(sketch#x, 15, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 15, sum))#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Union false, false
-      :- Aggregate [tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0) AS sketch#x]
+      :- Aggregate [tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0) AS sketch#x]
       :  +- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
       :     +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
-      +- Aggregate [tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(20), double, sum, 0, 0) AS sketch#x]
+      +- Aggregate [tuple_sketch_agg_double(key2#x, val2#x, 20, sum, 0, 0) AS sketch#x]
          +- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
             +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_union_agg(sketch, 12, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_double_double_1_1_1_4_through_1_5_1_8
+SELECT tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 12, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_double_double_1_1_1_4_through_1_5_1_8
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_double_double_1_1_1_4_through_1_5_1_8)
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_double_double_1_1_1_4_through_1_5_1_8)
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_union_agg(sketch#x, Some(12), double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_union_agg(sketch, 12, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_union_agg_double(sketch#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 12, sum))#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Union false, false
-      :- Aggregate [tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0) AS sketch#x]
+      :- Aggregate [tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0) AS sketch#x]
       :  +- SubqueryAlias spark_catalog.default.t_double_double_1_1_1_4_through_1_5_1_8
       :     +- Relation spark_catalog.default.t_double_double_1_1_1_4_through_1_5_1_8[key1#x,val1#x,key2#x,val2#x] parquet
-      +- Aggregate [tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0) AS sketch#x]
+      +- Aggregate [tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0) AS sketch#x]
          +- SubqueryAlias spark_catalog.default.t_double_double_1_1_1_4_through_1_5_1_8
             +- Relation spark_catalog.default.t_double_double_1_1_1_4_through_1_5_1_8[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_union_agg(sketch, 14, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_string_double_a_d_through_e_h
+SELECT tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 14, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_string_double_a_d_through_e_h
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_string_double_a_d_through_e_h)
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_string_double_a_d_through_e_h)
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_union_agg(sketch#x, Some(14), double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_union_agg(sketch, 14, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_union_agg_double(sketch#x, 14, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 14, sum))#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Union false, false
-      :- Aggregate [tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0) AS sketch#x]
+      :- Aggregate [tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0) AS sketch#x]
       :  +- SubqueryAlias spark_catalog.default.t_string_double_a_d_through_e_h
       :     +- Relation spark_catalog.default.t_string_double_a_d_through_e_h[key1#x,val1#x,key2#x,val2#x] parquet
-      +- Aggregate [tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0) AS sketch#x]
+      +- Aggregate [tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0) AS sketch#x]
          +- SubqueryAlias spark_catalog.default.t_string_double_a_d_through_e_h
             +- Relation spark_catalog.default.t_string_double_a_d_through_e_h[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_union_agg(sketch, 10, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_long_double_1_5_through_7_11
+SELECT tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 10, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_long_double_1_5_through_7_11
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_long_double_1_5_through_7_11)
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_long_double_1_5_through_7_11)
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_union_agg(sketch#x, Some(10), double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_union_agg(sketch, 10, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_union_agg_double(sketch#x, 10, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 10, sum))#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Union false, false
-      :- Aggregate [tuple_sketch_agg(struct(key1, key1#xL, val1, val1#x), Some(12), double, sum, 0, 0) AS sketch#x]
+      :- Aggregate [tuple_sketch_agg_double(key1#xL, val1#x, 12, sum, 0, 0) AS sketch#x]
       :  +- SubqueryAlias spark_catalog.default.t_long_double_1_5_through_7_11
       :     +- Relation spark_catalog.default.t_long_double_1_5_through_7_11[key1#xL,val1#x,key2#xL,val2#x] parquet
-      +- Aggregate [tuple_sketch_agg(struct(key2, key2#xL, val2, val2#x), Some(12), double, sum, 0, 0) AS sketch#x]
+      +- Aggregate [tuple_sketch_agg_double(key2#xL, val2#x, 12, sum, 0, 0) AS sketch#x]
          +- SubqueryAlias spark_catalog.default.t_long_double_1_5_through_7_11
             +- Relation spark_catalog.default.t_long_double_1_5_through_7_11[key1#xL,val1#x,key2#xL,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_union_agg(sketch, 6, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_float_double_1_1_1_4_through_1_5_1_8
+SELECT tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 6, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_float_double_1_1_1_4_through_1_5_1_8
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_float_double_1_1_1_4_through_1_5_1_8)
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_float_double_1_1_1_4_through_1_5_1_8)
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_union_agg(sketch#x, Some(6), double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_union_agg(sketch, 6, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_union_agg_double(sketch#x, 6, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 6, sum))#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Union false, false
-      :- Aggregate [tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0) AS sketch#x]
+      :- Aggregate [tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0) AS sketch#x]
       :  +- SubqueryAlias spark_catalog.default.t_float_double_1_1_1_4_through_1_5_1_8
       :     +- Relation spark_catalog.default.t_float_double_1_1_1_4_through_1_5_1_8[key1#x,val1#x,key2#x,val2#x] parquet
-      +- Aggregate [tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0) AS sketch#x]
+      +- Aggregate [tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0) AS sketch#x]
          +- SubqueryAlias spark_catalog.default.t_float_double_1_1_1_4_through_1_5_1_8
             +- Relation spark_catalog.default.t_float_double_1_1_1_4_through_1_5_1_8[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_union_agg(sketch, 12, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_binary_double_a_b_through_e_f
+SELECT tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 12, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_binary_double_a_b_through_e_f
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_binary_double_a_b_through_e_f)
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_binary_double_a_b_through_e_f)
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_union_agg(sketch#x, Some(12), double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_union_agg(sketch, 12, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_union_agg_double(sketch#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 12, sum))#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Union false, false
-      :- Aggregate [tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0) AS sketch#x]
+      :- Aggregate [tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0) AS sketch#x]
       :  +- SubqueryAlias spark_catalog.default.t_binary_double_a_b_through_e_f
       :     +- Relation spark_catalog.default.t_binary_double_a_b_through_e_f[key1#x,val1#x,key2#x,val2#x] parquet
-      +- Aggregate [tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0) AS sketch#x]
+      +- Aggregate [tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0) AS sketch#x]
          +- SubqueryAlias spark_catalog.default.t_binary_double_a_b_through_e_f
             +- Relation spark_catalog.default.t_binary_double_a_b_through_e_f[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_union_agg(sketch, 12, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_array_int_double_1_3_through_4_6
+SELECT tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 12, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_array_int_double_1_3_through_4_6
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_array_int_double_1_3_through_4_6)
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_array_int_double_1_3_through_4_6)
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_union_agg(sketch#x, Some(12), double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_union_agg(sketch, 12, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_union_agg_double(sketch#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 12, sum))#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Union false, false
-      :- Aggregate [tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0) AS sketch#x]
+      :- Aggregate [tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0) AS sketch#x]
       :  +- SubqueryAlias spark_catalog.default.t_array_int_double_1_3_through_4_6
       :     +- Relation spark_catalog.default.t_array_int_double_1_3_through_4_6[key1#x,val1#x,key2#x,val2#x] parquet
-      +- Aggregate [tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0) AS sketch#x]
+      +- Aggregate [tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0) AS sketch#x]
          +- SubqueryAlias spark_catalog.default.t_array_int_double_1_3_through_4_6
             +- Relation spark_catalog.default.t_array_int_double_1_3_through_4_6[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_union_agg(sketch, 16, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_array_long_double_1_3_through_4_6
+SELECT tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 16, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_array_long_double_1_3_through_4_6
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_array_long_double_1_3_through_4_6)
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_array_long_double_1_3_through_4_6)
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_union_agg(sketch#x, Some(16), double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_union_agg(sketch, 16, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_union_agg_double(sketch#x, 16, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 16, sum))#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Union false, false
-      :- Aggregate [tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0) AS sketch#x]
+      :- Aggregate [tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0) AS sketch#x]
       :  +- SubqueryAlias spark_catalog.default.t_array_long_double_1_3_through_4_6
       :     +- Relation spark_catalog.default.t_array_long_double_1_3_through_4_6[key1#x,val1#x,key2#x,val2#x] parquet
-      +- Aggregate [tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0) AS sketch#x]
+      +- Aggregate [tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0) AS sketch#x]
          +- SubqueryAlias spark_catalog.default.t_array_long_double_1_3_through_4_6
             +- Relation spark_catalog.default.t_array_long_double_1_3_through_4_6[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_union_agg(sketch, 12, 'integer', 'sum'), 'integer')
-FROM (SELECT tuple_sketch_agg(struct(key1, val1), 12, 'integer', 'sum') as sketch FROM t_int_int_1_5_through_7_11
+SELECT tuple_sketch_estimate_integer(tuple_union_agg_integer(sketch, 12, 'sum'))
+FROM (SELECT tuple_sketch_agg_integer(key1, val1, 12, 'sum') as sketch FROM t_int_int_1_5_through_7_11
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2), 12, 'integer', 'sum') as sketch FROM t_int_int_1_5_through_7_11)
+      SELECT tuple_sketch_agg_integer(key2, val2, 12, 'sum') as sketch FROM t_int_int_1_5_through_7_11)
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_union_agg(sketch#x, Some(12), integer, sum, 0, 0), integer) AS tuple_sketch_estimate(tuple_union_agg(sketch, 12, integer, sum), integer)#x]
+Aggregate [tuple_sketch_estimate_integer(tuple_union_agg_integer(sketch#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_integer(tuple_union_agg_integer(sketch, 12, sum))#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Union false, false
-      :- Aggregate [tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), integer, sum, 0, 0) AS sketch#x]
+      :- Aggregate [tuple_sketch_agg_integer(key1#x, val1#x, 12, sum, 0, 0) AS sketch#x]
       :  +- SubqueryAlias spark_catalog.default.t_int_int_1_5_through_7_11
       :     +- Relation spark_catalog.default.t_int_int_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
-      +- Aggregate [tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), integer, sum, 0, 0) AS sketch#x]
+      +- Aggregate [tuple_sketch_agg_integer(key2#x, val2#x, 12, sum, 0, 0) AS sketch#x]
          +- SubqueryAlias spark_catalog.default.t_int_int_1_5_through_7_11
             +- Relation spark_catalog.default.t_int_int_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_intersection_agg(sketch, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_int_double_1_5_through_7_11
+SELECT tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_int_double_1_5_through_7_11
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_int_double_1_5_through_7_11)
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_int_double_1_5_through_7_11)
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_intersection_agg(sketch#x, double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_intersection_agg(sketch, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch#x, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, sum))#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Union false, false
-      :- Aggregate [tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0) AS sketch#x]
+      :- Aggregate [tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0) AS sketch#x]
       :  +- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
       :     +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
-      +- Aggregate [tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0) AS sketch#x]
+      +- Aggregate [tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0) AS sketch#x]
          +- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
             +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_intersection_agg(sketch, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_long_double_1_5_through_7_11
+SELECT tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_long_double_1_5_through_7_11
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_long_double_1_5_through_7_11)
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_long_double_1_5_through_7_11)
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_intersection_agg(sketch#x, double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_intersection_agg(sketch, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch#x, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, sum))#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Union false, false
-      :- Aggregate [tuple_sketch_agg(struct(key1, key1#xL, val1, val1#x), Some(12), double, sum, 0, 0) AS sketch#x]
+      :- Aggregate [tuple_sketch_agg_double(key1#xL, val1#x, 12, sum, 0, 0) AS sketch#x]
       :  +- SubqueryAlias spark_catalog.default.t_long_double_1_5_through_7_11
       :     +- Relation spark_catalog.default.t_long_double_1_5_through_7_11[key1#xL,val1#x,key2#xL,val2#x] parquet
-      +- Aggregate [tuple_sketch_agg(struct(key2, key2#xL, val2, val2#x), Some(12), double, sum, 0, 0) AS sketch#x]
+      +- Aggregate [tuple_sketch_agg_double(key2#xL, val2#x, 12, sum, 0, 0) AS sketch#x]
          +- SubqueryAlias spark_catalog.default.t_long_double_1_5_through_7_11
             +- Relation spark_catalog.default.t_long_double_1_5_through_7_11[key1#xL,val1#x,key2#xL,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_intersection_agg(sketch, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_float_double_1_1_1_4_through_1_5_1_8
+SELECT tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_float_double_1_1_1_4_through_1_5_1_8
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_float_double_1_1_1_4_through_1_5_1_8)
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_float_double_1_1_1_4_through_1_5_1_8)
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_intersection_agg(sketch#x, double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_intersection_agg(sketch, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch#x, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, sum))#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Union false, false
-      :- Aggregate [tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0) AS sketch#x]
+      :- Aggregate [tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0) AS sketch#x]
       :  +- SubqueryAlias spark_catalog.default.t_float_double_1_1_1_4_through_1_5_1_8
       :     +- Relation spark_catalog.default.t_float_double_1_1_1_4_through_1_5_1_8[key1#x,val1#x,key2#x,val2#x] parquet
-      +- Aggregate [tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0) AS sketch#x]
+      +- Aggregate [tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0) AS sketch#x]
          +- SubqueryAlias spark_catalog.default.t_float_double_1_1_1_4_through_1_5_1_8
             +- Relation spark_catalog.default.t_float_double_1_1_1_4_through_1_5_1_8[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_intersection_agg(sketch, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_double_double_1_1_1_4_through_1_5_1_8
+SELECT tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_double_double_1_1_1_4_through_1_5_1_8
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_double_double_1_1_1_4_through_1_5_1_8)
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_double_double_1_1_1_4_through_1_5_1_8)
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_intersection_agg(sketch#x, double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_intersection_agg(sketch, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch#x, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, sum))#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Union false, false
-      :- Aggregate [tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0) AS sketch#x]
+      :- Aggregate [tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0) AS sketch#x]
       :  +- SubqueryAlias spark_catalog.default.t_double_double_1_1_1_4_through_1_5_1_8
       :     +- Relation spark_catalog.default.t_double_double_1_1_1_4_through_1_5_1_8[key1#x,val1#x,key2#x,val2#x] parquet
-      +- Aggregate [tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0) AS sketch#x]
+      +- Aggregate [tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0) AS sketch#x]
          +- SubqueryAlias spark_catalog.default.t_double_double_1_1_1_4_through_1_5_1_8
             +- Relation spark_catalog.default.t_double_double_1_1_1_4_through_1_5_1_8[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_intersection_agg(sketch, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_string_double_a_d_through_e_h
+SELECT tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_string_double_a_d_through_e_h
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_string_double_a_d_through_e_h)
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_string_double_a_d_through_e_h)
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_intersection_agg(sketch#x, double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_intersection_agg(sketch, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch#x, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, sum))#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Union false, false
-      :- Aggregate [tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0) AS sketch#x]
+      :- Aggregate [tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0) AS sketch#x]
       :  +- SubqueryAlias spark_catalog.default.t_string_double_a_d_through_e_h
       :     +- Relation spark_catalog.default.t_string_double_a_d_through_e_h[key1#x,val1#x,key2#x,val2#x] parquet
-      +- Aggregate [tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0) AS sketch#x]
+      +- Aggregate [tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0) AS sketch#x]
          +- SubqueryAlias spark_catalog.default.t_string_double_a_d_through_e_h
             +- Relation spark_catalog.default.t_string_double_a_d_through_e_h[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_intersection_agg(sketch, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_binary_double_a_b_through_e_f
+SELECT tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_binary_double_a_b_through_e_f
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_binary_double_a_b_through_e_f)
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_binary_double_a_b_through_e_f)
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_intersection_agg(sketch#x, double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_intersection_agg(sketch, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch#x, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, sum))#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Union false, false
-      :- Aggregate [tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0) AS sketch#x]
+      :- Aggregate [tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0) AS sketch#x]
       :  +- SubqueryAlias spark_catalog.default.t_binary_double_a_b_through_e_f
       :     +- Relation spark_catalog.default.t_binary_double_a_b_through_e_f[key1#x,val1#x,key2#x,val2#x] parquet
-      +- Aggregate [tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0) AS sketch#x]
+      +- Aggregate [tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0) AS sketch#x]
          +- SubqueryAlias spark_catalog.default.t_binary_double_a_b_through_e_f
             +- Relation spark_catalog.default.t_binary_double_a_b_through_e_f[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_intersection_agg(sketch, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_array_int_double_1_3_through_4_6
+SELECT tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_array_int_double_1_3_through_4_6
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_array_int_double_1_3_through_4_6)
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_array_int_double_1_3_through_4_6)
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_intersection_agg(sketch#x, double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_intersection_agg(sketch, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch#x, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, sum))#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Union false, false
-      :- Aggregate [tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0) AS sketch#x]
+      :- Aggregate [tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0) AS sketch#x]
       :  +- SubqueryAlias spark_catalog.default.t_array_int_double_1_3_through_4_6
       :     +- Relation spark_catalog.default.t_array_int_double_1_3_through_4_6[key1#x,val1#x,key2#x,val2#x] parquet
-      +- Aggregate [tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0) AS sketch#x]
+      +- Aggregate [tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0) AS sketch#x]
          +- SubqueryAlias spark_catalog.default.t_array_int_double_1_3_through_4_6
             +- Relation spark_catalog.default.t_array_int_double_1_3_through_4_6[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_intersection_agg(sketch, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_array_long_double_1_3_through_4_6
+SELECT tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_array_long_double_1_3_through_4_6
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_array_long_double_1_3_through_4_6)
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_array_long_double_1_3_through_4_6)
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_intersection_agg(sketch#x, double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_intersection_agg(sketch, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch#x, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, sum))#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Union false, false
-      :- Aggregate [tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0) AS sketch#x]
+      :- Aggregate [tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0) AS sketch#x]
       :  +- SubqueryAlias spark_catalog.default.t_array_long_double_1_3_through_4_6
       :     +- Relation spark_catalog.default.t_array_long_double_1_3_through_4_6[key1#x,val1#x,key2#x,val2#x] parquet
-      +- Aggregate [tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0) AS sketch#x]
+      +- Aggregate [tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0) AS sketch#x]
          +- SubqueryAlias spark_catalog.default.t_array_long_double_1_3_through_4_6
             +- Relation spark_catalog.default.t_array_long_double_1_3_through_4_6[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_intersection_agg(sketch, 'integer', 'sum'), 'integer')
-FROM (SELECT tuple_sketch_agg(struct(key1, val1), 12, 'integer', 'sum') as sketch FROM t_int_int_1_5_through_7_11
+SELECT tuple_sketch_estimate_integer(tuple_intersection_agg_integer(sketch, 'sum'))
+FROM (SELECT tuple_sketch_agg_integer(key1, val1, 12, 'sum') as sketch FROM t_int_int_1_5_through_7_11
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2), 12, 'integer', 'sum') as sketch FROM t_int_int_1_5_through_7_11)
+      SELECT tuple_sketch_agg_integer(key2, val2, 12, 'sum') as sketch FROM t_int_int_1_5_through_7_11)
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_intersection_agg(sketch#x, integer, sum, 0, 0), integer) AS tuple_sketch_estimate(tuple_intersection_agg(sketch, integer, sum), integer)#x]
+Aggregate [tuple_sketch_estimate_integer(tuple_intersection_agg_integer(sketch#x, sum, 0, 0)) AS tuple_sketch_estimate_integer(tuple_intersection_agg_integer(sketch, sum))#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Union false, false
-      :- Aggregate [tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), integer, sum, 0, 0) AS sketch#x]
+      :- Aggregate [tuple_sketch_agg_integer(key1#x, val1#x, 12, sum, 0, 0) AS sketch#x]
       :  +- SubqueryAlias spark_catalog.default.t_int_int_1_5_through_7_11
       :     +- Relation spark_catalog.default.t_int_int_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
-      +- Aggregate [tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), integer, sum, 0, 0) AS sketch#x]
+      +- Aggregate [tuple_sketch_agg_integer(key2#x, val2#x, 12, sum, 0, 0) AS sketch#x]
          +- SubqueryAlias spark_catalog.default.t_int_int_1_5_through_7_11
             +- Relation spark_catalog.default.t_int_int_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key, val)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES (1, 1.0D), (null, 2.0D), (2, 2.0D), (null, 3.0D), (3, 3.0D) tab(key, val)
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(key, key#x, val, val#x), Some(12), double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_sketch_agg(struct(key, val), 12, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(key#x, val#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, sum))#x]
 +- SubqueryAlias tab
    +- LocalRelation [key#x, val#x]
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key, val)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES ('test', 1.0D), (null, 2.0D), ('null', 3.0D), (null, 4.0D) tab(key, val)
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(key, key#x, val, val#x), Some(12), double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_sketch_agg(struct(key, val), 12, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(key#x, val#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, sum))#x]
 +- SubqueryAlias tab
    +- LocalRelation [key#x, val#x]
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key, val)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES (100L, 1.0D), (null, 2.0D), (200L, 3.0D), (null, 4.0D), (300L, 5.0D) tab(key, val)
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(key, key#xL, val, val#x), Some(12), double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_sketch_agg(struct(key, val), 12, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(key#xL, val#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, sum))#x]
 +- SubqueryAlias tab
    +- LocalRelation [key#xL, val#x]
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(CAST(key AS DOUBLE), val)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(CAST(key AS DOUBLE), val))
 FROM VALUES (1.1, 1.0D), (null, 2.0D), (2.2, 3.0D), (null, 4.0D), (3.3, 5.0D) tab(key, val)
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(col1, cast(key#x as double), val, val#x), Some(12), double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_sketch_agg(struct(CAST(key AS DOUBLE), val), 12, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(cast(key#x as double), val#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_sketch_agg_double(CAST(key AS DOUBLE), val, 12, sum))#x]
 +- SubqueryAlias tab
    +- LocalRelation [key#x, val#x]
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(CAST(key AS FLOAT), val)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(CAST(key AS FLOAT), val))
 FROM VALUES (1.5, 1.0D), (null, 2.0D), (2.5, 3.0D), (null, 4.0D), (3.5, 5.0D) tab(key, val)
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(col1, cast(key#x as float), val, val#x), Some(12), double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_sketch_agg(struct(CAST(key AS FLOAT), val), 12, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(cast(key#x as float), val#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_sketch_agg_double(CAST(key AS FLOAT), val, 12, sum))#x]
 +- SubqueryAlias tab
    +- LocalRelation [key#x, val#x]
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key, val)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES (X'AA', 1.0D), (null, 2.0D), (X'BB', 3.0D), (null, 4.0D), (X'CC', 5.0D) tab(key, val)
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(key, key#x, val, val#x), Some(12), double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_sketch_agg(struct(key, val), 12, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(key#x, val#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, sum))#x]
 +- SubqueryAlias tab
    +- LocalRelation [key#x, val#x]
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key, val)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES (ARRAY(1, 2), 1.0D), (null, 2.0D), (ARRAY(3, 4), 3.0D), (null, 4.0D), (ARRAY(5, 6), 5.0D) tab(key, val)
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(key, key#x, val, val#x), Some(12), double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_sketch_agg(struct(key, val), 12, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(key#x, val#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, sum))#x]
 +- SubqueryAlias tab
    +- LocalRelation [key#x, val#x]
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key, val)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES (ARRAY(10L, 20L), 1.0), (null, 2.0D), (ARRAY(30L, 40L), 3.0D), (null, 4.0D), (ARRAY(50L, 60L), 5.0D) tab(key, val)
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(key, key#x, val, val#x), Some(12), double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_sketch_agg(struct(key, val), 12, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(key#x, val#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, sum))#x]
 +- SubqueryAlias tab
    +- LocalRelation [key#x, val#x]
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key, val)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES (ARRAY(1, null), 1.0), (ARRAY(1), 2.0D), (ARRAY(2, null, 3), 3.0D), (ARRAY(4), 4.0D) tab(key, val)
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(key, key#x, val, val#x), Some(12), double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_sketch_agg(struct(key, val), 12, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(key#x, val#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, sum))#x]
 +- SubqueryAlias tab
    +- LocalRelation [key#x, val#x]
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key, val)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES (ARRAY(10L, null), 1.0D), (ARRAY(10L), 2.0D), (ARRAY(20L, null, 30L), 3.0D), (ARRAY(40L), 4.0D) tab(key, val)
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(key, key#x, val, val#x), Some(12), double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_sketch_agg(struct(key, val), 12, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(key#x, val#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, sum))#x]
 +- SubqueryAlias tab
    +- LocalRelation [key#x, val#x]
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key, val)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES (ARRAY(), 1.0D), (ARRAY(1, 2), 2.0D), (ARRAY(), 3.0D), (ARRAY(3, 4), 4.0D) tab(key, val)
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(key, key#x, val, val#x), Some(12), double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_sketch_agg(struct(key, val), 12, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(key#x, val#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, sum))#x]
 +- SubqueryAlias tab
    +- LocalRelation [key#x, val#x]
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key, val)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES ('', 1.0D), ('a', 2.0D), ('', 3.0D), ('b', 4.0D), ('c', 5.0D) tab(key, val)
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(key, key#x, val, val#x), Some(12), double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_sketch_agg(struct(key, val), 12, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(key#x, val#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, sum))#x]
 +- SubqueryAlias tab
    +- LocalRelation [key#x, val#x]
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key, val)))
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES (X'', 1.0D), (X'01', 2.0D), (X'02', 3.0D), (X'03', 4.0D), (CAST('  ' AS BINARY), 5.0D), (X'e280', 6.0D), (X'c1', 7.0D), (X'c120', 8.0D) tab(key, val)
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(key, key#x, val, val#x), Some(12), double, sum, 0, 0), double) AS tuple_sketch_estimate(tuple_sketch_agg(struct(key, val), 12, double, sum), double)#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(key#x, val#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val, 12, sum))#x]
 +- SubqueryAlias tab
    +- LocalRelation [key#x, val#x]
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1))) utf8_b FROM t_string_collation
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1)) utf8_b FROM t_string_collation
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), double) AS utf8_b#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0)) AS utf8_b#x]
 +- SubqueryAlias spark_catalog.default.t_string_collation
    +- Relation spark_catalog.default.t_string_collation[key1#x,val1#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1 COLLATE UTF8_LCASE, val1))) utf8_lc FROM t_string_collation
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1 COLLATE UTF8_LCASE, val1)) utf8_lc FROM t_string_collation
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(col1, collate(key1#x, UTF8_LCASE), val1, val1#x), Some(12), double, sum, 0, 0), double) AS utf8_lc#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(collate(key1#x, UTF8_LCASE), val1#x, 12, sum, 0, 0)) AS utf8_lc#x]
 +- SubqueryAlias spark_catalog.default.t_string_collation
    +- Relation spark_catalog.default.t_string_collation[key1#x,val1#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1 COLLATE UNICODE, val1))) unicode FROM t_string_collation
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1 COLLATE UNICODE, val1)) unicode FROM t_string_collation
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(col1, collate(key1#x, UNICODE), val1, val1#x), Some(12), double, sum, 0, 0), double) AS unicode#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(collate(key1#x, UNICODE), val1#x, 12, sum, 0, 0)) AS unicode#x]
 +- SubqueryAlias spark_catalog.default.t_string_collation
    +- Relation spark_catalog.default.t_string_collation[key1#x,val1#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1 COLLATE UNICODE_CI, val1))) unicode_ci FROM t_string_collation
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1 COLLATE UNICODE_CI, val1)) unicode_ci FROM t_string_collation
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(col1, collate(key1#x, UNICODE_CI), val1, val1#x), Some(12), double, sum, 0, 0), double) AS unicode_ci#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(collate(key1#x, UNICODE_CI), val1#x, 12, sum, 0, 0)) AS unicode_ci#x]
 +- SubqueryAlias spark_catalog.default.t_string_collation
    +- Relation spark_catalog.default.t_string_collation[key1#x,val1#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1 COLLATE UTF8_BINARY_RTRIM, val1))) utf8_b_rt FROM t_string_collation
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1 COLLATE UTF8_BINARY_RTRIM, val1)) utf8_b_rt FROM t_string_collation
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(col1, collate(key1#x, UTF8_BINARY_RTRIM), val1, val1#x), Some(12), double, sum, 0, 0), double) AS utf8_b_rt#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(collate(key1#x, UTF8_BINARY_RTRIM), val1#x, 12, sum, 0, 0)) AS utf8_b_rt#x]
 +- SubqueryAlias spark_catalog.default.t_string_collation
    +- Relation spark_catalog.default.t_string_collation[key1#x,val1#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1 COLLATE UTF8_LCASE_RTRIM, val1))) utf8_lc_rt FROM t_string_collation
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1 COLLATE UTF8_LCASE_RTRIM, val1)) utf8_lc_rt FROM t_string_collation
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(col1, collate(key1#x, UTF8_LCASE_RTRIM), val1, val1#x), Some(12), double, sum, 0, 0), double) AS utf8_lc_rt#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(collate(key1#x, UTF8_LCASE_RTRIM), val1#x, 12, sum, 0, 0)) AS utf8_lc_rt#x]
 +- SubqueryAlias spark_catalog.default.t_string_collation
    +- Relation spark_catalog.default.t_string_collation[key1#x,val1#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1 COLLATE UNICODE_RTRIM, val1))) unicode_rt FROM t_string_collation
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1 COLLATE UNICODE_RTRIM, val1)) unicode_rt FROM t_string_collation
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(col1, collate(key1#x, UNICODE_RTRIM), val1, val1#x), Some(12), double, sum, 0, 0), double) AS unicode_rt#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(collate(key1#x, UNICODE_RTRIM), val1#x, 12, sum, 0, 0)) AS unicode_rt#x]
 +- SubqueryAlias spark_catalog.default.t_string_collation
    +- Relation spark_catalog.default.t_string_collation[key1#x,val1#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1 COLLATE UNICODE_CI_RTRIM, val1))) unicode_ci_rt FROM t_string_collation
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1 COLLATE UNICODE_CI_RTRIM, val1)) unicode_ci_rt FROM t_string_collation
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(col1, collate(key1#x, UNICODE_CI_RTRIM), val1, val1#x), Some(12), double, sum, 0, 0), double) AS unicode_ci_rt#x]
+Aggregate [tuple_sketch_estimate_double(tuple_sketch_agg_double(collate(key1#x, UNICODE_CI_RTRIM), val1#x, 12, sum, 0, 0)) AS unicode_ci_rt#x]
 +- SubqueryAlias spark_catalog.default.t_string_collation
    +- Relation spark_catalog.default.t_string_collation[key1#x,val1#x] parquet
 
 
 -- !query
 WITH sketches AS (
-  SELECT 'int_sketch' as sketch_type, tuple_sketch_agg(struct(key1, val1), 12, 'double', 'sum') as sketch
+  SELECT 'int_sketch' as sketch_type, tuple_sketch_agg_double(key1, val1, 12, 'sum') as sketch
   FROM t_int_double_1_5_through_7_11
   UNION ALL
-  SELECT 'long_sketch' as sketch_type, tuple_sketch_agg(struct(key1, val1), 15, 'double', 'sum') as sketch
+  SELECT 'long_sketch' as sketch_type, tuple_sketch_agg_double(key1, val1, 15, 'sum') as sketch
   FROM t_long_double_1_5_through_7_11
   UNION ALL
-  SELECT 'double_sketch' as sketch_type, tuple_sketch_agg(struct(key1, val1), 10, 'double', 'sum') as sketch
+  SELECT 'double_sketch' as sketch_type, tuple_sketch_agg_double(key1, val1, 10, 'sum') as sketch
   FROM t_double_double_1_1_1_4_through_1_5_1_8
   UNION ALL
-  SELECT 'string_sketch' as sketch_type, tuple_sketch_agg(struct(key1, val1), 14, 'double', 'sum') as sketch
+  SELECT 'string_sketch' as sketch_type, tuple_sketch_agg_double(key1, val1, 14, 'sum') as sketch
   FROM t_string_double_a_d_through_e_h
 ),
 union_result AS (
-  SELECT tuple_union_agg(sketch, 16, 'double', 'sum') as union_sketch FROM sketches
+  SELECT tuple_union_agg_double(sketch, 16, 'sum') as union_sketch FROM sketches
 ),
 individual_sketches AS (
   SELECT
-    tuple_sketch_agg(struct(key1, val1), 12, 'double', 'sum') as sketch1,
-    tuple_sketch_agg(struct(key2, val2), 12, 'double', 'sum') as sketch2
+    tuple_sketch_agg_double(key1, val1, 12, 'sum') as sketch1,
+    tuple_sketch_agg_double(key2, val2, 12, 'sum') as sketch2
   FROM t_int_double_1_5_through_7_11
 )
 SELECT
-  tuple_sketch_estimate((SELECT union_sketch FROM union_result)) as union_estimate,
-  tuple_sketch_summary((SELECT union_sketch FROM union_result), 'double', 'sum') as union_summary,
-  tuple_sketch_estimate(tuple_union(sketch1, sketch2, 15, 'double', 'sum')) as binary_union_estimate,
-  tuple_sketch_estimate(tuple_intersection(sketch1, sketch2, 'double', 'sum')) as intersection_estimate,
-  tuple_sketch_estimate(tuple_difference(sketch1, sketch2, 'double')) as difference_estimate
+  tuple_sketch_estimate_double((SELECT union_sketch FROM union_result)) as union_estimate,
+  tuple_sketch_summary_double((SELECT union_sketch FROM union_result), 'sum') as union_summary,
+  tuple_sketch_estimate_double(tuple_union_double(sketch1, sketch2, 15, 'sum')) as binary_union_estimate,
+  tuple_sketch_estimate_double(tuple_intersection_double(sketch1, sketch2, 'sum')) as intersection_estimate,
+  tuple_sketch_estimate_double(tuple_difference_double(sketch1, sketch2)) as difference_estimate
 FROM individual_sketches
 -- !query analysis
 WithCTE
@@ -1361,29 +1361,29 @@ WithCTE
 :     +- Union false, false
 :        :- Union false, false
 :        :  :- Union false, false
-:        :  :  :- Aggregate [int_sketch AS sketch_type#x, tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0) AS sketch#x]
+:        :  :  :- Aggregate [int_sketch AS sketch_type#x, tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0) AS sketch#x]
 :        :  :  :  +- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
 :        :  :  :     +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
-:        :  :  +- Aggregate [long_sketch AS sketch_type#x, tuple_sketch_agg(struct(key1, key1#xL, val1, val1#x), Some(15), double, sum, 0, 0) AS sketch#x]
+:        :  :  +- Aggregate [long_sketch AS sketch_type#x, tuple_sketch_agg_double(key1#xL, val1#x, 15, sum, 0, 0) AS sketch#x]
 :        :  :     +- SubqueryAlias spark_catalog.default.t_long_double_1_5_through_7_11
 :        :  :        +- Relation spark_catalog.default.t_long_double_1_5_through_7_11[key1#xL,val1#x,key2#xL,val2#x] parquet
-:        :  +- Aggregate [double_sketch AS sketch_type#x, tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(10), double, sum, 0, 0) AS sketch#x]
+:        :  +- Aggregate [double_sketch AS sketch_type#x, tuple_sketch_agg_double(key1#x, val1#x, 10, sum, 0, 0) AS sketch#x]
 :        :     +- SubqueryAlias spark_catalog.default.t_double_double_1_1_1_4_through_1_5_1_8
 :        :        +- Relation spark_catalog.default.t_double_double_1_1_1_4_through_1_5_1_8[key1#x,val1#x,key2#x,val2#x] parquet
-:        +- Aggregate [string_sketch AS sketch_type#x, tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(14), double, sum, 0, 0) AS sketch#x]
+:        +- Aggregate [string_sketch AS sketch_type#x, tuple_sketch_agg_double(key1#x, val1#x, 14, sum, 0, 0) AS sketch#x]
 :           +- SubqueryAlias spark_catalog.default.t_string_double_a_d_through_e_h
 :              +- Relation spark_catalog.default.t_string_double_a_d_through_e_h[key1#x,val1#x,key2#x,val2#x] parquet
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias union_result
-:     +- Aggregate [tuple_union_agg(sketch#x, Some(16), double, sum, 0, 0) AS union_sketch#x]
+:     +- Aggregate [tuple_union_agg_double(sketch#x, 16, sum, 0, 0) AS union_sketch#x]
 :        +- SubqueryAlias sketches
 :           +- CTERelationRef xxxx, true, [sketch_type#x, sketch#x], false, false, 4
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias individual_sketches
-:     +- Aggregate [tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0) AS sketch1#x, tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0) AS sketch2#x]
+:     +- Aggregate [tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0) AS sketch1#x, tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0) AS sketch2#x]
 :        +- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
 :           +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
-+- Project [tuple_sketch_estimate(scalar-subquery#x [], double) AS union_estimate#x, tuple_sketch_summary(scalar-subquery#x [], double, sum) AS union_summary#x, tuple_sketch_estimate(tuple_union(sketch1#x, sketch2#x, 15, double, sum), double) AS binary_union_estimate#x, tuple_sketch_estimate(tuple_intersection(sketch1#x, sketch2#x, double, sum), double) AS intersection_estimate#x, tuple_sketch_estimate(tuple_difference(sketch1#x, sketch2#x, double), double) AS difference_estimate#x]
++- Project [tuple_sketch_estimate_double(scalar-subquery#x []) AS union_estimate#x, tuple_sketch_summary_double(scalar-subquery#x [], sum) AS union_summary#x, tuple_sketch_estimate_double(tuple_union_double(sketch1#x, sketch2#x, 15, sum)) AS binary_union_estimate#x, tuple_sketch_estimate_double(tuple_intersection_double(sketch1#x, sketch2#x, sum)) AS intersection_estimate#x, tuple_sketch_estimate_double(tuple_difference_double(sketch1#x, sketch2#x)) AS difference_estimate#x]
    :  :- Project [union_sketch#x]
    :  :  +- SubqueryAlias union_result
    :  :     +- CTERelationRef xxxx, true, [union_sketch#x], false, false, 1
@@ -1395,7 +1395,7 @@ WithCTE
 
 
 -- !query
-SELECT tuple_sketch_agg(struct(col, val), 2)
+SELECT tuple_sketch_agg_double(col, val, 2)
 FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -1404,48 +1404,48 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "hint" : "",
-    "msg" : "[SKETCH_INVALID_LG_NOM_ENTRIES] Invalid call to `tuple_sketch_agg`; the `lgNomEntries` value must be between 4 and 26, inclusive: 2. SQLSTATE: 22003",
-    "sqlExpr" : "\"tuple_sketch_agg(struct(col, val), 2, double, sum)\""
+    "msg" : "[SKETCH_INVALID_LG_NOM_ENTRIES] Invalid call to `tuple_sketch_agg_double`; the `lgNomEntries` value must be between 4 and 26, inclusive: 2. SQLSTATE: 22003",
+    "sqlExpr" : "\"tuple_sketch_agg_double(col, val, 2, sum)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 43,
+    "fragment" : "tuple_sketch_agg_double(col, val, 2)"
+  } ]
+}
+
+
+-- !query
+SELECT tuple_sketch_agg_double(col, val, 40)
+FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "hint" : "",
+    "msg" : "[SKETCH_INVALID_LG_NOM_ENTRIES] Invalid call to `tuple_sketch_agg_double`; the `lgNomEntries` value must be between 4 and 26, inclusive: 40. SQLSTATE: 22003",
+    "sqlExpr" : "\"tuple_sketch_agg_double(col, val, 40, sum)\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
     "stopIndex" : 44,
-    "fragment" : "tuple_sketch_agg(struct(col, val), 2)"
+    "fragment" : "tuple_sketch_agg_double(col, val, 40)"
   } ]
 }
 
 
 -- !query
-SELECT tuple_sketch_agg(struct(col, val), 40)
-FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val)
--- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "hint" : "",
-    "msg" : "[SKETCH_INVALID_LG_NOM_ENTRIES] Invalid call to `tuple_sketch_agg`; the `lgNomEntries` value must be between 4 and 26, inclusive: 40. SQLSTATE: 22003",
-    "sqlExpr" : "\"tuple_sketch_agg(struct(col, val), 40, double, sum)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 45,
-    "fragment" : "tuple_sketch_agg(struct(col, val), 40)"
-  } ]
-}
-
-
--- !query
-SELECT tuple_union_agg(sketch, 3, 'double', 'sum')
-FROM (SELECT tuple_sketch_agg(struct(col, val), 12) as sketch
+SELECT tuple_union_agg_double(sketch, 3, 'sum')
+FROM (SELECT tuple_sketch_agg_double(col, val, 12) as sketch
         FROM VALUES (1, 1.0D) AS tab(col, val)
       UNION ALL
-      SELECT tuple_sketch_agg(struct(col, val), 20) as sketch
+      SELECT tuple_sketch_agg_double(col, val, 20) as sketch
         FROM VALUES (1, 1.0D) AS tab(col, val))
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -1454,25 +1454,25 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "hint" : "",
-    "msg" : "[SKETCH_INVALID_LG_NOM_ENTRIES] Invalid call to `tuple_union_agg`; the `lgNomEntries` value must be between 4 and 26, inclusive: 3. SQLSTATE: 22003",
-    "sqlExpr" : "\"tuple_union_agg(sketch, 3, double, sum)\""
+    "msg" : "[SKETCH_INVALID_LG_NOM_ENTRIES] Invalid call to `tuple_union_agg_double`; the `lgNomEntries` value must be between 4 and 26, inclusive: 3. SQLSTATE: 22003",
+    "sqlExpr" : "\"tuple_union_agg_double(sketch, 3, sum)\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
-    "stopIndex" : 50,
-    "fragment" : "tuple_union_agg(sketch, 3, 'double', 'sum')"
+    "stopIndex" : 47,
+    "fragment" : "tuple_union_agg_double(sketch, 3, 'sum')"
   } ]
 }
 
 
 -- !query
-SELECT tuple_union_agg(sketch, 27, 'double', 'sum')
-FROM (SELECT tuple_sketch_agg(struct(col, val), 12) as sketch
+SELECT tuple_union_agg_double(sketch, 27, 'sum')
+FROM (SELECT tuple_sketch_agg_double(col, val, 12) as sketch
         FROM VALUES (1, 1.0D) AS tab(col, val)
       UNION ALL
-      SELECT tuple_sketch_agg(struct(col, val), 20) as sketch
+      SELECT tuple_sketch_agg_double(col, val, 20) as sketch
         FROM VALUES (1, 1.0D) AS tab(col, val))
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -1481,21 +1481,21 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "hint" : "",
-    "msg" : "[SKETCH_INVALID_LG_NOM_ENTRIES] Invalid call to `tuple_union_agg`; the `lgNomEntries` value must be between 4 and 26, inclusive: 27. SQLSTATE: 22003",
-    "sqlExpr" : "\"tuple_union_agg(sketch, 27, double, sum)\""
+    "msg" : "[SKETCH_INVALID_LG_NOM_ENTRIES] Invalid call to `tuple_union_agg_double`; the `lgNomEntries` value must be between 4 and 26, inclusive: 27. SQLSTATE: 22003",
+    "sqlExpr" : "\"tuple_union_agg_double(sketch, 27, sum)\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
-    "stopIndex" : 51,
-    "fragment" : "tuple_union_agg(sketch, 27, 'double', 'sum')"
+    "stopIndex" : 48,
+    "fragment" : "tuple_union_agg_double(sketch, 27, 'sum')"
   } ]
 }
 
 
 -- !query
-SELECT tuple_sketch_agg(struct(col, val), CAST(NULL AS INT)) AS lg_nom_entries_is_null
+SELECT tuple_sketch_agg_double(col, val, CAST(NULL AS INT)) AS lg_nom_entries_is_null
 FROM VALUES (15, 1.0D), (16, 2.0D), (17, 3.0D) tab(col, val)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -1504,20 +1504,20 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "exprName" : "lgNomEntries",
-    "sqlExpr" : "\"tuple_sketch_agg(struct(col, val), CAST(NULL AS INT), double, sum)\""
+    "sqlExpr" : "\"tuple_sketch_agg_double(col, val, CAST(NULL AS INT), sum)\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
-    "stopIndex" : 60,
-    "fragment" : "tuple_sketch_agg(struct(col, val), CAST(NULL AS INT))"
+    "stopIndex" : 59,
+    "fragment" : "tuple_sketch_agg_double(col, val, CAST(NULL AS INT))"
   } ]
 }
 
 
 -- !query
-SELECT tuple_sketch_agg(struct(col, val), CAST(col AS INT)) AS lg_nom_entries_non_constant
+SELECT tuple_sketch_agg_double(col, val, CAST(col AS INT)) AS lg_nom_entries_non_constant
 FROM VALUES (15, 1.0D), (16, 2.0D), (17, 3.0D) tab(col, val)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -1528,20 +1528,20 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputExpr" : "CAST(tab.col AS INT)",
     "inputName" : "lgNomEntries",
     "inputType" : "int",
-    "sqlExpr" : "\"tuple_sketch_agg(struct(col, val), CAST(col AS INT), double, sum)\""
+    "sqlExpr" : "\"tuple_sketch_agg_double(col, val, CAST(col AS INT), sum)\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
-    "stopIndex" : 59,
-    "fragment" : "tuple_sketch_agg(struct(col, val), CAST(col AS INT))"
+    "stopIndex" : 58,
+    "fragment" : "tuple_sketch_agg_double(col, val, CAST(col AS INT))"
   } ]
 }
 
 
 -- !query
-SELECT tuple_sketch_agg(struct(col, val), '15')
+SELECT tuple_sketch_agg_double(col, val, '15')
 FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -1551,69 +1551,22 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "messageParameters" : {
     "inputSql" : "\"15\"",
     "inputType" : "\"STRING\"",
-    "paramIndex" : "second",
+    "paramIndex" : "third",
     "requiredType" : "\"INT\"",
-    "sqlExpr" : "\"tuple_sketch_agg(struct(col, val), 15, double, sum)\""
+    "sqlExpr" : "\"tuple_sketch_agg_double(col, val, 15, sum)\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
-    "stopIndex" : 47,
-    "fragment" : "tuple_sketch_agg(struct(col, val), '15')"
+    "stopIndex" : 46,
+    "fragment" : "tuple_sketch_agg_double(col, val, '15')"
   } ]
 }
 
 
 -- !query
-SELECT tuple_sketch_agg(struct(col, val), 12, CAST(col AS STRING))
-FROM VALUES (15, 1.0D), (16, 2.0D), (17, 3.0D) tab(col, val)
--- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputExpr" : "CAST(tab.col AS STRING)",
-    "inputName" : "summaryType",
-    "inputType" : "string",
-    "sqlExpr" : "\"tuple_sketch_agg(struct(col, val), 12, CAST(col AS STRING), sum)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 66,
-    "fragment" : "tuple_sketch_agg(struct(col, val), 12, CAST(col AS STRING))"
-  } ]
-}
-
-
--- !query
-SELECT tuple_sketch_agg(struct(col, val), 12, 'invalid_type')
-FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val)
--- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "hint" : "",
-    "msg" : "[TUPLE_INVALID_SKETCH_SUMMARY_TYPE] Invalid call to `tuple_sketch_agg`: summary type 'invalid_type' is not supported. Valid summary types are: double, integer, string. SQLSTATE: 22023",
-    "sqlExpr" : "\"tuple_sketch_agg(struct(col, val), 12, invalid_type, sum)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 61,
-    "fragment" : "tuple_sketch_agg(struct(col, val), 12, 'invalid_type')"
-  } ]
-}
-
-
--- !query
-SELECT tuple_sketch_agg(struct(col, val), 12, 'double', CAST(col AS STRING))
+SELECT tuple_sketch_agg_double(col, val, 12, CAST(col AS STRING))
 FROM VALUES (15, 1.0D), (16, 2.0D), (17, 3.0D) tab(col, val)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -1624,20 +1577,20 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputExpr" : "CAST(tab.col AS STRING)",
     "inputName" : "mode",
     "inputType" : "string",
-    "sqlExpr" : "\"tuple_sketch_agg(struct(col, val), 12, double, CAST(col AS STRING))\""
+    "sqlExpr" : "\"tuple_sketch_agg_double(col, val, 12, CAST(col AS STRING))\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
-    "stopIndex" : 76,
-    "fragment" : "tuple_sketch_agg(struct(col, val), 12, 'double', CAST(col AS STRING))"
+    "stopIndex" : 65,
+    "fragment" : "tuple_sketch_agg_double(col, val, 12, CAST(col AS STRING))"
   } ]
 }
 
 
 -- !query
-SELECT tuple_sketch_agg(struct(col, val), 12, 'double', 'invalid_mode')
+SELECT tuple_sketch_agg_double(col, val, 12, 'invalid_type')
 FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -1646,21 +1599,21 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "sqlState" : "42K09",
   "messageParameters" : {
     "hint" : "",
-    "msg" : "[TUPLE_INVALID_SKETCH_MODE] Invalid call to `tuple_sketch_agg`: mode 'invalid_mode' is not supported. Valid modes are: sum, min, max, alwaysone. SQLSTATE: 22023",
-    "sqlExpr" : "\"tuple_sketch_agg(struct(col, val), 12, double, invalid_mode)\""
+    "msg" : "[TUPLE_INVALID_SKETCH_MODE] Invalid call to `tuple_sketch_agg_double`: mode 'invalid_type' is not supported. Valid modes are: sum, min, max, alwaysone. SQLSTATE: 22023",
+    "sqlExpr" : "\"tuple_sketch_agg_double(col, val, 12, invalid_type)\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
-    "stopIndex" : 71,
-    "fragment" : "tuple_sketch_agg(struct(col, val), 12, 'double', 'invalid_mode')"
+    "stopIndex" : 60,
+    "fragment" : "tuple_sketch_agg_double(col, val, 12, 'invalid_type')"
   } ]
 }
 
 
 -- !query
-SELECT tuple_sketch_agg(col, 15)
+SELECT tuple_sketch_agg_double(col, 15)
 FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -1668,47 +1621,49 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "inputSql" : "\"col\"",
+    "inputSql" : "\"15\"",
     "inputType" : "\"INT\"",
-    "paramIndex" : "first",
-    "requiredType" : "\"STRUCT\"",
-    "sqlExpr" : "\"tuple_sketch_agg(col, 15, double, sum)\""
+    "paramIndex" : "second",
+    "requiredType" : "(\"DOUBLE\" or \"FLOAT\")",
+    "sqlExpr" : "\"tuple_sketch_agg_double(col, 15, 12, sum)\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
-    "stopIndex" : 32,
-    "fragment" : "tuple_sketch_agg(col, 15)"
+    "stopIndex" : 39,
+    "fragment" : "tuple_sketch_agg_double(col, 15)"
   } ]
 }
 
 
 -- !query
-SELECT tuple_sketch_agg(struct(col, val, 2.0D), 15)
+SELECT tuple_sketch_agg_double(col, val, 2.0D, 15)
 FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "hint" : "",
-    "msg" : "The struct input to tuple_sketch_agg must have exactly 2 fields (key, summary value), but got 3 fields",
-    "sqlExpr" : "\"tuple_sketch_agg(struct(col, val, 2.0), 15, double, sum)\""
+    "inputSql" : "\"2.0\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "third",
+    "requiredType" : "\"INT\"",
+    "sqlExpr" : "\"tuple_sketch_agg_double(col, val, 2.0, 15)\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
-    "stopIndex" : 51,
-    "fragment" : "tuple_sketch_agg(struct(col, val, 2.0D), 15)"
+    "stopIndex" : 50,
+    "fragment" : "tuple_sketch_agg_double(col, val, 2.0D, 15)"
   } ]
 }
 
 
 -- !query
-SELECT tuple_union(1, 2)
+SELECT tuple_union_double(1, 2)
 FROM VALUES
   (1, 4),
   (2, 5),
@@ -1723,48 +1678,20 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputType" : "\"INT\"",
     "paramIndex" : "first",
     "requiredType" : "\"BINARY\"",
-    "sqlExpr" : "\"tuple_union(1, 2, 12, double, sum)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 24,
-    "fragment" : "tuple_union(1, 2)"
-  } ]
-}
-
-
--- !query
-SELECT tuple_intersection(1, 2)
-FROM VALUES
-  (1, 4),
-  (2, 5),
-  (3, 6) AS tab(col1, col2)
--- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"1\"",
-    "inputType" : "\"INT\"",
-    "paramIndex" : "first",
-    "requiredType" : "\"BINARY\"",
-    "sqlExpr" : "\"tuple_intersection(1, 2, double, sum)\""
+    "sqlExpr" : "\"tuple_union_double(1, 2, 12, sum)\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
     "stopIndex" : 31,
-    "fragment" : "tuple_intersection(1, 2)"
+    "fragment" : "tuple_union_double(1, 2)"
   } ]
 }
 
 
 -- !query
-SELECT tuple_difference(1, 2)
+SELECT tuple_intersection_double(1, 2)
 FROM VALUES
   (1, 4),
   (2, 5),
@@ -1779,22 +1706,50 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputType" : "\"INT\"",
     "paramIndex" : "first",
     "requiredType" : "\"BINARY\"",
-    "sqlExpr" : "\"tuple_difference(1, 2, double)\""
+    "sqlExpr" : "\"tuple_intersection_double(1, 2, sum)\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
-    "stopIndex" : 29,
-    "fragment" : "tuple_difference(1, 2)"
+    "stopIndex" : 38,
+    "fragment" : "tuple_intersection_double(1, 2)"
   } ]
 }
 
 
 -- !query
-SELECT tuple_union(
-    tuple_sketch_agg(struct(col1, 1.0D)),
-    tuple_sketch_agg(struct(col2, 2.0D)), 'invalid')
+SELECT tuple_difference_double(1, 2)
+FROM VALUES
+  (1, 4),
+  (2, 5),
+  (3, 6) AS tab(col1, col2)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"BINARY\"",
+    "sqlExpr" : "\"tuple_difference_double(1, 2)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "tuple_difference_double(1, 2)"
+  } ]
+}
+
+
+-- !query
+SELECT tuple_union_double(
+    tuple_sketch_agg_double(col1, 1.0D),
+    tuple_sketch_agg_double(col2, 2.0D), 'invalid')
 FROM VALUES
   (1, 4),
   (2, 5),
@@ -1809,21 +1764,21 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputType" : "\"STRING\"",
     "paramIndex" : "third",
     "requiredType" : "\"INT\"",
-    "sqlExpr" : "\"tuple_union(tuple_sketch_agg(struct(col1, 1.0), 12, double, sum), tuple_sketch_agg(struct(col2, 2.0), 12, double, sum), invalid, double, sum)\""
+    "sqlExpr" : "\"tuple_union_double(tuple_sketch_agg_double(col1, 1.0, 12, sum), tuple_sketch_agg_double(col2, 2.0, 12, sum), invalid, sum)\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
-    "stopIndex" : 114,
-    "fragment" : "tuple_union(\n    tuple_sketch_agg(struct(col1, 1.0D)),\n    tuple_sketch_agg(struct(col2, 2.0D)), 'invalid')"
+    "stopIndex" : 119,
+    "fragment" : "tuple_union_double(\n    tuple_sketch_agg_double(col1, 1.0D),\n    tuple_sketch_agg_double(col2, 2.0D), 'invalid')"
   } ]
 }
 
 
 -- !query
-SELECT tuple_intersection(
-    tuple_sketch_agg(struct(col1, 1.0)),
+SELECT tuple_intersection_double(
+    tuple_sketch_agg_double(col1, 1.0),
     'invalid_sketch')
 FROM VALUES
   (1, 4),
@@ -1835,135 +1790,158 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "inputSql" : "\"invalid_sketch\"",
-    "inputType" : "\"STRING\"",
+    "inputSql" : "\"1.0\"",
+    "inputType" : "\"DECIMAL(2,1)\"",
     "paramIndex" : "second",
-    "requiredType" : "\"BINARY\"",
-    "sqlExpr" : "\"tuple_intersection(tuple_sketch_agg(struct(col1, 1.0), 12, double, sum), invalid_sketch, double, sum)\""
+    "requiredType" : "(\"DOUBLE\" or \"FLOAT\")",
+    "sqlExpr" : "\"tuple_sketch_agg_double(col1, 1.0, 12, sum)\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 89,
-    "fragment" : "tuple_intersection(\n    tuple_sketch_agg(struct(col1, 1.0)),\n    'invalid_sketch')"
+    "startIndex" : 39,
+    "stopIndex" : 72,
+    "fragment" : "tuple_sketch_agg_double(col1, 1.0)"
   } ]
 }
 
 
 -- !query
-SELECT tuple_sketch_estimate(CAST('abc' AS BINARY))
+SELECT tuple_sketch_estimate_double(CAST('abc' AS BINARY))
 -- !query analysis
-Project [tuple_sketch_estimate(cast(abc as binary), double) AS tuple_sketch_estimate(CAST(abc AS BINARY), double)#x]
+Project [tuple_sketch_estimate_double(cast(abc as binary)) AS tuple_sketch_estimate_double(CAST(abc AS BINARY))#x]
 +- OneRowRelation
 
 
 -- !query
-SELECT tuple_union(CAST('abc' AS BINARY), CAST('def' AS BINARY))
+SELECT tuple_union_double(CAST('abc' AS BINARY), CAST('def' AS BINARY))
 -- !query analysis
-Project [tuple_union(cast(abc as binary), cast(def as binary), 12, double, sum) AS tuple_union(CAST(abc AS BINARY), CAST(def AS BINARY), 12, double, sum)#x]
+Project [tuple_union_double(cast(abc as binary), cast(def as binary), 12, sum) AS tuple_union_double(CAST(abc AS BINARY), CAST(def AS BINARY), 12, sum)#x]
 +- OneRowRelation
 
 
 -- !query
-SELECT tuple_intersection(CAST('abc' AS BINARY), CAST('def' AS BINARY))
+SELECT tuple_intersection_double(CAST('abc' AS BINARY), CAST('def' AS BINARY))
 -- !query analysis
-Project [tuple_intersection(cast(abc as binary), cast(def as binary), double, sum) AS tuple_intersection(CAST(abc AS BINARY), CAST(def AS BINARY), double, sum)#x]
+Project [tuple_intersection_double(cast(abc as binary), cast(def as binary), sum) AS tuple_intersection_double(CAST(abc AS BINARY), CAST(def AS BINARY), sum)#x]
 +- OneRowRelation
 
 
 -- !query
-SELECT tuple_difference(CAST('abc' AS BINARY), CAST('def' AS BINARY))
+SELECT tuple_difference_double(CAST('abc' AS BINARY), CAST('def' AS BINARY))
 -- !query analysis
-Project [tuple_difference(cast(abc as binary), cast(def as binary), double) AS tuple_difference(CAST(abc AS BINARY), CAST(def AS BINARY), double)#x]
+Project [tuple_difference_double(cast(abc as binary), cast(def as binary)) AS tuple_difference_double(CAST(abc AS BINARY), CAST(def AS BINARY))#x]
 +- OneRowRelation
 
 
 -- !query
-SELECT tuple_union_agg(buffer, 15, 'double', 'sum')
+SELECT tuple_union_agg_double(buffer, 15, 'sum')
 FROM (SELECT CAST('abc' AS BINARY) AS buffer)
 -- !query analysis
-Aggregate [tuple_union_agg(buffer#x, Some(15), double, sum, 0, 0) AS tuple_union_agg(buffer, 15, double, sum)#x]
+Aggregate [tuple_union_agg_double(buffer#x, 15, sum, 0, 0) AS tuple_union_agg_double(buffer, 15, sum)#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Project [cast(abc as binary) AS buffer#x]
       +- OneRowRelation
 
 
 -- !query
-SELECT tuple_intersection_agg(buffer, 'double', 'sum')
+SELECT tuple_intersection_agg_double(buffer, 'sum')
 FROM (SELECT CAST('abc' AS BINARY) AS buffer)
 -- !query analysis
-Aggregate [tuple_intersection_agg(buffer#x, double, sum, 0, 0) AS tuple_intersection_agg(buffer, double, sum)#x]
+Aggregate [tuple_intersection_agg_double(buffer#x, sum, 0, 0) AS tuple_intersection_agg_double(buffer, sum)#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Project [cast(abc as binary) AS buffer#x]
       +- OneRowRelation
 
 
 -- !query
-SELECT tuple_sketch_summary(tuple_sketch_agg(struct(key1, val1), 12, 'string', 'sum'), 'string', 'sum')
-FROM t_string_string_a_d_through_e_h
--- !query analysis
-Aggregate [tuple_sketch_summary(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), string, sum, 0, 0), string, sum) AS tuple_sketch_summary(tuple_sketch_agg(struct(key1, val1), 12, string, sum), string, sum)#x]
-+- SubqueryAlias spark_catalog.default.t_string_string_a_d_through_e_h
-   +- Relation spark_catalog.default.t_string_string_a_d_through_e_h[key1#x,val1#x,key2#x,val2#x] parquet
-
-
--- !query
-SELECT tuple_union_theta(
+SELECT tuple_union_theta_double(
     theta_sketch_agg(key1),
-    tuple_sketch_agg(struct(key2, val2)))
+    tuple_sketch_agg_double(key2, val2))
 FROM t_int_double_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_union_theta(theta_sketch_agg(key1#x, 12, 0, 0), tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0), 12, double, sum) AS tuple_union_theta(theta_sketch_agg(key1, 12), tuple_sketch_agg(struct(key2, val2), 12, double, sum), 12, double, sum)#x]
+Aggregate [tuple_union_theta_double(theta_sketch_agg(key1#x, 12, 0, 0), tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0), 12, sum) AS tuple_union_theta_double(theta_sketch_agg(key1, 12), tuple_sketch_agg_double(key2, val2, 12, sum), 12, sum)#x]
 +- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
    +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_intersection_theta(
+SELECT tuple_intersection_theta_double(
     theta_sketch_agg(key1),
-    tuple_sketch_agg(struct(key2, val2)))
+    tuple_sketch_agg_double(key2, val2))
 FROM t_int_double_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_intersection_theta(theta_sketch_agg(key1#x, 12, 0, 0), tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0), double, sum) AS tuple_intersection_theta(theta_sketch_agg(key1, 12), tuple_sketch_agg(struct(key2, val2), 12, double, sum), double, sum)#x]
+Aggregate [tuple_intersection_theta_double(theta_sketch_agg(key1#x, 12, 0, 0), tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0), sum) AS tuple_intersection_theta_double(theta_sketch_agg(key1, 12), tuple_sketch_agg_double(key2, val2, 12, sum), sum)#x]
 +- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
    +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_difference_theta(
+SELECT tuple_difference_theta_double(
     theta_sketch_agg(key1),
-    tuple_sketch_agg(struct(key2, val2)))
+    tuple_sketch_agg_double(key2, val2))
 FROM t_int_double_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_difference_theta(theta_sketch_agg(key1#x, 12, 0, 0), tuple_sketch_agg(struct(key2, key2#x, val2, val2#x), Some(12), double, sum, 0, 0), double) AS tuple_difference_theta(theta_sketch_agg(key1, 12), tuple_sketch_agg(struct(key2, val2), 12, double, sum), double)#x]
+Aggregate [tuple_difference_theta_double(theta_sketch_agg(key1#x, 12, 0, 0), tuple_sketch_agg_double(key2#x, val2#x, 12, sum, 0, 0)) AS tuple_difference_theta_double(theta_sketch_agg(key1, 12), tuple_sketch_agg_double(key2, val2, 12, sum))#x]
 +- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
    +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
 
 -- !query
-SELECT tuple_sketch_agg(struct(col1, col2), 12, 'double', 'sum')
+SELECT tuple_sketch_agg_double(col1, col2, 12, 'sum')
 FROM VALUES (1, 'invalid'), (2, 'invalid') AS tab(col1, col2)
 -- !query analysis
-Aggregate [tuple_sketch_agg(struct(col1, col1#x, col2, col2#x), Some(12), double, sum, 0, 0) AS tuple_sketch_agg(struct(col1, col2), 12, double, sum)#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col1#x, col2#x]
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"col2\"",
+    "inputType" : "\"STRING\"",
+    "paramIndex" : "second",
+    "requiredType" : "(\"DOUBLE\" or \"FLOAT\")",
+    "sqlExpr" : "\"tuple_sketch_agg_double(col1, col2, 12, sum)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 53,
+    "fragment" : "tuple_sketch_agg_double(col1, col2, 12, 'sum')"
+  } ]
+}
 
 
 -- !query
-SELECT tuple_sketch_agg(struct(col1, col2), 12, 'integer', 'sum')
+SELECT tuple_sketch_agg_integer(col1, col2, 12, 'sum')
 FROM VALUES (1, 1.5D), (2, 2.5D) AS tab(col1, col2)
 -- !query analysis
-Aggregate [tuple_sketch_agg(struct(col1, col1#x, col2, col2#x), Some(12), integer, sum, 0, 0) AS tuple_sketch_agg(struct(col1, col2), 12, integer, sum)#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col1#x, col2#x]
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"col2\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"INT\"",
+    "sqlExpr" : "\"tuple_sketch_agg_integer(col1, col2, 12, sum)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 54,
+    "fragment" : "tuple_sketch_agg_integer(col1, col2, 12, 'sum')"
+  } ]
+}
 
 
 -- !query
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, 'double', 'sum'), 'integer')
+SELECT tuple_sketch_estimate_integer(tuple_sketch_agg_double(key1, val1, 12, 'sum'))
 FROM t_int_double_1_5_through_7_11
 -- !query analysis
-Aggregate [tuple_sketch_estimate(tuple_sketch_agg(struct(key1, key1#x, val1, val1#x), Some(12), double, sum, 0, 0), integer) AS tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, double, sum), integer)#x]
+Aggregate [tuple_sketch_estimate_integer(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_integer(tuple_sketch_agg_double(key1, val1, 12, sum))#x]
 +- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
    +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
 
@@ -2036,6 +2014,13 @@ DROP TABLE IF EXISTS t_string_string_a_d_through_e_h
 -- !query analysis
 DropTable true, false
 +- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t_string_string_a_d_through_e_h
+
+
+-- !query
+DROP TABLE IF EXISTS t_string_array_string_a_d_through_e_h
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t_string_array_string_a_d_through_e_h
 
 
 -- !query

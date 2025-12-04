@@ -101,688 +101,676 @@ VALUES
   ('\uFFFD', 5.00D), ('Å', 6.00D), ('å', 7.00D), ('a\u030A', 8.00D), ('Å ', 9.00D), ('å  ', 10.00D),
   ('a\u030A   ', 11.00D) AS tab(key1, val1);
 
--- Test basic tuple_sketch_agg with IntegerType key and DoubleType value from table
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1))) AS result
+-- Test basic tuple_sketch_agg_double with IntegerType key and double summary from table
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1)) AS result
 FROM t_int_double_1_5_through_7_11;
 
--- Test tuple_sketch_agg with IntegerType key and IntegerType value from table
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, 'integer'), 'integer') AS result
+-- Test tuple_sketch_agg_integer with IntegerType key and integer summary from table
+SELECT tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key1, val1, 12)) AS result
 FROM t_int_int_1_5_through_7_11;
 
--- Test tuple_sketch_agg with ArrayType(IntegerType) key and double values from table
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1)))
+-- Test tuple_sketch_agg_double with ArrayType(IntegerType) key and double summary from table
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1))
 FROM t_array_int_double_1_3_through_4_6;
 
--- Test tuple_sketch_agg with ArrayType(LongType) key and double values from table
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key2, val2)))
+-- Test tuple_sketch_agg_double with ArrayType(LongType) key and double summary from table
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key2, val2))
 FROM t_array_long_double_1_3_through_4_6;
 
--- Test tuple_sketch_agg with BinaryType key and double values from table
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1)))
+-- Test tuple_sketch_agg_double with BinaryType key and double summary from table
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1))
 FROM t_binary_double_a_b_through_e_f;
 
--- Test tuple_sketch_agg with DoubleType key and double values from table
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1)))
+-- Test tuple_sketch_agg_double with DoubleType key and double summary from table
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1))
 FROM t_double_double_1_1_1_4_through_1_5_1_8;
 
--- Test tuple_sketch_agg with FloatType key and double values from table
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key2, val2)))
+-- Test tuple_sketch_agg_double with FloatType key and double summary from table
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key2, val2))
 FROM t_float_double_1_1_1_4_through_1_5_1_8;
 
--- Test tuple_sketch_agg with IntegerType key and explicit lgNomEntries parameter
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 22))
+-- Test tuple_sketch_agg_double with IntegerType key and explicit lgNomEntries parameter
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 22))
 FROM t_int_double_1_5_through_7_11;
 
--- Test tuple_sketch_agg with LongType key and double values
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1)))
+-- Test tuple_sketch_agg_double with LongType key and double summary
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1))
 FROM t_long_double_1_5_through_7_11;
 
--- Test tuple_sketch_agg with StringType key and double values
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1)))
+-- Test tuple_sketch_agg_double with StringType key and double summary
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1))
 FROM t_string_double_a_d_through_e_h;
 
--- Test tuple_sketch_agg with explicit summaryType parameter - double
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, 'double'))
+-- Test tuple_sketch_agg_double with explicit lgNomEntries parameter
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12))
 FROM t_int_double_1_5_through_7_11;
 
--- Test tuple_sketch_agg with explicit summaryType parameter - integer
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, 'integer'), 'integer')
+-- Test tuple_sketch_agg_integer with explicit lgNomEntries parameter
+SELECT tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key1, val1, 12))
 FROM t_int_int_1_5_through_7_11;
 
--- Test tuple_sketch_agg with explicit summaryType parameter - string
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, 'string'), 'string')
+-- Test tuple_sketch_agg_string with string keys and string summary
+SELECT tuple_sketch_estimate_string(tuple_sketch_agg_string(key1, val1, 12))
 FROM t_string_string_a_d_through_e_h;
 
--- Test tuple_sketch_agg with explicit summaryType parameter - string array
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, 'string'), 'string')
+-- Test tuple_sketch_agg_string with string keys and string array summary
+SELECT tuple_sketch_estimate_string(tuple_sketch_agg_string(key1, val1, 12))
 FROM t_string_array_string_a_d_through_e_h;
 
--- Test tuple_sketch_agg with all parameters including mode - sum (default)
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, 'double', 'sum'), 'double')
+-- Test tuple_sketch_agg_double with all parameters including mode - sum (default)
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12, 'sum'))
 FROM t_int_double_1_5_through_7_11;
 
--- Test tuple_sketch_agg with mode - min
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, 'double', 'min'))
+-- Test tuple_sketch_agg_double with mode - min
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12, 'min'))
 FROM t_int_double_1_5_through_7_11;
 
--- Test tuple_sketch_agg with mode - max
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, 'double', 'max'))
+-- Test tuple_sketch_agg_double with mode - max
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12, 'max'))
 FROM t_int_double_1_5_through_7_11;
 
--- Test tuple_sketch_agg with mode - alwaysone
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, 'double', 'alwaysone'))
+-- Test tuple_sketch_agg_double with mode - alwaysone
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12, 'alwaysone'))
 FROM t_int_double_1_5_through_7_11;
 
--- Test tuple_sketch_summary to aggregate summary values - sum mode
-SELECT tuple_sketch_summary(tuple_sketch_agg(struct(key1, val1), 12, 'double', 'sum'))
+-- Test tuple_sketch_summary_double to aggregate summary values - sum mode
+SELECT tuple_sketch_summary_double(tuple_sketch_agg_double(key1, val1, 12, 'sum'))
 FROM t_int_double_1_5_through_7_11;
 
--- Test tuple_sketch_summary to aggregate summary values - min mode
-SELECT tuple_sketch_summary(tuple_sketch_agg(struct(key1, val1), 12, 'double', 'min'))
+-- Test tuple_sketch_summary_double to aggregate summary values - min mode
+SELECT tuple_sketch_summary_double(tuple_sketch_agg_double(key1, val1, 12, 'min'))
 FROM t_int_double_1_5_through_7_11;
 
--- Test tuple_sketch_summary to aggregate summary values - max mode
-SELECT tuple_sketch_summary(tuple_sketch_agg(struct(key1, val1), 12, 'double', 'max'))
+-- Test tuple_sketch_summary_double to aggregate summary values - max mode
+SELECT tuple_sketch_summary_double(tuple_sketch_agg_double(key1, val1, 12, 'max'))
 FROM t_int_double_1_5_through_7_11;
 
--- Test tuple_sketch_summary to aggregate summary values - alwaysone mode
-SELECT tuple_sketch_summary(tuple_sketch_agg(struct(key1, val1), 12, 'double', 'alwaysone'))
+-- Test tuple_sketch_summary_double to aggregate summary values - alwaysone mode
+SELECT tuple_sketch_summary_double(tuple_sketch_agg_double(key1, val1, 12, 'alwaysone'))
 FROM t_int_double_1_5_through_7_11;
 
--- Test tuple_sketch_summary with integer summary type
-SELECT tuple_sketch_summary(tuple_sketch_agg(struct(key1, val1), 12, 'integer', 'sum'), 'integer', 'sum')
+-- Test tuple_sketch_summary_integer with integer summary type
+SELECT tuple_sketch_summary_integer(tuple_sketch_agg_integer(key1, val1, 12, 'sum'), 'sum')
 FROM t_int_int_1_5_through_7_11;
 
--- Test tuple_union function with IntegerType sketches
-SELECT tuple_sketch_estimate(
-  tuple_union(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+-- Test tuple_union_double function with IntegerType key sketches
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_int_double_1_5_through_7_11;
 
--- Test tuple_union function with LongType sketches and explicit lgNomEntries parameter
-SELECT tuple_sketch_estimate(
-  tuple_union(
-    tuple_sketch_agg(struct(key1, val1), 15),
-    tuple_sketch_agg(struct(key2, val2)), 15))
+-- Test tuple_union_double function with LongType key sketches and explicit lgNomEntries parameter
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    tuple_sketch_agg_double(key1, val1, 15),
+    tuple_sketch_agg_double(key2, val2), 15))
 FROM t_long_double_1_5_through_7_11;
 
--- Test tuple_union function with DoubleType sketches
-SELECT tuple_sketch_estimate(
-  tuple_union(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+-- Test tuple_union_double function with DoubleType key sketches
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_double_double_1_1_1_4_through_1_5_1_8;
 
--- Test tuple_union function with FloatType sketches and explicit lgNomEntries parameter
-SELECT tuple_sketch_estimate(
-  tuple_union(
-    tuple_sketch_agg(struct(key1, val1), 6),
-    tuple_sketch_agg(struct(key2, val2), 15), 15))
+-- Test tuple_union_double function with FloatType key sketches and explicit lgNomEntries parameter
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    tuple_sketch_agg_double(key1, val1, 6),
+    tuple_sketch_agg_double(key2, val2, 15), 15))
 FROM t_float_double_1_1_1_4_through_1_5_1_8;
 
--- Test tuple_union function with StringType sketches
-SELECT tuple_sketch_estimate(
-  tuple_union(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+-- Test tuple_union_double function with StringType key sketches
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_string_double_a_d_through_e_h;
 
--- Test tuple_union function with BinaryType sketches and explicit lgNomEntries parameter
-SELECT tuple_sketch_estimate(
-  tuple_union(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2), 20), 20))
+-- Test tuple_union_double function with BinaryType key sketches and explicit lgNomEntries parameter
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2, 20), 20))
 FROM t_binary_double_a_b_through_e_f;
 
--- Test tuple_union function with ArrayType(IntegerType) sketches
-SELECT tuple_sketch_estimate(
-  tuple_union(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+-- Test tuple_union_double function with ArrayType(IntegerType) key sketches
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_array_int_double_1_3_through_4_6;
 
--- Test tuple_union function with ArrayType(LongType) sketches and explicit lgNomEntries parameter
-SELECT tuple_sketch_estimate(
-  tuple_union(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2), 13), 13))
+-- Test tuple_union_double function with ArrayType(LongType) key sketches and explicit lgNomEntries parameter
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2, 13), 13))
 FROM t_array_long_double_1_3_through_4_6;
 
--- Test tuple_union with summaryType and mode parameters
-SELECT tuple_sketch_estimate(
-  tuple_union(
-    tuple_sketch_agg(struct(key1, val1), 12, 'double', 'sum'),
-    tuple_sketch_agg(struct(key2, val2), 12, 'double', 'sum'), 12, 'double', 'sum'))
+-- Test tuple_union_double with lgNomEntries and mode parameters
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    tuple_sketch_agg_double(key1, val1, 12, 'sum'),
+    tuple_sketch_agg_double(key2, val2, 12, 'sum'), 12, 'sum'))
 FROM t_int_double_1_5_through_7_11;
 
--- Test tuple_union_theta to merge tuple sketch with theta sketch
-SELECT tuple_sketch_estimate(
-  tuple_union_theta(
-    tuple_sketch_agg(struct(key1, val1)),
+-- Test tuple_union_theta_double to merge tuple sketch with theta sketch
+SELECT tuple_sketch_estimate_double(
+  tuple_union_theta_double(
+    tuple_sketch_agg_double(key1, val1),
     theta_sketch_agg(key2)))
 FROM t_int_double_1_5_through_7_11;
 
--- Test tuple_union_theta with explicit parameters
-SELECT tuple_sketch_estimate(
-  tuple_union_theta(
-    tuple_sketch_agg(struct(key1, val1), 12, 'double', 'sum'),
-    theta_sketch_agg(key2, 12), 12, 'double', 'sum'))
+-- Test tuple_union_theta_double with explicit parameters
+SELECT tuple_sketch_estimate_double(
+  tuple_union_theta_double(
+    tuple_sketch_agg_double(key1, val1, 12, 'sum'),
+    theta_sketch_agg(key2, 12), 12, 'sum'))
 FROM t_int_double_1_5_through_7_11;
 
--- Test tuple_intersection function with IntegerType sketches
-SELECT tuple_sketch_estimate(
-  tuple_intersection(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+-- Test tuple_intersection_double function with IntegerType key sketches
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_int_double_1_5_through_7_11;
 
--- Test tuple_intersection function with LongType sketches
-SELECT tuple_sketch_estimate(
-  tuple_intersection(
-    tuple_sketch_agg(struct(key1, val1), 5),
-    tuple_sketch_agg(struct(key2, val2), 12)))
+-- Test tuple_intersection_double function with LongType key sketches
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_double(
+    tuple_sketch_agg_double(key1, val1, 5),
+    tuple_sketch_agg_double(key2, val2, 12)))
 FROM t_long_double_1_5_through_7_11;
 
--- Test tuple_intersection function with DoubleType sketches
-SELECT tuple_sketch_estimate(
-  tuple_intersection(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+-- Test tuple_intersection_double function with DoubleType key sketches
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_double_double_1_1_1_4_through_1_5_1_8;
 
--- Test tuple_intersection function with FloatType sketches
-SELECT tuple_sketch_estimate(
-  tuple_intersection(
-    tuple_sketch_agg(struct(key1, val1), 5),
-    tuple_sketch_agg(struct(key2, val2))))
+-- Test tuple_intersection_double function with FloatType key sketches
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_double(
+    tuple_sketch_agg_double(key1, val1, 5),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_float_double_1_1_1_4_through_1_5_1_8;
 
--- Test tuple_intersection function with StringType sketches
-SELECT tuple_sketch_estimate(
-  tuple_intersection(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+-- Test tuple_intersection_double function with StringType key sketches
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_string_double_a_d_through_e_h;
 
--- Test tuple_intersection function with BinaryType sketches
-SELECT tuple_sketch_estimate(
-  tuple_intersection(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2), 22)))
+-- Test tuple_intersection_double function with BinaryType key sketches
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2, 22)))
 FROM t_binary_double_a_b_through_e_f;
 
--- Test tuple_intersection function with ArrayType(IntegerType) sketches
-SELECT tuple_sketch_estimate(
-  tuple_intersection(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+-- Test tuple_intersection_double function with ArrayType(IntegerType) key sketches
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_array_int_double_1_3_through_4_6;
 
--- Test tuple_intersection function with ArrayType(LongType) sketches
-SELECT tuple_sketch_estimate(
-  tuple_intersection(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2), 10)))
+-- Test tuple_intersection_double function with ArrayType(LongType) key sketches
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2, 10)))
 FROM t_array_long_double_1_3_through_4_6;
 
--- Test tuple_intersection with summaryType and mode parameters
-SELECT tuple_sketch_estimate(
-  tuple_intersection(
-    tuple_sketch_agg(struct(key1, val1), 12, 'double', 'min'),
-    tuple_sketch_agg(struct(key2, val2), 12, 'double', 'min'), 'double', 'min'))
+-- Test tuple_intersection_double with mode parameter
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_double(
+    tuple_sketch_agg_double(key1, val1, 12, 'min'),
+    tuple_sketch_agg_double(key2, val2, 12, 'min'), 'min'))
 FROM t_int_double_1_5_through_7_11;
 
--- Test tuple_intersection_theta to intersect tuple sketch with theta sketch
-SELECT tuple_sketch_estimate(
-  tuple_intersection_theta(
-    tuple_sketch_agg(struct(key1, val1)),
+-- Test tuple_intersection_theta_double to intersect tuple sketch with theta sketch
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_theta_double(
+    tuple_sketch_agg_double(key1, val1),
     theta_sketch_agg(key2)))
 FROM t_int_double_1_5_through_7_11;
 
--- Test tuple_intersection_theta with explicit parameters
-SELECT tuple_sketch_estimate(
-  tuple_intersection_theta(
-    tuple_sketch_agg(struct(key1, val1), 12, 'double', 'sum'),
-    theta_sketch_agg(key2, 12), 'double', 'sum'))
+-- Test tuple_intersection_theta_double with explicit parameters
+SELECT tuple_sketch_estimate_double(
+  tuple_intersection_theta_double(
+    tuple_sketch_agg_double(key1, val1, 12, 'sum'),
+    theta_sketch_agg(key2, 12), 'sum'))
 FROM t_int_double_1_5_through_7_11;
 
--- Test tuple_difference function with IntegerType sketches
-SELECT tuple_sketch_estimate(
-  tuple_difference(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+-- Test tuple_difference_double function with IntegerType key sketches
+SELECT tuple_sketch_estimate_double(
+  tuple_difference_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_int_double_1_5_through_7_11;
 
--- Test tuple_difference function with LongType sketches
-SELECT tuple_sketch_estimate(
-  tuple_difference(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2), 5)))
+-- Test tuple_difference_double function with LongType key sketches
+SELECT tuple_sketch_estimate_double(
+  tuple_difference_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2, 5)))
 FROM t_long_double_1_5_through_7_11;
 
--- Test tuple_difference function with DoubleType sketches
-SELECT tuple_sketch_estimate(
-  tuple_difference(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+-- Test tuple_difference_double function with DoubleType key sketches
+SELECT tuple_sketch_estimate_double(
+  tuple_difference_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_double_double_1_1_1_4_through_1_5_1_8;
 
--- Test tuple_difference function with FloatType sketches
-SELECT tuple_sketch_estimate(
-  tuple_difference(
-    tuple_sketch_agg(struct(key1, val1), 12),
-    tuple_sketch_agg(struct(key2, val2))))
+-- Test tuple_difference_double function with FloatType key sketches
+SELECT tuple_sketch_estimate_double(
+  tuple_difference_double(
+    tuple_sketch_agg_double(key1, val1, 12),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_float_double_1_1_1_4_through_1_5_1_8;
 
--- Test tuple_difference function with StringType sketches
-SELECT tuple_sketch_estimate(
-  tuple_difference(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+-- Test tuple_difference_double function with StringType key sketches
+SELECT tuple_sketch_estimate_double(
+  tuple_difference_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_string_double_a_d_through_e_h;
 
--- Test tuple_difference function with BinaryType sketches
-SELECT tuple_sketch_estimate(
-  tuple_difference(
-    tuple_sketch_agg(struct(key1, val1), 6),
-    tuple_sketch_agg(struct(key2, val2), 8)))
+-- Test tuple_difference_double function with BinaryType key sketches
+SELECT tuple_sketch_estimate_double(
+  tuple_difference_double(
+    tuple_sketch_agg_double(key1, val1, 6),
+    tuple_sketch_agg_double(key2, val2, 8)))
 FROM t_binary_double_a_b_through_e_f;
 
--- Test tuple_difference function with ArrayType(IntegerType) sketches
-SELECT tuple_sketch_estimate(
-  tuple_difference(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2))))
+-- Test tuple_difference_double function with ArrayType(IntegerType) key sketches
+SELECT tuple_sketch_estimate_double(
+  tuple_difference_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2)))
 FROM t_array_int_double_1_3_through_4_6;
 
--- Test tuple_difference function with ArrayType(LongType) sketches
-SELECT tuple_sketch_estimate(
-  tuple_difference(
-    tuple_sketch_agg(struct(key1, val1)),
-    tuple_sketch_agg(struct(key2, val2), 4)))
+-- Test tuple_difference_double function with ArrayType(LongType) key sketches
+SELECT tuple_sketch_estimate_double(
+  tuple_difference_double(
+    tuple_sketch_agg_double(key1, val1),
+    tuple_sketch_agg_double(key2, val2, 4)))
 FROM t_array_long_double_1_3_through_4_6;
 
--- Test tuple_difference with summaryType parameter
-SELECT tuple_sketch_estimate(
-  tuple_difference(
-    tuple_sketch_agg(struct(key1, val1), 12, 'integer', 'sum'),
-    tuple_sketch_agg(struct(key2, val2), 12, 'integer', 'sum'), 'integer'), 'integer')
+-- Test tuple_difference_integer with integer summary type
+SELECT tuple_sketch_estimate_integer(
+  tuple_difference_integer(
+    tuple_sketch_agg_integer(key1, val1, 12, 'sum'),
+    tuple_sketch_agg_integer(key2, val2, 12, 'sum')))
 FROM t_int_int_1_5_through_7_11;
 
--- Test tuple_difference_theta to compute A-NOT-B with theta sketch
-SELECT tuple_sketch_estimate(
-  tuple_difference_theta(
-    tuple_sketch_agg(struct(key1, val1)),
+-- Test tuple_difference_theta_double to compute A-NOT-B with theta sketch
+SELECT tuple_sketch_estimate_double(
+  tuple_difference_theta_double(
+    tuple_sketch_agg_double(key1, val1),
     theta_sketch_agg(key2)))
 FROM t_int_double_1_5_through_7_11;
 
--- Test tuple_difference_theta with explicit parameters
-SELECT tuple_sketch_estimate(
-  tuple_difference_theta(
-    tuple_sketch_agg(struct(key1, val1), 12, 'double', 'sum'),
-    theta_sketch_agg(key2, 12), 'double'))
+-- Test tuple_difference_theta_double with explicit parameters
+SELECT tuple_sketch_estimate_double(
+  tuple_difference_theta_double(
+    tuple_sketch_agg_double(key1, val1, 12, 'sum'),
+    theta_sketch_agg(key2, 12)))
 FROM t_int_double_1_5_through_7_11;
 
--- Test tuple_union_agg with IntegerType and explicit lgNomEntries parameter
-SELECT tuple_sketch_estimate(tuple_union_agg(sketch, 15, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_int_double_1_5_through_7_11
+-- Test tuple_union_agg_double with IntegerType key and explicit lgNomEntries parameter
+SELECT tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 15, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_int_double_1_5_through_7_11
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2), 20) as sketch FROM t_int_double_1_5_through_7_11);
+      SELECT tuple_sketch_agg_double(key2, val2, 20) as sketch FROM t_int_double_1_5_through_7_11);
 
--- Test tuple_union_agg with DoubleType sketches and explicit lgNomEntries parameter
-SELECT tuple_sketch_estimate(tuple_union_agg(sketch, 12, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_double_double_1_1_1_4_through_1_5_1_8
+-- Test tuple_union_agg_double with DoubleType key sketches and explicit lgNomEntries parameter
+SELECT tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 12, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_double_double_1_1_1_4_through_1_5_1_8
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_double_double_1_1_1_4_through_1_5_1_8);
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_double_double_1_1_1_4_through_1_5_1_8);
 
--- Test tuple_union_agg with StringType sketches and explicit lgNomEntries parameter
-SELECT tuple_sketch_estimate(tuple_union_agg(sketch, 14, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_string_double_a_d_through_e_h
+-- Test tuple_union_agg_double with StringType key sketches and explicit lgNomEntries parameter
+SELECT tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 14, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_string_double_a_d_through_e_h
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_string_double_a_d_through_e_h);
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_string_double_a_d_through_e_h);
 
--- Test tuple_union_agg with LongType sketches and explicit lgNomEntries parameter
-SELECT tuple_sketch_estimate(tuple_union_agg(sketch, 10, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_long_double_1_5_through_7_11
+-- Test tuple_union_agg_double with LongType key sketches and explicit lgNomEntries parameter
+SELECT tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 10, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_long_double_1_5_through_7_11
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_long_double_1_5_through_7_11);
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_long_double_1_5_through_7_11);
 
--- Test tuple_union_agg with FloatType sketches and explicit lgNomEntries parameter
-SELECT tuple_sketch_estimate(tuple_union_agg(sketch, 6, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_float_double_1_1_1_4_through_1_5_1_8
+-- Test tuple_union_agg_double with FloatType keysketches and explicit lgNomEntries parameter
+SELECT tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 6, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_float_double_1_1_1_4_through_1_5_1_8
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_float_double_1_1_1_4_through_1_5_1_8);
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_float_double_1_1_1_4_through_1_5_1_8);
 
--- Test tuple_union_agg with BinaryType sketches
-SELECT tuple_sketch_estimate(tuple_union_agg(sketch, 12, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_binary_double_a_b_through_e_f
+-- Test tuple_union_agg_double with BinaryType key sketches
+SELECT tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 12, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_binary_double_a_b_through_e_f
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_binary_double_a_b_through_e_f);
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_binary_double_a_b_through_e_f);
 
--- Test tuple_union_agg with ArrayType(IntegerType) sketches and explicit lgNomEntries parameter
-SELECT tuple_sketch_estimate(tuple_union_agg(sketch, 12, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_array_int_double_1_3_through_4_6
+-- Test tuple_union_agg_double with ArrayType(IntegerType) key sketches and explicit lgNomEntries parameter
+SELECT tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 12, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_array_int_double_1_3_through_4_6
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_array_int_double_1_3_through_4_6);
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_array_int_double_1_3_through_4_6);
 
--- Test tuple_union_agg with ArrayType(LongType) sketches and explicit lgNomEntries parameter
-SELECT tuple_sketch_estimate(tuple_union_agg(sketch, 16, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_array_long_double_1_3_through_4_6
+-- Test tuple_union_agg_double with ArrayType(LongType) key sketches and explicit lgNomEntries parameter
+SELECT tuple_sketch_estimate_double(tuple_union_agg_double(sketch, 16, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_array_long_double_1_3_through_4_6
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_array_long_double_1_3_through_4_6);
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_array_long_double_1_3_through_4_6);
 
--- Test tuple_union_agg with integer summary type
-SELECT tuple_sketch_estimate(tuple_union_agg(sketch, 12, 'integer', 'sum'), 'integer')
-FROM (SELECT tuple_sketch_agg(struct(key1, val1), 12, 'integer', 'sum') as sketch FROM t_int_int_1_5_through_7_11
+-- Test tuple_union_agg_integer with integer summary type
+SELECT tuple_sketch_estimate_integer(tuple_union_agg_integer(sketch, 12, 'sum'))
+FROM (SELECT tuple_sketch_agg_integer(key1, val1, 12, 'sum') as sketch FROM t_int_int_1_5_through_7_11
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2), 12, 'integer', 'sum') as sketch FROM t_int_int_1_5_through_7_11);
+      SELECT tuple_sketch_agg_integer(key2, val2, 12, 'sum') as sketch FROM t_int_int_1_5_through_7_11);
 
--- Test tuple_intersection_agg with IntegerType sketches
-SELECT tuple_sketch_estimate(tuple_intersection_agg(sketch, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_int_double_1_5_through_7_11
+-- Test tuple_intersection_agg_double with IntegerType key sketches
+SELECT tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_int_double_1_5_through_7_11
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_int_double_1_5_through_7_11);
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_int_double_1_5_through_7_11);
 
--- Test tuple_intersection_agg with LongType sketches
-SELECT tuple_sketch_estimate(tuple_intersection_agg(sketch, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_long_double_1_5_through_7_11
+-- Test tuple_intersection_agg_double with LongType key sketches
+SELECT tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_long_double_1_5_through_7_11
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_long_double_1_5_through_7_11);
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_long_double_1_5_through_7_11);
 
--- Test tuple_intersection_agg with FloatType sketches
-SELECT tuple_sketch_estimate(tuple_intersection_agg(sketch, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_float_double_1_1_1_4_through_1_5_1_8
+-- Test tuple_intersection_agg_double with FloatType key sketches
+SELECT tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_float_double_1_1_1_4_through_1_5_1_8
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_float_double_1_1_1_4_through_1_5_1_8);
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_float_double_1_1_1_4_through_1_5_1_8);
 
--- Test tuple_intersection_agg with DoubleType sketches
-SELECT tuple_sketch_estimate(tuple_intersection_agg(sketch, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_double_double_1_1_1_4_through_1_5_1_8
+-- Test tuple_intersection_agg_double with DoubleType key sketches
+SELECT tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_double_double_1_1_1_4_through_1_5_1_8
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_double_double_1_1_1_4_through_1_5_1_8);
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_double_double_1_1_1_4_through_1_5_1_8);
 
--- Test tuple_intersection_agg with StringType sketches
-SELECT tuple_sketch_estimate(tuple_intersection_agg(sketch, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_string_double_a_d_through_e_h
+-- Test tuple_intersection_agg_double with StringType key sketches
+SELECT tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_string_double_a_d_through_e_h
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_string_double_a_d_through_e_h);
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_string_double_a_d_through_e_h);
 
--- Test tuple_intersection_agg with BinaryType sketches
-SELECT tuple_sketch_estimate(tuple_intersection_agg(sketch, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_binary_double_a_b_through_e_f
+-- Test tuple_intersection_agg_double with BinaryType key sketches
+SELECT tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_binary_double_a_b_through_e_f
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_binary_double_a_b_through_e_f);
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_binary_double_a_b_through_e_f);
 
--- Test tuple_intersection_agg with ArrayType(IntegerType) sketches
-SELECT tuple_sketch_estimate(tuple_intersection_agg(sketch, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_array_int_double_1_3_through_4_6
+-- Test tuple_intersection_agg_double with ArrayType(IntegerType) key sketches
+SELECT tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_array_int_double_1_3_through_4_6
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_array_int_double_1_3_through_4_6);
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_array_int_double_1_3_through_4_6);
 
--- Test tuple_intersection_agg with ArrayType(LongType) sketches
-SELECT tuple_sketch_estimate(tuple_intersection_agg(sketch, 'double', 'sum'))
-FROM (SELECT tuple_sketch_agg(struct(key1, val1)) as sketch FROM t_array_long_double_1_3_through_4_6
+-- Test tuple_intersection_agg_double with ArrayType(LongType) key sketches
+SELECT tuple_sketch_estimate_double(tuple_intersection_agg_double(sketch, 'sum'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_array_long_double_1_3_through_4_6
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2)) as sketch FROM t_array_long_double_1_3_through_4_6);
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_array_long_double_1_3_through_4_6);
 
--- Test tuple_intersection_agg with integer summary type
-SELECT tuple_sketch_estimate(tuple_intersection_agg(sketch, 'integer', 'sum'), 'integer')
-FROM (SELECT tuple_sketch_agg(struct(key1, val1), 12, 'integer', 'sum') as sketch FROM t_int_int_1_5_through_7_11
+-- Test tuple_intersection_agg_integer with integer summary type
+SELECT tuple_sketch_estimate_integer(tuple_intersection_agg_integer(sketch, 'sum'))
+FROM (SELECT tuple_sketch_agg_integer(key1, val1, 12, 'sum') as sketch FROM t_int_int_1_5_through_7_11
       UNION ALL
-      SELECT tuple_sketch_agg(struct(key2, val2), 12, 'integer', 'sum') as sketch FROM t_int_int_1_5_through_7_11);
+      SELECT tuple_sketch_agg_integer(key2, val2, 12, 'sum') as sketch FROM t_int_int_1_5_through_7_11);
 
--- Test tuple_sketch_agg with IntegerType and null values (nulls should be ignored)
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key, val)))
+-- Test tuple_sketch_agg_double with IntegerType key and null values (nulls should be ignored)
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES (1, 1.0D), (null, 2.0D), (2, 2.0D), (null, 3.0D), (3, 3.0D) tab(key, val);
 
--- Test tuple_sketch_agg with StringType and null values (nulls should be ignored)
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key, val)))
+-- Test tuple_sketch_agg_double with StringType key and null values (nulls should be ignored)
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES ('test', 1.0D), (null, 2.0D), ('null', 3.0D), (null, 4.0D) tab(key, val);
 
--- Test tuple_sketch_agg with LongType and null values (nulls should be ignored)
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key, val)))
+-- Test tuple_sketch_agg_double with LongType key yand null values (nulls should be ignored)
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES (100L, 1.0D), (null, 2.0D), (200L, 3.0D), (null, 4.0D), (300L, 5.0D) tab(key, val);
 
--- Test tuple_sketch_agg with DoubleType and null values (nulls should be ignored)
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(CAST(key AS DOUBLE), val)))
+-- Test tuple_sketch_agg_double with DoubleType key and null values (nulls should be ignored)
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(CAST(key AS DOUBLE), val))
 FROM VALUES (1.1, 1.0D), (null, 2.0D), (2.2, 3.0D), (null, 4.0D), (3.3, 5.0D) tab(key, val);
 
--- Test tuple_sketch_agg with FloatType and null values (nulls should be ignored)
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(CAST(key AS FLOAT), val)))
+-- Test tuple_sketch_agg_double with FloatType key and null values (nulls should be ignored)
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(CAST(key AS FLOAT), val))
 FROM VALUES (1.5, 1.0D), (null, 2.0D), (2.5, 3.0D), (null, 4.0D), (3.5, 5.0D) tab(key, val);
 
--- Test tuple_sketch_agg with BinaryType and null values (nulls should be ignored)
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key, val)))
+-- Test tuple_sketch_agg_double with BinaryType key and null values (nulls should be ignored)
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES (X'AA', 1.0D), (null, 2.0D), (X'BB', 3.0D), (null, 4.0D), (X'CC', 5.0D) tab(key, val);
 
--- Test tuple_sketch_agg with ArrayType(IntegerType) and null values (nulls should be ignored)
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key, val)))
+-- Test tuple_sketch_agg_double with ArrayType(IntegerType) key and null values (nulls should be ignored)
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES (ARRAY(1, 2), 1.0D), (null, 2.0D), (ARRAY(3, 4), 3.0D), (null, 4.0D), (ARRAY(5, 6), 5.0D) tab(key, val);
 
--- Test tuple_sketch_agg with ArrayType(LongType) and null values (nulls should be ignored)
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key, val)))
+-- Test tuple_sketch_agg_double with ArrayType(LongType) key and null values (nulls should be ignored)
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES (ARRAY(10L, 20L), 1.0), (null, 2.0D), (ARRAY(30L, 40L), 3.0D), (null, 4.0D), (ARRAY(50L, 60L), 5.0D) tab(key, val);
 
--- Test tuple_sketch_agg with arrays containing null elements
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key, val)))
+-- Test tuple_sketch_agg_double with arrays containing null elements
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES (ARRAY(1, null), 1.0), (ARRAY(1), 2.0D), (ARRAY(2, null, 3), 3.0D), (ARRAY(4), 4.0D) tab(key, val);
 
--- Test tuple_sketch_agg with arrays containing null elements (LongType)
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key, val)))
+-- Test tuple_sketch_agg_double with arrays containing null elements (LongType)
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES (ARRAY(10L, null), 1.0D), (ARRAY(10L), 2.0D), (ARRAY(20L, null, 30L), 3.0D), (ARRAY(40L), 4.0D) tab(key, val);
 
--- Test tuple_sketch_agg with empty arrays
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key, val)))
+-- Test tuple_sketch_agg_double with empty arrays
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES (ARRAY(), 1.0D), (ARRAY(1, 2), 2.0D), (ARRAY(), 3.0D), (ARRAY(3, 4), 4.0D) tab(key, val);
 
--- Test tuple_sketch_agg with empty strings
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key, val)))
+-- Test tuple_sketch_agg_double with empty strings
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES ('', 1.0D), ('a', 2.0D), ('', 3.0D), ('b', 4.0D), ('c', 5.0D) tab(key, val);
 
--- Test tuple_sketch_agg with empty binary data
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key, val)))
+-- Test tuple_sketch_agg_double with empty binary data
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES (X'', 1.0D), (X'01', 2.0D), (X'02', 3.0D), (X'03', 4.0D), (CAST('  ' AS BINARY), 5.0D), (X'e280', 6.0D), (X'c1', 7.0D), (X'c120', 8.0D) tab(key, val);
 
--- Test tuple_sketch_agg with collated string data
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1))) utf8_b FROM t_string_collation;
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1 COLLATE UTF8_LCASE, val1))) utf8_lc FROM t_string_collation;
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1 COLLATE UNICODE, val1))) unicode FROM t_string_collation;
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1 COLLATE UNICODE_CI, val1))) unicode_ci FROM t_string_collation;
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1 COLLATE UTF8_BINARY_RTRIM, val1))) utf8_b_rt FROM t_string_collation;
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1 COLLATE UTF8_LCASE_RTRIM, val1))) utf8_lc_rt FROM t_string_collation;
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1 COLLATE UNICODE_RTRIM, val1))) unicode_rt FROM t_string_collation;
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1 COLLATE UNICODE_CI_RTRIM, val1))) unicode_ci_rt FROM t_string_collation;
+-- Test tuple_sketch_agg_double with collated string data
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1)) utf8_b FROM t_string_collation;
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1 COLLATE UTF8_LCASE, val1)) utf8_lc FROM t_string_collation;
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1 COLLATE UNICODE, val1)) unicode FROM t_string_collation;
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1 COLLATE UNICODE_CI, val1)) unicode_ci FROM t_string_collation;
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1 COLLATE UTF8_BINARY_RTRIM, val1)) utf8_b_rt FROM t_string_collation;
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1 COLLATE UTF8_LCASE_RTRIM, val1)) utf8_lc_rt FROM t_string_collation;
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1 COLLATE UNICODE_RTRIM, val1)) unicode_rt FROM t_string_collation;
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1 COLLATE UNICODE_CI_RTRIM, val1)) unicode_ci_rt FROM t_string_collation;
 
 -- Comprehensive test using all TupleSketch functions in a single query
 WITH sketches AS (
-  SELECT 'int_sketch' as sketch_type, tuple_sketch_agg(struct(key1, val1), 12, 'double', 'sum') as sketch
+  SELECT 'int_sketch' as sketch_type, tuple_sketch_agg_double(key1, val1, 12, 'sum') as sketch
   FROM t_int_double_1_5_through_7_11
   UNION ALL
-  SELECT 'long_sketch' as sketch_type, tuple_sketch_agg(struct(key1, val1), 15, 'double', 'sum') as sketch
+  SELECT 'long_sketch' as sketch_type, tuple_sketch_agg_double(key1, val1, 15, 'sum') as sketch
   FROM t_long_double_1_5_through_7_11
   UNION ALL
-  SELECT 'double_sketch' as sketch_type, tuple_sketch_agg(struct(key1, val1), 10, 'double', 'sum') as sketch
+  SELECT 'double_sketch' as sketch_type, tuple_sketch_agg_double(key1, val1, 10, 'sum') as sketch
   FROM t_double_double_1_1_1_4_through_1_5_1_8
   UNION ALL
-  SELECT 'string_sketch' as sketch_type, tuple_sketch_agg(struct(key1, val1), 14, 'double', 'sum') as sketch
+  SELECT 'string_sketch' as sketch_type, tuple_sketch_agg_double(key1, val1, 14, 'sum') as sketch
   FROM t_string_double_a_d_through_e_h
 ),
 union_result AS (
-  SELECT tuple_union_agg(sketch, 16, 'double', 'sum') as union_sketch FROM sketches
+  SELECT tuple_union_agg_double(sketch, 16, 'sum') as union_sketch FROM sketches
 ),
 individual_sketches AS (
   SELECT
-    tuple_sketch_agg(struct(key1, val1), 12, 'double', 'sum') as sketch1,
-    tuple_sketch_agg(struct(key2, val2), 12, 'double', 'sum') as sketch2
+    tuple_sketch_agg_double(key1, val1, 12, 'sum') as sketch1,
+    tuple_sketch_agg_double(key2, val2, 12, 'sum') as sketch2
   FROM t_int_double_1_5_through_7_11
 )
 SELECT
   -- Basic estimate from union of all sketches
-  tuple_sketch_estimate((SELECT union_sketch FROM union_result)) as union_estimate,
+  tuple_sketch_estimate_double((SELECT union_sketch FROM union_result)) as union_estimate,
   -- Summary aggregation from union
-  tuple_sketch_summary((SELECT union_sketch FROM union_result), 'double', 'sum') as union_summary,
+  tuple_sketch_summary_double((SELECT union_sketch FROM union_result), 'sum') as union_summary,
   -- Union of two individual sketches
-  tuple_sketch_estimate(tuple_union(sketch1, sketch2, 15, 'double', 'sum')) as binary_union_estimate,
+  tuple_sketch_estimate_double(tuple_union_double(sketch1, sketch2, 15, 'sum')) as binary_union_estimate,
   -- Intersection of two individual sketches
-  tuple_sketch_estimate(tuple_intersection(sketch1, sketch2, 'double', 'sum')) as intersection_estimate,
+  tuple_sketch_estimate_double(tuple_intersection_double(sketch1, sketch2, 'sum')) as intersection_estimate,
   -- Difference of two individual sketches
-  tuple_sketch_estimate(tuple_difference(sketch1, sketch2, 'double')) as difference_estimate
+  tuple_sketch_estimate_double(tuple_difference_double(sketch1, sketch2)) as difference_estimate
 FROM individual_sketches;
 
 -- Negative test cases
 
--- Test tuple_sketch_agg with lgNomEntries value of 2 (too low, minimum is 4) - should fail
-SELECT tuple_sketch_agg(struct(col, val), 2)
+-- Test tuple_sketch_agg_double with lgNomEntries value of 2 (too low, minimum is 4) - should fail
+SELECT tuple_sketch_agg_double(col, val, 2)
 FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val);
 
--- Test tuple_sketch_agg with lgNomEntries value of 40 (too high, maximum is 26) - should fail
-SELECT tuple_sketch_agg(struct(col, val), 40)
+-- Test tuple_sketch_agg_double with lgNomEntries value of 40 (too high, maximum is 26) - should fail
+SELECT tuple_sketch_agg_double(col, val, 40)
 FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val);
 
--- Test tuple_union_agg with lgNomEntries value of 3 (too low, minimum is 4) - should fail
-SELECT tuple_union_agg(sketch, 3, 'double', 'sum')
-FROM (SELECT tuple_sketch_agg(struct(col, val), 12) as sketch
+-- Test tuple_union_agg_double with lgNomEntries value of 3 (too low, minimum is 4) - should fail
+SELECT tuple_union_agg_double(sketch, 3, 'sum')
+FROM (SELECT tuple_sketch_agg_double(col, val, 12) as sketch
         FROM VALUES (1, 1.0D) AS tab(col, val)
       UNION ALL
-      SELECT tuple_sketch_agg(struct(col, val), 20) as sketch
+      SELECT tuple_sketch_agg_double(col, val, 20) as sketch
         FROM VALUES (1, 1.0D) AS tab(col, val));
 
--- Test tuple_union_agg with lgNomEntries value of 27 (too high, maximum is 26) - should fail
-SELECT tuple_union_agg(sketch, 27, 'double', 'sum')
-FROM (SELECT tuple_sketch_agg(struct(col, val), 12) as sketch
+-- Test tuple_union_agg_double with lgNomEntries value of 27 (too high, maximum is 26) - should fail
+SELECT tuple_union_agg_double(sketch, 27, 'sum')
+FROM (SELECT tuple_sketch_agg_double(col, val, 12) as sketch
         FROM VALUES (1, 1.0D) AS tab(col, val)
       UNION ALL
-      SELECT tuple_sketch_agg(struct(col, val), 20) as sketch
+      SELECT tuple_sketch_agg_double(col, val, 20) as sketch
         FROM VALUES (1, 1.0D) AS tab(col, val));
 
 -- lgNomEntries parameter is NULL
-SELECT tuple_sketch_agg(struct(col, val), CAST(NULL AS INT)) AS lg_nom_entries_is_null
+SELECT tuple_sketch_agg_double(col, val, CAST(NULL AS INT)) AS lg_nom_entries_is_null
 FROM VALUES (15, 1.0D), (16, 2.0D), (17, 3.0D) tab(col, val);
 
 -- lgNomEntries parameter is not foldable (non-constant)
-SELECT tuple_sketch_agg(struct(col, val), CAST(col AS INT)) AS lg_nom_entries_non_constant
+SELECT tuple_sketch_agg_double(col, val, CAST(col AS INT)) AS lg_nom_entries_non_constant
 FROM VALUES (15, 1.0D), (16, 2.0D), (17, 3.0D) tab(col, val);
 
 -- lgNomEntries parameter has wrong type (STRING instead of INT)
-SELECT tuple_sketch_agg(struct(col, val), '15')
-FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val);
-
--- summaryType parameter is not foldable (non-constant)
-SELECT tuple_sketch_agg(struct(col, val), 12, CAST(col AS STRING))
-FROM VALUES (15, 1.0D), (16, 2.0D), (17, 3.0D) tab(col, val);
-
--- Invalid summaryType parameter value
-SELECT tuple_sketch_agg(struct(col, val), 12, 'invalid_type')
+SELECT tuple_sketch_agg_double(col, val, '15')
 FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val);
 
 -- mode parameter is not foldable (non-constant)
-SELECT tuple_sketch_agg(struct(col, val), 12, 'double', CAST(col AS STRING))
+SELECT tuple_sketch_agg_double(col, val, 12, CAST(col AS STRING))
 FROM VALUES (15, 1.0D), (16, 2.0D), (17, 3.0D) tab(col, val);
 
 -- Invalid mode parameter value
-SELECT tuple_sketch_agg(struct(col, val), 12, 'double', 'invalid_mode')
+SELECT tuple_sketch_agg_double(col, val, 12, 'invalid_type')
 FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val);
 
--- Invalid struct input - not a struct
-SELECT tuple_sketch_agg(col, 15)
+-- Invalid input - summary is an int when supposed to be double
+SELECT tuple_sketch_agg_double(col, 15)
 FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val);
 
--- Invalid struct input - struct # of elements is not 2
-SELECT tuple_sketch_agg(struct(col, val, 2.0D), 15)
+-- Invalid input - double instead of int for lgNomEntries
+SELECT tuple_sketch_agg_double(col, val, 2.0D, 15)
 FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val);
 
--- Test tuple_union with integers (1, 2) instead of binary sketch data - should fail
-SELECT tuple_union(1, 2)
+-- Test tuple_union_double with integers (1, 2) instead of binary sketch data - should fail
+SELECT tuple_union_double(1, 2)
 FROM VALUES
   (1, 4),
   (2, 5),
   (3, 6) AS tab(col1, col2);
 
--- Test tuple_intersection with integers (1, 2) instead of binary sketch data - should fail
-SELECT tuple_intersection(1, 2)
+-- Test tuple_intersection_double with integers (1, 2) instead of binary sketch data - should fail
+SELECT tuple_intersection_double(1, 2)
 FROM VALUES
   (1, 4),
   (2, 5),
   (3, 6) AS tab(col1, col2);
 
--- Test tuple_difference with integers (1, 2) instead of binary sketch data - should fail
-SELECT tuple_difference(1, 2)
+-- Test tuple_difference_double with integers (1, 2) instead of binary sketch data - should fail
+SELECT tuple_difference_double(1, 2)
 FROM VALUES
   (1, 4),
   (2, 5),
   (3, 6) AS tab(col1, col2);
 
--- Test tuple_union with string 'invalid' instead of integer for lgNomEntries parameter - should fail
-SELECT tuple_union(
-    tuple_sketch_agg(struct(col1, 1.0D)),
-    tuple_sketch_agg(struct(col2, 2.0D)), 'invalid')
+-- Test tuple_union_double with string 'invalid' instead of integer for lgNomEntries parameter - should fail
+SELECT tuple_union_double(
+    tuple_sketch_agg_double(col1, 1.0D),
+    tuple_sketch_agg_double(col2, 2.0D), 'invalid')
 FROM VALUES
   (1, 4),
   (2, 5),
   (3, 6) AS tab(col1, col2);
 
--- Test tuple_intersection with string 'invalid_sketch' instead of binary sketch data - should fail
-SELECT tuple_intersection(
-    tuple_sketch_agg(struct(col1, 1.0)),
+-- Test tuple_intersection_double with string 'invalid_sketch' instead of binary sketch data - should fail
+SELECT tuple_intersection_double(
+    tuple_sketch_agg_double(col1, 1.0),
     'invalid_sketch')
 FROM VALUES
   (1, 4),
   (2, 5),
   (3, 6) AS tab(col1, col2);
 
--- Test tuple_sketch_estimate with invalid binary data ('abc') that is not a valid tuple sketch - should fail
-SELECT tuple_sketch_estimate(CAST('abc' AS BINARY));
+-- Test tuple_sketch_estimate_double with invalid binary data ('abc') that is not a valid tuple sketch - should fail
+SELECT tuple_sketch_estimate_double(CAST('abc' AS BINARY));
 
--- Test tuple_union with invalid binary data ('abc', 'def') that are not valid tuple sketches - should fail
-SELECT tuple_union(CAST('abc' AS BINARY), CAST('def' AS BINARY));
+-- Test tuple_union_double with invalid binary data ('abc', 'def') that are not valid tuple sketches - should fail
+SELECT tuple_union_double(CAST('abc' AS BINARY), CAST('def' AS BINARY));
 
--- Test tuple_intersection with invalid binary data ('abc', 'def') that are not valid tuple sketches - should fail
-SELECT tuple_intersection(CAST('abc' AS BINARY), CAST('def' AS BINARY));
+-- Test tuple_intersection_double with invalid binary data ('abc', 'def') that are not valid tuple sketches - should fail
+SELECT tuple_intersection_double(CAST('abc' AS BINARY), CAST('def' AS BINARY));
 
--- Test tuple_difference with invalid binary data ('abc', 'def') that are not valid tuple sketches - should fail
-SELECT tuple_difference(CAST('abc' AS BINARY), CAST('def' AS BINARY));
+-- Test tuple_difference_double with invalid binary data ('abc', 'def') that are not valid tuple sketches - should fail
+SELECT tuple_difference_double(CAST('abc' AS BINARY), CAST('def' AS BINARY));
 
--- Test tuple_union_agg with invalid binary data ('abc') that is not a valid tuple sketch - should fail
-SELECT tuple_union_agg(buffer, 15, 'double', 'sum')
+-- Test tuple_union_agg_double with invalid binary data ('abc') that is not a valid tuple sketch - should fail
+SELECT tuple_union_agg_double(buffer, 15, 'sum')
 FROM (SELECT CAST('abc' AS BINARY) AS buffer);
 
--- Test tuple_intersection_agg with invalid binary data ('abc') that is not a valid tuple sketch - should fail
-SELECT tuple_intersection_agg(buffer, 'double', 'sum')
+-- Test tuple_intersection_agg_double with invalid binary data ('abc') that is not a valid tuple sketch - should fail
+SELECT tuple_intersection_agg_double(buffer, 'sum')
 FROM (SELECT CAST('abc' AS BINARY) AS buffer);
 
--- Test tuple_sketch_summary with invalid summaryType for operation - should fail
-SELECT tuple_sketch_summary(tuple_sketch_agg(struct(key1, val1), 12, 'string', 'sum'), 'string', 'sum')
-FROM t_string_string_a_d_through_e_h;
-
--- Test tuple_union_theta with mismatched sketch types - theta sketch in first argument should fail
-SELECT tuple_union_theta(
+-- Test tuple_union_theta_double with mismatched sketch types - theta sketch in first argument should fail
+SELECT tuple_union_theta_double(
     theta_sketch_agg(key1),
-    tuple_sketch_agg(struct(key2, val2)))
+    tuple_sketch_agg_double(key2, val2))
 FROM t_int_double_1_5_through_7_11;
 
--- Test tuple_intersection_theta with mismatched sketch types - theta sketch in first argument should fail
-SELECT tuple_intersection_theta(
+-- Test tuple_intersection_theta_double with mismatched sketch types - theta sketch in first argument should fail
+SELECT tuple_intersection_theta_double(
     theta_sketch_agg(key1),
-    tuple_sketch_agg(struct(key2, val2)))
+    tuple_sketch_agg_double(key2, val2))
 FROM t_int_double_1_5_through_7_11;
 
--- Test tuple_difference_theta with mismatched sketch types - theta sketch in first argument should fail
-SELECT tuple_difference_theta(
+-- Test tuple_difference_theta_double with mismatched sketch types - theta sketch in first argument should fail
+SELECT tuple_difference_theta_double(
     theta_sketch_agg(key1),
-    tuple_sketch_agg(struct(key2, val2)))
+    tuple_sketch_agg_double(key2, val2))
 FROM t_int_double_1_5_through_7_11;
 
--- Test tuple_sketch_agg with wrong struct field type for summary (expecting double but got string)
-SELECT tuple_sketch_agg(struct(col1, col2), 12, 'double', 'sum')
+-- Test tuple_sketch_agg_double with wrong value type (expecting double but got string)
+SELECT tuple_sketch_agg_double(col1, col2, 12, 'sum')
 FROM VALUES (1, 'invalid'), (2, 'invalid') AS tab(col1, col2);
 
--- Test tuple_sketch_agg with wrong struct field type for summary (expecting integer but got double)
-SELECT tuple_sketch_agg(struct(col1, col2), 12, 'integer', 'sum')
+-- Test tuple_sketch_agg_integer with wrong value type (expecting integer but got double)
+SELECT tuple_sketch_agg_integer(col1, col2, 12, 'sum')
 FROM VALUES (1, 1.5D), (2, 2.5D) AS tab(col1, col2);
 
--- Test tuple_sketch_estimate with wrong summaryType parameter
-SELECT tuple_sketch_estimate(tuple_sketch_agg(struct(key1, val1), 12, 'double', 'sum'), 'integer')
+-- Test tuple_sketch_estimate_integer with wrong sketch type (integer estimate on double sketch)
+SELECT tuple_sketch_estimate_integer(tuple_sketch_agg_double(key1, val1, 12, 'sum'))
 FROM t_int_double_1_5_through_7_11;
 
 -- Clean up
@@ -796,4 +784,5 @@ DROP TABLE IF EXISTS t_array_int_double_1_3_through_4_6;
 DROP TABLE IF EXISTS t_array_long_double_1_3_through_4_6;
 DROP TABLE IF EXISTS t_int_int_1_5_through_7_11;
 DROP TABLE IF EXISTS t_string_string_a_d_through_e_h;
+DROP TABLE IF EXISTS t_string_array_string_a_d_through_e_h;
 DROP TABLE IF EXISTS t_string_collation;
