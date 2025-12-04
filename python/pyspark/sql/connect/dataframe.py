@@ -1845,12 +1845,6 @@ class DataFrame(ParentDataFrame):
         return table.cast(schema)
 
     def toPandas(self) -> "PandasDataFrameLike":
-        query = self._plan.to_proto(self._session.client)
-        pdf, ei = self._session.client.to_pandas(query, self._plan.observations)
-        self._execution_info = ei
-        return pdf
-
-    def toPandas(self) -> "PandasDataFrameLike":
         return self._to_pandas()
 
     def _to_pandas(self, **kwargs) -> "PandasDataFrameLike":
