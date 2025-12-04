@@ -62,7 +62,6 @@ from pyspark.sql.types import (
 )
 from pyspark.errors.exceptions.captured import install_exception_handler
 from pyspark.sql.utils import (
-    is_timestamp_ntz_preferred,
     to_str,
     try_remote_session_classmethod,
     remote_only,
@@ -1048,10 +1047,25 @@ class SparkSession(SparkConversionMixin):
                 errorClass="CANNOT_INFER_EMPTY_SCHEMA",
                 messageParameters={},
             )
-        infer_dict_as_struct = self._jconf.inferDictAsStruct()
-        infer_array_from_first_element = self._jconf.legacyInferArrayTypeFromFirstElement()
-        infer_map_from_first_pair = self._jconf.legacyInferMapStructTypeFromFirstItem()
-        prefer_timestamp_ntz = is_timestamp_ntz_preferred()
+
+        (
+            timestampType,
+            inferDictAsStruct,
+            legacyInferArrayTypeFromFirstElement,
+            legacyInferMapStructTypeFromFirstItem,
+        ) = self._jconf.getConfs(
+            [
+                "spark.sql.timestampType",
+                "spark.sql.pyspark.inferNestedDictAsStruct.enabled",
+                "spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled",
+                "spark.sql.pyspark.legacy.inferMapTypeFromFirstPair.enabled",
+            ]
+        )
+        prefer_timestamp_ntz = timestampType == "TIMESTAMP_NTZ"
+        infer_dict_as_struct = inferDictAsStruct == "true"
+        infer_array_from_first_element = legacyInferArrayTypeFromFirstElement == "true"
+        infer_map_from_first_pair = legacyInferMapStructTypeFromFirstItem == "true"
+
         schema = reduce(
             _merge_type,
             (
@@ -1101,10 +1115,24 @@ class SparkSession(SparkConversionMixin):
                 messageParameters={},
             )
 
-        infer_dict_as_struct = self._jconf.inferDictAsStruct()
-        infer_array_from_first_element = self._jconf.legacyInferArrayTypeFromFirstElement()
-        infer_map_from_first_pair = self._jconf.legacyInferMapStructTypeFromFirstItem()
-        prefer_timestamp_ntz = is_timestamp_ntz_preferred()
+        (
+            timestampType,
+            inferDictAsStruct,
+            legacyInferArrayTypeFromFirstElement,
+            legacyInferMapStructTypeFromFirstItem,
+        ) = self._jconf.getConfs(
+            [
+                "spark.sql.timestampType",
+                "spark.sql.pyspark.inferNestedDictAsStruct.enabled",
+                "spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled",
+                "spark.sql.pyspark.legacy.inferMapTypeFromFirstPair.enabled",
+            ]
+        )
+        prefer_timestamp_ntz = timestampType == "TIMESTAMP_NTZ"
+        infer_dict_as_struct = inferDictAsStruct == "true"
+        infer_array_from_first_element = legacyInferArrayTypeFromFirstElement == "true"
+        infer_map_from_first_pair = legacyInferMapStructTypeFromFirstItem == "true"
+
         if samplingRatio is None:
             schema = _infer_schema(
                 first,
