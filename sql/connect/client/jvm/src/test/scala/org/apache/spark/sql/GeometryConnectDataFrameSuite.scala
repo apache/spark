@@ -112,8 +112,8 @@ class GeometryConnectDataFrameSuite extends QueryTest with RemoteSparkSession {
 
   test("geospatial feature disabled") {
     withSQLConf("spark.sql.geospatial.enabled" -> "false") {
-      val geometry = Geometry.fromWKB(point1, 4326)
-      val schema = StructType(Seq(StructField("col1", GeometryType(4326))))
+      val geometry = Geometry.fromWKB(point1, 0)
+      val schema = StructType(Seq(StructField("col1", GeometryType(0))))
       // Java List[Row] + schema.
       val javaList = java.util.Arrays.asList(Row(geometry))
       checkError(
