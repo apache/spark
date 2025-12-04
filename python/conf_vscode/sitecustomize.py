@@ -16,23 +16,34 @@
 #
 
 try:
-    import debugpy
-    import fcntl
     import os
     import sys
+
     if "DEBUGPY_ADAPTER_ENDPOINTS" in os.environ and not any("debugpy" in arg for arg in sys.argv):
-        lock_file = os.getenv("DEBUGPY_ADAPTER_ENDPOINTS") + ".lock"
-        try:
-            fd = os.open(lock_file, os.O_CREAT | os.O_RDWR, 0o600)
-            fcntl.flock(fd, fcntl.LOCK_EX)
-            debugpy.listen(0)
-            debugpy.wait_for_client()
+
+        def install_debugpy():
+            import debugpy
+            import fcntl
+
+            lock_file = os.getenv("DEBUGPY_ADAPTER_ENDPOINTS") + ".lock"
             try:
-                os.remove(os.getenv("DEBUGPY_ADAPTER_ENDPOINTS"))
-            except Exception:
-                pass
-        finally:
-            fcntl.flock(fd, fcntl.LOCK_UN)
-            os.close(fd)
+                fd = os.open(lock_file, os.O_CREAT | os.O_RDWR, 0o600)
+                fcntl.flock(fd, fcntl.LOCK_EX)
+                debugpy.listen(0)
+                debugpy.wait_for_client()
+                try:
+                    os.remove(os.getenv("DEBUGPY_ADAPTER_ENDPOINTS"))
+                except Exception:
+                    pass
+            finally:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+                os.close(fd)
+
+        if "pyspark.daemon" in sys.orig_argv and "PYSPARK_DEBUGPY_HOOK_DAEMON" not in os.environ:
+            # Hooking daemon could be potentially dangerous because we need to fork later
+            os.register_at_fork(after_in_child=install_debugpy)
+        else:
+            install_debugpy()
+
 except ImportError:
     pass
