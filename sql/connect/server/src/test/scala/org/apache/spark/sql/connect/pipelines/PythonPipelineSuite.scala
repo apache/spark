@@ -1105,6 +1105,70 @@ class PythonPipelineSuite
         |""".stripMargin)
   }
 
+  private val eagerExecutionPythonCommands = Seq(
+    "df.collect()",
+    "df.first()",
+    "df.head(0)",
+    "df.toPandas()",
+    "spark.readStream.format(\"rate\").load().writeStream" +
+      ".format(\"memory\").queryName(\"test_query_name\").start()")
+
+  gridTest("unsupported eager execution inside flow function is blocked")(
+    eagerExecutionPythonCommands) { unsupportedEagerExecutionCommand =>
+    val ex = intercept[RuntimeException] {
+      buildGraph(s"""
+        |@dp.materialized_view()
+        |def mv():
+        |  df = spark.range(5)
+        |  $unsupportedEagerExecutionCommand
+        |  return df
+        |""".stripMargin)
+    }
+    assert(ex.getMessage.contains("ATTEMPT_ANALYSIS_IN_PIPELINE_QUERY_FUNCTION"))
+  }
+
+  gridTest("eager execution outside flow function is allowed")(eagerExecutionPythonCommands) {
+    unsupportedEagerExecutionCommand =>
+      buildGraph(s"""
+      |df = spark.range(5)
+      |$unsupportedEagerExecutionCommand
+      |
+      |@dp.materialized_view()
+      |def mv():
+      |  df = spark.range(5)
+      |  return df
+      |""".stripMargin)
+  }
+
+  private val eagerAnalysisPythonCommands = Seq("df.schema", "df.isStreaming", "df.isLocal()")
+
+  gridTest("eager analysis inside flow function is blocked")(eagerAnalysisPythonCommands) {
+    eagerAnalysisPythonCommand =>
+      val ex = intercept[RuntimeException] {
+        buildGraph(s"""
+          |@dp.materialized_view()
+          |def mv():
+          |  df = spark.range(5)
+          |  $eagerAnalysisPythonCommand
+          |  return df
+          |""".stripMargin)
+      }
+      assert(ex.getMessage.contains("ATTEMPT_ANALYSIS_IN_PIPELINE_QUERY_FUNCTION"))
+  }
+
+  gridTest("eager analysis outside flow function is allowed")(eagerAnalysisPythonCommands) {
+    eagerAnalysisPythonCommand =>
+      buildGraph(s"""
+        |df = spark.range(5)
+        |$eagerAnalysisPythonCommand
+        |
+        |@dp.materialized_view()
+        |def mv():
+        |  df = spark.range(5)
+        |  return df
+        |""".stripMargin)
+  }
+
   override protected def test(testName: String, testTags: Tag*)(testFun: => Any)(implicit
       pos: Position): Unit = {
     if (PythonTestDepsChecker.isConnectDepsAvailable) {

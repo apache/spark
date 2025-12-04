@@ -44,6 +44,22 @@ if ! python3 -c "import debugpy" 2>/dev/null; then
   exit 1
 fi
 
+# If --hook-daemon is in the arguments, set the env variable to hook the daemon process
+# Daemon is not hooked by default to avoid potential fork issues
+new_args=()
+for arg in "$@"; do
+  case "$arg" in
+    --hook-daemon)
+      export PYSPARK_DEBUGPY_HOOK_DAEMON=1
+      # skip this arg
+      ;;
+    *)
+      new_args+=("$arg")
+      ;;
+  esac
+done
+set -- "${new_args[@]}"
+
 export DEBUGPY_ADAPTER_ENDPOINTS=$VSCODE_DEBUGPY_ADAPTER_ENDPOINTS
 export PYTHONPATH="$FWDIR/conf_vscode:$PYTHONPATH"
 
