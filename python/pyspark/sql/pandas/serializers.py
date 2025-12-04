@@ -1326,10 +1326,7 @@ class ArrowStreamAggPandasIterUDFSerializer(ArrowStreamPandasUDFSerializer):
                 # Lazily read and convert Arrow batches to pandas Series one at a time
                 # from the stream. This avoids loading all batches into memory for the group
                 batch_iter = (
-                    tuple(
-                        self.arrow_to_pandas(c, i)
-                        for i, c in enumerate(batch.columns)
-                    )
+                    tuple(self.arrow_to_pandas(c, i) for i, c in enumerate(batch.columns))
                     for batch in ArrowStreamSerializer.load_stream(self, stream)
                 )
                 yield batch_iter

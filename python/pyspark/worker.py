@@ -3322,8 +3322,7 @@ def read_udfs(pickleSer, infile, eval_type):
                 # Multiple columns: Iterator[Tuple[pd.Series, ...]] ->
                 # Iterator[Tuple[pd.Series, ...]]
                 series_iter = (
-                    tuple(batch_series[o] for o in arg_offsets)
-                    for batch_series in batch_iter
+                    tuple(batch_series[o] for o in arg_offsets) for batch_series in batch_iter
                 )
             return f(series_iter)
 

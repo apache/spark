@@ -897,7 +897,6 @@ class GroupedAggPandasUDFTestsMixin:
                     )
                     assert_frame_equal(expected, result)
 
-
     def test_iterator_grouped_agg_basic(self):
         """
         Test basic functionality of iterator grouped agg pandas UDF with Iterator[pd.Series].
@@ -918,12 +917,7 @@ class GroupedAggPandasUDFTestsMixin:
                 cnt += len(series)
             return sum_val / cnt if cnt > 0 else 0.0
 
-        result = (
-            df.groupby("id")
-            .agg(pandas_mean_iter(df["v"]).alias("mean"))
-            .sort("id")
-            .collect()
-        )
+        result = df.groupby("id").agg(pandas_mean_iter(df["v"]).alias("mean")).sort("id").collect()
 
         # Expected means:
         # Group 1: (1.0 + 2.0) / 2 = 1.5
@@ -989,9 +983,7 @@ class GroupedAggPandasUDFTestsMixin:
                 total += series.sum()
             return total
 
-        self.assertEqual(
-            pandas_sum_iter.evalType, PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF
-        )
+        self.assertEqual(pandas_sum_iter.evalType, PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF)
 
         @pandas_udf("double")
         def pandas_sum_iter_tuple(it: Iterator[Tuple[pd.Series, pd.Series]]) -> float:
@@ -1033,11 +1025,7 @@ class GroupedAggPandasUDFTestsMixin:
                         break
                 return total / count if count > 0 else 0.0
 
-            result = (
-                df.groupby("id")
-                .agg(pandas_sum_partial(df["v"]).alias("mean"))
-                .sort("id")
-            )
+            result = df.groupby("id").agg(pandas_sum_partial(df["v"]).alias("mean")).sort("id")
 
             # Verify results are correct for partial consumption
             # With batch size = 2:
