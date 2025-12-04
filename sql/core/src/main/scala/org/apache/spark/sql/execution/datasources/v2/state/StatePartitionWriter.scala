@@ -16,19 +16,20 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.state
 
-import java.io.IOException
+import java.util.UUID
 
 import scala.collection.MapView
 import scala.collection.immutable.HashMap
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
-import org.apache.spark.sql.execution.streaming.state.{KeyStateEncoderSpec, StateStore, StateStoreConf, StateStoreId, StateStoreProvider, StateStoreProviderId}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.DIR_NAME_STATE
+import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreColFamilySchema, StateStoreConf, StateStoreId, StateStoreProvider, StateStoreProviderId}
 
 /**
  * A writer that can directly write binary data to the streaming state store.
@@ -44,11 +45,13 @@ import org.apache.spark.sql.types.StructType
 class StatePartitionAllColumnFamiliesWriter(
      storeConf: StateStoreConf,
      hadoopConf: Configuration,
-     partition: StateStoreInputPartition,
-     columnFamilyToSchemaMap: HashMap[String, (StructType, StructType)],
-     keyStateEncoderSpec: KeyStateEncoderSpec) {
-
-  private val (defaultKeySchema, defaultValueSchema) = {
+     partitionId: Int,
+     targetCpLocation: String,
+     operatorId: Int,
+     storeName: String,
+     batchId: Long,
+     columnFamilyToSchemaMap: HashMap[String, StateStoreColFamilySchema]) {
+  private val defaultSchema = {
     columnFamilyToSchemaMap.getOrElse(
       StateStore.DEFAULT_COL_FAMILY_NAME,
       throw new IllegalArgumentException(
@@ -57,43 +60,39 @@ class StatePartitionAllColumnFamiliesWriter(
   }
 
   private val columnFamilyToKeySchemaLenMap: MapView[String, Int] =
-    columnFamilyToSchemaMap.view.mapValues(_._1.length)
+    columnFamilyToSchemaMap.view.mapValues(_.keySchema.length)
   private val columnFamilyToValueSchemaLenMap: MapView[String, Int] =
-    columnFamilyToSchemaMap.view.mapValues(_._2.length)
+    columnFamilyToSchemaMap.view.mapValues(_.valueSchema.length)
 
   private val rowConverter = {
-     val schema = SchemaUtil.getSourceSchema(
-       partition.sourceOptions, defaultKeySchema, defaultValueSchema, None, None)
+    val schema = SchemaUtil.getScanAllColumnFamiliesSchema(defaultSchema.keySchema)
     CatalystTypeConverters.createToCatalystConverter(schema)
   }
 
   protected lazy val provider: StateStoreProvider = {
-    val stateStoreId = StateStoreId(partition.sourceOptions.stateCheckpointLocation.toString,
-      partition.sourceOptions.operatorId, partition.partition, partition.sourceOptions.storeName)
-    val stateStoreProviderId = StateStoreProviderId(stateStoreId, partition.queryId)
+    val stateCheckpointLocation = new Path(targetCpLocation, DIR_NAME_STATE).toString
+    val stateStoreId = StateStoreId(stateCheckpointLocation,
+      operatorId, partitionId, storeName)
+    val stateStoreProviderId = StateStoreProviderId(stateStoreId, UUID.randomUUID())
 
     val provider = StateStoreProvider.createAndInit(
-      stateStoreProviderId, defaultKeySchema, defaultValueSchema, keyStateEncoderSpec,
+      stateStoreProviderId, defaultSchema.keySchema, defaultSchema.valueSchema,
+      defaultSchema.keyStateEncoderSpec.get,
       useColumnFamilies = false, storeConf, hadoopConf,
       useMultipleValuesPerKey = false, stateSchemaProvider = None)
     provider
   }
 
   private lazy val stateStore: StateStore = {
-    val stateStoreCkptId = if (storeConf.enableStateStoreCheckpointIds) {
-      Some(java.util.UUID.randomUUID.toString)
-    } else {
-      None
-    }
-    val version = partition.sourceOptions.batchId + 1
-    // Create empty store to avoid loading old partition data during repartitioning
+    // TODO[SPARK-54590]: Support checkpoint V2 in StatePartitionAllColumnFamiliesWriter
+    // Create empty store to avoid loading old partition data since we are rewriting the
+    // store e.g. during repartitioning
     // Use loadEmpty=true to create a fresh state store without loading previous versions
     // We create the empty store AT version, and the next commit will
     // produce version + 1
     provider.getStore(
-      version,
-      stateStoreCkptId,
-      forceSnapshotOnCommit = true,
+      batchId + 1,
+      stateStoreCkptId = None,
       loadEmpty = true
     )
   }
@@ -103,19 +102,22 @@ class StatePartitionAllColumnFamiliesWriter(
   // - key_bytes, BinaryType
   // - value_bytes, BinaryType
   // - column_family_name, StringType
-  def put(partition: Iterator[Row]): Unit = {
-    partition.foreach(row => putRaw(row))
-    stateStore.commit()
+  def put(rows: Iterator[Row]): Unit = {
+    try {
+      rows.foreach(row => putRaw(row))
+      stateStore.commit()
+    } finally {
+      if (!stateStore.hasCommitted) {
+        stateStore.abort()
+      }
+    }
   }
 
   private def putRaw(rawRecord: Row): Unit = {
     val record = rowConverter(rawRecord).asInstanceOf[InternalRow]
-    // Validate record schema
-    if (record.numFields != 4) {
-      throw new IOException(
+    assert(record.numFields == 4,
         s"Invalid record schema: expected 4 fields (partition_key, key_bytes, value_bytes, " +
           s"column_family_name), got ${record.numFields}")
-    }
 
     // Extract raw bytes and column family name from the record
     val keyBytes = record.getBinary(1)
@@ -130,7 +132,6 @@ class StatePartitionAllColumnFamiliesWriter(
     val valueRow = new UnsafeRow(columnFamilyToValueSchemaLenMap(colFamilyName))
     valueRow.pointTo(valueBytes, valueBytes.length)
 
-    // Use StateStore API which handles proper RocksDB encoding (version byte, checksums, etc.)
     stateStore.put(keyRow, valueRow, colFamilyName)
   }
 }

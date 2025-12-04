@@ -16,14 +16,14 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.state
 
-import java.util.UUID
+import java.io.File
 
 import scala.collection.immutable.HashMap
 
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryCheckpointMetadata}
-import org.apache.spark.sql.execution.streaming.state.{KeyStateEncoderSpec, NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, RocksDBStateStoreProvider, StateStore, StateStoreConf, StateStoreId}
+import org.apache.spark.sql.execution.streaming.state.{KeyStateEncoderSpec, NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, RocksDBStateStoreProvider, StateStore, StateStoreColFamilySchema, StateStoreConf, StateStoreId}
 import org.apache.spark.sql.execution.streaming.utils.StreamingUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, Trigger}
@@ -102,37 +102,30 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
 
     // Create column family to schema map
     val columnFamilyToSchemaMap = HashMap(
-      StateStore.DEFAULT_COL_FAMILY_NAME -> (keySchema, valueSchema)
-    )
-
-    // Create StateSourceOptions for the target checkpoint
-    val targetStateSourceOptions = StateSourceOptions(
-      resolvedCpLocation = targetCpLocation,
-      batchId = lastBatch,
-      operatorId = 0,
-      storeName = storeName.getOrElse(StateStoreId.DEFAULT_STORE_NAME),
-      joinSide = StateSourceOptions.JoinSideValues.none,
-      readChangeFeed = false,
-      fromSnapshotOptions = None,
-      readChangeFeedOptions = None,
-      stateVarName = None,
-      readRegisteredTimers = false,
-      flattenCollectionTypes = true,
-      internalOnlyReadAllColumnFamilies = true
+      StateStore.DEFAULT_COL_FAMILY_NAME -> StateStoreColFamilySchema(
+        StateStore.DEFAULT_COL_FAMILY_NAME,
+        keySchemaId = 0,
+        keySchema,
+        valueSchemaId = 0,
+        valueSchema,
+        keyStateEncoderSpec = Some(keyStateEncoderSpec)
+      )
     )
 
     val storeConf: StateStoreConf = StateStoreConf(SQLConf.get)
     val serializableHadoopConf = new SerializableConfiguration(hadoopConf)
-    val queryId = UUID.randomUUID()
 
     // Define the partition processing function
     val putPartitionFunc: Iterator[Row] => Unit = partition => {
-      val partitionInfo = new StateStoreInputPartition(
-        TaskContext.getPartitionId(), queryId, targetStateSourceOptions
-      )
       val allCFWriter = new StatePartitionAllColumnFamiliesWriter(
-        storeConf, serializableHadoopConf.value, partitionInfo,
-        columnFamilyToSchemaMap, keyStateEncoderSpec
+        storeConf,
+        serializableHadoopConf.value,
+        TaskContext.getPartitionId(),
+        targetCpLocation,
+        0,
+        storeName.getOrElse(StateStoreId.DEFAULT_STORE_NAME),
+        lastBatch,
+        columnFamilyToSchemaMap
       )
       allCFWriter.put(partition)
     }
@@ -143,6 +136,9 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
     // Commit to commitLog
     val latestCommit = targetCheckpointMetadata.commitLog.get(lastBatch).get
     targetCheckpointMetadata.commitLog.add(lastBatch + 1, latestCommit)
+    val batchToCheck = lastBatch + 2
+    assert(!checkpointFileExists(new File(targetDir, "state/0/0"), batchToCheck, ".changelog"))
+    assert(checkpointFileExists(new File(targetDir, "state/0/0"), batchToCheck, ".zip"))
 
     // Step 4: Read from target using normal reader
     val targetReader = spark.read
@@ -172,6 +168,31 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
             s"  Target: $targetRow")
     }
   }
+
+    /**
+     * Checks if a changelog file for the specified version exists in the given directory.
+     * A changelog file has the suffix ".changelog".
+     *
+     * @param dir Directory to search for changelog files
+     * @param version The version to check for existence
+     * @param suffix Either 'zip' or 'changelog'
+     * @return true if a changelog file with the given version exists, false otherwise
+     */
+    private def checkpointFileExists(dir: File, version: Long, suffix: String): Boolean = {
+      Option(dir.listFiles)
+        .getOrElse(Array.empty)
+        .filter { file =>
+          file.getName.endsWith(suffix) && !file.getName.startsWith(".")
+        }
+        .exists { file =>
+          val nameWithoutSuffix = file.getName.stripSuffix(suffix)
+          val parts = nameWithoutSuffix.split("_")
+          parts.headOption match {
+            case Some(ver) if ver.forall(_.isDigit) => ver.toLong == version
+            case _ => false
+          }
+        }
+    }
 
   /**
    * Helper method to test SPARK-54420 read and write with different state format versions

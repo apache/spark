@@ -765,17 +765,11 @@ private[sql] class RocksDBStateStoreProvider
       }
 
       // Load RocksDB: either empty or from existing checkpoints
-      if (loadEmpty) {
-        rocksDB.loadEmpty(
-          targetVersion = version,
-          stateStoreCkptId = if (storeConf.enableStateStoreCheckpointIds) uniqueId else None,
-          readOnly = readOnly)
-      } else {
-        rocksDB.load(
-          version,
-          stateStoreCkptId = if (storeConf.enableStateStoreCheckpointIds) uniqueId else None,
-          readOnly = readOnly)
-      }
+      rocksDB.load(
+        version,
+        stateStoreCkptId = if (storeConf.enableStateStoreCheckpointIds) uniqueId else None,
+        readOnly = readOnly,
+        createEmpty = loadEmpty)
 
       // Create or reuse store instance
       val store = existingStore match {

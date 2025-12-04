@@ -3943,7 +3943,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
   }
 
   testWithStateStoreCheckpointIdsAndChangelogEnabled(
-    "SPARK-54420: loadEmpty creates empty store at specified version") {
+    "SPARK-54420: load with createEmpty creates empty store at specified version") {
     enableStateStoreCheckpointIds =>
       val remoteDir = Utils.createTempDir().toString
       new File(remoteDir).delete()
@@ -3959,7 +3959,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         val (version1, _) = db.commit()
         assert(db.get("a") === "1")
 
-        db.loadEmpty(version1, versionToUniqueId.get(1))
+        db.load(version1, versionToUniqueId.get(1), createEmpty = true)
 
         // Add data and commit - should produce version 11
         db.put("b", "2")
@@ -3985,7 +3985,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       }
   }
 
-  testWithStateStoreCheckpointIdsAndChangelogEnabled("SPARK-54420: loadEmpty at version 0") {
+  testWithStateStoreCheckpointIdsAndChangelogEnabled(
+    "SPARK-54420: load with createEmpty at version 0") {
     enableStateStoreCheckpointIds =>
       val remoteDir = Utils.createTempDir().toString
       new File(remoteDir).delete()
@@ -4001,7 +4002,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           None
         }
 
-        db.loadEmpty(0, ckptId)
+        db.load(0, ckptId, createEmpty = true)
 
         // Verify store is empty
         assert(iterator(db).isEmpty)
@@ -4059,7 +4060,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     override def load(
         version: Long,
         ckptId: Option[String] = None,
-        readOnly: Boolean = false): RocksDB = {
+        readOnly: Boolean = false,
+        createEmpty: Boolean = false): RocksDB = {
       // When a ckptId is defined, it means the test is explicitly using v2 semantic
       // When it is not, it is possible that implicitly uses it.
       // So still do a versionToUniqueId.get
