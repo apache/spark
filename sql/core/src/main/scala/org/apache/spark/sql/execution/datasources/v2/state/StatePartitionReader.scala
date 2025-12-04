@@ -87,25 +87,23 @@ abstract class StatePartitionReaderBase(
   extends PartitionReader[InternalRow] with Logging {
   // Used primarily as a placeholder for the value schema in the context of
   // state variables used within the transformWithState operator.
-  private val schemaForValueRow: StructType =
+  private val dummySchema: StructType =
     StructType(Array(StructField("__dummy__", NullType)))
 
   protected val keySchema : StructType = {
     if (SchemaUtil.checkVariableType(stateVariableInfoOpt, StateVariableType.MapState)) {
       SchemaUtil.getCompositeKeySchema(schema, partition.sourceOptions)
     } else if (partition.sourceOptions.internalOnlyReadAllColumnFamilies) {
-      require(stateStoreColFamilySchemaOpt.isDefined)
-      stateStoreColFamilySchemaOpt.map(_.keySchema).get
+      stateStoreColFamilySchemaOpt.map(_.keySchema).getOrElse(dummySchema)
     } else {
       SchemaUtil.getSchemaAsDataType(schema, "key").asInstanceOf[StructType]
     }
   }
 
   protected val valueSchema : StructType = if (stateVariableInfoOpt.isDefined) {
-    schemaForValueRow
+    dummySchema
   } else if (partition.sourceOptions.internalOnlyReadAllColumnFamilies) {
-    require(stateStoreColFamilySchemaOpt.isDefined)
-    stateStoreColFamilySchemaOpt.map(_.valueSchema).get
+    stateStoreColFamilySchemaOpt.map(_.valueSchema).getOrElse(dummySchema)
   } else {
     SchemaUtil.getSchemaAsDataType(
       schema, "value").asInstanceOf[StructType]
@@ -269,8 +267,8 @@ class StatePartitionAllColumnFamiliesReader(
     storeConf,
     hadoopConf, partition, schema,
     keyStateEncoderSpec, None,
-    allColumnFamiliesReaderInfo.colFamilySchemas
-      .find(_.colFamilyName == StateStore.DEFAULT_COL_FAMILY_NAME),
+    allColumnFamiliesReaderInfo.colFamilySchemas.find(
+      _.colFamilyName == StateStore.DEFAULT_COL_FAMILY_NAME),
     None, None) {
 
   private val stateStoreColFamilySchemas = allColumnFamiliesReaderInfo.colFamilySchemas
