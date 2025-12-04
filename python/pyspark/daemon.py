@@ -165,8 +165,9 @@ def manager():
     rlist = [0, listen_sock.fileno()]
     poller = None
     try:
-        if os.name == "posix":
-            # On posix systems use poll to avoid problems with file descriptor numbers above 1024.
+        if os.name == "posix" and os.getenv("PYSPARK_FORCE_SELECT", "false").lower() != "true":
+            # On posix systems use poll to avoid problems with file descriptor numbers above 1024
+            # (unless we force select by setting the PYSPARK_FORCE_SELECT environment variable to true).
             poller = select.poll()
             for fd in rlist:
                 poller.register(fd, select.POLLIN)
