@@ -323,7 +323,7 @@ class FPGrowthModel private[ml] (
     s"FPGrowthModel: uid=$uid, numTrainingRecords=$numTrainingRecords"
   }
 
-  override def estimatedSize: Long = {
+  private[spark] override def estimatedSize: Long = {
     // TODO: Implement this method.
     throw new UnsupportedOperationException
   }
