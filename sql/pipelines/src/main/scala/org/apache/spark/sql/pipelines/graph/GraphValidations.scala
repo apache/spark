@@ -44,7 +44,7 @@ trait GraphValidations extends Logging {
       .foreach {
         case (dest, flows) =>
           throw new AnalysisException(
-            "INVALID_DESTINATION_WITH_MULTIPLE_FLOWS",
+            "MATERIALIZED_VIEW_WITH_MULTIPLE_QUERIES",
             Map(
               "tableName" -> dest.unquotedString,
               "flows" -> flows

@@ -2837,7 +2837,7 @@
     },
     "sqlState" : "42602"
   },
-  "INVALID_DESTINATION_WITH_MULTIPLE_FLOWS" : {
+  "MATERIALIZED_VIEW_WITH_MULTIPLE_QUERIES" : {
     "message" : [
       "Invalid destination <tableName> with multiple flows: <flows>."
     ],
@@ -5041,9 +5041,9 @@
   },
   "PIPELINE_GRAPH_NOT_TOPOLOGICALLY_SORTED" : {
     "message" : [
-      "Pipeline graph must be topologically sorted (flow <flowName> with unvisited input <inputName>)"
+      "There is a cycle between <flowName> and <inputName>."
     ],
-    "sqlState" : "42000"
+    "sqlState" : "0A000"
   },
   "PIPELINE_SQL_GRAPH_ELEMENT_REGISTRATION_ERROR" : {
     "message" : [
