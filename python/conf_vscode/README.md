@@ -34,3 +34,10 @@ If you want, you can set them manually.
 ```
 python/run-with-vscode-breakpoints python/run-tests --testnames="..."
 ```
+
+`daemon` is not tracked by default because of potential issues for fork. However if you need to debug `daemon`
+you can do
+
+```
+python/run-with-vscode-breakpoints --hook-daemon your_script.py
+```
