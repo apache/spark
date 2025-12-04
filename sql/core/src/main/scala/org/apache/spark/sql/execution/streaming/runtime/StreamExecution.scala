@@ -154,12 +154,6 @@ abstract class StreamExecution(
    */
   protected def sources: Seq[SparkDataStream]
 
-  /**
-   * Source-to-ID mapping for OffsetMap support.
-   * Using index as sourceId initially, can be extended to support user-provided names.
-   */
-  protected def sourceToIdMap: Map[SparkDataStream, String]
-
   /** Isolated spark session to run the batches with. */
   protected[sql] val sparkSessionForStream: SparkSession = sparkSession.cloneSession()
 
@@ -376,12 +370,10 @@ abstract class StreamExecution(
           toDebugString(includeLogicalPlan = isInitialized),
           cause = cause,
           getLatestExecutionContext().startOffsets
-            .toOffsets(sources.toSeq, sourceToIdMap.map(_.swap),
-              getLatestExecutionContext().offsetSeqMetadata)
+            .toOffsetSeq(sources.toSeq, getLatestExecutionContext().offsetSeqMetadata)
             .toString,
           getLatestExecutionContext().endOffsets
-            .toOffsets(sources.toSeq, sourceToIdMap.map(_.swap),
-              getLatestExecutionContext().offsetSeqMetadata)
+            .toOffsetSeq(sources.toSeq, getLatestExecutionContext().offsetSeqMetadata)
             .toString,
           errorClass = "STREAM_FAILED",
           messageParameters = Map(

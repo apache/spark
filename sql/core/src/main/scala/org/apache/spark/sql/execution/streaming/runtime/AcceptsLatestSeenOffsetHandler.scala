@@ -20,19 +20,18 @@ package org.apache.spark.sql.execution.streaming.runtime
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.connector.read.streaming.{AcceptsLatestSeenOffset, SparkDataStream}
 import org.apache.spark.sql.execution.streaming.Source
-import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqBase
+import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeq
 
 /**
  * This feeds "latest seen offset" to the sources that implement AcceptsLatestSeenOffset.
  */
 object AcceptsLatestSeenOffsetHandler {
   def setLatestSeenOffsetOnSources(
-      offsets: Option[OffsetSeqBase],
-      sources: Seq[SparkDataStream],
-      sourceIdMap: Map[String, SparkDataStream]): Unit = {
+      offsets: Option[OffsetSeq],
+      sources: Seq[SparkDataStream]): Unit = {
     assertNoAcceptsLatestSeenOffsetWithDataSourceV1(sources)
 
-    offsets.map(_.toStreamProgress(sources, sourceIdMap)) match {
+    offsets.map(_.toStreamProgress(sources)) match {
       case Some(streamProgress) =>
         streamProgress.foreach {
           case (src: AcceptsLatestSeenOffset, offset) =>

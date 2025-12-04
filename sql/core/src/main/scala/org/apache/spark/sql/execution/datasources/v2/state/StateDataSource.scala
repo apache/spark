@@ -135,7 +135,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
     val offsetLog = new StreamingQueryCheckpointMetadata(session, checkpointLocation).offsetLog
     offsetLog.get(batchId) match {
       case Some(value) =>
-        val metadata = value.metadataOpt.getOrElse(
+        val metadata = value.metadata.getOrElse(
           throw StateDataSourceErrors.offsetMetadataLogUnavailable(batchId, checkpointLocation)
         )
 
