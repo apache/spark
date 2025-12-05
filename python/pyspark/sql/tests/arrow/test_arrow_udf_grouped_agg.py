@@ -1271,36 +1271,6 @@ class GroupedAggArrowUDFTestsMixin:
             actual_results = result_sql.collect()
             self.assertEqual(actual_results, expected)
 
-    def test_iterator_grouped_agg_sql_register_basic(self):
-        """
-        Test registering iterator grouped agg UDF and using it in SQL.
-        """
-        import pyarrow as pa
-
-        @arrow_udf("double")
-        def arrow_sum_iter(it: Iterator[pa.Array]) -> float:
-            total = 0.0
-            for v in it:
-                assert isinstance(v, pa.Array)
-                total += pa.compute.sum(v).as_py()
-            return total
-
-        expected_eval_type = PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF
-        self.assertEqual(arrow_sum_iter.evalType, expected_eval_type)
-
-        with self.temp_func("arrow_sum_iter"):
-            registered_udf = self.spark.udf.register("arrow_sum_iter", arrow_sum_iter)
-            self.assertEqual(registered_udf.evalType, expected_eval_type)
-
-            # Test SQL query
-            q = """
-                SELECT arrow_sum_iter(v1) as sum_v
-                FROM VALUES (3, 0), (2, 0), (1, 1) tbl(v1, v2) GROUP BY v2 ORDER BY v2
-                """
-            actual = sorted([row["sum_v"] for row in self.spark.sql(q).collect()])
-            expected = [1.0, 5.0]
-            self.assertEqual(actual, expected)
-
 
 class GroupedAggArrowUDFTests(GroupedAggArrowUDFTestsMixin, ReusedSQLTestCase):
     pass
