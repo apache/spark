@@ -85,6 +85,21 @@ object OfflineStateRepartitionErrors {
       version: Int): StateRepartitionInvalidCheckpointError = {
     new StateRepartitionUnsupportedOffsetSeqVersionError(checkpointLocation, version)
   }
+
+  def unsupportedStatefulOperatorError(
+      operatorName: String,
+      checkpointLocation: String = ""): StateRepartitionInvalidCheckpointError = {
+    new StateRepartitionUnsupportedStatefulOperatorError(checkpointLocation, operatorName)
+  }
+
+  def unsupportedTransformWithStateVarTypeError(
+      variableType: String,
+      ttlEnabled: Boolean,
+      colFamilyName: String,
+      checkpointLocation: String = ""): StateRepartitionInvalidCheckpointError = {
+    new StateRepartitionUnsupportedTransformWithStateVarTypeError(
+      checkpointLocation, variableType, ttlEnabled, colFamilyName)
+  }
 }
 
 /**
@@ -201,3 +216,24 @@ class StateRepartitionUnsupportedOffsetSeqVersionError(
     checkpointLocation,
     subClass = "UNSUPPORTED_OFFSET_SEQ_VERSION",
     messageParameters = Map("version" -> version.toString))
+
+class StateRepartitionUnsupportedStatefulOperatorError(
+    checkpointLocation: String,
+    operatorName: String)
+  extends StateRepartitionInvalidCheckpointError(
+    checkpointLocation,
+    subClass = "UNSUPPORTED_STATEFUL_OPERATOR",
+    messageParameters = Map("operatorName" -> operatorName))
+
+class StateRepartitionUnsupportedTransformWithStateVarTypeError(
+    checkpointLocation: String,
+    variableType: String,
+    ttlEnabled: Boolean,
+    colFamilyName: String)
+  extends StateRepartitionInvalidCheckpointError(
+    checkpointLocation,
+    subClass = "UNSUPPORTED_TRANSFORM_WITH_STATE_VARIABLE_TYPE",
+    messageParameters = Map(
+      "variableType" -> variableType,
+      "ttlEnabled" -> ttlEnabled.toString,
+      "colFamilyName" -> colFamilyName))

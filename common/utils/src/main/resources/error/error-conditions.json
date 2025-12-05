@@ -5480,6 +5480,17 @@
         "message" : [
           "Unsupported offset sequence version <version>. Please make sure the checkpoint is from a supported Spark version (Spark 4.0+)."
         ]
+      },
+      "UNSUPPORTED_STATEFUL_OPERATOR" : {
+        "message" : [
+          "Unsupported stateful operator <operatorName>. Please use a checkpoint with supported stateful operators."
+        ]
+      },
+      "UNSUPPORTED_TRANSFORM_WITH_STATE_VARIABLE_TYPE" : {
+        "message" : [
+          "Unsupported transform with state variable type <variableType> (TTL_Enabled: <ttlEnabled>, ColFamilyName: <colFamilyName>).",
+          "Please use a checkpoint with supported transform with state variable types."
+        ]
       }
     },
     "sqlState" : "55019"
