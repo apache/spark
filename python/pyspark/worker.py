@@ -2955,7 +2955,6 @@ def read_udfs(pickleSer, infile, eval_type):
     else:
         profiler = None
 
-    # Read all UDFs upfront to avoid duplication across different eval_type branches
     udfs = read_all_udfs(pickleSer, infile, eval_type, runner_conf, profiler)
     num_udfs = len(udfs)
 
