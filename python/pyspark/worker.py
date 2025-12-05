@@ -2173,7 +2173,7 @@ def read_udtf(pickleSer, infile, eval_type):
 
     if (
         eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF
-        and runner_conf.use_legacy_pandas_udf_conversion
+        and runner_conf.use_legacy_pandas_udtf_conversion
     ):
 
         def wrap_arrow_udtf(f, return_type):
