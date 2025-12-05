@@ -84,58 +84,35 @@ trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression {
   def evalType: Int
   def udfDeterministic: Boolean
   def resultId: ExprId
+  def safeSrc: Option[String]
+  def safeAst: Option[Any]
+  def pureCatalystExpression: Option[Expression]
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
   override def toString: String = s"$name(${children.mkString(", ")})#${resultId.id}$typeSuffix"
 
   override def nullable: Boolean = true
-}
-
-/**
- * A serialized version of a Python lambda function. This is a special expression, which needs a
- * dedicated physical operator to execute it, and thus can't be pushed down to data sources.
- */
-case class PythonUDF(
-    name: String,
-    func: PythonFunction,
-    dataType: DataType,
-    children: Seq[Expression],
-    evalType: Int,
-    udfDeterministic: Boolean,
-    safeSrc: Option[String] = None,
-    safeAst: Option[Any] = None,
-    resultId: ExprId = NamedExpression.newExprId)
-  extends Expression with PythonFuncExpression with Unevaluable with Logging {
-
-  lazy val resultAttribute: Attribute = AttributeReference(toPrettySQL(this), dataType, nullable)(
-    exprId = resultId)
-
-  override lazy val canonicalized: Expression = {
-    val canonicalizedChildren = children.map(_.canonicalized)
-    // `resultId` can be seen as cosmetic variation in PythonUDF, as it doesn't affect the result.
-    this.copy(resultId = ExprId(-1)).withNewChildren(canonicalizedChildren)
-  }
-
-  final override val nodePatterns: Seq[TreePattern] = Seq(PYTHON_UDF)
-
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): PythonUDF =
-    copy(children = newChildren)
 
   /**
-   * Try and convert the provided AST to a native Catalyst expression if
-   * possible, otherwise return None.
+   * If the Python side has provided us with an alternative Catalyst expression
+   * return it. Otherwise try and convert the provided AST to a native Catalyst expression if
+   * possible. If neither are possible return None.
    */
   def toCatalyst(): Option[Expression] = {
-    safeAst match {
-      case None => None
-      case Some(ast) =>
-        if (ast.isInstanceOf[java.util.List[_]]) {
-          val happy_ast = _recursive_to_scala_for_java_lists(ast.asInstanceOf[java.util.List[Any]])
-          convert_ast(List(happy_ast))
-        } else {
-          None
+    pureCatalystExpression match {
+      case None =>
+        safeAst match {
+          case None => None
+          case Some(ast) =>
+            if (ast.isInstanceOf[java.util.List[_]]) {
+              val happy_ast = _recursive_to_scala_for_java_lists(ast.asInstanceOf[java.util.List[Any]])
+              convert_ast(List(happy_ast))
+            } else {
+              None
+            }
         }
+      case Some(expr) => Some(expr)
     }
   }
 
@@ -292,6 +269,38 @@ case class PythonUDF(
   }
 }
 
+/**
+ * A serialized version of a Python lambda function. This is a special expression, which needs a
+ * dedicated physical operator to execute it, and thus can't be pushed down to data sources.
+ */
+case class PythonUDF(
+    name: String,
+    func: PythonFunction,
+    dataType: DataType,
+    children: Seq[Expression],
+    evalType: Int,
+    udfDeterministic: Boolean,
+    safeSrc: Option[String] = None,
+    safeAst: Option[Any] = None,
+    pureCatalystExpression: Option[Expression] = None,
+    resultId: ExprId = NamedExpression.newExprId)
+  extends Expression with PythonFuncExpression with Unevaluable with Logging {
+
+  lazy val resultAttribute: Attribute = AttributeReference(toPrettySQL(this), dataType, nullable)(
+    exprId = resultId)
+
+  override lazy val canonicalized: Expression = {
+    val canonicalizedChildren = children.map(_.canonicalized)
+    // `resultId` can be seen as cosmetic variation in PythonUDF, as it doesn't affect the result.
+    this.copy(resultId = ExprId(-1)).withNewChildren(canonicalizedChildren)
+  }
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(PYTHON_UDF)
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): PythonUDF =
+    copy(children = newChildren)
+}
+
 abstract class UnevaluableAggregateFunc extends AggregateFunction {
   override def aggBufferSchema: StructType = throw internalError(
     "UnevaluableAggregateFunc.aggBufferSchema should not be called.")
@@ -319,6 +328,7 @@ case class PythonUDAF(
     evalType: Int = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
     safeSrc: Option[String] = None,
     safeAst: Option[Any] = None,
+    pureCatalystExpression: Option[Expression] = None,
     resultId: ExprId = NamedExpression.newExprId)
   extends UnevaluableAggregateFunc with PythonFuncExpression {
 
