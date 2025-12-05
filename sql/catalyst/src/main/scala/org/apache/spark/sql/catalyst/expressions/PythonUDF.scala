@@ -78,15 +78,16 @@ object PythonUDF {
 }
 
 
-trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression { self: Expression =>
+trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression
+    with Logging { self: Expression =>
   def name: String
   def func: PythonFunction
   def evalType: Int
   def udfDeterministic: Boolean
   def resultId: ExprId
-  def safeSrc: Option[String]
-  def safeAst: Option[Any]
-  def pureCatalystExpression: Option[Expression]
+  def safeSrc: Option[String] = None
+  def safeAst: Option[Any] = None
+  def pureCatalystExpression: Option[Expression] = None
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
@@ -280,9 +281,9 @@ case class PythonUDF(
     children: Seq[Expression],
     evalType: Int,
     udfDeterministic: Boolean,
-    safeSrc: Option[String] = None,
-    safeAst: Option[Any] = None,
-    pureCatalystExpression: Option[Expression] = None,
+    override val safeSrc: Option[String] = None,
+    override val safeAst: Option[Any] = None,
+    override val pureCatalystExpression: Option[Expression] = None,
     resultId: ExprId = NamedExpression.newExprId)
   extends Expression with PythonFuncExpression with Unevaluable with Logging {
 
@@ -326,9 +327,9 @@ case class PythonUDAF(
     children: Seq[Expression],
     udfDeterministic: Boolean,
     evalType: Int = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
-    safeSrc: Option[String] = None,
-    safeAst: Option[Any] = None,
-    pureCatalystExpression: Option[Expression] = None,
+    override val safeSrc: Option[String] = None,
+    override val safeAst: Option[Any] = None,
+    override val pureCatalystExpression: Option[Expression] = None,
     resultId: ExprId = NamedExpression.newExprId)
   extends UnevaluableAggregateFunc with PythonFuncExpression {
 

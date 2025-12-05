@@ -92,9 +92,11 @@ case class UserDefinedPythonFunction(
     if (pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
       || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF
       || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF) {
-      PythonUDAF(name, func, dataType, e, udfDeterministic, pythonEvalType, safeSrc, safeAst, safePureCatalystExpression)
+      PythonUDAF(name, func, dataType, e, udfDeterministic, pythonEvalType, safeSrc, safeAst,
+        safePureCatalystExpression)
     } else {
-      PythonUDF(name, func, dataType, e, pythonEvalType, udfDeterministic, safeSrc, safeAst, safePureCatalystExpression)
+      PythonUDF(name, func, dataType, e, pythonEvalType, udfDeterministic, safeSrc, safeAst,
+        safePureCatalystExpression)
     }
   }
 
