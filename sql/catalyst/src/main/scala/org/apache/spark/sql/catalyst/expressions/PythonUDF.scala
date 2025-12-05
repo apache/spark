@@ -106,8 +106,8 @@ trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression {
           case None => None
           case Some(ast) =>
             if (ast.isInstanceOf[java.util.List[_]]) {
-              val happy_ast = _recursive_to_scala_for_java_lists(ast.asInstanceOf[java.util.List[Any]])
-              convert_ast(List(happy_ast))
+              val happyAst = recursiveConvertListToScala(ast.asInstanceOf[java.util.List[Any]])
+              convertAst(List(happyAst))
             } else {
               None
             }
@@ -116,55 +116,55 @@ trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression {
     }
   }
 
-  def convert_ast(ast: List[Any]): Option[Expression] = {
-    val lambda_ast_opt = _get_lambda_ast(ast)
-    lambda_ast_opt match {
+  def convertAst(ast: List[Any]): Option[Expression] = {
+    val lambdaAstOpt = getLambdaFromAst(ast)
+    lambdaAstOpt match {
       case None => None
-      case Some(lambda_ast) =>
-        val params = _get_paramater_list(lambda_ast)
-        val body_ast = _get_lambda_body(lambda_ast)
-        logWarning(s"Got parameters ${params} and lambda body ${body_ast} from ${ast}!")
-        convert_func(params, body_ast)
+      case Some(lambdaAst) =>
+        val params = getParameterList(lambdaAst)
+        val bodyAst = getLambdaBody(lambdaAst)
+        logWarning(s"Got parameters ${params} and lambda body ${bodyAst} from ${ast}!")
+        convertFunction(params, bodyAst)
     }
   }
 
-  def convert_func(params: List[String], body: List[_]): Option[Expression] = {
+  def convertFunction(params: List[String], body: List[_]): Option[Expression] = {
     // For now all we handle is binary operators
     val operation = body.headOption
     operation match {
       case Some("Name") => // Variable name
-        val name_body = body(1).asInstanceOf[List[_]]
-        val var_name_ast = name_body(0)
-        val var_name = var_name_ast.asInstanceOf[List[_]](1).asInstanceOf[String]
-        val param_index = params.indexOf(var_name)
-        if (param_index == -1) {
+        val nameBody = body(1).asInstanceOf[List[_]]
+        val varNameAst = nameBody(0)
+        val varName = varNameAst.asInstanceOf[List[_]](1).asInstanceOf[String]
+        val paramIndex = params.indexOf(varName)
+        if (paramIndex == -1) {
           throw new Exception(s"Variable referenced not in param list.")
         } else {
-          Some(children(param_index))
+          Some(children(paramIndex))
         }
       case Some("Constant") =>
-        val constant_body = body(1).asInstanceOf[List[_]]
-        val constant_value_ast = constant_body(0)
-        val const_value = constant_value_ast.asInstanceOf[List[_]](1)
-        logWarning(f"Extracting constant ${const_value} of java type ${const_value.getClass}")
-        Some(Literal(const_value))
+        val constantBody = body(1).asInstanceOf[List[_]]
+        val constantValueAst = constantBody(0)
+        val constValue = constantValueAst.asInstanceOf[List[_]](1)
+        logWarning(f"Extracting constant ${constValue} of java type ${constValue.getClass}")
+        Some(Literal(constValue))
       case Some("BinOp") =>
-        val binop_body = body(1).asInstanceOf[List[_]]
-        val left_ast = _get_child_ast_from_node_name("left", binop_body).getOrElse(
+        val binopBody = body(1).asInstanceOf[List[_]]
+        val leftAst = getChildFromAstWithNodeName("left", binopBody).getOrElse(
           throw new Exception("Binary operation with no left side"))
-        val right_ast = _get_child_ast_from_node_name("right", binop_body).getOrElse(
+        val rightAst = getChildFromAstWithNodeName("right", binopBody).getOrElse(
           throw new Exception("Binary operation with no right side"))
-        val op_name = _get_child_ast_from_node_name("op", binop_body).getOrElse(
+        val opName = getChildFromAstWithNodeName("op", binopBody).getOrElse(
           throw new Exception("No operation?"))(0).asInstanceOf[String]
-        val left_expr = convert_func(params, left_ast).getOrElse(
+        val leftExpr = convertFunction(params, leftAst).getOrElse(
           throw new Exception("Could not convert left side"))
-        val right_expr = convert_func(params, right_ast).getOrElse(
+        val rightExpr = convertFunction(params, rightAst).getOrElse(
           throw new Exception("Could not convert right side"))
-        op_name match {
+        opName match {
           case "Add" =>
-            Some(Add(left_expr, right_expr))
+            Some(Add(leftExpr, rightExpr))
           case _ =>
-            throw new Exception(s"Unsupported binary operation ${op_name}")
+            throw new Exception(s"Unsupported binary operation ${opName}")
         }
       case Some(x) =>
         throw new Exception(s"Unsupported operaation $x")
@@ -173,15 +173,15 @@ trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression {
     }
   }
 
-  def _recursive_to_scala_for_java_lists(ast: java.util.List[Any]): List[Any] = {
+  def recursiveConvertListToScala(ast: java.util.List[Any]): List[Any] = {
     ast.asScala.map {
       case inner_list: java.util.List[_] =>
-        _recursive_to_scala_for_java_lists(inner_list.asInstanceOf[java.util.List[Any]])
+        recursiveConvertListToScala(inner_list.asInstanceOf[java.util.List[Any]])
       case other => other
     }.toList
   }
 
-  private def _get_child_ast_from_node_name(node_name: String, ast: List[_]): Option[List[_]] = {
+  private def getChildFromAstWithNodeName(node_name: String, ast: List[_]): Option[List[_]] = {
     logWarning(s"Looking for ${node_name} in ${ast}")
     if (ast(0).isInstanceOf[String]) {
       if (ast(0) == node_name) {
@@ -209,15 +209,15 @@ trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression {
     }
   }
 
-  private def _get_child_after_match_in_order(
+  private def getChildAfterMatchInOrder(
     node_names: List[String],
     ast: List[_]): Option[List[_]] = {
     node_names match {
       case Nil => Some(ast)
       case head :: tail =>
-        _get_child_ast_from_node_name(head, ast) match {
+        getChildFromAstWithNodeName(head, ast) match {
           case Some(child_ast) =>
-            _get_child_after_match_in_order(tail, child_ast)
+            getChildAfterMatchInOrder(tail, child_ast)
           case None =>
             None
         }
@@ -228,10 +228,10 @@ trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression {
    * Get the top level list of parameter names from the AST.
    * There could be multiple of these nested, but we only care about the top level one.
    */
-  private def _get_paramater_list(lambda_ast: List[_]): List[String] = {
-    val arguments_ast = _get_child_after_match_in_order(
+  private def getParameterList(lambdaAst: List[_]): List[String] = {
+    val arguments_ast = getChildAfterMatchInOrder(
       List("args", "arguments", "args"),
-      lambda_ast).getOrElse(throw new Exception("No arguments!"))
+      lambdaAst).getOrElse(throw new Exception("No arguments!"))
     logWarning(s"Extracting names from $arguments_ast")
     arguments_ast.map { arg_nested_tuple =>
       // todo: named params check.
@@ -243,27 +243,27 @@ trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression {
     }.toList
   }
 
-  private def _get_lambda_ast(ast: List[_]): Option[List[_]] = {
+  private def getLambdaFromAst(ast: List[_]): Option[List[_]] = {
     // The general Tree that is "ok" for us to start with is
     // "Module" -> "Body" -> "Assign", we can ignore what we are being assigned to for now
     // then grab the value side of the assignment and it could be either lambda OR
     // Call -> Func -> Args -> Lambda
-    val assigned = _get_child_after_match_in_order(
+    val assigned = getChildAfterMatchInOrder(
       List("Module", "body", "Assign", "value"),
       ast).getOrElse(throw new Exception("No Assignment?"))
-    val body_direct = _get_child_after_match_in_order(
+    val body_direct = getChildAfterMatchInOrder(
       List("Lambda"),
       assigned)
     body_direct match {
       case Some(body) => body_direct
-      case None => _get_child_after_match_in_order(
+      case None => getChildAfterMatchInOrder(
         List("Call", "func", "args", "Lambda"),
         assigned)
     }
   }
 
-  private def _get_lambda_body(lambda_ast: List[_]): List[_] = {
-    _get_child_ast_from_node_name("body", lambda_ast).getOrElse(
+  private def getLambdaBody(lambdaAst: List[_]): List[_] = {
+    getChildFromAstWithNodeName("body", lambdaAst).getOrElse(
       throw new Exception("Could not find the body of the lambda")
     )
   }
