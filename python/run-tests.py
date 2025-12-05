@@ -71,7 +71,12 @@ if "SPARK_SKIP_CONNECT_COMPAT_TESTS" not in os.environ:
             SPARK_DIST_CLASSPATH = os.path.join(build_dir, "jars", "*")
             break
     else:
-        raise RuntimeError("Cannot find assembly build directory, please build Spark first.")
+        # Allow dry-run mode to test argument transformation without building Spark
+        if os.environ.get("SPARK_TEST_DRY_RUN") == "1":
+            SPARK_DIST_CLASSPATH = ""  # Empty for dry run
+            LOGGER.warning("DRY RUN MODE: Spark not built")
+        else:
+            raise RuntimeError("Cannot find assembly build directory, please build Spark first.")
 
 
 def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_output):
@@ -144,8 +149,21 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
         "Starting test(%s): %s (temp output: %s)", pyspark_python, test_name, per_test_output.name)
     start_time = time.time()
     try:
+        # If user did not provide -k, enable substring matching by default
+        # When test identifier doesn't contain a dot, treat it as a pattern
+        args, k_inserted, module, test_identifier = transform_test_args_for_k_flag(test_name)
+        if k_inserted:
+            LOGGER.info("Pattern detected: inserted -k flag. Original: %s, Transformed: %s", 
+                       " ".join(test_name.split()), " ".join(args))
+        
+        # Dry run mode: just show what would be executed
+        if os.environ.get("SPARK_TEST_DRY_RUN") == "1":
+            LOGGER.info("DRY RUN: execute: %s %s", 
+                       os.path.join(SPARK_HOME, "bin/pyspark"), " ".join(args))
+            return 0
+        
         retcode = subprocess.Popen(
-            [os.path.join(SPARK_HOME, "bin/pyspark")] + test_name.split(),
+            [os.path.join(SPARK_HOME, "bin/pyspark")] + args,
             stderr=per_test_output, stdout=per_test_output, env=env).wait()
         if not keep_test_output:
             # There exists a race condition in Python and it causes flakiness in MacOS
@@ -212,6 +230,37 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
                 "Finished test(%s): %s (%is)", pyspark_python, test_name, duration)
 
 
+def transform_test_args_for_k_flag(test_name):
+    """
+    Transform test arguments to insert -k flag for pattern matching.
+    This is the core logic from lines 152-163, extracted as a reusable function.
+    
+    Parameters
+    ----------
+    test_name : str
+        Test name in format "module test_identifier" or "module Class.test_method"
+        
+    Returns
+    -------
+    tuple
+        (transformed_args_list, was_k_inserted, module, test_identifier)
+    """
+    args = test_name.split()
+    original_args = args.copy()
+    
+    # If user did not provide -k, enable substring matching by default
+    # When test identifier doesn't contain a dot, treat it as a pattern
+    if "-k" not in args and len(args) == 2:
+        module, test_identifier = args[0], args[1]
+        # If test_identifier doesn't contain a dot, it's likely a pattern (not exact match)
+        # Use -k for pattern matching: python -m unittest -k pattern module
+        if "." not in test_identifier:
+            args = ["-k", test_identifier, module]
+            return args, True, module, test_identifier
+    
+    return args, False, args[0] if args else None, args[1] if len(args) > 1 else None
+
+
 def get_default_python_executables():
     python_execs = [x for x in ["python3.11", "pypy3"] if which(x)]
 
@@ -227,6 +276,7 @@ def get_default_python_executables():
 
 def split_and_validate_testnames(testnames):
     testnames_to_test = []
+    dry_run = os.environ.get("SPARK_TEST_DRY_RUN") == "1"
 
     def module_exists(module):
         try:
@@ -238,7 +288,7 @@ def split_and_validate_testnames(testnames):
         if " " in testname:
             # "{module} {class.testcase_name}"
             module, testcase = testname.split(" ")
-            if not module_exists(module):
+            if not module_exists(module) and not dry_run:
                 print(f"Error: Can't find module '{module}'.")
                 sys.exit(-1)
             testnames_to_test.append(f"{module} {testcase}")
@@ -249,14 +299,20 @@ def split_and_validate_testnames(testnames):
             else:
                 # "{module.class.testcase_name}"
                 index = len(testname)
+                found_module = False
                 while (index := testname.rfind(".", 0, index)) != -1:
                     module, testcase = testname[:index], testname[index + 1:]
                     if module_exists(module):
                         testnames_to_test.append(f"{module} {testcase}")
+                        found_module = True
                         break
-                else:
-                    print(f"Error: Invalid testname '{testname}'.")
-                    sys.exit(-1)
+                if not found_module:
+                    if dry_run:
+                        # In dry run, accept any format for testing
+                        testnames_to_test.append(testname)
+                    else:
+                        print(f"Error: Invalid testname '{testname}'.")
+                        sys.exit(-1)
 
     return testnames_to_test
 
