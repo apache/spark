@@ -2922,9 +2922,7 @@ def read_udfs(pickleSer, infile, eval_type):
     # Read all UDFs
     num_udfs = read_int(infile)
     udfs = [
-        read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=i, profiler=profiler
-        )
+        read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index=i, profiler=profiler)
         for i in range(num_udfs)
     ]
 
