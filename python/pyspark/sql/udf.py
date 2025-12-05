@@ -237,6 +237,7 @@ class UserDefinedFunction:
         ast_info = None
         ast_dumped = None
         src = None
+        transpiled = None
         from pyspark.sql import SparkSession
 
         session = SparkSession._instantiatedSession
@@ -256,12 +257,77 @@ class UserDefinedFunction:
                 except Exception:
                     src = inspect.getsource(func.__call__)
                 ast_info = ast.parse(src)
+                transpiled = _transpile(src, ast_info)
                 ast_dumped = _dump_to_tree(ast_info)
             except Exception as e:
                 warnings.warn(f"Error building AST for UDF: {e} -- will not transpile")
         self.src = src
         self.ast_dumped = ast_dumped
+        self.transpiled = transpiled
 
+    # Transpiling tools
+    @staticmethod
+    def _transpile(src: str, ast_info: ast.AST) -> Optional[Column]:
+        # Short circuit on nothing to transpile.
+        if src == "" or ast_info is None:
+            return None
+        lambda_ast = _get_lambda_from_ast(ast_info)
+        if lambda_ast is None:
+            return None
+        lambda_body = lambda_ast.body
+        params = _get_parameter_list(lambda_ast)
+        return _convert_function(params, lambda_body)
+
+    def _convert_function(params: List[str], body: ast.AST) -> Optional[Column]:
+        match body:
+            case ast.BinOp(left=left, op=op, right=right):
+                match op:
+                    case ast.Add():
+                        left_col = _convert_function(params, left)
+                        if left_col is None:
+                            return
+                        right_col = _convert_function(params, right)
+                        if right_col is None:
+                            return
+                        return left_col.add(right_col)
+                    case _:
+                        return
+            case ast.Constant(value=value):
+                return Column._literal(value)
+            case ast.Name(id=name, ctx=ast.Load()):
+                # Note: the Python UDF parameter name might not match the column
+                # And at this point we don't know who are children are going to be.
+                if name in params:
+                    param_index = params.index(name)
+                    # TODO: Add a special node here that indicates we want child number param_index
+                    return ParamIndexNode(param_index)
+            case _:
+                return
+                
+        
+
+    @staticmethod
+    def _get_parameter_list(lambdaAst: ast.Lambda) -> List[str]:
+        params = []
+        for arg in lambdaAst.args.args:
+            params.append(arg.arg)
+        return params
+
+    @staticmethod
+    def _get_lambda_from_ast(ast: ast.AST) -> Optional[ast.Lambda]:
+        module = ast.Module
+        module_body = module.body
+        assigned = module_body.Assign.value
+        if isinstance(assigned, ast.Lambda):
+            return assigned
+        else:
+            return assigned.Call.func.args.Lambda
+
+    @staticmethod
+    def _convert_function(params: List[str], body: ast.AST) -> Optional[Column]
+        
+
+    # Everything else
     @staticmethod
     def _check_return_type(returnType: DataType, evalType: int) -> None:
         if evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF:
