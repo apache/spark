@@ -1452,6 +1452,42 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
         raise ValueError("Unknown eval type: {}".format(eval_type))
 
 
+def read_all_udfs(pickleSer, infile, eval_type, runner_conf, profiler):
+    """
+    Read all UDFs (functions and their argument offsets) upfront.
+
+    This helper function centralizes UDF reading logic to avoid duplication
+    across different eval_type branches in read_udfs().
+
+    Parameters
+    ----------
+    pickleSer : Serializer
+        Pickle serializer for deserializing UDF functions
+    infile : file-like object
+        Input stream to read UDF data from
+    eval_type : int
+        Evaluation type indicating the type of UDF
+    runner_conf : dict
+        Runner configuration dictionary
+    profiler : str or None
+        Profiler type, if any
+
+    Returns
+    -------
+    list
+        List of tuples, where each tuple contains (arg_offsets, udf_function)
+    """
+    num_udfs = read_int(infile)
+    udfs = []
+    for i in range(num_udfs):
+        udfs.append(
+            read_single_udf(
+                pickleSer, infile, eval_type, runner_conf, udf_index=i, profiler=profiler
+            )
+        )
+    return udfs
+
+
 # Used by SQL_GROUPED_MAP_PANDAS_UDF, SQL_GROUPED_MAP_ARROW_UDF,
 # SQL_COGROUPED_MAP_PANDAS_UDF, SQL_COGROUPED_MAP_ARROW_UDF,
 # SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
@@ -2919,7 +2955,9 @@ def read_udfs(pickleSer, infile, eval_type):
     else:
         profiler = None
 
-    num_udfs = read_int(infile)
+    # Read all UDFs upfront to avoid duplication across different eval_type branches
+    udfs = read_all_udfs(pickleSer, infile, eval_type, runner_conf, profiler)
+    num_udfs = len(udfs)
 
     is_scalar_iter = eval_type in (
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
@@ -2937,9 +2975,7 @@ def read_udfs(pickleSer, infile, eval_type):
         if is_map_arrow_iter:
             assert num_udfs == 1, "One MAP_ARROW_ITER UDF expected here."
 
-        arg_offsets, udf = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
-        )
+        arg_offsets, udf = udfs[0]
 
         def func(_, iterator):
             num_input_rows = 0
@@ -3035,9 +3071,7 @@ def read_udfs(pickleSer, infile, eval_type):
 
         # See FlatMapGroupsInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
-        arg_offsets, f = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
-        )
+        arg_offsets, f = udfs[0]
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
         def mapper(series_iter):
@@ -3063,9 +3097,7 @@ def read_udfs(pickleSer, infile, eval_type):
 
         # See TransformWithStateInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
-        arg_offsets, f = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
-        )
+        arg_offsets, f = udfs[0]
         parsed_offsets = extract_key_value_indexes(arg_offsets)
         ser.key_offsets = parsed_offsets[0][0]
         stateful_processor_api_client = StatefulProcessorApiClient(state_server_port, key_schema)
@@ -3094,9 +3126,7 @@ def read_udfs(pickleSer, infile, eval_type):
 
         # See TransformWithStateInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
-        arg_offsets, f = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
-        )
+        arg_offsets, f = udfs[0]
         # parsed offsets:
         # [
         #     [groupingKeyOffsets, dedupDataOffsets],
@@ -3132,9 +3162,7 @@ def read_udfs(pickleSer, infile, eval_type):
 
         # See TransformWithStateInPySparkExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
-        arg_offsets, f = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
-        )
+        arg_offsets, f = udfs[0]
         parsed_offsets = extract_key_value_indexes(arg_offsets)
         ser.key_offsets = parsed_offsets[0][0]
         stateful_processor_api_client = StatefulProcessorApiClient(state_server_port, key_schema)
@@ -3159,9 +3187,7 @@ def read_udfs(pickleSer, infile, eval_type):
 
         # See TransformWithStateInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
-        arg_offsets, f = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
-        )
+        arg_offsets, f = udfs[0]
         # parsed offsets:
         # [
         #     [groupingKeyOffsets, dedupDataOffsets],
@@ -3197,9 +3223,7 @@ def read_udfs(pickleSer, infile, eval_type):
 
         # See FlatMapGroupsInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
-        arg_offsets, f = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
-        )
+        arg_offsets, f = udfs[0]
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
         def batch_from_offset(batch, offsets):
@@ -3228,9 +3252,7 @@ def read_udfs(pickleSer, infile, eval_type):
 
         # See FlatMapGroupsInPandas(WithState)Exec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
-        arg_offsets, f = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
-        )
+        arg_offsets, f = udfs[0]
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
         def mapper(a):
@@ -3264,9 +3286,7 @@ def read_udfs(pickleSer, infile, eval_type):
         # We assume there is only one UDF here because cogrouped map doesn't
         # support combining multiple UDFs.
         assert num_udfs == 1
-        arg_offsets, f = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
-        )
+        arg_offsets, f = udfs[0]
 
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
@@ -3283,9 +3303,7 @@ def read_udfs(pickleSer, infile, eval_type):
         # We assume there is only one UDF here because cogrouped map doesn't
         # support combining multiple UDFs.
         assert num_udfs == 1
-        arg_offsets, f = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
-        )
+        arg_offsets, f = udfs[0]
 
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
@@ -3310,9 +3328,7 @@ def read_udfs(pickleSer, infile, eval_type):
         # support combining multiple UDFs.
         assert num_udfs == 1
 
-        arg_offsets, f = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
-        )
+        arg_offsets, f = udfs[0]
 
         # Convert to iterator of batches: Iterator[pa.Array] for single column,
         # or Iterator[Tuple[pa.Array, ...]] for multiple columns
@@ -3324,13 +3340,6 @@ def read_udfs(pickleSer, infile, eval_type):
             return f(batch_iter)
 
     else:
-        udfs = []
-        for i in range(num_udfs):
-            udfs.append(
-                read_single_udf(
-                    pickleSer, infile, eval_type, runner_conf, udf_index=i, profiler=profiler
-                )
-            )
 
         def mapper(a):
             result = tuple(f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs)
