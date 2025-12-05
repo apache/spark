@@ -964,7 +964,6 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
             # Enable additional coercions for UDTF serialization
             int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
         )
-        self._converter_map = dict()
 
     def _create_batch(self, series):
         """
@@ -1012,18 +1011,6 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
 
         return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
 
-    def _get_or_create_converter_from_pandas(self, dt):
-        key = dt.json()
-        if key not in self._converter_map:
-            conv = _create_converter_from_pandas(
-                dt,
-                timezone=self._timezone,
-                error_on_duplicated_field_names=False,
-                ignore_unexpected_complex_type_values=True,
-            )
-            self._converter_map[key] = conv
-        return self._converter_map[key]
-
     def _create_array(self, series, arrow_type, spark_type=None, arrow_cast=False):
         """
         Override the `_create_array` method in the superclass to create an Arrow Array
@@ -1055,7 +1042,13 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
 
         if arrow_type is not None:
             dt = spark_type or from_arrow_type(arrow_type, prefer_timestamp_ntz=True)
-            conv = self._get_or_create_converter_from_pandas(dt)
+            # TODO(SPARK-43579): cache the converter for reuse
+            conv = _create_converter_from_pandas(
+                dt,
+                timezone=self._timezone,
+                error_on_duplicated_field_names=False,
+                ignore_unexpected_complex_type_values=True,
+            )
             series = conv(series)
 
             if self._int_to_decimal_coercion_enabled:
