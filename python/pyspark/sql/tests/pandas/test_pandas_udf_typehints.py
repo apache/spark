@@ -430,12 +430,9 @@ class PandasUDFTypeHintsTests(ReusedSQLTestCase):
         # Expected weighted means:
         # Group 1: (1.0*1.0 + 2.0*2.0) / (1.0 + 2.0) = 5.0 / 3.0
         # Group 2: (3.0*1.0 + 5.0*2.0 + 10.0*3.0) / (1.0 + 2.0 + 3.0) = 43.0 / 6.0
-        expected_results = [(1, 5.0 / 3.0), (2, 43.0 / 6.0)]
+        expected = [Row(id=1, wm=5.0 / 3.0), Row(id=2, wm=43.0 / 6.0)]
         actual_results = actual2.collect()
-        self.assertEqual(len(actual_results), len(expected_results))
-        for (id_val, exp_wm), actual_row in zip(expected_results, actual_results):
-            self.assertEqual(id_val, actual_row["id"])
-            self.assertAlmostEqual(exp_wm, actual_row["wm"], places=5)
+        self.assertEqual(actual_results, expected)
 
     def test_ignore_type_hint_in_group_apply_in_pandas(self):
         df = self.spark.range(10)

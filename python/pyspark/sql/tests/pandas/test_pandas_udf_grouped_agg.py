@@ -17,7 +17,7 @@
 
 import unittest
 import logging
-from typing import cast
+from typing import cast, Iterator, Tuple
 
 from pyspark.util import PythonEvalType, is_remote_only
 from pyspark.sql import Row, functions as sf
@@ -901,8 +901,6 @@ class GroupedAggPandasUDFTestsMixin:
         """
         Test basic functionality of iterator grouped agg pandas UDF with Iterator[pd.Series].
         """
-        from typing import Iterator
-
         df = self.spark.createDataFrame(
             [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v")
         )
@@ -922,20 +920,14 @@ class GroupedAggPandasUDFTestsMixin:
         # Expected means:
         # Group 1: (1.0 + 2.0) / 2 = 1.5
         # Group 2: (3.0 + 5.0 + 10.0) / 3 = 6.0
-        expected = [(1, 1.5), (2, 6.0)]
-
-        self.assertEqual(len(result), len(expected))
-        for r, (exp_id, exp_mean) in zip(result, expected):
-            self.assertEqual(r["id"], exp_id)
-            self.assertAlmostEqual(r["mean"], exp_mean, places=5)
+        expected = [Row(id=1, mean=1.5), Row(id=2, mean=6.0)]
+        self.assertEqual(result, expected)
 
     def test_iterator_grouped_agg_multiple_columns(self):
         """
         Test iterator grouped agg pandas UDF with multiple columns
         using Iterator[Tuple[pd.Series, ...]].
         """
-        from typing import Iterator, Tuple
-
         df = self.spark.createDataFrame(
             [(1, 1.0, 1.0), (1, 2.0, 2.0), (2, 3.0, 1.0), (2, 5.0, 2.0), (2, 10.0, 3.0)],
             ("id", "v", "w"),
@@ -964,18 +956,13 @@ class GroupedAggPandasUDFTestsMixin:
         # Expected weighted means:
         # Group 1: (1.0*1.0 + 2.0*2.0) / (1.0 + 2.0) = 5.0 / 3.0
         # Group 2: (3.0*1.0 + 5.0*2.0 + 10.0*3.0) / (1.0 + 2.0 + 3.0) = 43.0 / 6.0
-        expected = [(1, 5.0 / 3.0), (2, 43.0 / 6.0)]
-
-        self.assertEqual(len(result), len(expected))
-        for r, (exp_id, exp_wm) in zip(result, expected):
-            self.assertEqual(r["id"], exp_id)
-            self.assertAlmostEqual(r["wm"], exp_wm, places=5)
+        expected = [Row(id=1, wm=5.0 / 3.0), Row(id=2, wm=43.0 / 6.0)]
+        self.assertEqual(result, expected)
 
     def test_iterator_grouped_agg_eval_type(self):
         """
         Test that the eval type is correctly inferred for iterator grouped agg UDFs.
         """
-        from typing import Iterator, Tuple
 
         @pandas_udf("double")
         def pandas_sum_iter(it: Iterator[pd.Series]) -> float:
@@ -1002,54 +989,52 @@ class GroupedAggPandasUDFTestsMixin:
         Test that iterator grouped agg UDF can partially consume batches.
         This ensures that batches are processed one by one without loading all data into memory.
         """
-        from typing import Iterator
-
         # Create a dataset with multiple batches per group
         # Use small batch size to ensure multiple batches per group
+        # Use same value (1.0) for all records to avoid batch ordering issues
         with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 2}):
+            # Group 1: 6 values (3 batches) - will process only first 2 batches (partial)
+            # Group 2: 2 values (1 batch) - will process 1 batch (all available)
             df = self.spark.createDataFrame(
-                [(1, 1.0), (1, 2.0), (1, 3.0), (1, 4.0), (2, 5.0), (2, 6.0)], ("id", "v")
+                [(1, 1.0), (1, 1.0), (1, 1.0), (1, 1.0), (1, 1.0), (1, 1.0), (2, 1.0), (2, 1.0)],
+                ("id", "v"),
             )
 
-            @pandas_udf("double")
-            def pandas_sum_partial(it: Iterator[pd.Series]) -> float:
-                # Only consume first two batches, then return
-                # This tests that partial consumption works correctly
-                total = 0.0
-                count = 0
+            @pandas_udf("long")
+            def pandas_partial_count(it: Iterator[pd.Series]) -> int:
+                # Process first 2 batches, then stop (partial consumption)
+                total_count = 0
                 for i, series in enumerate(it):
-                    if i < 2:  # Only process first 2 batches
-                        total += series.sum()
-                        count += len(series)
+                    assert isinstance(series, pd.Series)
+                    if i < 2:  # Process first 2 batches
+                        total_count += len(series)
                     else:
                         # Stop early - partial consumption
                         break
-                return total / count if count > 0 else 0.0
+                return total_count
 
-            result = df.groupby("id").agg(pandas_sum_partial(df["v"]).alias("mean")).sort("id")
+            result = df.groupby("id").agg(pandas_partial_count(df["v"]).alias("count")).sort("id")
 
             # Verify results are correct for partial consumption
             # With batch size = 2:
-            # Group 1 (id=1): 4 values in 2 batches -> processes both batches
-            #   Batch 1: [1.0, 2.0], Batch 2: [3.0, 4.0]
-            #   Result: (1.0+2.0+3.0+4.0)/4 = 2.5
-            # Group 2 (id=2): 2 values in 1 batch -> processes 1 batch (only 1 batch available)
-            #   Batch 1: [5.0, 6.0]
-            #   Result: (5.0+6.0)/2 = 5.5
+            # Group 1 (id=1): 6 values in 3 batches -> processes only first 2 batches (partial)
+            #   Result: count=4 (only 4 out of 6 values processed)
+            # Group 2 (id=2): 2 values in 1 batch -> processes 1 batch (all available)
+            #   Result: count=2
             actual = result.collect()
             self.assertEqual(len(actual), 2, "Should have results for both groups")
 
-            # Verify both groups were processed correctly
-            # Group 1: processes 2 batches (all available)
+            # Verify partial consumption works
+            # Group 1: processes only 2 batches (4 values out of 6 total) - partial consumption
             group1_result = next(row for row in actual if row["id"] == 1)
-            self.assertAlmostEqual(
-                group1_result["mean"], 2.5, places=5, msg="Group 1 should process 2 batches"
+            self.assertEqual(
+                group1_result["count"], 4, msg="Group 1 should process only 2 batches (4 values)"
             )
 
-            # Group 2: processes 1 batch (only batch available)
+            # Group 2: processes 1 batch (all 2 values, 1 batch available)
             group2_result = next(row for row in actual if row["id"] == 2)
-            self.assertAlmostEqual(
-                group2_result["mean"], 5.5, places=5, msg="Group 2 should process 1 batch"
+            self.assertEqual(
+                group2_result["count"], 2, msg="Group 2 should process 1 batch (2 values)"
             )
 
 
