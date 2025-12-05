@@ -994,10 +994,11 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
         // For example: (UDF -> UDF -> UDF) is often cheaper than UDF -> Catalyst -> UDF.
         // But if we can convert the first or the last in a chain we should.
         if (!parent_is_udf ||
-          s.children.forall { x => x.isInstanceOf[PythonUDF] &&
+          !s.children.forall { x => x.isInstanceOf[PythonUDF] &&
             x.asInstanceOf[PythonUDF].toCatalyst() == None }) {
           s.toCatalyst() match {
-            case None => s.mapChildren(applyExpr(_, parent_is_udf = true))
+            case None =>
+              s.mapChildren(applyExpr(_, parent_is_udf = true))
             case Some(catalystExpr) =>
               // Upgrade the types here since Python duct-typing means that
               // in Python the types get automatically upgraded (e.g. 4 -> 4L or 4.0 automatically).
