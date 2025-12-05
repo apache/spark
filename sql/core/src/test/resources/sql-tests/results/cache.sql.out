@@ -60,7 +60,7 @@ Project [1#x]
             :        +- OneRowRelation
             +- Project [1#x]
                +- SubqueryAlias t2
-                  +- CTERelationRef xxxx, true, [1#x], false
+                  +- CTERelationRef xxxx, true, [1#x], false, false, 1
 
 == Optimized Logical Plan ==
 InMemoryRelation [1#x], StorageLevel(disk, memory, deserialized, 1 replicas)
@@ -125,7 +125,7 @@ Project [sum(c3)#xL]
             +- Except false
                :- Aggregate [sum(c3#x) AS sum(c3)#xL]
                :  +- SubqueryAlias v
-               :     +- CTERelationRef xxxx, true, [c3#x], false
+               :     +- CTERelationRef xxxx, true, [c3#x], false, false
                +- Project [s#xL]
                   +- SubqueryAlias t2
                      +- View (`t2`, [s#xL])
@@ -142,40 +142,72 @@ Project [sum(c3)#xL]
                               :                       +- LocalRelation [c1#x, c2#x]
                               +- Aggregate [sum(c3#x) AS s#xL]
                                  +- SubqueryAlias v
-                                    +- CTERelationRef xxxx, true, [c3#x], false
+                                    +- CTERelationRef xxxx, true, [c3#x], false, false
 
 == Optimized Logical Plan ==
 InMemoryRelation [sum(c3)#xL], StorageLevel(disk, memory, deserialized, 1 replicas)
    +- AdaptiveSparkPlan isFinalPlan=true
       +- == Final Plan ==
-         *BroadcastHashJoin [coalesce(sum(c3)#xL, 0), isnull(sum(c3)#xL)], [coalesce(s#xL, 0), isnull(s#xL)], LeftAnti, BuildRight, false
-         :- *HashAggregate(keys=[], functions=[sum(c3#x)], output=[sum(c3)#xL])
-         :  +- ShuffleQueryStage 0
-         :     +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=x]
-         :        +- *HashAggregate(keys=[], functions=[partial_sum(c3#x)], output=[sum#xL])
-         :           +- *Project [(c1#x * c2#x) AS c3#x]
-         :              +- *LocalTableScan [c1#x, c2#x]
-         +- BroadcastQueryStage 2
-            +- BroadcastExchange HashedRelationBroadcastMode(List(coalesce(input[0, bigint, true], 0), isnull(input[0, bigint, true])),false), [plan_id=x]
-               +- *HashAggregate(keys=[], functions=[sum(c3#x)], output=[s#xL])
-                  +- ShuffleQueryStage 1
-                     +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=x]
-                        +- *HashAggregate(keys=[], functions=[partial_sum(c3#x)], output=[sum#xL])
-                           +- *Project [(c1#x + c1#x) AS c3#x]
-                              +- *LocalTableScan [c1#x, c2#x]
+         ResultQueryStage 1
+         +- *BroadcastHashJoin [coalesce(sum(c3)#xL, 0), isnull(sum(c3)#xL)], [coalesce(s#xL, 0), isnull(s#xL)], LeftAnti, BuildRight, false
+            :- *Project [ReusedSubquery Subquery subquery#x, [id=#x].sum(c3) AS sum(c3)#xL]
+            :  :  +- ReusedSubquery Subquery subquery#x, [id=#x]
+            :  +- *Scan OneRowRelation[]
+            +- BroadcastQueryStage 0
+               +- BroadcastExchange HashedRelationBroadcastMode(List(coalesce(input[0, bigint, true], 0), isnull(input[0, bigint, true])),false), [plan_id=x]
+                  +- *Project [Subquery subquery#x, [id=#x].s AS s#xL]
+                     :  +- Subquery subquery#x, [id=#x]
+                     :     +- AdaptiveSparkPlan isFinalPlan=true
+                     +- == Final Plan ==
+                        ResultQueryStage 1
+                        +- *Project [named_struct(sum(c3), sum(c3)#xL, s, s#xL) AS mergedValue#x]
+                           +- *HashAggregate(keys=[], functions=[sum(c3#x), sum(c3#x)], output=[sum(c3)#xL, s#xL])
+                              +- ShuffleQueryStage 0
+                                 +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=x]
+                                    +- *HashAggregate(keys=[], functions=[partial_sum(c3#x), partial_sum(c3#x)], output=[sum#xL, sum#xL])
+                                       +- *Project [(c1#x * c2#x) AS c3#x, (c1#x + c1#x) AS c3#x]
+                                          +- *LocalTableScan [c1#x, c2#x]
+                     +- == Initial Plan ==
+                        Project [named_struct(sum(c3), sum(c3)#xL, s, s#xL) AS mergedValue#x]
+                        +- HashAggregate(keys=[], functions=[sum(c3#x), sum(c3#x)], output=[sum(c3)#xL, s#xL])
+                           +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=x]
+                              +- HashAggregate(keys=[], functions=[partial_sum(c3#x), partial_sum(c3#x)], output=[sum#xL, sum#xL])
+                                 +- Project [(c1#x * c2#x) AS c3#x, (c1#x + c1#x) AS c3#x]
+                                    +- LocalTableScan [c1#x, c2#x]
+                     +- *Scan OneRowRelation[]
       +- == Initial Plan ==
          BroadcastHashJoin [coalesce(sum(c3)#xL, 0), isnull(sum(c3)#xL)], [coalesce(s#xL, 0), isnull(s#xL)], LeftAnti, BuildRight, false
-         :- HashAggregate(keys=[], functions=[sum(c3#x)], output=[sum(c3)#xL])
-         :  +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=x]
-         :     +- HashAggregate(keys=[], functions=[partial_sum(c3#x)], output=[sum#xL])
-         :        +- Project [(c1#x * c2#x) AS c3#x]
-         :           +- LocalTableScan [c1#x, c2#x]
+         :- Project [Subquery subquery#x, [id=#x].sum(c3) AS sum(c3)#xL]
+         :  :  +- Subquery subquery#x, [id=#x]
+         :  :     +- AdaptiveSparkPlan isFinalPlan=false
+         :  :        +- Project [named_struct(sum(c3), sum(c3)#xL, s, s#xL) AS mergedValue#x]
+         :  :           +- HashAggregate(keys=[], functions=[sum(c3#x), sum(c3#x)], output=[sum(c3)#xL, s#xL])
+         :  :              +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=x]
+         :  :                 +- HashAggregate(keys=[], functions=[partial_sum(c3#x), partial_sum(c3#x)], output=[sum#xL, sum#xL])
+         :  :                    +- Project [(c1#x * c2#x) AS c3#x, (c1#x + c1#x) AS c3#x]
+         :  :                       +- LocalTableScan [c1#x, c2#x]
+         :  +- Scan OneRowRelation[]
          +- BroadcastExchange HashedRelationBroadcastMode(List(coalesce(input[0, bigint, true], 0), isnull(input[0, bigint, true])),false), [plan_id=x]
-            +- HashAggregate(keys=[], functions=[sum(c3#x)], output=[s#xL])
-               +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=x]
-                  +- HashAggregate(keys=[], functions=[partial_sum(c3#x)], output=[sum#xL])
-                     +- Project [(c1#x + c1#x) AS c3#x]
-                        +- LocalTableScan [c1#x, c2#x]
+            +- Project [Subquery subquery#x, [id=#x].s AS s#xL]
+               :  +- Subquery subquery#x, [id=#x]
+               :     +- AdaptiveSparkPlan isFinalPlan=true
+               +- == Final Plan ==
+                  ResultQueryStage 1
+                  +- *Project [named_struct(sum(c3), sum(c3)#xL, s, s#xL) AS mergedValue#x]
+                     +- *HashAggregate(keys=[], functions=[sum(c3#x), sum(c3#x)], output=[sum(c3)#xL, s#xL])
+                        +- ShuffleQueryStage 0
+                           +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=x]
+                              +- *HashAggregate(keys=[], functions=[partial_sum(c3#x), partial_sum(c3#x)], output=[sum#xL, sum#xL])
+                                 +- *Project [(c1#x * c2#x) AS c3#x, (c1#x + c1#x) AS c3#x]
+                                    +- *LocalTableScan [c1#x, c2#x]
+               +- == Initial Plan ==
+                  Project [named_struct(sum(c3), sum(c3)#xL, s, s#xL) AS mergedValue#x]
+                  +- HashAggregate(keys=[], functions=[sum(c3#x), sum(c3#x)], output=[sum(c3)#xL, s#xL])
+                     +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=x]
+                        +- HashAggregate(keys=[], functions=[partial_sum(c3#x), partial_sum(c3#x)], output=[sum#xL, sum#xL])
+                           +- Project [(c1#x * c2#x) AS c3#x, (c1#x + c1#x) AS c3#x]
+                              +- LocalTableScan [c1#x, c2#x]
+               +- Scan OneRowRelation[]
 
 == Physical Plan ==
 AdaptiveSparkPlan isFinalPlan=false
@@ -183,34 +215,66 @@ AdaptiveSparkPlan isFinalPlan=false
       +- InMemoryRelation [sum(c3)#xL], StorageLevel(disk, memory, deserialized, 1 replicas)
             +- AdaptiveSparkPlan isFinalPlan=true
                +- == Final Plan ==
-                  *BroadcastHashJoin [coalesce(sum(c3)#xL, 0), isnull(sum(c3)#xL)], [coalesce(s#xL, 0), isnull(s#xL)], LeftAnti, BuildRight, false
-                  :- *HashAggregate(keys=[], functions=[sum(c3#x)], output=[sum(c3)#xL])
-                  :  +- ShuffleQueryStage 0
-                  :     +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=x]
-                  :        +- *HashAggregate(keys=[], functions=[partial_sum(c3#x)], output=[sum#xL])
-                  :           +- *Project [(c1#x * c2#x) AS c3#x]
-                  :              +- *LocalTableScan [c1#x, c2#x]
-                  +- BroadcastQueryStage 2
-                     +- BroadcastExchange HashedRelationBroadcastMode(List(coalesce(input[0, bigint, true], 0), isnull(input[0, bigint, true])),false), [plan_id=x]
-                        +- *HashAggregate(keys=[], functions=[sum(c3#x)], output=[s#xL])
-                           +- ShuffleQueryStage 1
-                              +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=x]
-                                 +- *HashAggregate(keys=[], functions=[partial_sum(c3#x)], output=[sum#xL])
-                                    +- *Project [(c1#x + c1#x) AS c3#x]
-                                       +- *LocalTableScan [c1#x, c2#x]
+                  ResultQueryStage 1
+                  +- *BroadcastHashJoin [coalesce(sum(c3)#xL, 0), isnull(sum(c3)#xL)], [coalesce(s#xL, 0), isnull(s#xL)], LeftAnti, BuildRight, false
+                     :- *Project [ReusedSubquery Subquery subquery#x, [id=#x].sum(c3) AS sum(c3)#xL]
+                     :  :  +- ReusedSubquery Subquery subquery#x, [id=#x]
+                     :  +- *Scan OneRowRelation[]
+                     +- BroadcastQueryStage 0
+                        +- BroadcastExchange HashedRelationBroadcastMode(List(coalesce(input[0, bigint, true], 0), isnull(input[0, bigint, true])),false), [plan_id=x]
+                           +- *Project [Subquery subquery#x, [id=#x].s AS s#xL]
+                              :  +- Subquery subquery#x, [id=#x]
+                              :     +- AdaptiveSparkPlan isFinalPlan=true
+                     +- == Final Plan ==
+                        ResultQueryStage 1
+                        +- *Project [named_struct(sum(c3), sum(c3)#xL, s, s#xL) AS mergedValue#x]
+                           +- *HashAggregate(keys=[], functions=[sum(c3#x), sum(c3#x)], output=[sum(c3)#xL, s#xL])
+                              +- ShuffleQueryStage 0
+                                 +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=x]
+                                    +- *HashAggregate(keys=[], functions=[partial_sum(c3#x), partial_sum(c3#x)], output=[sum#xL, sum#xL])
+                                       +- *Project [(c1#x * c2#x) AS c3#x, (c1#x + c1#x) AS c3#x]
+                                          +- *LocalTableScan [c1#x, c2#x]
+                     +- == Initial Plan ==
+                        Project [named_struct(sum(c3), sum(c3)#xL, s, s#xL) AS mergedValue#x]
+                        +- HashAggregate(keys=[], functions=[sum(c3#x), sum(c3#x)], output=[sum(c3)#xL, s#xL])
+                           +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=x]
+                              +- HashAggregate(keys=[], functions=[partial_sum(c3#x), partial_sum(c3#x)], output=[sum#xL, sum#xL])
+                                 +- Project [(c1#x * c2#x) AS c3#x, (c1#x + c1#x) AS c3#x]
+                                    +- LocalTableScan [c1#x, c2#x]
+                              +- *Scan OneRowRelation[]
                +- == Initial Plan ==
                   BroadcastHashJoin [coalesce(sum(c3)#xL, 0), isnull(sum(c3)#xL)], [coalesce(s#xL, 0), isnull(s#xL)], LeftAnti, BuildRight, false
-                  :- HashAggregate(keys=[], functions=[sum(c3#x)], output=[sum(c3)#xL])
-                  :  +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=x]
-                  :     +- HashAggregate(keys=[], functions=[partial_sum(c3#x)], output=[sum#xL])
-                  :        +- Project [(c1#x * c2#x) AS c3#x]
-                  :           +- LocalTableScan [c1#x, c2#x]
+                  :- Project [Subquery subquery#x, [id=#x].sum(c3) AS sum(c3)#xL]
+                  :  :  +- Subquery subquery#x, [id=#x]
+                  :  :     +- AdaptiveSparkPlan isFinalPlan=false
+                  :  :        +- Project [named_struct(sum(c3), sum(c3)#xL, s, s#xL) AS mergedValue#x]
+                  :  :           +- HashAggregate(keys=[], functions=[sum(c3#x), sum(c3#x)], output=[sum(c3)#xL, s#xL])
+                  :  :              +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=x]
+                  :  :                 +- HashAggregate(keys=[], functions=[partial_sum(c3#x), partial_sum(c3#x)], output=[sum#xL, sum#xL])
+                  :  :                    +- Project [(c1#x * c2#x) AS c3#x, (c1#x + c1#x) AS c3#x]
+                  :  :                       +- LocalTableScan [c1#x, c2#x]
+                  :  +- Scan OneRowRelation[]
                   +- BroadcastExchange HashedRelationBroadcastMode(List(coalesce(input[0, bigint, true], 0), isnull(input[0, bigint, true])),false), [plan_id=x]
-                     +- HashAggregate(keys=[], functions=[sum(c3#x)], output=[s#xL])
-                        +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=x]
-                           +- HashAggregate(keys=[], functions=[partial_sum(c3#x)], output=[sum#xL])
-                              +- Project [(c1#x + c1#x) AS c3#x]
-                                 +- LocalTableScan [c1#x, c2#x]
+                     +- Project [Subquery subquery#x, [id=#x].s AS s#xL]
+                        :  +- Subquery subquery#x, [id=#x]
+                        :     +- AdaptiveSparkPlan isFinalPlan=true
+               +- == Final Plan ==
+                  ResultQueryStage 1
+                  +- *Project [named_struct(sum(c3), sum(c3)#xL, s, s#xL) AS mergedValue#x]
+                     +- *HashAggregate(keys=[], functions=[sum(c3#x), sum(c3#x)], output=[sum(c3)#xL, s#xL])
+                        +- ShuffleQueryStage 0
+                           +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=x]
+                              +- *HashAggregate(keys=[], functions=[partial_sum(c3#x), partial_sum(c3#x)], output=[sum#xL, sum#xL])
+                                 +- *Project [(c1#x * c2#x) AS c3#x, (c1#x + c1#x) AS c3#x]
+                                    +- *LocalTableScan [c1#x, c2#x]
+               +- == Initial Plan ==
+                  Project [named_struct(sum(c3), sum(c3)#xL, s, s#xL) AS mergedValue#x]
+                  +- HashAggregate(keys=[], functions=[sum(c3#x), sum(c3#x)], output=[sum(c3)#xL, s#xL])
+                     +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=x]
+                        +- HashAggregate(keys=[], functions=[partial_sum(c3#x), partial_sum(c3#x)], output=[sum#xL, sum#xL])
+                           +- Project [(c1#x * c2#x) AS c3#x, (c1#x + c1#x) AS c3#x]
+                              +- LocalTableScan [c1#x, c2#x]
+                        +- Scan OneRowRelation[]
 
 
 -- !query
