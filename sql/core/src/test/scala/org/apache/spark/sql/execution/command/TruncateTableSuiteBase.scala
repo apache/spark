@@ -21,6 +21,7 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -103,10 +104,20 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       }
 
       // throw exception if the column in partition spec is not a partition column.
-      val errMsg = intercept[AnalysisException] {
-        sql(s"TRUNCATE TABLE $t PARTITION (unknown = 1)")
-      }.getMessage
-      assert(errMsg.contains("unknown is not a valid partition column"))
+      val expectedTableName = if (commandVersion == DDLCommandTestUtils.V1_COMMAND_VERSION) {
+        s"`$SESSION_CATALOG_NAME`.`ns`.`parttable`"
+      } else {
+        "`test_catalog`.`ns`.`partTable`"
+      }
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"TRUNCATE TABLE $t PARTITION (unknown = 1)")
+        },
+        condition = "PARTITIONS_NOT_FOUND",
+        parameters = Map(
+          "partitionList" -> "`unknown`",
+          "tableName" -> expectedTableName)
+      )
     }
   }
 
@@ -117,10 +128,28 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       sql(s"CREATE TABLE $t (c0 INT) $defaultUsing")
       sql(s"INSERT INTO $t SELECT 0")
 
-      val errMsg = intercept[AnalysisException] {
-        sql(s"TRUNCATE TABLE $t PARTITION (c0=1)")
-      }.getMessage
-      assert(errMsg.contains(invalidPartColumnError))
+      val expectedTableName = if (commandVersion == DDLCommandTestUtils.V1_COMMAND_VERSION) {
+        s"`$SESSION_CATALOG_NAME`.`ns`.`tbl`"
+      } else {
+        "`test_catalog`.`ns`.`tbl`"
+      }
+      val expectedCondition = if (commandVersion == DDLCommandTestUtils.V1_COMMAND_VERSION) {
+        "_LEGACY_ERROR_TEMP_1267"
+      } else {
+        "PARTITIONS_NOT_FOUND"
+      }
+      val expectedParameters = if (commandVersion == DDLCommandTestUtils.V1_COMMAND_VERSION) {
+        Map("tableIdentWithDB" -> expectedTableName)
+      } else {
+        Map("partitionList" -> "`c0`", "tableName" -> expectedTableName)
+      }
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"TRUNCATE TABLE $t PARTITION (c0=1)")
+        },
+        condition = expectedCondition,
+        parameters = expectedParameters
+      )
     }
   }
 
@@ -145,10 +174,20 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       sql(s"INSERT INTO $t PARTITION (id=0) SELECT 'abc'")
       sql(s"INSERT INTO $t PARTITION (id=1) SELECT 'def'")
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-        val errMsg = intercept[AnalysisException] {
-          sql(s"TRUNCATE TABLE $t PARTITION (ID=1)")
-        }.getMessage
-        assert(errMsg.contains("ID is not a valid partition column"))
+        val expectedTableName = if (commandVersion == DDLCommandTestUtils.V1_COMMAND_VERSION) {
+          s"`$SESSION_CATALOG_NAME`.`ns`.`tbl`"
+        } else {
+          "`test_catalog`.`ns`.`tbl`"
+        }
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"TRUNCATE TABLE $t PARTITION (ID=1)")
+          },
+          condition = "PARTITIONS_NOT_FOUND",
+          parameters = Map(
+            "partitionList" -> "`ID`",
+            "tableName" -> expectedTableName)
+        )
       }
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
         sql(s"TRUNCATE TABLE $t PARTITION (ID=1)")
@@ -181,7 +220,7 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
           exception = intercept[AnalysisException] {
             sql("TRUNCATE TABLE v0")
           },
-          errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+          condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
           parameters = Map(
             "viewName" -> "`spark_catalog`.`default`.`v0`",
             "operation" -> "TRUNCATE TABLE"),
@@ -198,7 +237,7 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
           exception = intercept[AnalysisException] {
             sql("TRUNCATE TABLE v1")
           },
-          errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+          condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
           parameters = Map(
             "viewName" -> "`v1`",
             "operation" -> "TRUNCATE TABLE"),
@@ -206,14 +245,14 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
         )
       }
 
-      val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
+      val v2 = s"${spark.sharedState.globalTempDB}.v2"
       withGlobalTempView("v2") {
         sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t")
         checkError(
           exception = intercept[AnalysisException] {
             sql(s"TRUNCATE TABLE $v2")
           },
-          errorClass = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
+          condition = "EXPECT_TABLE_NOT_VIEW.NO_ALTERNATIVE",
           parameters = Map(
             "viewName" -> "`global_temp`.`v2`",
             "operation" -> "TRUNCATE TABLE"),
@@ -232,26 +271,27 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
         Seq(Row(0, 0, 0), Row(1, 1, 1), Row(1, 2, 3)))
 
       withView("v0") {
-        sql(s"CREATE VIEW v0 AS SELECT * FROM $t")
+        // Add a dummy column so that this view is semantically different from raw table scan.
+        sql(s"CREATE VIEW v0 AS SELECT *, 'a' FROM $t")
         cacheRelation("v0")
         sql(s"TRUNCATE TABLE $t PARTITION (width = 1, length = 2)")
-        checkCachedRelation("v0", Seq(Row(0, 0, 0), Row(1, 1, 1)))
+        checkCachedRelation("v0", Seq(Row(0, 0, 0, "a"), Row(1, 1, 1, "a")))
       }
 
       withTempView("v1") {
-        sql(s"CREATE TEMP VIEW v1 AS SELECT * FROM $t")
+        sql(s"CREATE TEMP VIEW v1 AS SELECT *, 'a' FROM $t")
         cacheRelation("v1")
         sql(s"TRUNCATE TABLE $t PARTITION (width = 1, length = 1)")
-        checkCachedRelation("v1", Seq(Row(0, 0, 0)))
+        checkCachedRelation("v1", Seq(Row(0, 0, 0, "a")))
       }
 
-      val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
+      val v2 = s"${spark.sharedState.globalTempDB}.v2"
       withGlobalTempView("v2") {
         sql(s"INSERT INTO $t PARTITION (width = 10, length = 10) SELECT 10")
-        sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t")
+        sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT *, 'a' FROM $t")
         cacheRelation(v2)
         sql(s"TRUNCATE TABLE $t PARTITION (width = 10, length = 10)")
-        checkCachedRelation(v2, Seq(Row(0, 0, 0)))
+        checkCachedRelation(v2, Seq(Row(0, 0, 0, "a")))
       }
     }
   }

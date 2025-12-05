@@ -67,4 +67,59 @@ public class ByteArraySuite {
     byte[] y4 = new byte[]{(byte) 100, (byte) 200};
     Assertions.assertEquals(0, ByteArray.compareBinary(x4, y4));
   }
+
+  @Test
+  public void testConcat() {
+    byte[] x1 = new byte[]{(byte) 1, (byte) 2, (byte) 3};
+    byte[] y1 = new byte[]{(byte) 4, (byte) 5, (byte) 6};
+    byte[] result1 = ByteArray.concat(x1, y1);
+    byte[] expected1 = new byte[]{(byte) 1, (byte) 2, (byte) 3, (byte) 4, (byte) 5, (byte) 6};
+    Assertions.assertArrayEquals(expected1, result1);
+
+    byte[] x2 = new byte[]{(byte) 1, (byte) 2, (byte) 3};
+    byte[] y2 = new byte[0];
+    byte[] result2 = ByteArray.concat(x2, y2);
+    byte[] expected2 = new byte[]{(byte) 1, (byte) 2, (byte) 3};
+    Assertions.assertArrayEquals(expected2, result2);
+
+    byte[] x3 = new byte[0];
+    byte[] y3 = new byte[]{(byte) 4, (byte) 5, (byte) 6};
+    byte[] result3 = ByteArray.concat(x3, y3);
+    byte[] expected3 = new byte[]{(byte) 4, (byte) 5, (byte) 6};
+    Assertions.assertArrayEquals(expected3, result3);
+
+    byte[] x4 = new byte[]{(byte) 1, (byte) 2, (byte) 3};
+    byte[] y4 = null;
+    byte[] result4 = ByteArray.concat(x4, y4);
+    Assertions.assertArrayEquals(null, result4);
+  }
+
+  @Test
+  public void testConcatWS() {
+    byte[] separator = new byte[]{(byte) 42};
+
+    byte[] x1 = new byte[]{(byte) 1, (byte) 2, (byte) 3};
+    byte[] y1 = new byte[]{(byte) 4, (byte) 5, (byte) 6};
+    byte[] result1 = ByteArray.concatWS(separator, x1, y1);
+    byte[] expected1 = new byte[]{(byte) 1, (byte) 2, (byte) 3, (byte) 42,
+            (byte) 4, (byte) 5, (byte) 6};
+    Assertions.assertArrayEquals(expected1, result1);
+
+    byte[] x2 = new byte[]{(byte) 1, (byte) 2, (byte) 3};
+    byte[] y2 = new byte[0];
+    byte[] result2 = ByteArray.concatWS(separator, x2, y2);
+    byte[] expected2 = new byte[]{(byte) 1, (byte) 2, (byte) 3, (byte) 42};
+    Assertions.assertArrayEquals(expected2, result2);
+
+    byte[] x3 = new byte[0];
+    byte[] y3 = new byte[]{(byte) 4, (byte) 5, (byte) 6};
+    byte[] result3 = ByteArray.concatWS(separator, x3, y3);
+    byte[] expected3 = new byte[]{(byte) 42, (byte) 4, (byte) 5, (byte) 6};
+    Assertions.assertArrayEquals(expected3, result3);
+
+    byte[] x4 = new byte[]{(byte) 1, (byte) 2, (byte) 3};
+    byte[] y4 = null;
+    byte[] result4 = ByteArray.concatWS(separator, x4, y4);
+    Assertions.assertArrayEquals(null, result4);
+  }
 }

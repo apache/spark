@@ -379,7 +379,7 @@ SELECT * FROM persons2;
 +-------------+--------------------------+---------+
 
 -- in an atomic operation, 1) delete rows with ssn = 123456789 and 2) insert rows from persons2 
-INSERT INTO persons REPLACE WHERE ssn = 123456789 SELECT * FROM persons2
+INSERT INTO persons REPLACE WHERE ssn = 123456789 SELECT * FROM persons2;
 
 SELECT * FROM persons;
 +-------------+--------------------------+---------+

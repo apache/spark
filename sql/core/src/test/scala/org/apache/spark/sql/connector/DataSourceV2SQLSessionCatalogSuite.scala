@@ -71,4 +71,12 @@ class DataSourceV2SQLSessionCatalogSuite
       sql(s"CREATE EXTERNAL TABLE t (i INT) USING $v2Format TBLPROPERTIES($prop)")
     }
   }
+
+  test("SPARK-49152: partition columns should be put at the end") {
+    withTable("t") {
+      sql("CREATE TABLE t (c1 INT, c2 INT) USING json PARTITIONED BY (c1)")
+      // partition columns should be put at the end.
+      assert(getTableMetadata("default.t").columns().map(_.name()) === Seq("c2", "c1"))
+    }
+  }
 }

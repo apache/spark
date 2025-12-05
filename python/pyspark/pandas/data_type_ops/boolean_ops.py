@@ -19,9 +19,11 @@ import numbers
 from typing import Any, Union
 
 import pandas as pd
-from pandas.api.types import CategoricalDtype
+from pandas.api.types import CategoricalDtype, is_integer_dtype  # type: ignore[attr-defined]
+from pandas.core.dtypes.common import is_numeric_dtype
 
 from pyspark.pandas.base import column_op, IndexOpsMixin
+from pyspark.pandas.config import get_option
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
@@ -35,10 +37,9 @@ from pyspark.pandas.data_type_ops.base import (
     _is_boolean_type,
 )
 from pyspark.pandas.typedef.typehints import as_spark_type, extension_dtypes, pandas_on_spark_type
-from pyspark.sql import functions as F
-from pyspark.sql.column import Column as PySparkColumn
+from pyspark.pandas.utils import is_ansi_mode_enabled
+from pyspark.sql import functions as F, Column as PySparkColumn
 from pyspark.sql.types import BooleanType, StringType
-from pyspark.sql.utils import get_column_class
 from pyspark.errors import PySparkValueError
 
 
@@ -236,6 +237,12 @@ class BooleanOps(DataTypeOps):
 
     def __and__(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
+        if (
+            is_ansi_mode_enabled(left._internal.spark_frame.sparkSession)
+            and self.dtype == bool
+            and right is None
+        ):
+            raise TypeError("AND can not be applied to given types.")
         if isinstance(right, IndexOpsMixin) and isinstance(right.dtype, extension_dtypes):
             return right.__and__(left)
         else:
@@ -255,6 +262,12 @@ class BooleanOps(DataTypeOps):
 
     def xor(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
+        if (
+            is_ansi_mode_enabled(left._internal.spark_frame.sparkSession)
+            and self.dtype == bool
+            and right is None
+        ):
+            raise TypeError("XOR can not be applied to given types.")
         if isinstance(right, IndexOpsMixin) and isinstance(right.dtype, extension_dtypes):
             return right ^ left
         elif _is_valid_for_logical_operator(right):
@@ -276,6 +289,12 @@ class BooleanOps(DataTypeOps):
 
     def __or__(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
+        if (
+            is_ansi_mode_enabled(left._internal.spark_frame.sparkSession)
+            and self.dtype == bool
+            and right is None
+        ):
+            raise TypeError("OR can not be applied to given types.")
         if isinstance(right, IndexOpsMixin) and isinstance(right.dtype, extension_dtypes):
             return right.__or__(left)
         else:
@@ -321,6 +340,13 @@ class BooleanOps(DataTypeOps):
                 ),
             )
         else:
+            is_ansi = is_ansi_mode_enabled(index_ops._internal.spark_frame.sparkSession)
+            if is_ansi and get_option("compute.eager_check"):
+                if is_integer_dtype(dtype) and not isinstance(dtype, extension_dtypes):
+                    if index_ops.hasnans:
+                        raise ValueError(
+                            "Cannot convert %s with missing values to integer" % self.pretty_name
+                        )
             return _as_other_type(index_ops, dtype, spark_type)
 
     def neg(self, operand: IndexOpsLike) -> IndexOpsLike:
@@ -329,25 +355,39 @@ class BooleanOps(DataTypeOps):
     def abs(self, operand: IndexOpsLike) -> IndexOpsLike:
         return operand
 
+    def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        if is_ansi_mode_enabled(left._internal.spark_frame.sparkSession):
+            # Handle bool vs. non-bool numeric comparisons
+            left_is_bool = _is_boolean_type(left)
+            right_is_non_bool_numeric = is_numeric_dtype(right) and not _is_boolean_type(right)
+
+            if left_is_bool and right_is_non_bool_numeric:
+                if isinstance(right, numbers.Number):
+                    left = transform_boolean_operand_to_numeric(
+                        left, spark_type=as_spark_type(type(right))
+                    )
+                else:
+                    left = transform_boolean_operand_to_numeric(
+                        left, spark_type=right.spark.data_type
+                    )
+
+        return super().eq(left, right)
+
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        Column = get_column_class()
-        return column_op(Column.__lt__)(left, right)
+        return column_op(PySparkColumn.__lt__)(left, right)
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        Column = get_column_class()
-        return column_op(Column.__le__)(left, right)
+        return column_op(PySparkColumn.__le__)(left, right)
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        Column = get_column_class()
-        return column_op(Column.__ge__)(left, right)
+        return column_op(PySparkColumn.__ge__)(left, right)
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
-        Column = get_column_class()
-        return column_op(Column.__gt__)(left, right)
+        return column_op(PySparkColumn.__gt__)(left, right)
 
     def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
         return operand._with_new_scol(~operand.spark.column, field=operand._internal.data_fields[0])

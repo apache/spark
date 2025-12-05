@@ -16,7 +16,9 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.python
 
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -25,6 +27,35 @@ class PythonScanBuilder(
     ds: PythonDataSourceV2,
     shortName: String,
     outputSchema: StructType,
-    options: CaseInsensitiveStringMap) extends ScanBuilder {
-  override def build(): Scan = new PythonScan(ds, shortName, outputSchema, options)
+    options: CaseInsensitiveStringMap)
+    extends ScanBuilder
+    with SupportsPushDownFilters {
+  private var supportedFilters: Array[Filter] = Array.empty
+
+  override def build(): Scan =
+    new PythonScan(ds, shortName, outputSchema, options, supportedFilters)
+
+  // Optionally called by DSv2 once to push down filters before the scan is built.
+  override def pushFilters(filters: Array[Filter]): Array[Filter] = {
+    if (!SQLConf.get.pythonFilterPushDown) {
+      return filters
+    }
+
+    val dataSource = ds.getOrCreateDataSourceInPython(shortName, options, Some(outputSchema))
+    ds.source.pushdownFiltersInPython(dataSource, outputSchema, filters) match {
+      case None => filters // No filters are supported.
+      case Some(result) =>
+        // Filter pushdown also returns partitions and the read function.
+        // This helps reduce the number of Python worker calls.
+        ds.setReadInfo(result.readInfo)
+
+        // Partition the filters into supported and unsupported ones.
+        val isPushed = result.isFilterPushed.zip(filters)
+        supportedFilters = isPushed.collect { case (true, filter) => filter }.toArray
+        val unsupported = isPushed.collect { case (false, filter) => filter }.toArray
+        unsupported
+    }
+  }
+
+  override def pushedFilters(): Array[Filter] = supportedFilters
 }

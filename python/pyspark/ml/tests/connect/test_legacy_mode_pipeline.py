@@ -22,8 +22,9 @@ import unittest
 import numpy as np
 
 from pyspark.util import is_remote_only
-from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
+from pyspark.testing.utils import have_torch, torch_requirement_message
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 if should_test_connect:
     from pyspark.ml.connect.feature import StandardScaler
@@ -44,6 +45,8 @@ class PipelineTestsMixin:
             )
 
     def test_pipeline(self):
+        import torch
+
         train_dataset = self.spark.createDataFrame(
             [
                 (1.0, [0.0, 5.0]),
@@ -93,43 +96,50 @@ class PipelineTestsMixin:
         self._check_result(local_transform_result2, expected_predictions, expected_probabilities)
 
         with tempfile.TemporaryDirectory(prefix="test_pipeline") as tmp_dir:
-            pipeline_local_path = os.path.join(tmp_dir, "pipeline")
-            pipeline.saveToLocal(pipeline_local_path)
-            loaded_pipeline = Pipeline.loadFromLocal(pipeline_local_path)
+            with torch.serialization.safe_globals(
+                [
+                    torch.nn.modules.container.Sequential,
+                    torch.nn.modules.linear.Linear,
+                    torch.nn.modules.activation.Softmax,
+                ]
+            ):
+                pipeline_local_path = os.path.join(tmp_dir, "pipeline")
+                pipeline.saveToLocal(pipeline_local_path)
+                loaded_pipeline = Pipeline.loadFromLocal(pipeline_local_path)
 
-            assert pipeline.uid == loaded_pipeline.uid
-            assert loaded_pipeline.getStages()[1].getMaxIter() == 200
+                assert pipeline.uid == loaded_pipeline.uid
+                assert loaded_pipeline.getStages()[1].getMaxIter() == 200
 
-            pipeline_model_local_path = os.path.join(tmp_dir, "pipeline_model")
-            model.saveToLocal(pipeline_model_local_path)
-            loaded_model = Pipeline.loadFromLocal(pipeline_model_local_path)
+                pipeline_model_local_path = os.path.join(tmp_dir, "pipeline_model")
+                model.saveToLocal(pipeline_model_local_path)
+                loaded_model = Pipeline.loadFromLocal(pipeline_model_local_path)
 
-            assert model.uid == loaded_model.uid
-            assert loaded_model.stages[1].getMaxIter() == 200
+                assert model.uid == loaded_model.uid
+                assert loaded_model.stages[1].getMaxIter() == 200
 
-            loaded_model_transform_result = loaded_model.transform(eval_dataset).toPandas()
-            self._check_result(
-                loaded_model_transform_result, expected_predictions, expected_probabilities
-            )
+                loaded_model_transform_result = loaded_model.transform(eval_dataset).toPandas()
+                self._check_result(
+                    loaded_model_transform_result, expected_predictions, expected_probabilities
+                )
 
-            pipeline2_local_path = os.path.join(tmp_dir, "pipeline2")
-            pipeline2.saveToLocal(pipeline2_local_path)
-            loaded_pipeline2 = Pipeline.loadFromLocal(pipeline2_local_path)
+                pipeline2_local_path = os.path.join(tmp_dir, "pipeline2")
+                pipeline2.saveToLocal(pipeline2_local_path)
+                loaded_pipeline2 = Pipeline.loadFromLocal(pipeline2_local_path)
 
-            assert pipeline2.uid == loaded_pipeline2.uid
-            assert loaded_pipeline2.getStages()[0].getStages()[1].getMaxIter() == 200
+                assert pipeline2.uid == loaded_pipeline2.uid
+                assert loaded_pipeline2.getStages()[0].getStages()[1].getMaxIter() == 200
 
-            pipeline2_model_local_path = os.path.join(tmp_dir, "pipeline2_model")
-            model2.saveToLocal(pipeline2_model_local_path)
-            loaded_model2 = Pipeline.loadFromLocal(pipeline2_model_local_path)
+                pipeline2_model_local_path = os.path.join(tmp_dir, "pipeline2_model")
+                model2.saveToLocal(pipeline2_model_local_path)
+                loaded_model2 = Pipeline.loadFromLocal(pipeline2_model_local_path)
 
-            assert model2.uid == loaded_model2.uid
-            assert loaded_model2.stages[0].stages[1].getMaxIter() == 200
+                assert model2.uid == loaded_model2.uid
+                assert loaded_model2.stages[0].stages[1].getMaxIter() == 200
 
-            loaded_model2_transform_result = loaded_model2.transform(eval_dataset).toPandas()
-            self._check_result(
-                loaded_model2_transform_result, expected_predictions, expected_probabilities
-            )
+                loaded_model2_transform_result = loaded_model2.transform(eval_dataset).toPandas()
+                self._check_result(
+                    loaded_model2_transform_result, expected_predictions, expected_probabilities
+                )
 
     @staticmethod
     def test_pipeline_copy():
@@ -169,15 +179,15 @@ class PipelineTestsMixin:
 
 
 @unittest.skipIf(
-    not should_test_connect or is_remote_only(),
-    connect_requirement_message or "pyspark-connect cannot test classic Spark",
+    not should_test_connect or not have_torch or is_remote_only(),
+    connect_requirement_message
+    or torch_requirement_message
+    or "pyspark-connect cannot test classic Spark",
 )
-class PipelineTests(PipelineTestsMixin, unittest.TestCase):
-    def setUp(self) -> None:
-        self.spark = SparkSession.builder.master("local[2]").getOrCreate()
-
-    def tearDown(self) -> None:
-        self.spark.stop()
+class PipelineTests(PipelineTestsMixin, ReusedSQLTestCase):
+    @classmethod
+    def master(cls):
+        return "local[2]"
 
 
 if __name__ == "__main__":

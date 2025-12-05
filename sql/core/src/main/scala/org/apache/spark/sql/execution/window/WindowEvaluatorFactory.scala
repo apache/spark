@@ -45,6 +45,7 @@ class WindowEvaluatorFactory(
     private val factories = windowFrameExpressionFactoryPairs.map(_._2).toArray
     private val inMemoryThreshold = conf.windowExecBufferInMemoryThreshold
     private val spillThreshold = conf.windowExecBufferSpillThreshold
+    private val sizeInBytesSpillThreshold = conf.windowExecBufferSpillSizeThreshold
 
     override def eval(
         partitionIndex: Int,
@@ -82,7 +83,13 @@ class WindowEvaluatorFactory(
 
         // Manage the current partition.
         val buffer: ExternalAppendOnlyUnsafeRowArray =
-          new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold)
+          new ExternalAppendOnlyUnsafeRowArray(
+            inMemoryThreshold,
+            // TODO: shall we have a new config to specify the max in-memory buffer size
+            //       of ExternalAppendOnlyUnsafeRowArray?
+            sizeInBytesSpillThreshold,
+            spillThreshold,
+            sizeInBytesSpillThreshold)
 
         var bufferIterator: Iterator[UnsafeRow] = _
 

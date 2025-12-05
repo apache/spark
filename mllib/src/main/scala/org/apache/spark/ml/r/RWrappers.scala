@@ -33,7 +33,8 @@ private[r] object RWrappers extends MLReader[Object] {
   override def load(path: String): Object = {
     implicit val format = DefaultFormats
     val rMetadataPath = new Path(path, "rMetadata").toString
-    val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
+    val rMetadataStr = sparkSession.read.text(rMetadataPath)
+      .first().getString(0)
     val rMetadata = parse(rMetadataStr)
     val className = (rMetadata \ "class").extract[String]
     className match {

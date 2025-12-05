@@ -118,8 +118,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_PANDAS_DATAFRAME",
-            message_parameters={
+            errorClass="DIFFERENT_PANDAS_DATAFRAME",
+            messageParameters={
                 "left": pdf1.to_string(),
                 "left_dtype": str(pdf1.dtypes),
                 "right": pdf2.to_string(),
@@ -136,8 +136,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_PANDAS_SERIES",
-            message_parameters={
+            errorClass="DIFFERENT_PANDAS_SERIES",
+            messageParameters={
                 "left": series1.to_string(),
                 "left_dtype": str(series1.dtype),
                 "right": series2.to_string(),
@@ -154,8 +154,62 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_PANDAS_INDEX",
-            message_parameters={
+            errorClass="DIFFERENT_PANDAS_INDEX",
+            messageParameters={
+                "left": index1,
+                "left_dtype": str(index1.dtype),
+                "right": index2,
+                "right_dtype": str(index2.dtype),
+            },
+        )
+
+    def test_dataframe_error_assert_pandas_almost_equal(self):
+        pdf1 = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
+        pdf2 = pd.DataFrame({"a": [1, 3, 3], "b": [4, 5, 6]})
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            _assert_pandas_almost_equal(pdf1, pdf2, True)
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="DIFFERENT_PANDAS_DATAFRAME",
+            messageParameters={
+                "left": pdf1.to_string(),
+                "left_dtype": str(pdf1.dtypes),
+                "right": pdf2.to_string(),
+                "right_dtype": str(pdf2.dtypes),
+            },
+        )
+
+    def test_series_error_assert_pandas_almost_equal_2(self):
+        series1 = pd.Series([1, 2, 3])
+        series2 = pd.Series([4, 5, 6])
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            _assert_pandas_almost_equal(series1, series2, True)
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="DIFFERENT_PANDAS_SERIES",
+            messageParameters={
+                "left": series1.to_string(),
+                "left_dtype": str(series1.dtype),
+                "right": series2.to_string(),
+                "right_dtype": str(series2.dtype),
+            },
+        )
+
+    def test_index_error_assert_pandas_almost_equal(self):
+        index1 = pd.Index([1, 2, 3])
+        index2 = pd.Index([4, 5, 6])
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            _assert_pandas_almost_equal(index1, index2, True)
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="DIFFERENT_PANDAS_INDEX",
+            messageParameters={
                 "left": index1,
                 "left_dtype": str(index1.dtype),
                 "right": index2,
@@ -174,8 +228,8 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="DIFFERENT_PANDAS_MULTIINDEX",
-            message_parameters={
+            errorClass="DIFFERENT_PANDAS_MULTIINDEX",
+            messageParameters={
                 "left": multiindex1,
                 "left_dtype": str(multiindex1.dtype),
                 "right": multiindex2,

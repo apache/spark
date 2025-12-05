@@ -17,22 +17,23 @@
 package org.apache.spark.sql.execution.arrow
 
 import java.io.{ByteArrayOutputStream, DataOutputStream, File}
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
+import java.time.LocalTime
 import java.util.Locale
 
-import com.google.common.io.Files
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.{VectorLoader, VectorSchemaRoot}
 import org.apache.arrow.vector.ipc.JsonFileReader
 import org.apache.arrow.vector.util.{ByteArrayReadableSeekableByteChannel, Validator}
 
 import org.apache.spark.TaskContext
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, BinaryType, Decimal, IntegerType, NullType, StringType, StructField, StructType}
@@ -730,6 +731,43 @@ class ArrowConvertersSuite extends SharedSparkSession {
     }
   }
 
+  test("time type conversion") {
+    val json =
+      s"""
+         |{
+         |  "schema" : {
+         |    "fields" : [ {
+         |      "name" : "time",
+         |      "type" : {
+         |        "name" : "time",
+         |        "unit" : "NANOSECOND",
+         |        "bitWidth" : 64
+         |      },
+         |      "nullable" : true,
+         |      "children" : [ ]
+         |    } ]
+         |  },
+         |  "batches" : [ {
+         |    "count" : 3,
+         |    "columns" : [ {
+         |      "name" : "time",
+         |      "count" : 3,
+         |      "VALIDITY" : [ 1, 1, 1 ],
+         |      "DATA" : [ 0, 43200000000000, 3723123456789 ]
+         |    } ]
+         |  } ]
+         |}
+       """.stripMargin
+
+    val t1 = LocalTime.of(0, 0, 0)
+    val t2 = LocalTime.of(12, 0, 0)
+    val t3 = LocalTime.of(1, 2, 3, 123456789)
+
+    val df = Seq(t1, t2, t3).toDF("time")
+
+    collectAndValidate(df, json, "timeData.json")
+  }
+
   test("floating-point NaN") {
     val json =
       s"""
@@ -1217,8 +1255,8 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
     val tempFile1 = new File(tempDataPath, "testData2-ints-part1.json")
     val tempFile2 = new File(tempDataPath, "testData2-ints-part2.json")
-    Files.write(json1, tempFile1, StandardCharsets.UTF_8)
-    Files.write(json2, tempFile2, StandardCharsets.UTF_8)
+    Files.writeString(tempFile1.toPath, json1)
+    Files.writeString(tempFile2.toPath, json2)
 
     validateConversion(schema, arrowBatches(0), tempFile1)
     validateConversion(schema, arrowBatches(1), tempFile2)
@@ -1375,8 +1413,10 @@ class ArrowConvertersSuite extends SharedSparkSession {
     val schema = StructType(Seq(StructField("int", IntegerType, nullable = true)))
 
     val ctx = TaskContext.empty()
-    val batchIter = ArrowConverters.toBatchIterator(inputRows.iterator, schema, 5, null, true, ctx)
-    val outputRowIter = ArrowConverters.fromBatchIterator(batchIter, schema, null, true, ctx)
+    val batchIter = ArrowConverters.toBatchIterator(
+      inputRows.iterator, schema, 5, null, true, false, ctx)
+    val outputRowIter = ArrowConverters.fromBatchIterator(
+      batchIter, schema, null, true, false, ctx)
 
     var count = 0
     outputRowIter.zipWithIndex.foreach { case (row, i) =>
@@ -1396,12 +1436,13 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
     val schema = StructType(Seq(StructField("int", IntegerType, nullable = true)))
     val ctx = TaskContext.empty()
-    val batchIter = ArrowConverters.toBatchIterator(inputRows.iterator, schema, 5, null, true, ctx)
+    val batchIter = ArrowConverters.toBatchIterator(
+      inputRows.iterator, schema, 5, null, true, false, ctx)
 
     // Write batches to Arrow stream format as a byte array
     val out = new ByteArrayOutputStream()
     Utils.tryWithResource(new DataOutputStream(out)) { dataOut =>
-      val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true)
+      val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true, false)
       writer.writeBatches(batchIter)
       writer.end()
     }
@@ -1409,7 +1450,8 @@ class ArrowConvertersSuite extends SharedSparkSession {
     // Read Arrow stream into batches, then convert back to rows
     val in = new ByteArrayReadableSeekableByteChannel(out.toByteArray)
     val readBatches = ArrowConverters.getBatchesFromStream(in)
-    val outputRowIter = ArrowConverters.fromBatchIterator(readBatches, schema, null, true, ctx)
+    val outputRowIter = ArrowConverters.fromBatchIterator(
+      readBatches, schema, null, true, false, ctx)
 
     var count = 0
     outputRowIter.zipWithIndex.foreach { case (row, i) =>
@@ -1440,7 +1482,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
     }
     val ctx = TaskContext.empty()
     val batchIter = ArrowConverters.toBatchWithSchemaIterator(
-      inputRows.iterator, schema, 5, 1024 * 1024, null, true)
+      inputRows.iterator, schema, 5, 1024 * 1024, null, true, false)
     val (outputRowIter, outputType) = ArrowConverters.fromBatchWithSchemaIterator(batchIter, ctx)
 
     var count = 0
@@ -1459,7 +1501,8 @@ class ArrowConvertersSuite extends SharedSparkSession {
     val schema = StructType(Seq(StructField("int", IntegerType, nullable = true)))
     val ctx = TaskContext.empty()
     val batchIter =
-      ArrowConverters.toBatchWithSchemaIterator(Iterator.empty, schema, 5, 1024 * 1024, null, true)
+      ArrowConverters.toBatchWithSchemaIterator(
+        Iterator.empty, schema, 5, 1024 * 1024, null, true, false)
     val (outputRowIter, outputType) = ArrowConverters.fromBatchWithSchemaIterator(batchIter, ctx)
 
     assert(0 == outputRowIter.length)
@@ -1473,7 +1516,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
       proj(row).copy()
     }
     val batchIter1 = ArrowConverters.toBatchWithSchemaIterator(
-      inputRows1.iterator, schema1, 5, 1024 * 1024, null, true)
+      inputRows1.iterator, schema1, 5, 1024 * 1024, null, true, false)
 
     val schema2 = StructType(Seq(StructField("field2", IntegerType, nullable = true)))
     val inputRows2 = Array(InternalRow(1)).map { row =>
@@ -1481,7 +1524,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
       proj(row).copy()
     }
     val batchIter2 = ArrowConverters.toBatchWithSchemaIterator(
-      inputRows2.iterator, schema2, 5, 1024 * 1024, null, true)
+      inputRows2.iterator, schema2, 5, 1024 * 1024, null, true, false)
 
     val iter = batchIter1.toArray ++ batchIter2
 
@@ -1489,6 +1532,422 @@ class ArrowConvertersSuite extends SharedSparkSession {
     intercept[IllegalArgumentException] {
       ArrowConverters.fromBatchWithSchemaIterator(iter.iterator, ctx)._1.toArray
     }
+  }
+
+  test("roundtrip arrow batches with IPC stream - single batch") {
+    val inputRows = (0 until 9).map(InternalRow(_)) :+ InternalRow(null)
+    val schema = StructType(Seq(StructField("int", IntegerType, nullable = true)))
+    val ctx = TaskContext.empty()
+
+    val batchIter = ArrowConverters.toBatchIterator(
+      inputRows.iterator, schema, 10, null, true, false, ctx)
+
+    // Write batches to Arrow IPC stream format
+    val out = new ByteArrayOutputStream()
+    Utils.tryWithResource(new DataOutputStream(out)) { dataOut =>
+      val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true, false)
+      writer.writeBatches(batchIter)
+      writer.end()
+    }
+
+    // Test the new IPC stream converter with metrics
+    val (iterator, outputSchema) = ArrowConverters.fromIPCStreamWithIterator(out.toByteArray, ctx)
+    assert(outputSchema == schema)
+
+    // Initially one batch loaded
+    assert(iterator.batchesLoaded == 0)
+    assert(iterator.totalRowsProcessed == 0)
+
+    var count = 0
+    iterator.zipWithIndex.foreach { case (row, i) =>
+      if (i != 9) {
+        assert(row.getInt(0) == i)
+      } else {
+        assert(row.isNullAt(0))
+      }
+      count += 1
+    }
+    assert(count == inputRows.length)
+
+    // Verify metrics after consuming all rows
+    assert(iterator.batchesLoaded == 1,
+      s"Expected 1 batch loaded, got ${iterator.batchesLoaded}")
+    assert(iterator.totalRowsProcessed == inputRows.length,
+      s"Expected ${inputRows.length} rows processed, got ${iterator.totalRowsProcessed}")
+  }
+
+  test("multiple record batches in single IPC stream") {
+    val inputRows = (0 until 25).map(InternalRow(_))
+    val schema = StructType(Seq(StructField("int", IntegerType, nullable = true)))
+    val ctx = TaskContext.empty()
+
+    // Create multiple batches with small batch size
+    val batchIter = ArrowConverters.toBatchIterator(
+      inputRows.iterator, schema, 5, null, true, false, ctx)
+
+    val out = new ByteArrayOutputStream()
+    Utils.tryWithResource(new DataOutputStream(out)) { dataOut =>
+      val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true, false)
+      writer.writeBatches(batchIter)
+      writer.end()
+    }
+
+    val (iterator, outputSchema) = ArrowConverters.fromIPCStreamWithIterator(out.toByteArray, ctx)
+    assert(outputSchema == schema)
+
+    // Initially no batches loaded
+    assert(iterator.batchesLoaded == 0)
+    assert(iterator.totalRowsProcessed == 0)
+
+    iterator.zipWithIndex.foreach { case (row, i) =>
+      assert(row.getInt(0) == i)
+    }
+
+    // With batch size 5 and 25 rows, we expect 5 batches (25/5 = 5)
+    val expectedBatches = 5
+    assert(iterator.batchesLoaded == expectedBatches,
+      s"Expected $expectedBatches batches loaded, got ${iterator.batchesLoaded}")
+    assert(iterator.totalRowsProcessed == inputRows.length,
+      s"Expected ${inputRows.length} rows processed, got ${iterator.totalRowsProcessed}")
+  }
+
+  test("multiple record batches in single stream without schema") {
+    val inputRows = (0 until 15).map(InternalRow(_))
+    val schema = StructType(Seq(StructField("int", IntegerType, nullable = true)))
+    val ctx = TaskContext.empty()
+
+    val batchIter = ArrowConverters.toBatchIterator(
+      inputRows.iterator, schema, 7, null, true, false, ctx)
+
+    val out = new ByteArrayOutputStream()
+    Utils.tryWithResource(new DataOutputStream(out)) { dataOut =>
+      val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true, false)
+      writer.writeBatches(batchIter)
+      writer.end()
+    }
+
+    val (outputRowIter, outputSchema) = ArrowConverters.fromIPCStream(out.toByteArray, ctx)
+    assert(outputSchema == schema)
+    val res = outputRowIter.zipWithIndex.map { case (row, i) =>
+      assert(row.getInt(0) == i)
+      i
+    }
+    assert(res.length == inputRows.length)
+  }
+
+  test("roundtrip arrow batches with complex schema using IPC stream") {
+    val rows = (0 until 12).map { i =>
+      InternalRow(i, UTF8String.fromString(s"str-$i"), InternalRow(i * 2))
+    }
+
+    val schema = StructType(Seq(
+      StructField("int", IntegerType),
+      StructField("str", StringType),
+      StructField("struct", StructType(Seq(StructField("inner", IntegerType))))
+    ))
+
+    val inputRows = rows.map { row =>
+      val proj = UnsafeProjection.create(schema)
+      proj(row).copy()
+    }
+    val ctx = TaskContext.empty()
+
+    // Create multiple batches
+    val batchIter = ArrowConverters.toBatchIterator(
+      inputRows.iterator, schema, 4, null, true, false, ctx)
+
+    val out = new ByteArrayOutputStream()
+    Utils.tryWithResource(new DataOutputStream(out)) { dataOut =>
+      val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true, false)
+      writer.writeBatches(batchIter)
+      writer.end()
+    }
+
+    val (outputRowIter, outputSchema) = ArrowConverters.fromIPCStream(out.toByteArray, ctx)
+    assert(outputSchema == schema)
+    val outputRows = outputRowIter.zipWithIndex.map { case (row, i) =>
+      assert(row.getInt(0) == i)
+      assert(row.getUTF8String(1).toString == s"str-$i")
+      val struct = row.getStruct(2, 1)
+      assert(struct.getInt(0) == i * 2)
+      i
+    }
+    assert(outputRows.length == inputRows.length)
+  }
+
+  test("IPC stream batch metrics validation") {
+    val ctx = TaskContext.empty()
+    val schema = StructType(Seq(StructField("int", IntegerType, nullable = true)))
+
+    // Test with different batch sizes to validate metrics
+    val testCases = Seq(
+      (50, 7),  // 50 rows, batch size 7 -> 8 batches (7*7 + 1)
+      (20, 4),  // 20 rows, batch size 4 -> 5 batches (4*4 + 4)
+      (15, 15), // 15 rows, batch size 15 -> 1 batch
+      (0, 5)    // 0 rows, any batch size -> 0 batches
+    )
+
+    testCases.foreach { case (rowCount, batchSize) =>
+      val inputRows = (0 until rowCount).map(InternalRow(_))
+      val batchIter = ArrowConverters.toBatchIterator(
+        inputRows.iterator, schema, batchSize, null, true, false, ctx)
+
+      val out = new ByteArrayOutputStream()
+      Utils.tryWithResource(new DataOutputStream(out)) { dataOut =>
+        val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true, false)
+        writer.writeBatches(batchIter)
+        writer.end()
+      }
+
+      val (iterator, outputSchema) = ArrowConverters.fromIPCStreamWithIterator(out.toByteArray, ctx)
+      assert(outputSchema == schema)
+
+      // Initially no batches loaded
+      assert(iterator.batchesLoaded == 0)
+      assert(iterator.totalRowsProcessed == 0)
+
+      // Consume all rows
+      val proj = UnsafeProjection.create(schema)
+      val outputRows = iterator.map(proj(_).copy())
+      assert(outputRows.length == rowCount)
+
+      if (rowCount > 0) {
+        // Calculate expected batches
+        val expectedBatches = Math.ceil(rowCount.toDouble / batchSize).toInt
+        assert(iterator.batchesLoaded == expectedBatches,
+          s"For $rowCount rows with batch size $batchSize: " +
+          s"expected $expectedBatches batches, got ${iterator.batchesLoaded}")
+        assert(iterator.totalRowsProcessed == rowCount,
+          s"For $rowCount rows: expected $rowCount rows processed, " +
+          s"got ${iterator.totalRowsProcessed}")
+      } else {
+        // Empty case - no batches should be loaded
+        assert(iterator.batchesLoaded == 0)
+        assert(iterator.totalRowsProcessed == 0)
+      }
+    }
+  }
+
+  test("empty IPC stream") {
+    val schema = StructType(Seq(StructField("int", IntegerType, nullable = true)))
+    val ctx = TaskContext.empty()
+
+    val batchIter = ArrowConverters.toBatchIterator(
+      Iterator.empty, schema, 10, null, true, false, ctx)
+
+    val out = new ByteArrayOutputStream()
+    Utils.tryWithResource(new DataOutputStream(out)) { dataOut =>
+      val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true, false)
+      writer.writeBatches(batchIter)
+      writer.end()
+    }
+
+    val (iterator, outputSchema) = ArrowConverters.fromIPCStreamWithIterator(out.toByteArray, ctx)
+    assert(outputSchema == schema)
+
+    // Validate metrics for empty stream
+    // assert(iterator.batchesLoaded == 0)
+    assert(iterator.totalRowsProcessed == 0)
+    assert(!iterator.hasNext)
+
+    // Metrics should remain 0 after hasNext check
+    // assert(iterator.batchesLoaded == 0)
+    assert(iterator.totalRowsProcessed == 0)
+  }
+
+  test("IPC stream with invalid data") {
+    val ctx = TaskContext.empty()
+    val invalidData = Array[Byte](1, 2, 3, 4, 5)
+
+    intercept[Exception] {
+      ArrowConverters.fromIPCStream(invalidData, ctx)
+    }
+  }
+
+  test("IPC stream with empty data") {
+    val ctx = TaskContext.empty()
+    val emptyData = Array.empty[Byte]
+
+    intercept[Exception] {
+      ArrowConverters.fromIPCStream(emptyData, ctx)
+    }
+  }
+
+  test("IPC stream with null context") {
+    val inputRows = (0 until 5).map(InternalRow(_))
+    val schema = StructType(Seq(StructField("int", IntegerType, nullable = true)))
+    val ctx = TaskContext.empty()
+
+    val batchIter = ArrowConverters.toBatchIterator(
+      inputRows.iterator, schema, 10, null, true, false, ctx)
+
+    val out = new ByteArrayOutputStream()
+    Utils.tryWithResource(new DataOutputStream(out)) { dataOut =>
+      val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true, false)
+      writer.writeBatches(batchIter)
+      writer.end()
+    }
+
+    // Test with null context - should still work but won't have cleanup registration
+    val proj = UnsafeProjection.create(schema)
+    val (outputRowIter, outputSchema) = ArrowConverters.fromIPCStream(out.toByteArray, null)
+    assert(outputSchema == schema)
+    val outputRows = outputRowIter.map(proj(_).copy()).toList
+    assert(outputRows.length == inputRows.length)
+    outputRows.zipWithIndex.foreach { case (row, i) =>
+      assert(row.getInt(0) == i)
+    }
+  }
+
+  test("multi-batch iteration validation with varying batch sizes") {
+    val inputRows = (0 until 100).map(InternalRow(_))
+    val schema = StructType(Seq(StructField("int", IntegerType, nullable = true)))
+    val ctx = TaskContext.empty()
+
+    // Create many small batches
+    val batchIter = ArrowConverters.toBatchIterator(
+      inputRows.iterator, schema, 3, null, true, false, ctx)
+
+    val out = new ByteArrayOutputStream()
+    Utils.tryWithResource(new DataOutputStream(out)) { dataOut =>
+      val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true, false)
+      writer.writeBatches(batchIter)
+      writer.end()
+    }
+
+    val (iterator, outputSchema) = ArrowConverters.fromIPCStreamWithIterator(out.toByteArray, ctx)
+    assert(outputSchema == schema)
+
+    // Initially no batches loaded
+    assert(iterator.batchesLoaded == 0)
+    assert(iterator.totalRowsProcessed == 0)
+
+    // Test hasNext multiple times without calling next
+    assert(iterator.hasNext)
+    assert(iterator.hasNext)
+    assert(iterator.hasNext)
+
+    // After hasNext calls, first batch should be loaded
+    assert(iterator.batchesLoaded == 1)
+    assert(iterator.totalRowsProcessed == 0) // First batch has 3 rows
+
+    // Consume all rows
+    val proj = UnsafeProjection.create(schema)
+    val outputRows = iterator.map(proj(_).copy()).toList
+    assert(outputRows.length == inputRows.length)
+    outputRows.zipWithIndex.foreach { case (row, i) =>
+      assert(row.getInt(0) == i)
+    }
+
+    // With batch size 3 and 100 rows, we expect 34 batches (ceiling(100/3) = 34)
+    val expectedBatches = Math.ceil(inputRows.length.toDouble / 3).toInt
+    assert(iterator.batchesLoaded == expectedBatches,
+      s"Expected $expectedBatches batches loaded, got ${iterator.batchesLoaded}")
+    assert(iterator.totalRowsProcessed == inputRows.length,
+      s"Expected ${inputRows.length} rows processed, got ${iterator.totalRowsProcessed}")
+
+    // Verify no more data
+    assert(!iterator.hasNext)
+  }
+
+  test("multi-batch iteration with complex schema validation") {
+    val inputRows = (0 until 50).map { i =>
+      InternalRow(
+        i,
+        UTF8String.fromString(s"test-$i"),
+        if (i % 2 == 0) null else InternalRow(i * 3),
+        Array(i, i + 1, i + 2).map(x => x.toByte)
+      )
+    }
+
+    val schema = StructType(Seq(
+      StructField("id", IntegerType, nullable = false),
+      StructField("name", StringType, nullable = false),
+      StructField("nested", StructType(Seq(StructField("value", IntegerType))), nullable = true),
+      StructField("bytes", BinaryType, nullable = false)
+    ))
+
+    val projectedRows = inputRows.map { row =>
+      val proj = UnsafeProjection.create(schema)
+      proj(row).copy()
+    }
+    val ctx = TaskContext.empty()
+
+    // Use small batch size to create many batches
+    val batchIter = ArrowConverters.toBatchIterator(
+      projectedRows.iterator, schema, 7, null, true, false, ctx)
+
+    val out = new ByteArrayOutputStream()
+    Utils.tryWithResource(new DataOutputStream(out)) { dataOut =>
+      val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true, false)
+      writer.writeBatches(batchIter)
+      writer.end()
+    }
+
+    val (outputRowIter, outputSchema) = ArrowConverters.fromIPCStream(out.toByteArray, ctx)
+    val proj = UnsafeProjection.create(schema)
+    assert(outputSchema == schema)
+    val outputRows = outputRowIter.map(proj(_).copy()).toList
+    assert(outputRows.length == inputRows.length)
+
+    outputRows.zipWithIndex.foreach { case (row, i) =>
+      assert(row.getInt(0) == i)
+      assert(row.getUTF8String(1).toString == s"test-$i")
+      if (i % 2 == 0) {
+        assert(row.isNullAt(2))
+      } else {
+        val nested = row.getStruct(2, 1)
+        assert(nested.getInt(0) == i * 3)
+      }
+      val expectedBytes = Array(i, i + 1, i + 2).map(_.toByte)
+      assert(row.getBinary(3).sameElements(expectedBytes))
+    }
+  }
+
+  test("IPC stream partial consumption metrics validation") {
+    val inputRows = (0 until 30).map(InternalRow(_))
+    val schema = StructType(Seq(StructField("int", IntegerType, nullable = true)))
+    val ctx = TaskContext.empty()
+    val batchSize = 7
+
+    val batchIter = ArrowConverters.toBatchIterator(
+      inputRows.iterator, schema, batchSize, null, true, false, ctx)
+
+    val out = new ByteArrayOutputStream()
+    Utils.tryWithResource(new DataOutputStream(out)) { dataOut =>
+      val writer = new ArrowBatchStreamWriter(schema, dataOut, null, true, false)
+      writer.writeBatches(batchIter)
+      writer.end()
+    }
+
+    val (iterator, outputSchema) = ArrowConverters.fromIPCStreamWithIterator(out.toByteArray, ctx)
+    assert(outputSchema == schema)
+
+    // Initially no batches loaded
+    assert(iterator.batchesLoaded == 0)
+    assert(iterator.totalRowsProcessed == 0)
+
+    // Consume first 10 rows (should load 2 batches: 7 + 3)
+    val firstBatch = iterator.take(10).toList
+    assert(firstBatch.length == 10)
+
+    // After consuming 10 rows, we should have loaded at least 2 batches
+    assert(iterator.batchesLoaded >= 2,
+      s"Expected at least 2 batches loaded after 10 rows, got ${iterator.batchesLoaded}")
+    assert(iterator.totalRowsProcessed >= 10,
+      s"Expected at least 10 rows processed, got ${iterator.totalRowsProcessed}")
+
+    // Consume remaining rows
+    val remainingRows = iterator.toList
+    val totalConsumed = firstBatch.length + remainingRows.length
+    assert(totalConsumed == inputRows.length)
+
+    // Final metrics should show all batches loaded
+    val expectedBatches = Math.ceil(inputRows.length.toDouble / batchSize).toInt
+    assert(iterator.batchesLoaded == expectedBatches,
+      s"Expected $expectedBatches batches loaded, got ${iterator.batchesLoaded}")
+    assert(iterator.totalRowsProcessed == inputRows.length,
+      s"Expected ${inputRows.length} rows processed, got ${iterator.totalRowsProcessed}")
   }
 
   /** Test that a converted DataFrame to Arrow record batch equals batch read from JSON file */
@@ -1501,7 +1960,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
     // NOTE: coalesce to single partition because can only load 1 batch in validator
     val batchBytes = df.coalesce(1).toArrowBatchRdd.collect().head
     val tempFile = new File(tempDataPath, file)
-    Files.write(json, tempFile, StandardCharsets.UTF_8)
+    Files.writeString(tempFile.toPath, json)
     validateConversion(df.schema, batchBytes, tempFile, timeZoneId, errorOnDuplicatedFieldNames)
   }
 
@@ -1510,11 +1969,13 @@ class ArrowConvertersSuite extends SharedSparkSession {
       batchBytes: Array[Byte],
       jsonFile: File,
       timeZoneId: String = null,
-      errorOnDuplicatedFieldNames: Boolean = true): Unit = {
+      errorOnDuplicatedFieldNames: Boolean = true,
+      largeVarTypes: Boolean = false): Unit = {
     val allocator = new RootAllocator(Long.MaxValue)
     val jsonReader = new JsonFileReader(jsonFile, allocator)
 
-    val arrowSchema = ArrowUtils.toArrowSchema(sparkSchema, timeZoneId, errorOnDuplicatedFieldNames)
+    val arrowSchema = ArrowUtils.toArrowSchema(
+      sparkSchema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
     val jsonSchema = jsonReader.start()
     Validator.compareSchemas(arrowSchema, jsonSchema)
 

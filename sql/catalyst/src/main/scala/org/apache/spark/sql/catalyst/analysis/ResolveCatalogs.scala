@@ -19,9 +19,15 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.SparkException
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.SqlScriptingContextManager
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, LookupCatalog, SupportsNamespaces}
+import org.apache.spark.sql.catalyst.util.SparkCharVarcharUtils.replaceCharVarcharWithString
+import org.apache.spark.sql.connector.catalog._
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.util.ArrayImplicits._
 
@@ -34,21 +40,62 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
     // We only support temp variables for now and the system catalog is not properly implemented
     // yet. We need to resolve `UnresolvedIdentifier` for variable commands specially.
-    case c @ CreateVariable(UnresolvedIdentifier(nameParts, _), _, _) =>
-      val resolved = resolveVariableName(nameParts)
-      c.copy(name = resolved)
+    case c @ CreateVariable(identifiers, _, _) =>
+      // We resolve only UnresolvedIdentifiers, and pass on the other nodes
+      val resolved = identifiers.map {
+        case UnresolvedIdentifier(nameParts, _) =>
+          // From scripts we can only create local variables, which must be unqualified,
+          // and must not be DECLARE OR REPLACE.
+          if (withinSqlScript) {
+            if (c.replace) {
+              throw new AnalysisException(
+                "INVALID_VARIABLE_DECLARATION.REPLACE_LOCAL_VARIABLE",
+                Map("varName" -> toSQLId(nameParts))
+              )
+            }
+
+            if (nameParts.length != 1) {
+              throw new AnalysisException(
+                "INVALID_VARIABLE_DECLARATION.QUALIFIED_LOCAL_VARIABLE",
+                Map("varName" -> toSQLId(nameParts)))
+            }
+
+            SqlScriptingContextManager.get().map(_.getVariableManager)
+              .getOrElse(throw SparkException.internalError(
+                "Scripting local variable manager should be present in SQL script."))
+              .qualify(nameParts.last)
+          } else {
+            val resolvedIdentifier
+            = catalogManager.tempVariableManager.qualify(nameParts.last)
+
+            assertValidSessionVariableNameParts(nameParts, resolvedIdentifier)
+            resolvedIdentifier
+          }
+        case plan => plan
+      }
+      c.copy(names = resolved)
     case d @ DropVariable(UnresolvedIdentifier(nameParts, _), _) =>
-      val resolved = resolveVariableName(nameParts)
+      if (withinSqlScript) {
+        throw new AnalysisException(
+          "UNSUPPORTED_FEATURE.SQL_SCRIPTING_DROP_TEMPORARY_VARIABLE", Map.empty)
+      }
+      val resolved = catalogManager.tempVariableManager.qualify(nameParts.last)
+      assertValidSessionVariableNameParts(nameParts, resolved)
       d.copy(name = resolved)
 
+    // For CREATE TABLE and REPLACE TABLE statements, resolve the table identifier and include
+    // the table columns as output. This allows expressions (e.g., constraints) referencing these
+    // columns to be resolved correctly.
+    case c @ CreateTable(UnresolvedIdentifier(nameParts, allowTemp), columns, _, _, _) =>
+      val resolvedIdentifier = resolveIdentifier(nameParts, allowTemp, columns)
+      c.copy(name = resolvedIdentifier)
+
+    case r @ ReplaceTable(UnresolvedIdentifier(nameParts, allowTemp), columns, _, _, _) =>
+      val resolvedIdentifier = resolveIdentifier(nameParts, allowTemp, columns)
+      r.copy(name = resolvedIdentifier)
+
     case UnresolvedIdentifier(nameParts, allowTemp) =>
-      if (allowTemp && catalogManager.v1SessionCatalog.isTempView(nameParts)) {
-        val ident = Identifier.of(nameParts.dropRight(1).toArray, nameParts.last)
-        ResolvedIdentifier(FakeSystemCatalog, ident)
-      } else {
-        val CatalogAndIdentifier(catalog, identifier) = nameParts
-        ResolvedIdentifier(catalog, identifier)
-      }
+      resolveIdentifier(nameParts, allowTemp, Nil)
 
     case CurrentNamespace =>
       ResolvedNamespace(currentCatalog, catalogManager.currentNamespace.toImmutableArraySeq)
@@ -56,6 +103,27 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       resolveNamespace(currentCatalog, Seq.empty[String], fetchMetadata)
     case UnresolvedNamespace(CatalogAndNamespace(catalog, ns), fetchMetadata) =>
       resolveNamespace(catalog, ns, fetchMetadata)
+  }
+
+  private def resolveIdentifier(
+      nameParts: Seq[String],
+      allowTemp: Boolean,
+      columns: Seq[ColumnDefinition]): ResolvedIdentifier = {
+    val columnOutput = columns.map { col =>
+      val dataType = if (conf.preserveCharVarcharTypeInfo) {
+        col.dataType
+      } else {
+        replaceCharVarcharWithString(col.dataType)
+      }
+      AttributeReference(col.name, dataType, col.nullable, col.metadata)()
+    }
+    if (allowTemp && catalogManager.v1SessionCatalog.isTempView(nameParts)) {
+      val ident = Identifier.of(nameParts.dropRight(1).toArray, nameParts.last)
+      ResolvedIdentifier(FakeSystemCatalog, ident, columnOutput)
+    } else {
+      val CatalogAndIdentifier(catalog, identifier) = nameParts
+      ResolvedIdentifier(catalog, identifier, columnOutput)
+    }
   }
 
   private def resolveNamespace(
@@ -73,28 +141,34 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     }
   }
 
-  private def resolveVariableName(nameParts: Seq[String]): ResolvedIdentifier = {
-    def ident: Identifier = Identifier.of(Array(CatalogManager.SESSION_NAMESPACE), nameParts.last)
-    if (nameParts.length == 1) {
-      ResolvedIdentifier(FakeSystemCatalog, ident)
-    } else if (nameParts.length == 2) {
-      if (nameParts.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
-        ResolvedIdentifier(FakeSystemCatalog, ident)
-      } else {
-        throw QueryCompilationErrors.unresolvedVariableError(
-          nameParts, Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE))
-      }
-    } else if (nameParts.length == 3) {
-      if (nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
-        nameParts(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
-        ResolvedIdentifier(FakeSystemCatalog, ident)
-      } else {
-        throw QueryCompilationErrors.unresolvedVariableError(
-          nameParts, Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE))
-      }
-    } else {
+  private def withinSqlScript: Boolean =
+    SqlScriptingContextManager.get().map(_.getVariableManager).isDefined
+
+  private def assertValidSessionVariableNameParts(
+      nameParts: Seq[String],
+      resolvedIdentifier: ResolvedIdentifier): Unit = {
+    if (!validSessionVariableName(nameParts)) {
       throw QueryCompilationErrors.unresolvedVariableError(
-        nameParts, Seq(CatalogManager.SYSTEM_CATALOG_NAME, CatalogManager.SESSION_NAMESPACE))
+        nameParts,
+        Seq(
+          resolvedIdentifier.catalog.name(),
+          resolvedIdentifier.identifier.namespace().head)
+      )
+    }
+
+    def validSessionVariableName(nameParts: Seq[String]): Boolean = nameParts.length match {
+      case 1 => true
+
+      // On declare variable, local variables support only unqualified names.
+      // On drop variable, local variables are not supported at all.
+      case 2 if nameParts.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) => true
+
+      // When there are 3 nameParts the variable must be a fully qualified session variable
+      // i.e. "system.session.<varName>"
+      case 3 if nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+        nameParts(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) => true
+
+      case _ => false
     }
   }
 }

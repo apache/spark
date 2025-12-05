@@ -25,7 +25,6 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.{broadcast, SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.LogKeys.{CODEGEN_STAGE_ID, CONFIG, ERROR, HUGE_METHOD_LIMIT, MAX_METHOD_CODE_SIZE, TREE_NODE}
-import org.apache.spark.internal.MDC
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -56,6 +55,7 @@ trait CodegenSupport extends SparkPlan {
     case _: SortMergeJoinExec => "smj"
     case _: BroadcastNestedLoopJoinExec => "bnlj"
     case _: RDDScanExec => "rdd"
+    case _: OneRowRelationExec => "orr"
     case _: DataSourceScanExec => "scan"
     case _: InMemoryTableScanExec => "memoryScan"
     case _: WholeStageCodegenExec => "wholestagecodegen"
@@ -165,8 +165,10 @@ trait CodegenSupport extends SparkPlan {
         }
       }
 
+    @scala.annotation.nowarn("cat=deprecation")
     val inputVars = inputVarsCandidate match {
-      case stream: LazyList[ExprCode] => stream.force
+      case stream: Stream[ExprCode] => stream.force
+      case lazyList: LazyList[ExprCode] => lazyList.force
       case other => other
     }
 
@@ -545,6 +547,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with InputRDDCod
       addSuffix: Boolean = false,
       maxFields: Int,
       printNodeId: Boolean,
+      printOutputColumns: Boolean,
       indent: Int = 0): Unit = {
     child.generateTreeString(
       depth,
@@ -555,6 +558,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with InputRDDCod
       addSuffix = false,
       maxFields,
       printNodeId,
+      printOutputColumns,
       indent)
   }
 
@@ -816,6 +820,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
       addSuffix: Boolean = false,
       maxFields: Int,
       printNodeId: Boolean,
+      printOutputColumns: Boolean,
       indent: Int = 0): Unit = {
     child.generateTreeString(
       depth,
@@ -826,6 +831,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
       false,
       maxFields,
       printNodeId,
+      printOutputColumns,
       indent)
   }
 
@@ -953,6 +959,10 @@ case class CollapseCodegenStages(
         // Do not make LogicalTableScanExec the root of WholeStageCodegen
         // to support the fast driver-local collect/take paths.
         plan
+      case plan: EmptyRelationExec =>
+        // Do not make EmptyRelationExec the root of WholeStageCodegen
+        // to support the fast driver-local collect/take paths.
+        plan
       case plan: CommandResultExec =>
         // Do not make CommandResultExec the root of WholeStageCodegen
         // to support the fast driver-local collect/take paths.
@@ -968,8 +978,7 @@ case class CollapseCodegenStages(
   }
 
   def apply(plan: SparkPlan): SparkPlan = {
-    if (conf.wholeStageEnabled && CodegenObjectFactoryMode.withName(conf.codegenFactoryMode)
-      != CodegenObjectFactoryMode.NO_CODEGEN) {
+    if (conf.wholeStageEnabled && conf.codegenFactoryMode != CodegenObjectFactoryMode.NO_CODEGEN) {
       insertWholeStageCodegen(plan)
     } else {
       plan

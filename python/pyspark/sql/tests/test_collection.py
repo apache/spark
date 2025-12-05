@@ -15,12 +15,16 @@
 # limitations under the License.
 #
 
+import datetime
 import unittest
 
 from pyspark.sql.types import (
+    Row,
+    ArrayType,
     StringType,
     IntegerType,
     StructType,
+    StructField,
     BooleanType,
     DateType,
     TimestampType,
@@ -35,6 +39,7 @@ from pyspark.testing.sqlutils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
+from pyspark.testing.utils import assertDataFrameEqual
 
 
 class DataFrameCollectionTestsMixin:
@@ -289,6 +294,40 @@ class DataFrameCollectionTestsMixin:
         else:
             self.assertEqual(type(pdf["array_struct_col"][0]), list)
 
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message,
+    )
+    def test_to_pandas_for_empty_df_with_nested_array_columns(self):
+        for arrow_enabled in [False, True]:
+            with self.sql_conf({"spark.sql.execution.arrow.pyspark.enabled": arrow_enabled}):
+                self.check_to_pandas_for_empty_df_with_nested_array_columns()
+
+    def check_to_pandas_for_empty_df_with_nested_array_columns(self):
+        # SPARK-51112: Segfault must not occur when converting empty DataFrame with nested array
+        # columns to pandas DataFrame.
+        import pandas as pd
+
+        df = self.spark.createDataFrame(
+            data=[],
+            schema=StructType(
+                [
+                    StructField(
+                        name="b_int",
+                        dataType=IntegerType(),
+                        nullable=False,
+                    ),
+                    StructField(
+                        name="b",
+                        dataType=ArrayType(ArrayType(StringType(), True), True),
+                        nullable=True,
+                    ),
+                ]
+            ),
+        )
+        expected_pdf = pd.DataFrame(columns=["b_int", "b"])
+        assertDataFrameEqual(df.toPandas(), expected_pdf)
+
     def test_to_local_iterator(self):
         df = self.spark.range(8, numPartitions=4)
         expected = df.collect()
@@ -325,6 +364,53 @@ class DataFrameCollectionTestsMixin:
             if i == 7:
                 break
         self.assertEqual(df.take(8), result)
+
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message,
+    )
+    def test_collect_time(self):
+        import pandas as pd
+
+        query = """
+                SELECT * FROM VALUES
+                (TIME '12:34:56', 'a'), (TIME '22:56:01', 'b'), (NULL, 'c')
+                AS tab(t, i)
+                """
+
+        df = self.spark.sql(query)
+
+        rows = df.collect()
+        self.assertEqual(
+            rows,
+            [
+                Row(t=datetime.time(12, 34, 56), i="a"),
+                Row(t=datetime.time(22, 56, 1), i="b"),
+                Row(t=None, i="c"),
+            ],
+        )
+
+        pdf = df.toPandas()
+        self.assertTrue(
+            pdf.equals(
+                pd.DataFrame(
+                    {
+                        "t": [datetime.time(12, 34, 56), datetime.time(22, 56, 1), None],
+                        "i": ["a", "b", "c"],
+                    }
+                )
+            )
+        )
+
+        tbl = df.toArrow()
+        self.assertEqual(
+            [t.as_py() for t in tbl.column("t")],
+            [datetime.time(12, 34, 56), datetime.time(22, 56, 1), None],
+        )
+        self.assertEqual(
+            [i.as_py() for i in tbl.column("i")],
+            ["a", "b", "c"],
+        )
 
 
 class DataFrameCollectionTests(

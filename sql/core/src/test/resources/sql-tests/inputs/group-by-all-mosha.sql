@@ -12,7 +12,7 @@ SELECT i + 1 AS i1, COUNT(i - 2) ci, f / i AS fi, SUM(i + f) sif FROM stuff GROU
 
 SELECT i AS i, COUNT(i) ci, f AS f, SUM(i + f) sif FROM stuff GROUP BY ALL ORDER BY 1, i, 2, ci, 3, f, 4, sif;
 
-SELECT i + 1, f / i, substring(s, 2, 3), extract(year from t), d / 2, size(a) FROM stuff
+SELECT i + 1, f / i, substring(s, 2, 3), extract(year from t), octet_length(d), size(a) FROM stuff
 GROUP BY ALL ORDER BY 1, 3, 4, 5, 6, 2;
 
 -- unlike Mosha, I'm failing this case because IMO it is too implicit to automatically group by i.

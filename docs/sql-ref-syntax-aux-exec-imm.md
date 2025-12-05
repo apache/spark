@@ -21,51 +21,62 @@ license: |
 
 ### Description
 
-Executes a sql statement provided as a `STRING`, optionally passing `arg_exprN` to parameter markers and assigning the results to `var_nameN`.
+Executes a SQL statement provided as a `STRING`.
+The statement optionally passes arguments to parameter markers and assigns the results to variables.
 
 ### Syntax
 
 ```sql
 EXECUTE IMMEDIATE sql_string
-        [ INTO var_name [, …]  ]
-        [ USING { (arg_expr [ AS ] [alias] [, …] ) | arg_expr [ AS ] [alias] [, …] } ]
+        [ INTO var_name [, ...] ]
+        [ USING { arg_expr [ AS ] [alias] } [, ...] ]
 ```
+
+For compatibility with other SQL dialects, `EXECUTE IMMEDIATE` also supports `USING ( { arg_expr [ AS ] [alias] } [, ...] )`
 
 ### Parameters
 
 * **sql_string**
 
-  A STRING expression producing a well-formed SQL statement.
+  A constant expression of type `STRING`, producing a well-formed SQL statement.
 
-* **INTO var_name [, …]**
+* **INTO var_name [, ...]**
 
-    Optionally returns the results of a single row query into SQL variables.
-    If the query returns no rows the result is NULL.
-    - `var_name`
+  Optionally returns the results of a single row query into SQL variables.
+  If the query returns no rows the result is `NULL`.
+
+  If the statement is not a query, Spark raises `INVALID_STATEMENT_FOR_EXECUTE_INTO` error.
+
+  If the query returns more than one row, Spark raises `ROW_SUBQUERY_TOO_MANY_ROWS` error.
+
+  * **var_name**
+
     A SQL variable. A variable may not be referenced more than once.
 
-* **USING arg_expr [, …]**
+* **USING { arg_expr [ AS ] [alias] } [, ...]**
 
-  Optionally, if sql_string contains parameter markers, binds in values to the parameters.
-  - `arg_expr`
-  An expression that binds to a parameter marker.
-  If the parameter markers are unnamed the binding is by position.
-  For unnamed parameter markers, binding is by name.
-  - `alias`
-    Overrides the name used to bind `arg_expr` to a named parameter marker
+  Optionally, if `sql_string` contains parameter markers, binds in values to the parameters.
 
-  Each named parameter marker must be matched once. Not all arg_expr must be matched.
+  * **arg_expr**
 
+    A constant expression that binds to a parameter marker.
+    If the parameter markers are unnamed, the binding is by position.
+    For named parameter markers, binding is by name.
+
+  * **alias**
+
+    Overrides the name used to bind `arg_expr` to a named parameter marker.
+    Each named parameter marker must be matched once. Not all `arg_expr` must be matched.
 
 ### Examples
 
 ```sql
 -- A self-contained execution using a literal string
-EXECUTE IMMEDIATE 'SELECT SUM(c1) FROM VALUES(?), (?)' USING 5, 6;
+EXECUTE IMMEDIATE 'SELECT SUM(c1) FROM VALUES(?), (?) AS t(c1)' USING 5, 6;
  11
 
 -- A SQL string composed in a SQL variable
-DECLARE sqlStr = 'SELECT SUM(c1) FROM VALUES(?), (?)';
+DECLARE sqlStr = 'SELECT SUM(c1) FROM VALUES(?), (?) AS t(c1)';
 DECLARE arg1 = 5;
 DECLARE arg2 = 6;
 EXECUTE IMMEDIATE sqlStr USING arg1, arg2;
@@ -73,14 +84,30 @@ EXECUTE IMMEDIATE sqlStr USING arg1, arg2;
 
 -- Using the INTO clause
 DECLARE sum INT;
+DECLARE sqlStr = 'SELECT SUM(c1) FROM VALUES(:first), (:second) AS t(c1)';
 EXECUTE IMMEDIATE sqlStr INTO sum USING arg1, arg2;
 SELECT sum;
  11
 
 -- Using named parameter markers
-SET VAR sqlStr = 'SELECT SUM(c1) FROM VALUES(:first), (:second)';
-EXECUTE IMMEDIATE sqlStr INTO (sum)
-    USING 5 AS first, arg2 AS second;
+DECLARE sum INT;
+DECLARE sqlStr = 'SELECT SUM(c1) FROM VALUES(:first), (:second) AS t(c1)';
+EXECUTE IMMEDIATE sqlStr INTO sum USING (5 AS first, arg2 AS second);
 SELECT sum;
  11
+
+-- Using constant expressions
+DECLARE foo = 'sum';
+EXECUTE IMMEDIATE 'SELECT ' || foo || '(c1) FROM VALUES(?), (?) AS t(c1)'
+   USING 5 + 6, 7 + length('hello');
+ 33
+
+-- Parameter markers can be anywhere in the statement
+EXECUTE IMMEDIATE 'SELECT "5" :tens "9"::DECIMAL(:p, :s) AS IDENTIFIER(:col)' 
+   USING '8' AS tens, 10 AS p, 4 AS s, 'result_col' AS col;
++----------+                                                                    
+|result_col|
++----------+
+|  589.0000|
++----------+
 ```

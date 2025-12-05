@@ -349,7 +349,7 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
             |FROM VALUES (0), (1), (2), (10) AS tab(col);
             |""".stripMargin).collect()
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
       parameters = Map(
         "exprName" -> "accuracy",
         "sqlExpr" -> "\"percentile_approx(col, array(0.5, 0.4, 0.1), NULL)\""),
@@ -363,7 +363,7 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
             |FROM VALUES (0), (1), (2), (10) AS tab(col);
             |""".stripMargin).collect()
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
       parameters = Map(
         "exprName" -> "percentage",
         "sqlExpr" -> "\"percentile_approx(col, NULL, 100)\""),

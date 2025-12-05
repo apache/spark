@@ -20,14 +20,13 @@ package org.apache.spark.deploy.yarn
 import java.io.File
 import java.net.URL
 import java.nio.charset.StandardCharsets
-import java.nio.file.Paths
+import java.nio.file.{Files, Paths}
 import java.util.{HashMap => JHashMap}
 
 import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.io.Source
 
-import com.google.common.io.{ByteStreams, Files}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.exceptions.TestFailedException
@@ -40,6 +39,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Python.PYTHON_UNIX_DOMAIN_SOCKET_ENABLED
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher._
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationStart, SparkListenerExecutorAdded}
@@ -60,6 +60,16 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       case Some(path) => (true, path)
       case _ => (false, "")
     }
+  }
+
+  private var pyConnectDepChecker: PyConnectDepChecker = _
+
+  private def getOrCreatePyConnectDepChecker(
+      python: String, libPath: Seq[String]): PyConnectDepChecker = {
+    if (pyConnectDepChecker == null) {
+      pyConnectDepChecker = new PyConnectDepChecker(python, libPath)
+    }
+    pyConnectDepChecker
   }
 
   override def newYarnConfig(): YarnConfiguration = new YarnConfiguration()
@@ -84,6 +94,34 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     |    status.write(result)
     |    status.close()
     |    sc.stop()
+    """.stripMargin
+
+  private val TEST_CONNECT_PYFILE = s"""
+    |import mod1, mod2
+    |import sys
+    |from operator import add
+    |
+    |from pyspark.sql import SparkSession
+    |from pyspark.sql.functions import udf
+    |if __name__ == "__main__":
+    |    if len(sys.argv) != 2:
+    |        print >> sys.stderr, "Usage: test.py [result file]"
+    |        exit(-1)
+    |    spark = SparkSession.builder.config(
+    |        "${SPARK_API_MODE.key}", "connect").master("yarn").getOrCreate()
+    |    assert "connect" in str(spark)
+    |    status = open(sys.argv[1],'w')
+    |    result = "failure"
+    |    @udf
+    |    def test():
+    |        return mod1.func() * mod2.func()
+    |    df = spark.range(10).select(test())
+    |    cnt = df.count()
+    |    if cnt == 10:
+    |        result = "success"
+    |    status.write(result)
+    |    status.close()
+    |    spark.stop()
     """.stripMargin
 
   private val TEST_PYMODULE = """
@@ -141,7 +179,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       |  </property>
       |</configuration>
       |""".stripMargin
-    Files.write(coreSite, new File(customConf, "core-site.xml"), StandardCharsets.UTF_8)
+    Files.writeString(new File(customConf, "core-site.xml").toPath, coreSite)
 
     val result = File.createTempFile("result", null, tempDir)
     val finalState = runSpark(false,
@@ -230,11 +268,29 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   }
 
   test("run Python application in yarn-client mode") {
-    testPySpark(true)
+    testPySpark(
+      true,
+      // User is unknown in this suite.
+      extraConf = Map(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED.key -> false.toString)
+    )
   }
 
   test("run Python application in yarn-cluster mode") {
-    testPySpark(false)
+    testPySpark(
+      false,
+      // User is unknown in this suite.
+      extraConf = Map(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED.key -> false.toString)
+    )
+  }
+
+  test("run Python application with Spark Connect in yarn-client mode") {
+    testPySpark(
+      true, extraConf = Map(SPARK_API_MODE.key -> "connect"), script = TEST_CONNECT_PYFILE)
+  }
+
+  test("run Python application with Spark Connect in yarn-cluster mode") {
+    testPySpark(
+      false, extraConf = Map(SPARK_API_MODE.key -> "connect"), script = TEST_CONNECT_PYFILE)
   }
 
   test("run Python application in yarn-cluster mode using " +
@@ -242,6 +298,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     testPySpark(
       clientMode = false,
       extraConf = Map(
+        PYTHON_UNIX_DOMAIN_SOCKET_ENABLED.key -> false.toString,  // User is unknown in this suite.
         "spark.yarn.appMasterEnv.PYSPARK_DRIVER_PYTHON"
           -> sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", pythonExecutablePath),
         "spark.yarn.appMasterEnv.PYSPARK_PYTHON"
@@ -293,25 +350,23 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   }
 
   test("running Spark in yarn-cluster mode displays driver log links") {
-    val log4jConf = new File(tempDir, "log4j.properties")
+    val log4jConf = new File(tempDir, "log4j2.properties")
     val logOutFile = new File(tempDir, "logs")
-    Files.write(
+    Files.writeString(log4jConf.toPath,
       s"""rootLogger.level = debug
          |rootLogger.appenderRef.file.ref = file
          |appender.file.type = File
          |appender.file.name = file
          |appender.file.fileName = $logOutFile
          |appender.file.layout.type = PatternLayout
-         |""".stripMargin,
-      log4jConf, StandardCharsets.UTF_8)
+         |""".stripMargin)
     // Since this test is trying to extract log output from the SparkSubmit process itself,
     // standard options to the Spark process don't take effect. Leverage the java-opts file which
     // will get picked up for the SparkSubmit process.
     val confDir = new File(tempDir, "conf")
     confDir.mkdir()
     val javaOptsFile = new File(confDir, "java-opts")
-    Files.write(s"-Dlog4j.configurationFile=file://$log4jConf\n", javaOptsFile,
-      StandardCharsets.UTF_8)
+    Files.writeString(javaOptsFile.toPath, s"-Dlog4j.configurationFile=file://$log4jConf\n")
 
     val result = File.createTempFile("result", null, tempDir)
     val finalState = runSpark(clientMode = false,
@@ -320,7 +375,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       extraEnv = Map("SPARK_CONF_DIR" -> confDir.getAbsolutePath),
       extraConf = Map(CLIENT_INCLUDE_DRIVER_LOGS_LINK.key -> true.toString))
     checkResult(finalState, result)
-    val logOutput = Files.toString(logOutFile, StandardCharsets.UTF_8)
+    val logOutput = Files.readString(logOutFile.toPath)
     val logFilePattern = raw"""(?s).+\sDriver Logs \(<NAME>\): https?://.+/<NAME>(\?\S+)?\s.+"""
     logOutput should fullyMatch regex logFilePattern.replace("<NAME>", "stdout")
     logOutput should fullyMatch regex logFilePattern.replace("<NAME>", "stderr")
@@ -371,10 +426,11 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   private def testPySpark(
       clientMode: Boolean,
       extraConf: Map[String, String] = Map(),
-      extraEnv: Map[String, String] = Map()): Unit = {
+      extraEnv: Map[String, String] = Map(),
+      script: String = TEST_PYFILE): Unit = {
     assume(isPythonAvailable)
     val primaryPyFile = new File(tempDir, "test.py")
-    Files.write(TEST_PYFILE, primaryPyFile, StandardCharsets.UTF_8)
+    Files.writeString(primaryPyFile.toPath, script)
 
     // When running tests, let's not assume the user has built the assembly module, which also
     // creates the pyspark archive. Instead, let's use PYSPARK_ARCHIVES_PATH to point at the
@@ -390,13 +446,19 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       "PYSPARK_PYTHON" -> pythonExecutablePath
     ) ++ extraEnv
 
+    if (extraConf.getOrElse(SPARK_API_MODE.key, SPARK_API_MODE.defaultValueString) == "connect") {
+      val checker = getOrCreatePyConnectDepChecker(pythonExecutablePath, pythonPath)
+      assume(checker.isSparkConnectJarAvailable)
+      assume(checker.isConnectPythonPackagesAvailable)
+    }
+
     val moduleDir = {
       val subdir = new File(tempDir, "pyModules")
       subdir.mkdir()
       subdir
     }
     val pyModule = new File(moduleDir, "mod1.py")
-    Files.write(TEST_PYMODULE, pyModule, StandardCharsets.UTF_8)
+    Files.writeString(pyModule.toPath, TEST_PYMODULE)
 
     val mod2Archive = TestUtils.createJarWithFiles(Map("mod2.py" -> TEST_PYMODULE), moduleDir)
     val pyFiles = Seq(pyModule.getAbsolutePath(), mod2Archive.getPath()).mkString(",")
@@ -443,7 +505,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
 
   def createEmptyIvySettingsFile: File = {
     val emptyIvySettings = File.createTempFile("ivy", ".xml")
-    Files.write("<ivysettings />", emptyIvySettings, StandardCharsets.UTF_8)
+    Files.writeString(emptyIvySettings.toPath, "<ivysettings />")
     emptyIvySettings
   }
 
@@ -555,7 +617,7 @@ private object YarnClusterDriverUseSparkHadoopUtilConf extends Logging with Matc
       }
       result = "success"
     } finally {
-      Files.write(result, status, StandardCharsets.UTF_8)
+      Files.writeString(status.toPath, result)
       sc.stop()
     }
   }
@@ -658,7 +720,7 @@ private object YarnClusterDriver extends Logging with Matchers {
         assert(driverAttributes === expectationAttributes)
       }
     } finally {
-      Files.write(result, status, StandardCharsets.UTF_8)
+      Files.writeString(status.toPath, result)
       sc.stop()
     }
   }
@@ -700,14 +762,13 @@ private object YarnClasspathTest extends Logging {
     var result = "failure"
     try {
       val ccl = Thread.currentThread().getContextClassLoader()
-      val resource = ccl.getResourceAsStream("test.resource")
-      val bytes = ByteStreams.toByteArray(resource)
+      val bytes = ccl.getResourceAsStream("test.resource").readAllBytes()
       result = new String(bytes, 0, bytes.length, StandardCharsets.UTF_8)
     } catch {
       case t: Throwable =>
         error(s"loading test.resource to $resultPath", t)
     } finally {
-      Files.write(result, new File(resultPath), StandardCharsets.UTF_8)
+      Files.writeString(new File(resultPath).toPath, result)
     }
   }
 
@@ -751,7 +812,7 @@ private object YarnAddJarTest extends Logging {
         result = "success"
       }
     } finally {
-      Files.write(result, new File(resultPath), StandardCharsets.UTF_8)
+      Files.writeString(new File(resultPath).toPath, result)
       sc.stop()
     }
   }
@@ -796,8 +857,49 @@ private object ExecutorEnvTestApp {
       executorEnvs.get(k).contains(v)
     }
 
-    Files.write(result.toString, new File(status), StandardCharsets.UTF_8)
+    Files.writeString(new File(status).toPath, result.toString)
     sc.stop()
   }
 
+}
+
+private class PyConnectDepChecker(python: String, libPath: Seq[String]) {
+
+  import scala.sys.process.Process
+  import scala.util.Try
+  import scala.util.Properties.versionNumberString
+
+  lazy val isSparkConnectJarAvailable: Boolean = {
+    val filePath = s"$sparkHome/assembly/target/$scalaDir/jars/" +
+      s"spark-connect_$scalaVersion-$SPARK_VERSION.jar"
+    Files.exists(Paths.get(filePath))
+  }
+
+  lazy val isConnectPythonPackagesAvailable: Boolean = Try {
+    Process(
+      Seq(
+        python,
+        "-c",
+        "from pyspark.sql.connect.utils import check_dependencies;" +
+          "check_dependencies('pyspark.sql.connect.fake_module')"),
+      None,
+      "PYTHONPATH" -> libPath.mkString(File.pathSeparator)).!!
+    true
+  }.getOrElse(false)
+
+  private lazy val scalaVersion = {
+    versionNumberString.split('.') match {
+      case Array(major, minor, _*) => major + "." + minor
+      case _ => versionNumberString
+    }
+  }
+
+  private lazy val scalaDir = s"scala-$scalaVersion"
+
+  private lazy val sparkHome: String = {
+    if (!(sys.props.contains("spark.test.home") || sys.env.contains("SPARK_HOME"))) {
+      fail("spark.test.home or SPARK_HOME is not set.")
+    }
+    sys.props.getOrElse("spark.test.home", sys.env("SPARK_HOME"))
+  }
 }

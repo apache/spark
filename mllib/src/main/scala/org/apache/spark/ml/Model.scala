@@ -18,13 +18,14 @@
 package org.apache.spark.ml
 
 import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.util.SizeEstimator
 
 /**
  * A fitted model, i.e., a [[Transformer]] produced by an [[Estimator]].
  *
  * @tparam M model type
  */
-abstract class Model[M <: Model[M]] extends Transformer {
+abstract class Model[M <: Model[M]] extends Transformer { self =>
   /**
    * The parent estimator that produced this model.
    * @note For ensembles' component Models, this value can be null.
@@ -43,4 +44,18 @@ abstract class Model[M <: Model[M]] extends Transformer {
   def hasParent: Boolean = parent != null
 
   override def copy(extra: ParamMap): M
+
+  /**
+   * For ml connect only.
+   * Estimate the size of this model in bytes.
+   * This is an approximation, the real size might be different.
+   * 1, Both driver side memory usage and distributed objects size (like DataFrame,
+   * RDD, Graph, Summary) are counted.
+   * 2, Lazy vals are not counted, e.g., an auxiliary object used in prediction.
+   * 3, The default implementation uses `org.apache.spark.util.SizeEstimator.estimate`,
+   *    some models override the default implementation to achieve more precise estimation.
+   * 4, For 3-rd extension, if external languages are used, it is recommended to override
+   * this method and return a proper size.
+   */
+  private[spark] def estimatedSize: Long = SizeEstimator.estimate(self)
 }

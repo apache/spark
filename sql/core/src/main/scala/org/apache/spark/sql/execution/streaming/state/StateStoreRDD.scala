@@ -27,6 +27,28 @@ import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
+/**
+ * Thread local storage for sharing StateStore instances between RDDs.
+ * This allows a ReadStateStore to be reused by a subsequent StateStore operation.
+ */
+object StateStoreThreadLocalTracker {
+  /** Case class to hold both the store and its usage state */
+
+  private val storeInfo: ThreadLocal[ReadStateStore] = new ThreadLocal[ReadStateStore]
+
+  def setStore(store: ReadStateStore): Unit = {
+    storeInfo.set(store)
+  }
+
+  def getStore: Option[ReadStateStore] = {
+    Option(storeInfo.get())
+  }
+
+  def clearStore(): Unit = {
+    storeInfo.remove()
+  }
+}
+
 abstract class BaseStateStoreRDD[T: ClassTag, U: ClassTag](
     dataRDD: RDD[T],
     checkpointLocation: String,
@@ -39,8 +61,8 @@ abstract class BaseStateStoreRDD[T: ClassTag, U: ClassTag](
   protected val storeConf = new StateStoreConf(sessionState.conf, extraOptions)
 
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
-  protected val hadoopConfBroadcast = dataRDD.context.broadcast(
-    new SerializableConfiguration(sessionState.newHadoopConf()))
+  protected val hadoopConfBroadcast =
+    SerializableConfiguration.broadcast(dataRDD.context, sessionState.newHadoopConf())
 
   /**
    * Set the preferred location of each partition using the executor that has the related
@@ -72,6 +94,8 @@ class ReadStateStoreRDD[T: ClassTag, U: ClassTag](
     queryRunId: UUID,
     operatorId: Long,
     storeVersion: Long,
+    stateStoreCkptIds: Option[Array[Array[String]]],
+    stateSchemaBroadcast: Option[StateSchemaBroadcast],
     keySchema: StructType,
     valueSchema: StructType,
     keyStateEncoderSpec: KeyStateEncoderSpec,
@@ -90,7 +114,10 @@ class ReadStateStoreRDD[T: ClassTag, U: ClassTag](
     val inputIter = dataRDD.iterator(partition, ctxt)
     val store = StateStore.getReadOnly(
       storeProviderId, keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
+      stateStoreCkptIds.map(_.apply(partition.index).head),
+      stateSchemaBroadcast,
       useColumnFamilies, storeConf, hadoopConfBroadcast.value.value)
+    StateStoreThreadLocalTracker.setStore(store)
     storeReadFunction(store, inputIter)
   }
 }
@@ -107,6 +134,8 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     queryRunId: UUID,
     operatorId: Long,
     storeVersion: Long,
+    uniqueId: Option[Array[Array[String]]],
+    stateSchemaBroadcast: Option[StateSchemaBroadcast],
     keySchema: StructType,
     valueSchema: StructType,
     keyStateEncoderSpec: KeyStateEncoderSpec,
@@ -124,10 +153,29 @@ class StateStoreRDD[T: ClassTag, U: ClassTag](
     val storeProviderId = getStateProviderId(partition)
 
     val inputIter = dataRDD.iterator(partition, ctxt)
-    val store = StateStore.get(
-      storeProviderId, keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
-      useColumnFamilies, storeConf, hadoopConfBroadcast.value.value,
-      useMultipleValuesPerKey)
+    val store = StateStoreThreadLocalTracker.getStore match {
+      case Some(readStateStore: ReadStateStore) =>
+        StateStore.getWriteStore(readStateStore, storeProviderId,
+          keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
+          uniqueId.map(_.apply(partition.index).head),
+          stateSchemaBroadcast,
+          useColumnFamilies, storeConf, hadoopConfBroadcast.value.value,
+          useMultipleValuesPerKey)
+      case None =>
+        StateStore.get(
+          storeProviderId, keySchema, valueSchema, keyStateEncoderSpec, storeVersion,
+          uniqueId.map(_.apply(partition.index).head),
+          stateSchemaBroadcast,
+          useColumnFamilies, storeConf, hadoopConfBroadcast.value.value,
+          useMultipleValuesPerKey)
+    }
+
+    if (storeConf.unloadOnCommit) {
+      ctxt.addTaskCompletionListener[Unit](_ => {
+        StateStore.doMaintenanceAndUnload(storeProviderId)
+      })
+    }
+
     storeUpdateFunction(store, inputIter)
   }
 }

@@ -17,9 +17,12 @@
 
 package org.apache.spark.util.sketch;
 
+import java.io.BufferedInputStream;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.ByteBuffer;
 
 /**
  * A Bloom filter is a space-efficient probabilistic data structure that offers an approximate
@@ -51,7 +54,22 @@ public abstract class BloomFilter {
      *   <li>The words/longs (numWords * 64 bit)</li>
      * </ul>
      */
-    V1(1);
+    V1(1),
+
+    /**
+     * {@code BloomFilter} binary format version 2.
+     * Fixes the int32 truncation issue with V1 indexes, but by changing the bit pattern,
+     * it will become incompatible with V1 serializations.
+     * All values written in big-endian order:
+     * <ul>
+     *   <li>Version number, always 2 (32 bit)</li>
+     *   <li>Number of hash functions (32 bit)</li>
+     *   <li>Integer seed to initialize hash functions (32 bit) </li>
+     *   <li>Total number of words of the underlying bit array (32 bit)</li>
+     *   <li>The words/longs (numWords * 64 bit)</li>
+     * </ul>
+     */
+    V2(2);
 
     private final int versionNumber;
 
@@ -175,14 +193,26 @@ public abstract class BloomFilter {
    * the stream.
    */
   public static BloomFilter readFrom(InputStream in) throws IOException {
-    return BloomFilterImpl.readFrom(in);
+    // peek into the InputStream so we can determine the version
+    BufferedInputStream bin = new BufferedInputStream(in);
+    bin.mark(4);
+    int version = ByteBuffer.wrap(bin.readNBytes(4)).getInt();
+    bin.reset();
+
+    return switch (version) {
+      case 1 -> BloomFilterImpl.readFrom(bin);
+      case 2 -> BloomFilterImplV2.readFrom(bin);
+      default -> throw new IllegalArgumentException("Unknown BloomFilter version: " + version);
+    };
   }
 
   /**
    * Reads in a {@link BloomFilter} from a byte array.
    */
   public static BloomFilter readFrom(byte[] bytes) throws IOException {
-    return BloomFilterImpl.readFrom(bytes);
+    try (ByteArrayInputStream bis = new ByteArrayInputStream(bytes)) {
+      return readFrom(bis);
+    }
   }
 
   /**
@@ -256,6 +286,19 @@ public abstract class BloomFilter {
    * pick an optimal {@code numHashFunctions} which can minimize {@code fpp} for the bloom filter.
    */
   public static BloomFilter create(long expectedNumItems, long numBits) {
+    return create(Version.V2, expectedNumItems, numBits, BloomFilterImplV2.DEFAULT_SEED);
+  }
+
+  public static BloomFilter create(long expectedNumItems, long numBits, int seed) {
+    return create(Version.V2, expectedNumItems, numBits, seed);
+  }
+
+  public static BloomFilter create(
+      Version version,
+      long expectedNumItems,
+      long numBits,
+      int seed
+  ) {
     if (expectedNumItems <= 0) {
       throw new IllegalArgumentException("Expected insertions must be positive");
     }
@@ -264,6 +307,11 @@ public abstract class BloomFilter {
       throw new IllegalArgumentException("Number of bits must be positive");
     }
 
-    return new BloomFilterImpl(optimalNumOfHashFunctions(expectedNumItems, numBits), numBits);
+    int numHashFunctions = optimalNumOfHashFunctions(expectedNumItems, numBits);
+
+    return switch (version) {
+      case V1 -> new BloomFilterImpl(numHashFunctions, numBits);
+      case V2 -> new BloomFilterImplV2(numHashFunctions, numBits, seed);
+    };
   }
 }

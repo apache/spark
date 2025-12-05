@@ -34,6 +34,7 @@ The terms error class, state, and condition come from the SQL standard.
   * Error condition: `AS_OF_JOIN`
     * Error sub-condition: `TOLERANCE_IS_NON_NEGATIVE`
     * Error sub-condition: `TOLERANCE_IS_UNFOLDABLE`
+    * Error sub-condition: `UNSUPPORTED_DIRECTION`
 
 ### Inconsistent Use of the Term "Error Class"
 

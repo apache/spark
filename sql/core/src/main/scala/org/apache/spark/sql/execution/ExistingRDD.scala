@@ -17,16 +17,18 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{LOGICAL_PLAN_COLUMNS, OPTIMIZED_PLAN_COLUMNS}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Dataset, Encoder, SparkSession}
+import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.classic.{Dataset, SparkSession}
+import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.collection.Utils
 
@@ -97,13 +99,16 @@ case class LogicalRDD(
     rdd: RDD[InternalRow],
     outputPartitioning: Partitioning = UnknownPartitioning(0),
     override val outputOrdering: Seq[SortOrder] = Nil,
-    override val isStreaming: Boolean = false)(
+    override val isStreaming: Boolean = false,
+    @transient stream: Option[SparkDataStream] = None)(
     session: SparkSession,
     // originStats and originConstraints are intentionally placed to "second" parameter list,
     // to prevent catalyst rules to mistakenly transform and rewrite them. Do not change this.
     originStats: Option[Statistics] = None,
     originConstraints: Option[ExpressionSet] = None)
-  extends LeafNode with MultiInstanceRelation {
+  extends LeafNode
+  with StreamSourceAwareLogicalPlan
+  with MultiInstanceRelation {
 
   import LogicalRDD._
 
@@ -134,7 +139,8 @@ case class LogicalRDD(
       rdd,
       rewrittenPartitioning,
       rewrittenOrdering,
-      isStreaming
+      isStreaming,
+      stream
     )(session, rewrittenStatistics, rewrittenConstraints).asInstanceOf[this.type]
   }
 
@@ -158,6 +164,13 @@ case class LogicalRDD(
     // Therefore we assume that all subqueries are non-deterministic, and we do not expose any
     // constraints that contain a subquery.
     .filterNot(SubqueryExpression.hasSubquery)
+
+  override def withStream(stream: SparkDataStream): LogicalRDD = {
+    copy(stream = Some(stream))(session, originStats, originConstraints)
+  }
+
+  override def getStream: Option[SparkDataStream] = stream
+
 }
 
 object LogicalRDD extends Logging {
@@ -191,7 +204,8 @@ object LogicalRDD extends Logging {
       rdd,
       firstLeafPartitioning(executedPlan.outputPartitioning),
       executedPlan.outputOrdering,
-      isStreaming
+      isStreaming,
+      None
     )(originDataset.sparkSession, stats, constraints)
   }
 
@@ -215,10 +229,36 @@ object LogicalRDD extends Logging {
     }
   }
 
+  // A version of buildOutputAssocForRewrite which doesn't assume that the names are the same,
+  // because the new output can have different names. Used when copying the LogicalRDD with a new
+  // output
+  private[sql] def buildOutputAssocForRewriteWithNewOutput(
+      source: Seq[Attribute],
+      destination: Seq[Attribute]): Option[Map[Attribute, Attribute]] = {
+    val rewrite = source.zip(destination).flatMap { case (attr1, attr2) =>
+      if (attr1.dataType == attr2.dataType) {
+        Some(attr1 -> attr2)
+      } else {
+        None
+      }
+    }.toMap
+
+    if (rewrite.size == source.size) {
+      Some(rewrite)
+    } else {
+      None
+    }
+  }
+
   private[sql] def rewriteStatsAndConstraints(
       logicalPlan: LogicalPlan,
-      optimizedPlan: LogicalPlan): (Option[Statistics], Option[ExpressionSet]) = {
-    val rewrite = buildOutputAssocForRewrite(optimizedPlan.output, logicalPlan.output)
+      optimizedPlan: LogicalPlan,
+      sameOutput: Boolean = true): (Option[Statistics], Option[ExpressionSet]) = {
+    val rewrite = if (sameOutput) {
+      buildOutputAssocForRewrite(optimizedPlan.output, logicalPlan.output)
+    } else {
+      buildOutputAssocForRewriteWithNewOutput(optimizedPlan.output, logicalPlan.output)
+    }
 
     rewrite.map { rw =>
       val rewrittenStatistics = rewriteStatistics(optimizedPlan.stats, rw)
@@ -264,7 +304,11 @@ case class RDDScanExec(
     rdd: RDD[InternalRow],
     name: String,
     override val outputPartitioning: Partitioning = UnknownPartitioning(0),
-    override val outputOrdering: Seq[SortOrder] = Nil) extends LeafExecNode with InputRDDCodegen {
+    override val outputOrdering: Seq[SortOrder] = Nil,
+    @transient stream: Option[SparkDataStream] = None)
+  extends LeafExecNode
+  with StreamSourceAwareSparkPlan
+  with InputRDDCodegen {
 
   private def rddName: String = Option(rdd.name).map(n => s" $n").getOrElse("")
 
@@ -293,4 +337,54 @@ case class RDDScanExec(
   override protected val createUnsafeProjection: Boolean = true
 
   override def inputRDD: RDD[InternalRow] = rdd
+
+  // Don't care about `stream` when canonicalizing.
+  override protected def doCanonicalize(): SparkPlan = {
+    super.doCanonicalize().asInstanceOf[RDDScanExec].copy(stream = None)
+  }
+
+  override def getStream: Option[SparkDataStream] = stream
+}
+
+/**
+ * A physical plan node for `OneRowRelation` for scans with no 'FROM' clause.
+ *
+ * We do not extend `RDDScanExec` in order to avoid complexity due to `TreeNode.makeCopy` and
+ * `TreeNode`'s general use of reflection.
+ */
+case class OneRowRelationExec() extends LeafExecNode
+  with InputRDDCodegen {
+
+  override val nodeName: String = s"Scan OneRowRelation"
+
+  override val output: Seq[Attribute] = Nil
+
+  private val rdd: RDD[InternalRow] = {
+    val numOutputRows = longMetric("numOutputRows")
+    session
+      .sparkContext
+      .parallelize(Seq(""), 1)
+      .mapPartitionsInternal { _ =>
+        val proj = UnsafeProjection.create(Seq.empty[Expression])
+        Iterator(proj.apply(InternalRow.empty)).map { r =>
+          numOutputRows += 1
+          r
+        }
+      }
+  }
+
+  override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+
+  protected override def doExecute(): RDD[InternalRow] = rdd
+
+  override def simpleString(maxFields: Int): String = s"$nodeName[]"
+
+  override def inputRDD: RDD[InternalRow] = rdd
+
+  override protected val createUnsafeProjection: Boolean = false
+
+  override protected def doCanonicalize(): SparkPlan = {
+    super.doCanonicalize().asInstanceOf[OneRowRelationExec].copy()
+  }
 }

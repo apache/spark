@@ -120,7 +120,7 @@ def _read_descriptor_set_file(filePath: str) -> bytes:
 def _test() -> None:
     import os
     import sys
-    from pyspark.testing.utils import search_jar
+    from pyspark.testing.sqlutils import search_jar
 
     protobuf_jar = search_jar("connector/protobuf", "spark-protobuf-assembly-", "spark-protobuf")
     if protobuf_jar is None:
@@ -142,7 +142,7 @@ def _test() -> None:
 
     globs = pyspark.sql.connect.protobuf.functions.__dict__.copy()
     globs["spark"] = (
-        PySparkSession.builder.appName("sql.protobuf.functions tests")
+        PySparkSession.builder.appName("sql.connect.protobuf.functions tests")
         .remote(os.environ.get("SPARK_CONNECT_TESTING_REMOTE", "local[2]"))
         .getOrCreate()
     )

@@ -40,7 +40,7 @@ import org.apache.spark.deploy.yarn.ResourceRequestHelper._
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.executor.ExecutorExitCode
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile
@@ -529,7 +529,7 @@ private[yarn] class YarnAllocator(
             log"${MDC(LogKeys.MEMORY_SIZE, resource.getMemorySize)} MB memory."
           if (resource.getResources.nonEmpty) {
             requestContainerMessage = requestContainerMessage +
-              log" with custom resources: ${MDC(LogKeys.RESOURCE, resource)}"
+              log" with custom resources: ${MDC(LogKeys.YARN_RESOURCE, resource)}"
           }
           logInfo(requestContainerMessage)
         }
@@ -587,7 +587,7 @@ private[yarn] class YarnAllocator(
         if (log.isInfoEnabled()) {
           val (localized, anyHost) = newLocalityRequests.partition(_.getNodes() != null)
           if (anyHost.nonEmpty) {
-            logInfo(log"Submitted ${MDC(LogKeys.COUNT, anyHost.size)}} unlocalized container " +
+            logInfo(log"Submitted ${MDC(LogKeys.COUNT, anyHost.size)} unlocalized container " +
               log"requests.")
           }
           localized.foreach { request =>
@@ -599,7 +599,7 @@ private[yarn] class YarnAllocator(
         val numToCancel = math.min(numPendingAllocate, -missing)
         logInfo(log"Canceling requests for ${MDC(LogKeys.COUNT, numToCancel)} executor " +
           log"container(s) to have a new desired total " +
-          log"${MDC(LogKeys.EXECUTOR_DESIRED_COUNT,
+          log"${MDC(LogKeys.NUM_EXECUTOR_DESIRED,
             getOrUpdateTargetNumExecutorsForRPId(rpId))} executors.")
         // cancel pending allocate requests by taking locality preference into account
         val cancelRequests = (staleRequests ++ anyHostRequests ++ localRequests).take(numToCancel)
@@ -707,7 +707,7 @@ private[yarn] class YarnAllocator(
     runAllocatedContainers(containersToUse)
 
     logInfo(log"Received ${MDC(LogKeys.COUNT, allocatedContainers.size)} containers from YARN, " +
-      log"launching executors on ${MDC(LogKeys.EXECUTOR_LAUNCH_COUNT, containersToUse.size)} " +
+      log"launching executors on ${MDC(LogKeys.NUM_EXECUTOR_LAUNCH, containersToUse.size)} " +
       log"of them.")
   }
 
@@ -819,7 +819,8 @@ private[yarn] class YarnAllocator(
       } else {
         logInfo(log"Skip launching executorRunnable as running executors count: " +
           log"${MDC(LogKeys.COUNT, rpRunningExecs)} reached target executors count: " +
-          log"${MDC(LogKeys.EXECUTOR_TARGET_COUNT, getOrUpdateTargetNumExecutorsForRPId(rpId))}.")
+          log"${MDC(LogKeys.NUM_EXECUTOR_TARGET, getOrUpdateTargetNumExecutorsForRPId(rpId))}.")
+        internalReleaseContainer(container)
       }
     }
   }

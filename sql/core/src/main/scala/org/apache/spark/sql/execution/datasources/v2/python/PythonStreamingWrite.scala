@@ -18,6 +18,7 @@ package org.apache.spark.sql.execution.datasources.v2.python
 
 import org.apache.spark.JobArtifactSet
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.types.StructType
@@ -36,14 +37,17 @@ class PythonStreamingWrite(
   private var pythonDataSourceWriter: Array[Byte] = _
 
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
+  private val sessionUUID = {
+    SparkSession.getActiveSession.collect {
+      case session if session.sessionState.conf.pythonWorkerLoggingEnabled =>
+        session.sessionUUID
+    }
+  }
 
   private def createDataSourceFunc =
     ds.source.createPythonFunction(
       ds.getOrCreateDataSourceInPython(shortName, info.options(), Some(info.schema())).dataSource
     )
-
-  private lazy val pythonStreamingSinkCommitRunner =
-    new PythonStreamingSinkCommitRunner(createDataSourceFunc, info.schema(), isTruncate)
 
   override def createStreamingWriterFactory(
        physicalInfo: PhysicalWriteInfo): StreamingDataWriterFactory = {
@@ -56,15 +60,28 @@ class PythonStreamingWrite(
 
     pythonDataSourceWriter = writeInfo.writer
 
-    new PythonStreamingWriterFactory(ds.source, writeInfo.func, info.schema(), jobArtifactUUID)
+    new PythonStreamingWriterFactory(ds.source, writeInfo.func, info.schema(),
+      jobArtifactUUID, sessionUUID)
   }
 
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
-    pythonStreamingSinkCommitRunner.commitOrAbort(messages, epochId, false)
+    new PythonStreamingSinkCommitRunner(
+      createDataSourceFunc,
+      info.schema(),
+      messages,
+      batchId = epochId,
+      overwrite = isTruncate,
+      abort = false).runInPython()
   }
 
   override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
-    pythonStreamingSinkCommitRunner.commitOrAbort(messages, epochId, true)
+    new PythonStreamingSinkCommitRunner(
+      createDataSourceFunc,
+      info.schema(),
+      messages,
+      batchId = epochId,
+      overwrite = isTruncate,
+      abort = true).runInPython()
   }
 }
 
@@ -72,8 +89,10 @@ class PythonStreamingWriterFactory(
     source: UserDefinedPythonDataSource,
     pickledWriteFunc: Array[Byte],
     inputSchema: StructType,
-    jobArtifactUUID: Option[String])
-  extends PythonBatchWriterFactory(source, pickledWriteFunc, inputSchema, jobArtifactUUID)
+    jobArtifactUUID: Option[String],
+    sessionUUID: Option[String])
+  extends PythonBatchWriterFactory(source, pickledWriteFunc, inputSchema,
+      jobArtifactUUID, sessionUUID)
     with StreamingDataWriterFactory {
   override def createWriter(
       partitionId: Int,

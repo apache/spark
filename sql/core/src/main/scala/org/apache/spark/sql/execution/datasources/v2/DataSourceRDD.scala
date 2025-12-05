@@ -61,6 +61,14 @@ class DataSourceRDD(
       private var currentIter: Option[Iterator[Object]] = None
       private var currentIndex: Int = 0
 
+      private val partitionMetricCallback = new PartitionMetricCallback(customMetrics)
+
+      // In case of early stopping before consuming the entire iterator,
+      // we need to do one more metric update at the end of the task.
+      context.addTaskCompletionListener[Unit] { _ =>
+        partitionMetricCallback.execute()
+      }
+
       override def hasNext: Boolean = currentIter.exists(_.hasNext) || advanceToNextIter()
 
       override def next(): Object = {
@@ -87,14 +95,10 @@ class DataSourceRDD(
               new PartitionIterator[InternalRow](rowReader, customMetrics))
             (iter, rowReader)
           }
-          context.addTaskCompletionListener[Unit] { _ =>
-            // In case of early stopping before consuming the entire iterator,
-            // we need to do one more metric update at the end of the task.
-            CustomMetrics
-              .updateMetrics(reader.currentMetricsValues.toImmutableArraySeq, customMetrics)
-            iter.forceUpdateMetrics()
-            reader.close()
-          }
+
+          // Once we advance to the next partition, update the metric callback for early finish
+          partitionMetricCallback.advancePartition(iter, reader)
+
           currentIter = Some(iter)
           hasNext
         }
@@ -106,6 +110,28 @@ class DataSourceRDD(
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
     castPartition(split).inputPartitions.flatMap(_.preferredLocations())
+  }
+}
+
+private class PartitionMetricCallback
+    (customMetrics: Map[String, SQLMetric]) {
+  private var iter: MetricsIterator[_] = null
+  private var reader: PartitionReader[_] = null
+
+  def advancePartition(iter: MetricsIterator[_], reader: PartitionReader[_]): Unit = {
+    execute()
+
+    this.iter = iter
+    this.reader = reader
+  }
+
+  def execute(): Unit = {
+    if (iter != null && reader != null) {
+      CustomMetrics
+        .updateMetrics(reader.currentMetricsValues.toImmutableArraySeq, customMetrics)
+      iter.forceUpdateMetrics()
+      reader.close()
+    }
   }
 }
 

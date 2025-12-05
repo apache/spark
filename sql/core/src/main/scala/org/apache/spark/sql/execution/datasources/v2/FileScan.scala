@@ -18,28 +18,33 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.{Locale, OptionalLong}
 
-import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{PATH, REASON}
 import org.apache.spark.internal.config.IO_WARNING_LARGEFILETHRESHOLD
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Expression, ExpressionSet}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
-import org.apache.spark.sql.connector.read.{Batch, InputPartition, Scan, Statistics, SupportsReportStatistics}
+import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.PartitionedFileUtil
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.internal.{SessionStateHelper, SQLConf}
 import org.apache.spark.sql.internal.connector.SupportsMetadata
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 trait FileScan extends Scan
-  with Batch with SupportsReportStatistics with SupportsMetadata with Logging {
+  with Batch
+  with SupportsReportStatistics
+  with SupportsMetadata
+  with SQLConfHelper
+  with Logging {
   /**
    * Returns whether a file with `path` could be split or not.
    */
@@ -107,14 +112,16 @@ trait FileScan extends Scan
 
   override def hashCode(): Int = getClass.hashCode()
 
-  val maxMetadataValueLength = sparkSession.sessionState.conf.maxMetadataStringLength
+  override def conf: SQLConf = SessionStateHelper.getSqlConf(sparkSession)
+
+  val maxMetadataValueLength = conf.maxMetadataStringLength
 
   override def description(): String = {
     val metadataStr = getMetaData().toSeq.sorted.map {
       case (key, value) =>
         val redactedValue =
-          Utils.redact(sparkSession.sessionState.conf.stringRedactionPattern, value)
-        key + ": " + StringUtils.abbreviate(redactedValue, maxMetadataValueLength)
+          Utils.redact(conf.stringRedactionPattern, value)
+        key + ": " + Utils.abbreviate(redactedValue, maxMetadataValueLength)
     }.mkString(", ")
     s"${this.getClass.getSimpleName} $metadataStr"
   }
@@ -152,9 +159,11 @@ trait FileScan extends Scan
         partition.values
       }
       partition.files.flatMap { file =>
+        val filePath = file.getPath
         PartitionedFileUtil.splitFiles(
           file = file,
-          isSplitable = isSplitable(file.getPath),
+          filePath = filePath,
+          isSplitable = isSplitable(filePath),
           maxSplitBytes = maxSplitBytes,
           partitionValues = partitionValues
         )
@@ -164,7 +173,7 @@ trait FileScan extends Scan
     if (splitFiles.length == 1) {
       val path = splitFiles(0).toPath
       if (!isSplitable(path) && splitFiles(0).length >
-        sparkSession.sparkContext.getConf.get(IO_WARNING_LARGEFILETHRESHOLD)) {
+        SessionStateHelper.getSparkConf(sparkSession).get(IO_WARNING_LARGEFILETHRESHOLD)) {
         logWarning(log"Loading one large unsplittable file ${MDC(PATH, path.toString)} with only " +
           log"one partition, the reason is: ${MDC(REASON, getFileUnSplittableReason(path))}")
       }
@@ -180,7 +189,7 @@ trait FileScan extends Scan
   override def estimateStatistics(): Statistics = {
     new Statistics {
       override def sizeInBytes(): OptionalLong = {
-        val compressionFactor = sparkSession.sessionState.conf.fileCompressionFactor
+        val compressionFactor = conf.fileCompressionFactor
         val size = (compressionFactor * fileIndex.sizeInBytes /
           (dataSchema.defaultSize + fileIndex.partitionSchema.defaultSize) *
           (readDataSchema.defaultSize + readPartitionSchema.defaultSize)).toLong
@@ -202,7 +211,7 @@ trait FileScan extends Scan
     a.sortBy(_.hashCode()).sameElements(b.sortBy(_.hashCode()))
   }
 
-  private val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+  private val isCaseSensitive = conf.caseSensitiveAnalysis
 
   private def normalizeName(name: String): String = {
     if (isCaseSensitive) {

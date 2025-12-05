@@ -17,11 +17,10 @@
 package org.apache.spark.deploy.k8s.integrationtest
 
 import java.io.File
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
 import scala.jdk.CollectionConverters._
 
-import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model.Pod
 import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.matchers.should.Matchers._
@@ -40,7 +39,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
     val logConfFilePath = s"${sparkHomeDir.toFile}/conf/log4j2.properties"
 
     try {
-      Files.write(
+      Files.writeString(new File(logConfFilePath).toPath,
         """rootLogger.level = info
           |rootLogger.appenderRef.stdout.ref = console
           |appender.console.type = Console
@@ -51,9 +50,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
           |
           |logger.spark.name = org.apache.spark
           |logger.spark.level = debug
-      """.stripMargin,
-        new File(logConfFilePath),
-        StandardCharsets.UTF_8)
+      """.stripMargin)
 
       f()
     } finally {
@@ -175,7 +172,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
         expectedDriverLogOnCompletion = Seq(
           "Finished waiting, stopping Spark",
           "Decommission executors",
-          "Remove reason statistics: (gracefully decommissioned: 1, decommision unfinished: 0, " +
+          "Remove reason statistics: (gracefully decommissioned: 1, decommission unfinished: 0, " +
             "driver killed: 0, unexpectedly exited: 0)."),
         appArgs = Array.empty[String],
         driverPodChecker = doBasicDriverPyPodCheck,

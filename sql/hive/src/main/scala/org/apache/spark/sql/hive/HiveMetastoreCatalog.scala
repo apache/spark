@@ -25,15 +25,18 @@ import com.google.common.util.concurrent.Striped
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetOptions}
+import org.apache.spark.sql.hive.HiveUtils.CONVERT_METASTORE_AS_NULLABLE
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.HiveCaseSensitiveInferenceMode._
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
@@ -67,6 +70,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
   private[hive] def getCachedDataSourceTable(table: TableIdentifier): LogicalPlan = {
     val key = QualifiedTableName(
       // scalastyle:off caselocale
+      table.catalog.getOrElse(CatalogManager.SESSION_CATALOG_NAME).toLowerCase,
       table.database.getOrElse(sessionState.catalog.getCurrentDatabase).toLowerCase,
       table.table.toLowerCase)
       // scalastyle:on caselocale
@@ -82,7 +86,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
 
     catalogProxy.getCachedTable(tableIdentifier) match {
       case null => None // Cache miss
-      case logical @ LogicalRelation(relation: HadoopFsRelation, _, _, _) =>
+      case logical @ LogicalRelationWithTable(relation: HadoopFsRelation, _) =>
         val cachedRelationFileFormatClass = relation.fileFormat.getClass
 
         expectedFileFormat match {
@@ -199,8 +203,8 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       fileType: String,
       isWrite: Boolean): LogicalRelation = {
     val metastoreSchema = relation.tableMeta.schema
-    val tableIdentifier =
-      QualifiedTableName(relation.tableMeta.database, relation.tableMeta.identifier.table)
+    val tableIdentifier = QualifiedTableName(relation.tableMeta.identifier.catalog.get,
+      relation.tableMeta.database, relation.tableMeta.identifier.table)
 
     val lazyPruningEnabled = sparkSession.sessionState.conf.manageFilesourcePartitions
     val tablePath = new Path(relation.tableMeta.location)
@@ -335,14 +339,19 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       options: Map[String, String],
       fileFormat: FileFormat,
       fileIndexOpt: Option[FileIndex] = None): CatalogTable = {
+    val tableMeta = if (sparkSession.sessionState.conf.getConf(CONVERT_METASTORE_AS_NULLABLE)) {
+      relation.tableMeta.copy(schema = relation.tableMeta.schema.asNullable)
+    } else {
+      relation.tableMeta
+    }
     val inferenceMode = sparkSession.sessionState.conf.caseSensitiveInferenceMode
-    val shouldInfer = (inferenceMode != NEVER_INFER) && !relation.tableMeta.schemaPreservesCase
-    val tableName = relation.tableMeta.identifier.unquotedString
+    val shouldInfer = (inferenceMode != NEVER_INFER) && !tableMeta.schemaPreservesCase
     if (shouldInfer) {
+      val tableName = tableMeta.identifier.unquotedString
       logInfo(log"Inferring case-sensitive schema for table ${MDC(TABLE_NAME, tableName)} " +
-        log"(inference mode:  ${MDC(INFERENCE_MODE, inferenceMode)})})")
+        log"(inference mode: ${MDC(INFERENCE_MODE, inferenceMode)})")
       val fileIndex = fileIndexOpt.getOrElse {
-        val rootPath = new Path(relation.tableMeta.location)
+        val rootPath = new Path(tableMeta.location)
         new InMemoryFileIndex(sparkSession, Seq(rootPath), options, None)
       }
 
@@ -351,23 +360,23 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           sparkSession,
           options,
           fileIndex.listFiles(Nil, Nil).flatMap(_.files).map(_.fileStatus))
-        .map(mergeWithMetastoreSchema(relation.tableMeta.dataSchema, _))
+        .map(mergeWithMetastoreSchema(tableMeta.dataSchema, _))
 
       inferredSchema match {
         case Some(dataSchema) =>
           if (inferenceMode == INFER_AND_SAVE) {
-            updateDataSchema(relation.tableMeta.identifier, dataSchema)
+            updateDataSchema(tableMeta.identifier, dataSchema)
           }
-          val newSchema = StructType(dataSchema ++ relation.tableMeta.partitionSchema)
-          relation.tableMeta.copy(schema = newSchema)
+          val newSchema = StructType(dataSchema ++ tableMeta.partitionSchema)
+          tableMeta.copy(schema = newSchema)
         case None =>
           logWarning(log"Unable to infer schema for table ${MDC(TABLE_NAME, tableName)} from " +
             log"file format ${MDC(FILE_FORMAT, fileFormat)} (inference mode: " +
             log"${MDC(INFERENCE_MODE, inferenceMode)}). Using metastore schema.")
-          relation.tableMeta
+          tableMeta
       }
     } else {
-      relation.tableMeta
+      tableMeta
     }
   }
 

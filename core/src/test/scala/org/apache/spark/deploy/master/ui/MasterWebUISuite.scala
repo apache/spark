@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.master.ui
 
 import java.io.DataOutputStream
-import java.net.{HttpURLConnection, URL}
+import java.net.{HttpURLConnection, URI}
 import java.nio.charset.StandardCharsets
 import java.util.Date
 
@@ -125,7 +125,7 @@ object MasterWebUISuite {
       url: String,
       method: String,
       body: String = ""): HttpURLConnection = {
-    val conn = new URL(url).openConnection().asInstanceOf[HttpURLConnection]
+    val conn = new URI(url).toURL.openConnection().asInstanceOf[HttpURLConnection]
     conn.setRequestMethod(method)
     if (body.nonEmpty) {
       conn.setDoOutput(true)

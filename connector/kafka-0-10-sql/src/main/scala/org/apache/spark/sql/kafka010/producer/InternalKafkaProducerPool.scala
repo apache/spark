@@ -27,7 +27,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.kafka.clients.producer.KafkaProducer
 
 import org.apache.spark.{SparkConf, SparkEnv}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PRODUCER_ID
 import org.apache.spark.kafka010.{KafkaConfigUpdater, KafkaRedactionUtil}
 import org.apache.spark.sql.kafka010.{PRODUCER_CACHE_EVICTOR_THREAD_RUN_INTERVAL, PRODUCER_CACHE_TIMEOUT}

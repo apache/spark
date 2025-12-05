@@ -124,5 +124,13 @@ class NormalizeFloatingPointNumbersSuite extends PlanTest {
 
     comparePlans(doubleOptimized, correctAnswer)
   }
+
+  test("SPARK-49863: NormalizeFloatingNumbers preserves nullability for nested struct") {
+    val relation = LocalRelation($"a".double, $"b".string)
+    val nestedExpr = namedStruct("struct", namedStruct("double", relation.output.head))
+      .as("nestedExpr").toAttribute
+    val normalizedExpr = NormalizeFloatingNumbers.normalize(nestedExpr)
+    assert(nestedExpr.dataType == normalizedExpr.dataType)
+  }
 }
 

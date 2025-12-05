@@ -30,7 +30,7 @@ import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
-import org.apache.spark.internal.{Logging, MDC, MessageWithContext}
+import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.kafka010.{KafkaConfigUpdater, KafkaTokenUtil}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
@@ -62,6 +62,13 @@ private[kafka010] class InternalKafkaConsumer(
   // Exposed for testing
   private[consumer] var kafkaParamsWithSecurity: ju.Map[String, Object] = _
   private val consumer = createConsumer()
+
+  def poll(pollTimeoutMs: Long): ju.List[ConsumerRecord[Array[Byte], Array[Byte]]] = {
+    val p = consumer.poll(Duration.ofMillis(pollTimeoutMs))
+    val r = p.records(topicPartition)
+    logDebug(s"Polled $groupId ${p.partitions()}  ${r.size}")
+    r
+  }
 
   /**
    * Poll messages from Kafka starting from `offset` and returns a pair of "list of consumer record"
@@ -131,7 +138,7 @@ private[kafka010] class InternalKafkaConsumer(
     c
   }
 
-  private def seek(offset: Long): Unit = {
+  def seek(offset: Long): Unit = {
     logDebug(s"Seeking to $groupId $topicPartition $offset")
     consumer.seek(topicPartition, offset)
   }
@@ -229,6 +236,19 @@ private[consumer] case class FetchedRecord(
 }
 
 /**
+ * This class keeps returning the next records. If no new record is available, it will keep
+ * polling until timeout. It is used by KafkaBatchPartitionReader.nextWithTimeout(), to reduce
+ * seeking overhead in real time mode.
+ */
+private[sql] trait KafkaDataConsumerIterator {
+  /**
+   * Return the next record
+   * @return None if no new record is available after `timeoutMs`.
+   */
+  def nextWithTimeout(timeoutMs: Long): Option[ConsumerRecord[Array[Byte], Array[Byte]]]
+}
+
+/**
  * This class helps caller to read from Kafka leveraging consumer pool as well as fetched data pool.
  * This class throws error when data loss is detected while reading from Kafka.
  *
@@ -271,6 +291,82 @@ private[kafka010] class KafkaDataConsumer(
   private var totalRecordsRead: Long = 0
   // Starting timestamp when the consumer is created.
   private var startTimestampNano: Long = System.nanoTime()
+
+  /**
+   * Get an iterator that can return the next entry. It is used exclusively for real-time
+   * mode.
+   *
+   * It is called by KafkaBatchPartitionReader.nextWithTimeout(). Unlike get(), there is no
+   * out-of-bound check in this function. Since there is no endOffset given, we assume anything
+   * record is valid to return as long as it is at or after `offset`.
+   *
+   * @param startOffset, the starting positions to read from, inclusive.
+   */
+  def getIterator(startOffset: Long): KafkaDataConsumerIterator = {
+    new KafkaDataConsumerIterator {
+      private var fetchedRecordList
+          : Option[ju.ListIterator[ConsumerRecord[Array[Byte], Array[Byte]]]] = None
+      private val consumer = getOrRetrieveConsumer()
+      private var firstRecord = true
+      private var _currentOffset: Long = startOffset - 1
+
+      private def fetchedRecordListHasNext(): Boolean = {
+        fetchedRecordList.map(_.hasNext).getOrElse(false)
+      }
+
+      override def nextWithTimeout(
+          timeoutMs: Long): Option[ConsumerRecord[Array[Byte], Array[Byte]]] = {
+        var timeLeftMs = timeoutMs
+
+        def timeAndDeductFromTimeLeftMs[T](body: => T): Unit = {
+          // To reduce timing the same operator twice, we reuse the timing results for
+          // totalTimeReadNanos and for timeoutMs.
+          val prevTime = totalTimeReadNanos
+          timeNanos {
+            body
+          }
+          timeLeftMs -= (totalTimeReadNanos - prevTime) / 1000000
+        }
+
+        if (firstRecord) {
+          timeAndDeductFromTimeLeftMs {
+            consumer.seek(startOffset)
+            firstRecord = false
+          }
+        }
+        while (!fetchedRecordListHasNext() && timeLeftMs > 0) {
+          timeAndDeductFromTimeLeftMs {
+            try {
+              val records = consumer.poll(timeLeftMs)
+              numPolls += 1
+              if (!records.isEmpty) {
+                numRecordsPolled += records.size
+                fetchedRecordList = Some(records.listIterator)
+              }
+            } catch {
+              case ex: OffsetOutOfRangeException =>
+                if (_currentOffset != -1) {
+                  throw ex
+                } else {
+                  Thread.sleep(10) // retry until the source partition is populated
+                  assert(startOffset == 0)
+                  consumer.seek(startOffset)
+                }
+            }
+          }
+        }
+        if (fetchedRecordListHasNext()) {
+          totalRecordsRead += 1
+          val nextRecord = fetchedRecordList.get.next()
+          assert(nextRecord.offset > _currentOffset, "Kafka offset should be incremental.")
+          _currentOffset = nextRecord.offset
+          Some(nextRecord)
+        } else {
+          None
+        }
+      }
+    }
+  }
 
   /**
    * Get the record for the given offset if available.
@@ -392,12 +488,22 @@ private[kafka010] class KafkaDataConsumer(
       .getOrElse("")
     val walTime = System.nanoTime() - startTimestampNano
 
+    // Get task context information for correlation with executor logs
+    val taskCtx = TaskContext.get()
+    val taskContextInfo = if (taskCtx != null) {
+      log" for taskId=${MDC(TASK_ATTEMPT_ID, taskCtx.taskAttemptId())} " +
+        log"partitionId=${MDC(PARTITION_ID, taskCtx.partitionId())}."
+    } else {
+      log"."
+    }
+
     logInfo(log"From Kafka ${MDC(CONSUMER, kafkaMeta)} read " +
-      log"${MDC(TOTAL_RECORDS_READ, totalRecordsRead)} records through " +
-      log"${MDC(KAFKA_PULLS_COUNT, numPolls)} polls " +
-      log"(polled out ${MDC(KAFKA_RECORDS_PULLED_COUNT, numRecordsPolled)} records), " +
+      log"${MDC(NUM_RECORDS_READ, totalRecordsRead)} records through " +
+      log"${MDC(NUM_KAFKA_PULLS, numPolls)} polls " +
+      log"(polled out ${MDC(NUM_KAFKA_RECORDS_PULLED, numRecordsPolled)} records), " +
       log"taking ${MDC(TOTAL_TIME_READ, totalTimeReadNanos / NANOS_PER_MILLIS.toDouble)} ms, " +
-      log"during time span of ${MDC(TIME, walTime / NANOS_PER_MILLIS.toDouble)} ms."
+      log"during time span of ${MDC(TIME, walTime / NANOS_PER_MILLIS.toDouble)} ms" +
+      taskContextInfo
     )
 
     releaseConsumer()
@@ -741,5 +847,9 @@ private[kafka010] object KafkaDataConsumer extends Logging {
     }
 
     new KafkaDataConsumer(topicPartition, kafkaParams, consumerPool, fetchedDataPool)
+  }
+
+  private[kafka010] def getActiveSizeInConsumerPool(groupIdPrefix: String): Int = {
+    consumerPool.numActiveInGroupIdPrefix(groupIdPrefix)
   }
 }

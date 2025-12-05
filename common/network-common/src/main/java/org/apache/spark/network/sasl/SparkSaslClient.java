@@ -29,10 +29,10 @@ import javax.security.sasl.Sasl;
 import javax.security.sasl.SaslClient;
 import javax.security.sasl.SaslException;
 
-import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableMap;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 
 import static org.apache.spark.network.sasl.SparkSaslServer.*;
 
@@ -42,7 +42,7 @@ import static org.apache.spark.network.sasl.SparkSaslServer.*;
  * firstToken, which is then followed by a set of challenges and responses.
  */
 public class SparkSaslClient implements SaslEncryptionBackend {
-  private static final Logger logger = LoggerFactory.getLogger(SparkSaslClient.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(SparkSaslClient.class);
 
   private final String secretKeyId;
   private final SecretKeyHolder secretKeyHolder;
@@ -61,7 +61,7 @@ public class SparkSaslClient implements SaslEncryptionBackend {
       this.saslClient = Sasl.createSaslClient(new String[] { DIGEST }, null, null, DEFAULT_REALM,
         saslProps, new ClientCallbackHandler());
     } catch (SaslException e) {
-      throw Throwables.propagate(e);
+      throw new RuntimeException(e);
     }
   }
 
@@ -71,7 +71,7 @@ public class SparkSaslClient implements SaslEncryptionBackend {
       try {
         return saslClient.evaluateChallenge(new byte[0]);
       } catch (SaslException e) {
-        throw Throwables.propagate(e);
+        throw new RuntimeException(e);
       }
     } else {
       return new byte[0];
@@ -97,7 +97,7 @@ public class SparkSaslClient implements SaslEncryptionBackend {
     try {
       return saslClient != null ? saslClient.evaluateChallenge(token) : new byte[0];
     } catch (SaslException e) {
-      throw Throwables.propagate(e);
+      throw new RuntimeException(e);
     }
   }
 

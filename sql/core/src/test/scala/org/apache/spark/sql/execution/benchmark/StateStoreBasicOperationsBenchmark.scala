@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.execution.benchmark
 
+import java.util.UUID
+
 import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, NoPrefixKeyStateEncoderSpec, RocksDBStateStoreProvider, StateStore, StateStoreConf, StateStoreId, StateStoreProvider}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType, TimestampType}
@@ -353,10 +356,6 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
     }
   }
 
-  private def getRows(store: StateStore, keys: Seq[UnsafeRow]): Seq[UnsafeRow] = {
-    keys.map(key => store.get(key))
-  }
-
   private def loadInitialData(
       provider: StateStoreProvider,
       data: Seq[(UnsafeRow, UnsafeRow)]): Long = {
@@ -466,9 +465,11 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
     val storeId = StateStoreId(newDir(), Random.nextInt(), 0)
     val provider = new HDFSBackedStateStoreProvider()
     val storeConf = new StateStoreConf(new SQLConf())
+    val configuration = new Configuration
+    configuration.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
     provider.init(
       storeId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
-      useColumnFamilies = false, storeConf, new Configuration)
+      useColumnFamilies = false, storeConf, configuration)
     provider
   }
 
@@ -481,11 +482,16 @@ object StateStoreBasicOperationsBenchmark extends SqlBasedBenchmark {
     val sqlConf = new SQLConf()
     sqlConf.setConfString("spark.sql.streaming.stateStore.rocksdb.trackTotalNumberOfRows",
       trackTotalNumberOfRows.toString)
+    sqlConf.setConfString("spark.sql.streaming.stateStore.coordinatorReportSnapshotUploadLag",
+      false.toString)
     val storeConf = new StateStoreConf(sqlConf)
+
+    val configuration = new Configuration
+    configuration.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
 
     provider.init(
       storeId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
-      useColumnFamilies = useColumnFamilies, storeConf, new Configuration,
+      useColumnFamilies = useColumnFamilies, storeConf, configuration,
       useMultipleValuesPerKey = useMultipleValuesPerKey)
     provider
   }

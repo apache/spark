@@ -34,8 +34,8 @@ import org.apache.spark.sql.types.StructType
 class CSVOptions(
     @transient val parameters: CaseInsensitiveMap[String],
     val columnPruning: Boolean,
-    defaultTimeZoneId: String,
-    defaultColumnNameOfCorruptRecord: String)
+    private val defaultTimeZoneId: String,
+    private val defaultColumnNameOfCorruptRecord: String)
   extends FileSourceOptions(parameters) with Logging {
 
   import CSVOptions._
@@ -61,6 +61,24 @@ class CSVOptions(
         columnPruning,
         defaultTimeZoneId,
         defaultColumnNameOfCorruptRecord)
+  }
+
+  override def equals(obj: Any): Boolean = obj match {
+    case other: CSVOptions =>
+      (parameters == null && other.parameters == null ||
+      parameters != null && parameters == other.parameters) &&
+      columnPruning == other.columnPruning &&
+      defaultTimeZoneId == other.defaultTimeZoneId &&
+      defaultColumnNameOfCorruptRecord == other.defaultColumnNameOfCorruptRecord
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    var result = Option(parameters).map(_.hashCode()).getOrElse(0)
+    result = 31 * result + (if (columnPruning) 1 else 0)
+    result = 31 * result + defaultTimeZoneId.hashCode()
+    result = 31 * result + defaultColumnNameOfCorruptRecord.hashCode()
+    result
   }
 
   private def getChar(paramName: String, default: Char): Char = {
@@ -103,10 +121,21 @@ class CSVOptions(
 
   val delimiter = CSVExprUtils.toDelimiterStr(
     parameters.getOrElse(SEP, parameters.getOrElse(DELIMITER, ",")))
+
+  val extension = {
+    val ext = parameters.getOrElse(EXTENSION, "csv")
+    if (ext.size != 3 && !ext.forall(_.isLetter)) {
+      throw QueryExecutionErrors.invalidFileExtensionError(EXTENSION, ext)
+    }
+
+    ext
+  }
+
   val parseMode: ParseMode =
     parameters.get(MODE).map(ParseMode.fromString).getOrElse(PermissiveMode)
-  val charset = parameters.getOrElse(ENCODING,
-    parameters.getOrElse(CHARSET, StandardCharsets.UTF_8.name()))
+  val charset = parameters.get(ENCODING).orElse(parameters.get(CHARSET))
+    .map(CharsetProvider.forName(_, SQLConf.get.legacyJavaCharsets, caller = "CSVOptions"))
+    .getOrElse(StandardCharsets.UTF_8).name()
 
   val quote = getChar(QUOTE, '\"')
   val escape = getChar(ESCAPE, '\\')
@@ -186,16 +215,15 @@ class CSVOptions(
     } else {
       parameters.get(TIMESTAMP_FORMAT)
     }
-  val timestampFormatInWrite: String = parameters.getOrElse(TIMESTAMP_FORMAT,
-    if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
-      s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX"
-    } else {
-      s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS][XXX]"
-    })
+  val timestampFormatInWrite: String =
+    parameters.getOrElse(TIMESTAMP_FORMAT, commonTimestampFormat)
 
   val timestampNTZFormatInRead: Option[String] = parameters.get(TIMESTAMP_NTZ_FORMAT)
   val timestampNTZFormatInWrite: String = parameters.getOrElse(TIMESTAMP_NTZ_FORMAT,
     s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS]")
+
+  val timeFormatInRead: Option[String] = parameters.get(TIME_FORMAT)
+  val timeFormatInWrite: String = parameters.getOrElse(TIME_FORMAT, TimeFormatter.defaultPattern)
 
   // SPARK-39731: Enables the backward compatible parsing behavior.
   // Generally, this config should be set to false to avoid producing potentially incorrect results
@@ -299,6 +327,14 @@ class CSVOptions(
   private val isColumnPruningOptionEnabled: Boolean =
     getBool(COLUMN_PRUNING, !multiLine && columnPruning)
 
+  // This option takes in a column name and specifies that the entire CSV record should be stored
+  // as a single VARIANT type column in the table with the given column name.
+  // E.g. spark.read.format("csv").option("singleVariantColumn", "colName")
+  val singleVariantColumn: Option[String] = parameters.get(SINGLE_VARIANT_COLUMN)
+
+  def needHeaderForSingleVariantColumn: Boolean =
+    singleVariantColumn.isDefined && headerFlag
+
   def asWriterSettings: CsvWriterSettings = {
     val writerSettings = new CsvWriterSettings()
     val format = writerSettings.getFormat
@@ -375,19 +411,21 @@ object CSVOptions extends DataSourceOptions {
   val DATE_FORMAT = newOption("dateFormat")
   val TIMESTAMP_FORMAT = newOption("timestampFormat")
   val TIMESTAMP_NTZ_FORMAT = newOption("timestampNTZFormat")
+  val TIME_FORMAT = newOption("timeFormat")
   val ENABLE_DATETIME_PARSING_FALLBACK = newOption("enableDateTimeParsingFallback")
   val MULTI_LINE = newOption("multiLine")
   val SAMPLING_RATIO = newOption("samplingRatio")
   val EMPTY_VALUE = newOption("emptyValue")
   val LINE_SEP = newOption("lineSep")
   val INPUT_BUFFER_SIZE = newOption("inputBufferSize")
-  val COLUMN_NAME_OF_CORRUPT_RECORD = newOption("columnNameOfCorruptRecord")
+  val COLUMN_NAME_OF_CORRUPT_RECORD = newOption(DataSourceOptions.COLUMN_NAME_OF_CORRUPT_RECORD)
   val NULL_VALUE = newOption("nullValue")
   val NAN_VALUE = newOption("nanValue")
   val POSITIVE_INF = newOption("positiveInf")
   val NEGATIVE_INF = newOption("negativeInf")
   val TIME_ZONE = newOption("timeZone")
   val UNESCAPED_QUOTE_HANDLING = newOption("unescapedQuoteHandling")
+  val EXTENSION = newOption("extension")
   // Options with alternative
   val ENCODING = "encoding"
   val CHARSET = "charset"
@@ -399,4 +437,5 @@ object CSVOptions extends DataSourceOptions {
   val DELIMITER = "delimiter"
   newOption(SEP, DELIMITER)
   val COLUMN_PRUNING = newOption("columnPruning")
+  val SINGLE_VARIANT_COLUMN = newOption(DataSourceOptions.SINGLE_VARIANT_COLUMN)
 }

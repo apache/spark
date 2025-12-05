@@ -19,36 +19,43 @@ package org.apache.spark.sql.streaming
 
 import java.io.Serializable
 
-import org.apache.spark.annotation.{Evolving, Experimental}
+import org.apache.spark.annotation.Evolving
 
-@Experimental
 @Evolving
 /**
- * Interface used for arbitrary stateful operations with the v2 API to capture
- * single value state.
+ * Interface used for arbitrary stateful operations with the v2 API to capture single value state.
  */
-private[sql] trait ValueState[S] extends Serializable {
+trait ValueState[S] extends Serializable {
 
-  /** Whether state exists or not. */
+  /**
+   * Function to check whether state exists for current grouping key or not.
+   *
+   * @return - true if state exists, false otherwise.
+   */
   def exists(): Boolean
 
   /**
-   * Get the state value if it exists
-   * @throws java.util.NoSuchElementException if the state does not exist
+   * Function to get the state value for the current grouping key.
+   * If the state exists, the value is returned. If the state does not exist,
+   * the default value for the type is returned for AnyVal types and null for AnyRef types.
+   *
+   * Note that it's always recommended to check whether the state exists or not by calling exists()
+   * before calling get().
+   *
+   * @return - the value of the state if it exists. If the state does not exist, the default value
+   *           for the type is returned for AnyVal types and null for AnyRef types.
    */
-  @throws[NoSuchElementException]
   def get(): S
 
-  /** Get the state if it exists as an option and None otherwise */
-  def getOption(): Option[S]
-
   /**
-   * Update the value of the state.
+   * Function to update the value of the state for the current grouping key to the new value.
    *
-   * @param newState    the new value
+   * @param newState - the new value
    */
   def update(newState: S): Unit
 
-  /** Remove this state. */
+  /**
+   * Function to remove the state for the current grouping key.
+   */
   def clear(): Unit
 }

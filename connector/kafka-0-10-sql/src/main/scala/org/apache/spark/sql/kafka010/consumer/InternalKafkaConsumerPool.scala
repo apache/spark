@@ -129,6 +129,14 @@ private[consumer] class InternalKafkaConsumerPool(
 
   def size(key: CacheKey): Int = numIdle(key) + numActive(key)
 
+  private[kafka010] def numActiveInGroupIdPrefix(groupIdPrefix: String): Int = {
+    import scala.jdk.CollectionConverters._
+
+    pool.getNumActivePerKey().asScala.filter { case (key, _) =>
+      key.startsWith(groupIdPrefix + "-")
+    }.values.map(_.toInt).sum
+  }
+
   // TODO: revisit the relation between CacheKey and kafkaParams - for now it looks a bit weird
   //   as we force all consumers having same (groupId, topicPartition) to have same kafkaParams
   //   which might be viable in performance perspective (kafkaParams might be too huge to use
@@ -183,8 +191,8 @@ private[consumer] object InternalKafkaConsumerPool {
       setMaxTotal(-1)
 
       // Set minimum evictable idle time which will be referred from evictor thread
-      setMinEvictableIdleTime(Duration.ofMillis(minEvictableIdleTimeMillis))
-      setSoftMinEvictableIdleTime(BaseObjectPoolConfig.DEFAULT_SOFT_MIN_EVICTABLE_IDLE_DURATION)
+      setMinEvictableIdleDuration(Duration.ofMillis(minEvictableIdleTimeMillis))
+      setSoftMinEvictableIdleDuration(BaseObjectPoolConfig.DEFAULT_SOFT_MIN_EVICTABLE_IDLE_DURATION)
 
       // evictor thread will run test with ten idle objects
       setTimeBetweenEvictionRuns(Duration.ofMillis(evictorThreadRunIntervalMillis))

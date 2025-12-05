@@ -36,7 +36,7 @@ SELECT * FROM v;
 DESCRIBE EXTENDED v;
 
 -- Test ALTER VIEW ... WITH SCHEMA BINDING
-SET spark.sql.viewSchemaBindingMode=DISABLED;
+SET spark.sql.legacy.viewSchemaCompensation=false;
 
 DROP TABLE IF EXISTS t;
 CREATE TABLE t(c1 INT NOT NULL) USING PARQUET;

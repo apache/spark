@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive.orc
 
 import java.io.File
 
-import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
 import org.apache.orc.OrcConf
 
@@ -31,6 +30,8 @@ import org.apache.spark.sql.execution.datasources.orc.OrcQueryTest
 import org.apache.spark.sql.hive.{HiveSessionCatalog, HiveUtils}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.TimeType
+import org.apache.spark.util.Utils
 
 class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
   import testImplicits._
@@ -58,7 +59,7 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
             exception = intercept[AnalysisException] {
               spark.read.orc(path)
             },
-            errorClass = "UNABLE_TO_INFER_SCHEMA",
+            condition = "UNABLE_TO_INFER_SCHEMA",
             parameters = Map("format" -> "ORC")
           )
 
@@ -194,7 +195,7 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
         withTempPath { dir =>
           withTable("spark_19809") {
             sql(s"CREATE TABLE spark_19809(a int) STORED AS ORC LOCATION '$dir'")
-            Files.touch(new File(s"${dir.getCanonicalPath}", "zero.orc"))
+            Utils.touch(new File(s"${dir.getCanonicalPath}", "zero.orc"))
 
             Seq(true, false).foreach { convertMetastoreOrc =>
               withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> convertMetastoreOrc.toString) {
@@ -229,17 +230,6 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
   private def getCachedDataSourceTable(table: TableIdentifier) = {
     spark.sessionState.catalog.asInstanceOf[HiveSessionCatalog].metastoreCatalog
       .getCachedDataSourceTable(table)
-  }
-
-  private def checkCached(tableIdentifier: TableIdentifier): Unit = {
-    getCachedDataSourceTable(tableIdentifier) match {
-      case null => fail(s"Converted ${tableIdentifier.table} should be cached in the cache.")
-      case LogicalRelation(_: HadoopFsRelation, _, _, _) => // OK
-      case other =>
-        fail(
-          s"The cached ${tableIdentifier.table} should be a HadoopFsRelation. " +
-            s"However, $other is returned form the cache.")
-    }
   }
 
   test("SPARK-28573 ORC conversation could be applied for partitioned table insertion") {
@@ -412,6 +402,43 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
             }
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-49094: ignoreCorruptFiles works for hive orc w/ mergeSchema off") {
+    withTempDir { dir =>
+      val basePath = dir.getCanonicalPath
+      spark.range(0, 1).toDF("a").write.orc(new Path(basePath, "foo=1").toString)
+      spark.range(0, 1).toDF("b").write.json(new Path(basePath, "foo=2").toString)
+
+      withSQLConf(
+        SQLConf.IGNORE_CORRUPT_FILES.key -> "false",
+        SQLConf.ORC_IMPLEMENTATION.key -> "hive") {
+        Seq(true, false).foreach { mergeSchema =>
+          checkAnswer(spark.read
+            .option("mergeSchema", value = mergeSchema)
+            .option("ignoreCorruptFiles", value = true)
+            .orc(basePath), Row(0L, 1))
+        }
+      }
+    }
+  }
+
+  test("SPARK-51590: unsupported the TIME data types in Hive ORC") {
+    withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> "hive") {
+      withTempDir { dir =>
+        val tempDir = new File(dir, "files").getCanonicalPath
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql("select time'12:01:02' as t")
+              .write.format("orc").mode("overwrite").save(tempDir)
+          },
+          condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+          parameters = Map(
+            "columnName" -> "`t`",
+            "columnType" -> s"\"${TimeType().sql}\"",
+            "format" -> "ORC"))
       }
     }
   }

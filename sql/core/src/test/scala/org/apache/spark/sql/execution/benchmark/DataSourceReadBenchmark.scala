@@ -169,6 +169,12 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
           spark.sql(s"select $query from jsonTable").noop()
         }
 
+        sqlBenchmark.addCase("SQL Json with UnsafeRow") { _ =>
+          withSQLConf(SQLConf.JSON_USE_UNSAFE_ROW.key -> "true") {
+            spark.sql(s"select $query from jsonTable").noop()
+          }
+        }
+
         withParquetVersions { version =>
           sqlBenchmark.addCase(s"SQL Parquet Vectorized: DataPage$version") { _ =>
             spark.sql(s"select $query from parquet${version}Table").noop()
@@ -356,11 +362,11 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
       withTempTable("t1", "parquetV1Table", "parquetV2Table", "orcTable") {
         import spark.implicits._
         spark.range(values).map(_ => Random.nextLong()).map { x =>
-          val arrayOfStructColumn = (0 until 5).map(i => (x + i, s"$x" * 5))
+          val arrayOfStructColumn = (0 until 5).map(i => (x + i, s"$x".repeat(5)))
           val mapOfStructColumn = Map(
-            s"$x" -> (x * 0.1, (x, s"$x" * 100)),
-            (s"$x" * 2) -> (x * 0.2, (x, s"$x" * 200)),
-            (s"$x" * 3) -> (x * 0.3, (x, s"$x" * 300)))
+            s"$x" -> (x * 0.1, (x, s"$x".repeat(100))),
+            (s"$x".repeat(2)) -> (x * 0.2, (x, s"$x".repeat(200))),
+            (s"$x".repeat(3)) -> (x * 0.3, (x, s"$x".repeat(300))))
           (arrayOfStructColumn, mapOfStructColumn)
         }.toDF("col1", "col2").createOrReplaceTempView("t1")
 

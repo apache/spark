@@ -21,6 +21,7 @@ import java.io.*;
 import java.nio.channels.FileChannel;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -44,12 +45,8 @@ import scala.Tuple3;
 import scala.Tuple4;
 import scala.jdk.javaapi.CollectionConverters;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
-import com.google.common.collect.Lists;
-import com.google.common.base.Throwables;
-import com.google.common.io.Files;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
@@ -70,6 +67,7 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.Optional;
 import org.apache.spark.api.java.function.*;
 import org.apache.spark.input.PortableDataStream;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.partial.BoundedDouble;
 import org.apache.spark.partial.PartialResult;
 import org.apache.spark.rdd.RDD;
@@ -334,7 +332,8 @@ public class JavaAPISuite implements Serializable {
   public void toLocalIterator() {
     List<Integer> correct = Arrays.asList(1, 2, 3, 4);
     JavaRDD<Integer> rdd = sc.parallelize(correct);
-    List<Integer> result = Lists.newArrayList(rdd.toLocalIterator());
+    List<Integer> result = new ArrayList<>();
+    rdd.toLocalIterator().forEachRemaining(result::add);
     assertEquals(correct, result);
   }
 
@@ -960,7 +959,7 @@ public class JavaAPISuite implements Serializable {
     rdd.saveAsTextFile(outputDir);
     // Read the plain text file and check it's OK
     File outputFile = new File(outputDir, "part-00000");
-    String content = Files.toString(outputFile, StandardCharsets.UTF_8);
+    String content = Files.readString(outputFile.toPath());
     assertEquals("1\n2\n3\n4\n", content);
     // Also try reading it in as a text file RDD
     List<String> expected = Arrays.asList("1", "2", "3", "4");
@@ -977,8 +976,8 @@ public class JavaAPISuite implements Serializable {
     String path1 = new Path(tempDirName, "part-00000").toUri().getPath();
     String path2 = new Path(tempDirName, "part-00001").toUri().getPath();
 
-    Files.write(content1, new File(path1));
-    Files.write(content2, new File(path2));
+    Files.write(new File(path1).toPath(), content1);
+    Files.write(new File(path2).toPath(), content2);
 
     Map<String, String> container = new HashMap<>();
     container.put(path1, new Text(content1).toString());
@@ -1263,7 +1262,7 @@ public class JavaAPISuite implements Serializable {
     JavaPairRDD<Integer, Integer> combinedRDD = originalRDD.keyBy(keyFunction)
       .combineByKey(createCombinerFunction, mergeValueFunction, mergeValueFunction);
     Map<Integer, Integer> results = combinedRDD.collectAsMap();
-    ImmutableMap<Integer, Integer> expected = ImmutableMap.of(0, 9, 1, 5, 2, 7);
+    Map<Integer, Integer> expected = Map.of(0, 9, 1, 5, 2, 7);
     assertEquals(expected, results);
 
     Partitioner defaultPartitioner = Partitioner.defaultPartitioner(
@@ -1504,7 +1503,7 @@ public class JavaAPISuite implements Serializable {
     JavaFutureAction<Long> future = rdd.map(new BuggyMapFunction<>()).countAsync();
     ExecutionException ee = assertThrows(ExecutionException.class,
       () -> future.get(2, TimeUnit.SECONDS));
-    assertTrue(Throwables.getStackTraceAsString(ee).contains("Custom exception!"));
+    assertTrue(JavaUtils.stackTraceToString(ee).contains("Custom exception!"));
     assertTrue(future.isDone());
   }
 

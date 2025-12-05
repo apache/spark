@@ -17,18 +17,14 @@
 
 package org.apache.spark.sql.execution.datasources.v2.python
 
-import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream}
+import java.io.{DataInputStream, DataOutputStream}
 
-import scala.jdk.CollectionConverters._
+import net.razorvine.pickle.Pickler
 
-import org.apache.spark.SparkEnv
-import org.apache.spark.api.python.{PythonFunction, PythonWorker, PythonWorkerFactory, PythonWorkerUtils, SpecialLengths}
-import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.PYTHON_EXEC
-import org.apache.spark.internal.config.BUFFER_SIZE
-import org.apache.spark.internal.config.Python.PYTHON_AUTH_SOCKET_TIMEOUT
+import org.apache.spark.api.python.{PythonFunction, PythonWorkerUtils, SpecialLengths}
 import org.apache.spark.sql.connector.write.WriterCommitMessage
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.python.PythonPlannerRunner
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -39,78 +35,22 @@ import org.apache.spark.sql.types.StructType
  * from the socket, then commit or abort a microbatch.
  */
 class PythonStreamingSinkCommitRunner(
-    func: PythonFunction,
+    dataSourceCls: PythonFunction,
     schema: StructType,
-    overwrite: Boolean) extends Logging {
-  val workerModule: String = "pyspark.sql.worker.python_streaming_sink_runner"
+    messages: Array[WriterCommitMessage],
+    batchId: Long,
+    overwrite: Boolean,
+    abort: Boolean) extends PythonPlannerRunner[Unit](dataSourceCls) {
+  override val workerModule: String = "pyspark.sql.worker.python_streaming_sink_runner"
 
-  private val conf = SparkEnv.get.conf
-  protected val bufferSize: Int = conf.get(BUFFER_SIZE)
-  protected val authSocketTimeout = conf.get(PYTHON_AUTH_SOCKET_TIMEOUT)
-
-  private val envVars: java.util.Map[String, String] = func.envVars
-  private val pythonExec: String = func.pythonExec
-  private var pythonWorker: Option[PythonWorker] = None
-  private var pythonWorkerFactory: Option[PythonWorkerFactory] = None
-  protected val pythonVer: String = func.pythonVer
-
-  private var dataOut: DataOutputStream = null
-  private var dataIn: DataInputStream = null
-
-  /**
-   * Initializes the Python worker for running the streaming sink committer.
-   */
-  def init(): Unit = {
-    logInfo(log"Initializing Python runner pythonExec: ${MDC(PYTHON_EXEC, pythonExec)}")
-    val env = SparkEnv.get
-
-    val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
-    envVars.put("SPARK_LOCAL_DIRS", localdir)
-
-    envVars.put("SPARK_AUTH_SOCKET_TIMEOUT", authSocketTimeout.toString)
-    envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
-
-    val workerFactory =
-      new PythonWorkerFactory(pythonExec, workerModule, envVars.asScala.toMap, false)
-    val (worker: PythonWorker, _) = workerFactory.createSimpleWorker(blockingMode = true)
-    pythonWorker = Some(worker)
-    pythonWorkerFactory = Some(workerFactory)
-
-    val stream = new BufferedOutputStream(
-      pythonWorker.get.channel.socket().getOutputStream, bufferSize)
-    dataOut = new DataOutputStream(stream)
-
-    PythonWorkerUtils.writePythonVersion(pythonVer, dataOut)
-
-    val pythonIncludes = func.pythonIncludes.asScala.toSet
-    PythonWorkerUtils.writeSparkFiles(Some("streaming_job"), pythonIncludes, dataOut)
-
-    // Send the user function to python process
-    PythonWorkerUtils.writePythonFunction(func, dataOut)
-
+  override protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit = {
+    // Send the user function to python process.
+    PythonWorkerUtils.writePythonFunction(dataSourceCls, dataOut)
+    // Send the output schema.
     PythonWorkerUtils.writeUTF(schema.json, dataOut)
-
     dataOut.writeBoolean(overwrite)
 
-    dataOut.flush()
-
-    dataIn = new DataInputStream(
-      new BufferedInputStream(pythonWorker.get.channel.socket().getInputStream, bufferSize))
-
-    val initStatus = dataIn.readInt()
-    if (initStatus == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
-      val msg = PythonWorkerUtils.readUTF(dataIn)
-      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "initialize streaming sink", msg)
-    }
-  }
-
-  init()
-
-  def commitOrAbort(
-      messages: Array[WriterCommitMessage],
-      batchId: Long,
-      abort: Boolean): Unit = {
+    // Send the commit messages.
     dataOut.writeInt(messages.length)
     messages.foreach { message =>
       // Commit messages can be null if there are task failures.
@@ -122,10 +62,14 @@ class PythonStreamingSinkCommitRunner(
       }
     }
     dataOut.writeLong(batchId)
+    // Send whether to invoke `abort` instead of `commit`.
     dataOut.writeBoolean(abort)
-    dataOut.flush()
-    val status = dataIn.readInt()
-    if (status == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
+  }
+
+  override protected def receiveFromPython(dataIn: DataInputStream): Unit = {
+    // Receive any exceptions thrown in the Python worker.
+    val code = dataIn.readInt()
+    if (code == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       val action = if (abort) "abort" else "commit"
       throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(action, msg)

@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGe
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types.{DataType, NumericType}
 
-case class TryEval(child: Expression) extends UnaryExpression with NullIntolerant {
+case class TryEval(child: Expression) extends UnaryExpression {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childGen = child.genCode(ctx)
     ev.copy(code = code"""
@@ -48,6 +48,7 @@ case class TryEval(child: Expression) extends UnaryExpression with NullIntoleran
   override def dataType: DataType = child.dataType
 
   override def nullable: Boolean = true
+  override def nullIntolerant: Boolean = true
 
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
@@ -150,7 +151,7 @@ case class TryDivide(left: Expression, right: Expression, replacement: Expressio
   since = "4.0.0",
   group = "math_funcs")
 // scalastyle:on line.size.limit
-case class TryRemainder(left: Expression, right: Expression, replacement: Expression)
+case class TryMod(left: Expression, right: Expression, replacement: Expression)
   extends RuntimeReplaceable with InheritAnalysisRules {
   def this(left: Expression, right: Expression) = this(left, right,
     (left.dataType, right.dataType) match {
@@ -160,7 +161,7 @@ case class TryRemainder(left: Expression, right: Expression, replacement: Expres
     }
   )
 
-  override def prettyName: String = "try_remainder"
+  override def prettyName: String = "try_mod"
 
   override def parameters: Seq[Expression] = Seq(left, right)
 

@@ -71,21 +71,29 @@ if [ -z "$WORKDIR" ] || [ ! -d "$WORKDIR" ]; then
 fi
 
 if [ -d "$WORKDIR/output" ]; then
-  read -p "Output directory already exists. Overwrite and continue? [y/n] " ANSWER
-  if [ "$ANSWER" != "y" ]; then
+  if [ -z "$ANSWER" ]; then
+    read -p "Output directory already exists. Overwrite and continue? [y/n] " userinput
+    if [ "$userinput" != "y" ]; then
+      error "Exiting."
+    fi
+  elif [ "$ANSWER" != "y" ]; then
     error "Exiting."
   fi
 fi
 
 if [ ! -z "$RELEASE_STEP" ] && [ "$RELEASE_STEP" = "finalize" ]; then
   echo "THIS STEP IS IRREVERSIBLE! Make sure the vote has passed and you pick the right RC to finalize."
-  read -p "You must be a PMC member to run this step. Continue? [y/n] " ANSWER
-  if [ "$ANSWER" != "y" ]; then
+  if [ -z "$ANSWER" ]; then
+    read -p "You must be a PMC member to run this step. Continue? [y/n] " userinput
+    if [ "$userinput" != "y" ]; then
+      error "Exiting."
+    fi
+  elif [ "$ANSWER" != "y" ]; then
     error "Exiting."
   fi
 
-  if [ -z "$PYPI_PASSWORD" ]; then
-    stty -echo && printf "PyPi password: " && read PYPI_PASSWORD && printf '\n' && stty echo
+  if [ -z "$PYPI_API_TOKEN" ]; then
+    stty -echo && printf "PyPi API token: " && read PYPI_API_TOKEN && printf '\n' && stty echo
   fi
 fi
 
@@ -142,10 +150,14 @@ GIT_NAME=$GIT_NAME
 GIT_EMAIL=$GIT_EMAIL
 GPG_KEY=$GPG_KEY
 ASF_PASSWORD=$ASF_PASSWORD
-PYPI_PASSWORD=$PYPI_PASSWORD
+PYPI_API_TOKEN=$PYPI_API_TOKEN
 GPG_PASSPHRASE=$GPG_PASSPHRASE
 RELEASE_STEP=$RELEASE_STEP
 USER=$USER
+DEBUG_MODE=$DEBUG_MODE
+ANSWER=$ANSWER
+GITHUB_ACTIONS=$GITHUB_ACTIONS
+SPARK_RC_COUNT=$SPARK_RC_COUNT
 EOF
 
 JAVA_VOL=
@@ -155,7 +167,7 @@ if [ -n "$JAVA" ]; then
 fi
 
 echo "Building $RELEASE_TAG; output will be at $WORKDIR/output"
-docker run -ti \
+docker run $([ -z "$GITHUB_ACTIONS" ] && echo "-ti") \
   --env-file "$ENVFILE" \
   --volume "$WORKDIR:/opt/spark-rm" \
   $JAVA_VOL \

@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
@@ -25,21 +24,18 @@ import org.apache.spark.sql.types.{StructField, StructType}
 
 
 /**
- * Physical node for [[org.apache.spark.sql.catalyst.plans.logical.FlatMapGroupsInPandas]]
+ * Physical node for [[org.apache.spark.sql.catalyst.plans.logical.FlatMapGroupsInArrow]]
  *
- * Rows in each group are passed to the Python worker as an Arrow record batch.
- * The Python worker turns the record batch to a `pandas.DataFrame`, invoke the
- * user-defined function, and passes the resulting `pandas.DataFrame`
- * as an Arrow record batch. Finally, each record batch is turned to
+ * Rows in each group are passed to the Python worker as an iterator of Arrow record batches.
+ * The Python worker passes the record batches either as a materialized `pyarrow.Table` or
+ * an iterator of pyarrow.RecordBatch, depending on the eval type of the user-defined function.
+ * The Python worker returns the resulting record batches which are turned into an
  * Iterator[InternalRow] using ColumnarBatch.
  *
  * Note on memory usage:
- * Both the Python worker and the Java executor need to have enough memory to
- * hold the largest group. The memory on the Java side is used to construct the
- * record batch (off heap memory). The memory on the Python side is used for
- * holding the `pandas.DataFrame`. It's possible to further split one group into
- * multiple record batches to reduce the memory footprint on the Java side, this
- * is left as future work.
+ * When using the `pyarrow.Table` API, the entire group is materialized in memory in the Python
+ * worker, and the entire result for a group must also be fully materialized. The iterator of
+ * record batches API can be used to avoid this limitation on the Python side.
  */
 case class FlatMapGroupsInArrowExec(
     groupingAttributes: Seq[Attribute],
@@ -48,7 +44,9 @@ case class FlatMapGroupsInArrowExec(
     child: SparkPlan)
   extends FlatMapGroupsInBatchExec {
 
-  protected val pythonEvalType: Int = PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF
+  protected val pythonEvalType: Int = {
+    func.asInstanceOf[PythonUDF].evalType
+  }
 
   override protected def groupedData(iter: Iterator[InternalRow], attrs: Seq[Attribute]):
       Iterator[Iterator[InternalRow]] =

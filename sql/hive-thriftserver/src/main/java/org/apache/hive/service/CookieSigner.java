@@ -19,11 +19,10 @@ package org.apache.hive.service;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Base64;
 
-import org.apache.commons.codec.binary.Base64;
-
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 
 /**
  * The cookie signer generates a signature based on SHA digest
@@ -32,9 +31,9 @@ import org.apache.spark.internal.LoggerFactory;
  */
 public class CookieSigner {
   private static final String SIGNATURE = "&s=";
-  private static final String SHA_STRING = "SHA-256";
+  private static final String SHA_STRING = "SHA-512";
   private byte[] secretBytes;
-  private static final Logger LOG = LoggerFactory.getLogger(CookieSigner.class);
+  private static final SparkLogger LOG = SparkLoggerFactory.getLogger(CookieSigner.class);
 
   /**
    * Constructor
@@ -78,9 +77,6 @@ public class CookieSigner {
     String rawValue = signedStr.substring(0, index);
     String currentSignature = getSignature(rawValue);
 
-    if (LOG.isDebugEnabled()) {
-      LOG.debug("Signature generated for " + rawValue + " inside verify is " + currentSignature);
-    }
     if (!MessageDigest.isEqual(originalSignature.getBytes(), currentSignature.getBytes())) {
       throw new IllegalArgumentException("Invalid sign");
     }
@@ -98,7 +94,7 @@ public class CookieSigner {
       md.update(str.getBytes());
       md.update(secretBytes);
       byte[] digest = md.digest();
-      return new Base64(0).encodeToString(digest);
+      return Base64.getEncoder().encodeToString(digest);
     } catch (NoSuchAlgorithmException ex) {
       throw new RuntimeException("Invalid SHA digest String: " + SHA_STRING +
         " " + ex.getMessage(), ex);

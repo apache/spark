@@ -16,8 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.util
 
-import java.lang.{Long => JLong}
-import java.nio.CharBuffer
+import java.lang.{Long => JLong, StringBuilder => JStringBuilder}
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
@@ -26,16 +25,21 @@ import org.antlr.v4.runtime.tree.TerminalNode
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 
 trait SparkParserUtils {
-  val U16_CHAR_PATTERN = """\\u([a-fA-F0-9]{4})(?s).*""".r
-  val U32_CHAR_PATTERN = """\\U([a-fA-F0-9]{8})(?s).*""".r
-  val OCTAL_CHAR_PATTERN = """\\([01][0-7]{2})(?s).*""".r
-  val ESCAPED_CHAR_PATTERN = """\\((?s).)(?s).*""".r
 
-  /** Unescape backslash-escaped string enclosed by quotes. */
-  def unescapeSQLString(b: String): String = {
-    val sb = new StringBuilder(b.length())
-
-    def appendEscapedChar(n: Char): Unit = {
+  /**
+   * Unescape escaped string enclosed by quotes, with support for:
+   *   1. Double-quote escaping (`""`, `''`)
+   *   2. Traditional backslash escaping (\n, \t, \", etc.)
+   *
+   * @param b
+   *   The input string
+   * @param ignoreQuoteQuote
+   *   If true, consecutive quotes (`''` or `""`) are treated as string concatenation and will be
+   *   removed directly (e.g., `'a''b'` → `ab`). If false, they are treated as escape sequences
+   *   (e.g., `'a''b'` → `a'b`). Default is false (standard SQL escaping).
+   */
+  def unescapeSQLString(b: String, ignoreQuoteQuote: Boolean = false): String = {
+    def appendEscapedChar(n: Char, sb: JStringBuilder): Unit = {
       n match {
         case '0' => sb.append('\u0000')
         case 'b' => sb.append('\b')
@@ -50,50 +54,134 @@ trait SparkParserUtils {
       }
     }
 
-    if (b.startsWith("r") || b.startsWith("R")) {
-      b.substring(2, b.length - 1)
-    } else {
-      // Skip the first and last quotations enclosing the string literal.
-      val charBuffer = CharBuffer.wrap(b, 1, b.length - 1)
+    def allCharsAreHex(s: String, start: Int, length: Int): Boolean = {
+      val end = start + length
+      var i = start
+      while (i < end) {
+        val c = s.charAt(i)
+        val cIsHex = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+        if (!cIsHex) {
+          return false
+        }
+        i += 1
+      }
+      true
+    }
 
-      while (charBuffer.remaining() > 0) {
-        charBuffer match {
-          case U16_CHAR_PATTERN(cp) =>
+    def isThreeDigitOctalEscape(s: String, start: Int): Boolean = {
+      val firstChar = s.charAt(start)
+      val secondChar = s.charAt(start + 1)
+      val thirdChar = s.charAt(start + 2)
+      (firstChar == '0' || firstChar == '1') &&
+      (secondChar >= '0' && secondChar <= '7') &&
+      (thirdChar >= '0' && thirdChar <= '7')
+    }
+
+    val isRawString = {
+      val firstChar = b.charAt(0)
+      firstChar == 'r' || firstChar == 'R'
+    }
+
+    val isDoubleQuotedString = {
+      b.charAt(0) == '"'
+    }
+
+    val isSingleQuotedString = {
+      b.charAt(0) == '\''
+    }
+
+    if (isRawString) {
+      // Skip the 'r' or 'R' and the first and last quotations enclosing the string literal.
+      b.substring(2, b.length - 1)
+    } else if (b.indexOf('\\') == -1 &&
+      (!isDoubleQuotedString || b.indexOf("\"\"") == -1) &&
+      (!isSingleQuotedString || b.indexOf("''") == -1)) {
+      // Fast path for the common case where the string has no escaped characters,
+      // in which case we just skip the first and last quotations enclosing the string literal.
+      b.substring(1, b.length - 1)
+    } else {
+      val sb = new JStringBuilder(b.length())
+      // Skip the first and last quotations enclosing the string literal.
+      var i = 1
+      val length = b.length - 1
+      while (i < length) {
+        val c = b.charAt(i)
+        // First check for double-quote escaping (`""`, `''`)
+        if (isDoubleQuotedString && c == '"' && i + 1 < length && b.charAt(i + 1) == '"') {
+          if (!ignoreQuoteQuote) {
+            sb.append('"')
+          }
+          i += 2
+        } else if (isSingleQuotedString && c == '\'' && i + 1 < length && b.charAt(
+            i + 1) == '\'') {
+          if (!ignoreQuoteQuote) {
+            sb.append('\'')
+          }
+          i += 2
+        } else if (c != '\\' || i + 1 == length) {
+          // Either a regular character or a backslash at the end of the string:
+          sb.append(c)
+          i += 1
+        } else {
+          // A backslash followed by at least one character:
+          i += 1
+          val cAfterBackslash = b.charAt(i)
+          if (cAfterBackslash == 'u' && i + 1 + 4 <= length && allCharsAreHex(b, i + 1, 4)) {
             // \u0000 style 16-bit unicode character literals.
-            sb.append(Integer.parseInt(cp, 16).toChar)
-            charBuffer.position(charBuffer.position() + 6)
-          case U32_CHAR_PATTERN(cp) =>
+            sb.append(Integer.parseInt(b, i + 1, i + 1 + 4, 16).toChar)
+            i += 1 + 4
+          } else if (cAfterBackslash == 'U' && i + 1 + 8 <= length && allCharsAreHex(
+              b,
+              i + 1,
+              8)) {
             // \U00000000 style 32-bit unicode character literals.
             // Use Long to treat codePoint as unsigned in the range of 32-bit.
-            val codePoint = JLong.parseLong(cp, 16)
+            val codePoint = JLong.parseLong(b, i + 1, i + 1 + 8, 16)
             if (codePoint < 0x10000) {
-              sb.append((codePoint & 0xFFFF).toChar)
+              sb.append((codePoint & 0xffff).toChar)
             } else {
-              val highSurrogate = (codePoint - 0x10000) / 0x400 + 0xD800
-              val lowSurrogate = (codePoint - 0x10000) % 0x400 + 0xDC00
+              val highSurrogate = (codePoint - 0x10000) / 0x400 + 0xd800
+              val lowSurrogate = (codePoint - 0x10000) % 0x400 + 0xdc00
               sb.append(highSurrogate.toChar)
               sb.append(lowSurrogate.toChar)
             }
-            charBuffer.position(charBuffer.position() + 10)
-          case OCTAL_CHAR_PATTERN(cp) =>
+            i += 1 + 8
+          } else if (i + 3 <= length && isThreeDigitOctalEscape(b, i)) {
             // \000 style character literals.
-            sb.append(Integer.parseInt(cp, 8).toChar)
-            charBuffer.position(charBuffer.position() + 4)
-          case ESCAPED_CHAR_PATTERN(c) =>
-            // escaped character literals.
-            appendEscapedChar(c.charAt(0))
-            charBuffer.position(charBuffer.position() + 2)
-          case _ =>
-            // non-escaped character literals.
-            sb.append(charBuffer.get())
+            sb.append(Integer.parseInt(b, i, i + 3, 8).toChar)
+            i += 3
+          } else {
+            appendEscapedChar(cAfterBackslash, sb)
+            i += 1
+          }
         }
       }
-      sb.toString()
+      sb.toString
     }
+  }
+
+  /** Get the code that creates the given node. */
+  def source(ctx: ParserRuleContext): String = {
+    // Note: `exprCtx.getText` returns a string without spaces, so we need to
+    // get the text from the underlying char stream instead.
+    val stream = ctx.getStart.getInputStream
+    stream.getText(Interval.of(ctx.getStart.getStartIndex, ctx.getStop.getStopIndex))
   }
 
   /** Convert a string token into a string. */
   def string(token: Token): String = unescapeSQLString(token.getText)
+
+  /** Convert an array of string tokens into a concatenated string. */
+  def string(tokens: Array[Token]): String = {
+    if (tokens == null || tokens.isEmpty) {
+      ""
+    } else {
+      tokens.map(token => unescapeSQLString(token.getText)).mkString
+    }
+  }
+
+  /** Convert a string token into a string and remove `""` and `''`. */
+  def stringIgnoreQuoteQuote(token: Token): String = unescapeSQLString(token.getText, true)
 
   /** Convert a string node into a string. */
   def string(node: TerminalNode): String = unescapeSQLString(node.getText)
@@ -108,19 +196,32 @@ trait SparkParserUtils {
    * Register the origin of the context. Any TreeNode created in the closure will be assigned the
    * registered origin. This method restores the previously set origin after completion of the
    * closure.
+   *
+   * This method is parameter substitution-aware. If parameter substitution occurred before
+   * parsing, it will automatically adjust the positions and SQL text to refer to the original SQL
+   * (before substitution) instead of the substituted SQL.
    */
   def withOrigin[T](ctx: ParserRuleContext, sqlText: Option[String] = None)(f: => T): T = {
     val current = CurrentOrigin.get
     val text = sqlText.orElse(current.sqlText)
+
     if (text.isEmpty) {
       CurrentOrigin.set(position(ctx.getStart))
     } else {
-      CurrentOrigin.set(positionAndText(ctx.getStart, ctx.getStop, text.get,
-        current.objectType, current.objectName))
+      // Use the standard position method with the provided SQL text
+      CurrentOrigin.set(
+        positionAndText(
+          ctx.getStart,
+          ctx.getStop,
+          text.get,
+          current.objectType,
+          current.objectName))
     }
     try {
       f
     } finally {
+      // When restoring origin, preserve the original context to prevent contamination
+      // across unrelated parsing operations.
       CurrentOrigin.set(current)
     }
   }
@@ -133,14 +234,30 @@ trait SparkParserUtils {
       objectName: Option[String]): Origin = {
     val startOpt = Option(startToken)
     val stopOpt = Option(stopToken)
+
+    // Get the current origin to check for position mapper.
+    val currentOrigin = CurrentOrigin.get
+
+    // Don't map positions yet - store them as-is along with the mapper.
+    // Position mapping will be applied when creating query context for errors.
+    val (text, mapper) = currentOrigin.positionMapper match {
+      case Some(mapper) =>
+        // Store the mapper for later mapping.
+        (Some(mapper.originalText), Some(mapper))
+      case None =>
+        // No position mapper - use SQL text as-is.
+        (Some(sqlText), None)
+    }
+
     Origin(
       line = startOpt.map(_.getLine),
       startPosition = startOpt.map(_.getCharPositionInLine),
       startIndex = startOpt.map(_.getStartIndex),
       stopIndex = stopOpt.map(_.getStopIndex),
-      sqlText = Some(sqlText),
+      sqlText = text,
       objectType = objectType,
-      objectName = objectName)
+      objectName = objectName,
+      positionMapper = mapper)
   }
 
   /** Get the command which created the token. */

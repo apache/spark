@@ -20,14 +20,26 @@ import shutil
 import tempfile
 import time
 import unittest
+import logging
 from datetime import date, datetime
 from decimal import Decimal
 from typing import cast
 
 from pyspark import TaskContext
-from pyspark.util import PythonEvalType
-from pyspark.sql import Column
-from pyspark.sql.functions import array, col, expr, lit, sum, struct, udf, pandas_udf, PandasUDFType
+from pyspark.util import PythonEvalType, is_remote_only
+from pyspark.sql import Column, Row
+from pyspark.sql.functions import (
+    array,
+    col,
+    expr,
+    lit,
+    sum,
+    struct,
+    udf,
+    pandas_udf,
+    to_json,
+    PandasUDFType,
+)
 from pyspark.sql.types import (
     IntegerType,
     ByteType,
@@ -41,12 +53,13 @@ from pyspark.sql.types import (
     StringType,
     ArrayType,
     StructField,
-    Row,
     TimestampType,
     MapType,
     DateType,
     BinaryType,
     YearMonthIntervalType,
+    VariantType,
+    VariantVal,
 )
 from pyspark.errors import AnalysisException, PythonException
 from pyspark.testing.sqlutils import (
@@ -280,13 +293,17 @@ class ScalarPandasUDFTestsMixin:
         ).asNondeterministic()
         self.assertEqual(random_pandas_udf.deterministic, False)
         self.assertEqual(random_pandas_udf.evalType, PythonEvalType.SQL_SCALAR_PANDAS_UDF)
-        nondeterministic_pandas_udf = self.spark.catalog.registerFunction(
-            "randomPandasUDF", random_pandas_udf
-        )
-        self.assertEqual(nondeterministic_pandas_udf.deterministic, False)
-        self.assertEqual(nondeterministic_pandas_udf.evalType, PythonEvalType.SQL_SCALAR_PANDAS_UDF)
-        [row] = self.spark.sql("SELECT randomPandasUDF(1)").collect()
-        self.assertEqual(row[0], 7)
+
+        with self.temp_func("randomPandasUDF"):
+            nondeterministic_pandas_udf = self.spark.catalog.registerFunction(
+                "randomPandasUDF", random_pandas_udf
+            )
+            self.assertEqual(nondeterministic_pandas_udf.deterministic, False)
+            self.assertEqual(
+                nondeterministic_pandas_udf.evalType, PythonEvalType.SQL_SCALAR_PANDAS_UDF
+            )
+            [row] = self.spark.sql("SELECT randomPandasUDF(1)").collect()
+            self.assertEqual(row[0], 7)
 
         def random_iter_udf(it):
             for i in it:
@@ -297,15 +314,17 @@ class ScalarPandasUDFTestsMixin:
         ).asNondeterministic()
         self.assertEqual(random_pandas_iter_udf.deterministic, False)
         self.assertEqual(random_pandas_iter_udf.evalType, PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF)
-        nondeterministic_pandas_iter_udf = self.spark.catalog.registerFunction(
-            "randomPandasIterUDF", random_pandas_iter_udf
-        )
-        self.assertEqual(nondeterministic_pandas_iter_udf.deterministic, False)
-        self.assertEqual(
-            nondeterministic_pandas_iter_udf.evalType, PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
-        )
-        [row] = self.spark.sql("SELECT randomPandasIterUDF(1)").collect()
-        self.assertEqual(row[0], 7)
+
+        with self.temp_func("randomPandasIterUDF"):
+            nondeterministic_pandas_iter_udf = self.spark.catalog.registerFunction(
+                "randomPandasIterUDF", random_pandas_iter_udf
+            )
+            self.assertEqual(nondeterministic_pandas_iter_udf.deterministic, False)
+            self.assertEqual(
+                nondeterministic_pandas_iter_udf.evalType, PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
+            )
+            [row] = self.spark.sql("SELECT randomPandasIterUDF(1)").collect()
+            self.assertEqual(row[0], 7)
 
     def test_vectorized_udf_null_boolean(self):
         data = [(True,), (True,), (None,), (False,)]
@@ -504,7 +523,10 @@ class ScalarPandasUDFTestsMixin:
 
         def _scalar_f(id):
             return pd.DataFrame(
-                {"ts": id.apply(lambda i: pd.Timestamp(i)), "arr": id.apply(lambda i: [i, i + 1])}
+                {
+                    "ts": id.apply(lambda i: pd.Timestamp(i, unit="s")),
+                    "arr": id.apply(lambda i: [i, i + 1]),
+                }
             )
 
         scalar_f = pandas_udf(_scalar_f, returnType=return_type)
@@ -519,7 +541,7 @@ class ScalarPandasUDFTestsMixin:
             for i, row in enumerate(actual):
                 id, f = row
                 self.assertEqual(i, id)
-                self.assertEqual(pd.Timestamp(i).to_pydatetime(), f[0])
+                self.assertEqual(pd.Timestamp(i, unit="s").to_pydatetime(), f[0])
                 self.assertListEqual([i, i + 1], f[1])
 
     def test_vectorized_udf_struct_empty(self):
@@ -747,6 +769,316 @@ class ScalarPandasUDFTestsMixin:
         for f in [scalar_f, iter_f]:
             with self.assertRaisesRegex(Exception, "Return.*type.*Series"):
                 df.select(f(col("id"))).collect()
+
+    def test_udf_with_variant_input(self):
+        df = self.spark.range(0, 10).selectExpr("parse_json(cast(id as string)) v")
+
+        scalar_f = pandas_udf(lambda u: u.apply(str), StringType(), PandasUDFType.SCALAR)
+        iter_f = pandas_udf(
+            lambda it: map(lambda u: u.apply(str), it), StringType(), PandasUDFType.SCALAR_ITER
+        )
+
+        expected = [Row(udf="{0}".format(i)) for i in range(10)]
+
+        for f in [scalar_f, iter_f]:
+            result = df.select(f(col("v")).alias("udf")).collect()
+            self.assertEqual(result, expected)
+
+    def test_udf_with_variant_output(self):
+        # Variants representing the int8 value i.
+        # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
+        scalar_f = pandas_udf(
+            lambda u: u.apply(lambda i: VariantVal(bytes([12, i]), bytes([1, 0, 0]))), VariantType()
+        )
+        iter_f = pandas_udf(
+            lambda it: map(
+                lambda u: u.apply(lambda i: VariantVal(bytes([12, i]), bytes([1, 0, 0]))), it
+            ),
+            VariantType(),
+            PandasUDFType.SCALAR_ITER,
+        )
+
+        expected = [Row(udf=i) for i in range(10)]
+
+        for f in [scalar_f, iter_f]:
+            result = self.spark.range(10).select(f(col("id")).cast("int").alias("udf")).collect()
+            self.assertEqual(result, expected)
+
+    def test_udf_with_nested_variant_input(self):
+        # struct<variant>
+        df = self.spark.range(0, 10).selectExpr(
+            "named_struct('v', parse_json(cast(id as string))) struct_of_v"
+        )
+        scalar_f = pandas_udf(lambda u: u["v"].apply(str), StringType(), PandasUDFType.SCALAR)
+        iter_f = pandas_udf(
+            lambda it: map(lambda u: u["v"].apply(str), it), StringType(), PandasUDFType.SCALAR_ITER
+        )
+        expected = [Row(udf=f"{i}") for i in range(10)]
+        for f in [scalar_f, iter_f]:
+            result = df.select(f(col("struct_of_v")).alias("udf")).collect()
+            self.assertEqual(result, expected)
+
+        # array<variant>
+        df = self.spark.range(0, 10).selectExpr("array(parse_json(cast(id as string))) array_of_v")
+        scalar_f = pandas_udf(lambda u: u.apply(str), StringType(), PandasUDFType.SCALAR)
+        iter_f = pandas_udf(
+            lambda it: map(lambda u: u.apply(str), it), StringType(), PandasUDFType.SCALAR_ITER
+        )
+        expected = [
+            Row(udf=str([VariantVal(bytes([12, i]), bytes([1, 0, 0]))]).format(i))
+            for i in range(10)
+        ]
+        for f in [scalar_f, iter_f]:
+            result = df.select(f(col("array_of_v")).alias("udf")).collect()
+            self.assertEqual(result, expected)
+
+        # map<variant>
+        df = self.spark.range(0, 10).selectExpr("map('v', parse_json(cast(id as string))) map_of_v")
+        scalar_f = pandas_udf(lambda u: u.apply(str), StringType(), PandasUDFType.SCALAR)
+        iter_f = pandas_udf(
+            lambda it: map(lambda u: u.apply(str), it), StringType(), PandasUDFType.SCALAR_ITER
+        )
+        expected = [
+            Row(udf=str({"v": VariantVal(bytes([12, i]), bytes([1, 0, 0]))})) for i in range(10)
+        ]
+        for f in [scalar_f, iter_f]:
+            result = df.select(f(col("map_of_v")).alias("udf")).collect()
+            self.assertEqual(result, expected)
+
+    def test_udf_struct_with_metadata_value_field(self):
+        # This makes sure that not every struct with <metadata, value> fields is treated as Variant
+        scalar_f = pandas_udf(
+            lambda u: pd.DataFrame(
+                {
+                    "value": u.apply(lambda i: bytes([12, i])),
+                    "metadata": u.apply(lambda i: bytes([1, 0, i])),
+                }
+            ),
+            StructType(
+                [
+                    StructField("value", BinaryType(), True),
+                    StructField("metadata", BinaryType(), True),
+                ]
+            ),
+        )
+        iter_f = pandas_udf(
+            lambda it: map(
+                lambda u: pd.DataFrame(
+                    {
+                        "value": u.apply(lambda i: bytes([12, i])),
+                        "metadata": u.apply(lambda i: bytes([1, 0, i])),
+                    }
+                ),
+                it,
+            ),
+            StructType(
+                [
+                    StructField("value", BinaryType(), True),
+                    StructField("metadata", BinaryType(), True),
+                ]
+            ),
+            PandasUDFType.SCALAR_ITER,
+        )
+
+        expected = [Row(udf=Row(bytes([12, i]), bytes([1, 0, i]))) for i in range(10)]
+
+        for f in [scalar_f, iter_f]:
+            result = self.spark.range(10).select(f(col("id")).alias("udf")).collect()
+            self.assertEqual(result, expected)
+
+    def test_udf_with_variant_nested_output(self):
+        # struct<variant>
+        # Variants representing the int8 value i.
+        # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
+        scalar_f = pandas_udf(
+            lambda u: pd.DataFrame(
+                {"v": u.apply(lambda i: VariantVal(bytes([12, i]), bytes([1, 0, 0])))}
+            ),
+            StructType([StructField("v", VariantType(), True)]),
+        )
+        iter_f = pandas_udf(
+            lambda it: map(
+                lambda u: pd.DataFrame(
+                    {"v": u.apply(lambda i: VariantVal(bytes([12, i]), bytes([1, 0, 0])))}
+                ),
+                it,
+            ),
+            StructType([StructField("v", VariantType(), True)]),
+            PandasUDFType.SCALAR_ITER,
+        )
+        expected = [Row(udf=f"{{{i}}}") for i in range(10)]
+        for f in [scalar_f, iter_f]:
+            result = self.spark.range(10).select(f(col("id")).cast("string").alias("udf")).collect()
+            self.assertEqual(result, expected)
+
+        # array<variant>
+        # Variants representing the int8 value i.
+        # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
+        scalar_f = pandas_udf(
+            lambda u: u.apply(lambda i: [VariantVal(bytes([12, i]), bytes([1, 0, 0]))]),
+            ArrayType(VariantType()),
+        )
+        iter_f = pandas_udf(
+            lambda it: map(
+                lambda u: u.apply(lambda i: [VariantVal(bytes([12, i]), bytes([1, 0, 0]))]), it
+            ),
+            ArrayType(VariantType()),
+            PandasUDFType.SCALAR_ITER,
+        )
+        expected = [Row(udf=f"[{i}]") for i in range(10)]
+        for f in [scalar_f, iter_f]:
+            result = self.spark.range(10).select(f(col("id")).cast("string").alias("udf")).collect()
+            self.assertEqual(result, expected)
+
+        # map<string, variant>
+        # Variants representing the int8 value i.
+        # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
+        scalar_f = pandas_udf(
+            lambda u: u.apply(lambda i: {"v": VariantVal(bytes([12, i]), bytes([1, 0, 0]))}),
+            MapType(StringType(), VariantType()),
+        )
+        iter_f = pandas_udf(
+            lambda it: map(
+                lambda u: u.apply(lambda i: {"v": VariantVal(bytes([12, i]), bytes([1, 0, 0]))}), it
+            ),
+            MapType(StringType(), VariantType()),
+            PandasUDFType.SCALAR_ITER,
+        )
+        expected = [Row(udf=f"{{v -> {i}}}") for i in range(10)]
+        for f in [scalar_f, iter_f]:
+            result = self.spark.range(10).select(f(col("id")).cast("string").alias("udf")).collect()
+            self.assertEqual(result, expected)
+
+    def test_chained_udfs_with_variant(self):
+        # Variants representing the int8 value i.
+        # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
+        scalar_first = pandas_udf(
+            lambda u: u.apply(lambda i: VariantVal(bytes([12, i]), bytes([1, 0, 0]))), VariantType()
+        )
+        iter_first = pandas_udf(
+            lambda it: map(
+                lambda u: u.apply(lambda i: VariantVal(bytes([12, i]), bytes([1, 0, 0]))), it
+            ),
+            VariantType(),
+            PandasUDFType.SCALAR_ITER,
+        )
+        scalar_second = pandas_udf(lambda u: u.apply(str), StringType(), PandasUDFType.SCALAR)
+        iter_second = pandas_udf(
+            lambda it: map(lambda u: u.apply(str), it), StringType(), PandasUDFType.SCALAR_ITER
+        )
+
+        expected = [Row(udf="{0}".format(i)) for i in range(10)]
+
+        for f in [scalar_first, iter_first]:
+            for s in [scalar_second, iter_second]:
+                result = self.spark.range(10).select(s(f(col("id"))).alias("udf")).collect()
+                self.assertEqual(result, expected)
+
+    def test_chained_udfs_with_complex_variant(self):
+        # Variants representing the int8 value i.
+        # TODO(SPARK-50284): Replace when an easy Python API to construct Variants is created.
+        scalar_first = pandas_udf(
+            lambda u: u.apply(lambda i: [VariantVal(bytes([12, i]), bytes([1, 0, 0]))]),
+            ArrayType(VariantType()),
+        )
+        iter_first = pandas_udf(
+            lambda it: map(
+                lambda u: u.apply(lambda i: [VariantVal(bytes([12, i]), bytes([1, 0, 0]))]), it
+            ),
+            ArrayType(VariantType()),
+            PandasUDFType.SCALAR_ITER,
+        )
+        scalar_second = pandas_udf(
+            lambda u: u.apply(lambda v: str(v[0])), StringType(), PandasUDFType.SCALAR
+        )
+        iter_second = pandas_udf(
+            lambda it: map(lambda u: u.apply(lambda v: str(v[0])), it),
+            StringType(),
+            PandasUDFType.SCALAR_ITER,
+        )
+
+        expected = [Row(udf="{0}".format(i)) for i in range(10)]
+
+        for f in [scalar_first, iter_first]:
+            for s in [scalar_second, iter_second]:
+                result = self.spark.range(10).select(s(f(col("id"))).alias("udf")).collect()
+                self.assertEqual(result, expected)
+
+    def test_udafs_with_variant_input(self):
+        df = self.spark.range(0, 10).selectExpr("parse_json(cast(id as string)) v")
+
+        @pandas_udf("double")
+        def f(u: pd.Series) -> float:
+            return u.apply(lambda v: len(str(v))).mean()
+
+        expected = [Row(udf=1)]
+        result = df.select(f(col("v")).alias("udf")).collect()
+        self.assertEqual(result, expected)
+
+    def test_udafs_with_complex_variant_input(self):
+        # struct<v variant>
+        df = self.spark.range(0, 10).selectExpr("named_struct('v', parse_json(id::string)) s")
+
+        @pandas_udf("double")
+        def f(u: pd.Series) -> float:
+            return u.apply(lambda s: len(str(s["v"]))).mean()
+
+        expected = [Row(udf=1)]
+        result = df.select(f(col("s")).alias("udf")).collect()
+        self.assertEqual(result, expected)
+
+        # array<variant>
+        df = self.spark.range(0, 10).selectExpr("array(parse_json(id::string)) a")
+
+        @pandas_udf("double")
+        def f(u: pd.Series) -> float:
+            return u.apply(lambda s: len(str(s[0]))).mean() + 1
+
+        expected = [Row(udf=2)]
+        result = df.select(f(col("a")).alias("udf")).collect()
+        self.assertEqual(result, expected)
+
+        # map<string, variant>
+        df = self.spark.range(0, 10).selectExpr("map('v', parse_json(id::string)) m")
+
+        @pandas_udf("double")
+        def f(u: pd.Series) -> float:
+            return u.apply(lambda s: len(str(s["v"]))).mean() + 2
+
+        expected = [Row(udf=3)]
+        result = df.select(f(col("m")).alias("udf")).collect()
+        self.assertEqual(result, expected)
+
+    def test_udafs_with_variant_output(self):
+        @pandas_udf("variant")
+        def f(u: pd.Series) -> VariantVal:
+            return VariantVal(bytes([12, int(u.mean())]), bytes([1, 0, 0]))
+
+        result = self.spark.range(0, 10).select(to_json(f(col("id"))).alias("udf")).collect()
+        expected = [Row(udf="4")]
+        self.assertEqual(result, expected)
+
+    def test_udafs_with_complex_variant_output(self):
+        # struct is not support as the return type for PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
+        # UDFs yet.
+
+        # array<variant>
+        @pandas_udf("array<variant>")
+        def f(u: pd.Series) -> list:
+            return [VariantVal(bytes([12, int(u.mean())]), bytes([1, 0, 0]))]
+
+        result = self.spark.range(0, 10).select(to_json(f(col("id"))).alias("udf")).collect()
+        expected = [Row(udf="[4]")]
+        self.assertEqual(result, expected)
+
+        # map<string, variant>
+        @pandas_udf("map<string, variant>")
+        def f(u: pd.Series) -> dict:
+            return {"v": VariantVal(bytes([12, int(u.mean())]), bytes([1, 0, 0]))}
+
+        result = self.spark.range(0, 10).select(to_json(f(col("id"))).alias("udf")).collect()
+        expected = [Row(udf='{"v":4}')]
+        self.assertEqual(result, expected)
 
     def test_vectorized_udf_decorator(self):
         df = self.spark.range(10)
@@ -1071,14 +1403,16 @@ class ScalarPandasUDFTestsMixin:
 
         for original_add in [scalar_original_add, iter_original_add]:
             self.assertEqual(original_add.deterministic, True)
-            new_add = self.spark.catalog.registerFunction("add1", original_add)
-            res1 = df.select(new_add(col("a"), col("b")))
-            res2 = self.spark.sql(
-                "SELECT add1(t.a, t.b) FROM (SELECT id as a, id as b FROM range(10)) t"
-            )
-            expected = df.select(expr("a + b"))
-            self.assertEqual(expected.collect(), res1.collect())
-            self.assertEqual(expected.collect(), res2.collect())
+
+            with self.temp_func("add1"):
+                new_add = self.spark.catalog.registerFunction("add1", original_add)
+                res1 = df.select(new_add(col("a"), col("b")))
+                res2 = self.spark.sql(
+                    "SELECT add1(t.a, t.b) FROM (SELECT id as a, id as b FROM range(10)) t"
+                )
+                expected = df.select(expr("a + b"))
+                self.assertEqual(expected.collect(), res1.collect())
+                self.assertEqual(expected.collect(), res2.collect())
 
     def test_scalar_iter_udf_init(self):
         import numpy as np
@@ -1462,92 +1796,252 @@ class ScalarPandasUDFTestsMixin:
         def test_udf(a, b):
             return a + 10 * b
 
-        self.spark.udf.register("test_udf", test_udf)
+        with self.temp_func("test_udf"):
+            self.spark.udf.register("test_udf", test_udf)
 
-        for i, df in enumerate(
-            [
-                self.spark.range(2).select(test_udf(col("id"), b=col("id") * 10)),
-                self.spark.range(2).select(test_udf(a=col("id"), b=col("id") * 10)),
-                self.spark.range(2).select(test_udf(b=col("id") * 10, a=col("id"))),
-                self.spark.sql("SELECT test_udf(id, b => id * 10) FROM range(2)"),
-                self.spark.sql("SELECT test_udf(a => id, b => id * 10) FROM range(2)"),
-                self.spark.sql("SELECT test_udf(b => id * 10, a => id) FROM range(2)"),
-            ]
-        ):
-            with self.subTest(query_no=i):
-                assertDataFrameEqual(df, [Row(0), Row(101)])
+            for i, df in enumerate(
+                [
+                    self.spark.range(2).select(test_udf(col("id"), b=col("id") * 10)),
+                    self.spark.range(2).select(test_udf(a=col("id"), b=col("id") * 10)),
+                    self.spark.range(2).select(test_udf(b=col("id") * 10, a=col("id"))),
+                    self.spark.sql("SELECT test_udf(id, b => id * 10) FROM range(2)"),
+                    self.spark.sql("SELECT test_udf(a => id, b => id * 10) FROM range(2)"),
+                    self.spark.sql("SELECT test_udf(b => id * 10, a => id) FROM range(2)"),
+                ]
+            ):
+                with self.subTest(query_no=i):
+                    assertDataFrameEqual(df, [Row(0), Row(101)])
 
     def test_named_arguments_negative(self):
         @pandas_udf("int")
         def test_udf(a, b):
             return a + b
 
-        self.spark.udf.register("test_udf", test_udf)
+        with self.temp_func("test_udf"):
+            self.spark.udf.register("test_udf", test_udf)
 
-        with self.assertRaisesRegex(
-            AnalysisException,
-            "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
-        ):
-            self.spark.sql("SELECT test_udf(a => id, a => id * 10) FROM range(2)").show()
+            with self.assertRaisesRegex(
+                AnalysisException,
+                "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
+            ):
+                self.spark.sql("SELECT test_udf(a => id, a => id * 10) FROM range(2)").show()
 
-        with self.assertRaisesRegex(AnalysisException, "UNEXPECTED_POSITIONAL_ARGUMENT"):
-            self.spark.sql("SELECT test_udf(a => id, id * 10) FROM range(2)").show()
+            with self.assertRaisesRegex(AnalysisException, "UNEXPECTED_POSITIONAL_ARGUMENT"):
+                self.spark.sql("SELECT test_udf(a => id, id * 10) FROM range(2)").show()
 
-        with self.assertRaisesRegex(
-            PythonException, r"test_udf\(\) got an unexpected keyword argument 'c'"
-        ):
-            self.spark.sql("SELECT test_udf(c => 'x') FROM range(2)").show()
+            with self.assertRaisesRegex(
+                PythonException, r"test_udf\(\) got an unexpected keyword argument 'c'"
+            ):
+                self.spark.sql("SELECT test_udf(c => 'x') FROM range(2)").show()
 
     def test_kwargs(self):
         @pandas_udf("int")
         def test_udf(a, **kwargs):
             return a + 10 * kwargs["b"]
 
-        self.spark.udf.register("test_udf", test_udf)
+        with self.temp_func("test_udf"):
+            self.spark.udf.register("test_udf", test_udf)
 
-        for i, df in enumerate(
-            [
-                self.spark.range(2).select(test_udf(a=col("id"), b=col("id") * 10)),
-                self.spark.range(2).select(test_udf(b=col("id") * 10, a=col("id"))),
-                self.spark.sql("SELECT test_udf(a => id, b => id * 10) FROM range(2)"),
-                self.spark.sql("SELECT test_udf(b => id * 10, a => id) FROM range(2)"),
-            ]
-        ):
-            with self.subTest(query_no=i):
-                assertDataFrameEqual(df, [Row(0), Row(101)])
+            for i, df in enumerate(
+                [
+                    self.spark.range(2).select(test_udf(a=col("id"), b=col("id") * 10)),
+                    self.spark.range(2).select(test_udf(b=col("id") * 10, a=col("id"))),
+                    self.spark.sql("SELECT test_udf(a => id, b => id * 10) FROM range(2)"),
+                    self.spark.sql("SELECT test_udf(b => id * 10, a => id) FROM range(2)"),
+                ]
+            ):
+                with self.subTest(query_no=i):
+                    assertDataFrameEqual(df, [Row(0), Row(101)])
 
     def test_named_arguments_and_defaults(self):
         @pandas_udf("int")
         def test_udf(a, b=0):
             return a + 10 * b
 
-        self.spark.udf.register("test_udf", test_udf)
+        with self.temp_func("test_udf"):
+            self.spark.udf.register("test_udf", test_udf)
 
-        # without "b"
-        for i, df in enumerate(
-            [
-                self.spark.range(2).select(test_udf(col("id"))),
-                self.spark.range(2).select(test_udf(a=col("id"))),
-                self.spark.sql("SELECT test_udf(id) FROM range(2)"),
-                self.spark.sql("SELECT test_udf(a => id) FROM range(2)"),
-            ]
-        ):
-            with self.subTest(with_b=False, query_no=i):
-                assertDataFrameEqual(df, [Row(0), Row(1)])
+            # without "b"
+            for i, df in enumerate(
+                [
+                    self.spark.range(2).select(test_udf(col("id"))),
+                    self.spark.range(2).select(test_udf(a=col("id"))),
+                    self.spark.sql("SELECT test_udf(id) FROM range(2)"),
+                    self.spark.sql("SELECT test_udf(a => id) FROM range(2)"),
+                ]
+            ):
+                with self.subTest(with_b=False, query_no=i):
+                    assertDataFrameEqual(df, [Row(0), Row(1)])
 
-        # with "b"
-        for i, df in enumerate(
-            [
-                self.spark.range(2).select(test_udf(col("id"), b=col("id") * 10)),
-                self.spark.range(2).select(test_udf(a=col("id"), b=col("id") * 10)),
-                self.spark.range(2).select(test_udf(b=col("id") * 10, a=col("id"))),
-                self.spark.sql("SELECT test_udf(id, b => id * 10) FROM range(2)"),
-                self.spark.sql("SELECT test_udf(a => id, b => id * 10) FROM range(2)"),
-                self.spark.sql("SELECT test_udf(b => id * 10, a => id) FROM range(2)"),
-            ]
+            # with "b"
+            for i, df in enumerate(
+                [
+                    self.spark.range(2).select(test_udf(col("id"), b=col("id") * 10)),
+                    self.spark.range(2).select(test_udf(a=col("id"), b=col("id") * 10)),
+                    self.spark.range(2).select(test_udf(b=col("id") * 10, a=col("id"))),
+                    self.spark.sql("SELECT test_udf(id, b => id * 10) FROM range(2)"),
+                    self.spark.sql("SELECT test_udf(a => id, b => id * 10) FROM range(2)"),
+                    self.spark.sql("SELECT test_udf(b => id * 10, a => id) FROM range(2)"),
+                ]
+            ):
+                with self.subTest(with_b=True, query_no=i):
+                    assertDataFrameEqual(df, [Row(0), Row(101)])
+
+    def test_arrow_cast_enabled_numeric_to_decimal(self):
+        import numpy as np
+
+        columns = [
+            "int8",
+            "int16",
+            "int32",
+            "uint8",
+            "uint16",
+            "uint32",
+            "float64",
+        ]
+
+        pdf = pd.DataFrame({key: np.arange(1, 2).astype(key) for key in columns})
+        df = self.spark.range(2).repartition(1)
+
+        t = DecimalType(10, 0)
+        for column in columns:
+            with self.subTest(column=column):
+                v = pdf[column].iloc[:1]
+                row = df.select(pandas_udf(lambda _: v, t)(df.id)).first()
+                assert (row[0] == v).all()
+
+    def test_arrow_cast_enabled_str_to_numeric(self):
+        df = self.spark.range(2).repartition(1)
+        for t in [IntegerType(), LongType(), FloatType(), DoubleType()]:
+            with self.subTest(type=t):
+                row = df.select(pandas_udf(lambda _: pd.Series(["123"]), t)(df.id)).first()
+                assert row[0] == 123
+
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_scalar_pandas_udf_with_logging(self):
+        @pandas_udf("string", PandasUDFType.SCALAR)
+        def my_scalar_pandas_udf(x):
+            assert isinstance(x, pd.Series)
+            logger = logging.getLogger("test_scalar_pandas")
+            logger.warning(f"scalar pandas udf: {list(x)}")
+            return pd.Series(["scalar_pandas_" + str(val) for val in x])
+
+        with self.sql_conf({"spark.sql.pyspark.worker.logging.enabled": "true"}):
+            assertDataFrameEqual(
+                self.spark.range(3, numPartitions=2).select(
+                    my_scalar_pandas_udf("id").alias("result")
+                ),
+                [Row(result=f"scalar_pandas_{i}") for i in range(3)],
+            )
+
+            logs = self.spark.tvf.python_worker_logs()
+
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg=f"scalar pandas udf: {lst}",
+                        context={"func_name": my_scalar_pandas_udf.__name__},
+                        logger="test_scalar_pandas",
+                    )
+                    for lst in [[0], [1, 2]]
+                ],
+            )
+
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_scalar_iter_pandas_udf_with_logging(self):
+        @pandas_udf("string", PandasUDFType.SCALAR_ITER)
+        def my_scalar_iter_pandas_udf(it):
+            logger = logging.getLogger("test_scalar_iter_pandas")
+            for x in it:
+                assert isinstance(x, pd.Series)
+                logger.warning(f"scalar iter pandas udf: {list(x)}")
+                yield pd.Series(["scalar_iter_pandas_" + str(val) for val in x])
+
+        with self.sql_conf(
+            {
+                "spark.sql.execution.arrow.maxRecordsPerBatch": "3",
+                "spark.sql.pyspark.worker.logging.enabled": "true",
+            }
         ):
-            with self.subTest(with_b=True, query_no=i):
-                assertDataFrameEqual(df, [Row(0), Row(101)])
+            assertDataFrameEqual(
+                self.spark.range(9, numPartitions=2).select(
+                    my_scalar_iter_pandas_udf("id").alias("result")
+                ),
+                [Row(result=f"scalar_iter_pandas_{i}") for i in range(9)],
+            )
+
+            logs = self.spark.tvf.python_worker_logs()
+
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg=f"scalar iter pandas udf: {lst}",
+                        context={"func_name": my_scalar_iter_pandas_udf.__name__},
+                        logger="test_scalar_iter_pandas",
+                    )
+                    for lst in [[0, 1, 2], [3], [4, 5, 6], [7, 8]]
+                ],
+            )
+
+    def test_scalar_pandas_udf_with_compression_codec(self):
+        # Test scalar Pandas UDF with different compression codec settings
+        @pandas_udf("long")
+        def plus_one(v):
+            return v + 1
+
+        df = self.spark.range(100)
+        expected = [Row(result=i + 1) for i in range(100)]
+
+        for codec in ["none", "zstd", "lz4"]:
+            with self.subTest(compressionCodec=codec):
+                with self.sql_conf({"spark.sql.execution.arrow.compression.codec": codec}):
+                    result = df.select(plus_one("id").alias("result")).collect()
+                    self.assertEqual(expected, result)
+
+    def test_scalar_pandas_udf_with_compression_codec_complex_types(self):
+        # Test scalar Pandas UDF with compression for complex types (strings, arrays)
+        @pandas_udf("string")
+        def concat_string(v):
+            return v.apply(lambda x: "value_" + str(x))
+
+        @pandas_udf(ArrayType(IntegerType()))
+        def create_array(v):
+            return v.apply(lambda x: [x, x * 2, x * 3])
+
+        df = self.spark.range(50)
+
+        for codec in ["none", "zstd", "lz4"]:
+            with self.subTest(compressionCodec=codec):
+                with self.sql_conf({"spark.sql.execution.arrow.compression.codec": codec}):
+                    # Test string UDF
+                    result = df.select(concat_string("id").alias("result")).collect()
+                    expected = [Row(result=f"value_{i}") for i in range(50)]
+                    self.assertEqual(expected, result)
+
+                    # Test array UDF
+                    result = df.select(create_array("id").alias("result")).collect()
+                    expected = [Row(result=[i, i * 2, i * 3]) for i in range(50)]
+                    self.assertEqual(expected, result)
+
+    def test_scalar_iter_pandas_udf_with_compression_codec(self):
+        # Test scalar iterator Pandas UDF with compression
+        @pandas_udf("long", PandasUDFType.SCALAR_ITER)
+        def plus_two(iterator):
+            for s in iterator:
+                yield s + 2
+
+        df = self.spark.range(100)
+        expected = [Row(result=i + 2) for i in range(100)]
+
+        for codec in ["none", "zstd", "lz4"]:
+            with self.subTest(compressionCodec=codec):
+                with self.sql_conf({"spark.sql.execution.arrow.compression.codec": codec}):
+                    result = df.select(plus_two("id").alias("result")).collect()
+                    self.assertEqual(expected, result)
 
 
 class ScalarPandasUDFTests(ScalarPandasUDFTestsMixin, ReusedSQLTestCase):

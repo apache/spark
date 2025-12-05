@@ -22,6 +22,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, InMemoryCatalog, InMemoryPartitionTableCatalog, InMemoryTableWithV2FilterCatalog, StagingInMemoryTableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 trait DatasourceV2SQLBase
@@ -52,6 +53,7 @@ trait DatasourceV2SQLBase
   after {
     spark.sessionState.catalog.reset()
     spark.sessionState.catalogManager.reset()
-    spark.sessionState.conf.clear()
+    spark.sessionState.conf.unsetConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION)
+    spark.sessionState.conf.unsetConf(SQLConf.DEFAULT_CATALOG)
   }
 }

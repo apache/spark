@@ -46,6 +46,8 @@ Spark SQL and DataFrames support the following data types:
 * Datetime type
   - `DateType`: Represents values comprising values of fields year, month and day, without a
   time-zone.
+  - `TimeType(precision)`: Represents values comprising values of fields hour, minute and second with the number of decimal digits `precision` following the decimal point in the seconds field, without a time-zone.
+  The range of values is from `00:00:00` to `23:59:59` for min precision `0`, and to `23:59:59.999999` for max precision `6`.
   - `TimestampType`: Timestamp with local time zone(TIMESTAMP_LTZ). It represents values comprising values of fields year, month, day,
   hour, minute, and second, with the session local time-zone. The timestamp value represents an
   absolute point in time.
@@ -126,8 +128,10 @@ from pyspark.sql.types import *
 |**FloatType**|float<br/>**Note:** Numbers will be converted to 4-byte single-precision floating point numbers at runtime.|FloatType()|
 |**DoubleType**|float|DoubleType()|
 |**DecimalType**|decimal.Decimal|DecimalType()|
-|**StringType**|string|StringType()|
-|**BinaryType**|bytearray|BinaryType()|
+|**StringType**|str|StringType()|
+|**CharType(length)**|str|CharType(length)|
+|**VarcharType(length)**|str|VarcharType(length)|
+|**BinaryType**|bytes|BinaryType()|
 |**BooleanType**|bool|BooleanType()|
 |**TimestampType**|datetime.datetime|TimestampType()|
 |**TimestampNTZType**|datetime.datetime|TimestampNTZType()|
@@ -157,11 +161,14 @@ You can access them by doing
 |**DoubleType**|Double|DoubleType|
 |**DecimalType**|java.math.BigDecimal|DecimalType|
 |**StringType**|String|StringType|
+|**CharType(length)**|String|CharType(length)|
+|**VarcharType(length)**|String|VarcharType(length)|
 |**BinaryType**|Array[Byte]|BinaryType|
 |**BooleanType**|Boolean|BooleanType|
 |**TimestampType**|java.time.Instant or java.sql.Timestamp|TimestampType|
 |**TimestampNTZType**|java.time.LocalDateTime|TimestampNTZType|
 |**DateType**|java.time.LocalDate or java.sql.Date|DateType|
+|**TimeType**|java.time.LocalTime|TimeType|
 |**YearMonthIntervalType**|java.time.Period|YearMonthIntervalType|
 |**DayTimeIntervalType**|java.time.Duration|DayTimeIntervalType|
 |**ArrayType**|scala.collection.Seq|ArrayType(*elementType*, [*containsNull]*)<br/>**Note:** The default value of *containsNull* is true.|
@@ -188,11 +195,14 @@ please use factory methods provided in
 |**DoubleType**|double or Double|DataTypes.DoubleType|
 |**DecimalType**|java.math.BigDecimal|DataTypes.createDecimalType()<br/>DataTypes.createDecimalType(*precision*, *scale*).|
 |**StringType**|String|DataTypes.StringType|
+|**CharType(length)**|String|DataTypes.createCharType(length)|
+|**VarcharType(length)**|String|DataTypes.createVarcharType(length)|
 |**BinaryType**|byte[]|DataTypes.BinaryType|
 |**BooleanType**|boolean or Boolean|DataTypes.BooleanType|
 |**TimestampType**|java.time.Instant or java.sql.Timestamp|DataTypes.TimestampType|
 |**TimestampNTZType**|java.time.LocalDateTime|DataTypes.TimestampNTZType|
 |**DateType**|java.time.LocalDate or java.sql.Date|DataTypes.DateType|
+|**TimeType**|java.time.LocalTime|DataTypes.TimeType|
 |**YearMonthIntervalType**|java.time.Period|DataTypes.YearMonthIntervalType|
 |**DayTimeIntervalType**|java.time.Duration|DataTypes.DayTimeIntervalType|
 |**ArrayType**|java.util.List|DataTypes.createArrayType(*elementType*)<br/>**Note:** The value of *containsNull* will be true.<br/>DataTypes.createArrayType(*elementType*, *containsNull*).|
@@ -242,6 +252,8 @@ The following table shows the type names as well as aliases used in Spark SQL pa
 |**TimestampType**|TIMESTAMP, TIMESTAMP_LTZ|
 |**TimestampNTZType**|TIMESTAMP_NTZ|
 |**StringType**|STRING|
+|**CharType(length)**|CHAR(length)|
+|**VarcharType(length)**|VARCHAR(length)|
 |**BinaryType**|BINARY|
 |**DecimalType**|DECIMAL, DEC, NUMERIC|
 |**YearMonthIntervalType**|INTERVAL YEAR, INTERVAL YEAR TO MONTH, INTERVAL MONTH|

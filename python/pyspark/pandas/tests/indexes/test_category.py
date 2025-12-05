@@ -21,7 +21,6 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 import pyspark.pandas as ps
-from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
@@ -202,18 +201,9 @@ class CategoricalIndexTestsMixin:
         psidx3 = ps.from_pandas(pidx3)
 
         self.assert_eq(psidx1.append(psidx2), pidx1.append(pidx2))
-        if LooseVersion(pd.__version__) >= LooseVersion("1.5.0"):
-            self.assert_eq(
-                psidx1.append(psidx3.astype("category")), pidx1.append(pidx3.astype("category"))
-            )
-        else:
-            expected_result = ps.CategoricalIndex(
-                ["x", "y", "z", "y", "x", "w", "z"],
-                categories=["z", "y", "x", "w"],
-                ordered=False,
-                dtype="category",
-            )
-            self.assert_eq(psidx1.append(psidx3.astype("category")), expected_result)
+        self.assert_eq(
+            psidx1.append(psidx3.astype("category")), pidx1.append(pidx3.astype("category"))
+        )
 
         # TODO: append non-categorical or categorical with a different category
         self.assertRaises(NotImplementedError, lambda: psidx1.append(psidx3))
@@ -412,7 +402,6 @@ class CategoricalIndexTests(CategoricalIndexTestsMixin, PandasOnSparkTestCase, T
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.pandas.tests.indexes.test_category import *  # noqa: F401
 
     try:

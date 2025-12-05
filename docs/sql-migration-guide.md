@@ -22,6 +22,11 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Spark SQL 4.0 to 4.1
+
+- Since Spark 4.1, the Parquet reader no longer assumes all struct values to be null, if all the requested fields are missing in the parquet file. The new default behavior is to read an additional struct field that is present in the file to determine nullness. To restore the previous behavior, set `spark.sql.legacy.parquet.returnNullStructIfAllFieldsMissing` to `true`.
+- Since Spark 4.1, the Spark Thrift Server returns the corrected 1-based ORDINAL_POSITION in the result of GetColumns operation, instead of the wrongly 0-based. To restore the previous behavior, set `spark.sql.legacy.hive.thriftServer.useZeroBasedColumnOrdinalPosition` to `true`.
+
 ## Upgrading from Spark SQL 3.5 to 4.0
 
 - Since Spark 4.0, `spark.sql.ansi.enabled` is on by default. To restore the previous behavior, set `spark.sql.ansi.enabled` to `false` or `SPARK_ANSI_SQL_MODE` to `false`.
@@ -29,10 +34,13 @@ license: |
 - Since Spark 4.0, the default behaviour when inserting elements in a map is changed to first normalize keys -0.0 to 0.0. The affected SQL functions are `create_map`, `map_from_arrays`, `map_from_entries`, and `map_concat`. To restore the previous behaviour, set `spark.sql.legacy.disableMapKeyNormalization` to `true`.
 - Since Spark 4.0, the default value of `spark.sql.maxSinglePartitionBytes` is changed from `Long.MaxValue` to `128m`. To restore the previous behavior, set `spark.sql.maxSinglePartitionBytes` to `9223372036854775807`(`Long.MaxValue`).
 - Since Spark 4.0, any read of SQL tables takes into consideration the SQL configs `spark.sql.files.ignoreCorruptFiles`/`spark.sql.files.ignoreMissingFiles` instead of the core config `spark.files.ignoreCorruptFiles`/`spark.files.ignoreMissingFiles`.
+- Since Spark 4.0, when reading SQL tables hits `org.apache.hadoop.security.AccessControlException` and `org.apache.hadoop.hdfs.BlockMissingException`, the exception will be thrown and fail the task, even if `spark.sql.files.ignoreCorruptFiles` is set to `true`.
 - Since Spark 4.0, `spark.sql.hive.metastore` drops the support of Hive prior to 2.0.0 as they require JDK 8 that Spark does not support anymore. Users should migrate to higher versions.
+- Since Spark 4.0, Spark removes `hive-llap-common` dependency. To restore the previous behavior, add `hive-llap-common` jar to the class path.
 - Since Spark 4.0, `spark.sql.parquet.compression.codec` drops the support of codec name `lz4raw`, please use `lz4_raw` instead.
 - Since Spark 4.0, when overflowing during casting timestamp to byte/short/int under non-ansi mode, Spark will return null instead a wrapping value.
 - Since Spark 4.0, the `encode()` and `decode()` functions support only the following charsets 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16', 'UTF-32'. To restore the previous behavior when the function accepts charsets of the current JDK used by Spark, set `spark.sql.legacy.javaCharsets` to `true`.
+- Since Spark 4.0, the `encode()` and `decode()` functions raise `MALFORMED_CHARACTER_CODING` error when handling unmappable characters, while in Spark 3.5 and earlier versions, these characters will be replaced with mojibakes. To restore the previous behavior, set `spark.sql.legacy.codingErrorAction` to `true`. For example, if you try to `decode` a string value `tést` / [116, -23, 115, 116] (encoded in latin1) with 'UTF-8', you get `t�st`.
 - Since Spark 4.0, the legacy datetime rebasing SQL configs with the prefix `spark.sql.legacy` are removed. To restore the previous behavior, use the following configs:
   - `spark.sql.parquet.int96RebaseModeInWrite` instead of `spark.sql.legacy.parquet.int96RebaseModeInWrite`
   - `spark.sql.parquet.datetimeRebaseModeInWrite` instead of `spark.sql.legacy.parquet.datetimeRebaseModeInWrite`
@@ -40,21 +48,32 @@ license: |
   - `spark.sql.avro.datetimeRebaseModeInWrite` instead of `spark.sql.legacy.avro.datetimeRebaseModeInWrite`
   - `spark.sql.avro.datetimeRebaseModeInRead` instead of `spark.sql.legacy.avro.datetimeRebaseModeInRead`
 - Since Spark 4.0, the default value of `spark.sql.orc.compression.codec` is changed from `snappy` to `zstd`. To restore the previous behavior, set `spark.sql.orc.compression.codec` to `snappy`.
-- Since Spark 4.0, the SQL config `spark.sql.legacy.allowZeroIndexInFormatString` is deprecated. Consider to change `strfmt` of the `format_string` function to use 1-based indexes. The first argument must be referenced by "1$", the second by "2$", etc.
-- Since Spark 4.0, JDBC read option `preferTimestampNTZ=true` will not convert Postgres TIMESTAMP WITH TIME ZONE and TIME WITH TIME ZONE data types to TimestampNTZType, which is available in Spark 3.5. 
-- Since Spark 4.0, JDBC read option `preferTimestampNTZ=true` will not convert MySQL TIMESTAMP to TimestampNTZType, which is available in Spark 3.5. MySQL DATETIME is not affected.
+- Since Spark 4.0, the SQL config `spark.sql.legacy.allowZeroIndexInFormatString` is deprecated. Consider to change `strfmt` of the `format_string` function to use 1-based indexes. The first argument must be referenced by `1$`, the second by `2$`, etc.
+- Since Spark 4.0, Postgres JDBC datasource will read JDBC read TIMESTAMP WITH TIME ZONE as TimestampType regardless of the JDBC read option `preferTimestampNTZ`, while in 3.5 and previous, TimestampNTZType when `preferTimestampNTZ=true`. To restore the previous behavior, set `spark.sql.legacy.postgres.datetimeMapping.enabled` to `true`.
+- Since Spark 4.0, Postgres JDBC datasource will write TimestampType as TIMESTAMP WITH TIME ZONE, while in 3.5 and previous, it wrote as TIMESTAMP a.k.a. TIMESTAMP WITHOUT TIME ZONE. To restore the previous behavior, set `spark.sql.legacy.postgres.datetimeMapping.enabled` to `true`.
+- Since Spark 4.0, MySQL JDBC datasource will read TIMESTAMP as TimestampType regardless of the JDBC read option `preferTimestampNTZ`, while in 3.5 and previous, TimestampNTZType when `preferTimestampNTZ=true`. To restore the previous behavior, set `spark.sql.legacy.mysql.timestampNTZMapping.enabled` to `true`, MySQL DATETIME is not affected.
 - Since Spark 4.0, MySQL JDBC datasource will read SMALLINT as ShortType, while in Spark 3.5 and previous, it was read as IntegerType. MEDIUMINT UNSIGNED is read as IntegerType, while in Spark 3.5 and previous, it was read as LongType. To restore the previous behavior, you can cast the column to the old type.
 - Since Spark 4.0, MySQL JDBC datasource will read FLOAT as FloatType, while in Spark 3.5 and previous, it was read as DoubleType. To restore the previous behavior, you can cast the column to the old type.
 - Since Spark 4.0, MySQL JDBC datasource will read BIT(n > 1) as BinaryType, while in Spark 3.5 and previous, read as LongType. To restore the previous behavior, set `spark.sql.legacy.mysql.bitArrayMapping.enabled` to `true`.
 - Since Spark 4.0, MySQL JDBC datasource will write ShortType as SMALLINT, while in Spark 3.5 and previous, write as INTEGER. To restore the previous behavior, you can replace the column with IntegerType whenever before writing.
+- Since Spark 4.0, MySQL JDBC datasource will write TimestampNTZType as MySQL DATETIME because they both represent TIMESTAMP WITHOUT TIME ZONE, while in 3.5 and previous, it wrote as MySQL TIMESTAMP. To restore the previous behavior, set `spark.sql.legacy.mysql.timestampNTZMapping.enabled` to `true`.
 - Since Spark 4.0, Oracle JDBC datasource will write TimestampType as TIMESTAMP WITH LOCAL TIME ZONE, while in Spark 3.5 and previous, write as TIMESTAMP. To restore the previous behavior, set `spark.sql.legacy.oracle.timestampMapping.enabled` to `true`.
 - Since Spark 4.0, MsSQL Server JDBC datasource will read TINYINT as ShortType, while in Spark 3.5 and previous, read as IntegerType. To restore the previous behavior, set `spark.sql.legacy.mssqlserver.numericMapping.enabled` to `true`.
 - Since Spark 4.0, MsSQL Server JDBC datasource will read DATETIMEOFFSET as TimestampType, while in Spark 3.5 and previous, read as StringType. To restore the previous behavior, set `spark.sql.legacy.mssqlserver.datetimeoffsetMapping.enabled` to `true`.
 - Since Spark 4.0, DB2 JDBC datasource will read SMALLINT as ShortType, while in Spark 3.5 and previous, it was read as IntegerType. To restore the previous behavior, set `spark.sql.legacy.db2.numericMapping.enabled` to `true`.
+- Since Spark 4.0, DB2 JDBC datasource will write BooleanType as BOOLEAN, while in Spark 3.5 and previous, write as CHAR(1). To restore the previous behavior, set `spark.sql.legacy.db2.booleanMapping.enabled` to `true`.
 - Since Spark 4.0, The default value for `spark.sql.legacy.ctePrecedencePolicy` has been changed from `EXCEPTION` to `CORRECTED`. Instead of raising an error, inner CTE definitions take precedence over outer definitions.
 - Since Spark 4.0, The default value for `spark.sql.legacy.timeParserPolicy` has been changed from `EXCEPTION` to `CORRECTED`. Instead of raising an `INCONSISTENT_BEHAVIOR_CROSS_VERSION` error, `CANNOT_PARSE_TIMESTAMP` will be raised if ANSI mode is enable. `NULL` will be returned if ANSI mode is disabled. See [Datetime Patterns for Formatting and Parsing](sql-ref-datetime-pattern.html).
 - Since Spark 4.0, A bug falsely allowing `!` instead of `NOT` when `!` is not a prefix operator has been fixed. Clauses such as `expr ! IN (...)`, `expr ! BETWEEN ...`, or `col ! NULL` now raise syntax errors. To restore the previous behavior, set `spark.sql.legacy.bangEqualsNot` to `true`. 
-- Since Spark 4.0, Views allow control over how they react to underlying query changes. By default views tolerate column type changes in the query and compensate with casts. To restore the previous behavior, allowing up-casts only, set `spark.sql.viewSchemaBindingMode` to `DISABLED`. This disables the feature and also disallows the `WITH SCHEMA` clause.
+- Since Spark 4.0, By default views tolerate column type changes in the query and compensate with casts. To restore the previous behavior, allowing up-casts only, set `spark.sql.legacy.viewSchemaCompensation` to `false`.
+- Since Spark 4.0, Views allow control over how they react to underlying query changes. By default views tolerate column type changes in the query and compensate with casts. To disable this feature set `spark.sql.legacy.viewSchemaBindingMode` to `false`. This also removes the clause from `DESCRIBE EXTENDED` and `SHOW CREATE TABLE`.
+- Since Spark 4.0, The Storage-Partitioned Join feature flag `spark.sql.sources.v2.bucketing.pushPartValues.enabled` is set to `true`. To restore the previous behavior, set `spark.sql.sources.v2.bucketing.pushPartValues.enabled` to `false`.
+- Since Spark 4.0, the `sentences` function uses `Locale(language)` instead of `Locale.US` when `language` parameter is not `NULL` and `country` parameter is `NULL`.
+- Since Spark 4.0, reading from a file source table will correctly respect query options, e.g. delimiters. Previously, the first query plan was cached and subsequent option changes ignored. To restore the previous behavior, set `spark.sql.legacy.readFileSourceTableCacheIgnoreOptions` to `true`.
+
+## Upgrading from Spark SQL 3.5.3 to 3.5.4
+
+- Since Spark 3.5.4, when reading SQL tables hits `org.apache.hadoop.security.AccessControlException` and `org.apache.hadoop.hdfs.BlockMissingException`, the exception will be thrown and fail the task, even if `spark.sql.files.ignoreCorruptFiles` is set to `true`.
 
 ## Upgrading from Spark SQL 3.5.1 to 3.5.2
 
@@ -92,6 +111,7 @@ license: |
   - Since Spark 3.4, `BinaryType` is not supported in CSV datasource. In Spark 3.3 or earlier, users can write binary columns in CSV datasource, but the output content in CSV files is `Object.toString()` which is meaningless; meanwhile, if users read CSV tables with binary columns, Spark will throw an `Unsupported type: binary` exception.
   - Since Spark 3.4, bloom filter joins are enabled by default. To restore the legacy behavior, set `spark.sql.optimizer.runtime.bloomFilter.enabled` to `false`.
   - Since Spark 3.4, when schema inference on external Parquet files, INT64 timestamps with annotation `isAdjustedToUTC=false` will be inferred as TimestampNTZ type instead of Timestamp type. To restore the legacy behavior, set `spark.sql.parquet.inferTimestampNTZ.enabled` to `false`.
+  - Since Spark 3.4, the behavior for `CREATE TABLE AS SELECT ...` is changed from OVERWRITE to APPEND when `spark.sql.legacy.allowNonEmptyLocationInCTAS` is set to `true`. Users are recommended to avoid CTAS with a non-empty table location.
 
 ## Upgrading from Spark SQL 3.2 to 3.3
 
@@ -123,7 +143,7 @@ license: |
       * `[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
       * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
 
-  - Since Spark 3.3, the `strfmt` in `format_string(strfmt, obj, ...)` and `printf(strfmt, obj, ...)` will no longer support to use "0$" to specify the first argument, the first argument should always reference by "1$" when use argument index to indicating the position of the argument in the argument list.
+  - Since Spark 3.3, the `strfmt` in `format_string(strfmt, obj, ...)` and `printf(strfmt, obj, ...)` will no longer support to use `0$` to specify the first argument, the first argument should always reference by `1$` when use argument index to indicating the position of the argument in the argument list.
 
   - Since Spark 3.3, nulls are written as empty strings in CSV data source by default. In Spark 3.2 or earlier, nulls were written as empty strings as quoted empty strings, `""`. To restore the previous behavior, set `nullValue` to `""`, or set the configuration `spark.sql.legacy.nullValueWrittenAsQuotedEmptyStringCsv` to `true`.
 
@@ -150,6 +170,8 @@ license: |
   - Since Spark 3.2, ADD FILE/JAR/ARCHIVE commands require each path to be enclosed by `"` or `'` if the path contains whitespaces.
 
   - Since Spark 3.2, all the supported JDBC dialects use StringType for ROWID. In Spark 3.1 or earlier, Oracle dialect uses StringType and the other dialects use LongType.
+
+  - Since Spark 3.2, Parquet files with nanosecond precision for timestamp type (`INT64 (TIMESTAMP(NANOS, true))`) are not readable. To restore the behavior before Spark 3.2, you can set `spark.sql.legacy.parquet.nanosAsLong` to `true`.
 
   - In Spark 3.2, PostgreSQL JDBC dialect uses StringType for MONEY and MONEY[] is not supported due to the JDBC driver for PostgreSQL can't handle those types properly. In Spark 3.1 or earlier, DoubleType and ArrayType of DoubleType are used respectively.
 
@@ -628,142 +650,111 @@ license: |
   - Since Spark 2.3, the Join/Filter's deterministic predicates that are after the first non-deterministic predicates are also pushed down/through the child operators, if possible. In prior Spark versions, these filters are not eligible for predicate pushdown.
 
   - Partition column inference previously found incorrect common type for different inferred types, for example, previously it ended up with double type as the common type for double type and date type. Now it finds the correct common type for such conflicts. The conflict resolution follows the table below:
+
     <table>
-    <thead>
-      <tr>
-        <th>
-          <b>InputA \ InputB</b>
-        </th>
-        <th>
-          <b>NullType</b>
-        </th>
-        <th>
-          <b>IntegerType</b>
-        </th>
-        <th>
-          <b>LongType</b>
-        </th>
-        <th>
-          <b>DecimalType(38,0)*</b>
-        </th>
-        <th>
-          <b>DoubleType</b>
-        </th>
-        <th>
-          <b>DateType</b>
-        </th>
-        <th>
-          <b>TimestampType</b>
-        </th>
-        <th>
-          <b>StringType</b>
-        </th>
-      </tr>
-   </thead>
-      <tr>
-        <td>
-          <b>NullType</b>
-        </td>
-        <td>NullType</td>
-        <td>IntegerType</td>
-        <td>LongType</td>
-        <td>DecimalType(38,0)</td>
-        <td>DoubleType</td>
-        <td>DateType</td>
-        <td>TimestampType</td>
-        <td>StringType</td>
-      </tr>
-      <tr>
-        <td>
-          <b>IntegerType</b>
-        </td>
-        <td>IntegerType</td>
-        <td>IntegerType</td>
-        <td>LongType</td>
-        <td>DecimalType(38,0)</td>
-        <td>DoubleType</td>
-        <td>StringType</td>
-        <td>StringType</td>
-        <td>StringType</td>
-      </tr>
-      <tr>
-        <td>
-          <b>LongType</b>
-        </td>
-        <td>LongType</td>
-        <td>LongType</td>
-        <td>LongType</td>
-        <td>DecimalType(38,0)</td>
-        <td>StringType</td>
-        <td>StringType</td>
-        <td>StringType</td>
-        <td>StringType</td>
-      </tr>
-      <tr>
-        <td>
-          <b>DecimalType(38,0)*</b>
-        </td>
-        <td>DecimalType(38,0)</td>
-        <td>DecimalType(38,0)</td>
-        <td>DecimalType(38,0)</td>
-        <td>DecimalType(38,0)</td>
-        <td>StringType</td>
-        <td>StringType</td>
-        <td>StringType</td>
-        <td>StringType</td>
-      </tr>
-      <tr>
-        <td>
-          <b>DoubleType</b>
-        </td>
-        <td>DoubleType</td>
-        <td>DoubleType</td>
-        <td>StringType</td>
-        <td>StringType</td>
-        <td>DoubleType</td>
-        <td>StringType</td>
-        <td>StringType</td>
-        <td>StringType</td>
-      </tr>
-      <tr>
-        <td>
-          <b>DateType</b>
-        </td>
-        <td>DateType</td>
-        <td>StringType</td>
-        <td>StringType</td>
-        <td>StringType</td>
-        <td>StringType</td>
-        <td>DateType</td>
-        <td>TimestampType</td>
-        <td>StringType</td>
-      </tr>
-      <tr>
-        <td>
-          <b>TimestampType</b>
-        </td>
-        <td>TimestampType</td>
-        <td>StringType</td>
-        <td>StringType</td>
-        <td>StringType</td>
-        <td>StringType</td>
-        <td>TimestampType</td>
-        <td>TimestampType</td>
-        <td>StringType</td>
-      </tr>
-      <tr>
-        <td>
-          <b>StringType</b>
-        </td>
-        <td>StringType</td>
-        <td>StringType</td>
-        <td>StringType</td>
-        <td>StringType</td>
-        <td>StringType</td>
-        <td>StringType</td>
-        <td>StringType</td>
-        <td>StringType</td>
-      </tr>
+      <thead>
+        <tr>
+          <th><b>InputA \ InputB</b></th>
+          <th><b>NullType</b></th>
+          <th><b>IntegerType</b></th>
+          <th><b>LongType</b></th>
+          <th><b>DecimalType(38,0)*</b></th>
+          <th><b>DoubleType</b></th>
+          <th><b>DateType</b></th>
+          <th><b>TimestampType</b></th>
+          <th><b>StringType</b></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><b>NullType</b></td>
+          <td>NullType</td>
+          <td>IntegerType</td>
+          <td>LongType</td>
+          <td>DecimalType(38,0)</td>
+          <td>DoubleType</td>
+          <td>DateType</td>
+          <td>TimestampType</td>
+          <td>StringType</td>
+        </tr>
+        <tr>
+          <td><b>IntegerType</b></td>
+          <td>IntegerType</td>
+          <td>IntegerType</td>
+          <td>LongType</td>
+          <td>DecimalType(38,0)</td>
+          <td>DoubleType</td>
+          <td>StringType</td>
+          <td>StringType</td>
+          <td>StringType</td>
+        </tr>
+        <tr>
+          <td><b>LongType</b></td>
+          <td>LongType</td>
+          <td>LongType</td>
+          <td>LongType</td>
+          <td>DecimalType(38,0)</td>
+          <td>StringType</td>
+          <td>StringType</td>
+          <td>StringType</td>
+          <td>StringType</td>
+         </tr>
+        <tr>
+          <td><b>DecimalType(38,0)*</b></td>
+          <td>DecimalType(38,0)</td>
+          <td>DecimalType(38,0)</td>
+          <td>DecimalType(38,0)</td>
+          <td>DecimalType(38,0)</td>
+          <td>StringType</td>
+          <td>StringType</td>
+          <td>StringType</td>
+          <td>StringType</td>
+        </tr>
+        <tr>
+          <td><b>DoubleType</b></td>
+          <td>DoubleType</td>
+          <td>DoubleType</td>
+          <td>StringType</td>
+          <td>StringType</td>
+          <td>DoubleType</td>
+          <td>StringType</td>
+          <td>StringType</td>
+          <td>StringType</td>
+        </tr>
+        <tr>
+          <td><b>DateType</b></td>
+          <td>DateType</td>
+          <td>StringType</td>
+          <td>StringType</td>
+          <td>StringType</td>
+          <td>StringType</td>
+          <td>DateType</td>
+          <td>TimestampType</td>
+          <td>StringType</td>
+        </tr>
+        <tr>
+          <td><b>TimestampType</b></td>
+          <td>TimestampType</td>
+          <td>StringType</td>
+          <td>StringType</td>
+          <td>StringType</td>
+          <td>StringType</td>
+          <td>TimestampType</td>
+          <td>TimestampType</td>
+          <td>StringType</td>
+        </tr>
+        <tr>
+          <td><b>StringType</b></td>
+          <td>StringType</td>
+          <td>StringType</td>
+          <td>StringType</td>
+          <td>StringType</td>
+          <td>StringType</td>
+          <td>StringType</td>
+          <td>StringType</td>
+          <td>StringType</td>
+        </tr> 
+      </tbody>
     </table>
 
     Note that, for <b>DecimalType(38,0)*</b>, the table above intentionally does not cover all other combinations of scales and precisions because currently we only infer decimal type like `BigInteger`/`BigInt`. For example, 1.1 is inferred as double type.
@@ -1069,7 +1060,7 @@ Python UDF registration is unchanged.
 Spark SQL is designed to be compatible with the Hive Metastore, SerDes and UDFs.
 Currently, Hive SerDes and UDFs are based on built-in Hive,
 and Spark SQL can be connected to different versions of Hive Metastore
-(from 2.0.0 to 2.3.10 and 3.0.0 to 3.1.3. Also see [Interacting with Different Versions of Hive Metastore](sql-data-sources-hive-tables.html#interacting-with-different-versions-of-hive-metastore)).
+(from 2.0.0 to 2.3.10 and 3.0.0 to 4.1.0. Also see [Interacting with Different Versions of Hive Metastore](sql-data-sources-hive-tables.html#interacting-with-different-versions-of-hive-metastore).
 
 #### Deploying in Existing Hive Warehouses
 {:.no_toc}

@@ -19,21 +19,25 @@ package org.apache.spark.sql.execution.datasources.v2.jdbc
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{JOIN_CONDITION, JOIN_TYPE, SCHEMA}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.expressions.{FieldReference, SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{ScanBuilder, SupportsPushDownAggregates, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
+import org.apache.spark.sql.connector.join.JoinType
+import org.apache.spark.sql.connector.read.{ScanBuilder, SupportsPushDownAggregates, SupportsPushDownJoin, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRDD, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
-import org.apache.spark.sql.jdbc.JdbcDialects
+import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.jdbc.{JdbcDialects, JdbcSQLQueryBuilder, JoinPushdownAliasGenerator}
 import org.apache.spark.sql.types.StructType
 
 case class JDBCScanBuilder(
     session: SparkSession,
     schema: StructType,
-    jdbcOptions: JDBCOptions)
+    var jdbcOptions: JDBCOptions,
+    additionalMetrics: Map[String, SQLMetric] = Map())
   extends ScanBuilder
     with SupportsPushDownV2Filters
     with SupportsPushDownRequiredColumns
@@ -42,6 +46,7 @@ case class JDBCScanBuilder(
     with SupportsPushDownOffset
     with SupportsPushDownTableSample
     with SupportsPushDownTopN
+    with SupportsPushDownJoin
     with Logging {
 
   private val dialect = JdbcDialects.get(jdbcOptions.url)
@@ -89,7 +94,7 @@ case class JDBCScanBuilder(
   override def pushAggregation(aggregation: Aggregation): Boolean = {
     if (!jdbcOptions.pushDownAggregate) return false
 
-    val compiledAggs = aggregation.aggregateExpressions.flatMap(dialect.compileAggregate)
+    val compiledAggs = aggregation.aggregateExpressions.flatMap(dialect.compileExpression)
     if (compiledAggs.length != aggregation.aggregateExpressions.length) return false
 
     val compiledGroupBys = aggregation.groupByExpressions.flatMap(dialect.compileExpression)
@@ -119,6 +124,151 @@ case class JDBCScanBuilder(
         logError("Failed to push down aggregation to JDBC", e)
         false
     }
+  }
+
+  // TODO: currently we check that all the options are same (besides dbtable and query options).
+  // That is too strict, so in the future we should relax this check by asserting only specific
+  // options are some (e.g. host, port, username, password, database...).
+  // Also, we need to check if join is done on 2 tables from 2 different databases within same
+  // host. These shouldn't be allowed.
+  override def isOtherSideCompatibleForJoin(other: SupportsPushDownJoin): Boolean = {
+    if (!jdbcOptions.pushDownJoin ||
+        !dialect.supportsJoin ||
+        !other.isInstanceOf[JDBCScanBuilder]) {
+      return false
+    }
+
+    val filteredJDBCOptions = jdbcOptions.parameters -
+      JDBCOptions.JDBC_TABLE_NAME -
+      JDBCOptions.JDBC_QUERY_STRING
+
+    val otherSideFilteredJDBCOptions = other.asInstanceOf[JDBCScanBuilder].jdbcOptions.parameters -
+      JDBCOptions.JDBC_TABLE_NAME -
+      JDBCOptions.JDBC_QUERY_STRING
+
+    filteredJDBCOptions == otherSideFilteredJDBCOptions
+  };
+
+  /**
+   * Helper method to calculate StructType based on the SupportsPushDownJoin.ColumnWithAlias and
+   * the given schema.
+   *
+   * If ColumnWithAlias object has defined alias, new field with new name being equal to alias
+   * should be returned. Otherwise, original field is returned.
+   */
+  private def calculateJoinOutputSchema(
+      columnsWithAliases: Array[SupportsPushDownJoin.ColumnWithAlias],
+      schema: StructType): StructType = {
+    var newSchema = StructType(Seq())
+    columnsWithAliases.foreach { columnWithAlias =>
+      val colName = columnWithAlias.colName()
+      val alias = columnWithAlias.alias()
+      val field = schema(colName)
+
+      if (alias == null) {
+        newSchema = newSchema.add(field)
+      } else {
+        newSchema = newSchema.add(alias, field.dataType, field.nullable, field.metadata)
+      }
+    }
+
+    newSchema
+  }
+
+  override def pushDownJoin(
+      other: SupportsPushDownJoin,
+      joinType: JoinType,
+      leftSideRequiredColumnsWithAliases: Array[SupportsPushDownJoin.ColumnWithAlias],
+      rightSideRequiredColumnsWithAliases: Array[SupportsPushDownJoin.ColumnWithAlias],
+      condition: Predicate ): Boolean = {
+    if (!jdbcOptions.pushDownJoin || !dialect.supportsJoin) {
+      return false
+    }
+
+    val joinTypeStringOption = joinType match {
+      case JoinType.INNER_JOIN => Some("INNER JOIN")
+      case JoinType.LEFT_OUTER_JOIN => Some("LEFT JOIN")
+      case JoinType.RIGHT_OUTER_JOIN => Some("RIGHT JOIN")
+      case _ => None
+    }
+    if (!joinTypeStringOption.isDefined) {
+      logError(log"Failed to push down join to JDBC due to unsupported join type " +
+        log"${MDC(JOIN_TYPE, joinType)}")
+      return false
+    }
+
+    val compiledCondition = dialect.compileExpression(condition)
+    if (!compiledCondition.isDefined) {
+      logError(log"Failed to push down join to JDBC due to unsupported join condition " +
+        log"${MDC(JOIN_CONDITION, condition)}")
+      return false
+    }
+
+    val otherJdbcScanBuilder = other.asInstanceOf[JDBCScanBuilder]
+
+    // requiredSchema will become the finalSchema of this JDBCScanBuilder
+    var requiredSchema = StructType(Seq())
+    requiredSchema = calculateJoinOutputSchema(leftSideRequiredColumnsWithAliases, finalSchema)
+    requiredSchema = requiredSchema.merge(
+      calculateJoinOutputSchema(
+        rightSideRequiredColumnsWithAliases,
+        otherJdbcScanBuilder.finalSchema
+      )
+    )
+
+    val joinOutputColumns = requiredSchema.fields.map(f => dialect.quoteIdentifier(f.name))
+    val conditionString = compiledCondition.get
+
+    // Get left side and right side of join sql query builders and recursively build them when
+    // crafting join sql query.
+    val leftSideJdbcSQLBuilder = getJoinPushdownJdbcSQLBuilder(leftSideRequiredColumnsWithAliases)
+    val otherSideJdbcSQLBuilder = otherJdbcScanBuilder
+      .getJoinPushdownJdbcSQLBuilder(rightSideRequiredColumnsWithAliases)
+
+    val joinQuery = dialect
+      .getJdbcSQLQueryBuilder(jdbcOptions)
+      .withJoin(
+        leftSideJdbcSQLBuilder,
+        otherSideJdbcSQLBuilder,
+        JoinPushdownAliasGenerator.getSubqueryQualifier,
+        JoinPushdownAliasGenerator.getSubqueryQualifier,
+        joinOutputColumns,
+        joinTypeStringOption.get,
+        conditionString
+      )
+      .build()
+
+    val newJdbcOptionsMap = jdbcOptions.parameters.originalMap +
+      (JDBCOptions.JDBC_QUERY_STRING -> joinQuery) - JDBCOptions.JDBC_TABLE_NAME
+
+    jdbcOptions = new JDBCOptions(newJdbcOptionsMap)
+    finalSchema = requiredSchema
+    logInfo(log"Updated JDBC schema due to join pushdown. " +
+      log"New schema: ${MDC(SCHEMA, finalSchema.toDDL)}")
+
+    // We need to reset the pushedPredicate because it has already been consumed in previously
+    // crafted SQL query.
+    pushedPredicate = Array.empty[Predicate]
+    // Table sample is pushed down already as well, so we need to reset it to None to not push it
+    // down again when join pushdown is triggered again on this JDBCScanBuilder.
+    tableSample = None
+
+    true
+  }
+
+  def getJoinPushdownJdbcSQLBuilder(
+      columnsWithAliases: Array[SupportsPushDownJoin.ColumnWithAlias]): JdbcSQLQueryBuilder = {
+    val quotedColumns = columnsWithAliases.map(col => dialect.quoteIdentifier(col.colName()))
+    val quotedAliases = columnsWithAliases
+      .map(col => Option(col.alias()).map(dialect.quoteIdentifier))
+
+    // Only filters can be pushed down before join pushdown, so we need to craft SQL query
+    // that contains filters as well.
+    // Joins on top of samples are not supported so we don't need to provide tableSample here.
+    dialect
+      .getJdbcSQLQueryBuilder(jdbcOptions)
+      .withPredicates(pushedPredicate, JDBCPartition(whereClause = null, idx = 1))
+      .withAliasedColumns(quotedColumns, quotedAliases)
   }
 
   override def pushTableSample(
@@ -191,7 +341,9 @@ case class JDBCScanBuilder(
     // "DEPT","NAME",MAX("SALARY"),MIN("BONUS"), instead of getting column names from
     // prunedSchema and quote them (will become "MAX(SALARY)", "MIN(BONUS)" and can't
     // be used in sql string.
-    JDBCScan(JDBCRelation(schema, parts, jdbcOptions)(session), finalSchema, pushedPredicate,
-      pushedAggregateList, pushedGroupBys, tableSample, pushedLimit, sortOrders, pushedOffset)
+    JDBCScan(JDBCRelation(schema, parts, jdbcOptions, additionalMetrics)(session),
+      finalSchema, pushedPredicate, pushedAggregateList, pushedGroupBys,
+      tableSample, pushedLimit, sortOrders, pushedOffset)
   }
+
 }

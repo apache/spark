@@ -32,7 +32,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.{PythonWorker, PythonWorkerFactory}
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.executor.ExecutorBackend
-import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.config._
 import org.apache.spark.memory.{MemoryManager, UnifiedMemoryManager}
@@ -73,7 +73,7 @@ class SparkEnv (
 
   // We initialize the ShuffleManager later in SparkContext and Executor to allow
   // user jars to define custom ShuffleManagers.
-  private var _shuffleManager: ShuffleManager = _
+  @volatile private var _shuffleManager: ShuffleManager = _
 
   def shuffleManager: ShuffleManager = _shuffleManager
 
@@ -144,7 +144,7 @@ class SparkEnv (
       workerModule: String,
       daemonModule: String,
       envVars: Map[String, String],
-      useDaemon: Boolean): (PythonWorker, Option[Int]) = {
+      useDaemon: Boolean): (PythonWorker, Option[ProcessHandle]) = {
     synchronized {
       val key = PythonWorkersKey(pythonExec, workerModule, daemonModule, envVars)
       val workerFactory = pythonWorkers.getOrElseUpdate(key, new PythonWorkerFactory(
@@ -163,7 +163,7 @@ class SparkEnv (
       pythonExec: String,
       workerModule: String,
       envVars: Map[String, String],
-      useDaemon: Boolean): (PythonWorker, Option[Int]) = {
+      useDaemon: Boolean): (PythonWorker, Option[ProcessHandle]) = {
     createPythonWorker(
       pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars, useDaemon)
   }
@@ -172,7 +172,7 @@ class SparkEnv (
       pythonExec: String,
       workerModule: String,
       daemonModule: String,
-      envVars: Map[String, String]): (PythonWorker, Option[Int]) = {
+      envVars: Map[String, String]): (PythonWorker, Option[ProcessHandle]) = {
     val useDaemon = conf.get(Python.PYTHON_USE_DAEMON)
     createPythonWorker(
       pythonExec, workerModule, daemonModule, envVars, useDaemon)
@@ -258,7 +258,6 @@ object SparkEnv extends Logging {
       isLocal: Boolean,
       listenerBus: LiveListenerBus,
       numCores: Int,
-      sparkContext: SparkContext,
       mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None): SparkEnv = {
     assert(conf.contains(DRIVER_HOST_ADDRESS),
       s"${DRIVER_HOST_ADDRESS.key} is not set on the driver!")
@@ -281,7 +280,6 @@ object SparkEnv extends Logging {
       numCores,
       ioEncryptionKey,
       listenerBus = listenerBus,
-      Option(sparkContext),
       mockOutputCommitCoordinator = mockOutputCommitCoordinator
     )
   }
@@ -317,7 +315,6 @@ object SparkEnv extends Logging {
   /**
    * Helper method to create a SparkEnv for a driver or an executor.
    */
-  // scalastyle:off argcount
   private def create(
       conf: SparkConf,
       executorId: String,
@@ -328,9 +325,7 @@ object SparkEnv extends Logging {
       numUsableCores: Int,
       ioEncryptionKey: Option[Array[Byte]],
       listenerBus: LiveListenerBus = null,
-      sc: Option[SparkContext] = None,
       mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None): SparkEnv = {
-    // scalastyle:on argcount
 
     val isDriver = executorId == SparkContext.DRIVER_IDENTIFIER
 
@@ -371,7 +366,7 @@ object SparkEnv extends Logging {
         name: String, endpointCreator: => RpcEndpoint):
       RpcEndpointRef = {
       if (isDriver) {
-        logInfo("Registering " + name)
+        logInfo(log"Registering ${MDC(LogKeys.ENDPOINT_NAME, name)}")
         rpcEnv.setupEndpoint(name, endpointCreator)
       } else {
         RpcUtils.makeDriverRef(name, conf, rpcEnv)
@@ -473,12 +468,7 @@ object SparkEnv extends Logging {
     }
 
     val outputCommitCoordinator = mockOutputCommitCoordinator.getOrElse {
-      if (isDriver) {
-        new OutputCommitCoordinator(conf, isDriver, sc)
-      } else {
-        new OutputCommitCoordinator(conf, isDriver)
-      }
-
+      new OutputCommitCoordinator(conf, isDriver)
     }
     val outputCommitCoordinatorRef = registerOrLookupEndpoint("OutputCommitCoordinator",
       new OutputCommitCoordinatorEndpoint(rpcEnv, outputCommitCoordinator))

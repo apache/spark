@@ -20,6 +20,7 @@ package org.apache.spark.sql.sources
 import scala.util.Random
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
@@ -52,7 +53,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    spark.conf.set(SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING, true)
+    spark.conf.set(SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING.key, true)
   }
 
   protected override def afterAll(): Unit = {
@@ -221,7 +222,8 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
         df)
 
       // Case 4: InSet
-      val inSetExpr = expressions.InSet($"j".expr,
+      val inSetExpr = expressions.InSet(
+        UnresolvedAttribute("j"),
         Set(bucketValue, bucketValue + 1, bucketValue + 2, bucketValue + 3))
       checkPrunedAnswers(
         bucketSpec,
@@ -688,7 +690,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
         val t1 = spark.table("t")
         val t2 = t1.selectExpr("i as ii")
         val plan = t1.join(t2, t1("i") === t2("ii")).queryExecution.executedPlan
-        assert(plan.collect { case sort: SortExec => sort }.isEmpty)
+        assert(plan.collectFirst { case sort: SortExec => sort }.isEmpty)
       }
     }
   }
@@ -701,7 +703,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
           sql("CREATE VIEW v AS SELECT * FROM t").collect()
 
           val plan = sql("SELECT * FROM t a JOIN v b ON a.i = b.i").queryExecution.executedPlan
-          assert(plan.collect { case exchange: ShuffleExchangeExec => exchange }.isEmpty)
+          assert(plan.collectFirst { case exchange: ShuffleExchangeExec => exchange }.isEmpty)
         }
       }
     }

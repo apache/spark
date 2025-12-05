@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.io.File
 import java.net.URI
+import java.nio.file.Files
 import java.util.Locale
 
 import org.apache.spark.{SparkConf, TestUtils}
@@ -27,8 +28,8 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
+import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.TimestampTypes
@@ -132,7 +133,7 @@ import org.apache.spark.util.Utils
 // scalastyle:on line.size.limit
 @ExtendedSQLTest
 class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
-    with SQLQueryTestHelper {
+    with SQLQueryTestHelper with TPCDSSchema {
 
   import IntegratedUDFTestUtils._
 
@@ -156,6 +157,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     // SPARK-39564: don't print out serde to avoid introducing complicated and error-prone
     // regex magic.
     .set("spark.test.noSerdeInExplain", "true")
+    .set(SQLConf.SCHEMA_LEVEL_COLLATIONS_ENABLED, true)
 
   // SPARK-32106 Since we add SQL test 'transform.sql' will use `cat` command,
   // here we need to ignore it.
@@ -165,13 +167,17 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   protected def ignoreList: Set[String] = Set(
     "ignored.sql" // Do NOT remove this one. It is here to test the ignore functionality.
   ) ++ otherIgnoreList
+  /** List of test cases that require TPCDS table schemas to be loaded. */
+  private def requireTPCDSCases: Seq[String] = Seq("pipe-operators.sql")
+  /** List of TPCDS table names and schemas to load from the [[TPCDSSchema]] base class. */
+  private val tpcDSTableNamesToSchemas: Map[String, String] = tableColumns
 
   // Create all the test cases.
   listTestCases.foreach(createScalaTestCase)
 
   protected def createScalaTestCase(testCase: TestCase): Unit = {
     if (ignoreList.exists(t =>
-        testCase.name.toLowerCase(Locale.ROOT).contains(t.toLowerCase(Locale.ROOT)))) {
+      testCase.name.toLowerCase(Locale.ROOT).contains(t.toLowerCase(Locale.ROOT)))) {
       // Create a test case to ignore this case.
       ignore(testCase.name) { /* Do nothing */ }
     } else testCase match {
@@ -224,7 +230,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
 
   /** Run a test case. */
   protected def runSqlTestCase(testCase: TestCase, listTestCases: Seq[TestCase]): Unit = {
-    val input = fileToString(new File(testCase.inputFile))
+    val input = Files.readString(new File(testCase.inputFile).toPath)
     val (comments, code) = splitCommentsAndCodes(input)
     val queries = getQueries(code, comments, listTestCases)
     val settings = getSparkSettings(comments)
@@ -306,13 +312,13 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         localSparkSession.udf.register("vol", (s: String) => s)
         localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
         localSparkSession.conf.set(SQLConf.LEGACY_INTERVAL_ENABLED.key, true)
-      case _: SQLQueryTestSuite#AnsiTest =>
-        localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
+      case _: SQLQueryTestSuite#NonAnsiTest =>
+        localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, false)
       case _: SQLQueryTestSuite#TimestampNTZTest =>
         localSparkSession.conf.set(SQLConf.TIMESTAMP_TYPE.key,
           TimestampTypes.TIMESTAMP_NTZ.toString)
       case _ =>
-        localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, false)
+        localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
     }
 
     if (sparkConfigSet.nonEmpty) {
@@ -320,6 +326,15 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       val setOperations = sparkConfigSet.map { case (key, value) => s"set $key=$value" }
       logInfo(s"Setting configs: ${setOperations.mkString(", ")}")
       setOperations.foreach(localSparkSession.sql)
+    }
+
+    // Load TPCDS table schemas for the test case if required.
+    val lowercaseTestCase = testCase.name.toLowerCase(Locale.ROOT)
+    if (requireTPCDSCases.contains(lowercaseTestCase)) {
+      tpcDSTableNamesToSchemas.foreach { case (name: String, schema: String) =>
+        localSparkSession.sql(s"DROP TABLE IF EXISTS $name")
+        localSparkSession.sql(s"CREATE TABLE `$name` ($schema) USING parquet")
+      }
     }
 
     // Run the SQL queries preparing them for comparison.
@@ -348,6 +363,13 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       }
     }
 
+    // Drop TPCDS tables after the test case if required.
+    if (requireTPCDSCases.contains(lowercaseTestCase)) {
+      tpcDSTableNamesToSchemas.foreach { case (name: String, schema: String) =>
+        localSparkSession.sql(s"DROP TABLE IF EXISTS $name")
+      }
+    }
+
     if (regenerateGoldenFiles) {
       // Again, we are explicitly not using multi-line string due to stripMargin removing "|".
       val goldenOutput = {
@@ -357,7 +379,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       val resultFile = new File(testCase.resultFile)
       val parent = resultFile.getParentFile
       if (!parent.exists()) {
-        assert(parent.mkdirs(), "Could not create directory: " + parent)
+        assert(Utils.createDirectory(parent), "Could not create directory: " + parent)
       }
       stringToFile(resultFile, goldenOutput)
     }
@@ -445,8 +467,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         }
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}postgreSQL")) {
         PgSQLTestCase(testCaseName, absPath, resultFile) :: Nil
-      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}ansi")) {
-        AnsiTestCase(testCaseName, absPath, resultFile) :: Nil
+      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}nonansi")) {
+        NonAnsiTestCase(testCaseName, absPath, resultFile) :: Nil
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}timestampNTZ")) {
         TimestampNTZTestCase(testCaseName, absPath, resultFile) :: Nil
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}cte.sql")) {
@@ -618,7 +640,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       makeOutput: (String, Option[String], String) => QueryTestOutput): Unit = {
     // Read back the golden file.
     val expectedOutputs: Seq[QueryTestOutput] = {
-      val goldenOutput = fileToString(new File(resultFile))
+      val goldenOutput = Files.readString(new File(resultFile).toPath)
       val segments = goldenOutput.split("-- !query.*\n")
 
       val numSegments = outputs.map(_.numSegments).sum + 1
@@ -703,9 +725,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   }
 
   test("Test logic for determining whether a query is semantically sorted") {
-    withTable("t1", "t2") {
-      spark.sql("CREATE TABLE t1(a int, b int) USING parquet")
-      spark.sql("CREATE TABLE t2(a int, b int) USING parquet")
+    withTempView("t1", "t2") {
+      spark.sql("CREATE TEMP VIEW t1 AS SELECT * FROM VALUES (1, 1) AS t1(a, b)")
+      spark.sql("CREATE TEMP VIEW t2 AS SELECT * FROM VALUES (1, 2) AS t2(a, b)")
 
       val unsortedSelectQuery = "select * from t1"
       val sortedSelectQuery = "select * from t1 order by a, b"

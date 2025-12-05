@@ -25,14 +25,10 @@ class DataFrameObservationParityTests(
     DataFrameObservationTestsMixin,
     ReusedConnectTestCase,
 ):
-    # TODO(SPARK-41625): Support Structured Streaming
-    @unittest.skip("Fails in Spark Connect, should enable.")
-    def test_observe_str(self):
-        super().test_observe_str()
+    pass
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.sql.tests.connect.test_parity_observation import *  # noqa: F401
 
     try:

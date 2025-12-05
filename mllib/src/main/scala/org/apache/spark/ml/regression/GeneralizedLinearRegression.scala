@@ -17,16 +17,16 @@
 
 package org.apache.spark.ml.regression
 
+import java.io.{DataInputStream, DataOutputStream}
 import java.util.Locale
 
 import breeze.stats.{distributions => dist}
 import breeze.stats.distributions.Rand.FixedSeed.randBasis
-import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.feature.{Instance, OffsetInstance}
@@ -41,6 +41,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
+import org.apache.spark.util.Utils
 
 /**
  * Params for Generalized Linear Regression.
@@ -418,9 +419,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
       val model = copyValues(
         new GeneralizedLinearRegressionModel(uid, wlsModel.coefficients, wlsModel.intercept)
           .setParent(this))
-      val trainingSummary = new GeneralizedLinearRegressionTrainingSummary(dataset, model,
-        wlsModel.diagInvAtWA.toArray, 1, getSolver)
-      model.setSummary(Some(trainingSummary))
+      model.createSummary(dataset, wlsModel.diagInvAtWA.toArray, 1)
+      model
     } else {
       val instances = validated.rdd.map {
         case Row(label: Double, weight: Double, offset: Double, features: Vector) =>
@@ -435,9 +435,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
       val model = copyValues(
         new GeneralizedLinearRegressionModel(uid, irlsModel.coefficients, irlsModel.intercept)
           .setParent(this))
-      val trainingSummary = new GeneralizedLinearRegressionTrainingSummary(dataset, model,
-        irlsModel.diagInvAtWA.toArray, irlsModel.numIterations, getSolver)
-      model.setSummary(Some(trainingSummary))
+      model.createSummary(dataset, irlsModel.diagInvAtWA.toArray, irlsModel.numIterations)
+      model
     }
 
     model
@@ -445,6 +444,14 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
 
   @Since("2.0.0")
   override def copy(extra: ParamMap): GeneralizedLinearRegression = defaultCopy(extra)
+
+  override def estimateModelSize(dataset: Dataset[_]): Long = {
+    val numFeatures = DatasetUtils.getNumFeatures(dataset, $(featuresCol))
+
+    var size = this.estimateMatadataSize
+    size += Vectors.getDenseSize(numFeatures) // coefficients
+    size
+  }
 }
 
 @Since("2.0.0")
@@ -1009,6 +1016,9 @@ class GeneralizedLinearRegressionModel private[ml] (
   with GeneralizedLinearRegressionBase with MLWritable
   with HasTrainingSummary[GeneralizedLinearRegressionTrainingSummary] {
 
+  // For ml connect only
+  private[ml] def this() = this("", Vectors.empty, Double.NaN)
+
   /**
    * Sets the link prediction (linear predictor) column name.
    *
@@ -1074,8 +1084,8 @@ class GeneralizedLinearRegressionModel private[ml] (
     }
 
     if (numColsOutput == 0) {
-      this.logWarning(s"$uid: GeneralizedLinearRegressionModel.transform() does nothing" +
-        " because no output columns were set.")
+      this.logWarning(log"${MDC(LogKeys.UUID, uid)}: GeneralizedLinearRegressionModel.transform()" +
+        log" does nothing because no output columns were set.")
     }
     outputData.toDF()
   }
@@ -1102,6 +1112,14 @@ class GeneralizedLinearRegressionModel private[ml] (
     copied.setSummary(trainingSummary).setParent(parent)
   }
 
+  private[spark] override def estimatedSize: Long = {
+    var size = this.estimateMatadataSize
+    if (this.coefficients != null) {
+      size += this.coefficients.getSizeInBytes
+    }
+    size
+  }
+
   /**
    * Returns a [[org.apache.spark.ml.util.MLWriter]] instance for this ML instance.
    *
@@ -1120,10 +1138,57 @@ class GeneralizedLinearRegressionModel private[ml] (
     s"GeneralizedLinearRegressionModel: uid=$uid, family=${$(family)}, link=${$(link)}, " +
       s"numFeatures=$numFeatures"
   }
+
+  private[spark] def createSummary(
+    dataset: Dataset[_], diagInvAtWA: Array[Double], numIter: Int
+  ): Unit = {
+    val summary = new GeneralizedLinearRegressionTrainingSummary(
+      dataset, this, diagInvAtWA, numIter, $(solver)
+    )
+
+    setSummary(Some(summary))
+  }
+
+  override private[spark] def saveSummary(path: String): Unit = {
+    ReadWriteUtils.saveObjectToLocal[(Array[Double], Int)](
+      path, (summary.diagInvAtWA, summary.numIterations),
+      (data, dos) => {
+        ReadWriteUtils.serializeDoubleArray(data._1, dos)
+        dos.writeInt(data._2)
+      }
+    )
+  }
+
+  override private[spark] def loadSummary(path: String, dataset: DataFrame): Unit = {
+    val (diagInvAtWA: Array[Double], numIterations: Int) =
+      ReadWriteUtils.loadObjectFromLocal[(Array[Double], Int)](
+      path,
+      dis => {
+        val diagInvAtWA = ReadWriteUtils.deserializeDoubleArray(dis)
+        val numIterations = dis.readInt()
+        (diagInvAtWA, numIterations)
+      }
+    )
+    createSummary(dataset, diagInvAtWA, numIterations)
+  }
 }
 
 @Since("2.0.0")
 object GeneralizedLinearRegressionModel extends MLReadable[GeneralizedLinearRegressionModel] {
+  private[ml] case class Data(intercept: Double, coefficients: Vector)
+
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    dos.writeDouble(data.intercept)
+    serializeVector(data.coefficients, dos)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val intercept = dis.readDouble()
+    val coefficients = deserializeVector(dis)
+    Data(intercept, coefficients)
+  }
 
   @Since("2.0.0")
   override def read: MLReader[GeneralizedLinearRegressionModel] =
@@ -1137,15 +1202,13 @@ object GeneralizedLinearRegressionModel extends MLReadable[GeneralizedLinearRegr
   class GeneralizedLinearRegressionModelWriter(instance: GeneralizedLinearRegressionModel)
     extends MLWriter with Logging {
 
-    private case class Data(intercept: Double, coefficients: Vector)
-
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       // Save model data: intercept, coefficients
       val data = Data(instance.intercept, instance.coefficients)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -1156,15 +1219,14 @@ object GeneralizedLinearRegressionModel extends MLReadable[GeneralizedLinearRegr
     private val className = classOf[GeneralizedLinearRegressionModel].getName
 
     override def load(path: String): GeneralizedLinearRegressionModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath)
-        .select("intercept", "coefficients").head()
-      val intercept = data.getDouble(0)
-      val coefficients = data.getAs[Vector](1)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
 
-      val model = new GeneralizedLinearRegressionModel(metadata.uid, coefficients, intercept)
+      val model = new GeneralizedLinearRegressionModel(
+        metadata.uid, data.coefficients, data.intercept
+      )
 
       metadata.getAndSetParams(model)
       model
@@ -1182,7 +1244,7 @@ object GeneralizedLinearRegressionModel extends MLReadable[GeneralizedLinearRegr
 @Since("2.0.0")
 class GeneralizedLinearRegressionSummary private[regression] (
     dataset: Dataset[_],
-    origModel: GeneralizedLinearRegressionModel) extends Serializable {
+    origModel: GeneralizedLinearRegressionModel) extends Summary with Serializable {
 
   import GeneralizedLinearRegression._
 
@@ -1436,7 +1498,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
 class GeneralizedLinearRegressionTrainingSummary private[regression] (
     dataset: Dataset[_],
     origModel: GeneralizedLinearRegressionModel,
-    private val diagInvAtWA: Array[Double],
+    private[spark] val diagInvAtWA: Array[Double],
     @Since("2.0.0") val numIterations: Int,
     @Since("2.0.0") val solver: String)
   extends GeneralizedLinearRegressionSummary(dataset, origModel) with Serializable {
@@ -1574,12 +1636,12 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
       // Output coefficients with statistics
       sb.append("Coefficients:\n")
       colNames.zipWithIndex.map { case (colName: String, i: Int) =>
-        StringUtils.leftPad(colName, colWidths(i))
+        Utils.leftPad(colName, colWidths(i))
       }.addString(sb, "", " ", "\n")
 
       data.foreach { case strRow: Array[String] =>
         strRow.zipWithIndex.map { case (cell: String, i: Int) =>
-          StringUtils.leftPad(cell, colWidths(i))
+          Utils.leftPad(cell, colWidths(i))
         }.addString(sb, "", " ", "\n")
       }
 
@@ -1592,9 +1654,9 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
       val rd = s"Residual deviance: ${round(deviance)} on $residualDegreeOfFreedom degrees of " +
         "freedom"
       val l = math.max(nd.length, rd.length)
-      sb.append(StringUtils.leftPad(nd, l))
+      sb.append(Utils.leftPad(nd, l))
       sb.append("\n")
-      sb.append(StringUtils.leftPad(rd, l))
+      sb.append(Utils.leftPad(rd, l))
 
       if (family.name != "tweedie") {
         sb.append("\n")

@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.ExpressionBuilder
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UNRESOLVED_COLLATION}
+import org.apache.spark.sql.catalyst.util.{AttributeNameParser, CollationFactory}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.StringTypeAnyCollation
+import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
 
 // scalastyle:off line.contains.tab
@@ -36,35 +38,30 @@ import org.apache.spark.sql.types._
   """,
   examples = """
     Examples:
-      > SET spark.sql.collation.enabled=true;
-      spark.sql.collation.enabled	true
-      > SELECT COLLATION('Spark SQL' _FUNC_ UTF8_BINARY_LCASE);
-      UTF8_BINARY_LCASE
-      > SET spark.sql.collation.enabled=false;
-      spark.sql.collation.enabled	false
+      > SELECT COLLATION('Spark SQL' _FUNC_ UTF8_LCASE);
+      SYSTEM.BUILTIN.UTF8_LCASE
   """,
   since = "4.0.0",
   group = "string_funcs")
 // scalastyle:on line.contains.tab
 object CollateExpressionBuilder extends ExpressionBuilder {
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
-    // We need to throw collationNotEnabledError before unexpectedNullError
-    // and nonFoldableArgumentError, as we do not want user to see misleading
-    // messages that collation is enabled
-    if (!SQLConf.get.collationEnabled) {
-      throw QueryCompilationErrors.collationNotEnabledError()
-    }
     expressions match {
       case Seq(e: Expression, collationExpr: Expression) =>
         (collationExpr.dataType, collationExpr.foldable) match {
-          case (StringType, true) =>
+          case (_: StringType, true) =>
             val evalCollation = collationExpr.eval()
             if (evalCollation == null) {
               throw QueryCompilationErrors.unexpectedNullError("collation", collationExpr)
             } else {
-              Collate(e, evalCollation.toString)
+              if (!SQLConf.get.trimCollationEnabled &&
+                evalCollation.toString.toUpperCase().contains("TRIM")) {
+                throw QueryCompilationErrors.trimCollationNotEnabledError()
+              }
+              Collate(e, UnresolvedCollation(
+                AttributeNameParser.parseAttributeName(evalCollation.toString)))
             }
-          case (StringType, false) => throw QueryCompilationErrors.nonFoldableArgumentError(
+          case (_: StringType, false) => throw QueryCompilationErrors.nonFoldableArgumentError(
             funcName, "collationName", StringType)
           case (_, _) => throw QueryCompilationErrors.unexpectedInputDataTypeError(
             funcName, 1, StringType, collationExpr)
@@ -79,19 +76,72 @@ object CollateExpressionBuilder extends ExpressionBuilder {
  * This function is pass-through, it will not modify the input data.
  * Only type metadata will be updated.
  */
-case class Collate(child: Expression, collationName: String)
-  extends UnaryExpression with ExpectsInputTypes {
-  private val collationId = CollationFactory.collationNameToId(collationName)
-  override def dataType: DataType = StringType(collationId)
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
-
-  override protected def withNewChildInternal(
-    newChild: Expression): Expression = copy(newChild)
+case class Collate(child: Expression, collation: Expression)
+  extends BinaryExpression with ExpectsInputTypes {
+  override def left: Expression = child
+  override def right: Expression = collation
+  override def dataType: DataType = collation.dataType
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true), AnyDataType)
 
   override def eval(row: InternalRow): Any = child.eval(row)
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    defineCodeGen(ctx, ev, (in) => in)
+  /** Just a simple passthrough for code generation. */
+  override def genCode(ctx: CodegenContext): ExprCode = child.genCode(ctx)
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    throw SparkException.internalError("Collate.doGenCode should not be called.")
+  }
+
+  override def sql: String = s"$prettyName(${child.sql}, $collation)"
+
+  override def toString: String =
+    s"$prettyName($child, $collation)"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): Expression =
+    copy(child = newLeft, collation = newRight)
+
+  override def foldable: Boolean = child.foldable
+}
+
+/**
+ * An expression that marks an unresolved collation name.
+ *
+ * This class is used to represent a collation name that has not yet been resolved from a fully
+ * qualified collation name. It is used during the analysis phase, where the collation name is
+ * specified but not yet validated or resolved.
+ */
+case class UnresolvedCollation(collationName: Seq[String])
+  extends LeafExpression with Unevaluable {
+  override def dataType: DataType = throw new UnresolvedException("dataType")
+
+  override def nullable: Boolean = false
+
+  override lazy val resolved: Boolean = false
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_COLLATION)
+}
+
+/**
+ * An expression that represents a resolved collation name.
+ */
+case class ResolvedCollation(collationName: String) extends LeafExpression {
+  override def nullable: Boolean = false
+
+  override def dataType: DataType = StringType(CollationFactory.collationNameToId(collationName))
+
+  override def toString: String = collationName
+
+  override def sql: String = collationName
+
+  override def eval(input: InternalRow): Any = Literal.create(collationName, dataType).eval(input)
+
+  /** Just a simple passthrough for code generation. */
+  override def genCode(ctx: CodegenContext): ExprCode =
+    Literal.create(collationName, dataType).genCode(ctx)
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    throw SparkException.internalError("ResolvedCollation.doGenCode should not be called.")
+  }
 }
 
 // scalastyle:off line.contains.tab
@@ -103,23 +153,23 @@ case class Collate(child: Expression, collationName: String)
   """,
   examples = """
     Examples:
-      > SET spark.sql.collation.enabled=true;
-      spark.sql.collation.enabled	true
       > SELECT _FUNC_('Spark SQL');
-      UTF8_BINARY
-      > SET spark.sql.collation.enabled=false;
-      spark.sql.collation.enabled	false
+      SYSTEM.BUILTIN.UTF8_BINARY
   """,
   since = "4.0.0",
   group = "string_funcs")
 // scalastyle:on line.contains.tab
 case class Collation(child: Expression)
-  extends UnaryExpression with RuntimeReplaceable with ExpectsInputTypes {
+  extends UnaryExpression
+  with RuntimeReplaceable
+  with ExpectsInputTypes
+  with DefaultStringProducingExpression {
   override protected def withNewChildInternal(newChild: Expression): Collation = copy(newChild)
-  override def replacement: Expression = {
+  override lazy val replacement: Expression = {
     val collationId = child.dataType.asInstanceOf[StringType].collationId
-    val collationName = CollationFactory.fetchCollation(collationId).collationName
-    Literal.create(collationName, SQLConf.get.defaultStringType)
+    val fullyQualifiedCollationName = CollationFactory.fullyQualifiedName(collationId)
+    Literal.create(fullyQualifiedCollationName, dataType)
   }
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeAnyCollation)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
 }

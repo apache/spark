@@ -21,14 +21,11 @@ from pyspark.sql.tests.test_dataframe_query_context import DataFrameQueryContext
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class DataFrameParityTests(DataFrameQueryContextTestsMixin, ReusedConnectTestCase):
-    @unittest.skip("Spark Connect does not support DataFrameQueryContext currently.")
-    def test_dataframe_query_context(self):
-        super().test_dataframe_query_context()
+class DataFrameQueryContextParityTests(DataFrameQueryContextTestsMixin, ReusedConnectTestCase):
+    pass
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.sql.tests.connect.test_parity_dataframe_query_context import *  # noqa: F401
 
     try:

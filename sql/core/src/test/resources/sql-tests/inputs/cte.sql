@@ -1,5 +1,7 @@
 create temporary view t as select * from values 0, 1, 2 as t(id);
 create temporary view t2 as select * from values 0, 1 as t(id);
+create temporary view t3 as select * from t;
+create table t4(col1 TIMESTAMP);
 
 -- WITH clause should not fall into infinite loop by referencing self
 WITH s AS (SELECT 1 FROM s) SELECT * FROM s;
@@ -9,6 +11,9 @@ SELECT * FROM r;
 
 -- WITH clause should reference the base table
 WITH t AS (SELECT 1 FROM t) SELECT * FROM t;
+
+-- Table `t` referenced by a view should take precedence over the top CTE `t`
+WITH t AS (SELECT 1) SELECT * FROM t3;
 
 -- WITH clause should not allow cross reference
 WITH s1 AS (SELECT 1 FROM s2), s2 AS (SELECT 1 FROM s1) SELECT * FROM s1, s2;
@@ -172,6 +177,117 @@ with cte AS (SELECT * FROM va) SELECT * FROM cte;
 -- Self-refer to non-existent cte, should fail.
 with cte as (select * from cte) select * from cte;
 
+-- WithCTE placement for WITH in boch UNION branches
+SELECT * FROM (
+  (
+    WITH cte AS (SELECT 1)
+    SELECT * FROM cte
+  ) UNION ALL (
+    WITH cte AS (SELECT 2)
+    SELECT * FROM cte
+  )
+);
+
+-- CTE in the left UNION branch with a subquery referencing that CTE name on the right
+SELECT * FROM (
+  (
+    WITH cte AS (SELECT 2)
+    SELECT * FROM cte
+  ) UNION ALL (
+    SELECT 1 WHERE EXISTS (
+      SELECT * FROM cte
+    )
+  )
+);
+
+-- CTEs in subqueries in both branches of UNION
+SELECT
+  *
+FROM
+  VALUES (1)
+WHERE EXISTS (
+  WITH cte AS (SELECT 1)
+  SELECT * FROM cte
+)
+UNION ALL (
+  SELECT
+    *
+  FROM
+    VALUES (1)
+  WHERE EXISTS (
+    WITH cte AS (SELECT 1)
+    SELECT * FROM cte
+  )
+);
+
+WITH cte AS (
+  SELECT
+    *
+  FROM
+    VALUES (1)
+  WHERE EXISTS (
+    WITH cte AS (SELECT 1)
+    SELECT * FROM cte
+  )
+  UNION ALL (
+    SELECT
+      *
+    FROM
+      VALUES (1)
+    WHERE EXISTS (
+      WITH cte AS (SELECT 1)
+      SELECT * FROM cte
+    )
+  )
+)
+SELECT * FROM cte;
+
+SELECT * FROM (
+  WITH cte AS (SELECT 1)
+  SELECT
+    *
+  FROM VALUES (1)
+  WHERE EXISTS (
+    WITH cte AS (SELECT 1)
+    SELECT * FROM cte
+  )
+  UNION ALL (
+    SELECT
+      *
+    FROM
+      VALUES (1)
+    WHERE EXISTS (
+      WITH cte AS (SELECT 1)
+      SELECT * FROM cte
+    )
+  )
+);
+
+-- CTE name with dots
+WITH `a.b.c` AS (
+  SELECT 1
+)
+SELECT * FROM `a.b.c`;
+
+-- Expression ID assignment in CTE with JOIN
+SELECT * FROM (
+  WITH cte1 AS (SELECT * FROM t4) SELECT t4.col1 FROM t4 JOIN cte1 USING (col1)
+);
+
+SELECT * FROM (
+  WITH cte1 AS (SELECT * FROM t4) SELECT cte1.col1 FROM t4 JOIN cte1 USING (col1)
+);
+
+SELECT * FROM (
+  WITH cte1 AS (SELECT * FROM t4) SELECT t4.col1 FROM cte1 JOIN t4 USING (col1)
+);
+
+SELECT * FROM (
+  WITH cte1 AS (SELECT * FROM t4) SELECT cte1.col1 FROM cte1 JOIN t4 USING (col1)
+);
+
 -- Clean up
 DROP VIEW IF EXISTS t;
 DROP VIEW IF EXISTS t2;
+DROP VIEW IF EXISTS t3;
+DROP TABLE IF EXISTS t4;

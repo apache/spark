@@ -49,6 +49,20 @@ class RuntimeConf:
 
     set.__doc__ = PySparkRuntimeConfig.set.__doc__
 
+    def _set_all(self, configs: Dict[str, Union[str, int, bool]], silent: bool) -> None:
+        conf_list = []
+        for key, value in configs.items():
+            if isinstance(value, bool):
+                value = "true" if value else "false"
+            elif isinstance(value, int):
+                value = str(value)
+            conf_list.append(proto.KeyValue(key=key, value=value))
+        op_set = proto.ConfigRequest.Set(pairs=conf_list, silent=silent)
+        operation = proto.ConfigRequest.Operation(set=op_set)
+        result = self._client.config(operation)
+        for warn in result.warnings:
+            warnings.warn(warn)
+
     def get(
         self, key: str, default: Union[Optional[str], _NoValueType] = _NoValue
     ) -> Optional[str]:
@@ -100,8 +114,8 @@ class RuntimeConf:
             return False
         else:
             raise PySparkValueError(
-                error_class="VALUE_NOT_ALLOWED",
-                message_parameters={"arg_name": "result", "allowed_values": "'true' or 'false'"},
+                errorClass="VALUE_NOT_ALLOWED",
+                messageParameters={"arg_name": "result", "allowed_values": "'true' or 'false'"},
             )
 
     isModifiable.__doc__ = PySparkRuntimeConfig.isModifiable.__doc__
@@ -110,8 +124,8 @@ class RuntimeConf:
         """Assert that an object is of type str."""
         if not isinstance(obj, str):
             raise PySparkTypeError(
-                error_class="NOT_STR",
-                message_parameters={
+                errorClass="NOT_STR",
+                messageParameters={
                     "arg_name": identifier,
                     "arg_type": type(obj).__name__,
                 },

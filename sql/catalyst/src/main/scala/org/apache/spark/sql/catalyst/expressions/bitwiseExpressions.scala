@@ -39,7 +39,9 @@ import org.apache.spark.sql.types._
 case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithmetic
   with CommutativeExpression {
 
-  protected override val evalMode: EvalMode.Value = EvalMode.LEGACY
+  override def evalMode: EvalMode.Value = EvalMode.LEGACY
+
+  override val evalContext: NumericEvalContext = NumericEvalContext(evalMode)
 
   override def inputType: AbstractDataType = IntegralType
 
@@ -86,7 +88,9 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
 case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmetic
   with CommutativeExpression {
 
-  protected override val evalMode: EvalMode.Value = EvalMode.LEGACY
+  override def evalMode: EvalMode.Value = EvalMode.LEGACY
+
+  override val evalContext: NumericEvalContext = NumericEvalContext(evalMode)
 
   override def inputType: AbstractDataType = IntegralType
 
@@ -133,7 +137,9 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
 case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithmetic
   with CommutativeExpression {
 
-  protected override val evalMode: EvalMode.Value = EvalMode.LEGACY
+  override def evalMode: EvalMode.Value = EvalMode.LEGACY
+
+  override val evalContext: NumericEvalContext = NumericEvalContext(evalMode)
 
   override def inputType: AbstractDataType = IntegralType
 
@@ -176,8 +182,8 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
   since = "1.4.0",
   group = "bitwise_funcs")
 case class BitwiseNot(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
-
+  extends UnaryExpression with ExpectsInputTypes {
+  override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType)
 
   override def dataType: DataType = child.dataType
@@ -218,7 +224,8 @@ case class BitwiseNot(child: Expression)
   since = "3.0.0",
   group = "bitwise_funcs")
 case class BitwiseCount(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
+  extends UnaryExpression with ExpectsInputTypes {
+  override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(IntegralType, BooleanType))
 
@@ -269,7 +276,8 @@ object BitwiseGetUtil {
   since = "3.2.0",
   group = "bitwise_funcs")
 case class BitwiseGet(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends BinaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType, IntegerType)
 

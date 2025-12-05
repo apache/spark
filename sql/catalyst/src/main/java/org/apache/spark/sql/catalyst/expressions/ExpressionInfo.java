@@ -48,11 +48,11 @@ public class ExpressionInfo {
             "collection_funcs", "predicate_funcs", "conditional_funcs", "conversion_funcs",
             "csv_funcs", "datetime_funcs", "generator_funcs", "hash_funcs", "json_funcs",
             "lambda_funcs", "map_funcs", "math_funcs", "misc_funcs", "string_funcs", "struct_funcs",
-            "window_funcs", "xml_funcs", "table_funcs", "url_funcs", "variant_funcs"));
+            "window_funcs", "xml_funcs", "table_funcs", "url_funcs", "variant_funcs", "st_funcs"));
 
     private static final Set<String> validSources =
-            new HashSet<>(Arrays.asList("built-in", "hive", "python_udf", "scala_udf",
-                    "java_udf", "python_udtf"));
+            new HashSet<>(Arrays.asList("built-in", "hive", "python_udf", "scala_udf", "sql_udf",
+                    "java_udf", "python_udtf", "internal"));
 
     public String getClassName() {
         return className;

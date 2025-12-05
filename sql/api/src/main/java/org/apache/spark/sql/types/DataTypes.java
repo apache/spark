@@ -95,6 +95,42 @@ public class DataTypes {
   public static final DataType ShortType = ShortType$.MODULE$;
 
   /**
+   * Creates a GeographyType by specifying the SRID value.
+   *
+   * @since 4.1.0
+   */
+  public static GeographyType createGeographyType(int srid) {
+    return GeographyType$.MODULE$.apply(srid);
+  }
+
+  /**
+   * Creates a GeographyType by specifying the CRS value.
+   *
+   * @since 4.1.0
+   */
+  public static GeographyType createGeographyType(String crs) {
+    return GeographyType$.MODULE$.apply(crs);
+  }
+
+  /**
+   * Creates a GeometryType by specifying the SRID value.
+   *
+   * @since 4.1.0
+   */
+  public static GeometryType createGeometryType(int srid) {
+    return GeometryType$.MODULE$.apply(srid);
+  }
+
+  /**
+   * Creates a GeometryType by specifying the CRS value.
+   *
+   * @since 4.1.0
+   */
+  public static GeometryType createGeometryType(String crs) {
+    return GeometryType$.MODULE$.apply(crs);
+  }
+
+  /**
    * Gets the NullType object.
    */
   public static final DataType NullType = NullType$.MODULE$;
@@ -258,5 +294,23 @@ public class DataTypes {
     }
 
     return StructType$.MODULE$.apply(fields);
+  }
+
+  /**
+   * Creates a CharType with the given length.
+   *
+   * @since 4.0.0
+   */
+  public static CharType createCharType(int length) {
+    return new CharType(length);
+  }
+
+  /**
+   * Creates a VarcharType with the given length.
+   *
+   * @since 4.0.0
+   */
+  public static VarcharType createVarcharType(int length) {
+    return new VarcharType(length);
   }
 }

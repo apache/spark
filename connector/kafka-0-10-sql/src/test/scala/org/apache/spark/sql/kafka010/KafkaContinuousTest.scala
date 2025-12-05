@@ -22,8 +22,8 @@ import java.util.concurrent.atomic.AtomicInteger
 import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd, SparkListenerTaskStart}
 import org.apache.spark.sql.execution.datasources.v2.ContinuousScanExec
-import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
+import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.sql.test.TestSparkSession
 

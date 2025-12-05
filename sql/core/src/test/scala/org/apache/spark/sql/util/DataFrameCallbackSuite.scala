@@ -18,18 +18,25 @@
 package org.apache.spark.sql.util
 
 import java.lang.{Long => JLong}
+import java.util.concurrent.{CopyOnWriteArrayList, CountDownLatch, TimeUnit}
 
 import scala.collection.mutable.ArrayBuffer
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark._
-import org.apache.spark.sql.{functions, Dataset, QueryTest, Row, SparkSession}
+import org.apache.spark.internal.config.EXECUTOR_HEARTBEAT_INTERVAL
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerExecutorMetricsUpdate}
+import org.apache.spark.sql.{functions, Encoder, Encoders, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
-import org.apache.spark.sql.execution.{QueryExecution, WholeStageCodegenExec}
+import org.apache.spark.sql.classic.Dataset
+import org.apache.spark.sql.execution.{CollectMetricsExec, QueryExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, LeafRunnableCommand}
 import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
+import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionEnd
+import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
@@ -39,6 +46,12 @@ class DataFrameCallbackSuite extends QueryTest
   with AdaptiveSparkPlanHelper {
   import testImplicits._
   import functions._
+
+  override protected def sparkConf: SparkConf = {
+    val sparkConf = super.sparkConf
+    sparkConf.set(SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key, "false")
+
+  }
 
   test("execute callback functions when a DataFrame action finished successfully") {
     val metrics = ArrayBuffer.empty[(String, QueryExecution, Long)]
@@ -118,7 +131,7 @@ class DataFrameCallbackSuite extends QueryTest
     sparkContext.listenerBus.waitUntilEmpty()
     assert(metrics.length == 2)
 
-    assert(metrics(0)._1 == "foreach")
+    assert(metrics(0)._1 == "foreachPartition")
     assert(metrics(1)._1 == "reduce")
 
     spark.listenerManager.unregister(listener)
@@ -245,11 +258,12 @@ class DataFrameCallbackSuite extends QueryTest
     withTable("tab") {
       spark.range(10).select($"id", $"id" % 5 as "p").write.partitionBy("p").saveAsTable("tab")
       sparkContext.listenerBus.waitUntilEmpty()
-      // CTAS would derive 3 query executions
-      // 1. CreateDataSourceTableAsSelectCommand
+      // CTAS would derive 4 query executions
+      // 1. DropTable
       // 2. InsertIntoHadoopFsRelationCommand
-      // 3. CommandResultExec
-      assert(commands.length == 6)
+      // 3. CreateDataSourceTableAsSelectCommand
+      // 4. SaveAsV1TableCommand
+      assert(commands.length == 7)
       assert(commands(5)._1 == "command")
       assert(commands(5)._2.isInstanceOf[CreateDataSourceTableAsSelectCommand])
       assert(commands(5)._2.asInstanceOf[CreateDataSourceTableAsSelectCommand]
@@ -339,6 +353,100 @@ class DataFrameCallbackSuite extends QueryTest
     }
   }
 
+  test("SPARK-52006: executor heartbeat should exclude observable metrics") {
+    val metricMaps = ArrayBuffer.empty[Map[String, Row]]
+    @volatile var accumulatorId = 0L
+    val listener = new SparkListener {
+      override def onExecutorMetricsUpdate(msg: SparkListenerExecutorMetricsUpdate): Unit = {
+        HeartbeatMonitor.heartbeatReceived(msg)
+      }
+
+      override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
+        case e: SparkListenerSQLExecutionEnd =>
+          metricMaps += e.qe.observedMetrics
+          val accumulators = e.qe.executedPlan
+            .collect { case exec: CollectMetricsExec => exec.accumulatorId }
+          assert(accumulators.length === 1)
+          accumulatorId = accumulators.head
+        case _ => // Ignore
+      }
+    }
+    sparkContext.listenerBus.waitUntilEmpty()
+    sparkContext.addSparkListener(listener)
+
+    try {
+      val heartbeatInterval = sparkContext.getConf.get(EXECUTOR_HEARTBEAT_INTERVAL)
+      val df = spark.range(0, 100, 1, 1)
+        .mapPartitions { iter =>
+          TaskContext.get().addTaskCompletionListener[Unit] { _ =>
+            // Wait for heartbeat sent, 30s timeout by default
+            assert(HeartbeatMonitor.await(heartbeatInterval * 3, TimeUnit.MILLISECONDS))
+          }
+          iter
+        }.toDF("id")
+        .observe(
+          name = "my_event",
+          max($"id").as("max_val"),
+          percentile_approx($"id", lit(0.5), lit(100)),
+          percentile_approx($"id", lit(0.5), lit(100)),
+          min($"id").as("min_val"))
+      df.collect()
+      sparkContext.listenerBus.waitUntilEmpty()
+
+      val msgs = HeartbeatMonitor.msgs.asScala
+      val accumulatorIds = msgs.flatMap(_.accumUpdates.flatMap(_._4)).map(_.id).toSet
+      assert(accumulatorId != 0)
+      assert(msgs.nonEmpty && !accumulatorIds.contains(accumulatorId))
+    } finally {
+      sparkContext.removeSparkListener(listener)
+    }
+  }
+
+  test("SPARK-50581: support observe with udaf") {
+    withUserDefinedFunction(("someUdaf", true)) {
+      spark.udf.register("someUdaf", functions.udaf(new Aggregator[JLong, JLong, JLong] {
+        def zero: JLong = 0L
+        def reduce(b: JLong, a: JLong): JLong = a + b
+        def merge(b1: JLong, b2: JLong): JLong = b1 + b2
+        def finish(r: JLong): JLong = r
+        def bufferEncoder: Encoder[JLong] = Encoders.LONG
+        def outputEncoder: Encoder[JLong] = Encoders.LONG
+      }))
+
+      val df = spark.range(100)
+
+      val metricMaps = ArrayBuffer.empty[Map[String, Row]]
+      val listener = new QueryExecutionListener {
+        override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
+          if (qe.observedMetrics.nonEmpty) {
+            metricMaps += qe.observedMetrics
+          }
+        }
+
+        override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
+          // No-op
+        }
+      }
+      try {
+        spark.listenerManager.register(listener)
+
+        // udaf usage in observe is not working (serialization exception)
+        df.observe(
+            name = "my_metrics",
+            expr("someUdaf(id)").as("agg")
+          )
+          .collect()
+
+        sparkContext.listenerBus.waitUntilEmpty()
+        assert(metricMaps.size === 1)
+        assert(metricMaps.head("my_metrics") === Row(4950L))
+
+      } finally {
+        spark.listenerManager.unregister(listener)
+      }
+    }
+  }
+
   private def validateObservedMetrics(df: Dataset[JLong]): Unit = {
     val metricMaps = ArrayBuffer.empty[Map[String, Row]]
     val listener = new QueryExecutionListener {
@@ -402,6 +510,23 @@ case class ErrorTestCommand(foo: String) extends LeafRunnableCommand {
 
   override val output: Seq[Attribute] = Seq(AttributeReference("foo", StringType)())
 
-  override def run(sparkSession: SparkSession): Seq[Row] =
+  override def run(sparkSession: org.apache.spark.sql.SparkSession): Seq[Row] =
     throw new java.lang.Error(foo)
+}
+
+/** Singleton utils for testing SPARK-52006 */
+object HeartbeatMonitor {
+  private val heartbeatLatch = new CountDownLatch(1)
+  val msgs = new CopyOnWriteArrayList[SparkListenerExecutorMetricsUpdate]()
+
+  def heartbeatReceived(msg: SparkListenerExecutorMetricsUpdate): Unit = {
+    if (msg.accumUpdates.nonEmpty) {
+      msgs.add(msg)
+      heartbeatLatch.countDown()
+    }
+  }
+
+  def await(timeout: Long, timeUnit: TimeUnit): Boolean = {
+    heartbeatLatch.await(timeout, timeUnit)
+  }
 }

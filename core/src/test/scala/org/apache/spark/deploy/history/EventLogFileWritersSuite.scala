@@ -112,6 +112,26 @@ abstract class EventLogFileWritersSuite extends SparkFunSuite with LocalSparkCon
     assert(writer.compressionCodecName === EVENT_LOG_COMPRESSION_CODEC.defaultValue)
   }
 
+  test("SPARK-52458: Support spark.eventLog.excludedPatterns") {
+    val appId = getUniqueApplicationId
+    val attemptId = None
+
+    val conf = getLoggingConf(testDirPath, None)
+    conf.set(EVENT_LOG_EXCLUDED_PATTERNS, Seq("B", "C"))
+
+    val writer = createWriter(appId, attemptId, testDirPath.toUri, conf,
+      SparkHadoopUtil.get.newConfiguration(conf))
+
+    writer.start()
+    Seq("A", "B", "C", "D").foreach { name =>
+      writer.writeEvent(s"""{"Event":"$name"}""", flushLogger = true)
+    }
+    writer.stop()
+
+    verifyWriteEventLogFile(appId, attemptId, testDirPath.toUri,
+      None, Seq("""{"Event":"A"}""", """{"Event":"D"}"""))
+  }
+
   protected def readLinesFromEventLogFile(log: Path, fs: FileSystem): List[String] = {
     val logDataStream = EventLogFileReader.openEventLog(log, fs)
     try {
@@ -302,7 +322,7 @@ class RollingEventLogFilesWriterSuite extends EventLogFileWritersSuite {
       writer.start()
 
       // write log more than 20m (intended to roll over to 3 files)
-      val dummyStr = "dummy" * 1024
+      val dummyStr = "dummy".repeat(1024)
       val expectedLines = writeTestEvents(writer, dummyStr, 1024 * 1024 * 21)
 
       val logDirPath = getAppEventLogDirPath(testDirPath.toUri, appId, attemptId)
@@ -326,7 +346,7 @@ class RollingEventLogFilesWriterSuite extends EventLogFileWritersSuite {
 
     val conf = getLoggingConf(testDirPath, None)
     conf.set(EVENT_LOG_ENABLE_ROLLING, true)
-    conf.set(EVENT_LOG_ROLLING_MAX_FILE_SIZE.key, "9m")
+    conf.set(EVENT_LOG_ROLLING_MAX_FILE_SIZE.key, "1m")
 
     val e = intercept[IllegalArgumentException] {
       createWriter(appId, attemptId, testDirPath.toUri, conf,

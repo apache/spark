@@ -397,9 +397,25 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT k, udaf(v) FROM test_agg GROUP BY k HAVING udaf(v) = false
 -- !query schema
-struct<k:int,udaf(v):int>
+struct<>
 -- !query output
-4	0
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"INT\"",
+    "right" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"(udaf(v) = false)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 51,
+    "stopIndex" : 65,
+    "fragment" : "udaf(v) = false"
+  } ]
+}
 
 
 -- !query

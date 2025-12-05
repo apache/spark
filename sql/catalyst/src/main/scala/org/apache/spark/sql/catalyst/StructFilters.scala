@@ -156,6 +156,8 @@ object StructFilters {
         Some(Literal(true, BooleanType))
       case sources.AlwaysFalse() =>
         Some(Literal(false, BooleanType))
+      case _: sources.CollatedFilter =>
+        None
     }
     translate(filter)
   }

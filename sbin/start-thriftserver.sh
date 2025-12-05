@@ -19,6 +19,7 @@
 
 #
 # Shell script for starting the Spark SQL Thrift server
+export SPARK_CONNECT_MODE=0
 
 # Enter posix mode for bash
 set -o posix
@@ -52,7 +53,7 @@ function usage {
 
 if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
   usage
-  exit 1
+  exit 0
 fi
 
 export SUBMIT_USAGE_FUNCTION=usage

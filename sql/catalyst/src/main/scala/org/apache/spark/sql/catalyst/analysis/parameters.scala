@@ -18,11 +18,11 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, CreateMap, CreateNamedStruct, Expression, LeafExpression, Literal, MapFromArrays, MapFromEntries, SubqueryExpression, Unevaluable, VariableReference}
+import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression, SubqueryExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SupervisingCommand}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, PARAMETER, PARAMETERIZED_QUERY, TreePattern, UNRESOLVED_WITH}
-import org.apache.spark.sql.errors.QueryErrorsBase
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.types.DataType
 
 sealed trait Parameter extends LeafExpression with Unevaluable {
@@ -105,15 +105,28 @@ case class PosParameterizedQuery(child: LogicalPlan, args: Seq[Expression])
 }
 
 /**
- * Base class for rules that process parameterized queries.
+ * The logical plan representing a parameterized query with general parameter support.
+ * This allows the query to use either positional or named parameters based on the
+ * parameter markers found in the query, with optional parameter names provided.
+ *
+ * @param child The parameterized logical plan.
+ * @param args The literal values or collection constructor functions such as `map()`,
+ *             `array()`, `struct()` of parameters.
+ * @param paramNames Optional parameter names corresponding to args. If provided for an argument,
+ *                   that argument can be used for named parameter binding. If not provided
+ *                   parameters are treated as positional.
  */
-abstract class ParameterizedQueryProcessor extends Rule[LogicalPlan] {
-  def assertUnresolvedPlanHasSingleParameterizedQuery(plan: LogicalPlan): Unit = {
-    if (plan.containsPattern(PARAMETERIZED_QUERY)) {
-      val parameterizedQueries = plan.collect { case p: ParameterizedQuery => p }
-      assert(parameterizedQueries.length == 1)
-    }
-  }
+case class GeneralParameterizedQuery(
+    child: LogicalPlan,
+    args: Seq[Expression],
+    paramNames: Seq[String])
+  extends ParameterizedQuery(child) {
+  assert(args.nonEmpty)
+  assert(paramNames.length == args.length,
+    s"paramNames must be same length as args. " +
+    s"paramNames.length=${paramNames.length}, args.length=${args.length}")
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(child = newChild)
 }
 
 /**
@@ -127,10 +140,8 @@ abstract class ParameterizedQueryProcessor extends Rule[LogicalPlan] {
  * `PosParameterizedQuery(ExplainCommand(ExplainCommand(SomeQuery(...))))` =>
  * `ExplainCommand(ExplainCommand(PosParameterizedQuery(SomeQuery(...))))`
  */
-object MoveParameterizedQueriesDown extends ParameterizedQueryProcessor {
+object MoveParameterizedQueriesDown extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    assertUnresolvedPlanHasSingleParameterizedQuery(plan)
-
     plan.resolveOperatorsWithPruning(_.containsPattern(PARAMETERIZED_QUERY)) {
       case pq: ParameterizedQuery if pq.exists(isSupervisingCommand) =>
         moveParameterizedQueryIntoSupervisingCommand(pq)
@@ -157,51 +168,44 @@ object MoveParameterizedQueriesDown extends ParameterizedQueryProcessor {
 }
 
 /**
- * Finds all named parameters in `ParameterizedQuery` and substitutes them by literals or
+ * Binds all named parameters in `ParameterizedQuery` and substitutes them by literals or
  * by collection constructor functions such as `map()`, `array()`, `struct()`
  * from the user-specified arguments.
  */
-object BindParameters extends ParameterizedQueryProcessor with QueryErrorsBase {
-  private def checkArgs(args: Iterable[(String, Expression)]): Unit = {
-    def isNotAllowed(expr: Expression): Boolean = expr.exists {
-      case _: Literal | _: CreateArray | _: CreateNamedStruct |
-        _: CreateMap | _: MapFromArrays |  _: MapFromEntries | _: VariableReference => false
-      case a: Alias => isNotAllowed(a.child)
-      case _ => true
-    }
-    args.find(arg => isNotAllowed(arg._2)).foreach { case (name, expr) =>
-      expr.failAnalysis(
-        errorClass = "INVALID_SQL_ARG",
-        messageParameters = Map("name" -> name))
-    }
-  }
+object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
 
-  private def bind(p: LogicalPlan)(f: PartialFunction[Expression, Expression]): LogicalPlan = {
-    p.resolveExpressionsWithPruning(_.containsPattern(PARAMETER)) (f orElse {
-      case sub: SubqueryExpression => sub.withNewPlan(bind(sub.plan)(f))
-    })
+  private def bind(p0: LogicalPlan)(f: PartialFunction[Expression, Expression]): LogicalPlan = {
+    var stop = false
+    p0.resolveOperatorsDownWithPruning(_.containsPattern(PARAMETER) && !stop) {
+      case p1 =>
+        stop = p1.isInstanceOf[ParameterizedQuery]
+        p1.transformExpressionsWithPruning(_.containsPattern(PARAMETER)) (f orElse {
+          case sub: SubqueryExpression => sub.withNewPlan(bind(sub.plan)(f))
+        })
+    }
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    assertUnresolvedPlanHasSingleParameterizedQuery(plan)
-
     plan.resolveOperatorsWithPruning(_.containsPattern(PARAMETERIZED_QUERY)) {
       // We should wait for `CTESubstitution` to resolve CTE before binding parameters, as CTE
       // relations are not children of `UnresolvedWith`.
       case NameParameterizedQuery(child, argNames, argValues)
-        if !child.containsPattern(UNRESOLVED_WITH) && argValues.forall(_.resolved) =>
+        if !child.containsPattern(UNRESOLVED_WITH) &&
+          argValues.forall(_.resolved) =>
         if (argNames.length != argValues.length) {
           throw SparkException.internalError(s"The number of argument names ${argNames.length} " +
             s"must be equal to the number of argument values ${argValues.length}.")
         }
         val args = argNames.zip(argValues).toMap
-        checkArgs(args)
+        ParameterizedQueryArgumentsValidator(args)
         bind(child) { case NamedParameter(name) if args.contains(name) => args(name) }
 
       case PosParameterizedQuery(child, args)
-        if !child.containsPattern(UNRESOLVED_WITH) && args.forall(_.resolved) =>
+        if !child.containsPattern(UNRESOLVED_WITH) &&
+          args.forall(_.resolved) =>
+
         val indexedArgs = args.zipWithIndex
-        checkArgs(indexedArgs.map(arg => (s"_${arg._2}", arg._1)))
+        ParameterizedQueryArgumentsValidator(indexedArgs.map(arg => (s"_${arg._2}", arg._1)))
 
         val positions = scala.collection.mutable.Set.empty[Int]
         bind(child) { case p @ PosParameter(pos) => positions.add(pos); p }
@@ -212,7 +216,64 @@ object BindParameters extends ParameterizedQueryProcessor with QueryErrorsBase {
             args(posToIndex(pos))
         }
 
-      case _ => plan
+      case GeneralParameterizedQuery(child, args, paramNames)
+        if !child.containsPattern(UNRESOLVED_WITH) &&
+          args.forall(_.resolved) =>
+
+        // Check all arguments for validity (args are already evaluated expressions/literals)
+        val allArgs = args.zip(paramNames).zipWithIndex.map { case ((arg, name), index) =>
+          val finalName = if (name.isEmpty) s"_$index" else name
+          finalName -> arg
+        }
+        ParameterizedQueryArgumentsValidator(allArgs)
+
+        // Collect parameter types used in the query to enforce invariants
+        var hasNamedParam = false
+        val positionalParams = scala.collection.mutable.Set.empty[Int]
+        bind(child) {
+          case p @ NamedParameter(_) => hasNamedParam = true; p
+          case p @ PosParameter(pos) => positionalParams.add(pos); p
+        }
+
+        // Validate: no mixing of positional and named parameters
+        if (hasNamedParam && positionalParams.nonEmpty) {
+          throw QueryCompilationErrors.invalidQueryMixedQueryParameters()
+        }
+
+        // Validate: if query uses named parameters, all USING expressions must have names
+        if (hasNamedParam && positionalParams.isEmpty) {
+          if (paramNames.isEmpty) {
+            // Query uses named parameters but no USING expressions provided
+            throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(Seq.empty)
+          } else {
+            // Check that all USING expressions have names
+            val unnamedExpressions = paramNames.zipWithIndex.collect {
+              case ("", index) => index // empty strings are unnamed
+            }
+            if (unnamedExpressions.nonEmpty) {
+              val unnamedExprs = unnamedExpressions.map(args(_))
+              throw QueryCompilationErrors.invalidQueryAllParametersMustBeNamed(unnamedExprs)
+            }
+          }
+        }
+
+        // Now we can do simple binding based on which type we determined
+        if (hasNamedParam) {
+          // Named parameter binding - paramNames guaranteed to have no nulls at this point
+          val namedArgsMap = paramNames.zip(args).toMap
+          bind(child) {
+            case NamedParameter(name) => namedArgsMap.getOrElse(name, NamedParameter(name))
+          }
+        } else {
+          // Positional parameter binding (same logic as PosParameterizedQuery)
+          val posToIndex = positionalParams.toSeq.sorted.zipWithIndex.toMap
+          bind(child) {
+            case PosParameter(pos) if posToIndex.contains(pos) && args.size > posToIndex(pos) =>
+              args(posToIndex(pos))
+          }
+        }
+
+      case other => other
     }
   }
 }

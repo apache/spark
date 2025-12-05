@@ -83,6 +83,7 @@ def launch_gateway(conf=None, popen_kwargs=None):
             os.unlink(conn_info_file)
 
             env = dict(os.environ)
+            env["SPARK_CONNECT_MODE"] = "0"
             env["_PYSPARK_DRIVER_CONN_INFO_PATH"] = conn_info_file
 
             # Launch the Java gateway.
@@ -108,8 +109,8 @@ def launch_gateway(conf=None, popen_kwargs=None):
 
             if not os.path.isfile(conn_info_file):
                 raise PySparkRuntimeError(
-                    error_class="JAVA_GATEWAY_EXITED",
-                    message_parameters={},
+                    errorClass="JAVA_GATEWAY_EXITED",
+                    messageParameters={},
                 )
 
             with open(conn_info_file, "rb") as info:
@@ -161,7 +162,10 @@ def launch_gateway(conf=None, popen_kwargs=None):
     java_import(gateway.jvm, "org.apache.spark.mllib.api.python.*")
     java_import(gateway.jvm, "org.apache.spark.resource.*")
     # TODO(davies): move into sql
-    java_import(gateway.jvm, "org.apache.spark.sql.*")
+    java_import(gateway.jvm, "org.apache.spark.sql.Encoders")
+    java_import(gateway.jvm, "org.apache.spark.sql.OnSuccessCall")
+    java_import(gateway.jvm, "org.apache.spark.sql.functions")
+    java_import(gateway.jvm, "org.apache.spark.sql.classic.*")
     java_import(gateway.jvm, "org.apache.spark.sql.api.python.*")
     java_import(gateway.jvm, "org.apache.spark.sql.hive.*")
     java_import(gateway.jvm, "scala.Tuple2")

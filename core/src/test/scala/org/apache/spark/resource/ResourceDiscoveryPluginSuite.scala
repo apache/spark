@@ -18,13 +18,12 @@
 package org.apache.spark.resource
 
 import java.io.File
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util.Optional
 import java.util.UUID
 
 import scala.concurrent.duration._
 
-import com.google.common.io.Files
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 
 import org.apache.spark._
@@ -148,7 +147,7 @@ object TestResourceDiscoveryPlugin {
   def writeFile(conf: SparkConf, id: String): Unit = {
     val path = conf.get(TEST_PATH_CONF)
     val fileName = s"$id - ${UUID.randomUUID.toString}"
-    Files.write(id, new File(path, fileName), StandardCharsets.UTF_8)
+    Files.writeString(new File(path, fileName).toPath, id)
   }
 }
 

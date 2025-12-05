@@ -21,8 +21,9 @@ import scala.collection.mutable
 import scala.util.Random
 
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{NUM_CLASSES, NUM_EXAMPLES, NUM_FEATURES, TIMER, WEIGHTED_NUM}
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{MAX_MEMORY_SIZE, MEMORY_SIZE, NUM_CLASSES, NUM_EXAMPLES, NUM_FEATURES, NUM_NODES, NUM_WEIGHTED_EXAMPLES, TIMER}
+import org.apache.spark.ml.EstimatorUtils
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.impl.Utils
@@ -36,6 +37,7 @@ import org.apache.spark.mllib.tree.model.ImpurityStats
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.util.PeriodicRDDCheckpointer
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.SizeEstimator
 import org.apache.spark.util.collection.OpenHashMap
 import org.apache.spark.util.random.{SamplingUtils, XORShiftRandom}
 
@@ -101,6 +103,9 @@ private[spark] object RandomForest extends Logging with Serializable {
     run(instances, strategy, numTrees, featureSubsetStrategy, seed, None)
   }
 
+  // This member is only for testing code.
+  private[spark] var lastEarlyStoppedModelSize: Long = 0
+
   /**
    * Train a random forest with metadata and splits. This method is mainly for GBT,
    * in which bagged input can be reused among trees.
@@ -109,6 +114,7 @@ private[spark] object RandomForest extends Logging with Serializable {
    * @param metadata Learning and dataset metadata for DecisionTree.
    * @return an unweighted set of trees
    */
+  // scalastyle:off
   def runBagged(
       baggedInput: RDD[BaggedPoint[TreePoint]],
       metadata: DecisionTreeMetadata,
@@ -119,7 +125,9 @@ private[spark] object RandomForest extends Logging with Serializable {
       seed: Long,
       instr: Option[Instrumentation],
       prune: Boolean = true, // exposed for testing only, real trees are always pruned
-      parentUID: Option[String] = None): Array[DecisionTreeModel] = {
+      parentUID: Option[String] = None,
+      earlyStopModelSizeThresholdInBytes: Long = 0): Array[DecisionTreeModel] = {
+    lastEarlyStoppedModelSize = 0
     val timer = new TimeTracker()
     timer.start("total")
 
@@ -136,7 +144,7 @@ private[spark] object RandomForest extends Logging with Serializable {
         logInfo(log"numClasses: ${MDC(NUM_CLASSES, metadata.numClasses)}")
         logInfo(log"numExamples: ${MDC(NUM_EXAMPLES, metadata.numExamples)}")
         logInfo(log"weightedNumExamples: " +
-          log"${MDC(WEIGHTED_NUM, metadata.weightedNumExamples)}")
+          log"${MDC(NUM_WEIGHTED_EXAMPLES, metadata.weightedNumExamples)}")
     }
 
     timer.start("init")
@@ -190,7 +198,8 @@ private[spark] object RandomForest extends Logging with Serializable {
 
     timer.stop("init")
 
-    while (nodeStack.nonEmpty) {
+    var earlyStop = false
+    while (nodeStack.nonEmpty && !earlyStop) {
       // Collect some nodes to split, and choose features for each node (if subsampling).
       // Each group of nodes may come from one or multiple trees, and at multiple levels.
       val (nodesForGroup, treeToNodeToIndexInfo) =
@@ -214,8 +223,24 @@ private[spark] object RandomForest extends Logging with Serializable {
       }
 
       timer.stop("findBestSplits")
-    }
 
+      if (earlyStopModelSizeThresholdInBytes > 0) {
+        val nodes = topNodes.map(_.toNode(prune))
+        val estimatedSize = SizeEstimator.estimate(nodes)
+        if (estimatedSize > earlyStopModelSizeThresholdInBytes){
+          earlyStop = true
+          val warningMessage = "The random forest training stops early because the model size " +
+            s"($estimatedSize bytes) exceeds threshold " +
+            s"($earlyStopModelSizeThresholdInBytes bytes)."
+          logWarning(warningMessage)
+          val msgBuffer = EstimatorUtils.warningMessagesBuffer.get()
+          if (msgBuffer != null) {
+            msgBuffer.append(warningMessage)
+          }
+          lastEarlyStoppedModelSize = estimatedSize
+        }
+      }
+    }
     timer.stop("total")
 
     logInfo("Internal timing for DecisionTree:")
@@ -253,6 +278,7 @@ private[spark] object RandomForest extends Logging with Serializable {
         }
     }
   }
+  // scalastyle:on
 
   /**
    * Train a random forest.
@@ -269,6 +295,7 @@ private[spark] object RandomForest extends Logging with Serializable {
       instr: Option[Instrumentation],
       prune: Boolean = true, // exposed for testing only, real trees are always pruned
       parentUID: Option[String] = None): Array[DecisionTreeModel] = {
+    val earlyStopModelSizeThresholdInBytes = TreeConfig.trainingEarlyStopModelSizeThresholdInBytes
     val timer = new TimeTracker()
 
     timer.start("build metadata")
@@ -301,7 +328,8 @@ private[spark] object RandomForest extends Logging with Serializable {
 
     val trees = runBagged(baggedInput = baggedInput, metadata = metadata, bcSplits = bcSplits,
       strategy = strategy, numTrees = numTrees, featureSubsetStrategy = featureSubsetStrategy,
-      seed = seed, instr = instr, prune = prune, parentUID = parentUID)
+      seed = seed, instr = instr, prune = prune, parentUID = parentUID,
+      earlyStopModelSizeThresholdInBytes = earlyStopModelSizeThresholdInBytes)
 
     baggedInput.unpersist()
     bcSplits.destroy()
@@ -1288,9 +1316,10 @@ private[spark] object RandomForest extends Logging with Serializable {
     }
     if (memUsage > maxMemoryUsage) {
       // If maxMemoryUsage is 0, we should still allow splitting 1 node.
-      logWarning(s"Tree learning is using approximately $memUsage bytes per iteration, which" +
-        s" exceeds requested limit maxMemoryUsage=$maxMemoryUsage. This allows splitting" +
-        s" $numNodesInGroup nodes in this iteration.")
+      logWarning(log"Tree learning is using approximately ${MDC(MEMORY_SIZE, memUsage)} " +
+        log"bytes per iteration, which exceeds requested limit " +
+        log"maxMemoryUsage=${MDC(MAX_MEMORY_SIZE, maxMemoryUsage)}. This allows splitting " +
+        log"${MDC(NUM_NODES, numNodesInGroup)} nodes in this iteration.")
     }
     // Convert mutable maps to immutable ones.
     val nodesForGroup: Map[Int, Array[LearningNode]] =

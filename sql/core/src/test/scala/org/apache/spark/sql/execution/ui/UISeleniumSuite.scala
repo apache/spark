@@ -127,7 +127,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser {
       exception = intercept[SparkRuntimeException] {
         spark.sql(s"SELECT raise_error('$errorMsg')").collect()
       },
-      errorClass = "USER_RAISED_EXCEPTION",
+      condition = "USER_RAISED_EXCEPTION",
       parameters = Map("errorMessage" -> escape))
     eventually(timeout(10.seconds), interval(100.milliseconds)) {
       val summary = findErrorSummaryOnSQLUI()

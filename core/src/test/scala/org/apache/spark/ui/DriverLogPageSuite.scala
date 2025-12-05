@@ -19,9 +19,9 @@ package org.apache.spark.ui
 
 import java.io.File
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
 import jakarta.servlet.http.HttpServletRequest
-import org.apache.commons.io.FileUtils
 import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -54,7 +54,7 @@ class DriverLogPageSuite extends SparkFunSuite {
     withTempDir { dir =>
       val page = new DriverLogPage(null, conf.set(DRIVER_LOG_LOCAL_DIR, dir.getCanonicalPath))
       val file = new File(dir, "driver.log")
-      FileUtils.writeStringToFile(file, "driver log content", StandardCharsets.UTF_8)
+      Files.writeString(file.toPath(), "driver log content", StandardCharsets.UTF_8)
       val request = mock(classOf[HttpServletRequest])
       val log = page.renderLog(request)
       assert(log.startsWith("==== Bytes 0-18 of 18 of"))

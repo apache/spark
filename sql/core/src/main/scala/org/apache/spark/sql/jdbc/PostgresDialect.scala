@@ -23,21 +23,22 @@ import java.util
 import java.util.Locale
 
 import scala.util.Using
+import scala.util.control.NonFatal
 
+import org.apache.spark.SparkThrowable
 import org.apache.spark.internal.LogKeys.COLUMN_NAME
-import org.apache.spark.internal.MDC
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NonEmptyNamespaceException, NoSuchIndexException}
 import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.connector.expressions.NamedReference
+import org.apache.spark.sql.connector.expressions.{Expression, NamedReference}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.types._
 
 
-private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
+private case class PostgresDialect()
+  extends JdbcDialect with SQLConfHelper with NoLegacyJDBCError {
 
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:postgresql")
@@ -46,10 +47,17 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
   private val supportedAggregateFunctions = Set("MAX", "MIN", "SUM", "COUNT", "AVG",
     "VAR_POP", "VAR_SAMP", "STDDEV_POP", "STDDEV_SAMP", "COVAR_POP", "COVAR_SAMP", "CORR",
     "REGR_INTERCEPT", "REGR_R2", "REGR_SLOPE", "REGR_SXY")
-  private val supportedFunctions = supportedAggregateFunctions
+  private val supportedStringFunctions = Set("RPAD", "LPAD")
+  private val supportedFunctions = supportedAggregateFunctions ++ supportedStringFunctions
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
+
+  override def isObjectNotFoundException(e: SQLException): Boolean = {
+    e.getSQLState == "42P01" ||
+      e.getSQLState == "3F000" ||
+      e.getSQLState == "42704"
+  }
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
@@ -61,8 +69,8 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
         // money type seems to be broken but one workaround is to handle it as string.
         // See SPARK-34333 and https://github.com/pgjdbc/pgjdbc/issues/100
         Some(StringType)
-      case Types.TIMESTAMP
-        if "timestamptz".equalsIgnoreCase(typeName) =>
+      case Types.TIMESTAMP if "timestamptz".equalsIgnoreCase(typeName) &&
+          !conf.legacyPostgresDatetimeMappingEnabled =>
         // timestamptz represents timestamp with time zone, currently it maps to Types.TIMESTAMP.
         // We need to change to Types.TIMESTAMP_WITH_TIMEZONE if the upstream changes.
         Some(TimestampType)
@@ -149,6 +157,8 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
     case FloatType => Some(JdbcType("FLOAT4", Types.FLOAT))
     case DoubleType => Some(JdbcType("FLOAT8", Types.DOUBLE))
     case ShortType | ByteType => Some(JdbcType("SMALLINT", Types.SMALLINT))
+    case TimestampType if !conf.legacyPostgresDatetimeMappingEnabled =>
+      Some(JdbcType("TIMESTAMP WITH TIME ZONE", Types.TIMESTAMP))
     case t: DecimalType => Some(
       JdbcType(s"NUMERIC(${t.precision},${t.scale})", java.sql.Types.NUMERIC))
     case ArrayType(et, _) if et.isInstanceOf[AtomicType] || et.isInstanceOf[ArrayType] =>
@@ -232,6 +242,11 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
       s" $indexType (${columnList.mkString(", ")}) $indexProperties"
   }
 
+  // See https://www.postgresql.org/docs/current/errcodes-appendix.html
+  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+    Option(exception.getSQLState).exists(_.startsWith("42"))
+  }
+
   // SHOW INDEX syntax
   // https://www.postgresql.org/docs/14/view-pg-indexes.html
   override def indexExists(
@@ -255,20 +270,21 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
 
   override def classifyException(
       e: Throwable,
-      errorClass: String,
+      condition: String,
       messageParameters: Map[String, String],
-      description: String): AnalysisException = {
+      description: String,
+      isRuntime: Boolean): Throwable with SparkThrowable = {
     e match {
       case sqlException: SQLException =>
         sqlException.getSQLState match {
           // https://www.postgresql.org/docs/14/errcodes-appendix.html
           case "42P07" =>
-            if (errorClass == "FAILED_JDBC.CREATE_INDEX") {
+            if (condition == "FAILED_JDBC.CREATE_INDEX") {
               throw new IndexAlreadyExistsException(
                 indexName = messageParameters("indexName"),
                 tableName = messageParameters("tableName"),
                 cause = Some(e))
-            } else if (errorClass == "FAILED_JDBC.RENAME_TABLE") {
+            } else if (condition == "FAILED_JDBC.RENAME_TABLE") {
               val newTable = messageParameters("newName")
               throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
             } else {
@@ -276,10 +292,10 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
               if (tblRegexp.nonEmpty) {
                 throw QueryCompilationErrors.tableAlreadyExistsError(tblRegexp.get.group(1))
               } else {
-                super.classifyException(e, errorClass, messageParameters, description)
+                super.classifyException(e, condition, messageParameters, description, isRuntime)
               }
             }
-          case "42704" if errorClass == "FAILED_JDBC.DROP_INDEX" =>
+          case "42704" if condition == "FAILED_JDBC.DROP_INDEX" =>
             val indexName = messageParameters("indexName")
             val tableName = messageParameters("tableName")
             throw new NoSuchIndexException(indexName, tableName, cause = Some(e))
@@ -288,11 +304,56 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
               namespace = messageParameters.get("namespace").toArray,
               details = sqlException.getMessage,
               cause = Some(e))
-          case _ => super.classifyException(e, errorClass, messageParameters, description)
+          case _ =>
+            super.classifyException(e, condition, messageParameters, description, isRuntime)
         }
       case unsupported: UnsupportedOperationException => throw unsupported
-      case _ => super.classifyException(e, errorClass, messageParameters, description)
+      case _ => super.classifyException(e, condition, messageParameters, description, isRuntime)
     }
+  }
+
+  class PostgresSQLBuilder extends JDBCSQLBuilder {
+    override def visitExtract(field: String, source: String): String = {
+      // SECOND, MINUTE, HOUR, DAY, MONTH, QUARTER, YEAR are identical on postgres and spark for
+      // both datetime and interval types.
+      // DAY_OF_WEEK  is DOW, day of week is full compatible with postgres,
+      //              but in V2ExpressionBuilder they converted DAY_OF_WEEK to DAY_OF_WEEK_ISO,
+      //              so we need to push down ISODOW
+      //              (ISO and standard day of weeks differs in starting day,
+      //              Sunday is 0 on standard DOW extraction, while in ISO it's 7)
+      // DAY_OF_YEAR  have same semantic, but different name (On postgres, it is DOY)
+      // WEEK         is a little bit specific function, but both spark and postgres uses ISO week
+      // YEAR_OF_WEEK is ISO year actually. First few days of a calendar year can belong to the
+      //              past year by ISO standard of week counting.
+      val postgresField = field match {
+        case "DAY_OF_WEEK" => "ISODOW"
+        case "DAY_OF_YEAR" => "DOY"
+        case "YEAR_OF_WEEK" => "ISOYEAR"
+        case _ => field
+      }
+      super.visitExtract(postgresField, source)
+    }
+
+    override def visitBinaryArithmetic(name: String, l: String, r: String): String = {
+      l + " " + name.replace('^', '#') + " " + r
+    }
+  }
+
+  override def compileExpression(expr: Expression): Option[String] = {
+    val postgresSQLBuilder = new PostgresSQLBuilder()
+    try {
+      Some(postgresSQLBuilder.build(expr))
+    } catch {
+      case NonFatal(e) =>
+        logWarning("Error occurs while compiling V2 expression", e)
+        None
+    }
+  }
+
+  override def compileValue(value: Any): Any = value match {
+    case binaryValue: Array[Byte] =>
+      binaryValue.map("%02X".format(_)).mkString("'\\x", "", "'::bytea")
+    case other => super.compileValue(other)
   }
 
   override def supportsLimit: Boolean = true
@@ -300,6 +361,8 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
   override def supportsOffset: Boolean = true
 
   override def supportsTableSample: Boolean = true
+
+  override def supportsJoin: Boolean = true
 
   override def getTableSample(sample: TableSampleInfo): String = {
     // hard-coded to BERNOULLI for now because Spark doesn't have a way to specify sample
@@ -365,7 +428,9 @@ private case class PostgresDialect() extends JdbcDialect with SQLConfHelper {
         try {
           Using.resource(conn.createStatement()) { stmt =>
             Using.resource(stmt.executeQuery(query)) { rs =>
-              if (rs.next()) metadata.putLong("arrayDimension", rs.getLong(1))
+              // Metadata can return 0 for CTAS tables. For such tables, we are always reading
+              // them as 1D array
+              if (rs.next()) metadata.putLong("arrayDimension", Math.max(1L, rs.getLong(1)))
             }
           }
         } catch {

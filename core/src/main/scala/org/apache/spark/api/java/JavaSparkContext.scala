@@ -552,6 +552,21 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
     sc.stop()
   }
 
+  /**
+   * Shut down the SparkContext with exit code that will passed to scheduler backend.
+   * In client mode, client side may call `SparkContext.stop()` to clean up but exit with
+   * code not equal to 0. This behavior cause resource scheduler such as `ApplicationMaster`
+   * exit with success status but client side exited with failed status. Spark can call
+   * this method to stop SparkContext and pass client side correct exit code to scheduler backend.
+   * Then scheduler backend should send the exit code to corresponding resource scheduler
+   * to keep consistent.
+   *
+   * @param exitCode Specified exit code that will passed to scheduler backend in client mode.
+   */
+  def stop(exitCode: Int): Unit = {
+    sc.stop(exitCode)
+  }
+
   override def close(): Unit = stop()
 
   /**
@@ -629,6 +644,9 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    * changed at runtime.
    */
   def getConf: SparkConf = sc.getConf
+
+  /** Return a read-only version of the spark conf. */
+  def getReadOnlyConf: ReadOnlySparkConf = sc.getReadOnlyConf
 
   /**
    * Pass-through to SparkContext.setCallSite.  For API support only.
@@ -763,8 +781,31 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   /**
    * Cancel active jobs for the specified group. See
    * `org.apache.spark.api.java.JavaSparkContext.setJobGroup` for more information.
+   *
+   * @param groupId the group ID to cancel
+   * @param reason reason for cancellation
+   *
+   * @since 4.0.0
+   */
+  def cancelJobGroup(groupId: String, reason: String): Unit = sc.cancelJobGroup(groupId, reason)
+
+  /**
+   * Cancel active jobs for the specified group. See
+   * `org.apache.spark.api.java.JavaSparkContext.setJobGroup` for more information.
+   *
+   * @param groupId the group ID to cancel
    */
   def cancelJobGroup(groupId: String): Unit = sc.cancelJobGroup(groupId)
+
+  /**
+   * Cancel active jobs that have the specified tag. See `org.apache.spark.SparkContext.addJobTag`.
+   *
+   * @param tag The tag to be cancelled. Cannot contain ',' (comma) character.
+   * @param reason reason for cancellation
+   *
+   * @since 4.0.0
+   */
+  def cancelJobsWithTag(tag: String, reason: String): Unit = sc.cancelJobsWithTag(tag, reason)
 
   /**
    * Cancel active jobs that have the specified tag. See `org.apache.spark.SparkContext.addJobTag`.

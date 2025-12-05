@@ -33,6 +33,7 @@ import org.apache.spark.sql.protobuf.utils.ProtobufOptions
 import org.apache.spark.sql.protobuf.utils.ProtobufUtils
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.{ProtobufUtils => CommonProtobufUtils}
 
 class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with ProtobufTestBase
   with Serializable {
@@ -40,11 +41,11 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
   import testImplicits._
 
   val testFileDescFile = protobufDescriptorFile("functions_suite.desc")
-  private val testFileDesc = ProtobufUtils.readDescriptorFileContent(testFileDescFile)
+  private val testFileDesc = CommonProtobufUtils.readDescriptorFileContent(testFileDescFile)
   private val javaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.SimpleMessageProtos$"
 
   val proto2FileDescFile = protobufDescriptorFile("proto2_messages.desc")
-  val proto2FileDesc = ProtobufUtils.readDescriptorFileContent(proto2FileDescFile)
+  val proto2FileDesc = CommonProtobufUtils.readDescriptorFileContent(proto2FileDescFile)
   private val proto2JavaClassNamePrefix = "org.apache.spark.sql.protobuf.protos.Proto2Messages$"
 
   private def emptyBinaryDF = Seq(Array[Byte]()).toDF("binary")
@@ -467,7 +468,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
 
   test("Handle extra fields : oldProducer -> newConsumer") {
     val catalystTypesFile = protobufDescriptorFile("catalyst_types.desc")
-    val descBytes = ProtobufUtils.readDescriptorFileContent(catalystTypesFile)
+    val descBytes = CommonProtobufUtils.readDescriptorFileContent(catalystTypesFile)
 
     val oldProducer = ProtobufUtils.buildDescriptor(descBytes, "oldProducer")
     val newConsumer = ProtobufUtils.buildDescriptor(descBytes, "newConsumer")
@@ -509,7 +510,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
 
   test("Handle extra fields : newProducer -> oldConsumer") {
     val catalystTypesFile = protobufDescriptorFile("catalyst_types.desc")
-    val descBytes = ProtobufUtils.readDescriptorFileContent(catalystTypesFile)
+    val descBytes = CommonProtobufUtils.readDescriptorFileContent(catalystTypesFile)
 
     val newProducer = ProtobufUtils.buildDescriptor(descBytes, "newProducer")
     val oldConsumer = ProtobufUtils.buildDescriptor(descBytes, "oldConsumer")
@@ -708,7 +709,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
     checkError(
       exception = e,
-      errorClass = "PROTOBUF_DEPENDENCY_NOT_FOUND",
+      condition = "PROTOBUF_DEPENDENCY_NOT_FOUND",
       parameters = Map("dependencyName" -> "nestedenum.proto"))
   }
 
@@ -1057,7 +1058,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
     }
     checkError(
       ex,
-      errorClass = "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND",
+      condition = "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND",
       parameters = Map("filePath" -> "/non/existent/path.desc")
     )
     assert(ex.getCause != null)
@@ -1699,7 +1700,7 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       }
       checkError(
         exception = parseError,
-        errorClass = "CANNOT_CONVERT_SQL_VALUE_TO_PROTOBUF_ENUM_TYPE",
+        condition = "CANNOT_CONVERT_SQL_VALUE_TO_PROTOBUF_ENUM_TYPE",
         parameters = Map(
           "sqlColumn" -> "`basic_enum`",
           "protobufColumn" -> "field 'basic_enum'",
@@ -1711,13 +1712,40 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
       }
       checkError(
         exception = parseError,
-        errorClass = "CANNOT_CONVERT_SQL_VALUE_TO_PROTOBUF_ENUM_TYPE",
+        condition = "CANNOT_CONVERT_SQL_VALUE_TO_PROTOBUF_ENUM_TYPE",
         parameters = Map(
           "sqlColumn" -> "`basic_enum`",
           "protobufColumn" -> "field 'basic_enum'",
           "data" -> "9999",
           "enumString" -> "0, 1, 2"))
     }
+  }
+
+  test("non-struct SQL type") {
+    val dfWithInt = spark
+      .range(1)
+      .select(
+        lit(9999).as("int_col")
+      )
+
+    val parseError = intercept[AnalysisException] {
+      dfWithInt.select(
+        to_protobuf_wrapper($"int_col", "SimpleMessageEnum", Some(testFileDesc))).collect()
+    }
+    val descMsg = testFileDesc.map("%02X".format(_)).mkString("")
+    checkError(
+      exception = parseError,
+      condition = "DATATYPE_MISMATCH.NON_STRUCT_TYPE",
+      parameters = Map(
+        "inputName" -> "data",
+        "inputType" -> "\"INT\"",
+        "sqlExpr" ->
+          s"""\"to_protobuf(int_col, SimpleMessageEnum, X'$descMsg', NULL)\""""
+      ),
+      queryContext = Array(ExpectedContext(
+        fragment = "fn",
+        callSitePattern = ".*"))
+    )
   }
 
   test("test unsigned integer types") {
@@ -2040,6 +2068,205 @@ class ProtobufFunctionsSuite extends QueryTest with SharedSparkSession with Prot
         }
       }
     }
+  }
+
+  test("SPARK-49121: from_protobuf and to_protobuf SQL functions") {
+    withTable("protobuf_test_table") {
+      sql(
+        """
+          |CREATE TABLE protobuf_test_table AS
+          |  SELECT named_struct(
+          |    'id', 1L,
+          |    'string_value', 'test_string',
+          |    'int32_value', 32,
+          |    'int64_value', 64L,
+          |    'double_value', CAST(123.456 AS DOUBLE),
+          |    'float_value', CAST(789.01 AS FLOAT),
+          |    'bool_value', true,
+          |    'bytes_value', CAST('sample_bytes' AS BINARY)
+          |  ) AS complex_struct
+          |""".stripMargin)
+
+      val toProtobufSql =
+        s"""
+           |SELECT
+           |  to_protobuf(
+           |    complex_struct, 'SimpleMessageJavaTypes', '$testFileDescFile', map()
+           |  ) AS protobuf_data
+           |FROM protobuf_test_table
+           |""".stripMargin
+
+      val protobufResult = spark.sql(toProtobufSql).collect()
+      assert(protobufResult != null)
+
+      val fromProtobufSql =
+        s"""
+           |SELECT
+           |  from_protobuf(protobuf_data, 'SimpleMessageJavaTypes', '$testFileDescFile', map())
+           |FROM
+           |  ($toProtobufSql)
+           |""".stripMargin
+
+      checkAnswer(
+        spark.sql(fromProtobufSql),
+        Seq(Row(Row(1L, "test_string", 32, 64L, 123.456, 789.01F, true, "sample_bytes".getBytes)))
+      )
+
+      // Negative tests for to_protobuf.
+      var fragment = s"to_protobuf(complex_struct, 42, '$testFileDescFile', map())"
+      checkError(
+        exception = intercept[AnalysisException](sql(
+          s"""
+             |SELECT
+             |  to_protobuf(complex_struct, 42, '$testFileDescFile', map())
+             |FROM protobuf_test_table
+             |""".stripMargin)),
+        condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+        parameters = Map(
+          "sqlExpr" -> s"""\"to_protobuf(complex_struct, 42, $testFileDescFile, map())\"""",
+          "msg" -> ("The second argument of the TO_PROTOBUF SQL function must be a constant " +
+            "string representing the Protobuf message name"),
+          "hint" -> ""),
+        queryContext = Array(ExpectedContext(
+          fragment = fragment,
+          start = 10,
+          stop = fragment.length + 9))
+      )
+      checkError(
+        exception = intercept[AnalysisException](sql(
+          s"""
+             |SELECT
+             |  to_protobuf(complex_struct, 'SimpleMessageJavaTypes', 42, map())
+             |FROM protobuf_test_table
+             |""".stripMargin)),
+        condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+        parameters = Map(
+          "sqlExpr" -> "\"to_protobuf(complex_struct, SimpleMessageJavaTypes, 42, map())\"",
+          "msg" -> ("The third argument of the TO_PROTOBUF SQL function must be a constant " +
+            "string or binary data representing the Protobuf descriptor file path"),
+          "hint" -> ""),
+        queryContext = Array(ExpectedContext(
+          fragment = "to_protobuf(complex_struct, 'SimpleMessageJavaTypes', 42, map())",
+          start = 10,
+          stop = 73))
+      )
+      fragment = s"to_protobuf(complex_struct, 'SimpleMessageJavaTypes', '$testFileDescFile', 42)"
+      checkError(
+        exception = intercept[AnalysisException](sql(
+          s"""
+             |SELECT
+             |  to_protobuf(complex_struct, 'SimpleMessageJavaTypes', '$testFileDescFile', 42)
+             |FROM protobuf_test_table
+             |""".stripMargin)),
+        condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+        parameters = Map(
+          "sqlExpr" ->
+            s"""\"to_protobuf(complex_struct, SimpleMessageJavaTypes, $testFileDescFile, 42)\"""",
+          "msg" -> ("The fourth argument of the TO_PROTOBUF SQL function must be a constant " +
+            "map of strings to strings containing the options to use for converting the value " +
+            "to Protobuf format"),
+          "hint" -> ""),
+        queryContext = Array(ExpectedContext(
+          fragment = fragment,
+          start = 10,
+          stop = fragment.length + 9))
+      )
+
+      // Negative tests for from_protobuf.
+      fragment = s"from_protobuf(protobuf_data, 42, '$testFileDescFile', map())"
+      checkError(
+        exception = intercept[AnalysisException](sql(
+          s"""
+             |SELECT from_protobuf(protobuf_data, 42, '$testFileDescFile', map())
+             |FROM ($toProtobufSql)
+             |""".stripMargin)),
+        condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+        parameters = Map(
+          "sqlExpr" -> s"""\"from_protobuf(protobuf_data, 42, $testFileDescFile, map())\"""",
+          "msg" -> ("The second argument of the FROM_PROTOBUF SQL function must be a constant " +
+            "string representing the Protobuf message name"),
+          "hint" -> ""),
+        queryContext = Array(ExpectedContext(
+          fragment = fragment,
+          start = 8,
+          stop = fragment.length + 7))
+      )
+      checkError(
+        exception = intercept[AnalysisException](sql(
+          s"""
+             |SELECT from_protobuf(protobuf_data, 'SimpleMessageJavaTypes', 42, map())
+             |FROM ($toProtobufSql)
+             |""".stripMargin)),
+        condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+        parameters = Map(
+          "sqlExpr" -> "\"from_protobuf(protobuf_data, SimpleMessageJavaTypes, 42, map())\"",
+          "msg" -> ("The third argument of the FROM_PROTOBUF SQL function must be a constant " +
+            "string or binary data representing the Protobuf descriptor file path"),
+          "hint" -> ""),
+        queryContext = Array(ExpectedContext(
+          fragment = "from_protobuf(protobuf_data, 'SimpleMessageJavaTypes', 42, map())",
+          start = 8,
+          stop = 72))
+      )
+      fragment = s"from_protobuf(protobuf_data, 'SimpleMessageJavaTypes', '$testFileDescFile', 42)"
+      checkError(
+        exception = intercept[AnalysisException](sql(
+          s"""
+             |SELECT
+             |  from_protobuf(protobuf_data, 'SimpleMessageJavaTypes', '$testFileDescFile', 42)
+             |FROM ($toProtobufSql)
+             |""".stripMargin)),
+        condition = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+        parameters = Map(
+          "sqlExpr" ->
+            s"""\"from_protobuf(protobuf_data, SimpleMessageJavaTypes, $testFileDescFile, 42)\"""",
+          "msg" -> ("The fourth argument of the FROM_PROTOBUF SQL function must be a constant " +
+            "map of strings to strings containing the options to use for converting the value " +
+            "from Protobuf format"),
+          "hint" -> ""),
+        queryContext = Array(ExpectedContext(
+          fragment = fragment,
+          start = 10,
+          stop = fragment.length + 9))
+      )
+    }
+  }
+
+  test("SPARK-54156: boolean Protobuf options reject non-boolean values") {
+    Seq(
+      "emit.default.values",
+      "enums.as.ints",
+      "upcast.unsigned.ints",
+      "unwrap.primitive.wrapper.types",
+      "retain.empty.message.types",
+      "convert.any.fields.to.json"
+    ).foreach { opt =>
+      val e = intercept[AnalysisException] {
+        ProtobufOptions(Map(opt -> "not_a_bool"))
+      }
+      checkError(
+        exception = e,
+        condition = "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE",
+        parameters = Map(
+          "optionName" -> opt,
+          "message" -> "Cannot cast value 'not_a_bool' to Boolean."
+        )
+      )
+    }
+  }
+
+  test("SPARK-54156: integer Protobuf options reject non-integer values") {
+    val e = intercept[AnalysisException] {
+      ProtobufOptions(Map("recursive.fields.max.depth" -> "not_an_int"))
+    }
+    checkError(
+      exception = e,
+      condition = "STDS_INVALID_OPTION_VALUE.WITH_MESSAGE",
+      parameters = Map(
+        "optionName" -> "recursive.fields.max.depth",
+        "message" -> "Cannot cast value 'not_an_int' to Int."
+      )
+    )
   }
 
   def testFromProtobufWithOptions(

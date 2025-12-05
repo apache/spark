@@ -18,6 +18,8 @@ rem limitations under the License.
 rem
 
 rem Figure out where the Spark framework is installed
+set SPARK_CONNECT_MODE=0
+
 call "%~dp0find-spark-home.cmd"
 
 call "%SPARK_HOME%\bin\load-spark-env.cmd"

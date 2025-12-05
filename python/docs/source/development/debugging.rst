@@ -211,11 +211,11 @@ You can profile it as below.
          8     51.5 MiB      0.0 MiB       df = session.range(10000)
          9     54.4 MiB      2.8 MiB       return df.collect()
 
-Python/Pandas UDF
-~~~~~~~~~~~~~~~~~
+Python/Pandas/Arrow UDF
+~~~~~~~~~~~~~~~~~~~~~~~
 
 PySpark provides remote `memory_profiler <https://github.com/pythonprofilers/memory_profiler>`_ for
-Python/Pandas UDFs. That can be used on editors with line numbers such as Jupyter notebooks. UDFs with iterators as inputs/outputs are not supported.
+Python/Pandas/Arrow UDFs. That can be used on editors with line numbers such as Jupyter notebooks. UDFs that are generator functions are not supported.
 
 SparkSession-based memory profiler can be enabled by setting the `Runtime SQL configuration <https://spark.apache.org/docs/latest/configuration.html#runtime-sql-configuration>`_
 ``spark.sql.pyspark.udf.profiler`` to ``memory``. An example on a Jupyter notebook is as shown below.
@@ -263,6 +263,16 @@ The UDF IDs can be seen in the query plan, for example, ``add1(...)#2L`` in ``Ar
     +- ArrowEvalPython [add1(id#0L)#2L], [pythonUDF0#11L], 200
        +- *(1) Range (0, 10, step=1, splits=16)
 
+We can render the result with an arbitrary renderer function as shown below.
+
+.. code-block:: python
+
+    def do_render(codemap):
+        # Your custom rendering logic
+        ...
+
+    spark.profile.render(id=2, type="memory", renderer=do_render)
+
 We can clear the result memory profile as shown below.
 
 .. code-block:: python
@@ -306,11 +316,11 @@ regular Python process unless you are running your driver program in another mac
           276    0.000    0.000    0.002    0.000 <frozen importlib._bootstrap>:147(__enter__)
     ...
 
-Python/Pandas UDF
-~~~~~~~~~~~~~~~~~
+Python/Pandas/Arrow UDF
+~~~~~~~~~~~~~~~~~~~~~~~
 
 PySpark provides remote `Python Profilers <https://docs.python.org/3/library/profile.html>`_ for
-Python/Pandas UDFs. UDFs with iterators as inputs/outputs are not supported.
+Python/Pandas/Arrow UDFs. UDFs that are generator functions are not supported.
 
 SparkSession-based performance profiler can be enabled by setting the `Runtime SQL configuration <https://spark.apache.org/docs/latest/configuration.html#runtime-sql-configuration>`_
 ``spark.sql.pyspark.udf.profiler`` to ``perf``. An example is as shown below.
@@ -357,6 +367,25 @@ The UDF IDs can be seen in the query plan, for example, ``add1(...)#2L`` in ``Ar
     *(2) Project [pythonUDF0#11L AS add1(id)#3L]
     +- ArrowEvalPython [add1(id#0L)#2L], [pythonUDF0#11L], 200
        +- *(1) Range (0, 10, step=1, splits=16)
+
+We can render the result with a preregistered renderer as shown below.
+
+.. code-block:: python
+
+    >>> spark.profile.render(id=2, type="perf")  # renderer="flameprof" by default
+
+.. image:: ../../../../docs/img/pyspark-udf-profile.png
+    :alt: PySpark UDF profile
+
+Or with an arbitrary renderer function as shown below.
+
+.. code-block:: python
+
+    >>> def do_render(stats):
+    ...     # Your custom rendering logic
+    ...     ...
+    ...
+    >>> spark.profile.render(id=2, type="perf", renderer=do_render)
 
 We can clear the result performance profile as shown below.
 
@@ -640,7 +669,7 @@ Stack Traces
 
 There are Spark configurations to control stack traces:
 
-- ``spark.sql.execution.pyspark.udf.simplifiedTraceback.enabled`` is true by default to simplify traceback from Python UDFs.
+- ``spark.sql.execution.pyspark.udf.simplifiedTraceback.enabled`` is true by default to simplify traceback from Python UDFs and Data Sources.
 
 - ``spark.sql.pyspark.jvmStacktrace.enabled`` is false by default to hide JVM stacktrace and to show a Python-friendly exception only.
 

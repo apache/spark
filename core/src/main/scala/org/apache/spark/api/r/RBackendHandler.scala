@@ -26,7 +26,7 @@ import io.netty.handler.timeout.ReadTimeoutException
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.api.r.SerDe._
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.R._
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -159,7 +159,7 @@ private[r] class RBackendHandler(server: RBackend)
             log"${MDC(CLASS_NAME, cls)}.${MDC(METHOD_NAME, methodName)}. Candidates are:")
           selectedMethods.foreach { method =>
             logWarning(log"${MDC(METHOD_NAME, methodName)}(" +
-              log"${MDC(METHOD_PARAMETER_TYPES, method.getParameterTypes.mkString(","))})")
+              log"${MDC(METHOD_PARAM_TYPES, method.getParameterTypes.mkString(","))})")
           }
           throw new Exception(s"No matched method found for $cls.$methodName")
         }
@@ -181,7 +181,7 @@ private[r] class RBackendHandler(server: RBackend)
             + log"Candidates are:")
           ctors.foreach { ctor =>
             logWarning(log"${MDC(CLASS_NAME, cls)}(" +
-              log"${MDC(METHOD_PARAMETER_TYPES, ctor.getParameterTypes.mkString(","))})")
+              log"${MDC(METHOD_PARAM_TYPES, ctor.getParameterTypes.mkString(","))})")
           }
           throw new Exception(s"No matched constructor found for $cls")
         }

@@ -21,12 +21,12 @@ import java.util.Locale
 
 import scala.util.control.Exception.allCatch
 
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.util.{DateFormatter, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -67,6 +67,14 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     "yyyy-MM-dd", "yyyy-M-d", "yyyy-M-dd", "yyyy-MM-d", "yyyy-MM", "yyyy-M", "yyyy")
 
   private val isDefaultNTZ = SQLConf.get.timestampType == TimestampNTZType
+
+  override def equals(obj: Any): Boolean = obj match {
+    case other: CSVInferSchema =>
+      options == other.options
+    case _ => false
+  }
+
+  override def hashCode(): Int = options.hashCode()
 
   /**
    * Similar to the JSON schema inference
@@ -138,7 +146,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
         case BooleanType => tryParseBoolean(field)
         case StringType => StringType
         case other: DataType =>
-          throw QueryExecutionErrors.dataTypeUnexpectedError(other)
+          throw SparkException.internalError(s"Unexpected data type $other")
       }
       compatibleType(typeSoFar, typeElemInfer).getOrElse(StringType)
     }

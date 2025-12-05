@@ -234,6 +234,166 @@ Project [scalar-subquery#x [a#x] AS scalarsubquery(a)#xL]
 
 
 -- !query
+SELECT
+  (
+    SELECT
+      COUNT(null_view.a) AS result
+    FROM
+      null_view
+    INNER JOIN r
+      ON r.c = null_view.a
+      AND r.c IS NOT NULL
+    WHERE
+      null_view.a = l.a
+  )
+FROM
+  l
+-- !query analysis
+Project [scalar-subquery#x [a#x] AS scalarsubquery(a)#xL]
+:  +- Aggregate [count(a#x) AS result#xL]
+:     +- Filter (a#x = outer(a#x))
+:        +- Join Inner, ((c#x = a#x) AND isnotnull(c#x))
+:           :- SubqueryAlias null_view
+:           :  +- View (`null_view`, [a#x, b#x])
+:           :     +- Project [cast(CAST(NULL AS INT)#x as int) AS a#x, cast(CAST(NULL AS INT)#x as int) AS b#x]
+:           :        +- Project [cast(null as int) AS CAST(NULL AS INT)#x, cast(null as int) AS CAST(NULL AS INT)#x]
+:           :           +- OneRowRelation
+:           +- SubqueryAlias r
+:              +- View (`r`, [c#x, d#x])
+:                 +- Project [cast(col1#x as int) AS c#x, cast(col2#x as decimal(2,1)) AS d#x]
+:                    +- LocalRelation [col1#x, col2#x]
++- SubqueryAlias l
+   +- View (`l`, [a#x, b#x])
+      +- Project [cast(col1#x as int) AS a#x, cast(col2#x as decimal(2,1)) AS b#x]
+         +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT
+(
+  SELECT
+    COUNT(null_view.a) AS result
+  FROM
+    null_view
+  INNER JOIN r
+    ON r.c = null_view.a
+    AND r.c IS NOT NULL
+  WHERE
+    null_view.a = l.a
+  HAVING COUNT(*) > -1
+)
+FROM
+  l
+-- !query analysis
+Project [scalar-subquery#x [a#x] AS scalarsubquery(a)#xL]
+:  +- Project [result#xL]
+:     +- Filter (count(1)#xL > cast(-1 as bigint))
+:        +- Aggregate [count(a#x) AS result#xL, count(1) AS count(1)#xL]
+:           +- Filter (a#x = outer(a#x))
+:              +- Join Inner, ((c#x = a#x) AND isnotnull(c#x))
+:                 :- SubqueryAlias null_view
+:                 :  +- View (`null_view`, [a#x, b#x])
+:                 :     +- Project [cast(CAST(NULL AS INT)#x as int) AS a#x, cast(CAST(NULL AS INT)#x as int) AS b#x]
+:                 :        +- Project [cast(null as int) AS CAST(NULL AS INT)#x, cast(null as int) AS CAST(NULL AS INT)#x]
+:                 :           +- OneRowRelation
+:                 +- SubqueryAlias r
+:                    +- View (`r`, [c#x, d#x])
+:                       +- Project [cast(col1#x as int) AS c#x, cast(col2#x as decimal(2,1)) AS d#x]
+:                          +- LocalRelation [col1#x, col2#x]
++- SubqueryAlias l
+   +- View (`l`, [a#x, b#x])
+      +- Project [cast(col1#x as int) AS a#x, cast(col2#x as decimal(2,1)) AS b#x]
+         +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT
+  (
+    SELECT
+      COUNT(f.a) AS result
+    FROM
+    (
+        SELECT a, b FROM null_view
+        INTERSECT
+        SELECT c, d FROM r WHERE c IS NOT NULL
+    ) AS f
+    WHERE
+      f.a = l.a
+  )
+FROM
+  l
+-- !query analysis
+Project [scalar-subquery#x [a#x] AS scalarsubquery(a)#xL]
+:  +- Aggregate [count(a#x) AS result#xL]
+:     +- Filter (a#x = outer(a#x))
+:        +- SubqueryAlias f
+:           +- Intersect false
+:              :- Project [a#x, cast(b#x as decimal(11,1)) AS b#x]
+:              :  +- Project [a#x, b#x]
+:              :     +- SubqueryAlias null_view
+:              :        +- View (`null_view`, [a#x, b#x])
+:              :           +- Project [cast(CAST(NULL AS INT)#x as int) AS a#x, cast(CAST(NULL AS INT)#x as int) AS b#x]
+:              :              +- Project [cast(null as int) AS CAST(NULL AS INT)#x, cast(null as int) AS CAST(NULL AS INT)#x]
+:              :                 +- OneRowRelation
+:              +- Project [c#x, cast(d#x as decimal(11,1)) AS d#x]
+:                 +- Project [c#x, d#x]
+:                    +- Filter isnotnull(c#x)
+:                       +- SubqueryAlias r
+:                          +- View (`r`, [c#x, d#x])
+:                             +- Project [cast(col1#x as int) AS c#x, cast(col2#x as decimal(2,1)) AS d#x]
+:                                +- LocalRelation [col1#x, col2#x]
++- SubqueryAlias l
+   +- View (`l`, [a#x, b#x])
+      +- Project [cast(col1#x as int) AS a#x, cast(col2#x as decimal(2,1)) AS b#x]
+         +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT
+(
+  SELECT
+    COUNT(f.a) AS result
+  FROM
+  (
+      SELECT a, b FROM null_view
+      INTERSECT
+      SELECT c, d FROM r WHERE c IS NOT NULL
+  ) AS f
+  WHERE
+    f.a = l.a
+  HAVING COUNT(*) > -1
+)
+FROM
+  l
+-- !query analysis
+Project [scalar-subquery#x [a#x] AS scalarsubquery(a)#xL]
+:  +- Project [result#xL]
+:     +- Filter (count(1)#xL > cast(-1 as bigint))
+:        +- Aggregate [count(a#x) AS result#xL, count(1) AS count(1)#xL]
+:           +- Filter (a#x = outer(a#x))
+:              +- SubqueryAlias f
+:                 +- Intersect false
+:                    :- Project [a#x, cast(b#x as decimal(11,1)) AS b#x]
+:                    :  +- Project [a#x, b#x]
+:                    :     +- SubqueryAlias null_view
+:                    :        +- View (`null_view`, [a#x, b#x])
+:                    :           +- Project [cast(CAST(NULL AS INT)#x as int) AS a#x, cast(CAST(NULL AS INT)#x as int) AS b#x]
+:                    :              +- Project [cast(null as int) AS CAST(NULL AS INT)#x, cast(null as int) AS CAST(NULL AS INT)#x]
+:                    :                 +- OneRowRelation
+:                    +- Project [c#x, cast(d#x as decimal(11,1)) AS d#x]
+:                       +- Project [c#x, d#x]
+:                          +- Filter isnotnull(c#x)
+:                             +- SubqueryAlias r
+:                                +- View (`r`, [c#x, d#x])
+:                                   +- Project [cast(col1#x as int) AS c#x, cast(col2#x as decimal(2,1)) AS d#x]
+:                                      +- LocalRelation [col1#x, col2#x]
++- SubqueryAlias l
+   +- View (`l`, [a#x, b#x])
+      +- Project [cast(col1#x as int) AS a#x, cast(col2#x as decimal(2,1)) AS b#x]
+         +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
 set spark.sql.optimizer.decorrelateSubqueryLegacyIncorrectCountHandling.enabled = true
 -- !query analysis
 SetCommand (spark.sql.optimizer.decorrelateSubqueryLegacyIncorrectCountHandling.enabled,Some(true))

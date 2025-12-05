@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.Types
+import java.sql.{SQLException, Types}
 import java.util.Locale
 
 import org.apache.spark.sql.connector.catalog.Identifier
@@ -25,7 +25,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.types._
 
 
-private case class DerbyDialect() extends JdbcDialect {
+private case class DerbyDialect() extends JdbcDialect with NoLegacyJDBCError {
 
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:derby")
@@ -38,6 +38,12 @@ private case class DerbyDialect() extends JdbcDialect {
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
+  override def isObjectNotFoundException(e: SQLException): Boolean = {
+    e.getSQLState.equalsIgnoreCase("42Y07") ||
+      e.getSQLState.equalsIgnoreCase("42X05") ||
+      e.getSQLState.equalsIgnoreCase("X0X05")
+  }
+
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
     if (sqlType == Types.REAL) Option(FloatType) else None
@@ -48,13 +54,24 @@ private case class DerbyDialect() extends JdbcDialect {
     case ByteType => Option(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
     case ShortType => Option(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
     case BooleanType => Option(JdbcType("BOOLEAN", java.sql.Types.BOOLEAN))
-    // 31 is the maximum precision and 5 is the default scale for a Derby DECIMAL
-    case t: DecimalType if t.precision > 31 =>
-      Option(JdbcType("DECIMAL(31,5)", java.sql.Types.DECIMAL))
+    // 31 is the maximum precision
+    // https://db.apache.org/derby/docs/10.13/ref/rrefsqlj15260.html
+    case t: DecimalType =>
+      val (p, s) = if (t.precision > 31) {
+        (31, math.max(t.scale - (t.precision - 31), 0))
+      } else {
+        (t.precision, t.scale)
+      }
+      Option(JdbcType(s"DECIMAL($p,$s)", java.sql.Types.DECIMAL))
     case _ => None
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
+
+  // See https://db.apache.org/derby/docs/10.15/ref/rrefexcept71493.html
+  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+    Option(exception.getSQLState).exists(_.startsWith("42"))
+  }
 
   // See https://db.apache.org/derby/docs/10.15/ref/rrefsqljrenametablestatement.html
   override def renameTable(oldTable: Identifier, newTable: Identifier): String = {

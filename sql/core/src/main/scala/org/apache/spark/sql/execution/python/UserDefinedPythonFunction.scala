@@ -24,11 +24,15 @@ import scala.collection.mutable.ArrayBuffer
 import net.razorvine.pickle.Pickler
 
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonWorkerUtils, SpecialLengths}
-import org.apache.spark.sql.{Column, DataFrame, Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, UnresolvedPolymorphicPythonUDTF}
+import org.apache.spark.sql.{Column, TableArg}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, UnresolvedPolymorphicPythonUDTF, UnresolvedTableArgPlanId}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, NamedParametersSupport, OneRowRelation}
+import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.classic.ClassicConversions._
+import org.apache.spark.sql.classic.ExpressionUtils.expression
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.{SQLConf, TableValuedFunctionArgument}
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
@@ -45,37 +49,44 @@ case class UserDefinedPythonFunction(
     if (pythonEvalType == PythonEvalType.SQL_BATCHED_UDF
         || pythonEvalType ==PythonEvalType.SQL_ARROW_BATCHED_UDF
         || pythonEvalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
-        || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF) {
+        || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
+        || pythonEvalType == PythonEvalType.SQL_SCALAR_ARROW_UDF
+        || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF
+        || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF) {
       /*
        * Check if the named arguments:
        * - don't have duplicated names
        * - don't contain positional arguments after named arguments
        */
-      NamedParametersSupport.splitAndCheckNamedArguments(e, name)
+      NamedParametersSupport.splitAndCheckNamedArguments(e, name, SQLConf.get.resolver)
     } else if (e.exists(_.isInstanceOf[NamedArgumentExpression])) {
       throw QueryCompilationErrors.namedArgumentsNotSupported(name)
     }
 
-    if (pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF) {
-      PythonUDAF(name, func, dataType, e, udfDeterministic)
+    if (pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
+      || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF
+      || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF) {
+      PythonUDAF(name, func, dataType, e, udfDeterministic, pythonEvalType)
     } else {
       PythonUDF(name, func, dataType, e, pythonEvalType, udfDeterministic)
     }
   }
 
+  def builderWithColumns(e: Seq[Column]): Expression = builder(e.map(expression))
+
   /** Returns a [[Column]] that will evaluate to calling this UDF with the given input. */
   def apply(exprs: Column*): Column = {
-    fromUDFExpr(builder(exprs.map(_.expr)))
+    fromUDFExpr(builder(exprs.map(expression)))
   }
 
   /**
    * Returns a [[Column]] that will evaluate the UDF expression with the given input.
    */
   def fromUDFExpr(expr: Expression): Column = {
-    expr match {
-      case udaf: PythonUDAF => Column(udaf.toAggregateExpression())
-      case _ => Column(expr)
-    }
+    Column(expr match {
+      case udaf: PythonUDAF => udaf.toAggregateExpression()
+      case _ => expr
+    })
   }
 }
 
@@ -112,7 +123,17 @@ case class UserDefinedPythonTableFunction(
      * - don't have duplicated names
      * - don't contain positional arguments after named arguments
      */
-    NamedParametersSupport.splitAndCheckNamedArguments(exprs, name)
+    NamedParametersSupport.splitAndCheckNamedArguments(exprs, name, SQLConf.get.resolver)
+
+    // Check which argument is a table argument here since it will be replaced with
+    // `UnresolvedAttribute` to construct lateral join.
+    val tableArgs = exprs.map {
+      case _: FunctionTableSubqueryArgumentExpression => true
+      case _: UnresolvedTableArgPlanId => true
+      case NamedArgumentExpression(_, _: FunctionTableSubqueryArgumentExpression) => true
+      case NamedArgumentExpression(_, _: UnresolvedTableArgPlanId) => true
+      case _ => false
+    }
 
     val udtf = returnType match {
       case Some(rt) =>
@@ -123,15 +144,9 @@ case class UserDefinedPythonTableFunction(
           pickledAnalyzeResult = None,
           children = exprs,
           evalType = pythonEvalType,
-          udfDeterministic = udfDeterministic)
+          udfDeterministic = udfDeterministic,
+          tableArguments = Some(tableArgs))
       case _ =>
-        // Check which argument is a table argument here since it will be replaced with
-        // `UnresolvedAttribute` to construct lateral join.
-        val tableArgs = exprs.map {
-          case _: FunctionTableSubqueryArgumentExpression => true
-          case NamedArgumentExpression(_, _: FunctionTableSubqueryArgumentExpression) => true
-          case _ => false
-        }
         val runAnalyzeInPython = (func: PythonFunction, exprs: Seq[Expression]) => {
           val runner =
             new UserDefinedPythonTableFunctionAnalyzeRunner(name, func, exprs, tableArgs, parser)
@@ -143,7 +158,8 @@ case class UserDefinedPythonTableFunction(
           children = exprs,
           evalType = pythonEvalType,
           udfDeterministic = udfDeterministic,
-          resolveElementMetadata = runAnalyzeInPython)
+          resolveElementMetadata = runAnalyzeInPython,
+          tableArguments = Some(tableArgs))
     }
     Generate(
       udtf,
@@ -156,8 +172,16 @@ case class UserDefinedPythonTableFunction(
   }
 
   /** Returns a [[DataFrame]] that will evaluate to calling this UDTF with the given input. */
-  def apply(session: SparkSession, exprs: Column*): DataFrame = {
-    val udtf = builder(exprs.map(_.expr), session.sessionState.sqlParser)
+  def apply(session: SparkSession, exprs: TableValuedFunctionArgument*): DataFrame = {
+    val parser = session.sessionState.sqlParser
+    val expressions = exprs.map {
+      case col: Column => session.expression(col)
+      case tableArg: TableArg => tableArg.expression
+      case other => throw new IllegalArgumentException(
+        s"Unsupported argument type: ${other.getClass.getName}"
+      )
+    }
+    val udtf = builder(expressions, parser)
     Dataset.ofRows(session, udtf)
   }
 }
@@ -209,7 +233,8 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
       }
       if (value.foldable) {
         dataOut.writeBoolean(true)
-        val obj = pickler.dumps(EvaluatePython.toJava(value.eval(), value.dataType))
+        val obj = pickler.dumps(EvaluatePython.toJava(
+          value.eval(), value.dataType, SQLConf.get.pysparkBinaryAsBytes))
         PythonWorkerUtils.writeBytes(obj, dataOut)
       } else {
         dataOut.writeBoolean(false)

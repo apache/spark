@@ -23,7 +23,7 @@ Project [try_add(2147483647, cast(1 as decimal(10,0))) AS try_add(2147483647, 1)
 -- !query
 SELECT try_add(2147483647, "1")
 -- !query analysis
-Project [try_add(2147483647, 1) AS try_add(2147483647, 1)#x]
+Project [try_add(2147483647, 1) AS try_add(2147483647, 1)#xL]
 +- OneRowRelation
 
 
@@ -66,6 +66,13 @@ Project [try_add(1, (9223372036854775807 + 1)) AS try_add(1, (922337203685477580
 SELECT try_add(1, 1.0 / 0.0)
 -- !query analysis
 Project [try_add(1, (1.0 / 0.0)) AS try_add(1, (1.0 / 0.0))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_add(sum(1), 1) GROUP BY ALL
+-- !query analysis
+Aggregate [try_add(sum(1), 1) AS try_add(sum(1), 1)#xL]
 +- OneRowRelation
 
 
@@ -240,6 +247,13 @@ Project [try_divide(1, 0) AS try_divide(1, 0)#x]
 
 
 -- !query
+SELECT try_divide(sum(1), 1) GROUP BY ALL
+-- !query analysis
+Aggregate [try_divide(sum(1), 1) AS try_divide(sum(1), 1)#x]
++- OneRowRelation
+
+
+-- !query
 SELECT try_divide(interval 2 year, 2)
 -- !query analysis
 Project [try_divide(INTERVAL '2' YEAR, 2) AS try_divide(INTERVAL '2' YEAR, 2)#x]
@@ -305,7 +319,7 @@ Project [try_subtract(2147483647, cast(-1 as decimal(10,0))) AS try_subtract(214
 -- !query
 SELECT try_subtract(2147483647, "-1")
 -- !query analysis
-Project [try_subtract(2147483647, -1) AS try_subtract(2147483647, -1)#x]
+Project [try_subtract(2147483647, -1) AS try_subtract(2147483647, -1)#xL]
 +- OneRowRelation
 
 
@@ -348,6 +362,13 @@ Project [try_subtract(1, (9223372036854775807 + 1)) AS try_subtract(1, (92233720
 SELECT try_subtract(1, 1.0 / 0.0)
 -- !query analysis
 Project [try_subtract(1, (1.0 / 0.0)) AS try_subtract(1, (1.0 / 0.0))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_subtract(sum(1), 1) GROUP BY ALL
+-- !query analysis
+Aggregate [try_subtract(sum(1), 1) AS try_subtract(sum(1), 1)#xL]
 +- OneRowRelation
 
 
@@ -403,7 +424,7 @@ Project [try_multiply(2147483647, cast(-2 as decimal(10,0))) AS try_multiply(214
 -- !query
 SELECT try_multiply(2147483647, "-2")
 -- !query analysis
-Project [try_multiply(2147483647, -2) AS try_multiply(2147483647, -2)#x]
+Project [try_multiply(2147483647, -2) AS try_multiply(2147483647, -2)#xL]
 +- OneRowRelation
 
 
@@ -446,6 +467,13 @@ Project [try_multiply(1, (9223372036854775807 + 1)) AS try_multiply(1, (92233720
 SELECT try_multiply(1, 1.0 / 0.0)
 -- !query analysis
 Project [try_multiply(1, (1.0 / 0.0)) AS try_multiply(1, (1.0 / 0.0))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_multiply(sum(1), 1) GROUP BY ALL
+-- !query analysis
+Aggregate [try_multiply(sum(1), 1) AS try_multiply(sum(1), 1)#xL]
 +- OneRowRelation
 
 

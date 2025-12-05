@@ -20,7 +20,6 @@ import unittest
 import pandas as pd
 
 import pyspark.pandas as ps
-from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
@@ -39,17 +38,10 @@ class IndexesSymmetricDiffMixin:
             (psidx1 + 1).symmetric_difference(psidx2).sort_values(),
             (pidx1 + 1).symmetric_difference(pidx2).sort_values(),
         )
-        # No longer supported from pandas 2.0.0.
-        if LooseVersion(pd.__version__) >= LooseVersion("2.0.0"):
-            self.assert_eq(
-                (psidx1 ^ psidx2).sort_values(),
-                ps.Index([1, 5], dtype="int64"),
-            )
-        else:
-            self.assert_eq(
-                (psidx1 ^ psidx2).sort_values(),
-                (pidx1 ^ pidx2).sort_values(),
-            )
+        self.assert_eq(
+            (psidx1 ^ psidx2).sort_values(),
+            ps.Index([1, 5], dtype="int64"),
+        )
         self.assert_eq(
             psidx1.symmetric_difference(psidx2, result_name="result").sort_values(),
             pidx1.symmetric_difference(pidx2, result_name="result").sort_values(),

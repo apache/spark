@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.vectorized;
 
+import scala.PartialFunction;
+
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
@@ -23,6 +25,8 @@ import org.apache.spark.sql.types.UserDefinedType;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.types.VariantVal;
+import org.apache.spark.unsafe.types.GeographyVal;
+import org.apache.spark.unsafe.types.GeometryVal;
 
 /**
  * An interface representing in-memory columnar data in Spark. This interface defines the main APIs
@@ -67,6 +71,18 @@ public abstract class ColumnVector implements AutoCloseable {
    */
   @Override
   public abstract void close();
+
+  /**
+   * Cleans up memory for this column vector if it's resources are freeable between batches.
+   * The column vector is not usable after this.
+   *
+   * If this is a writable column vector or constant column vector, it is a no-op.
+   */
+  public void closeIfFreeable() {
+    // By default, we just call close() for all column vectors. If a column vector is writable or
+    // constant, it should override this method and do nothing.
+    close();
+  }
 
   /**
    * Returns true if this column vector contains any null values.
@@ -274,6 +290,16 @@ public abstract class ColumnVector implements AutoCloseable {
    */
   public abstract byte[] getBinary(int rowId);
 
+  public GeographyVal getGeography(int rowId) {
+    byte[] bytes = getBinary(rowId);
+    return (bytes == null) ? null : GeographyVal.fromBytes(bytes);
+  }
+
+  public GeometryVal getGeometry(int rowId) {
+    byte[] bytes = getBinary(rowId);
+    return (bytes == null) ? null : GeometryVal.fromBytes(bytes);
+  }
+
   /**
    * Returns the calendar interval type value for {@code rowId}. If the slot for
    * {@code rowId} is null, it should return null.
@@ -324,10 +350,21 @@ public abstract class ColumnVector implements AutoCloseable {
    * Sets up the data type of this column vector.
    */
   protected ColumnVector(DataType type) {
-    if (type instanceof UserDefinedType) {
-      this.type = ((UserDefinedType) type).sqlType();
-    } else {
-      this.type = type;
-    }
+    this.type = type == null ? null : type.transformRecursively(
+      new PartialFunction<DataType, DataType>() {
+        @Override
+        public boolean isDefinedAt(DataType x) {
+          return x instanceof UserDefinedType<?>;
+        }
+
+        @Override
+        public DataType apply(DataType t) {
+          if (t instanceof UserDefinedType<?> udt) {
+            return udt.sqlType();
+          } else {
+            return t;
+          }
+        }
+      });
   }
 }

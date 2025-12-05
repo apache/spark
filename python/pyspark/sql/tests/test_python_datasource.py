@@ -15,32 +15,57 @@
 # limitations under the License.
 #
 import os
+import platform
 import tempfile
 import unittest
-from typing import Callable, Union
+import logging
+import json
+from dataclasses import dataclass
+from datetime import datetime
+from decimal import Decimal
+from typing import Callable, Iterable, List, Union, Iterator, Tuple
 
-from pyspark.errors import PythonException
+from pyspark.errors import AnalysisException, PythonException
 from pyspark.sql.datasource import (
-    DataSource,
-    DataSourceReader,
-    InputPartition,
-    DataSourceWriter,
-    WriterCommitMessage,
     CaseInsensitiveDict,
+    DataSource,
+    DataSourceArrowWriter,
+    DataSourceReader,
+    DataSourceWriter,
+    EqualNullSafe,
+    EqualTo,
+    Filter,
+    GreaterThan,
+    GreaterThanOrEqual,
+    In,
+    InputPartition,
+    IsNotNull,
+    IsNull,
+    LessThan,
+    LessThanOrEqual,
+    Not,
+    StringContains,
+    StringEndsWith,
+    StringStartsWith,
+    WriterCommitMessage,
 )
 from pyspark.sql.functions import spark_partition_id
-from pyspark.sql.types import Row, StructType
+from pyspark.sql.session import SparkSession
+from pyspark.sql.types import Row, StructField, StructType, IntegerType, DecimalType, VariantVal
+from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
+    SPARK_HOME,
+    ReusedSQLTestCase,
     have_pyarrow,
     pyarrow_requirement_message,
 )
-from pyspark.testing import assertDataFrameEqual
-from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.testing.utils import SPARK_HOME
+from pyspark.util import is_remote_only
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class BasePythonDataSourceTestsMixin:
+    spark: SparkSession
+
     def test_basic_data_source_class(self):
         class MyDataSource(DataSource):
             ...
@@ -67,18 +92,33 @@ class BasePythonDataSourceTestsMixin:
     def test_data_source_register(self):
         class TestReader(DataSourceReader):
             def read(self, partition):
-                yield (0, 1)
+                yield (
+                    0,
+                    1,
+                    VariantVal.parseJson('{"c":1}'),
+                    {"v": VariantVal.parseJson('{"d":2}')},
+                    [VariantVal.parseJson('{"e":3}')],
+                    {"v1": VariantVal.parseJson('{"f":4}'), "v2": VariantVal.parseJson('{"g":5}')},
+                )
 
         class TestDataSource(DataSource):
             def schema(self):
-                return "a INT, b INT"
+                return (
+                    "a INT, b INT, c VARIANT, d STRUCT<v VARIANT>, e ARRAY<VARIANT>,"
+                    "f MAP<STRING, VARIANT>"
+                )
 
             def reader(self, schema):
                 return TestReader()
 
         self.spark.dataSource.register(TestDataSource)
         df = self.spark.read.format("TestDataSource").load()
-        assertDataFrameEqual(df, [Row(a=0, b=1)])
+        assertDataFrameEqual(
+            df.selectExpr(
+                "a", "b", "to_json(c) c", "to_json(d.v) d", "to_json(e[0]) e", "to_json(f['v2']) f"
+            ),
+            [Row(a=0, b=1, c='{"c":1}', d='{"d":2}', e='{"e":3}', f='{"g":5}')],
+        )
 
         class MyDataSource(TestDataSource):
             @classmethod
@@ -86,13 +126,21 @@ class BasePythonDataSourceTestsMixin:
                 return "TestDataSource"
 
             def schema(self):
-                return "c INT, d INT"
+                return (
+                    "c INT, d INT, e VARIANT, f STRUCT<v VARIANT>, g ARRAY<VARIANT>,"
+                    "h MAP<STRING, VARIANT>"
+                )
 
         # Should be able to register the data source with the same name.
         self.spark.dataSource.register(MyDataSource)
 
         df = self.spark.read.format("TestDataSource").load()
-        assertDataFrameEqual(df, [Row(c=0, d=1)])
+        assertDataFrameEqual(
+            df.selectExpr(
+                "c", "d", "to_json(e) e", "to_json(f.v) f", "to_json(g[0]) g", "to_json(h['v2']) h"
+            ),
+            [Row(c=0, d=1, e='{"c":1}', f='{"d":2}', g='{"e":3}', h='{"g":5}')],
+        )
 
     def register_data_source(
         self,
@@ -154,7 +202,8 @@ class BasePythonDataSourceTestsMixin:
             read_func=lambda schema, partition: iter([Row(i=1, j=2), Row(j=3, k=4)])
         )
         with self.assertRaisesRegex(
-            PythonException, "PYTHON_DATA_SOURCE_READ_RETURN_SCHEMA_MISMATCH"
+            PythonException,
+            r"\[DATA_SOURCE_RETURN_SCHEMA_MISMATCH\] Return schema mismatch in the result",
         ):
             self.spark.read.format("test").load().show()
 
@@ -244,6 +293,209 @@ class BasePythonDataSourceTestsMixin:
         assertDataFrameEqual(df, [Row(x=0, y="0"), Row(x=1, y="1")])
         self.assertEqual(df.select(spark_partition_id()).distinct().count(), 2)
 
+    def test_filter_pushdown(self):
+        class TestDataSourceReader(DataSourceReader):
+            def __init__(self):
+                self.has_filter = False
+
+            def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
+                assert set(filters) == {
+                    IsNotNull(("x",)),
+                    IsNotNull(("y",)),
+                    EqualTo(("x",), 1),
+                    EqualTo(("y",), 2),
+                }, filters
+                self.has_filter = True
+                # pretend we support x = 1 filter but in fact we don't
+                # so we only return y = 2 filter
+                yield filters[filters.index(EqualTo(("y",), 2))]
+
+            def partitions(self):
+                assert self.has_filter
+                return super().partitions()
+
+            def read(self, partition):
+                assert self.has_filter
+                yield [1, 1]
+                yield [1, 2]
+                yield [2, 2]
+
+        class TestDataSource(DataSource):
+            @classmethod
+            def name(cls):
+                return "test"
+
+            def schema(self):
+                return "x int, y int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("test").load().filter("x = 1 and y = 2")
+            # only the y = 2 filter is applied post scan
+            assertDataFrameEqual(df, [Row(x=1, y=2), Row(x=2, y=2)])
+
+    def test_extraneous_filter(self):
+        class TestDataSourceReader(DataSourceReader):
+            def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
+                yield EqualTo(("x",), 1)
+
+            def partitions(self):
+                assert False
+
+            def read(self, partition):
+                assert False
+
+        class TestDataSource(DataSource):
+            @classmethod
+            def name(cls):
+                return "test"
+
+            def schema(self):
+                return "x int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+            self.spark.dataSource.register(TestDataSource)
+            with self.assertRaisesRegex(Exception, "DATA_SOURCE_EXTRANEOUS_FILTERS"):
+                self.spark.read.format("test").load().filter("x = 1").show()
+
+    def test_filter_pushdown_error(self):
+        error_str = "dummy error"
+
+        class TestDataSourceReader(DataSourceReader):
+            def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
+                raise Exception(error_str)
+
+            def read(self, partition):
+                yield [1]
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return "x int"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").load().filter("x = 1 or x is null")
+            assertDataFrameEqual(df, [Row(x=1)])  # works when not pushing down filters
+            with self.assertRaisesRegex(Exception, error_str):
+                df.filter("x = 1").explain()
+
+    def test_filter_pushdown_disabled(self):
+        class TestDataSourceReader(DataSourceReader):
+            def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
+                assert False
+
+            def read(self, partition):
+                assert False
+
+        class TestDataSource(DataSource):
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": False}):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").schema("x int").load()
+            with self.assertRaisesRegex(Exception, "DATA_SOURCE_PUSHDOWN_DISABLED"):
+                df.show()
+
+    def _check_filters(self, sql_type, sql_filter, python_filters):
+        """
+        Parameters
+        ----------
+        sql_type: str
+            The SQL type of the column x.
+        sql_filter: str
+            A SQL filter using the column x.
+        python_filters: List[Filter]
+            The expected python filters to be pushed down.
+        """
+
+        class TestDataSourceReader(DataSourceReader):
+            def pushFilters(self, filters: List[Filter]) -> Iterable[Filter]:
+                actual = [f for f in filters if not isinstance(f, IsNotNull)]
+                expected = python_filters
+                assert actual == expected, (actual, expected)
+                return filters
+
+            def read(self, partition):
+                yield from []
+
+        class TestDataSource(DataSource):
+            def schema(self):
+                return f"x {sql_type}"
+
+            def reader(self, schema) -> "DataSourceReader":
+                return TestDataSourceReader()
+
+        with self.sql_conf({"spark.sql.python.filterPushdown.enabled": True}):
+            self.spark.dataSource.register(TestDataSource)
+            df = self.spark.read.format("TestDataSource").load().filter(sql_filter)
+            df.count()
+
+    def test_unsupported_filter(self):
+        self._check_filters(
+            "struct<a:int, b:int, c:int>", "x.a = 1 and x.b = x.c", [EqualTo(("x", "a"), 1)]
+        )
+        self._check_filters("int", "x = 1 or x > 2", [])
+        self._check_filters("int", "(0 < x and x < 1) or x = 2", [])
+        self._check_filters("int", "x % 5 = 1", [])
+        self._check_filters("array<int>", "x[0] = 1", [])
+        self._check_filters("string", "x like 'a%a%'", [])
+        self._check_filters("string", "x ilike 'a'", [])
+        self._check_filters("string", "x = 'a' collate zh", [])
+
+    def test_filter_value_type(self):
+        self._check_filters("int", "x = 1", [EqualTo(("x",), 1)])
+        self._check_filters("int", "x = null", [EqualTo(("x",), None)])
+        self._check_filters("float", "x = 3 / 2", [EqualTo(("x",), 1.5)])
+        self._check_filters("string", "x = '1'", [EqualTo(("x",), "1")])
+        self._check_filters("array<int>", "x = array(1, 2)", [EqualTo(("x",), [1, 2])])
+        self._check_filters(
+            "struct<x:int>", "x = named_struct('x', 1)", [EqualTo(("x",), {"x": 1})]
+        )
+        self._check_filters(
+            "decimal", "x in (1.1, 2.1)", [In(("x",), [Decimal(1.1), Decimal(2.1)])]
+        )
+        self._check_filters(
+            "timestamp_ntz",
+            "x = timestamp_ntz '2020-01-01 00:00:00'",
+            [EqualTo(("x",), datetime.strptime("2020-01-01 00:00:00", "%Y-%m-%d %H:%M:%S"))],
+        )
+        self._check_filters(
+            "interval second",
+            "x = interval '2' second",
+            [],  # intervals are not supported
+        )
+
+    def test_filter_type(self):
+        self._check_filters("boolean", "x", [EqualTo(("x",), True)])
+        self._check_filters("boolean", "not x", [Not(EqualTo(("x",), True))])
+        self._check_filters("int", "x is null", [IsNull(("x",))])
+        self._check_filters("int", "x <> 0", [Not(EqualTo(("x",), 0))])
+        self._check_filters("int", "x <=> 1", [EqualNullSafe(("x",), 1)])
+        self._check_filters("int", "1 < x", [GreaterThan(("x",), 1)])
+        self._check_filters("int", "1 <= x", [GreaterThanOrEqual(("x",), 1)])
+        self._check_filters("int", "x < 1", [LessThan(("x",), 1)])
+        self._check_filters("int", "x <= 1", [LessThanOrEqual(("x",), 1)])
+        self._check_filters("string", "x like 'a%'", [StringStartsWith(("x",), "a")])
+        self._check_filters("string", "x like '%a'", [StringEndsWith(("x",), "a")])
+        self._check_filters("string", "x like '%a%'", [StringContains(("x",), "a")])
+        self._check_filters(
+            "string", "x like 'a%b'", [StringStartsWith(("x",), "a"), StringEndsWith(("x",), "b")]
+        )
+        self._check_filters("int", "x in (1, 2)", [In(("x",), [1, 2])])
+
+    def test_filter_nested_column(self):
+        self._check_filters("struct<y:int>", "x.y = 1", [EqualTo(("x", "y"), 1)])
+
     def _get_test_json_data_source(self):
         import json
         import os
@@ -276,7 +528,7 @@ class BasePythonDataSourceTestsMixin:
                 from pyspark import TaskContext
 
                 context = TaskContext.get()
-                output_path = os.path.join(self.path, f"{context.partitionId}.json")
+                output_path = os.path.join(self.path, f"{context.partitionId()}.json")
                 count = 0
                 with open(output_path, "w") as file:
                     for row in iterator:
@@ -372,6 +624,641 @@ class BasePythonDataSourceTestsMixin:
         d2 = d.copy()
         self.assertEqual(d2["BaR"], 3)
         self.assertEqual(d2["baz"], 3)
+
+    def test_arrow_batch_data_source(self):
+        import pyarrow as pa
+
+        class ArrowBatchDataSource(DataSource):
+            """
+            A data source for testing Arrow Batch Serialization
+            """
+
+            @classmethod
+            def name(cls):
+                return "arrowbatch"
+
+            def schema(self):
+                return "key int, value string"
+
+            def reader(self, schema: str):
+                return ArrowBatchDataSourceReader(schema, self.options)
+
+        class ArrowBatchDataSourceReader(DataSourceReader):
+            def __init__(self, schema, options):
+                self.schema: str = schema
+                self.options = options
+
+            def read(self, partition):
+                # Create Arrow Record Batch
+                keys = pa.array([1, 2, 3, 4, 5], type=pa.int32())
+                values = pa.array(["one", "two", "three", "four", "five"], type=pa.string())
+                schema = pa.schema([("key", pa.int32()), ("value", pa.string())])
+                record_batch = pa.RecordBatch.from_arrays([keys, values], schema=schema)
+                yield record_batch
+
+            def partitions(self):
+                # hardcoded number of partitions
+                num_part = 1
+                return [InputPartition(i) for i in range(num_part)]
+
+        self.spark.dataSource.register(ArrowBatchDataSource)
+        df = self.spark.read.format("arrowbatch").load()
+        expected_data = [
+            Row(key=1, value="one"),
+            Row(key=2, value="two"),
+            Row(key=3, value="three"),
+            Row(key=4, value="four"),
+            Row(key=5, value="five"),
+        ]
+        assertDataFrameEqual(df, expected_data)
+
+        with self.assertRaisesRegex(
+            PythonException,
+            "PySparkRuntimeError: \\[DATA_SOURCE_RETURN_SCHEMA_MISMATCH\\] Return schema"
+            " mismatch in the result from 'read' method\\. Expected: 1 columns, Found: 2 columns",
+        ):
+            self.spark.read.format("arrowbatch").schema("dummy int").load().show()
+
+        with self.assertRaisesRegex(
+            PythonException,
+            "PySparkRuntimeError: \\[DATA_SOURCE_RETURN_SCHEMA_MISMATCH\\] Return schema mismatch"
+            " in the result from 'read' method\\. Expected: \\['key', 'dummy'\\] columns, Found:"
+            " \\['key', 'value'\\] columns",
+        ):
+            self.spark.read.format("arrowbatch").schema("key int, dummy string").load().show()
+
+    def test_arrow_batch_sink(self):
+        class TestDataSource(DataSource):
+            @classmethod
+            def name(cls):
+                return "arrow_sink"
+
+            def writer(self, schema, overwrite):
+                return TestArrowWriter(self.options["path"])
+
+        class TestArrowWriter(DataSourceArrowWriter):
+            def __init__(self, path):
+                self.path = path
+
+            def write(self, iterator):
+                from pyspark import TaskContext
+
+                context = TaskContext.get()
+                output_path = os.path.join(self.path, f"{context.partitionId()}.json")
+                with open(output_path, "w") as file:
+                    for batch in iterator:
+                        df = batch.to_pandas()
+                        df.to_json(file, orient="records", lines=True)
+                return WriterCommitMessage()
+
+        self.spark.dataSource.register(TestDataSource)
+        df = self.spark.range(3)
+        with tempfile.TemporaryDirectory(prefix="test_arrow_batch_sink") as d:
+            df.write.format("arrow_sink").mode("append").save(d)
+            df2 = self.spark.read.format("json").load(d)
+            assertDataFrameEqual(df2, df)
+
+    def test_data_source_type_mismatch(self):
+        class TestDataSource(DataSource):
+            @classmethod
+            def name(cls):
+                return "test"
+
+            def schema(self):
+                return "id int"
+
+            def reader(self, schema):
+                return TestReader()
+
+            def writer(self, schema, overwrite):
+                return TestWriter()
+
+        class TestReader:
+            def partitions(self):
+                return []
+
+            def read(self, partition):
+                yield (0,)
+
+        class TestWriter:
+            def write(self, iterator):
+                return WriterCommitMessage()
+
+        self.spark.dataSource.register(TestDataSource)
+
+        with self.assertRaisesRegex(
+            AnalysisException,
+            r"\[DATA_SOURCE_TYPE_MISMATCH\] Expected an instance of DataSourceReader",
+        ):
+            self.spark.read.format("test").load().show()
+
+        df = self.spark.range(10)
+        with self.assertRaisesRegex(
+            AnalysisException,
+            r"\[DATA_SOURCE_TYPE_MISMATCH\] Expected an instance of DataSourceWriter",
+        ):
+            df.write.format("test").mode("append").saveAsTable("test_table")
+
+    def test_decimal_round(self):
+        class SimpleDataSource(DataSource):
+            @classmethod
+            def name(cls) -> str:
+                return "simple_decimal"
+
+            def schema(self) -> StructType:
+                return StructType(
+                    [
+                        StructField("i", IntegerType()),
+                        StructField("d", DecimalType(38, 18)),
+                    ]
+                )
+
+            def reader(self, schema: StructType) -> DataSourceReader:
+                return SimpleDataSourceReader()
+
+        class SimpleDataSourceReader(DataSourceReader):
+            def read(self, partition: InputPartition) -> Iterator[Tuple]:
+                yield (1, Decimal(1.234))
+
+        self.spark.dataSource.register(SimpleDataSource)
+        df = self.spark.read.format("simple_decimal").load()
+
+        rounded = df.select("d").first().d
+        self.assertEqual(rounded, Decimal("1.233999999999999986"))
+
+    @unittest.skipIf(
+        "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
+    )
+    def test_data_source_segfault(self):
+        import ctypes
+
+        for enabled, expected in [
+            (True, "Segmentation fault"),
+            (False, "Consider setting .* for the better Python traceback."),
+        ]:
+            with self.subTest(enabled=enabled), self.sql_conf(
+                {"spark.sql.execution.pyspark.udf.faulthandler.enabled": enabled}
+            ):
+                with self.subTest(worker="pyspark.sql.worker.create_data_source"):
+
+                    class TestDataSource(DataSource):
+                        @classmethod
+                        def name(cls):
+                            return "test"
+
+                        def schema(self):
+                            return ctypes.string_at(0)
+
+                    self.spark.dataSource.register(TestDataSource)
+
+                    with self.assertRaisesRegex(Exception, expected):
+                        self.spark.read.format("test").load().show()
+
+                with self.subTest(worker="pyspark.sql.worker.plan_data_source_read"):
+
+                    class TestDataSource(DataSource):
+                        @classmethod
+                        def name(cls):
+                            return "test"
+
+                        def schema(self):
+                            return "x string"
+
+                        def reader(self, schema):
+                            return TestReader()
+
+                    class TestReader(DataSourceReader):
+                        def partitions(self):
+                            ctypes.string_at(0)
+                            return []
+
+                        def read(self, partition):
+                            return []
+
+                    self.spark.dataSource.register(TestDataSource)
+
+                    with self.assertRaisesRegex(Exception, expected):
+                        self.spark.read.format("test").load().show()
+
+                with self.subTest(worker="pyspark.worker"):
+
+                    class TestDataSource(DataSource):
+                        @classmethod
+                        def name(cls):
+                            return "test"
+
+                        def schema(self):
+                            return "x string"
+
+                        def reader(self, schema):
+                            return TestReader2()
+
+                    class TestReader2(DataSourceReader):
+                        def read(self, partition):
+                            ctypes.string_at(0)
+                            yield "x",
+
+                    self.spark.dataSource.register(TestDataSource)
+
+                    with self.assertRaisesRegex(Exception, expected):
+                        self.spark.read.format("test").load().show()
+
+                with self.subTest(worker="pyspark.sql.worker.write_into_data_source"):
+
+                    class TestDataSource(DataSource):
+                        @classmethod
+                        def name(cls):
+                            return "test"
+
+                        def writer(self, schema, overwrite):
+                            return TestWriter()
+
+                    class TestWriter(DataSourceWriter):
+                        def write(self, iterator):
+                            ctypes.string_at(0)
+                            return WriterCommitMessage()
+
+                    self.spark.dataSource.register(TestDataSource)
+
+                    with self.assertRaisesRegex(Exception, expected):
+                        self.spark.range(10).write.format("test").mode("append").saveAsTable(
+                            "test_table"
+                        )
+
+                with self.subTest(worker="pyspark.sql.worker.commit_data_source_write"):
+
+                    class TestDataSource(DataSource):
+                        @classmethod
+                        def name(cls):
+                            return "test"
+
+                        def writer(self, schema, overwrite):
+                            return TestWriter2()
+
+                    class TestWriter2(DataSourceWriter):
+                        def write(self, iterator):
+                            return WriterCommitMessage()
+
+                        def commit(self, messages):
+                            ctypes.string_at(0)
+
+                    self.spark.dataSource.register(TestDataSource)
+
+                    with self.assertRaisesRegex(Exception, expected):
+                        self.spark.range(10).write.format("test").mode("append").saveAsTable(
+                            "test_table"
+                        )
+
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_data_source_reader_with_logging(self):
+        logger = logging.getLogger("test_data_source_reader")
+
+        class TestJsonReader(DataSourceReader):
+            def __init__(self, options):
+                logger.warning(f"TestJsonReader.__init__: {list(options)}")
+                self.options = options
+
+            def partitions(self):
+                logger.warning("TestJsonReader.partitions")
+                return super().partitions()
+
+            def read(self, partition):
+                logger.warning(f"TestJsonReader.read: {partition}")
+                path = self.options.get("path")
+                if path is None:
+                    raise Exception("path is not specified")
+                with open(path, "r") as file:
+                    for line in file.readlines():
+                        if line.strip():
+                            data = json.loads(line)
+                            yield data.get("name"), data.get("age")
+
+        class TestJsonDataSource(DataSource):
+            def __init__(self, options):
+                super().__init__(options)
+                logger.warning(f"TestJsonDataSource.__init__: {list(options)}")
+
+            @classmethod
+            def name(cls):
+                logger.warning("TestJsonDataSource.name")
+                return "my-json"
+
+            def schema(self):
+                logger.warning("TestJsonDataSource.schema")
+                return "name STRING, age INT"
+
+            def reader(self, schema) -> "DataSourceReader":
+                logger.warning(f"TestJsonDataSource.reader: {schema.fieldNames()}")
+                return TestJsonReader(self.options)
+
+        self.spark.dataSource.register(TestJsonDataSource)
+        path1 = os.path.join(SPARK_HOME, "python/test_support/sql/people.json")
+
+        with self.sql_conf({"spark.sql.pyspark.worker.logging.enabled": "true"}):
+            assertDataFrameEqual(
+                self.spark.read.format("my-json").load(path1),
+                [
+                    Row(name="Michael", age=None),
+                    Row(name="Andy", age=30),
+                    Row(name="Justin", age=19),
+                ],
+            )
+
+            logs = self.spark.tvf.python_worker_logs()
+
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg=msg,
+                        context=context,
+                        logger="test_data_source_reader",
+                    )
+                    for msg, context in [
+                        (
+                            "TestJsonDataSource.__init__: ['path']",
+                            {"class_name": "TestJsonDataSource", "func_name": "__init__"},
+                        ),
+                        (
+                            "TestJsonDataSource.name",
+                            {"class_name": "TestJsonDataSource", "func_name": "name"},
+                        ),
+                        (
+                            "TestJsonDataSource.schema",
+                            {"class_name": "TestJsonDataSource", "func_name": "schema"},
+                        ),
+                        (
+                            "TestJsonDataSource.reader: ['name', 'age']",
+                            {"class_name": "TestJsonDataSource", "func_name": "reader"},
+                        ),
+                        (
+                            "TestJsonReader.__init__: ['path']",
+                            {"class_name": "TestJsonDataSource", "func_name": "reader"},
+                        ),
+                        (
+                            "TestJsonReader.partitions",
+                            {"class_name": "TestJsonReader", "func_name": "partitions"},
+                        ),
+                        (
+                            "TestJsonReader.read: None",
+                            {"class_name": "TestJsonReader", "func_name": "read"},
+                        ),
+                    ]
+                ],
+            )
+
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_data_source_reader_pushdown_with_logging(self):
+        logger = logging.getLogger("test_data_source_reader_pushdown")
+
+        class TestJsonReader(DataSourceReader):
+            def __init__(self, options):
+                logger.warning(f"TestJsonReader.__init__: {list(options)}")
+                self.options = options
+
+            def pushFilters(self, filters):
+                logger.warning(f"TestJsonReader.pushFilters: {filters}")
+                return super().pushFilters(filters)
+
+            def partitions(self):
+                logger.warning("TestJsonReader.partitions")
+                return super().partitions()
+
+            def read(self, partition):
+                logger.warning(f"TestJsonReader.read: {partition}")
+                path = self.options.get("path")
+                if path is None:
+                    raise Exception("path is not specified")
+                with open(path, "r") as file:
+                    for line in file.readlines():
+                        if line.strip():
+                            data = json.loads(line)
+                            yield data.get("name"), data.get("age")
+
+        class TestJsonDataSource(DataSource):
+            def __init__(self, options):
+                super().__init__(options)
+                logger.warning(f"TestJsonDataSource.__init__: {list(options)}")
+
+            @classmethod
+            def name(cls):
+                logger.warning("TestJsonDataSource.name")
+                return "my-json"
+
+            def schema(self):
+                logger.warning("TestJsonDataSource.schema")
+                return "name STRING, age INT"
+
+            def reader(self, schema) -> "DataSourceReader":
+                logger.warning(f"TestJsonDataSource.reader: {schema.fieldNames()}")
+                return TestJsonReader(self.options)
+
+        self.spark.dataSource.register(TestJsonDataSource)
+        path1 = os.path.join(SPARK_HOME, "python/test_support/sql/people.json")
+
+        with self.sql_conf(
+            {
+                "spark.sql.python.filterPushdown.enabled": "true",
+                "spark.sql.pyspark.worker.logging.enabled": "true",
+            }
+        ):
+            assertDataFrameEqual(
+                self.spark.read.format("my-json").load(path1).filter("age is not null"),
+                [
+                    Row(name="Andy", age=30),
+                    Row(name="Justin", age=19),
+                ],
+            )
+
+            logs = self.spark.tvf.python_worker_logs()
+
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg=msg,
+                        context=context,
+                        logger="test_data_source_reader_pushdown",
+                    )
+                    for msg, context in [
+                        (
+                            "TestJsonDataSource.__init__: ['path']",
+                            {"class_name": "TestJsonDataSource", "func_name": "__init__"},
+                        ),
+                        (
+                            "TestJsonDataSource.name",
+                            {"class_name": "TestJsonDataSource", "func_name": "name"},
+                        ),
+                        (
+                            "TestJsonDataSource.schema",
+                            {"class_name": "TestJsonDataSource", "func_name": "schema"},
+                        ),
+                        (
+                            "TestJsonDataSource.reader: ['name', 'age']",
+                            {"class_name": "TestJsonDataSource", "func_name": "reader"},
+                        ),
+                        (
+                            "TestJsonReader.pushFilters: [IsNotNull(attribute=('age',))]",
+                            {"class_name": "TestJsonReader", "func_name": "pushFilters"},
+                        ),
+                        (
+                            "TestJsonReader.__init__: ['path']",
+                            {"class_name": "TestJsonDataSource", "func_name": "reader"},
+                        ),
+                        (
+                            "TestJsonReader.partitions",
+                            {"class_name": "TestJsonReader", "func_name": "partitions"},
+                        ),
+                        (
+                            "TestJsonReader.read: None",
+                            {"class_name": "TestJsonReader", "func_name": "read"},
+                        ),
+                    ]
+                ],
+            )
+
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_data_source_writer_with_logging(self):
+        logger = logging.getLogger("test_datasource_writer")
+
+        @dataclass
+        class TestCommitMessage(WriterCommitMessage):
+            count: int
+
+        class TestJsonWriter(DataSourceWriter):
+            def __init__(self, options):
+                logger.warning(f"TestJsonWriter.__init__: {list(options)}")
+                self.options = options
+                self.path = self.options.get("path")
+
+            def write(self, iterator):
+                from pyspark import TaskContext
+
+                if self.options.get("abort", None):
+                    logger.warning("TestJsonWriter.write: abort test")
+                    raise Exception("abort test")
+
+                context = TaskContext.get()
+                output_path = os.path.join(self.path, f"{context.partitionId()}.json")
+                count = 0
+                rows = []
+                with open(output_path, "w") as file:
+                    for row in iterator:
+                        count += 1
+                        rows.append(row.asDict())
+                        file.write(json.dumps(row.asDict()) + "\n")
+
+                logger.warning(f"TestJsonWriter.write: {count}, {rows}")
+
+                return TestCommitMessage(count=count)
+
+            def commit(self, messages):
+                total_count = sum(message.count for message in messages)
+                with open(os.path.join(self.path, "_success.txt"), "w") as file:
+                    file.write(f"count: {total_count}\n")
+
+                logger.warning(f"TestJsonWriter.commit: {total_count}")
+
+            def abort(self, messages):
+                with open(os.path.join(self.path, "_failed.txt"), "w") as file:
+                    file.write("failed")
+
+                logger.warning("TestJsonWriter.abort")
+
+        class TestJsonDataSource(DataSource):
+            @classmethod
+            def name(cls):
+                logger.warning("TestJsonDataSource.name")
+                return "my-json"
+
+            def writer(self, schema, overwrite):
+                logger.warning(f"TestJsonDataSource.writer: {schema.fieldNames(), {overwrite}}")
+                return TestJsonWriter(self.options)
+
+        # Register the data source
+        self.spark.dataSource.register(TestJsonDataSource)
+
+        with tempfile.TemporaryDirectory(prefix="test_datasource_write_logging") as d:
+            with self.sql_conf({"spark.sql.pyspark.worker.logging.enabled": "true"}):
+                # Create a simple DataFrame and write it using our custom datasource
+                df = self.spark.createDataFrame(
+                    [("Charlie", 35), ("Diana", 28)], "name STRING, age INT"
+                ).repartitionByRange(2, "age")
+                df.write.format("my-json").mode("overwrite").save(d)
+
+                # Verify the write worked by checking the success file
+                with open(os.path.join(d, "_success.txt"), "r") as file:
+                    text = file.read()
+                self.assertEqual(text, "count: 2\n")
+
+                with self.assertRaises(Exception, msg="abort test"):
+                    df.write.format("my-json").mode("append").option("abort", "true").save(d)
+
+                logs = self.spark.tvf.python_worker_logs()
+
+                assertDataFrameEqual(
+                    logs.select("level", "msg", "context", "logger"),
+                    [
+                        Row(
+                            level="WARNING",
+                            msg=msg,
+                            context=context,
+                            logger="test_datasource_writer",
+                        )
+                        for msg, context in [
+                            (
+                                "TestJsonDataSource.name",
+                                {"class_name": "TestJsonDataSource", "func_name": "name"},
+                            ),
+                            (
+                                "TestJsonDataSource.writer: (['name', 'age'], {True})",
+                                {"class_name": "TestJsonDataSource", "func_name": "writer"},
+                            ),
+                            (
+                                "TestJsonWriter.__init__: ['path']",
+                                {"class_name": "TestJsonDataSource", "func_name": "writer"},
+                            ),
+                            (
+                                "TestJsonWriter.write: 1, [{'name': 'Diana', 'age': 28}]",
+                                {"class_name": "TestJsonWriter", "func_name": "write"},
+                            ),
+                            (
+                                "TestJsonWriter.write: 1, [{'name': 'Charlie', 'age': 35}]",
+                                {"class_name": "TestJsonWriter", "func_name": "write"},
+                            ),
+                            (
+                                "TestJsonWriter.commit: 2",
+                                {"class_name": "TestJsonWriter", "func_name": "commit"},
+                            ),
+                            (
+                                "TestJsonDataSource.name",
+                                {"class_name": "TestJsonDataSource", "func_name": "name"},
+                            ),
+                            (
+                                "TestJsonDataSource.writer: (['name', 'age'], {False})",
+                                {"class_name": "TestJsonDataSource", "func_name": "writer"},
+                            ),
+                            (
+                                "TestJsonWriter.__init__: ['abort', 'path']",
+                                {"class_name": "TestJsonDataSource", "func_name": "writer"},
+                            ),
+                            (
+                                "TestJsonWriter.write: abort test",
+                                {"class_name": "TestJsonWriter", "func_name": "write"},
+                            ),
+                            (
+                                "TestJsonWriter.write: abort test",
+                                {"class_name": "TestJsonWriter", "func_name": "write"},
+                            ),
+                            (
+                                "TestJsonWriter.abort",
+                                {"class_name": "TestJsonWriter", "func_name": "abort"},
+                            ),
+                        ]
+                    ],
+                )
 
 
 class PythonDataSourceTests(BasePythonDataSourceTestsMixin, ReusedSQLTestCase):

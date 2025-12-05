@@ -21,23 +21,24 @@ import sys
 from typing import (
     overload,
     Any,
+    Callable,
     TYPE_CHECKING,
     Union,
 )
 
+from pyspark.sql.tvf_argument import TableValuedFunctionArgument
 from pyspark.sql.utils import dispatch_col_method
 from pyspark.sql.types import DataType
 from pyspark.errors import PySparkValueError
 
 if TYPE_CHECKING:
-    from py4j.java_gateway import JavaObject
     from pyspark.sql._typing import LiteralType, DecimalLiteral, DateTimeLiteral
     from pyspark.sql.window import WindowSpec
 
 __all__ = ["Column"]
 
 
-class Column:
+class Column(TableValuedFunctionArgument):
 
     """
     A column in a DataFrame.
@@ -71,16 +72,10 @@ class Column:
     # HACK ALERT!! this is to reduce the backward compatibility concern, and returns
     # Spark Classic Column by default. This is NOT an API, and NOT supposed to
     # be directly invoked. DO NOT use this constructor.
-    def __new__(
-        cls,
-        jc: "JavaObject",
-    ) -> "Column":
+    def __new__(cls, *args: Any, **kwargs: Any) -> "Column":
         from pyspark.sql.classic.column import Column
 
-        return Column.__new__(Column, jc)
-
-    def __init__(self, jc: "JavaObject") -> None:
-        self._jc = jc
+        return Column.__new__(Column, *args, **kwargs)
 
     # arithmetic operators
     @dispatch_col_method
@@ -315,8 +310,8 @@ class Column:
     @dispatch_col_method
     def __contains__(self, item: Any) -> None:
         raise PySparkValueError(
-            error_class="CANNOT_APPLY_IN_FOR_COLUMN",
-            message_parameters={},
+            errorClass="CANNOT_APPLY_IN_FOR_COLUMN",
+            messageParameters={},
         )
 
     # bitwise operators
@@ -324,7 +319,7 @@ class Column:
     def bitwiseOR(
         self, other: Union["Column", "LiteralType", "DecimalLiteral", "DateTimeLiteral"]
     ) -> "Column":
-        """ "
+        """
         Compute bitwise OR of this expression with another expression.
 
         .. versionchanged:: 3.4.0
@@ -889,6 +884,9 @@ class Column:
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
 
+        .. versionchanged:: 4.1.0
+            Also takes a single :class:`DataFrame` to be used as IN subquery.
+
         Parameters
         ----------
         cols : Any
@@ -906,7 +904,7 @@ class Column:
 
         Example 1: Filter rows with names in the specified values
 
-        >>> df[df.name.isin("Bob", "Mike")].show()
+        >>> df[df.name.isin("Bob", "Mike")].orderBy("age").show()
         +---+----+
         |age|name|
         +---+----+
@@ -930,6 +928,26 @@ class Column:
         |age|name|
         +---+----+
         |  8|Mike|
+        +---+----+
+
+        Example 4: Take a :class:`DataFrame` and work as IN subquery
+
+        >>> df.where(df.age.isin(spark.range(6))).orderBy("age").show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
+
+        Example 5: Multiple values for IN subquery
+
+        >>> from pyspark.sql.functions import lit, struct
+        >>> df.where(struct(df.age, df.name).isin(spark.range(6).select("id", lit("Bob")))).show()
+        +---+----+
+        |age|name|
+        +---+----+
+        |  5| Bob|
         +---+----+
         """
         ...
@@ -1518,6 +1536,76 @@ class Column:
         |  5|  Bob|   1|  5|
         |  2|Alice|   1|  2|
         +---+-----+----+---+
+        """
+        ...
+
+    @dispatch_col_method
+    def transform(self, f: Callable[["Column"], "Column"]) -> "Column":
+        """
+        Applies a transformation function to this column.
+
+        This method allows you to apply a function that takes a Column and returns a Column,
+        enabling method chaining and functional transformations.
+
+        .. versionadded:: 4.1.0
+
+        Parameters
+        ----------
+        f : callable
+            A function that takes a :class:`Column` and returns a :class:`Column`.
+
+        Returns
+        -------
+        :class:`Column`
+            The result of applying the function to this column.
+
+        Examples
+        --------
+        Example 1: Chain built-in functions
+
+        >>> from pyspark.sql.functions import trim, upper
+        >>> df = spark.createDataFrame([("  hello  ",), ("  world  ",)], ["text"])
+        >>> df.select(df.text.transform(trim).transform(upper).alias("result")).show()
+        +------+
+        |result|
+        +------+
+        | HELLO|
+        | WORLD|
+        +------+
+
+        Example 2: Use lambda functions
+
+        >>> df = spark.createDataFrame([(10,), (20,), (30,)], ["value"])
+        >>> df.select(
+        ...     df.value.transform(lambda c: c + 5)
+        ...     .transform(lambda c: c * 2)
+        ...     .transform(lambda c: c - 10).alias("result")
+        ... ).show()
+        +------+
+        |result|
+        +------+
+        |    20|
+        |    40|
+        |    60|
+        +------+
+        """
+        ...
+
+    @dispatch_col_method
+    def outer(self) -> "Column":
+        """
+        Mark this column as an outer column if its expression refers to columns from an outer query.
+
+        This is used to trigger lazy analysis of Spark Classic DataFrame, so that we can use it
+        to build subquery expressions. Spark Connect DataFrame is always lazily analyzed and
+        does not need to use this function.
+
+        .. versionadded:: 4.0.0
+
+        See Also
+        --------
+        pyspark.sql.dataframe.DataFrame.scalar
+        pyspark.sql.dataframe.DataFrame.exists
         """
         ...
 

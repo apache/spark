@@ -17,11 +17,12 @@
 package org.apache.spark.deploy.k8s.features
 
 import java.io.File
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.util.Base64
 
 import scala.jdk.CollectionConverters._
 
-import com.google.common.base.Charsets
-import com.google.common.io.{BaseEncoding, Files}
 import io.fabric8.kubernetes.api.model.Secret
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -106,7 +107,7 @@ class DriverKubernetesCredentialsFeatureStepSuite extends SparkFunSuite {
     assert(credentialsSecret.getMetadata.getName ===
       s"${kubernetesConf.resourceNamePrefix}-kubernetes-credentials")
     val decodedSecretData = credentialsSecret.getData.asScala.map { data =>
-      (data._1, new String(BaseEncoding.base64().decode(data._2), Charsets.UTF_8))
+      (data._1, new String(Base64.getDecoder().decode(data._2), StandardCharsets.UTF_8))
     }
     val expectedSecretData = Map(
       DRIVER_CREDENTIALS_CA_CERT_SECRET_NAME -> "ca-cert",
@@ -128,7 +129,7 @@ class DriverKubernetesCredentialsFeatureStepSuite extends SparkFunSuite {
 
   private def writeCredentials(credentialsFileName: String, credentialsContents: String): File = {
     val credentialsFile = new File(credentialsTempDirectory, credentialsFileName)
-    Files.write(credentialsContents, credentialsFile, Charsets.UTF_8)
+    Files.writeString(credentialsFile.toPath, credentialsContents)
     credentialsFile
   }
 }

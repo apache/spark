@@ -1,2 +1,0 @@
-Project [map_zip_with(f#0, f#0, lambdafunction((lambda y#0.id + lambda z#0.id), lambda x#0, lambda y#0, lambda z#0, false)) AS map_zip_with(f, f, lambdafunction((namedlambdavariable().id + namedlambdavariable().id), namedlambdavariable(), namedlambdavariable(), namedlambdavariable()))#0]
-+- LocalRelation <empty>, [id#0L, a#0, b#0, d#0, e#0, f#0, g#0]

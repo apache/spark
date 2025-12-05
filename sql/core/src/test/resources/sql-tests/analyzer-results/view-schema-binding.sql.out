@@ -151,9 +151,9 @@ DescribeTableCommand `spark_catalog`.`default`.`v`, true, [col_name#x, data_type
 
 
 -- !query
-SET spark.sql.viewSchemaBindingMode=DISABLED
+SET spark.sql.legacy.viewSchemaCompensation=false
 -- !query analysis
-SetCommand (spark.sql.viewSchemaBindingMode,Some(DISABLED))
+SetCommand (spark.sql.legacy.viewSchemaCompensation,Some(false))
 
 
 -- !query
@@ -172,7 +172,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`t`, false
 -- !query
 CREATE OR REPLACE VIEW v AS SELECT * FROM t
 -- !query analysis
-CreateViewCommand `spark_catalog`.`default`.`v`, SELECT * FROM t, false, true, PersistedView, UNSUPPORTED, true
+CreateViewCommand `spark_catalog`.`default`.`v`, SELECT * FROM t, false, true, PersistedView, BINDING, true
    +- Project [c1#x]
       +- SubqueryAlias spark_catalog.default.t
          +- Relation spark_catalog.default.t[c1#x] parquet
@@ -199,23 +199,7 @@ DescribeTableCommand `spark_catalog`.`default`.`v`, true, [col_name#x, data_type
 -- !query
 ALTER VIEW v WITH SCHEMA BINDING
 -- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "FEATURE_NOT_ENABLED",
-  "sqlState" : "56038",
-  "messageParameters" : {
-    "configKey" : "spark.sql.viewSchemaBindingMode",
-    "configValue" : "COMPENSATION",
-    "featureName" : "VIEW ... WITH SCHEMA ..."
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 14,
-    "stopIndex" : 32,
-    "fragment" : "WITH SCHEMA BINDING"
-  } ]
-}
+AlterViewSchemaBindingCommand `spark_catalog`.`default`.`v`, BINDING
 
 
 -- !query

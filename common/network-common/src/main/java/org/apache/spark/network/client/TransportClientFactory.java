@@ -21,16 +21,15 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.codahale.metrics.MetricSet;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
-import com.google.common.base.Throwables;
-import com.google.common.collect.Lists;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
@@ -42,9 +41,11 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.server.TransportChannelHandler;
 import org.apache.spark.network.util.*;
@@ -77,7 +78,8 @@ public class TransportClientFactory implements Closeable {
     }
   }
 
-  private static final Logger logger = LoggerFactory.getLogger(TransportClientFactory.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(TransportClientFactory.class);
 
   private final TransportContext context;
   private final TransportConf conf;
@@ -97,9 +99,9 @@ public class TransportClientFactory implements Closeable {
   public TransportClientFactory(
       TransportContext context,
       List<TransportClientBootstrap> clientBootstraps) {
-    this.context = Preconditions.checkNotNull(context);
+    this.context = Objects.requireNonNull(context);
     this.conf = context.getConf();
-    this.clientBootstraps = Lists.newArrayList(Preconditions.checkNotNull(clientBootstraps));
+    this.clientBootstraps = new ArrayList<>(Objects.requireNonNull(clientBootstraps));
     this.connectionPool = new ConcurrentHashMap<>();
     this.numConnectionsPerPeer = conf.numConnectionsPerPeer();
     this.rand = new Random();
@@ -169,8 +171,10 @@ public class TransportClientFactory implements Closeable {
       // this code was able to update things.
       TransportChannelHandler handler = cachedClient.getChannel().pipeline()
         .get(TransportChannelHandler.class);
-      synchronized (handler) {
-        handler.getResponseHandler().updateTimeOfLastRequest();
+      if (handler != null) {
+        synchronized (handler) {
+          handler.getResponseHandler().updateTimeOfLastRequest();
+        }
       }
 
       if (cachedClient.isActive()) {
@@ -188,7 +192,9 @@ public class TransportClientFactory implements Closeable {
     final String resolvMsg = resolvedAddress.isUnresolved() ? "failed" : "succeed";
     if (hostResolveTimeMs > 2000) {
       logger.warn("DNS resolution {} for {} took {} ms",
-          resolvMsg, resolvedAddress, hostResolveTimeMs);
+        MDC.of(LogKeys.STATUS, resolvMsg),
+        MDC.of(LogKeys.HOST_PORT, resolvedAddress),
+        MDC.of(LogKeys.TIME, hostResolveTimeMs));
     } else {
       logger.trace("DNS resolution {} for {} took {} ms",
           resolvMsg, resolvedAddress, hostResolveTimeMs);
@@ -202,7 +208,8 @@ public class TransportClientFactory implements Closeable {
           logger.trace("Returning cached connection to {}: {}", resolvedAddress, cachedClient);
           return cachedClient;
         } else {
-          logger.info("Found inactive connection to {}, creating a new one.", resolvedAddress);
+          logger.info("Found inactive connection to {}, creating a new one.",
+            MDC.of(LogKeys.HOST_PORT, resolvedAddress));
         }
       }
       // If this connection should fast fail when last connection failed in last fast fail time
@@ -305,8 +312,8 @@ public class TransportClientFactory implements Closeable {
             if (handshakeFuture.isSuccess()) {
               logger.debug("{} successfully completed TLS handshake to ", address);
             } else {
-              logger.info(
-                "failed to complete TLS handshake to " + address, handshakeFuture.cause());
+              logger.info("failed to complete TLS handshake to {}", handshakeFuture.cause(),
+                MDC.of(LogKeys.HOST_PORT, address));
               cf.channel().close();
             }
           }
@@ -331,14 +338,18 @@ public class TransportClientFactory implements Closeable {
       }
     } catch (Exception e) { // catch non-RuntimeExceptions too as bootstrap may be written in Scala
       long bootstrapTimeMs = (System.nanoTime() - preBootstrap) / 1000000;
-      logger.error("Exception while bootstrapping client after " + bootstrapTimeMs + " ms", e);
+      logger.error("Exception while bootstrapping client after {} ms", e,
+        MDC.of(LogKeys.BOOTSTRAP_TIME, bootstrapTimeMs));
       client.close();
-      throw Throwables.propagate(e);
+      if (e instanceof RuntimeException re) throw re;
+      throw new RuntimeException(e);
     }
     long postBootstrap = System.nanoTime();
 
     logger.info("Successfully created connection to {} after {} ms ({} ms spent in bootstraps)",
-      address, (postBootstrap - preConnect) / 1000000, (postBootstrap - preBootstrap) / 1000000);
+      MDC.of(LogKeys.HOST_PORT, address),
+      MDC.of(LogKeys.ELAPSED_TIME, (postBootstrap - preConnect) / 1000000),
+      MDC.of(LogKeys.BOOTSTRAP_TIME, (postBootstrap - preBootstrap) / 1000000));
 
     return client;
   }

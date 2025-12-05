@@ -19,14 +19,13 @@ package org.apache.spark.util
 
 import java.io._
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util.concurrent.CountDownLatch
 import java.util.zip.GZIPInputStream
 
 import scala.collection.mutable.HashSet
 import scala.reflect._
 
-import com.google.common.io.Files
-import org.apache.commons.io.IOUtils
 import org.apache.logging.log4j._
 import org.apache.logging.log4j.core.{Appender, LogEvent, Logger}
 import org.mockito.ArgumentCaptor
@@ -35,6 +34,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config
+import org.apache.spark.util.Utils
 import org.apache.spark.util.logging.{FileAppender, RollingFileAppender, SizeBasedRollingPolicy, TimeBasedRollingPolicy}
 
 class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter {
@@ -54,11 +54,11 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter {
     val inputStream = new ByteArrayInputStream(testString.getBytes(StandardCharsets.UTF_8))
     // The `header` should not be covered
     val header = "Add header"
-    Files.write(header, testFile, StandardCharsets.UTF_8)
+    Files.writeString(testFile.toPath, header)
     val appender = new FileAppender(inputStream, testFile)
     inputStream.close()
     appender.awaitTermination()
-    assert(Files.toString(testFile, StandardCharsets.UTF_8) === header + testString)
+    assert(Files.readString(testFile.toPath) === header + testString)
   }
 
   test("SPARK-35027: basic file appender - close stream") {
@@ -387,12 +387,12 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter {
       if (file.getName.endsWith(RollingFileAppender.GZIP_LOG_SUFFIX)) {
         val inputStream = new GZIPInputStream(new FileInputStream(file))
         try {
-          IOUtils.toString(inputStream, StandardCharsets.UTF_8)
+          Utils.toString(inputStream)
         } finally {
-          IOUtils.closeQuietly(inputStream)
+          Utils.closeQuietly(inputStream)
         }
       } else {
-        Files.toString(file, StandardCharsets.UTF_8)
+        Files.readString(file.toPath)
       }
     }.mkString("")
     assert(allText === expectedText)

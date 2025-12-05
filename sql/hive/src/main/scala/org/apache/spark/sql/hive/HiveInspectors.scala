@@ -34,6 +34,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.execution.datasources.DaysWritable
 import org.apache.spark.sql.types
 import org.apache.spark.sql.types._
@@ -920,9 +921,22 @@ private[hive] trait HiveInspectors {
       throw SparkException.internalError(s"Hive doesn't support the constant type [$dt].")
     // ideally, we don't test the foldable here(but in optimizer), however, some of the
     // Hive UDF / UDAF requires its argument to be constant objectinspector, we do it eagerly.
-    case _ if expr.foldable => toInspector(Literal.create(expr.eval(), expr.dataType))
+    case _ if expr.foldable && canEarlyEval(expr) =>
+      toInspector(Literal.create(expr.eval(), expr.dataType))
     // For those non constant expression, map to object inspector according to its data type
     case _ => toInspector(expr.dataType)
+  }
+
+  // TODO: hard-coding a list here is not very robust. A better idea is to have some kind of query
+  //       context to pre-evaluate these current datetime values, and evaluating these expressions
+  //       just get the pre-evaluated values from the query context, so that we don't need to wait
+  //       for the rule `FinishAnalysis` to compute the values.
+  private def canEarlyEval(e: Expression): Boolean = e match {
+    case _: CurrentDate => false
+    case _: CurrentTime => false
+    case _: CurrentTimestampLike => false
+    case _: LocalTimestamp => false
+    case _ => e.children.forall(canEarlyEval)
   }
 
   def inspectorToDataType(inspector: ObjectInspector): DataType = inspector match {
@@ -1126,7 +1140,7 @@ private[hive] trait HiveInspectors {
     private def decimalTypeInfo(decimalType: DecimalType): TypeInfo = decimalType match {
       case DecimalType.Fixed(precision, scale) => new DecimalTypeInfo(precision, scale)
       case dt => throw new AnalysisException(
-        errorClass = "_LEGACY_ERROR_TEMP_3094", messageParameters = Map("dt" -> dt.catalogString))
+        errorClass = "_LEGACY_ERROR_TEMP_3094", messageParameters = Map("dt" -> toSQLType(dt)))
     }
 
     def toTypeInfo: TypeInfo = dt match {
@@ -1155,7 +1169,7 @@ private[hive] trait HiveInspectors {
       case _: YearMonthIntervalType => intervalYearMonthTypeInfo
       case dt =>
         throw new AnalysisException(
-          errorClass = "_LEGACY_ERROR_TEMP_3095", messageParameters = Map("dt" -> dt.catalogString))
+          errorClass = "_LEGACY_ERROR_TEMP_3095", messageParameters = Map("dt" -> toSQLType(dt)))
     }
   }
 }

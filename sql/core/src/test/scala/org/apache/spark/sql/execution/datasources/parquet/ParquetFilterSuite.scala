@@ -22,7 +22,7 @@ import java.lang.{Double => JDouble, Float => JFloat, Long => JLong}
 import java.math.{BigDecimal => JBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, LocalDate, LocalDateTime, Period, ZoneId}
+import java.time.{Duration, LocalDate, LocalDateTime, LocalTime, Period, ZoneId}
 import java.util.HashSet
 
 import scala.reflect.ClassTag
@@ -43,9 +43,10 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.InferFiltersFromConstraints
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.parseColumnPath
 import org.apache.spark.sql.execution.ExplainMode
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation, PushableColumnAndNestedColumn}
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelationWithTable, PushableColumnAndNestedColumn}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.functions._
@@ -77,6 +78,7 @@ import org.apache.spark.util.ArrayImplicits._
  * within the test.
  */
 abstract class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSparkSession {
+  import testImplicits.toRichColumn
 
   protected def createParquetFilters(
       schema: MessageType,
@@ -1957,7 +1959,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
           val ex = intercept[SparkException] {
             sql(s"select a from $tableName where b > 0").collect()
           }
-          assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
+          assert(ex.getCondition.startsWith("FAILED_READ_FILE"))
           assert(ex.getCause.isInstanceOf[SparkRuntimeException])
           assert(ex.getCause.getMessage.contains(
             """Found duplicate field(s) "B": [B, b] in case-insensitive mode"""))
@@ -2228,10 +2230,58 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       }
     }
   }
+
+  test("SPARK-51687: filter pushdown - time") {
+    def secs(s: Int): LocalTime = LocalTime.ofSecondOfDay(s)
+    def secsLit(s: Int): Literal = Literal(secs(s))
+    val data = (1 to 4).map(i => Tuple1(secs(i)))
+    withNestedParquetDataFrame(data) { case (inputDF, colName, resultFun) =>
+      implicit val df: DataFrame = inputDF
+
+      val iAttr = df(colName).expr
+      assert(df(colName).expr.dataType === TimeType())
+
+      checkFilterPredicate(iAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
+      checkFilterPredicate(iAttr.isNotNull, classOf[NotEq[_]],
+        (1 to 4).map(i => Row.apply(resultFun(secs(i)))))
+
+      checkFilterPredicate(iAttr === secsLit(1), classOf[Eq[_]], resultFun(secs(1)))
+      checkFilterPredicate(iAttr <=> secsLit(1), classOf[Eq[_]], resultFun(secs(1)))
+      checkFilterPredicate(iAttr =!= secsLit(1), classOf[NotEq[_]],
+        (2 to 4).map(i => Row.apply(resultFun(secs(i)))))
+
+      checkFilterPredicate(iAttr < secsLit(2), classOf[Lt[_]], resultFun(secs(1)))
+      checkFilterPredicate(iAttr > secsLit(3), classOf[Gt[_]], resultFun(secs(4)))
+      checkFilterPredicate(iAttr <= secsLit(1), classOf[LtEq[_]], resultFun(secs(1)))
+      checkFilterPredicate(iAttr >= secsLit(4), classOf[GtEq[_]], resultFun(secs(4)))
+
+      checkFilterPredicate(secsLit(1) === iAttr, classOf[Eq[_]], resultFun(secs(1)))
+      checkFilterPredicate(secsLit(1) <=> iAttr, classOf[Eq[_]], resultFun(secs(1)))
+      checkFilterPredicate(secsLit(2) > iAttr, classOf[Lt[_]], resultFun(secs(1)))
+      checkFilterPredicate(secsLit(3) < iAttr, classOf[Gt[_]], resultFun(secs(4)))
+      checkFilterPredicate(secsLit(1) >= iAttr, classOf[LtEq[_]], resultFun(secs(1)))
+      checkFilterPredicate(secsLit(4) <= iAttr, classOf[GtEq[_]], resultFun(secs(4)))
+
+      checkFilterPredicate(!(iAttr < secsLit(4)), classOf[GtEq[_]], resultFun(secs(4)))
+      checkFilterPredicate(iAttr < secsLit(2) || iAttr > secsLit(3), classOf[Operators.Or],
+        Seq(Row(resultFun(secs(1))), Row(resultFun(secs(4)))))
+
+      Seq(3, 20).foreach { threshold =>
+        withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+          checkFilterPredicate(
+            In(iAttr, Array(2, 3, 4, 5, 6, 7).map(secsLit).toImmutableArraySeq),
+            if (threshold == 3) classOf[FilterIn[_]] else classOf[Operators.Or],
+            Seq(Row(resultFun(secs(2))), Row(resultFun(secs(3))), Row(resultFun(secs(4)))))
+        }
+      }
+    }
+  }
 }
 
 @ExtendedSQLTest
 class ParquetV1FilterSuite extends ParquetFilterSuite {
+  import testImplicits.ColumnConstructorExt
+
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
@@ -2276,7 +2326,7 @@ class ParquetV1FilterSuite extends ParquetFilterSuite {
         var maybeRelation: Option[HadoopFsRelation] = None
         val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
           case PhysicalOperation(_, filters,
-          LogicalRelation(relation: HadoopFsRelation, _, _, _)) =>
+            LogicalRelationWithTable(relation: HadoopFsRelation, _)) =>
             maybeRelation = Some(relation)
             filters
         }.flatten.reduceLeftOption(_ && _)
@@ -2312,6 +2362,8 @@ class ParquetV1FilterSuite extends ParquetFilterSuite {
 
 @ExtendedSQLTest
 class ParquetV2FilterSuite extends ParquetFilterSuite {
+  import testImplicits.ColumnConstructorExt
+
   // TODO: enable Parquet V2 write path after file source V2 writers are workable.
   override protected def sparkConf: SparkConf =
     super

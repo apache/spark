@@ -19,8 +19,8 @@ package org.apache.hive.service;
 
 import org.apache.hadoop.hive.conf.HiveConf;
 
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 
@@ -29,7 +29,7 @@ import org.apache.spark.internal.MDC;
  *
  */
 public final class ServiceOperations {
-  private static final Logger LOG = LoggerFactory.getLogger(ServiceOperations.class);
+  private static final SparkLogger LOG = SparkLoggerFactory.getLogger(ServiceOperations.class);
 
   private ServiceOperations() {
   }
@@ -133,7 +133,7 @@ public final class ServiceOperations {
       stop(service);
     } catch (Exception e) {
       LOG.warn("When stopping the service {}", e,
-        MDC.of(LogKeys.SERVICE_NAME$.MODULE$, service.getName()));
+        MDC.of(LogKeys.SERVICE_NAME, service.getName()));
       return e;
     }
     return null;

@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import os
 import sys
 import decimal
 import time
@@ -45,9 +46,14 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from pyspark.util import is_remote_only
+from pyspark.util import is_remote_only, JVM_INT_MAX
 from pyspark.serializers import CloudPickleSerializer
-from pyspark.sql.utils import has_numpy, get_active_spark_context
+from pyspark.sql.utils import (
+    get_active_spark_context,
+    escape_meta_characters,
+    IllegalArgumentException,
+    StringConcat,
+)
 from pyspark.sql.variant_utils import VariantUtils
 from pyspark.errors import (
     PySparkNotImplementedError,
@@ -58,9 +64,10 @@ from pyspark.errors import (
     PySparkAttributeError,
     PySparkKeyError,
 )
-
-if has_numpy:
-    import numpy as np
+from pyspark.sql.geo_utils import (
+    GeographicSpatialReferenceSystemMapper as _GeographicSRSMapper,
+    CartesianSpatialReferenceSystemMapper as _CartesianSRSMapper,
+)
 
 if TYPE_CHECKING:
     import numpy as np
@@ -78,10 +85,13 @@ __all__ = [
     "BinaryType",
     "BooleanType",
     "DateType",
+    "TimeType",
     "TimestampType",
     "TimestampNTZType",
     "DecimalType",
     "DoubleType",
+    "Geography",
+    "Geometry",
     "FloatType",
     "ByteType",
     "IntegerType",
@@ -97,6 +107,8 @@ __all__ = [
     "StructType",
     "VariantType",
     "VariantVal",
+    "GeographyType",
+    "GeometryType",
 ]
 
 
@@ -188,16 +200,37 @@ class DataType:
         >>> DataType.fromDDL("b: string, a: int")
         StructType([StructField('b', StringType(), True), StructField('a', IntegerType(), True)])
         """
-        from pyspark.sql import SparkSession
-        from pyspark.sql.functions import udf
+        return _parse_datatype_string(ddl)
 
-        # Intentionally uses SparkSession so one implementation can be shared with/without
-        # Spark Connect.
-        schema = (
-            SparkSession.active().range(0).select(udf(lambda x: x, returnType=ddl)("id")).schema
-        )
-        assert len(schema) == 1
-        return schema[0].dataType
+    @classmethod
+    def _data_type_build_formatted_string(
+        cls,
+        dataType: "DataType",
+        prefix: str,
+        stringConcat: StringConcat,
+        maxDepth: int,
+    ) -> None:
+        if isinstance(dataType, (ArrayType, StructType, MapType)):
+            dataType._build_formatted_string(prefix, stringConcat, maxDepth - 1)
+
+    # The method typeName() is not always the same as the Scala side.
+    # Add this helper method to make TreeString() compatible with Scala side.
+    @classmethod
+    def _get_jvm_type_name(cls, dataType: "DataType") -> str:
+        if isinstance(
+            dataType,
+            (
+                DecimalType,
+                CharType,
+                VarcharType,
+                DayTimeIntervalType,
+                YearMonthIntervalType,
+                TimeType,
+            ),
+        ):
+            return dataType.simpleString()
+        else:
+            return dataType.typeName()
 
 
 # This singleton pattern does not work with pickle, you will get
@@ -254,37 +287,36 @@ class StringType(AtomicType):
         name of the collation, default is UTF8_BINARY.
     """
 
-    collationNames = ["UTF8_BINARY", "UTF8_BINARY_LCASE", "UNICODE", "UNICODE_CI"]
+    providerSpark = "spark"
+    providerICU = "icu"
+    providers = [providerSpark, providerICU]
 
-    def __init__(self, collation: Optional[str] = None):
-        self.collationId = 0 if collation is None else self.collationNameToId(collation)
-
-    @classmethod
-    def fromCollationId(self, collationId: int) -> "StringType":
-        return StringType(StringType.collationNames[collationId])
-
-    def collationIdToName(self) -> str:
-        if self.collationId == 0:
-            return ""
-        else:
-            return " collate %s" % StringType.collationNames[self.collationId]
+    def __init__(self, collation: str = "UTF8_BINARY"):
+        self.collation = collation
 
     @classmethod
-    def collationNameToId(cls, collationName: str) -> int:
-        return StringType.collationNames.index(collationName)
+    def collationProvider(cls, collationName: str) -> str:
+        # TODO: do this properly like on the scala side
+        if collationName.startswith("UTF8"):
+            return StringType.providerSpark
+        return StringType.providerICU
 
     def simpleString(self) -> str:
-        return "string" + self.collationIdToName()
+        if self.isUTF8BinaryCollation():
+            return "string"
+
+        return f"string collate {self.collation}"
 
     def jsonValue(self) -> str:
-        return "string" + self.collationIdToName()
+        return self.simpleString()
 
     def __repr__(self) -> str:
         return (
-            "StringType('%s')" % StringType.collationNames[self.collationId]
-            if self.collationId != 0
-            else "StringType()"
+            "StringType()" if self.isUTF8BinaryCollation() else "StringType('%s')" % self.collation
         )
+
+    def isUTF8BinaryCollation(self) -> bool:
+        return self.collation == "UTF8_BINARY"
 
 
 class CharType(AtomicType):
@@ -343,7 +375,11 @@ class BooleanType(AtomicType, metaclass=DataTypeSingleton):
     pass
 
 
-class DateType(AtomicType, metaclass=DataTypeSingleton):
+class DatetimeType(AtomicType):
+    """Super class of all datetime data type."""
+
+
+class DateType(DatetimeType, metaclass=DataTypeSingleton):
     """Date (datetime.date) data type."""
 
     EPOCH_ORDINAL = datetime.datetime(1970, 1, 1).toordinal()
@@ -360,8 +396,56 @@ class DateType(AtomicType, metaclass=DataTypeSingleton):
             return datetime.date.fromordinal(v + self.EPOCH_ORDINAL)
 
 
-class TimestampType(AtomicType, metaclass=DataTypeSingleton):
+class AnyTimeType(DatetimeType):
+    """A TIME type of any valid precision."""
+
+    pass
+
+
+class TimeType(AnyTimeType):
+    """Time (datetime.time) data type."""
+
+    def __init__(self, precision: int = 6):
+        self.precision = precision
+
+    def needConversion(self) -> bool:
+        return True
+
+    def toInternal(self, t: datetime.time) -> int:
+        if t is not None:
+            return (
+                t.hour * 3_600_000_000_000
+                + t.minute * 60_000_000_000
+                + t.second * 1_000_000_000
+                + t.microsecond * 1_000
+            )
+
+    def fromInternal(self, nano: int) -> datetime.time:
+        if nano is not None:
+            hours, remainder = divmod(nano, 3_600_000_000_000)
+            minutes, remainder = divmod(remainder, 60_000_000_000)
+            seconds, remainder = divmod(remainder, 1_000_000_000)
+            microseconds = remainder // 1_000
+            return datetime.time(hours, minutes, seconds, microseconds)
+
+    def simpleString(self) -> str:
+        return "time(%d)" % (self.precision)
+
+    def jsonValue(self) -> str:
+        return "time(%d)" % (self.precision)
+
+    def __repr__(self) -> str:
+        return "TimeType(%d)" % (self.precision)
+
+
+class TimestampType(DatetimeType, metaclass=DataTypeSingleton):
     """Timestamp (datetime.datetime) data type."""
+
+    # We need to cache the timezone info for datetime.datetime.fromtimestamp
+    # otherwise the forked process will be extremely slow to convert the timestamp.
+    # This is probably a glibc issue - the forked process will have a bad cache/lock
+    # status for the timezone info.
+    tz_info = None
 
     def needConversion(self) -> bool:
         return True
@@ -376,10 +460,15 @@ class TimestampType(AtomicType, metaclass=DataTypeSingleton):
     def fromInternal(self, ts: int) -> datetime.datetime:
         if ts is not None:
             # using int to avoid precision loss in float
-            return datetime.datetime.fromtimestamp(ts // 1000000).replace(microsecond=ts % 1000000)
+            # If TimestampType.tz_info is not None, we need to use it to convert the timestamp.
+            # Otherwise, we need to use the default timezone.
+            # We need to replace the tzinfo to None to keep backward compatibility
+            return datetime.datetime.fromtimestamp(ts // 1000000, self.tz_info).replace(
+                microsecond=ts % 1000000, tzinfo=None
+            )
 
 
-class TimestampNTZType(AtomicType, metaclass=DataTypeSingleton):
+class TimestampNTZType(DatetimeType, metaclass=DataTypeSingleton):
     """Timestamp (datetime.datetime) data type without timezone information."""
 
     def needConversion(self) -> bool:
@@ -397,8 +486,8 @@ class TimestampNTZType(AtomicType, metaclass=DataTypeSingleton):
     def fromInternal(self, ts: int) -> datetime.datetime:
         if ts is not None:
             # using int to avoid precision loss in float
-            return datetime.datetime.utcfromtimestamp(ts // 1000000).replace(
-                microsecond=ts % 1000000
+            return datetime.datetime.fromtimestamp(ts // 1000000, datetime.timezone.utc).replace(
+                microsecond=ts % 1000000, tzinfo=None
             )
 
 
@@ -447,6 +536,210 @@ class FloatType(FractionalType, metaclass=DataTypeSingleton):
     """Float data type, representing single precision floats."""
 
     pass
+
+
+class SpatialType(AtomicType):
+    """Super class of all spatial data types: GeographyType and GeometryType."""
+
+    # Mixed SRID value and the corresponding CRS for geospatial types (Geometry and Geography).
+    # These values represent a geospatial type that can hold different SRID values per row.
+    MIXED_SRID = -1
+    MIXED_CRS = "SRID:ANY"
+
+
+class GeographyType(SpatialType):
+    """
+    The data type representing GEOGRAPHY values which are spatial objects, as defined in the Open
+    Geospatial Consortium (OGC) Simple Feature Access specification
+    (https://portal.ogc.org/files/?artifact_id=25355), with a geographic coordinate system.
+
+    .. versionadded:: 4.1.0
+    """
+
+    # The default coordinate reference system (CRS) value and the default edge interpolation
+    # algorithm used for geographies, as specified by the Parquet, Delta, and Iceberg
+    # specifications. If CRS or algorithm values are omitted, they should default to these.
+    DEFAULT_CRS = "OGC:CRS84"
+    DEFAULT_ALG = "SPHERICAL"
+    DEFAULT_SRID = 4326
+
+    def __init__(self, srid: int | str):
+        # Special string value "ANY" is used to represent the mixed SRID GEOGRAPHY type.
+        if srid == "ANY":
+            self.srid = GeographyType.MIXED_SRID
+            self._crs = GeographyType.MIXED_CRS
+        # Otherwise, the parameterized GEOGRAPHY type requires a valid integer SRID value.
+        elif not isinstance(srid, int) or (crs := _GeographicSRSMapper.get_string_id(srid)) is None:
+            raise IllegalArgumentException(
+                errorClass="ST_INVALID_SRID_VALUE",
+                messageParameters={
+                    "srid": str(srid),
+                },
+            )
+        else:
+            self.srid = srid
+            self._crs = crs
+        self._alg = GeographyType.DEFAULT_ALG
+
+    @classmethod
+    def _from_crs(cls, crs: str, alg: str) -> "GeographyType":
+        # Algorithm value must be validated, although only SPHERICAL is supported currently.
+        if alg != cls.DEFAULT_ALG:
+            raise IllegalArgumentException(
+                errorClass="ST_INVALID_ALGORITHM_VALUE",
+                messageParameters={
+                    "alg": str(alg),
+                },
+            )
+        # Special CRS value "SRID:ANY" is used to represent the mixed SRID GEOGRAPHY type.
+        # Note: unlike the actual CRS values, the special "SRID:ANY" value is case-insensitive.
+        if crs.lower() == cls.MIXED_CRS.lower():
+            return GeographyType("ANY")
+        # Otherwise, JSON parsing for the GEOGRAPHY type requires a valid CRS value.
+        srid = _GeographicSRSMapper.get_srid(crs)
+        if srid is None:
+            raise IllegalArgumentException(
+                errorClass="ST_INVALID_CRS_VALUE",
+                messageParameters={
+                    "crs": str(crs),
+                },
+            )
+        geography = GeographyType(srid)
+        geography._crs = crs
+        geography._alg = alg
+        return geography
+
+    def simpleString(self) -> str:
+        if self.srid == GeographyType.MIXED_SRID:
+            # The mixed SRID type is displayed with a special string value "ANY".
+            return "geography(any)"
+        else:
+            # The fixed SRID type is displayed with the appropriate SRID value.
+            return f"geography({self.srid})"
+
+    def __repr__(self) -> str:
+        if self.srid == GeographyType.MIXED_SRID:
+            # The mixed SRID type is displayed with a special string value "ANY".
+            return "GeographyType(ANY)"
+        else:
+            # The fixed SRID type is displayed with the appropriate SRID value.
+            return f"GeographyType({self.srid})"
+
+    def jsonValue(self) -> Union[str, Dict[str, Any]]:
+        # The JSON representation always uses the CRS and algorithm value.
+        return f"geography({self._crs}, {self._alg})"
+
+    def needConversion(self) -> bool:
+        return True
+
+    def fromInternal(self, obj: Dict) -> Optional["Geography"]:
+        if obj is None or not all(key in obj for key in ["srid", "bytes"]):
+            return None
+        return Geography(obj["bytes"], obj["srid"])
+
+    def toInternal(self, geography: Any) -> Any:
+        if geography is None:
+            return None
+        assert isinstance(geography, Geography)
+        return {"srid": geography.srid, "wkb": geography.wkb}
+
+
+class GeometryType(SpatialType):
+    """
+    The data type representing GEOMETRY values which are spatial objects, as defined in the Open
+    Geospatial Consortium (OGC) Simple Feature Access specification
+    (https://portal.ogc.org/files/?artifact_id=25355), with a Cartesian coordinate system.
+
+    Parameters
+    ----------
+    srid : int or str
+        The Spatial Reference System Identifier (SRID) value for the GEOMETRY.
+
+    .. versionadded:: 4.1.0
+    """
+
+    # The default coordinate reference system (CRS) value used for geometries, as specified by the
+    # Parquet, Delta, and Iceberg specifications. If CRS is omitted, it should default to this.
+    DEFAULT_CRS = "OGC:CRS84"
+    DEFAULT_SRID = 4326
+
+    """ The constructor for the GEOMETRY type can accept either a single valid geometric integer
+    SRID value, or a special string value "ANY" used to represent a mixed SRID GEOMETRY type."""
+
+    def __init__(self, srid: int | str):
+        # Special string value "ANY" is used to represent the mixed SRID GEOMETRY type.
+        if srid == "ANY":
+            self.srid = GeometryType.MIXED_SRID
+            self._crs = GeometryType.MIXED_CRS
+        # Otherwise, the parameterized GEOMETRY type requires a valid integer SRID value.
+        elif not isinstance(srid, int) or (crs := _CartesianSRSMapper.get_string_id(srid)) is None:
+            raise IllegalArgumentException(
+                errorClass="ST_INVALID_SRID_VALUE",
+                messageParameters={
+                    "srid": str(srid),
+                },
+            )
+        # If the SRID is valid, initialize the GEOMETRY type with the corresponding CRS value.
+        else:
+            self.srid = srid
+            self._crs = crs
+
+    """ JSON parsing logic for the GEOMETRY type relies on the CRS value, instead of the SRID.
+    The method can accept either a single valid geometric string CRS value, or a special case
+    insensitive string value "SRID:ANY" used to represent a mixed SRID GEOMETRY type."""
+
+    @classmethod
+    def _from_crs(cls, crs: str) -> "GeometryType":
+        # Special CRS value "SRID:ANY" is used to represent the mixed SRID GEOMETRY type.
+        # Note: unlike the actual CRS values, the special "SRID:ANY" value is case-insensitive.
+        if crs.lower() == cls.MIXED_CRS.lower():
+            return GeometryType("ANY")
+        # Otherwise, JSON parsing for the GEOMETRY type requires a valid CRS value.
+        srid = _CartesianSRSMapper.get_srid(crs)
+        if srid is None:
+            raise IllegalArgumentException(
+                errorClass="ST_INVALID_CRS_VALUE",
+                messageParameters={
+                    "crs": str(crs),
+                },
+            )
+        geometry = GeometryType(srid)
+        geometry._crs = crs
+        return geometry
+
+    def simpleString(self) -> str:
+        if self.srid == GeometryType.MIXED_SRID:
+            # The mixed SRID type is displayed with a special string value "ANY".
+            return "geometry(any)"
+        else:
+            # The fixed SRID type is displayed with the appropriate SRID value.
+            return f"geometry({self.srid})"
+
+    def __repr__(self) -> str:
+        if self.srid == GeometryType.MIXED_SRID:
+            # The mixed SRID type is displayed with a special string value "ANY".
+            return "GeometryType(ANY)"
+        else:
+            # The fixed SRID type is displayed with the appropriate SRID value.
+            return f"GeometryType({self.srid})"
+
+    def jsonValue(self) -> Union[str, Dict[str, Any]]:
+        # The JSON representation always uses the CRS value.
+        return f"geometry({self._crs})"
+
+    def needConversion(self) -> bool:
+        return True
+
+    def fromInternal(self, obj: Dict) -> Optional["Geometry"]:
+        if obj is None or not all(key in obj for key in ["srid", "bytes"]):
+            return None
+        return Geometry(obj["bytes"], obj["srid"])
+
+    def toInternal(self, geometry: Any) -> Any:
+        if geometry is None:
+            return None
+        assert isinstance(geometry, Geometry)
+        return {"srid": geometry.srid, "wkb": geometry.wkb}
 
 
 class ByteType(IntegralType):
@@ -515,8 +808,8 @@ class DayTimeIntervalType(AnsiIntervalType):
         fields = DayTimeIntervalType._fields
         if startField not in fields.keys() or endField not in fields.keys():
             raise PySparkRuntimeError(
-                error_class="INVALID_INTERVAL_CASTING",
-                message_parameters={"start_field": str(startField), "end_field": str(endField)},
+                errorClass="INVALID_INTERVAL_CASTING",
+                messageParameters={"start_field": str(startField), "end_field": str(endField)},
             )
         self.startField = startField
         self.endField = endField
@@ -550,7 +843,12 @@ class DayTimeIntervalType(AnsiIntervalType):
 
 
 class YearMonthIntervalType(AnsiIntervalType):
-    """YearMonthIntervalType, represents year-month intervals of the SQL standard"""
+    """YearMonthIntervalType, represents year-month intervals of the SQL standard
+
+    Notes
+    -----
+    This data type doesn't support collection: df.collect/take/head.
+    """
 
     YEAR = 0
     MONTH = 1
@@ -573,8 +871,8 @@ class YearMonthIntervalType(AnsiIntervalType):
         fields = YearMonthIntervalType._fields
         if startField not in fields.keys() or endField not in fields.keys():
             raise PySparkRuntimeError(
-                error_class="INVALID_INTERVAL_CASTING",
-                message_parameters={"start_field": str(startField), "end_field": str(endField)},
+                errorClass="INVALID_INTERVAL_CASTING",
+                messageParameters={"start_field": str(startField), "end_field": str(endField)},
             )
         self.startField = startField
         self.endField = endField
@@ -592,6 +890,24 @@ class YearMonthIntervalType(AnsiIntervalType):
 
     jsonValue = _str_repr
 
+    def needConversion(self) -> bool:
+        # If PYSPARK_YM_INTERVAL_LEGACY is not set, needConversion is true,
+        # 'df.collect' fails with PySparkNotImplementedError;
+        # otherwise, no conversion is needed, and 'df.collect' returns the internal integers.
+        return not os.environ.get("PYSPARK_YM_INTERVAL_LEGACY") == "1"
+
+    def toInternal(self, obj: Any) -> Any:
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "YearMonthIntervalType.toInternal"},
+        )
+
+    def fromInternal(self, obj: Any) -> Any:
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "YearMonthIntervalType.fromInternal"},
+        )
+
     def __repr__(self) -> str:
         return "%s(%d, %d)" % (type(self).__name__, self.startField, self.endField)
 
@@ -608,6 +924,21 @@ class CalendarIntervalType(DataType, metaclass=DataTypeSingleton):
     @classmethod
     def typeName(cls) -> str:
         return "interval"
+
+    def needConversion(self) -> bool:
+        return True
+
+    def toInternal(self, obj: Any) -> Any:
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "CalendarIntervalType.toInternal"},
+        )
+
+    def fromInternal(self, obj: Any) -> Any:
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "CalendarIntervalType.fromInternal"},
+        )
 
 
 class ArrayType(DataType):
@@ -693,8 +1024,18 @@ class ArrayType(DataType):
         }
 
     @classmethod
-    def fromJson(cls, json: Dict[str, Any]) -> "ArrayType":
-        return ArrayType(_parse_datatype_json_value(json["elementType"]), json["containsNull"])
+    def fromJson(
+        cls,
+        json: Dict[str, Any],
+        fieldPath: str = "",
+        collationsMap: Optional[Dict[str, str]] = None,
+    ) -> "ArrayType":
+        elementType = _parse_datatype_json_value(
+            json["elementType"],
+            "element" if fieldPath == "" else fieldPath + ".element",
+            collationsMap,
+        )
+        return ArrayType(elementType, json["containsNull"])
 
     def needConversion(self) -> bool:
         return self.elementType.needConversion()
@@ -708,6 +1049,21 @@ class ArrayType(DataType):
         if not self.needConversion():
             return obj
         return obj and [self.elementType.fromInternal(v) for v in obj]
+
+    def _build_formatted_string(
+        self,
+        prefix: str,
+        stringConcat: StringConcat,
+        maxDepth: int = JVM_INT_MAX,
+    ) -> None:
+        if maxDepth > 0:
+            stringConcat.append(
+                f"{prefix}-- element: {DataType._get_jvm_type_name(self.elementType)} "
+                + f"(containsNull = {str(self.containsNull).lower()})\n"
+            )
+            DataType._data_type_build_formatted_string(
+                self.elementType, f"{prefix}    |", stringConcat, maxDepth
+            )
 
 
 class MapType(DataType):
@@ -810,10 +1166,21 @@ class MapType(DataType):
         }
 
     @classmethod
-    def fromJson(cls, json: Dict[str, Any]) -> "MapType":
+    def fromJson(
+        cls,
+        json: Dict[str, Any],
+        fieldPath: str = "",
+        collationsMap: Optional[Dict[str, str]] = None,
+    ) -> "MapType":
+        keyType = _parse_datatype_json_value(
+            json["keyType"], "key" if fieldPath == "" else fieldPath + ".key", collationsMap
+        )
+        valueType = _parse_datatype_json_value(
+            json["valueType"], "value" if fieldPath == "" else fieldPath + ".value", collationsMap
+        )
         return MapType(
-            _parse_datatype_json_value(json["keyType"]),
-            _parse_datatype_json_value(json["valueType"]),
+            keyType,
+            valueType,
             json["valueContainsNull"],
         )
 
@@ -833,6 +1200,25 @@ class MapType(DataType):
         return obj and dict(
             (self.keyType.fromInternal(k), self.valueType.fromInternal(v)) for k, v in obj.items()
         )
+
+    def _build_formatted_string(
+        self,
+        prefix: str,
+        stringConcat: StringConcat,
+        maxDepth: int = JVM_INT_MAX,
+    ) -> None:
+        if maxDepth > 0:
+            stringConcat.append(f"{prefix}-- key: {DataType._get_jvm_type_name(self.keyType)}\n")
+            DataType._data_type_build_formatted_string(
+                self.keyType, f"{prefix}    |", stringConcat, maxDepth
+            )
+            stringConcat.append(
+                f"{prefix}-- value: {DataType._get_jvm_type_name(self.valueType)} "
+                + f"(valueContainsNull = {str(self.valueContainsNull).lower()})\n"
+            )
+            DataType._data_type_build_formatted_string(
+                self.valueType, f"{prefix}    |", stringConcat, maxDepth
+            )
 
 
 class StructField(DataType):
@@ -884,21 +1270,116 @@ class StructField(DataType):
         return "StructField('%s', %s, %s)" % (self.name, self.dataType, str(self.nullable))
 
     def jsonValue(self) -> Dict[str, Any]:
+        collationMetadata = self.getCollationMetadata()
+        metadata = (
+            self.metadata
+            if not collationMetadata
+            else {**self.metadata, _COLLATIONS_METADATA_KEY: collationMetadata}
+        )
+
         return {
             "name": self.name,
-            "type": self.dataType.jsonValue(),
+            "type": self._dataTypeJsonValue(collationMetadata),
             "nullable": self.nullable,
-            "metadata": self.metadata,
+            "metadata": metadata,
         }
+
+    def _dataTypeJsonValue(self, collationMetadata: Dict[str, str]) -> Union[str, Dict[str, Any]]:
+        if not collationMetadata:
+            return self.dataType.jsonValue()
+
+        def removeCollations(dt: DataType) -> DataType:
+            # Only recurse into map and array types as any child struct type
+            # will have already been processed.
+            if isinstance(dt, ArrayType):
+                return ArrayType(removeCollations(dt.elementType), dt.containsNull)
+            elif isinstance(dt, MapType):
+                return MapType(
+                    removeCollations(dt.keyType),
+                    removeCollations(dt.valueType),
+                    dt.valueContainsNull,
+                )
+            elif isinstance(dt, StringType):
+                return StringType()
+            elif isinstance(dt, VarcharType):
+                return VarcharType(dt.length)
+            elif isinstance(dt, CharType):
+                return CharType(dt.length)
+            else:
+                return dt
+
+        # As we want to be backwards compatible we should remove all collations information from the
+        # json and only keep that information in the metadata.
+        return removeCollations(self.dataType).jsonValue()
 
     @classmethod
     def fromJson(cls, json: Dict[str, Any]) -> "StructField":
+        metadata = json.get("metadata")
+        collationsMap = {}
+        if metadata and _COLLATIONS_METADATA_KEY in metadata:
+            collationsMap = metadata[_COLLATIONS_METADATA_KEY]
+            for key, value in collationsMap.items():
+                nameParts = value.split(".")
+                assert len(nameParts) == 2
+                provider, name = nameParts[0], nameParts[1]
+                _assert_valid_collation_provider(provider)
+                collationsMap[key] = name
+
+            metadata = {
+                key: value for key, value in metadata.items() if key != _COLLATIONS_METADATA_KEY
+            }
+
         return StructField(
             json["name"],
-            _parse_datatype_json_value(json["type"]),
+            _parse_datatype_json_value(json["type"], json["name"], collationsMap),
             json.get("nullable", True),
-            json.get("metadata"),
+            metadata,
         )
+
+    def getCollationsMap(self, metadata: Dict[str, Any]) -> Dict[str, str]:
+        if not metadata or _COLLATIONS_METADATA_KEY not in metadata:
+            return {}
+
+        collationMetadata: Dict[str, str] = metadata[_COLLATIONS_METADATA_KEY]
+        collationsMap: Dict[str, str] = {}
+
+        for key, value in collationMetadata.items():
+            nameParts = value.split(".")
+            assert len(nameParts) == 2
+            provider, name = nameParts[0], nameParts[1]
+            _assert_valid_collation_provider(provider)
+            collationsMap[key] = name
+
+        return collationsMap
+
+    def getCollationMetadata(self) -> Dict[str, str]:
+        def visitRecursively(dt: DataType, fieldPath: str) -> None:
+            if isinstance(dt, ArrayType):
+                processDataType(dt.elementType, fieldPath + ".element")
+            elif isinstance(dt, MapType):
+                processDataType(dt.keyType, fieldPath + ".key")
+                processDataType(dt.valueType, fieldPath + ".value")
+            elif isinstance(dt, StringType) and self._isCollatedString(dt):
+                collationMetadata[fieldPath] = self.schemaCollationValue(dt)
+
+        def processDataType(dt: DataType, fieldPath: str) -> None:
+            if self._isCollatedString(dt):
+                collationMetadata[fieldPath] = self.schemaCollationValue(dt)
+            else:
+                visitRecursively(dt, fieldPath)
+
+        collationMetadata: Dict[str, str] = {}
+        visitRecursively(self.dataType, self.name)
+        return collationMetadata
+
+    def _isCollatedString(self, dt: DataType) -> bool:
+        return isinstance(dt, StringType) and not dt.isUTF8BinaryCollation()
+
+    def schemaCollationValue(self, dt: DataType) -> str:
+        assert isinstance(dt, StringType)
+        collationName = dt.collation
+        provider = StringType.collationProvider(collationName)
+        return f"{provider}.{collationName}"
 
     def needConversion(self) -> bool:
         return self.dataType.needConversion()
@@ -911,9 +1392,25 @@ class StructField(DataType):
 
     def typeName(self) -> str:  # type: ignore[override]
         raise PySparkTypeError(
-            error_class="INVALID_TYPENAME_CALL",
-            message_parameters={},
+            errorClass="INVALID_TYPENAME_CALL",
+            messageParameters={},
         )
+
+    def _build_formatted_string(
+        self,
+        prefix: str,
+        stringConcat: StringConcat,
+        maxDepth: int = JVM_INT_MAX,
+    ) -> None:
+        if maxDepth > 0:
+            stringConcat.append(
+                f"{prefix}-- {escape_meta_characters(self.name)}: "
+                + f"{DataType._get_jvm_type_name(self.dataType)} "
+                + f"(nullable = {str(self.nullable).lower()})\n"
+            )
+            DataType._data_type_build_formatted_string(
+                self.dataType, f"{prefix}    |", stringConcat, maxDepth
+            )
 
 
 class StructType(DataType):
@@ -1056,8 +1553,8 @@ class StructType(DataType):
         else:
             if isinstance(field, str) and data_type is None:
                 raise PySparkValueError(
-                    error_class="ARGUMENT_REQUIRED",
-                    message_parameters={
+                    errorClass="ARGUMENT_REQUIRED",
+                    messageParameters={
                         "arg_name": "data_type",
                         "condition": "passing name of struct_field to create",
                     },
@@ -1088,23 +1585,21 @@ class StructType(DataType):
             for field in self:
                 if field.name == key:
                     return field
-            raise PySparkKeyError(
-                error_class="KEY_NOT_EXISTS", message_parameters={"key": str(key)}
-            )
+            raise PySparkKeyError(errorClass="KEY_NOT_EXISTS", messageParameters={"key": str(key)})
         elif isinstance(key, int):
             try:
                 return self.fields[key]
             except IndexError:
                 raise PySparkIndexError(
-                    error_class="INDEX_OUT_OF_RANGE",
-                    message_parameters={"arg_name": "StructType", "index": str(key)},
+                    errorClass="INDEX_OUT_OF_RANGE",
+                    messageParameters={"arg_name": "StructType", "index": str(key)},
                 )
         elif isinstance(key, slice):
             return StructType(self.fields[key])
         else:
             raise PySparkTypeError(
-                error_class="NOT_INT_OR_SLICE_OR_STR",
-                message_parameters={"arg_name": "key", "arg_type": type(key).__name__},
+                errorClass="NOT_INT_OR_SLICE_OR_STR",
+                messageParameters={"arg_name": "key", "arg_type": type(key).__name__},
             )
 
     def simpleString(self) -> str:
@@ -1280,6 +1775,9 @@ class StructType(DataType):
         if obj is None:
             return
 
+        if isinstance(obj, VariantVal):
+            raise PySparkValueError("Rows cannot be of type VariantVal")
+
         if self._needSerializeAnyField:
             # Only calling toInternal function for fields that need conversion
             if isinstance(obj, dict):
@@ -1300,8 +1798,8 @@ class StructType(DataType):
                 )
             else:
                 raise PySparkValueError(
-                    error_class="UNEXPECTED_TUPLE_WITH_STRUCT",
-                    message_parameters={"tuple": str(obj)},
+                    errorClass="UNEXPECTED_TUPLE_WITH_STRUCT",
+                    messageParameters={"tuple": str(obj)},
                 )
         else:
             if isinstance(obj, dict):
@@ -1313,8 +1811,8 @@ class StructType(DataType):
                 return tuple(d.get(n) for n in self.names)
             else:
                 raise PySparkValueError(
-                    error_class="UNEXPECTED_TUPLE_WITH_STRUCT",
-                    message_parameters={"tuple": str(obj)},
+                    errorClass="UNEXPECTED_TUPLE_WITH_STRUCT",
+                    messageParameters={"tuple": str(obj)},
                 )
 
     def fromInternal(self, obj: Tuple) -> "Row":
@@ -1335,6 +1833,36 @@ class StructType(DataType):
             values = obj
         return _create_row(self.names, values)
 
+    def _build_formatted_string(
+        self,
+        prefix: str,
+        stringConcat: StringConcat,
+        maxDepth: int = JVM_INT_MAX,
+    ) -> None:
+        for field in self.fields:
+            field._build_formatted_string(prefix, stringConcat, maxDepth)
+
+    def treeString(self, maxDepth: int = JVM_INT_MAX) -> str:
+        stringConcat = StringConcat()
+        stringConcat.append("root\n")
+        prefix = " |"
+        depth = maxDepth if maxDepth > 0 else JVM_INT_MAX
+        for field in self.fields:
+            field._build_formatted_string(prefix, stringConcat, depth)
+        return stringConcat.toString()
+
+    def toDDL(self) -> str:
+        from pyspark.sql.utils import is_remote
+
+        if is_remote():
+            from pyspark.sql.connect.session import SparkSession
+
+            session = SparkSession.getActiveSession()
+            assert session is not None
+            return session._to_ddl(self)
+        else:
+            return get_active_spark_context()._to_ddl(self)
+
 
 class VariantType(AtomicType):
     """
@@ -1350,6 +1878,12 @@ class VariantType(AtomicType):
         if obj is None or not all(key in obj for key in ["value", "metadata"]):
             return None
         return VariantVal(obj["value"], obj["metadata"])
+
+    def toInternal(self, variant: Any) -> Any:
+        if variant is None:
+            return None
+        assert isinstance(variant, VariantVal)
+        return {"value": variant.value, "metadata": variant.metadata}
 
 
 class UserDefinedType(DataType):
@@ -1368,8 +1902,8 @@ class UserDefinedType(DataType):
         Underlying SQL storage type for this UDT.
         """
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "sqlType()"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "sqlType()"},
         )
 
     @classmethod
@@ -1378,8 +1912,8 @@ class UserDefinedType(DataType):
         The Python module of the UDT.
         """
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "module()"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "module()"},
         )
 
     @classmethod
@@ -1416,8 +1950,8 @@ class UserDefinedType(DataType):
         Converts a user-type object into a SQL datum.
         """
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "toInternal()"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "toInternal()"},
         )
 
     def deserialize(self, datum: Any) -> Any:
@@ -1425,8 +1959,8 @@ class UserDefinedType(DataType):
         Converts a SQL datum into a user-type object.
         """
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "fromInternal()"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "fromInternal()"},
         )
 
     def simpleString(self) -> str:
@@ -1469,9 +2003,6 @@ class UserDefinedType(DataType):
             UDT = getattr(m, pyClass)
         return UDT()
 
-    def __eq__(self, other: Any) -> bool:
-        return type(self) == type(other)
-
 
 class VariantVal:
     """
@@ -1493,11 +2024,13 @@ class VariantVal:
 
     Examples
     --------
-    >>> from pyspark.sql.functions import *
+    >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
-    >>> v = df.select(parse_json(df.json).alias("var")).collect()[0].var
+    >>> v = df.select(sf.parse_json(df.json).alias("var")).head().var
     >>> v.toPython()
     {'a': 1}
+    >>> v.toJson()
+    '{"a":1}'
     """
 
     def __init__(self, value: bytes, metadata: bytes):
@@ -1534,6 +2067,153 @@ class VariantVal:
         """
         return VariantUtils.to_json(self.value, self.metadata, zone_id)
 
+    @classmethod
+    def parseJson(cls, json_str: str) -> "VariantVal":
+        """
+        Convert the VariantVal to a nested Python object of Python data types.
+        :return: Python representation of the Variant nested structure
+        """
+        (value, metadata) = VariantUtils.parse_json(json_str)
+        return VariantVal(value, metadata)
+
+
+class Geography:
+    """
+    A class to represent a Geography value in Python.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    wkb : bytes
+        The bytes representing the WKB of Geography.
+
+    srid : integer
+        The integer value representing SRID of Geography.
+
+    Methods
+    -------
+    getBytes()
+        Returns the WKB of Geography.
+
+    getSrid()
+        Returns the SRID of Geography.
+
+    Examples
+    --------
+    >>> g = Geography.fromWKB(bytes.fromhex('010100000000000000000031400000000000001c40'), 4326)
+    >>> g.getBytes().hex()
+    '010100000000000000000031400000000000001c40'
+    >>> g.getSrid()
+    4326
+    """
+
+    def __init__(self, wkb: bytes, srid: int):
+        self.wkb = wkb
+        self.srid = srid
+
+    def __str__(self) -> str:
+        return "Geography(%r, %d)" % (self.wkb, self.srid)
+
+    def __repr__(self) -> str:
+        return "Geography(%r, %d)" % (self.wkb, self.srid)
+
+    def getSrid(self) -> int:
+        """
+        Returns the SRID of Geography.
+        """
+        return self.srid
+
+    def getBytes(self) -> bytes:
+        """
+        Returns the WKB of Geography.
+        """
+        return self.wkb
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, Geography):
+            # Don't attempt to compare against unrelated types.
+            return NotImplemented
+
+        return self.wkb == other.wkb and self.srid == other.srid
+
+    @classmethod
+    def fromWKB(cls, wkb: bytes, srid: int) -> "Geography":
+        """
+        Construct Python Geography object from WKB.
+        :return: Python representation of the Geography type value.
+        """
+        return Geography(wkb, srid)
+
+
+class Geometry:
+    """
+    A class to represent a Geometry value in Python.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    wkb : bytes
+        The bytes representing the WKB of Geometry.
+
+    srid : integer
+        The integer value representing SRID of Geometry.
+
+    Methods
+    -------
+    getBytes()
+        Returns the WKB of Geometry.
+
+    getSrid()
+        Returns the SRID of Geometry.
+
+    Examples
+    --------
+    >>> g = Geometry.fromWKB(bytes.fromhex('010100000000000000000031400000000000001c40'), 0)
+    >>> g.getBytes().hex()
+    '010100000000000000000031400000000000001c40'
+    >>> g.getSrid()
+    0
+    """
+
+    def __init__(self, wkb: bytes, srid: int):
+        self.wkb = wkb
+        self.srid = srid
+
+    def __str__(self) -> str:
+        return "Geometry(%r, %d)" % (self.wkb, self.srid)
+
+    def __repr__(self) -> str:
+        return "Geometry(%r, %d)" % (self.wkb, self.srid)
+
+    def getSrid(self) -> int:
+        """
+        Returns the SRID of Geometry.
+        """
+        return self.srid
+
+    def getBytes(self) -> bytes:
+        """
+        Returns the WKB of Geometry.
+        """
+        return self.wkb
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, Geometry):
+            # Don't attempt to compare against unrelated types.
+            return NotImplemented
+
+        return self.wkb == other.wkb and self.srid == other.srid
+
+    @classmethod
+    def fromWKB(cls, wkb: bytes, srid: int) -> "Geometry":
+        """
+        Construct Python Geometry object from WKB.
+        :return: Python representation of the Geometry type value.
+        """
+        return Geometry(wkb, srid)
+
 
 _atomic_types: List[Type[DataType]] = [
     StringType,
@@ -1553,20 +2233,61 @@ _atomic_types: List[Type[DataType]] = [
     TimestampNTZType,
     NullType,
     VariantType,
+    YearMonthIntervalType,
+    DayTimeIntervalType,
 ]
-_all_atomic_types: Dict[str, Type[DataType]] = dict((t.typeName(), t) for t in _atomic_types)
 
-_complex_types: List[Type[Union[ArrayType, MapType, StructType]]] = [ArrayType, MapType, StructType]
-_all_complex_types: Dict[str, Type[Union[ArrayType, MapType, StructType]]] = dict(
-    (v.typeName(), v) for v in _complex_types
-)
+_complex_types: List[Type[Union[ArrayType, MapType, StructType]]] = [
+    ArrayType,
+    MapType,
+    StructType,
+]
+_all_complex_types: Dict[str, Type[Union[ArrayType, MapType, StructType]]] = {
+    "array": ArrayType,
+    "map": MapType,
+    "struct": StructType,
+}
 
-_COLLATED_STRING = re.compile(r"string\s+collate\s+([\w_]+|`[\w_]`)")
+# Datatypes that can be directly parsed by mapping a json string without regex.
+# This dict should be only used in json parsing.
+# Note that:
+# 1, CharType and VarcharType are not listed here, since they need regex;
+# 2, DecimalType can be parsed by both mapping ('decimal') and regex ('decimal(10, 2)');
+# 3, CalendarIntervalType is not an atomic type, but can be mapped by 'interval';
+_all_mappable_types: Dict[str, Type[DataType]] = {
+    "string": StringType,
+    "binary": BinaryType,
+    "boolean": BooleanType,
+    "decimal": DecimalType,
+    "float": FloatType,
+    "double": DoubleType,
+    "byte": ByteType,
+    "short": ShortType,
+    "integer": IntegerType,
+    "long": LongType,
+    "date": DateType,
+    "timestamp": TimestampType,
+    "timestamp_ntz": TimestampNTZType,
+    "void": NullType,
+    "variant": VariantType,
+    "interval": CalendarIntervalType,
+}
+
 _LENGTH_CHAR = re.compile(r"char\(\s*(\d+)\s*\)")
 _LENGTH_VARCHAR = re.compile(r"varchar\(\s*(\d+)\s*\)")
+_STRING_WITH_COLLATION = re.compile(r"string\s+collate\s+(\w+)")
 _FIXED_DECIMAL = re.compile(r"decimal\(\s*(\d+)\s*,\s*(-?\d+)\s*\)")
 _INTERVAL_DAYTIME = re.compile(r"interval (day|hour|minute|second)( to (day|hour|minute|second))?")
 _INTERVAL_YEARMONTH = re.compile(r"interval (year|month)( to (year|month))?")
+_TIME = re.compile(r"time\(\s*(\d+)\s*\)")
+_GEOMETRY = re.compile(r"^geometry$")
+_GEOMETRY_CRS = re.compile(r"geometry\(\s*([\w]+:-?[\w]+)\s*\)")
+_GEOGRAPHY = re.compile(r"^geography$")
+_GEOGRAPHY_CRS = re.compile(r"geography\(\s*([\w]+:-?[\w]+)\s*\)")
+_GEOGRAPHY_CRS_ALG = re.compile(r"geography\(\s*([\w]+:-?[\w]+)\s*,\s*(\w+)\s*\)")
+_GEOGRAPHY_ALG = re.compile(r"geography\(\s*(\w+)\s*\)")
+
+_COLLATIONS_METADATA_KEY = "__COLLATIONS"
 
 
 def _drop_metadata(d: Union[DataType, StructField]) -> Union[DataType, StructField]:
@@ -1626,35 +2347,14 @@ def _parse_datatype_string(s: str) -> DataType:
         ...
     ParseException:...
     """
-    from py4j.java_gateway import JVMView
+    from pyspark.sql.utils import is_remote
 
-    sc = get_active_spark_context()
+    if is_remote():
+        from pyspark.sql.connect.session import SparkSession
 
-    def from_ddl_schema(type_str: str) -> DataType:
-        return _parse_datatype_json_string(
-            cast(JVMView, sc._jvm).org.apache.spark.sql.types.StructType.fromDDL(type_str).json()
-        )
-
-    def from_ddl_datatype(type_str: str) -> DataType:
-        return _parse_datatype_json_string(
-            cast(JVMView, sc._jvm)
-            .org.apache.spark.sql.api.python.PythonSQLUtils.parseDataType(type_str)
-            .json()
-        )
-
-    try:
-        # DDL format, "fieldname datatype, fieldname datatype".
-        return from_ddl_schema(s)
-    except Exception as e:
-        try:
-            # For backwards compatibility, "integer", "struct<fieldname: datatype>" and etc.
-            return from_ddl_datatype(s)
-        except BaseException:
-            try:
-                # For backwards compatibility, "fieldname: datatype, fieldname: datatype" case.
-                return from_ddl_datatype("struct<%s>" % s.strip())
-            except BaseException:
-                raise e
+        return SparkSession.active()._parse_ddl(s)
+    else:
+        return get_active_spark_context()._parse_ddl(s)
 
 
 def _parse_datatype_json_string(json_string: str) -> DataType:
@@ -1670,11 +2370,8 @@ def _parse_datatype_json_string(json_string: str) -> DataType:
     ...     python_datatype = _parse_datatype_json_string(scala_datatype.json())
     ...     assert datatype == python_datatype
     ...
-    >>> for cls in _all_atomic_types.values():
-    ...     if cls is not VarcharType and cls is not CharType:
-    ...         check_datatype(cls())
-    ...     else:
-    ...         check_datatype(cls(1))
+    >>> for cls in _all_mappable_types.values():
+    ...     check_datatype(cls())
 
     >>> # Simple ArrayType.
     >>> simple_arraytype = ArrayType(StringType(), True)
@@ -1715,15 +2412,24 @@ def _parse_datatype_json_string(json_string: str) -> DataType:
     return _parse_datatype_json_value(json.loads(json_string))
 
 
-def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
+def _parse_datatype_json_value(  # type: ignore[return]
+    json_value: Union[dict, str],
+    fieldPath: str = "",
+    collationsMap: Optional[Dict[str, str]] = None,
+) -> DataType:
     if not isinstance(json_value, dict):
-        if json_value in _all_atomic_types.keys():
-            return _all_atomic_types[json_value]()
-        elif json_value == "decimal":
-            return DecimalType()
+        if json_value in _all_mappable_types.keys():
+            if collationsMap is not None and fieldPath in collationsMap:
+                _assert_valid_type_for_collation(fieldPath, json_value, collationsMap)
+                collation_name = collationsMap[fieldPath]
+                return StringType(collation_name)
+            return _all_mappable_types[json_value]()
         elif _FIXED_DECIMAL.match(json_value):
             m = _FIXED_DECIMAL.match(json_value)
             return DecimalType(int(m.group(1)), int(m.group(2)))  # type: ignore[union-attr]
+        elif _TIME.match(json_value):
+            m = _TIME.match(json_value)
+            return TimeType(int(m.group(1)))  # type: ignore[union-attr]
         elif _INTERVAL_DAYTIME.match(json_value):
             m = _INTERVAL_DAYTIME.match(json_value)
             inverted_fields = DayTimeIntervalType._inverted_fields
@@ -1740,10 +2446,8 @@ def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
             if first_field is not None and second_field is None:
                 return YearMonthIntervalType(first_field)
             return YearMonthIntervalType(first_field, second_field)
-        elif json_value == "interval":
-            return CalendarIntervalType()
-        elif _COLLATED_STRING.match(json_value):
-            m = _COLLATED_STRING.match(json_value)
+        elif _STRING_WITH_COLLATION.match(json_value):
+            m = _STRING_WITH_COLLATION.match(json_value)
             return StringType(m.group(1))  # type: ignore[union-attr]
         elif _LENGTH_CHAR.match(json_value):
             m = _LENGTH_CHAR.match(json_value)
@@ -1751,27 +2455,78 @@ def _parse_datatype_json_value(json_value: Union[dict, str]) -> DataType:
         elif _LENGTH_VARCHAR.match(json_value):
             m = _LENGTH_VARCHAR.match(json_value)
             return VarcharType(int(m.group(1)))  # type: ignore[union-attr]
+        elif _GEOMETRY.match(json_value):
+            return GeometryType._from_crs(GeometryType.DEFAULT_CRS)
+        elif _GEOMETRY_CRS.match(json_value):
+            crs = _GEOMETRY_CRS.match(json_value)
+            if crs is not None:
+                return GeometryType._from_crs(crs.group(1))
+        elif _GEOGRAPHY.match(json_value):
+            return GeographyType._from_crs(GeographyType.DEFAULT_CRS, GeographyType.DEFAULT_ALG)
+        elif _GEOGRAPHY_CRS.match(json_value):
+            crs = _GEOGRAPHY_CRS.match(json_value)
+            if crs is not None:
+                return GeographyType._from_crs(crs.group(1), GeographyType.DEFAULT_ALG)
+        elif _GEOGRAPHY_CRS_ALG.match(json_value):
+            crs_alg = _GEOGRAPHY_CRS_ALG.match(json_value)
+            if crs_alg is not None:
+                return GeographyType._from_crs(crs_alg.group(1), crs_alg.group(2))
+        elif _GEOGRAPHY_ALG.match(json_value):
+            alg = _GEOGRAPHY_ALG.match(json_value)
+            if alg is not None:
+                return GeographyType._from_crs(GeographyType.DEFAULT_CRS, alg.group(1))
         else:
             raise PySparkValueError(
-                error_class="CANNOT_PARSE_DATATYPE",
-                message_parameters={"error": str(json_value)},
+                errorClass="CANNOT_PARSE_DATATYPE",
+                messageParameters={"msg": str(json_value)},
             )
     else:
         tpe = json_value["type"]
         if tpe in _all_complex_types:
-            return _all_complex_types[tpe].fromJson(json_value)
+            if collationsMap is not None and fieldPath in collationsMap:
+                _assert_valid_type_for_collation(fieldPath, tpe, collationsMap)
+
+            complex_type = _all_complex_types[tpe]
+            if complex_type is ArrayType:
+                return ArrayType.fromJson(json_value, fieldPath, collationsMap)
+            elif complex_type is MapType:
+                return MapType.fromJson(json_value, fieldPath, collationsMap)
+            return StructType.fromJson(json_value)
         elif tpe == "udt":
             return UserDefinedType.fromJson(json_value)
         else:
             raise PySparkValueError(
-                error_class="UNSUPPORTED_DATA_TYPE",
-                message_parameters={"data_type": str(tpe)},
+                errorClass="UNSUPPORTED_DATA_TYPE",
+                messageParameters={"data_type": str(tpe)},
             )
+
+
+def _assert_valid_type_for_collation(
+    fieldPath: str, fieldType: Any, collationMap: Dict[str, str]
+) -> None:
+    if fieldPath in collationMap and fieldType != "string":
+        raise PySparkTypeError(
+            errorClass="INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
+            messageParameters={"jsonType": fieldType},
+        )
+
+
+def _assert_valid_collation_provider(provider: str) -> None:
+    if provider.lower() not in StringType.providers:
+        raise PySparkValueError(
+            errorClass="COLLATION_INVALID_PROVIDER",
+            messageParameters={
+                "provider": provider,
+                "supportedProviders": ", ".join(StringType.providers),
+            },
+        )
 
 
 # Mapping Python types to Spark SQL DataType
 _type_mappings = {
     type(None): NullType,
+    Geometry: GeometryType,
+    Geography: GeographyType,
     bool: BooleanType,
     int: LongType,
     float: DoubleType,
@@ -1780,7 +2535,7 @@ _type_mappings = {
     decimal.Decimal: DecimalType,
     datetime.date: DateType,
     datetime.datetime: TimestampType,  # can be TimestampNTZType
-    datetime.time: TimestampType,  # can be TimestampNTZType
+    datetime.time: TimeType,
     datetime.timedelta: DayTimeIntervalType,
     bytes: BinaryType,
 }
@@ -1868,7 +2623,9 @@ def _from_numpy_type(nt: "np.dtype") -> Optional[DataType]:
     """Convert NumPy type to Spark data type."""
     import numpy as np
 
-    if nt == np.dtype("int8"):
+    if nt == np.dtype("bool"):
+        return BooleanType()
+    elif nt == np.dtype("int8"):
         return ByteType()
     elif nt == np.dtype("int16"):
         return ShortType()
@@ -1880,6 +2637,8 @@ def _from_numpy_type(nt: "np.dtype") -> Optional[DataType]:
         return FloatType()
     elif nt == np.dtype("float64"):
         return DoubleType()
+    elif nt.type == np.dtype("str"):
+        return StringType()
 
     return None
 
@@ -1888,6 +2647,7 @@ def _infer_type(
     obj: Any,
     infer_dict_as_struct: bool = False,
     infer_array_from_first_element: bool = False,
+    infer_map_from_first_pair: bool = False,
     prefer_timestamp_ntz: bool = False,
 ) -> DataType:
     """Infer the DataType from obj"""
@@ -1898,6 +2658,12 @@ def _infer_type(
         return obj.__UDT__
 
     dataType = _type_mappings.get(type(obj))
+    if dataType is GeographyType:
+        assert isinstance(obj, Geography)
+        return GeographyType(obj.getSrid())
+    if dataType is GeometryType:
+        assert isinstance(obj, Geometry)
+        return GeometryType(obj.getSrid())
     if dataType is DecimalType:
         # the precision and scale of `obj` may be different from row to row.
         return DecimalType(38, 18)
@@ -1923,12 +2689,13 @@ def _infer_type(
                             value,
                             infer_dict_as_struct,
                             infer_array_from_first_element,
+                            infer_map_from_first_pair,
                             prefer_timestamp_ntz,
                         ),
                         True,
                     )
             return struct
-        else:
+        elif infer_map_from_first_pair:
             for key, value in obj.items():
                 if key is not None and value is not None:
                     return MapType(
@@ -1936,17 +2703,47 @@ def _infer_type(
                             key,
                             infer_dict_as_struct,
                             infer_array_from_first_element,
+                            infer_map_from_first_pair,
                             prefer_timestamp_ntz,
                         ),
                         _infer_type(
                             value,
                             infer_dict_as_struct,
                             infer_array_from_first_element,
+                            infer_map_from_first_pair,
                             prefer_timestamp_ntz,
                         ),
                         True,
                     )
             return MapType(NullType(), NullType(), True)
+        else:
+            key_type: DataType = NullType()
+            value_type: DataType = NullType()
+            for key, value in obj.items():
+                if key is not None:
+                    key_type = _merge_type(
+                        key_type,
+                        _infer_type(
+                            key,
+                            infer_dict_as_struct,
+                            infer_array_from_first_element,
+                            infer_map_from_first_pair,
+                            prefer_timestamp_ntz,
+                        ),
+                    )
+                if value is not None:
+                    value_type = _merge_type(
+                        value_type,
+                        _infer_type(
+                            value,
+                            infer_dict_as_struct,
+                            infer_array_from_first_element,
+                            infer_map_from_first_pair,
+                            prefer_timestamp_ntz,
+                        ),
+                    )
+
+            return MapType(key_type, value_type, True)
     elif isinstance(obj, list):
         if len(obj) > 0:
             if infer_array_from_first_element:
@@ -1981,20 +2778,23 @@ def _infer_type(
             return ArrayType(_array_type_mappings[obj.typecode](), False)
         else:
             raise PySparkTypeError(
-                error_class="UNSUPPORTED_DATA_TYPE",
-                message_parameters={"data_type": f"array({obj.typecode})"},
+                errorClass="UNSUPPORTED_DATA_TYPE",
+                messageParameters={"data_type": f"array({obj.typecode})"},
             )
+    elif isinstance(obj, VariantVal):
+        return VariantType()
     else:
         try:
             return _infer_schema(
                 obj,
                 infer_dict_as_struct=infer_dict_as_struct,
                 infer_array_from_first_element=infer_array_from_first_element,
+                prefer_timestamp_ntz=prefer_timestamp_ntz,
             )
         except TypeError:
             raise PySparkTypeError(
-                error_class="UNSUPPORTED_DATA_TYPE",
-                message_parameters={"data_type": type(obj).__name__},
+                errorClass="UNSUPPORTED_DATA_TYPE",
+                messageParameters={"data_type": type(obj).__name__},
             )
 
 
@@ -2003,6 +2803,7 @@ def _infer_schema(
     names: Optional[List[str]] = None,
     infer_dict_as_struct: bool = False,
     infer_array_from_first_element: bool = False,
+    infer_map_from_first_pair: bool = False,
     prefer_timestamp_ntz: bool = False,
 ) -> StructType:
     """Infer the schema from dict/namedtuple/object"""
@@ -2027,8 +2828,8 @@ def _infer_schema(
 
     else:
         raise PySparkTypeError(
-            error_class="CANNOT_INFER_SCHEMA_FOR_TYPE",
-            message_parameters={"data_type": type(row).__name__},
+            errorClass="CANNOT_INFER_SCHEMA_FOR_TYPE",
+            messageParameters={"data_type": type(row).__name__},
         )
 
     fields = []
@@ -2041,6 +2842,7 @@ def _infer_schema(
                         v,
                         infer_dict_as_struct,
                         infer_array_from_first_element,
+                        infer_map_from_first_pair,
                         prefer_timestamp_ntz,
                     ),
                     True,
@@ -2048,8 +2850,8 @@ def _infer_schema(
             )
         except TypeError:
             raise PySparkTypeError(
-                error_class="CANNOT_INFER_TYPE_FOR_FIELD",
-                message_parameters={"field_name": k},
+                errorClass="CANNOT_INFER_TYPE_FOR_FIELD",
+                messageParameters={"field_name": k},
             )
     return StructType(fields)
 
@@ -2129,6 +2931,10 @@ def _merge_type(
         return a
     elif isinstance(a, TimestampNTZType) and isinstance(b, TimestampType):
         return b
+    elif isinstance(a, GeometryType) and isinstance(b, GeometryType) and a.srid != b.srid:
+        return GeometryType("ANY")
+    elif isinstance(a, GeographyType) and isinstance(b, GeographyType) and a.srid != b.srid:
+        return GeographyType("ANY")
     elif isinstance(a, AtomicType) and isinstance(b, StringType):
         return b
     elif isinstance(a, StringType) and isinstance(b, AtomicType):
@@ -2136,8 +2942,8 @@ def _merge_type(
     elif type(a) is not type(b):
         # TODO: type cast (such as int -> long)
         raise PySparkTypeError(
-            error_class="CANNOT_MERGE_TYPE",
-            message_parameters={"data_type1": type(a).__name__, "data_type2": type(b).__name__},
+            errorClass="CANNOT_MERGE_TYPE",
+            messageParameters={"data_type1": type(a).__name__, "data_type2": type(b).__name__},
         )
 
     # same type
@@ -2182,6 +2988,9 @@ def _need_converter(dataType: DataType) -> bool:
         return _need_converter(dataType.keyType) or _need_converter(dataType.valueType)
     elif isinstance(dataType, NullType):
         return True
+    elif isinstance(dataType, StringType):
+        # Coercion to StringType is allowed, e.g. dict -> str
+        return True
     else:
         return False
 
@@ -2193,15 +3002,34 @@ def _create_converter(dataType: DataType) -> Callable:
 
     if isinstance(dataType, ArrayType):
         conv = _create_converter(dataType.elementType)
-        return lambda row: [conv(v) for v in row]
+        return lambda row: [conv(v) for v in row] if row is not None else None
 
     elif isinstance(dataType, MapType):
         kconv = _create_converter(dataType.keyType)
         vconv = _create_converter(dataType.valueType)
-        return lambda row: dict((kconv(k), vconv(v)) for k, v in row.items())
+        return (
+            lambda row: dict((kconv(k), vconv(v)) for k, v in row.items())
+            if row is not None
+            else None
+        )
 
     elif isinstance(dataType, NullType):
         return lambda x: None
+
+    elif isinstance(dataType, StringType):
+
+        def convert_string(value: Any) -> Any:
+            if value is None:
+                return None
+            else:
+                if isinstance(value, bool):
+                    # To match the Classic behavior
+                    return str(value).lower()
+                else:
+                    # Coercion to StringType is allowed, e.g. dict -> str
+                    return str(value)
+
+        return convert_string
 
     elif not isinstance(dataType, StructType):
         return lambda x: x
@@ -2227,8 +3055,8 @@ def _create_converter(dataType: DataType) -> Callable:
             d = obj.__dict__
         else:
             raise PySparkTypeError(
-                error_class="UNSUPPORTED_DATA_TYPE",
-                message_parameters={"data_type": type(obj).__name__},
+                errorClass="UNSUPPORTED_DATA_TYPE",
+                messageParameters={"data_type": type(obj).__name__},
             )
 
         if convert_fields:
@@ -2253,12 +3081,15 @@ _acceptable_types = {
     VarcharType: (str,),
     BinaryType: (bytearray, bytes),
     DateType: (datetime.date, datetime.datetime),
+    TimeType: (datetime.time,),
     TimestampType: (datetime.datetime,),
     TimestampNTZType: (datetime.datetime,),
     DayTimeIntervalType: (datetime.timedelta,),
     ArrayType: (list, tuple, array),
     MapType: (dict,),
     StructType: (tuple, list, dict),
+    GeometryType: (Geometry,),
+    GeographyType: (Geography,),
     VariantType: (
         bool,
         int,
@@ -2357,20 +3188,22 @@ def _make_type_verifier(
             return "field %s in %s" % (n, name)
 
     def verify_nullability(obj: Any) -> bool:
-        if obj is None:
+        if obj is None or (isinstance(obj, decimal.Decimal) and obj.is_nan()):
+            # Spark's DecimalType doesn't support NaN,
+            # casting DoubleType NaN to DecimalType will return Null.
             if nullable:
                 return True
             else:
                 if name is not None:
                     raise PySparkValueError(
-                        error_class="FIELD_NOT_NULLABLE_WITH_NAME",
-                        message_parameters={
+                        errorClass="FIELD_NOT_NULLABLE_WITH_NAME",
+                        messageParameters={
                             "field_name": str(name),
                         },
                     )
                 raise PySparkValueError(
-                    error_class="FIELD_NOT_NULLABLE",
-                    message_parameters={},
+                    errorClass="FIELD_NOT_NULLABLE",
+                    messageParameters={},
                 )
         else:
             return False
@@ -2387,8 +3220,8 @@ def _make_type_verifier(
         if type(obj) not in _acceptable_types[_type]:
             if name is not None:
                 raise PySparkTypeError(
-                    error_class="FIELD_DATA_TYPE_UNACCEPTABLE_WITH_NAME",
-                    message_parameters={
+                    errorClass="FIELD_DATA_TYPE_UNACCEPTABLE_WITH_NAME",
+                    messageParameters={
                         "field_name": str(name),
                         "data_type": str(dataType),
                         "obj": repr(obj),
@@ -2396,8 +3229,8 @@ def _make_type_verifier(
                     },
                 )
             raise PySparkTypeError(
-                error_class="FIELD_DATA_TYPE_UNACCEPTABLE",
-                message_parameters={
+                errorClass="FIELD_DATA_TYPE_UNACCEPTABLE",
+                messageParameters={
                     "data_type": str(dataType),
                     "obj": repr(obj),
                     "obj_type": str(type(obj)),
@@ -2416,16 +3249,16 @@ def _make_type_verifier(
             if not (hasattr(obj, "__UDT__") and obj.__UDT__ == dataType):
                 if name is not None:
                     raise PySparkValueError(
-                        error_class="FIELD_TYPE_MISMATCH_WITH_NAME",
-                        message_parameters={
+                        errorClass="FIELD_TYPE_MISMATCH_WITH_NAME",
+                        messageParameters={
                             "field_name": str(name),
                             "obj": str(obj),
                             "data_type": str(dataType),
                         },
                     )
                 raise PySparkValueError(
-                    error_class="FIELD_TYPE_MISMATCH",
-                    message_parameters={
+                    errorClass="FIELD_TYPE_MISMATCH",
+                    messageParameters={
                         "obj": str(obj),
                         "data_type": str(dataType),
                     },
@@ -2443,8 +3276,8 @@ def _make_type_verifier(
             upper_bound = 127
             if obj < lower_bound or obj > upper_bound:
                 raise PySparkValueError(
-                    error_class="VALUE_OUT_OF_BOUNDS",
-                    message_parameters={
+                    errorClass="VALUE_OUT_OF_BOUNDS",
+                    messageParameters={
                         "arg_name": "obj",
                         "lower_bound": str(lower_bound),
                         "upper_bound": str(upper_bound),
@@ -2463,8 +3296,8 @@ def _make_type_verifier(
             upper_bound = 32767
             if obj < lower_bound or obj > upper_bound:
                 raise PySparkValueError(
-                    error_class="VALUE_OUT_OF_BOUNDS",
-                    message_parameters={
+                    errorClass="VALUE_OUT_OF_BOUNDS",
+                    messageParameters={
                         "arg_name": "obj",
                         "lower_bound": str(lower_bound),
                         "upper_bound": str(upper_bound),
@@ -2483,8 +3316,8 @@ def _make_type_verifier(
             upper_bound = 2147483647
             if obj < lower_bound or obj > upper_bound:
                 raise PySparkValueError(
-                    error_class="VALUE_OUT_OF_BOUNDS",
-                    message_parameters={
+                    errorClass="VALUE_OUT_OF_BOUNDS",
+                    messageParameters={
                         "arg_name": "obj",
                         "lower_bound": str(lower_bound),
                         "upper_bound": str(upper_bound),
@@ -2503,8 +3336,8 @@ def _make_type_verifier(
             upper_bound = 9223372036854775807
             if obj < lower_bound or obj > upper_bound:
                 raise PySparkValueError(
-                    error_class="VALUE_OUT_OF_BOUNDS",
-                    message_parameters={
+                    errorClass="VALUE_OUT_OF_BOUNDS",
+                    messageParameters={
                         "arg_name": "obj",
                         "lower_bound": str(lower_bound),
                         "upper_bound": str(upper_bound),
@@ -2558,16 +3391,16 @@ def _make_type_verifier(
                 if len(obj) != len(verifiers):
                     if name is not None:
                         raise PySparkValueError(
-                            error_class="FIELD_STRUCT_LENGTH_MISMATCH_WITH_NAME",
-                            message_parameters={
+                            errorClass="FIELD_STRUCT_LENGTH_MISMATCH_WITH_NAME",
+                            messageParameters={
                                 "field_name": str(name),
                                 "object_length": str(len(obj)),
                                 "field_length": str(len(verifiers)),
                             },
                         )
                     raise PySparkValueError(
-                        error_class="FIELD_STRUCT_LENGTH_MISMATCH",
-                        message_parameters={
+                        errorClass="FIELD_STRUCT_LENGTH_MISMATCH",
+                        messageParameters={
                             "object_length": str(len(obj)),
                             "field_length": str(len(verifiers)),
                         },
@@ -2581,8 +3414,8 @@ def _make_type_verifier(
             else:
                 if name is not None:
                     raise PySparkTypeError(
-                        error_class="FIELD_DATA_TYPE_UNACCEPTABLE_WITH_NAME",
-                        message_parameters={
+                        errorClass="FIELD_DATA_TYPE_UNACCEPTABLE_WITH_NAME",
+                        messageParameters={
                             "field_name": str(name),
                             "data_type": str(dataType),
                             "obj": repr(obj),
@@ -2590,8 +3423,8 @@ def _make_type_verifier(
                         },
                     )
                 raise PySparkTypeError(
-                    error_class="FIELD_DATA_TYPE_UNACCEPTABLE",
-                    message_parameters={
+                    errorClass="FIELD_DATA_TYPE_UNACCEPTABLE",
+                    messageParameters={
                         "data_type": str(dataType),
                         "obj": repr(obj),
                         "obj_type": str(type(obj)),
@@ -2607,6 +3440,24 @@ def _make_type_verifier(
             pass
 
         verify_value = verify_variant
+
+    elif isinstance(dataType, GeometryType):
+
+        def verify_geometry(obj: Any) -> None:
+            assert_acceptable_types(obj)
+            verify_acceptable_types(obj)
+            assert isinstance(obj, Geometry)
+
+        verify_value = verify_geometry
+
+    elif isinstance(dataType, GeographyType):
+
+        def verify_geography(obj: Any) -> None:
+            assert_acceptable_types(obj)
+            verify_acceptable_types(obj)
+            assert isinstance(obj, Geography)
+
+        verify_value = verify_geography
 
     else:
 
@@ -2704,8 +3555,8 @@ class Row(tuple):
     def __new__(cls, *args: Optional[str], **kwargs: Optional[Any]) -> "Row":
         if args and kwargs:
             raise PySparkValueError(
-                error_class="CANNOT_SET_TOGETHER",
-                message_parameters={"arg_list": "args and kwargs"},
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "args and kwargs"},
             )
         if kwargs:
             # create row objects
@@ -2746,8 +3597,8 @@ class Row(tuple):
         """
         if not hasattr(self, "__fields__"):
             raise PySparkTypeError(
-                error_class="CANNOT_CONVERT_TYPE",
-                message_parameters={
+                errorClass="CANNOT_CONVERT_TYPE",
+                messageParameters={
                     "from_type": "Row",
                     "to_type": "dict",
                 },
@@ -2780,8 +3631,8 @@ class Row(tuple):
         """create new Row object"""
         if len(args) > len(self):
             raise PySparkValueError(
-                error_class="TOO_MANY_VALUES",
-                message_parameters={
+                errorClass="TOO_MANY_VALUES",
+                messageParameters={
                     "expected": str(len(self)),
                     "item": "fields",
                     "actual": str(len(args)),
@@ -2798,16 +3649,14 @@ class Row(tuple):
             idx = self.__fields__.index(item)
             return super(Row, self).__getitem__(idx)
         except IndexError:
-            raise PySparkKeyError(
-                error_class="KEY_NOT_EXISTS", message_parameters={"key": str(item)}
-            )
+            raise PySparkKeyError(errorClass="KEY_NOT_EXISTS", messageParameters={"key": str(item)})
         except ValueError:
             raise PySparkValueError(item)
 
     def __getattr__(self, item: str) -> Any:
         if item.startswith("__"):
             raise PySparkAttributeError(
-                error_class="ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": item}
+                errorClass="ATTRIBUTE_NOT_SUPPORTED", messageParameters={"attr_name": item}
             )
         try:
             # it will be slow when it has many fields,
@@ -2816,18 +3665,18 @@ class Row(tuple):
             return self[idx]
         except IndexError:
             raise PySparkAttributeError(
-                error_class="ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": item}
+                errorClass="ATTRIBUTE_NOT_SUPPORTED", messageParameters={"attr_name": item}
             )
         except ValueError:
             raise PySparkAttributeError(
-                error_class="ATTRIBUTE_NOT_SUPPORTED", message_parameters={"attr_name": item}
+                errorClass="ATTRIBUTE_NOT_SUPPORTED", messageParameters={"attr_name": item}
             )
 
     def __setattr__(self, key: Any, value: Any) -> None:
         if key != "__fields__":
             raise PySparkRuntimeError(
-                error_class="READ_ONLY",
-                message_parameters={"object": "Row"},
+                errorClass="READ_ONLY",
+                messageParameters={"object": "Row"},
             )
         self.__dict__[key] = value
 
@@ -2859,6 +3708,17 @@ class DateConverter:
 
         Date = JavaClass("java.sql.Date", gateway_client)
         return Date.valueOf(obj.strftime("%Y-%m-%d"))
+
+
+class TimeConverter:
+    def can_convert(self, obj: Any) -> bool:
+        return isinstance(obj, datetime.time)
+
+    def convert(self, obj: datetime.time, gateway_client: "GatewayClient") -> "JavaGateway":
+        from py4j.java_gateway import JavaClass
+
+        LocalTime = JavaClass("java.time.LocalTime", gateway_client)
+        return LocalTime.of(obj.hour, obj.minute, obj.second, obj.microsecond * 1000)
 
 
 class DatetimeConverter:
@@ -2916,7 +3776,13 @@ class DayTimeIntervalTypeConverter:
 
 class NumpyScalarConverter:
     def can_convert(self, obj: Any) -> bool:
-        return has_numpy and isinstance(obj, np.generic)
+        from pyspark.testing.utils import have_numpy
+
+        if have_numpy:
+            import numpy as np
+
+            return isinstance(obj, np.generic)
+        return False
 
     def convert(self, obj: "np.generic", gateway_client: "GatewayClient") -> Any:
         return obj.item()
@@ -2927,6 +3793,8 @@ class NumpyArrayConverter:
         self, nt: "np.dtype", gateway: "JavaGateway"
     ) -> Optional["JavaClass"]:
         """Convert NumPy type to Py4J Java type."""
+        import numpy as np
+
         if nt in [np.dtype("int8"), np.dtype("int16")]:
             # Mapping int8 to gateway.jvm.byte causes
             #   TypeError: 'bytes' object does not support item assignment
@@ -2941,11 +3809,19 @@ class NumpyArrayConverter:
             return gateway.jvm.double
         elif nt == np.dtype("bool"):
             return gateway.jvm.boolean
+        elif nt.type == np.dtype("str"):
+            return gateway.jvm.String
 
         return None
 
     def can_convert(self, obj: Any) -> bool:
-        return has_numpy and isinstance(obj, np.ndarray) and obj.ndim == 1
+        from pyspark.testing.utils import have_numpy
+
+        if have_numpy:
+            import numpy as np
+
+            return isinstance(obj, np.ndarray) and obj.ndim == 1
+        return False
 
     def convert(self, obj: "np.ndarray", gateway_client: "GatewayClient") -> "JavaGateway":
         from pyspark import SparkContext
@@ -2954,15 +3830,12 @@ class NumpyArrayConverter:
         assert gateway is not None
         plist = obj.tolist()
 
-        if len(obj) > 0 and isinstance(plist[0], str):
-            jtpe = gateway.jvm.String
-        else:
-            jtpe = self._from_numpy_type_to_java_type(obj.dtype, gateway)
-            if jtpe is None:
-                raise PySparkTypeError(
-                    error_class="UNSUPPORTED_NUMPY_ARRAY_SCALAR",
-                    message_parameters={"dtype": str(obj.dtype)},
-                )
+        jtpe = self._from_numpy_type_to_java_type(obj.dtype, gateway)
+        if jtpe is None:
+            raise PySparkTypeError(
+                errorClass="UNSUPPORTED_NUMPY_ARRAY_SCALAR",
+                messageParameters={"dtype": str(obj.dtype)},
+            )
         jarr = gateway.new_array(jtpe, len(obj))
         for i in range(len(plist)):
             jarr[i] = plist[i]
@@ -2976,6 +3849,7 @@ if not is_remote_only():
     register_input_converter(DatetimeNTZConverter())
     register_input_converter(DatetimeConverter())
     register_input_converter(DateConverter())
+    register_input_converter(TimeConverter())
     register_input_converter(DayTimeIntervalTypeConverter())
     register_input_converter(NumpyScalarConverter())
     # NumPy array satisfies py4j.java_collections.ListConverter,

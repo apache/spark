@@ -677,8 +677,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
   "sqlState" : "4274K",
   "messageParameters" : {
-    "functionName" : "`UDTFForwardStateFromAnalyzeWithKwargs`",
-    "parameterName" : "`argument`"
+    "parameterName" : "`argument`",
+    "routineName" : "`UDTFForwardStateFromAnalyzeWithKwargs`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -870,8 +870,8 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
   "sqlState" : "4274K",
   "messageParameters" : {
-    "functionName" : "`UDTFWithSinglePartition`",
-    "parameterName" : "`initial_count`"
+    "parameterName" : "`initial_count`",
+    "routineName" : "`UDTFWithSinglePartition`"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -900,6 +900,47 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "startIndex" : 1,
     "stopIndex" : 10,
     "fragment" : "unparsable"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM UDTFPartitionByIndexingBug(
+    TABLE(
+        SELECT
+            5 AS unused_col,
+            'hi' AS partition_col,
+            1.0 AS double_col
+
+        UNION ALL
+
+        SELECT
+            4 AS unused_col,
+            'hi' AS partition_col,
+            1.0 AS double_col
+    )
+)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT * FROM
+    InvalidEvalReturnsNoneToNonNullableColumnScalarType(TABLE(SELECT 1 AS X), unresolved_column)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`unresolved_column`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 93,
+    "stopIndex" : 109,
+    "fragment" : "unresolved_column"
   } ]
 }
 

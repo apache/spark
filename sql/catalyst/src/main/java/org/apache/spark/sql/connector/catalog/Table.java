@@ -18,7 +18,9 @@
 package org.apache.spark.sql.connector.catalog;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.catalog.constraints.Constraint;
 import org.apache.spark.sql.connector.expressions.Transform;
+import org.apache.spark.sql.errors.QueryCompilationErrors;
 import org.apache.spark.sql.types.StructType;
 
 import java.util.Collections;
@@ -49,13 +51,25 @@ public interface Table {
   String name();
 
   /**
+   * An ID of the table that can be used to reliably check if two table objects refer to the same
+   * metastore entity. If a table is dropped and recreated again with the same name, the new table
+   * ID must be different. This method must return null if connectors don't support the notion of
+   * table ID.
+   */
+  default String id() {
+    return null;
+  }
+
+  /**
    * Returns the schema of this table. If the table is not readable and doesn't have a schema, an
    * empty schema can be returned here.
    * <p>
    * @deprecated This is deprecated. Please override {@link #columns} instead.
    */
   @Deprecated(since = "3.4.0")
-  StructType schema();
+  default StructType schema() {
+    throw QueryCompilationErrors.mustOverrideOneMethodError("columns");
+  }
 
   /**
    * Returns the columns of this table. If the table is not readable and doesn't have a schema, an
@@ -83,4 +97,17 @@ public interface Table {
    * Returns the set of capabilities for this table.
    */
   Set<TableCapability> capabilities();
+
+  /**
+   * Returns the constraints for this table.
+   */
+  default Constraint[] constraints() { return new Constraint[0]; }
+
+  /**
+   * Returns the version of this table if versioning is supported, null otherwise.
+   * <p>
+   * This method must not trigger a refresh of the table metadata. It should return
+   * the version that corresponds to the current state of this table instance.
+   */
+  default String version() { return null; }
 }

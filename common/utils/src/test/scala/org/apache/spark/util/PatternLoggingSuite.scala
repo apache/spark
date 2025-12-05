@@ -17,21 +17,31 @@
 package org.apache.spark.util
 
 import org.apache.logging.log4j.Level
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.internal.Logging
 
-class PatternLoggingSuite extends LoggingSuiteBase with BeforeAndAfterAll {
+class PatternLoggingSuite extends LoggingSuiteBase {
 
   override def className: String = classOf[PatternLoggingSuite].getSimpleName
   override def logFilePath: String = "target/pattern.log"
 
   override def beforeAll(): Unit = Logging.disableStructuredLogging()
 
-  override def afterAll(): Unit = Logging.enableStructuredLogging()
-
   override def expectedPatternForBasicMsg(level: Level): String = {
     s""".*$level $className: This is a log message\n"""
+  }
+
+  override def expectedPatternForBasicMsgWithEscapeChar(level: Level): String = {
+    s""".*$level $className: This is a log message\nThis is a new line \t other msg\n"""
+  }
+
+  override def expectedPatternForBasicMsgWithEscapeCharMDC(level: Level): String = {
+    s""".*$level $className: This is a log message\nThis is a new line \t other msg\n"""
+  }
+
+  override def expectedPatternForMsgWithMDCAndEscapeChar(level: Level): String = {
+    s""".*$level $className: The first message\nthe first new line\tthe first other msg\n""" +
+      s"""[\\s\\S]*The second message\nthe second new line\tthe second other msg\n"""
   }
 
   override def expectedPatternForBasicMsgWithException(level: Level): String = {
@@ -47,8 +57,8 @@ class PatternLoggingSuite extends LoggingSuiteBase with BeforeAndAfterAll {
   override def expectedPatternForMsgWithMDCAndException(level: Level): String =
     s""".*$level $className: Error in executor 1.\njava.lang.RuntimeException: OOM\n[\\s\\S]*"""
 
-  override def expectedPatternForExternalSystemCustomLogKey(level: Level): String = {
-    s""".*$level $className: External system custom log message.\n"""
+  override def expectedPatternForCustomLogKey(level: Level): String = {
+    s""".*$level $className: Custom log message.\n"""
   }
 
   override def verifyMsgWithConcat(level: Level, logOutput: String): Unit = {

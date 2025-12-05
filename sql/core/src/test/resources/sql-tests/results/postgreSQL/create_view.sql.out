@@ -269,7 +269,7 @@ View Text           	SELECT * FROM base_table
 View Original Text  	SELECT * FROM base_table	                    
 View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.temp_view_test	                    
-View Query Output Columns	[a, id]
+View Query Output Columns	[`a`, `id`]
 
 
 -- !query
@@ -335,7 +335,7 @@ View Text           	SELECT * FROM base_table
 View Original Text  	SELECT * FROM base_table	                    
 View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.temp_view_test	                    
-View Query Output Columns	[a, id]
+View Query Output Columns	[`a`, `id`]
 
 
 -- !query
@@ -391,7 +391,7 @@ View Original Text  	SELECT t1.a AS t1_a, t2.a AS t2_a
     WHERE t1.id = t2.id	                    
 View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.temp_view_test	                    
-View Query Output Columns	[t1_a, t2_a]
+View Query Output Columns	[`t1_a`, `t2_a`]
 
 
 -- !query
@@ -464,7 +464,7 @@ View Text           	SELECT * FROM base_table WHERE id IN (SELECT id FROM base_t
 View Original Text  	SELECT * FROM base_table WHERE id IN (SELECT id FROM base_table2)	                    
 View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.temp_view_test	                    
-View Query Output Columns	[a, id]
+View Query Output Columns	[`a`, `id`]
 
 
 -- !query
@@ -495,7 +495,7 @@ View Text           	SELECT t1.id, t2.a FROM base_table t1, (SELECT * FROM base_
 View Original Text  	SELECT t1.id, t2.a FROM base_table t1, (SELECT * FROM base_table2) t2	                    
 View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.temp_view_test	                    
-View Query Output Columns	[id, a]
+View Query Output Columns	[`id`, `a`]
 
 
 -- !query
@@ -526,7 +526,7 @@ View Text           	SELECT * FROM base_table WHERE EXISTS (SELECT 1 FROM base_t
 View Original Text  	SELECT * FROM base_table WHERE EXISTS (SELECT 1 FROM base_table2)	                    
 View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.temp_view_test	                    
-View Query Output Columns	[a, id]
+View Query Output Columns	[`a`, `id`]
 
 
 -- !query
@@ -557,7 +557,7 @@ View Text           	SELECT * FROM base_table WHERE NOT EXISTS (SELECT 1 FROM ba
 View Original Text  	SELECT * FROM base_table WHERE NOT EXISTS (SELECT 1 FROM base_table2)	                    
 View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.temp_view_test	                    
-View Query Output Columns	[a, id]
+View Query Output Columns	[`a`, `id`]
 
 
 -- !query
@@ -588,7 +588,7 @@ View Text           	SELECT * FROM base_table WHERE EXISTS (SELECT 1)
 View Original Text  	SELECT * FROM base_table WHERE EXISTS (SELECT 1)	                    
 View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.temp_view_test	                    
-View Query Output Columns	[a, id]
+View Query Output Columns	[`a`, `id`]
 
 
 -- !query
@@ -800,7 +800,7 @@ View Text           	SELECT * FROM t1 CROSS JOIN t2
 View Original Text  	SELECT * FROM t1 CROSS JOIN t2	                    
 View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.testviewschm2	                    
-View Query Output Columns	[num, name, num2, value]
+View Query Output Columns	[`num`, `name`, `num2`, `value`]
 
 
 -- !query
@@ -851,7 +851,7 @@ View Text           	SELECT * FROM t1 INNER JOIN t2 ON t1.num = t2.num2
 View Original Text  	SELECT * FROM t1 INNER JOIN t2 ON t1.num = t2.num2	                    
 View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.testviewschm2	                    
-View Query Output Columns	[num, name, num2, value]
+View Query Output Columns	[`num`, `name`, `num2`, `value`]
 
 
 -- !query
@@ -902,7 +902,7 @@ View Text           	SELECT * FROM t1 LEFT JOIN t2 ON t1.num = t2.num2
 View Original Text  	SELECT * FROM t1 LEFT JOIN t2 ON t1.num = t2.num2	                    
 View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.testviewschm2	                    
-View Query Output Columns	[num, name, num2, value]
+View Query Output Columns	[`num`, `name`, `num2`, `value`]
 
 
 -- !query
@@ -953,7 +953,7 @@ View Text           	SELECT * FROM t1 LEFT JOIN t2 ON t1.num = t2.num2 AND t2.va
 View Original Text  	SELECT * FROM t1 LEFT JOIN t2 ON t1.num = t2.num2 AND t2.value = 'xxx'	                    
 View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.testviewschm2	                    
-View Query Output Columns	[num, name, num2, value]
+View Query Output Columns	[`num`, `name`, `num2`, `value`]
 
 
 -- !query
@@ -1074,7 +1074,7 @@ BETWEEN (SELECT d FROM tbl2 WHERE c = 1) AND (SELECT e FROM tbl3 WHERE f = 2)
 AND EXISTS (SELECT g FROM tbl4 LEFT JOIN tbl3 ON tbl4.h = tbl3.f)	                    
 View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.testviewschm2	                    
-View Query Output Columns	[a, b]
+View Query Output Columns	[`a`, `b`]
 
 
 -- !query
@@ -1114,7 +1114,7 @@ AND EXISTS (SELECT g FROM tbl4 LEFT JOIN tbl3 ON tbl4.h = tbl3.f)
 AND NOT EXISTS (SELECT g FROM tbl4 LEFT JOIN tmptbl ON tbl4.h = tmptbl.j)	                    
 View Schema Mode    	COMPENSATION        	                    
 View Catalog and Namespace	spark_catalog.testviewschm2	                    
-View Query Output Columns	[a, b]
+View Query Output Columns	[`a`, `b`]
 
 
 -- !query

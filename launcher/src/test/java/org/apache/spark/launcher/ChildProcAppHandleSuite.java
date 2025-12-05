@@ -26,6 +26,8 @@ import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
 import static java.nio.file.attribute.PosixFilePermission.*;
 
 import org.apache.logging.log4j.core.config.Property;
@@ -126,7 +128,9 @@ public class ChildProcAppHandleSuite extends BaseSuite {
     waitFor(handle);
 
     assertTrue(MESSAGES.contains("output"));
-    assertEquals(Arrays.asList("error"), Files.lines(err).collect(Collectors.toList()));
+    try (Stream<String> lines = Files.lines(err)) {
+      assertEquals(Arrays.asList("error"), lines.collect(Collectors.toList()));
+    }
   }
 
   @Test
@@ -142,7 +146,9 @@ public class ChildProcAppHandleSuite extends BaseSuite {
     waitFor(handle);
 
     assertTrue(MESSAGES.contains("error"));
-    assertEquals(Arrays.asList("output"), Files.lines(out).collect(Collectors.toList()));
+    try (Stream<String> lines = Files.lines(out)) {
+      assertEquals(Arrays.asList("output"), lines.collect(Collectors.toList()));
+    }
   }
 
   @Test
@@ -161,8 +167,12 @@ public class ChildProcAppHandleSuite extends BaseSuite {
     waitFor(handle);
 
     assertTrue(MESSAGES.isEmpty());
-    assertEquals(Arrays.asList("error"), Files.lines(err).collect(Collectors.toList()));
-    assertEquals(Arrays.asList("output"), Files.lines(out).collect(Collectors.toList()));
+    try (Stream<String> lines = Files.lines(err)) {
+      assertEquals(Arrays.asList("error"), lines.collect(Collectors.toList()));
+    }
+    try (Stream<String> lines = Files.lines(out)) {
+      assertEquals(Arrays.asList("output"), lines.collect(Collectors.toList()));
+    }
   }
 
   @Test

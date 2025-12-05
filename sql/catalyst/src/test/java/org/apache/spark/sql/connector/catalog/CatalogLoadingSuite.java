@@ -6,7 +6,7 @@
  * (the "License"); you may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import org.apache.spark.network.util.JavaUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -24,6 +25,7 @@ import org.apache.spark.SparkException;
 import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 import org.apache.spark.util.Utils;
+
 public class CatalogLoadingSuite {
   @Test
   public void testLoad() throws SparkException {
@@ -58,6 +60,7 @@ public class CatalogLoadingSuite {
     conf.setConfString("spark.sql.catalog.test-name", TestCatalogPlugin.class.getCanonicalName());
     conf.setConfString("spark.sql.catalog.test-name.name", "not-catalog-name");
     conf.setConfString("spark.sql.catalog.test-name.kEy", "valUE");
+    conf.setConfString("spark.sql.catalog.test-name.osName", "${system:os.name}");
 
     CatalogPlugin plugin = Catalogs.load("test-name", conf);
     Assertions.assertNotNull(plugin,"Should instantiate a non-null plugin");
@@ -66,11 +69,13 @@ public class CatalogLoadingSuite {
 
     TestCatalogPlugin testPlugin = (TestCatalogPlugin) plugin;
 
-    Assertions.assertEquals(2, testPlugin.options.size(), "Options should contain only two keys");
+    Assertions.assertEquals(3, testPlugin.options.size(), "Options should contain only three keys");
     Assertions.assertEquals("not-catalog-name", testPlugin.options.get("name"),
       "Options should contain correct value for name (not overwritten)");
     Assertions.assertEquals("valUE", testPlugin.options.get("key"),
       "Options should contain correct value for key");
+    Assertions.assertEquals(JavaUtils.osName, testPlugin.options.get("osName"),
+      "Options should contain correct substitution for value");
   }
 
   @Test
@@ -80,7 +85,7 @@ public class CatalogLoadingSuite {
     SparkException exc = Assertions.assertThrows(CatalogNotFoundException.class,
         () -> Catalogs.load("missing", conf));
 
-    Assertions.assertEquals(exc.getErrorClass(), "CATALOG_NOT_FOUND");
+    Assertions.assertEquals(exc.getCondition(), "CATALOG_NOT_FOUND");
     Assertions.assertEquals(exc.getMessageParameters().get("catalogName"), "`missing`");
   }
 

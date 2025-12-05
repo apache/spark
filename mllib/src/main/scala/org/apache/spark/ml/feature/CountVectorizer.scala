@@ -16,6 +16,8 @@
  */
 package org.apache.spark.ml.feature
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
@@ -277,6 +279,9 @@ class CountVectorizerModel(
 
   import CountVectorizerModel._
 
+  // For ml connect only
+  private[ml] def this() = this("", Array.empty)
+
   @Since("1.5.0")
   def this(vocabulary: Array[String]) = {
     this(Identifiable.randomUID("cntVecModel"), vocabulary)
@@ -310,7 +315,10 @@ class CountVectorizerModel(
       broadcastDict = Some(dataset.sparkSession.sparkContext.broadcast(dict))
     }
     val dictBr = broadcastDict.get
+    // SPARK-48837: capture parameter values here so that we only evaulate once-per-transform
+    // rather than once-per-row:
     val minTf = $(minTF)
+    val isBinary = $(binary)
     val vectorizer = udf { document: Seq[String] =>
       val termCounts = new OpenHashMap[Int, Double]
       var tokenCount = 0L
@@ -322,7 +330,7 @@ class CountVectorizerModel(
         tokenCount += 1
       }
       val effectiveMinTF = if (minTf >= 1.0) minTf else tokenCount * minTf
-      val effectiveCounts = if ($(binary)) {
+      val effectiveCounts = if (isBinary) {
         termCounts.filter(_._2 >= effectiveMinTF).map(p => (p._1, 1.0)).toSeq
       } else {
         termCounts.filter(_._2 >= effectiveMinTF).toSeq
@@ -362,17 +370,27 @@ class CountVectorizerModel(
 
 @Since("1.6.0")
 object CountVectorizerModel extends MLReadable[CountVectorizerModel] {
+  private[ml] case class Data(vocabulary: Seq[String])
+
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    serializeStringArray(data.vocabulary.toArray, dos)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val vocabulary = deserializeStringArray(dis).toSeq
+    Data(vocabulary)
+  }
 
   private[CountVectorizerModel]
   class CountVectorizerModelWriter(instance: CountVectorizerModel) extends MLWriter {
 
-    private case class Data(vocabulary: Seq[String])
-
     override protected def saveImpl(path: String): Unit = {
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.vocabulary.toImmutableArraySeq)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -381,13 +399,10 @@ object CountVectorizerModel extends MLReadable[CountVectorizerModel] {
     private val className = classOf[CountVectorizerModel].getName
 
     override def load(path: String): CountVectorizerModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath)
-        .select("vocabulary")
-        .head()
-      val vocabulary = data.getAs[Seq[String]](0).toArray
-      val model = new CountVectorizerModel(metadata.uid, vocabulary)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
+      val model = new CountVectorizerModel(metadata.uid, data.vocabulary.toArray)
       metadata.getAndSetParams(model)
       model
     }

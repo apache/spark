@@ -17,11 +17,10 @@
 package org.apache.spark.deploy.k8s.features
 
 import java.io.File
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
 import scala.jdk.CollectionConverters._
 
-import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model._
 
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkPod}
@@ -116,7 +115,7 @@ private[spark] class HadoopConfDriverFeatureStep(conf: KubernetesConf)
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
     if (confDir.isDefined) {
       val fileMap = confFiles.map { file =>
-        (file.getName(), Files.toString(file, StandardCharsets.UTF_8))
+        (file.getName(), Files.readString(file.toPath))
       }.toMap.asJava
 
       Seq(new ConfigMapBuilder()

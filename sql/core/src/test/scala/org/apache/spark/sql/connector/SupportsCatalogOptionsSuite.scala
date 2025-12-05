@@ -26,18 +26,18 @@ import scala.util.Try
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, SaveMode}
-import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, QueryTest, SaveMode}
+import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NoSuchTableException, TableAlreadyExistsException, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog, SupportsCatalogOptions, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, InMemoryTableCatalog, SupportsCatalogOptions, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{LongType, StructType}
+import org.apache.spark.sql.types.LongType
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, QueryExecutionListener}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -100,7 +100,8 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
     }
     assert(table.partitioning().map(_.references().head.fieldNames().head) === partitionBy,
       "Partitioning was incorrect")
-    assert(table.schema() === df.schema.asNullable, "Schema did not match")
+    assert(table.columns() === CatalogV2Util.structTypeToV2Columns(df.schema.asNullable),
+      "Column did not match")
 
     checkAnswer(load("t1", withCatalogOption), df.toDF())
   }
@@ -147,7 +148,8 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
 
     val table = catalog(SESSION_CATALOG_NAME).loadTable(Identifier.of(Array("default"), "t1"))
     assert(table.partitioning().isEmpty, "Partitioning should be empty")
-    assert(table.schema() === new StructType().add("id", LongType), "Schema did not match")
+    assert(table.columns() sameElements
+      Array(Column.create("id", LongType)), "Schema did not match")
     assert(load("t1", None).count() === 0)
   }
 
@@ -159,7 +161,8 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
 
     val table = catalog(catalogName).loadTable("t1")
     assert(table.partitioning().isEmpty, "Partitioning should be empty")
-    assert(table.schema() === new StructType().add("id", LongType), "Schema did not match")
+    assert(table.columns() sameElements
+      Array(Column.create("id", LongType)), "Schema did not match")
     assert(load("t1", Some(catalogName)).count() === 0)
   }
 
@@ -218,7 +221,8 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
     val e = intercept[NoSuchTableException] {
       spark.read.format(format).option("name", "non_existent_table").load()
     }
-    checkErrorTableNotFound(e, "`default`.`non_existent_table`")
+    val currentCatalogName = spark.catalog.currentCatalog().name()
+    checkErrorTableNotFound(e, s"`$currentCatalogName`.`default`.`non_existent_table`")
   }
 
   test("DataFrameWriter creates v2Relation with identifiers") {
@@ -301,8 +305,13 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
         .mode(SaveMode.Overwrite).save()
 
       // load with version
-      checkAnswer(load("t", Some(catalogName), version = Some("Snapshot123456789")), df1.toDF())
-      checkAnswer(load("t", Some(catalogName), version = Some("2345678910")), df2.toDF())
+      val readDF1 = load("t", Some(catalogName), version = Some("Snapshot123456789"))
+      checkAnswer(readDF1, df1.toDF())
+      checkTimeTravel(readDF1, expectedTimeTravelSpec = AsOfVersion("Snapshot123456789"))
+
+      val readDF2 = load("t", Some(catalogName), version = Some("2345678910"))
+      checkAnswer(readDF2, df2.toDF())
+      checkTimeTravel(readDF2, expectedTimeTravelSpec = AsOfVersion("2345678910"))
     }
 
     val ts1 = DateTimeUtils.stringToTimestampAnsi(
@@ -326,16 +335,26 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
         .mode(SaveMode.Overwrite).save()
 
       // load with timestamp
-      checkAnswer(load("t", Some(catalogName), version = None,
-        timestamp = Some("2019-01-29 00:37:58")), df3.toDF())
-      checkAnswer(load("t", Some(catalogName), version = None,
-        timestamp = Some("2021-01-29 00:37:58")), df4.toDF())
+      val readDF3 = load("t", Some(catalogName), version = None,
+        timestamp = Some("2019-01-29 00:37:58"))
+      checkAnswer(readDF3, df3.toDF())
+      checkTimeTravel(readDF3, expectedTimeTravelSpec = AsOfTimestamp(ts1))
+
+      val readDF4 = load("t", Some(catalogName), version = None,
+        timestamp = Some("2021-01-29 00:37:58"))
+      checkAnswer(readDF4, df4.toDF())
+      checkTimeTravel(readDF4, expectedTimeTravelSpec = AsOfTimestamp(ts2))
 
       // load with timestamp in number format
-      checkAnswer(load("t", Some(catalogName), version = None,
-        timestamp = Some(MICROSECONDS.toSeconds(ts1).toString)), df3.toDF())
-      checkAnswer(load("t", Some(catalogName), version = None,
-        timestamp = Some(MICROSECONDS.toSeconds(ts2).toString)), df4.toDF())
+      val readDF5 = load("t", Some(catalogName), version = None,
+        timestamp = Some(MICROSECONDS.toSeconds(ts1).toString))
+      checkAnswer(readDF5, df3.toDF())
+      checkTimeTravel(readDF5, expectedTimeTravelSpec = AsOfTimestamp(ts1))
+
+      val readDF6 = load("t", Some(catalogName), version = None,
+        timestamp = Some(MICROSECONDS.toSeconds(ts2).toString))
+      checkAnswer(readDF6, df4.toDF())
+      checkTimeTravel(readDF6, expectedTimeTravelSpec = AsOfTimestamp(ts2))
     }
 
     val e = intercept[AnalysisException] {
@@ -354,6 +373,11 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
     val v2 = plan.asInstanceOf[DataSourceV2Relation]
     assert(v2.identifier.exists(_.name() == identifier))
     assert(v2.catalog.exists(_ == catalogPlugin))
+  }
+
+  private def checkTimeTravel(ds: Dataset[_], expectedTimeTravelSpec: TimeTravelSpec): Unit = {
+    val relation = ds.logicalPlan.asInstanceOf[DataSourceV2Relation]
+    assert(relation.timeTravelSpec.contains(expectedTimeTravelSpec))
   }
 
   private def load(

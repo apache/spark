@@ -32,8 +32,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit.KubernetesClientUtils
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
-import org.apache.spark.internal.LogKeys.{COUNT, HOST_PORT, TOTAL}
-import org.apache.spark.internal.MDC
+import org.apache.spark.internal.LogKeys.{COUNT, TOTAL}
 import org.apache.spark.internal.config.SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext}
@@ -73,6 +72,10 @@ private[spark] class KubernetesClusterSchedulerBackend(
   private val defaultProfile = scheduler.sc.resourceProfileManager.defaultResourceProfile
 
   private val namespace = conf.get(KUBERNETES_NAMESPACE)
+
+  // KEP 2255: When a Deployment or Replicaset is scaled down, the pods will be deleted in the
+  // order of the value of this annotation, ascending.
+  private val podDeletionCostAnnotation = "controller.kubernetes.io/pod-deletion-cost"
 
   // Allow removeExecutor to be accessible by ExecutorPodsLifecycleEventHandler
   private[k8s] def doRemoveExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
@@ -196,6 +199,31 @@ private[spark] class KubernetesClusterSchedulerBackend(
     super.getExecutorIds()
   }
 
+  private def annotateExecutorDeletionCost(execIds: Seq[String]): Unit = {
+    conf.get(KUBERNETES_EXECUTOR_POD_DELETION_COST).foreach { cost =>
+      logInfo(s"Annotating executor pod(s) ${execIds.mkString(",")} with deletion cost $cost")
+      val annotateTask = new Runnable() {
+        override def run(): Unit = Utils.tryLogNonFatalError {
+          kubernetesClient
+            .pods()
+            .inNamespace(namespace)
+            .withLabel(SPARK_APP_ID_LABEL, applicationId())
+            .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
+            .withLabelIn(SPARK_EXECUTOR_ID_LABEL, execIds: _*)
+            .resources()
+            .forEach { podResource =>
+              podResource.edit({ p: Pod =>
+                new PodBuilder(p).editOrNewMetadata()
+                  .addToAnnotations(podDeletionCostAnnotation, cost.toString)
+                  .endMetadata()
+                  .build()})
+            }
+        }
+      }
+      executorService.execute(annotateTask)
+    }
+  }
+
   private def labelDecommissioningExecs(execIds: Seq[String]) = {
     // Only kick off the labeling task if we have a label.
     conf.get(KUBERNETES_EXECUTOR_DECOMMISSION_LABEL).foreach { label =>
@@ -229,6 +257,9 @@ private[spark] class KubernetesClusterSchedulerBackend(
     // picked the pod to evict so we don't need to update the labels.
     if (!triggeredByExecutor) {
       labelDecommissioningExecs(executorsAndDecomInfo.map(_._1).toImmutableArraySeq)
+      if (conf.get(KUBERNETES_ALLOCATION_PODS_ALLOCATOR).equals("deployment")) {
+        annotateExecutorDeletionCost(executorsAndDecomInfo.map(_._1).toImmutableArraySeq)
+      }
     }
     super.decommissionExecutors(executorsAndDecomInfo, adjustTargetNumExecutors,
       triggeredByExecutor)
@@ -236,6 +267,9 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   override def doKillExecutors(executorIds: Seq[String]): Future[Boolean] = {
     // If we've decided to remove some executors we should tell Kubernetes that we don't care.
+    if (conf.get(KUBERNETES_ALLOCATION_PODS_ALLOCATOR).equals("deployment")) {
+      annotateExecutorDeletionCost(executorIds)
+    }
     labelDecommissioningExecs(executorIds)
 
     // Tell the executors to exit themselves.
@@ -356,7 +390,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
               execIDRequester -= rpcAddress
               // Expected, executors re-establish a connection with an ID
             case _ =>
-              logInfo(log"No executor found for ${MDC(HOST_PORT, rpcAddress)}")
+              logDebug(s"No executor found for ${rpcAddress}")
           }
       }
     }

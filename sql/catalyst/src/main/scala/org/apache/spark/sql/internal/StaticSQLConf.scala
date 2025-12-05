@@ -135,6 +135,13 @@ object StaticSQLConf {
     .toSequence
     .createOptional
 
+  val LOAD_SESSION_EXTENSIONS_FROM_CLASSPATH =
+    buildStaticConf("spark.sql.extensions.test.loadFromCp")
+      .doc("Flag that determines if we should load extensions from the classpath using the " +
+        "SparkSessionExtensionsProvider mechanism. This is a test only flag.")
+      .booleanConf
+      .createWithDefault(true)
+
   val SPARK_CACHE_SERIALIZER = buildStaticConf("spark.sql.cache.serializer")
     .doc("The name of a class that implements " +
       "org.apache.spark.sql.columnar.CachedBatchSerializer. It will be used to " +
@@ -170,6 +177,16 @@ object StaticSQLConf {
       .intConf
       .createWithDefault(1000)
 
+  val SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD =
+    buildStaticConf("spark.sql.shuffleExchange.maxThreadThreshold")
+      .internal()
+      .doc("The maximum degree of parallelism for doing preparation of shuffle exchange, " +
+        "which includes subquery execution, file listing, etc.")
+      .version("4.0.0")
+      .intConf
+      .checkValue(thres => thres > 0 && thres <= 1024, "The threshold must be in (0,1024].")
+      .createWithDefault(1024)
+
   val BROADCAST_EXCHANGE_MAX_THREAD_THRESHOLD =
     buildStaticConf("spark.sql.broadcastExchange.maxThreadThreshold")
       .internal()
@@ -192,6 +209,15 @@ object StaticSQLConf {
       .intConf
       .checkValue(thres => thres > 0 && thres <= 128, "The threshold must be in (0,128].")
       .createWithDefault(16)
+
+  val RESULT_QUERY_STAGE_MAX_THREAD_THRESHOLD =
+    buildStaticConf("spark.sql.resultQueryStage.maxThreadThreshold")
+      .internal()
+      .doc("The maximum degree of parallelism to execute ResultQueryStageExec in AQE")
+      .version("4.0.0")
+      .intConf
+      .checkValue(thres => thres > 0 && thres <= 1024, "The threshold must be in (0,1024].")
+      .createWithDefault(1024)
 
   val SQL_EVENT_TRUNCATE_LENGTH = buildStaticConf("spark.sql.event.truncate.length")
     .doc("Threshold of SQL length beyond which it will be truncated before adding to " +
@@ -263,7 +289,7 @@ object StaticSQLConf {
     buildStaticConf("spark.sql.streaming.ui.enabledCustomMetricList")
       .internal()
       .doc("Configures a list of custom metrics on Structured Streaming UI, which are enabled. " +
-        "The list contains the name of the custom metrics separated by comma. In aggregation" +
+        "The list contains the name of the custom metrics separated by comma. In aggregation " +
         "only sum used. The list of supported custom metrics is state store provider specific " +
         "and it can be found out for example from query progress log entry.")
       .version("3.1.0")
@@ -278,4 +304,14 @@ object StaticSQLConf {
       .version("3.1.0")
       .stringConf
       .createWithDefault("")
+
+  val DATA_FRAME_DEBUGGING_ENABLED =
+    buildStaticConf("spark.python.sql.dataFrameDebugging.enabled")
+    .internal()
+    .doc(
+      "Enable the DataFrame debugging. This feature is enabled by default, but has a " +
+        "non-trivial performance overhead because of the stack trace collection.")
+    .version("4.0.0")
+    .booleanConf
+    .createWithDefault(true)
 }

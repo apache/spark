@@ -18,6 +18,7 @@
 package org.apache.spark.ml
 
 import scala.annotation.varargs
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.param.{ParamMap, ParamPair}
@@ -81,4 +82,34 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage {
   }
 
   override def copy(extra: ParamMap): Estimator[M]
+
+  /**
+   * For ml connect only.
+   * Estimate an upper-bound size of the model to be fitted in bytes, based on the
+   * parameters and the dataset, e.g., using $(k) and numFeatures to estimate a
+   * k-means model size.
+   * 1, Both driver side memory usage and distributed objects size (like DataFrame,
+   * RDD, Graph, Summary) are counted.
+   * 2, Lazy vals are not counted, e.g., an auxiliary object used in prediction.
+   * 3, If there is no enough information to get an accurate size, try to estimate the
+   * upper-bound size, e.g.
+   *    - Given a LogisticRegression estimator, assume the coefficients are dense, even
+   *      though the actual fitted model might be sparse (by L1 penalty).
+   *    - Given a tree model, assume all underlying trees are complete binary trees, even
+   *      though some branches might be pruned or truncated.
+   * 4, For some model such as tree model, estimating model size before training is hard,
+   *    the `estimateModelSize` method is not supported.
+   */
+  private[spark] def estimateModelSize(dataset: Dataset[_]): Long = {
+    throw new UnsupportedOperationException
+  }
+}
+
+
+object EstimatorUtils {
+  // This warningMessagesBuffer is for collecting warning messages during `estimator.fit`
+  // execution in Spark Connect server.
+  private[spark] val warningMessagesBuffer = new java.lang.ThreadLocal[ArrayBuffer[String]]() {
+    override def initialValue: ArrayBuffer[String] = null
+  }
 }

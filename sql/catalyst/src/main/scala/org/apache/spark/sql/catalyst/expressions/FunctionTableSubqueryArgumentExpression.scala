@@ -172,9 +172,12 @@ case class FunctionTableSubqueryArgumentExpression(
     }
   }
 
-  private lazy val extraProjectedPartitioningExpressions: Seq[Alias] = {
+  lazy val extraProjectedPartitioningExpressions: Seq[Alias] = {
     partitionByExpressions.filter { e =>
-      !subqueryOutputs.contains(e)
+      !subqueryOutputs.contains(e) ||
+        // Skip deduplicating the 'partitionBy' expression(s) against the attributes of the input
+        // table if the UDTF also specified 'select' expression(s).
+        selectedInputExpressions.nonEmpty
     }.zipWithIndex.map { case (expr, index) =>
       Alias(expr, s"partition_by_$index")()
     }

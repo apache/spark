@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
@@ -89,10 +91,12 @@ private[ml] trait OneHotEncoderBase extends Params with HasHandleInvalid
         s"output columns ${outputColNames.length}.")
 
     // Input columns must be NumericType.
-    inputColNames.foreach(SchemaUtils.checkNumericType(schema, _))
+    inputColNames.foreach { colName =>
+      SchemaUtils.checkNumericType(schema, colName)
+    }
 
     // Prepares output columns with proper attributes by examining input columns.
-    val inputFields = inputColNames.map(schema(_))
+    val inputFields = inputColNames.map(SchemaUtils.getSchemaField(schema, _))
 
     val outputFields = inputFields.zip(outputColNames).map { case (inputField, outputColName) =>
       OneHotEncoderCommon.transformOutputColumnSchema(
@@ -231,6 +235,9 @@ class OneHotEncoderModel private[ml] (
   extends Model[OneHotEncoderModel] with OneHotEncoderBase with MLWritable {
 
   import OneHotEncoderModel._
+
+  // For ml connect only
+  private[ml] def this() = this("", Array.emptyIntArray)
 
   // Returns the category size for each index with `dropLast` and `handleInvalid`
   // taken into account.
@@ -396,17 +403,27 @@ class OneHotEncoderModel private[ml] (
 
 @Since("3.0.0")
 object OneHotEncoderModel extends MLReadable[OneHotEncoderModel] {
+  private[ml] case class Data(categorySizes: Array[Int])
+
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    serializeIntArray(data.categorySizes, dos)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val categorySizes = deserializeIntArray(dis)
+    Data(categorySizes)
+  }
 
   private[OneHotEncoderModel]
   class OneHotEncoderModelWriter(instance: OneHotEncoderModel) extends MLWriter {
 
-    private case class Data(categorySizes: Array[Int])
-
     override protected def saveImpl(path: String): Unit = {
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.categorySizes)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -415,13 +432,10 @@ object OneHotEncoderModel extends MLReadable[OneHotEncoderModel] {
     private val className = classOf[OneHotEncoderModel].getName
 
     override def load(path: String): OneHotEncoderModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath)
-        .select("categorySizes")
-        .head()
-      val categorySizes = data.getAs[Seq[Int]](0).toArray
-      val model = new OneHotEncoderModel(metadata.uid, categorySizes)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
+      val model = new OneHotEncoderModel(metadata.uid, data.categorySizes)
       metadata.getAndSetParams(model)
       model
     }

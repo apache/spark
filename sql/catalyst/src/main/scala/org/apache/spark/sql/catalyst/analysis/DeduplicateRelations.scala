@@ -19,25 +19,18 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
+import org.apache.spark.sql.catalyst.analysis.resolver.ResolverTag
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, AttributeSet, Expression, NamedExpression, OuterReference, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-
-/**
- * A helper class used to detect duplicate relations fast in `DeduplicateRelations`. Two relations
- * are duplicated if:
- *  1. they are the same class.
- *  2. they have the same output attribute IDs.
- *
- * The first condition is necessary because the CTE relation definition node and reference node have
- * the same output attribute IDs but they are not duplicated.
- */
-case class RelationWrapper(cls: Class[_], outputAttrIds: Seq[Long])
+import org.apache.spark.sql.internal.SQLConf
 
 object DeduplicateRelations extends Rule[LogicalPlan] {
+  type ExprIdMap = mutable.HashMap[Class[_], mutable.HashSet[Long]]
+
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    val newPlan = renewDuplicatedRelations(mutable.HashSet.empty, plan)._1
+    val newPlan = renewDuplicatedRelations(mutable.HashMap.empty, plan)._1
 
     // Wait for `ResolveMissingReferences` to resolve missing attributes first
     def noMissingInput(p: LogicalPlan) = !p.exists(_.missingInput.nonEmpty)
@@ -64,21 +57,30 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
       case e @ Except(left, right, _) if !e.duplicateResolved && noMissingInput(right) =>
         e.copy(right = dedupRight(left, right))
       // Only after we finish by-name resolution for Union
-      case u: Union if !u.byName && !u.duplicateResolved =>
+      case u: Union if !u.byName && !u.duplicatesResolvedBetweenBranches =>
+        val unionWithChildOutputsDeduplicated =
+          DeduplicateUnionChildOutput.deduplicateOutputPerChild(u)
         // Use projection-based de-duplication for Union to avoid breaking the checkpoint sharing
         // feature in streaming.
-        val newChildren = u.children.foldRight(Seq.empty[LogicalPlan]) { (head, tail) =>
-          head +: tail.map {
-            case child if head.outputSet.intersect(child.outputSet).isEmpty =>
-              child
-            case child =>
-              val projectList = child.output.map { attr =>
-                Alias(attr, attr.name)()
+        val newChildren =
+          unionWithChildOutputsDeduplicated.children.foldRight(Seq.empty[LogicalPlan]) {
+            (head, tail) =>
+              head +: tail.map {
+                case child if head.outputSet.intersect(child.outputSet).isEmpty =>
+                  child
+                case child =>
+                  val projectList = child.output.map { attr =>
+                    Alias(attr, attr.name)()
+                  }
+                  val project = Project(projectList, child)
+                  project.setTagValue(
+                    ResolverTag.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION,
+                    ()
+                  )
+                  project
               }
-              Project(projectList, child)
           }
-        }
-        u.copy(children = newChildren)
+        unionWithChildOutputsDeduplicated.copy(children = newChildren)
       case merge: MergeIntoTable
           if !merge.duplicateResolved && noMissingInput(merge.sourceTable) =>
         merge.copy(sourceTable = dedupRight(merge.targetTable, merge.sourceTable))
@@ -86,10 +88,10 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
   }
 
   private def existDuplicatedExprId(
-      existingRelations: mutable.HashSet[RelationWrapper],
-      plan: RelationWrapper): Boolean = {
-    existingRelations.filter(_.cls == plan.cls)
-      .exists(_.outputAttrIds.intersect(plan.outputAttrIds).nonEmpty)
+      existingRelations: ExprIdMap,
+      planClass: Class[_], exprIds: Seq[Long]): Boolean = {
+    val attrSet = existingRelations.getOrElse(planClass, mutable.HashSet.empty)
+    exprIds.exists(attrSet.contains)
   }
 
   /**
@@ -100,7 +102,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
    *          whether the plan is changed or not)
    */
   private def renewDuplicatedRelations(
-      existingRelations: mutable.HashSet[RelationWrapper],
+      existingRelations: ExprIdMap,
       plan: LogicalPlan): (LogicalPlan, Boolean) = plan match {
     case p: LogicalPlan if p.isStreaming => (plan, false)
 
@@ -140,8 +142,22 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         _.output.map(_.exprId.id),
         newFlatMap => newFlatMap.copy(output = newFlatMap.output.map(_.newInstance())))
 
+    case f: FlatMapGroupsInArrow =>
+      deduplicateAndRenew[FlatMapGroupsInArrow](
+        existingRelations,
+        f,
+        _.output.map(_.exprId.id),
+        newFlatMap => newFlatMap.copy(output = newFlatMap.output.map(_.newInstance())))
+
     case f: FlatMapCoGroupsInPandas =>
       deduplicateAndRenew[FlatMapCoGroupsInPandas](
+        existingRelations,
+        f,
+        _.output.map(_.exprId.id),
+        newFlatMap => newFlatMap.copy(output = newFlatMap.output.map(_.newInstance())))
+
+    case f: FlatMapCoGroupsInArrow =>
+      deduplicateAndRenew[FlatMapCoGroupsInArrow](
         existingRelations,
         f,
         _.output.map(_.exprId.id),
@@ -203,7 +219,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
   }
 
   private def deduplicate(
-      existingRelations: mutable.HashSet[RelationWrapper],
+      existingRelations: ExprIdMap,
       plan: LogicalPlan): (LogicalPlan, Boolean) = {
     var planChanged = false
     val newPlan = if (plan.children.nonEmpty) {
@@ -226,8 +242,17 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
       if (planChanged) {
         if (planWithNewSubquery.childrenResolved) {
           val planWithNewChildren = planWithNewSubquery.withNewChildren(newChildren.toSeq)
+          val childrenOutputLookup = AttributeSet.fromAttributeSets(newChildren.map(_.outputSet))
+          val childrenOutput = newChildren.flatMap(_.output)
           val attrMap = AttributeMap(plan.children.flatMap(_.output)
-            .zip(newChildren.flatMap(_.output)).filter { case (a1, a2) => a1.exprId != a2.exprId })
+            .zip(childrenOutput).filter { case (a1, a2) => a1.exprId != a2.exprId })
+          val preventDeduplicationIfOldExprIdStillExists =
+            conf.getConf(SQLConf.DONT_DEDUPLICATE_EXPRESSION_IF_EXPR_ID_IN_OUTPUT)
+          val missingAttributeMap = AttributeMap(attrMap.filter {
+            case (oldAttribute, _) =>
+              !preventDeduplicationIfOldExprIdStillExists ||
+              !childrenOutputLookup.contains(oldAttribute)
+          })
           if (attrMap.isEmpty) {
             planWithNewChildren
           } else {
@@ -255,17 +280,23 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
                 val newRightGroup = rewriteAttrs(c.rightGroup, rightAttrMap)
                 val newLeftOrder = rewriteAttrs(c.leftOrder, leftAttrMap)
                 val newRightOrder = rewriteAttrs(c.rightOrder, rightAttrMap)
-                val newKeyDes = c.keyDeserializer.asInstanceOf[UnresolvedDeserializer]
-                  .copy(inputAttributes = newLeftGroup)
-                val newLeftDes = c.leftDeserializer.asInstanceOf[UnresolvedDeserializer]
-                  .copy(inputAttributes = newLeftAttr)
-                val newRightDes = c.rightDeserializer.asInstanceOf[UnresolvedDeserializer]
-                  .copy(inputAttributes = newRightAttr)
+                val newKeyDes = c.keyDeserializer match {
+                  case u: UnresolvedDeserializer => u.copy(inputAttributes = newLeftGroup)
+                  case e: Expression => e.withNewChildren(rewriteAttrs(e.children, leftAttrMap))
+                }
+                val newLeftDes = c.leftDeserializer match {
+                  case u: UnresolvedDeserializer => u.copy(inputAttributes = newLeftAttr)
+                  case e: Expression => e.withNewChildren(rewriteAttrs(e.children, leftAttrMap))
+                }
+                val newRightDes = c.rightDeserializer match {
+                  case u: UnresolvedDeserializer => u.copy(inputAttributes = newRightAttr)
+                  case e: Expression => e.withNewChildren(rewriteAttrs(e.children, rightAttrMap))
+                }
                 c.copy(keyDeserializer = newKeyDes, leftDeserializer = newLeftDes,
                   rightDeserializer = newRightDes, leftGroup = newLeftGroup,
                   rightGroup = newRightGroup, leftAttr = newLeftAttr, rightAttr = newRightAttr,
                   leftOrder = newLeftOrder, rightOrder = newRightOrder)
-              case _ => planWithNewChildren.rewriteAttrs(attrMap)
+              case _ => planWithNewChildren.rewriteAttrs(missingAttributeMap)
             }
           }
         } else {
@@ -281,20 +312,21 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
   }
 
   private def deduplicateAndRenew[T <: LogicalPlan](
-      existingRelations: mutable.HashSet[RelationWrapper], plan: T,
+      existingRelations: ExprIdMap, plan: T,
       getExprIds: T => Seq[Long],
       copyNewPlan: T => T): (LogicalPlan, Boolean) = {
     var (newPlan, planChanged) = deduplicate(existingRelations, plan)
     if (newPlan.resolved) {
       val exprIds = getExprIds(newPlan.asInstanceOf[T])
       if (exprIds.nonEmpty) {
-        val planWrapper = RelationWrapper(newPlan.getClass, exprIds)
-        if (existDuplicatedExprId(existingRelations, planWrapper)) {
+        if (existDuplicatedExprId(existingRelations, newPlan.getClass, exprIds)) {
           newPlan = copyNewPlan(newPlan.asInstanceOf[T])
           newPlan.copyTagsFrom(plan)
           (newPlan, true)
         } else {
-          existingRelations.add(planWrapper)
+          val attrSet = existingRelations.getOrElseUpdate(newPlan.getClass, mutable.HashSet.empty)
+          exprIds.foreach(attrSet.add)
+          existingRelations.put(newPlan.getClass, attrSet)
           (newPlan, planChanged)
         }
       } else {
@@ -362,14 +394,14 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         if findAliases(projectList).size == projectList.size =>
         Nil
 
-      case oldVersion @ Aggregate(_, aggregateExpressions, _)
+      case oldVersion @ Aggregate(_, aggregateExpressions, _, _)
           if findAliases(aggregateExpressions).intersect(conflictingAttributes).nonEmpty =>
         val newVersion = oldVersion.copy(aggregateExpressions = newAliases(aggregateExpressions))
         newVersion.copyTagsFrom(oldVersion)
         Seq((oldVersion, newVersion))
 
       // We don't search the child plan recursively for the same reason as the above Project.
-      case _ @ Aggregate(_, aggregateExpressions, _)
+      case _ @ Aggregate(_, aggregateExpressions, _, _)
         if findAliases(aggregateExpressions).size == aggregateExpressions.size =>
         Nil
 
@@ -379,7 +411,19 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         newVersion.copyTagsFrom(oldVersion)
         Seq((oldVersion, newVersion))
 
+      case oldVersion @ FlatMapGroupsInArrow(_, _, output, _)
+        if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
+        val newVersion = oldVersion.copy(output = output.map(_.newInstance()))
+        newVersion.copyTagsFrom(oldVersion)
+        Seq((oldVersion, newVersion))
+
       case oldVersion @ FlatMapCoGroupsInPandas(_, _, _, output, _, _)
+        if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
+        val newVersion = oldVersion.copy(output = output.map(_.newInstance()))
+        newVersion.copyTagsFrom(oldVersion)
+        Seq((oldVersion, newVersion))
+
+      case oldVersion @ FlatMapCoGroupsInArrow(_, _, _, output, _, _)
         if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
         val newVersion = oldVersion.copy(output = output.map(_.newInstance()))
         newVersion.copyTagsFrom(oldVersion)
@@ -424,7 +468,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
         newVersion.copyTagsFrom(oldVersion)
         Seq((oldVersion, newVersion))
 
-      case oldVersion @ Window(windowExpressions, _, _, child)
+      case oldVersion @ Window(windowExpressions, _, _, child, _)
           if AttributeSet(windowExpressions.map(_.toAttribute)).intersect(conflictingAttributes)
           .nonEmpty =>
         val newVersion = oldVersion.copy(windowExpressions = newAliases(windowExpressions))

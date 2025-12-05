@@ -89,6 +89,27 @@ select a, b, count(1) from data group by cube(-1, 2);
 
 select a, b, count(1) from data group by cube(1, 3);
 
+-- Group by ordinal on subquery with CTE inside
+SELECT (
+  WITH cte AS (SELECT 1)
+  SELECT * FROM cte
+) AS subq1
+FROM
+  VALUES (1)
+GROUP BY
+  1
+;
+
+-- Group by ordinal on subquery with relation
+SELECT (
+  SELECT a FROM data LIMIT 1
+) AS subq1
+FROM
+  VALUES (1)
+GROUP BY
+  1
+;
+
 -- turn off group by ordinal
 set spark.sql.groupByOrdinal=false;
 

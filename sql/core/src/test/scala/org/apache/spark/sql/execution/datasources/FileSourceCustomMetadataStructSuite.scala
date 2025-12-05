@@ -21,9 +21,10 @@ import java.io.File
 
 import org.apache.hadoop.fs.{FileStatus, Path}
 
-import org.apache.spark.sql.{DataFrame, Dataset, QueryTest, Row}
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, FileSourceConstantMetadataStructField, FileSourceGeneratedMetadataStructField, Literal}
+import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.functions.{col, lit, when}
 import org.apache.spark.sql.test.SharedSparkSession

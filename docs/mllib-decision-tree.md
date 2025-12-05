@@ -58,19 +58,19 @@ impurity measure for regression (variance).
   <tbody>
     <tr>
       <td>Gini impurity</td>
-	  <td>Classification</td>
-	  <td>$\sum_{i=1}^{C} f_i(1-f_i)$</td><td>$f_i$ is the frequency of label $i$ at a node and $C$ is the number of unique labels.</td>
+      <td>Classification</td>
+      <td>$\sum_{i=1}^{C} f_i(1-f_i)$</td><td>$f_i$ is the frequency of label $i$ at a node and $C$ is the number of unique labels.</td>
     </tr>
     <tr>
       <td>Entropy</td>
-	  <td>Classification</td>
-	  <td>$\sum_{i=1}^{C} -f_ilog(f_i)$</td><td>$f_i$ is the frequency of label $i$ at a node and $C$ is the number of unique labels.</td>
+      <td>Classification</td>
+      <td>$\sum_{i=1}^{C} -f_ilog(f_i)$</td><td>$f_i$ is the frequency of label $i$ at a node and $C$ is the number of unique labels.</td>
     </tr>
     <tr>
       <td>Variance</td>
-	  <td>Regression</td>
-     <td>$\frac{1}{N} \sum_{i=1}^{N} (y_i - \mu)^2$</td><td>$y_i$ is label for an instance,
-	  $N$ is the number of instances and $\mu$ is the mean given by $\frac{1}{N} \sum_{i=1}^N y_i$.</td>
+      <td>Regression</td>
+      <td>$\frac{1}{N} \sum_{i=1}^{N} (y_i - \mu)^2$</td><td>$y_i$ is label for an instance,
+      $N$ is the number of instances and $\mu$ is the mean given by $\frac{1}{N} \sum_{i=1}^N y_i$.</td>
     </tr>
   </tbody>
 </table>

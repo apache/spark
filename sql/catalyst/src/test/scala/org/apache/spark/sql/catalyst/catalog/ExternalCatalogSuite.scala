@@ -245,12 +245,15 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
 
   test("alter table schema") {
     val catalog = newBasicCatalog()
-    val newDataSchema = StructType(Seq(
+    val newSchema = StructType(Seq(
       StructField("col1", IntegerType),
-      StructField("new_field_2", StringType)))
-    catalog.alterTableDataSchema("db2", "tbl1", newDataSchema)
+      StructField("new_field_2", StringType),
+      StructField("a", IntegerType),
+      StructField("b", StringType)))
+    catalog.alterTableSchema("db2", "tbl1", newSchema)
     val newTbl1 = catalog.getTable("db2", "tbl1")
-    assert(newTbl1.dataSchema == newDataSchema)
+    assert(newTbl1.dataSchema == StructType(newSchema.take(2)))
+    assert(newTbl1.schema == newSchema)
   }
 
   test("alter table stats") {
@@ -570,7 +573,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
         // then be caught and converted to a RuntimeException with a descriptive message.
         case ex: RuntimeException if ex.getMessage.contains("MetaException") =>
           throw new AnalysisException(
-            errorClass = "_LEGACY_ERROR_TEMP_2193",
+            errorClass = "INTERNAL_ERROR_HIVE_METASTORE_PARTITION_FILTER",
             messageParameters = Map(
               "hiveMetastorePartitionPruningFallbackOnException" ->
                 SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key))
@@ -983,6 +986,32 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
       "db2", "tbl1", Seq(part1.spec), ignoreIfNotExists = false, purge = false, retainData = false)
     assert(fs.exists(partPath))
   }
+
+  test("SPARK-52683: support alterTableSchema partitioned columns") {
+    val catalog = newBasicCatalog()
+
+    val schema = new StructType()
+      .add("a", IntegerType)
+      .add("b", IntegerType)
+      .add("c", StringType)
+    val table = CatalogTable(
+      identifier = TableIdentifier("t", Some("db1")),
+      tableType = CatalogTableType.MANAGED,
+      storage = storageFormat,
+      schema = schema,
+      partitionColumnNames = Seq("c"),
+      provider = Some("hive"))
+    catalog.createTable(table, ignoreIfExists = false)
+
+    val newSchema = new StructType()
+      .add("b", LongType)
+      .add("a", IntegerType)
+      .add("c", StringType)
+    catalog.alterTableSchema("db1", "t", newSchema)
+
+    assert(catalog.getTable("db1", "t").schema == newSchema)
+    assert(catalog.getTable("db1", "t").partitionColumnNames == Seq("c"))
+  }
 }
 
 
@@ -1073,7 +1102,8 @@ abstract class CatalogTestUtils {
   def newTable(
       name: String,
       database: Option[String] = None,
-      defaultColumns: Boolean = false): CatalogTable = {
+      defaultColumns: Boolean = false,
+      clusterBy: Boolean = false): CatalogTable = {
     CatalogTable(
       identifier = TableIdentifier(name, database),
       tableType = CatalogTableType.EXTERNAL,
@@ -1110,8 +1140,14 @@ abstract class CatalogTestUtils {
           .add("b", "string")
       },
       provider = Some(defaultProvider),
-      partitionColumnNames = Seq("a", "b"),
-      bucketSpec = Some(BucketSpec(4, Seq("col1"), Nil)))
+      partitionColumnNames = if (clusterBy) Seq.empty else Seq("a", "b"),
+      bucketSpec = if (clusterBy) None else Some(BucketSpec(4, Seq("col1"), Nil)),
+      properties = if (clusterBy) {
+        Map(
+          ClusterBySpec.toPropertyWithoutValidation(ClusterBySpec.fromColumnNames(Seq("c1", "c2"))))
+      } else {
+        Map.empty
+      })
   }
 
   def newView(

@@ -30,9 +30,9 @@ import org.apache.spark.sql.execution.datasources.jdbc.connection.{DB2Connection
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., ibmcom/db2:11.5.8.0):
+ * To run this test suite for a specific version (e.g., icr.io/db2_community/db2:11.5.9.0):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 DB2_DOCKER_IMAGE_NAME=ibmcom/db2:11.5.8.0
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 DB2_DOCKER_IMAGE_NAME=icr.io/db2_community/db2:11.5.9.0
  *     ./build/sbt -Pdocker-integration-tests
  *     "docker-integration-tests/testOnly *DB2KrbIntegrationSuite"
  * }}}
@@ -57,7 +57,7 @@ class DB2KrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
     override def beforeContainerStart(
         hostConfigBuilder: HostConfig,
         containerConfigBuilder: ContainerConfig): Unit = {
-      copyExecutableResource("db2_krb_setup.sh", initDbDir, replaceIp)
+      copyExecutableResource("db2-krb-setup.sh", initDbDir, replaceIp)
 
       val newBind = new Bind(
         initDbDir.getAbsolutePath,

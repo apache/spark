@@ -1,6 +1,6 @@
 Package: SparkR
 Type: Package
-Version: 4.0.0
+Version: 4.2.0
 Title: R Front End for 'Apache Spark'
 Description: Provides an R Front end for 'Apache Spark' <https://spark.apache.org>.
 Authors@R:
@@ -57,6 +57,7 @@ Collate:
     'types.R'
     'utils.R'
     'window.R'
+    'zzz.R'
 RoxygenNote: 7.1.2
 VignetteBuilder: knitr
 NeedsCompilation: no

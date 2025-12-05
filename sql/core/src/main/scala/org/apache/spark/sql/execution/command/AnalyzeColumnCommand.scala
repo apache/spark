@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql._
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{DatetimeType, _}
 
@@ -42,7 +44,7 @@ case class AnalyzeColumnCommand(
     val sessionState = sparkSession.sessionState
 
     tableIdent.database match {
-      case Some(db) if db == sparkSession.sharedState.globalTempViewManager.database =>
+      case Some(db) if db == sparkSession.sharedState.globalTempDB =>
         val plan = sessionState.catalog.getGlobalTempView(tableIdent.identifier).getOrElse {
           throw QueryCompilationErrors.noSuchTableError(db, tableIdent.identifier)
         }
@@ -140,7 +142,8 @@ case class AnalyzeColumnCommand(
     case DoubleType | FloatType => true
     case BooleanType => true
     case _: DatetimeType => true
-    case BinaryType | StringType => true
+    case CharType(_) | VarcharType(_) => false
+    case BinaryType | _: StringType => true
     case _ => false
   }
 }

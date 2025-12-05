@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.mutable
 
 import org.apache.spark.sql.{sources, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Expression, PythonUDF, SubqueryExpression}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{ScanBuilder, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, DataSourceUtils, PartitioningAwareFileIndex, PartitioningUtils}
@@ -70,11 +70,13 @@ abstract class FileScanBuilder(
   }
 
   override def pushFilters(filters: Seq[Expression]): Seq[Expression] = {
-    val (filtersToPush, filtersToRemain) = filters.partition(
-      f => DataSourceUtils.shouldPushFilter(f, supportsCollationPushDown))
+    val (deterministicFilters, nonDeterminsticFilters) = filters.partition(_.deterministic)
     val (partitionFilters, dataFilters) =
-      DataSourceUtils.getPartitionFiltersAndDataFilters(partitionSchema, filtersToPush)
-    this.partitionFilters = partitionFilters
+      DataSourceUtils.getPartitionFiltersAndDataFilters(partitionSchema, deterministicFilters)
+    this.partitionFilters = partitionFilters.filter { f =>
+      // Python UDFs might exist because this rule is applied before ``ExtractPythonUDFs``.
+      !SubqueryExpression.hasSubquery(f) && !f.exists(_.isInstanceOf[PythonUDF])
+    }
     this.dataFilters = dataFilters
     val translatedFilters = mutable.ArrayBuffer.empty[sources.Filter]
     for (filterExpr <- dataFilters) {
@@ -84,7 +86,7 @@ abstract class FileScanBuilder(
       }
     }
     pushedDataFilters = pushDataFilters(translatedFilters.toArray)
-    dataFilters ++ filtersToRemain
+    dataFilters ++ nonDeterminsticFilters
   }
 
   override def pushedFilters: Array[Predicate] = pushedDataFilters.map(_.toV2)
@@ -95,12 +97,6 @@ abstract class FileScanBuilder(
    * File source needs to implement this method to push down data filters.
    */
   protected def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = Array.empty[Filter]
-
-  /**
-   * Returns whether the file scan builder supports filter pushdown
-   * for non utf8 binary collated columns.
-   */
-  protected def supportsCollationPushDown: Boolean = false
 
   private def createRequiredNameSet(): Set[String] =
     requiredSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive)).toSet

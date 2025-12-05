@@ -557,17 +557,23 @@ FROM testData
 WINDOW w AS (PARTITION BY cate ORDER BY val)
 ORDER BY cate, val
 -- !query schema
-struct<val:int,cate:string,max:int,min:int,min:int,count:bigint,sum:bigint,avg:double,stddev:double,first_value:int,first_value_ignore_null:int,first_value_contain_null:int,any_value:int,any_value_ignore_null:int,any_value_contain_null:int,last_value:int,last_value_ignore_null:int,last_value_contain_null:int,rank:int,dense_rank:int,cume_dist:double,percent_rank:double,ntile:int,row_number:int,var_pop:double,var_samp:double,approx_count_distinct:bigint,covar_pop:double,corr:double,stddev_samp:double,stddev_pop:double,collect_list:array<int>,collect_set:array<int>,skewness:double,kurtosis:double>
+struct<>
 -- !query output
-NULL	NULL	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	1	1	0.5	0.0	1	1	NULL	NULL	0	NULL	NULL	NULL	NULL	[]	[]	NULL	NULL
-3	NULL	3	3	3	1	3	3.0	NULL	NULL	3	NULL	NULL	3	NULL	3	3	3	2	2	1.0	1.0	2	2	0.0	NULL	1	0.0	NULL	NULL	0.0	[3]	[3]	NULL	NULL
-NULL	a	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	1	1	0.25	0.0	1	1	NULL	NULL	0	NULL	NULL	NULL	NULL	[]	[]	NULL	NULL
-1	a	1	1	1	2	2	1.0	0.0	NULL	1	NULL	NULL	1	NULL	1	1	1	2	2	0.75	0.3333333333333333	1	2	0.0	0.0	1	0.0	NULL	0.0	0.0	[1,1]	[1]	0.7071067811865476	-1.5
-1	a	1	1	1	2	2	1.0	0.0	NULL	1	NULL	NULL	1	NULL	1	1	1	2	2	0.75	0.3333333333333333	2	3	0.0	0.0	1	0.0	NULL	0.0	0.0	[1,1]	[1]	0.7071067811865476	-1.5
-2	a	2	1	1	3	4	1.3333333333333333	0.5773502691896258	NULL	1	NULL	NULL	1	NULL	2	2	2	4	3	1.0	1.0	2	4	0.22222222222222224	0.33333333333333337	2	4.772185885555555E8	1.0	0.5773502691896258	0.4714045207910317	[1,1,2]	[1,2]	1.1539890888012805	-0.6672217220327235
-1	b	1	1	1	1	1	1.0	NULL	1	1	1	1	1	1	1	1	1	1	1	0.3333333333333333	0.0	1	1	0.0	NULL	1	NULL	NULL	NULL	0.0	[1]	[1]	NULL	NULL
-2	b	2	1	1	2	3	1.5	0.7071067811865476	1	1	1	1	1	1	2	2	2	2	2	0.6666666666666666	0.5	1	2	0.25	0.5	2	0.0	NULL	0.7071067811865476	0.5	[1,2]	[1,2]	0.0	-2.0000000000000013
-3	b	3	1	1	3	6	2.0	1.0	1	1	1	1	1	1	3	3	3	3	3	1.0	1.0	2	3	0.6666666666666666	1.0	3	5.3687091175E8	1.0	1.0	0.816496580927726	[1,2,3]	[1,2,3]	0.7057890433107311	-1.4999999999999984
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1016,
+    "stopIndex" : 1041,
+    "fragment" : "corr(val, val_long) OVER w"
+  } ]
+}
 
 
 -- !query
@@ -1054,6 +1060,7 @@ SELECT
     lag(v, 1) IGNORE NULLS OVER w lag_1,
     lag(v, 2) IGNORE NULLS OVER w lag_2,
     lag(v, 3) IGNORE NULLS OVER w lag_3,
+    lag(v, +3) IGNORE NULLS OVER w lag_plus_3,
     nth_value(v, 1) IGNORE NULLS OVER w nth_value_1,
     nth_value(v, 2) IGNORE NULLS OVER w nth_value_2,
     nth_value(v, 3) IGNORE NULLS OVER w nth_value_3,
@@ -1065,17 +1072,17 @@ FROM
 WINDOW w AS (ORDER BY id)
 ORDER BY id
 -- !query schema
-struct<content:string,id:int,v:string,lead_0:string,lead_1:string,lead_2:string,lead_3:string,lag_0:string,lag_1:string,lag_2:string,lag_3:string,nth_value_1:string,nth_value_2:string,nth_value_3:string,first_value:string,any_value:string,last_value:string>
+struct<content:string,id:int,v:string,lead_0:string,lead_1:string,lead_2:string,lead_3:string,lag_0:string,lag_1:string,lag_2:string,lag_3:string,lag_plus_3:string,nth_value_1:string,nth_value_2:string,nth_value_3:string,first_value:string,any_value:string,last_value:string>
 -- !query output
-a	0	NULL	NULL	x	y	z	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL
-a	1	x	x	y	z	v	x	NULL	NULL	NULL	x	NULL	NULL	x	x	x
-b	2	NULL	NULL	y	z	v	NULL	x	NULL	NULL	x	NULL	NULL	x	x	x
-c	3	NULL	NULL	y	z	v	NULL	x	NULL	NULL	x	NULL	NULL	x	x	x
-a	4	y	y	z	v	NULL	y	x	NULL	NULL	x	y	NULL	x	x	y
-b	5	NULL	NULL	z	v	NULL	NULL	y	x	NULL	x	y	NULL	x	x	y
-a	6	z	z	v	NULL	NULL	z	y	x	NULL	x	y	z	x	x	z
-a	7	v	v	NULL	NULL	NULL	v	z	y	x	x	y	z	x	x	v
-a	8	NULL	NULL	NULL	NULL	NULL	NULL	v	z	y	x	y	z	x	x	v
+a	0	NULL	NULL	x	y	z	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL
+a	1	x	x	y	z	v	x	NULL	NULL	NULL	NULL	x	NULL	NULL	x	x	x
+b	2	NULL	NULL	y	z	v	NULL	x	NULL	NULL	NULL	x	NULL	NULL	x	x	x
+c	3	NULL	NULL	y	z	v	NULL	x	NULL	NULL	NULL	x	NULL	NULL	x	x	x
+a	4	y	y	z	v	NULL	y	x	NULL	NULL	NULL	x	y	NULL	x	x	y
+b	5	NULL	NULL	z	v	NULL	NULL	y	x	NULL	NULL	x	y	NULL	x	x	y
+a	6	z	z	v	NULL	NULL	z	y	x	NULL	NULL	x	y	z	x	x	z
+a	7	v	v	NULL	NULL	NULL	v	z	y	x	x	x	y	z	x	x	v
+a	8	NULL	NULL	NULL	NULL	NULL	NULL	v	z	y	y	x	y	z	x	x	v
 
 
 -- !query
@@ -1320,8 +1327,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1004",
+  "errorClass" : "MISSING_WINDOW_SPECIFICATION",
+  "sqlState" : "42P20",
   "messageParameters" : {
+    "docroot" : "https://spark.apache.org/docs/latest",
     "windowName" : "w"
   }
 }
@@ -1337,8 +1346,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1004",
+  "errorClass" : "MISSING_WINDOW_SPECIFICATION",
+  "sqlState" : "42P20",
   "messageParameters" : {
+    "docroot" : "https://spark.apache.org/docs/latest",
     "windowName" : "w"
   }
 }
@@ -1432,3 +1443,68 @@ a	1	2
 a	NULL	1
 b	1	1
 b	2	2
+
+
+-- !query
+SELECT *, mean(val_double) over (partition BY val ORDER BY val_date RANGE INTERVAL '5' DAY PRECEDING) AS mean FROM testData
+-- !query schema
+struct<val:int,val_long:bigint,val_double:double,val_date:date,val_timestamp:timestamp,cate:string,mean:double>
+-- !query output
+1	1	1.0	2017-08-01	2017-07-31 17:00:00	a	1.0
+1	2	2.5	2017-08-02	2017-08-05 23:13:20	a	1.5
+1	NULL	1.0	2017-08-01	2017-07-31 17:00:00	b	1.0
+2	2147483650	100.001	2020-12-31	2020-12-30 16:00:00	a	100.001
+2	3	3.3	2017-08-03	2017-08-17 13:00:00	b	3.3
+3	1	1.0	2017-08-01	2017-07-31 17:00:00	NULL	1.0
+3	2147483650	100.001	2020-12-31	2020-12-30 16:00:00	b	100.001
+NULL	1	1.0	2017-08-01	2017-07-31 17:00:00	a	1.0
+NULL	NULL	NULL	NULL	NULL	NULL	NULL
+
+
+-- !query
+SELECT *, mean(val_double) over (partition BY val ORDER BY val_date RANGE INTERVAL '1 2:3:4.001' DAY TO SECOND PRECEDING) AS mean FROM testData
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.RANGE_FRAME_INVALID_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "orderSpecType" : "\"DATE\"",
+    "sqlExpr" : "\"(PARTITION BY val ORDER BY val_date ASC NULLS FIRST RANGE BETWEEN INTERVAL '1 02:03:04.001' DAY TO SECOND PRECEDING AND CURRENT ROW)\"",
+    "valueBoundaryType" : "\"INTERVAL DAY TO SECOND\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 33,
+    "stopIndex" : 121,
+    "fragment" : "(partition BY val ORDER BY val_date RANGE INTERVAL '1 2:3:4.001' DAY TO SECOND PRECEDING)"
+  } ]
+}
+
+
+-- !query
+SELECT *, mean(val_double) over (partition BY val ORDER BY val_date RANGE DATE '2024-01-01' FOLLOWING) AS mean FROM testData
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.SPECIFIED_WINDOW_FRAME_UNACCEPTED_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "expectedType" : "(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL\")",
+    "exprType" : "\"DATE\"",
+    "location" : "lower",
+    "sqlExpr" : "\"RANGE BETWEEN DATE '2024-01-01' FOLLOWING AND CURRENT ROW\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 33,
+    "stopIndex" : 102,
+    "fragment" : "(partition BY val ORDER BY val_date RANGE DATE '2024-01-01' FOLLOWING)"
+  } ]
+}

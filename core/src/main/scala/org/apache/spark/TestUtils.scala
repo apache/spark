@@ -20,7 +20,7 @@ package org.apache.spark
 import java.io.{ByteArrayInputStream, File, FileInputStream, FileOutputStream}
 import java.net.{HttpURLConnection, InetSocketAddress, URL}
 import java.nio.charset.StandardCharsets
-import java.nio.file.{Files => JavaFiles, Paths}
+import java.nio.file.{Files, Paths}
 import java.nio.file.attribute.PosixFilePermission.{OWNER_EXECUTE, OWNER_READ, OWNER_WRITE}
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
@@ -37,8 +37,6 @@ import scala.reflect.{classTag, ClassTag}
 import scala.sys.process.Process
 import scala.util.Try
 
-import com.google.common.io.{ByteStreams, Files}
-import org.apache.commons.lang3.StringUtils
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.core.LoggerContext
 import org.apache.logging.log4j.core.appender.ConsoleAppender
@@ -97,7 +95,7 @@ private[spark] object TestUtils extends SparkTestUtils {
     files.foreach { case (k, v) =>
       val entry = new JarEntry(k)
       jarStream.putNextEntry(entry)
-      ByteStreams.copy(new ByteArrayInputStream(v.getBytes(StandardCharsets.UTF_8)), jarStream)
+      new ByteArrayInputStream(v.getBytes(StandardCharsets.UTF_8)).transferTo(jarStream)
     }
     jarStream.close()
     jarFile.toURI.toURL
@@ -133,7 +131,7 @@ private[spark] object TestUtils extends SparkTestUtils {
       jarStream.putNextEntry(jarEntry)
 
       val in = new FileInputStream(file)
-      ByteStreams.copy(in, jarStream)
+      in.transferTo(jarStream)
       in.close()
     }
     jarStream.close()
@@ -229,13 +227,13 @@ private[spark] object TestUtils extends SparkTestUtils {
   def getAbsolutePathFromExecutable(executable: String): Option[String] = {
     val command = if (Utils.isWindows) s"$executable.exe" else executable
     if (command.split(File.separator, 2).length == 1 &&
-        JavaFiles.isRegularFile(Paths.get(command)) &&
-        JavaFiles.isExecutable(Paths.get(command))) {
+        Files.isRegularFile(Paths.get(command)) &&
+        Files.isExecutable(Paths.get(command))) {
       Some(Paths.get(command).toAbsolutePath.toString)
     } else {
       sys.env("PATH").split(Pattern.quote(File.pathSeparator))
-        .map(path => Paths.get(s"${StringUtils.strip(path, "\"")}${File.separator}$command"))
-        .find(p => JavaFiles.isRegularFile(p) && JavaFiles.isExecutable(p))
+        .map(path => Paths.get(s"${Utils.strip(path, "\"")}${File.separator}$command"))
+        .find(p => Files.isRegularFile(p) && Files.isExecutable(p))
         .map(_.toString)
     }
   }
@@ -413,7 +411,7 @@ private[spark] object TestUtils extends SparkTestUtils {
   /** Creates a temp JSON file that contains the input JSON record. */
   def createTempJsonFile(dir: File, prefix: String, jsonValue: JValue): String = {
     val file = File.createTempFile(prefix, ".json", dir)
-    JavaFiles.write(file.toPath, compact(render(jsonValue)).getBytes())
+    Files.write(file.toPath, compact(render(jsonValue)).getBytes())
     file.getPath
   }
 
@@ -421,8 +419,8 @@ private[spark] object TestUtils extends SparkTestUtils {
   def createTempScriptWithExpectedOutput(dir: File, prefix: String, output: String): String = {
     val file = File.createTempFile(prefix, ".sh", dir)
     val script = s"cat <<EOF\n$output\nEOF\n"
-    Files.write(script, file, StandardCharsets.UTF_8)
-    JavaFiles.setPosixFilePermissions(file.toPath,
+    Files.writeString(file.toPath, script)
+    Files.setPosixFilePermissions(file.toPath,
       EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
     file.getPath
   }

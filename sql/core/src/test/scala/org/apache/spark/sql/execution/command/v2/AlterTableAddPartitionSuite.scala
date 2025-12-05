@@ -43,7 +43,7 @@ class AlterTableAddPartitionSuite
         exception = intercept[AnalysisException] {
           sql(sqlText)
         },
-        errorClass = "INVALID_PARTITION_OPERATION.PARTITION_MANAGEMENT_IS_UNSUPPORTED",
+        condition = "INVALID_PARTITION_OPERATION.PARTITION_MANAGEMENT_IS_UNSUPPORTED",
         parameters = Map("name" -> tableName),
         context = ExpectedContext(
           fragment = t,
@@ -92,25 +92,26 @@ class AlterTableAddPartitionSuite
       checkCachedRelation(t, Seq(Row(0, 0)))
 
       withView("v0") {
-        sql(s"CREATE VIEW v0 AS SELECT * FROM $t")
+        // Add a dummy column so that this view is semantically different from raw table scan.
+        sql(s"CREATE VIEW v0 AS SELECT *, 'a' FROM $t")
         cacheRelation("v0")
         sql(s"ALTER TABLE $t ADD PARTITION (id=0, part=1)")
-        checkCachedRelation("v0", Seq(Row(0, 0), Row(0, 1)))
+        checkCachedRelation("v0", Seq(Row(0, 0, "a"), Row(0, 1, "a")))
       }
 
       withTempView("v1") {
-        sql(s"CREATE TEMP VIEW v1 AS SELECT * FROM $t")
+        sql(s"CREATE TEMP VIEW v1 AS SELECT *, 'a' FROM $t")
         cacheRelation("v1")
         sql(s"ALTER TABLE $t ADD PARTITION (id=1, part=2)")
-        checkCachedRelation("v1", Seq(Row(0, 0), Row(0, 1), Row(1, 2)))
+        checkCachedRelation("v1", Seq(Row(0, 0, "a"), Row(0, 1, "a"), Row(1, 2, "a")))
       }
 
-      val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
+      val v2 = s"${spark.sharedState.globalTempDB}.v2"
       withGlobalTempView(v2) {
-        sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t")
+        sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT *, 'a' FROM $t")
         cacheRelation(v2)
         sql(s"ALTER TABLE $t ADD PARTITION (id=2, part=3)")
-        checkCachedRelation(v2, Seq(Row(0, 0), Row(0, 1), Row(1, 2), Row(2, 3)))
+        checkCachedRelation(v2, Seq(Row(0, 0, "a"), Row(0, 1, "a"), Row(1, 2, "a"), Row(2, 3, "a")))
       }
     }
   }
@@ -126,7 +127,7 @@ class AlterTableAddPartitionSuite
           " PARTITION (id=2) LOCATION 'loc1'")
       }
       checkError(e,
-        errorClass = "PARTITIONS_ALREADY_EXIST",
+        condition = "PARTITIONS_ALREADY_EXIST",
         parameters = Map("partitionList" -> "PARTITION (`id` = 2)",
         "tableName" -> "`test_catalog`.`ns`.`tbl`"))
 
@@ -146,7 +147,7 @@ class AlterTableAddPartitionSuite
             exception = intercept[SparkNumberFormatException] {
               sql(s"ALTER TABLE $t ADD PARTITION (p='aaa')")
             },
-            errorClass = "CAST_INVALID_INPUT",
+            condition = "CAST_INVALID_INPUT",
             parameters = Map(
               "ansiConfig" -> "\"spark.sql.ansi.enabled\"",
               "expression" -> "'aaa'",

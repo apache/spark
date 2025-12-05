@@ -24,20 +24,24 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{COUNT, DATABASE_NAME, ERROR, TABLE_NAME, TIME}
-import org.apache.spark.sql.{Column, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
+import org.apache.spark.sql.catalyst.analysis.ResolvedIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTablePartition, CatalogTableType, ExternalCatalogUtils}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
+import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.{QueryExecution, RemoveShuffleFiles}
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, InMemoryFileIndex}
+import org.apache.spark.sql.execution.datasources.v2.ExtractV2CatalogAndIdentifier
+import org.apache.spark.sql.functions.{col, lit}
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.Utils
@@ -303,8 +307,8 @@ object CommandUtils extends Logging {
       columns.map(statExprs(_, conf, attributePercentiles))
 
     val namedExpressions = expressions.map(e => Alias(e, e.toString)())
-    val statsRow = new QueryExecution(sparkSession, Aggregate(Nil, namedExpressions, relation))
-      .executedPlan.executeTake(1).head
+    val statsRow = new QueryExecution(sparkSession, Aggregate(Nil, namedExpressions, relation),
+      shuffleCleanupMode = RemoveShuffleFiles).executedPlan.executeTake(1).head
 
     val rowCount = statsRow.getLong(0)
     val columnStats = columns.zipWithIndex.map { case (attr, i) =>
@@ -329,7 +333,7 @@ object CommandUtils extends Logging {
     val attributePercentiles = mutable.HashMap[Attribute, ArrayData]()
     if (attrsToGenHistogram.nonEmpty) {
       val percentiles = (0 to conf.histogramNumBins)
-        .map(i => i.toDouble / conf.histogramNumBins).toArray
+        .map(i => i.toDouble / conf.histogramNumBins).toArray[Any]
 
       val namedExprs = attrsToGenHistogram.map { attr =>
         val aggFunc =
@@ -340,8 +344,8 @@ object CommandUtils extends Logging {
         Alias(expr, expr.toString)()
       }
 
-      val percentilesRow = new QueryExecution(sparkSession, Aggregate(Nil, namedExprs, relation))
-        .executedPlan.executeTake(1).head
+      val percentilesRow = new QueryExecution(sparkSession, Aggregate(Nil, namedExprs, relation),
+        shuffleCleanupMode = RemoveShuffleFiles).executedPlan.executeTake(1).head
       attrsToGenHistogram.zipWithIndex.foreach { case (attr, i) =>
         val percentiles = percentilesRow.getArray(i)
         // When there is no non-null value, `percentiles` is null. In such case, there is no
@@ -410,7 +414,7 @@ object CommandUtils extends Logging {
       case DoubleType | FloatType => fixedLenTypeStruct
       case BooleanType => fixedLenTypeStruct
       case _: DatetimeType => fixedLenTypeStruct
-      case BinaryType | StringType =>
+      case BinaryType | _: StringType =>
         // For string and binary type, we don't compute min, max or histogram
         val nullLit = Literal(null, col.dataType)
         struct(
@@ -465,16 +469,55 @@ object CommandUtils extends Logging {
   }
 
   def uncacheTableOrView(sparkSession: SparkSession, ident: ResolvedIdentifier): Unit = {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
-    uncacheTableOrView(sparkSession, ident.identifier.toQualifiedNameParts(ident.catalog))
+    val nameParts = ident.identifier.toQualifiedNameParts(ident.catalog)
+    uncacheTableOrView(sparkSession, nameParts, cascade = true)
   }
 
   def uncacheTableOrView(sparkSession: SparkSession, ident: TableIdentifier): Unit = {
-    uncacheTableOrView(sparkSession, ident.nameParts)
+    uncacheTableOrView(sparkSession, ident.nameParts, cascade = true)
   }
 
-  private def uncacheTableOrView(sparkSession: SparkSession, name: Seq[String]): Unit = {
-    sparkSession.sharedState.cacheManager.uncacheTableOrView(sparkSession, name, cascade = true)
+  // uncaches plans that reference the provided table/view by plan
+  // if the passed relation is a DSv2 relation without time travel,
+  // this method invalidates all cache entries for the given table by name (including time travel)
+  def uncacheTableOrView(
+      sparkSession: SparkSession,
+      relation: LogicalPlan,
+      cascade: Boolean): Unit = {
+    EliminateSubqueryAliases(relation) match {
+      case r @ ExtractV2CatalogAndIdentifier(catalog, ident) if r.timeTravelSpec.isEmpty =>
+        val nameParts = ident.toQualifiedNameParts(catalog)
+        uncacheTableOrView(sparkSession, nameParts, cascade)
+      case _ =>
+        uncacheQuery(sparkSession, relation, cascade)
+    }
+  }
+
+  private def uncacheTableOrView(
+      sparkSession: SparkSession,
+      name: Seq[String],
+      cascade: Boolean): Unit = {
+    sparkSession.sharedState.cacheManager.uncacheTableOrView(sparkSession, name, cascade)
+  }
+
+  private def uncacheQuery(
+      sparkSession: SparkSession,
+      plan: LogicalPlan,
+      cascade: Boolean): Unit = {
+    sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession, plan, cascade)
+  }
+
+  // recaches all plans that reference the provided table/view by plan
+  // if the passed relation is a DSv2 relation without time travel,
+  // this method recaches all cache entries for the given table by name (including time travel)
+  def recacheTableOrView(sparkSession: SparkSession, relation: LogicalPlan): Unit = {
+    EliminateSubqueryAliases(relation) match {
+      case r @ ExtractV2CatalogAndIdentifier(catalog, ident) if r.timeTravelSpec.isEmpty =>
+        val nameParts = ident.toQualifiedNameParts(catalog)
+        sparkSession.sharedState.cacheManager.recacheTableOrView(sparkSession, nameParts)
+      case _ =>
+        sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, relation)
+    }
   }
 
   def calculateRowCountsPerPartition(
@@ -483,17 +526,17 @@ object CommandUtils extends Logging {
       partitionValueSpec: Option[TablePartitionSpec]): Map[TablePartitionSpec, BigInt] = {
     val filter = if (partitionValueSpec.isDefined) {
       val filters = partitionValueSpec.get.map {
-        case (columnName, value) => EqualTo(UnresolvedAttribute(columnName), Literal(value))
+        case (columnName, value) => col(columnName) ===  lit(value)
       }
-      filters.reduce(And)
+      filters.reduce(_ && _)
     } else {
-      Literal.TrueLiteral
+      lit(true)
     }
 
     val tableDf = sparkSession.table(tableMeta.identifier)
-    val partitionColumns = tableMeta.partitionColumnNames.map(Column(_))
+    val partitionColumns = tableMeta.partitionColumnNames.map(col)
 
-    val df = tableDf.filter(Column(filter)).groupBy(partitionColumns: _*).count()
+    val df = tableDf.filter(filter).groupBy(partitionColumns: _*).count()
 
     df.collect().map { r =>
       val partitionColumnValues = partitionColumns.indices.map { i =>

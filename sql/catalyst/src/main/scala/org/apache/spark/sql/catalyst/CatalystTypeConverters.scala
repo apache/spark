@@ -21,7 +21,7 @@ import java.lang.{Iterable => JavaIterable}
 import java.math.{BigDecimal => JavaBigDecimal}
 import java.math.{BigInteger => JavaBigInteger}
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, LocalTime, Period}
 import java.util.{Map => JavaMap}
 import javax.annotation.Nullable
 
@@ -35,7 +35,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{GeographyVal, GeometryVal, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.Utils
 
@@ -66,9 +66,20 @@ object CatalystTypeConverters {
       case arrayType: ArrayType => ArrayConverter(arrayType.elementType)
       case mapType: MapType => MapConverter(mapType.keyType, mapType.valueType)
       case structType: StructType => StructConverter(structType)
+      case CharType(length) => new CharConverter(length)
+      case VarcharType(length) => new VarcharConverter(length)
       case _: StringType => StringConverter
+      case _ @ (_: GeographyType | _: GeometryType) if !SQLConf.get.geospatialEnabled =>
+        throw new org.apache.spark.sql.AnalysisException(
+          errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",
+          messageParameters = scala.collection.immutable.Map.empty)
+      case g: GeographyType =>
+        new GeographyConverter(g)
+      case g: GeometryType =>
+        new GeometryConverter(g)
       case DateType if SQLConf.get.datetimeJava8ApiEnabled => LocalDateConverter
       case DateType => DateConverter
+      case _: TimeType => TimeConverter
       case TimestampType if SQLConf.get.datetimeJava8ApiEnabled => InstantConverter
       case TimestampType => TimestampConverter
       case TimestampNTZType => TimestampNTZConverter
@@ -296,6 +307,33 @@ object CatalystTypeConverters {
       toScala(row.getStruct(column, structType.size))
   }
 
+  private class CharConverter(length: Int) extends CatalystTypeConverter[Any, String, UTF8String] {
+    override def toCatalystImpl(scalaValue: Any): UTF8String =
+      CharVarcharCodegenUtils.charTypeWriteSideCheck(
+        StringConverter.toCatalystImpl(scalaValue), length)
+    override def toScala(catalystValue: UTF8String): String = if (catalystValue == null) {
+      null
+    } else {
+      CharVarcharCodegenUtils.charTypeWriteSideCheck(catalystValue, length).toString
+    }
+    override def toScalaImpl(row: InternalRow, column: Int): String =
+      CharVarcharCodegenUtils.charTypeWriteSideCheck(row.getUTF8String(column), length).toString
+  }
+
+  private class VarcharConverter(length: Int)
+    extends CatalystTypeConverter[Any, String, UTF8String] {
+    override def toCatalystImpl(scalaValue: Any): UTF8String =
+      CharVarcharCodegenUtils.varcharTypeWriteSideCheck(
+        StringConverter.toCatalystImpl(scalaValue), length)
+    override def toScala(catalystValue: UTF8String): String = if (catalystValue == null) {
+      null
+    } else {
+      CharVarcharCodegenUtils.varcharTypeWriteSideCheck(catalystValue, length).toString
+    }
+    override def toScalaImpl(row: InternalRow, column: Int): String =
+      CharVarcharCodegenUtils.varcharTypeWriteSideCheck(row.getUTF8String(column), length).toString
+  }
+
   private object StringConverter extends CatalystTypeConverter[Any, String, UTF8String] {
     override def toCatalystImpl(scalaValue: Any): UTF8String = scalaValue match {
       case str: String => UTF8String.fromString(str)
@@ -313,6 +351,64 @@ object CatalystTypeConverters {
       if (catalystValue == null) null else catalystValue.toString
     override def toScalaImpl(row: InternalRow, column: Int): String =
       row.getUTF8String(column).toString
+  }
+
+  private def assertGeospatialEnabled(): Unit = {
+    if (!SQLConf.get.geospatialEnabled) {
+      throw new org.apache.spark.sql.AnalysisException(
+        errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",
+        messageParameters = scala.collection.immutable.Map.empty)
+    }
+  }
+
+  private class GeometryConverter(dataType: GeometryType)
+      extends CatalystTypeConverter[Any, org.apache.spark.sql.types.Geometry, GeometryVal] {
+    override def toCatalystImpl(scalaValue: Any): GeometryVal = scalaValue match {
+      case g: org.apache.spark.sql.types.Geometry if SQLConf.get.geospatialEnabled =>
+        STUtils.serializeGeomFromWKB(g, dataType)
+      case other => throw new SparkIllegalArgumentException(
+        errorClass = "_LEGACY_ERROR_TEMP_3219",
+        messageParameters = scala.collection.immutable.Map(
+          "other" -> other.toString,
+          "otherClass" -> other.getClass.getCanonicalName,
+          "dataType" -> StringType.sql))
+    }
+    override def toScala(catalystValue: GeometryVal): org.apache.spark.sql.types.Geometry = {
+      assertGeospatialEnabled()
+      if (catalystValue == null) null
+      else STUtils.deserializeGeom(catalystValue, dataType)
+    }
+
+    override def toScalaImpl(row: InternalRow, column: Int):
+        org.apache.spark.sql.types.Geometry = {
+      assertGeospatialEnabled()
+      STUtils.deserializeGeom(row.getGeometry(0), dataType)
+    }
+  }
+
+  private class GeographyConverter(dataType: GeographyType)
+      extends CatalystTypeConverter[Any, org.apache.spark.sql.types.Geography, GeographyVal] {
+    override def toCatalystImpl(scalaValue: Any): GeographyVal = scalaValue match {
+      case g: org.apache.spark.sql.types.Geography if SQLConf.get.geospatialEnabled =>
+        STUtils.serializeGeogFromWKB(g, dataType)
+      case other => throw new SparkIllegalArgumentException(
+        errorClass = "_LEGACY_ERROR_TEMP_3219",
+        messageParameters = scala.collection.immutable.Map(
+          "other" -> other.toString,
+          "otherClass" -> other.getClass.getCanonicalName,
+          "dataType" -> StringType.sql))
+    }
+    override def toScala(catalystValue: GeographyVal): org.apache.spark.sql.types.Geography = {
+      assertGeospatialEnabled()
+      if (catalystValue == null) null
+      else STUtils.deserializeGeog(catalystValue, dataType)
+    }
+
+    override def toScalaImpl(row: InternalRow, column: Int):
+        org.apache.spark.sql.types.Geography = {
+      assertGeospatialEnabled()
+      STUtils.deserializeGeog(row.getGeography(0), dataType)
+    }
   }
 
   private object DateConverter extends CatalystTypeConverter[Any, Date, Any] {
@@ -341,6 +437,18 @@ object CatalystTypeConverters {
     }
     override def toScalaImpl(row: InternalRow, column: Int): LocalDate =
       DateTimeUtils.daysToLocalDate(row.getInt(column))
+  }
+
+  private object TimeConverter extends CatalystTypeConverter[LocalTime, LocalTime, Any] {
+    override def toCatalystImpl(scalaValue: LocalTime): Long = {
+      DateTimeUtils.localTimeToNanos(scalaValue)
+    }
+    override def toScala(catalystValue: Any): LocalTime = {
+      if (catalystValue == null) null
+      else DateTimeUtils.nanosToLocalTime(catalystValue.asInstanceOf[Long])
+    }
+    override def toScalaImpl(row: InternalRow, column: Int): LocalTime =
+      DateTimeUtils.nanosToLocalTime(row.getLong(column))
   }
 
   private object TimestampConverter extends CatalystTypeConverter[Any, Timestamp, Any] {
@@ -529,11 +637,15 @@ object CatalystTypeConverters {
     case c: Char => StringConverter.toCatalyst(c.toString)
     case d: Date => DateConverter.toCatalyst(d)
     case ld: LocalDate => LocalDateConverter.toCatalyst(ld)
+    case t: LocalTime => TimeConverter.toCatalyst(t)
     case t: Timestamp => TimestampConverter.toCatalyst(t)
     case i: Instant => InstantConverter.toCatalyst(i)
     case l: LocalDateTime => TimestampNTZConverter.toCatalyst(l)
-    case d: BigDecimal => new DecimalConverter(DecimalType(d.precision, d.scale)).toCatalyst(d)
-    case d: JavaBigDecimal => new DecimalConverter(DecimalType(d.precision, d.scale)).toCatalyst(d)
+    case d: BigDecimal =>
+      new DecimalConverter(DecimalType(Math.max(d.precision, d.scale), d.scale)).toCatalyst(d)
+    case d: JavaBigDecimal =>
+      new DecimalConverter(DecimalType(Math.max(d.precision, d.scale), d.scale)).toCatalyst(d)
+    case seq: scala.collection.mutable.ArraySeq[_] => convertToCatalyst(seq.array)
     case seq: Seq[Any] => new GenericArrayData(seq.map(convertToCatalyst).toArray)
     case r: Row => InternalRow(r.toSeq.map(convertToCatalyst): _*)
     case arr: Array[Byte] => arr

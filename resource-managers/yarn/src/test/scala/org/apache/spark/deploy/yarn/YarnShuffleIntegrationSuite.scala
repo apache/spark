@@ -18,10 +18,8 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.File
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
-import com.google.common.io.Files
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
@@ -34,6 +32,7 @@ import org.apache.spark.network.shuffle.ShuffleTestAccessor
 import org.apache.spark.network.shuffledb.DBBackend
 import org.apache.spark.network.yarn.{YarnShuffleService, YarnTestAccessor}
 import org.apache.spark.tags.{ExtendedLevelDBTest, ExtendedYarnTest}
+import org.apache.spark.util.Utils
 
 /**
  * Integration test for the external shuffle service with a yarn mini-cluster
@@ -172,16 +171,16 @@ private object YarnExternalShuffleDriver extends Logging with Matchers {
         val dbBackend = DBBackend.byName(dbBackendName)
         logWarning(s"Use ${dbBackend.name()} as the implementation of " +
           s"${SHUFFLE_SERVICE_DB_BACKEND.key}")
-        FileUtils.copyDirectory(registeredExecFile, execStateCopy)
+        Utils.copyDirectory(registeredExecFile, execStateCopy)
         assert(!ShuffleTestAccessor
           .reloadRegisteredExecutors(dbBackend, execStateCopy).isEmpty)
       }
     } finally {
       sc.stop()
       if (execStateCopy != null) {
-        FileUtils.deleteDirectory(execStateCopy)
+        Utils.deleteRecursively(execStateCopy)
       }
-      Files.write(result, status, StandardCharsets.UTF_8)
+      Files.writeString(status.toPath, result)
     }
   }
 

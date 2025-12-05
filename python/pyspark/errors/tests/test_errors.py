@@ -19,7 +19,7 @@
 import json
 import unittest
 
-from pyspark.errors import PySparkValueError
+from pyspark.errors import PySparkRuntimeError, PySparkValueError
 from pyspark.errors.error_classes import ERROR_CLASSES_JSON
 from pyspark.errors.utils import ErrorClassesReader
 
@@ -52,7 +52,71 @@ class ErrorsTest(unittest.TestCase):
 
     def test_invalid_error_class(self):
         with self.assertRaisesRegex(ValueError, "Cannot find main error class"):
-            PySparkValueError(error_class="invalid", message_parameters={})
+            PySparkValueError(errorClass="invalid", messageParameters={})
+
+    def test_breaking_change_info(self):
+        # Test retrieving the breaking change info for an error.
+        error_reader = ErrorClassesReader()
+        error_reader.error_info_map = {
+            "TEST_ERROR": {
+                "message": ["Error message 1 with <param>."],
+                "breaking_change_info": {
+                    "migration_message": ["Migration message with <param2>."],
+                    "mitigation_config": {"key": "config.key1", "value": "config.value1"},
+                    "needsAudit": False,
+                },
+            },
+            "TEST_ERROR_WITH_SUB_CLASS": {
+                "message": ["Error message 2 with <param>."],
+                "sub_class": {
+                    "SUBCLASS": {
+                        "message": ["Subclass message with <param2>."],
+                        "breaking_change_info": {
+                            "migration_message": ["Subclass migration message with <param3>."],
+                            "mitigation_config": {
+                                "key": "config.key2",
+                                "value": "config.value2",
+                            },
+                            "needsAudit": True,
+                        },
+                    }
+                },
+            },
+        }
+        error_message1 = error_reader.get_error_message(
+            "TEST_ERROR", {"param": "value1", "param2": "value2"}
+        )
+        self.assertEqual(
+            error_message1, "Error message 1 with value1. Migration message with value2."
+        )
+        error_message2 = error_reader.get_error_message(
+            "TEST_ERROR_WITH_SUB_CLASS.SUBCLASS",
+            {"param": "value1", "param2": "value2", "param3": "value3"},
+        )
+        self.assertEqual(
+            error_message2,
+            "Error message 2 with value1. Subclass message with value2."
+            " Subclass migration message with value3.",
+        )
+        breaking_change_info1 = error_reader.get_breaking_change_info("TEST_ERROR")
+        self.assertEqual(
+            breaking_change_info1, error_reader.error_info_map["TEST_ERROR"]["breaking_change_info"]
+        )
+        breaking_change_info2 = error_reader.get_breaking_change_info(
+            "TEST_ERROR_WITH_SUB_CLASS.SUBCLASS"
+        )
+        subclass_map = error_reader.error_info_map["TEST_ERROR_WITH_SUB_CLASS"]["sub_class"]
+        self.assertEqual(breaking_change_info2, subclass_map["SUBCLASS"]["breaking_change_info"])
+
+    def test_sqlstate(self):
+        error = PySparkRuntimeError(errorClass="APPLICATION_NAME_NOT_SET", messageParameters={})
+        self.assertIsNone(error.getSqlState())
+
+        error = PySparkRuntimeError(
+            errorClass="SESSION_MUTATION_IN_DECLARATIVE_PIPELINE.SET_RUNTIME_CONF",
+            messageParameters={"method": "set"},
+        )
+        self.assertIsNone(error.getSqlState())
 
 
 if __name__ == "__main__":

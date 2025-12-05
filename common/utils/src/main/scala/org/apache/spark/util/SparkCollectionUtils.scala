@@ -16,7 +16,10 @@
  */
 package org.apache.spark.util
 
+import java.util.Arrays
+
 import scala.collection.immutable
+import scala.reflect.ClassTag
 
 private[spark] trait SparkCollectionUtils {
   /**
@@ -31,6 +34,36 @@ private[spark] trait SparkCollectionUtils {
       idx = idx + 1
     }
     builder.result()
+  }
+
+  def isEmpty[K, V](map: java.util.Map[K, V]): Boolean = {
+    map == null || map.isEmpty()
+  }
+
+  def isNotEmpty[K, V](map: java.util.Map[K, V]): Boolean = !isEmpty(map)
+
+  def createArray[K: ClassTag](size: Int, defaultValue: K): Array[K] = {
+    val arr = Array.ofDim[K](size)
+    val classTag = implicitly[ClassTag[K]]
+    classTag.runtimeClass match {
+      case c if c == classOf[Boolean] =>
+        Arrays.fill(arr.asInstanceOf[Array[Boolean]], defaultValue.asInstanceOf[Boolean])
+      case c if c == classOf[Byte] =>
+        Arrays.fill(arr.asInstanceOf[Array[Byte]], defaultValue.asInstanceOf[Byte])
+      case c if c == classOf[Short] =>
+        Arrays.fill(arr.asInstanceOf[Array[Short]], defaultValue.asInstanceOf[Short])
+      case c if c == classOf[Int] =>
+        Arrays.fill(arr.asInstanceOf[Array[Int]], defaultValue.asInstanceOf[Int])
+      case c if c == classOf[Long] =>
+        Arrays.fill(arr.asInstanceOf[Array[Long]], defaultValue.asInstanceOf[Long])
+      case c if c == classOf[Float] =>
+        Arrays.fill(arr.asInstanceOf[Array[Float]], defaultValue.asInstanceOf[Float])
+      case c if c == classOf[Double] =>
+        Arrays.fill(arr.asInstanceOf[Array[Double]], defaultValue.asInstanceOf[Double])
+      case _ =>
+        Arrays.fill(arr.asInstanceOf[Array[AnyRef]], defaultValue.asInstanceOf[AnyRef])
+    }
+    arr
   }
 }
 

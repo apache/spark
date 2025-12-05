@@ -49,6 +49,7 @@ import org.apache.spark.util.SparkClassUtils
 @JsonSerialize(using = classOf[DataTypeJsonSerializer])
 @JsonDeserialize(using = classOf[DataTypeJsonDeserializer])
 abstract class DataType extends AbstractDataType {
+
   /**
    * The default size of a value of this data type, used internally for size estimation.
    */
@@ -57,7 +58,9 @@ abstract class DataType extends AbstractDataType {
   /** Name of the type used in JSON serialization. */
   def typeName: String = {
     this.getClass.getSimpleName
-      .stripSuffix("$").stripSuffix("Type").stripSuffix("UDT")
+      .stripSuffix("$")
+      .stripSuffix("Type")
+      .stripSuffix("UDT")
       .toLowerCase(Locale.ROOT)
   }
 
@@ -92,8 +95,8 @@ abstract class DataType extends AbstractDataType {
     }
 
   /**
-   * Returns the same data type but set all nullability fields are true
-   * (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
+   * Returns the same data type but set all nullability fields are true (`StructField.nullable`,
+   * `ArrayType.containsNull`, and `MapType.valueContainsNull`).
    */
   private[spark] def asNullable: DataType
 
@@ -102,11 +105,17 @@ abstract class DataType extends AbstractDataType {
    */
   private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = f(this)
 
+  /**
+   * Recursively applies the provided partial function `f` to transform this DataType tree.
+   */
+  private[spark] def transformRecursively(f: PartialFunction[DataType, DataType]): DataType = {
+    if (f.isDefinedAt(this)) f(this) else this
+  }
+
   final override private[sql] def defaultConcreteType: DataType = this
 
   override private[sql] def acceptsType(other: DataType): Boolean = sameType(other)
 }
-
 
 /**
  * @since 1.3.0
@@ -117,7 +126,13 @@ object DataType {
   private val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\-?\d+)\s*\)""".r
   private val CHAR_TYPE = """char\(\s*(\d+)\s*\)""".r
   private val VARCHAR_TYPE = """varchar\(\s*(\d+)\s*\)""".r
-  private val COLLATED_STRING_TYPE = """string\s+collate\s+([\w_]+|`[\w_]`)""".r
+  private val STRING_WITH_COLLATION = """string\s+collate\s+(\w+)""".r
+  private val GEOMETRY_TYPE = """geometry\(\s*([\w]+:-?[\w]+)\s*\)""".r
+  private val GEOGRAPHY_TYPE_CRS = """geography\(\s*(\w+:-?\w+)\s*\)""".r
+  private val GEOGRAPHY_TYPE_ALG = """geography\(\s*(\w+)\s*\)""".r
+  private val GEOGRAPHY_TYPE_CRS_ALG = """geography\(\s*(\w+:-?\w+)\s*,\s*(\w+)\s*\)""".r
+
+  val COLLATIONS_METADATA_KEY = "__COLLATIONS"
 
   def fromDDL(ddl: String): DataType = {
     parseTypeWithFallback(
@@ -127,14 +142,18 @@ object DataType {
   }
 
   /**
-   * Parses data type from a string with schema. It calls `parser` for `schema`.
-   * If it fails, calls `fallbackParser`. If the fallback function fails too, combines error message
-   * from `parser` and `fallbackParser`.
+   * Parses data type from a string with schema. It calls `parser` for `schema`. If it fails,
+   * calls `fallbackParser`. If the fallback function fails too, combines error message from
+   * `parser` and `fallbackParser`.
    *
-   * @param schema The schema string to parse by `parser` or `fallbackParser`.
-   * @param parser The function that should be invoke firstly.
-   * @param fallbackParser The function that is called when `parser` fails.
-   * @return The data type parsed from the `schema` schema.
+   * @param schema
+   *   The schema string to parse by `parser` or `fallbackParser`.
+   * @param parser
+   *   The function that should be invoke firstly.
+   * @param fallbackParser
+   *   The function that is called when `parser` fails.
+   * @return
+   *   The data type parsed from the `schema` schema.
    */
   def parseTypeWithFallback(
       schema: String,
@@ -147,7 +166,8 @@ object DataType {
         try {
           fallbackParser(schema)
         } catch {
-          case NonFatal(_) =>
+          case NonFatal(suppressed) =>
+            e.addSuppressed(suppressed)
             if (e.isInstanceOf[SparkThrowable]) {
               throw e
             }
@@ -159,8 +179,20 @@ object DataType {
   def fromJson(json: String): DataType = parseDataType(parse(json))
 
   private val otherTypes = {
-    Seq(NullType, DateType, TimestampType, BinaryType, IntegerType, BooleanType, LongType,
-      DoubleType, FloatType, ShortType, ByteType, StringType, CalendarIntervalType,
+    (Seq(
+      NullType,
+      DateType,
+      TimestampType,
+      BinaryType,
+      IntegerType,
+      BooleanType,
+      LongType,
+      DoubleType,
+      FloatType,
+      ShortType,
+      ByteType,
+      StringType,
+      CalendarIntervalType,
       DayTimeIntervalType(DAY),
       DayTimeIntervalType(DAY, HOUR),
       DayTimeIntervalType(DAY, MINUTE),
@@ -175,28 +207,39 @@ object DataType {
       YearMonthIntervalType(MONTH),
       YearMonthIntervalType(YEAR, MONTH),
       TimestampNTZType,
-      VariantType)
-      .map(t => t.typeName -> t).toMap
+      VariantType) ++
+      (TimeType.MIN_PRECISION to TimeType.MAX_PRECISION).map(TimeType(_)))
+      .map(t => t.typeName -> t)
+      .toMap
   }
 
   /** Given the string representation of a type, return its DataType */
   private def nameToType(name: String): DataType = {
     name match {
-      case COLLATED_STRING_TYPE(collation) =>
-        val collationId = CollationFactory.collationNameToId(collation)
-        StringType(collationId)
       case "decimal" => DecimalType.USER_DEFAULT
       case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
       case CHAR_TYPE(length) => CharType(length.toInt)
       case VARCHAR_TYPE(length) => VarcharType(length.toInt)
+      case STRING_WITH_COLLATION(collation) => StringType(collation)
+      // If the coordinate reference system (CRS) value is omitted, Parquet and other storage
+      // formats (Delta, Iceberg) consider "OGC:CRS84" to be the default value of the crs.
+      case "geometry" => GeometryType(GeometryType.GEOMETRY_DEFAULT_CRS)
+      case GEOMETRY_TYPE(crs) => GeometryType(crs)
+      case "geography" => GeographyType(GeographyType.GEOGRAPHY_DEFAULT_CRS)
+      case GEOGRAPHY_TYPE_CRS(crs) =>
+        GeographyType(crs, GeographyType.GEOGRAPHY_DEFAULT_ALGORITHM)
+      case GEOGRAPHY_TYPE_ALG(alg) =>
+        GeographyType(GeographyType.GEOGRAPHY_DEFAULT_CRS, alg)
+      case GEOGRAPHY_TYPE_CRS_ALG(crs, alg) => GeographyType(crs, alg)
       // For backwards compatibility, previously the type name of NullType is "null"
       case "null" => NullType
       case "timestamp_ltz" => TimestampType
-      case other => otherTypes.getOrElse(
-        other,
-        throw new SparkIllegalArgumentException(
-          errorClass = "INVALID_JSON_DATA_TYPE",
-          messageParameters = Map("invalidType" -> name)))
+      case other =>
+        otherTypes.getOrElse(
+          other,
+          throw new SparkIllegalArgumentException(
+            errorClass = "INVALID_JSON_DATA_TYPE",
+            messageParameters = Map("invalidType" -> name)))
     }
   }
 
@@ -207,71 +250,135 @@ object DataType {
     }
   }
 
+  private[sql] def parseDataType(json: JValue): DataType = {
+    parseDataType(json, fieldPath = "", collationsMap = Map.empty)
+  }
+
   // NOTE: Map fields must be sorted in alphabetical order to keep consistent with the Python side.
-  private[sql] def parseDataType(json: JValue): DataType = json match {
+  private[sql] def parseDataType(
+      json: JValue,
+      fieldPath: String,
+      collationsMap: Map[String, String]): DataType = json match {
     case JString(name) =>
-      nameToType(name)
+      collationsMap.get(fieldPath) match {
+        case Some(collation) =>
+          assertValidTypeForCollations(fieldPath, name, collationsMap)
+          stringTypeWithCollation(collation)
+        case _ => nameToType(name)
+      }
 
     case JSortedObject(
-    ("containsNull", JBool(n)),
-    ("elementType", t: JValue),
-    ("type", JString("array"))) =>
-      ArrayType(parseDataType(t), n)
+          ("containsNull", JBool(n)),
+          ("elementType", t: JValue),
+          ("type", JString("array"))) =>
+      assertValidTypeForCollations(fieldPath, "array", collationsMap)
+      val elementType = parseDataType(t, appendFieldToPath(fieldPath, "element"), collationsMap)
+      ArrayType(elementType, n)
 
     case JSortedObject(
-    ("keyType", k: JValue),
-    ("type", JString("map")),
-    ("valueContainsNull", JBool(n)),
-    ("valueType", v: JValue)) =>
-      MapType(parseDataType(k), parseDataType(v), n)
+          ("keyType", k: JValue),
+          ("type", JString("map")),
+          ("valueContainsNull", JBool(n)),
+          ("valueType", v: JValue)) =>
+      assertValidTypeForCollations(fieldPath, "map", collationsMap)
+      val keyType = parseDataType(k, appendFieldToPath(fieldPath, "key"), collationsMap)
+      val valueType = parseDataType(v, appendFieldToPath(fieldPath, "value"), collationsMap)
+      MapType(keyType, valueType, n)
 
-    case JSortedObject(
-    ("fields", JArray(fields)),
-    ("type", JString("struct"))) =>
+    case JSortedObject(("fields", JArray(fields)), ("type", JString("struct"))) =>
+      assertValidTypeForCollations(fieldPath, "struct", collationsMap)
       StructType(fields.map(parseStructField))
 
     // Scala/Java UDT
     case JSortedObject(
-    ("class", JString(udtClass)),
-    ("pyClass", _),
-    ("sqlType", _),
-    ("type", JString("udt"))) =>
+          ("class", JString(udtClass)),
+          ("pyClass", _),
+          ("sqlType", _),
+          ("type", JString("udt"))) =>
       SparkClassUtils.classForName[UserDefinedType[_]](udtClass).getConstructor().newInstance()
 
     // Python UDT
     case JSortedObject(
-    ("pyClass", JString(pyClass)),
-    ("serializedClass", JString(serialized)),
-    ("sqlType", v: JValue),
-    ("type", JString("udt"))) =>
-        new PythonUserDefinedType(parseDataType(v), pyClass, serialized)
+          ("pyClass", JString(pyClass)),
+          ("serializedClass", JString(serialized)),
+          ("sqlType", v: JValue),
+          ("type", JString("udt"))) =>
+      new PythonUserDefinedType(parseDataType(v), pyClass, serialized)
 
-    case other => throw new SparkIllegalArgumentException(
-      errorClass = "INVALID_JSON_DATA_TYPE",
-      messageParameters = Map("invalidType" -> compact(render(other))))
+    case other =>
+      throw new SparkIllegalArgumentException(
+        errorClass = "INVALID_JSON_DATA_TYPE",
+        messageParameters = Map("invalidType" -> compact(render(other))))
   }
 
   private def parseStructField(json: JValue): StructField = json match {
     case JSortedObject(
-    ("metadata", metadata: JObject),
-    ("name", JString(name)),
-    ("nullable", JBool(nullable)),
-    ("type", dataType: JValue)) =>
-      StructField(name, parseDataType(dataType), nullable, Metadata.fromJObject(metadata))
+          ("metadata", JObject(metadataFields)),
+          ("name", JString(name)),
+          ("nullable", JBool(nullable)),
+          ("type", dataType: JValue)) =>
+      val collationsMap = getCollationsMap(metadataFields)
+      val metadataWithoutCollations =
+        JObject(metadataFields.filterNot(_._1 == COLLATIONS_METADATA_KEY))
+      StructField(
+        name,
+        parseDataType(dataType, name, collationsMap),
+        nullable,
+        Metadata.fromJObject(metadataWithoutCollations))
     // Support reading schema when 'metadata' is missing.
     case JSortedObject(
-    ("name", JString(name)),
-    ("nullable", JBool(nullable)),
-    ("type", dataType: JValue)) =>
+          ("name", JString(name)),
+          ("nullable", JBool(nullable)),
+          ("type", dataType: JValue)) =>
       StructField(name, parseDataType(dataType), nullable)
     // Support reading schema when 'nullable' is missing.
-    case JSortedObject(
-    ("name", JString(name)),
-    ("type", dataType: JValue)) =>
+    case JSortedObject(("name", JString(name)), ("type", dataType: JValue)) =>
       StructField(name, parseDataType(dataType))
-    case other => throw new SparkIllegalArgumentException(
-      errorClass = "_LEGACY_ERROR_TEMP_3250",
-      messageParameters = Map("other" -> compact(render(other))))
+    case other =>
+      throw new SparkIllegalArgumentException(
+        errorClass = "INVALID_JSON_DATA_TYPE",
+        messageParameters = Map("invalidType" -> compact(render(other))))
+  }
+
+  private def assertValidTypeForCollations(
+      fieldPath: String,
+      fieldType: String,
+      collationMap: Map[String, String]): Unit = {
+    if (collationMap.contains(fieldPath) && fieldType != "string") {
+      throw new SparkIllegalArgumentException(
+        errorClass = "INVALID_JSON_DATA_TYPE_FOR_COLLATIONS",
+        messageParameters = Map("jsonType" -> fieldType))
+    }
+  }
+
+  /**
+   * Appends a field name to a given path, using a dot separator if the path is not empty.
+   */
+  private def appendFieldToPath(basePath: String, fieldName: String): String = {
+    if (basePath.isEmpty) fieldName else s"$basePath.$fieldName"
+  }
+
+  /**
+   * Returns a map of field path to collation name.
+   */
+  private def getCollationsMap(metadataFields: List[JField]): Map[String, String] = {
+    val collationsJsonOpt = metadataFields.find(_._1 == COLLATIONS_METADATA_KEY).map(_._2)
+    collationsJsonOpt match {
+      case Some(JObject(fields)) =>
+        fields.collect { case (fieldPath, JString(collation)) =>
+          collation.split("\\.", 2) match {
+            case Array(provider: String, collationName: String) =>
+              CollationFactory.assertValidProvider(provider)
+              fieldPath -> collationName
+          }
+        }.toMap
+
+      case _ => Map.empty
+    }
+  }
+
+  private def stringTypeWithCollation(collationName: String): StringType = {
+    StringType(CollationFactory.collationNameToId(collationName))
   }
 
   protected[types] def buildFormattedString(
@@ -294,15 +401,15 @@ object DataType {
    * Compares two types, ignoring compatible nullability of ArrayType, MapType, StructType.
    *
    * Compatible nullability is defined as follows:
-   *   - If `from` and `to` are ArrayTypes, `from` has a compatible nullability with `to`
-   *   if and only if `to.containsNull` is true, or both of `from.containsNull` and
-   *   `to.containsNull` are false.
-   *   - If `from` and `to` are MapTypes, `from` has a compatible nullability with `to`
-   *   if and only if `to.valueContainsNull` is true, or both of `from.valueContainsNull` and
-   *   `to.valueContainsNull` are false.
-   *   - If `from` and `to` are StructTypes, `from` has a compatible nullability with `to`
-   *   if and only if for all every pair of fields, `to.nullable` is true, or both
-   *   of `fromField.nullable` and `toField.nullable` are false.
+   *   - If `from` and `to` are ArrayTypes, `from` has a compatible nullability with `to` if and
+   *     only if `to.containsNull` is true, or both of `from.containsNull` and `to.containsNull`
+   *     are false.
+   *   - If `from` and `to` are MapTypes, `from` has a compatible nullability with `to` if and
+   *     only if `to.valueContainsNull` is true, or both of `from.valueContainsNull` and
+   *     `to.valueContainsNull` are false.
+   *   - If `from` and `to` are StructTypes, `from` has a compatible nullability with `to` if and
+   *     only if for all every pair of fields, `to.nullable` is true, or both of
+   *     `fromField.nullable` and `toField.nullable` are false.
    */
   private[sql] def equalsIgnoreCompatibleNullability(from: DataType, to: DataType): Boolean = {
     equalsIgnoreCompatibleNullability(from, to, ignoreName = false)
@@ -313,15 +420,15 @@ object DataType {
    * also the field name. It compares based on the position.
    *
    * Compatible nullability is defined as follows:
-   *   - If `from` and `to` are ArrayTypes, `from` has a compatible nullability with `to`
-   *   if and only if `to.containsNull` is true, or both of `from.containsNull` and
-   *   `to.containsNull` are false.
-   *   - If `from` and `to` are MapTypes, `from` has a compatible nullability with `to`
-   *   if and only if `to.valueContainsNull` is true, or both of `from.valueContainsNull` and
-   *   `to.valueContainsNull` are false.
-   *   - If `from` and `to` are StructTypes, `from` has a compatible nullability with `to`
-   *   if and only if for all every pair of fields, `to.nullable` is true, or both
-   *   of `fromField.nullable` and `toField.nullable` are false.
+   *   - If `from` and `to` are ArrayTypes, `from` has a compatible nullability with `to` if and
+   *     only if `to.containsNull` is true, or both of `from.containsNull` and `to.containsNull`
+   *     are false.
+   *   - If `from` and `to` are MapTypes, `from` has a compatible nullability with `to` if and
+   *     only if `to.valueContainsNull` is true, or both of `from.valueContainsNull` and
+   *     `to.valueContainsNull` are false.
+   *   - If `from` and `to` are StructTypes, `from` has a compatible nullability with `to` if and
+   *     only if for all every pair of fields, `to.nullable` is true, or both of
+   *     `fromField.nullable` and `toField.nullable` are false.
    */
   private[sql] def equalsIgnoreNameAndCompatibleNullability(
       from: DataType,
@@ -339,26 +446,66 @@ object DataType {
 
       case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
         (tn || !fn) &&
-          equalsIgnoreCompatibleNullability(fromKey, toKey, ignoreName) &&
-          equalsIgnoreCompatibleNullability(fromValue, toValue, ignoreName)
+        equalsIgnoreCompatibleNullability(fromKey, toKey, ignoreName) &&
+        equalsIgnoreCompatibleNullability(fromValue, toValue, ignoreName)
 
       case (StructType(fromFields), StructType(toFields)) =>
         fromFields.length == toFields.length &&
-          fromFields.zip(toFields).forall { case (fromField, toField) =>
-            (ignoreName || fromField.name == toField.name) &&
-              (toField.nullable || !fromField.nullable) &&
-              equalsIgnoreCompatibleNullability(fromField.dataType, toField.dataType, ignoreName)
-          }
+        fromFields.zip(toFields).forall { case (fromField, toField) =>
+          (ignoreName || fromField.name == toField.name) &&
+          (toField.nullable || !fromField.nullable) &&
+          equalsIgnoreCompatibleNullability(fromField.dataType, toField.dataType, ignoreName)
+        }
 
       case (fromDataType, toDataType) => fromDataType == toDataType
     }
   }
 
   /**
-   * Returns true if the two data types share the same "shape", i.e. the types
-   * are the same, but the field names don't need to be the same.
+   * Compares two data types, ignoring compatible collation of StringType. If `checkComplexTypes`
+   * is true, it will also ignore collations for nested types.
+   */
+  private[sql] def equalsIgnoreCompatibleCollation(
+      from: DataType,
+      to: DataType,
+      checkComplexTypes: Boolean = true): Boolean = {
+    def transform: PartialFunction[DataType, DataType] = {
+      case dt @ (_: CharType | _: VarcharType) => dt
+      case _: StringType => StringType
+      // SPARK-53330 (see below)
+      case _: DayTimeIntervalType => DayTimeIntervalType.DEFAULT
+    }
+
+    if (checkComplexTypes) {
+      from.transformRecursively(transform) == to.transformRecursively(transform)
+    } else {
+      (from, to) match {
+        case (a: StringType, b: StringType) => a.constraint == b.constraint
+        // SPARK-53330: Arrow serialization always returns DayTimeIntervalType(0, 3)
+        // as it has the maximum range, we can always assume that we can match
+        // with the target type.
+        case (x: DayTimeIntervalType, y: DayTimeIntervalType) => true
+
+        case (fromDataType, toDataType) => fromDataType == toDataType
+      }
+    }
+  }
+
+  private[sql] def equalsIgnoreCompatibleCollation(
+      from: Seq[DataType],
+      to: Seq[DataType]): Boolean = {
+    from.length == to.length &&
+    from.zip(to).forall { case (fromDataType, toDataType) =>
+      equalsIgnoreCompatibleCollation(fromDataType, toDataType)
+    }
+  }
+
+  /**
+   * Returns true if the two data types share the same "shape", i.e. the types are the same, but
+   * the field names don't need to be the same.
    *
-   * @param ignoreNullability whether to ignore nullability when comparing the types
+   * @param ignoreNullability
+   *   whether to ignore nullability when comparing the types
    */
   def equalsStructurally(
       from: DataType,
@@ -367,20 +514,21 @@ object DataType {
     (from, to) match {
       case (left: ArrayType, right: ArrayType) =>
         equalsStructurally(left.elementType, right.elementType, ignoreNullability) &&
-          (ignoreNullability || left.containsNull == right.containsNull)
+        (ignoreNullability || left.containsNull == right.containsNull)
 
       case (left: MapType, right: MapType) =>
         equalsStructurally(left.keyType, right.keyType, ignoreNullability) &&
-          equalsStructurally(left.valueType, right.valueType, ignoreNullability) &&
-          (ignoreNullability || left.valueContainsNull == right.valueContainsNull)
+        equalsStructurally(left.valueType, right.valueType, ignoreNullability) &&
+        (ignoreNullability || left.valueContainsNull == right.valueContainsNull)
 
       case (StructType(fromFields), StructType(toFields)) =>
         fromFields.length == toFields.length &&
-          fromFields.zip(toFields)
-            .forall { case (l, r) =>
-              equalsStructurally(l.dataType, r.dataType, ignoreNullability) &&
-                (ignoreNullability || l.nullable == r.nullable)
-            }
+        fromFields
+          .zip(toFields)
+          .forall { case (l, r) =>
+            equalsStructurally(l.dataType, r.dataType, ignoreNullability) &&
+            (ignoreNullability || l.nullable == r.nullable)
+          }
 
       case (fromDataType, toDataType) => fromDataType == toDataType
     }
@@ -399,14 +547,15 @@ object DataType {
 
       case (left: MapType, right: MapType) =>
         equalsStructurallyByName(left.keyType, right.keyType, resolver) &&
-          equalsStructurallyByName(left.valueType, right.valueType, resolver)
+        equalsStructurallyByName(left.valueType, right.valueType, resolver)
 
       case (StructType(fromFields), StructType(toFields)) =>
         fromFields.length == toFields.length &&
-          fromFields.zip(toFields)
-            .forall { case (l, r) =>
-              resolver(l.name, r.name) && equalsStructurallyByName(l.dataType, r.dataType, resolver)
-            }
+        fromFields
+          .zip(toFields)
+          .forall { case (l, r) =>
+            resolver(l.name, r.name) && equalsStructurallyByName(l.dataType, r.dataType, resolver)
+          }
 
       case _ => true
     }
@@ -421,12 +570,12 @@ object DataType {
         equalsIgnoreNullability(leftElementType, rightElementType)
       case (MapType(leftKeyType, leftValueType, _), MapType(rightKeyType, rightValueType, _)) =>
         equalsIgnoreNullability(leftKeyType, rightKeyType) &&
-          equalsIgnoreNullability(leftValueType, rightValueType)
+        equalsIgnoreNullability(leftValueType, rightValueType)
       case (StructType(leftFields), StructType(rightFields)) =>
         leftFields.length == rightFields.length &&
-          leftFields.zip(rightFields).forall { case (l, r) =>
-            l.name == r.name && equalsIgnoreNullability(l.dataType, r.dataType)
-          }
+        leftFields.zip(rightFields).forall { case (l, r) =>
+          l.name == r.name && equalsIgnoreNullability(l.dataType, r.dataType)
+        }
       case (l, r) => l == r
     }
   }
@@ -442,14 +591,14 @@ object DataType {
 
       case (MapType(fromKey, fromValue, _), MapType(toKey, toValue, _)) =>
         equalsIgnoreCaseAndNullability(fromKey, toKey) &&
-          equalsIgnoreCaseAndNullability(fromValue, toValue)
+        equalsIgnoreCaseAndNullability(fromValue, toValue)
 
       case (StructType(fromFields), StructType(toFields)) =>
         fromFields.length == toFields.length &&
-          fromFields.zip(toFields).forall { case (l, r) =>
-            l.name.equalsIgnoreCase(r.name) &&
-              equalsIgnoreCaseAndNullability(l.dataType, r.dataType)
-          }
+        fromFields.zip(toFields).forall { case (l, r) =>
+          l.name.equalsIgnoreCase(r.name) &&
+          equalsIgnoreCaseAndNullability(l.dataType, r.dataType)
+        }
 
       case (fromDataType, toDataType) => fromDataType == toDataType
     }

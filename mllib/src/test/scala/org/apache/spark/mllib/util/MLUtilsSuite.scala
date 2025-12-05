@@ -18,13 +18,11 @@
 package org.apache.spark.mllib.util
 
 import java.io.File
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
 import scala.io.Source
 
-import com.google.common.io.Files
-
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.{SparkException, SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.mllib.linalg.{DenseVector, Matrices, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils._
@@ -93,7 +91,7 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
       """.stripMargin
     val tempDir = Utils.createTempDir()
     val file = new File(tempDir.getPath, "part-00000")
-    Files.write(lines, file, StandardCharsets.UTF_8)
+    Files.writeString(file.toPath, lines)
     val path = tempDir.toURI.toString
 
     val pointsWithNumFeatures = loadLibSVMFile(sc, path, 6).collect()
@@ -126,7 +124,7 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
       """.stripMargin
     val tempDir = Utils.createTempDir()
     val file = new File(tempDir.getPath, "part-00000")
-    Files.write(lines, file, StandardCharsets.UTF_8)
+    Files.writeString(file.toPath, lines)
     val path = tempDir.toURI.toString
 
     intercept[SparkException] {
@@ -143,7 +141,7 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
       """.stripMargin
     val tempDir = Utils.createTempDir()
     val file = new File(tempDir.getPath, "part-00000")
-    Files.write(lines, file, StandardCharsets.UTF_8)
+    Files.writeString(file.toPath, lines)
     val path = tempDir.toURI.toString
 
     intercept[SparkException] {
@@ -378,7 +376,7 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("kFold with fold column: invalid fold numbers") {
     val data = sc.parallelize(Seq(0, 1, 2), 2).toDF( "fold")
-    val err1 = intercept[SparkException] {
+    val err1 = intercept[SparkRuntimeException] {
       kFold(data, 2, "fold")(0)._1.collect()
     }
     assert(err1.getMessage.contains("Fold number must be in range [0, 2), but got 2."))

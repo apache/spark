@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.datasources.csv
 import java.io.{FileNotFoundException, IOException}
 import java.nio.charset.{Charset, StandardCharsets}
 
+import scala.util.control.NonFatal
+
 import com.univocity.parsers.csv.CsvParser
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
@@ -28,16 +30,20 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 
 import org.apache.spark.TaskContext
 import org.apache.spark.input.{PortableDataStream, StreamInputFormat}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PATH
+import org.apache.spark.paths.SparkPath
 import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVInferSchema, CSVOptions, UnivocityParser}
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * Common functions for parsing CSV files
@@ -62,10 +68,14 @@ abstract class CSVDataSource extends Serializable {
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
       parsedOptions: CSVOptions): Option[StructType] = {
-    if (inputPaths.nonEmpty) {
-      Some(infer(sparkSession, inputPaths, parsedOptions))
-    } else {
-      None
+    parsedOptions.singleVariantColumn match {
+      case Some(columnName) => Some(StructType(Array(StructField(columnName, VariantType))))
+      case None =>
+        if (inputPaths.nonEmpty) {
+          Some(infer(sparkSession, inputPaths, parsedOptions))
+        } else {
+          None
+        }
     }
   }
 
@@ -83,6 +93,31 @@ object CSVDataSource extends Logging {
       TextInputCSVDataSource
     }
   }
+
+  /**
+   * Returns a function that sets the header column names used in singleVariantColumn mode. The
+   * returned function takes an optional input, which is the header column names potentially read by
+   * `CSVHeaderChecker`. The function only needs to read the file when the input is empty (e.g.,
+   * `CSVHeaderChecker` won't read anything when the partition is not at the file start).
+   *
+   * We need to return a function here instead of letting `CSVHeaderChecker` call this function
+   * directly, because this package (also the `CSVUtils` class) depends on `CSVHeaderChecker`.
+   */
+  def setHeaderForSingleVariantColumn(
+      conf: Configuration,
+      file: PartitionedFile,
+      parser: UnivocityParser): Option[Option[Array[String]] => Unit] =
+    if (parser.options.needHeaderForSingleVariantColumn) {
+      Some(headerColumnNames => {
+        parser.headerColumnNames = headerColumnNames.orElse {
+          CSVUtils.readHeaderLine(file.toPath, parser.options, conf).map { line =>
+            new CsvParser(parser.options.asParserSettings).parseLine(line)
+          }
+        }
+      })
+    } else {
+      None
+    }
 }
 
 object TextInputCSVDataSource extends CSVDataSource {
@@ -95,13 +130,17 @@ object TextInputCSVDataSource extends CSVDataSource {
       headerChecker: CSVHeaderChecker,
       requiredSchema: StructType): Iterator[InternalRow] = {
     val lines = {
-      val linesReader = new HadoopFileLinesReader(file, parser.options.lineSeparatorInRead, conf)
+      val linesReader = Utils.createResourceUninterruptiblyIfInTaskThread(
+        new HadoopFileLinesReader(file, parser.options.lineSeparatorInRead, conf)
+      )
       Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => linesReader.close()))
       linesReader.map { line =>
         new String(line.getBytes, 0, line.getLength, parser.options.charset)
       }
     }
 
+    headerChecker.setHeaderForSingleVariantColumn =
+      CSVDataSource.setHeaderForSingleVariantColumn(conf, file, parser)
     UnivocityParser.parseIterator(lines, parser, headerChecker, requiredSchema)
   }
 
@@ -179,6 +218,8 @@ object MultiLineCSVDataSource extends CSVDataSource with Logging {
       parser: UnivocityParser,
       headerChecker: CSVHeaderChecker,
       requiredSchema: StructType): Iterator[InternalRow] = {
+    headerChecker.setHeaderForSingleVariantColumn =
+      CSVDataSource.setHeaderForSingleVariantColumn(conf, file, parser)
     UnivocityParser.parseStream(
       CodecStreams.createInputStreamWithCloseResource(conf, file.toPath),
       parser,
@@ -210,6 +251,9 @@ object MultiLineCSVDataSource extends CSVDataSource with Logging {
           logWarning(log"Skipped the rest of the content in the corrupted file: " +
             log"${MDC(PATH, lines.getPath())}", e)
           Array.empty[Array[String]]
+        case NonFatal(e) =>
+          val path = SparkPath.fromPathString(lines.getPath())
+          throw QueryExecutionErrors.cannotReadFilesError(e, path.urlEncoded)
       }
     }.take(1).headOption match {
       case Some(firstRow) =>

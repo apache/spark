@@ -19,6 +19,7 @@ package org.apache.spark.network.shuffle;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -27,8 +28,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 
 import com.codahale.metrics.MetricSet;
-import com.google.common.collect.Lists;
 
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.MergedBlockMetaResponseCallback;
@@ -80,7 +82,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     this.appId = appId;
     TransportContext context = new TransportContext(
       transportConf, new NoOpRpcHandler(), true, true);
-    List<TransportClientBootstrap> bootstraps = Lists.newArrayList();
+    List<TransportClientBootstrap> bootstraps = new ArrayList<>();
     if (authEnabled) {
       bootstraps.add(new AuthClientBootstrap(transportConf, appId, secretKeyHolder));
     }
@@ -103,7 +105,8 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
       this.comparableAppAttemptId = Integer.parseInt(appAttemptId);
     } catch (NumberFormatException e) {
       logger.warn("Push based shuffle requires comparable application attemptId, " +
-        "but the appAttemptId {} cannot be parsed to Integer", appAttemptId, e);
+        "but the appAttemptId {} cannot be parsed to Integer", e,
+          MDC.of(LogKeys.APP_ATTEMPT_ID, appAttemptId));
     }
   }
 
@@ -217,8 +220,9 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
         }
       });
     } catch (Exception e) {
-      logger.error("Exception while sending finalizeShuffleMerge request to {}:{}",
-        host, port, e);
+      logger.error("Exception while sending finalizeShuffleMerge request to {}:{}", e,
+        MDC.of(LogKeys.HOST, host),
+        MDC.of(LogKeys.PORT, port));
       listener.onShuffleMergeFailure(e);
     }
   }
@@ -316,16 +320,19 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
           BlockTransferMessage msgObj = BlockTransferMessage.Decoder.fromByteBuffer(response);
           numRemovedBlocksFuture.complete(((BlocksRemoved) msgObj).numRemovedBlocks);
         } catch (Throwable t) {
-          logger.warn("Error trying to remove blocks " + Arrays.toString(blockIds) +
-            " via external shuffle service from executor: " + execId, t);
+          logger.warn("Error trying to remove blocks {} via external shuffle service from " +
+            "executor: {}", t,
+            MDC.of(LogKeys.BLOCK_IDS, Arrays.toString(blockIds)),
+            MDC.of(LogKeys.EXECUTOR_ID, execId));
           numRemovedBlocksFuture.complete(0);
         }
       }
 
       @Override
       public void onFailure(Throwable e) {
-        logger.warn("Error trying to remove blocks " + Arrays.toString(blockIds) +
-          " via external shuffle service from executor: " + execId, e);
+        logger.warn("Error trying to remove blocks {} via external shuffle service from " +
+          "executor: {}", e, MDC.of(LogKeys.BLOCK_IDS, Arrays.toString(blockIds)),
+          MDC.of(LogKeys.EXECUTOR_ID, execId));
         numRemovedBlocksFuture.complete(0);
       }
     });

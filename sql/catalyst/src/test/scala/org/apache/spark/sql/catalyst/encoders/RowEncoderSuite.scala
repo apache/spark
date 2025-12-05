@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.encoders
 import scala.collection.mutable
 import scala.util.Random
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
@@ -74,6 +75,26 @@ class ExamplePointUDT extends UserDefinedType[ExamplePoint] {
   private[spark] override def asNullable: ExamplePointUDT = this
 }
 
+class ExamplePointNotAnnotated(val x: Double, val y: Double) extends Serializable {
+  private val inner = new ExamplePoint(x, y)
+  override def hashCode: Int = inner.hashCode
+  override def equals(that: Any): Boolean = {
+    that match {
+      case e: ExamplePointNotAnnotated => inner.equals(e.inner)
+      case _ => false
+    }
+  }
+}
+class ExamplePointNotAnnotatedUDT extends UserDefinedType[ExamplePointNotAnnotated] {
+  override def sqlType: DataType = DoubleType
+  override def serialize(p: ExamplePointNotAnnotated): Double = p.x
+  override def deserialize(datum: Any): ExamplePointNotAnnotated = {
+    val x = datum.asInstanceOf[Double]
+    new ExamplePointNotAnnotated(x, 3.14 * datum.asInstanceOf[Double])
+  }
+  override def userClass: Class[ExamplePointNotAnnotated] = classOf[ExamplePointNotAnnotated]
+}
+
 class RowEncoderSuite extends CodegenInterpretedPlanTest {
 
   private val structOfString = new StructType().add("str", StringType)
@@ -110,7 +131,8 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       .add("binary", BinaryType)
       .add("date", DateType)
       .add("timestamp", TimestampType)
-      .add("udt", new ExamplePointUDT))
+      .add("udt", new ExamplePointUDT)
+      .add("udtNotAnnotated", new ExamplePointNotAnnotatedUDT))
 
   encodeDecodeTest(
     new StructType()
@@ -177,8 +199,8 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
 
   test("SPARK-23179: RowEncoder should respect nullOnOverflow for decimals") {
     val schema = new StructType().add("decimal", DecimalType.SYSTEM_DEFAULT)
-    testDecimalOverflow(schema, Row(BigDecimal("9" * 100)))
-    testDecimalOverflow(schema, Row(new java.math.BigDecimal("9" * 100)))
+    testDecimalOverflow(schema, Row(BigDecimal("9".repeat(100))))
+    testDecimalOverflow(schema, Row(new java.math.BigDecimal("9".repeat(100))))
   }
 
   private def testDecimalOverflow(schema: StructType, row: Row): Unit = {
@@ -275,9 +297,10 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
   test("RowEncoder should throw RuntimeException if input row object is null") {
     val schema = new StructType().add("int", IntegerType)
     val encoder = ExpressionEncoder(schema)
-    val e = intercept[RuntimeException](toRow(encoder, null))
-    assert(e.getCause.getMessage.contains("Null value appeared in non-nullable field"))
-    assert(e.getCause.getMessage.contains("top level Product or row object"))
+    // Check the error class only since the parameters may change depending on how we are running
+    // this test case.
+    val exception = intercept[SparkRuntimeException](toRow(encoder, null))
+    assert(exception.getCondition == "NOT_NULL_ASSERT_VIOLATION")
   }
 
   test("RowEncoder should validate external type") {
@@ -286,14 +309,16 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       val encoder = ExpressionEncoder(schema)
       toRow(encoder, Row(1.toShort))
     }
-    assert(e1.getCause.getMessage.contains("java.lang.Short is not a valid external type"))
+    assert(e1.getCause.getMessage.contains("The external type java.lang.Short " +
+      "is not valid for the type \"INT\""))
 
     val e2 = intercept[RuntimeException] {
       val schema = new StructType().add("a", StringType)
       val encoder = ExpressionEncoder(schema)
       toRow(encoder, Row(1))
     }
-    assert(e2.getCause.getMessage.contains("java.lang.Integer is not a valid external type"))
+    assert(e2.getCause.getMessage.contains("The external type java.lang.Integer " +
+      "is not valid for the type \"STRING\""))
 
     val e3 = intercept[RuntimeException] {
       val schema = new StructType().add("a",
@@ -301,14 +326,16 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       val encoder = ExpressionEncoder(schema)
       toRow(encoder, Row(1 -> "a"))
     }
-    assert(e3.getCause.getMessage.contains("scala.Tuple2 is not a valid external type"))
+    assert(e3.getCause.getMessage.contains("The external type scala.Tuple2 is not valid " +
+      "for the type \"STRUCT<b: INT, c: STRING>\""))
 
     val e4 = intercept[RuntimeException] {
       val schema = new StructType().add("a", ArrayType(TimestampType))
       val encoder = ExpressionEncoder(schema)
       toRow(encoder, Row(Array("a")))
     }
-    assert(e4.getCause.getMessage.contains("java.lang.String is not a valid external type"))
+    assert(e4.getCause.getMessage.contains("The external type java.lang.String is not valid " +
+      "for the type \"TIMESTAMP\""))
   }
 
   private def roundTripArray[T](dt: DataType, nullable: Boolean, data: Array[T]): Unit = {
@@ -364,6 +391,16 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       val readback = fromRow(encoder, row)
       assert(readback.get(0).equals(localDate))
     }
+  }
+
+  test("encoding/decoding TimeType to/from java.time.LocalTime") {
+    val schema = new StructType().add("t", TimeType())
+    val encoder = ExpressionEncoder(schema).resolveAndBind()
+    val localTime = java.time.LocalTime.parse("20:38:45.123456")
+    val row = toRow(encoder, Row(localTime))
+    assert(row.getLong(0) === DateTimeUtils.localTimeToNanos(localTime))
+    val readback = fromRow(encoder, row)
+    assert(readback.get(0).equals(localTime))
   }
 
   test("SPARK-34605: encoding/decoding DayTimeIntervalType to/from java.time.Duration") {
@@ -481,5 +518,42 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     val encoder = ExpressionEncoder(schema, lenient = true).resolveAndBind()
     val data = Row(mutable.ArraySeq.make(Array(Row("key", "value".getBytes))))
     val row = encoder.createSerializer()(data)
+  }
+
+  test("do not allow serializing too long strings into char/varchar") {
+    Seq(CharType(5), VarcharType(5)).foreach { typ =>
+      withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+        val schema = new StructType().add("c", typ)
+        val encoder = ExpressionEncoder(schema).resolveAndBind()
+        val value = "abcdef"
+        checkError(
+          exception = intercept[SparkRuntimeException]({
+            val row = toRow(encoder, Row(value))
+          }),
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "5")
+        )
+      }
+    }
+  }
+
+  test("do not allow deserializing too long strings into char/varchar") {
+    Seq(CharType(5), VarcharType(5)).foreach { typ =>
+      withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+        val fromSchema = new StructType().add("c", StringType)
+        val fromEncoder = ExpressionEncoder(fromSchema).resolveAndBind()
+        val toSchema = new StructType().add("c", typ)
+        val toEncoder = ExpressionEncoder(toSchema).resolveAndBind()
+        val value = "abcdef"
+        val row = toRow(fromEncoder, Row(value))
+        checkError(
+          exception = intercept[SparkRuntimeException]({
+            val value = fromRow(toEncoder, row)
+          }),
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "5")
+        )
+      }
+    }
   }
 }

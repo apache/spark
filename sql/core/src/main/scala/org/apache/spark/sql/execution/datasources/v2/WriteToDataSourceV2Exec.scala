@@ -20,22 +20,25 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, ProjectingInternalRow}
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, TableSpec, UnaryNode}
-import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, CharVarcharUtils, WriteDeltaProjections}
-import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{DELETE_OPERATION, INSERT_OPERATION, UPDATE_OPERATION}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, TableSpec, UnaryNode}
+import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, CharVarcharUtils, ReplaceDataProjections, WriteDeltaProjections}
+import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{DELETE_OPERATION, INSERT_OPERATION, REINSERT_OPERATION, UPDATE_OPERATION, WRITE_OPERATION, WRITE_WITH_METADATA_OPERATION}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog, TableInfo, TableWritePrivilege}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.CustomMetric
-import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, PhysicalWriteInfoImpl, Write, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, MergeSummaryImpl, PhysicalWriteInfoImpl, RowLevelOperationTable, Write, WriterCommitMessage, WriteSummary}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SQLExecution, UnaryExecNode}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.joins.BaseJoinExec
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.SchemaValidationMode.PROHIBIT_CHANGES
 import org.apache.spark.util.{LongAccumulator, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -82,10 +85,14 @@ case class CreateTableAsSelectExec(
       }
       throw QueryCompilationErrors.tableAlreadyExistsError(ident)
     }
-    val table = Option(catalog.createTable(
-      ident, getV2Columns(query.schema, catalog.useNullableQuerySchema),
-      partitioning.toArray, properties.asJava)).getOrElse(catalog.loadTable(ident))
-    writeToTable(catalog, table, writeOptions, ident, query)
+    val tableInfo = new TableInfo.Builder()
+      .withColumns(getV2Columns(query.schema, catalog.useNullableQuerySchema))
+      .withPartitions(partitioning.toArray)
+      .withProperties(properties.asJava)
+      .build()
+    val table = Option(catalog.createTable(ident, tableInfo))
+      .getOrElse(catalog.loadTable(ident, Set(TableWritePrivilege.INSERT).asJava))
+    writeToTable(catalog, table, writeOptions, ident, query, overwrite = false)
   }
 }
 
@@ -109,6 +116,9 @@ case class AtomicCreateTableAsSelectExec(
 
   val properties = CatalogV2Util.convertTableProperties(tableSpec)
 
+  override val metrics: Map[String, SQLMetric] =
+    DataSourceV2Utils.commitMetrics(sparkContext, catalog)
+
   override protected def run(): Seq[InternalRow] = {
     if (catalog.tableExists(ident)) {
       if (ifNotExists) {
@@ -116,10 +126,14 @@ case class AtomicCreateTableAsSelectExec(
       }
       throw QueryCompilationErrors.tableAlreadyExistsError(ident)
     }
-    val stagedTable = catalog.stageCreate(
-      ident, getV2Columns(query.schema, catalog.useNullableQuerySchema),
-      partitioning.toArray, properties.asJava)
-    writeToTable(catalog, stagedTable, writeOptions, ident, query)
+    val tableInfo = new TableInfo.Builder()
+      .withColumns(getV2Columns(query.schema, catalog.useNullableQuerySchema))
+      .withPartitions(partitioning.toArray)
+      .withProperties(properties.asJava)
+      .build()
+    val stagedTable = Option(catalog.stageCreate(ident, tableInfo)
+    ).getOrElse(catalog.loadTable(ident, Set(TableWritePrivilege.INSERT).asJava))
+    writeToTable(catalog, stagedTable, writeOptions, ident, query, overwrite = false)
   }
 }
 
@@ -141,7 +155,7 @@ case class ReplaceTableAsSelectExec(
     tableSpec: TableSpec,
     writeOptions: Map[String, String],
     orCreate: Boolean,
-    invalidateCache: (TableCatalog, Table, Identifier) => Unit)
+    invalidateCache: (TableCatalog, Identifier) => Unit)
   extends V2CreateTableAsSelectBaseExec {
 
   val properties = CatalogV2Util.convertTableProperties(tableSpec)
@@ -155,17 +169,30 @@ case class ReplaceTableAsSelectExec(
     // 1. Creating the new table fails,
     // 2. Writing to the new table fails,
     // 3. The table returned by catalog.createTable doesn't support writing.
+    //
+    // RTAS must refresh and pin versions in query to read from original table versions instead of
+    // newly created empty table that is meant to serve as target for append/overwrite
+    val refreshedQuery = V2TableRefreshUtil.refresh(
+      session,
+      query,
+      versionedOnly = true,
+      schemaValidationMode = PROHIBIT_CHANGES)
     if (catalog.tableExists(ident)) {
-      val table = catalog.loadTable(ident)
-      invalidateCache(catalog, table, ident)
+      invalidateCache(catalog, ident)
       catalog.dropTable(ident)
     } else if (!orCreate) {
       throw QueryCompilationErrors.cannotReplaceMissingTableError(ident)
     }
-    val table = Option(catalog.createTable(
-      ident, getV2Columns(query.schema, catalog.useNullableQuerySchema),
-      partitioning.toArray, properties.asJava)).getOrElse(catalog.loadTable(ident))
-    writeToTable(catalog, table, writeOptions, ident, query)
+    val tableInfo = new TableInfo.Builder()
+      .withColumns(getV2Columns(refreshedQuery.schema, catalog.useNullableQuerySchema))
+      .withPartitions(partitioning.toArray)
+      .withProperties(properties.asJava)
+      .build()
+    val table = Option(catalog.createTable(ident, tableInfo))
+      .getOrElse(catalog.loadTable(ident, Set(TableWritePrivilege.INSERT).asJava))
+    writeToTable(
+      catalog, table, writeOptions, ident, refreshedQuery,
+      overwrite = true, refreshPhaseEnabled = false)
   }
 }
 
@@ -189,24 +216,34 @@ case class AtomicReplaceTableAsSelectExec(
     tableSpec: TableSpec,
     writeOptions: Map[String, String],
     orCreate: Boolean,
-    invalidateCache: (TableCatalog, Table, Identifier) => Unit)
+    invalidateCache: (TableCatalog, Identifier) => Unit)
   extends V2CreateTableAsSelectBaseExec {
 
   val properties = CatalogV2Util.convertTableProperties(tableSpec)
 
+  override val metrics: Map[String, SQLMetric] =
+    DataSourceV2Utils.commitMetrics(sparkContext, catalog)
+
   override protected def run(): Seq[InternalRow] = {
     val columns = getV2Columns(query.schema, catalog.useNullableQuerySchema)
     if (catalog.tableExists(ident)) {
-      val table = catalog.loadTable(ident)
-      invalidateCache(catalog, table, ident)
+      invalidateCache(catalog, ident)
     }
     val staged = if (orCreate) {
-      catalog.stageCreateOrReplace(
-        ident, columns, partitioning.toArray, properties.asJava)
+      val tableInfo = new TableInfo.Builder()
+        .withColumns(columns)
+        .withPartitions(partitioning.toArray)
+        .withProperties(properties.asJava)
+        .build()
+      catalog.stageCreateOrReplace(ident, tableInfo)
     } else if (catalog.tableExists(ident)) {
       try {
-        catalog.stageReplace(
-          ident, columns, partitioning.toArray, properties.asJava)
+        val tableInfo = new TableInfo.Builder()
+          .withColumns(columns)
+          .withPartitions(partitioning.toArray)
+          .withProperties(properties.asJava)
+          .build()
+        catalog.stageReplace(ident, tableInfo)
       } catch {
         case e: NoSuchTableException =>
           throw QueryCompilationErrors.cannotReplaceMissingTableError(ident, Some(e))
@@ -214,7 +251,9 @@ case class AtomicReplaceTableAsSelectExec(
     } else {
       throw QueryCompilationErrors.cannotReplaceMissingTableError(ident)
     }
-    writeToTable(catalog, staged, writeOptions, ident, query)
+    val table = Option(staged).getOrElse(
+      catalog.loadTable(ident, Set(TableWritePrivilege.INSERT).asJava))
+    writeToTable(catalog, table, writeOptions, ident, query, overwrite = true)
   }
 }
 
@@ -272,9 +311,17 @@ case class OverwritePartitionsDynamicExec(
 case class ReplaceDataExec(
     query: SparkPlan,
     refreshCache: () => Unit,
+    projections: ReplaceDataProjections,
     write: Write) extends V2ExistingTableWriteExec {
 
-  override val stringArgs: Iterator[Any] = Iterator(query, write)
+  override def writingTask: WritingSparkTask[_] = {
+    projections match {
+      case ReplaceDataProjections(dataProj, Some(metadataProj)) =>
+        DataAndMetadataWritingSparkTask(dataProj, metadataProj)
+      case _ =>
+        DataWritingSparkTask
+    }
+  }
 
   override protected def withNewChildInternal(newChild: SparkPlan): ReplaceDataExec = {
     copy(query = newChild)
@@ -289,8 +336,6 @@ case class WriteDeltaExec(
     refreshCache: () => Unit,
     projections: WriteDeltaProjections,
     write: DeltaWrite) extends V2ExistingTableWriteExec {
-
-  override lazy val stringArgs: Iterator[Any] = Iterator(query, write)
 
   override lazy val writingTask: WritingSparkTask[_] = {
     if (projections.metadataProjection.isDefined) {
@@ -311,6 +356,8 @@ case class WriteToDataSourceV2Exec(
     query: SparkPlan,
     writeMetrics: Seq[CustomMetric]) extends V2TableWriteExec {
 
+  override val stringArgs: Iterator[Any] = Iterator(batchWrite, query)
+
   override val customMetrics: Map[String, SQLMetric] = writeMetrics.map { customMetric =>
     customMetric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, customMetric)
   }.toMap
@@ -329,22 +376,40 @@ trait V2ExistingTableWriteExec extends V2TableWriteExec {
   def refreshCache: () => Unit
   def write: Write
 
+  override val stringArgs: Iterator[Any] = Iterator(query, write)
+
   override val customMetrics: Map[String, SQLMetric] =
     write.supportedCustomMetrics().map { customMetric =>
       customMetric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, customMetric)
     }.toMap
 
   override protected def run(): Seq[InternalRow] = {
-    val writtenRows = writeWithV2(write.toBatch)
+    val writtenRows = try {
+      writeWithV2(write.toBatch)
+    } finally {
+      postDriverMetrics()
+    }
     refreshCache()
     writtenRows
+  }
+
+  protected def postDriverMetrics(): Unit = {
+    val driveSQLMetrics = write.reportDriverMetrics().map(customTaskMetric => {
+      val metric = metrics(customTaskMetric.name())
+      metric.set(customTaskMetric.value())
+      metric
+    })
+
+    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId,
+      driveSQLMetrics.toImmutableArraySeq)
   }
 }
 
 /**
  * The base physical plan for writing data into data source v2.
  */
-trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
+trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSparkPlanHelper {
   def query: SparkPlan
   def writingTask: WritingSparkTask[_] = DataWritingSparkTask
 
@@ -378,7 +443,7 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
 
     logInfo(log"Start processing data source write support: " +
       log"${MDC(LogKeys.BATCH_WRITE, batchWrite)}. The input RDD has " +
-      log"${MDC(LogKeys.COUNT, messages.length)}} partitions.")
+      log"${MDC(LogKeys.COUNT, messages.length)} partitions.")
 
     // Avoid object not serializable issue.
     val writeMetrics: Map[String, SQLMetric] = customMetrics
@@ -397,8 +462,12 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
         }
       )
 
+      val writeSummary = getWriteSummary(query)
       logInfo(log"Data source write support ${MDC(LogKeys.BATCH_WRITE, batchWrite)} is committing.")
-      batchWrite.commit(messages)
+      writeSummary match {
+        case Some(summary) => batchWrite.commit(messages, summary)
+        case None => batchWrite.commit(messages)
+      }
       logInfo(log"Data source write support ${MDC(LogKeys.BATCH_WRITE, batchWrite)} committed.")
       commitProgress = Some(StreamWriterCommitProgress(totalNumRowsAccumulator.value))
     } catch {
@@ -419,6 +488,58 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
     }
 
     Nil
+  }
+
+  private def getWriteSummary(query: SparkPlan): Option[WriteSummary] = {
+    collectFirst(query) { case m: MergeRowsExec => m }.map { n =>
+      val metrics = n.metrics
+      val numSourceRows = getNumSourceRows(n)
+      MergeSummaryImpl(
+        numSourceRows,
+        metrics.get("numTargetRowsCopied").map(_.value).getOrElse(-1L),
+        metrics.get("numTargetRowsDeleted").map(_.value).getOrElse(-1L),
+        metrics.get("numTargetRowsUpdated").map(_.value).getOrElse(-1L),
+        metrics.get("numTargetRowsInserted").map(_.value).getOrElse(-1L),
+        metrics.get("numTargetRowsMatchedUpdated").map(_.value).getOrElse(-1L),
+        metrics.get("numTargetRowsMatchedDeleted").map(_.value).getOrElse(-1L),
+        metrics.get("numTargetRowsNotMatchedBySourceUpdated").map(_.value).getOrElse(-1L),
+        metrics.get("numTargetRowsNotMatchedBySourceDeleted").map(_.value).getOrElse(-1L)
+      )
+    }
+  }
+
+  private def getNumSourceRows(mergeRowsExec: MergeRowsExec): Long = {
+    def hasTargetTable(plan: SparkPlan): Boolean = {
+      collectFirst(plan) {
+        case scan @ BatchScanExec(_, _, _, _, _: RowLevelOperationTable, _) => scan
+      }.isDefined
+    }
+
+    def findSourceScan(join: BaseJoinExec): Option[SparkPlan] = {
+      val leftHasTarget = hasTargetTable(join.left)
+      val rightHasTarget = hasTargetTable(join.right)
+
+      val sourceSide = if (leftHasTarget) {
+        Some(join.right)
+      } else if (rightHasTarget) {
+        Some(join.left)
+      } else {
+        None
+      }
+
+      sourceSide.flatMap { side =>
+        collectFirst(side) {
+          case source if source.metrics.contains("numOutputRows") =>
+          source
+        }
+      }
+    }
+
+    (for {
+      join <- collectFirst(mergeRowsExec.child) { case j: BaseJoinExec => j }
+      sourceScan <- findSourceScan(join)
+      metric <- sourceScan.metrics.get("numOutputRows")
+    } yield metric.value).getOrElse(-1L)
   }
 }
 
@@ -456,7 +577,7 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
             log"(task ${MDC(LogKeys.TASK_ID, taskId)}, " +
             log"attempt ${MDC(LogKeys.TASK_ATTEMPT_ID, attemptId)}, " +
             log"stage ${MDC(LogKeys.STAGE_ID, stageId)}." +
-            log"${MDC(LogKeys.STAGE_ATTEMPT, stageAttempt)})")
+            log"${MDC(LogKeys.STAGE_ATTEMPT_ID, stageAttempt)})")
 
           dataWriter.commit()
         } else {
@@ -476,7 +597,8 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
       logInfo(log"Committed partition ${MDC(LogKeys.PARTITION_ID, partId)} " +
         log"(task ${MDC(LogKeys.TASK_ID, taskId)}, " +
         log"attempt ${MDC(LogKeys.TASK_ATTEMPT_ID, attemptId)}, " +
-        log"stage ${MDC(LogKeys.STAGE_ID, stageId)}.${MDC(LogKeys.STAGE_ATTEMPT, stageAttempt)})")
+        log"stage ${MDC(LogKeys.STAGE_ID, stageId)}." +
+        log"${MDC(LogKeys.STAGE_ATTEMPT_ID, stageAttempt)})")
 
       DataWritingSparkTaskResult(iterWithMetrics.count, msg)
 
@@ -485,12 +607,14 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
       logError(log"Aborting commit for partition ${MDC(LogKeys.PARTITION_ID, partId)} " +
         log"(task ${MDC(LogKeys.TASK_ID, taskId)}, " +
         log"attempt ${MDC(LogKeys.TASK_ATTEMPT_ID, attemptId)}, " +
-        log"stage ${MDC(LogKeys.STAGE_ID, stageId)}.${MDC(LogKeys.STAGE_ATTEMPT, stageAttempt)})")
+        log"stage ${MDC(LogKeys.STAGE_ID, stageId)}." +
+        log"${MDC(LogKeys.STAGE_ATTEMPT_ID, stageAttempt)})")
       dataWriter.abort()
       logError(log"Aborted commit for partition ${MDC(LogKeys.PARTITION_ID, partId)} " +
         log"(task ${MDC(LogKeys.TASK_ID, taskId)}, " +
         log"attempt ${MDC(LogKeys.TASK_ATTEMPT_ID, attemptId)}, " +
-        log"stage ${MDC(LogKeys.STAGE_ID, stageId)}.${MDC(LogKeys.STAGE_ATTEMPT, stageAttempt)})")
+        log"stage ${MDC(LogKeys.STAGE_ID, stageId)}." +
+        log"${MDC(LogKeys.STAGE_ATTEMPT_ID, stageAttempt)})")
     }, finallyBlock = {
       dataWriter.close()
     })
@@ -511,6 +635,32 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
       }
       count += 1
       iter.next()
+    }
+  }
+}
+
+case class DataAndMetadataWritingSparkTask(
+    dataProj: ProjectingInternalRow,
+    metadataProj: ProjectingInternalRow) extends WritingSparkTask[DataWriter[InternalRow]] {
+  override protected def write(
+      writer: DataWriter[InternalRow], iter: java.util.Iterator[InternalRow]): Unit = {
+    while (iter.hasNext) {
+      val row = iter.next()
+      val operation = row.getInt(0)
+
+      operation match {
+        case WRITE_WITH_METADATA_OPERATION =>
+          dataProj.project(row)
+          metadataProj.project(row)
+          writer.write(metadataProj, dataProj)
+
+        case WRITE_OPERATION =>
+          dataProj.project(row)
+          writer.write(dataProj)
+
+        case other =>
+          throw new SparkException(s"Unexpected operation ID: $other")
+      }
     }
   }
 }
@@ -543,6 +693,10 @@ case class DeltaWritingSparkTask(
           rowProjection.project(row)
           rowIdProjection.project(row)
           writer.update(null, rowIdProjection, rowProjection)
+
+        case REINSERT_OPERATION =>
+          rowProjection.project(row)
+          writer.reinsert(null, rowProjection)
 
         case INSERT_OPERATION =>
           rowProjection.project(row)
@@ -580,6 +734,11 @@ case class DeltaWithMetadataWritingSparkTask(
           metadataProjection.project(row)
           writer.update(metadataProjection, rowIdProjection, rowProjection)
 
+        case REINSERT_OPERATION =>
+          rowProjection.project(row)
+          metadataProjection.project(row)
+          writer.reinsert(metadataProjection, rowProjection)
+
         case INSERT_OPERATION =>
           rowProjection.project(row)
           writer.insert(rowProjection)
@@ -605,18 +764,19 @@ private[v2] trait V2CreateTableAsSelectBaseExec extends LeafV2CommandExec {
       table: Table,
       writeOptions: Map[String, String],
       ident: Identifier,
-      query: LogicalPlan): Seq[InternalRow] = {
+      query: LogicalPlan,
+      overwrite: Boolean,
+      refreshPhaseEnabled: Boolean = true): Seq[InternalRow] = {
     Utils.tryWithSafeFinallyAndFailureCallbacks({
       val relation = DataSourceV2Relation.create(table, Some(catalog), Some(ident))
-      val append = AppendData.byPosition(relation, query, writeOptions)
-      val qe = session.sessionState.executePlan(append)
-      qe.assertCommandExecuted()
-
-      table match {
-        case st: StagedTable => st.commitStagedChanges()
-        case _ =>
+      val writeCommand = if (overwrite) {
+        OverwriteByExpression.byPosition(relation, query, Literal.TrueLiteral, writeOptions)
+      } else {
+        AppendData.byPosition(relation, query, writeOptions)
       }
-
+      val qe = QueryExecution.create(session, writeCommand, refreshPhaseEnabled)
+      qe.assertCommandExecuted()
+      DataSourceV2Utils.commitStagedChanges(sparkContext, table, metrics)
       Nil
     })(catchBlock = {
       table match {

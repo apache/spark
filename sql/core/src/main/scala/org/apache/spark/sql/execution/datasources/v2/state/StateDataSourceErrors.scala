@@ -63,6 +63,12 @@ object StateDataSourceErrors {
     new StateDataSourceReadStateSchemaFailure(sourceOptions, cause)
   }
 
+  def failedToReadOperatorMetadata(
+      checkpointLocation: String,
+      batchId: Long): StateDataSourceException = {
+    new StateDataSourceReadOperatorMetadataFailure(checkpointLocation, batchId)
+  }
+
   def conflictOptions(options: Seq[String]): StateDataSourceException = {
     new StateDataSourceConflictOptions(options)
   }
@@ -74,6 +80,18 @@ object StateDataSourceErrors {
   def noPartitionDiscoveredInStateStore(
       sourceOptions: StateSourceOptions): StateDataSourceException = {
     new StateDataSourceNoPartitionDiscoveredInStateStore(sourceOptions)
+  }
+
+  def mixedCheckpointFormatVersionsNotSupported(
+      startBatchId: Long,
+      endBatchId: Long,
+      startFormatVersion: Int,
+      endFormatVersion: Int): StateDataSourceException = {
+    new StateDataSourceMixedCheckpointFormatVersionsNotSupported(
+      startBatchId,
+      endBatchId,
+      startFormatVersion,
+      endFormatVersion)
   }
 }
 
@@ -157,4 +175,27 @@ class StateDataSourceNoPartitionDiscoveredInStateStore(sourceOptions: StateSourc
   extends StateDataSourceException(
     "STDS_NO_PARTITION_DISCOVERED_IN_STATE_STORE",
     Map("sourceOptions" -> sourceOptions.toString),
+    cause = null)
+
+class StateDataSourceReadOperatorMetadataFailure(
+    checkpointLocation: String,
+    batchId: Long)
+  extends StateDataSourceException(
+    "STDS_FAILED_TO_READ_OPERATOR_METADATA",
+    Map("checkpointLocation" -> checkpointLocation, "batchId" -> batchId.toString),
+    cause = null)
+
+class StateDataSourceMixedCheckpointFormatVersionsNotSupported(
+    startBatchId: Long,
+    endBatchId: Long,
+    startFormatVersion: Int,
+    endFormatVersion: Int)
+  extends StateDataSourceException(
+    "STDS_MIXED_CHECKPOINT_FORMAT_VERSIONS_NOT_SUPPORTED",
+    Map(
+      "startBatchId" -> startBatchId.toString,
+      "endBatchId" -> endBatchId.toString,
+      "startFormatVersion" -> startFormatVersion.toString,
+      "endFormatVersion" -> endFormatVersion.toString
+    ),
     cause = null)

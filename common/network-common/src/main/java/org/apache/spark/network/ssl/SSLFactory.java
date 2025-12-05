@@ -20,6 +20,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
@@ -41,21 +42,18 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
 
-import com.google.common.io.Files;
-
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.handler.ssl.OpenSsl;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.network.util.JavaUtils;
 
 public class SSLFactory {
-  private static final Logger logger = LoggerFactory.getLogger(SSLFactory.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(SSLFactory.class);
 
   /**
    * For a configuration specifying keystore/truststore files
@@ -136,7 +134,7 @@ public class SSLFactory {
           try {
             manager.destroy();
           } catch (InterruptedException ex) {
-            logger.info("Interrupted while destroying trust manager: " + ex.toString(), ex);
+            logger.info("Interrupted while destroying trust manager: ", ex);
           }
         }
       }
@@ -379,7 +377,7 @@ public class SSLFactory {
 
   private static TrustManager[] defaultTrustManagers(File trustStore, String trustStorePassword)
       throws IOException, KeyStoreException, CertificateException, NoSuchAlgorithmException {
-    try (InputStream input = Files.asByteSource(trustStore).openStream()) {
+    try (InputStream input = Files.newInputStream(trustStore.toPath())) {
       KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
       char[] passwordCharacters = trustStorePassword != null?
         trustStorePassword.toCharArray() : null;

@@ -105,11 +105,11 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
       <script type="module" src={UIUtils.prependBaseUri(
         request, "/static/utils.js")}></script> ++
       summary ++ appList ++ pageLink
-    UIUtils.basicSparkPage(request, content, "History Server", true)
+    UIUtils.basicSparkPage(request, content, parent.title, true)
   }
 
   def shouldDisplayApplications(requestedIncomplete: Boolean): Boolean = {
-    parent.getApplicationList().exists(isApplicationCompleted(_) != requestedIncomplete)
+    parent.getApplicationInfoList(1)(isApplicationCompleted(_) != requestedIncomplete).nonEmpty
   }
 
   private def makePageLink(request: HttpServletRequest, showIncomplete: Boolean): String = {

@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-Spark SQL provides `spark.read().xml("file_1_path","file_2_path")` to read a file or directory of files in XML format into a Spark DataFrame, and `dataframe.write().xml("path")` to write to a xml file. When reading a XML file, the `rowTag` option must be specified to indicate the XML element that maps to a `DataFrame row`. The option() function can be used to customize the behavior of reading or writing, such as controlling behavior of the XML attributes, XSD validation, compression, and so on.
+Spark SQL provides `spark.read().xml("file_1_path","file_2_path")` to read a file or directory of files in XML format into a Spark DataFrame, and `dataframe.write().xml("path")` to write to a xml file. The `rowTag` option must be specified to indicate the XML element that maps to a `DataFrame row`. The option() function can be used to customize the behavior of reading or writing, such as controlling behavior of the XML attributes, XSD validation, compression, and so on.
 
 <div class="codetabs">
 
@@ -61,7 +61,7 @@ Data source options of XML can be set via:
         <code><xmp><books><book></book>...</books></xmp></code>
         the appropriate value would be book. This is a required option for both read and write.
     </td>
-    <td>read</td>
+    <td>read/write</td>
   </tr>
 
   <tr>
@@ -84,7 +84,7 @@ Data source options of XML can be set via:
     <td>Allows a mode for dealing with corrupt records during parsing.<br>
     <ul>
       <li><code>PERMISSIVE</code>: when it meets a corrupted record, puts the malformed string into a field configured by columnNameOfCorruptRecord, and sets malformed fields to null. To keep corrupt records, an user can set a string type field named columnNameOfCorruptRecord in an user-defined schema. If a schema does not have the field, it drops corrupt records during parsing. When inferring a schema, it implicitly adds a columnNameOfCorruptRecord field in an output schema.</li>
-      <li><code>DROPMALFORMED</code>: ignores the whole corrupted records. This mode is unsupported in the JSON built-in functions.</li>
+      <li><code>DROPMALFORMED</code>: ignores the whole corrupted records. This mode is unsupported in the XML built-in functions.</li>
       <li><code>FAILFAST</code>: throws an exception when it meets corrupted records.</li>
     </ul>
     </td>

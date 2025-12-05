@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.sql.{IntegratedUDFTestUtils, QueryTest}
-import org.apache.spark.sql.functions.count
+import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
+import org.apache.spark.sql.functions.{array, avg, col, count, transform}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.LongType
 
@@ -91,7 +91,10 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
     val pythonSQLMetrics = List(
       "data sent to Python workers",
       "data returned from Python workers",
-      "number of output rows")
+      "number of output rows",
+      "time to initialize Python workers",
+      "time to start Python workers",
+      "time to run Python workers")
 
     val df = base.groupBy(pythonTestUDF(base("a") + 1))
       .agg(pythonTestUDF(pythonTestUDF(base("a") + 1)))
@@ -111,5 +114,46 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
     val df = spark.range(1)
     val pandasTestUDF = TestGroupedAggPandasUDF(name = udfName)
     assert(df.agg(pandasTestUDF(df("id"))).schema.fieldNames.exists(_.startsWith(udfName)))
+  }
+
+  test("SPARK-48706: Negative test case for Python UDF in higher order functions") {
+    assume(shouldTestPythonUDFs)
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.range(1).select(transform(array("id"), x => pythonTestUDF(x))).collect()
+      },
+      condition = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_PYTHON_UDF",
+      parameters = Map("funcName" -> "\"pyUDF(namedlambdavariable())\""),
+      context = ExpectedContext(
+        "transform", s".*${this.getClass.getSimpleName}.*"))
+  }
+
+  test("SPARK-48666: Python UDF execution against partitioned column") {
+    assume(shouldTestPythonUDFs)
+    withTable("t") {
+      spark.range(1).selectExpr("id AS t", "(id + 1) AS p").write.partitionBy("p").saveAsTable("t")
+      val table = spark.table("t")
+      val newTable = table.withColumn("new_column", pythonTestUDF(table("p")))
+      val df = newTable.as("t1").join(
+        newTable.as("t2"), col("t1.new_column") === col("t2.new_column"))
+      checkAnswer(df, Row(0, 1, 1, 0, 1, 1))
+    }
+  }
+
+  test("SPARK-53311: Nondeterministic Python UDF pull out in aggregate with grouping") {
+    assume(shouldTestPythonUDFs)
+
+    // nondeterministic UDF
+    val pythonUDF = TestPythonUDF(name = "foo", Some(LongType), deterministic = false)
+
+    // This query should work without throwing an analysis exception
+    // The UDF foo(value) appears in both grouping expressions and aggregate expressions
+    // The fix ensures that both instances are properly mapped to the same attribute
+    val df = spark.range(1)
+      .selectExpr("id", "id % 3 as value")
+      .groupBy(pythonUDF(col("value")))
+      .agg(avg("id"), pythonUDF(col("value")))
+
+    checkAnswer(df, Row(0, 0.0, 0))
   }
 }

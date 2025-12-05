@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.TimestampTypes
@@ -57,7 +57,14 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
   checkDataType("Dec(10, 5)", DecimalType(10, 5))
   checkDataType("deC", DecimalType.USER_DEFAULT)
   checkDataType("DATE", DateType)
+  checkDataType("TimE", TimeType())
+  checkDataType("TimE WiTHOUT TiME ZoNE", TimeType())
+  checkDataType("time(0)", TimeType(0))
+  checkDataType("time(0) without time zone", TimeType(0))
+  checkDataType("TIME(6)", TimeType(6))
+  checkDataType("TIME(6) WITHOUT TIME ZONE", TimeType(6))
   checkDataType("timestamp", TimestampType)
+  checkDataType("TIMESTAMP WITHOUT TIME ZONE", TimestampNTZType)
   checkDataType("timestamp_ntz", TimestampNTZType)
   checkDataType("timestamp_ltz", TimestampType)
   checkDataType("string", StringType)
@@ -138,12 +145,12 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
   test("Do not print empty parentheses for no params") {
     checkError(
       exception = intercept("unknown"),
-      errorClass = "UNSUPPORTED_DATATYPE",
+      condition = "UNSUPPORTED_DATATYPE",
       parameters = Map("typeName" -> "\"UNKNOWN\"")
     )
     checkError(
       exception = intercept("unknown(1,2,3)"),
-      errorClass = "UNSUPPORTED_DATATYPE",
+      condition = "UNSUPPORTED_DATATYPE",
       parameters = Map("typeName" -> "\"UNKNOWN(1,2,3)\"")
     )
   }
@@ -154,6 +161,7 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
     }
     withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> TimestampTypes.TIMESTAMP_LTZ.toString) {
       assert(parse("timestamp") === TimestampType)
+      assert(parse("timestamp without time zone") === TimestampNTZType)
     }
   }
 
@@ -172,4 +180,61 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
   // DataType parser accepts comments.
   checkDataType("Struct<x: INT, y: STRING COMMENT 'test'>",
     (new StructType).add("x", IntegerType).add("y", StringType, true, "test"))
+
+  test("unsupported precision of the time data type") {
+    checkError(
+      exception = intercept[SparkException] {
+        CatalystSqlParser.parseDataType("time(9)")
+      },
+      condition = "UNSUPPORTED_TIME_PRECISION",
+      parameters = Map("precision" -> "9"))
+    checkError(
+      exception = intercept[SparkException] {
+        CatalystSqlParser.parseDataType("time(8) without time zone")
+      },
+      condition = "UNSUPPORTED_TIME_PRECISION",
+      parameters = Map("precision" -> "8"))
+    checkError(
+      exception = intercept[ParseException] {
+        CatalystSqlParser.parseDataType("time(-1)")
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'-'", "hint" -> ""))
+    checkError(
+      exception = intercept[ParseException] {
+        CatalystSqlParser.parseDataType("time(-100) WITHOUT TIME ZONE")
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'-'", "hint" -> ""))
+  }
+
+  test("invalid TIME suffix") {
+    checkError(
+      exception = intercept[ParseException] {
+        CatalystSqlParser.parseDataType("time(0) WITHOUT TIMEZONE")
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'WITHOUT'", "hint" -> ""))
+    checkError(
+      exception = intercept[ParseException] {
+        CatalystSqlParser.parseDataType("time(0) WITH TIME ZONE")
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'WITH'", "hint" -> ""))
+  }
+
+  test("invalid TIMESTAMP suffix") {
+    checkError(
+      exception = intercept[ParseException] {
+        CatalystSqlParser.parseDataType("timestamp WITHOUT TIMEZONE")
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'WITHOUT'", "hint" -> ""))
+    checkError(
+      exception = intercept[ParseException] {
+        CatalystSqlParser.parseDataType("timestamp WITH TIME ZONE")
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'WITH'", "hint" -> ""))
+  }
 }

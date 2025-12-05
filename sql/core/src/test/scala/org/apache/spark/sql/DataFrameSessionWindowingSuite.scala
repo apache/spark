@@ -480,7 +480,7 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
       df <- Seq(df1, df2)
       nullable <- Seq(true, false)
     } {
-      val dfWithDesiredNullability = new DataFrame(df.queryExecution, ExpressionEncoder(
+      val dfWithDesiredNullability = new classic.DataFrame(df.queryExecution, ExpressionEncoder(
         StructType(df.schema.fields.map(_.copy(nullable = nullable)))))
       // session window without dynamic gap
       val windowedProject = dfWithDesiredNullability
@@ -545,6 +545,57 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
       } else {
         assert(exist.isEmpty, assertHintMsg)
       }
+    }
+  }
+
+  test("SPARK-49836 using window fn with window as parameter should preserve parent operator") {
+    withTempView("clicks") {
+      val df = Seq(
+        // small window: [00:00, 01:00), user1, 2
+        ("2024-09-30 00:00:00", "user1"), ("2024-09-30 00:00:30", "user1"),
+        // small window: [01:00, 02:00), user2, 2
+        ("2024-09-30 00:01:00", "user2"), ("2024-09-30 00:01:30", "user2"),
+        // small window: [03:00, 04:00), user1, 1
+        ("2024-09-30 00:03:30", "user1"),
+        // small window: [11:00, 12:00), user1, 3
+        ("2024-09-30 00:11:00", "user1"), ("2024-09-30 00:11:30", "user1"),
+        ("2024-09-30 00:11:45", "user1")
+      ).toDF("eventTime", "userId")
+
+      // session window: (01:00, 09:00), user1, 3 / (02:00, 07:00), user2, 2 /
+      //   (12:00, 12:05), user1, 3
+
+      df.createOrReplaceTempView("clicks")
+
+      val aggregatedData = spark.sql(
+        """
+          |SELECT
+          |  userId,
+          |  avg(cpu_large.numClicks) AS clicksPerSession
+          |FROM
+          |(
+          |  SELECT
+          |    session_window(small_window, '5 minutes') AS session,
+          |    userId,
+          |    sum(numClicks) AS numClicks
+          |  FROM
+          |  (
+          |    SELECT
+          |      window(eventTime, '1 minute') AS small_window,
+          |      userId,
+          |      count(*) AS numClicks
+          |    FROM clicks
+          |    GROUP BY window, userId
+          |  ) cpu_small
+          |  GROUP BY session_window, userId
+          |) cpu_large
+          |GROUP BY userId
+          |""".stripMargin)
+
+      checkAnswer(
+        aggregatedData,
+        Seq(Row("user1", 3), Row("user2", 2))
+      )
     }
   }
 }

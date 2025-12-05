@@ -36,7 +36,7 @@ class Word2VecSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("Word2Vec") {
-    val sentence = "a b " * 100 + "a c " * 10
+    val sentence = "a b ".repeat(100) + "a c ".repeat(10)
     val numOfWords = sentence.split(" ").length
     val doc = sc.parallelize(Seq(sentence, sentence)).map(line => line.split(" "))
 
@@ -76,7 +76,7 @@ class Word2VecSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("getVectors") {
-    val sentence = "a b " * 100 + "a c " * 10
+    val sentence = "a b ".repeat(100) + "a c ".repeat(10)
     val doc = sc.parallelize(Seq(sentence, sentence)).map(line => line.split(" "))
     val docDF = doc.zip(doc).toDF("text", "alsotext")
 
@@ -106,7 +106,7 @@ class Word2VecSuite extends MLTest with DefaultReadWriteTest {
 
   test("findSynonyms") {
 
-    val sentence = "a b " * 100 + "a c " * 10
+    val sentence = "a b ".repeat(100) + "a c ".repeat(10)
     val doc = sc.parallelize(Seq(sentence, sentence)).map(line => line.split(" "))
     val docDF = doc.zip(doc).toDF("text", "alsotext")
 
@@ -138,7 +138,7 @@ class Word2VecSuite extends MLTest with DefaultReadWriteTest {
 
   test("window size") {
 
-    val sentence = "a q s t q s t b b b s t m s t m q " * 100 + "a c " * 10
+    val sentence = "a q s t q s t b b b s t m s t m q ".repeat(100) + "a c ".repeat(10)
     val doc = sc.parallelize(Seq(sentence, sentence)).map(line => line.split(" "))
     val docDF = doc.zip(doc).toDF("text", "alsotext")
 

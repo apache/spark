@@ -24,9 +24,10 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.producer.ProducerConfig
+import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, ByteArraySerializer}
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.kafka010.KafkaConfigUpdater
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -140,6 +141,8 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       ENDING_OFFSETS_BY_TIMESTAMP_OPTION_KEY, ENDING_OFFSETS_OPTION_KEY,
       LatestOffsetRangeLimit)
     assert(endingRelationOffsets != EarliestOffsetRangeLimit)
+
+    checkOffsetLimitValidity(startingRelationOffsets, endingRelationOffsets)
 
     val includeHeaders = caseInsensitiveParameters.getOrElse(INCLUDE_HEADERS, "false").toBoolean
 
@@ -271,13 +274,21 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       if (p <= 0) throw new IllegalArgumentException("minPartitions must be positive")
     }
 
+    if (params.contains(MAX_RECORDS_PER_PARTITION_OPTION_KEY)) {
+      val p = params(MAX_RECORDS_PER_PARTITION_OPTION_KEY).toLong
+      if (p <= 0) {
+        throw new IllegalArgumentException(
+          s"$MAX_RECORDS_PER_PARTITION_OPTION_KEY must be positive")
+      }
+    }
+
     // Validate user-specified Kafka options
 
     if (params.contains(s"kafka.${ConsumerConfig.GROUP_ID_CONFIG}")) {
       logWarning(CUSTOM_GROUP_ID_ERROR_MESSAGE)
       if (params.contains(GROUP_ID_PREFIX)) {
-        logWarning("Option 'groupIdPrefix' will be ignored as " +
-          s"option 'kafka.${ConsumerConfig.GROUP_ID_CONFIG}' has been set.")
+        logWarning(log"Option groupIdPrefix will be ignored as " +
+          log"option kafka.${MDC(LogKeys.CONFIG, ConsumerConfig.GROUP_ID_CONFIG)} has been set.")
       }
     }
 
@@ -455,6 +466,8 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
         ENDING_OFFSETS_BY_TIMESTAMP_OPTION_KEY, ENDING_OFFSETS_OPTION_KEY,
         LatestOffsetRangeLimit)
 
+      checkOffsetLimitValidity(startingRelationOffsets, endingRelationOffsets)
+
       new KafkaBatch(
         strategy(caseInsensitiveOptions),
         caseInsensitiveOptions,
@@ -557,6 +570,7 @@ private[kafka010] object KafkaSourceProvider extends Logging {
   private[kafka010] val ENDING_TIMESTAMP_OPTION_KEY = "endingtimestamp"
   private val FAIL_ON_DATA_LOSS_OPTION_KEY = "failondataloss"
   private[kafka010] val MIN_PARTITIONS_OPTION_KEY = "minpartitions"
+  private[kafka010] val MAX_RECORDS_PER_PARTITION_OPTION_KEY = "maxrecordsperpartition"
   private[kafka010] val MAX_OFFSET_PER_TRIGGER = "maxoffsetspertrigger"
   private[kafka010] val MIN_OFFSET_PER_TRIGGER = "minoffsetspertrigger"
   private[kafka010] val MAX_TRIGGER_DELAY = "maxtriggerdelay"
@@ -598,6 +612,60 @@ private[kafka010] object KafkaSourceProvider extends Logging {
 
   private val serClassName = classOf[ByteArraySerializer].getName
   private val deserClassName = classOf[ByteArrayDeserializer].getName
+
+  def checkStartOffsetNotGreaterThanEndOffset(
+      startOffset: Long,
+      endOffset: Long,
+      topicPartition: TopicPartition,
+      exception: (Long, Long, TopicPartition) => Exception): Unit = {
+    // earliest or latest offsets are negative and should not be compared
+    if (startOffset > endOffset && startOffset >= 0 && endOffset >= 0) {
+      throw exception(startOffset, endOffset, topicPartition)
+    }
+  }
+
+  def checkOffsetLimitValidity(
+      startOffset: KafkaOffsetRangeLimit,
+      endOffset: KafkaOffsetRangeLimit): Unit = {
+    startOffset match {
+      case start: SpecificOffsetRangeLimit if endOffset.isInstanceOf[SpecificOffsetRangeLimit] =>
+        val end = endOffset.asInstanceOf[SpecificOffsetRangeLimit]
+        if (start.partitionOffsets.keySet != end.partitionOffsets.keySet) {
+          throw KafkaExceptions.unmatchedTopicPartitionsBetweenOffsets(
+            start.partitionOffsets.keySet, end.partitionOffsets.keySet
+          )
+        }
+        start.partitionOffsets.foreach {
+          case (tp, startOffset) =>
+            checkStartOffsetNotGreaterThanEndOffset(
+              startOffset,
+              end.partitionOffsets(tp),
+              tp,
+              KafkaExceptions.unresolvedStartOffsetGreaterThanEndOffset
+            )
+        }
+
+      case start: SpecificTimestampRangeLimit
+        if endOffset.isInstanceOf[SpecificTimestampRangeLimit] =>
+        val end = endOffset.asInstanceOf[SpecificTimestampRangeLimit]
+        if (start.topicTimestamps.keySet != end.topicTimestamps.keySet) {
+          throw KafkaExceptions.unmatchedTopicPartitionsBetweenOffsets(
+            start.topicTimestamps.keySet, end.topicTimestamps.keySet
+          )
+        }
+        start.topicTimestamps.foreach {
+          case (tp, startOffset) =>
+            checkStartOffsetNotGreaterThanEndOffset(
+              startOffset,
+              end.topicTimestamps(tp),
+              tp,
+              KafkaExceptions.unresolvedStartTimestampGreaterThanEndTimestamp
+            )
+        }
+
+      case _ =>  // do nothing
+    }
+  }
 
   def getKafkaOffsetRangeLimit(
       params: CaseInsensitiveMap[String],

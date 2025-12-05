@@ -55,7 +55,7 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
   test("createPartition") {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryPartitionTable(
-      table.name(), table.schema(), table.partitioning(), table.properties())
+      table.name(), table.columns(), table.partitioning(), table.properties())
     assert(!hasPartitions(partTable))
 
     val partIdent = InternalRow.apply("3")
@@ -70,7 +70,7 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
   test("dropPartition") {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryPartitionTable(
-      table.name(), table.schema(), table.partitioning(), table.properties())
+      table.name(), table.columns(), table.partitioning(), table.properties())
     assert(!hasPartitions(partTable))
 
     val partIdent = InternalRow.apply("3")
@@ -88,12 +88,12 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
   test("purgePartition") {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryPartitionTable(
-      table.name(), table.schema(), table.partitioning(), table.properties())
+      table.name(), table.columns(), table.partitioning(), table.properties())
     checkError(
       exception = intercept[SparkUnsupportedOperationException] {
         partTable.purgePartition(InternalRow.apply("3"))
       },
-      errorClass = "UNSUPPORTED_FEATURE.PURGE_PARTITION",
+      condition = "UNSUPPORTED_FEATURE.PURGE_PARTITION",
       parameters = Map.empty
     )
   }
@@ -101,7 +101,7 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
   test("replacePartitionMetadata") {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryPartitionTable(
-      table.name(), table.schema(), table.partitioning(), table.properties())
+      table.name(), table.columns(), table.partitioning(), table.properties())
     assert(!hasPartitions(partTable))
 
     val partIdent = InternalRow.apply("3")
@@ -123,7 +123,7 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
   test("loadPartitionMetadata") {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryPartitionTable(
-      table.name(), table.schema(), table.partitioning(), table.properties())
+      table.name(), table.columns(), table.partitioning(), table.properties())
     assert(!hasPartitions(partTable))
 
     val partIdent = InternalRow.apply("3")
@@ -140,7 +140,7 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
   test("listPartitionIdentifiers") {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryPartitionTable(
-      table.name(), table.schema(), table.partitioning(), table.properties())
+      table.name(), table.columns(), table.partitioning(), table.properties())
     assert(!hasPartitions(partTable))
 
     val partIdent = InternalRow.apply("3")
@@ -217,7 +217,7 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
       exception = intercept[SparkIllegalArgumentException] {
         partTable.partitionExists(InternalRow(0))
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3208",
+      condition = "_LEGACY_ERROR_TEMP_3208",
       parameters = Map("numFields" -> "1", "schemaLen" -> "2"))
   }
 
@@ -228,7 +228,7 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
       partTable.renamePartition(InternalRow(0, "abc"), InternalRow(1, "abc"))
     }
     checkError(e,
-      errorClass = "PARTITIONS_ALREADY_EXIST",
+      condition = "PARTITIONS_ALREADY_EXIST",
       parameters = Map("partitionList" -> "PARTITION (`part0` = 1, `part1` = abc)",
       "tableName" -> "`test`.`ns`.`test_table`"))
 
@@ -237,7 +237,7 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
       partTable.renamePartition(newPart, InternalRow(3, "abc"))
     }
     checkError(e2,
-      errorClass = "PARTITIONS_NOT_FOUND",
+      condition = "PARTITIONS_NOT_FOUND",
       parameters = Map("partitionList" -> "PARTITION (`part0` = 2, `part1` = xyz)",
         "tableName" -> "`test`.`ns`.`test_table`"))
 
@@ -248,7 +248,7 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
   test("truncatePartition") {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryPartitionTable(
-      table.name(), table.schema(), table.partitioning(), table.properties())
+      table.name(), table.columns(), table.partitioning(), table.properties())
     assert(!hasPartitions(partTable))
 
     val partIdent = InternalRow.apply("3")
@@ -258,8 +258,8 @@ class SupportsPartitionManagementSuite extends SparkFunSuite {
     assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 2)
 
     partTable.withData(Array(
-      new BufferedRows("3").withRow(InternalRow(0, "abc", "3")),
-      new BufferedRows("4").withRow(InternalRow(1, "def", "4"))
+      BufferedRows("3", partTable.columns()).withRow(InternalRow(0, "abc", "3")),
+      BufferedRows("4", partTable.columns()).withRow(InternalRow(1, "def", "4"))
     ))
 
     partTable.truncatePartition(partIdent)

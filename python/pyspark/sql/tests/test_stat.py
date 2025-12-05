@@ -17,7 +17,7 @@
 
 import unittest
 
-from pyspark.sql import Row
+from pyspark.sql import Row, functions as sf
 from pyspark.sql.types import (
     StringType,
     IntegerType,
@@ -120,8 +120,8 @@ class DataFrameStatTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_LIST_OR_STR_OR_TUPLE",
-            message_parameters={"arg_name": "subset", "arg_type": "int"},
+            errorClass="NOT_LIST_OR_STR_OR_TUPLE",
+            messageParameters={"arg_name": "subset", "arg_type": "int"},
         )
 
     def test_fillna(self):
@@ -200,8 +200,8 @@ class DataFrameStatTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INT_OR_STR",
-            message_parameters={"arg_name": "value", "arg_type": "list"},
+            errorClass="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INT_OR_STR",
+            messageParameters={"arg_name": "value", "arg_type": "list"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -209,8 +209,8 @@ class DataFrameStatTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_LIST_OR_TUPLE",
-            message_parameters={"arg_name": "subset", "arg_type": "int"},
+            errorClass="NOT_LIST_OR_TUPLE",
+            messageParameters={"arg_name": "subset", "arg_type": "int"},
         )
 
     def test_replace(self):
@@ -399,8 +399,8 @@ class DataFrameStatTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="ARGUMENT_REQUIRED",
-            message_parameters={"arg_name": "value", "condition": "`to_replace` is dict"},
+            errorClass="ARGUMENT_REQUIRED",
+            messageParameters={"arg_name": "value", "condition": "`to_replace` is dict"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -408,8 +408,8 @@ class DataFrameStatTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
-            message_parameters={"arg_name": "to_replace", "arg_type": "function"},
+            errorClass="NOT_BOOL_OR_DICT_OR_FLOAT_OR_INT_OR_LIST_OR_STR_OR_TUPLE",
+            messageParameters={"arg_name": "to_replace", "arg_type": "function"},
         )
 
     def test_unpivot(self):
@@ -430,24 +430,26 @@ class DataFrameStatTestsMixin:
         with self.subTest(desc="with no identifier"):
             for id in [[], ()]:
                 with self.subTest(ids=id):
-                    actual = df.unpivot(id, ["int", "double"], "var", "val")
+                    actual = df.unpivot(id, ["int", "double"], "var", "val").sort("var", "val")
                     self.assertEqual(actual.schema.simpleString(), "struct<var:string,val:double>")
                     self.assertEqual(
                         actual.collect(),
                         [
-                            Row(var="int", value=10.0),
-                            Row(var="double", value=1.0),
-                            Row(var="int", value=20.0),
-                            Row(var="double", value=2.0),
-                            Row(var="int", value=30.0),
-                            Row(var="double", value=3.0),
+                            Row(var="double", val=1.0),
+                            Row(var="double", val=2.0),
+                            Row(var="double", val=3.0),
+                            Row(var="int", val=10.0),
+                            Row(var="int", val=20.0),
+                            Row(var="int", val=30.0),
                         ],
                     )
 
         with self.subTest(desc="with single identifier column"):
             for id in ["id", ["id"], ("id",)]:
                 with self.subTest(ids=id):
-                    actual = df.unpivot(id, ["int", "double"], "var", "val")
+                    actual = df.unpivot(id, ["int", "double"], "var", "val").sort(
+                        "id", sf.desc("val")
+                    )
                     self.assertEqual(
                         actual.schema.simpleString(),
                         "struct<id:bigint,var:string,val:double>",
@@ -455,19 +457,21 @@ class DataFrameStatTestsMixin:
                     self.assertEqual(
                         actual.collect(),
                         [
-                            Row(id=1, var="int", value=10.0),
-                            Row(id=1, var="double", value=1.0),
-                            Row(id=2, var="int", value=20.0),
-                            Row(id=2, var="double", value=2.0),
-                            Row(id=3, var="int", value=30.0),
-                            Row(id=3, var="double", value=3.0),
+                            Row(id=1, var="int", val=10.0),
+                            Row(id=1, var="double", val=1.0),
+                            Row(id=2, var="int", val=20.0),
+                            Row(id=2, var="double", val=2.0),
+                            Row(id=3, var="int", val=30.0),
+                            Row(id=3, var="double", val=3.0),
                         ],
                     )
 
         with self.subTest(desc="with multiple identifier columns"):
             for ids in [["id", "double"], ("id", "double")]:
                 with self.subTest(ids=ids):
-                    actual = df.unpivot(ids, ["int", "double"], "var", "val")
+                    actual = df.unpivot(ids, ["int", "double"], "var", "val").sort(
+                        "id", sf.desc("val")
+                    )
                     self.assertEqual(
                         actual.schema.simpleString(),
                         "struct<id:bigint,double:double,var:string,val:double>",
@@ -475,31 +479,33 @@ class DataFrameStatTestsMixin:
                     self.assertEqual(
                         actual.collect(),
                         [
-                            Row(id=1, double=1.0, var="int", value=10.0),
-                            Row(id=1, double=1.0, var="double", value=1.0),
-                            Row(id=2, double=2.0, var="int", value=20.0),
-                            Row(id=2, double=2.0, var="double", value=2.0),
-                            Row(id=3, double=3.0, var="int", value=30.0),
-                            Row(id=3, double=3.0, var="double", value=3.0),
+                            Row(id=1, double=1.0, var="int", val=10.0),
+                            Row(id=1, double=1.0, var="double", val=1.0),
+                            Row(id=2, double=2.0, var="int", val=20.0),
+                            Row(id=2, double=2.0, var="double", val=2.0),
+                            Row(id=3, double=3.0, var="int", val=30.0),
+                            Row(id=3, double=3.0, var="double", val=3.0),
                         ],
                     )
 
         with self.subTest(desc="with no identifier columns but none value columns"):
             # select only columns that have common data type (double)
-            actual = df.select("id", "int", "double").unpivot([], None, "var", "val")
+            actual = (
+                df.select("id", "int", "double").unpivot([], None, "var", "val").sort("var", "val")
+            )
             self.assertEqual(actual.schema.simpleString(), "struct<var:string,val:double>")
             self.assertEqual(
                 actual.collect(),
                 [
-                    Row(var="id", value=1.0),
-                    Row(var="int", value=10.0),
-                    Row(var="double", value=1.0),
-                    Row(var="id", value=2.0),
-                    Row(var="int", value=20.0),
-                    Row(var="double", value=2.0),
-                    Row(var="id", value=3.0),
-                    Row(var="int", value=30.0),
-                    Row(var="double", value=3.0),
+                    Row(var="double", val=1.0),
+                    Row(var="double", val=2.0),
+                    Row(var="double", val=3.0),
+                    Row(var="id", val=1.0),
+                    Row(var="id", val=2.0),
+                    Row(var="id", val=3.0),
+                    Row(var="int", val=10.0),
+                    Row(var="int", val=20.0),
+                    Row(var="int", val=30.0),
                 ],
             )
 
@@ -507,26 +513,30 @@ class DataFrameStatTestsMixin:
             for ids in ["id", ["id"], ("id",)]:
                 with self.subTest(ids=ids):
                     # select only columns that have common data type (double)
-                    actual = df.select("id", "int", "double").unpivot(ids, None, "var", "val")
+                    actual = (
+                        df.select("id", "int", "double")
+                        .unpivot(ids, None, "var", "val")
+                        .sort("id", sf.desc("val"))
+                    )
                     self.assertEqual(
                         actual.schema.simpleString(), "struct<id:bigint,var:string,val:double>"
                     )
                     self.assertEqual(
                         actual.collect(),
                         [
-                            Row(id=1, var="int", value=10.0),
-                            Row(id=1, var="double", value=1.0),
-                            Row(id=2, var="int", value=20.0),
-                            Row(id=2, var="double", value=2.0),
-                            Row(id=3, var="int", value=30.0),
-                            Row(id=3, var="double", value=3.0),
+                            Row(id=1, var="int", val=10.0),
+                            Row(id=1, var="double", val=1.0),
+                            Row(id=2, var="int", val=20.0),
+                            Row(id=2, var="double", val=2.0),
+                            Row(id=3, var="int", val=30.0),
+                            Row(id=3, var="double", val=3.0),
                         ],
                     )
 
         with self.subTest(desc="with multiple identifier columns but none given value columns"):
             for ids in [["id", "str"], ("id", "str")]:
                 with self.subTest(ids=ids):
-                    actual = df.unpivot(ids, None, "var", "val")
+                    actual = df.unpivot(ids, None, "var", "val").sort("id", sf.desc("val"))
                     self.assertEqual(
                         actual.schema.simpleString(),
                         "struct<id:bigint,str:string,var:string,val:double>",
@@ -546,7 +556,7 @@ class DataFrameStatTestsMixin:
         with self.subTest(desc="with single value column"):
             for values in ["int", ["int"], ("int",)]:
                 with self.subTest(values=values):
-                    actual = df.unpivot("id", values, "var", "val")
+                    actual = df.unpivot("id", values, "var", "val").sort("id")
                     self.assertEqual(
                         actual.schema.simpleString(), "struct<id:bigint,var:string,val:bigint>"
                     )
@@ -562,7 +572,7 @@ class DataFrameStatTestsMixin:
         with self.subTest(desc="with multiple value columns"):
             for values in [["int", "double"], ("int", "double")]:
                 with self.subTest(values=values):
-                    actual = df.unpivot("id", values, "var", "val")
+                    actual = df.unpivot("id", values, "var", "val").sort("id", sf.desc("val"))
                     self.assertEqual(
                         actual.schema.simpleString(), "struct<id:bigint,var:string,val:double>"
                     )

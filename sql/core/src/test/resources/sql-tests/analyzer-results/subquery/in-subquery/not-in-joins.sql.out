@@ -341,8 +341,8 @@ GROUP BY t1b,
 HAVING   t1b < sum(t1c)
 -- !query analysis
 Project [count(DISTINCT t1a)#xL, t1b#x, t1c#x, t1d#xL]
-+- Filter (cast(t1b#x as bigint) < sum(t1c#x)#xL)
-   +- Aggregate [t1b#x, t1c#x, t1d#xL], [count(distinct t1a#x) AS count(DISTINCT t1a)#xL, t1b#x, t1c#x, t1d#xL, sum(t1c#x) AS sum(t1c#x)#xL]
++- Filter (cast(t1b#x as bigint) < sum(t1c)#xL)
+   +- Aggregate [t1b#x, t1c#x, t1d#xL], [count(distinct t1a#x) AS count(DISTINCT t1a)#xL, t1b#x, t1c#x, t1d#xL, sum(t1c#x) AS sum(t1c)#xL]
       +- Filter NOT t1a#x IN (list#x [])
          :  +- Project [t2a#x]
          :     +- Join Inner, (t1a#x = t2a#x)
@@ -390,8 +390,8 @@ GROUP BY t1b,
 HAVING   t1b < sum(t1c)
 -- !query analysis
 Project [count(DISTINCT t1a)#xL, t1b#x, t1c#x, t1d#xL]
-+- Filter (cast(t1b#x as bigint) < sum(t1c#x)#xL)
-   +- Aggregate [t1b#x, t1c#x, t1d#xL], [count(distinct t1a#x) AS count(DISTINCT t1a)#xL, t1b#x, t1c#x, t1d#xL, sum(t1c#x) AS sum(t1c#x)#xL]
++- Filter (cast(t1b#x as bigint) < sum(t1c)#xL)
+   +- Aggregate [t1b#x, t1c#x, t1d#xL], [count(distinct t1a#x) AS count(DISTINCT t1a)#xL, t1b#x, t1c#x, t1d#xL, sum(t1c#x) AS sum(t1c)#xL]
       +- Filter (NOT t1a#x IN (list#x []) AND NOT t1d#xL IN (list#x []))
          :  :- Project [t2a#x]
          :  :  +- Join Inner, (t1a#x = t2a#x)

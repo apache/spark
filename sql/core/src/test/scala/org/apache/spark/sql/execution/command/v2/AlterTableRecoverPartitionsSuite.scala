@@ -35,7 +35,7 @@ class AlterTableRecoverPartitionsSuite
         exception = intercept[AnalysisException] {
           sql(s"ALTER TABLE $t RECOVER PARTITIONS")
         },
-        errorClass = "NOT_SUPPORTED_COMMAND_FOR_V2_TABLE",
+        condition = "NOT_SUPPORTED_COMMAND_FOR_V2_TABLE",
         parameters = Map("cmd" -> "ALTER TABLE ... RECOVER PARTITIONS")
       )
     }

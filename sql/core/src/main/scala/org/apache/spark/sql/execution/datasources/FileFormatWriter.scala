@@ -26,16 +26,16 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark._
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.io.{FileCommitProtocol, SparkHadoopWriterUtils}
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.write.WriterCommitMessage
 import org.apache.spark.sql.execution.{ProjectExec, SortExec, SparkPlan, SQLExecution, UnsafeExternalRowSorter}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
@@ -383,32 +383,41 @@ object FileFormatWriter extends Logging {
 
     committer.setupTask(taskAttemptContext)
 
-    val dataWriter =
-      if (sparkPartitionId != 0 && !iterator.hasNext) {
-        // In case of empty job, leave first partition to save meta for file format like parquet.
-        new EmptyDirectoryDataWriter(description, taskAttemptContext, committer)
-      } else if (description.partitionColumns.isEmpty && description.bucketSpec.isEmpty) {
-        new SingleDirectoryDataWriter(description, taskAttemptContext, committer)
-      } else {
-        concurrentOutputWriterSpec match {
-          case Some(spec) =>
-            new DynamicPartitionDataConcurrentWriter(
-              description, taskAttemptContext, committer, spec)
-          case _ =>
-            new DynamicPartitionDataSingleWriter(description, taskAttemptContext, committer)
-        }
-      }
+    var dataWriter: FileFormatDataWriter = null
 
     Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
+      dataWriter =
+        if (sparkPartitionId != 0 && !iterator.hasNext) {
+          // In case of empty job, leave first partition to save meta for file format like parquet.
+          new EmptyDirectoryDataWriter(description, taskAttemptContext, committer)
+        } else if (description.partitionColumns.isEmpty && description.bucketSpec.isEmpty) {
+          new SingleDirectoryDataWriter(description, taskAttemptContext, committer)
+        } else {
+          concurrentOutputWriterSpec match {
+            case Some(spec) =>
+              new DynamicPartitionDataConcurrentWriter(
+                description, taskAttemptContext, committer, spec)
+            case _ =>
+              new DynamicPartitionDataSingleWriter(description, taskAttemptContext, committer)
+          }
+        }
+
       // Execute the task to write rows out and commit the task.
       dataWriter.writeWithIterator(iterator)
       dataWriter.commit()
     })(catchBlock = {
       // If there is an error, abort the task
-      dataWriter.abort()
-      logError(log"Job ${MDC(JOB_ID, jobId)} aborted.")
+      if (dataWriter != null) {
+        dataWriter.abort()
+      } else {
+        committer.abortTask(taskAttemptContext)
+      }
+      logError(log"Job: ${MDC(JOB_ID, jobId)}, Task: ${MDC(TASK_ID, taskId)}, " +
+        log"Task attempt ${MDC(TASK_ATTEMPT_ID, taskAttemptId)} aborted.")
     }, finallyBlock = {
-      dataWriter.close()
+      if (dataWriter != null) {
+        dataWriter.close()
+      }
     })
   }
 

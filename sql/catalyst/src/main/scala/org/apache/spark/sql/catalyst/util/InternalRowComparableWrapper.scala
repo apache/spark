@@ -20,8 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Expression, Murmur3HashFunction, RowOrdering}
-import org.apache.spark.sql.catalyst.plans.physical.KeyGroupedPartitioning
+import org.apache.spark.sql.catalyst.expressions.{BaseOrdering, Expression, Murmur3HashFunction, RowOrdering}
 import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition}
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.NonFateSharingCache
@@ -34,13 +33,31 @@ import org.apache.spark.util.NonFateSharingCache
  *
  * @param dataTypes the data types for the row
  */
-class InternalRowComparableWrapper(val row: InternalRow, val dataTypes: Seq[DataType]) {
-  import InternalRowComparableWrapper._
+class InternalRowComparableWrapper private (
+    val row: InternalRow,
+    val dataTypes: Seq[DataType],
+    val structType: StructType,
+    val ordering: BaseOrdering) {
 
-  private val structType = structTypeCache.get(dataTypes)
-  private val ordering = orderingCache.get(dataTypes)
+  /**
+   * Previous constructor for binary compatibility. Prefer using
+   * `getInternalRowComparableWrapperFactory` for the creation of InternalRowComparableWrapper's in
+   * hot paths to avoid excessive cache lookups.
+   */
+  @deprecated
+  def this(row: InternalRow, dataTypes: Seq[DataType]) = this(
+    row,
+    dataTypes,
+    InternalRowComparableWrapper.structTypeCache.get(dataTypes),
+    InternalRowComparableWrapper.orderingCache.get(dataTypes))
 
-  override def hashCode(): Int = Murmur3HashFunction.hash(row, structType, 42L).toInt
+  override def hashCode(): Int = Murmur3HashFunction.hash(
+    row,
+    structType,
+    42L,
+    isCollationAware = true,
+    // legacyCollationAwareHashing only matters when isCollationAware is false.
+    legacyCollationAwareHashing = false).toInt
 
   override def equals(other: Any): Boolean = {
     if (!other.isInstanceOf[InternalRowComparableWrapper]) {
@@ -85,22 +102,35 @@ object InternalRowComparableWrapper {
   }
 
   def mergePartitions(
-      leftPartitioning: KeyGroupedPartitioning,
-      rightPartitioning: KeyGroupedPartitioning,
-      partitionExpression: Seq[Expression]): Seq[InternalRow] = {
+      leftPartitioning: Seq[InternalRow],
+      rightPartitioning: Seq[InternalRow],
+      partitionExpression: Seq[Expression],
+      intersect: Boolean = false): Seq[InternalRowComparableWrapper] = {
     val partitionDataTypes = partitionExpression.map(_.dataType)
-    val partitionsSet = new mutable.HashSet[InternalRowComparableWrapper]
-    leftPartitioning.partitionValues
-      .map(new InternalRowComparableWrapper(_, partitionDataTypes))
-      .foreach(partition => partitionsSet.add(partition))
-    rightPartitioning.partitionValues
-      .map(new InternalRowComparableWrapper(_, partitionDataTypes))
-      .foreach(partition => partitionsSet.add(partition))
-    // SPARK-41471: We keep to order of partitions to make sure the order of
-    // partitions is deterministic in different case.
-    val partitionOrdering: Ordering[InternalRow] = {
-      RowOrdering.createNaturalAscendingOrdering(partitionDataTypes)
+    val leftPartitionSet = new mutable.HashSet[InternalRowComparableWrapper]
+    val internalRowComparableWrapperFactory =
+      getInternalRowComparableWrapperFactory(partitionDataTypes)
+    leftPartitioning
+      .map(internalRowComparableWrapperFactory)
+      .foreach(partition => leftPartitionSet.add(partition))
+    val rightPartitionSet = new mutable.HashSet[InternalRowComparableWrapper]
+    rightPartitioning
+      .map(internalRowComparableWrapperFactory)
+      .foreach(partition => rightPartitionSet.add(partition))
+
+    val result = if (intersect) {
+      leftPartitionSet.intersect(rightPartitionSet)
+    } else {
+      leftPartitionSet.union(rightPartitionSet)
     }
-    partitionsSet.map(_.row).toSeq.sorted(partitionOrdering)
+    result.toSeq
+  }
+
+  /** Creates a shared factory method for a given row schema to avoid excessive cache lookups. */
+  def getInternalRowComparableWrapperFactory(
+      dataTypes: Seq[DataType]): InternalRow => InternalRowComparableWrapper = {
+    val structType = structTypeCache.get(dataTypes)
+    val ordering = orderingCache.get(dataTypes)
+    row: InternalRow => new InternalRowComparableWrapper(row, dataTypes, structType, ordering)
   }
 }

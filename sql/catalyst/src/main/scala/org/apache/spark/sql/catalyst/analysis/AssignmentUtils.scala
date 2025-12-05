@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.{Attribute, CreateNamedStruct, Expression, GetStructField, Literal}
+import org.apache.spark.sql.catalyst.analysis.TableOutputResolver.DefaultValueFillMode.{NONE, RECURSE}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, CreateNamedStruct, Expression, GetStructField, IsNull, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.Assignment
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -49,11 +50,19 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
    *
    * @param attrs table attributes
    * @param assignments assignments to align
+   * @param fromStar whether the assignments were resolved from an UPDATE SET * clause.
+   *                 These updates may assign struct fields individually
+   *                 (preserving existing fields).
+   * @param coerceNestedTypes whether to coerce nested types to match the target type
+   *                         for complex types
+   * @param missingSourcePaths paths that exist in target but not in source
    * @return aligned update assignments that match table attributes
    */
   def alignUpdateAssignments(
       attrs: Seq[Attribute],
-      assignments: Seq[Assignment]): Seq[Assignment] = {
+      assignments: Seq[Assignment],
+      fromStar: Boolean,
+      coerceNestedTypes: Boolean): Seq[Assignment] = {
 
     val errors = new mutable.ArrayBuffer[String]()
 
@@ -63,7 +72,9 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
         colExpr = attr,
         assignments,
         addError = err => errors += err,
-        colPath = Seq(attr.name))
+        colPath = Seq(attr.name),
+        coerceNestedTypes,
+        fromStar)
     }
 
     if (errors.nonEmpty) {
@@ -84,11 +95,14 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
    *
    * @param attrs table attributes
    * @param assignments insert assignments to align
+   * @param coerceNestedTypes whether to coerce nested types to match the target type
+   *                          for complex types
    * @return aligned insert assignments that match table attributes
    */
   def alignInsertAssignments(
       attrs: Seq[Attribute],
-      assignments: Seq[Assignment]): Seq[Assignment] = {
+      assignments: Seq[Assignment],
+      coerceNestedTypes: Boolean = false): Seq[Assignment] = {
 
     val errors = new mutable.ArrayBuffer[String]()
 
@@ -120,8 +134,9 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
         val colPath = Seq(attr.name)
         val actualAttr = restoreActualType(attr)
         val value = matchingAssignments.head.value
+        val coerceMode = if (coerceNestedTypes) RECURSE else NONE
         TableOutputResolver.resolveUpdate(
-          "", value, actualAttr, conf, err => errors += err, colPath)
+          "", value, actualAttr, conf, err => errors += err, colPath, coerceMode)
       }
       Assignment(attr, resolvedValue)
     }
@@ -142,7 +157,9 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
       colExpr: Expression,
       assignments: Seq[Assignment],
       addError: String => Unit,
-      colPath: Seq[String]): Expression = {
+      colPath: Seq[String],
+      coerceNestedTypes: Boolean = false,
+      updateStar: Boolean = false): Expression = {
 
     val (exactAssignments, otherAssignments) = assignments.partition { assignment =>
       assignment.key.semanticEquals(colExpr)
@@ -165,9 +182,12 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
       TableOutputResolver.checkNullability(colExpr, col, conf, colPath)
     } else if (exactAssignments.nonEmpty) {
       val value = exactAssignments.head.value
-      TableOutputResolver.resolveUpdate("", value, col, conf, addError, colPath)
+      val coerceMode = if (coerceNestedTypes) RECURSE else NONE
+      val resolvedValue = TableOutputResolver.resolveUpdate("", value, col, conf, addError,
+        colPath, coerceMode)
+      resolvedValue
     } else {
-      applyFieldAssignments(col, colExpr, fieldAssignments, addError, colPath)
+      applyFieldAssignments(col, colExpr, fieldAssignments, addError, colPath, coerceNestedTypes)
     }
   }
 
@@ -176,7 +196,8 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
       colExpr: Expression,
       assignments: Seq[Assignment],
       addError: String => Unit,
-      colPath: Seq[String]): Expression = {
+      colPath: Seq[String],
+      coerceNestedTyptes: Boolean): Expression = {
 
     col.dataType match {
       case structType: StructType =>
@@ -185,7 +206,8 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
           GetStructField(colExpr, ordinal, Some(field.name))
         }
         val updatedFieldExprs = fieldAttrs.zip(fieldExprs).map { case (fieldAttr, fieldExpr) =>
-          applyAssignments(fieldAttr, fieldExpr, assignments, addError, colPath :+ fieldAttr.name)
+          applyAssignments(fieldAttr, fieldExpr, assignments, addError, colPath :+ fieldAttr.name,
+            coerceNestedTyptes)
         }
         toNamedStruct(structType, updatedFieldExprs)
 
@@ -202,6 +224,52 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
       Seq(Literal(field.name), expr)
     }.toImmutableArraySeq
     CreateNamedStruct(namedStructExprs)
+  }
+
+  private def getMissingSourcePaths(targetType: StructType,
+                                 sourceType: DataType,
+                                 colPath: Seq[String],
+                                 addError: String => Unit): Seq[Seq[String]] = {
+    val nestedTargetPaths = DataTypeUtils.extractLeafFieldPaths(targetType, Seq.empty)
+    val nestedSourcePaths = sourceType match {
+      case sourceStructType: StructType =>
+        DataTypeUtils.extractLeafFieldPaths(sourceStructType, Seq.empty)
+      case _ =>
+        addError(s"Value for struct type: " +
+          s"${colPath.quoted} must be a struct but was ${sourceType.simpleString}")
+        Seq()
+    }
+    nestedSourcePaths.diff(nestedTargetPaths)
+  }
+
+  /**
+   * Creates a null check for a field at the given path within a struct expression.
+   * Navigates through the struct hierarchy following the path and returns an IsNull check
+   * for the final field.
+   *
+   * @param rootExpr the root expression to navigate from
+   * @param path the field path to navigate (sequence of field names)
+   * @return an IsNull expression checking if the field at the path is null
+   */
+  private def createNullCheckForFieldPath(
+      rootExpr: Expression,
+      path: Seq[String]): Expression = {
+    var currentExpr: Expression = rootExpr
+    path.foreach { fieldName =>
+      currentExpr.dataType match {
+        case st: StructType =>
+          st.fields.find(f => conf.resolver(f.name, fieldName)) match {
+            case Some(field) =>
+              val fieldIndex = st.fieldIndex(field.name)
+              currentExpr = GetStructField(currentExpr, fieldIndex, Some(field.name))
+            case None =>
+              // Field not found, shouldn't happen
+          }
+        case _ =>
+          // Not a struct, shouldn't happen
+      }
+    }
+    IsNull(currentExpr)
   }
 
   /**

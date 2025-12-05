@@ -16,11 +16,13 @@
 #
 import unittest
 
+from pyspark import is_remote_only
 from pyspark.pandas.tests.frame.test_take import FrameTakeMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
+@unittest.skipIf(is_remote_only(), "Flaky with OOM")
 class FrameTakeParityTests(
     FrameTakeMixin,
     PandasOnSparkTestUtils,

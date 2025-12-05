@@ -18,11 +18,17 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.resource.ResourceProfile
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, PythonUDF, PythonUDTF}
+import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistryBase, MultiInstanceRelation, UnresolvedAttribute, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.TableFunctionRegistry.TableFunctionBuilder
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Expression, ExpressionDescription, ExpressionInfo, JsonToStructs, PythonUDF, PythonUDTF}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, TimeMode}
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.util.LogUtils
 
 /**
  * FlatMap groups using a udf: pandas.Dataframe -> pandas.DataFrame.
@@ -162,6 +168,91 @@ case class FlatMapGroupsInPandasWithState(
 }
 
 /**
+ * Invokes methods defined in the stateful processor used in arbitrary state API v2. We allow the
+ * user to act on per-group set of input rows along with keyed state and the user can choose to
+ * output/return 0 or more rows. For a streaming dataframe, we will repeatedly invoke the interface
+ * methods for new rows in each trigger and the user's state/state variables will be stored
+ * persistently across invocations.
+ *
+ * Note that before invoking the function, please project the grouping attributes of input dataframe
+ * and initial state dataframe to the front of the output attributes. The attributes are not fully
+ * resolved when this function is invoked. Will return left and right attributes by taking the first
+ * `groupingAttributesLen` and `initGroupingAttrsLen` after attributes are resolved.
+ * The dedup of grouping attributes will happen in the physical operator.
+ * @param functionExpr function called on each group
+ * @param groupingAttributesLen length of the seq of grouping attributes for input dataframe.
+ * @param outputAttrs used to define the output rows
+ * @param outputMode defines the output mode for the statefulProcessor
+ * @param timeMode the time mode semantics of the stateful processor for timers and TTL.
+ * @param userFacingDataType the data type of the input and return type in user functions.
+ * @param child logical plan of the underlying data
+ * @param initialState logical plan of initial state
+ * @param initGroupingAttrsLen length of the seq of grouping attributes for initial state dataframe
+ */
+case class TransformWithStateInPySpark(
+    functionExpr: Expression,
+    groupingAttributesLen: Int,
+    outputAttrs: Seq[Attribute],
+    outputMode: OutputMode,
+    timeMode: TimeMode,
+    userFacingDataType: TransformWithStateInPySpark.UserFacingDataType.Value,
+    child: LogicalPlan,
+    hasInitialState: Boolean,
+    initialState: LogicalPlan,
+    initGroupingAttrsLen: Int,
+    initialStateSchema: StructType) extends BinaryNode {
+  override def left: LogicalPlan = child
+
+  override def right: LogicalPlan = initialState
+
+  override def output: Seq[Attribute] = outputAttrs
+
+  override def producedAttributes: AttributeSet = AttributeSet(outputAttrs)
+
+  override lazy val references: AttributeSet =
+    AttributeSet(leftAttributes ++ rightReferences ++ functionExpr.references) -- producedAttributes
+
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan, newRight: LogicalPlan): TransformWithStateInPySpark =
+    copy(child = newLeft, initialState = newRight)
+
+  def leftAttributes: Seq[Attribute] = {
+    assert(resolved, "This method is expected to be called after resolution.")
+    left.output.take(groupingAttributesLen)
+  }
+
+  def rightAttributes: Seq[Attribute] = {
+    assert(resolved, "This method is expected to be called after resolution.")
+    if (hasInitialState) {
+      right.output.take(initGroupingAttrsLen)
+    } else {
+      // Dummy variables for passing the distribution & ordering check
+      // in physical operators.
+      left.output.take(groupingAttributesLen)
+    }
+  }
+
+  // Include the initial state columns in the references to avoid being column pruned.
+  private def rightReferences: Seq[Attribute] = {
+    assert(resolved, "This method is expected to be called after resolution.")
+    if (hasInitialState) {
+      right.output
+    } else {
+      // Dummy variables for passing the distribution & ordering check
+      // in physical operators.
+      left.output.take(groupingAttributesLen)
+    }
+  }
+}
+
+object TransformWithStateInPySpark {
+  object UserFacingDataType extends Enumeration {
+    val PYTHON_ROW = Value("python_row")
+    val PANDAS = Value("pandas")
+  }
+}
+
+/**
  * Flatmap cogroups using a udf: iter(pyarrow.RecordBatch) -> iter(pyarrow.RecordBatch)
  * This is used by DataFrame.groupby().cogroup().applyInArrow().
  */
@@ -294,5 +385,65 @@ case class AttachDistributedSequence(
     val truncatedOutputString = truncatedString(output, "[", ", ", "]", maxFields)
     val indexColumn = s"Index: $sequenceAttr"
     s"$nodeName$truncatedOutputString $indexColumn"
+  }
+}
+
+// scalastyle:off line.contains.tab line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_() - Returns a table of logs collected from Python workers.
+  """,
+  examples = """
+    Examples:
+      > SET spark.sql.pyspark.worker.logging.enabled=true;
+        spark.sql.pyspark.worker.logging.enabled	true
+      > SELECT * FROM _FUNC_();
+
+  """,
+  since = "4.1.0",
+  group = "table_funcs")
+// scalastyle:on line.contains.tab line.size.limit
+case class PythonWorkerLogs(jsonAttr: Attribute)
+  extends LeafNode with MultiInstanceRelation with SQLConfHelper {
+
+  def this() = this(DataTypeUtils.toAttribute(StructField("message", StringType)))
+
+  override def output: Seq[Attribute] = Seq(jsonAttr)
+
+  override def newInstance(): PythonWorkerLogs =
+    copy(jsonAttr = jsonAttr.newInstance())
+
+  override protected def stringArgs: Iterator[Any] = Iterator(output)
+
+  override def computeStats(): Statistics = Statistics(
+    // TODO: Instead of returning a default value here, find a way to return a meaningful size
+    // estimate for RDDs. See PR 1238 for more discussions.
+    sizeInBytes = BigInt(conf.defaultSizeInBytes)
+  )
+}
+
+object PythonWorkerLogs extends SQLConfHelper {
+  val TableFunctionName = "python_worker_logs"
+
+  val functionBuilder: (String, (ExpressionInfo, TableFunctionBuilder)) = {
+    val (info, builder) = FunctionRegistryBase.build[PythonWorkerLogs](
+      TableFunctionName, None)
+    val funcBuilder = (expressions: Seq[Expression]) => {
+      if (conf.pythonWorkerLoggingEnabled) {
+        Project(
+          Seq(UnresolvedStar(Some(Seq("from_json")))),
+          Project(
+            Seq(Alias(
+              JsonToStructs(
+                schema = StructType.fromDDL(LogUtils.SPARK_LOG_SCHEMA),
+                options = Map.empty,
+                child = UnresolvedAttribute("message")),
+              "from_json")()),
+            builder(expressions)))
+      } else {
+        throw QueryCompilationErrors.pythonWorkerLoggingNotEnabledError()
+      }
+    }
+    TableFunctionName -> (info, funcBuilder)
   }
 }

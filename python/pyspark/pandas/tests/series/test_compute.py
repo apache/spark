@@ -544,8 +544,8 @@ class SeriesComputeMixin:
 
         self.check_error(
             exception=ctx.exception,
-            error_class="VALUE_NOT_ALLOWED",
-            message_parameters={
+            errorClass="VALUE_NOT_ALLOWED",
+            messageParameters={
                 "arg_name": "inclusive",
                 "allowed_values": str(["left", "right", "both", "neither"]),
             },

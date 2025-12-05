@@ -55,6 +55,7 @@ class SparkSubmitOptionParser {
   protected final String PACKAGES = "--packages";
   protected final String PACKAGES_EXCLUDE = "--exclude-packages";
   protected final String PROPERTIES_FILE = "--properties-file";
+  protected final String LOAD_SPARK_DEFAULTS = "--load-spark-defaults";
   protected final String PROXY_USER = "--proxy-user";
   protected final String PY_FILES = "--py-files";
   protected final String REPOSITORIES = "--repositories";
@@ -130,6 +131,7 @@ class SparkSubmitOptionParser {
     { USAGE_ERROR },
     { VERBOSE, "-v" },
     { VERSION },
+    { LOAD_SPARK_DEFAULTS },
   };
 
   /**

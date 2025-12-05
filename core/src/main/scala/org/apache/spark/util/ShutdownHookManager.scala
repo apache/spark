@@ -26,7 +26,7 @@ import scala.util.Try
 import org.apache.hadoop.fs.FileSystem
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.internal.config.SPARK_SHUTDOWN_TIMEOUT_MS
 
@@ -61,12 +61,12 @@ private[spark] object ShutdownHookManager extends Logging {
   // Add a shutdown hook to delete the temp dirs when the JVM exits
   logDebug("Adding shutdown hook") // force eager creation of logger
   addShutdownHook(TEMP_DIR_SHUTDOWN_PRIORITY) { () =>
-    logInfo("Shutdown hook called")
+    logDebug("Shutdown hook called")
     // we need to materialize the paths to delete because deleteRecursively removes items from
     // shutdownDeletePaths as we are traversing through it.
     shutdownDeletePaths.toArray.foreach { dirPath =>
       try {
-        logInfo("Deleting directory " + dirPath)
+        logDebug(log"Deleting directory ${MDC(LogKeys.PATH, dirPath)}")
         Utils.deleteRecursively(new File(dirPath))
       } catch {
         case e: Exception =>
@@ -110,7 +110,7 @@ private[spark] object ShutdownHookManager extends Logging {
       }
     }
     if (retval) {
-      logInfo("path = " + file + ", already present as root for deletion.")
+      logInfo(log"path = ${MDC(LogKeys.FILE_NAME, file)}, already present as root for deletion.")
     }
     retval
   }

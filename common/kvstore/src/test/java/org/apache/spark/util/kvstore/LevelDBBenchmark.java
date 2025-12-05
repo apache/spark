@@ -28,13 +28,17 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Slf4jReporter;
 import com.codahale.metrics.Snapshot;
 import com.codahale.metrics.Timer;
-import org.apache.commons.io.FileUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+// checkstyle.off: RegexpSinglelineJava
 import org.slf4j.LoggerFactory;
+// checkstyle.on: RegexpSinglelineJava
+
+import org.apache.spark.network.util.JavaUtils;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -77,7 +81,7 @@ public class LevelDBBenchmark {
       }
     }
     if (dbpath != null) {
-      FileUtils.deleteQuietly(dbpath);
+      JavaUtils.deleteQuietly(dbpath);
     }
   }
 

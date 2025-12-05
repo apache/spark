@@ -82,8 +82,9 @@ class SortSuite extends SparkPlanTest with SharedSparkSession {
   test("sorting does not crash for large inputs") {
     val sortOrder = $"a".asc :: Nil
     val stringLength = 1024 * 1024 * 2
+    val df = Seq(Tuple1("a".repeat(stringLength)), Tuple1("b".repeat(stringLength))).toDF("a")
     checkThatPlansAgree(
-      Seq(Tuple1("a" * stringLength), Tuple1("b" * stringLength)).toDF("a").repartition(1),
+      df.repartition(1),
       SortExec(sortOrder, global = true, _: SparkPlan, testSpillFrequency = 1),
       ReferenceSort(sortOrder, global = true, _: SparkPlan),
       sortAnswers = false

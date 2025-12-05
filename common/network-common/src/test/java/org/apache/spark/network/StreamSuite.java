@@ -29,7 +29,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 
-import com.google.common.io.Files;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -43,6 +42,7 @@ import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.server.TransportServer;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
@@ -212,7 +212,8 @@ public class StreamSuite {
         callback.waitForCompletion(timeoutMs);
 
         if (srcBuffer == null) {
-          assertTrue(Files.equal(testData.testFile, outFile), "File stream did not match.");
+          assertTrue(JavaUtils.contentEquals(testData.testFile, outFile),
+            "File stream did not match.");
         } else {
           ByteBuffer base;
           synchronized (srcBuffer) {

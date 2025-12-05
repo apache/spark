@@ -211,9 +211,9 @@ class ResourceProfileBuilder:
 
         if _jvm is not None:
             self._jvm = _jvm
-            self._java_resource_profile_builder = (
-                _jvm.org.apache.spark.resource.ResourceProfileBuilder()
-            )
+            self._java_resource_profile_builder = getattr(
+                _jvm, "org.apache.spark.resource.ResourceProfileBuilder"
+            )()
         else:
             self._jvm = None
             self._java_resource_profile_builder = None

@@ -22,12 +22,10 @@ import com.google.protobuf.{BoolValue, BytesValue, DoubleValue, FloatValue, Int3
 import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
 import com.google.protobuf.WireFormat
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 
-@DeveloperApi
 object SchemaConverters extends Logging {
 
   /**
@@ -42,13 +40,13 @@ object SchemaConverters extends Logging {
    *
    * @since 3.4.0
    */
-  def toSqlType(
+  private[protobuf] def toSqlType(
       descriptor: Descriptor,
       protobufOptions: ProtobufOptions = ProtobufOptions(Map.empty)): SchemaType = {
     toSqlTypeHelper(descriptor, protobufOptions)
   }
 
-  def toSqlTypeHelper(
+  private[protobuf] def toSqlTypeHelper(
       descriptor: Descriptor,
       protobufOptions: ProtobufOptions): SchemaType = {
     val fields = descriptor.getFields.asScala.flatMap(
@@ -65,7 +63,7 @@ object SchemaConverters extends Logging {
   // exceed the maximum recursive depth specified by the recursiveFieldMaxDepth option.
   // A return of None implies the field has reached the maximum allowed recursive depth and
   // should be dropped.
-  def structFieldFor(
+  private def structFieldFor(
       fd: FieldDescriptor,
       existingRecordNames: Map[String, Int],
       protobufOptions: ProtobufOptions): Option[StructField] = {
@@ -176,16 +174,16 @@ object SchemaConverters extends Logging {
         }
       case MESSAGE =>
         // If the `recursive.fields.max.depth` value is not specified, it will default to -1,
-        // and recursive fields are not permitted. Setting it to 0 drops all recursive fields,
-        // 1 allows it to be recursed once, and 2 allows it to be recursed twice and so on.
-        // A value greater than 10 is not allowed, and if a protobuf record has more depth for
-        // recursive fields than the allowed value, it will be truncated and some fields may be
-        // discarded.
+        // and recursive fields are not permitted. Setting it to 1 drops all recursive fields,
+        // 2 allows it to be recursed once, and 3 allows it to be recursed twice and so on.
+        // A value less than or equal to 0 or greater than 10 is not allowed, and if a protobuf
+        // record has more depth for recursive fields than the allowed value, it will be truncated
+        // and some fields may be discarded.
         // SQL Schema for protob2uf `message Person { string name = 1; Person bff = 2;}`
         // will vary based on the value of "recursive.fields.max.depth".
         // 1: struct<name: string>
-        // 2: struct<name string, bff: struct<name: string>>
-        // 3: struct<name string, bff: struct<name string, bff: struct<name: string>>>
+        // 2: struct<name: string, bff: struct<name: string>>
+        // 3: struct<name: string, bff: struct<name: string, bff: struct<name: string>>>
         // and so on.
         // TODO(rangadi): A better way to terminate would be replace the remaining recursive struct
         //      with the byte array of corresponding protobuf. This way no information is lost.

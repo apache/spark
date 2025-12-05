@@ -17,14 +17,19 @@
 
 package org.apache.spark.sql.types
 
+import org.json4s.JsonAST.{JString, JValue}
+
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.catalyst.util.CollationFactory
 
 @Experimental
-case class CharType(length: Int) extends AtomicType {
+case class CharType(length: Int)
+    extends StringType(CollationFactory.UTF8_BINARY_COLLATION_ID, FixedLength(length)) {
   require(length >= 0, "The length of char type cannot be negative.")
 
   override def defaultSize: Int = length
   override def typeName: String = s"char($length)"
+  override def jsonValue: JValue = JString(typeName)
   override def toString: String = s"CharType($length)"
   private[spark] override def asNullable: CharType = this
 }

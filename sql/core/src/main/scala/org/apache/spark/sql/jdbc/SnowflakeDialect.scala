@@ -17,14 +17,19 @@
 
 package org.apache.spark.sql.jdbc
 
+import java.sql.SQLException
 import java.util.Locale
 
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.types.{BooleanType, DataType}
 
-private case class SnowflakeDialect() extends JdbcDialect {
+private case class SnowflakeDialect() extends JdbcDialect with NoLegacyJDBCError {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:snowflake")
+
+  override def isObjectNotFoundException(e: SQLException): Boolean = {
+    e.getSQLState == "002003"
+  }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
     case BooleanType =>
@@ -32,5 +37,12 @@ private case class SnowflakeDialect() extends JdbcDialect {
       // but Snowflake does not have a BIT type. It uses BOOLEAN instead.
       Some(JdbcType("BOOLEAN", java.sql.Types.BOOLEAN))
     case _ => JdbcUtils.getCommonJDBCType(dt)
+  }
+
+  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+    // There is no official documentation for SQL state in Snowflake, but they follow ANSI standard
+    // where 42000 SQLState is used for syntax errors.
+    // Manual tests also show that this is the error state for syntax error
+    "42000".equals(exception.getSQLState)
   }
 }

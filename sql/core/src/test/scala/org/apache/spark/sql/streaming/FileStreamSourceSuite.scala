@@ -39,7 +39,9 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.read.streaming.ReadLimit
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.FileStreamSource.{FileEntry, SeenFilesMap, SourceFileArchiver}
+import org.apache.spark.sql.execution.streaming.runtime.{CleanSourceMode, FileStreamOptions, FileStreamSource, FileStreamSourceLog, FileStreamSourceOffset, MemoryStream, SerializedOffset, StreamExecution, StreamingExecutionRelation, StreamingQueryWrapper, StreamingRelation}
+import org.apache.spark.sql.execution.streaming.runtime.FileStreamSource.{FileEntry, SeenFilesMap, SourceFileArchiver}
+import org.apache.spark.sql.execution.streaming.sinks.{FileStreamSink, FileStreamSinkLog, SinkFileStatus}
 import org.apache.spark.sql.execution.streaming.sources.MemorySink
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
@@ -106,7 +108,7 @@ abstract class FileStreamSourceTest
     override def addData(source: FileStreamSource): Unit = {
       val tempFile = Utils.tempFileWith(new File(tmp, tmpFilePrefix))
       val finalFile = new File(src, tempFile.getName)
-      src.mkdirs()
+      Utils.createDirectory(src)
       require(stringToFile(tempFile, content).renameTo(finalFile))
       logInfo(s"Written text '$content' to file $finalFile")
     }
@@ -127,7 +129,7 @@ abstract class FileStreamSourceTest
     def writeToFile(df: DataFrame, src: File, tmp: File): Unit = {
       val tmpDir = Utils.tempFileWith(new File(tmp, "orc"))
       df.write.orc(tmpDir.getCanonicalPath)
-      src.mkdirs()
+      Utils.createDirectory(src)
       tmpDir.listFiles().foreach { f =>
         f.renameTo(new File(src, s"${f.getName}"))
       }
@@ -149,7 +151,7 @@ abstract class FileStreamSourceTest
     def writeToFile(df: DataFrame, src: File, tmp: File): Unit = {
       val tmpDir = Utils.tempFileWith(new File(tmp, "parquet"))
       df.write.parquet(tmpDir.getCanonicalPath)
-      src.mkdirs()
+      Utils.createDirectory(src)
       tmpDir.listFiles().foreach { f =>
         f.renameTo(new File(src, s"${f.getName}"))
       }
@@ -235,14 +237,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
   override val streamingTimeout = 80.seconds
 
-  /** Use `format` and `path` to create FileStreamSource via DataFrameReader */
-  private def createFileStreamSource(
-      format: String,
-      path: String,
-      schema: Option[StructType] = None): FileStreamSource = {
-    getSourceFromFileStream(createFileStream(format, path, schema))
-  }
-
   private def createFileStreamSourceAndGetSchema(
       format: Option[String],
       path: Option[String],
@@ -262,7 +256,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    spark.conf.set(SQLConf.ORC_IMPLEMENTATION, "native")
+    spark.conf.set(SQLConf.ORC_IMPLEMENTATION.key, "native")
   }
 
   override def afterAll(): Unit = {
@@ -419,7 +413,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
             createFileStreamSourceAndGetSchema(
               format = Some("json"), path = Some(src.getCanonicalPath), schema = None)
           },
-          errorClass = "UNABLE_TO_INFER_SCHEMA",
+          condition = "UNABLE_TO_INFER_SCHEMA",
           parameters = Map("format" -> "JSON")
         )
       }
@@ -672,7 +666,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     withTempDirs { case (baseSrc, tmp) =>
       withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") {
         val src = new File(baseSrc, "type=X")
-        src.mkdirs()
+        Utils.createDirectory(src)
 
         // Add a file so that we can infer its schema
         stringToFile(new File(src, "existing"), "{'c': 'drop1'}\n{'c': 'keep2'}\n{'c': 'keep3'}")
@@ -1459,7 +1453,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
   test("explain") {
     withTempDirs { case (src, tmp) =>
-      src.mkdirs()
+      Utils.createDirectory(src)
 
       val df = spark.readStream.format("text").load(src.getCanonicalPath).map(_.toString + "-x")
       // Test `explain` not throwing errors
@@ -1504,11 +1498,11 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
     // This is to avoid running a spark job to list of files in parallel
     // by the InMemoryFileIndex.
-    spark.conf.set(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD, numFiles * 2)
+    spark.conf.set(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key, numFiles * 2)
 
     withTempDirs { case (root, tmp) =>
       val src = new File(root, "a=1")
-      src.mkdirs()
+      Utils.createDirectory(src)
 
       (1 to numFiles).map { _.toString }.foreach { i =>
         val tempFile = Utils.tempFileWith(new File(tmp, "text"))
@@ -1539,7 +1533,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         batchId: Long,
         expectedBatches: Int,
         expectedCompactInterval: Int): Boolean = {
-      import CompactibleFileStreamLog._
+      import org.apache.spark.sql.execution.streaming.runtime.CompactibleFileStreamLog._
 
       val fileSource = getSourcesFromStreamingQuery(execution).head
       val metadataLog = fileSource invokePrivate _metadataLog()
@@ -1932,8 +1926,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     withTempDirs { case (dir, tmp) =>
       val sourceDir1 = new File(dir, "source1")
       val sourceDir2 = new File(dir, "source2")
-      sourceDir1.mkdirs()
-      sourceDir2.mkdirs()
+      Utils.createDirectory(sourceDir1)
+      Utils.createDirectory(sourceDir2)
 
       val source1 = createFileStream("text", s"${sourceDir1.getCanonicalPath}")
       val source2 = createFileStream("text", s"${sourceDir2.getCanonicalPath}")
@@ -2305,7 +2299,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         }
 
         // batch 5 will trigger list operation though the batch 4 should have 1 unseen file:
-        // 1 is smaller than the threshold (refer FileStreamSource.DISCARD_UNSEEN_FILES_RATIO),
+        // 1 is smaller than the threshold (refer FileStreamOptions.discardCachedInputRatio),
         // hence unseen files for batch 4 will be discarded.
         val offsetBatch = source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(10))
           .asInstanceOf[FileStreamSourceOffset]
@@ -2357,6 +2351,207 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
+  test("Options for caching unread files") {
+    withCountListingLocalFileSystemAsLocalFileSystem {
+      withThreeTempDirs { case (src, meta, tmp) =>
+        val options = Map("latestFirst" -> "false", "maxFilesPerTrigger" -> "10",
+          "maxCachedFiles" -> "12", "discardCachedInputRatio" -> "0.1")
+        val scheme = CountListingLocalFileSystem.scheme
+        val source = new FileStreamSource(spark, s"$scheme:///${src.getCanonicalPath}/*/*", "text",
+          StructType(Nil), Seq.empty, meta.getCanonicalPath, options)
+        val _metadataLog = PrivateMethod[FileStreamSourceLog](Symbol("metadataLog"))
+        val metadataLog = source invokePrivate _metadataLog()
+
+        def verifyBatch(
+            offset: FileStreamSourceOffset,
+            expectedBatchId: Long,
+            inputFiles: Seq[File],
+            expectedFileOffset: Int,
+            expectedFilesInBatch: Int,
+            expectedListingCount: Int): Unit = {
+          val batchId = offset.logOffset
+          assert(batchId === expectedBatchId)
+
+          val files = metadataLog.get(batchId).getOrElse(Array.empty[FileEntry])
+          assert(files.forall(_.batchId == batchId))
+
+          val actualInputFiles = files.map { p => p.sparkPath.toUri.getPath }
+          val expectedInputFiles = inputFiles.slice(
+            expectedFileOffset,
+            expectedFileOffset + expectedFilesInBatch
+            )
+            .map(_.getCanonicalPath)
+          assert(actualInputFiles === expectedInputFiles)
+
+          assert(expectedListingCount === CountListingLocalFileSystem.pathToNumListStatusCalled
+            .get(src.getCanonicalPath).map(_.get()).getOrElse(0))
+        }
+
+        CountListingLocalFileSystem.resetCount()
+
+        // provide 44 files in src, with sequential "last modified" to guarantee ordering
+        val inputFiles = (0 to 43).map { idx =>
+          val f = createFile(idx.toString, new File(src, idx.toString), tmp)
+          f.setLastModified(idx * 10000)
+          f
+        }
+
+        // first 3 batches only perform 1 listing
+        // batch 0 processes 10 (12 cached)
+        // batch 1 processes 10 from cache (2 cached)
+        // batch 2 processes 2 from cache (0 cached) since
+        //  discardCachedInputRatio is less than threshold
+        val offsetBatch0 = source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(10))
+          .asInstanceOf[FileStreamSourceOffset]
+        verifyBatch(offsetBatch0, expectedBatchId = 0, inputFiles,
+          expectedFileOffset = 0, expectedFilesInBatch = 10, expectedListingCount = 1)
+        val offsetBatch1 = source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(10))
+            .asInstanceOf[FileStreamSourceOffset]
+        verifyBatch(offsetBatch1, expectedBatchId = 1, inputFiles,
+          expectedFileOffset = 10, expectedFilesInBatch = 10, expectedListingCount = 1)
+        val offsetBatch2 = source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(10))
+            .asInstanceOf[FileStreamSourceOffset]
+        verifyBatch(offsetBatch2, expectedBatchId = 2, inputFiles,
+          expectedFileOffset = 20, expectedFilesInBatch = 2, expectedListingCount = 1)
+
+        // next 3 batches perform another listing
+        // batch 3 processes 10 (12 cached)
+        // batch 4 processes 10 from cache (2 cached)
+        // batch 5 processes 2 from cache (0 cached) since
+        //  discardCachedInputRatio is less than threshold
+        val offsetBatch3 = source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(10))
+            .asInstanceOf[FileStreamSourceOffset]
+        verifyBatch(offsetBatch3, expectedBatchId = 3, inputFiles,
+          expectedFileOffset = 22, expectedFilesInBatch = 10, expectedListingCount = 2)
+        val offsetBatch4 = source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(10))
+            .asInstanceOf[FileStreamSourceOffset]
+        verifyBatch(offsetBatch4, expectedBatchId = 4, inputFiles,
+          expectedFileOffset = 32, expectedFilesInBatch = 10, expectedListingCount = 2)
+        val offsetBatch5 = source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(10))
+            .asInstanceOf[FileStreamSourceOffset]
+        verifyBatch(offsetBatch5, expectedBatchId = 5, inputFiles,
+          expectedFileOffset = 42, expectedFilesInBatch = 2, expectedListingCount = 2)
+
+        // validate no remaining files and another listing is performed
+        val offsetBatch = source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(10))
+          .asInstanceOf[FileStreamSourceOffset]
+        assert(5 === offsetBatch.logOffset)
+        assert(3 === CountListingLocalFileSystem.pathToNumListStatusCalled
+          .get(src.getCanonicalPath).map(_.get()).getOrElse(0))
+      }
+    }
+  }
+
+  test("SPARK-48802: Ensure maxCachedFiles set to 0 forces each batch to list files") {
+    withCountListingLocalFileSystemAsLocalFileSystem {
+      withThreeTempDirs { case (src, meta, tmp) =>
+        val options = Map("latestFirst" -> "false", "maxFilesPerTrigger" -> "10",
+          "maxCachedFiles" -> "0")
+        val scheme = CountListingLocalFileSystem.scheme
+        val source = new FileStreamSource(spark, s"$scheme:///${src.getCanonicalPath}/*/*", "text",
+          StructType(Nil), Seq.empty, meta.getCanonicalPath, options)
+        val _metadataLog = PrivateMethod[FileStreamSourceLog](Symbol("metadataLog"))
+        val metadataLog = source invokePrivate _metadataLog()
+
+        def verifyBatch(
+            offset: FileStreamSourceOffset,
+            expectedBatchId: Long,
+            inputFiles: Seq[File],
+            expectedFileOffset: Int,
+            expectedFilesInBatch: Int,
+            expectedListingCount: Int): Unit = {
+          val batchId = offset.logOffset
+          assert(batchId === expectedBatchId)
+
+          val files = metadataLog.get(batchId).getOrElse(Array.empty[FileEntry])
+          assert(files.forall(_.batchId == batchId))
+
+          val actualInputFiles = files.map { p => p.sparkPath.toUri.getPath }
+          val expectedInputFiles = inputFiles.slice(
+            expectedFileOffset,
+            expectedFileOffset + expectedFilesInBatch
+            )
+            .map(_.getCanonicalPath)
+          assert(actualInputFiles === expectedInputFiles)
+
+          assert(expectedListingCount === CountListingLocalFileSystem.pathToNumListStatusCalled
+            .get(src.getCanonicalPath).map(_.get()).getOrElse(0))
+        }
+
+        CountListingLocalFileSystem.resetCount()
+
+        // provide 20 files in src, with sequential "last modified" to guarantee ordering
+        val inputFiles = (0 to 19).map { idx =>
+          val f = createFile(idx.toString, new File(src, idx.toString), tmp)
+          f.setLastModified(idx * 10000)
+          f
+        }
+
+        // each batch should perform a listing since maxCachedFiles is set to 0
+        val offsetBatch0 = source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(10))
+          .asInstanceOf[FileStreamSourceOffset]
+        verifyBatch(offsetBatch0, expectedBatchId = 0, inputFiles,
+          expectedFileOffset = 0, expectedFilesInBatch = 10, expectedListingCount = 1)
+        val offsetBatch1 = source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(10))
+            .asInstanceOf[FileStreamSourceOffset]
+        verifyBatch(offsetBatch1, expectedBatchId = 1, inputFiles,
+          expectedFileOffset = 10, expectedFilesInBatch = 10, expectedListingCount = 2)
+
+        // validate no remaining files and another listing is performed
+        val offsetBatch = source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(10))
+          .asInstanceOf[FileStreamSourceOffset]
+        assert(1 === offsetBatch.logOffset)
+        assert(3 === CountListingLocalFileSystem.pathToNumListStatusCalled
+          .get(src.getCanonicalPath).map(_.get()).getOrElse(0))
+      }
+    }
+  }
+
+  test("SPARK-48314: Don't cache unread files when using Trigger.AvailableNow") {
+    withCountListingLocalFileSystemAsLocalFileSystem {
+      withThreeTempDirs { case (src, meta, tmp) =>
+        val options = Map("latestFirst" -> "false", "maxFilesPerTrigger" -> "5",
+          "maxCachedFiles" -> "2")
+        val scheme = CountListingLocalFileSystem.scheme
+        val source = new FileStreamSource(spark, s"$scheme:///${src.getCanonicalPath}/*/*", "text",
+          StructType(Nil), Seq.empty, meta.getCanonicalPath, options)
+        val _metadataLog = PrivateMethod[FileStreamSourceLog](Symbol("metadataLog"))
+        val metadataLog = source invokePrivate _metadataLog()
+
+        // provide 20 files in src, with sequential "last modified" to guarantee ordering
+        (0 to 19).map { idx =>
+            val f = createFile(idx.toString, new File(src, idx.toString), tmp)
+          f.setLastModified(idx * 10000)
+          f
+        }
+
+        source.prepareForTriggerAvailableNow()
+        CountListingLocalFileSystem.resetCount()
+
+        var offset = source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(5))
+          .asInstanceOf[FileStreamSourceOffset]
+        var files = metadataLog.get(offset.logOffset).getOrElse(Array.empty[FileEntry])
+
+        // All files are already tracked in allFilesForTriggerAvailableNow
+        assert(0 === CountListingLocalFileSystem.pathToNumListStatusCalled
+          .get(src.getCanonicalPath).map(_.get()).getOrElse(0))
+        // Should be 5 files in the batch based on maxFiles limit
+        assert(files.length == 5)
+
+        // Reading again leverages the files already tracked in allFilesForTriggerAvailableNow,
+        // so no more listings need to happen
+        offset = source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(5))
+          .asInstanceOf[FileStreamSourceOffset]
+        files = metadataLog.get(offset.logOffset).getOrElse(Array.empty[FileEntry])
+
+        assert(0 === CountListingLocalFileSystem.pathToNumListStatusCalled
+          .get(src.getCanonicalPath).map(_.get()).getOrElse(0))
+        // Should be 5 files in the batch since cached files are ignored
+        assert(files.length == 5)
+      }
+    }
+  }
+
   test("SPARK-31962: file stream source shouldn't allow modifiedBefore/modifiedAfter") {
     def formatTime(time: LocalDateTime): String = {
       time.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
@@ -2402,7 +2597,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     val tempFile = Utils.tempFileWith(new File(tmp, "text"))
     val finalFile = new File(src, tempFile.getName)
     require(!src.exists(), s"$src exists, dir: ${src.isDirectory}, file: ${src.isFile}")
-    require(src.mkdirs(), s"Cannot create $src")
+    require(Utils.createDirectory(src), s"Cannot create $src")
     require(src.isDirectory(), s"$src is not a directory")
     require(stringToFile(tempFile, content).renameTo(finalFile))
     finalFile

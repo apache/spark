@@ -16,12 +16,16 @@
 # limitations under the License.
 #
 
+from enum import Enum
 from itertools import chain
+import datetime
+import unittest
+
 from pyspark.sql import Column, Row
 from pyspark.sql import functions as sf
-from pyspark.sql.types import StructType, StructField, LongType
+from pyspark.sql.types import StructType, StructField, IntegerType, LongType
 from pyspark.errors import AnalysisException, PySparkTypeError, PySparkValueError
-from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, pandas_requirement_message
 
 
 class ColumnTestsMixin:
@@ -53,8 +57,8 @@ class ColumnTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "col", "arg_type": "int"},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "col", "arg_type": "int"},
         )
 
         class A:
@@ -68,8 +72,8 @@ class ColumnTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN_OR_STR",
-            message_parameters={"arg_name": "col", "arg_type": "NoneType"},
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "col", "arg_type": "NoneType"},
         )
         self.assertRaises(TypeError, lambda: to_json(1))
 
@@ -94,12 +98,40 @@ class ColumnTestsMixin:
             cs.startswith("a"),
             cs.endswith("a"),
             ci.eqNullSafe(cs),
+            sf.col("b") & sf.lit(True),
+            sf.col("b") & True,
+            sf.lit(True) & sf.col("b"),
+            True & sf.col("b"),
+            sf.col("b") | sf.lit(True),
+            sf.col("b") | True,
+            sf.lit(True) | sf.col("b"),
+            True | sf.col("b"),
         )
         self.assertTrue(all(isinstance(c, Column) for c in css))
         self.assertTrue(isinstance(ci.cast(LongType()), Column))
         self.assertRaisesRegex(
             ValueError, "Cannot apply 'in' operator against a column", lambda: 1 in cs
         )
+
+    def test_column_date_time_op(self):
+        query = """
+            SELECT * FROM VALUES
+            (TIME('00:00:00'), 1),
+            (TIME('01:02:03'), 2),
+            (TIME('11:12:13'), 3)
+            AS tab(t, i)
+            """
+
+        df = self.spark.sql(query)
+
+        res1 = df.select("i").where(sf.col("t") < datetime.time(3, 0, 0))
+        self.assertEqual([r.i for r in res1.collect()], [1, 2])
+
+        res2 = df.select("i").where(sf.col("t") > datetime.time(1, 0, 0))
+        self.assertEqual([r.i for r in res2.collect()], [2, 3])
+
+        res3 = df.select("i").where(sf.col("t") == datetime.time(0, 0, 0))
+        self.assertEqual([r.i for r in res3.collect()], [1])
 
     def test_column_accessor(self):
         from pyspark.sql.functions import col
@@ -121,8 +153,8 @@ class ColumnTestsMixin:
         self.assertTrue(isinstance(df["key"], Column))
         self.assertTrue(isinstance(df[0], Column))
         self.assertRaises(IndexError, lambda: df[2])
-        self.assertRaises(AnalysisException, lambda: df["bad_key"])
         self.assertRaises(TypeError, lambda: df[{}])
+        self.assertRaises(AnalysisException, lambda: df.select(df["bad_key"]).schema)
 
     def test_column_name_with_non_ascii(self):
         columnName = "数量"
@@ -177,8 +209,8 @@ class ColumnTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_COLUMN",
-            message_parameters={"arg_name": "col", "arg_type": "int"},
+            errorClass="NOT_COLUMN",
+            messageParameters={"arg_name": "col", "arg_type": "int"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -186,8 +218,8 @@ class ColumnTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_STR",
-            message_parameters={"arg_name": "fieldName", "arg_type": "Column"},
+            errorClass="NOT_STR",
+            messageParameters={"arg_name": "fieldName", "arg_type": "Column"},
         )
 
     def test_drop_fields(self):
@@ -218,15 +250,41 @@ class ColumnTestsMixin:
         ).withColumn("square_value", mapping_expr[sf.col("key")])
         self.assertEqual(df.count(), 3)
 
+    def test_alias_metadata(self):
+        df = self.spark.createDataFrame([("",)], ["a"])
+        df = df.withMetadata("a", {"foo": "bar"})
+        self.assertEqual(df.schema["a"].metadata, {"foo": "bar"})
+
+        # SPARK-51426: Ensure setting metadata to '{]' clears it
+        df = df.select([sf.col("a").alias("a", metadata={})])
+        self.assertEqual(df.schema["a"].metadata, {})
+
+        df = df.withMetadata("a", {"baz": "burr"})
+        self.assertEqual(df.schema["a"].metadata, {"baz": "burr"})
+
+        df = df.withMetadata("a", {})
+        self.assertEqual(df.schema["a"].metadata, {})
+
     def test_alias_negative(self):
         with self.assertRaises(PySparkValueError) as pe:
             self.spark.range(1).id.alias("a", "b", metadata={})
 
         self.check_error(
             exception=pe.exception,
-            error_class="ONLY_ALLOWED_FOR_SINGLE_COLUMN",
-            message_parameters={"arg_name": "metadata"},
+            errorClass="ONLY_ALLOWED_FOR_SINGLE_COLUMN",
+            messageParameters={"arg_name": "metadata"},
         )
+
+    def test_cast_str_representation(self):
+        self.assertEqual(str(sf.col("a").cast("int")), "Column<'CAST(a AS INT)'>")
+        self.assertEqual(str(sf.col("a").cast("INT")), "Column<'CAST(a AS INT)'>")
+        self.assertEqual(str(sf.col("a").cast(IntegerType())), "Column<'CAST(a AS INT)'>")
+        self.assertEqual(str(sf.col("a").cast(LongType())), "Column<'CAST(a AS BIGINT)'>")
+
+        self.assertEqual(str(sf.col("a").try_cast("int")), "Column<'TRY_CAST(a AS INT)'>")
+        self.assertEqual(str(sf.col("a").try_cast("INT")), "Column<'TRY_CAST(a AS INT)'>")
+        self.assertEqual(str(sf.col("a").try_cast(IntegerType())), "Column<'TRY_CAST(a AS INT)'>")
+        self.assertEqual(str(sf.col("a").try_cast(LongType())), "Column<'TRY_CAST(a AS BIGINT)'>")
 
     def test_cast_negative(self):
         with self.assertRaises(PySparkTypeError) as pe:
@@ -234,8 +292,8 @@ class ColumnTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_DATATYPE_OR_STR",
-            message_parameters={"arg_name": "dataType", "arg_type": "int"},
+            errorClass="NOT_DATATYPE_OR_STR",
+            messageParameters={"arg_name": "dataType", "arg_type": "int"},
         )
 
     def test_over_negative(self):
@@ -244,16 +302,204 @@ class ColumnTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_WINDOWSPEC",
-            message_parameters={"arg_name": "window", "arg_type": "int"},
+            errorClass="NOT_WINDOWSPEC",
+            messageParameters={"arg_name": "window", "arg_type": "int"},
         )
 
-    def test_union_classmethod_usage(self):
+    def test_eqnullsafe_classmethod_usage(self):
         df = self.spark.range(1)
         self.assertEqual(df.select(Column.eqNullSafe(df.id, df.id)).first()[0], True)
 
     def test_isinstance_dataframe(self):
         self.assertIsInstance(self.spark.range(1).id, Column)
+
+    def test_expr_str_representation(self):
+        expression = sf.expr("foo")
+        when_cond = sf.when(expression, sf.lit(None))
+        self.assertEqual(str(when_cond), "Column<'CASE WHEN foo THEN NULL END'>")
+
+    def test_col_field_ops_representation(self):
+        # SPARK-49894: Test string representation of columns
+        c = sf.col("c")
+
+        # getField
+        self.assertEqual(str(c.x), "Column<'c['x']'>")
+        self.assertEqual(str(c.x.y), "Column<'c['x']['y']'>")
+        self.assertEqual(str(c.x.y.z), "Column<'c['x']['y']['z']'>")
+
+        self.assertEqual(str(c["x"]), "Column<'c['x']'>")
+        self.assertEqual(str(c["x"]["y"]), "Column<'c['x']['y']'>")
+        self.assertEqual(str(c["x"]["y"]["z"]), "Column<'c['x']['y']['z']'>")
+
+        self.assertEqual(str(c.getField("x")), "Column<'c['x']'>")
+        self.assertEqual(
+            str(c.getField("x").getField("y")),
+            "Column<'c['x']['y']'>",
+        )
+        self.assertEqual(
+            str(c.getField("x").getField("y").getField("z")),
+            "Column<'c['x']['y']['z']'>",
+        )
+
+        self.assertEqual(str(c.getItem("x")), "Column<'c['x']'>")
+        self.assertEqual(
+            str(c.getItem("x").getItem("y")),
+            "Column<'c['x']['y']'>",
+        )
+        self.assertEqual(
+            str(c.getItem("x").getItem("y").getItem("z")),
+            "Column<'c['x']['y']['z']'>",
+        )
+
+        self.assertEqual(
+            str(c.x["y"].getItem("z")),
+            "Column<'c['x']['y']['z']'>",
+        )
+        self.assertEqual(
+            str(c["x"].getField("y").getItem("z")),
+            "Column<'c['x']['y']['z']'>",
+        )
+        self.assertEqual(
+            str(c.getField("x").getItem("y").z),
+            "Column<'c['x']['y']['z']'>",
+        )
+        self.assertEqual(
+            str(c["x"].y.getField("z")),
+            "Column<'c['x']['y']['z']'>",
+        )
+
+        # WithField
+        self.assertEqual(
+            str(c.withField("x", sf.col("y"))),
+            "Column<'update_field(c, x, y)'>",
+        )
+        self.assertEqual(
+            str(c.withField("x", sf.col("y")).withField("x", sf.col("z"))),
+            "Column<'update_field(update_field(c, x, y), x, z)'>",
+        )
+
+        # DropFields
+        self.assertEqual(str(c.dropFields("x")), "Column<'drop_field(c, x)'>")
+        self.assertEqual(
+            str(c.dropFields("x", "y")),
+            "Column<'drop_field(drop_field(c, x), y)'>",
+        )
+        self.assertEqual(
+            str(c.dropFields("x", "y", "z")),
+            "Column<'drop_field(drop_field(drop_field(c, x), y), z)'>",
+        )
+
+    def test_lit_time_representation(self):
+        dt = datetime.date(2021, 3, 4)
+        self.assertEqual(str(sf.lit(dt)), "Column<'2021-03-04'>")
+
+        ts = datetime.datetime(2021, 3, 4, 12, 34, 56, 1234)
+        self.assertEqual(str(sf.lit(ts)), "Column<'2021-03-04 12:34:56.001234'>")
+
+        ts = datetime.time(12, 34, 56, 1234)
+        self.assertEqual(str(sf.lit(ts)), "Column<'12:34:56.001234'>")
+
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    def test_lit_delta_representation(self):
+        for delta in [
+            datetime.timedelta(days=1),
+            datetime.timedelta(hours=2),
+            datetime.timedelta(minutes=3),
+            datetime.timedelta(seconds=4),
+            datetime.timedelta(microseconds=5),
+            datetime.timedelta(days=2, hours=21, microseconds=908),
+            datetime.timedelta(days=1, minutes=-3, microseconds=-1001),
+            datetime.timedelta(days=1, hours=2, minutes=3, seconds=4, microseconds=5),
+        ]:
+            import pandas as pd
+
+            # Column<'PT69H0.000908S'> or Column<'P2DT21H0M0.000908S'>
+            s = str(sf.lit(delta))
+
+            # Parse the ISO string representation and compare
+            self.assertTrue(pd.Timedelta(s[8:-2]).to_pytimedelta() == delta)
+
+    def test_enum_literals(self):
+        class IntEnum(Enum):
+            X = 1
+            Y = 2
+            Z = 3
+
+        class BoolEnum(Enum):
+            T = True
+
+        class StrEnum(Enum):
+            X = "x"
+
+        id = sf.col("id")
+        s = sf.col("s")
+        b = sf.col("b")
+
+        cols, expected = list(
+            zip(
+                (id + IntEnum.X, 2),
+                (id - IntEnum.X, 0),
+                (id * IntEnum.X, 1),
+                (id / IntEnum.X, 1.0),
+                (id % IntEnum.X, 0),
+                (IntEnum.X + id, 2),
+                (IntEnum.X - id, 0),
+                (IntEnum.X * id, 1),
+                (IntEnum.X / id, 1.0),
+                (IntEnum.X % id, 0),
+                (id**IntEnum.X, 1.0),
+                (IntEnum.X**id, 1, 0),
+                (id == IntEnum.X, True),
+                (IntEnum.X == id, True),
+                (id < IntEnum.X, False),
+                (id <= IntEnum.X, True),
+                (id >= IntEnum.X, True),
+                (id > IntEnum.X, False),
+                (id.eqNullSafe(IntEnum.X), True),
+                (b & BoolEnum.T, True),
+                (b | BoolEnum.T, True),
+                (BoolEnum.T & b, True),
+                (BoolEnum.T | b, True),
+                (id.bitwiseOR(IntEnum.X), 1),
+                (id.bitwiseAND(IntEnum.X), 1),
+                (id.bitwiseXOR(IntEnum.X), 0),
+                (id.contains(IntEnum.X), True),
+                (s.startswith(StrEnum.X), False),
+                (s.endswith(StrEnum.X), False),
+                (s.like(StrEnum.X), False),
+                (s.rlike(StrEnum.X), False),
+                (s.ilike(StrEnum.X), False),
+                (s.substr(IntEnum.X, IntEnum.Y), "1"),
+                (sf.when(b, IntEnum.X).when(~b, IntEnum.Y).otherwise(IntEnum.Z), 1),
+            )
+        )
+        result = (
+            self.spark.range(1, 2)
+            .select(id, id.astype("string").alias("s"), id.astype("boolean").alias("b"))
+            .select(*cols)
+            .first()
+        )
+
+        for r, c, e in zip(result, cols, expected):
+            self.assertEqual(r, e, str(c))
+
+    def test_transform(self):
+        # Test with built-in functions
+        df = self.spark.createDataFrame([("  hello  ",), ("  world  ",)], ["text"])
+        result = df.select(df.text.transform(sf.trim).transform(sf.upper)).collect()
+        self.assertEqual(result[0][0], "HELLO")
+        self.assertEqual(result[1][0], "WORLD")
+
+        # Test with lambda functions
+        df = self.spark.createDataFrame([(10,), (20,), (30,)], ["value"])
+        result = df.select(
+            df.value.transform(lambda c: c + 5)
+            .transform(lambda c: c * 2)
+            .transform(lambda c: c - 10)
+        ).collect()
+        self.assertEqual(result[0][0], 20)
+        self.assertEqual(result[1][0], 40)
+        self.assertEqual(result[2][0], 60)
 
 
 class ColumnTests(ColumnTestsMixin, ReusedSQLTestCase):

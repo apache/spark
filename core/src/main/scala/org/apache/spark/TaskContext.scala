@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import java.io.Serializable
+import java.io.Closeable
 import java.util.Properties
 
 import org.apache.spark.annotation.{DeveloperApi, Evolving, Since}
@@ -47,6 +47,15 @@ object TaskContext {
       0
     } else {
       tc.partitionId()
+    }
+  }
+
+  def withTaskContext[T](context: TaskContext)(task: => T): T = {
+    try {
+      TaskContext.setTaskContext(context)
+      task
+    } finally {
+      TaskContext.unset()
     }
   }
 
@@ -300,9 +309,32 @@ abstract class TaskContext extends Serializable {
   /** Marks the task as completed and triggers the completion listeners. */
   private[spark] def markTaskCompleted(error: Option[Throwable]): Unit
 
+  /** If the task fails, the exception that caused it, otherwise None. */
+  private[spark] def getTaskFailure: Option[Throwable] = None
+
   /** Optionally returns the stored fetch failure in the task. */
   private[spark] def fetchFailed: Option[FetchFailedException]
 
   /** Gets local properties set upstream in the driver. */
   private[spark] def getLocalProperties: Properties
+
+  /** Whether the current task is allowed to interrupt. */
+  private[spark] def interruptible(): Boolean
+
+  /**
+   * Pending the interruption request until the task is able to
+   * interrupt after creating the resource uninterruptibly.
+   */
+  private[spark] def pendingInterrupt(threadToInterrupt: Option[Thread], reason: String): Unit
+
+  /**
+   * Creating a closeable resource uninterruptibly. A task is not allowed to interrupt in this
+   * state until the resource creation finishes. E.g.,
+   * {{{
+   *  val linesReader = TaskContext.get().createResourceUninterruptibly {
+   *    new HadoopFileLinesReader(file, parser.options.lineSeparatorInRead, conf)
+   *  }
+   * }}}
+   */
+  private[spark] def createResourceUninterruptibly[T <: Closeable](resourceBuilder: => T): T
 }

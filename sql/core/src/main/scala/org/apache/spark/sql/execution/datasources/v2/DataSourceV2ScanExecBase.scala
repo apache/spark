@@ -71,7 +71,7 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
    * Shorthand for calling redact() without specifying redacting rules
    */
   protected def redact(text: String): String = {
-    Utils.redact(session.sessionState.conf.stringRedactionPattern, text)
+    Utils.redact(conf.stringRedactionPattern, text)
   }
 
   override def verboseStringWithOperatorId(): String = {

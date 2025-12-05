@@ -17,14 +17,16 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Rand, UpdateFields}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CreateArray, Expression, GetArrayItem, PythonUDF, Rand, UpdateFields}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.MetadataBuilder
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{ArrayType, IntegerType, MetadataBuilder}
 
 class CollapseProjectSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -264,6 +266,102 @@ class CollapseProjectSuite extends PlanTest {
     val query = Project(Seq(select.output.head.withName("C")), select)
     val optimized = Optimize.execute(query)
     val expected = relation.select(($"a" + $"b").as("C")).analyze
+    comparePlans(optimized, expected)
+  }
+
+  test("ES-1102888: collapse project duplicating aggregate expressions in UDF") {
+    withSQLConf(SQLConf.AVOID_COLLAPSE_UDF_WITH_EXPENSIVE_EXPR.key -> "true") {
+      val pythonUdf = (e: Expression) => {
+        PythonUDF("udf", null, ArrayType(IntegerType), Seq(e), 0, udfDeterministic = true)
+      }
+
+      val query = testRelation
+        .groupBy($"a")(collectList($"b").as("l1"))
+        .select(pythonUdf($"l1").as("l2"))
+        .select(CreateArray(Seq(
+          GetArrayItem($"l2", 0),
+          GetArrayItem($"l2", 1),
+          GetArrayItem($"l2", 2),
+          GetArrayItem($"l2", 3)
+        )))
+        .analyze
+
+      val optimized = Optimize.execute(query)
+      val expected = testRelation
+        .groupBy($"a")(pythonUdf(collectList($"b")).as("l2"))
+        .select(CreateArray(Seq(
+          GetArrayItem($"l2", 0),
+          GetArrayItem($"l2", 1),
+          GetArrayItem($"l2", 2),
+          GetArrayItem($"l2", 3)
+        )))
+        .analyze
+      comparePlans(optimized, expected)
+    }
+  }
+
+  test("SPARK-53399: Merge Python UDFs with same evalType") {
+    val pythonUdf = (e: Expression) => {
+      PythonUDF("udf", null, IntegerType, Seq(e), PythonEvalType.SQL_BATCHED_UDF, true)
+    }
+
+    val query = testRelation
+      .select(
+        pythonUdf($"a") as "udf_a", // Always inline
+        $"b",
+        $"b" + 1 as "b_plus_1", // Never inline
+        $"b" + 2 as "b_plus_2") // Maybe inline
+      .select(
+        $"udf_a",
+        pythonUdf($"b") as "udf_b",
+        $"b_plus_1" + $"b_plus_1" as "2b_plus_2",
+        $"b_plus_2")
+      .analyze
+
+    val optimized = Optimize.execute(query)
+
+    val expected = testRelation
+      .select(
+        $"a", // New passthrough attribute is added due to always inline
+        $"b",
+        $"b" + 1 as "b_plus_1", // Never inline is kept in lower
+        $"b" + 2 as "b_plus_2") // Maybe inline is kept in lower for now
+      .select(
+        pythonUdf($"a") as "udf_a", // Always inline is moved to upper
+        pythonUdf($"b") as "udf_b",
+        $"b_plus_1" + $"b_plus_1" as "2b_plus_2",
+        $"b_plus_2")
+      .analyze
+
+    comparePlans(optimized, expected)
+  }
+
+  test("SPARK-53399: Don't merge Python UDFs with different evalType") {
+    val pythonUdfA = (e: Expression) => {
+      PythonUDF("udf", null, IntegerType, Seq(e), PythonEvalType.SQL_BATCHED_UDF, true)
+    }
+
+    val pythonUdfB = (e: Expression) => {
+      PythonUDF("udf", null, IntegerType, Seq(e), PythonEvalType.SQL_ARROW_BATCHED_UDF, true)
+    }
+
+    val query = testRelation
+      .select(
+        pythonUdfA($"a") as "udf_a", // Maybe inline because `evalType` doesn't match to `udf_b`'s
+        $"b",
+        $"b" + 1 as "b_plus_1", // Never inline
+        $"b" + 2 as "b_plus_2") // Maybe inline
+      .select(
+        $"udf_a",
+        pythonUdfB($"b") as "udf_b",
+        $"b_plus_1" + $"b_plus_1" as "2b_plus_2",
+        "b_plus_2")
+      .analyze
+
+    val optimized = Optimize.execute(query)
+
+    val expected = query // No always inlines so keep both nodes intact
+
     comparePlans(optimized, expected)
   }
 }

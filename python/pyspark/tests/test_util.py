@@ -15,14 +15,16 @@
 # limitations under the License.
 #
 import os
+import time
 import unittest
+from unittest.mock import patch
 
 from py4j.protocol import Py4JJavaError
 
 from pyspark import keyword_only
 from pyspark.util import _parse_memory
 from pyspark.loose_version import LooseVersion
-from pyspark.testing.utils import PySparkTestCase, eventually
+from pyspark.testing.utils import PySparkTestCase, eventually, timeout
 from pyspark.find_spark_home import _find_spark_home
 
 
@@ -86,6 +88,28 @@ class UtilTests(PySparkTestCase):
         finally:
             os.environ["SPARK_HOME"] = origin
 
+    def test_timeout_decorator(self):
+        @timeout(1)
+        def timeout_func():
+            time.sleep(10)
+
+        with self.assertRaises(TimeoutError) as e:
+            timeout_func()
+        self.assertTrue("Function timeout_func timed out after 1 seconds" in str(e.exception))
+
+    def test_timeout_function(self):
+        def timeout_func():
+            time.sleep(10)
+
+        with self.assertRaises(TimeoutError) as e:
+            timeout(1)(timeout_func)()
+        self.assertTrue("Function timeout_func timed out after 1 seconds" in str(e.exception))
+
+    def test_timeout_lambda(self):
+        with self.assertRaises(TimeoutError) as e:
+            timeout(1)(lambda: time.sleep(10))()
+        self.assertTrue("Function <lambda> timed out after 1 seconds" in str(e.exception))
+
     @eventually(timeout=180, catch_assertions=True)
     def test_eventually_decorator(self):
         import random
@@ -123,6 +147,57 @@ class UtilTests(PySparkTestCase):
         self.assertEqual(_parse_memory("1g"), 1024)
         with self.assertRaisesRegex(ValueError, "invalid format"):
             _parse_memory("2gs")
+
+    @eventually(timeout=180, catch_timeout=True)
+    @timeout(timeout=1)
+    def test_retry_timeout_test(self):
+        import random
+
+        if random.random() < 0.5:
+            print("hanging for 1 hour")
+            time.sleep(3600)  # Simulate a long-running operation
+        else:
+            print("succeeding immediately")
+
+
+class HandleWorkerExceptionTests(unittest.TestCase):
+    exception_bytes = b"ValueError: test_message"
+    traceback_bytes = b"Traceback (most recent call last):"
+
+    def run_handle_worker_exception(self, hide_traceback=None):
+        import io
+        from pyspark.util import handle_worker_exception
+
+        try:
+            raise ValueError("test_message")
+        except Exception as e:
+            with io.BytesIO() as stream:
+                handle_worker_exception(e, stream, hide_traceback)
+                return stream.getvalue()
+
+    @patch.dict(os.environ, {"SPARK_SIMPLIFIED_TRACEBACK": "", "SPARK_HIDE_TRACEBACK": ""})
+    def test_env_full(self):
+        result = self.run_handle_worker_exception()
+        self.assertIn(self.exception_bytes, result)
+        self.assertIn(self.traceback_bytes, result)
+
+    @patch.dict(os.environ, {"SPARK_HIDE_TRACEBACK": "1"})
+    def test_env_hide_traceback(self):
+        result = self.run_handle_worker_exception()
+        self.assertIn(self.exception_bytes, result)
+        self.assertNotIn(self.traceback_bytes, result)
+
+    @patch.dict(os.environ, {"SPARK_HIDE_TRACEBACK": "1"})
+    def test_full(self):
+        # Should ignore the environment variable because hide_traceback is explicitly set.
+        result = self.run_handle_worker_exception(False)
+        self.assertIn(self.exception_bytes, result)
+        self.assertIn(self.traceback_bytes, result)
+
+    def test_hide_traceback(self):
+        result = self.run_handle_worker_exception(True)
+        self.assertIn(self.exception_bytes, result)
+        self.assertNotIn(self.traceback_bytes, result)
 
 
 if __name__ == "__main__":

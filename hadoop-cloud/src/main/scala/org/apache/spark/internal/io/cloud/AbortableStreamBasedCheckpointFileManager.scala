@@ -24,9 +24,9 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
-import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.streaming.AbstractFileContextBasedCheckpointFileManager
-import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
+import org.apache.spark.internal.{Logging, LogKeys}
+import org.apache.spark.sql.execution.streaming.checkpointing.AbstractFileContextBasedCheckpointFileManager
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager.CancellableFSDataOutputStream
 
 class AbortableStreamBasedCheckpointFileManager(path: Path, hadoopConf: Configuration)
   extends AbstractFileContextBasedCheckpointFileManager(path, hadoopConf) with Logging {
@@ -36,7 +36,7 @@ class AbortableStreamBasedCheckpointFileManager(path: Path, hadoopConf: Configur
       s" an fs (path: $path) with abortable stream support")
   }
 
-  logInfo(s"Writing atomically to $path based on abortable stream")
+  logInfo(log"Writing atomically to ${MDC(LogKeys.PATH, path)} based on abortable stream")
 
   class AbortableStreamBasedFSDataOutputStream(
       fsDataOutputStream: FSDataOutputStream,
@@ -53,7 +53,8 @@ class AbortableStreamBasedCheckpointFileManager(path: Path, hadoopConf: Configur
         fsDataOutputStream.close()
       } catch {
           case NonFatal(e) =>
-            logWarning(s"Error cancelling write to $path (stream: $fsDataOutputStream)", e)
+            logWarning(log"Error cancelling write to ${MDC(LogKeys.PATH, path)} " +
+              log"(stream: ${MDC(LogKeys.FS_DATA_OUTPUT_STREAM, fsDataOutputStream)})", e)
       } finally {
         terminated = true
       }
@@ -71,7 +72,8 @@ class AbortableStreamBasedCheckpointFileManager(path: Path, hadoopConf: Configur
         fsDataOutputStream.close()
       } catch {
           case NonFatal(e) =>
-            logWarning(s"Error closing $path (stream: $fsDataOutputStream)", e)
+            logWarning(log"Error closing ${MDC(LogKeys.PATH, path)} " +
+              log"(stream: ${MDC(LogKeys.FS_DATA_OUTPUT_STREAM, fsDataOutputStream)})", e)
       } finally {
         terminated = true
       }

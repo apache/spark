@@ -1,2 +1,0 @@
-Project [from_protobuf(bytes#0, StorageLevel, Some([B)) AS from_protobuf(bytes)#0]
-+- LocalRelation <empty>, [id#0L, bytes#0]

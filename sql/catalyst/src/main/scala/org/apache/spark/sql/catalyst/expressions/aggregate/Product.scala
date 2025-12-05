@@ -76,6 +76,9 @@ case class PandasProduct(
     ignoreNA: Boolean)
     extends DeclarativeAggregate with ImplicitCastInputTypes with UnaryLike[Expression] {
 
+  def this(child: Expression, ignoreNA: Expression) =
+    this(child, PandasAggregate.expressionToIgnoreNA(ignoreNA, "pandas_product"))
+
   override def nullable: Boolean = !ignoreNA
 
   override def dataType: DataType = child.dataType match {

@@ -19,9 +19,7 @@ package org.apache.spark.ml.source.libsvm;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-
-import com.google.common.io.Files;
+import java.nio.file.Files;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,7 +48,7 @@ public class JavaLibSVMRelationSuite extends SharedSparkSession {
     tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "datasource");
     File file = new File(tempDir, "part-00000");
     String s = "1 1:1.0 3:2.0 5:3.0\n0\n0 2:4.0 4:5.0 6:6.0";
-    Files.write(s, file, StandardCharsets.UTF_8);
+    Files.writeString(file.toPath(), s);
     path = tempDir.toURI().toString();
   }
 

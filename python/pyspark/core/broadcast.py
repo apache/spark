@@ -59,8 +59,8 @@ def _from_id(bid: int) -> "Broadcast[Any]":
 
     if bid not in _broadcastRegistry:
         raise PySparkRuntimeError(
-            error_class="BROADCAST_VARIABLE_NOT_LOADED",
-            message_parameters={
+            errorClass="BROADCAST_VARIABLE_NOT_LOADED",
+            messageParameters={
                 "variable": str(bid),
             },
         )
@@ -125,8 +125,8 @@ class Broadcast(Generic[T]):
             if sc._encryption_enabled:
                 # with encryption, we ask the jvm to do the encryption for us, we send it data
                 # over a socket
-                port, auth_secret = self._python_broadcast.setupEncryptionServer()
-                (encryption_sock_file, _) = local_connect_and_auth(port, auth_secret)
+                conn_info, auth_secret = self._python_broadcast.setupEncryptionServer()
+                (encryption_sock_file, _) = local_connect_and_auth(conn_info, auth_secret)
                 broadcast_out = ChunkedStream(encryption_sock_file, 8192)
             else:
                 # no encryption, we can just write pickled data directly to the file from python
@@ -270,8 +270,8 @@ class Broadcast(Generic[T]):
             # we only need to decrypt it here when encryption is enabled and
             # if its on the driver, since executor decryption is handled already
             if self._sc is not None and self._sc._encryption_enabled:
-                port, auth_secret = self._python_broadcast.setupDecryptionServer()
-                (decrypted_sock_file, _) = local_connect_and_auth(port, auth_secret)
+                conn_info, auth_secret = self._python_broadcast.setupDecryptionServer()
+                (decrypted_sock_file, _) = local_connect_and_auth(conn_info, auth_secret)
                 self._python_broadcast.waitTillBroadcastDataSent()
                 return self.load(decrypted_sock_file)
             else:
@@ -299,8 +299,8 @@ class Broadcast(Generic[T]):
         """
         if self._jbroadcast is None:
             raise PySparkRuntimeError(
-                error_class="INVALID_BROADCAST_OPERATION",
-                message_parameters={"operation": "unpersisted"},
+                errorClass="INVALID_BROADCAST_OPERATION",
+                messageParameters={"operation": "unpersisted"},
             )
         self._jbroadcast.unpersist(blocking)
 
@@ -329,8 +329,8 @@ class Broadcast(Generic[T]):
         """
         if self._jbroadcast is None:
             raise PySparkRuntimeError(
-                error_class="INVALID_BROADCAST_OPERATION",
-                message_parameters={"operation": "destroyed"},
+                errorClass="INVALID_BROADCAST_OPERATION",
+                messageParameters={"operation": "destroyed"},
             )
         self._jbroadcast.destroy(blocking)
         os.unlink(self._path)
@@ -338,8 +338,8 @@ class Broadcast(Generic[T]):
     def __reduce__(self) -> Tuple[Callable[[int], "Broadcast[T]"], Tuple[int]]:
         if self._jbroadcast is None:
             raise PySparkRuntimeError(
-                error_class="INVALID_BROADCAST_OPERATION",
-                message_parameters={"operation": "serialized"},
+                errorClass="INVALID_BROADCAST_OPERATION",
+                messageParameters={"operation": "serialized"},
             )
         assert self._pickle_registry is not None
         self._pickle_registry.add(self)

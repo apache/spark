@@ -17,18 +17,22 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import org.apache.spark.sql.Strategy
 import org.apache.spark.sql.catalyst.analysis.ResolvedIdentifier
 import org.apache.spark.sql.catalyst.expressions.VariableReference
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.classic.Strategy
 import org.apache.spark.sql.execution.SparkPlan
 
 object V2CommandStrategy extends Strategy {
 
   // TODO: move v2 commands to here which are not data source v2 related.
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    case CreateVariable(ident: ResolvedIdentifier, defaultExpr, replace) =>
-      CreateVariableExec(ident.identifier.name, defaultExpr, replace) :: Nil
+    case CreateVariable(idents: Seq[LogicalPlan], defaultExpr, replace)
+        if idents.forall(_.isInstanceOf[ResolvedIdentifier]) =>
+      CreateVariableExec(
+        idents.map(_.asInstanceOf[ResolvedIdentifier]),
+        defaultExpr,
+        replace) :: Nil
 
     case DropVariable(ident: ResolvedIdentifier, ifExists) =>
       DropVariableExec(ident.identifier.name, ifExists) :: Nil

@@ -18,14 +18,15 @@
 package org.apache.spark.sql.hive
 
 import java.io.File
+import java.nio.file.Files
 import java.util.Locale
 
-import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
-import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
+import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{QueryTest, _}
+import org.apache.spark.sql.catalyst.expressions.Hex
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.hive.execution.HiveTempPath
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -39,7 +40,7 @@ case class TestData(key: Int, value: String)
 case class ThreeColumnTable(key: Int, value: String, key1: String)
 
 class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
-    with SQLTestUtils with PrivateMethodTester {
+    with SQLTestUtils {
   import spark.implicits._
 
   override lazy val testData = spark.sparkContext.parallelize(
@@ -350,7 +351,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       exception = intercept[AnalysisException] {
         Seq((1, 2, 3, 4)).toDF("a", "b", "c", "d").write.partitionBy("b", "c").insertInto(tableName)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1309",
+      condition = "_LEGACY_ERROR_TEMP_1309",
       parameters = Map.empty
     )
   }
@@ -362,7 +363,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         exception = intercept[AnalysisException] {
           sql(s"INSERT INTO TABLE $tableName PARTITION(b=1, c=2) SELECT 1, 2, 3")
         },
-        errorClass = "INSERT_PARTITION_COLUMN_ARITY_MISMATCH",
+        condition = "INSERT_PARTITION_COLUMN_ARITY_MISMATCH",
         parameters = Map(
           "staticPartCols" -> "`b`, `c`",
           "tableColumns" -> "`a`, `d`, `b`, `c`",
@@ -720,7 +721,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
              |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
              |SELECT * FROM test_insert_table""".stripMargin)
         },
-        errorClass = "PARSE_SYNTAX_ERROR",
+        condition = "PARSE_SYNTAX_ERROR",
         parameters = Map("error" -> "'ROW'", "hint" -> ""))
     }
   }
@@ -740,7 +741,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
                |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
                |SELECT * FROM test_insert_table""".stripMargin)
         },
-        errorClass = "PARSE_SYNTAX_ERROR",
+        condition = "PARSE_SYNTAX_ERROR",
         parameters = Map("error" -> "'ROW'", "hint" -> ""))
     }
   }
@@ -809,7 +810,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
               }
               checkError(
                 exception = e,
-                errorClass = "COLUMN_ALREADY_EXISTS",
+                condition = "COLUMN_ALREADY_EXISTS",
                 parameters = Map("columnName" -> "`id`"))
             }
           }
@@ -823,8 +824,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       withTempDir { dir =>
         val file = new File(dir, "test.hex")
         val hex = "AABBCC"
-        val bs = org.apache.commons.codec.binary.Hex.decodeHex(hex.toCharArray)
-        Files.write(bs, file)
+        Files.write(file.toPath, Hex.unhex(hex))
         val path = file.getParent
         sql(s"create table t1 (c string) STORED AS TEXTFILE location '$path'")
         checkAnswer(
@@ -858,7 +858,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
               |SELECT 1
             """.stripMargin)
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1076",
+        condition = "_LEGACY_ERROR_TEMP_1076",
         parameters = Map(
           "details" -> "The spec ([d=Some()]) contains an empty partition column value")
       )

@@ -27,7 +27,7 @@ from shutil import copyfile, copytree, rmtree
 from pathlib import Path
 
 if (
-    # When we package, the parent diectory 'classic' dir
+    # When we package, the parent directory 'classic' dir
     # (as we pip install -e python/packaging/classic)
     os.getcwd() == str(Path(__file__).parent.absolute())
     and str(Path(__file__).parent.name) == "classic"
@@ -148,13 +148,15 @@ if in_spark:
 # If you are changing the versions here, please also change ./python/pyspark/sql/pandas/utils.py
 # For Arrow, you should also check ./pom.xml and ensure there are no breaking changes in the
 # binary format protocol with the Java version, see ARROW_HOME/format/* for specifications.
-# Also don't forget to update python/docs/source/getting_started/install.rst, and
-# python/packaging/connect/setup.py
-_minimum_pandas_version = "2.0.0"
+# Also don't forget to update python/docs/source/getting_started/install.rst,
+# python/packaging/client/setup.py, and python/packaging/connect/setup.py
+_minimum_pandas_version = "2.2.0"
 _minimum_numpy_version = "1.21"
-_minimum_pyarrow_version = "10.0.0"
-_minimum_grpc_version = "1.62.0"
-_minimum_googleapis_common_protos_version = "1.56.4"
+_minimum_pyarrow_version = "15.0.0"
+_minimum_grpc_version = "1.76.0"
+_minimum_googleapis_common_protos_version = "1.71.0"
+_minimum_pyyaml_version = "3.11"
+_minimum_zstandard_version = "0.25.0"
 
 
 class InstallCommand(install):
@@ -288,8 +290,10 @@ try:
             "pyspark.sql.connect.streaming.worker",
             "pyspark.sql.functions",
             "pyspark.sql.pandas",
+            "pyspark.sql.plot",
             "pyspark.sql.protobuf",
             "pyspark.sql.streaming",
+            "pyspark.sql.streaming.proto",
             "pyspark.sql.worker",
             "pyspark.streaming",
             "pyspark.bin",
@@ -303,6 +307,7 @@ try:
             "pyspark.pandas.spark",
             "pyspark.pandas.typedef",
             "pyspark.pandas.usage_logging",
+            "pyspark.pipelines",
             "pyspark.python.pyspark",
             "pyspark.python.lib",
             "pyspark.testing",
@@ -312,6 +317,7 @@ try:
             "pyspark.errors",
             "pyspark.errors.exceptions",
             "pyspark.examples.src.main.python",
+            "pyspark.logger",
         ],
         include_package_data=True,
         package_dir={
@@ -338,10 +344,10 @@ try:
             "pyspark.examples.src.main.python": ["*.py", "*/*.py"],
         },
         scripts=scripts,
-        license="http://www.apache.org/licenses/LICENSE-2.0",
+        license="Apache-2.0",
         # Don't forget to update python/docs/source/getting_started/install.rst
         # if you're updating the versions or dependencies.
-        install_requires=["py4j==0.10.9.7"],
+        install_requires=["py4j>=0.10.9.7,<0.10.9.10"],
         extras_require={
             "ml": ["numpy>=%s" % _minimum_numpy_version],
             "mllib": ["numpy>=%s" % _minimum_numpy_version],
@@ -361,17 +367,28 @@ try:
                 "grpcio>=%s" % _minimum_grpc_version,
                 "grpcio-status>=%s" % _minimum_grpc_version,
                 "googleapis-common-protos>=%s" % _minimum_googleapis_common_protos_version,
+                "zstandard>=%s" % _minimum_zstandard_version,
                 "numpy>=%s" % _minimum_numpy_version,
             ],
+            "pipelines": [
+                "pandas>=%s" % _minimum_pandas_version,
+                "pyarrow>=%s" % _minimum_pyarrow_version,
+                "numpy>=%s" % _minimum_numpy_version,
+                "grpcio>=%s" % _minimum_grpc_version,
+                "grpcio-status>=%s" % _minimum_grpc_version,
+                "googleapis-common-protos>=%s" % _minimum_googleapis_common_protos_version,
+                "zstandard>=%s" % _minimum_zstandard_version,
+                "pyyaml>=%s" % _minimum_pyyaml_version,
+            ],
         },
-        python_requires=">=3.9",
+        python_requires=">=3.10",
         classifiers=[
             "Development Status :: 5 - Production/Stable",
-            "License :: OSI Approved :: Apache Software License",
-            "Programming Language :: Python :: 3.9",
             "Programming Language :: Python :: 3.10",
             "Programming Language :: Python :: 3.11",
             "Programming Language :: Python :: 3.12",
+            "Programming Language :: Python :: 3.13",
+            "Programming Language :: Python :: 3.14",
             "Programming Language :: Python :: Implementation :: CPython",
             "Programming Language :: Python :: Implementation :: PyPy",
             "Typing :: Typed",

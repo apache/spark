@@ -183,6 +183,28 @@ class MasterSuite extends MasterSuiteBase {
     assert(master.invokePrivate(_newDriverId(submitDate)) === "my-driver-00001")
   }
 
+  test("SPARK-50208: Use driverID as appName in javaOpts") {
+    val master = makeMaster(new SparkConf().set(MASTER_USE_DRIVER_ID_AS_APP_NAME, true))
+    val command = Command(
+      "org.apache.spark.deploy.worker.DriverWrapper",
+      Seq("{{WORKER_URL}}", "{{USER_JAR}}", "mainClass"),
+      Map.empty, Seq.empty, Seq.empty, Seq.empty)
+    val desc = DriverDescription("", 1, 1, false, command)
+    val result = master.invokePrivate(_maybeUpdateAppName(desc, "driver-id"))
+    assert(result.command.javaOpts.contains("-Dspark.app.name=driver-id"))
+  }
+
+  test("SPARK-50208: Use driverID as appName in arguments") {
+    val master = makeMaster(new SparkConf().set(MASTER_USE_DRIVER_ID_AS_APP_NAME, true))
+    val command = Command(
+      "org.apache.spark.deploy.worker.DriverWrapper",
+      Seq("{{WORKER_URL}}", "{{USER_JAR}}", "org.apache.spark.deploy.SparkSubmit", "pi.py"),
+      Map.empty, Seq.empty, Seq.empty, Seq.empty)
+    val desc = DriverDescription("", 1, 1, false, command)
+    val result = master.invokePrivate(_maybeUpdateAppName(desc, "driver-id"))
+    assert(result.command.arguments.contains("spark.app.name=driver-id"))
+  }
+
   test("SPARK-45753: Prevent invalid driver id patterns") {
     val m = intercept[IllegalArgumentException] {
       makeMaster(new SparkConf().set(DRIVER_ID_PATTERN, "my driver"))

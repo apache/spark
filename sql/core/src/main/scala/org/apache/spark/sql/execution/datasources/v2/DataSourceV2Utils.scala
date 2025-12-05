@@ -23,16 +23,20 @@ import scala.jdk.CollectionConverters._
 
 import com.fasterxml.jackson.databind.ObjectMapper
 
+import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.TimeTravelSpec
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SessionConfigSupport, SupportsCatalogOptions, SupportsRead, Table, TableProvider}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SessionConfigSupport, StagedTable, StagingTableCatalog, SupportsCatalogOptions, SupportsRead, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability.BATCH_READ
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -101,7 +105,7 @@ private[sql] object DataSourceV2Utils extends Logging {
       userSpecifiedSchema: Option[StructType],
       extraOptions: CaseInsensitiveMap[String],
       source: String,
-      paths: String*): Option[DataFrame] = {
+      paths: String*): Option[LogicalPlan] = {
     val catalogManager = sparkSession.sessionState.catalogManager
     val conf = sparkSession.sessionState.conf
     val sessionOptions = DataSourceV2Utils.extractSessionConfigs(provider, conf)
@@ -111,7 +115,7 @@ private[sql] object DataSourceV2Utils extends Logging {
     val finalOptions = sessionOptions.filter { case (k, _) => !optionsWithPath.contains(k) } ++
       optionsWithPath.originalMap
     val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
-    val (table, catalog, ident) = provider match {
+    val (table, catalog, ident, timeTravelSpec) = provider match {
       case _: SupportsCatalogOptions if userSpecifiedSchema.nonEmpty =>
         throw new IllegalArgumentException(
           s"$source does not support user specified schema. Please don't specify the schema.")
@@ -137,18 +141,17 @@ private[sql] object DataSourceV2Utils extends Logging {
         }
         val timeTravel = TimeTravelSpec.create(
           timeTravelTimestamp, timeTravelVersion, conf.sessionLocalTimeZone)
-        (CatalogV2Util.getTable(catalog, ident, timeTravel), Some(catalog), Some(ident))
+        val tbl = CatalogV2Util.getTable(catalog, ident, timeTravel)
+        (tbl, Some(catalog), Some(ident), timeTravel)
       case _ =>
         // TODO: Non-catalog paths for DSV2 are currently not well defined.
         val tbl = DataSourceV2Utils.getTableFromProvider(provider, dsOptions, userSpecifiedSchema)
-        (tbl, None, None)
+        (tbl, None, None, None)
     }
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
     table match {
       case _: SupportsRead if table.supports(BATCH_READ) =>
-        Option(Dataset.ofRows(
-          sparkSession,
-          DataSourceV2Relation.create(table, catalog, ident, dsOptions)))
+        Option(DataSourceV2Relation.create(table, catalog, ident, dsOptions, timeTravelSpec))
       case _ => None
     }
   }
@@ -178,5 +181,35 @@ private[sql] object DataSourceV2Utils extends Logging {
     } else {
       extraOptions + ("paths" -> objectMapper.writeValueAsString(paths.toArray))
     }
+  }
+
+  /**
+   * If `table` is a StagedTable, commit the staged changes and report the commit metrics.
+   * Do nothing if the table is not a StagedTable.
+   */
+  def commitStagedChanges(
+      sparkContext: SparkContext, table: Table, metrics: Map[String, SQLMetric]): Unit = {
+    table match {
+      case stagedTable: StagedTable =>
+        stagedTable.commitStagedChanges()
+
+        val driverMetrics = stagedTable.reportDriverMetrics()
+        if (driverMetrics.nonEmpty) {
+          for (taskMetric <- driverMetrics) {
+            metrics.get(taskMetric.name()).foreach(_.set(taskMetric.value()))
+          }
+
+          val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+          SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
+        }
+      case _ =>
+    }
+  }
+
+  def commitMetrics(
+      sparkContext: SparkContext, tableCatalog: StagingTableCatalog): Map[String, SQLMetric] = {
+    tableCatalog.supportedCustomMetrics().map {
+      metric => metric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, metric)
+    }.toMap
   }
 }

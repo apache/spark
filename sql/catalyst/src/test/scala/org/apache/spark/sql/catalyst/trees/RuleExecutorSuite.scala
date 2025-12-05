@@ -18,10 +18,12 @@
 package org.apache.spark.sql.catalyst.trees
 
 import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{Expression, IntegerLiteral, Literal}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
+import org.apache.spark.sql.internal.SQLConf
 
-class RuleExecutorSuite extends SparkFunSuite {
+class RuleExecutorSuite extends SparkFunSuite with SQLConfHelper {
   object DecrementLiterals extends Rule[Expression] {
     def apply(e: Expression): Expression = e transform {
       case IntegerLiteral(i) if i > 0 => Literal(i - 1)
@@ -111,6 +113,76 @@ class RuleExecutorSuite extends SparkFunSuite {
     val ruleName = DecrementLiterals.ruleName
     assert(e.getMessage.contains(s"Rule $ruleName in batch once generated an invalid plan"))
     assert(e.getMessage.contains("not positive integer"))
+  }
+
+  private object OptimizerWithLightweightValidation extends RuleExecutor[Expression] {
+    override protected def validatePlanChanges(
+        previousPlan: Expression,
+        currentPlan: Expression): Option[String] = {
+      (previousPlan, currentPlan) match {
+        case (IntegerLiteral(i), IntegerLiteral(j)) if i == j => None
+        case _ => Some("value changed")
+      }
+    }
+    override protected def validatePlanChangesLightweight(
+        previousPlan: Expression,
+        currentPlan: Expression): Option[String] = previousPlan match {
+      case IntegerLiteral(i) if i < 0 => None
+      case _ => Some("input is non-negative")
+    }
+    override val batches: Seq[Batch] = Batch("once", FixedPoint(1), DecrementLiterals) :: Nil
+  }
+
+  test("lightweight optimizer validation disabled") {
+    withSQLConf(SQLConf.LIGHTWEIGHT_PLAN_CHANGE_VALIDATION.key -> "false") {
+      // Test when full plan validation is both enabled and disabled.
+      Seq("true", "false").foreach { fullValidation =>
+        withSQLConf(SQLConf.PLAN_CHANGE_VALIDATION.key -> fullValidation) {
+          // Input passes validation
+          assert(OptimizerWithLightweightValidation.execute(Literal(0)) === Literal(0))
+
+          // Input does not pass validation
+          if (fullValidation == "false") {
+            // no validation runs
+            assert(OptimizerWithLightweightValidation.execute(Literal(1)) === Literal(0))
+          } else {
+            // full validation runs, taking the place of lightweight validation
+            val e = intercept[SparkException] {
+              OptimizerWithLightweightValidation.execute(Literal(1))
+            }
+            val ruleName = DecrementLiterals.ruleName
+            assert(e.getMessage.contains(s"Rule $ruleName in batch once generated an invalid plan"))
+            assert(e.getMessage.contains("value changed"))
+          }
+        }
+      }
+    }
+  }
+
+  test("lightweight optimizer validation enabled") {
+    withSQLConf(SQLConf.LIGHTWEIGHT_PLAN_CHANGE_VALIDATION.key -> "true") {
+      // Test when full plan validation is both enabled and disabled.
+      Seq("true", "false").foreach { fullValidation =>
+        withSQLConf(SQLConf.PLAN_CHANGE_VALIDATION.key -> fullValidation) {
+          // Input passes validation
+          assert(OptimizerWithLightweightValidation.execute(Literal(0)) === Literal(0))
+
+          // Input does not pass validation
+          val e = intercept[SparkException] {
+            OptimizerWithLightweightValidation.execute(Literal(1))
+          }
+          val ruleName = DecrementLiterals.ruleName
+          assert(e.getMessage.contains(s"Rule $ruleName in batch once generated an invalid plan"))
+          if (fullValidation == "false") {
+            // only lightweight validation runs
+            assert(e.getMessage.contains("input is non-negative"))
+          } else {
+            // full validation runs, taking the place of lightweight validation
+            assert(e.getMessage.contains("value changed"))
+          }
+        }
+      }
+    }
   }
 
   test("SPARK-27243: dumpTimeSpent when no rule has run") {

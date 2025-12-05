@@ -22,7 +22,7 @@ import java.time.ZoneOffset
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, IntervalStringStyles, IntervalUtils, MapData, SparkStringUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CharVarcharCodegenUtils, DateFormatter, FractionTimeFormatter, IntervalStringStyles, IntervalUtils, MapData, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.BinaryOutputStyle
@@ -30,10 +30,12 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SparkStringUtils
 
 trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
 
   private lazy val dateFormatter = DateFormatter()
+  private lazy val timeFormatter = new FractionTimeFormatter()
   private lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
   private lazy val timestampNTZFormatter = TimestampFormatter.getFractionFormatter(ZoneOffset.UTC)
 
@@ -53,7 +55,17 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
     i => func(i.asInstanceOf[T])
 
   // Returns a function to convert a value to pretty string. The function assumes input is not null.
-  protected final def castToString(from: DataType): Any => UTF8String = from match {
+  protected final def castToString(
+      from: DataType, to: StringConstraint = NoConstraint): Any => UTF8String =
+    to match {
+      case FixedLength(length) =>
+        s => CharVarcharCodegenUtils.charTypeWriteSideCheck(castToString(from)(s), length)
+      case MaxLength(length) =>
+        s => CharVarcharCodegenUtils.varcharTypeWriteSideCheck(castToString(from)(s), length)
+      case NoConstraint => castToString(from)
+    }
+
+  private def castToString(from: DataType): Any => UTF8String = from match {
     case CalendarIntervalType =>
       acceptAny[CalendarInterval](i => UTF8String.fromString(i.toString))
     case BinaryType => acceptAny[Array[Byte]](binaryFormatter.apply)
@@ -63,6 +75,8 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       acceptAny[Long](t => UTF8String.fromString(timestampFormatter.format(t)))
     case TimestampNTZType =>
       acceptAny[Long](t => UTF8String.fromString(timestampNTZFormatter.format(t)))
+    case _: TimeType =>
+      acceptAny[Long](t => UTF8String.fromString(timeFormatter.format(t)))
     case ArrayType(et, _) =>
       acceptAny[ArrayData](array => {
         val builder = new UTF8StringBuilder
@@ -152,7 +166,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       })
     case pudt: PythonUserDefinedType => castToString(pudt.sqlType)
     case udt: UserDefinedType[_] =>
-      o => UTF8String.fromString(udt.deserialize(o).toString)
+      o => UTF8String.fromString(udt.stringifyValue(udt.deserialize(o)))
     case YearMonthIntervalType(startField, endField) =>
       acceptAny[Int](i => UTF8String.fromString(
         IntervalUtils.toYearMonthIntervalString(i, ANSI_STYLE, startField, endField)))
@@ -167,8 +181,31 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
 
   // Returns a function to generate code to convert a value to pretty string. It assumes the input
   // is not null.
-  @scala.annotation.tailrec
   protected final def castToStringCode(
+      from: DataType,
+      ctx: CodegenContext,
+      to: StringConstraint = NoConstraint): (ExprValue, ExprValue) => Block =
+    (c, evPrim) => {
+      val tmpVar = ctx.freshVariable("tmp", classOf[UTF8String])
+      val castToString = castToStringCode(from, ctx)(c, tmpVar)
+      val maintainConstraint = to match {
+        case FixedLength(length) =>
+          code"""$evPrim = org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils
+                .charTypeWriteSideCheck($tmpVar, $length);""".stripMargin
+        case MaxLength(length) =>
+          code"""$evPrim = org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils
+                .varcharTypeWriteSideCheck($tmpVar, $length);""".stripMargin
+        case NoConstraint => code"$evPrim = $tmpVar;"
+      }
+      code"""
+            UTF8String $tmpVar;
+            $castToString
+            $maintainConstraint
+          """
+    }
+
+  @scala.annotation.tailrec
+  private def castToStringCode(
       from: DataType, ctx: CodegenContext): (ExprValue, ExprValue) => Block = {
     from match {
       case BinaryType =>
@@ -190,6 +227,11 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
         val tf = JavaCode.global(
           ctx.addReferenceObj("timestampNTZFormatter", timestampNTZFormatter),
           timestampNTZFormatter.getClass)
+        (c, evPrim) => code"$evPrim = UTF8String.fromString($tf.format($c));"
+      case _: TimeType =>
+        val tf = JavaCode.global(
+          ctx.addReferenceObj("timeFormatter", timeFormatter),
+          timeFormatter.getClass)
         (c, evPrim) => code"$evPrim = UTF8String.fromString($tf.format($c));"
       case CalendarIntervalType =>
         (c, evPrim) => code"$evPrim = UTF8String.fromString($c.toString());"
@@ -233,7 +275,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       case udt: UserDefinedType[_] =>
         val udtRef = JavaCode.global(ctx.addReferenceObj("udt", udt), udt.sqlType)
         (c, evPrim) =>
-          code"$evPrim = UTF8String.fromString($udtRef.deserialize($c).toString());"
+          code"$evPrim = UTF8String.fromString($udtRef.stringifyValue($udtRef.deserialize($c)));"
       case i: YearMonthIntervalType =>
         val iu = IntervalUtils.getClass.getName.stripSuffix("$")
         val iss = IntervalStringStyles.getClass.getName.stripSuffix("$")
@@ -416,7 +458,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
 object ToStringBase {
   def getBinaryFormatter: BinaryFormatter = {
     val style = SQLConf.get.getConf(SQLConf.BINARY_OUTPUT_STYLE)
-    style.map(BinaryOutputStyle.withName) match {
+    style match {
       case Some(BinaryOutputStyle.UTF8) =>
         (array: Array[Byte]) => UTF8String.fromBytes(array)
       case Some(BinaryOutputStyle.BASIC) =>
@@ -430,7 +472,24 @@ object ToStringBase {
         (array: Array[Byte]) => UTF8String.fromString(SparkStringUtils.getHexString(array))
     }
   }
+
+  def getBinaryParser: BinaryParser = {
+    val style = SQLConf.get.getConf(SQLConf.BINARY_OUTPUT_STYLE)
+    style match {
+      case Some(BinaryOutputStyle.UTF8) =>
+        (utf8: UTF8String) => utf8.getBytes
+      case Some(BinaryOutputStyle.BASIC) =>
+        (utf8: UTF8String) =>
+          utf8.toString.stripPrefix("[").stripSuffix("]").split(",").map(_.trim.toByte)
+      case Some(BinaryOutputStyle.BASE64) =>
+        (utf8: UTF8String) => java.util.Base64.getDecoder.decode(utf8.getBytes)
+      case Some(BinaryOutputStyle.HEX) =>
+        (utf8: UTF8String) => Hex.unhex(utf8.getBytes)
+      case _ =>
+        (utf8: UTF8String) => SparkStringUtils.fromHexString(utf8.toString)
+    }
+  }
 }
 
 trait BinaryFormatter extends (Array[Byte] => UTF8String) with Serializable
-
+trait BinaryParser extends (UTF8String => Array[Byte]) with Serializable

@@ -1,4 +1,4 @@
--- All these should error out in the parser
+-- All these should error out in the parser in non-ansi mode, error out in the analyzer in ansi mode
 SELECT 1 FROM "not_exist";
 
 USE SCHEMA "not_exist";
@@ -14,6 +14,8 @@ SELECT 1 FROM not_exist AS X("hello");
 SELECT "not_exist"();
 
 SELECT "not_exist".not_exist();
+
+select 1 from "not_""exists";
 
 -- All these should error out in analysis
 SELECT 1 FROM `hello`;
@@ -35,6 +37,7 @@ SELECT `not_exist`.not_exist();
 -- Strings in various situations all work
 SELECT "hello";
 
+-- Ok for non-ansi mode, error for ansi-mode
 CREATE TEMPORARY VIEW v(c1 COMMENT "hello") AS SELECT 1;
 DROP VIEW v;
 

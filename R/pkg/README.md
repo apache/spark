@@ -1,4 +1,4 @@
-# R on Spark
+# R on Spark (deprecated)
 
 SparkR is an R package that provides a light-weight frontend to use Spark from R.
 

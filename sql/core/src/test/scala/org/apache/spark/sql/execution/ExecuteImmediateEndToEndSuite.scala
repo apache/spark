@@ -16,8 +16,7 @@
  */
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{QueryTest}
-import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ExecuteImmediateEndToEndSuite extends QueryTest with SharedSparkSession {
@@ -38,29 +37,13 @@ class ExecuteImmediateEndToEndSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("EXEC IMMEDIATE STACK OVERFLOW") {
-    try {
-      spark.sql("DECLARE parm = 1;")
-      val query = (1 to 20000).map(x => "SELECT 1 as a").mkString(" UNION ALL ")
-      Seq(
-        s"EXECUTE IMMEDIATE '$query'",
-        s"EXECUTE IMMEDIATE '$query' INTO parm").foreach { q =>
-        val e = intercept[ParseException] {
-          spark.sql(q)
-        }
-
-        checkError(
-          exception = intercept[ParseException](sql(query).collect()),
-          errorClass = "FAILED_TO_PARSE_TOO_COMPLEX",
-          parameters = Map(),
-          context = ExpectedContext(
-            query,
-            start = 0,
-            stop = query.length - 1)
-        )
-      }
-    } finally {
-      spark.sql("DROP TEMPORARY VARIABLE IF EXISTS parm;")
-    }
+  test("SQL Scripting not supported inside EXECUTE IMMEDIATE") {
+    val executeImmediateText = "EXECUTE IMMEDIATE 'BEGIN SELECT 1; END'"
+    checkError(
+      exception = intercept[AnalysisException ] {
+        spark.sql(executeImmediateText)
+      },
+      condition = "SQL_SCRIPT_IN_EXECUTE_IMMEDIATE",
+      parameters = Map("sqlString" -> "BEGIN SELECT 1; END"))
   }
 }

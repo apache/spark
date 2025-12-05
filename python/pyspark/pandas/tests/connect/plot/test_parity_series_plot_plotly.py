@@ -24,13 +24,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils, TestUtils
 class SeriesPlotPlotlyParityTests(
     SeriesPlotPlotlyTestsMixin, PandasOnSparkTestUtils, TestUtils, ReusedConnectTestCase
 ):
-    @unittest.skip("Test depends on Spark ML which is not supported from Spark Connect.")
-    def test_hist_plot(self):
-        super().test_hist_plot()
-
-    @unittest.skip("Test depends on Spark ML which is not supported from Spark Connect.")
-    def test_kde_plot(self):
-        super().test_kde_plot()
+    pass
 
 
 if __name__ == "__main__":

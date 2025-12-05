@@ -44,6 +44,30 @@ Project [scalar-subquery#x [] AS scalarsubquery()#x]
 
 
 -- !query
+SELECT (
+  WITH unreferenced AS (SELECT id)
+  SELECT 1
+) FROM range(1)
+-- !query analysis
+Project [scalar-subquery#x [] AS scalarsubquery()#x]
+:  +- Project [1 AS 1#x]
+:     +- OneRowRelation
++- Range (0, 1, step=1)
+
+
+-- !query
+SELECT (
+  WITH unreferenced AS (SELECT 1)
+  SELECT id
+) FROM range(1)
+-- !query analysis
+Project [scalar-subquery#x [id#xL] AS scalarsubquery(id)#xL]
+:  +- Project [outer(id#xL)]
+:     +- OneRowRelation
++- Range (0, 1, step=1)
+
+
+-- !query
 SELECT * FROM
   (
    WITH cte AS (SELECT * FROM range(10))

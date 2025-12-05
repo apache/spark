@@ -38,14 +38,16 @@ import org.apache.avro.generic.{GenericContainer, GenericData, GenericRecord}
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark._
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.PythonBroadcast
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.CLASS_NAME
 import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.internal.io.FileCommitProtocol._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus}
 import org.apache.spark.storage._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{BoundedPriorityQueue, ByteBufferInputStream, NextIterator, SerializableConfiguration, SerializableJobConf, Utils}
 import org.apache.spark.util.collection.{BitSet, CompactBuffer}
 import org.apache.spark.util.io.ChunkedByteBuffer
@@ -227,15 +229,13 @@ class KryoSerializer(conf: SparkConf)
 
     // scalastyle:on
 
-    kryo.register(None.getClass)
-    kryo.register(Nil.getClass)
     kryo.register(Utils.classForName("scala.collection.immutable.ArraySeq$ofRef"))
-    kryo.register(Utils.classForName("scala.collection.immutable.$colon$colon"))
     kryo.register(Utils.classForName("scala.collection.immutable.Map$EmptyMap$"))
     kryo.register(Utils.classForName("scala.math.Ordering$Reverse"))
     kryo.register(Utils.classForName("scala.reflect.ClassTag$GenericClassTag"))
     kryo.register(classOf[ArrayBuffer[Any]])
     kryo.register(classOf[Array[Array[Byte]]])
+    kryo.register(classOf[UTF8String])
 
     // We can't load those class directly in order to avoid unnecessary jar dependencies.
     // We load them safely, ignore it if the class not found.
@@ -522,6 +522,7 @@ private[spark] class KryoSerializerInstance(
  * Interface implemented by clients to register their classes with Kryo when using Kryo
  * serialization.
  */
+@DeveloperApi
 trait KryoRegistrator {
   def registerClasses(kryo: Kryo): Unit
 }
@@ -574,6 +575,7 @@ private[serializer] object KryoSerializer {
       "org.apache.spark.sql.catalyst.expressions.BoundReference",
       "org.apache.spark.sql.catalyst.expressions.SortOrder",
       "[Lorg.apache.spark.sql.catalyst.expressions.SortOrder;",
+      "org.apache.spark.sql.catalyst.expressions.GenericInternalRow",
       "org.apache.spark.sql.catalyst.InternalRow",
       "org.apache.spark.sql.catalyst.InternalRow$",
       "[Lorg.apache.spark.sql.catalyst.InternalRow;",
@@ -608,6 +610,12 @@ private[serializer] object KryoSerializer {
       "org.apache.spark.sql.execution.joins.LongHashedRelation",
       "org.apache.spark.sql.execution.joins.LongToUnsafeRowMap",
       "org.apache.spark.sql.execution.joins.UnsafeHashedRelation",
+      "org.apache.spark.sql.columnar.CachedBatch",
+      "org.apache.spark.sql.columnar.SimpleMetricsCachedBatch",
+      "org.apache.spark.sql.execution.columnar.DefaultCachedBatch",
+      "org.apache.spark.sql.columnar.CachedBatchSerializer",
+      "org.apache.spark.sql.columnar.SimpleMetricsCachedBatchSerializer",
+      "org.apache.spark.sql.execution.columnar.DefaultCachedBatchSerializer",
 
       "org.apache.spark.ml.attribute.Attribute",
       "org.apache.spark.ml.attribute.AttributeGroup",

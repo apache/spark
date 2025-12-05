@@ -20,6 +20,7 @@
 import logging
 from argparse import ArgumentParser
 import os
+import importlib
 import platform
 import re
 import shutil
@@ -111,19 +112,24 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
     while os.path.isdir(tmp_dir):
         tmp_dir = os.path.join(target_dir, str(uuid.uuid4()))
     os.mkdir(tmp_dir)
+    sock_dir = os.getenv('TMPDIR') or os.getenv('TEMP') or os.getenv('TMP') or '/tmp'
     env["TMPDIR"] = tmp_dir
     metastore_dir = os.path.join(tmp_dir, str(uuid.uuid4()))
     while os.path.isdir(metastore_dir):
         metastore_dir = os.path.join(metastore_dir, str(uuid.uuid4()))
     os.mkdir(metastore_dir)
 
-    # Also override the JVM's temp directory by setting driver and executor options.
-    java_options = "-Djava.io.tmpdir={0}".format(tmp_dir)
+    # Also override the JVM's temp directory and log4j conf by setting driver and executor options.
+    log4j2_path = os.path.join(SPARK_HOME, "python/test_support/log4j2.properties")
+    java_options = "-Djava.io.tmpdir={0} -Dlog4j.configurationFile={1}".format(
+        tmp_dir, log4j2_path
+    )
     java_options = java_options + " -Xss4M"
     spark_args = [
         "--conf", "spark.driver.extraJavaOptions='{0}'".format(java_options),
         "--conf", "spark.executor.extraJavaOptions='{0}'".format(java_options),
         "--conf", "spark.sql.warehouse.dir='{0}'".format(metastore_dir),
+        "--conf", "spark.python.unix.domain.socket.dir={0}".format(sock_dir),
         "pyspark-shell",
     ]
 
@@ -207,9 +213,9 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
 
 
 def get_default_python_executables():
-    python_execs = [x for x in ["python3.9", "pypy3"] if which(x)]
+    python_execs = [x for x in ["python3.11", "pypy3"] if which(x)]
 
-    if "python3.9" not in python_execs:
+    if "python3.11" not in python_execs:
         p = which("python3")
         if not p:
             LOGGER.error("No python3 executable found.  Exiting!")
@@ -217,6 +223,42 @@ def get_default_python_executables():
         else:
             python_execs.insert(0, p)
     return python_execs
+
+
+def split_and_validate_testnames(testnames):
+    testnames_to_test = []
+
+    def module_exists(module):
+        try:
+            return importlib.util.find_spec(module) is not None
+        except ModuleNotFoundError:
+            return False
+
+    for testname in testnames.split(','):
+        if " " in testname:
+            # "{module} {class.testcase_name}"
+            module, testcase = testname.split(" ")
+            if not module_exists(module):
+                print(f"Error: Can't find module '{module}'.")
+                sys.exit(-1)
+            testnames_to_test.append(f"{module} {testcase}")
+        else:
+            if module_exists(testname):
+                # "{module}"
+                testnames_to_test.append(testname)
+            else:
+                # "{module.class.testcase_name}"
+                index = len(testname)
+                while (index := testname.rfind(".", 0, index)) != -1:
+                    module, testcase = testname[:index], testname[index + 1:]
+                    if module_exists(module):
+                        testnames_to_test.append(f"{module} {testcase}")
+                        break
+                else:
+                    print(f"Error: Invalid testname '{testname}'.")
+                    sys.exit(-1)
+
+    return testnames_to_test
 
 
 def parse_opts():
@@ -251,6 +293,7 @@ def parse_opts():
             "For example, 'pyspark.sql.foo' to run the module as unittests or doctests, "
             "'pyspark.sql.tests FooTests' to run the specific class of unittests, "
             "'pyspark.sql.tests FooTests.test_foo' to run the specific unittest in the class. "
+            "'pyspark.sql.tests.FooTests.test_foo' will work too. "
             "'--modules' option is ignored if they are given.")
     )
     group.add_argument(
@@ -307,7 +350,7 @@ def main():
                 sys.exit(-1)
         LOGGER.info("Will test the following Python modules: %s", [x.name for x in modules_to_test])
     else:
-        testnames_to_test = opts.testnames.split(',')
+        testnames_to_test = split_and_validate_testnames(opts.testnames)
         LOGGER.info("Will test the following Python tests: %s", testnames_to_test)
 
     task_queue = Queue.PriorityQueue()

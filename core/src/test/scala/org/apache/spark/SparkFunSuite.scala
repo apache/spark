@@ -26,7 +26,6 @@ import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
-import org.apache.commons.io.FileUtils
 import org.apache.logging.log4j._
 import org.apache.logging.log4j.core.{LogEvent, Logger, LoggerContext}
 import org.apache.logging.log4j.core.appender.AbstractAppender
@@ -126,7 +125,7 @@ abstract class SparkFunSuite
     // copy it into a temporary one for accessing it from the dependent module.
     val file = File.createTempFile("test-resource", suffix)
     file.deleteOnExit()
-    FileUtils.copyURLToFile(url, file)
+    Utils.copyURLToFile(url, file)
     file
   }
 
@@ -205,7 +204,7 @@ abstract class SparkFunSuite
         logInfo("\n\n===== EXTRA LOGS FOR THE FAILED TEST\n")
         workerLogfiles.foreach { logFile =>
           logInfo(s"\n----- Logfile: ${logFile.getAbsolutePath()}")
-          logInfo(FileUtils.readFileToString(logFile, "UTF-8"))
+          logInfo(Files.readString(logFile.toPath))
         }
       }
     }
@@ -233,6 +232,20 @@ abstract class SparkFunSuite
       outcome
     } finally {
       logInfo(s"\n\n===== FINISHED $shortSuiteName: '$testName' =====\n")
+    }
+  }
+
+  protected def gridTest[A](testNamePrefix: String, testTags: Tag*)(params: Seq[A])(
+    testFun: A => Unit): Unit = {
+    for (param <- params) {
+      test(testNamePrefix + s" ($param)", testTags: _*)(testFun(param))
+    }
+  }
+
+  protected def namedGridTest[A](testNamePrefix: String, testTags: Tag*)(params: Map[String, A])(
+    testFun: A => Unit): Unit = {
+    for (param <- params) {
+      test(testNamePrefix + s" ${param._1}", testTags: _*)(testFun(param._2))
     }
   }
 
@@ -268,7 +281,7 @@ abstract class SparkFunSuite
   protected def withLogAppender(
       appender: AbstractAppender,
       loggerNames: Seq[String] = Seq.empty,
-      level: Option[Level] = None)(
+      level: Option[Level] = Some(Level.INFO))(
       f: => Unit): Unit = {
     val loggers = if (loggerNames.nonEmpty) {
       loggerNames.map(LogManager.getLogger)
@@ -327,9 +340,9 @@ abstract class SparkFunSuite
   }
 
   /**
-   * Checks an exception with an error class against expected results.
+   * Checks an exception with an error condition against expected results.
    * @param exception     The exception to check
-   * @param errorClass    The expected error class identifying the error
+   * @param condition     The expected error condition identifying the error
    * @param sqlState      Optional the expected SQLSTATE, not verified if not supplied
    * @param parameters    A map of parameter names and values. The names are as defined
    *                      in the error-classes file.
@@ -338,12 +351,12 @@ abstract class SparkFunSuite
    */
   protected def checkError(
       exception: SparkThrowable,
-      errorClass: String,
+      condition: String,
       sqlState: Option[String] = None,
       parameters: Map[String, String] = Map.empty,
       matchPVals: Boolean = false,
       queryContext: Array[ExpectedContext] = Array.empty): Unit = {
-    assert(exception.getErrorClass === errorClass)
+    assert(exception.getCondition === condition)
     sqlState.foreach(state => assert(exception.getSqlState === state))
     val expectedParameters = exception.getMessageParameters.asScala
     if (matchPVals) {
@@ -371,72 +384,81 @@ abstract class SparkFunSuite
           "Invalid objectType of a query context Actual:" + actual.toString)
         assert(actual.objectName() === expected.objectName,
           "Invalid objectName of a query context. Actual:" + actual.toString)
-        assert(actual.startIndex() === expected.startIndex,
-          "Invalid startIndex of a query context. Actual:" + actual.toString)
-        assert(actual.stopIndex() === expected.stopIndex,
-          "Invalid stopIndex of a query context. Actual:" + actual.toString)
+        // If startIndex and stopIndex are -1, it means we simply want to check the
+        // fragment of the query context. This should be the case when the fragment is
+        // distinguished within the query text.
+        if (expected.startIndex != -1) {
+          assert(actual.startIndex() === expected.startIndex,
+            "Invalid startIndex of a query context. Actual:" + actual.toString)
+        }
+        if (expected.stopIndex != -1) {
+          assert(actual.stopIndex() === expected.stopIndex,
+            "Invalid stopIndex of a query context. Actual:" + actual.toString)
+        }
         assert(actual.fragment() === expected.fragment,
           "Invalid fragment of a query context. Actual:" + actual.toString)
       } else if (actual.contextType() == QueryContextType.DataFrame) {
         assert(actual.fragment() === expected.fragment,
           "Invalid code fragment of a query context. Actual:" + actual.toString)
-        assert(actual.callSite().matches(expected.callSitePattern),
-          "Invalid callSite of a query context. Actual:" + actual.toString)
+        if (expected.callSitePattern.nonEmpty) {
+          assert(actual.callSite().matches(expected.callSitePattern),
+            "Invalid callSite of a query context. Actual:" + actual.toString)
+        }
       }
     }
   }
 
   protected def checkError(
       exception: SparkThrowable,
-      errorClass: String,
+      condition: String,
       sqlState: String,
       parameters: Map[String, String]): Unit =
-    checkError(exception, errorClass, Some(sqlState), parameters)
+    checkError(exception, condition, Some(sqlState), parameters)
 
   protected def checkError(
       exception: SparkThrowable,
-      errorClass: String,
+      condition: String,
       sqlState: String,
       parameters: Map[String, String],
       context: ExpectedContext): Unit =
-    checkError(exception, errorClass, Some(sqlState), parameters, false, Array(context))
+    checkError(exception, condition, Some(sqlState), parameters, false, Array(context))
 
   protected def checkError(
       exception: SparkThrowable,
-      errorClass: String,
+      condition: String,
       parameters: Map[String, String],
       context: ExpectedContext): Unit =
-    checkError(exception, errorClass, None, parameters, false, Array(context))
+    checkError(exception, condition, None, parameters, false, Array(context))
 
   protected def checkError(
       exception: SparkThrowable,
-      errorClass: String,
+      condition: String,
       sqlState: String,
       context: ExpectedContext): Unit =
-    checkError(exception, errorClass, None, Map.empty, false, Array(context))
+    checkError(exception, condition, Some(sqlState), Map.empty, false, Array(context))
 
   protected def checkError(
       exception: SparkThrowable,
-      errorClass: String,
+      condition: String,
       sqlState: Option[String],
       parameters: Map[String, String],
       context: ExpectedContext): Unit =
-    checkError(exception, errorClass, sqlState, parameters,
+    checkError(exception, condition, sqlState, parameters,
       false, Array(context))
 
   protected def checkErrorMatchPVals(
       exception: SparkThrowable,
-      errorClass: String,
+      condition: String,
       parameters: Map[String, String]): Unit =
-    checkError(exception, errorClass, None, parameters, matchPVals = true)
+    checkError(exception, condition, None, parameters, matchPVals = true)
 
   protected def checkErrorMatchPVals(
       exception: SparkThrowable,
-      errorClass: String,
+      condition: String,
       sqlState: Option[String],
       parameters: Map[String, String],
       context: ExpectedContext): Unit =
-    checkError(exception, errorClass, sqlState, parameters,
+    checkError(exception, condition, sqlState, parameters,
       matchPVals = true, Array(context))
 
   protected def checkErrorTableNotFound(
@@ -444,7 +466,7 @@ abstract class SparkFunSuite
       tableName: String,
       queryContext: ExpectedContext): Unit =
     checkError(exception = exception,
-      errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      condition = "TABLE_OR_VIEW_NOT_FOUND",
       parameters = Map("relationName" -> tableName),
       queryContext = Array(queryContext))
 
@@ -452,13 +474,13 @@ abstract class SparkFunSuite
       exception: SparkThrowable,
       tableName: String): Unit =
     checkError(exception = exception,
-      errorClass = "TABLE_OR_VIEW_NOT_FOUND",
+      condition = "TABLE_OR_VIEW_NOT_FOUND",
       parameters = Map("relationName" -> tableName))
 
   protected def checkErrorTableAlreadyExists(exception: SparkThrowable,
                                              tableName: String): Unit =
     checkError(exception = exception,
-      errorClass = "TABLE_OR_VIEW_ALREADY_EXISTS",
+      condition = "TABLE_OR_VIEW_ALREADY_EXISTS",
       parameters = Map("relationName" -> tableName))
 
   case class ExpectedContext(
@@ -474,6 +496,12 @@ abstract class SparkFunSuite
   object ExpectedContext {
     def apply(fragment: String, start: Int, stop: Int): ExpectedContext = {
       ExpectedContext("", "", start, stop, fragment)
+    }
+
+    // Check the fragment only. This is only used when the fragment is distinguished within
+    // the query text
+    def apply(fragment: String): ExpectedContext = {
+      ExpectedContext("", "", -1, -1, fragment)
     }
 
     def apply(

@@ -105,6 +105,7 @@ JSON
 .. autosummary::
    :toctree: api/
 
+   json_normalize
    read_json
    DataFrame.to_json
 

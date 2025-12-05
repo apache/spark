@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+import unittest
 import pandas as pd
 import numpy as np
 import re
@@ -38,7 +38,7 @@ class SeriesStringOpsAdvMixin:
                 "\nleading-whitespace",
                 "trailing-Whitespace    \t",
                 None,
-                np.NaN,
+                np.nan,
             ]
         )
 
@@ -183,6 +183,8 @@ class SeriesStringOpsAdvMixin:
         with self.assertRaises(NotImplementedError):
             self.check_func(lambda x: x.str.split(expand=True))
 
+        self.check_func_on_series(lambda x: repr(x.str.split("-", n=1, expand=True)), pser)
+
     def test_string_rsplit(self):
         self.check_func_on_series(lambda x: repr(x.str.rsplit()), self.pser[:-1])
         self.check_func_on_series(lambda x: repr(x.str.rsplit(r"p*")), self.pser[:-1])
@@ -192,6 +194,8 @@ class SeriesStringOpsAdvMixin:
         self.check_func_on_series(lambda x: x.str.rsplit(n=2, expand=True), pser, almost=True)
         with self.assertRaises(NotImplementedError):
             self.check_func(lambda x: x.str.rsplit(expand=True))
+
+        self.check_func_on_series(lambda x: repr(x.str.rsplit("-", n=1, expand=True)), pser)
 
     def test_string_translate(self):
         m = str.maketrans({"a": "X", "e": "Y", "i": None})
@@ -222,7 +226,6 @@ class SeriesStringOpsAdvTests(
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.pandas.tests.series.test_string_ops_adv import *  # noqa: F401
 
     try:

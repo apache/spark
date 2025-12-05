@@ -21,8 +21,10 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
@@ -35,11 +37,11 @@ import com.codahale.metrics.RatioGauge;
 import com.codahale.metrics.Timer;
 import com.codahale.metrics.Counter;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Sets;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
+import org.apache.spark.internal.LogKeys;
+import org.apache.spark.internal.MDC;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.MergedBlockMetaResponseCallback;
 import org.apache.spark.network.client.RpcResponseCallback;
@@ -65,7 +67,8 @@ import org.apache.spark.network.util.TransportConf;
  */
 public class ExternalBlockHandler extends RpcHandler
     implements RpcHandler.MergedBlockMetaReqHandler {
-  private static final Logger logger = LoggerFactory.getLogger(ExternalBlockHandler.class);
+  private static final SparkLogger logger =
+    SparkLoggerFactory.getLogger(ExternalBlockHandler.class);
   private static final String SHUFFLE_MERGER_IDENTIFIER = "shuffle-push-merger";
   private static final String SHUFFLE_BLOCK_ID = "shuffle";
   private static final String SHUFFLE_CHUNK_ID = "shuffleChunk";
@@ -196,7 +199,7 @@ public class ExternalBlockHandler extends RpcHandler
 
     } else if (msgObj instanceof GetLocalDirsForExecutors msg) {
       checkAuth(client, msg.appId);
-      Set<String> execIdsForBlockResolver = Sets.newHashSet(msg.execIds);
+      Set<String> execIdsForBlockResolver = new HashSet<>(Set.of(msg.execIds));
       boolean fetchMergedBlockDirs = execIdsForBlockResolver.remove(SHUFFLE_MERGER_IDENTIFIER);
       Map<String, String[]> localDirs = blockManager.getLocalDirs(msg.appId,
         execIdsForBlockResolver);
@@ -221,7 +224,9 @@ public class ExternalBlockHandler extends RpcHandler
     } else if (msgObj instanceof RemoveShuffleMerge msg) {
       checkAuth(client, msg.appId);
       logger.info("Removing shuffle merge data for application {} shuffle {} shuffleMerge {}",
-          msg.appId, msg.shuffleId, msg.shuffleMergeId);
+        MDC.of(LogKeys.APP_ID, msg.appId),
+        MDC.of(LogKeys.SHUFFLE_ID, msg.shuffleId),
+        MDC.of(LogKeys.SHUFFLE_MERGE_ID, msg.shuffleMergeId));
       mergeManager.removeShuffleMerge(msg);
     } else if (msgObj instanceof DiagnoseCorruption msg) {
       checkAuth(client, msg.appId);
@@ -580,7 +585,7 @@ public class ExternalBlockHandler extends RpcHandler
 
     @Override
     public ManagedBuffer next() {
-      ManagedBuffer block = Preconditions.checkNotNull(mergeManager.getMergedBlockData(
+      ManagedBuffer block = Objects.requireNonNull(mergeManager.getMergedBlockData(
         appId, shuffleId, shuffleMergeId, reduceIds[reduceIdx], chunkIds[reduceIdx][chunkIdx]));
       if (chunkIdx < chunkIds[reduceIdx].length - 1) {
         chunkIdx += 1;

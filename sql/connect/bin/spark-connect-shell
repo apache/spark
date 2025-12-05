@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+# The spark connect shell for development. This shell script builds the spark connect server with
+# all dependencies and starts the server at the default port.
+# Use `/bin/spark-connect-shell` or set SCBUILD=0 if rebuilding the dependency jars are not needed.
+
+# Go to the Spark project root directory
+FWDIR="$(cd "`dirname "$0"`"/../../..; pwd)"
+cd "$FWDIR"
+export SPARK_HOME=$FWDIR
+
+# Determine the Scala version used in Spark
+SCALA_BINARY_VER=`grep "scala.binary.version" "${SPARK_HOME}/pom.xml" | head -n1 | awk -F '[<>]' '{print $3}'`
+SCALA_ARG="-Pscala-${SCALA_BINARY_VER}"
+
+SCBUILD="${SCBUILD:-1}"
+if [ "$SCBUILD" -eq "1" ]; then
+  # Build the jars needed for spark submit and spark connect
+  build/sbt "${SCALA_ARG}" -Phive package || exit 1
+fi
+
+exec "${SPARK_HOME}"/bin/spark-shell --conf spark.plugins=org.apache.spark.sql.connect.SparkConnectPlugin "$@"

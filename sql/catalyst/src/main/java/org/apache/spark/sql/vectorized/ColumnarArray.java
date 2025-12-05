@@ -26,6 +26,8 @@ import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.types.VariantVal;
+import org.apache.spark.unsafe.types.GeographyVal;
+import org.apache.spark.unsafe.types.GeometryVal;
 
 /**
  * Array abstraction in {@link ColumnVector}.
@@ -58,7 +60,7 @@ public final class ColumnarArray extends ArrayData {
   private UnsafeArrayData setNullBits(UnsafeArrayData arrayData) {
     if (data.hasNull()) {
       for (int i = 0; i < length; i++) {
-        if (data.isNullAt(i)) {
+        if (data.isNullAt(offset + i)) {
           arrayData.setNullAt(i);
         }
       }
@@ -172,6 +174,16 @@ public final class ColumnarArray extends ArrayData {
   @Override
   public byte[] getBinary(int ordinal) {
     return data.getBinary(offset + ordinal);
+  }
+
+  @Override
+  public GeographyVal getGeography(int ordinal) {
+    return data.getGeography(offset + ordinal);
+  }
+
+  @Override
+  public GeometryVal getGeometry(int ordinal) {
+    return data.getGeometry(offset + ordinal);
   }
 
   @Override

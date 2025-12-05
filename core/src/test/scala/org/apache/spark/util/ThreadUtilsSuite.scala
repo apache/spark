@@ -98,6 +98,40 @@ class ThreadUtilsSuite extends SparkFunSuite {
     }
   }
 
+  test("newDaemonBlockingThreadPoolExecutorService") {
+    val nThread = 3
+    val workQueueSize = 5
+    val submithreadsLatch = new CountDownLatch(nThread + workQueueSize + 1)
+    val latch = new CountDownLatch(1)
+    val blockingPool = ThreadUtils.newDaemonBlockingThreadPoolExecutorService(
+      nThread, workQueueSize, "ThreadUtilsSuite-newDaemonBlockingThreadPoolExecutorService")
+
+    try {
+      val submitThread = new Thread(() => {
+        (0 until nThread + workQueueSize + 1).foreach { i =>
+          blockingPool.execute(() => {
+            latch.await(10, TimeUnit.SECONDS)
+          })
+          submithreadsLatch.countDown()
+        }
+      })
+      submitThread.setDaemon(true)
+      submitThread.start()
+
+      // the last one task submission will be blocked until previous tasks completed
+      eventually(timeout(10.seconds)) {
+        assert(submithreadsLatch.getCount === 1L)
+      }
+      latch.countDown()
+      eventually(timeout(10.seconds)) {
+        assert(submithreadsLatch.getCount === 0L)
+        assert(!submitThread.isAlive)
+      }
+    } finally {
+      blockingPool.shutdownNow()
+    }
+  }
+
   test("sameThread") {
     val callerThreadName = Thread.currentThread().getName()
     val f = Future {

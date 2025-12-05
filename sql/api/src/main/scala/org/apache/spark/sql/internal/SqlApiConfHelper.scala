@@ -21,9 +21,9 @@ import java.util.concurrent.atomic.AtomicReference
 /**
  * SqlApiConfHelper is created to avoid a deadlock during a concurrent access to SQLConf and
  * SqlApiConf, which is because SQLConf and SqlApiConf tries to load each other upon
- * initializations. SqlApiConfHelper is private to sql package and is not supposed to be
- * accessed by end users. Variables and methods within SqlApiConfHelper are defined to
- * be used by SQLConf and SqlApiConf only.
+ * initializations. SqlApiConfHelper is private to sql package and is not supposed to be accessed
+ * by end users. Variables and methods within SqlApiConfHelper are defined to be used by SQLConf
+ * and SqlApiConf only.
  */
 private[sql] object SqlApiConfHelper {
   // Shared keys.
@@ -32,7 +32,16 @@ private[sql] object SqlApiConfHelper {
   val CASE_SENSITIVE_KEY: String = "spark.sql.caseSensitive"
   val SESSION_LOCAL_TIMEZONE_KEY: String = "spark.sql.session.timeZone"
   val LOCAL_RELATION_CACHE_THRESHOLD_KEY: String = "spark.sql.session.localRelationCacheThreshold"
-  val DEFAULT_COLLATION: String = "spark.sql.session.collation.default"
+  val LOCAL_RELATION_CHUNK_SIZE_ROWS_KEY: String = "spark.sql.session.localRelationChunkSizeRows"
+  val LOCAL_RELATION_CHUNK_SIZE_BYTES_KEY: String =
+    "spark.sql.session.localRelationChunkSizeBytes"
+  val LOCAL_RELATION_BATCH_OF_CHUNKS_SIZE_BYTES_KEY: String =
+    "spark.sql.session.localRelationBatchOfChunksSizeBytes"
+  val ARROW_EXECUTION_USE_LARGE_VAR_TYPES = "spark.sql.execution.arrow.useLargeVarTypes"
+  val PARSER_DFA_CACHE_FLUSH_THRESHOLD_KEY: String =
+    "spark.sql.parser.parserDfaCacheFlushThreshold"
+  val PARSER_DFA_CACHE_FLUSH_RATIO_KEY: String = "spark.sql.parser.parserDfaCacheFlushRatio"
+  val MANAGE_PARSER_CACHES_KEY: String = "spark.sql.parser.manageParserCaches"
 
   val confGetter: AtomicReference[() => SqlApiConf] = {
     new AtomicReference[() => SqlApiConf](() => DefaultSqlApiConf)

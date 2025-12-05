@@ -30,7 +30,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.api.r._
 import org.apache.spark.api.r.SpecialLengths
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.internal.{LogKeys, MDC}
+import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow.ArrowWriter
 import org.apache.spark.sql.types.StructType
@@ -85,7 +85,8 @@ class ArrowRRunner(
       override protected def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
         if (inputIterator.hasNext) {
           val arrowSchema =
-            ArrowUtils.toArrowSchema(schema, timeZoneId, errorOnDuplicatedFieldNames = true)
+            ArrowUtils.toArrowSchema(
+              schema, timeZoneId, errorOnDuplicatedFieldNames = true, largeVarTypes = false)
           val allocator = ArrowUtils.rootAllocator.newChildAllocator(
             "stdout writer for R", 0, Long.MaxValue)
           val root = VectorSchemaRoot.create(arrowSchema, allocator)

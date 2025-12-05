@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import platform
 from decimal import Decimal
 import os
 import time
@@ -25,7 +24,12 @@ from typing import cast
 from pyspark.sql import Row
 import pyspark.sql.functions as F
 from pyspark.sql.types import (
+    DecimalType,
+    StructType,
+    StructField,
+    StringType,
     DateType,
+    TimeType,
     TimestampType,
     TimestampNTZType,
 )
@@ -33,6 +37,7 @@ from pyspark.errors import (
     PySparkTypeError,
     PySparkValueError,
 )
+from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,
@@ -43,12 +48,41 @@ from pyspark.testing.sqlutils import (
 
 
 class DataFrameCreationTestsMixin:
+    def test_create_str_from_dict(self):
+        data = [
+            {"broker": {"teamId": 3398, "contactEmail": "abc.xyz@123.ca"}},
+        ]
+
+        for schema in [
+            StructType([StructField("broker", StringType())]),
+            "broker: string",
+        ]:
+            df = self.spark.createDataFrame(data, schema=schema)
+            self.assertEqual(
+                df.first().broker,
+                """{'teamId': 3398, 'contactEmail': 'abc.xyz@123.ca'}""",
+            )
+
     def test_create_dataframe_from_array_of_long(self):
         import array
 
         data = [Row(longarray=array.array("l", [-9223372036854775808, 0, 9223372036854775807]))]
         df = self.spark.createDataFrame(data)
         self.assertEqual(df.first(), Row(longarray=[-9223372036854775808, 0, 9223372036854775807]))
+
+    def test_create_dataframe_from_datetime_time(self):
+        import datetime
+
+        df = self.spark.createDataFrame(
+            [
+                (datetime.time(1, 2, 3),),
+                (datetime.time(4, 5, 6),),
+                (datetime.time(7, 8, 9),),
+            ],
+            ["t"],
+        )
+        self.assertIsInstance(df.schema["t"].dataType, TimeType)
+        self.assertEqual(df.count(), 3)
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_create_dataframe_from_pandas_with_timestamp(self):
@@ -111,11 +145,7 @@ class DataFrameCreationTestsMixin:
                 os.environ["TZ"] = orig_env_tz
             time.tzset()
 
-    # TODO(SPARK-43354): Re-enable test_create_dataframe_from_pandas_with_day_time_interval
-    @unittest.skipIf(
-        "pypy" in platform.python_implementation().lower() or not have_pandas,
-        "Fails in PyPy Python 3.8, should enable.",
-    )
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_create_dataframe_from_pandas_with_day_time_interval(self):
         # SPARK-37277: Test DayTimeIntervalType in createDataFrame without Arrow.
         import pandas as pd
@@ -131,14 +161,25 @@ class DataFrameCreationTestsMixin:
             [Row(value=None)],
         )
 
+    def test_check_decimal_nan(self):
+        data = [Row(dec=Decimal("NaN"))]
+        schema = StructType([StructField("dec", DecimalType(), False)])
+        with self.assertRaises(PySparkValueError):
+            self.spark.createDataFrame(data=data, schema=schema)
+
+    def test_decimal_round(self):
+        df = self.spark.createDataFrame([(Decimal(1.234),)], ["d"])
+        rounded = df.first().d
+        self.assertEqual(rounded, Decimal("1.233999999999999986"))
+
     def test_invalid_argument_create_dataframe(self):
         with self.assertRaises(PySparkTypeError) as pe:
             self.spark.createDataFrame([(1, 2)], schema=123)
 
         self.check_error(
             exception=pe.exception,
-            error_class="NOT_LIST_OR_NONE_OR_STRUCT",
-            message_parameters={"arg_name": "schema", "arg_type": "int"},
+            errorClass="NOT_LIST_OR_NONE_OR_STRUCT",
+            messageParameters={"arg_name": "schema", "arg_type": "int"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -146,8 +187,8 @@ class DataFrameCreationTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="INVALID_TYPE",
-            message_parameters={"arg_name": "data", "arg_type": "DataFrame"},
+            errorClass="INVALID_TYPE",
+            messageParameters={"arg_name": "data", "arg_type": "DataFrame"},
         )
 
     def test_partial_inference_failure(self):
@@ -156,8 +197,8 @@ class DataFrameCreationTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            error_class="CANNOT_DETERMINE_TYPE",
-            message_parameters={},
+            errorClass="CANNOT_DETERMINE_TYPE",
+            messageParameters={},
         )
 
     @unittest.skipIf(
@@ -191,8 +232,8 @@ class DataFrameCreationTestsMixin:
 
             self.check_error(
                 exception=pe.exception,
-                error_class="CANNOT_INFER_EMPTY_SCHEMA",
-                message_parameters={},
+                errorClass="CANNOT_INFER_EMPTY_SCHEMA",
+                messageParameters={},
             )
 
             # Dict has different types of values should fail
@@ -214,6 +255,13 @@ class DataFrameCreationTestsMixin:
                 sdf.withColumn("test", F.col("dict_col")[F.col("str_col")]).collect(),
                 [Row(str_col="second", dict_col={"first": 0.7, "second": 0.3}, test=0.3)],
             )
+
+    def test_empty_schema(self):
+        schema = StructType()
+        for data in [[], [Row()]]:
+            with self.subTest(data=data):
+                sdf = self.spark.createDataFrame(data, schema)
+                assertDataFrameEqual(sdf, data)
 
 
 class DataFrameCreationTests(

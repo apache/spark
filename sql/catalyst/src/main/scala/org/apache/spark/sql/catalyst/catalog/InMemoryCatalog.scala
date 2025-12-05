@@ -192,7 +192,10 @@ class InMemoryCatalog(
   override def createTable(
       tableDefinition: CatalogTable,
       ignoreIfExists: Boolean): Unit = synchronized {
-    assert(tableDefinition.identifier.database.isDefined)
+    assert(tableDefinition.identifier.database.isDefined,
+      "Table identifier " + tableDefinition.identifier.quotedString +
+      " is missing database name. " +
+      "Cannot create table without a database specified.")
     val db = tableDefinition.identifier.database.get
     requireDbExists(db)
     val table = tableDefinition.identifier.table
@@ -313,7 +316,10 @@ class InMemoryCatalog(
   }
 
   override def alterTable(tableDefinition: CatalogTable): Unit = synchronized {
-    assert(tableDefinition.identifier.database.isDefined)
+    assert(tableDefinition.identifier.database.isDefined,
+      "Table identifier " + tableDefinition.identifier.quotedString +
+      " is missing database name. " +
+      "Cannot alter table without a database specified.")
     val db = tableDefinition.identifier.database.get
     requireTableExists(db, tableDefinition.identifier.table)
     val updatedProperties = tableDefinition.properties.filter(kv => kv._1 != "comment")
@@ -328,6 +334,21 @@ class InMemoryCatalog(
     requireTableExists(db, table)
     val origTable = catalog(db).tables(table).table
     val newSchema = StructType(newDataSchema ++ origTable.partitionSchema)
+    catalog(db).tables(table).table = origTable.copy(schema = newSchema)
+  }
+
+  override def alterTableSchema(
+      db: String,
+      table: String,
+      newSchema: StructType): Unit = synchronized {
+    requireTableExists(db, table)
+    val origTable = catalog(db).tables(table).table
+
+    val partCols = origTable.partitionColumnNames
+    assert(newSchema.map(_.name).takeRight(partCols.length) == partCols,
+      s"Partition columns ${partCols.mkString("[", ", ", "]")} are only supported at the end of " +
+        s"the new schema ${newSchema.catalogString} for now.")
+
     catalog(db).tables(table).table = origTable.copy(schema = newSchema)
   }
 
@@ -509,7 +530,7 @@ class InMemoryCatalog(
         try {
           val fs = tablePath.getFileSystem(hadoopConfig)
           fs.mkdirs(newPartPath)
-          if(!fs.rename(oldPartPath, newPartPath)) {
+          if (!fs.rename(oldPartPath, newPartPath)) {
             throw new IOException(s"Renaming partition path from $oldPartPath to " +
               s"$newPartPath returned false")
           }

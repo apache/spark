@@ -27,6 +27,7 @@ import org.apache.spark.sql.internal.connector.{SimpleTableProvider, SupportsStr
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.Utils
 
 /**
  * This is no-op datasource. It does not do anything besides consuming its input.
@@ -48,6 +49,7 @@ private[noop] object NoopTable extends Table with SupportsWrite {
       TableCapability.TRUNCATE,
       TableCapability.ACCEPT_ANY_SCHEMA)
   }
+  override def toString: String = Utils.getFormattedClassName(this)
 }
 
 private[noop] object NoopWriteBuilder extends WriteBuilder
@@ -59,6 +61,7 @@ private[noop] object NoopWriteBuilder extends WriteBuilder
 private[noop] object NoopWrite extends Write {
   override def toBatch: BatchWrite = NoopBatchWrite
   override def toStreaming: StreamingWrite = NoopStreamingWrite
+  override def toString: String = Utils.getFormattedClassName(this)
 }
 
 private[noop] object NoopBatchWrite extends BatchWrite {
@@ -67,6 +70,7 @@ private[noop] object NoopBatchWrite extends BatchWrite {
   override def useCommitCoordinator(): Boolean = false
   override def commit(messages: Array[WriterCommitMessage]): Unit = {}
   override def abort(messages: Array[WriterCommitMessage]): Unit = {}
+  override def toString: String = Utils.getFormattedClassName(this)
 }
 
 private[noop] object NoopWriterFactory extends DataWriterFactory {
@@ -86,6 +90,7 @@ private[noop] object NoopStreamingWrite extends StreamingWrite {
   override def useCommitCoordinator(): Boolean = false
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
   override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
+  override def toString: String = Utils.getFormattedClassName(this)
 }
 
 private[noop] object NoopStreamingDataWriterFactory extends StreamingDataWriterFactory {

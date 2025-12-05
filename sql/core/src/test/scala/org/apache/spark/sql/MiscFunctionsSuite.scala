@@ -61,7 +61,7 @@ class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
         checkAnswer(sql(s"select $func"), Row(user))
         checkError(
           exception = intercept[ParseException](sql(s"select $func()")),
-          errorClass = "PARSE_SYNTAX_ERROR",
+          condition = "PARSE_SYNTAX_ERROR",
           parameters = Map("error" -> s"'$func'", "hint" -> ""))
       }
     }
@@ -238,7 +238,7 @@ class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("reflect(cast(null as string), 'fromString', a)")
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
       parameters = Map(
         "exprName" -> "`class`",
         "sqlExpr" -> "\"reflect(CAST(NULL AS STRING), fromString, a)\""),
@@ -247,7 +247,7 @@ class MiscFunctionsSuite extends QueryTest with SharedSparkSession {
       exception = intercept[AnalysisException] {
         df.selectExpr("reflect('java.util.UUID', cast(null as string), a)")
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
       parameters = Map(
         "exprName" -> "`method`",
         "sqlExpr" -> "\"reflect(java.util.UUID, CAST(NULL AS STRING), a)\""),

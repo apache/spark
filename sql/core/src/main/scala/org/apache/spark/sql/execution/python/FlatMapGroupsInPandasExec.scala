@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.python
 
-import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
 
@@ -46,7 +45,7 @@ case class FlatMapGroupsInPandasExec(
     child: SparkPlan)
   extends FlatMapGroupsInBatchExec {
 
-  protected val pythonEvalType: Int = PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
+  protected val pythonEvalType: Int = func.asInstanceOf[PythonUDF].evalType
 
   override protected def withNewChildInternal(newChild: SparkPlan): FlatMapGroupsInPandasExec =
     copy(child = newChild)

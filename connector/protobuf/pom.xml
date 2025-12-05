@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.13</artifactId>
-    <version>4.0.0-SNAPSHOT</version>
+    <version>4.2.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
@@ -146,7 +146,7 @@
                   <inputDirectories>
                     <include>src/test/resources/protobuf</include>
                   </inputDirectories>
-                  <includeStdTypes>true</includeStdTypes>
+                  <includeMavenTypes>direct</includeMavenTypes>
                   <outputTargets>
                     <outputTarget>
                       <type>java</type>
@@ -189,7 +189,7 @@
                   <inputDirectories>
                     <include>src/test/resources/protobuf</include>
                   </inputDirectories>
-                  <includeStdTypes>true</includeStdTypes>
+                  <includeMavenTypes>direct</includeMavenTypes>
                   <outputTargets>
                     <outputTarget>
                       <type>java</type>

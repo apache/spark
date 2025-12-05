@@ -25,7 +25,7 @@ import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 
 import scala.jdk.CollectionConverters._
 
-trait SparkTestUtils {
+private[spark] trait SparkTestUtils {
   // Adapted from the JavaCompiler.java doc examples
   private val SOURCE = JavaFileObject.Kind.SOURCE
 
@@ -66,8 +66,6 @@ trait SparkTestUtils {
     assert(result.exists(), "Compiled file not found: " + result.getAbsolutePath())
     val out = new File(destDir, fileName)
 
-    // renameTo cannot handle in and out files in different filesystems
-    // use google's Files.move instead
     Files.move(result.toPath, out.toPath)
 
     assert(out.exists(), "Destination file not moved: " + out.getAbsolutePath())
@@ -103,4 +101,4 @@ trait SparkTestUtils {
 
 }
 
-object SparkTestUtils extends SparkTestUtils
+private[spark] object SparkTestUtils extends SparkTestUtils

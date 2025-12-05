@@ -25,10 +25,13 @@ import scala.util.Random
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException, TaskContext}
+import org.apache.spark.TaskContext.withTaskContext
 import org.apache.spark.sql.Encoders
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, ValueStateImplWithTTL}
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.ttl.ValueStateImplWithTTL
+import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{TimeMode, TTLConfig, ValueState}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -44,15 +47,17 @@ case class TestClass(var id: Long, var name: String)
 class ValueStateSuite extends StateVariableSuiteBase {
 
   import StateStoreTestsHelper._
+  import testImplicits._
 
   test("Implicit key operations") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
+        stringEncoder, TimeMode.None())
 
       val stateName = "testState"
-      val testState: ValueState[Long] = handle.getValueState[Long]("testState", Encoders.scalaLong)
+      val testState: ValueState[Long] = handle.getValueState[Long]("testState",
+        TTLConfig.NONE)
       assert(ImplicitGroupingKeyTracker.getImplicitKeyOption.isEmpty)
       val ex = intercept[Exception] {
         testState.update(123)
@@ -61,7 +66,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
       assert(ex.isInstanceOf[SparkException])
       checkError(
         ex.asInstanceOf[SparkException],
-        errorClass = "INTERNAL_ERROR_TWS",
+        condition = "INTERNAL_ERROR_TWS",
         parameters = Map(
           "message" -> s"Implicit key not found in state store for stateName=$stateName"
         ),
@@ -80,7 +85,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
       }
       checkError(
         ex1.asInstanceOf[SparkException],
-        errorClass = "INTERNAL_ERROR_TWS",
+        condition = "INTERNAL_ERROR_TWS",
         parameters = Map(
           "message" -> s"Implicit key not found in state store for stateName=$stateName"
         ),
@@ -93,9 +98,10 @@ class ValueStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
+        stringEncoder, TimeMode.None())
 
-      val testState: ValueState[Long] = handle.getValueState[Long]("testState", Encoders.scalaLong)
+      val testState: ValueState[Long] = handle.getValueState[Long]("testState",
+        TTLConfig.NONE)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update(123)
       assert(testState.get() === 123)
@@ -119,12 +125,12 @@ class ValueStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
+        stringEncoder, TimeMode.None())
 
       val testState1: ValueState[Long] = handle.getValueState[Long](
-        "testState1", Encoders.scalaLong)
+        "testState1", TTLConfig.NONE)
       val testState2: ValueState[Long] = handle.getValueState[Long](
-        "testState2", Encoders.scalaLong)
+        "testState2", TTLConfig.NONE)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState1.update(123)
       assert(testState1.get() === 123)
@@ -164,19 +170,19 @@ class ValueStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store,
-        UUID.randomUUID(), Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
+        UUID.randomUUID(), stringEncoder, TimeMode.None())
 
-      val cfName = "_testState"
+      val cfName = "$testState"
       val ex = intercept[SparkUnsupportedOperationException] {
-        handle.getValueState[Long](cfName, Encoders.scalaLong)
+        handle.getValueState[Long](cfName, TTLConfig.NONE)
       }
       checkError(
         ex,
-        errorClass = "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS",
+        condition = "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS",
         parameters = Map(
           "colFamilyName" -> cfName
         ),
-        matchPVals = true
+        matchPVals = false
       )
     }
   }
@@ -185,14 +191,17 @@ class ValueStateSuite extends StateVariableSuiteBase {
     val storeId = StateStoreId(newDir(), Random.nextInt(), 0)
     val provider = new HDFSBackedStateStoreProvider()
     val storeConf = new StateStoreConf(new SQLConf())
+    val hadoopConf = new Configuration()
+    hadoopConf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
+
     val ex = intercept[StateStoreMultipleColumnFamiliesNotSupportedException] {
       provider.init(
         storeId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
-        useColumnFamilies = true, storeConf, new Configuration)
+        useColumnFamilies = true, storeConf, hadoopConf)
     }
     checkError(
       ex,
-      errorClass = "UNSUPPORTED_FEATURE.STATE_STORE_MULTIPLE_COLUMN_FAMILIES",
+      condition = "UNSUPPORTED_FEATURE.STATE_STORE_MULTIPLE_COLUMN_FAMILIES",
       parameters = Map(
         "stateStoreProvider" -> "HDFSBackedStateStoreProvider"
       ),
@@ -204,10 +213,10 @@ class ValueStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
+        stringEncoder, TimeMode.None())
 
       val testState: ValueState[Double] = handle.getValueState[Double]("testState",
-        Encoders.scalaDouble)
+        Encoders.scalaDouble, TTLConfig.NONE)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update(1.0)
       assert(testState.get().equals(1.0))
@@ -230,10 +239,10 @@ class ValueStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
+        stringEncoder, TimeMode.None())
 
       val testState: ValueState[Long] = handle.getValueState[Long]("testState",
-        Encoders.scalaLong)
+        TTLConfig.NONE)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update(1L)
       assert(testState.get().equals(1L))
@@ -256,10 +265,10 @@ class ValueStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
+        stringEncoder, TimeMode.None())
 
       val testState: ValueState[TestClass] = handle.getValueState[TestClass]("testState",
-        Encoders.product[TestClass])
+        TTLConfig.NONE)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update(TestClass(1, "testcase1"))
       assert(testState.get().equals(TestClass(1, "testcase1")))
@@ -282,10 +291,10 @@ class ValueStateSuite extends StateVariableSuiteBase {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.None())
+        stringEncoder, TimeMode.None())
 
       val testState: ValueState[POJOTestClass] = handle.getValueState[POJOTestClass]("testState",
-        Encoders.bean(classOf[POJOTestClass]))
+         Encoders.bean(classOf[POJOTestClass]), TTLConfig.NONE)
       ImplicitGroupingKeyTracker.setImplicitKey("test_key")
       testState.update(new POJOTestClass("testcase1", 1))
       assert(testState.get().equals(new POJOTestClass("testcase1", 1)))
@@ -304,13 +313,12 @@ class ValueStateSuite extends StateVariableSuiteBase {
     }
   }
 
-
   test(s"test Value state TTL") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val timestampMs = 10
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]], TimeMode.ProcessingTime(),
+        stringEncoder, TimeMode.ProcessingTime(),
         batchTimestampMs = Some(timestampMs))
 
       val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
@@ -325,12 +333,12 @@ class ValueStateSuite extends StateVariableSuiteBase {
       var ttlValue = testState.getTTLValue()
       assert(ttlValue.isDefined)
       assert(ttlValue.get._2 === ttlExpirationMs)
-      var ttlStateValueIterator = testState.getValuesInTTLState()
-      assert(ttlStateValueIterator.hasNext)
+      var ttlStateValueIterator = testState.getValueInTTLState()
+      assert(ttlStateValueIterator.isDefined)
 
       // increment batchProcessingTime, or watermark and ensure expired value is not returned
       val nextBatchHandle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
+        stringEncoder,
         TimeMode.ProcessingTime(), batchTimestampMs = Some(ttlExpirationMs))
 
       val nextBatchTestState: ValueStateImplWithTTL[String] =
@@ -347,10 +355,9 @@ class ValueStateSuite extends StateVariableSuiteBase {
       ttlValue = nextBatchTestState.getTTLValue()
       assert(ttlValue.isDefined)
       assert(ttlValue.get._2 === ttlExpirationMs)
-      ttlStateValueIterator = nextBatchTestState.getValuesInTTLState()
-      assert(ttlStateValueIterator.hasNext)
-      assert(ttlStateValueIterator.next() === ttlExpirationMs)
-      assert(ttlStateValueIterator.isEmpty)
+      ttlStateValueIterator = nextBatchTestState.getValueInTTLState()
+      assert(ttlStateValueIterator.isDefined)
+      assert(ttlStateValueIterator.get === ttlExpirationMs)
 
       // getWithoutTTL should still return the expired value
       assert(nextBatchTestState.getWithoutEnforcingTTL().get === "v1")
@@ -361,15 +368,15 @@ class ValueStateSuite extends StateVariableSuiteBase {
     }
   }
 
-  test("test negative or zero TTL duration throws error") {
+  test("test null or zero TTL duration throws error") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
       val batchTimestampMs = 10
       val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
-        Encoders.STRING.asInstanceOf[ExpressionEncoder[Any]],
+        stringEncoder,
         TimeMode.ProcessingTime(), batchTimestampMs = Some(batchTimestampMs))
 
-      Seq(null, Duration.ZERO, Duration.ofMinutes(-1)).foreach { ttlDuration =>
+      Seq(null, Duration.ofMinutes(-1)).foreach { ttlDuration =>
         val ttlConfig = TTLConfig(ttlDuration)
         val ex = intercept[SparkUnsupportedOperationException] {
           handle.getValueState[String]("testState", Encoders.STRING, ttlConfig)
@@ -377,7 +384,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
 
         checkError(
           ex,
-          errorClass = "STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE",
+          condition = "STATEFUL_PROCESSOR_TTL_DURATION_MUST_BE_POSITIVE",
           parameters = Map(
             "operationType" -> "update",
             "stateName" -> "testState"
@@ -387,6 +394,33 @@ class ValueStateSuite extends StateVariableSuiteBase {
       }
     }
   }
+
+  test("Value state TTL with non-primitive type") {
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+      val store = provider.getStore(0)
+      val timestampMs = 10
+      val handle = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        encoderFor(Encoders.product[TestClass]).asInstanceOf[ExpressionEncoder[Any]],
+        TimeMode.ProcessingTime(), batchTimestampMs = Some(timestampMs))
+
+      val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
+      val testState: ValueStateImplWithTTL[POJOTestClass] =
+        handle.getValueState[POJOTestClass]("testState",
+        Encoders.bean(classOf[POJOTestClass]), ttlConfig)
+          .asInstanceOf[ValueStateImplWithTTL[POJOTestClass]]
+      ImplicitGroupingKeyTracker.setImplicitKey(TestClass(1L, "k1"))
+      testState.update(new POJOTestClass("n1", 1))
+      assert(testState.get() === new POJOTestClass("n1", 1))
+      assert(testState.getWithoutEnforcingTTL().get === new POJOTestClass("n1", 1))
+
+      val ttlExpirationMs = timestampMs + 60000
+      val ttlValue = testState.getTTLValue()
+      assert(ttlValue.isDefined)
+      assert(ttlValue.get._2 === ttlExpirationMs)
+      val ttlStateValueIterator = testState.getValueInTTLState()
+      assert(ttlStateValueIterator.isDefined)
+    }
+  }
 }
 
 /**
@@ -394,11 +428,12 @@ class ValueStateSuite extends StateVariableSuiteBase {
  * types (ValueState, ListState, MapState) used in arbitrary stateful operators.
  */
 abstract class StateVariableSuiteBase extends SharedSparkSession
-  with BeforeAndAfter {
+  with BeforeAndAfter with AlsoTestWithEncodingTypes {
 
   before {
     StateStore.stop()
     require(!StateStore.isMaintenanceRunning)
+    spark.streams.stateStoreCoordinator // initialize the lazy coordinator
   }
 
   after {
@@ -410,6 +445,9 @@ abstract class StateVariableSuiteBase extends SharedSparkSession
 
   import StateStoreTestsHelper._
 
+  protected val stringEncoder = encoderFor(Encoders.STRING).asInstanceOf[ExpressionEncoder[Any]]
+
+  // dummy schema for initializing rocksdb provider
   protected def schemaForKeyRow: StructType = new StructType().add("key", BinaryType)
   protected def schemaForValueRow: StructType = new StructType().add("value", BinaryType)
 
@@ -429,20 +467,33 @@ abstract class StateVariableSuiteBase extends SharedSparkSession
       conf: Configuration = new Configuration,
       useColumnFamilies: Boolean = false): RocksDBStateStoreProvider = {
     val provider = new RocksDBStateStoreProvider()
+    conf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
     provider.init(
       storeId, schemaForKeyRow, schemaForValueRow, keyStateEncoderSpec,
       useColumnFamilies,
-      new StateStoreConf(sqlConf), conf, useMultipleValuesPerKey)
+      new StateStoreConf(sqlConf), conf, useMultipleValuesPerKey,
+      Some(new TestStateSchemaProvider))
     provider
   }
 
   protected def tryWithProviderResource[T](
       provider: StateStoreProvider)(f: StateStoreProvider => T): T = {
     try {
-      f(provider)
+      val tc = TaskContext.empty()
+      try {
+        withTaskContext(tc) {
+          f(provider)
+        }
+      } finally {
+        tc.markTaskCompleted(None)
+      }
     } finally {
       provider.close()
     }
   }
 }
 
+/**
+ * Test suite that runs all ValueStateSuite tests with row checksum enabled.
+ */
+class ValueStateSuiteWithRowChecksum extends ValueStateSuite with EnableStateStoreRowChecksum

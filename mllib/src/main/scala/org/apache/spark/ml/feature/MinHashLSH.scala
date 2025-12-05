@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import scala.util.Random
 
 import org.apache.hadoop.fs.Path
@@ -47,6 +49,9 @@ class MinHashLSHModel private[ml](
     override val uid: String,
     private[ml] val randCoefficients: Array[(Int, Int)])
   extends LSHModel[MinHashLSHModel] {
+
+  // For ml connect only
+  private[ml] def this() = this("", Array.empty)
 
   /** @group setParam */
   @Since("2.4.0")
@@ -207,6 +212,18 @@ object MinHashLSH extends DefaultParamsReadable[MinHashLSH] {
 
 @Since("2.1.0")
 object MinHashLSHModel extends MLReadable[MinHashLSHModel] {
+  private[ml] case class Data(randCoefficients: Array[Int])
+
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    serializeIntArray(data.randCoefficients, dos)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val randCoefficients = deserializeIntArray(dis)
+    Data(randCoefficients)
+  }
 
   @Since("2.1.0")
   override def read: MLReader[MinHashLSHModel] = new MinHashLSHModelReader
@@ -217,13 +234,11 @@ object MinHashLSHModel extends MLReadable[MinHashLSHModel] {
   private[MinHashLSHModel] class MinHashLSHModelWriter(instance: MinHashLSHModel)
     extends MLWriter {
 
-    private case class Data(randCoefficients: Array[Int])
-
     override protected def saveImpl(path: String): Unit = {
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.randCoefficients.flatMap(tuple => Array(tuple._1, tuple._2)))
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -233,13 +248,14 @@ object MinHashLSHModel extends MLReadable[MinHashLSHModel] {
     private val className = classOf[MinHashLSHModel].getName
 
     override def load(path: String): MinHashLSHModel = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath).select("randCoefficients").head()
-      val randCoefficients = data.getSeq[Int](0).grouped(2)
-        .map(tuple => (tuple(0), tuple(1))).toArray
-      val model = new MinHashLSHModel(metadata.uid, randCoefficients)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
+      val model = new MinHashLSHModel(
+        metadata.uid,
+        data.randCoefficients.grouped(2).map(tuple => (tuple(0), tuple(1))).toArray
+      )
 
       metadata.getAndSetParams(model)
       model

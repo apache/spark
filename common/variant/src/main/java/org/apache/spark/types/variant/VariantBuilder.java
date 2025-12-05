@@ -26,10 +26,9 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.util.*;
 
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonParser;
@@ -43,24 +42,29 @@ import static org.apache.spark.types.variant.VariantUtil.*;
  * Build variant value and metadata by parsing JSON values.
  */
 public class VariantBuilder {
+  public VariantBuilder(boolean allowDuplicateKeys) {
+    this.allowDuplicateKeys = allowDuplicateKeys;
+  }
+
   /**
    * Parse a JSON string as a Variant value.
    * @throws VariantSizeLimitException if the resulting variant value or metadata would exceed
    * the SIZE_LIMIT (for example, this could be a maximum of 16 MiB).
    * @throws IOException if any JSON parsing error happens.
    */
-  public static Variant parseJson(String json) throws IOException {
+  public static Variant parseJson(String json, boolean allowDuplicateKeys) throws IOException {
     try (JsonParser parser = new JsonFactory().createParser(json)) {
       parser.nextToken();
-      return parseJson(parser);
+      return parseJson(parser, allowDuplicateKeys);
     }
   }
 
   /**
-   * Similar {@link #parseJson(String)}, but takes a JSON parser instead of string input.
+   * Similar {@link #parseJson(String, boolean)}, but takes a JSON parser instead of string input.
    */
-  public static Variant parseJson(JsonParser parser) throws IOException {
-    VariantBuilder builder = new VariantBuilder();
+  public static Variant parseJson(JsonParser parser, boolean allowDuplicateKeys)
+      throws IOException {
+    VariantBuilder builder = new VariantBuilder(allowDuplicateKeys);
     builder.buildJson(parser);
     return builder.result();
   }
@@ -103,6 +107,14 @@ public class VariantBuilder {
     }
     writeLong(metadata, offsetStart + numKeys * offsetSize, currentOffset, offsetSize);
     return new Variant(Arrays.copyOfRange(writeBuffer, 0, writePos), metadata);
+  }
+
+  // Return the variant value only, without metadata.
+  // Used in shredding to produce a final value, where all shredded values refer to a common
+  // metadata. It is expected to be called instead of `result()`, although it is valid to call both
+  // methods, in any order.
+  public byte[] valueWithoutMetadata() {
+    return Arrays.copyOfRange(writeBuffer, 0, writePos);
   }
 
   public void appendString(String str) {
@@ -217,7 +229,7 @@ public class VariantBuilder {
   public void appendFloat(float f) {
     checkCapacity(1 + 4);
     writeBuffer[writePos++] = primitiveHeader(FLOAT);
-    writeLong(writeBuffer, writePos, Float.floatToIntBits(f), 8);
+    writeLong(writeBuffer, writePos, Float.floatToIntBits(f), 4);
     writePos += 4;
   }
 
@@ -228,6 +240,18 @@ public class VariantBuilder {
     writePos += U32_SIZE;
     System.arraycopy(binary, 0, writeBuffer, writePos, binary.length);
     writePos += binary.length;
+  }
+
+  public void appendUuid(UUID uuid) {
+    checkCapacity(1 + 16);
+    writeBuffer[writePos++] = primitiveHeader(UUID);
+
+    // UUID is stored big-endian, so don't use writeLong.
+    ByteBuffer buffer = ByteBuffer.wrap(writeBuffer, writePos, 16);
+    buffer.order(ByteOrder.BIG_ENDIAN);
+    buffer.putLong(writePos, uuid.getMostSignificantBits());
+    buffer.putLong(writePos + 8, uuid.getLeastSignificantBits());
+    writePos += 16;
   }
 
   // Add a key to the variant dictionary. If the key already exists, the dictionary is not modified.
@@ -258,23 +282,63 @@ public class VariantBuilder {
   // record the offset of the field. The offset is computed as `getWritePos() - start`.
   // 3. The caller calls `finishWritingObject` to finish writing a variant object.
   //
-  // This function is responsible to sort the fields by key and check for any duplicate field keys.
+  // This function is responsible to sort the fields by key. If there are duplicate field keys:
+  // - when `allowDuplicateKeys` is true, the field with the greatest offset value (the last
+  // appended one) is kept.
+  // - otherwise, throw an exception.
   public void finishWritingObject(int start, ArrayList<FieldEntry> fields) {
-    int dataSize = writePos - start;
     int size = fields.size();
     Collections.sort(fields);
     int maxId = size == 0 ? 0 : fields.get(0).id;
-    // Check for duplicate field keys. Only need to check adjacent key because they are sorted.
-    for (int i = 1; i < size; ++i) {
-      maxId = Math.max(maxId, fields.get(i).id);
-      String key = fields.get(i).key;
-      if (key.equals(fields.get(i - 1).key)) {
-        @SuppressWarnings("unchecked")
-        Map<String, String> parameters = Map$.MODULE$.<String, String>empty().updated("key", key);
-        throw new SparkRuntimeException("VARIANT_DUPLICATE_KEY", parameters,
-            null, new QueryContext[]{}, "");
+    if (allowDuplicateKeys) {
+      int distinctPos = 0;
+      // Maintain a list of distinct keys in-place.
+      for (int i = 1; i < size; ++i) {
+        maxId = Math.max(maxId, fields.get(i).id);
+        if (fields.get(i).id == fields.get(i - 1).id) {
+          // Found a duplicate key. Keep the field with a greater offset.
+          if (fields.get(distinctPos).offset < fields.get(i).offset) {
+            fields.set(distinctPos, fields.get(distinctPos).withNewOffset(fields.get(i).offset));
+          }
+        } else {
+          // Found a distinct key. Add the field to the list.
+          ++distinctPos;
+          fields.set(distinctPos, fields.get(i));
+        }
+      }
+      if (distinctPos + 1 < fields.size()) {
+        size = distinctPos + 1;
+        // Resize `fields` to `size`.
+        fields.subList(size, fields.size()).clear();
+        // Sort the fields by offsets so that we can move the value data of each field to the new
+        // offset without overwriting the fields after it.
+        fields.sort(Comparator.comparingInt(f -> f.offset));
+        int currentOffset = 0;
+        for (int i = 0; i < size; ++i) {
+          int oldOffset = fields.get(i).offset;
+          int fieldSize = VariantUtil.valueSize(writeBuffer, start + oldOffset);
+          System.arraycopy(writeBuffer, start + oldOffset,
+              writeBuffer, start + currentOffset, fieldSize);
+          fields.set(i, fields.get(i).withNewOffset(currentOffset));
+          currentOffset += fieldSize;
+        }
+        writePos = start + currentOffset;
+        // Change back to the sort order by field keys to meet the variant spec.
+        Collections.sort(fields);
+      }
+    } else {
+      for (int i = 1; i < size; ++i) {
+        maxId = Math.max(maxId, fields.get(i).id);
+        String key = fields.get(i).key;
+        if (key.equals(fields.get(i - 1).key)) {
+          @SuppressWarnings("unchecked")
+          Map<String, String> parameters = Map$.MODULE$.<String, String>empty().updated("key", key);
+          throw new SparkRuntimeException("VARIANT_DUPLICATE_KEY", parameters,
+              null, new QueryContext[]{}, "");
+        }
       }
     }
+    int dataSize = writePos - start;
     boolean largeSize = size > U8_MAX;
     int sizeBytes = largeSize ? U32_SIZE : 1;
     int idSize = getIntegerSize(maxId);
@@ -362,13 +426,24 @@ public class VariantBuilder {
         });
         break;
       default:
-        int size = valueSize(value, pos);
-        checkIndex(pos + size - 1, value.length);
-        checkCapacity(size);
-        System.arraycopy(value, pos, writeBuffer, writePos, size);
-        writePos += size;
+        shallowAppendVariantImpl(value, pos);
         break;
     }
+  }
+
+  // Append the variant value without rewriting or creating any metadata. This is used when
+  // building an object during shredding, where there is a fixed pre-existing metadata that
+  // all shredded values will refer to.
+  public void shallowAppendVariant(Variant v) {
+    shallowAppendVariantImpl(v.value, v.pos);
+  }
+
+  private void shallowAppendVariantImpl(byte[] value, int pos) {
+    int size = valueSize(value, pos);
+    checkIndex(pos + size - 1, value.length);
+    checkCapacity(size);
+    System.arraycopy(value, pos, writeBuffer, writePos, size);
+    writePos += size;
   }
 
   private void checkCapacity(int additional) {
@@ -397,6 +472,10 @@ public class VariantBuilder {
       this.key = key;
       this.id = id;
       this.offset = offset;
+    }
+
+    FieldEntry withNewOffset(int newOffset) {
+      return new FieldEntry(key, id, newOffset);
     }
 
     @Override
@@ -463,12 +542,13 @@ public class VariantBuilder {
   }
 
   // Choose the smallest unsigned integer type that can store `value`. It must be within
-  // `[0, U24_MAX]`.
+  // `[0, SIZE_LIMIT]`.
   private int getIntegerSize(int value) {
-    assert value >= 0 && value <= U24_MAX;
+    assert value >= 0 && value <= SIZE_LIMIT;
     if (value <= U8_MAX) return 1;
     if (value <= U16_MAX) return 2;
-    return U24_SIZE;
+    if (value <= U24_MAX) return 3;
+    return 4;
   }
 
   private void parseFloatingPoint(JsonParser parser) throws IOException {
@@ -502,4 +582,5 @@ public class VariantBuilder {
   private final HashMap<String, Integer> dictionary = new HashMap<>();
   // Store all keys in `dictionary` in the order of id.
   private final ArrayList<byte[]> dictionaryKeys = new ArrayList<>();
+  private final boolean allowDuplicateKeys;
 }

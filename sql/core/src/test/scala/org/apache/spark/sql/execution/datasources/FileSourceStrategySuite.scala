@@ -26,12 +26,14 @@ import org.apache.hadoop.fs.{BlockLocation, FileStatus, Path, RawLocalFileSystem
 import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.SparkException
+import org.apache.spark.internal.config
 import org.apache.spark.paths.SparkPath.{fromUrlString => sp}
-import org.apache.spark.sql._
+import org.apache.spark.sql.{execution, DataFrame, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionSet}
 import org.apache.spark.sql.catalyst.util
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.execution.{DataSourceScanExec, FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.functions._
@@ -44,7 +46,7 @@ import org.apache.spark.util.Utils
 class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
-  protected override def sparkConf = super.sparkConf.set("spark.default.parallelism", "1")
+  protected override def sparkConf = super.sparkConf.set(config.DEFAULT_PARALLELISM.key, "1")
 
   test("unpartitioned table, single partition") {
     val table =
@@ -398,7 +400,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
 
         Seq("p1=1/p2=2/p3=3/file1", "p1=1/p2=3/p3=3/file1").foreach { fileName =>
           val file = new File(tempDir, fileName)
-          assert(file.getParentFile.exists() || file.getParentFile.mkdirs())
+          assert(file.getParentFile.exists() || Utils.createDirectory(file.getParentFile))
           util.stringToFile(file, fileName)
         }
 
@@ -680,8 +682,8 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
     files.foreach {
       case (name, size) =>
         val file = new File(tempDir, name)
-        assert(file.getParentFile.exists() || file.getParentFile.mkdirs())
-        util.stringToFile(file, "*" * size)
+        assert(file.getParentFile.exists() || Utils.createDirectory(file.getParentFile))
+        util.stringToFile(file, "*".repeat(size))
     }
 
     val df = spark.read
@@ -690,7 +692,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
 
     if (buckets > 0) {
       val bucketed = df.queryExecution.analyzed transform {
-        case l @ LogicalRelation(r: HadoopFsRelation, _, _, _) =>
+        case l @ LogicalRelationWithTable(r: HadoopFsRelation, _) =>
           l.copy(relation =
             r.copy(bucketSpec =
               Some(BucketSpec(numBuckets = buckets, "c1" :: Nil, Nil)))(r.sparkSession))
@@ -720,7 +722,7 @@ object LastArguments {
 }
 
 /** A test [[FileFormat]] that records the arguments passed to buildReader, and returns nothing. */
-class TestFileFormat extends TextBasedFileFormat {
+case class TestFileFormat() extends TextBasedFileFormat {
 
   override def toString: String = "TestFileFormat"
 

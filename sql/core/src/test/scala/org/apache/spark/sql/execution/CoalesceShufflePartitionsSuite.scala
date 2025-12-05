@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.execution
 
+import java.nio.ByteOrder.{nativeOrder, BIG_ENDIAN}
+
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config.IO_ENCRYPTION_ENABLED
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.execution.adaptive._
 import org.apache.spark.sql.execution.adaptive.AQEShuffleReadExec
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
@@ -28,7 +31,8 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ArrayImplicits._
 
-class CoalesceShufflePartitionsSuite extends SparkFunSuite {
+class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
+    with AdaptiveSparkPlanHelper{
 
   private var originalActiveSparkSession: Option[SparkSession] = _
   private var originalInstantiatedSparkSession: Option[SparkSession] = _
@@ -107,8 +111,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite {
 
         // Then, let's look at the number of post-shuffle partitions estimated
         // by the ExchangeCoordinator.
-        val finalPlan = agg.queryExecution.executedPlan
-          .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+        val finalPlan = stripAQEPlan(agg.queryExecution.executedPlan)
         val shuffleReads = finalPlan.collect {
           case r @ CoalescedShuffleRead() => r
         }
@@ -153,8 +156,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite {
 
         // Then, let's look at the number of post-shuffle partitions estimated
         // by the ExchangeCoordinator.
-        val finalPlan = join.queryExecution.executedPlan
-          .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+        val finalPlan = stripAQEPlan(join.queryExecution.executedPlan)
         val shuffleReads = finalPlan.collect {
           case r @ CoalescedShuffleRead() => r
         }
@@ -176,16 +178,21 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite {
 
     test(s"determining the number of reducers: complex query 1$testNameNote") {
       val test: (SparkSession) => Unit = { spark: SparkSession =>
+        // The default lz4 compression does not generate the same compressed
+        // stream on all architectures especially for different endianness.
+        // Increase the maxRange on big endian so the same number of partitions
+        // are generated as on little endian.
+        val maxRange = if (nativeOrder().equals(BIG_ENDIAN)) 2000 else 1000
         val df1 =
           spark
-            .range(0, 1000, 1, numInputPartitions)
+            .range(0, maxRange, 1, numInputPartitions)
             .selectExpr("id % 500 as key1", "id as value1")
             .groupBy("key1")
             .count()
             .toDF("key1", "cnt1")
         val df2 =
           spark
-            .range(0, 1000, 1, numInputPartitions)
+            .range(0, maxRange, 1, numInputPartitions)
             .selectExpr("id % 500 as key2", "id as value2")
             .groupBy("key2")
             .count()
@@ -197,15 +204,14 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite {
         val expectedAnswer =
           spark
             .range(0, 500)
-            .selectExpr("id", "2 as cnt")
+            .selectExpr("id", s"${maxRange/500}L as cnt")
         QueryTest.checkAnswer(
           join,
           expectedAnswer.collect().toImmutableArraySeq)
 
         // Then, let's look at the number of post-shuffle partitions estimated
         // by the ExchangeCoordinator.
-        val finalPlan = join.queryExecution.executedPlan
-          .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+        val finalPlan = stripAQEPlan(join.queryExecution.executedPlan)
         val shuffleReads = finalPlan.collect {
           case r @ CoalescedShuffleRead() => r
         }
@@ -255,8 +261,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite {
 
         // Then, let's look at the number of post-shuffle partitions estimated
         // by the ExchangeCoordinator.
-        val finalPlan = join.queryExecution.executedPlan
-          .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+        val finalPlan = stripAQEPlan(join.queryExecution.executedPlan)
         val shuffleReads = finalPlan.collect {
           case r @ CoalescedShuffleRead() => r
         }
@@ -297,8 +302,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite {
             expectedAnswer.collect().toImmutableArraySeq)
 
           // Then, let's make sure we do not reduce number of post shuffle partitions.
-          val finalPlan = join.queryExecution.executedPlan
-            .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+          val finalPlan = stripAQEPlan(join.queryExecution.executedPlan)
           val shuffleReads = finalPlan.collect {
             case r @ CoalescedShuffleRead() => r
           }
@@ -316,7 +320,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite {
       import spark.implicits._
       spark.conf.set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "1KB")
       spark.conf.set(SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key, "10KB")
-      spark.conf.set(SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR, 2.0)
+      spark.conf.set(SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR.key, "2.0")
       val df00 = spark.range(0, 1000, 2)
         .selectExpr("id as key", "id as value")
         .union(Seq.fill(100000)((600, 600)).toDF("key", "value"))
@@ -344,7 +348,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite {
       import spark.implicits._
       spark.conf.set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
       spark.conf.set(SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key, "100B")
-      spark.conf.set(SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR, 2.0)
+      spark.conf.set(SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR.key, "2.0")
       val df00 = spark.range(0, 10, 2)
         .selectExpr("id as key", "id as value")
         .union(Seq.fill(1000)((600, 600)).toDF("key", "value"))
@@ -374,72 +378,71 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite {
 
   test("SPARK-24705 adaptive query execution works correctly when exchange reuse enabled") {
     val test: SparkSession => Unit = { spark: SparkSession =>
-      spark.sql("SET spark.sql.exchange.reuse=true")
-      val df = spark.range(0, 6, 1).selectExpr("id AS key", "id AS value")
+      withSQLConf("spark.sql.exchange.reuse" -> "true") {
+        val df = spark.range(0, 6, 1).selectExpr("id AS key", "id AS value")
 
-      // test case 1: a query stage has 3 child stages but they are the same stage.
-      // Final Stage 1
-      //   ShuffleQueryStage 0
-      //   ReusedQueryStage 0
-      //   ReusedQueryStage 0
-      val resultDf = df.join(df, "key").join(df, "key")
-      QueryTest.checkAnswer(resultDf, (0 to 5).map(i => Row(i, i, i, i)))
-      val finalPlan = resultDf.queryExecution.executedPlan
-        .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
-      assert(finalPlan.collect {
-        case ShuffleQueryStageExec(_, r: ReusedExchangeExec, _) => r
-      }.length == 2)
-      assert(
-        finalPlan.collect {
-          case r @ CoalescedShuffleRead() => r
-        }.length == 3)
-
-
-      // test case 2: a query stage has 2 parent stages.
-      // Final Stage 3
-      //   ShuffleQueryStage 1
-      //     ShuffleQueryStage 0
-      //   ShuffleQueryStage 2
-      //     ReusedQueryStage 0
-      val grouped = df.groupBy((col("key") + 1).as("key")).agg(max("value").as("value"))
-      val resultDf2 = grouped.groupBy(col("key") + 1).max("value")
-        .union(grouped.groupBy(col("key") + 2).max("value"))
-      QueryTest.checkAnswer(resultDf2, Row(2, 0) :: Row(3, 0) :: Row(3, 1) :: Row(4, 1) ::
-        Row(4, 2) :: Row(5, 2) :: Row(5, 3) :: Row(6, 3) :: Row(6, 4) :: Row(7, 4) :: Row(7, 5) ::
-        Row(8, 5) :: Nil)
-
-      val finalPlan2 = resultDf2.queryExecution.executedPlan
-        .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
-
-      // The result stage has 2 children
-      val level1Stages = finalPlan2.collect { case q: QueryStageExec => q }
-      assert(level1Stages.length == 2)
-
-      assert(
-        finalPlan2.collect {
-          case r @ CoalescedShuffleRead() => r
-        }.length == 2, "finalPlan2")
-
-      level1Stages.foreach(qs =>
-        assert(qs.plan.collect {
-          case r @ CoalescedShuffleRead() => r
-        }.length == 1,
-          "Wrong CoalescedShuffleRead below " + qs.simpleString(3)))
-
-      val leafStages = level1Stages.flatMap { stage =>
-        // All of the child stages of result stage have only one child stage.
-        val children = stage.plan.collect { case q: QueryStageExec => q }
-        assert(children.length == 1)
-        children
-      }
-      assert(leafStages.length == 2)
-
-      val reusedStages = level1Stages.flatMap { stage =>
-        stage.plan.collect {
+        // test case 1: a query stage has 3 child stages but they are the same stage.
+        // Final Stage 1
+        //   ShuffleQueryStage 0
+        //   ReusedQueryStage 0
+        //   ReusedQueryStage 0
+        val resultDf = df.join(df, "key").join(df, "key")
+        QueryTest.checkAnswer(resultDf, (0 to 5).map(i => Row(i, i, i, i)))
+        val finalPlan = stripAQEPlan(resultDf.queryExecution.executedPlan)
+        assert(finalPlan.collect {
           case ShuffleQueryStageExec(_, r: ReusedExchangeExec, _) => r
+        }.length == 2)
+        assert(
+          finalPlan.collect {
+            case r@CoalescedShuffleRead() => r
+          }.length == 3)
+
+
+        // test case 2: a query stage has 2 parent stages.
+        // Final Stage 3
+        //   ShuffleQueryStage 1
+        //     ShuffleQueryStage 0
+        //   ShuffleQueryStage 2
+        //     ReusedQueryStage 0
+        val grouped = df.groupBy((col("key") + 1).as("key")).agg(max("value").as("value"))
+        val resultDf2 = grouped.groupBy(col("key") + 1).max("value")
+          .union(grouped.groupBy(col("key") + 2).max("value"))
+        QueryTest.checkAnswer(resultDf2, Row(2, 0) :: Row(3, 0) :: Row(3, 1) :: Row(4, 1) ::
+          Row(4, 2) :: Row(5, 2) :: Row(5, 3) :: Row(6, 3) :: Row(6, 4) :: Row(7, 4) :: Row(7, 5) ::
+          Row(8, 5) :: Nil)
+
+        val finalPlan2 = stripAQEPlan(resultDf2.queryExecution.executedPlan)
+
+        // The result stage has 2 children
+        val level1Stages = finalPlan2.collect { case q: QueryStageExec => q }
+        assert(level1Stages.length == 2)
+
+        assert(
+          finalPlan2.collect {
+            case r@CoalescedShuffleRead() => r
+          }.length == 2, "finalPlan2")
+
+        level1Stages.foreach(qs =>
+          assert(qs.plan.collect {
+            case r@CoalescedShuffleRead() => r
+          }.length == 1,
+            "Wrong CoalescedShuffleRead below " + qs.simpleString(3)))
+
+        val leafStages = level1Stages.flatMap { stage =>
+          // All of the child stages of result stage have only one child stage.
+          val children = stage.plan.collect { case q: QueryStageExec => q }
+          assert(children.length == 1)
+          children
         }
+        assert(leafStages.length == 2)
+
+        val reusedStages = level1Stages.flatMap { stage =>
+          stage.plan.collect {
+            case ShuffleQueryStageExec(_, r: ReusedExchangeExec, _) => r
+          }
+        }
+        assert(reusedStages.length == 1)
       }
-      assert(reusedStages.length == 1)
     }
     withSparkSession(test, 400, None)
   }
@@ -451,8 +454,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite {
 
       QueryTest.checkAnswer(resultDf,
         Seq(0, 1, 2).map(i => Row(i)))
-      val finalPlan = resultDf.queryExecution.executedPlan
-        .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+      val finalPlan = stripAQEPlan(resultDf.queryExecution.executedPlan)
       assert(
         finalPlan.collect {
           case r @ CoalescedShuffleRead() => r
@@ -472,8 +474,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite {
 
       // Shuffle partition coalescing of the join is performed independent of the non-grouping
       // aggregate on the other side of the union.
-      val finalPlan = resultDf.queryExecution.executedPlan
-        .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+      val finalPlan = stripAQEPlan(resultDf.queryExecution.executedPlan)
       assert(
         finalPlan.collect {
           case r @ CoalescedShuffleRead() => r
@@ -488,8 +489,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite {
       val resultDf = ds.repartition(ds.col("id"))
       resultDf.collect()
 
-      val finalPlan = resultDf.queryExecution.executedPlan
-        .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+      val finalPlan = stripAQEPlan(resultDf.queryExecution.executedPlan)
       assert(
         finalPlan.collect {
           case r @ CoalescedShuffleRead() => r
@@ -499,6 +499,20 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite {
       // Before SPARK-34790, it will throw an exception when io encryption enabled.
       withSparkSession(test, Int.MaxValue, None, enableIOEncryption)
     }
+  }
+
+  test("SPARK-51505: log empty partition number metrics") {
+    val test: SparkSession => Unit = { spark: SparkSession =>
+      val df = spark.range(0, 1000, 1, 10).withColumn("value", expr("id % 3"))
+        .groupBy("value").agg("value" -> "sum")
+      df.collect()
+      val plan = df.queryExecution.executedPlan
+      val coalesce = collectFirst(plan) {
+        case e: AQEShuffleReadExec => e
+      }.get
+      assert(coalesce.metrics("numEmptyPartitions").value == 2)
+    }
+    withSparkSession(test, 100, None)
   }
 }
 

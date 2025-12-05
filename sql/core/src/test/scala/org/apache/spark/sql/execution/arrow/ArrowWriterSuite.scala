@@ -17,15 +17,23 @@
 
 package org.apache.spark.sql.execution.arrow
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.arrow.vector.VectorSchemaRoot
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.YearUDT
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.encoders.RowEncoder.{encoderFor => toRowEncoder}
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.util.{Geography => InternalGeography, Geometry => InternalGeometry}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized._
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, GeographyVal, GeometryVal, UTF8String}
+import org.apache.spark.util.MaybeNull
 
 class ArrowWriterSuite extends SparkFunSuite {
 
@@ -38,6 +46,8 @@ class ArrowWriterSuite extends SparkFunSuite {
       val datatype = dt match {
         case _: DayTimeIntervalType => DayTimeIntervalType()
         case _: YearMonthIntervalType => YearMonthIntervalType()
+        case _: TimeType => TimeType()
+        case u: UserDefinedType[_] => u.sqlType
         case tpe => tpe
       }
       val schema = new StructType().add("value", datatype, nullable = true)
@@ -49,11 +59,19 @@ class ArrowWriterSuite extends SparkFunSuite {
       }
       writer.finish()
 
+      val dataModified = data.map { datum =>
+        dt match {
+          case _: GeometryType => datum.asInstanceOf[GeometryVal].getBytes
+          case _: GeographyType => datum.asInstanceOf[GeographyVal].getBytes
+          case _ => datum
+        }
+      }
+
       val reader = new ArrowColumnVector(writer.root.getFieldVectors().get(0))
-      data.zipWithIndex.foreach {
+      dataModified.zipWithIndex.foreach {
         case (null, rowId) => assert(reader.isNullAt(rowId))
         case (datum, rowId) =>
-          val value = dt match {
+          val value = datatype match {
             case BooleanType => reader.getBoolean(rowId)
             case ByteType => reader.getByte(rowId)
             case ShortType => reader.getShort(rowId)
@@ -67,15 +85,35 @@ class ArrowWriterSuite extends SparkFunSuite {
             case DateType => reader.getInt(rowId)
             case TimestampType => reader.getLong(rowId)
             case TimestampNTZType => reader.getLong(rowId)
+            case _: TimeType => reader.getLong(rowId)
             case _: YearMonthIntervalType => reader.getInt(rowId)
             case _: DayTimeIntervalType => reader.getLong(rowId)
             case CalendarIntervalType => reader.getInterval(rowId)
+            case _: GeometryType => reader.getGeometry(rowId).getBytes
+            case _: GeographyType => reader.getGeography(rowId).getBytes
           }
           assert(value === datum)
       }
 
       writer.root.close()
     }
+
+    val wkbs = Seq("010100000000000000000031400000000000001c40",
+      "010100000000000000000034400000000000003540")
+      .map { x =>
+        x.grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+    }
+
+    val geographies = wkbs.map(x => InternalGeography.fromWkb(x, 4326).getValue)
+    val geometries = wkbs.map(x => InternalGeometry.fromWkb(x, 0).getValue)
+    val mixedGeometries = wkbs.zip(Seq(0, 4326)).map {
+      case (g, srid) => InternalGeometry.fromWkb(g, srid).getValue
+    }
+
+    check(GeometryType(0), geometries)
+    check(GeographyType(4326), geographies)
+    check(GeometryType("ANY"), mixedGeometries)
+    check(GeographyType("ANY"), geographies)
     check(BooleanType, Seq(true, null, false))
     check(ByteType, Seq(1.toByte, 2.toByte, null, 4.toByte))
     check(ShortType, Seq(1.toShort, 2.toShort, null, 4.toShort))
@@ -91,6 +129,7 @@ class ArrowWriterSuite extends SparkFunSuite {
     check(DateType, Seq(0, 1, 2, null, 4))
     check(TimestampType, Seq(0L, 3.6e9.toLong, null, 8.64e10.toLong), "America/Los_Angeles")
     check(TimestampNTZType, Seq(0L, 3.6e9.toLong, null, 8.64e10.toLong))
+    DataTypeTestUtils.timeTypes.foreach(check(_, Seq(0L, 4.32e4.toLong, null, 3723123456789L)))
     check(NullType, Seq(null, null, null))
     DataTypeTestUtils.yearMonthIntervalTypes
       .foreach(check(_, Seq(null, 0, 1, -1, Int.MaxValue, Int.MinValue)))
@@ -102,16 +141,258 @@ class ArrowWriterSuite extends SparkFunSuite {
         new CalendarInterval(-1, -2, -3),
         new CalendarInterval(-11, -22, -33),
         null))
+    check(new YearUDT, Seq(2020, 2021, null, 2022))
+  }
+
+  test("nested geographies") {
+    def check(
+      dt: StructType,
+      data: Seq[InternalRow]): Unit = {
+      val writer = ArrowWriter.create(dt.asInstanceOf[StructType], "UTC")
+
+      // Write data to arrow.
+      data.toSeq.foreach { datum =>
+        writer.write(datum)
+      }
+      writer.finish()
+
+      // Create arrow vector readers.
+      val vectors = writer.root.getFieldVectors.asScala
+        .map { new ArrowColumnVector(_) }.toArray.asInstanceOf[Array[ColumnVector]]
+
+      val batch = new ColumnarBatch(vectors, writer.root.getRowCount.toInt)
+
+      data.zipWithIndex.foreach { case (datum, i) =>
+        // Read data from arrow.
+        val internalRow = batch.getRow(i)
+
+        // All nullable results first must check whether the value is null.
+        if (datum.getStruct(0, 4) == null || internalRow.getStruct(0, 4) == null) {
+          assert(datum.getStruct(0, 4) == null && internalRow.getStruct(0, 4) == null)
+        } else {
+          val expectedStruct = datum.getStruct(0, 4)
+          val actualStruct = internalRow.getStruct(0, 4)
+          assert(expectedStruct.getInt(0) === actualStruct.getInt(0))
+          assert(expectedStruct.getInt(2) === actualStruct.getInt(2))
+
+          if (expectedStruct.getGeography(1) == null ||
+            actualStruct.getGeography(1) == null) {
+            assert(expectedStruct.getGeography(1) == null && actualStruct.getGeography(1) == null)
+          } else {
+            assert(expectedStruct.getGeography(1).getBytes ===
+              actualStruct.getGeography(1).getBytes)
+          }
+          if (expectedStruct.getGeography(3) == null ||
+            actualStruct.getGeography(3) == null) {
+            assert(expectedStruct.getGeography(3) == null && actualStruct.getGeography(3) == null)
+          } else {
+            assert(expectedStruct.getGeography(3).getBytes ===
+              actualStruct.getGeography(3).getBytes)
+          }
+
+          if (datum.getArray(1) == null ||
+            internalRow.getArray(1) == null) {
+            assert(internalRow.getArray(1) == null && datum.getArray(1) == null)
+          } else {
+            internalRow.getArray(1).toSeq[GeographyVal](GeographyType(4326))
+              .zip(datum.getArray(1).toSeq[GeographyVal](GeographyType(4326))).foreach {
+                case (actual, expected) =>
+                  assert(actual.getBytes === expected.getBytes)
+              }
+          }
+
+          if (datum.getMap(2) == null ||
+            internalRow.getMap(2) == null) {
+            assert(internalRow.getMap(2) == null && datum.getMap(2) == null)
+          } else {
+            assert(internalRow.getMap(2).keyArray().toSeq(StringType) ===
+              datum.getMap(2).keyArray().toSeq(StringType))
+            internalRow.getMap(2).valueArray().toSeq[GeographyVal](GeographyType("ANY"))
+              .zip(datum.getMap(2).valueArray().toSeq[GeographyVal](GeographyType("ANY"))).foreach {
+                case (actual, expected) =>
+                  assert((actual == null && expected == null) ||
+                    actual.getBytes === expected.getBytes)
+              }
+          }
+        }
+      }
+
+      writer.root.close()
+    }
+
+    val point1 = "010100000000000000000031400000000000001C40"
+      .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+    val point2 = "010100000000000000000035400000000000001E40"
+      .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+
+    val schema = new StructType()
+      .add(
+        "s",
+        new StructType()
+          .add("i1", "int")
+          .add("g0", "geography(4326)")
+          .add("i2", "int")
+          .add("g1", "geography(4326)"))
+      .add("a", "array<geography(4326)>")
+      .add("m", "map<string, geography(ANY)>")
+
+    val maybeNull5 = MaybeNull(5)
+    val maybeNull7 = MaybeNull(7)
+    val maybeNull11 = MaybeNull(11)
+    val maybeNull13 = MaybeNull(13)
+    val maybeNull17 = MaybeNull(17)
+
+    val nestedGeographySerializer = ExpressionEncoder(toRowEncoder(schema)).createSerializer()
+    val data = Iterator
+      .tabulate(100)(i =>
+        nestedGeographySerializer.apply(
+          (Row(
+            maybeNull5(
+              Row(
+                i,
+                maybeNull7(org.apache.spark.sql.types.Geography.fromWKB(point1)),
+                i + 1,
+                maybeNull11(org.apache.spark.sql.types.Geography.fromWKB(point2, 4326)))),
+            maybeNull7((0 until 10).map(j =>
+              org.apache.spark.sql.types.Geography.fromWKB(point2, 4326))),
+            maybeNull13(
+              Map((i.toString, maybeNull17(
+                org.apache.spark.sql.types.Geography.fromWKB(point1, 4326)))))))))
+      .map(_.copy()).toSeq
+
+    check(schema, data)
+  }
+
+  test("nested geometries") {
+    def check(
+      dt: StructType,
+      data: Seq[InternalRow]): Unit = {
+      val writer = ArrowWriter.create(dt.asInstanceOf[StructType], "UTC")
+
+      // Write data to arrow.
+      data.toSeq.foreach { datum =>
+        writer.write(datum)
+      }
+      writer.finish()
+
+      // Create arrow vector readers.
+      val vectors = writer.root.getFieldVectors.asScala
+        .map { new ArrowColumnVector(_) }.toArray.asInstanceOf[Array[ColumnVector]]
+
+      val batch = new ColumnarBatch(vectors, writer.root.getRowCount.toInt)
+      data.zipWithIndex.foreach { case (datum, i) =>
+        // Read data from arrow.
+        val internalRow = batch.getRow(i)
+
+        // All nullable results first must check whether the value is null.
+        if (datum.getStruct(0, 4) == null || internalRow.getStruct(0, 4) == null) {
+          assert(datum.getStruct(0, 4) == null && internalRow.getStruct(0, 4) == null)
+        } else {
+          val expectedStruct = datum.getStruct(0, 4)
+          val actualStruct = internalRow.getStruct(0, 4)
+          assert(expectedStruct.getInt(0) === actualStruct.getInt(0))
+          assert(expectedStruct.getInt(2) === actualStruct.getInt(2))
+
+          if (expectedStruct.getGeometry(1) == null ||
+            actualStruct.getGeometry(1) == null) {
+            assert(expectedStruct.getGeometry(1) == null && actualStruct.getGeometry(1) == null)
+          } else {
+            assert(expectedStruct.getGeometry(1).getBytes ===
+              actualStruct.getGeometry(1).getBytes)
+          }
+          if (expectedStruct.getGeometry(3) == null ||
+            actualStruct.getGeometry(3) == null) {
+            assert(expectedStruct.getGeometry(3) == null && actualStruct.getGeometry(3) == null)
+          } else {
+            assert(expectedStruct.getGeometry(3).getBytes ===
+              actualStruct.getGeometry(3).getBytes)
+          }
+
+          if (datum.getArray(1) == null ||
+            internalRow.getArray(1) == null) {
+            assert(internalRow.getArray(1) == null && datum.getArray(1) == null)
+          } else {
+            internalRow.getArray(1).toSeq[GeometryVal](GeometryType(0))
+              .zip(datum.getArray(1).toSeq[GeometryVal](GeometryType(0))).foreach {
+                case (actual, expected) =>
+                  assert(actual.getBytes === expected.getBytes)
+              }
+          }
+
+          if (datum.getMap(2) == null ||
+            internalRow.getMap(2) == null) {
+            assert(internalRow.getMap(2) == null && datum.getMap(2) == null)
+          } else {
+            assert(internalRow.getMap(2).keyArray().toSeq(StringType) ===
+              datum.getMap(2).keyArray().toSeq(StringType))
+            internalRow.getMap(2).valueArray().toSeq[GeometryVal](GeometryType("ANY"))
+              .zip(datum.getMap(2).valueArray().toSeq[GeometryVal](GeometryType("ANY"))).foreach {
+                case (actual, expected) =>
+                  assert((actual == null && expected == null) ||
+                    actual.getBytes === expected.getBytes)
+              }
+          }
+        }
+      }
+
+      writer.root.close()
+    }
+
+    val point1 = "010100000000000000000031400000000000001C40"
+      .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+    val point2 = "010100000000000000000035400000000000001E40"
+      .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+
+    val schema = new StructType()
+      .add(
+        "s",
+        new StructType()
+          .add("i1", "int")
+          .add("g0", "geometry(0)")
+          .add("i2", "int")
+          .add("g4326", "geometry(4326)"))
+      .add("a", "array<geometry(0)>")
+      .add("m", "map<string, geometry(ANY)>")
+
+    val maybeNull5 = MaybeNull(5)
+    val maybeNull7 = MaybeNull(7)
+    val maybeNull11 = MaybeNull(11)
+    val maybeNull13 = MaybeNull(13)
+    val maybeNull17 = MaybeNull(17)
+
+    val nestedGeometrySerializer = ExpressionEncoder(toRowEncoder(schema)).createSerializer()
+    val data = Iterator
+      .tabulate(100) { i =>
+        val mixedSrid = if (i % 2 == 0) 0 else 4326
+
+        nestedGeometrySerializer.apply(
+          (Row(
+            maybeNull5(
+              Row(
+                i,
+                maybeNull7(org.apache.spark.sql.types.Geometry.fromWKB(point1, 0)),
+                i + 1,
+                maybeNull11(org.apache.spark.sql.types.Geometry.fromWKB(point2, 4326)))),
+            maybeNull7((0 until 10).map(j =>
+              org.apache.spark.sql.types.Geometry.fromWKB(point2, 0))),
+            maybeNull13(
+              Map((i.toString, maybeNull17(
+                org.apache.spark.sql.types.Geometry.fromWKB(point1, mixedSrid))))))))
+      }.map(_.copy()).toSeq
+
+    check(schema, data)
   }
 
   test("get multiple") {
     def check(dt: DataType, data: Seq[Any], timeZoneId: String = null): Unit = {
-      val avroDatatype = dt match {
+      val datatype = dt match {
         case _: DayTimeIntervalType => DayTimeIntervalType()
         case _: YearMonthIntervalType => YearMonthIntervalType()
+        case _: TimeType => TimeType()
+        case u: UserDefinedType[_] => u.sqlType
         case tpe => tpe
       }
-      val schema = new StructType().add("value", avroDatatype, nullable = false)
+      val schema = new StructType().add("value", datatype, nullable = false)
       val writer = ArrowWriter.create(schema, timeZoneId)
       assert(writer.schema === schema)
 
@@ -121,7 +402,7 @@ class ArrowWriterSuite extends SparkFunSuite {
       writer.finish()
 
       val reader = new ArrowColumnVector(writer.root.getFieldVectors().get(0))
-      val values = dt match {
+      val values = datatype match {
         case BooleanType => reader.getBooleans(0, data.size)
         case ByteType => reader.getBytes(0, data.size)
         case ShortType => reader.getShorts(0, data.size)
@@ -132,6 +413,7 @@ class ArrowWriterSuite extends SparkFunSuite {
         case DateType => reader.getInts(0, data.size)
         case TimestampType => reader.getLongs(0, data.size)
         case TimestampNTZType => reader.getLongs(0, data.size)
+        case _: TimeType => reader.getLongs(0, data.size)
         case _: YearMonthIntervalType => reader.getInts(0, data.size)
         case _: DayTimeIntervalType => reader.getLongs(0, data.size)
       }
@@ -149,8 +431,10 @@ class ArrowWriterSuite extends SparkFunSuite {
     check(DateType, (0 until 10))
     check(TimestampType, (0 until 10).map(_ * 4.32e10.toLong), "America/Los_Angeles")
     check(TimestampNTZType, (0 until 10).map(_ * 4.32e10.toLong))
+    DataTypeTestUtils.timeTypes.foreach(check(_, (0 until 10).map(_ * 4.32e10.toLong)))
     DataTypeTestUtils.yearMonthIntervalTypes.foreach(check(_, (0 until 14)))
     DataTypeTestUtils.dayTimeIntervalTypes.foreach(check(_, (-10 until 10).map(_ * 1000.toLong)))
+    check(new YearUDT, 2018 to 2029)
   }
 
   test("write multiple, over initial capacity") {
@@ -158,7 +442,8 @@ class ArrowWriterSuite extends SparkFunSuite {
         schema: StructType,
         timeZoneId: String): (ArrowWriter, Int) = {
       val arrowSchema =
-        ArrowUtils.toArrowSchema(schema, timeZoneId, errorOnDuplicatedFieldNames = true)
+        ArrowUtils.toArrowSchema(
+          schema, timeZoneId, errorOnDuplicatedFieldNames = true, largeVarTypes = false)
       val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
       val vector = root.getFieldVectors.get(0)
       vector.allocateNew()

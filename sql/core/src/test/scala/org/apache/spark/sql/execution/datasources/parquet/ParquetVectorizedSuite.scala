@@ -34,13 +34,14 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.RowOrdering
+import org.apache.spark.sql.catalyst.expressions.{RowOrdering, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordReaderBase.ParquetRowGroupReader
 import org.apache.spark.sql.execution.vectorized.ColumnVectorUtils
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.collection.Utils.createArray
 
 /**
  * A test suite on the vectorized Parquet reader. Unlike `ParquetIOSuite`, this focuses on
@@ -480,6 +481,173 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
     }
   }
 
+  truncateTypeTest("primitive type", IntegerType, LongType, IntegerType)
+
+  truncateTypeTest("basic struct",
+    readType = StructType(Seq(
+      StructField("a", IntegerType),
+      StructField("b", StringType),
+      StructField("c", BooleanType)
+    )),
+    requestedType = StructType(Seq(
+      StructField("a", LongType),
+      StructField("b", StringType)
+    )),
+    expectedType = StructType(Seq(
+      StructField("a", IntegerType),
+      StructField("b", StringType)
+    ))
+  )
+
+  truncateTypeTest("nested struct",
+    readType = StructType(Seq(
+      StructField("nested", StructType(Seq(
+        StructField("x", IntegerType),
+        StructField("y", StringType),
+        StructField("z", DoubleType)
+      ))),
+      StructField("extra", BooleanType)
+    )),
+    requestedType = StructType(Seq(
+      StructField("nested", StructType(Seq(
+        StructField("x", IntegerType),
+        StructField("y", StringType)
+      ))),
+      StructField("extra", BooleanType)
+    )),
+    expectedType = StructType(Seq(
+      StructField("nested", StructType(Seq(
+        StructField("x", IntegerType),
+        StructField("y", StringType)
+      ))),
+      StructField("extra", BooleanType)
+    ))
+  )
+
+  truncateTypeTest("empty structs",
+    readType = StructType(Seq.empty),
+    requestedType = StructType(Seq.empty),
+    expectedType = StructType(Seq.empty)
+  )
+
+  truncateTypeTest("simple arrays",
+    readType = ArrayType(IntegerType),
+    requestedType = ArrayType(LongType),
+    expectedType = ArrayType(IntegerType)
+  )
+
+  truncateTypeTest("structs in arrays",
+    readType = ArrayType(StructType(Seq(
+      StructField("a", IntegerType),
+      StructField("b", StringType),
+      StructField("c", BooleanType)
+    ))),
+    requestedType = ArrayType(StructType(Seq(
+      StructField("a", IntegerType),
+      StructField("b", StringType)
+    ))),
+    expectedType = ArrayType(StructType(Seq(
+      StructField("a", IntegerType),
+      StructField("b", StringType)
+    )))
+  )
+
+  truncateTypeTest("nested array, containsNull is preserved",
+    readType = ArrayType(ArrayType(IntegerType, containsNull = false)),
+    requestedType = ArrayType(ArrayType(IntegerType, containsNull = true)),
+    expectedType = ArrayType(ArrayType(IntegerType, containsNull = false))
+  )
+
+  truncateTypeTest("map with primitive key/value types",
+    readType = MapType(StringType, IntegerType),
+    requestedType = MapType(StringType, LongType),
+    expectedType = MapType(StringType, IntegerType)
+  )
+
+  truncateTypeTest("map with struct values needing truncation",
+    readType = MapType(StringType, StructType(Seq(
+      StructField("a", IntegerType),
+      StructField("b", StringType),
+      StructField("c", DoubleType)
+    ))),
+    requestedType = MapType(StringType, StructType(Seq(
+      StructField("a", IntegerType),
+      StructField("b", StringType)
+    ))),
+    expectedType = MapType(StringType, StructType(Seq(
+      StructField("a", IntegerType),
+      StructField("b", StringType)
+    )))
+  )
+
+  truncateTypeTest("map with struct keys needing truncation",
+    readType = MapType(StructType(Seq(
+      StructField("a", IntegerType),
+      StructField("b", DoubleType),
+      StructField("c", StringType)
+    )), IntegerType),
+    requestedType = MapType(StructType(Seq(
+      StructField("a", IntegerType),
+      StructField("b", FloatType)
+    )), IntegerType),
+    expectedType = MapType(StructType(Seq(
+      StructField("a", IntegerType),
+      StructField("b", DoubleType)
+    )), IntegerType)
+  )
+
+  truncateTypeTest("map valueContainsNull is preserved",
+    readType = MapType(StringType, IntegerType, valueContainsNull = false),
+    requestedType = MapType(StringType, IntegerType, valueContainsNull = true),
+    expectedType = MapType(StringType, IntegerType, valueContainsNull = false)
+  )
+
+  truncateTypeTest("all complex types",
+    readType = StructType(Seq(
+      StructField("complexField", ArrayType(MapType(StringType, StructType(Seq(
+        StructField("x", IntegerType),
+        StructField("y", StringType),
+        StructField("z", BooleanType)
+      ))))),
+      StructField("extraTopLevel", DoubleType)
+    )),
+    requestedType = StructType(Seq(
+      StructField("complexField", ArrayType(MapType(StringType, StructType(Seq(
+        StructField("x", IntegerType),
+        StructField("y", StringType)
+      )))))
+    )),
+    expectedType = StructType(Seq(
+      StructField("complexField", ArrayType(MapType(StringType, StructType(Seq(
+        StructField("x", IntegerType),
+        StructField("y", StringType)
+      )))))
+    ))
+  )
+
+  truncateTypeTest("struct UDT",
+    readType = new StructType()
+      .add("_1", LongType)
+      .add("_2", IntegerType)
+      .add("_3", StringType),
+    requestedType = new TestStructUDT(),
+    expectedType = new StructType()
+      .add("_1", LongType)
+      .add("_2", IntegerType)
+  )
+
+  private def truncateTypeTest(
+    testName: String,
+    readType: DataType,
+    requestedType: DataType,
+    expectedType: DataType
+  ): Unit = {
+    test(s"truncateType - $testName") {
+      val result = VectorizedParquetRecordReader.truncateType(readType, requestedType)
+      assert(result === expectedType)
+    }
+  }
+
   private def testPrimitiveString(
       firstRowIndexesOpt: Option[Seq[Long]],
       rangesOpt: Option[Seq[(Long, Long)]],
@@ -501,8 +669,8 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
     val maxDef = if (inputValues.contains(null)) 1 else 0
     val ty = parquetSchema.asGroupType().getType("a").asPrimitiveType()
     val cd = new ColumnDescriptor(Seq("a").toArray, ty, 0, maxDef)
-    val repetitionLevels = Array.fill[Int](inputValues.length)(0)
-    val definitionLevels = inputValues.map(v => if (v == null) 0 else 1)
+    val repetitionLevels = createArray(inputValues.length, 0)
+    val definitionLevels = inputValues.map(v => if (v == null) 0 else maxDef)
 
     val memPageStore = new MemPageStore(expectedValues.length)
 
@@ -758,6 +926,32 @@ class ParquetVectorizedSuite extends QueryTest with ParquetTest with SharedSpark
         index += 1
         res
       }
+    }
+  }
+}
+
+@SQLUserDefinedType(udt = classOf[TestStructUDT])
+case class TestStruct(a: Integer, b: java.lang.Long)
+
+class TestStructUDT extends UserDefinedType[TestStruct] {
+  override def sqlType: DataType = new StructType()
+    .add("_1", IntegerType)
+    .add("_2", LongType)
+
+  override def serialize(n: TestStruct): Any = {
+    val row = new SpecificInternalRow(sqlType.asInstanceOf[StructType].map(_.dataType))
+    if (n.a == null) row.setNullAt(0) else row.setInt(0, n.a)
+    if (n.b == null) row.setNullAt(1) else row.setLong(1, n.b)
+    row
+  }
+
+  override def userClass: Class[TestStruct] = classOf[TestStruct]
+
+  override def deserialize(datum: Any): TestStruct = {
+    datum match {
+      case row: InternalRow => TestStruct(
+        if (row.isNullAt(0)) null else row.getInt(0),
+        if (row.isNullAt(1)) null else row.getLong(1))
     }
   }
 }

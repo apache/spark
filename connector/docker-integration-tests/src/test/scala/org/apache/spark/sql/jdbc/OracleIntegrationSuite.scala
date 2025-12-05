@@ -26,7 +26,7 @@ import org.apache.spark.sql.{DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, WholeStageCodegenExec}
-import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.LogicalRelationWithTable
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCRelation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -54,14 +54,15 @@ import org.apache.spark.tags.DockerTest
  * A sequence of commands to build the Oracle Database Free container image:
  *  $ git clone https://github.com/oracle/docker-images.git
  *  $ cd docker-images/OracleDatabase/SingleInstance/dockerfiles
- *  $ ./buildContainerImage.sh -v 23.2.0 -f
- *  $ export ORACLE_DOCKER_IMAGE_NAME=oracle/database:23.2.0-free
+ *  $ ./buildContainerImage.sh -v 23.4.0 -f
+ *  $ export ORACLE_DOCKER_IMAGE_NAME=oracle/database:23.4.0-free
  *
- * This procedure has been validated with Oracle Database Free version 23.2.0,
- * and with Oracle Express Edition versions 18.4.0 and 21.3.0
+ * This procedure has been validated with Oracle Database Free version 23.4.0,
+ * and with Oracle Express Edition versions 18.4.0 and 21.4.0
  */
 @DockerTest
-class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSparkSession {
+class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
+  with SharedSparkSession {
   import testImplicits._
 
   override val db = new OracleDatabaseOnDocker
@@ -456,7 +457,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       .load()
 
     df1.logicalPlan match {
-      case LogicalRelation(JDBCRelation(_, parts, _), _, _, _) =>
+      case LogicalRelationWithTable(JDBCRelation(_, parts, _, _), _) =>
         val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
         assert(whereClauses === Set(
           """"D" < '2018-07-11' or "D" is null""",
@@ -479,7 +480,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       .load()
 
     df2.logicalPlan match {
-      case LogicalRelation(JDBCRelation(_, parts, _), _, _, _) =>
+      case LogicalRelationWithTable(JDBCRelation(_, parts, _, _), _) =>
         val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
         assert(whereClauses === Set(
           """"T" < '2018-07-15 20:50:32.5' or "T" is null""",

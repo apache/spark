@@ -25,7 +25,6 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.catalyst.util.fileToString
 
 trait SQLKeywordUtils extends SparkFunSuite with SQLHelper {
 
@@ -38,7 +37,8 @@ trait SQLKeywordUtils extends SparkFunSuite with SQLHelper {
       getWorkspaceFilePath("sql", "api", "src", "main", "antlr4", "org",
         "apache", "spark", "sql", "catalyst", "parser", "SqlBaseLexer.g4").toFile
 
-    (fileToString(sqlBaseParserPath) + fileToString(sqlBaseLexerPath)).split("\n")
+    (Files.readString(sqlBaseParserPath.toPath) +
+      Files.readString(sqlBaseLexerPath.toPath)).split("\n")
   }
 
   // each element is an array of 4 string: the keyword name, reserve or not in Spark ANSI mode,
@@ -47,7 +47,7 @@ trait SQLKeywordUtils extends SparkFunSuite with SQLHelper {
     val docPath = {
       getWorkspaceFilePath("docs", "sql-ref-ansi-compliance.md").toFile
     }
-    fileToString(docPath).split("\n")
+    Files.readString(docPath.toPath).split("\n")
       .dropWhile(!_.startsWith("|Keyword|")).drop(2).takeWhile(_.startsWith("|"))
       .map(_.stripPrefix("|").split("\\|").map(_.trim))
   }
@@ -98,7 +98,7 @@ trait SQLKeywordUtils extends SparkFunSuite with SQLHelper {
           }
           (symbol, literals) :: Nil
         } else {
-          val literal = literalDef.replaceAll("'", "").trim
+          val literal = literalDef.split("\\{")(0).replaceAll("'", "").trim
           // The case where a symbol string and its literal string are different,
           // e.g., `SETMINUS: 'MINUS';`.
           if (symbol != literal) {

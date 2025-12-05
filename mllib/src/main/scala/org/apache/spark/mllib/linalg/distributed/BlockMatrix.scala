@@ -17,13 +17,15 @@
 
 package org.apache.spark.mllib.linalg.distributed
 
+import java.util.Objects
+
 import scala.collection.mutable.ArrayBuffer
 
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, Matrix => BM}
 
 import org.apache.spark.{Partitioner, PartitionIdPassthrough, SparkException}
 import org.apache.spark.annotation.Since
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -90,7 +92,7 @@ private[mllib] class GridPartitioner(
   }
 
   override def hashCode: Int = {
-    com.google.common.base.Objects.hashCode(
+    Objects.hash(
       rows: java.lang.Integer,
       cols: java.lang.Integer,
       rowsPerPart: java.lang.Integer,
@@ -322,7 +324,10 @@ class BlockMatrix @Since("1.3.0") (
     val m = numRows().toInt
     val n = numCols().toInt
     val mem = m * n / 125000
-    if (mem > 500) logWarning(s"Storing this matrix will require $mem MiB of memory!")
+    if (mem > 500) {
+      logWarning(log"Storing this matrix will require ${MDC(LogKeys.MEMORY_SIZE, mem)} " +
+        log"MiB of memory!")
+    }
     val localBlocks = blocks.collect()
     val values = new Array[Double](m * n)
     localBlocks.foreach { case ((blockRowIndex, blockColIndex), submat) =>

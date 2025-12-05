@@ -24,18 +24,17 @@ import java.util.Locale
 import scala.collection.mutable.ArrayBuilder
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{IndexAlreadyExistsException, NoSuchIndexException}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.index.TableIndex
-import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NamedReference, NullOrdering, SortDirection}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.connector.expressions.{Expression, Extract, FieldReference, NamedReference, NullOrdering, SortDirection}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.types._
 
-private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
+private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with NoLegacyJDBCError {
 
   override def canHandle(url : String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:mysql")
@@ -46,12 +45,46 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
   // See https://dev.mysql.com/doc/refman/8.0/en/aggregate-functions.html
   private val supportedAggregateFunctions =
     Set("MAX", "MIN", "SUM", "COUNT", "AVG") ++ distinctUnsupportedAggregateFunctions
-  private val supportedFunctions = supportedAggregateFunctions
+  private val supportedFunctions = supportedAggregateFunctions ++ Set("DATE_ADD", "DATE_DIFF")
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
+  override def isObjectNotFoundException(e: SQLException): Boolean = {
+    e.getErrorCode == 1146
+  }
+
   class MySQLSQLBuilder extends JDBCSQLBuilder {
+
+    override def visitExtract(extract: Extract): String = {
+      val field = extract.field
+      field match {
+        case "DAY_OF_YEAR" => s"DAYOFYEAR(${build(extract.source())})"
+        case "WEEK" => s"WEEKOFYEAR(${build(extract.source())})"
+        // MySQL does not support the date field YEAR_OF_WEEK.
+        // We can't push down SECOND due to the difference in result types between Spark and
+        // MySQL. Spark returns decimal(8, 6), but MySQL returns integer.
+        case "YEAR_OF_WEEK" | "SECOND" =>
+          visitUnexpectedExpr(extract)
+        // WEEKDAY uses Monday = 0, Tuesday = 1, ... and ISO standard is Monday = 1, ...,
+        // so we use the formula (WEEKDAY + 1) to follow the ISO standard.
+        case "DAY_OF_WEEK" => s"(WEEKDAY(${build(extract.source())}) + 1)"
+        // MINUTE, HOUR, DAY, MONTH, QUARTER, YEAR are identical on MySQL and Spark for
+        // both datetime and interval types.
+        case _ => super.visitExtract(field, build(extract.source()))
+      }
+    }
+
+    override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
+      funcName match {
+        case "DATE_ADD" =>
+          s"DATE_ADD(${inputs(0)}, INTERVAL ${inputs(1)} DAY)"
+        case "DATE_DIFF" =>
+          s"DATEDIFF(${inputs(0)}, ${inputs(1)})"
+        case _ => super.visitSQLFunction(funcName, inputs)
+      }
+    }
+
     override def visitSortOrder(
         sortKey: String, sortDirection: SortDirection, nullOrdering: NullOrdering): String = {
       (sortDirection, nullOrdering) match {
@@ -64,6 +97,21 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
         case (SortDirection.DESCENDING, NullOrdering.NULLS_LAST) =>
           s"$sortKey $sortDirection"
       }
+    }
+
+    override def visitStartsWith(l: String, r: String): String = {
+      val value = r.substring(1, r.length() - 1)
+      s"$l LIKE '${escapeSpecialCharsForLikePattern(value)}%' ESCAPE '\\\\'"
+    }
+
+    override def visitEndsWith(l: String, r: String): String = {
+      val value = r.substring(1, r.length() - 1)
+      s"$l LIKE '%${escapeSpecialCharsForLikePattern(value)}' ESCAPE '\\\\'"
+    }
+
+    override def visitContains(l: String, r: String): String = {
+      val value = r.substring(1, r.length() - 1)
+      s"$l LIKE '%${escapeSpecialCharsForLikePattern(value)}%' ESCAPE '\\\\'"
     }
 
     override def visitAggregateFunction(
@@ -142,13 +190,19 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
         // https://github.com/mysql/mysql-connector-j/blob/8.3.0/src/main/core-api/java/com/mysql/cj/MysqlType.java#L251
         // scalastyle:on line.size.limit
         Some(getTimestampType(md.build()))
-      case Types.TIMESTAMP => Some(TimestampType)
+      case Types.TIMESTAMP if !conf.legacyMySqlTimestampNTZMappingEnabled => Some(TimestampType)
       case _ => None
     }
   }
 
   override def quoteIdentifier(colName: String): String = {
-    s"`$colName`"
+    // Per MySQL documentation: https://dev.mysql.com/doc/refman/8.4/en/identifiers.html
+    //
+    // Identifier quote characters can be included within an identifier if you quote the
+    // identifier. If the character to be included within the identifier is the same as
+    // that used to quote the identifier itself, then you need to double the character.
+    val escapedColName = colName.replace("`", "``")
+    s"`$escapedColName`"
   }
 
   override def schemasExists(conn: Connection, options: JDBCOptions, schema: String): Boolean = {
@@ -171,6 +225,11 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
+
+  // See https://dev.mysql.com/doc/mysql-errors/8.0/en/server-error-reference.html
+  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+    "42000".equals(exception.getSQLState)
+  }
 
   // See https://dev.mysql.com/doc/refman/8.0/en/alter-table.html
   override def getUpdateColumnTypeQuery(
@@ -228,7 +287,8 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
     // In MYSQL, DATETIME is TIMESTAMP WITHOUT TIME ZONE
     // https://github.com/mysql/mysql-connector-j/blob/8.3.0/src/main/core-api/java/com/mysql/cj/MysqlType.java#L251
     // scalastyle:on line.size.limit
-    case TimestampNTZType => Option(JdbcType("DATETIME", java.sql.Types.TIMESTAMP))
+    case TimestampNTZType if !conf.legacyMySqlTimestampNTZMappingEnabled =>
+      Option(JdbcType("DATETIME", java.sql.Types.TIMESTAMP))
     case _ => JdbcUtils.getCommonJDBCType(dt)
   }
 
@@ -314,25 +374,30 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
 
   override def classifyException(
       e: Throwable,
-      errorClass: String,
+      condition: String,
       messageParameters: Map[String, String],
-      description: String): AnalysisException = {
+      description: String,
+      isRuntime: Boolean): Throwable with SparkThrowable = {
     e match {
       case sqlException: SQLException =>
         sqlException.getErrorCode match {
           // ER_DUP_KEYNAME
-          case 1061 if errorClass == "FAILED_JDBC.CREATE_INDEX" =>
+          case 1050 if condition == "FAILED_JDBC.RENAME_TABLE" =>
+            val newTable = messageParameters("newName")
+            throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
+          case 1061 if condition == "FAILED_JDBC.CREATE_INDEX" =>
             val indexName = messageParameters("indexName")
             val tableName = messageParameters("tableName")
             throw new IndexAlreadyExistsException(indexName, tableName, cause = Some(e))
-          case 1091 if errorClass == "FAILED_JDBC.DROP_INDEX" =>
+          case 1091 if condition == "FAILED_JDBC.DROP_INDEX" =>
             val indexName = messageParameters("indexName")
             val tableName = messageParameters("tableName")
             throw new NoSuchIndexException(indexName, tableName, cause = Some(e))
-          case _ => super.classifyException(e, errorClass, messageParameters, description)
+          case _ =>
+            super.classifyException(e, condition, messageParameters, description, isRuntime)
         }
       case unsupported: UnsupportedOperationException => throw unsupported
-      case _ => super.classifyException(e, errorClass, messageParameters, description)
+      case _ => super.classifyException(e, condition, messageParameters, description, isRuntime)
     }
   }
 
@@ -365,7 +430,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
       }
 
       options.prepareQuery +
-        s"SELECT $columnList FROM ${options.tableOrQuery} $tableSampleClause" +
+        s"SELECT $hintClause$columnList FROM $tableOrQuery $tableSampleClause" +
         s" $whereClause $groupByClause $orderByClause $limitOrOffsetStmt"
     }
   }
@@ -376,4 +441,8 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper {
   override def supportsLimit: Boolean = true
 
   override def supportsOffset: Boolean = true
+
+  override def supportsHint: Boolean = true
+
+  override def supportsJoin: Boolean = true
 }

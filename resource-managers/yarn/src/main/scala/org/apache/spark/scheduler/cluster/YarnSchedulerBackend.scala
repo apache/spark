@@ -29,7 +29,7 @@ import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
-import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.resource.ResourceProfile
@@ -179,7 +179,7 @@ private[spark] abstract class YarnSchedulerBackend(
       resourceProfileId: Int): Seq[BlockManagerId] = {
     // TODO (SPARK-33481) This is a naive way of calculating numMergersDesired for a stage,
     // TODO we can use better heuristics to calculate numMergersDesired for a stage.
-    val maxExecutors = if (Utils.isDynamicAllocationEnabled(sc.getConf)) {
+    val maxExecutors = if (Utils.isDynamicAllocationEnabled(sc.getReadOnlyConf)) {
       maxNumExecutors
     } else {
       numExecutors
@@ -366,7 +366,8 @@ private[spark] abstract class YarnSchedulerBackend(
             am.ask[Boolean](r).andThen {
               case Success(b) => context.reply(b)
               case Failure(NonFatal(e)) =>
-                logError(s"Sending $r to AM was unsuccessful", e)
+                logError(
+                  log"Sending ${MDC(LogKeys.REQUEST_EXECUTORS, r)} to AM was unsuccessful", e)
                 context.sendFailure(e)
             }(ThreadUtils.sameThread)
           case None =>
@@ -380,7 +381,7 @@ private[spark] abstract class YarnSchedulerBackend(
             am.ask[Boolean](k).andThen {
               case Success(b) => context.reply(b)
               case Failure(NonFatal(e)) =>
-                logError(s"Sending $k to AM was unsuccessful", e)
+                logError(log"Sending ${MDC(LogKeys.KILL_EXECUTORS, k)} to AM was unsuccessful", e)
                 context.sendFailure(e)
             }(ThreadUtils.sameThread)
           case None =>

@@ -60,14 +60,14 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       "predicate_funcs", "conditional_funcs", "conversion_funcs", "csv_funcs", "datetime_funcs",
       "generator_funcs", "hash_funcs", "json_funcs", "lambda_funcs", "map_funcs", "math_funcs",
       "misc_funcs", "string_funcs", "struct_funcs", "window_funcs", "xml_funcs", "table_funcs",
-      "url_funcs", "variant_funcs").sorted
+      "url_funcs", "variant_funcs", "st_funcs").sorted
     val invalidGroupName = "invalid_group_funcs"
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
         new ExpressionInfo(
           "testClass", null, "testName", null, "", "", "", invalidGroupName, "", "", "")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3202",
+      condition = "_LEGACY_ERROR_TEMP_3202",
       parameters = Map(
         "exprName" -> "testName",
         "group" -> invalidGroupName,
@@ -78,7 +78,9 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
     val info = spark.sessionState.catalog.lookupFunctionInfo(FunctionIdentifier("sum"))
     assert(info.getSource === "built-in")
 
-    val validSources = Seq("built-in", "hive", "python_udf", "scala_udf", "java_udf", "python_udtf")
+    val validSources = Seq(
+      "built-in", "hive", "python_udf", "scala_udf", "java_udf", "python_udtf", "internal",
+      "sql_udf")
     validSources.foreach { source =>
       val info = new ExpressionInfo(
         "testClass", null, "testName", null, "", "", "", "", "", "", source)
@@ -90,7 +92,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
         new ExpressionInfo(
           "testClass", null, "testName", null, "", "", "", "", "", "", invalidSource)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3203",
+      condition = "_LEGACY_ERROR_TEMP_3203",
       parameters = Map(
         "exprName" -> "testName",
         "source" -> invalidSource,
@@ -103,7 +105,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       exception = intercept[SparkIllegalArgumentException] {
         new ExpressionInfo("testClass", null, "testName", null, "", "", invalidNote, "", "", "", "")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3201",
+      condition = "_LEGACY_ERROR_TEMP_3201",
       parameters = Map("exprName" -> "testName", "note" -> invalidNote))
 
     val invalidSince = "-3.0.0"
@@ -112,7 +114,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
         new ExpressionInfo(
           "testClass", null, "testName", null, "", "", "", "", invalidSince, "", "")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3204",
+      condition = "_LEGACY_ERROR_TEMP_3204",
       parameters = Map("since" -> invalidSince, "exprName" -> "testName"))
 
     val invalidDeprecated = "  invalid deprecated"
@@ -121,7 +123,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
         new ExpressionInfo(
           "testClass", null, "testName", null, "", "", "", "", "", invalidDeprecated, "")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_3205",
+      condition = "_LEGACY_ERROR_TEMP_3205",
       parameters = Map("exprName" -> "testName", "deprecated" -> invalidDeprecated))
   }
 
@@ -141,7 +143,10 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       // Examples demonstrate alternative syntax, see SPARK-45574
       "org.apache.spark.sql.catalyst.expressions.Cast",
       // Examples demonstrate alternative syntax, see SPARK-47012
-      "org.apache.spark.sql.catalyst.expressions.Collate"
+      "org.apache.spark.sql.catalyst.expressions.Collate",
+      classOf[ShiftLeft].getName,
+      classOf[ShiftRight].getName,
+      classOf[ShiftRightUnsigned].getName
     )
     spark.sessionState.functionRegistry.listFunction().foreach { funcId =>
       val info = spark.sessionState.catalog.lookupFunctionInfo(funcId)
@@ -204,6 +209,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       "org.apache.spark.sql.catalyst.expressions.CurrentTimeZone",
       "org.apache.spark.sql.catalyst.expressions.Now",
       "org.apache.spark.sql.catalyst.expressions.LocalTimestamp",
+      "org.apache.spark.sql.catalyst.expressions.CurrentTime",
       // Random output without a seed
       "org.apache.spark.sql.catalyst.expressions.Rand",
       "org.apache.spark.sql.catalyst.expressions.Randn",
@@ -222,6 +228,12 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       // Throws an error
       "org.apache.spark.sql.catalyst.expressions.RaiseErrorExpressionBuilder",
       "org.apache.spark.sql.catalyst.expressions.AssertTrue",
+      // Requires dynamic class loading not available in this test suite.
+      "org.apache.spark.sql.catalyst.expressions.FromAvro",
+      "org.apache.spark.sql.catalyst.expressions.ToAvro",
+      "org.apache.spark.sql.catalyst.expressions.SchemaOfAvro",
+      "org.apache.spark.sql.catalyst.expressions.FromProtobuf",
+      "org.apache.spark.sql.catalyst.expressions.ToProtobuf",
       classOf[CurrentUser].getName,
       // The encrypt expression includes a random initialization vector to its encrypted result
       classOf[AesEncrypt].getName)
@@ -234,7 +246,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       // Examples can change settings. We clone the session to prevent tests clashing.
       val clonedSpark = spark.cloneSession()
       // Coalescing partitions can change result order, so disable it.
-      clonedSpark.conf.set(SQLConf.COALESCE_PARTITIONS_ENABLED, false)
+      clonedSpark.conf.set(SQLConf.COALESCE_PARTITIONS_ENABLED.key, false)
       val info = clonedSpark.sessionState.catalog.lookupFunctionInfo(funcId)
       val className = info.getClassName
       if (!ignoreSet.contains(className)) {
@@ -279,15 +291,16 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       candidateExprsToCheck.filter(superClass.isAssignableFrom).foreach { clazz =>
         val isEvalOverrode = clazz.getMethod("eval", classOf[InternalRow]) !=
           superClass.getMethod("eval", classOf[InternalRow])
-        val isNullIntolerantMixedIn = classOf[NullIntolerant].isAssignableFrom(clazz)
-        if (isEvalOverrode && isNullIntolerantMixedIn) {
-          fail(s"${clazz.getName} should not extend ${classOf[NullIntolerant].getSimpleName}, " +
+        val isNullIntolerantOverridden = clazz.getMethod("nullIntolerant") !=
+          classOf[Expression].getMethod("nullIntolerant")
+        if (isEvalOverrode && isNullIntolerantOverridden) {
+          fail(s"${clazz.getName} should not override nullIntolerant, " +
             s"or add ${clazz.getName} in the ignoreSet of this test.")
-        } else if (!isEvalOverrode && !isNullIntolerantMixedIn) {
-          fail(s"${clazz.getName} should extend ${classOf[NullIntolerant].getSimpleName}.")
+        } else if (!isEvalOverrode && !isNullIntolerantOverridden) {
+          fail(s"${clazz.getName} should override nullIntolerant.")
         } else {
-          assert((!isEvalOverrode && isNullIntolerantMixedIn) ||
-            (isEvalOverrode && !isNullIntolerantMixedIn))
+          assert((!isEvalOverrode && isNullIntolerantOverridden) ||
+            (isEvalOverrode && !isNullIntolerantOverridden))
         }
       }
     }

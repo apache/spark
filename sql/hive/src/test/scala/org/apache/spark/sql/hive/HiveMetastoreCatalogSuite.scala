@@ -358,7 +358,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
                |""".stripMargin)
           checkError(
             exception = intercept[AnalysisException](spark.table("non_partition_table")),
-            errorClass = "_LEGACY_ERROR_TEMP_3096",
+            condition = "_LEGACY_ERROR_TEMP_3096",
             parameters = Map(
               "resLen" -> "2",
               "relLen" -> "1",
@@ -422,12 +422,56 @@ class DataSourceWithHiveMetastoreCatalogSuite
         "a struct<" +
           "`a.a`:int," +
           "`a.b`:struct<" +
-          "  `a b b`:array<string>," +
-          "  `a b c`:map<int, string>" +
+          "  `a b b`:array<string>" +
+          "  ,`a b c`:map<int, string>" +
+          "  ,````:int" +
           "  >" +
           ">"
       sql("CREATE TABLE t(" + schema + ")")
       assert(spark.table("t").schema === CatalystSqlParser.parseTableSchema(schema))
+
+      // Also test views with this schema
+      withView("v") {
+        sql("CREATE VIEW v AS SELECT * FROM t")
+        assert(spark.table("v").schema === CatalystSqlParser.parseTableSchema(schema))
+      }
+    }
+  }
+
+  test("SPARK-54028: Table and View with complex nested schema and ALTER operations") {
+    withTable("t") {
+      val schema =
+          "struct_field STRUCT<" +
+          "`colon:field_name`:STRING" +
+          ">"
+      sql("CREATE TABLE t (" + schema + ")")
+
+      // Verify initial table schema
+      assert(spark.table("t").schema === CatalystSqlParser.parseTableSchema(schema))
+
+      withView("v") {
+        sql("CREATE VIEW v AS SELECT `struct_field` FROM t")
+
+        // Verify view schema matches the original schema
+        val expectedViewSchema = CatalystSqlParser.parseTableSchema(schema)
+        assert(spark.table("v").schema === expectedViewSchema)
+
+        // Add new column to table
+        sql("ALTER TABLE t ADD COLUMN (field_1 INT)")
+
+        // Update schema string to include new column
+        val updatedSchema = schema + ",field_1 INT"
+
+        // Verify table schema after ALTER
+        assert(spark.table("t").schema === CatalystSqlParser.parseTableSchema(updatedSchema))
+
+        // Alter view to include new column
+        sql("ALTER VIEW v AS " +
+          "SELECT `struct_field`,`field_1` FROM t")
+
+        // Verify view schema after ALTER
+        assert(spark.table("v").schema === CatalystSqlParser.parseTableSchema(updatedSchema))
+      }
     }
   }
 

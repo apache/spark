@@ -26,7 +26,6 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.util.ArrayImplicits._
 
-
 /**
  * Metadata is a wrapper over Map[String, Any] that limits the value type to simple ones: Boolean,
  * Long, Double, String, Metadata, Array[Boolean], Array[Long], Array[Double], Array[String], and
@@ -35,19 +34,31 @@ import org.apache.spark.util.ArrayImplicits._
  * The default constructor is private. User should use either [[MetadataBuilder]] or
  * `Metadata.fromJson()` to create Metadata instances.
  *
- * @param map an immutable map that stores the data
+ * @param map
+ *   an immutable map that stores the data
  *
  * @since 1.3.0
  */
 @Stable
+@SerialVersionUID(-3987058932362209243L)
 sealed class Metadata private[types] (private[types] val map: Map[String, Any])
-  extends Serializable {
+    extends Serializable {
+
+  @transient private[types] var runtimeMap: Map[String, Any] = _
+  private[types] def setRuntimeMap(map: Map[String, Any]): Unit = runtimeMap = map
 
   /** No-arg constructor for kryo. */
   protected def this() = this(null)
 
   /** Tests whether this Metadata contains a binding for a key. */
   def contains(key: String): Boolean = map.contains(key)
+
+  /**
+   * Tests whether this Metadata is empty.
+   *
+   * @since 4.0.0
+   */
+  def isEmpty: Boolean = map.isEmpty
 
   /** Gets a Long. */
   def getLong(key: String): Long = get(key)
@@ -78,6 +89,24 @@ sealed class Metadata private[types] (private[types] val map: Map[String, Any])
 
   /** Gets a Metadata array. */
   def getMetadataArray(key: String): Array[Metadata] = get(key)
+
+  /** Return a copy with the keys removed */
+  def withKeysRemoved(keysToRemove: Seq[String]): Metadata = {
+    if (keysToRemove.isEmpty) {
+      this
+    } else {
+      new Metadata(this.map -- keysToRemove)
+    }
+  }
+
+  /** Return a copy with a key removed */
+  def withKeyRemoved(keyToRemove: String): Metadata = {
+    if (map.contains(keyToRemove)) {
+      new Metadata(map - keyToRemove)
+    } else {
+      this
+    }
+  }
 
   /** Converts to its JSON representation. */
   def json: String = compact(render(jsonValue))
@@ -111,6 +140,12 @@ sealed class Metadata private[types] (private[types] val map: Map[String, Any])
 
   private def get[T](key: String): T = {
     map(key).asInstanceOf[T]
+  }
+
+  private[sql] def getExpression[E](key: String): (String, Option[E]) = {
+    val sql = getString(key)
+    val expr = Option(runtimeMap).flatMap(_.get(key).map(_.asInstanceOf[E]))
+    sql -> expr
   }
 
   private[sql] def jsonValue: JValue = Metadata.toJsonValue(this)
@@ -166,7 +201,8 @@ object Metadata {
               builder.putStringArray(key, value.asInstanceOf[List[JString]].map(_.s).toArray)
             case _: JObject =>
               builder.putMetadataArray(
-                key, value.asInstanceOf[List[JObject]].map(fromJObject).toArray)
+                key,
+                value.asInstanceOf[List[JObject]].map(fromJObject).toArray)
             case other =>
               throw DataTypeErrors.unsupportedArrayTypeError(other.getClass)
           }
@@ -240,6 +276,7 @@ object Metadata {
 class MetadataBuilder {
 
   private val map: mutable.Map[String, Any] = mutable.Map.empty
+  private val runtimeMap: mutable.Map[String, Any] = mutable.Map.empty
 
   /** Returns the immutable version of this map.  Used for java interop. */
   protected def getMap = map.toMap
@@ -247,6 +284,9 @@ class MetadataBuilder {
   /** Include the content of an existing [[Metadata]] instance. */
   def withMetadata(metadata: Metadata): this.type = {
     map ++= metadata.map
+    if (metadata.runtimeMap != null) {
+      runtimeMap ++= metadata.runtimeMap
+    }
     this
   }
 
@@ -285,7 +325,16 @@ class MetadataBuilder {
 
   /** Builds the [[Metadata]] instance. */
   def build(): Metadata = {
-    new Metadata(map.toMap)
+    if (map.isEmpty && runtimeMap.isEmpty) {
+      // Save some memory when the metadata is empty
+      Metadata.empty
+    } else {
+      val metadata = new Metadata(map.toMap)
+      if (runtimeMap.nonEmpty) {
+        metadata.setRuntimeMap(runtimeMap.toMap)
+      }
+      metadata
+    }
   }
 
   private def put(key: String, value: Any): this.type = {
@@ -293,8 +342,15 @@ class MetadataBuilder {
     this
   }
 
+  private[sql] def putExpression[E](key: String, sql: String, expr: Option[E]): this.type = {
+    map.put(key, sql)
+    expr.foreach(runtimeMap.put(key, _))
+    this
+  }
+
   def remove(key: String): this.type = {
     map.remove(key)
+    runtimeMap.remove(key)
     this
   }
 }

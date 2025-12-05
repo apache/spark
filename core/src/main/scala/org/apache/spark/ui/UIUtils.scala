@@ -214,7 +214,7 @@ private[spark] object UIUtils extends Logging {
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/timeline-view.css")} type="text/css"/>
     <script src={prependBaseUri(request, "/static/sorttable.js")} ></script>
-    <script src={prependBaseUri(request, "/static/jquery-3.5.1.min.js")}></script>
+    <script src={prependBaseUri(request, "/static/jquery.min.js")}></script>
     <script src={prependBaseUri(request, "/static/vis-timeline-graph2d.min.js")}></script>
     <script src={prependBaseUri(request, "/static/bootstrap.bundle.min.js")}></script>
     <script src={prependBaseUri(request, "/static/initialize-tooltips.js")}></script>
@@ -222,6 +222,7 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri(request, "/static/timeline-view.js")}></script>
     <script src={prependBaseUri(request, "/static/log-view.js")}></script>
     <script src={prependBaseUri(request, "/static/webui.js")}></script>
+    <script src={prependBaseUri(request, "/static/scroll-button.js")} type="module"></script>
     <script>setUIRoot('{UIUtils.uiRoot(request)}')</script>
   }
 
@@ -236,14 +237,17 @@ private[spark] object UIUtils extends Logging {
 
   def dataTablesHeaderNodes(request: HttpServletRequest): Seq[Node] = {
     <link rel="stylesheet"
-          href={prependBaseUri(request, "/static/dataTables.bootstrap4.1.13.5.min.css")}
+          href={prependBaseUri(request, "/static/dataTables.bootstrap4.min.css")}
+          type="text/css"/>
+    <link rel="stylesheet"
+          href={prependBaseUri(request, "/static/jquery.dataTables.min.css")}
           type="text/css"/>
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/webui-dataTables.css")} type="text/css"/>
-    <script src={prependBaseUri(request, "/static/jquery.dataTables.1.13.5.min.js")}></script>
+    <script src={prependBaseUri(request, "/static/jquery.dataTables.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.cookies.2.2.0.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.blockUI.min.js")}></script>
-    <script src={prependBaseUri(request, "/static/dataTables.bootstrap4.1.13.5.min.js")}></script>
+    <script src={prependBaseUri(request, "/static/dataTables.bootstrap4.min.js")}></script>
     <script src={prependBaseUri(request, "/static/jquery.mustache.js")}></script>
   }
 
@@ -446,20 +450,30 @@ private[spark] object UIUtils extends Logging {
     val startRatio = if (total == 0) 0.0 else (boundedStarted.toDouble / total) * 100
     val startWidth = "width: %s%%".format(startRatio)
 
+    val killTaskReasonText = reasonToNumKilled.toSeq.sortBy(-_._2).map {
+        case (reason, count) => s" ($count killed: $reason)"
+      }.mkString
+    val progressTitle = s"$completed/$total" + {
+      if (started > 0) s" ($started running)" else ""
+    } + {
+      if (failed > 0) s" ($failed failed)" else ""
+    } + {
+      if (skipped > 0) s" ($skipped skipped)" else ""
+    } + killTaskReasonText
+
+    // scalastyle:off line.size.limit
     <div class="progress">
-      <span style="text-align:center; position:absolute; width:100%;">
-        {completed}/{total}
-        { if (failed == 0 && skipped == 0 && started > 0) s"($started running)" }
-        { if (failed > 0) s"($failed failed)" }
-        { if (skipped > 0) s"($skipped skipped)" }
-        { reasonToNumKilled.toSeq.sortBy(-_._2).map {
-            case (reason, count) => s"($count killed: $reason)"
-          }
-        }
+      <span style="display: flex; align-items: center; justify-content: center; position:absolute; width:100%; height:100%; text-align:center;" title={progressTitle}>
+        { s"$completed/$total" +
+            (if (failed == 0 && skipped == 0 && started > 0) s" ($started running)" else "") +
+            (if (failed > 0) s" ($failed failed)" else "") +
+            (if (skipped > 0) s" ($skipped skipped)" else "") +
+            killTaskReasonText }
       </span>
       <div class="progress-bar progress-completed" style={completeWidth}></div>
       <div class="progress-bar progress-started" style={startWidth}></div>
     </div>
+    // scalastyle:on line.size.limit
   }
 
   /** Return a "DAG visualization" DOM element that expands into a visualization for a stage. */

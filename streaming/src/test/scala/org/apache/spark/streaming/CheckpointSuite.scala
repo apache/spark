@@ -18,13 +18,12 @@
 package org.apache.spark.streaming
 
 import java.io._
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
-import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.{IntWritable, Text}
@@ -387,6 +386,7 @@ class CheckpointSuite extends TestSuiteBase with LocalStreamingContext with DStr
 
     val cp = new Checkpoint(ssc, Time(1000))
     ssc.stop()
+    Thread.sleep(100)
 
     // Serialize/deserialize to simulate write to storage and reading it back
     val newCp = Utils.deserialize[Checkpoint](Utils.serialize(cp))
@@ -649,7 +649,7 @@ class CheckpointSuite extends TestSuiteBase with LocalStreamingContext with DStr
      */
     def writeFile(i: Int, clock: Clock): Unit = {
       val file = new File(testDir, i.toString)
-      Files.write(s"$i\n", file, StandardCharsets.UTF_8)
+      Files.writeString(file.toPath, s"$i\n")
       assert(file.setLastModified(clock.getTimeMillis()))
       // Check that the file's modification date is actually the value we wrote, since rounding or
       // truncation will break the test:
@@ -879,8 +879,8 @@ class CheckpointSuite extends TestSuiteBase with LocalStreamingContext with DStr
     assert(checkpointFiles.size === 2)
     // Although bytes2 was written with an old time, it contains the latest status, so we should
     // try to read from it at first.
-    assert(Files.toByteArray(checkpointFiles(0)) === bytes2)
-    assert(Files.toByteArray(checkpointFiles(1)) === bytes1)
+    assert(Files.readAllBytes(checkpointFiles(0).toPath) === bytes2)
+    assert(Files.readAllBytes(checkpointFiles(1).toPath) === bytes1)
     checkpointWriter.stop()
   }
 

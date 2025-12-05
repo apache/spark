@@ -19,11 +19,13 @@ package org.apache.spark.sql.streaming
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql._
+import org.apache.spark.sql.{Encoder}
 import org.apache.spark.sql.catalyst.plans.logical.Range
+import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.connector.read.streaming
 import org.apache.spark.sql.connector.read.streaming.{AcceptsLatestSeenOffset, SparkDataStream}
-import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.{Offset, Source}
+import org.apache.spark.sql.execution.streaming.runtime._
 import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemoryStream, ContinuousMemoryStreamOffset}
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.tags.SlowSQLTest
@@ -60,7 +62,7 @@ class AcceptsLatestSeenOffsetSuite extends StreamTest with BeforeAndAfter {
   }
 
   test("DataSource V2 source with micro-batch") {
-    val inputData = new TestMemoryStream[Long](0, spark.sqlContext)
+    val inputData = new TestMemoryStream[Long](0, spark)
     val df = inputData.toDF().select("value")
 
     /** Add data to this test source by incrementing its available offset */
@@ -108,7 +110,7 @@ class AcceptsLatestSeenOffsetSuite extends StreamTest with BeforeAndAfter {
     //  Test case: when the query is restarted, we expect the execution to call `latestSeenOffset`
     //  first. Later as part of the execution, execution may call `initialOffset` if the previous
     //  run of the query had no committed batches.
-    val inputData = new TestMemoryStream[Long](0, spark.sqlContext)
+    val inputData = new TestMemoryStream[Long](0, spark)
     val df = inputData.toDF().select("value")
 
     /** Add data to this test source by incrementing its available offset */
@@ -150,7 +152,7 @@ class AcceptsLatestSeenOffsetSuite extends StreamTest with BeforeAndAfter {
   }
 
   test("DataSource V2 source with continuous mode") {
-    val inputData = new TestContinuousMemoryStream[Long](0, spark.sqlContext, 1)
+    val inputData = new TestContinuousMemoryStream[Long](0, spark, 1)
     val df = inputData.toDF().select("value")
 
     /** Add data to this test source by incrementing its available offset */
@@ -231,9 +233,9 @@ class AcceptsLatestSeenOffsetSuite extends StreamTest with BeforeAndAfter {
 
   class TestMemoryStream[A : Encoder](
       _id: Int,
-      _sqlContext: SQLContext,
+      _sparkSession: SparkSession,
       _numPartitions: Option[Int] = None)
-    extends MemoryStream[A](_id, _sqlContext, _numPartitions)
+    extends MemoryStream[A](_id, _sparkSession, _numPartitions)
     with AcceptsLatestSeenOffset {
 
     @volatile var latestSeenOffset: streaming.Offset = null
@@ -258,9 +260,9 @@ class AcceptsLatestSeenOffsetSuite extends StreamTest with BeforeAndAfter {
 
   class TestContinuousMemoryStream[A : Encoder](
       _id: Int,
-      _sqlContext: SQLContext,
+      _sparkSession: SparkSession,
       _numPartitions: Int = 2)
-    extends ContinuousMemoryStream[A](_id, _sqlContext, _numPartitions)
+    extends ContinuousMemoryStream[A](_id, _sparkSession, _numPartitions)
     with AcceptsLatestSeenOffset {
 
     @volatile var latestSeenOffset: streaming.Offset = _

@@ -25,9 +25,10 @@ import scala.util.Random
 
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkException
-import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.{MEMORY_OFFHEAP_ENABLED, MEMORY_OFFHEAP_SIZE}
 import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.memory.{TaskMemoryManager, UnifiedMemoryManager}
+import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -39,15 +40,18 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.CompactBuffer
 
-class HashedRelationSuite extends SharedSparkSession {
+abstract class HashedRelationSuite extends SharedSparkSession {
+  protected def useOffHeapMemoryMode: Boolean
 
-  val mm = new TaskMemoryManager(
-    new UnifiedMemoryManager(
-      new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
-      Long.MaxValue,
-      Long.MaxValue / 2,
-      1),
-    0)
+  val umm = new UnifiedMemoryManager(
+    new SparkConf()
+      .set(MEMORY_OFFHEAP_ENABLED, useOffHeapMemoryMode)
+      .set(MEMORY_OFFHEAP_SIZE, ByteUnit.GiB.toBytes(1L)),
+    Runtime.getRuntime.maxMemory,
+    Runtime.getRuntime.maxMemory / 2,
+    1)
+
+  val mm = new TaskMemoryManager(umm, 0)
 
   val rand = new Random(100)
 
@@ -63,6 +67,11 @@ class HashedRelationSuite extends SharedSparkSession {
   val contiguousRows = contiguousArray.map(i => projection(InternalRow(i.toLong)).copy())
   val sparseRows = sparseArray.map(i => projection(InternalRow(i.toLong)).copy())
   val randomRows = randomArray.map(i => projection(InternalRow(i.toLong)).copy())
+
+  protected override def afterEach(): Unit = {
+    super.afterEach()
+    assert(umm.executionMemoryUsed === 0)
+  }
 
   test("UnsafeHashedRelation") {
     val schema = StructType(StructField("a", IntegerType, true) :: Nil)
@@ -87,6 +96,7 @@ class HashedRelationSuite extends SharedSparkSession {
     val out = new ObjectOutputStream(os)
     hashed.asInstanceOf[UnsafeHashedRelation].writeExternal(out)
     out.flush()
+    hashed.close()
     val in = new ObjectInputStream(new ByteArrayInputStream(os.toByteArray))
     val hashed2 = new UnsafeHashedRelation()
     hashed2.readExternal(in)
@@ -108,19 +118,13 @@ class HashedRelationSuite extends SharedSparkSession {
   }
 
   test("test serialization empty hash map") {
-    val taskMemoryManager = new TaskMemoryManager(
-      new UnifiedMemoryManager(
-        new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
-        Long.MaxValue,
-        Long.MaxValue / 2,
-        1),
-      0)
-    val binaryMap = new BytesToBytesMap(taskMemoryManager, 1, 1)
+    val binaryMap = new BytesToBytesMap(mm, 1, 1)
     val os = new ByteArrayOutputStream()
     val out = new ObjectOutputStream(os)
     val hashed = new UnsafeHashedRelation(1, 1, binaryMap)
     hashed.writeExternal(out)
     out.flush()
+    hashed.close()
     val in = new ObjectInputStream(new ByteArrayInputStream(os.toByteArray))
     val hashed2 = new UnsafeHashedRelation()
     hashed2.readExternal(in)
@@ -149,9 +153,10 @@ class HashedRelationSuite extends SharedSparkSession {
       assert(row.getLong(0) === i)
       assert(row.getInt(1) === i + 1)
     }
+    longRelation.close()
 
     val longRelation2 = LongHashedRelation(rows.iterator ++ rows.iterator, key, 100, mm)
-        .asInstanceOf[LongHashedRelation]
+      .asInstanceOf[LongHashedRelation]
     assert(!longRelation2.keyIsUnique)
     (0 until 100).foreach { i =>
       val rows = longRelation2.get(i).toArray
@@ -166,6 +171,7 @@ class HashedRelationSuite extends SharedSparkSession {
     val out = new ObjectOutputStream(os)
     longRelation2.writeExternal(out)
     out.flush()
+    longRelation2.close()
     val in = new ObjectInputStream(new ByteArrayInputStream(os.toByteArray))
     val relation = new LongHashedRelation()
     relation.readExternal(in)
@@ -181,19 +187,12 @@ class HashedRelationSuite extends SharedSparkSession {
   }
 
   test("LongToUnsafeRowMap with very wide range") {
-    val taskMemoryManager = new TaskMemoryManager(
-      new UnifiedMemoryManager(
-        new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
-        Long.MaxValue,
-        Long.MaxValue / 2,
-        1),
-      0)
     val unsafeProj = UnsafeProjection.create(Seq(BoundReference(0, LongType, false)))
 
     {
       // SPARK-16740
       val keys = Seq(0L, Long.MaxValue, Long.MaxValue)
-      val map = new LongToUnsafeRowMap(taskMemoryManager, 1)
+      val map = new LongToUnsafeRowMap(mm, 1)
       keys.foreach { k =>
         map.append(k, unsafeProj(InternalRow(k)))
       }
@@ -210,7 +209,7 @@ class HashedRelationSuite extends SharedSparkSession {
     {
       // SPARK-16802
       val keys = Seq(Long.MaxValue, Long.MaxValue - 10)
-      val map = new LongToUnsafeRowMap(taskMemoryManager, 1)
+      val map = new LongToUnsafeRowMap(mm, 1)
       keys.foreach { k =>
         map.append(k, unsafeProj(InternalRow(k)))
       }
@@ -226,20 +225,13 @@ class HashedRelationSuite extends SharedSparkSession {
   }
 
   test("LongToUnsafeRowMap with random keys") {
-    val taskMemoryManager = new TaskMemoryManager(
-      new UnifiedMemoryManager(
-        new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
-        Long.MaxValue,
-        Long.MaxValue / 2,
-        1),
-      0)
     val unsafeProj = UnsafeProjection.create(Seq(BoundReference(0, LongType, false)))
 
     val N = 1000000
     val rand = new Random
     val keys = (0 to N).map(x => rand.nextLong()).toArray
 
-    val map = new LongToUnsafeRowMap(taskMemoryManager, 10)
+    val map = new LongToUnsafeRowMap(mm, 10)
     keys.foreach { k =>
       map.append(k, unsafeProj(InternalRow(k)))
     }
@@ -249,8 +241,9 @@ class HashedRelationSuite extends SharedSparkSession {
     val out = new ObjectOutputStream(os)
     map.writeExternal(out)
     out.flush()
+    map.free()
     val in = new ObjectInputStream(new ByteArrayInputStream(os.toByteArray))
-    val map2 = new LongToUnsafeRowMap(taskMemoryManager, 1)
+    val map2 = new LongToUnsafeRowMap(mm, 1)
     map2.readExternal(in)
 
     val row = unsafeProj(InternalRow(0L)).copy()
@@ -276,24 +269,17 @@ class HashedRelationSuite extends SharedSparkSession {
       }
       i += 1
     }
-    map.free()
+    map2.free()
   }
 
   test("SPARK-24257: insert big values into LongToUnsafeRowMap") {
-    val taskMemoryManager = new TaskMemoryManager(
-      new UnifiedMemoryManager(
-        new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
-        Long.MaxValue,
-        Long.MaxValue / 2,
-        1),
-      0)
     val unsafeProj = UnsafeProjection.create(Array[DataType](StringType))
-    val map = new LongToUnsafeRowMap(taskMemoryManager, 1)
+    val map = new LongToUnsafeRowMap(mm, 1)
 
     val key = 0L
     // the page array is initialized with length 1 << 17 (1M bytes),
     // so here we need a value larger than 1 << 18 (2M bytes), to trigger the bug
-    val bigStr = UTF8String.fromString("x" * (1 << 19))
+    val bigStr = UTF8String.fromString("x".repeat(1 << 19))
 
     map.append(key, unsafeProj(InternalRow(bigStr)))
     map.optimize()
@@ -343,6 +329,7 @@ class HashedRelationSuite extends SharedSparkSession {
     val rows = (0 until 100).map(i => unsafeProj(InternalRow(Int.int2long(i), i + 1)).copy())
     val longRelation = LongHashedRelation(rows.iterator ++ rows.iterator, key, 100, mm)
     val longRelation2 = ser.deserialize[LongHashedRelation](ser.serialize(longRelation))
+    longRelation.close()
     (0 until 100).foreach { i =>
       val rows = longRelation2.get(i).toArray
       assert(rows.length === 2)
@@ -359,6 +346,7 @@ class HashedRelationSuite extends SharedSparkSession {
     unsafeHashed.asInstanceOf[UnsafeHashedRelation].writeExternal(out)
     out.flush()
     val unsafeHashed2 = ser.deserialize[UnsafeHashedRelation](ser.serialize(unsafeHashed))
+    unsafeHashed.close()
     val os2 = new ByteArrayOutputStream()
     val out2 = new ObjectOutputStream(os2)
     unsafeHashed2.writeExternal(out2)
@@ -398,6 +386,7 @@ class HashedRelationSuite extends SharedSparkSession {
     thread2.join()
 
     val unsafeHashed2 = ser.deserialize[UnsafeHashedRelation](ser.serialize(unsafeHashed))
+    unsafeHashed.close()
     val os2 = new ByteArrayOutputStream()
     val out2 = new ObjectOutputStream(os2)
     unsafeHashed2.writeExternal(out2)
@@ -410,7 +399,7 @@ class HashedRelationSuite extends SharedSparkSession {
     val unsafeProj = UnsafeProjection.create(
       Seq(BoundReference(0, IntegerType, false),
         BoundReference(1, StringType, true)))
-    val unsafeRow = unsafeProj(InternalRow(0, UTF8String.fromString(" " * 100)))
+    val unsafeRow = unsafeProj(InternalRow(0, UTF8String.fromString(" ".repeat(100))))
     val key = Seq(BoundReference(0, IntegerType, false))
     val rows = (0 until (1 << 24)).iterator.map { i =>
       unsafeRow.setInt(0, i % 1000000)
@@ -437,7 +426,7 @@ class HashedRelationSuite extends SharedSparkSession {
     val unsafeProj = UnsafeProjection.create(
       Seq(BoundReference(0, IntegerType, false),
         BoundReference(1, StringType, true)))
-    val unsafeRow = unsafeProj(InternalRow(0, UTF8String.fromString(" " * 100)))
+    val unsafeRow = unsafeProj(InternalRow(0, UTF8String.fromString(" ".repeat(100))))
     val key = Seq(BoundReference(0, IntegerType, false))
     val rows = (0 until (1 << 10)).iterator.map { i =>
       unsafeRow.setInt(0, i % 1000000)
@@ -452,18 +441,21 @@ class HashedRelationSuite extends SharedSparkSession {
     val hashedRelation = UnsafeHashedRelation(contiguousRows.iterator, singleKey, 1, mm)
     val keyIterator = hashedRelation.keys()
     assert(keyIterator.map(key => key.getLong(0)).toArray === contiguousArray)
+    hashedRelation.close()
   }
 
   test("UnsafeHashedRelation: key set iterator on a sparse array of keys") {
     val hashedRelation = UnsafeHashedRelation(sparseRows.iterator, singleKey, 1, mm)
     val keyIterator = hashedRelation.keys()
     assert(keyIterator.map(key => key.getLong(0)).toArray === sparseArray)
+    hashedRelation.close()
   }
 
   test("LongHashedRelation: key set iterator on a contiguous array of keys") {
     val longRelation = LongHashedRelation(contiguousRows.iterator, singleKey, 1, mm)
     val keyIterator = longRelation.keys()
     assert(keyIterator.map(key => key.getLong(0)).toArray === contiguousArray)
+    longRelation.close()
   }
 
   test("LongToUnsafeRowMap: key set iterator on a contiguous array of keys") {
@@ -478,6 +470,7 @@ class HashedRelationSuite extends SharedSparkSession {
     rowMap.optimize()
     keyIterator = rowMap.keys()
     assert(keyIterator.map(key => key.getLong(0)).toArray === contiguousArray)
+    rowMap.free()
   }
 
   test("LongToUnsafeRowMap: key set iterator on a sparse array with equidistant keys") {
@@ -490,6 +483,7 @@ class HashedRelationSuite extends SharedSparkSession {
     rowMap.optimize()
     keyIterator = rowMap.keys()
     assert(keyIterator.map(_.getLong(0)).toArray === sparseArray)
+    rowMap.free()
   }
 
   test("LongToUnsafeRowMap: key set iterator on an array with a single key") {
@@ -530,6 +524,7 @@ class HashedRelationSuite extends SharedSparkSession {
       buffer.append(keyIterator.next().getLong(0))
     }
     assert(buffer === randomArray)
+    rowMap.free()
   }
 
   test("LongToUnsafeRowMap: no explicit hasNext calls on the key iterator") {
@@ -548,8 +543,8 @@ class HashedRelationSuite extends SharedSparkSession {
       exception = intercept[SparkException] {
         keyIterator.next()
       },
-      errorClass = "_LEGACY_ERROR_TEMP_2104",
-      parameters = Map.empty
+      condition = "INTERNAL_ERROR",
+      parameters = Map("message" -> "End of the iterator.")
     )
     assert(buffer.sortWith(_ < _) === randomArray)
     buffer.clear()
@@ -560,6 +555,7 @@ class HashedRelationSuite extends SharedSparkSession {
       buffer.append(keyIterator.next().getLong(0))
     }
     assert(buffer === randomArray)
+    rowMap.free()
   }
 
   test("LongToUnsafeRowMap: call hasNext at the end of the iterator") {
@@ -577,6 +573,7 @@ class HashedRelationSuite extends SharedSparkSession {
     assert(keyIterator.map(key => key.getLong(0)).toArray === sparseArray)
     assert(keyIterator.hasNext == false)
     assert(keyIterator.hasNext == false)
+    rowMap.free()
   }
 
   test("LongToUnsafeRowMap: random sequence of hasNext and next() calls on the key iterator") {
@@ -607,6 +604,7 @@ class HashedRelationSuite extends SharedSparkSession {
       }
     }
     assert(buffer === randomArray)
+    rowMap.free()
   }
 
   test("HashJoin: packing and unpacking with the same key type in a LongType") {
@@ -661,6 +659,7 @@ class HashedRelationSuite extends SharedSparkSession {
     assert(hashed.keys().isEmpty)
     assert(hashed.keyIsUnique)
     assert(hashed.estimatedSize == 0)
+    hashed.close()
   }
 
   test("SPARK-32399: test methods related to key index") {
@@ -739,20 +738,14 @@ class HashedRelationSuite extends SharedSparkSession {
         val actualValues = row.map(_._2.getInt(1))
         assert(actualValues === expectedValues)
     }
+    unsafeRelation.close()
   }
 
   test("LongToUnsafeRowMap support ignoresDuplicatedKey") {
-    val taskMemoryManager = new TaskMemoryManager(
-      new UnifiedMemoryManager(
-        new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
-        Long.MaxValue,
-        Long.MaxValue / 2,
-        1),
-      0)
     val unsafeProj = UnsafeProjection.create(Seq(BoundReference(0, LongType, false)))
     val keys = Seq(1L, 1L, 1L)
     Seq(true, false).foreach { ignoresDuplicatedKey =>
-      val map = new LongToUnsafeRowMap(taskMemoryManager, 1, ignoresDuplicatedKey)
+      val map = new LongToUnsafeRowMap(mm, 1, ignoresDuplicatedKey)
       keys.foreach { k =>
         map.append(k, unsafeProj(InternalRow(k)))
       }
@@ -765,4 +758,12 @@ class HashedRelationSuite extends SharedSparkSession {
       map.free()
     }
   }
+}
+
+class HashedRelationOnHeapSuite extends HashedRelationSuite {
+  override protected def useOffHeapMemoryMode: Boolean = false
+}
+
+class HashedRelationOffHeapSuite extends HashedRelationSuite {
+  override protected def useOffHeapMemoryMode: Boolean = true
 }

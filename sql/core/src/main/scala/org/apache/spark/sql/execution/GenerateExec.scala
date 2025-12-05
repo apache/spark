@@ -86,12 +86,16 @@ case class GenerateExec(
       val generatorNullRow = new GenericInternalRow(generator.elementSchema.length)
       val rows = if (requiredChildOutput.nonEmpty) {
 
-        val pruneChildForResult: InternalRow => InternalRow =
-          if (child.outputSet == AttributeSet(requiredChildOutput)) {
+        val pruneChildForResult: InternalRow => InternalRow = {
+          // The declared output of this operator is `requiredChildOutput ++ generatorOutput`.
+          // If `child.output` is different from `requiredChildOutput`, we must do an projection
+          // to adjust the child output and make sure the final result matches the declared output.
+          if (child.output == requiredChildOutput) {
             identity
           } else {
             UnsafeProjection.create(requiredChildOutput, child.output)
           }
+        }
 
         val joinedRow = new JoinedRow
         iter.flatMap { row =>
@@ -142,10 +146,8 @@ case class GenerateExec(
   override def needCopyResult: Boolean = true
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    val requiredAttrSet = AttributeSet(requiredChildOutput)
-    val requiredInput = child.output.zip(input).filter {
-      case (attr, _) => requiredAttrSet.contains(attr)
-    }.map(_._2)
+    val attrToInputCode = AttributeMap(child.output.zip(input))
+    val requiredInput = requiredChildOutput.map(attrToInputCode)
     boundGenerator match {
       case e: CollectionGenerator => codeGenCollection(ctx, e, requiredInput)
       case g => codeGenIterableOnce(ctx, g, requiredInput)

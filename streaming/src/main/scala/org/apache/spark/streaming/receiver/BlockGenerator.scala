@@ -22,8 +22,8 @@ import java.util.concurrent.{ArrayBlockingQueue, TimeUnit}
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.STATUS
+import org.apache.spark.internal.{Logging, LogKeys}
+import org.apache.spark.internal.LogKeys._
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.StreamingConf.BLOCK_INTERVAL
 import org.apache.spark.streaming.util.RecurringTimer
@@ -142,7 +142,7 @@ private[streaming] class BlockGenerator(
         state = StoppedAddingData
       } else {
         logWarning(log"Cannot stop BlockGenerator as its not in the Active state " +
-          log"[state = ${MDC(STATUS, state)}]")
+          log"[state = ${MDC(BLOCK_GENERATOR_STATUS, state)}]")
         return
       }
     }
@@ -276,12 +276,13 @@ private[streaming] class BlockGenerator(
       }
 
       // At this point, state is StoppedGeneratingBlock. So drain the queue of to-be-pushed blocks.
-      logInfo("Pushing out the last " + blocksForPushing.size() + " blocks")
+      logInfo(log"Pushing out the last " +
+        log"${MDC(LogKeys.NUM_BLOCK_IDS, blocksForPushing.size())} blocks")
       while (!blocksForPushing.isEmpty) {
         val block = blocksForPushing.take()
         logDebug(s"Pushing block $block")
         pushBlock(block)
-        logInfo("Blocks left to push " + blocksForPushing.size())
+        logInfo(log"Blocks left to push ${MDC(LogKeys.NUM_BLOCK_IDS, blocksForPushing.size())}")
       }
       logInfo("Stopped block pushing thread")
     } catch {
@@ -299,6 +300,6 @@ private[streaming] class BlockGenerator(
 
   private def pushBlock(block: Block): Unit = {
     listener.onPushBlock(block.id, block.buffer)
-    logInfo("Pushed block " + block.id)
+    logInfo(log"Pushed block ${MDC(LogKeys.BLOCK_ID, block.id)}")
   }
 }

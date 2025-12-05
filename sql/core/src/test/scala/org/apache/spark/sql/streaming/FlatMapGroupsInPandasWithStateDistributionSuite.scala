@@ -18,10 +18,9 @@
 package org.apache.spark.sql.streaming
 
 import org.apache.spark.sql.IntegratedUDFTestUtils.{shouldTestPandasUDFs, TestGroupedMapPandasUDFWithState}
-import org.apache.spark.sql.catalyst.expressions.PythonUDF
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Update
-import org.apache.spark.sql.execution.python.FlatMapGroupsInPandasWithStateExec
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.python.streaming.FlatMapGroupsInPandasWithStateExec
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.streaming.util.{StatefulOpClusteredDistributionTestHelper, StreamManualClock}
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructField, StructType}
 import org.apache.spark.tags.SlowSQLTest
@@ -83,8 +82,7 @@ class FlatMapGroupsInPandasWithStateDistributionSuite extends StreamTest
         .repartition($"key1")
         .groupBy($"key1", $"key2")
         .applyInPandasWithState(
-          pythonFunc(inputDataDS("key1"), inputDataDS("key2"), inputDataDS("timestamp"))
-            .expr.asInstanceOf[PythonUDF],
+          pythonFunc(inputDataDS("key1"), inputDataDS("key2"), inputDataDS("timestamp")),
           outputStructType,
           stateStructType,
           "Update",

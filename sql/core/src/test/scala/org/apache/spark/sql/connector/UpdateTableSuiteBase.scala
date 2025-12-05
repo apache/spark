@@ -17,15 +17,106 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.SparkException
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue}
-import org.apache.spark.sql.connector.expressions.LiteralValue
+import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, TableChange, TableInfo}
+import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType}
 
 abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
 
   import testImplicits._
+
+  test("update table containing added column with default value") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |""".stripMargin)
+
+    sql(s"ALTER TABLE $tableNameAsString ADD COLUMN txt STRING DEFAULT 'initial-text'")
+
+    append("pk INT, salary INT, dep STRING, txt STRING",
+      """{ "pk": 3, "salary": 300, "dep": "hr", "txt": "explicit-text" }
+        |{ "pk": 4, "salary": 400, "dep": "software", "txt": "explicit-text" }
+        |{ "pk": 5, "salary": 500, "dep": "hr" }
+        |""".stripMargin)
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(
+        Row(1, 100, "hr", "initial-text"),
+        Row(2, 200, "software", "initial-text"),
+        Row(3, 300, "hr", "explicit-text"),
+        Row(4, 400, "software", "explicit-text"),
+        Row(5, 500, "hr", null)))
+
+    sql(s"ALTER TABLE $tableNameAsString ALTER COLUMN txt SET DEFAULT 'new-text'")
+
+    sql(s"UPDATE $tableNameAsString SET txt = DEFAULT WHERE pk IN (2, 8, 11)")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(
+        Row(1, 100, "hr", "initial-text"),
+        Row(2, 200, "software", "new-text"),
+        Row(3, 300, "hr", "explicit-text"),
+        Row(4, 400, "software", "explicit-text"),
+        Row(5, 500, "hr", null)))
+  }
+
+  test("update table with expression-based default values") {
+    val columns = Array(
+      Column.create("pk", IntegerType),
+      Column.create("salary", IntegerType),
+      Column.create("dep", StringType))
+    val tableInfo = new TableInfo.Builder().withColumns(columns).build()
+    catalog.createTable(ident, tableInfo)
+
+    append("pk INT, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |{ "pk": 3, "salary": 300, "dep": "hr" }
+        |""".stripMargin)
+
+    val addColumn = TableChange.addColumn(
+      Array("value"),
+      IntegerType,
+      false, /* not nullable */
+      null, /* no comment */
+      null, /* no position */
+      new ColumnDefaultValue(
+        new GeneralScalarExpression(
+          "+",
+          Array(LiteralValue(100, IntegerType), LiteralValue(23, IntegerType))),
+        LiteralValue(123, IntegerType)))
+    catalog.alterTable(ident, addColumn)
+
+    append("pk INT, salary INT, dep STRING, value INT",
+      """{ "pk": 4, "salary": 400, "dep": "hr", "value": -4 }
+        |{ "pk": 5, "salary": 500, "dep": "hr", "value": -5 }
+        |""".stripMargin)
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(
+        Row(1, 100, "hr", 123),
+        Row(2, 200, "software", 123),
+        Row(3, 300, "hr", 123),
+        Row(4, 400, "hr", -4),
+        Row(5, 500, "hr", -5)))
+
+    sql(s"UPDATE $tableNameAsString SET value = DEFAULT WHERE pk >= 5")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(
+        Row(1, 100, "hr", 123),
+        Row(2, 200, "software", 123),
+        Row(3, 300, "hr", 123),
+        Row(4, 400, "hr", -4),
+        Row(5, 500, "hr", 123)))
+  }
 
   test("EXPLAIN only update") {
     createAndInitTable("pk INT NOT NULL, dep STRING", """{ "pk": 1, "dep": "hr" }""")
@@ -528,6 +619,25 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       Row(2) :: Nil)
   }
 
+  test("SPARK-53538: update with nondeterministic assignments and no wholestage codegen") {
+    val extraColCount = SQLConf.get.wholeStageMaxNumFields - 4
+    val schema = "pk INT NOT NULL, id INT, value DOUBLE, dep STRING, " +
+      ((1 to extraColCount).map(i => s"col$i INT").mkString(", "))
+    val data = (1 to 3).map { i =>
+      s"""{ "pk": $i, "id": $i, "value": 2.0, "dep": "hr", """ +
+        ((1 to extraColCount).map(j => s""""col$j": $i""").mkString(", ")) +
+      "}"
+    }.mkString("\n")
+    createAndInitTable(schema, data)
+
+    // rand() always generates values in [0, 1) range
+    sql(s"UPDATE $tableNameAsString SET value = rand() WHERE id <= 2")
+
+    checkAnswer(
+      sql(s"SELECT count(*) FROM $tableNameAsString WHERE value < 2.0"),
+      Row(2) :: Nil)
+  }
+
   test("update with default values") {
     val idDefault = new ColumnDefaultValue("42", LiteralValue(42, IntegerType))
     val columns = Array(
@@ -548,6 +658,33 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, 42, "hr") :: Row(2, 2, "software") :: Row(3, 42, "hr") :: Nil)
+  }
+
+  test("update with current_timestamp default value using DEFAULT keyword") {
+    sql(s"""CREATE TABLE $tableNameAsString
+      | (pk INT NOT NULL, current_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""".stripMargin)
+    append("pk INT NOT NULL, current_timestamp TIMESTAMP",
+      """{ "pk": 1, "i": false, "current_timestamp": "2023-01-01 10:00:00" }
+        |{ "pk": 2, "i": true, "current_timestamp": "2023-01-01 11:00:00" }
+        |""".stripMargin)
+
+    val initialResult = sql(s"SELECT * FROM $tableNameAsString").collect()
+    assert(initialResult.length == 2)
+    val initialTimestamp1 = initialResult(0).getTimestamp(1)
+    val initialTimestamp2 = initialResult(1).getTimestamp(1)
+
+    sql(s"UPDATE $tableNameAsString SET current_timestamp = DEFAULT WHERE pk = 1")
+
+    val updatedResult = sql(s"SELECT * FROM $tableNameAsString").collect()
+    assert(updatedResult.length == 2)
+
+    val updatedRow = updatedResult.find(_.getInt(0) == 1).get
+    val unchangedRow = updatedResult.find(_.getInt(0) == 2).get
+
+    // The timestamp should be different (newer) after the update for pk=1
+    assert(updatedRow.getTimestamp(1).getTime > initialTimestamp1.getTime)
+    // The timestamp should remain unchanged for pk=2
+    assert(unchangedRow.getTimestamp(1).getTime == initialTimestamp2.getTime)
   }
 
   test("update char/varchar columns") {
@@ -575,9 +712,54 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
         |{ "pk": 3, "s": { "n_i": 3, "n_l": 33 }, "dep": "hr" }
         |""".stripMargin)
 
-    val e = intercept[SparkException] {
-      sql(s"UPDATE $tableNameAsString SET s = named_struct('n_i', null, 'n_l', -1L) WHERE pk = 1")
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql(s"UPDATE $tableNameAsString SET s = named_struct('n_i', null, 'n_l', -1L) WHERE pk = 1")
+      },
+      condition = "NOT_NULL_ASSERT_VIOLATION",
+      sqlState = "42000",
+      parameters = Map("walkedTypePath" -> "\ns\nn_i\n"))
+  }
+
+
+
+  test("update table with recursive CTE") {
+    withTempView("source") {
+      sql(
+        s"""CREATE TABLE $tableNameAsString (
+           | val INT)
+           |""".stripMargin)
+
+      append("val INT",
+        """{ "val": 1 }
+          |{ "val": 9 }
+          |{ "val": 8 }
+          |{ "val": 4 }
+          |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1),
+          Row(9),
+          Row(8),
+          Row(4)))
+
+      sql(
+        s"""WITH RECURSIVE s(val) AS (
+           |  SELECT 1
+           |  UNION ALL
+           |  SELECT val + 1 FROM s WHERE val < 5
+           |) UPDATE $tableNameAsString SET val = val + 1 WHERE val IN (SELECT val FROM s)
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(2),
+          Row(9),
+          Row(8),
+          Row(5)))
     }
-    assert(e.getCause.getMessage.contains("Null value appeared in non-nullable field"))
   }
 }

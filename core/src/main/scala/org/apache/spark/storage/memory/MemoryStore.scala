@@ -27,10 +27,8 @@ import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
-import com.google.common.io.ByteStreams
-
 import org.apache.spark.{SparkConf, SparkException, TaskContext}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.{STORAGE_UNROLL_MEMORY_THRESHOLD, UNROLL_MEMORY_CHECK_PERIOD, UNROLL_MEMORY_GROWTH_FACTOR}
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
@@ -117,7 +115,8 @@ private[spark] class MemoryStore(
       log"needed to store a block in memory. Please configure Spark with more memory.")
   }
 
-  logInfo("MemoryStore started with capacity %s".format(Utils.bytesToString(maxMemory)))
+  logInfo(log"MemoryStore started with capacity " +
+    log"${MDC(MEMORY_SIZE, Utils.bytesToString(maxMemory))}")
 
   /** Total storage memory used including unroll memory, in bytes. */
   private def memoryUsed: Long = memoryManager.storageMemoryUsed
@@ -158,8 +157,9 @@ private[spark] class MemoryStore(
       entries.synchronized {
         entries.put(blockId, entry)
       }
-      logInfo("Block %s stored as bytes in memory (estimated size %s, free %s)".format(
-        blockId, Utils.bytesToString(size), Utils.bytesToString(maxMemory - blocksMemoryUsed)))
+      logInfo(log"Block ${MDC(BLOCK_ID, blockId)} stored as bytes in memory " +
+        log"(estimated size ${MDC(SIZE, Utils.bytesToString(size))}, " +
+        log"free ${MDC(MEMORY_SIZE, Utils.bytesToString(maxMemory - blocksMemoryUsed))})")
       true
     } else {
       false
@@ -250,7 +250,8 @@ private[spark] class MemoryStore(
     // SPARK-45025 - if a thread interrupt was received, we log a warning and return used memory
     // to avoid getting killed by task reaper eventually.
     if (shouldCheckThreadInterruption && Thread.currentThread().isInterrupted) {
-      logInfo(s"Failed to unroll block=$blockId since thread interrupt was received")
+      logInfo(
+        log"Failed to unroll block=${MDC(BLOCK_ID, blockId)} since thread interrupt was received")
       Left(unrollMemoryUsedByThisBlock)
     } else if (keepUnrolling) {
       // Make sure that we have enough memory to store the block. By this point, it is possible that
@@ -279,8 +280,9 @@ private[spark] class MemoryStore(
           entries.put(blockId, entry)
         }
 
-        logInfo("Block %s stored as values in memory (estimated size %s, free %s)".format(blockId,
-          Utils.bytesToString(entry.size), Utils.bytesToString(maxMemory - blocksMemoryUsed)))
+        logInfo(log"Block ${MDC(BLOCK_ID, blockId)} stored as values in memory " +
+          log"(estimated size ${MDC(MEMORY_SIZE, Utils.bytesToString(entry.size))}, free " +
+          log"${MDC(FREE_MEMORY_SIZE, Utils.bytesToString(maxMemory - blocksMemoryUsed))})")
         Right(entry.size)
       } else {
         // We ran out of space while unrolling the values for this block
@@ -521,8 +523,8 @@ private[spark] class MemoryStore(
       if (freedMemory >= space) {
         var lastSuccessfulBlock = -1
         try {
-          logInfo(s"${selectedBlocks.size} blocks selected for dropping " +
-            s"(${Utils.bytesToString(freedMemory)} bytes)")
+          logInfo(log"${MDC(NUM_BLOCKS, selectedBlocks.size)} blocks selected for dropping " +
+            log"(${MDC(MEMORY_SIZE, Utils.bytesToString(freedMemory))} bytes)")
           selectedBlocks.indices.foreach { idx =>
             val blockId = selectedBlocks(idx)
             val entry = entries.synchronized {
@@ -537,8 +539,9 @@ private[spark] class MemoryStore(
             }
             lastSuccessfulBlock = idx
           }
-          logInfo(s"After dropping ${selectedBlocks.size} blocks, " +
-            s"free memory is ${Utils.bytesToString(maxMemory - blocksMemoryUsed)}")
+          logInfo(
+            log"After dropping ${MDC(NUM_BLOCKS, selectedBlocks.size)} blocks, free memory is" +
+            log"${MDC(FREE_MEMORY_SIZE, Utils.bytesToString(maxMemory - blocksMemoryUsed))}")
           freedMemory
         } finally {
           // like BlockManager.doPut, we use a finally rather than a catch to avoid having to deal
@@ -553,7 +556,7 @@ private[spark] class MemoryStore(
         }
       } else {
         blockId.foreach { id =>
-          logInfo(s"Will not store $id")
+          logInfo(log"Will not store ${MDC(BLOCK_ID, id)}")
         }
         selectedBlocks.foreach { id =>
           blockInfoManager.unlock(id)
@@ -649,11 +652,11 @@ private[spark] class MemoryStore(
    */
   private def logMemoryUsage(): Unit = {
     logInfo(
-      s"Memory use = ${Utils.bytesToString(blocksMemoryUsed)} (blocks) + " +
-      s"${Utils.bytesToString(currentUnrollMemory)} (scratch space shared across " +
-      s"$numTasksUnrolling tasks(s)) = ${Utils.bytesToString(memoryUsed)}. " +
-      s"Storage limit = ${Utils.bytesToString(maxMemory)}."
-    )
+      log"Memory use = ${MDC(CURRENT_MEMORY_SIZE, Utils.bytesToString(blocksMemoryUsed))} " +
+      log"(blocks) + ${MDC(FREE_MEMORY_SIZE, Utils.bytesToString(currentUnrollMemory))} " +
+      log"(scratch space shared across ${MDC(NUM_TASKS, numTasksUnrolling)} " +
+      log"tasks(s)) = ${MDC(STORAGE_MEMORY_SIZE, Utils.bytesToString(memoryUsed))}. " +
+      log"Storage limit = ${MDC(MAX_MEMORY_SIZE, Utils.bytesToString(maxMemory))}.")
   }
 
   /**
@@ -900,7 +903,7 @@ private[storage] class PartiallySerializedBlock[T](
         // We want to close the output stream in order to free any resources associated with the
         // serializer itself (such as Kryo's internal buffers). close() might cause data to be
         // written, so redirect the output stream to discard that data.
-        redirectableOutputStream.setOutputStream(ByteStreams.nullOutputStream())
+        redirectableOutputStream.setOutputStream(OutputStream.nullOutputStream())
         serializationStream.close()
       } finally {
         discarded = true
@@ -918,7 +921,7 @@ private[storage] class PartiallySerializedBlock[T](
     verifyNotConsumedAndNotDiscarded()
     consumed = true
     // `unrolled`'s underlying buffers will be freed once this input stream is fully read:
-    ByteStreams.copy(unrolledBuffer.toInputStream(dispose = true), os)
+    unrolledBuffer.toInputStream(dispose = true).transferTo(os)
     memoryStore.releaseUnrollMemoryForThisTask(memoryMode, unrollMemory)
     redirectableOutputStream.setOutputStream(os)
     while (rest.hasNext) {

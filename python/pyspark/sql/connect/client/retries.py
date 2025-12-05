@@ -19,10 +19,13 @@ import grpc
 import random
 import time
 import typing
-from typing import Optional, Callable, Generator, List, Type
+import warnings
+from google.rpc import error_details_pb2
+from grpc_status import rpc_status
+from typing import Optional, Callable, Generator, List, Type, cast
 from types import TracebackType
-from pyspark.sql.connect.client.logging import logger
-from pyspark.errors import PySparkRuntimeError, RetriesExceeded
+from pyspark.sql.connect.logging import logger
+from pyspark.errors import PySparkRuntimeError
 
 """
 This module contains retry system. The system is designed to be
@@ -45,6 +48,34 @@ class RetryPolicy:
     Describes key aspects of RetryPolicy.
 
     It's advised that different policies are implemented as different subclasses.
+
+    Parameters
+    ----------
+    max_retries: int, optional
+        Maximum number of retries.
+    initial_backoff: int
+        Start value of the exponential backoff.
+    max_backoff: int, optional
+        Maximal value of the exponential backoff.
+    backoff_multiplier: float
+        Multiplicative base of the exponential backoff.
+    jitter: int
+        Sample a random value uniformly from the range [0, jitter] and add it to the backoff.
+    min_jitter_threshold: int
+        Minimal value of the backoff to add random jitter.
+    recognize_server_retry_delay: bool
+        Per gRPC standard, the server can send error messages that contain `RetryInfo` message
+        with `retry_delay` field indicating that the client should wait for at least `retry_delay`
+        amount of time before retrying again, see:
+        https://github.com/googleapis/googleapis/blob/master/google/rpc/error_details.proto#L91
+
+        If this flag is set to true, RetryPolicy will use `RetryInfo.retry_delay` field
+        in the backoff computation. Server's `retry_delay` can override client's `max_backoff`.
+
+        This flag does not change which errors are retried, only how the backoff is computed.
+        `DefaultPolicy` additionally has a rule for retrying any error that contains `RetryInfo`.
+    max_server_retry_delay: int, optional
+        Limit for the server-provided `retry_delay`.
     """
 
     def __init__(
@@ -55,6 +86,8 @@ class RetryPolicy:
         backoff_multiplier: float = 1.0,
         jitter: int = 0,
         min_jitter_threshold: int = 0,
+        recognize_server_retry_delay: bool = False,
+        max_server_retry_delay: Optional[int] = None,
     ):
         self.max_retries = max_retries
         self.initial_backoff = initial_backoff
@@ -62,6 +95,8 @@ class RetryPolicy:
         self.backoff_multiplier = backoff_multiplier
         self.jitter = jitter
         self.min_jitter_threshold = min_jitter_threshold
+        self.recognize_server_retry_delay = recognize_server_retry_delay
+        self.max_server_retry_delay = max_server_retry_delay
         self._name = self.__class__.__name__
 
     @property
@@ -98,7 +133,7 @@ class RetryPolicyState:
     def can_retry(self, exception: BaseException) -> bool:
         return self.policy.can_retry(exception)
 
-    def next_attempt(self) -> Optional[int]:
+    def next_attempt(self, exception: Optional[BaseException] = None) -> Optional[int]:
         """
         Returns
         -------
@@ -118,6 +153,14 @@ class RetryPolicyState:
             self._next_wait = min(
                 float(self.policy.max_backoff), wait_time * self.policy.backoff_multiplier
             )
+
+        if exception is not None and self.policy.recognize_server_retry_delay:
+            retry_delay = extract_retry_delay(exception)
+            if retry_delay is not None:
+                logger.debug(f"The server has sent a retry delay of {retry_delay} ms.")
+                if self.policy.max_server_retry_delay is not None:
+                    retry_delay = min(retry_delay, self.policy.max_server_retry_delay)
+                wait_time = max(wait_time, retry_delay)
 
         # Jitter current backoff, after the future backoff was computed
         if wait_time >= self.policy.min_jitter_threshold:
@@ -160,6 +203,7 @@ class Retrying:
     This class is a point of entry into the retry logic.
     The class accepts a list of retry policies and applies them in given order.
     The first policy accepting an exception will be used.
+    If the error was matched by one policy, the other policies will be skipped.
 
     The usage of the class should be as follows:
     for attempt in Retrying(...):
@@ -167,7 +211,7 @@ class Retrying:
             Do something that can throw exception
 
     In case error is considered retriable, it would be retried based on policies, and
-    RetriesExceeded will be raised if the retries limit would exceed.
+    it will be raised if the retries limit would exceed.
 
     Exceptions not considered retriable will be passed through transparently.
     """
@@ -203,8 +247,8 @@ class Retrying:
     def _last_exception(self) -> BaseException:
         if self._exception is None:
             raise PySparkRuntimeError(
-                error_class="NO_ACTIVE_EXCEPTION",
-                message_parameters={},
+                errorClass="NO_ACTIVE_EXCEPTION",
+                messageParameters={},
             )
         return self._exception
 
@@ -217,23 +261,25 @@ class Retrying:
             return
 
         # Attempt to find a policy to wait with
+        matched_policy = None
         for policy in self._policies:
-            if not policy.can_retry(exception):
-                continue
-
-            wait_time = policy.next_attempt()
+            if policy.can_retry(exception):
+                matched_policy = policy
+                break
+        if matched_policy is not None:
+            wait_time = matched_policy.next_attempt(exception)
             if wait_time is not None:
                 logger.debug(
                     f"Got error: {repr(exception)}. "
-                    + f"Will retry after {wait_time} ms (policy: {policy.name})"
+                    + f"Will retry after {wait_time} ms (policy: {matched_policy.name})"
                 )
-
                 self._sleep(wait_time / 1000)
                 return
 
         # Exceeded retries
         logger.debug(f"Given up on retrying. error: {repr(exception)}")
-        raise RetriesExceeded(error_class="RETRIES_EXCEEDED", message_parameters={}) from exception
+        warnings.warn("[RETRIES_EXCEEDED] The maximum number of retries has been exceeded.")
+        raise exception
 
     def __iter__(self) -> Generator[AttemptManager, None, None]:
         """
@@ -274,6 +320,8 @@ class DefaultPolicy(RetryPolicy):
         max_backoff: Optional[int] = 60000,
         jitter: int = 500,
         min_jitter_threshold: int = 2000,
+        recognize_server_retry_delay: bool = True,
+        max_server_retry_delay: Optional[int] = 10 * 60 * 1000,  # 10 minutes
     ):
         super().__init__(
             max_retries=max_retries,
@@ -282,6 +330,8 @@ class DefaultPolicy(RetryPolicy):
             max_backoff=max_backoff,
             jitter=jitter,
             min_jitter_threshold=min_jitter_threshold,
+            recognize_server_retry_delay=recognize_server_retry_delay,
+            max_server_retry_delay=max_server_retry_delay,
         )
 
     def can_retry(self, e: BaseException) -> bool:
@@ -314,4 +364,29 @@ class DefaultPolicy(RetryPolicy):
         if e.code() == grpc.StatusCode.UNAVAILABLE:
             return True
 
+        if extract_retry_info(e) is not None:
+            # All errors messages containing `RetryInfo` should be retried.
+            return True
+
         return False
+
+
+def extract_retry_info(exception: BaseException) -> Optional[error_details_pb2.RetryInfo]:
+    """Extract and return RetryInfo from the grpc.RpcError"""
+    if isinstance(exception, grpc.RpcError):
+        status = rpc_status.from_call(cast(grpc.Call, exception))
+        if status:
+            for d in status.details:
+                if d.Is(error_details_pb2.RetryInfo.DESCRIPTOR):
+                    info = error_details_pb2.RetryInfo()
+                    d.Unpack(info)
+                    return info
+    return None
+
+
+def extract_retry_delay(exception: BaseException) -> Optional[int]:
+    """Extract and return RetryInfo.retry_delay in milliseconds from grpc.RpcError if present."""
+    retry_info = extract_retry_info(exception)
+    if retry_info is not None:
+        return retry_info.retry_delay.ToMilliseconds()
+    return None

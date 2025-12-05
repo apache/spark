@@ -43,7 +43,8 @@ class Iso8601DateFormatter(
     locale: Locale,
     legacyFormat: LegacyDateFormats.LegacyDateFormat,
     isParsing: Boolean)
-  extends DateFormatter with DateTimeFormatterHelper {
+    extends DateFormatter
+    with DateTimeFormatterHelper {
 
   @transient
   private lazy val formatter = getOrCreateFormatter(pattern, locale, isParsing)
@@ -62,8 +63,7 @@ class Iso8601DateFormatter(
   override def format(localDate: LocalDate): String = {
     try {
       localDate.format(formatter)
-    } catch checkFormattedDiff(toJavaDate(localDateToDays(localDate)),
-      (d: Date) => format(d))
+    } catch checkFormattedDiff(toJavaDate(localDateToDays(localDate)), (d: Date) => format(d))
   }
 
   override def format(days: Int): String = {
@@ -83,19 +83,22 @@ class Iso8601DateFormatter(
 }
 
 /**
- * The formatter for dates which doesn't require users to specify a pattern. While formatting,
- * it uses the default pattern [[DateFormatter.defaultPattern]]. In parsing, it follows the CAST
+ * The formatter for dates which doesn't require users to specify a pattern. While formatting, it
+ * uses the default pattern [[DateFormatter.defaultPattern]]. In parsing, it follows the CAST
  * logic in conversion of strings to Catalyst's DateType.
  *
- * @param locale The locale overrides the system locale and is used in formatting.
- * @param legacyFormat Defines the formatter used for legacy dates.
- * @param isParsing Whether the formatter is used for parsing (`true`) or for formatting (`false`).
+ * @param locale
+ *   The locale overrides the system locale and is used in formatting.
+ * @param legacyFormat
+ *   Defines the formatter used for legacy dates.
+ * @param isParsing
+ *   Whether the formatter is used for parsing (`true`) or for formatting (`false`).
  */
 class DefaultDateFormatter(
     locale: Locale,
     legacyFormat: LegacyDateFormats.LegacyDateFormat,
     isParsing: Boolean)
-  extends Iso8601DateFormatter(DateFormatter.defaultPattern, locale, legacyFormat, isParsing) {
+    extends Iso8601DateFormatter(DateFormatter.defaultPattern, locale, legacyFormat, isParsing) {
 
   override def parse(s: String): Int = {
     try {
@@ -125,11 +128,13 @@ trait LegacyDateFormatter extends DateFormatter {
  * JVM time zone intentionally for compatibility with Spark 2.4 and earlier versions.
  *
  * Note: Using of the default JVM time zone makes the formatter compatible with the legacy
- *       `SparkDateTimeUtils` methods `toJavaDate` and `fromJavaDate` that are based on the default
- *       JVM time zone too.
+ * `SparkDateTimeUtils` methods `toJavaDate` and `fromJavaDate` that are based on the default JVM
+ * time zone too.
  *
- * @param pattern `java.text.SimpleDateFormat` compatible pattern.
- * @param locale The locale overrides the system locale and is used in parsing/formatting.
+ * @param pattern
+ *   `java.text.SimpleDateFormat` compatible pattern.
+ * @param locale
+ *   The locale overrides the system locale and is used in parsing/formatting.
  */
 class LegacyFastDateFormatter(pattern: String, locale: Locale) extends LegacyDateFormatter {
   @transient
@@ -145,14 +150,16 @@ class LegacyFastDateFormatter(pattern: String, locale: Locale) extends LegacyDat
  * JVM time zone intentionally for compatibility with Spark 2.4 and earlier versions.
  *
  * Note: Using of the default JVM time zone makes the formatter compatible with the legacy
- *       `SparkDateTimeUtils` methods `toJavaDate` and `fromJavaDate` that are based on the default
- *       JVM time zone too.
+ * `SparkDateTimeUtils` methods `toJavaDate` and `fromJavaDate` that are based on the default JVM
+ * time zone too.
  *
- * @param pattern The pattern describing the date and time format.
- *                See <a href="https://docs.oracle.com/javase/7/docs/api/java/text/SimpleDateFormat.html">
- *                Date and Time Patterns</a>
- * @param locale  The locale whose date format symbols should be used. It overrides the system
- *                locale in parsing/formatting.
+ * @param pattern
+ *   The pattern describing the date and time format. See <a
+ *   href="https://docs.oracle.com/javase/7/docs/api/java/text/SimpleDateFormat.html"> Date and
+ *   Time Patterns</a>
+ * @param locale
+ *   The locale whose date format symbols should be used. It overrides the system locale in
+ *   parsing/formatting.
  */
 // scalastyle:on line.size.limit
 class LegacySimpleDateFormatter(pattern: String, locale: Locale) extends LegacyDateFormatter {

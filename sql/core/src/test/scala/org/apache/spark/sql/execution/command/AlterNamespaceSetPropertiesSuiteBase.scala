@@ -49,8 +49,8 @@ trait AlterNamespaceSetPropertiesSuiteBase extends QueryTest with DDLCommandTest
       sql(s"ALTER DATABASE $catalog.$ns SET PROPERTIES ('d'='d')")
     }
     checkError(e,
-      errorClass = "SCHEMA_NOT_FOUND",
-      parameters = Map("schemaName" -> s"`$ns`"))
+      condition = "SCHEMA_NOT_FOUND",
+      parameters = Map("schemaName" -> s"`$catalog`.`$ns`"))
   }
 
   test("basic test") {
@@ -83,15 +83,25 @@ trait AlterNamespaceSetPropertiesSuiteBase extends QueryTest with DDLCommandTest
       CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
         withNamespace(ns) {
           sql(s"CREATE NAMESPACE $ns")
-          val exception = intercept[ParseException] {
-            sql(s"ALTER NAMESPACE $ns SET PROPERTIES ('$key'='dummyVal')")
-          }
-          assert(exception.getMessage.contains(s"$key is a reserved namespace property"))
+          val sqlText = s"ALTER NAMESPACE $ns SET PROPERTIES ('$key'='dummyVal')"
+          checkErrorMatchPVals(
+            exception = intercept[ParseException] {
+              sql(sqlText)
+            },
+            condition = "UNSUPPORTED_FEATURE.SET_NAMESPACE_PROPERTY",
+            parameters = Map("property" -> key, "msg" -> ".*"),
+            sqlState = None,
+            context = ExpectedContext(
+              fragment = sqlText,
+              start = 0,
+              stop = 46 + ns.length + key.length)
+          )
         }
       }
     }
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "true")) {
-      CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
+      CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES
+        .filterNot(prop => prop == PROP_COLLATION || prop == PROP_COMMENT).foreach { key =>
         withNamespace(ns) {
           // Set the location explicitly because v2 catalog may not set the default location.
           // Without this, `meta.get(key)` below may return null.

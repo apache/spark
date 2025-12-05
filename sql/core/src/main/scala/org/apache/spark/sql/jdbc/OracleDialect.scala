@@ -17,20 +17,21 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Date, Timestamp, Types}
+import java.sql.{Date, SQLException, Timestamp, Types}
 import java.util.Locale
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.connector.expressions.Expression
+import org.apache.spark.sql.connector.expressions.{Expression, Extract, Literal}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.jdbc.OracleDialect._
 import org.apache.spark.sql.types._
 
 
-private case class OracleDialect() extends JdbcDialect with SQLConfHelper {
+private case class OracleDialect() extends JdbcDialect with SQLConfHelper with NoLegacyJDBCError {
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:oracle")
 
@@ -43,12 +44,42 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper {
   // scalastyle:on line.size.limit
   private val supportedAggregateFunctions =
     Set("MAX", "MIN", "SUM", "COUNT", "AVG") ++ distinctUnsupportedAggregateFunctions
-  private val supportedFunctions = supportedAggregateFunctions
+  private val supportedFunctions = supportedAggregateFunctions ++ Set("TRUNC")
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
+  override def isObjectNotFoundException(e: SQLException): Boolean = {
+    e.getMessage.contains("ORA-00942") ||
+      e.getMessage.contains("ORA-39165")
+  }
+
   class OracleSQLBuilder extends JDBCSQLBuilder {
+
+    override def visitExtract(extract: Extract): String = {
+      val field = extract.field
+      field match {
+        // YEAR, MONTH, DAY, HOUR, MINUTE are identical on Oracle and Spark for
+        // both datetime and interval types.
+        case "YEAR" | "MONTH" | "DAY" | "HOUR" | "MINUTE" =>
+          super.visitExtract(field, build(extract.source()))
+        // Oracle does not support the following date fields: DAY_OF_YEAR, WEEK, QUARTER,
+        // DAY_OF_WEEK, or YEAR_OF_WEEK.
+        // We can't push down SECOND due to the difference in result types between Spark and
+        // Oracle. Spark returns decimal(8, 6), but Oracle returns integer.
+        case _ =>
+          visitUnexpectedExpr(extract)
+      }
+    }
+
+    override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
+      funcName match {
+        case "TRUNC" =>
+          s"TRUNC(${inputs(0)}, 'IW')"
+        case _ => super.visitSQLFunction(funcName, inputs)
+      }
+    }
+
     override def visitAggregateFunction(
         funcName: String, isDistinct: Boolean, inputs: Array[String]): String =
       if (isDistinct && distinctUnsupportedAggregateFunctions.contains(funcName)) {
@@ -60,6 +91,28 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper {
       } else {
         super.visitAggregateFunction(funcName, isDistinct, inputs)
       }
+
+    override def visitBinaryComparison(name: String, le: Expression, re: Expression): String = {
+      (le, re) match {
+        case (lit: Literal[_], _) if lit.dataType == BinaryType =>
+          compareBlob(lit, name, re)
+        case (_, lit: Literal[_]) if lit.dataType == BinaryType =>
+          compareBlob(le, name, lit)
+        case _ =>
+          super.visitBinaryComparison(name, le, re);
+      }
+    }
+
+    private def compareBlob(lhs: Expression, operator: String, rhs: Expression): String = {
+      val l = inputToSQL(lhs)
+      val r = inputToSQL(rhs)
+      if (operator == "<=>") {
+        val compare = s"DBMS_LOB.COMPARE($l, $r) = 0"
+        s"(($l IS NOT NULL AND $r IS NOT NULL AND $compare) OR ($l IS NULL AND $r IS NULL))"
+      } else {
+        s"DBMS_LOB.COMPARE($l, $r) $operator 0"
+      }
+    }
   }
 
   override def compileExpression(expr: Expression): Option[String] = {
@@ -137,10 +190,17 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper {
     case timestampValue: Timestamp => "{ts '" + timestampValue + "'}"
     case dateValue: Date => "{d '" + dateValue + "'}"
     case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
+    case binaryValue: Array[Byte] =>
+      binaryValue.map("%02X".format(_)).mkString("HEXTORAW('", "", "')")
     case _ => value
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
+
+  // See https://docs.oracle.com/cd/E11882_01/appdev.112/e10827/appd.htm#g642406
+  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+    "42000".equals(exception.getSQLState)
+  }
 
   /**
    * The SQL query used to truncate a table.
@@ -197,8 +257,8 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper {
     extends JdbcSQLQueryBuilder(dialect, options) {
 
     override def build(): String = {
-      val selectStmt = s"SELECT $columnList FROM ${options.tableOrQuery} $tableSampleClause" +
-        s" $whereClause $groupByClause $orderByClause"
+      val selectStmt = s"SELECT $hintClause$columnList FROM $tableOrQuery" +
+        s" $tableSampleClause $whereClause $groupByClause $orderByClause"
       val finalSelectStmt = if (limit > 0) {
         if (offset > 0) {
           // Because the rownum is calculated when the value is returned,
@@ -229,6 +289,29 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper {
   override def supportsLimit: Boolean = true
 
   override def supportsOffset: Boolean = true
+
+  override def supportsHint: Boolean = true
+
+  override def supportsJoin: Boolean = true
+
+  override def classifyException(
+      e: Throwable,
+      condition: String,
+      messageParameters: Map[String, String],
+      description: String,
+      isRuntime: Boolean): Throwable with SparkThrowable = {
+    e match {
+      case sqlException: SQLException =>
+        sqlException.getErrorCode match {
+          case 955 if condition == "FAILED_JDBC.RENAME_TABLE" =>
+            val newTable = messageParameters("newName")
+            throw QueryCompilationErrors.tableAlreadyExistsError(newTable)
+          case _ =>
+            super.classifyException(e, condition, messageParameters, description, isRuntime)
+        }
+      case _ => super.classifyException(e, condition, messageParameters, description, isRuntime)
+    }
+  }
 }
 
 private[jdbc] object OracleDialect {

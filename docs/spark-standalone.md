@@ -60,10 +60,6 @@ Finally, the following configuration options can be passed to the master and wor
     <td>Hostname to listen on</td>
   </tr>
   <tr>
-    <td><code>-i HOST</code>, <code>--ip HOST</code></td>
-    <td>Hostname to listen on (deprecated, use -h or --host)</td>
-  </tr>
-  <tr>
     <td><code>-p PORT</code>, <code>--port PORT</code></td>
     <td>Port for service to listen on (default: 7077 for master, random for worker)</td>
   </tr>
@@ -211,6 +207,15 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>1.1.0</td>
 </tr>
 <tr>
+  <td><code>spark.master.ui.title</code></td>
+  <td>(None)</td>
+  <td>
+    Specifies the title of the Master UI page. If unset, <code>Spark Master at 'master url'</code>
+    is used by default.
+  </td>
+  <td>4.0.0</td>
+</tr>
+<tr>
   <td><code>spark.master.ui.decommission.allow.mode</code></td>
   <td><code>LOCAL</code></td>
   <td>
@@ -232,7 +237,7 @@ SPARK_MASTER_OPTS supports the following system properties:
 </tr>
 <tr>
   <td><code>spark.master.rest.enabled</code></td>
-  <td><code>false</code></td>
+  <td><code>true</code></td>
   <td>
     Whether to use the Master REST API endpoint or not.
   </td>
@@ -253,6 +258,14 @@ SPARK_MASTER_OPTS supports the following system properties:
     Specifies the port number of the Master REST API endpoint.
   </td>
   <td>1.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.master.rest.filters</code></td>
+  <td>(None)</td>
+  <td>
+    Comma separated list of filter class names to apply to the Master REST API.
+  </td>
+  <td>4.0.0</td>
 </tr>
 <tr>
   <td><code>spark.master.useAppNameAsAppId.enabled</code></td>
@@ -338,28 +351,28 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td><code>spark.deploy.appNumberModulo</code></td>
   <td>(None)</td>
   <td>
-    The modulo for app number. By default, the next of `app-yyyyMMddHHmmss-9999` is
-    `app-yyyyMMddHHmmss-10000`. If we have 10000 as modulo, it will be `app-yyyyMMddHHmmss-0000`.
-    In most cases, the prefix `app-yyyyMMddHHmmss` is increased already during creating 10000 applications.
+    The modulo for app number. By default, the next of <code>app-yyyyMMddHHmmss-9999</code> is
+    <code>app-yyyyMMddHHmmss-10000</code>. If we have 10000 as modulo, it will be <code>app-yyyyMMddHHmmss-0000</code>.
+    In most cases, the prefix <code>app-yyyyMMddHHmmss</code> is increased already during creating 10000 applications.
   </td>
   <td>4.0.0</td>
 </tr>
 <tr>
   <td><code>spark.deploy.driverIdPattern</code></td>
-  <td>driver-%s-%04d</td>
+  <td><code>driver-%s-%04d</code></td>
   <td>
-    The pattern for driver ID generation based on Java `String.format` method.
-    The default value is `driver-%s-%04d` which represents the existing driver id string, e.g., `driver-20231031224459-0019`. Please be careful to generate unique IDs.
+    The pattern for driver ID generation based on Java <code>String.format</code> method.
+    The default value is <code>driver-%s-%04d</code> which represents the existing driver id string, e.g., <code>driver-20231031224459-0019</code>. Please be careful to generate unique IDs.
   </td>
   <td>4.0.0</td>
 </tr>
 <tr>
   <td><code>spark.deploy.appIdPattern</code></td>
-  <td>app-%s-%04d</td>
+  <td><code>app-%s-%04d</code></td>
   <td>
-    The pattern for app ID generation based on Java `String.format` method.
-    The default value is `app-%s-%04d` which represents the existing app id string, e.g.,
-    `app-20231031224509-0008`. Plesae be careful to generate unique IDs.
+    The pattern for app ID generation based on Java <code>String.format</code> method.
+    The default value is <code>app-%s-%04d</code> which represents the existing app id string, e.g.,
+    <code>app-20231031224509-0008</code>. Please be careful to generate unique IDs.
   </td>
   <td>4.0.0</td>
 </tr>
@@ -440,7 +453,7 @@ SPARK_WORKER_OPTS supports the following system properties:
   <td>
     Enable periodic cleanup of worker / application directories.  Note that this only affects standalone
     mode, as YARN works differently. Only the directories of stopped applications are cleaned up.
-    This should be enabled if spark.shuffle.service.db.enabled is "true"
+    This should be enabled if <code>spark.shuffle.service.db.enabled</code> is "true"
   </td>
   <td>1.0.0</td>
 </tr>
@@ -480,8 +493,8 @@ SPARK_WORKER_OPTS supports the following system properties:
   <td>ROCKSDB</td>
   <td>
     When <code>spark.shuffle.service.db.enabled</code> is true, user can use this to specify the kind of disk-based
-    store used in shuffle service state store. This supports `ROCKSDB` and `LEVELDB` (deprecated) now and `ROCKSDB` as default value.
-    The original data store in `RocksDB/LevelDB` will not be automatically convert to another kind of storage now.
+    store used in shuffle service state store. This supports <code>ROCKSDB</code> and <code>LEVELDB</code> (deprecated) now and <code>ROCKSDB</code> as default value.
+    The original data store in <code>RocksDB/LevelDB</code> will not be automatically convert to another kind of storage now.
   </td>
   <td>3.4.0</td>
 </tr>
@@ -491,8 +504,8 @@ SPARK_WORKER_OPTS supports the following system properties:
   <td>
     Enable cleanup non-shuffle files(such as temp. shuffle blocks, cached RDD/broadcast blocks,
     spill files, etc) of worker directories following executor exits. Note that this doesn't
-    overlap with `spark.worker.cleanup.enabled`, as this enables cleanup of non-shuffle files in
-    local directories of a dead executor, while `spark.worker.cleanup.enabled` enables cleanup of
+    overlap with <code>spark.worker.cleanup.enabled</code>, as this enables cleanup of non-shuffle files in
+    local directories of a dead executor, while <code>spark.worker.cleanup.enabled</code> enables cleanup of
     all files/subdirectories of a stopped and timeout application.
     This only affects Standalone mode, support of other cluster managers can be added in the future.
   </td>
@@ -510,11 +523,11 @@ SPARK_WORKER_OPTS supports the following system properties:
 </tr>
 <tr>
   <td><code>spark.worker.idPattern</code></td>
-  <td>worker-%s-%s-%d</td>
+  <td><code>worker-%s-%s-%d</code></td>
   <td>
-    The pattern for worker ID generation based on Java `String.format` method.
-    The default value is `worker-%s-%s-%d` which represents the existing worker id string, e.g.,
-    `worker-20231109183042-[fe80::1%lo0]-39729`. Please be careful to generate unique IDs
+    The pattern for worker ID generation based on Java <code>String.format</code> method.
+    The default value is <code>worker-%s-%s-%d</code> which represents the existing worker id string, e.g.,
+    <code>worker-20231109183042-[fe80::1%lo0]-39729</code>. Please be careful to generate unique IDs
   </td>
   <td>4.0.0</td>
 </tr>
@@ -598,35 +611,37 @@ via <code>http://[host:port]/[version]/submissions/[action]</code> where
 <code>action</code> is one of the following supported actions.
 
 <table class="spark-config">
-  <thead><tr><th>Command</th><th>Description</th><th>HTTP METHOD</th><th>Since Version</th></tr></thead>
+  <thead><tr><th>Command</th><th>HTTP METHOD</th><th>Description</th><th>Since Version</th></tr></thead>
   <tr>
     <td><code>create</code></td>
-    <td>Create a Spark driver via <code>cluster</code> mode.</td>
     <td>POST</td>
+    <td>Create a Spark driver via <code>cluster</code> mode. Since 4.0.0, Spark master supports server-side
+      variable replacements for the values of Spark properties and environment variables.
+    </td>
     <td>1.3.0</td>
   </tr>
   <tr>
     <td><code>kill</code></td>
-    <td>Kill a single Spark driver.</td>
     <td>POST</td>
+    <td>Kill a single Spark driver.</td>
     <td>1.3.0</td>
   </tr>
   <tr>
     <td><code>killall</code></td>
-    <td>Kill all running Spark drivers.</td>
     <td>POST</td>
+    <td>Kill all running Spark drivers.</td>
     <td>4.0.0</td>
   </tr>
   <tr>
     <td><code>status</code></td>
-    <td>Check the status of a Spark job.</td>
     <td>GET</td>
+    <td>Check the status of a Spark job.</td>
     <td>1.3.0</td>
   </tr>
   <tr>
     <td><code>clear</code></td>
-    <td>Clear the completed drivers and applications.</td>
     <td>POST</td>
+    <td>Clear the completed drivers and applications.</td>
     <td>4.0.0</td>
   </tr>
 </table>
@@ -665,6 +680,33 @@ The following is the response from the REST API for the above <code>create</code
 }
 ```
 
+When Spark master requires HTTP <code>Authorization</code> header via
+<code>spark.master.rest.filters=org.apache.spark.ui.JWSFilter</code> and
+<code>spark.org.apache.spark.ui.JWSFilter.param.secretKey=BASE64URL-ENCODED-KEY</code>
+configurations, <code>curl</code> CLI command can provide the required header like the following.
+
+```bash
+$ curl -XPOST http://IP:PORT/v1/submissions/create \
+--header "Authorization: Bearer USER-PROVIDED-WEB-TOEN-SIGNED-BY-THE-SAME-SHARED-KEY"
+...
+```
+
+For <code>sparkProperties</code> and <code>environmentVariables</code>, users can use place
+holders for server-side environment variables like the following.
+
+```bash
+{% raw %}
+...
+  "sparkProperties": {
+    "spark.hadoop.fs.s3a.endpoint": "{{AWS_ENDPOINT_URL}}",
+    "spark.hadoop.fs.s3a.endpoint.region": "{{AWS_REGION}}"
+  },
+  "environmentVariables": {
+    "AWS_CA_BUNDLE": "{{AWS_CA_BUNDLE}}"
+  },
+...
+{% endraw %}
+```
 
 # Resource Scheduling
 
@@ -793,7 +835,7 @@ In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spa
     <td><code>spark.deploy.recoveryDirectory</code></td>
     <td>""</td>
     <td>The directory in which Spark will store recovery state, accessible from the Master's perspective.
-      Note that the directory should be clearly manualy if <code>spark.deploy.recoveryMode</code>
+      Note that the directory should be clearly manually if <code>spark.deploy.recoveryMode</code>
       or <code>spark.deploy.recoveryCompressionCodec</code> is changed.
     </td>
     <td>0.8.1</td>
@@ -822,13 +864,13 @@ In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spa
   <tr>
     <td><code>spark.deploy.zookeeper.url</code></td>
     <td>None</td>
-    <td>When `spark.deploy.recoveryMode` is set to ZOOKEEPER, this configuration is used to set the zookeeper URL to connect to.</td>
+    <td>When <code>spark.deploy.recoveryMode</code> is set to ZOOKEEPER, this configuration is used to set the zookeeper URL to connect to.</td>
     <td>0.8.1</td>
   </tr>
   <tr>
     <td><code>spark.deploy.zookeeper.dir</code></td>
     <td>None</td>
-    <td>When `spark.deploy.recoveryMode` is set to ZOOKEEPER, this configuration is used to set the zookeeper directory to store recovery state.</td>
+    <td>When <code>spark.deploy.recoveryMode</code> is set to ZOOKEEPER, this configuration is used to set the zookeeper directory to store recovery state.</td>
     <td>0.8.1</td>
   </tr>
 </table>

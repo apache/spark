@@ -44,11 +44,8 @@ class ShowNamespacesSuite extends command.ShowNamespacesSuiteBase with CommandSu
         exception = intercept[AnalysisException] {
           sql("SHOW NAMESPACES")
         },
-        errorClass = "_LEGACY_ERROR_TEMP_1184",
-        parameters = Map(
-          "plugin" -> "testcat_no_namespace",
-          "ability" -> "namespaces"
-        )
+        condition = "MISSING_CATALOG_ABILITY.NAMESPACES",
+        parameters = Map("plugin" -> "testcat_no_namespace")
       )
     }
   }
@@ -58,11 +55,8 @@ class ShowNamespacesSuite extends command.ShowNamespacesSuiteBase with CommandSu
       exception = intercept[AnalysisException] {
         sql("SHOW NAMESPACES in testcat_no_namespace")
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1184",
-      parameters = Map(
-        "plugin" -> "testcat_no_namespace",
-        "ability" -> "namespaces"
-      )
+      condition = "MISSING_CATALOG_ABILITY.NAMESPACES",
+      parameters = Map("plugin" -> "testcat_no_namespace")
     )
   }
 }

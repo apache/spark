@@ -36,7 +36,7 @@ import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.VersionUtils
+import org.apache.spark.util.{SizeEstimator, VersionUtils}
 
 /**
  * Common params for FPGrowth and FPGrowthModel
@@ -223,6 +223,9 @@ class FPGrowthModel private[ml] (
     private val numTrainingRecords: Long)
   extends Model[FPGrowthModel] with FPGrowthParams with MLWritable {
 
+  // For ml connect only
+  private[ml] def this() = this("", null, Map.empty, -1L)
+
   /** @group setParam */
   @Since("2.2.0")
   def setMinConfidence(value: Double): this.type = set(minConfidence, value)
@@ -319,6 +322,16 @@ class FPGrowthModel private[ml] (
   override def toString: String = {
     s"FPGrowthModel: uid=$uid, numTrainingRecords=$numTrainingRecords"
   }
+
+  override def estimatedSize: Long = {
+    freqItemsets match {
+      case df: org.apache.spark.sql.classic.DataFrame =>
+        df.toArrowBatchRdd.map(_.length.toLong).reduce(_ + _) +
+          SizeEstimator.estimate(itemSupport)
+      case o => throw new UnsupportedOperationException(
+        s"Unsupported dataframe type: ${o.getClass.getName}")
+    }
+  }
 }
 
 @Since("2.2.0")
@@ -336,9 +349,10 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
 
     override protected def saveImpl(path: String): Unit = {
       val extraMetadata: JObject = Map("numTrainingRecords" -> instance.numTrainingRecords)
-      DefaultParamsWriter.saveMetadata(instance, path, sc, extraMetadata = Some(extraMetadata))
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession,
+        extraMetadata = Some(extraMetadata))
       val dataPath = new Path(path, "data").toString
-      instance.freqItemsets.write.parquet(dataPath)
+      ReadWriteUtils.saveDataFrame(dataPath, instance.freqItemsets)
     }
   }
 
@@ -349,7 +363,7 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
 
     override def load(path: String): FPGrowthModel = {
       implicit val format = DefaultFormats
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val (major, minor) = VersionUtils.majorMinorVersion(metadata.sparkVersion)
       val numTrainingRecords = if (major < 2 || (major == 2 && minor < 4)) {
         // 2.3 and before don't store the count
@@ -359,7 +373,7 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
         (metadata.metadata \ "numTrainingRecords").extract[Long]
       }
       val dataPath = new Path(path, "data").toString
-      val frequentItems = sparkSession.read.parquet(dataPath)
+      val frequentItems = ReadWriteUtils.loadDataFrame(dataPath, sparkSession)
       val itemSupport = if (numTrainingRecords == 0L) {
         Map.empty[Any, Double]
       } else {

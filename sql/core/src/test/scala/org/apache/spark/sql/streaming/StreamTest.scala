@@ -27,7 +27,7 @@ import org.scalatest.{Assertions, BeforeAndAfterAll}
 import org.scalatest.concurrent.{Eventually, Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
-import org.scalatest.time.Span
+import org.scalatest.time.{Millis, Span}
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkEnv
@@ -37,10 +37,12 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical.AllTuples
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, SparkDataStream}
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2ScanRelation
-import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousExecution, EpochCoordinatorRef, IncrementAndGetEpoch}
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperator
+import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, MemoryStreamBase, MemoryStreamTable, MicroBatchExecution, StreamExecution, StreamingExecutionRelation, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.sources.MemorySink
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.streaming.StreamingQueryListener._
@@ -170,6 +172,31 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
       CheckAnswerRowsByFunc(globalCheckFunction, false)
   }
 
+  object CheckAnswerWithTimeout {
+
+    def apply[A: Encoder](timeoutMs: Long, data: A*): CheckAnswerRowsNoWait = {
+      val toExternalRow = createToExternalRowConverter[A]()
+      CheckAnswerRowsNoWait(data.map(toExternalRow), timeoutMs)
+    }
+
+    def apply(timeoutMs: Long, rows: Row*): CheckAnswerRowsNoWait =
+      CheckAnswerRowsNoWait(rows, timeoutMs)
+  }
+
+  /**
+   * Used for testing Real-time mode where batches run for a fixed amount of time
+   */
+  object CheckAnswerRowsContainsWithTimeout {
+
+    def apply[A: Encoder](timeoutMs: Long, data: A*): CheckAnswerRowsContainsWithTimeout = {
+      val toExternalRow = createToExternalRowConverter[A]()
+      CheckAnswerRowsContainsWithTimeout(data.map(toExternalRow), timeoutMs)
+    }
+
+    def apply(timeoutMs: Long, rows: Row*): CheckAnswerRowsContainsWithTimeout =
+      CheckAnswerRowsContainsWithTimeout(rows, timeoutMs)
+  }
+
   /**
    * Checks to make sure that the current data stored in the sink matches the `expectedAnswer`.
    * This operation automatically blocks until all added data has been processed.
@@ -216,6 +243,20 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
     override def toString: String = s"CheckNewAnswer: ${expectedAnswer.mkString(",")}"
   }
 
+  case class CheckAnswerRowsNoWait(expectedAnswer: Seq[Row], waitTimeoutMs: Long)
+    extends StreamAction
+      with StreamMustBeRunning {
+    override def toString: String = s"$operatorName: ${expectedAnswer.mkString(",")}"
+    private def operatorName = "CheckAnswerWithTimeout"
+  }
+
+  case class CheckAnswerRowsContainsWithTimeout(expectedAnswer: Seq[Row], waitTimeoutMs: Long)
+    extends StreamAction
+      with StreamMustBeRunning {
+    override def toString: String = s"$operatorName: ${expectedAnswer.mkString(",")}"
+    private def operatorName = "CheckAnswerContainsWithTimeout"
+  }
+
   object CheckNewAnswer {
     def apply(): CheckNewAnswerRows = CheckNewAnswerRows(Seq.empty)
 
@@ -240,6 +281,10 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
 
   /** Advance the trigger clock's time manually. */
   case class AdvanceManualClock(timeToAdd: Long) extends StreamAction
+
+  case class WaitUntilBatchProcessed(batchId: Long) extends StreamAction with StreamMustBeRunning
+
+  case object WaitUntilCurrentBatchProcessed extends StreamAction with StreamMustBeRunning
 
   /**
    * Signals that a failure is expected and should not kill the test.
@@ -346,7 +391,8 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
   def testStream(
       _stream: Dataset[_],
       outputMode: OutputMode = OutputMode.Append,
-      extraOptions: Map[String, String] = Map.empty)(actions: StreamAction*): Unit = synchronized {
+      extraOptions: Map[String, String] = Map.empty,
+      sink: MemorySink = new MemorySink())(actions: StreamAction*): Unit = synchronized {
     import org.apache.spark.sql.streaming.util.StreamManualClock
 
     // `synchronized` is added to prevent the user from calling multiple `testStream`s concurrently
@@ -354,12 +400,12 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
     // and it may not work correctly when multiple `testStream`s run concurrently.
 
     val stream = _stream.toDF()
-    val sparkSession = stream.sparkSession  // use the session in DF, not the default session
+    // use the session in DF, not the default session
+    val sparkSession = castToImpl(stream.sparkSession)
     var pos = 0
     var currentStream: StreamExecution = null
     var lastStream: StreamExecution = null
     val awaiting = new mutable.HashMap[Int, OffsetV2]() // source index -> offset to wait for
-    val sink = new MemorySink
     val resetConfValues = mutable.Map[String, Option[String]]()
     val defaultCheckpointLocation =
       Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
@@ -542,10 +588,7 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
           val metadataRoot = Option(checkpointLocation).getOrElse(defaultCheckpointLocation)
 
           additionalConfs.foreach(pair => {
-            val value =
-              if (sparkSession.conf.contains(pair._1)) {
-                Some(sparkSession.conf.get(pair._1))
-              } else None
+            val value = sparkSession.conf.getOption(pair._1)
             resetConfValues(pair._1) = value
             sparkSession.conf.set(pair._1, pair._2)
           })
@@ -599,6 +642,39 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
             s"Unexpected clock time after updating: " +
               s"expecting $manualClockExpectedTime, current ${clock.getTimeMillis()}")
 
+        case WaitUntilBatchProcessed(batchId) =>
+          eventually("Next batch was never processed") {
+            if (!currentStream.exception.isDefined) {
+              assert(currentStream.commitLog.getLatestBatchId().getOrElse(-1L) >= batchId)
+
+              // The progress gets updated after the commit log is updated, but callers
+              // use WaitUntil(Current)BatchProcessed to check the streaming query progress.
+              //
+              // Checking the progress alone is not enough because progress can be posted due
+              // to idleness even if the commitLog has not been updated.
+              val latestProgressBatchId =
+                currentStream.recentProgress.lastOption.map(_.batchId).getOrElse(-1L)
+              assert(latestProgressBatchId >= batchId)
+            }
+          }
+          if (currentStream.exception.isDefined) {
+            throw currentStream.exception.get
+          }
+
+        case WaitUntilCurrentBatchProcessed =>
+          if (currentStream.exception.isDefined) {
+            throw currentStream.exception.get
+          }
+          val currBatch = currentStream.commitLog.getLatestBatchId().getOrElse(-1L)
+          eventually("Current batch never finishes") {
+            assert(currentStream.commitLog.getLatestBatchId() != None
+              && currentStream.commitLog.getLatestBatchId().get > currBatch)
+
+            // See WaitUntilBatchProcessed for an explanation of why we wait for the progress
+            val latestProgressBatchId =
+              currentStream.recentProgress.lastOption.map(_.batchId).getOrElse(-1L)
+            assert(latestProgressBatchId >= currBatch)
+          }
         case StopStream =>
           verify(currentStream != null, "can not stop a stream that is not running")
           try failAfter(streamingTimeout) {
@@ -743,6 +819,23 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
         case e: ExternalAction =>
           e.runAction()
 
+
+        case CheckAnswerRowsNoWait(expectedAnswer, timeoutMs) =>
+          Eventually.eventually(Timeout(Span(timeoutMs, Millis))) {
+            val sparkAnswer = sink.allData
+            QueryTest.sameRows(expectedAnswer, sparkAnswer).foreach {
+              error => failTest(error)
+            }
+          }
+
+        case CheckAnswerRowsContainsWithTimeout(expectedAnswer, timeoutMs) =>
+          Eventually.eventually(Timeout(Span(timeoutMs, Millis))) {
+            val sparkAnswer = sink.allData
+            QueryTest.includesRows(expectedAnswer, sparkAnswer).foreach { error =>
+              failTest(error)
+            }
+          }
+
         case CheckAnswerRows(expectedAnswer, lastOnly, isSorted) =>
           val sparkAnswer = fetchStreamAnswer(currentStream, lastOnly)
           QueryTest.sameRows(expectedAnswer, sparkAnswer, isSorted).foreach {
@@ -813,6 +906,13 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
         case (key, None) => sparkSession.conf.unset(key)
       }
       sparkSession.streams.removeListener(listener)
+      // The state store is stopped here to unload all state stores and terminate all maintenance
+      // threads. It is necessary because the temp directory used by the checkpoint directory
+      // may be deleted soon after, and the maintenance thread may see unexpected error and
+      // cause unexpected behavior. Doing it after a test finishes might be too late because
+      // sometimes the checkpoint directory is under `withTempDir`, and in this case the temp
+      // directory is deleted before the test finishes.
+      StateStore.stop()
     }
   }
 
@@ -863,7 +963,7 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
 
     (1 to iterations).foreach { i =>
       val rand = Random.nextDouble()
-      if(!running) {
+      if (!running) {
         rand match {
           case r if r < 0.7 => // AddData
             addRandomData()
@@ -891,7 +991,7 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
         }
       }
     }
-    if(!running) { actions += StartStream() }
+    if (!running) { actions += StartStream() }
     addCheck()
     testStream(ds)(actions.toSeq: _*)
   }

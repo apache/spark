@@ -20,11 +20,12 @@ package org.apache.spark.sql.catalyst.analysis
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, CurrentTimestamp, Literal, Rand}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, CurrentTime, CurrentTimestamp, Literal, Rand}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, EvalInlineTables}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.types.{LongType, NullType, TimestampType}
+import org.apache.spark.sql.catalyst.util.EvaluateUnresolvedInlineTable
+import org.apache.spark.sql.types.{LongType, NullType, TimestampType, TimeType}
 
 /**
  * Unit tests for [[ResolveInlineTables]]. Note that there are also test cases defined in
@@ -36,45 +37,45 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
   private def lit(v: Any): Literal = Literal(v)
 
   test("validate inputs are foldable") {
-    ResolveInlineTables.validateInputEvaluable(
+    EvaluateUnresolvedInlineTable.validateInputEvaluable(
       UnresolvedInlineTable(Seq("c1", "c2"), Seq(Seq(lit(1)))))
 
     // Alias is OK
-    ResolveInlineTables.validateInputEvaluable(
+    EvaluateUnresolvedInlineTable.validateInputEvaluable(
       UnresolvedInlineTable(Seq("c1", "c2"), Seq(Seq(Alias(lit(1), "a")()))))
 
     // nondeterministic (rand) should not work
     intercept[AnalysisException] {
-      ResolveInlineTables.validateInputEvaluable(
+      EvaluateUnresolvedInlineTable.validateInputEvaluable(
         UnresolvedInlineTable(Seq("c1"), Seq(Seq(Rand(1)))))
     }
 
     // aggregate should not work
     intercept[AnalysisException] {
-      ResolveInlineTables.validateInputEvaluable(
+      EvaluateUnresolvedInlineTable.validateInputEvaluable(
         UnresolvedInlineTable(Seq("c1"), Seq(Seq(Count(lit(1))))))
     }
 
     // unresolved attribute should not work
     intercept[AnalysisException] {
-      ResolveInlineTables.validateInputEvaluable(
+      EvaluateUnresolvedInlineTable.validateInputEvaluable(
         UnresolvedInlineTable(Seq("c1"), Seq(Seq(UnresolvedAttribute("A")))))
     }
   }
 
   test("validate input dimensions") {
-    ResolveInlineTables.validateInputDimension(
+    EvaluateUnresolvedInlineTable.validateInputDimension(
       UnresolvedInlineTable(Seq("c1"), Seq(Seq(lit(1)), Seq(lit(2)))))
 
     // num alias != data dimension
     intercept[AnalysisException] {
-      ResolveInlineTables.validateInputDimension(
+      EvaluateUnresolvedInlineTable.validateInputDimension(
         UnresolvedInlineTable(Seq("c1", "c2"), Seq(Seq(lit(1)), Seq(lit(2)))))
     }
 
     // num alias == data dimension, but data themselves are inconsistent
     intercept[AnalysisException] {
-      ResolveInlineTables.validateInputDimension(
+      EvaluateUnresolvedInlineTable.validateInputDimension(
         UnresolvedInlineTable(Seq("c1"), Seq(Seq(lit(1)), Seq(lit(21), lit(22)))))
     }
   }
@@ -104,7 +105,7 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
     assert(resolved.isInstanceOf[ResolvedInlineTable])
 
     EvalInlineTables(ComputeCurrentTime(resolved)) match {
-      case LocalRelation(output, data, _) =>
+      case LocalRelation(output, data, _, _) =>
         assert(output.map(_.dataType) == Seq(TimestampType))
         assert(data.size == 2)
         // Make sure that both CURRENT_TIMESTAMP expressions are evaluated to the same value.
@@ -112,11 +113,38 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
     }
   }
 
+  test("cast and execute CURRENT_TIME expressions") {
+    val table = UnresolvedInlineTable(
+      Seq("c1"),
+      Seq(
+        Seq(CurrentTime()),
+        Seq(CurrentTime())
+      )
+    )
+    val resolved = ResolveInlineTables(ResolveTimeZone(table))
+    assert(resolved.isInstanceOf[ResolvedInlineTable],
+      "Expected an inline table to be resolved into a ResolvedInlineTable")
+
+    val transformed = ComputeCurrentTime(resolved)
+    EvalInlineTables(transformed) match {
+      case LocalRelation(output, data, _, _) =>
+        // expect default precision = 6
+        assert(output.map(_.dataType) == Seq(TimeType(6)))
+        // Should have 2 rows
+        assert(data.size == 2)
+        // Both rows should have the *same* microsecond value for current_time
+        assert(data(0).getLong(0) == data(1).getLong(0),
+          "Both CURRENT_TIME calls must yield the same value in the same query")
+    }
+  }
+
+
   test("convert TimeZoneAwareExpression") {
     val table = UnresolvedInlineTable(Seq("c1"),
       Seq(Seq(Cast(lit("1991-12-06 00:00:00.0"), TimestampType))))
     val withTimeZone = ResolveTimeZone.apply(table)
-    val LocalRelation(output, data, _) = EvalInlineTables(ResolveInlineTables.apply(withTimeZone))
+    val LocalRelation(output, data, _, _) =
+      EvalInlineTables(ResolveInlineTables.apply(withTimeZone))
     val correct = Cast(lit("1991-12-06 00:00:00.0"), TimestampType)
       .withTimeZone(conf.sessionLocalTimeZone).eval().asInstanceOf[Long]
     assert(output.map(_.dataType) == Seq(TimestampType))
@@ -126,11 +154,11 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
 
   test("nullability inference in convert") {
     val table1 = UnresolvedInlineTable(Seq("c1"), Seq(Seq(lit(1)), Seq(lit(2L))))
-    val converted1 = ResolveInlineTables.findCommonTypesAndCast(table1)
+    val converted1 = EvaluateUnresolvedInlineTable.findCommonTypesAndCast(table1)
     assert(!converted1.schema.fields(0).nullable)
 
     val table2 = UnresolvedInlineTable(Seq("c1"), Seq(Seq(lit(1)), Seq(Literal(null, NullType))))
-    val converted2 = ResolveInlineTables.findCommonTypesAndCast(table2)
+    val converted2 = EvaluateUnresolvedInlineTable.findCommonTypesAndCast(table2)
     assert(converted2.schema.fields(0).nullable)
   }
 }

@@ -29,19 +29,19 @@ import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionExce
 import org.codehaus.commons.compiler.{CompileException, InternalCompilerException}
 import org.codehaus.janino.ClassBodyEvaluator
 import org.codehaus.janino.util.ClassFile
+import org.codehaus.janino.util.ClassFile.CodeAttribute
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, TaskContext, TaskKilledException}
 import org.apache.spark.executor.InputMetrics
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.internal.MDC
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.HashableWeakReference
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, CollationSupport, MapData, SQLOrderingUtil, UnsafeRowUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationAwareUTF8String, CollationFactory, CollationSupport, MapData, SQLOrderingUtil, UnsafeRowUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -1518,6 +1518,8 @@ object CodeGenerator extends Logging {
       classOf[Platform].getName,
       classOf[InternalRow].getName,
       classOf[UnsafeRow].getName,
+      classOf[GeographyVal].getName,
+      classOf[GeometryVal].getName,
       classOf[UTF8String].getName,
       classOf[Decimal].getName,
       classOf[CalendarInterval].getName,
@@ -1530,17 +1532,18 @@ object CodeGenerator extends Logging {
       classOf[TaskContext].getName,
       classOf[TaskKilledException].getName,
       classOf[InputMetrics].getName,
+      classOf[CollationAwareUTF8String].getName,
       classOf[CollationFactory].getName,
       classOf[CollationSupport].getName,
       QueryExecutionErrors.getClass.getName.stripSuffix("$")
     )
     evaluator.setExtendedClass(classOf[GeneratedClass])
 
-    logDebug({
+    logBasedOnLevel(SQLConf.get.codegenLogLevel) {
       // Only add extra debugging info to byte code when we are going to print the source code.
       evaluator.setDebuggingInformation(true, true, false)
-      s"\n${CodeFormatter.format(code)}"
-    })
+      log"\n${MDC(LogKeys.CODE, CodeFormatter.format(code))}"
+    }
 
     val codeStats = try {
       evaluator.cook("generated.java", code.body)
@@ -1578,9 +1581,6 @@ object CodeGenerator extends Logging {
     val classes = evaluator.getBytecodes.asScala
 
     // Then walk the classes to get at the method bytecode.
-    val codeAttr = Utils.classForName("org.codehaus.janino.util.ClassFile$CodeAttribute")
-    val codeAttrField = codeAttr.getDeclaredField("code")
-    codeAttrField.setAccessible(true)
     val codeStats = classes.map { case (_, classBytes) =>
       val classCodeSize = classBytes.length
       CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.update(classCodeSize)
@@ -1588,14 +1588,15 @@ object CodeGenerator extends Logging {
         val cf = new ClassFile(new ByteArrayInputStream(classBytes))
         val constPoolSize = cf.getConstantPoolSize
         val methodCodeSizes = cf.methodInfos.asScala.flatMap { method =>
-          method.getAttributes().filter(_.getClass eq codeAttr).map { a =>
-            val byteCodeSize = codeAttrField.get(a).asInstanceOf[Array[Byte]].length
+          method.getAttributes.collect { case attr: CodeAttribute =>
+            val byteCodeSize = attr.code.length
             CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(byteCodeSize)
 
             if (byteCodeSize > DEFAULT_JVM_HUGE_METHOD_LIMIT) {
-              logInfo("Generated method too long to be JIT compiled: " +
-                log"${MDC(CLASS_NAME, cf.getThisClassName)}.${MDC(METHOD_NAME, method.getName)} " +
-                log"is ${MDC(BYTECODE_SIZE, byteCodeSize)} bytes")
+              logInfo(log"Generated method too long to be JIT compiled: " +
+                log"${MDC(LogKeys.CLASS_NAME, cf.getThisClassName)}." +
+                log"${MDC(LogKeys.METHOD_NAME, method.getName)} is " +
+                log"${MDC(LogKeys.BYTECODE_SIZE, byteCodeSize)} bytes")
             }
 
             byteCodeSize
@@ -1683,6 +1684,8 @@ object CodeGenerator extends Logging {
       case _ => PhysicalDataType(dataType) match {
         case _: PhysicalArrayType => s"$input.getArray($ordinal)"
         case PhysicalBinaryType => s"$input.getBinary($ordinal)"
+        case _: PhysicalGeographyType => s"$input.getGeography($ordinal)"
+        case _: PhysicalGeometryType => s"$input.getGeometry($ordinal)"
         case PhysicalCalendarIntervalType => s"$input.getInterval($ordinal)"
         case t: PhysicalDecimalType => s"$input.getDecimal($ordinal, ${t.precision}, ${t.scale})"
         case _: PhysicalMapType => s"$input.getMap($ordinal)"
@@ -1961,6 +1964,8 @@ object CodeGenerator extends Logging {
    * Returns the Java type for a DataType.
    */
   def javaType(dt: DataType): String = dt match {
+    case _: GeographyType => "GeographyVal"
+    case _: GeometryType => "GeometryVal"
     case udt: UserDefinedType[_] => javaType(udt.sqlType)
     case ObjectType(cls) if cls.isArray => s"${javaType(ObjectType(cls.getComponentType))}[]"
     case ObjectType(cls) => cls.getName
@@ -1990,12 +1995,14 @@ object CodeGenerator extends Logging {
     case ByteType => java.lang.Byte.TYPE
     case ShortType => java.lang.Short.TYPE
     case IntegerType | DateType | _: YearMonthIntervalType => java.lang.Integer.TYPE
-    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
+    case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
       java.lang.Long.TYPE
     case FloatType => java.lang.Float.TYPE
     case DoubleType => java.lang.Double.TYPE
     case _: DecimalType => classOf[Decimal]
     case BinaryType => classOf[Array[Byte]]
+    case _: GeographyType => classOf[GeographyVal]
+    case _: GeometryType => classOf[GeometryVal]
     case _: StringType => classOf[UTF8String]
     case CalendarIntervalType => classOf[CalendarInterval]
     case _: StructType => classOf[InternalRow]

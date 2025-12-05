@@ -29,13 +29,14 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.getPartitionValueString
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateFormatter, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateFormatter, DateTimeUtils, TimeFormatter, TimestampFormatter}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -65,6 +66,7 @@ object PartitionSpec {
 
 object PartitioningUtils extends SQLConfHelper {
 
+  val timePartitionPattern = "HH:mm:ss[.SSSSSS]"
   val timestampPartitionPattern = "yyyy-MM-dd HH:mm:ss[.S]"
 
   case class TypedPartValue(value: String, dataType: DataType)
@@ -106,9 +108,10 @@ object PartitioningUtils extends SQLConfHelper {
       userSpecifiedSchema: Option[StructType],
       caseSensitive: Boolean,
       validatePartitionColumns: Boolean,
-      timeZoneId: String): PartitionSpec = {
+      timeZoneId: String,
+      ignoreInvalidPartitionPaths: Boolean): PartitionSpec = {
     parsePartitions(paths, typeInference, basePaths, userSpecifiedSchema, caseSensitive,
-      validatePartitionColumns, DateTimeUtils.getZoneId(timeZoneId))
+      validatePartitionColumns, DateTimeUtils.getZoneId(timeZoneId), ignoreInvalidPartitionPaths)
   }
 
   private[datasources] def parsePartitions(
@@ -118,7 +121,8 @@ object PartitioningUtils extends SQLConfHelper {
       userSpecifiedSchema: Option[StructType],
       caseSensitive: Boolean,
       validatePartitionColumns: Boolean,
-      zoneId: ZoneId): PartitionSpec = {
+      zoneId: ZoneId,
+      ignoreInvalidPartitionPaths: Boolean): PartitionSpec = {
     val userSpecifiedDataTypes = if (userSpecifiedSchema.isDefined) {
       val nameToDataType = userSpecifiedSchema.get.fields.map(f => f.name -> f.dataType).toMap
       if (!caseSensitive) {
@@ -142,10 +146,11 @@ object PartitioningUtils extends SQLConfHelper {
       timestampPartitionPattern,
       zoneId,
       isParsing = true)
+    val timeFormatter = TimeFormatter(timePartitionPattern, isParsing = true)
     // First, we need to parse every partition's path and see if we can find partition values.
     val (partitionValues, optDiscoveredBasePaths) = paths.map { path =>
       parsePartition(path, typeInference, basePaths, userSpecifiedDataTypes,
-        validatePartitionColumns, zoneId, dateFormatter, timestampFormatter)
+        validatePartitionColumns, zoneId, dateFormatter, timestampFormatter, timeFormatter)
     }.unzip
 
     // We create pairs of (path -> path's partition value) here
@@ -170,14 +175,9 @@ object PartitioningUtils extends SQLConfHelper {
       //   "hdfs://host:9000/path"
       // TODO: Selective case sensitivity.
       val discoveredBasePaths = optDiscoveredBasePaths.flatten.map(_.toString.toLowerCase())
-      assert(
-        discoveredBasePaths.distinct.size == 1,
-        "Conflicting directory structures detected. Suspicious paths:\b" +
-          discoveredBasePaths.distinct.mkString("\n\t", "\n\t", "\n\n") +
-          "If provided paths are partition directories, please set " +
-          "\"basePath\" in the options of the data source to specify the " +
-          "root directory of the table. If there are multiple root directories, " +
-          "please load them separately and then union them.")
+      if (!ignoreInvalidPartitionPaths && discoveredBasePaths.distinct.size != 1) {
+        throw QueryExecutionErrors.conflictingDirectoryStructuresError(discoveredBasePaths)
+      }
 
       val resolvedPartitionValues = resolvePartitions(pathsWithPartitionValues, caseSensitive)
 
@@ -242,7 +242,8 @@ object PartitioningUtils extends SQLConfHelper {
       validatePartitionColumns: Boolean,
       zoneId: ZoneId,
       dateFormatter: DateFormatter,
-      timestampFormatter: TimestampFormatter): (Option[PartitionValues], Option[Path]) = {
+      timestampFormatter: TimestampFormatter,
+      timeFormatter: TimeFormatter): (Option[PartitionValues], Option[Path]) = {
     val columns = ArrayBuffer.empty[(String, TypedPartValue)]
     // Old Hadoop versions don't have `Path.isRoot`
     var finished = path.getParent == null
@@ -264,7 +265,7 @@ object PartitioningUtils extends SQLConfHelper {
         // Once we get the string, we try to parse it and find the partition column and value.
         val maybeColumn =
           parsePartitionColumn(currentPath.getName, typeInference, userSpecifiedDataTypes,
-            zoneId, dateFormatter, timestampFormatter)
+            zoneId, dateFormatter, timestampFormatter, timeFormatter)
         maybeColumn.foreach(columns += _)
 
         // Now, we determine if we should stop.
@@ -300,7 +301,8 @@ object PartitioningUtils extends SQLConfHelper {
       userSpecifiedDataTypes: Map[String, DataType],
       zoneId: ZoneId,
       dateFormatter: DateFormatter,
-      timestampFormatter: TimestampFormatter): Option[(String, TypedPartValue)] = {
+      timestampFormatter: TimestampFormatter,
+      timeFormatter: TimeFormatter): Option[(String, TypedPartValue)] = {
     val equalSignIndex = columnSpec.indexOf('=')
     if (equalSignIndex == -1) {
       None
@@ -321,7 +323,8 @@ object PartitioningUtils extends SQLConfHelper {
           typeInference,
           zoneId,
           dateFormatter,
-          timestampFormatter)
+          timestampFormatter,
+          timeFormatter)
       }
       Some(columnName -> TypedPartValue(rawColumnValue, dataType))
     }
@@ -384,9 +387,9 @@ object PartitioningUtils extends SQLConfHelper {
       } else {
         pathsWithPartitionValues.map(_._2.columnNames.map(_.toLowerCase()))
       }
-      assert(
-        partColNames.distinct.size == 1,
-        listConflictingPartitionColumns(pathsWithPartitionValues))
+      if (partColNames.distinct.size != 1) {
+        throw conflictingPartitionColumnsError(pathsWithPartitionValues)
+      }
 
       // Resolves possible type conflicts for each column
       val values = pathsWithPartitionValues.map(_._2)
@@ -402,8 +405,8 @@ object PartitioningUtils extends SQLConfHelper {
     }
   }
 
-  private[datasources] def listConflictingPartitionColumns(
-      pathWithPartitionValues: Seq[(Path, PartitionValues)]): String = {
+  private[datasources] def conflictingPartitionColumnsError(
+      pathWithPartitionValues: Seq[(Path, PartitionValues)]): SparkRuntimeException = {
     val distinctPartColNames = pathWithPartitionValues.map(_._2.columnNames).distinct
 
     def groupByKey[K, V](seq: Seq[(K, V)]): Map[K, Iterable[V]] =
@@ -421,35 +424,31 @@ object PartitioningUtils extends SQLConfHelper {
     // Lists out those non-leaf partition directories that also contain files
     val suspiciousPaths = distinctPartColNames.sortBy(_.length).flatMap(partColNamesToPaths)
 
-    s"Conflicting partition column names detected:\n" +
-      distinctPartColLists.mkString("\n\t", "\n\t", "\n\n") +
-      "For partitioned table directories, data files should only live in leaf directories.\n" +
-      "And directories at the same level should have the same partition column name.\n" +
-      "Please check the following directories for unexpected files or " +
-      "inconsistent partition column names:\n" +
-      suspiciousPaths.map("\t" + _).mkString("\n", "\n", "")
+    QueryExecutionErrors.conflictingPartitionColumnNamesError(
+      distinctPartColLists, suspiciousPaths)
   }
 
   // scalastyle:off line.size.limit
   /**
    * Converts a string to a [[Literal]] with automatic type inference. Currently only supports
    * [[NullType]], [[IntegerType]], [[LongType]], [[DoubleType]], [[DecimalType]], [[DateType]]
-   * [[TimestampType]], and [[StringType]].
+   * [[TimestampType]], [[TimeType]] and [[StringType]].
    *
    * When resolving conflicts, it follows the table below:
    *
-   * +--------------------+-------------------+-------------------+-------------------+--------------------+------------+---------------+---------------+------------+
-   * | InputA \ InputB    | NullType          | IntegerType       | LongType          | DecimalType(38,0)* | DoubleType | DateType      | TimestampType | StringType |
-   * +--------------------+-------------------+-------------------+-------------------+--------------------+------------+---------------+---------------+------------+
-   * | NullType           | NullType          | IntegerType       | LongType          | DecimalType(38,0)  | DoubleType | DateType      | TimestampType | StringType |
-   * | IntegerType        | IntegerType       | IntegerType       | LongType          | DecimalType(38,0)  | DoubleType | StringType    | StringType    | StringType |
-   * | LongType           | LongType          | LongType          | LongType          | DecimalType(38,0)  | StringType | StringType    | StringType    | StringType |
-   * | DecimalType(38,0)* | DecimalType(38,0) | DecimalType(38,0) | DecimalType(38,0) | DecimalType(38,0)  | StringType | StringType    | StringType    | StringType |
-   * | DoubleType         | DoubleType        | DoubleType        | StringType        | StringType         | DoubleType | StringType    | StringType    | StringType |
-   * | DateType           | DateType          | StringType        | StringType        | StringType         | StringType | DateType      | TimestampType | StringType |
-   * | TimestampType      | TimestampType     | StringType        | StringType        | StringType         | StringType | TimestampType | TimestampType | StringType |
-   * | StringType         | StringType        | StringType        | StringType        | StringType         | StringType | StringType    | StringType    | StringType |
-   * +--------------------+-------------------+-------------------+-------------------+--------------------+------------+---------------+---------------+------------+
+   * +--------------------+-------------------+-------------------+-------------------+--------------------+------------+---------------+---------------+------------+------------+
+   * | InputA \ InputB    | NullType          | IntegerType       | LongType          | DecimalType(38,0)* | DoubleType | DateType      | TimestampType | StringType | TimeType   |
+   * +--------------------+-------------------+-------------------+-------------------+--------------------+------------+---------------+---------------+------------+------------+
+   * | NullType           | NullType          | IntegerType       | LongType          | DecimalType(38,0)  | DoubleType | DateType      | TimestampType | StringType | TimeType   |
+   * | IntegerType        | IntegerType       | IntegerType       | LongType          | DecimalType(38,0)  | DoubleType | StringType    | StringType    | StringType | StringType |
+   * | LongType           | LongType          | LongType          | LongType          | DecimalType(38,0)  | StringType | StringType    | StringType    | StringType | StringType |
+   * | DecimalType(38,0)* | DecimalType(38,0) | DecimalType(38,0) | DecimalType(38,0) | DecimalType(38,0)  | StringType | StringType    | StringType    | StringType | StringType |
+   * | DoubleType         | DoubleType        | DoubleType        | StringType        | StringType         | DoubleType | StringType    | StringType    | StringType | StringType |
+   * | DateType           | DateType          | StringType        | StringType        | StringType         | StringType | DateType      | TimestampType | StringType | StringType |
+   * | TimeType           | TimeType          | StringType        | StringType        | StringType         | StringType | StringType    | StringType    | StringType | TimeType   |
+   * | TimestampType      | TimestampType     | StringType        | StringType        | StringType         | StringType | TimestampType | TimestampType | StringType | StringType |
+   * | StringType         | StringType        | StringType        | StringType        | StringType         | StringType | StringType    | StringType    | StringType | StringType |
+   * +--------------------+-------------------+-------------------+-------------------+--------------------+------------+---------------+---------------+------------+------------+
    * Note that, for DecimalType(38,0)*, the table above intentionally does not cover all other
    * combinations of scales and precisions because currently we only infer decimal type like
    * `BigInteger`/`BigInt`. For example, 1.1 is inferred as double type.
@@ -460,7 +459,8 @@ object PartitioningUtils extends SQLConfHelper {
       typeInference: Boolean,
       zoneId: ZoneId,
       dateFormatter: DateFormatter,
-      timestampFormatter: TimestampFormatter): DataType = {
+      timestampFormatter: TimestampFormatter,
+      timeFormatter: TimeFormatter): DataType = {
     val decimalTry = Try {
       // `BigDecimal` conversion can fail when the `field` is not a form of number.
       val bigDecimal = new JBigDecimal(raw)
@@ -506,6 +506,20 @@ object PartitioningUtils extends SQLConfHelper {
       timestampType
     }
 
+    val timeTry = Try {
+      val unescapedRaw = unescapePathName(raw)
+      // try and parse the time, if no exception occurs this is a candidate to be resolved as
+      // TimeType
+      timeFormatter.parse(unescapedRaw)
+      // We need to check that we can cast the raw string since we later can use Cast to get
+      // the partition values with the right DataType (see
+      // org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex.inferPartitioning)
+      val timeValue = Cast(Literal(unescapedRaw), TimeType(), Some(zoneId.getId)).eval()
+      // Disallow TimeType if the cast returned null
+      require(timeValue != null)
+      TimeType()
+    }
+
     if (typeInference) {
       // First tries integral types
       Try({ Integer.parseInt(raw); IntegerType })
@@ -516,6 +530,7 @@ object PartitioningUtils extends SQLConfHelper {
         // Then falls back to date/timestamp types
         .orElse(timestampTry)
         .orElse(dateTry)
+        .orElse(timeTry)
         // Then falls back to string
         .getOrElse {
           if (raw == DEFAULT_PARTITION_NAME) NullType else StringType
@@ -541,6 +556,7 @@ object PartitioningUtils extends SQLConfHelper {
     case _: DecimalType => Literal(new JBigDecimal(value)).value
     case DateType =>
       Cast(Literal(value), DateType, Some(zoneId.getId)).eval()
+    case tt: TimeType => Cast(Literal(unescapePathName(value)), tt).eval()
     // Timestamp types
     case dt if AnyTimestampType.acceptsType(dt) =>
       Try {
@@ -552,7 +568,7 @@ object PartitioningUtils extends SQLConfHelper {
       Cast(Literal(unescapePathName(value)), it).eval()
     case BinaryType => value.getBytes()
     case BooleanType => value.toBoolean
-    case dt => throw QueryExecutionErrors.typeUnsupportedError(dt)
+    case dt => throw SparkException.internalError(s"Unsupported partition type: $dt")
   }
 
   def validatePartitionColumn(

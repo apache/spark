@@ -16,31 +16,32 @@
  */
 package org.apache.spark.sql.execution.datasources.xml
 
-import java.io.{EOFException, File}
+import java.io.{EOFException, File, FileOutputStream, StringWriter}
 import java.nio.charset.{StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.{Files, Path, Paths}
 import java.sql.{Date, Timestamp}
-import java.time.{Instant, LocalDateTime}
+import java.time.{Instant, LocalDateTime, Year}
 import java.util.TimeZone
 import java.util.concurrent.ConcurrentHashMap
-import javax.xml.stream.XMLStreamException
+import javax.xml.stream.{XMLOutputFactory, XMLStreamException}
 
 import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
 import scala.io.Source
 import scala.jdk.CollectionConverters._
 
-import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FSDataInputStream
 import org.apache.hadoop.io.{LongWritable, Text}
-import org.apache.hadoop.io.compress.GzipCodec
+import org.apache.hadoop.io.compress.{CompressionCodecFactory, GzipCodec}
 
-import org.apache.spark.{DebugFilesystem, SparkException}
-import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, QueryTest, Row, SaveMode}
+import org.apache.spark.{DebugFilesystem, SparkConf, SparkException}
+import org.apache.spark.io.ZStdCompressionCodec
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, QueryTest, Row, SaveMode, YearUDT}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UDTEncoder
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
-import org.apache.spark.sql.catalyst.xml.XmlOptions
+import org.apache.spark.sql.catalyst.xml.{IndentingXMLStreamWriter, XmlOptions}
 import org.apache.spark.sql.catalyst.xml.XmlOptions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
@@ -50,6 +51,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
 
 class XmlSuite
     extends QueryTest
@@ -58,7 +60,12 @@ class XmlSuite
     with TestXmlData {
   import testImplicits._
 
-  private val resDir = "test-data/xml-resources/"
+  protected val legacyParserEnabled: Boolean = false
+
+  override protected def sparkConf: SparkConf = super.sparkConf
+    .set("spark.sql.xml.legacyXMLParser.enabled", legacyParserEnabled.toString)
+
+  protected val resDir = "test-data/xml-resources/"
 
   private var tempDir: Path = _
 
@@ -76,6 +83,20 @@ class XmlSuite
 
   override def excluded: Seq[String] = Seq(
     s"Propagate Hadoop configs from $dataSourceFormat options to underlying file system")
+
+  private val baseOptions = Map("rowTag" -> "ROW")
+
+  private def readData(
+      xmlString: String,
+      schemaOpt: Option[StructType],
+      options: Map[String, String] = Map.empty): DataFrame = {
+    val ds = spark.createDataset(spark.sparkContext.parallelize(Seq(xmlString)))(Encoders.STRING)
+    if (schemaOpt.isDefined) {
+      spark.read.schema(schemaOpt.get).options(options).xml(ds)
+    } else {
+      spark.read.options(options).xml(ds)
+    }
+  }
 
   // Tests
 
@@ -180,6 +201,16 @@ class XmlSuite
     assert(results.length === 3)
   }
 
+  test("DSL test zstd compressed file") {
+    val results = spark.read
+      .option("rowTag", "ROW")
+      .xml(getTestResourcePath(resDir + "cars.xml.zst"))
+      .select("year")
+      .collect()
+
+    assert(results.length === 3)
+  }
+
   test("DSL test bad charset name") {
     val exception = intercept[SparkException] {
       spark.read
@@ -189,7 +220,7 @@ class XmlSuite
         .select("year")
         .collect()
     }
-    ExceptionUtils.getRootCause(exception).isInstanceOf[UnsupportedCharsetException]
+    Utils.getRootCause(exception).isInstanceOf[UnsupportedCharsetException]
     assert(exception.getMessage.contains("1-9588-osi"))
   }
 
@@ -241,8 +272,10 @@ class XmlSuite
           .option("mode", FailFastMode.name)
           .xml(inputFile)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_2165",
-      parameters = Map("failFastMode" -> "FAILFAST")
+      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "badRecord" -> "_corrupt_record",
+        "failFastMode" -> "FAILFAST")
     )
     val exceptionInParsing = intercept[SparkException] {
       spark.read
@@ -252,13 +285,13 @@ class XmlSuite
         .xml(inputFile)
         .collect()
     }
-    checkError(
+    checkErrorMatchPVals(
       exception = exceptionInParsing,
-      errorClass = "FAILED_READ_FILE.NO_HINT",
-      parameters = Map("path" -> Path.of(inputFile).toUri.toString))
+      condition = "FAILED_READ_FILE.NO_HINT",
+      parameters = Map("path" -> s".*$inputFile.*"))
     checkError(
       exception = exceptionInParsing.getCause.asInstanceOf[SparkException],
-      errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       parameters = Map(
         "badRecord" -> "[null]",
         "failFastMode" -> FailFastMode.name)
@@ -274,8 +307,10 @@ class XmlSuite
           .option("mode", FailFastMode.name)
           .xml(inputFile)
       },
-      errorClass = "_LEGACY_ERROR_TEMP_2165",
-      parameters = Map("failFastMode" -> "FAILFAST"))
+      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "badRecord" -> "_corrupt_record",
+        "failFastMode" -> "FAILFAST"))
     val exceptionInParsing = intercept[SparkException] {
       spark.read
         .schema("_id string")
@@ -284,13 +319,13 @@ class XmlSuite
         .xml(inputFile)
         .show()
     }
-    checkError(
+    checkErrorMatchPVals(
       exception = exceptionInParsing,
-      errorClass = "FAILED_READ_FILE.NO_HINT",
-      parameters = Map("path" -> Path.of(inputFile).toUri.toString))
+      condition = "FAILED_READ_FILE.NO_HINT",
+      parameters = Map("path" -> s".*$inputFile.*"))
     checkError(
       exception = exceptionInParsing.getCause.asInstanceOf[SparkException],
-      errorClass = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       parameters = Map(
         "badRecord" -> "[null]",
         "failFastMode" -> FailFastMode.name)
@@ -304,21 +339,37 @@ class XmlSuite
       .option("columnNameOfCorruptRecord", "_malformed_records")
       .xml(getTestResourcePath(resDir + "cars-malformed.xml"))
     val cars = carsDf.collect()
-    assert(cars.length === 3)
 
-    val malformedRowOne = carsDf.cache().select("_malformed_records").first().get(0).toString
-    val malformedRowTwo = carsDf.cache().select("_malformed_records").take(2).last.get(0).toString
-    val expectedMalformedRowOne = "<ROW><year>2012</year><make>Tesla</make><model>>S" +
-      "<comment>No comment</comment></ROW>"
-    val expectedMalformedRowTwo = "<ROW></year><make>Ford</make><model>E350</model>model></model>" +
-      "<comment>Go get one now they are going fast</comment></ROW>"
+    if (legacyParserEnabled) {
+      assert(cars.length === 3)
+      val malformedRows = carsDf.cache().filter($"_malformed_records".isNotNull)
+      val malformedRowOne = malformedRows.select("_malformed_records").first().get(0).toString
+      val malformedRowTwo = malformedRows.select("_malformed_records").take(2).last.get(0).toString
+      val expectedMalformedRowOne = "<ROW><year>2012</year><make>Tesla</make><model>>S" +
+        "<comment>No comment</comment></ROW>"
+      val expectedMalformedRowTwo = "<ROW></year><make>Ford</make><model>E350</model>" +
+        "model></model><comment>Go get one now they are going fast</comment></ROW>"
+      assert(
+        malformedRowOne.replaceAll("\\s", "") === expectedMalformedRowOne.replaceAll("\\s", ""))
+      assert(
+        malformedRowTwo.replaceAll("\\s", "") === expectedMalformedRowTwo.replaceAll("\\s", ""))
 
-    assert(malformedRowOne.replaceAll("\\s", "") === expectedMalformedRowOne.replaceAll("\\s", ""))
-    assert(malformedRowTwo.replaceAll("\\s", "") === expectedMalformedRowTwo.replaceAll("\\s", ""))
-    assert(cars(2)(0) === null)
-    assert(cars(0).toSeq.takeRight(3) === Seq(null, null, null))
-    assert(cars(1).toSeq.takeRight(3) === Seq(null, null, null))
-    assert(cars(2).toSeq.takeRight(3) === Seq("Chevy", "Volt", 2015))
+      val validRows = carsDf.cache().filter($"_malformed_records".isNull)
+      checkAnswer(validRows, Seq(Row(null, "Chevy", "Volt", 2015)))
+    } else {
+      // Memory efficient parser skips parsing data once malformed-ness is detected.
+      assert(cars.length === 2)
+
+      // Memory efficient parser will put the whole file into _malformed_records column
+      val malformedRows = carsDf.cache().filter($"_malformed_records".isNotNull)
+      assert(
+        malformedRows.first().getString(0).startsWith("<?xml version=\"1.0\"?>")
+          && malformedRows.first().getString(0).endsWith("</ROWSET>\n")
+      )
+
+      val validRows = carsDf.cache().filter($"_malformed_records".isNull)
+      checkAnswer(validRows, Seq(Row(null, "Chevy", "Volt", 2015)))
+    }
   }
 
   test("DSL test with empty file and known schema") {
@@ -1044,9 +1095,15 @@ class XmlSuite
       .xml(getTestResourcePath(resDir + "books-malformed-attributes.xml"))
       .collect()
 
-    assert(results.length === 2)
-    assert(results(0)(0) === "bk111")
-    assert(results(1)(0) === "bk112")
+    if (legacyParserEnabled) {
+      assert(results.length === 2)
+      assert(results(0)(0) === "bk111")
+      assert(results(1)(0) === "bk112")
+    } else {
+      // Memory efficient parser skips parsing data once malformed-ness is detected.
+      assert(results.length === 1)
+      assert(results(0)(0) === "bk111")
+    }
   }
 
   test("read utf-8 encoded file with empty tag") {
@@ -1250,6 +1307,60 @@ class XmlSuite
       rec.endsWith("</basket>"))
   }
 
+  test("test XSD validation where row tag is the root tag") {
+    val basketDF = spark.read
+      .option("rowTag", "baskets")
+      .option("inferSchema", true)
+      .option("mode", "PERMISSIVE")
+      .option("rowValidationXSDPath", getTestResourcePath(resDir + "basket.xsd")
+        .replace("file:/", "/"))
+      .option("columnNameOfCorruptRecord", "_malformed_records")
+      .xml(getTestResourcePath(resDir + "basket.xml"))
+      .cache()
+    assert(basketDF.schema == new StructType().add("_malformed_records", StringType))
+  }
+
+  Seq(
+    "basket_invalid_in_the_beginning.xml",
+    "basket_invalid_in_the_middle.xml",
+    "basket_invalid_at_the_end.xml"
+  ).foreach { file =>
+    test("test XSD validation with invalid XSD records in different places, file: " + file) {
+      val basketDF = spark.read
+        .option("rowTag", "basket")
+        .option("inferSchema", true)
+        .option(
+          "rowValidationXSDPath",
+          getTestResourcePath(resDir + "basket.xsd")
+            .replace("file:/", "/")
+        )
+        .option("mode", "PERMISSIVE")
+        .option("columnNameOfCorruptRecord", "_malformed_records")
+        .xml(getTestResourcePath(resDir + file))
+        .cache()
+
+      // Should have both valid and invalid records
+      assert(basketDF.count() == 4)
+
+      // Check invalid record
+      assert(basketDF.filter($"_malformed_records".isNotNull).count() == 1)
+      val rec = basketDF
+        .filter($"_malformed_records".isNotNull)
+        .select("_malformed_records").collect()(0).getString(0)
+      assert(
+        rec.startsWith("""<basket invalid="true">""") &&
+          rec.indexOf("<extra>123</extra>") != -1 &&
+          rec.endsWith("</basket>"))
+
+      // Check valid records
+      assert(basketDF.filter($"_malformed_records".isNull).count() == 3)
+      checkAnswer(
+        basketDF.filter($"_malformed_records".isNull).select($"entry".getItem(0)),
+        Seq(Row(Row(1, "fork")), Row(Row(3, "apple")), Row(Row(5, "straw")))
+      )
+    }
+  }
+
   test("test xmlDataset") {
     val data = Seq(
       "<ROW><year>2012</year><make>Tesla</make><model>S</model><comment>No comment</comment></ROW>",
@@ -1281,26 +1392,6 @@ class XmlSuite
     assert(result.select("decoded._foo").head().getString(0) === "bar")
   }
 
-  /*
-  test("from_xml array basic test") {
-    val xmlData =
-      """<parent><pid>12345</pid><name>dave guy</name></parent>
-        |<parent><pid>67890</pid><name>other guy</name></parent>""".stripMargin
-    val df = Seq((8, xmlData)).toDF("number", "payload")
-    val xmlSchema = ArrayType(
-      StructType(
-        StructField("pid", IntegerType) ::
-          StructField("name", StringType) :: Nil))
-    val expectedSchema = df.schema.add("decoded", xmlSchema)
-    val result = df.withColumn("decoded",
-      from_xml(df.col("payload"), xmlSchema))
-    assert(expectedSchema === result.schema)
-    // TODO: ArrayType and MapType support in from_xml
-    // assert(result.selectExpr("decoded[0].pid").head().getInt(0) === 12345)
-    // assert(result.selectExpr("decoded[1].pid").head().getInt(1) === 67890)
-  }
-  */
-
   test("from_xml error test") {
     // XML contains error
     val xmlData =
@@ -1321,12 +1412,10 @@ class XmlSuite
         spark.sql(s"""SELECT schema_of_xml('<ROW><a>1<ROW>', map('mode', 'DROPMALFORMED'))""")
           .collect()
       },
-      errorClass = "_LEGACY_ERROR_TEMP_1099",
+      condition = "PARSE_MODE_UNSUPPORTED",
       parameters = Map(
-        "funcName" -> "schema_of_xml",
-        "mode" -> "DROPMALFORMED",
-        "permissiveMode" -> "PERMISSIVE",
-        "failFastMode" -> FailFastMode.name)
+        "funcName" -> "`schema_of_xml`",
+        "mode" -> "DROPMALFORMED")
     )
   }
 
@@ -1336,9 +1425,10 @@ class XmlSuite
         spark.sql(s"""SELECT schema_of_xml('<ROW><a>1<ROW>', map('mode', 'FAILFAST'))""")
           .collect()
       },
-      errorClass = "_LEGACY_ERROR_TEMP_2165",
+      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
       parameters = Map(
-        "failFastMode" -> FailFastMode.name)
+        "badRecord" -> "_corrupt_record",
+        "failFastMode" -> "FAILFAST")
     )
   }
 
@@ -1400,7 +1490,7 @@ class XmlSuite
       exception = intercept[AnalysisException] {
         df.select(to_xml($"value")).collect()
       },
-      errorClass = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"to_xml(value)\"",
         "paramIndex" -> ordinalNumber(0),
@@ -1632,6 +1722,57 @@ class XmlSuite
     assert(df.collect().head.getAs[Timestamp](2).getTime === 1322936130000L)
   }
 
+  test("Write timestamps correctly in ISO8601 format by default") {
+    val originalSchema =
+      buildSchema(
+        field("author"),
+        field("time", TimestampType),
+        field("time2", TimestampType),
+        field("time3", TimestampType),
+        field("time4", TimestampType),
+        field("time5", TimestampType)
+      )
+
+    val df = spark.read
+      .option("rowTag", "book")
+      .option("timestampFormat", "dd/MM/yyyy HH:mm[XXX]")
+      .schema(originalSchema)
+      .xml(getTestResourcePath(resDir + "timestamps.xml"))
+
+    withTempDir { dir =>
+      // use los angeles as old dates have wierd offsets
+      withSQLConf("spark.session.timeZone" -> "America/Los_Angeles") {
+        df
+          .write
+          .option("rowTag", "book")
+          .xml(dir.getCanonicalPath + "/xml")
+        val schema =
+          buildSchema(
+            field("author"),
+            field("time", StringType),
+            field("time2", StringType),
+            field("time3", StringType),
+            field("time4", StringType),
+            field("time5", StringType)
+          )
+        val df2 = spark.read
+          .option("rowTag", "book")
+          .schema(schema)
+          .xml(dir.getCanonicalPath + "/xml")
+
+        val expectedStringDatesWithoutFormat = Seq(
+          Row("John Smith",
+            "1800-01-01T10:07:02.000-07:52:58",
+            "1885-01-01T10:30:00.000-08:00",
+            "2014-10-27T18:30:00.000-07:00",
+            "2015-08-26T18:00:00.000-07:00",
+            "2016-01-28T20:00:00.000-08:00"))
+
+        checkAnswer(df2, expectedStringDatesWithoutFormat)
+      }
+    }
+  }
+
   test("Test custom timestampFormat without timezone") {
     val xml = s"""<book>
                  |    <author>John Smith</author>
@@ -1732,14 +1873,14 @@ class XmlSuite
       exception = intercept[AnalysisException] {
         spark.read.xml("/this/file/does/not/exist")
       },
-      errorClass = "PATH_NOT_FOUND",
+      condition = "PATH_NOT_FOUND",
       parameters = Map("path" -> "file:/this/file/does/not/exist")
     )
     checkError(
       exception = intercept[AnalysisException] {
         spark.read.schema(buildSchema(field("dummy"))).xml("/this/file/does/not/exist")
       },
-      errorClass = "PATH_NOT_FOUND",
+      condition = "PATH_NOT_FOUND",
       parameters = Map("path" -> "file:/this/file/does/not/exist")
     )
   }
@@ -1882,7 +2023,7 @@ class XmlSuite
     }
 
     checkXmlOptionErrorMessage(Map.empty,
-      "[XML_ROW_TAG_MISSING] `rowTag` option is required for reading files in XML format.",
+      "[XML_ROW_TAG_MISSING] `rowTag` option is required for reading/writing files in XML format.",
       QueryCompilationErrors.xmlRowTagRequiredError(XmlOptions.ROW_TAG).getCause)
     checkXmlOptionErrorMessage(Map("rowTag" -> ""),
       "'rowTag' option should not be an empty string.")
@@ -1901,6 +2042,20 @@ class XmlSuite
       .option("rowTag", "ROW")
       .schema(schema)
       .xml(spark.createDataset(Seq(xmlString)))
+  }
+
+  test("SPARK-50688: rowTag requirement for write") {
+    withTempDir { dir =>
+      dir.delete()
+      val e = intercept[AnalysisException] {
+        spark.range(1).write.xml(dir.getCanonicalPath)
+      }
+      checkError(
+        exception = e,
+        condition = "XML_ROW_TAG_MISSING",
+        parameters = Map("rowTag" -> "`rowTag`")
+      )
+    }
   }
 
   test("Primitive field casting") {
@@ -2372,10 +2527,12 @@ class XmlSuite
   test("Timestamp type inference for a mix of TIMESTAMP_NTZ and TIMESTAMP_LTZ") {
     withTempPath { path =>
       Seq(
+        "<ROWS>",
         "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>",
         "<ROW><col0>2020-12-12T17:12:12.000Z</col0></ROW>",
         "<ROW><col0>2020-12-12T17:12:12.000+05:00</col0></ROW>",
-        "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>"
+        "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>",
+        "</ROWS>"
       ).toDF("data")
         .coalesce(1)
         .write.text(path.getAbsolutePath)
@@ -2407,10 +2564,12 @@ class XmlSuite
   test("Malformed records when reading TIMESTAMP_LTZ as TIMESTAMP_NTZ") {
     withTempPath { path =>
       Seq(
+        "<ROWS>",
         "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>",
         "<ROW><col0>2020-12-12T12:12:12.000Z</col0></ROW>",
         "<ROW><col0>2020-12-12T12:12:12.000+05:00</col0></ROW>",
-        "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>"
+        "<ROW><col0>2020-12-12T12:12:12.000</col0></ROW>",
+        "</ROWS>"
       ).toDF("data")
         .coalesce(1)
         .write.text(path.getAbsolutePath)
@@ -2447,15 +2606,14 @@ class XmlSuite
     val exp = spark.sql("select timestamp_ntz'2020-12-12 12:12:12' as col0")
     for (pattern <- patterns) {
       withTempPath { path =>
-        val actualPath = path.toPath.toUri.toURL.toString
         val err = intercept[SparkException] {
           exp.write.option("timestampNTZFormat", pattern)
             .option("rowTag", "ROW").xml(path.getAbsolutePath)
         }
         checkErrorMatchPVals(
           exception = err,
-          errorClass = "TASK_WRITE_FAILED",
-          parameters = Map("path" -> s"$actualPath.*"))
+          condition = "TASK_WRITE_FAILED",
+          parameters = Map("path" -> s".*${path.getName}.*"))
         val msg = err.getCause.getMessage
         assert(
           msg.contains("Unsupported field: OffsetSeconds") ||
@@ -2759,7 +2917,7 @@ class XmlSuite
   test("Find compatible types even if inferred DecimalType is not capable of other IntegralType") {
     val mixedIntegerAndDoubleRecords = Seq(
       """<ROW><a>3</a><b>1.1</b></ROW>""",
-      s"""<ROW><a>3.1</a><b>0.${"0" * 38}1</b></ROW>""").toDS()
+      s"""<ROW><a>3.1</a><b>0.${"0".repeat(38)}1</b></ROW>""").toDS()
     val xmlDF = spark.read
       .option("prefersDecimal", "true")
       .option("rowTag", "ROW")
@@ -2779,9 +2937,8 @@ class XmlSuite
     )
   }
 
-  def bigIntegerRecords: Dataset[String] =
-    spark.createDataset(spark.sparkContext.parallelize(
-      s"""<ROW><a>1${"0" * 38}</a><b>92233720368547758070</b></ROW>""" :: Nil))(Encoders.STRING)
+  def bigIntegerRecords: Dataset[String] = spark.createDataset(spark.sparkContext.parallelize(
+    s"""<ROW><a>1${"0".repeat(38)}</a><b>92233720368547758070</b></ROW>""" :: Nil))(Encoders.STRING)
 
   test("Infer big integers correctly even when it does not fit in decimal") {
     val df = spark.read
@@ -2801,7 +2958,7 @@ class XmlSuite
 
   def floatingValueRecords: Dataset[String] =
     spark.createDataset(spark.sparkContext.parallelize(
-      s"""<ROW><a>0.${"0" * 38}1</a><b>.01</b></ROW>""" :: Nil))(Encoders.STRING)
+      s"""<ROW><a>0.${"0".repeat(38)}1</a><b>.01</b></ROW>""" :: Nil))(Encoders.STRING)
 
   test("Infer floating-point values correctly even when it does not fit in decimal") {
     val df = spark.read
@@ -2845,8 +3002,8 @@ class XmlSuite
             .xml(inputFile.toURI.toString)
             .collect()
         }
-        assert(ExceptionUtils.getRootCause(e).isInstanceOf[EOFException])
-        assert(ExceptionUtils.getRootCause(e).getMessage === "Unexpected end of input stream")
+        assert(Utils.getRootCause(e).isInstanceOf[EOFException])
+        assert(Utils.getRootCause(e).getMessage === "Unexpected end of input stream")
         val e2 = intercept[SparkException] {
           spark.read
             .option("rowTag", "ROW")
@@ -2854,8 +3011,8 @@ class XmlSuite
             .xml(inputFile.toURI.toString)
             .collect()
         }
-        assert(ExceptionUtils.getRootCause(e2).isInstanceOf[EOFException])
-        assert(ExceptionUtils.getRootCause(e2).getMessage === "Unexpected end of input stream")
+        assert(Utils.getRootCause(e2).isInstanceOf[EOFException])
+        assert(Utils.getRootCause(e2).getMessage === "Unexpected end of input stream")
       }
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
         val result = spark.read
@@ -2864,6 +3021,13 @@ class XmlSuite
            .xml(inputFile.toURI.toString)
            .collect()
         assert(result.isEmpty)
+
+        val result2 = spark.read
+          .option("rowTag", "ROW")
+          .option("multiLine", true)
+          .xml(inputFile.toURI.toString)
+          .collect()
+        assert(result2.isEmpty)
       }
     })
     withTempPath { dir =>
@@ -2879,7 +3043,7 @@ class XmlSuite
           exception = intercept[SparkException] {
             df.collect()
           },
-          errorClass = "FAILED_READ_FILE.FILE_NOT_EXIST",
+          condition = "FAILED_READ_FILE.FILE_NOT_EXIST",
           parameters = Map("path" -> s".*$dir.*")
         )
       }
@@ -2974,11 +3138,10 @@ class XmlSuite
                 .mode(SaveMode.Overwrite)
                 .xml(path)
             }
-            val actualPath = Path.of(dir.getAbsolutePath).toUri.toURL.toString.stripSuffix("/")
             checkErrorMatchPVals(
               exception = e,
-              errorClass = "TASK_WRITE_FAILED",
-              parameters = Map("path" -> s"$actualPath.*"))
+              condition = "TASK_WRITE_FAILED",
+              parameters = Map("path" -> s".*${dir.getName}.*"))
             assert(e.getCause.isInstanceOf[XMLStreamException])
             assert(e.getCause.getMessage.contains(errorMsg))
         }
@@ -3024,9 +3187,518 @@ class XmlSuite
         assert(dfRead.count() === numRecords)
         assert(XmlSuiteDebugFileSystem.totalFiles() === numFiles)
         assert(XmlSuiteDebugFileSystem.maxFiles() > 1)
+
+        XmlSuiteDebugFileSystem.reset()
       }
     }
   }
+
+  /////////////////////////////////////
+  // Projection, sorting, filtering  //
+  /////////////////////////////////////
+  test("select with string xml object") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |    <name>John</name>
+         |    <metadata><id>3</id></metadata>
+         |</ROW>
+         |""".stripMargin
+    val schema = new StructType()
+      .add("name", StringType)
+      .add("metadata", StringType)
+    val df = readData(xmlString, Some(schema), baseOptions)
+    checkAnswer(df.select("name"), Seq(Row("John")))
+  }
+
+  test("select with duplicate field name in string xml object") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |    <a><b>c</b></a>
+         |    <b>d</b>
+         |</ROW>
+         |""".stripMargin
+    val schema = new StructType()
+      .add("a", StringType)
+      .add("b", StringType)
+    val df = readData(xmlString, Some(schema), baseOptions)
+    val dfWithSchemaInference = readData(xmlString, None, baseOptions)
+    Seq(df, dfWithSchemaInference).foreach { df =>
+      checkAnswer(df.select("b"), Seq(Row("d")))
+    }
+  }
+
+  test("select nested struct objects") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |    <struct>
+         |        <innerStruct>
+         |            <field1>1</field1>
+         |            <field2>2</field2>
+         |        </innerStruct>
+         |    </struct>
+         |</ROW>
+         |""".stripMargin
+    val schema = new StructType()
+      .add(
+        "struct",
+        new StructType()
+          .add("innerStruct", new StructType().add("field1", LongType).add("field2", LongType))
+      )
+    val df = readData(xmlString, Some(schema), baseOptions)
+    val dfWithSchemaInference = readData(xmlString, None, baseOptions)
+    Seq(df, dfWithSchemaInference).foreach { df =>
+      checkAnswer(df.select("struct"), Seq(Row(Row(Row(1, 2)))))
+      checkAnswer(df.select("struct.innerStruct"), Seq(Row(Row(1, 2))))
+    }
+  }
+
+  test("select a struct of lists") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |    <struct>
+         |        <array><field>1</field></array>
+         |        <array><field>2</field></array>
+         |        <array><field>3</field></array>
+         |    </struct>
+         |</ROW>
+         |""".stripMargin
+    val schema = new StructType()
+      .add(
+        "struct",
+        new StructType()
+          .add("array", ArrayType(StructType(StructField("field", LongType) :: Nil))))
+
+    val df = readData(xmlString, Some(schema), baseOptions)
+    val dfWithSchemaInference = readData(xmlString, None, baseOptions)
+    Seq(df, dfWithSchemaInference).foreach { df =>
+      checkAnswer(df.select("struct"), Seq(Row(Row(Array(Row(1), Row(2), Row(3))))))
+      checkAnswer(df.select("struct.array"), Seq(Row(Array(Row(1), Row(2), Row(3)))))
+    }
+  }
+
+  test("select complex objects") {
+    val xmlString =
+      s"""
+         |<ROW>
+         |    1
+         |    <struct1>
+         |        value2
+         |        <struct2>
+         |            3
+         |            <array1>
+         |                value4
+         |                <struct3>
+         |                    5
+         |                    <array2>1<!--First comment--> <!--Second comment--></array2>
+         |                    value6
+         |                    <array2>2</array2>
+         |                    7
+         |                </struct3>
+         |                value8
+         |                <string>string</string>
+         |                9
+         |            </array1>
+         |            value10
+         |            <array1>
+         |                <struct3><!--First comment--> <!--Second comment-->
+         |                    <array2>3</array2>
+         |                    11
+         |                    <array2>4</array2><!--First comment--> <!--Second comment-->
+         |                </struct3>
+         |                <string>string</string>
+         |                value12
+         |            </array1>
+         |            13
+         |            <int>3</int>
+         |            value14
+         |        </struct2>
+         |        15
+         |    </struct1>
+         |     <!--First comment-->
+         |    value16
+         |     <!--Second comment-->
+         |</ROW>
+         |""".stripMargin
+    val df = readData(xmlString, None, baseOptions ++ Map("valueTag" -> "VALUE"))
+    checkAnswer(df.select("struct1.VALUE"), Seq(Row(Seq("value2", "15"))))
+    checkAnswer(df.select("struct1.struct2.array1"), Seq(Row(Seq(
+      Row(Seq("value4", "value8", "9"), "string", Row(Seq("5", "value6", "7"), Seq(1, 2))),
+      Row(Seq("value12"), "string", Row(Seq("11"), Seq(3, 4)))
+    ))))
+    checkAnswer(df.select("struct1.struct2.array1.struct3"), Seq(Row(Seq(
+      Row(Seq("5", "value6", "7"), Seq(1, 2)),
+      Row(Seq("11"), Seq(3, 4))
+    ))))
+    checkAnswer(df.select("struct1.struct2.array1.string"), Seq(Row(Seq("string", "string"))))
+  }
+
+  /////////////////////////////////////
+  // IndentingXMLStreamWriter        //
+  /////////////////////////////////////
+  test("write proper indentation for simple nested XML elements") {
+    val writer = new StringWriter()
+    val xmlWriter = XMLOutputFactory.newInstance().createXMLStreamWriter(writer)
+    val indentingXmlWriter = new IndentingXMLStreamWriter(xmlWriter)
+    indentingXmlWriter.setIndentStep("    ")
+    val testString =
+      s"""|<a>
+          |    <b/>
+          |    <c>
+          |        <d/>
+          |    </c>
+          |</a>""".stripMargin
+
+    indentingXmlWriter.writeStartElement("a")
+    indentingXmlWriter.writeStartElement("b")
+    indentingXmlWriter.writeEndElement()
+    indentingXmlWriter.writeStartElement("c")
+    indentingXmlWriter.writeStartElement("d")
+    indentingXmlWriter.writeEndElement()
+    indentingXmlWriter.writeEndElement()
+    indentingXmlWriter.writeEndElement()
+    indentingXmlWriter.flush()
+
+    val outputString = writer.toString
+    assert(outputString == testString)
+  }
+
+  test("write proper indentation for complex nested XML elements") {
+    val writer = new StringWriter()
+    val xmlWriter = XMLOutputFactory.newInstance().createXMLStreamWriter(writer)
+    val indentingXmlWriter = new IndentingXMLStreamWriter(xmlWriter)
+    indentingXmlWriter.setIndentStep("    ")
+    val testString =
+      s"""|<a>
+          |    <b>
+          |        <c/>
+          |        <d>
+          |            <e/>
+          |        </d>
+          |        <f>
+          |            <g/>
+          |            <h/>
+          |        </f>
+          |    </b>
+          |    <i/>
+          |</a>""".stripMargin
+
+    indentingXmlWriter.writeStartElement("a")
+    indentingXmlWriter.writeStartElement("b")
+    indentingXmlWriter.writeStartElement("c")
+    indentingXmlWriter.writeEndElement()
+    indentingXmlWriter.writeStartElement("d")
+    indentingXmlWriter.writeStartElement("e")
+    indentingXmlWriter.writeEndElement()
+    indentingXmlWriter.writeEndElement()
+    indentingXmlWriter.writeStartElement("f")
+    indentingXmlWriter.writeStartElement("g")
+    indentingXmlWriter.writeEndElement()
+    indentingXmlWriter.writeStartElement("h")
+    indentingXmlWriter.writeEndElement()
+    indentingXmlWriter.writeEndElement()
+    indentingXmlWriter.writeEndElement()
+    indentingXmlWriter.writeStartElement("i")
+    indentingXmlWriter.writeEndElement()
+    indentingXmlWriter.writeEndElement()
+    indentingXmlWriter.flush()
+
+    val outputString = writer.toString
+    assert(outputString == testString)
+  }
+
+  test("write proper indentation for nested XML elements with characters") {
+    val writer = new StringWriter()
+    val xmlWriter = XMLOutputFactory.newInstance().createXMLStreamWriter(writer)
+    val indentingXmlWriter = new IndentingXMLStreamWriter(xmlWriter)
+    indentingXmlWriter.setIndentStep("    ")
+    val testString =
+      s"""|<a>
+          |    <b>
+          |        <c>1</c>
+          |        <d>
+          |            <e>2</e>
+          |        </d>
+          |    </b>
+          |    <f>3</f>
+          |</a>""".stripMargin
+
+    indentingXmlWriter.writeStartElement("a")
+    indentingXmlWriter.writeStartElement("b")
+    indentingXmlWriter.writeStartElement("c")
+    indentingXmlWriter.writeCharacters("1")
+    indentingXmlWriter.writeEndElement()
+    indentingXmlWriter.writeStartElement("d")
+    indentingXmlWriter.writeStartElement("e")
+    indentingXmlWriter.writeCharacters("2")
+    indentingXmlWriter.writeEndElement()
+    indentingXmlWriter.writeEndElement()
+    indentingXmlWriter.writeEndElement()
+    indentingXmlWriter.writeStartElement("f")
+    indentingXmlWriter.writeCharacters("3")
+    indentingXmlWriter.writeEndElement()
+    indentingXmlWriter.writeEndElement()
+    indentingXmlWriter.flush()
+
+    val outputString = writer.toString
+    assert(outputString == testString)
+  }
+
+  test("change indent step while writing") {
+    val writer = new StringWriter()
+    val xmlWriter = XMLOutputFactory.newInstance().createXMLStreamWriter(writer)
+    val indentingXmlWriter = new IndentingXMLStreamWriter(xmlWriter)
+    val testString =
+      s"""|<a>
+          |  <b/>
+          |    <c>
+          |  <d/>
+          |    </c>
+          |</a>""".stripMargin
+
+    indentingXmlWriter.setIndentStep("  ")
+    indentingXmlWriter.writeStartElement("a")
+    indentingXmlWriter.writeStartElement("b")
+    indentingXmlWriter.writeEndElement()
+    indentingXmlWriter.setIndentStep("    ")
+    indentingXmlWriter.writeStartElement("c")
+    indentingXmlWriter.setIndentStep(" ")
+    indentingXmlWriter.writeStartElement("d")
+    indentingXmlWriter.setIndentStep("    ")
+    indentingXmlWriter.writeEndElement()
+    indentingXmlWriter.writeEndElement()
+    indentingXmlWriter.writeEndElement()
+    indentingXmlWriter.flush()
+
+    val outputString = writer.toString
+    assert(outputString == testString)
+  }
+
+  test("from_xml only allow StructType or VariantType") {
+    val xmlData = "<a>1</a>"
+    val df = Seq((8, xmlData)).toDF("number", "payload")
+
+    Seq(
+      "array<string>",
+      "map<string, string>"
+    ).foreach { schema =>
+      val exception = intercept[AnalysisException](
+        df.withColumn(
+            "decoded",
+            from_xml(df.col("payload"), schema, Map[String, String]().asJava)
+          )
+      )
+      assert(exception.getCondition.contains("INVALID_XML_SCHEMA"))
+    }
+
+    Seq(
+      "struct<a:string>",
+      "variant"
+    ).foreach { schema =>
+      df.withColumn(
+        "decoded",
+        from_xml(df.col("payload"), schema, Map[String, String]().asJava)
+      )
+    }
+  }
+
+  private def createTestFiles(dir: File, fileFormatWriter: Boolean): Seq[Row] = {
+    val numRecord = 100
+    val codecExtensionMap = HadoopCompressionCodec.values()
+      .map(c => (c.lowerCaseName(),
+        Option(c.getCompressionCodec).map(_.getDefaultExtension).getOrElse(""))) ++
+      Seq(("zstd", ".zst"), ("zstd", ".zstd"), ("gzip", ".gzip"))
+
+    val codecFactory = new CompressionCodecFactory(spark.sessionState.newHadoopConf())
+    codecExtensionMap.foreach { case (codec, ext) =>
+
+      val records: Seq[(Int, String)] = (1 to numRecord).map(id => (id, s"value_${codec}$ext"))
+      val file = new File(dir, s"test_$codec.xml$ext")
+
+      // file data source writers do not support zstd codec yet.
+      if (fileFormatWriter && !codec.equals("zstd")) {
+        val df = records.toDF("id", "value")
+        df.coalesce(1).write
+          .option("rowTag", "ROW")
+          .option("compression", codec)
+          .xml(file.getCanonicalPath)
+
+        val compressedFiles = new File(file.getCanonicalPath).listFiles()
+
+        compressedFiles.foreach { file =>
+          if (file.isFile && file.getName.startsWith("part")) {
+            val newName = file.getName.split("\\.").init.mkString(".") + ext
+            val status = file.renameTo(new File(dir, newName))
+            assert(status)
+          }
+        }
+      } else {
+        val data = records.map {
+          case (id, value) =>
+            s"""  <ROW>
+               |    <id>${id}</id>
+               |    <value>${value}</value>
+               |  </ROW>""".stripMargin
+        }.mkString("<ROWS>\n", "\n", "\n</ROWS>")
+        val os = new FileOutputStream(file)
+
+        val outputStream = codec match {
+          case "zstd" =>
+            new ZStdCompressionCodec(sparkConf).compressedOutputStream(os)
+          case codec if ext.nonEmpty =>
+            val compressionCodec = codecFactory.getCodecByName(codec)
+            compressionCodec.createOutputStream(os)
+          case _ => os
+        }
+        outputStream.write(data.getBytes(StandardCharsets.UTF_8))
+        outputStream.close()
+      }
+    }
+
+    val expectedOutput = codecExtensionMap.flatMap {
+      case (codec, ext) =>
+        val data = (1 to numRecord).map(i => Row(i, s"value_${codec}$ext"))
+        data
+    }.toSeq
+    assert(expectedOutput.length == codecExtensionMap.length * numRecord)
+    expectedOutput
+  }
+
+  test("Test all supported codec and extension including zst, zstd and gzip") {
+    for (
+      fileFormatWriter <- Seq(true, false)
+    ) {
+      logInfo(s"Testing with fileFormatWriter=$fileFormatWriter")
+      withTempDir { dir =>
+        val options = Map(
+          "rowTag" -> "ROW",
+          "recursiveFileLookup" -> "true"
+        )
+
+        val expectedOutput = createTestFiles(dir, fileFormatWriter)
+        val df = spark.read.options(options).xml(dir.getCanonicalPath)
+        checkAnswer(df, expectedOutput)
+      }
+    }
+  }
+
+  test("SPARK-52695: UDT write support for xml file format") {
+    val udt = new YearUDT()
+    val encoder = UDTEncoder(udt, classOf[YearUDT])
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath
+      // Write a dataset of Year objects
+      val df1 = spark.range(2018, 2025).map(y => Year.of(y.toInt))(encoder)
+
+      df1
+      .write
+      .mode(SaveMode.Overwrite)
+      .option("rowTag", "ROW")
+      .xml(path)
+
+      val df = spark.read
+        .option("rowTag", "ROW")
+        .xml(path)
+
+      assert(df.schema === StructType(Seq(StructField("value", LongType))))
+      checkAnswer(df, spark.range(2018, 2025).toDF("value"))
+    }
+  }
+
+  test("TIME type roundtrip with XML datasource - representative precisions") {
+    import java.time.LocalTime
+
+    def testTimesForPrecision(p: Int): Seq[LocalTime] = {
+      p match {
+        case 0 => Seq(LocalTime.of(0, 0, 0), LocalTime.of(14, 30, 45),
+          LocalTime.of(23, 59, 59))
+        case 3 => Seq(LocalTime.of(0, 0, 0, 0), LocalTime.of(14, 30, 45, 123000000),
+          LocalTime.of(23, 59, 59, 999000000))
+        case 6 => Seq(LocalTime.of(0, 0, 0, 0), LocalTime.of(14, 30, 45, 123456000),
+          LocalTime.of(23, 59, 59, 999999000))
+      }
+    }
+
+    withTempDir { dir =>
+      Seq(0, 3, 6).foreach { precision =>
+        val schema = new StructType().add("time", TimeType(precision))
+        val timeData = testTimesForPrecision(precision)
+        val df = timeData.toDF("time").select($"time".cast(TimeType(precision)))
+
+        val outputPath = s"${dir.getCanonicalPath}/time_p$precision.xml"
+        df.write.mode("overwrite").option("rowTag", "record").xml(outputPath)
+
+        val readBack = spark.read.schema(schema).option("rowTag", "record").xml(outputPath)
+        assert(readBack.schema === schema, s"Schema mismatch for precision $precision")
+        checkAnswer(readBack, df)
+      }
+
+      // Test custom format
+      val customTime = LocalTime.of(14, 30, 45, 123456000)
+      val customSchema = new StructType().add("time", TimeType(6))
+      val customDF = Seq(customTime).toDF("time").select($"time".cast(TimeType(6)))
+      val customPath = s"${dir.getCanonicalPath}/time_custom.xml"
+
+      customDF.write.mode("overwrite")
+        .option("rowTag", "record")
+        .option("timeFormat", "HH-mm-ss.SSSSSS")
+        .xml(customPath)
+
+      val readBackCustom = spark.read
+        .schema(customSchema)
+        .option("rowTag", "record")
+        .option("timeFormat", "HH-mm-ss.SSSSSS")
+        .xml(customPath)
+
+      assert(readBackCustom.schema === customSchema, "Custom format schema mismatch")
+      checkAnswer(readBackCustom, customDF)
+    }
+  }
+
+  test("validate XML Options") {
+    assert(XmlOptions.getAllOptions.size == 32)
+    // Please add validation on any new XML options here
+    assert(XmlOptions.isValidOption("rowTag"))
+    assert(XmlOptions.isValidOption("rootTag"))
+    assert(XmlOptions.isValidOption("declaration"))
+    assert(XmlOptions.isValidOption("arrayElementName"))
+    assert(XmlOptions.isValidOption("excludeAttribute"))
+    assert(XmlOptions.isValidOption("attributePrefix"))
+    assert(XmlOptions.isValidOption("valueTag"))
+    assert(XmlOptions.isValidOption("nullValue"))
+    assert(XmlOptions.isValidOption("ignoreSurroundingSpaces"))
+    assert(XmlOptions.isValidOption("rowValidationXSDPath"))
+    assert(XmlOptions.isValidOption("wildcardColName"))
+    assert(XmlOptions.isValidOption("ignoreNamespace"))
+    assert(XmlOptions.isValidOption("inferSchema"))
+    assert(XmlOptions.isValidOption("preferDate"))
+    assert(XmlOptions.isValidOption("mode"))
+    assert(XmlOptions.isValidOption("locale"))
+    assert(XmlOptions.isValidOption("compression"))
+    assert(XmlOptions.isValidOption("multiLine"))
+    assert(XmlOptions.isValidOption("samplingRatio"))
+    assert(XmlOptions.isValidOption("columnNameOfCorruptRecord"))
+    assert(XmlOptions.isValidOption("dateFormat"))
+    assert(XmlOptions.isValidOption("timestampFormat"))
+    assert(XmlOptions.isValidOption("timestampNTZFormat"))
+    assert(XmlOptions.isValidOption("timeFormat"))
+    assert(XmlOptions.isValidOption("timeZone"))
+    assert(XmlOptions.isValidOption("indent"))
+    assert(XmlOptions.isValidOption("prefersDecimal"))
+    assert(XmlOptions.isValidOption("validateName"))
+    assert(XmlOptions.isValidOption("singleVariantColumn"))
+    assert(XmlOptions.isValidOption("useLegacyXMLParser"))
+    // Alternative options
+    assert(XmlOptions.isValidOption("encoding"))
+    assert(XmlOptions.isValidOption("charset"))
+  }
+}
+
+class XmlSuiteWithLegacyParser extends XmlSuite {
+  override protected val legacyParserEnabled: Boolean = true
 }
 
 // Mock file system that checks the number of open files

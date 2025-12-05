@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.{JobExecutionStatus, SparkConf}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.CLASS_NAME
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.scheduler._
@@ -35,7 +35,7 @@ import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.metric._
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.status.{ElementTrackingStore, KVUtils, LiveEntity}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{MetricUtils, Utils}
 import org.apache.spark.util.collection.OpenHashMap
 
 class SQLAppStatusListener(
@@ -179,14 +179,14 @@ class SQLAppStatusListener(
     // work around a race in the DAGScheduler. The metrics info does not contain accumulator info
     // when reading event logs in the SHS, so we have to rely on the accumulator in that case.
     val accums = if (live && event.taskMetrics != null) {
-      event.taskMetrics.externalAccums.flatMap { a =>
+      event.taskMetrics.withExternalAccums(_.flatMap { a =>
         // This call may fail if the accumulator is gc'ed, so account for that.
         try {
-          Some(a.toInfo(Some(a.value), None))
+          Some(a.toInfoUpdate)
         } catch {
           case _: IllegalAccessError => None
         }
-      }
+      })
     } else {
       info.accumulables
     }
@@ -235,7 +235,7 @@ class SQLAppStatusListener(
         }
       }.getOrElse(
         // Built-in SQLMetric
-        SQLMetrics.stringValue(m.metricType, _, _)
+        MetricUtils.stringValue(m.metricType, _, _)
       )
       (m.accumulatorId, metricAggMethod)
     }.toMap
@@ -343,7 +343,7 @@ class SQLAppStatusListener(
 
   private def onExecutionStart(event: SparkListenerSQLExecutionStart): Unit = {
     val SparkListenerSQLExecutionStart(executionId, rootExecutionId, description, details,
-      physicalPlanDescription, sparkPlanInfo, time, modifiedConfigs, _) = event
+      physicalPlanDescription, sparkPlanInfo, time, modifiedConfigs, _, _) = event
 
     val planGraph = SparkPlanGraph(sparkPlanInfo)
     val sqlPlanMetrics = planGraph.allNodes.flatMap { node =>
@@ -554,7 +554,7 @@ private class LiveStageMetrics(
   /**
    * Task metrics values for the stage. Maps the metric ID to the metric values for each
    * index. For each metric ID, there will be the same number of values as the number
-   * of indices. This relies on `SQLMetrics.stringValue` treating 0 as a neutral value,
+   * of indices. This relies on `MetricUtils.stringValue` treating 0 as a neutral value,
    * independent of the actual metric type.
    */
   private val taskMetrics = new ConcurrentHashMap[Long, Array[Long]]()
@@ -601,7 +601,7 @@ private class LiveStageMetrics(
         val metricValues = taskMetrics.computeIfAbsent(acc.id, _ => new Array(numTasks))
         metricValues(taskIdx) = value
 
-        if (SQLMetrics.metricNeedsMax(accumIdsToMetricType(acc.id))) {
+        if (MetricUtils.metricNeedsMax(accumIdsToMetricType(acc.id))) {
           val maxMetricsTaskId = metricsIdToMaxTaskValue.computeIfAbsent(acc.id, _ => Array(value,
             taskId))
 

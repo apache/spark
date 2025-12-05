@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.annotation.{Evolving, Experimental}
+import org.apache.spark.annotation.Evolving
 import org.apache.spark.api.java.Optional
-import org.apache.spark.sql.execution.streaming.GroupStateImpl
-import org.apache.spark.sql.execution.streaming.GroupStateImpl._
+import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.GroupStateImpl
+import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.GroupStateImpl._
 
 /**
  * :: Experimental ::
@@ -114,7 +114,6 @@ import org.apache.spark.sql.execution.streaming.GroupStateImpl._
  *           Spark SQL types (see `Encoder` for more details).
  * @since 3.2.0
  */
-@Experimental
 @Evolving
 trait TestGroupState[S] extends GroupState[S] {
   /** Whether the state has been marked for removing */

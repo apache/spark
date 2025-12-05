@@ -63,6 +63,8 @@
       url: sql-performance-tuning.html#optimizing-the-join-strategy
     - text: Adaptive Query Execution
       url: sql-performance-tuning.html#adaptive-query-execution
+    - text: Storage Partition Join
+      url: sql-performance-tuning.html#storage-partition-join
 - text: Distributed SQL Engine
   url: sql-distributed-sql-engine.html
   subitems:
@@ -85,14 +87,24 @@
       url: sql-ref-datetime-pattern.html
     - text: Number Pattern
       url: sql-ref-number-pattern.html
+    - text: Operators
+      url: sql-ref-operators.html
     - text: Functions
       url: sql-ref-functions.html
     - text: Identifiers
       url: sql-ref-identifier.html
+    - text: IDENTIFIER clause
+      url: sql-ref-identifier-clause.html
     - text: Literals
       url: sql-ref-literals.html
     - text: Null Semantics
       url: sql-ref-null-semantics.html
+    - text: Parameter Markers
+      url: sql-ref-parameter-markers.html
+    - text: Name Resolution
+      url: sql-ref-name-resolution.html
+    - text: SQL Scripting
+      url: sql-ref-scripting.html
     - text: SQL Syntax
       url: sql-ref-syntax.html
       subitems:
@@ -102,7 +114,11 @@
           url: sql-ref-syntax.html#dml-statements
         - text: Data Retrieval(Queries)
           url: sql-ref-syntax.html#data-retrieval-statements
+        - text: SQL Scripting Statements
+          url: sql-ref-syntax.html#sql-scripting-statements
         - text: Auxiliary Statements
           url: sql-ref-syntax.html#auxiliary-statements
+        - text: Pipe Syntax
+          url: sql-pipe-syntax.html
 - text: Error Conditions
   url: sql-error-conditions.html

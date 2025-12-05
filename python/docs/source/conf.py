@@ -23,11 +23,11 @@ import errno
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 sys.path.insert(0, os.path.abspath('.'))
 
-# generate user_guide/pandas_on_spark/supported_pandas_api.rst
+# generate tutorial/pandas_on_spark/supported_pandas_api.rst
 from pyspark.pandas.supported_api_gen import generate_supported_api
 
 output_rst_file_path = (
-    "%s/user_guide/pandas_on_spark/supported_pandas_api.rst"
+    "%s/tutorial/pandas_on_spark/supported_pandas_api.rst"
     % os.path.dirname(os.path.abspath(__file__))
 )
 generate_supported_api(output_rst_file_path)
@@ -188,25 +188,25 @@ autodoc_typehints = "none"
 # a list of builtin themes.
 html_theme = 'pydata_sphinx_theme'
 
-html_context = {
-    # When releasing a new Spark version, please update the file
-    # "site/static/versions.json" under the code repository "spark-website"
-    # (item should be added in order), and also set the local environment
-    # variable "RELEASE_VERSION".
-    "switcher_json_url": "https://spark.apache.org/static/versions.json",
-    "switcher_template_url": "https://spark.apache.org/docs/{version}/api/python/index.html",
-}
-
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
 # documentation.
 html_theme_options = {
+    "check_switcher": False,
+    "switcher": {
+        # When releasing a new Spark version, please update the file
+        # "site/static/versions.json" under the code repository "spark-website"
+        # (item should be added in order), and also set the local environment
+        # variable "RELEASE_VERSION".
+        "json_url": "https://spark.apache.org/static/versions.json",
+        "version_match": release,
+    },
     "header_links_before_dropdown": 6,
     "navbar_end": ["version-switcher", "theme-switcher", "navbar-icon-links"],
     "footer_start": ["spark_footer", "sphinx-version"],
     "logo": {
-        "image_light": "_static/spark-logo-light.png",
-        "image_dark": "_static/spark-logo-dark.png",
+        "image_light": "https://spark.apache.org/images/spark-logo.png",
+        "image_dark": "https://spark.apache.org/images/spark-logo-rev.svg",
     },
     "icon_links": [
         {
@@ -234,7 +234,7 @@ html_theme_options = {
 
 # The name of an image file (relative to this directory) to place at the top
 # of the sidebar.
-html_logo = "../../../docs/img/spark-logo-reverse.png"
+html_logo = "https://spark.apache.org/images/spark-logo-rev.svg"
 
 # The name of an image file (within the static path) to use as a favicon of the
 # docs.  This file should be a Windows icon file (.ico) being 16x16 or 32x32

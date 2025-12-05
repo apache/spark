@@ -27,8 +27,8 @@ import java.nio.channels.WritableByteChannel;
 import java.util.Optional;
 
 import org.apache.spark.SparkConf;
-import org.apache.spark.internal.Logger;
-import org.apache.spark.internal.LoggerFactory;
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 import org.apache.spark.shuffle.api.ShuffleMapOutputWriter;
@@ -45,8 +45,8 @@ import org.apache.spark.shuffle.api.metadata.MapOutputCommitMessage;
  */
 public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
 
-  private static final Logger log =
-    LoggerFactory.getLogger(LocalDiskShuffleMapOutputWriter.class);
+  private static final SparkLogger log =
+    SparkLoggerFactory.getLogger(LocalDiskShuffleMapOutputWriter.class);
 
   private final int shuffleId;
   private final long mapId;
@@ -74,7 +74,7 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     this.blockResolver = blockResolver;
     this.bufferSize =
       (int) (long) sparkConf.get(
-        package$.MODULE$.SHUFFLE_UNSAFE_FILE_OUTPUT_BUFFER_SIZE()) * 1024;
+        package$.MODULE$.SHUFFLE_LOCAL_DISK_FILE_OUTPUT_BUFFER_SIZE()) * 1024;
     this.partitionLengths = new long[numPartitions];
     this.outputFile = blockResolver.getDataFile(shuffleId, mapId);
     this.outputTempFile = null;
@@ -125,7 +125,7 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     cleanUp();
     if (outputTempFile != null && outputTempFile.exists() && !outputTempFile.delete()) {
       log.warn("Failed to delete temporary shuffle file at {}",
-        MDC.of(LogKeys.PATH$.MODULE$, outputTempFile.getAbsolutePath()));
+        MDC.of(LogKeys.PATH, outputTempFile.getAbsolutePath()));
     }
   }
 

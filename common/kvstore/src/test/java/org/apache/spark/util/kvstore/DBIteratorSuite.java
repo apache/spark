@@ -32,8 +32,10 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+// checkstyle.off: RegexpSinglelineJava
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+// checkstyle.on: RegexpSinglelineJava
 import static org.junit.jupiter.api.Assertions.*;
 
 public abstract class DBIteratorSuite {
@@ -497,7 +499,9 @@ public abstract class DBIteratorSuite {
 
   private List<CustomType1> collect(KVStoreView<CustomType1> view) throws Exception {
     try (KVStoreIterator<CustomType1> iterator = view.closeableIterator()) {
-      return Lists.newArrayList(iterator);
+      List<CustomType1> list = new ArrayList<>();
+      iterator.forEachRemaining(list::add);
+      return list;
     }
   }
 

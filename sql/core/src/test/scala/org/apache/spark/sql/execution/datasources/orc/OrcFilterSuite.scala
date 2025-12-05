@@ -46,6 +46,7 @@ import org.apache.spark.util.ArrayImplicits._
  */
 @ExtendedSQLTest
 class OrcFilterSuite extends OrcTest with SharedSparkSession {
+  import testImplicits.{toRichColumn, ColumnConstructorExt}
 
   override protected def sparkConf: SparkConf =
     super
@@ -681,7 +682,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
             exception = intercept[AnalysisException] {
               sql(s"select a from $tableName where a < 0").collect()
             },
-            errorClass = "AMBIGUOUS_REFERENCE",
+            condition = "AMBIGUOUS_REFERENCE",
             parameters = Map(
               "name" -> "`a`",
               "referenceNames" -> ("[`spark_catalog`.`default`.`spark_32622`.`a`, " +
@@ -706,7 +707,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
           val ex = intercept[SparkException] {
             sql(s"select A from $tableName where A < 0").collect()
           }
-          assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
+          assert(ex.getCondition.startsWith("FAILED_READ_FILE"))
           assert(ex.getCause.isInstanceOf[SparkRuntimeException])
           assert(ex.getCause.getMessage.contains(
             """Found duplicate field(s) "A": [A, a] in case-insensitive mode"""))

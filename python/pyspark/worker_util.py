@@ -75,8 +75,8 @@ def check_python_version(infile: IO) -> None:
     worker_version = "%d.%d" % sys.version_info[:2]
     if version != worker_version:
         raise PySparkRuntimeError(
-            error_class="PYTHON_VERSION_MISMATCH",
-            message_parameters={
+            errorClass="PYTHON_VERSION_MISMATCH",
+            messageParameters={
                 "worker_version": worker_version,
                 "driver_version": str(version),
             },
@@ -107,8 +107,8 @@ def setup_memory_limits(memory_limit_mb: int) -> None:
 
         except (resource.error, OSError, ValueError) as e:
             # not all systems support resource limits, so warn instead of failing
-            curent = currentframe()
-            lineno = getframeinfo(curent).lineno + 1 if curent is not None else 0
+            current = currentframe()
+            lineno = getframeinfo(current).lineno + 1 if current is not None else 0
             if "__file__" in globals():
                 print(
                     warnings.formatwarning(
@@ -156,9 +156,13 @@ def setup_broadcasts(infile: IO) -> None:
     num_broadcast_variables = read_int(infile)
     if needs_broadcast_decryption_server:
         # read the decrypted data from a server in the jvm
-        port = read_int(infile)
-        auth_secret = utf8_deserializer.loads(infile)
-        (broadcast_sock_file, _) = local_connect_and_auth(port, auth_secret)
+        conn_info = read_int(infile)
+        auth_secret = None
+        if conn_info == -1:
+            conn_info = utf8_deserializer.loads(infile)
+        else:
+            auth_secret = utf8_deserializer.loads(infile)
+        (broadcast_sock_file, _) = local_connect_and_auth(conn_info, auth_secret)
 
     for _ in range(num_broadcast_variables):
         bid = read_long(infile)

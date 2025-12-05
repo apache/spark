@@ -30,7 +30,6 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.{Properties, Try}
 
-import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.{Configuration => HadoopConfiguration}
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.security.UserGroupInformation
@@ -39,8 +38,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.spark._
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
-import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys
+import org.apache.spark.internal.{LogEntry, Logging, LogKeys}
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
@@ -64,6 +62,8 @@ private[deploy] object SparkSubmitAction extends Enumeration {
  */
 private[spark] class SparkSubmit extends Logging {
 
+  override protected def logName: String = classOf[SparkSubmit].getName
+
   import DependencyUtils._
   import SparkSubmit._
 
@@ -78,12 +78,12 @@ private[spark] class SparkSubmit extends Logging {
     } else {
       // For non-shell applications, enable structured logging if it's not explicitly disabled
       // via the configuration `spark.log.structuredLogging.enabled`.
-      if (sparkConf.getBoolean(STRUCTURED_LOGGING_ENABLED.key, defaultValue = true)) {
-        Logging.enableStructuredLogging()
-      } else {
-        Logging.disableStructuredLogging()
-      }
+      Utils.resetStructuredLogging(sparkConf)
     }
+
+    // We should initialize log again after `spark.log.structuredLogging.enabled` effected
+    Logging.uninitialize()
+
     // Initialize logging if it hasn't been done yet. Keep track of whether logging needs to
     // be reset before the application starts.
     val uninitLog = initializeLogIfNecessary(true, silent = true)
@@ -108,8 +108,13 @@ private[spark] class SparkSubmit extends Logging {
    */
   private def kill(args: SparkSubmitArguments, sparkConf: SparkConf): Unit = {
     if (RestSubmissionClient.supportsRestClient(args.master)) {
-      new RestSubmissionClient(args.master)
+      val response = new RestSubmissionClient(args.master)
         .killSubmission(args.submissionToKill)
+      if (response.success) {
+        logInfo(s"${args.submissionToKill} is killed successfully.")
+      } else {
+        logError(response.message)
+      }
     } else {
       sparkConf.set("spark.master", args.master)
       SparkSubmitUtils
@@ -142,12 +147,14 @@ private[spark] class SparkSubmit extends Logging {
    /___/ .__/\_,_/_/ /_/\_\   version %s
       /_/
                         """.format(SPARK_VERSION))
-    logInfo("Using Scala %s, %s, %s".format(
-      Properties.versionString, Properties.javaVmName, Properties.javaVersion))
-    logInfo(s"Branch $SPARK_BRANCH")
-    logInfo(s"Compiled by user $SPARK_BUILD_USER on $SPARK_BUILD_DATE")
-    logInfo(s"Revision $SPARK_REVISION")
-    logInfo(s"Url $SPARK_REPO_URL")
+    logInfo(log"Using Scala ${MDC(LogKeys.SCALA_VERSION, Properties.versionString)}," +
+      log" ${MDC(LogKeys.JAVA_VM_NAME, Properties.javaVmName)}," +
+      log" ${MDC(LogKeys.JAVA_VERSION, Properties.javaVersion)}")
+    logInfo(log"Branch ${MDC(LogKeys.SPARK_BRANCH, SPARK_BRANCH)}")
+    logInfo(log"Compiled by user ${MDC(LogKeys.SPARK_BUILD_USER, SPARK_BUILD_USER)} on" +
+      log" ${MDC(LogKeys.SPARK_BUILD_DATE, SPARK_BUILD_DATE)}")
+    logInfo(log"Revision ${MDC(LogKeys.SPARK_REVISION, SPARK_REVISION)}")
+    logInfo(log"Url ${MDC(LogKeys.SPARK_REPO_URL, SPARK_REPO_URL)}")
     logInfo("Type --help for more information.")
   }
 
@@ -163,7 +170,7 @@ private[spark] class SparkSubmit extends Logging {
         // Here we are checking for client mode because when job is sumbitted in cluster
         // deploy mode with k8s resource manager, the spark submit in the driver container
         // is done in client mode.
-        val isKubernetesClusterModeDriver = args.master.startsWith("k8s") &&
+        val isKubernetesClusterModeDriver = SparkMasterRegex.isK8s(args.master) &&
           "client".equals(args.deployMode) &&
           sparkConf.getBoolean("spark.kubernetes.submitInDriver", false)
         if (isKubernetesClusterModeDriver) {
@@ -241,17 +248,16 @@ private[spark] class SparkSubmit extends Logging {
     val childArgs = new ArrayBuffer[String]()
     val childClasspath = new ArrayBuffer[String]()
     val sparkConf = args.toSparkConf()
-    if (sparkConf.contains("spark.local.connect")) sparkConf.remove("spark.remote")
     var childMainClass = ""
 
     // Set the cluster manager
     val clusterManager: Int = args.maybeMaster match {
       case Some(v) =>
-        assert(args.maybeRemote.isEmpty || sparkConf.contains("spark.local.connect"))
+        assert(args.maybeRemote.isEmpty)
         v match {
           case "yarn" => YARN
           case m if m.startsWith("spark") => STANDALONE
-          case m if m.startsWith("k8s") => KUBERNETES
+          case m if SparkMasterRegex.isK8s(m) => KUBERNETES
           case m if m.startsWith("local") => LOCAL
           case _ =>
             error("Master must either be yarn or start with spark, k8s, or local")
@@ -361,7 +367,7 @@ private[spark] class SparkSubmit extends Logging {
 
       // install any R packages that may have been passed through --jars or --packages.
       // Spark Packages may contain R source code inside the jar.
-      if (args.isR && !StringUtils.isBlank(args.jars)) {
+      if (args.isR && !SparkStringUtils.isBlank(args.jars)) {
         RPackageUtils.checkAndBuildRPackage(args.jars, printStream, args.verbose)
       }
     }
@@ -438,7 +444,9 @@ private[spark] class SparkSubmit extends Logging {
                 workingDirectory,
                 if (resolvedUri.getFragment != null) resolvedUri.getFragment else source.getName)
                 .getCanonicalFile
-              logInfo(s"Files $resolvedUri from $source to $dest")
+              logInfo(log"Files ${MDC(LogKeys.URI, resolvedUri)}" +
+                log" from ${MDC(LogKeys.SOURCE_PATH, source)}" +
+                log" to ${MDC(LogKeys.DESTINATION_PATH, dest)}")
               Utils.deleteRecursively(dest)
               if (isArchive) {
                 Utils.unpack(source, dest)
@@ -633,14 +641,11 @@ private[spark] class SparkSubmit extends Logging {
       // All cluster managers
       OptionAssigner(
         // If remote is not set, sets the master,
-        // In local remote mode, starts the default master to to start the server.
-        if (args.maybeRemote.isEmpty || sparkConf.contains("spark.local.connect")) args.master
+        if (args.maybeRemote.isEmpty) args.master
         else args.maybeMaster.orNull,
         ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, confKey = "spark.master"),
       OptionAssigner(
-        // In local remote mode, do not set remote.
-        if (sparkConf.contains("spark.local.connect")) null
-        else args.maybeRemote.orNull, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, confKey = "spark.remote"),
+        args.maybeRemote.orNull, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, confKey = "spark.remote"),
       OptionAssigner(args.deployMode, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
         confKey = SUBMIT_DEPLOY_MODE.key),
       OptionAssigner(args.name, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, confKey = "spark.app.name"),
@@ -743,6 +748,8 @@ private[spark] class SparkSubmit extends Logging {
           (clusterManager & opt.clusterManager) != 0) {
         if (opt.clOption != null) { childArgs += opt.clOption += opt.value }
         if (opt.confKey != null) {
+          // Used in SparkConnectClient because Spark Connect client does not have SparkConf.
+          if (opt.confKey == "spark.remote") System.setProperty("spark.remote", opt.value)
           if (opt.mergeFn.isDefined && sparkConf.contains(opt.confKey)) {
             sparkConf.set(opt.confKey, opt.mergeFn.get.apply(sparkConf.get(opt.confKey), opt.value))
           } else {
@@ -755,8 +762,7 @@ private[spark] class SparkSubmit extends Logging {
     // In case of shells, spark.ui.showConsoleProgress can be true by default or by user. Except,
     // when Spark Connect is in local mode, because Spark Connect support its own progress
     // reporting.
-    if (isShell(args.primaryResource) && !sparkConf.contains(UI_SHOW_CONSOLE_PROGRESS) &&
-        !sparkConf.contains("spark.local.connect")) {
+    if (isShell(args.primaryResource) && !sparkConf.contains(UI_SHOW_CONSOLE_PROGRESS)) {
       sparkConf.set(UI_SHOW_CONSOLE_PROGRESS, true)
     }
 
@@ -921,7 +927,7 @@ private[spark] class SparkSubmit extends Logging {
   private def setRMPrincipal(sparkConf: SparkConf): Unit = {
     val shortUserName = UserGroupInformation.getCurrentUser.getShortUserName
     val key = s"spark.hadoop.${YarnConfiguration.RM_PRINCIPAL}"
-    logInfo(s"Setting ${key} to ${shortUserName}")
+    logInfo(log"Setting ${MDC(LogKeys.KEY, key)} to ${MDC(LogKeys.SHORT_USER_NAME, shortUserName)}")
     sparkConf.set(key, shortUserName)
   }
 
@@ -958,11 +964,12 @@ private[spark] class SparkSubmit extends Logging {
     }
 
     if (args.verbose) {
-      logInfo(s"Main class:\n$childMainClass")
-      logInfo(s"Arguments:\n${childArgs.mkString("\n")}")
+      logInfo(log"Main class:\n${MDC(LogKeys.CLASS_NAME, childMainClass)}")
+      logInfo(log"Arguments:\n${MDC(LogKeys.ARGS, childArgs.mkString("\n"))}")
       // sysProps may contain sensitive information, so redact before printing
-      logInfo(s"Spark config:\n${Utils.redact(sparkConf.getAll.toMap).sorted.mkString("\n")}")
-      logInfo(s"Classpath elements:\n${childClasspath.mkString("\n")}")
+      logInfo(log"Spark config:\n" +
+      log"${MDC(LogKeys.CONFIG, Utils.redact(sparkConf.getAll.toMap).sorted.mkString("\n"))}")
+      logInfo(log"Classpath elements:\n${MDC(LogKeys.CLASS_PATHS, childClasspath.mkString("\n"))}")
       logInfo("\n")
     }
     assert(!(args.deployMode == "cluster" && args.proxyUser != null && childClasspath.nonEmpty) ||
@@ -982,21 +989,21 @@ private[spark] class SparkSubmit extends Logging {
       case e: ClassNotFoundException =>
         logError(log"Failed to load class ${MDC(LogKeys.CLASS_NAME, childMainClass)}.")
         if (childMainClass.contains("thriftserver")) {
-          logInfo(s"Failed to load main class $childMainClass.")
+          logInfo(log"Failed to load main class ${MDC(LogKeys.CLASS_NAME, childMainClass)}.")
           logInfo("You need to build Spark with -Phive and -Phive-thriftserver.")
         } else if (childMainClass.contains("org.apache.spark.sql.connect")) {
-          logInfo(s"Failed to load main class $childMainClass.")
+          logInfo(log"Failed to load main class ${MDC(LogKeys.CLASS_NAME, childMainClass)}.")
           // TODO(SPARK-42375): Should point out the user-facing page here instead.
           logInfo("You need to specify Spark Connect jars with --jars or --packages.")
         }
-        throw new SparkUserAppException(CLASS_NOT_FOUND_EXIT_STATUS)
+        throw new SparkUserAppException(SparkExitCode.CLASS_NOT_FOUND)
       case e: NoClassDefFoundError =>
         logError(log"Failed to load ${MDC(LogKeys.CLASS_NAME, childMainClass)}", e)
         if (e.getMessage.contains("org/apache/hadoop/hive")) {
-          logInfo(s"Failed to load hive class.")
+          logInfo("Failed to load hive class.")
           logInfo("You need to build Spark with -Phive and -Phive-thriftserver.")
         }
-        throw new SparkUserAppException(CLASS_NOT_FOUND_EXIT_STATUS)
+        throw new SparkUserAppException(SparkExitCode.CLASS_NOT_FOUND)
     }
 
     val app: SparkApplication = if (classOf[SparkApplication].isAssignableFrom(mainClass)) {
@@ -1015,13 +1022,26 @@ private[spark] class SparkSubmit extends Logging {
         e
     }
 
+    var exitCode: Int = 1
+    var cause: Throwable = null
     try {
       app.start(childArgs.toArray, sparkConf)
+      exitCode = 0
     } catch {
       case t: Throwable =>
-        throw findCause(t)
+        cause = findCause(t)
+        cause match {
+          case e: SparkUserAppException =>
+            exitCode = e.exitCode
+          case _ =>
+        }
+        // Store the diagnostics externally if enabled, but still throw to complete the application.
+        if (sparkConf.getBoolean("spark.kubernetes.driver.annotateExitException", false)) {
+          annotateExitException(args, sparkConf, cause)
+        }
+        throw cause
     } finally {
-      if (args.master.startsWith("k8s") && !isShell(args.primaryResource) &&
+      if (SparkMasterRegex.isK8s(args.master) && !isShell(args.primaryResource) &&
           !isSqlShell(args.mainClass) && !isThriftServer(args.mainClass) &&
           !isConnectServer(args.mainClass)) {
         try {
@@ -1030,12 +1050,36 @@ private[spark] class SparkSubmit extends Logging {
           case e: Throwable => logError("Failed to close SparkContext", e)
         }
       }
+      if (sparkConf.get(SUBMIT_CALL_SYSTEM_EXIT_ON_MAIN_EXIT)) {
+        logInfo(
+          log"Calling System.exit() with exit code ${MDC(LogKeys.EXIT_CODE, exitCode)} " +
+          log"because ${MDC(LogKeys.CONFIG, SUBMIT_CALL_SYSTEM_EXIT_ON_MAIN_EXIT.key)}=true")
+        exitFn(exitCode, Option(cause))
+      }
     }
   }
 
   /** Throw a SparkException with the given error message. */
   private def error(msg: String): Unit = throw new SparkException(msg)
 
+  /**
+   * Store the exit exception using the SparkDiagnosticsSetter.
+   */
+  private def annotateExitException(
+      args: SparkSubmitArguments,
+      sparkConf: SparkConf,
+      throwable: Throwable): Unit = {
+    // Swallow exceptions when storing diagnostics, this shouldn't fail the application.
+    try {
+      if (!isShell(args.primaryResource) && !isSqlShell(args.mainClass)
+          && !isThriftServer(args.mainClass) && !isConnectServer(args.mainClass)) {
+        SparkSubmitUtils.getSparkDiagnosticsSetters(args.master)
+          .foreach(_.setDiagnostics(throwable, sparkConf))
+      }
+    } catch {
+      case e: Throwable => logDebug(s"Failed to set diagnostics: $e")
+    }
+  }
 }
 
 
@@ -1069,10 +1113,9 @@ object SparkSubmit extends CommandLineUtils with Logging {
   private val SPARK_SHELL = "spark-shell"
   private val PYSPARK_SHELL = "pyspark-shell"
   private val SPARKR_SHELL = "sparkr-shell"
+  private val CONNECT_SHELL = "connect-shell"
   private val SPARKR_PACKAGE_ARCHIVE = "sparkr.zip"
   private val R_PACKAGE_ARCHIVE = "rpkg.zip"
-
-  private val CLASS_NOT_FOUND_EXIT_STATUS = 101
 
   // Following constants are visible for testing.
   private[deploy] val YARN_CLUSTER_SUBMIT_CLASS =
@@ -1092,24 +1135,38 @@ object SparkSubmit extends CommandLineUtils with Logging {
         new SparkSubmitArguments(args.toImmutableArraySeq) {
           override protected def logInfo(msg: => String): Unit = self.logInfo(msg)
 
+          override protected def logInfo(entry: LogEntry): Unit = self.logInfo(entry)
+
           override protected def logWarning(msg: => String): Unit = self.logWarning(msg)
 
+          override protected def logWarning(entry: LogEntry): Unit = self.logWarning(entry)
+
           override protected def logError(msg: => String): Unit = self.logError(msg)
+
+          override protected def logError(entry: LogEntry): Unit = self.logError(entry)
         }
       }
 
       override protected def logInfo(msg: => String): Unit = printMessage(msg)
 
+      override protected def logInfo(entry: LogEntry): Unit = printMessage(entry.message)
+
       override protected def logWarning(msg: => String): Unit = printMessage(s"Warning: $msg")
 
+      override protected def logWarning(entry: LogEntry): Unit =
+        printMessage(s"Warning: ${entry.message}")
+
       override protected def logError(msg: => String): Unit = printMessage(s"Error: $msg")
+
+      override protected def logError(entry: LogEntry): Unit =
+        printMessage(s"Error: ${entry.message}")
 
       override def doSubmit(args: Array[String]): Unit = {
         try {
           super.doSubmit(args)
         } catch {
           case e: SparkUserAppException =>
-            exitFn(e.exitCode)
+            exitFn(e.exitCode, Option(e.getCause))
         }
       }
 
@@ -1129,7 +1186,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
    * Return whether the given primary resource represents a shell.
    */
   private[deploy] def isShell(res: String): Boolean = {
-    (res == SPARK_SHELL || res == PYSPARK_SHELL || res == SPARKR_SHELL)
+    (res == SPARK_SHELL || res == PYSPARK_SHELL || res == SPARKR_SHELL || res == CONNECT_SHELL)
   }
 
   /**
@@ -1198,6 +1255,23 @@ private[spark] object SparkSubmitUtils {
       case _ => throw new SparkException(s"Spark config without '=': $pair")
     }
   }
+
+  private[deploy] def getSparkDiagnosticsSetters(
+      master: String): Option[SparkDiagnosticsSetter] = {
+    val loader = Utils.getContextOrSparkClassLoader
+    val serviceLoaders =
+      ServiceLoader.load(classOf[SparkDiagnosticsSetter], loader)
+        .asScala
+        .filter(_.supports(master))
+
+    serviceLoaders.size match {
+      case x if x > 1 =>
+        throw new SparkException(s"Multiple($x) external SparkDiagnosticsSetter registered.")
+      case 1 =>
+        Some(serviceLoaders.headOption.get)
+      case _ => None
+    }
+  }
 }
 
 /**
@@ -1219,4 +1293,21 @@ private[spark] trait SparkSubmitOperation {
   def printSubmissionStatus(submissionId: String, conf: SparkConf): Unit
 
   def supports(master: String): Boolean
+}
+
+/**
+ * Provides a hook to set the application failure details in some external system.
+ */
+private[spark] trait SparkDiagnosticsSetter {
+
+  /**
+   * Set the failure details.
+   */
+  def setDiagnostics(throwable: Throwable, conf: SparkConf): Unit
+
+  /**
+   * Whether this implementation of the SparkDiagnosticsSetter supports setting the exit
+   * exception for this application.
+   */
+  def supports(clusterManagerUrl: String): Boolean
 }

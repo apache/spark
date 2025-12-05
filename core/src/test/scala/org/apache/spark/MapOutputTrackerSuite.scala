@@ -38,6 +38,7 @@ import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEndpoint, RpcEndpoin
 import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus, MapStatus, MergeStatus}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{BlockManagerId, BlockManagerMasterEndpoint, ShuffleBlockId, ShuffleMergedBlockId}
+import org.apache.spark.util.collection.Utils.createArray
 
 class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
   private val conf = new SparkConf
@@ -193,7 +194,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     // Message size should be ~123B, and no exception should be thrown
     masterTracker.registerShuffle(10, 1, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
     masterTracker.registerMapOutput(10, 0, MapStatus(
-      BlockManagerId("88", "mph", 1000), Array.fill[Long](10)(0), 5))
+      BlockManagerId("88", "mph", 1000), createArray(10, 0L), 5))
     val senderAddress = RpcAddress("localhost", 12345)
     val rpcCallContext = mock(classOf[RpcCallContext])
     when(rpcCallContext.senderAddress).thenReturn(senderAddress)
@@ -271,7 +272,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       masterTracker.registerShuffle(20, 100, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
       (0 until 100).foreach { i =>
         masterTracker.registerMapOutput(20, i, new CompressedMapStatus(
-          BlockManagerId("999", "mps", 1000), Array.fill[Long](4000000)(0), 5))
+          BlockManagerId("999", "mps", 1000), createArray(4000000, 0L), 5, 100))
       }
       val senderAddress = RpcAddress("localhost", 12345)
       val rpcCallContext = mock(classOf[RpcCallContext])
@@ -578,7 +579,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       masterTracker.registerShuffle(20, 100, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
       (0 until 100).foreach { i =>
         masterTracker.registerMapOutput(20, i, new CompressedMapStatus(
-          BlockManagerId("999", "mps", 1000), Array.fill[Long](4000000)(0), 5))
+          BlockManagerId("999", "mps", 1000), createArray(4000000, 0L), 5, 100))
       }
 
       val mapWorkerRpcEnv = createRpcEnv("spark-worker", "localhost", 0, new SecurityManager(conf))
@@ -625,7 +626,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       masterTracker.registerShuffle(20, 100, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
       (0 until 100).foreach { i =>
         masterTracker.registerMapOutput(20, i, new CompressedMapStatus(
-          BlockManagerId("999", "mps", 1000), Array.fill[Long](4000000)(0), 5))
+          BlockManagerId("999", "mps", 1000), createArray(4000000, 0L), 5, 100))
       }
       masterTracker.registerMergeResult(20, 0, MergeStatus(BlockManagerId("999", "mps", 1000), 0,
         bitmap1, 1000L))
@@ -1105,6 +1106,61 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
         Array(2L), 0))
       tracker.removeOutputsOnHost("hostA")
       assert(tracker.getMapOutputLocation(0, 0) == None)
+    } finally {
+      tracker.stop()
+      rpcEnv.shutdown()
+    }
+  }
+
+  test(
+    "SPARK-48394: mapIdToMapIndex should cleanup unused mapIndexes after removeOutputsByFilter"
+  ) {
+    val rpcEnv = createRpcEnv("test")
+    val tracker = newTrackerMaster()
+    try {
+      tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+        new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
+      tracker.registerShuffle(0, 1, 1)
+      tracker.registerMapOutput(0, 0, MapStatus(BlockManagerId("exec-1", "hostA", 1000),
+        Array(2L), 0))
+      tracker.removeOutputsOnHost("hostA")
+      assert(tracker.shuffleStatuses(0).mapIdToMapIndex.filter(_._2 == 0).size == 0)
+    } finally {
+      tracker.stop()
+      rpcEnv.shutdown()
+    }
+  }
+
+  test("SPARK-48394: mapIdToMapIndex should cleanup unused mapIndexes after unregisterMapOutput") {
+    val rpcEnv = createRpcEnv("test")
+    val tracker = newTrackerMaster()
+    try {
+      tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+        new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
+      tracker.registerShuffle(0, 1, 1)
+      tracker.registerMapOutput(0, 0, MapStatus(BlockManagerId("exec-1", "hostA", 1000),
+        Array(2L), 0))
+      tracker.unregisterMapOutput(0, 0, BlockManagerId("exec-1", "hostA", 1000))
+      assert(tracker.shuffleStatuses(0).mapIdToMapIndex.filter(_._2 == 0).size == 0)
+    } finally {
+      tracker.stop()
+      rpcEnv.shutdown()
+    }
+  }
+
+  test("SPARK-48394: mapIdToMapIndex should cleanup unused mapIndexes after registerMapOutput") {
+    val rpcEnv = createRpcEnv("test")
+    val tracker = newTrackerMaster()
+    try {
+      tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+        new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
+      tracker.registerShuffle(0, 1, 1)
+      tracker.registerMapOutput(0, 0, MapStatus(BlockManagerId("exec-1", "hostA", 1000),
+        Array(2L), 0))
+      // Another task also finished working on partition 0.
+      tracker.registerMapOutput(0, 0, MapStatus(BlockManagerId("exec-2", "hostB", 1000),
+        Array(2L), 1))
+      assert(tracker.shuffleStatuses(0).mapIdToMapIndex.filter(_._2 == 0).size == 1)
     } finally {
       tracker.stop()
       rpcEnv.shutdown()

@@ -27,15 +27,15 @@ import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.GetTablesOperation
 import org.apache.hive.service.cli.session.HiveSession
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 
 /**
  * Spark's own GetTablesOperation
  *
- * @param sqlContext SQLContext to use
+ * @param session SparkSession to use
  * @param parentSession a HiveSession from SessionManager
  * @param catalogName catalog name. null if not applicable
  * @param schemaName database name, null or a concrete database name
@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
  * @param tableTypes list of allowed table types, e.g. "TABLE", "VIEW"
  */
 private[hive] class SparkGetTablesOperation(
-    val sqlContext: SQLContext,
+    val session: SparkSession,
     parentSession: HiveSession,
     catalogName: String,
     schemaName: String,
@@ -53,7 +53,7 @@ private[hive] class SparkGetTablesOperation(
   with SparkOperation
   with Logging {
 
-  override def runInternal(): Unit = {
+  override def runInternal(): Unit = withClassLoader { _ =>
     // Do not change cmdStr. It's used for Hive auditing and authorization.
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName"
     val tableTypesStr = if (tableTypes == null) "null" else tableTypes.asScala.mkString(",")
@@ -67,11 +67,7 @@ private[hive] class SparkGetTablesOperation(
       log"tableName: ${MDC(TABLE_NAME, tableName)}' " +
       log"with ${MDC(STATEMENT_ID, statementId)}")
     setState(OperationState.RUNNING)
-    // Always use the latest class loader provided by executionHive's state.
-    val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
-    Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
-    val catalog = sqlContext.sessionState.catalog
     val schemaPattern = convertSchemaPattern(schemaName)
     val tablePattern = convertIdentifierPattern(tableName, true)
     val matchingDbs = catalog.listDatabases(schemaPattern)
@@ -103,7 +99,7 @@ private[hive] class SparkGetTablesOperation(
 
       // Temporary views and global temporary views
       if (tableTypes == null || tableTypes.isEmpty || tableTypes.contains(VIEW.name)) {
-        val globalTempViewDb = catalog.globalTempViewManager.database
+        val globalTempViewDb = catalog.globalTempDatabase
         val databasePattern = Pattern.compile(CLIServiceUtils.patternToRegex(schemaName))
         val tempViews = if (databasePattern.matcher(globalTempViewDb).matches()) {
           catalog.listTables(globalTempViewDb, tablePattern, includeLocalTempViews = true)

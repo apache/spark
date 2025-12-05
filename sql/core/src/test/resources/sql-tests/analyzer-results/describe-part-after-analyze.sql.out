@@ -12,7 +12,7 @@ VALUES ('k1', 100), ('k2', 200), ('k3', 300)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t, [ds=2017-08-01, hr=10], false, [ds#x, hr#x], Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t], Append, `spark_catalog`.`default`.`t`, org.apache.spark.sql.execution.datasources.CatalogFileIndex(file:[not included in comparison]/{warehouse_dir}/t), [key, value, ds, hr]
 +- Project [key#x, value#x, cast(2017-08-01 as string) AS ds#x, cast(10 as int) AS hr#x]
-   +- Project [cast(col1#x as string) AS key#x, cast(col2#x as string) AS value#x]
+   +- Project [col1#x AS key#x, cast(col2#x as string) AS value#x]
       +- LocalRelation [col1#x, col2#x]
 
 
@@ -22,7 +22,7 @@ VALUES ('k1', 101), ('k2', 201), ('k3', 301), ('k4', 401)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t, [ds=2017-08-01, hr=11], false, [ds#x, hr#x], Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t], Append, `spark_catalog`.`default`.`t`, org.apache.spark.sql.execution.datasources.CatalogFileIndex(file:[not included in comparison]/{warehouse_dir}/t), [key, value, ds, hr]
 +- Project [key#x, value#x, cast(2017-08-01 as string) AS ds#x, cast(11 as int) AS hr#x]
-   +- Project [cast(col1#x as string) AS key#x, cast(col2#x as string) AS value#x]
+   +- Project [col1#x AS key#x, cast(col2#x as string) AS value#x]
       +- LocalRelation [col1#x, col2#x]
 
 
@@ -32,7 +32,7 @@ VALUES ('k1', 102), ('k2', 202)
 -- !query analysis
 InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/t, [ds=2017-09-01, hr=5], false, [ds#x, hr#x], Parquet, [path=file:[not included in comparison]/{warehouse_dir}/t], Append, `spark_catalog`.`default`.`t`, org.apache.spark.sql.execution.datasources.CatalogFileIndex(file:[not included in comparison]/{warehouse_dir}/t), [key, value, ds, hr]
 +- Project [key#x, value#x, cast(2017-09-01 as string) AS ds#x, cast(5 as int) AS hr#x]
-   +- Project [cast(col1#x as string) AS key#x, cast(col2#x as string) AS value#x]
+   +- Project [col1#x AS key#x, cast(col2#x as string) AS value#x]
       +- LocalRelation [col1#x, col2#x]
 
 

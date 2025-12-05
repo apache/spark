@@ -30,7 +30,7 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorExitCode
-import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.LogKeys.{MERGE_DIR_NAME, PATH}
 import org.apache.spark.network.shuffle.ExecutorDiskUtils
 import org.apache.spark.storage.DiskBlockManager.ATTEMPT_ID_KEY
@@ -252,7 +252,7 @@ private[spark] class DiskBlockManager(
     Utils.getConfiguredLocalDirs(conf).flatMap { rootDir =>
       try {
         val localDir = Utils.createDirectory(rootDir, "blockmgr")
-        logInfo(s"Created local directory at $localDir")
+        logInfo(log"Created local directory at ${MDC(PATH, localDir)}")
         Some(localDir)
       } catch {
         case e: IOException =>
@@ -290,7 +290,7 @@ private[spark] class DiskBlockManager(
               }
             }
           }
-          logInfo(s"Merge directory and its sub dirs get created at $mergeDir")
+          logInfo(log"Merge directory and its sub dirs get created at ${MDC(PATH, mergeDir)}")
         } catch {
           case e: IOException =>
             logError(
@@ -316,7 +316,7 @@ private[spark] class DiskBlockManager(
         throw SparkCoreErrors.failToCreateDirectoryError(dirToCreate.getAbsolutePath, maxAttempts)
       }
       try {
-        dirToCreate.mkdirs()
+        Utils.createDirectory(dirToCreate)
         Files.setPosixFilePermissions(
           dirToCreate.toPath, PosixFilePermissions.fromString("rwxrwx---"))
         if (dirToCreate.exists()) {

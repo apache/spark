@@ -29,7 +29,6 @@ from sparktestsupport.shellutils import exit_from_command_with_retcode, run_cmd,
 from sparktestsupport.utils import (
     determine_modules_for_files,
     determine_modules_to_test,
-    determine_tags_to_exclude,
     identify_changed_files_from_git_commits,
 )
 import sparktestsupport.modules as modules
@@ -287,7 +286,7 @@ def build_spark_assembly_sbt(extra_profiles, checkstyle=False):
     if checkstyle:
         run_java_style_checks(build_profiles)
 
-    if not os.environ.get("SPARK_JENKINS") and not os.environ.get("SKIP_UNIDOC"):
+    if not os.environ.get("SKIP_UNIDOC"):
         build_spark_unidoc_sbt(extra_profiles)
 
 
@@ -395,7 +394,7 @@ def run_python_tests(test_modules, test_pythons, parallelism, with_coverage=Fals
 
 
 def run_python_packaging_tests():
-    if not os.environ.get("SPARK_JENKINS") and os.environ.get("SKIP_PACKAGING", "false") != "true":
+    if os.environ.get("SKIP_PACKAGING", "false") != "true":
         set_title_and_block("Running PySpark packaging tests", "BLOCK_PYSPARK_PIP_TESTS")
         command = [os.path.join(SPARK_HOME, "dev", "run-pip-tests")]
         run_cmd(command)
@@ -427,7 +426,7 @@ def parse_opts():
     parser.add_argument(
         "--python-executables",
         type=str,
-        default="python3.9",
+        default="python3.11",
         help="A comma-separated list of Python executables to test against (default: %(default)s)",
     )
     parser.add_argument(
@@ -507,22 +506,13 @@ def main():
         else:
             print("Cannot install SparkR as R was not found in PATH")
 
-    if os.environ.get("SPARK_JENKINS"):
-        # if we're on the Amplab Jenkins build servers setup variables
-        # to reflect the environment settings
-        build_tool = os.environ.get("SPARK_JENKINS_BUILD_TOOL", "sbt")
-        scala_version = os.environ.get("SPARK_JENKINS_BUILD_SCALA_PROFILE")
-        hadoop_version = os.environ.get("SPARK_JENKINS_BUILD_PROFILE", "hadoop3")
-        test_env = "spark_jenkins"
+    build_tool = "sbt"
+    scala_version = os.environ.get("SCALA_PROFILE")
+    hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop3")
+    if "GITHUB_ACTIONS" in os.environ:
+        test_env = "github_actions"
     else:
-        # else we're running locally or GitHub Actions.
-        build_tool = "sbt"
-        scala_version = os.environ.get("SCALA_PROFILE")
-        hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop3")
-        if "GITHUB_ACTIONS" in os.environ:
-            test_env = "github_actions"
-        else:
-            test_env = "local"
+        test_env = "local"
 
     extra_profiles = get_hadoop_profiles(hadoop_version) + get_scala_profiles(scala_version)
 
@@ -569,15 +559,6 @@ def main():
         if len(changed_modules) == 0:
             print("[info] There are no modules to test, exiting without testing.")
             return
-
-    # If we're running the tests in Jenkins, calculate the diff from the targeted branch, and
-    # detect modules to test.
-    elif os.environ.get("SPARK_JENKINS_PRB"):
-        target_branch = os.environ["ghprbTargetBranch"]
-        changed_files = identify_changed_files_from_git_commits("HEAD", target_branch=target_branch)
-        changed_modules = determine_modules_for_files(changed_files)
-        test_modules = determine_modules_to_test(changed_modules)
-        excluded_tags = determine_tags_to_exclude(changed_modules)
 
     # If there is no changed module found, tests all.
     if not changed_modules:
@@ -633,12 +614,7 @@ def main():
         ):
             run_sparkr_style_checks()
 
-    # determine if docs were changed and if we're inside the jenkins environment
-    # note - the below commented out until *all* Jenkins workers can get the Bundler gem installed
-    # if "DOCS" in changed_modules and test_env == "spark_jenkins":
-    #    build_spark_documentation()
-
-    if any(m.should_run_build_tests for m in test_modules) and test_env != "spark_jenkins":
+    if any(m.should_run_build_tests for m in test_modules):
         run_build_tests()
 
     # spark build
