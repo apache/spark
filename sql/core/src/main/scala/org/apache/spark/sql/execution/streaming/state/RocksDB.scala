@@ -180,7 +180,7 @@ class RocksDB(
 
   @volatile private var db: NativeRocksDB = _
   @volatile private var changelogWriter: Option[StateStoreChangelogWriter] = None
-  private var enableChangelogCheckpointing: Boolean = conf.enableChangelogCheckpointing
+  @volatile private var enableChangelogCheckpointing: Boolean = conf.enableChangelogCheckpointing
   @volatile protected var loadedVersion: Long = -1L   // -1 = nothing valid is loaded
 
   // Can be updated by whichever thread uploaded a snapshot, which could be either task,
@@ -553,26 +553,25 @@ class RocksDB(
     this
   }
 
+  private def loadEmptyStoreWithoutCheckpointId(version: Long): Unit = {
+    // Use version 0 logic to create empty directory with no SST files
+    val metadata = fileManager.loadCheckpointFromDfs(0, workingDir, rocksDBFileMapping, None)
+    loadedVersion = version
+    fileManager.setMaxSeenVersion(version)
+    openLocalRocksDB(metadata)
+  }
   private def loadWithoutCheckpointId(
       version: Long,
       readOnly: Boolean = false,
-      createEmpty: Boolean = false): RocksDB = {
+      loadEmpty: Boolean = false): RocksDB = {
 
     try {
-      enableChangelogCheckpointing = if (createEmpty) false else conf.enableChangelogCheckpointing
-      // For createEmpty, always proceed; otherwise, only if version changed
-      if (createEmpty || loadedVersion != version) {
+      // For loadEmpty, always proceed; otherwise, only if version changed
+      if (loadEmpty || loadedVersion != version) {
         closeDB(ignoreException = false)
 
-        if (createEmpty) {
-          // Use version 0 logic to create empty directory with no SST files
-          val metadata = fileManager.loadCheckpointFromDfs(0, workingDir, rocksDBFileMapping, None)
-          loadedVersion = version
-          fileManager.setMaxSeenVersion(version)
-          openLocalRocksDB(metadata)
-          // Empty store has no keys
-          numKeysOnLoadedVersion = 0
-          numInternalKeysOnLoadedVersion = 0
+        if (loadEmpty) {
+          loadEmptyStoreWithoutCheckpointId(version)
         } else {
           // load the latest snapshot
           loadSnapshotWithoutCheckpointId(version)
@@ -583,17 +582,17 @@ class RocksDB(
             replayChangelog(versionsAndUniqueIds)
             loadedVersion = version
           }
-          // After changelog replay the numKeysOnWritingVersion will be updated to
-          // the correct number of keys in the loaded version.
-          numKeysOnLoadedVersion = numKeysOnWritingVersion
-          numInternalKeysOnLoadedVersion = numInternalKeysOnWritingVersion
-          fileManagerMetrics = fileManager.latestLoadCheckpointMetrics
         }
+        // After changelog replay the numKeysOnWritingVersion will be updated to
+        // the correct number of keys in the loaded version.
+        numKeysOnLoadedVersion = numKeysOnWritingVersion
+        numInternalKeysOnLoadedVersion = numInternalKeysOnWritingVersion
+        fileManagerMetrics = fileManager.latestLoadCheckpointMetrics
       }
       if (conf.resetStatsOnLoad) {
         nativeStats.reset
       }
-      if (createEmpty) {
+      if (loadEmpty) {
         logInfo(log"Created empty store at version ${MDC(LogKeys.VERSION_NUM, version)}")
       } else {
         logInfo(log"Loaded ${MDC(LogKeys.VERSION_NUM, version)}")
@@ -603,17 +602,14 @@ class RocksDB(
         loadedVersion = -1  // invalidate loaded data
         throw t
     }
-    if (enableChangelogCheckpointing && !readOnly) {
+    // Checking conf.enableChangelogCheckpointing instead of enableChangelogCheckpointing.
+    // enableChangelogCheckpointing is set to false when loadEmpty is true, but we still want
+    // to abort previous used changelogWriter if there is any
+    if (conf.enableChangelogCheckpointing && !readOnly) {
       // Make sure we don't leak resource.
       changelogWriter.foreach(_.abort())
-      if (createEmpty) {
-        // Empty lineage since this is a fresh start with forced snapshot
-        changelogWriter = Some(fileManager.getChangeLogWriter(
-          version + 1,
-          useColumnFamilies,
-          sessionStateStoreCkptId,
-          if (enableStateStoreCheckpointIds) Some(Array.empty[LineageItem]) else None
-        ))
+      if (loadEmpty) {
+        changelogWriter = None
       } else {
         changelogWriter = Some(fileManager.getChangeLogWriter(version + 1, useColumnFamilies))
       }
@@ -733,7 +729,7 @@ class RocksDB(
       version: Long,
       stateStoreCkptId: Option[String] = None,
       readOnly: Boolean = false,
-      createEmpty: Boolean = false): RocksDB = {
+      loadEmpty: Boolean = false): RocksDB = {
     val startTime = System.currentTimeMillis()
 
     assert(version >= 0)
@@ -744,11 +740,14 @@ class RocksDB(
 
     logInfo(log"Loading ${MDC(LogKeys.VERSION_NUM, version)} with stateStoreCkptId: ${
       MDC(LogKeys.UUID, stateStoreCkptId.getOrElse(""))}")
+    // If loadEmpty is true, we will not generate a changelog but only a snapshot file to prevent
+    // mistakenly applying new changelog to older state version
+    enableChangelogCheckpointing = if (loadEmpty) false else conf.enableChangelogCheckpointing
     if (stateStoreCkptId.isDefined || enableStateStoreCheckpointIds && version == 0) {
-      assert(createEmpty == false, "createEmpty not support for checkpointV2 yet")
+      assert(!loadEmpty, "loadEmpty not support for checkpointV2 yet")
       loadWithCheckpointId(version, stateStoreCkptId, readOnly)
     } else {
-      loadWithoutCheckpointId(version, readOnly, createEmpty)
+      loadWithoutCheckpointId(version, readOnly, loadEmpty)
     }
 
     // Record the metrics after loading

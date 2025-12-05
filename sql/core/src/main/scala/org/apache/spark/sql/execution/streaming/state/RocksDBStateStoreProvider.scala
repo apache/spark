@@ -764,12 +764,11 @@ private[sql] class RocksDBStateStoreProvider
           Some(s)
       }
 
-      // Load RocksDB: either empty or from existing checkpoints
       rocksDB.load(
         version,
         stateStoreCkptId = if (storeConf.enableStateStoreCheckpointIds) uniqueId else None,
         readOnly = readOnly,
-        createEmpty = loadEmpty)
+        loadEmpty = loadEmpty)
 
       // Create or reuse store instance
       val store = existingStore match {
@@ -816,7 +815,7 @@ private[sql] class RocksDBStateStoreProvider
       version,
       uniqueId,
       readOnly = false,
-      forceSnapshotOnCommit = if (loadEmpty) true else forceSnapshotOnCommit,
+      forceSnapshotOnCommit = forceSnapshotOnCommit,
       loadEmpty = loadEmpty
     )
   }

@@ -3942,83 +3942,43 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }}
   }
 
-  testWithStateStoreCheckpointIdsAndChangelogEnabled(
+  test(
     "SPARK-54420: load with createEmpty creates empty store at specified version") {
-    enableStateStoreCheckpointIds =>
-      val remoteDir = Utils.createTempDir().toString
-      new File(remoteDir).delete()
-      val versionToUniqueId = new mutable.HashMap[Long, String]()
+    val remoteDir = Utils.createTempDir().toString
+    new File(remoteDir).delete()
 
-      withDB(remoteDir,
-        enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
-        versionToUniqueId = versionToUniqueId) { db =>
-        // Put initial data first
-        val version = 0
-        db.load(version, versionToUniqueId.get(0))
-        db.put("a", "1")
-        val (version1, _) = db.commit()
-        assert(db.get("a") === "1")
+    withDB(remoteDir) { db =>
+      // loading batch 0 with loadEmpty = true
+      db.load(0, None, loadEmpty = true)
+      assert(iterator(db).isEmpty)
+      db.put("a", "1")
+      val (version1, _) = db.commit()
+      assert(toStr(db.get("a")) === "1")
 
-        db.load(version1, versionToUniqueId.get(1), createEmpty = true)
+      // check we can load store normally even the previous one loadEmpty = true
+      db.load(version1)
+      db.put("b", "2")
+      val (version2, _) = db.commit()
+      assert(version2 === version1 + 1)
+      assert(toStr(db.get("b")) === "2")
+      assert(toStr(db.get("a")) === "1")
 
-        // Add data and commit - should produce version 11
-        db.put("b", "2")
-        val (version2, _) = db.commit(forceSnapshot = true)
-        assert(version2 === version1 + 1)
-        assert(toStr(db.get("b")) === "2")
-        assert(db.get("a") === null)
-        assert(iterator(db).isEmpty)
+      // load an empty store
+      db.load(version2, loadEmpty = true)
+      db.put("c", "3")
+      val (version3, _) = db.commit()
+      assert(db.get("b") === null)
+      assert(toStr(db.get("c")) === "3")
+      assert(version3 === version2 + 1)
 
-        db.put("c", "3")
-        assert(toStr(db.get("b")) === "2")
-        assert(toStr(db.get("c")) === "3")
-        val (version3, _) = db.commit(forceSnapshot = true)
-        assert(version3 === version2 + 1)
-      }
-
-      // Verify we can reload the committed version
-      withDB(remoteDir, version = 3,
-        enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
-        versionToUniqueId = versionToUniqueId) { db =>
-        assert(toStr(db.get("c")) === "3")
-        assert(db.iterator().map(toStr).toSet === Set(("a", "1")))
-      }
-  }
-
-  testWithStateStoreCheckpointIdsAndChangelogEnabled(
-    "SPARK-54420: load with createEmpty at version 0") {
-    enableStateStoreCheckpointIds =>
-      val remoteDir = Utils.createTempDir().toString
-      new File(remoteDir).delete()
-      val versionToUniqueId = new mutable.HashMap[Long, String]()
-
-      withDB(remoteDir,
-        enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
-        versionToUniqueId = versionToUniqueId) { db =>
-        // Create empty store at version 0
-        val ckptId = if (enableStateStoreCheckpointIds) {
-          Some(java.util.UUID.randomUUID.toString)
-        } else {
-          None
-        }
-
-        db.load(0, ckptId, createEmpty = true)
-
-        // Verify store is empty
-        assert(iterator(db).isEmpty)
-
-        // Add data and commit - should produce version 1
-        db.put("a", "1")
-        val (newVersion, _) = db.commit(true)
-        assert(newVersion === 1)
-      }
-
-      // Verify we can reload version 1
-      withDB(remoteDir, version = 1,
-        enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
-        versionToUniqueId = versionToUniqueId) { db =>
-        assert(toStr(db.get("a")) === "1")
-      }
+      // load 2 empty store in a row
+      db.load(version3, loadEmpty = true)
+      db.put("d", "4")
+      val (version4, _) = db.commit()
+      assert(db.get("c") === null)
+      assert(toStr(db.get("d")) === "4")
+      assert(version4 === version3 + 1)
+    }
   }
 
   test("SPARK-44639: Use Java tmp dir instead of configured local dirs on Yarn") {
