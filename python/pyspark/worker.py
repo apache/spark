@@ -149,6 +149,13 @@ class RunnerConf:
         )
 
     @property
+    def use_legacy_pandas_udtf_conversion(self) -> bool:
+        return (
+            self.get("spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled", "false")
+            == "true"
+        )
+
+    @property
     def binary_as_bytes(self) -> bool:
         return self.get("spark.sql.execution.pyspark.binaryAsBytes", "true") == "true"
 
@@ -1514,7 +1521,7 @@ def read_udtf(pickleSer, infile, eval_type):
         input_types = [
             field.dataType for field in _parse_datatype_json_string(utf8_deserializer.loads(infile))
         ]
-        if runner_conf.use_legacy_pandas_udf_conversion:
+        if runner_conf.use_legacy_pandas_udtf_conversion:
             # NOTE: if timezone is set here, that implies respectSessionTimeZone is True
             ser = ArrowStreamPandasUDTFSerializer(
                 runner_conf.timezone,
@@ -2293,7 +2300,7 @@ def read_udtf(pickleSer, infile, eval_type):
 
     elif (
         eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF
-        and not runner_conf.use_legacy_pandas_udf_conversion
+        and not runner_conf.use_legacy_pandas_udtf_conversion
     ):
 
         def wrap_arrow_udtf(f, return_type):
