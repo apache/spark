@@ -14,11 +14,6 @@
       "Arrow legacy IPC format is not supported in PySpark, please unset ARROW_PRE_0_15_IPC_FORMAT."
     ]
   },
-  "ATTEMPT_ANALYSIS_IN_PIPELINE_QUERY_FUNCTION": {
-    "message": [
-      "Operations that trigger DataFrame analysis or execution are not allowed in pipeline query functions. Move code outside of the pipeline query function."
-    ]
-  },
   "ATTRIBUTE_NOT_CALLABLE": {
     "message": [
       "Attribute `<attr_name>` in provided object `<obj_name>` is not callable."
@@ -908,7 +903,7 @@
   },
   "PIPELINE_SPEC_FILE_NOT_FOUND": {
     "message": [
-      "No pipeline.yaml or pipeline.yml file provided in arguments or found in directory `<dir_path>` or readable ancestor directories."
+      "No spark-pipeline.yaml or spark-pipeline.yml file provided in arguments or found in directory `<dir_path>` or readable ancestor directories."
     ]
   },
   "PIPELINE_SPEC_INVALID_GLOB_PATTERN": {

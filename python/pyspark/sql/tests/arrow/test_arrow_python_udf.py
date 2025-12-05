@@ -508,11 +508,13 @@ class ArrowPythonUDFLegacyTests(ArrowPythonUDFLegacyTestsMixin, ReusedSQLTestCas
     @classmethod
     def setUpClass(cls):
         super(ArrowPythonUDFLegacyTests, cls).setUpClass()
+        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.concurrency.level", "4")
         cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "true")
 
     @classmethod
     def tearDownClass(cls):
         try:
+            cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.concurrency.level")
             cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
         finally:
             super(ArrowPythonUDFLegacyTests, cls).tearDownClass()

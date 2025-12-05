@@ -475,7 +475,6 @@ pyspark_core = Module(
         "pyspark.tests.test_conf",
         "pyspark.tests.test_context",
         "pyspark.tests.test_daemon",
-        "pyspark.tests.test_install_spark",
         "pyspark.tests.test_join",
         "pyspark.tests.test_memory_profiler",
         "pyspark.tests.test_profiler",
@@ -771,6 +770,18 @@ pyspark_ml = Module(
     ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
+    ],
+)
+
+pyspark_install = Module(
+    name="pyspark-install",
+    dependencies=[core],
+    source_file_regexes=[
+        "python/pyspark/install.py",
+        "python/pyspark/tests/test_install_spark.py",
+    ],
+    python_test_goals=[
+        "pyspark.tests.test_install_spark",
     ],
 )
 
@@ -1555,7 +1566,6 @@ pyspark_pipelines = Module(
     dependencies=[pyspark_core, pyspark_sql, pyspark_connect],
     source_file_regexes=["python/pyspark/pipelines"],
     python_test_goals=[
-        "pyspark.pipelines.tests.test_block_connect_access",
         "pyspark.pipelines.tests.test_block_session_mutations",
         "pyspark.pipelines.tests.test_cli",
         "pyspark.pipelines.tests.test_decorators",

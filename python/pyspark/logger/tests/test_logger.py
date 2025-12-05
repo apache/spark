@@ -215,7 +215,6 @@ class LoggerTests(LoggerTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.logger.tests.test_logger import *  # noqa: F401
 
     try:

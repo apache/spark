@@ -23,13 +23,13 @@ import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput, StorageLevelProtoConverter}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
-import org.apache.spark.sql.connect.utils.PlanCompressionUtils
+import org.apache.spark.sql.connect.utils.{PipelineAnalysisContextUtils, PlanCompressionUtils}
 import org.apache.spark.sql.execution.{CodegenMode, CommandExecutionMode, CostMode, ExtendedMode, FormattedMode, SimpleMode}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.ArrayImplicits._
@@ -62,6 +62,12 @@ private[connect] class SparkConnectAnalyzeHandler(
     lazy val planner = new SparkConnectPlanner(sessionHolder)
     val session = sessionHolder.session
     val builder = proto.AnalyzePlanResponse.newBuilder()
+    val userContext = request.getUserContext
+
+    // Pipeline has not yet supported eager analysis inside flow function.
+    if (PipelineAnalysisContextUtils.isInsidePipelineFlowFunction(userContext)) {
+      throw new AnalysisException("ATTEMPT_ANALYSIS_IN_PIPELINE_QUERY_FUNCTION", Map())
+    }
 
     def transformRelation(rel: proto.Relation) = planner.transformRelation(rel, cachePlan = true)
     def transformRelationPlan(plan: proto.Plan) = {

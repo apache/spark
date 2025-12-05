@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CurrentUserContext
-import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NamedRelation, NoSuchDatabaseException, NoSuchFunctionException, NoSuchTableException, TimeTravelSpec}
+import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NamedRelation, NoSuchDatabaseException, NoSuchFunctionException, NoSuchTableException, RelationCache, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.catalog.ClusterBySpec
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.{SerdeInfo, TableSpec}
@@ -36,6 +36,7 @@ import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, LiteralValue, Transform}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, MapType, Metadata, MetadataBuilder, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -497,6 +498,27 @@ private[sql] object CatalogV2Util {
     loadTable(catalog, ident).map(DataSourceV2Relation.create(_, Some(catalog), Some(ident)))
   }
 
+  def isSameTable(
+      rel: DataSourceV2Relation,
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      table: Table): Boolean = {
+    rel.catalog.contains(catalog) && rel.identifier.contains(ident) && rel.table.id == table.id
+  }
+
+  def lookupCachedRelation(
+      cache: RelationCache,
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      table: Table,
+      conf: SQLConf): Option[DataSourceV2Relation] = {
+    val nameParts = ident.toQualifiedNameParts(catalog)
+    val cached = cache.lookup(nameParts, conf.resolver)
+    cached.collect {
+      case r: DataSourceV2Relation if isSameTable(r, catalog, ident, table) => r
+    }
+  }
+
   def isSessionCatalog(catalog: CatalogPlugin): Boolean = {
     catalog.name().equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME)
   }
@@ -565,12 +587,29 @@ private[sql] object CatalogV2Util {
       .asTableCatalog
   }
 
+  def toStructType(cols: Seq[MetadataColumn]): StructType = {
+    StructType(cols.map(toStructField))
+  }
+
+  private def toStructField(col: MetadataColumn): StructField = {
+    val metadata = Option(col.metadataInJSON).map(Metadata.fromJson).getOrElse(Metadata.empty)
+    var f = StructField(col.name, col.dataType, col.isNullable, metadata)
+    if (col.comment != null) {
+      f = f.withComment(col.comment)
+    }
+    f
+  }
+
+  def v2ColumnsToStructType(columns: Array[Column]): StructType = {
+    v2ColumnsToStructType(columns.toImmutableArraySeq)
+  }
+
   /**
    * Converts DS v2 columns to StructType, which encodes column comment and default value to
    * StructField metadata. This is mainly used to define the schema of v2 scan, w.r.t. the columns
    * of the v2 table.
    */
-  def v2ColumnsToStructType(columns: Array[Column]): StructType = {
+  def v2ColumnsToStructType(columns: Seq[Column]): StructType = {
     StructType(columns.map(v2ColumnToStructField))
   }
 

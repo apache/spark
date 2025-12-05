@@ -34,8 +34,8 @@ import org.apache.spark.sql.types.StructType
 class CSVOptions(
     @transient val parameters: CaseInsensitiveMap[String],
     val columnPruning: Boolean,
-    defaultTimeZoneId: String,
-    defaultColumnNameOfCorruptRecord: String)
+    private val defaultTimeZoneId: String,
+    private val defaultColumnNameOfCorruptRecord: String)
   extends FileSourceOptions(parameters) with Logging {
 
   import CSVOptions._
@@ -61,6 +61,24 @@ class CSVOptions(
         columnPruning,
         defaultTimeZoneId,
         defaultColumnNameOfCorruptRecord)
+  }
+
+  override def equals(obj: Any): Boolean = obj match {
+    case other: CSVOptions =>
+      (parameters == null && other.parameters == null ||
+      parameters != null && parameters == other.parameters) &&
+      columnPruning == other.columnPruning &&
+      defaultTimeZoneId == other.defaultTimeZoneId &&
+      defaultColumnNameOfCorruptRecord == other.defaultColumnNameOfCorruptRecord
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    var result = Option(parameters).map(_.hashCode()).getOrElse(0)
+    result = 31 * result + (if (columnPruning) 1 else 0)
+    result = 31 * result + defaultTimeZoneId.hashCode()
+    result = 31 * result + defaultColumnNameOfCorruptRecord.hashCode()
+    result
   }
 
   private def getChar(paramName: String, default: Char): Char = {
@@ -203,6 +221,9 @@ class CSVOptions(
   val timestampNTZFormatInRead: Option[String] = parameters.get(TIMESTAMP_NTZ_FORMAT)
   val timestampNTZFormatInWrite: String = parameters.getOrElse(TIMESTAMP_NTZ_FORMAT,
     s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS]")
+
+  val timeFormatInRead: Option[String] = parameters.get(TIME_FORMAT)
+  val timeFormatInWrite: String = parameters.getOrElse(TIME_FORMAT, TimeFormatter.defaultPattern)
 
   // SPARK-39731: Enables the backward compatible parsing behavior.
   // Generally, this config should be set to false to avoid producing potentially incorrect results
@@ -390,6 +411,7 @@ object CSVOptions extends DataSourceOptions {
   val DATE_FORMAT = newOption("dateFormat")
   val TIMESTAMP_FORMAT = newOption("timestampFormat")
   val TIMESTAMP_NTZ_FORMAT = newOption("timestampNTZFormat")
+  val TIME_FORMAT = newOption("timeFormat")
   val ENABLE_DATETIME_PARSING_FALLBACK = newOption("enableDateTimeParsingFallback")
   val MULTI_LINE = newOption("multiLine")
   val SAMPLING_RATIO = newOption("samplingRatio")

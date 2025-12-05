@@ -43,22 +43,26 @@ import org.apache.spark.sql.execution.streaming.runtime.SerializedOffset
  *   -         // No offset for this source i.e., an invalid JSON string
  *   {2}       // LongOffset 2
  *   ...
+ *
+ * Version 2 format (OffsetMap):
+ *   v2        // version 2
+ *   metadata
+ *   0:{0}     // sourceId:offset
+ *   1:{3}     // sourceId:offset
+ *   ...
  */
 class OffsetSeqLog(sparkSession: SparkSession, path: String)
-  extends HDFSMetadataLog[OffsetSeq](sparkSession, path) {
+  extends HDFSMetadataLog[OffsetSeqBase](sparkSession, path) {
 
-  override protected def deserialize(in: InputStream): OffsetSeq = {
+  override protected def deserialize(in: InputStream): OffsetSeqBase = {
     // called inside a try-finally where the underlying stream is closed in the caller
-    def parseOffset(value: String): OffsetV2 = value match {
-      case OffsetSeqLog.SERIALIZED_VOID_OFFSET => null
-      case json => SerializedOffset(json)
-    }
     val lines = IOSource.fromInputStream(in, UTF_8.name()).getLines()
     if (!lines.hasNext) {
       throw new IllegalStateException("Incomplete log file")
     }
 
-    validateVersion(lines.next(), OffsetSeqLog.VERSION)
+    val versionStr = lines.next()
+    val versionInt = validateVersion(versionStr, OffsetSeqLog.MAX_VERSION)
 
     // read metadata
     val metadata = lines.next().trim match {
@@ -66,33 +70,82 @@ class OffsetSeqLog(sparkSession: SparkSession, path: String)
       case md => Some(md)
     }
     import org.apache.spark.util.ArrayImplicits._
-    OffsetSeq.fill(metadata, lines.map(parseOffset).toArray.toImmutableArraySeq: _*)
+    if (versionInt == OffsetSeqLog.VERSION_2) {
+      // deserialize the remaining lines into the offset map
+      val remainingLines = lines.toArray
+      // New OffsetMap format: sourceId:offset
+      val offsetsMap = remainingLines.map { line =>
+        val colonIndex = line.indexOf(':')
+        if (colonIndex == -1) {
+          throw new IllegalStateException(s"Invalid OffsetMap format: $line")
+        }
+        val sourceId = line.substring(0, colonIndex)
+        val offsetStr = line.substring(colonIndex + 1)
+        val offset = if (offsetStr == OffsetSeqLog.SERIALIZED_VOID_OFFSET) {
+          None
+        } else {
+          Some(OffsetSeqLog.parseOffset(offsetStr))
+        }
+        sourceId -> offset
+      }.toMap
+      OffsetMap(offsetsMap, metadata.map(OffsetSeqMetadata.apply))
+    } else {
+      OffsetSeq.fill(metadata,
+        lines.map(OffsetSeqLog.parseOffset).toArray.toImmutableArraySeq: _*)
+    }
   }
 
-  override protected def serialize(offsetSeq: OffsetSeq, out: OutputStream): Unit = {
+  override protected def serialize(offsetSeq: OffsetSeqBase, out: OutputStream): Unit = {
     // called inside a try-finally where the underlying stream is closed in the caller
-    out.write(("v" + OffsetSeqLog.VERSION).getBytes(UTF_8))
+    out.write(("v" + offsetSeq.metadataOpt.map(_.version).getOrElse(OffsetSeqLog.VERSION_1))
+      .getBytes(UTF_8))
 
     // write metadata
     out.write('\n')
-    out.write(offsetSeq.metadata.map(_.json).getOrElse("").getBytes(UTF_8))
+    out.write(offsetSeq.metadataOpt.map(_.json).getOrElse("").getBytes(UTF_8))
 
-    // write offsets, one per line
-    offsetSeq.offsets.map(_.map(_.json)).foreach { offset =>
-      out.write('\n')
-      offset match {
-        case Some(json: String) => out.write(json.getBytes(UTF_8))
-        case None => out.write(OffsetSeqLog.SERIALIZED_VOID_OFFSET.getBytes(UTF_8))
-      }
+    offsetSeq match {
+      case offsetMap: OffsetMap =>
+        // For OffsetMap, write sourceId:offset pairs, one per line
+        offsetMap.offsetsMap.foreach { case (sourceId, offsetOpt) =>
+          out.write('\n')
+          out.write(sourceId.getBytes(UTF_8))
+          out.write(':')
+          offsetOpt match {
+            case Some(offset) => out.write(offset.json.getBytes(UTF_8))
+            case None => out.write(OffsetSeqLog.SERIALIZED_VOID_OFFSET.getBytes(UTF_8))
+          }
+        }
+      case _ =>
+        // Original sequence-based serialization
+        offsetSeq.offsets.map(_.map(_.json)).foreach { offset =>
+          out.write('\n')
+          offset match {
+            case Some(json: String) => out.write(json.getBytes(UTF_8))
+            case None => out.write(OffsetSeqLog.SERIALIZED_VOID_OFFSET.getBytes(UTF_8))
+          }
+        }
     }
   }
 
   def offsetSeqMetadataForBatchId(batchId: Long): Option[OffsetSeqMetadata] = {
-    if (batchId < 0) None else get(batchId).flatMap(_.metadata)
+    if (batchId < 0) {
+      None
+    } else {
+      get(batchId).flatMap(_.metadataOpt)
+    }
   }
 }
 
 object OffsetSeqLog {
-  private[streaming] val VERSION = 1
-  private val SERIALIZED_VOID_OFFSET = "-"
+  private[streaming] val VERSION_1 = 1
+  private[streaming] val VERSION_2 = 2
+  private[streaming] val VERSION = VERSION_1  // Default version for backward compatibility
+  private[streaming] val MAX_VERSION = VERSION_2
+  private[streaming] val SERIALIZED_VOID_OFFSET = "-"
+
+  private[checkpointing] def parseOffset(value: String): OffsetV2 = value match {
+    case SERIALIZED_VOID_OFFSET => null
+    case json => SerializedOffset(json)
+  }
 }

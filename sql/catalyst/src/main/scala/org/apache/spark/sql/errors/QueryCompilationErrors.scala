@@ -1726,7 +1726,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def userSpecifiedSchemaMismatchActualSchemaError(
       schema: StructType, actualSchema: StructType): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1133",
+      errorClass = "USER_SPECIFIED_AND_ACTUAL_SCHEMA_MISMATCH",
       messageParameters = Map(
         "schema" -> schema.toDDL,
         "actualSchema" -> actualSchema.toDDL))
@@ -2140,7 +2140,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
       messageParameters = Map(
         "tableName" -> toSQLId(tableName),
-        "errors" -> errors.mkString("\n- ", "\n- ", "")))
+        "errors" -> errors.mkString("- ", "\n- ", "")))
   }
 
   def metadataColumnsChangedAfterAnalysis(
@@ -2150,7 +2150,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.METADATA_COLUMNS_MISMATCH",
       messageParameters = Map(
         "tableName" -> toSQLId(tableName),
-        "errors" -> errors.mkString("\n- ", "\n- ", "")))
+        "errors" -> errors.mkString("- ", "\n- ", "")))
   }
 
   def numberOfPartitionsNotAllowedWithUnspecifiedDistributionError(): Throwable = {
@@ -2475,7 +2475,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def cannotResolveColumnNameAmongAttributesError(
       colName: String, fieldNames: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1201",
+      errorClass = "UNRESOLVED_COLUMN_AMONG_FIELD_NAMES",
       messageParameters = Map(
         "colName" -> colName,
         "fieldNames" -> fieldNames))
@@ -4477,7 +4477,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "viewName" -> toSQLId(viewName),
         "tableName" -> toSQLId(tableName),
         "colType" -> "data",
-        "errors" -> errors.mkString("\n- ", "\n- ", "")))
+        "errors" -> errors.mkString("- ", "\n- ", "")))
   }
 
   def metadataColumnsChangedAfterViewWithPlanCreation(
@@ -4490,6 +4490,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "viewName" -> toSQLId(viewName),
         "tableName" -> toSQLId(tableName),
         "colType" -> "metadata",
-        "errors" -> errors.mkString("\n- ", "\n- ", "")))
+        "errors" -> errors.mkString("- ", "\n- ", "")))
   }
 }

@@ -44,7 +44,7 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
       validateStoreAssignmentPolicy()
       val newTable = cleanAttrMetadata(u.table)
       val newAssignments = AssignmentUtils.alignUpdateAssignments(u.table.output, u.assignments,
-        coerceNestedTypes = false)
+        fromStar = false, coerceNestedTypes = false)
       u.copy(table = newTable, assignments = newAssignments)
 
     case u: UpdateTable if !u.skipSchemaResolution && u.resolved && !u.aligned =>
@@ -56,7 +56,8 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
       val coerceNestedTypes = SQLConf.get.coerceMergeNestedTypes
       m.copy(
         targetTable = cleanAttrMetadata(m.targetTable),
-        matchedActions = alignActions(m.targetTable.output, m.matchedActions, coerceNestedTypes),
+        matchedActions = alignActions(m.targetTable.output, m.matchedActions,
+          coerceNestedTypes),
         notMatchedActions = alignActions(m.targetTable.output, m.notMatchedActions,
           coerceNestedTypes),
         notMatchedBySourceActions = alignActions(m.targetTable.output, m.notMatchedBySourceActions,
@@ -117,9 +118,9 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
       actions: Seq[MergeAction],
       coerceNestedTypes: Boolean): Seq[MergeAction] = {
     actions.map {
-      case u @ UpdateAction(_, assignments) =>
+      case u @ UpdateAction(_, assignments, fromStar) =>
         u.copy(assignments = AssignmentUtils.alignUpdateAssignments(attrs, assignments,
-          coerceNestedTypes))
+          fromStar, coerceNestedTypes))
       case d: DeleteAction =>
         d
       case i @ InsertAction(_, assignments) =>

@@ -467,7 +467,8 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def collect(self) -> List[Row]:
         with SCCallSiteSync(self._sc):
             sock_info = self._jdf.collectToPython()
-        return list(_load_from_socket(sock_info, BatchedSerializer(CPickleSerializer())))
+        with _load_from_socket(sock_info, BatchedSerializer(CPickleSerializer())) as stream:
+            return list(stream)
 
     def toLocalIterator(self, prefetchPartitions: bool = False) -> Iterator[Row]:
         with SCCallSiteSync(self._sc):
@@ -488,7 +489,8 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def tail(self, num: int) -> List[Row]:
         with SCCallSiteSync(self._sc):
             sock_info = self._jdf.tailToPython(num)
-        return list(_load_from_socket(sock_info, BatchedSerializer(CPickleSerializer())))
+        with _load_from_socket(sock_info, BatchedSerializer(CPickleSerializer())) as stream:
+            return list(stream)
 
     def foreach(self, f: Callable[[Row], None]) -> None:
         self.rdd.foreach(f)

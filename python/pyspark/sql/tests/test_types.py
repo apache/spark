@@ -2076,6 +2076,44 @@ class TypesTestsMixin:
         for instance in instances:
             self.assertEqual(eval(repr(instance)), instance)
 
+    def test_hashable(self):
+        for dt in [
+            NullType(),
+            StringType(),
+            StringType("UTF8_BINARY"),
+            StringType("UTF8_LCASE"),
+            StringType("UNICODE"),
+            StringType("UNICODE_CI"),
+            CharType(10),
+            VarcharType(10),
+            BinaryType(),
+            BooleanType(),
+            DateType(),
+            TimeType(),
+            TimestampType(),
+            TimestampNTZType(),
+            TimeType(),
+            DecimalType(),
+            DoubleType(),
+            FloatType(),
+            ByteType(),
+            IntegerType(),
+            LongType(),
+            ShortType(),
+            DayTimeIntervalType(),
+            YearMonthIntervalType(),
+            CalendarIntervalType(),
+            ArrayType(StringType()),
+            MapType(StringType(), IntegerType()),
+            StructField("f1", StringType(), True),
+            StructType([StructField("f1", StringType(), True)]),
+            VariantType(),
+            GeometryType(0),
+            GeographyType(4326),
+            ExamplePointUDT(),
+        ]:
+            _ = hash(dt)
+
     def test_daytime_interval_type_constructor(self):
         # SPARK-37277: Test constructors in day time interval.
         self.assertEqual(DayTimeIntervalType().simpleString(), "interval day to second")

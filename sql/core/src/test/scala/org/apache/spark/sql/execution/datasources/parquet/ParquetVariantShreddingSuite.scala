@@ -28,7 +28,8 @@ import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.schema.{LogicalTypeAnnotation, PrimitiveType, Type}
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.SparkException
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
 import org.apache.spark.sql.test.SharedSparkSession
@@ -47,7 +48,8 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
 
   test("timestamp physical type") {
     ParquetOutputTimestampType.values.foreach { timestampParquetType =>
-      withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> timestampParquetType.toString) {
+      withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> timestampParquetType.toString,
+        SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.key -> "true") {
         withTempDir { dir =>
           val schema = "t timestamp, st struct<t timestamp>, at array<timestamp>"
           val fullSchema = "v struct<metadata binary, value binary, typed_value struct<" +
@@ -160,64 +162,127 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
     Seq(false, true).foreach { annotateVariantLogicalType =>
       Seq(false, true).foreach { shredVariant =>
         Seq(false, true).foreach { allowReadingShredded =>
-          withSQLConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> shredVariant.toString,
-            SQLConf.VARIANT_INFER_SHREDDING_SCHEMA.key -> shredVariant.toString,
-            SQLConf.VARIANT_ALLOW_READING_SHREDDED.key ->
-              (allowReadingShredded || shredVariant).toString,
-            SQLConf.PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE.key ->
-              annotateVariantLogicalType.toString) {
-            def validateAnnotation(g: Type): Unit = {
-              if (annotateVariantLogicalType) {
-                assert(g.getLogicalTypeAnnotation == LogicalTypeAnnotation.variantType(1))
-              } else {
-                assert(g.getLogicalTypeAnnotation == null)
+          Seq(false, true).foreach { ignoreVariantAnnotation =>
+            withSQLConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> shredVariant.toString,
+              SQLConf.VARIANT_INFER_SHREDDING_SCHEMA.key -> shredVariant.toString,
+              SQLConf.VARIANT_ALLOW_READING_SHREDDED.key ->
+                (allowReadingShredded || shredVariant).toString,
+              SQLConf.PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE.key ->
+                annotateVariantLogicalType.toString,
+              SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.key -> ignoreVariantAnnotation.toString) {
+              def validateAnnotation(g: Type): Unit = {
+                if (annotateVariantLogicalType) {
+                  assert(g.getLogicalTypeAnnotation == LogicalTypeAnnotation.variantType(1))
+                } else {
+                  assert(g.getLogicalTypeAnnotation == null)
+                }
+              }
+              withTempDir { dir =>
+                // write parquet file
+                val df = spark.sql(
+                  """
+                    | select
+                    |  id * 2 i,
+                    |  to_variant_object(named_struct('id', id)) v,
+                    |  named_struct('i', (id * 2)::string,
+                    |     'nv', to_variant_object(named_struct('id', 30 + id))) ns,
+                    |  array(to_variant_object(named_struct('id', 10 + id))) av,
+                    |  map('v2', to_variant_object(named_struct('id', 20 + id))) mv
+                    |  from range(0,3,1,1)""".stripMargin)
+                df.write.mode("overwrite").parquet(dir.getAbsolutePath)
+                val file = dir.listFiles().find(_.getName.endsWith(".parquet")).get
+                val parquetFilePath = file.getAbsolutePath
+                val inputFile = HadoopInputFile.fromPath(new Path(parquetFilePath),
+                  new Configuration())
+                val reader = ParquetFileReader.open(inputFile)
+                val footer = reader.getFooter
+                val schema = footer.getFileMetaData.getSchema
+                val vGroup = schema.getType(schema.getFieldIndex("v"))
+                validateAnnotation(vGroup)
+                assert(vGroup.asGroupType().getFields.asScala.toSeq
+                  .exists(_.getName == "typed_value") == shredVariant)
+                val nsGroup = schema.getType(schema.getFieldIndex("ns")).asGroupType()
+                val nvGroup = nsGroup.getType(nsGroup.getFieldIndex("nv"))
+                validateAnnotation(nvGroup)
+                val avGroup = schema.getType(schema.getFieldIndex("av")).asGroupType()
+                val avList = avGroup.getType(avGroup.getFieldIndex("list")).asGroupType()
+                val avElement = avList.getType(avList.getFieldIndex("element"))
+                validateAnnotation(avElement)
+                val mvGroup = schema.getType(schema.getFieldIndex("mv")).asGroupType()
+                val mvList = mvGroup.getType(mvGroup.getFieldIndex("key_value")).asGroupType()
+                val mvValue = mvList.getType(mvList.getFieldIndex("value"))
+                validateAnnotation(mvValue)
+                // verify result
+                val result = spark.read.format("parquet")
+                  .schema("v variant, ns struct<nv variant>, av array<variant>, " +
+                    "mv map<string, variant>")
+                  .load(dir.getAbsolutePath)
+                  .selectExpr("v:id::int i1", "ns.nv:id::int i2", "av[0]:id::int i3",
+                    "mv['v2']:id::int i4")
+                checkAnswer(result, Array(Row(0, 30, 10, 20), Row(1, 31, 11, 21),
+                  Row(2, 32, 12, 22)))
+                reader.close()
               }
             }
-            withTempDir { dir =>
-              // write parquet file
-              val df = spark.sql(
-                """
-                  | select
-                  |  id * 2 i,
-                  |  to_variant_object(named_struct('id', id)) v,
-                  |  named_struct('i', (id * 2)::string,
-                  |     'nv', to_variant_object(named_struct('id', 30 + id))) ns,
-                  |  array(to_variant_object(named_struct('id', 10 + id))) av,
-                  |  map('v2', to_variant_object(named_struct('id', 20 + id))) mv
-                  |  from range(0,3,1,1)""".stripMargin)
-              df.write.mode("overwrite").parquet(dir.getAbsolutePath)
-              val file = dir.listFiles().find(_.getName.endsWith(".parquet")).get
-              val parquetFilePath = file.getAbsolutePath
-              val inputFile = HadoopInputFile.fromPath(new Path(parquetFilePath),
-                new Configuration())
-              val reader = ParquetFileReader.open(inputFile)
-              val footer = reader.getFooter
-              val schema = footer.getFileMetaData.getSchema
-              val vGroup = schema.getType(schema.getFieldIndex("v"))
-              validateAnnotation(vGroup)
-              assert(vGroup.asGroupType().getFields.asScala.toSeq
-                .exists(_.getName == "typed_value") == shredVariant)
-              val nsGroup = schema.getType(schema.getFieldIndex("ns")).asGroupType()
-              val nvGroup = nsGroup.getType(nsGroup.getFieldIndex("nv"))
-              validateAnnotation(nvGroup)
-              val avGroup = schema.getType(schema.getFieldIndex("av")).asGroupType()
-              val avList = avGroup.getType(avGroup.getFieldIndex("list")).asGroupType()
-              val avElement = avList.getType(avList.getFieldIndex("element"))
-              validateAnnotation(avElement)
-              val mvGroup = schema.getType(schema.getFieldIndex("mv")).asGroupType()
-              val mvList = mvGroup.getType(mvGroup.getFieldIndex("key_value")).asGroupType()
-              val mvValue = mvList.getType(mvList.getFieldIndex("value"))
-              validateAnnotation(mvValue)
-              // verify result
-              val result = spark.read.format("parquet")
-                .schema("v variant, ns struct<nv variant>, av array<variant>, " +
-                  "mv map<string, variant>")
-                .load(dir.getAbsolutePath)
-                .selectExpr("v:id::int i1", "ns.nv:id::int i2", "av[0]:id::int i3",
-                  "mv['v2']:id::int i4")
-              checkAnswer(result, Array(Row(0, 30, 10, 20), Row(1, 31, 11, 21), Row(2, 32, 12, 22)))
-              reader.close()
+          }
+        }
+      }
+    }
+  }
+
+  test("variant logical type annotation - ignore variant annotation") {
+    Seq(true, false).foreach { ignoreVariantAnnotation =>
+      withSQLConf(SQLConf.PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE.key -> "true",
+        SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.key -> ignoreVariantAnnotation.toString,
+        SQLConf.VARIANT_INFER_SHREDDING_SCHEMA.key -> "false"
+      ) {
+        withTempDir { dir =>
+          // write parquet file
+          val df = spark.sql(
+            """
+              | select
+              |  id * 2 i,
+              |  1::variant v,
+              |  named_struct('i', (id * 2)::string, 'nv', 1::variant) ns,
+              |  array(1::variant) av,
+              |  map('v2', 1::variant) mv
+              |  from range(0,1,1,1)""".stripMargin)
+          df.write.mode("overwrite").parquet(dir.getAbsolutePath)
+          // verify result
+          val normal_result = spark.read.format("parquet")
+            .schema("v variant, ns struct<nv variant>, av array<variant>, " +
+              "mv map<string, variant>")
+            .load(dir.getAbsolutePath)
+            .selectExpr("v::int i1", "ns.nv::int i2", "av[0]::int i3",
+              "mv['v2']::int i4")
+          checkAnswer(normal_result, Array(Row(1, 1, 1, 1)))
+          val struct_result = spark.read.format("parquet")
+            .schema("v struct<value binary, metadata binary>, " +
+              "ns struct<nv struct<value binary, metadata binary>>, " +
+              "av array<struct<value binary, metadata binary>>, " +
+              "mv map<string, struct<value binary, metadata binary>>")
+            .load(dir.getAbsolutePath)
+            .selectExpr("v", "ns.nv", "av[0]", "mv['v2']")
+          if (ignoreVariantAnnotation) {
+            checkAnswer(
+              struct_result,
+              Seq(Row(
+                Row(Array[Byte](12, 1), Array[Byte](1, 0, 0)),
+                Row(Array[Byte](12, 1), Array[Byte](1, 0, 0)),
+                Row(Array[Byte](12, 1), Array[Byte](1, 0, 0)),
+                Row(Array[Byte](12, 1), Array[Byte](1, 0, 0))
+              ))
+            )
+          } else {
+            val exception = intercept[SparkException]{
+              struct_result.collect()
             }
+            checkError(
+              exception = exception.getCause.asInstanceOf[AnalysisException],
+              condition = "_LEGACY_ERROR_TEMP_3071",
+              parameters = Map("msg" -> "Invalid Spark read type[\\s\\S]*"),
+              matchPVals = true
+            )
           }
         }
       }
@@ -239,7 +304,8 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
       "c struct<value binary, typed_value decimal(15, 1)>>>"
     withSQLConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> true.toString,
       SQLConf.VARIANT_ALLOW_READING_SHREDDED.key -> true.toString,
-      SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST.key -> schema) {
+      SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST.key -> schema,
+      SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.key -> true.toString) {
       df.write.mode("overwrite").parquet(dir.getAbsolutePath)
 
 
@@ -313,7 +379,8 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
       "struct<value binary, typed_value int>>>"
     withSQLConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> true.toString,
       SQLConf.VARIANT_ALLOW_READING_SHREDDED.key -> true.toString,
-      SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST.key -> schema) {
+      SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST.key -> schema,
+      SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.key -> true.toString) {
       df.write.mode("overwrite").parquet(dir.getAbsolutePath)
 
       // Verify that we can read the full variant.
@@ -378,7 +445,8 @@ class ParquetVariantShreddingSuite extends QueryTest with ParquetTest with Share
       "m map<string, struct<metadata binary, value binary>>"
     withSQLConf(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> true.toString,
       SQLConf.VARIANT_ALLOW_READING_SHREDDED.key -> true.toString,
-      SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST.key -> schema) {
+      SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST.key -> schema,
+      SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.key -> true.toString) {
       df.write.mode("overwrite").parquet(dir.getAbsolutePath)
 
       // Verify that we can read the full variant.

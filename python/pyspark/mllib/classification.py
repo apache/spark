@@ -34,7 +34,6 @@ from pyspark.mllib.regression import (
 )
 from pyspark.mllib.util import Saveable, Loader, inherit_doc
 from pyspark.mllib.linalg import Vector
-from pyspark.mllib.regression import LabeledPoint
 
 if TYPE_CHECKING:
     from pyspark.mllib._typing import VectorLike

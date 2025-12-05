@@ -247,20 +247,23 @@ This is a dummy streaming data reader that generate 2 rows in every microbatch. 
 
         def partitions(self, start: dict, end: dict) -> list[InputPartition]:
             """
-            Plans the partitioning of the current microbatch defined by start and end offset,
-            it needs to return a sequence of :class:`InputPartition` object.
+            Plans the partitioning of the current microbatch defined by start
+            and end offset, it needs to return a sequence of
+            :class:`InputPartition` object.
             """
             return [RangePartition(start["offset"], end["offset"])]
 
         def commit(self, end: dict) -> None:
             """
-            This is invoked when the query has finished processing data before end offset, this can be used to clean up resource.
+            This is invoked when the query has finished processing data before end
+            offset, this can be used to clean up resource.
             """
             pass
 
         def read(self, partition) -> Iterator[Tuple]:
             """
-            Takes a partition as an input and read an iterator of tuples from the data source.
+            Takes a partition as an input and read an iterator of tuples from the
+            data source.
             """
             start, end = partition.start, partition.end
             for i in range(start, end):
@@ -305,7 +308,8 @@ This is the same dummy streaming reader that generate 2 rows every batch impleme
 
         def read(self, start: dict) -> Tuple[Iterator[Tuple], dict]:
             """
-            Takes start offset as an input, return an iterator of tuples and the start offset of next read.
+            Takes start offset as an input, return an iterator of tuples and
+            the start offset of next read.
             """
             start_idx = start["offset"]
             it = iter([(i,) for i in range(start_idx, start_idx + 2)])
@@ -313,7 +317,8 @@ This is the same dummy streaming reader that generate 2 rows every batch impleme
 
         def readBetweenOffsets(self, start: dict, end: dict) -> Iterator[Tuple]:
             """
-            Takes start and end offset as input and read an iterator of data deterministically.
+            Takes start and end offset as input and read an iterator of data
+            deterministically.
             This is called whe query replay batches during restart or after failure.
             """
             start_idx = start["offset"]
@@ -322,7 +327,8 @@ This is the same dummy streaming reader that generate 2 rows every batch impleme
 
         def commit(self, end: dict) -> None:
             """
-            This is invoked when the query has finished processing data before end offset, this can be used to clean up resource.
+            This is invoked when the query has finished processing data before end
+            offset, this can be used to clean up resource.
             """
             pass
 
@@ -363,8 +369,10 @@ This is a streaming data writer that write the metadata information of each micr
 
        def commit(self, messages: List[Optional[SimpleCommitMessage]], batchId: int) -> None:
            """
-           Receives a sequence of :class:`SimpleCommitMessage` when all write tasks succeed and decides what to do with it.
-           In this FakeStreamWriter, we write the metadata of the microbatch(number of rows and partitions) into a json file inside commit().
+           Receives a sequence of :class:`SimpleCommitMessage` when all write tasks
+           succeed and decides what to do with it.
+           In this FakeStreamWriter, we write the metadata of the microbatch
+           (number of rows and partitions) into a json file inside commit().
            """
            status = dict(num_partitions=len(messages), rows=sum(m.count for m in messages))
            with open(os.path.join(self.path, f"{batchId}.json"), "a") as file:
@@ -372,7 +380,8 @@ This is a streaming data writer that write the metadata information of each micr
 
        def abort(self, messages: List[Optional[SimpleCommitMessage]], batchId: int) -> None:
            """
-           Receives a sequence of :class:`SimpleCommitMessage` from successful tasks when some tasks fail and decides what to do with it.
+           Receives a sequence of :class:`SimpleCommitMessage` from successful tasks
+           when some tasks fail and decides what to do with it.
            In this FakeStreamWriter, we write a failure message into a txt file inside abort().
            """
            with open(os.path.join(self.path, f"{batchId}.txt"), "w") as file:
