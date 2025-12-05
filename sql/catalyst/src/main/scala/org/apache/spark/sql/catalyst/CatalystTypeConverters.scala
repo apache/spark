@@ -24,13 +24,12 @@ import java.sql.{Date, Timestamp}
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, LocalTime, Period}
 import java.util.{Map => JavaMap}
 import javax.annotation.Nullable
-
 import scala.language.existentials
-
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType._
@@ -79,6 +78,8 @@ object CatalystTypeConverters {
         new GeometryConverter(g)
       case DateType if SQLConf.get.datetimeJava8ApiEnabled => LocalDateConverter
       case DateType => DateConverter
+      case _: TimeType if !SQLConf.get.isTimeTypeEnabled =>
+        QueryCompilationErrors.unsupportedTimeTypeError()
       case _: TimeType => TimeConverter
       case TimestampType if SQLConf.get.datetimeJava8ApiEnabled => InstantConverter
       case TimestampType => TimestampConverter

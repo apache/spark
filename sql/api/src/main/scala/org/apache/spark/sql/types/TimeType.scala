@@ -18,7 +18,8 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.annotation.Unstable
-import org.apache.spark.sql.errors.DataTypeErrors
+import org.apache.spark.sql.errors.{CompilationErrors, DataTypeErrors}
+import org.apache.spark.sql.internal.SqlApiConfHelper
 
 /**
  * The time type represents a time value with fields hour, minute, second, up to microseconds. The
@@ -32,6 +33,10 @@ import org.apache.spark.sql.errors.DataTypeErrors
  */
 @Unstable
 case class TimeType(precision: Int) extends AnyTimeType {
+
+  if (!SqlApiConfHelper.confGetter.get()().isTimeTypeEnabled) {
+    throw CompilationErrors.unsupportedTimeTypeError()
+  }
 
   if (precision < TimeType.MIN_PRECISION || precision > TimeType.MAX_PRECISION) {
     throw DataTypeErrors.unsupportedTimePrecisionError(precision)
@@ -54,5 +59,7 @@ object TimeType {
   val DEFAULT_PRECISION: Int = MICROS_PRECISION
   val NANOS_PRECISION: Int = 9
 
-  def apply(): TimeType = new TimeType(DEFAULT_PRECISION)
+  def apply(): TimeType = {
+    new TimeType(DEFAULT_PRECISION)
+  }
 }
