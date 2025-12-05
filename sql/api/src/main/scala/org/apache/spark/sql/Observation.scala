@@ -78,7 +78,11 @@ class Observation(val name: String) {
   @throws[InterruptedException]
   def get: Map[String, Any] = {
     val row = getRow
-    row.getValuesMap(row.schema.map(_.name))
+    if (row.schema == null) {
+      Map.empty
+    } else {
+      row.getValuesMap(row.schema.map(_.name))
+    }
   }
 
   /**
