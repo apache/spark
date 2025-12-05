@@ -52,7 +52,7 @@ class TransformWithStateInPySparkPythonRunner(
     _schema: StructType,
     processorHandle: StatefulProcessorHandleImpl,
     _timeZoneId: String,
-    initialWorkerConf: Map[String, String],
+    initialRunnerConf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     groupingKeySchema: StructType,
@@ -60,7 +60,7 @@ class TransformWithStateInPySparkPythonRunner(
     eventTimeWatermarkForEviction: Option[Long])
   extends TransformWithStateInPySparkPythonBaseRunner[InType](
     funcs, evalType, argOffsets, _schema, processorHandle, _timeZoneId,
-    initialWorkerConf, pythonMetrics, jobArtifactUUID, groupingKeySchema,
+    initialRunnerConf, pythonMetrics, jobArtifactUUID, groupingKeySchema,
     batchTimestampMs, eventTimeWatermarkForEviction)
   with PythonArrowInput[InType] {
 
@@ -126,7 +126,7 @@ class TransformWithStateInPySparkPythonInitialStateRunner(
     initStateSchema: StructType,
     processorHandle: StatefulProcessorHandleImpl,
     _timeZoneId: String,
-    initialWorkerConf: Map[String, String],
+    initialRunnerConf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     groupingKeySchema: StructType,
@@ -134,7 +134,7 @@ class TransformWithStateInPySparkPythonInitialStateRunner(
     eventTimeWatermarkForEviction: Option[Long])
   extends TransformWithStateInPySparkPythonBaseRunner[GroupedInType](
     funcs, evalType, argOffsets, dataSchema, processorHandle, _timeZoneId,
-    initialWorkerConf, pythonMetrics, jobArtifactUUID, groupingKeySchema,
+    initialRunnerConf, pythonMetrics, jobArtifactUUID, groupingKeySchema,
     batchTimestampMs, eventTimeWatermarkForEviction)
   with PythonArrowInput[GroupedInType] {
 
@@ -195,7 +195,7 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
     _schema: StructType,
     processorHandle: StatefulProcessorHandleImpl,
     _timeZoneId: String,
-    initialWorkerConf: Map[String, String],
+    initialRunnerConf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     groupingKeySchema: StructType,
@@ -212,7 +212,7 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
   protected val arrowMaxRecordsPerBatch = sqlConf.arrowMaxRecordsPerBatch
   protected val arrowMaxBytesPerBatch = sqlConf.arrowMaxBytesPerBatch
 
-  override protected val workerConf: Map[String, String] = initialWorkerConf +
+  override protected val runnerConf: Map[String, String] = initialRunnerConf +
     (SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> arrowMaxRecordsPerBatch.toString) +
     (SQLConf.ARROW_EXECUTION_MAX_BYTES_PER_BATCH.key -> arrowMaxBytesPerBatch.toString)
 
@@ -225,7 +225,7 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
 
   override protected def handleMetadataBeforeExec(stream: DataOutputStream): Unit = {
     super.handleMetadataBeforeExec(stream)
-    // Also write the port/path number for state server
+    // Write the port/path number for state server
     if (isUnixDomainSock) {
       stream.writeInt(-1)
       PythonWorkerUtils.writeUTF(stateServerSocketPath, stream)
