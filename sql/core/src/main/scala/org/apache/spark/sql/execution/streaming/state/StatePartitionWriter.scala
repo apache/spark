@@ -51,8 +51,7 @@ class StatePartitionAllColumnFamiliesWriter(
   private val defaultSchema = {
     columnFamilyToSchemaMap.getOrElse(
       StateStore.DEFAULT_COL_FAMILY_NAME,
-      throw new IllegalArgumentException(
-        s"Column family ${StateStore.DEFAULT_COL_FAMILY_NAME} not found in schema map")
+      columnFamilyToSchemaMap.head._2 // join V3 doesn't have default col family
     )
   }
 
@@ -66,11 +65,11 @@ class StatePartitionAllColumnFamiliesWriter(
     val stateStoreId = StateStoreId(stateCheckpointLocation,
       operatorId, partitionId, storeName)
     val stateStoreProviderId = StateStoreProviderId(stateStoreId, UUID.randomUUID())
-
+    val useColumnFamilies = columnFamilyToSchemaMap.size > 1
     val provider = StateStoreProvider.createAndInit(
       stateStoreProviderId, defaultSchema.keySchema, defaultSchema.valueSchema,
       defaultSchema.keyStateEncoderSpec.get,
-      useColumnFamilies = false, storeConf, hadoopConf,
+      useColumnFamilies = useColumnFamilies, storeConf, hadoopConf,
       useMultipleValuesPerKey = false, stateSchemaProvider = None)
     provider
   }
@@ -82,11 +81,33 @@ class StatePartitionAllColumnFamiliesWriter(
     // Use loadEmpty=true to create a fresh state store without loading previous versions
     // We create the empty store AT version, and the next commit will
     // produce version + 1
-    provider.getStore(
+    val store = provider.getStore(
       currentBatchId,
       stateStoreCkptId = None,
       loadEmpty = true
     )
+    if (columnFamilyToSchemaMap.size > 1) {
+      columnFamilyToSchemaMap.foreach { pair =>
+        val colFamilyName = pair._1
+        val cfSchema = pair._2
+        colFamilyName match {
+          case StateStore.DEFAULT_COL_FAMILY_NAME => // createAndInit has registered default
+          case _ =>
+            val isInternal = colFamilyName.startsWith("$")
+            val useMultipleValuesPerKey = false
+            require(cfSchema.keyStateEncoderSpec.isDefined,
+              s"keyStateEncoderSpec must be defined for column family ${cfSchema.colFamilyName}")
+            store.createColFamilyIfAbsent(
+              colFamilyName,
+              cfSchema.keySchema,
+              cfSchema.valueSchema,
+              cfSchema.keyStateEncoderSpec.get,
+              useMultipleValuesPerKey,
+              isInternal)
+        }
+      }
+    }
+    store
   }
 
   // The function that writes and commits data to state store. It takes in rows with schema
