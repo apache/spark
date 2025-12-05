@@ -611,12 +611,14 @@ case class Cast(
         messageParameters = Map("other" -> other.toString))
     }
     if (canCast) {
-      // If the cast is to a time type, we first need to check if the time type is enabled.
-      case _: TimeType if !SQLConf.get.isTimeTypeEnabled =>
-        throw QueryCompilationErrors.unsupportedTimeTypeError()
-      // If the cast is not to a time type, we can skip the time type check and continue.
-      case _ =>
-        TypeCheckResult.TypeCheckSuccess
+      dataType match {
+        // If the cast is to a time type, we first need to check if the time type is enabled.
+        case _: TimeType if !SQLConf.get.isTimeTypeEnabled =>
+          throw QueryCompilationErrors.unsupportedTimeTypeError()
+        // If the cast is not to a time type, we can skip the time type check and continue.
+        case _ =>
+          TypeCheckResult.TypeCheckSuccess
+      }
     } else {
       typeCheckFailureInCast
     }
