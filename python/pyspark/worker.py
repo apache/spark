@@ -119,7 +119,15 @@ class RunnerConf:
 
     def load(self, infile):
         num_conf = read_int(infile)
-        for i in range(num_conf):
+        if num_conf < 0 or num_conf > 10000:
+            # We only have a few thousands configurations. This is a sanity check.
+            raise PySparkRuntimeError(
+                errorClass="PROTOCOL_ERROR",
+                messageParameters={
+                    "failure": f"Invalid number of configurations: {num_conf}",
+                },
+            )
+        for _ in range(num_conf):
             k = utf8_deserializer.loads(infile)
             v = utf8_deserializer.loads(infile)
             self._conf[k] = v

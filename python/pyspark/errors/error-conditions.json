@@ -941,6 +941,11 @@
       "Argument <arg_name> must be a numerical column for plotting, got <arg_type>."
     ]
   },
+  "PROTOCOL_ERROR": {
+    "message": [
+      "<failure>. This usually indicates that the message does not conform to the protocol."
+    ]
+  },
   "PYTHON_HASH_SEED_NOT_SET": {
     "message": [
       "Randomness of hash of string should be disabled via PYTHONHASHSEED."
