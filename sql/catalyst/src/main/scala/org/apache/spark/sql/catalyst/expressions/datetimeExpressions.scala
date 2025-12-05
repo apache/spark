@@ -26,7 +26,7 @@ import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.{SparkDateTimeException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
@@ -2214,12 +2214,27 @@ case class ParseToTimestamp(
     val types = Seq(
       StringTypeWithCollation(
         supportsTrimCollation = true),
-        DateType,
-        TimestampType,
-        TimestampNTZType)
+        //DateType,
+        //TimestampType,
+        //TimestampNTZType
+        )
     TypeCollection(
       (if (dataType.isInstanceOf[TimestampType]) types :+ NumericType else types): _*
     ) +: format.map(_ => StringTypeWithCollation(supportsTrimCollation = true)).toSeq
+  }
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      return defaultCheck
+    } else {
+        val inputType = left.dataType
+        if (!inputType.isInstanceOf[StringType]) {
+          return TypeCheckResult.TypeCheckFailure(
+            s"ParseToTimestamp requires string input, but got ${left.dataType.catalogString}. On Wisconsin!"
+            )
+        }
+        return TypeCheckResult.TypeCheckSuccess
+    }
   }
 
   override protected def withNewChildrenInternal(
