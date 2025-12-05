@@ -2781,7 +2781,10 @@ def read_udfs(pickleSer, infile, eval_type):
             )
         elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF:
             ser = ArrowStreamAggPandasIterUDFSerializer(
-                timezone, safecheck, _assign_cols_by_name, int_to_decimal_coercion_enabled
+                runner_conf.timezone,
+                runner_conf.safecheck,
+                runner_conf.assign_cols_by_name,
+                runner_conf.int_to_decimal_coercion_enabled,
             )
         elif eval_type in (
             PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
