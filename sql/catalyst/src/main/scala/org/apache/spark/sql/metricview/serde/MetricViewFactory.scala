@@ -23,10 +23,10 @@ object MetricViewFactory {
   def fromYAML(yamlContent: String): MetricView = {
     try {
       val yamlVersion =
-        YamlMapperProvider.mapperWithAllFields.readValue(yamlContent, classOf[YAMLVersion])
+        YamlMapperProviderV01.mapperWithAllFields.readValue(yamlContent, classOf[YAMLVersion])
       yamlVersion.version match {
         case "0.1" =>
-          MetricViewYAMLDeserializer.parseYaml(yamlContent).toCanonical
+          MetricViewYAMLDeserializerV01.parseYaml(yamlContent).toCanonical
         case _ =>
           throw MetricViewValidationException(
             s"Invalid YAML version: ${yamlVersion.version}"
@@ -48,7 +48,7 @@ object MetricViewFactory {
       val versionSpecific = MetricViewBase.fromCanonical(metricView)
       versionSpecific.version match {
         case "0.1" =>
-          MetricViewYAMLSerializer.toYaml(
+          MetricViewYAMLSerializerV01.toYaml(
             versionSpecific.asInstanceOf[MetricViewV01]
           )
         case _ =>

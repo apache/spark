@@ -19,13 +19,13 @@ package org.apache.spark.sql.metricview.serde
 
 import com.fasterxml.jackson.annotation.JsonProperty
 
-case class ColumnV01(
+private[sql] case class ColumnV01(
     @JsonProperty(required = true) name: String,
     @JsonProperty(required = true) expr: String
 ) extends ColumnBase
 
-object ColumnV01 {
-  def fromCanonical(canonical: Column[_ <: Expression]): ColumnV01 = {
+private[sql] object ColumnV01 {
+  def fromCanonical(canonical: Column): ColumnV01 = {
     val name = canonical.name
     val expr = canonical.expression match {
       case DimensionExpression(exprStr) => exprStr
@@ -38,14 +38,14 @@ object ColumnV01 {
   }
 }
 
-case class MetricViewV01(
+private[sql] case class MetricViewV01(
     @JsonProperty(required = true) version: String,
     @JsonProperty(required = true) source: String,
     filter: Option[String] = None,
     dimensions: Seq[ColumnV01] = Seq.empty,
     measures: Seq[ColumnV01] = Seq.empty) extends MetricViewBase
 
-object MetricViewV01 {
+private[sql] object MetricViewV01 {
   def fromCanonical(canonical: MetricView): MetricViewV01 = {
     val source = canonical.from.toString
     val filter = canonical.where
@@ -68,14 +68,16 @@ object MetricViewV01 {
   }
 }
 
-object YamlMapperProvider extends YamlMapperProviderBase
+private[sql] object YamlMapperProviderV01 extends YamlMapperProviderBase
 
-object MetricViewYAMLDeserializer extends BaseMetricViewYAMLDeserializer[MetricViewV01] {
-  override protected def yamlMapperProvider: YamlMapperProviderBase = YamlMapperProvider
+private[sql] object MetricViewYAMLDeserializerV01
+  extends BaseMetricViewYAMLDeserializer[MetricViewV01] {
+  override protected def yamlMapperProvider: YamlMapperProviderBase = YamlMapperProviderV01
 
   protected def getTargetClass: Class[MetricViewV01] = classOf[MetricViewV01]
 }
 
-object MetricViewYAMLSerializer extends BaseMetricViewYAMLSerializer[MetricViewV01] {
-  override protected def yamlMapperProvider: YamlMapperProviderBase = YamlMapperProvider
+private[sql] object MetricViewYAMLSerializerV01
+  extends BaseMetricViewYAMLSerializer[MetricViewV01] {
+  override protected def yamlMapperProvider: YamlMapperProviderBase = YamlMapperProviderV01
 }

@@ -25,13 +25,13 @@ import com.fasterxml.jackson.dataformat.yaml.{YAMLFactory, YAMLGenerator}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.yaml.snakeyaml.DumperOptions
 
-object Constants {
+private[sql] object Constants {
   final val MAXIMUM_PROPERTY_SIZE: Int = 1 * 1024
   final val COLUMN_TYPE_PROPERTY_KEY = "metric_view.type"
   final val COLUMN_EXPR_PROPERTY_KEY = "metric_view.expr"
 }
 
-trait YamlMapperProviderBase {
+private[sql] trait YamlMapperProviderBase {
   def mapperWithAllFields: ObjectMapper = {
     val options = new DumperOptions()
     // Set flow style to BLOCK for better readability (each key-value pair on separate lines)
@@ -73,7 +73,7 @@ trait YamlMapperProviderBase {
  * This trait provides the core parsing functionality while allowing version-specific
  * implementations to specify the target type and YAML configuration.
  */
-trait BaseMetricViewYAMLDeserializer[T] {
+private[sql] trait BaseMetricViewYAMLDeserializer[T] {
   /**
    * The YAML utilities to use for deserialization.
    * Subclasses can override this to provide version-specific YAML behavior.
@@ -104,7 +104,7 @@ trait BaseMetricViewYAMLDeserializer[T] {
   protected def getTargetClass: Class[T]
 }
 
-trait BaseMetricViewYAMLSerializer[T] {
+private[sql] trait BaseMetricViewYAMLSerializer[T] {
   protected def yamlMapperProvider: YamlMapperProviderBase
 
   def toYaml(obj: T): String = {
@@ -120,10 +120,10 @@ trait BaseMetricViewYAMLSerializer[T] {
   }
 }
 
-trait ColumnBase {
+private[sql] trait ColumnBase {
   def name: String
   def expr: String
-  def toCanonical(ordinal: Int, isDimension: Boolean): Column[_ <: Expression] = {
+  def toCanonical(ordinal: Int, isDimension: Boolean): Column = {
     if (isDimension) {
       Column(
         name = name,
@@ -140,7 +140,7 @@ trait ColumnBase {
   }
 }
 
-trait MetricViewBase {
+private[sql] trait MetricViewBase {
   def version: String
   def source: String
   def filter: Option[String]
@@ -167,7 +167,7 @@ trait MetricViewBase {
   }
 }
 
-object MetricViewBase {
+private[sql] object MetricViewBase {
   /**
    * Factory method to create the appropriate version-specific MetricView from canonical form.
    * @param canonical The canonical MetricView to convert from

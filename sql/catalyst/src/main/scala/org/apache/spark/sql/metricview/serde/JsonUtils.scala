@@ -20,7 +20,7 @@ package org.apache.spark.sql.metricview.serde
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 
-object JsonUtils {
+private[sql] object JsonUtils {
   // Singleton ObjectMapper that can be used across the project
   private lazy val mapper: ObjectMapper = {
     val m = new ObjectMapper()

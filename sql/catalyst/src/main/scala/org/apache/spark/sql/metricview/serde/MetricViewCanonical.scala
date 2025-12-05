@@ -27,41 +27,45 @@ import org.apache.spark.sql.metricview.serde.ColumnType.ColumnType
 import org.apache.spark.sql.metricview.serde.SourceType.SourceType
 
 // Trait representing the capability to validate an object
-trait Validatable {
-  def validate(): Try[Unit]
+private[sql] trait Validatable {
+  def validate(): Unit
 }
 
-sealed abstract class MetricViewSerdeException(message: String, cause: Option[Throwable] = None)
+private[sql] sealed abstract class MetricViewSerdeException(
+    message: String,
+    cause: Option[Throwable] = None)
   extends Exception(message, cause.orNull)
 
 case class MetricViewValidationException(message: String, cause: Option[Throwable] = None)
   extends MetricViewSerdeException(message, cause)
 
-case class MetricViewFromProtoException(message: String, cause: Option[Throwable] = None)
+private[sql] case class MetricViewFromProtoException(
+    message: String,
+    cause: Option[Throwable] = None)
   extends MetricViewSerdeException(message, cause)
 
 case class MetricViewYAMLParsingException(message: String, cause: Option[Throwable] = None)
   extends MetricViewSerdeException(message, cause)
 
 // Expression types in a Metric View
-sealed trait Expression extends Validatable {
+private[sql] sealed trait Expression extends Validatable {
   def expr: String
 
   // Validate that expression is not empty
-  def validate(): Try[Unit] = {
+  def validate(): Unit = {
     if (expr.isEmpty) {
-      Failure(MetricViewValidationException("expr cannot be empty"))
-    } else Success(())
+      throw MetricViewValidationException("expr cannot be empty")
+    }
   }
 }
 
 // Dimension expression representing a scalar value
-case class DimensionExpression(expr: String) extends Expression
+private[sql] case class DimensionExpression(expr: String) extends Expression
 
 // Measure expression representing an aggregated value
-case class MeasureExpression(expr: String) extends Expression
+private[sql] case class MeasureExpression(expr: String) extends Expression
 
-object SourceType extends Enumeration {
+private[sql] object SourceType extends Enumeration {
   type SourceType = Value
   val ASSET, SQL = Value
 
@@ -75,22 +79,20 @@ object SourceType extends Enumeration {
 }
 
 // Representation of a source in the Metric View
-sealed trait Source extends Validatable {
+private[sql] sealed trait Source extends Validatable {
   def sourceType: SourceType
 
-  def validate(): Try[Unit]
+  def validate(): Unit
 }
 
 // Asset source, representing a catalog table, view, or Metric View, etc.
 case class AssetSource(name: String) extends Source {
   val sourceType: SourceType = SourceType.ASSET
 
-  def validate(): Try[Unit] = {
+  def validate(): Unit = {
     if (name.isEmpty) {
-      Failure(
-        MetricViewValidationException("Source cannot be empty")
-      )
-    } else Success(())
+      throw MetricViewValidationException("Source cannot be empty")
+    }
   }
 
   override def toString: String = this.name
@@ -100,18 +102,16 @@ case class AssetSource(name: String) extends Source {
 case class SQLSource(sql: String) extends Source {
   val sourceType: SourceType = SourceType.SQL
 
-  def validate(): Try[Unit] = {
+  def validate(): Unit = {
     if (sql.isEmpty) {
-      Failure(
-        MetricViewValidationException("Source cannot be empty")
-      )
-    } else Success(())
+      throw MetricViewValidationException("Source cannot be empty")
+    }
   }
 
   override def toString: String = this.sql
 }
 
-object Source {
+private[sql] object Source {
   def apply(sourceText: String): Source = {
     if (sourceText.isEmpty) {
       throw MetricViewValidationException("Source cannot be empty")
@@ -131,12 +131,12 @@ object Source {
   }
 }
 
-case class Column[T <: Expression](
+private[sql] case class Column(
     name: String,
-    expression: T,
+    expression: Expression,
     ordinal: Int) extends Validatable {
-  override def validate(): Try[Unit] = {
-    Success(())
+  override def validate(): Unit = {
+    // No validation needed
   }
 
   def columnType: ColumnType = expression match {
@@ -154,7 +154,7 @@ case class Column[T <: Expression](
   }
 }
 
-object ColumnType extends Enumeration {
+private[sql] object ColumnType extends Enumeration {
   type ColumnType = Value
   val Dimension: ColumnType = Value("dimension")
   val Measure: ColumnType = Value("measure")
@@ -171,7 +171,7 @@ object ColumnType extends Enumeration {
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonInclude(Include.NON_ABSENT)
-case class ColumnMetadata(
+private[sql] case class ColumnMetadata(
     @JsonProperty(value = Constants.COLUMN_TYPE_PROPERTY_KEY, required = true)
     columnType: String, // "type" -> "metric_view.type"
     @JsonProperty(value = Constants.COLUMN_EXPR_PROPERTY_KEY, required = true)
@@ -180,26 +180,22 @@ case class ColumnMetadata(
 
 // Only parse the "version" field and ignore all others
 @JsonIgnoreProperties(ignoreUnknown = true)
-case class YAMLVersion(version: String) extends Validatable {
+private[sql] case class YAMLVersion(version: String) extends Validatable {
   private def validYAMLVersions: Set[String] = Set("0.1")
-  def validate(): Try[Unit] = {
+  def validate(): Unit = {
     if (!validYAMLVersions.contains(version)) {
-      Failure(
-        MetricViewValidationException(
-          s"Invalid YAML version: $version"
-        )
+      throw MetricViewValidationException(
+        s"Invalid YAML version: $version"
       )
-    } else Success(())
+    }
   }
 }
 
-object YAMLVersion {
+private[sql] object YAMLVersion {
   def apply(version: String): YAMLVersion = {
     val yamlVersion = new YAMLVersion(version)
-    yamlVersion.validate() match {
-      case Success(_) => yamlVersion
-      case Failure(e) => throw e
-    }
+    yamlVersion.validate()
+    yamlVersion
   }
 }
 
@@ -207,6 +203,6 @@ case class MetricView(
     version: String,
     from: Source,
     where: Option[String] = None,
-    select: Seq[Column[_ <: Expression]]) {
+    select: Seq[Column]) {
 
 }
