@@ -1443,6 +1443,8 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
   test("SPARK-54420: HDFSBackedStateStoreProvider does not support load empty store") {
     val provider = new HDFSBackedStateStoreProvider()
+    val hadoopConf = new Configuration()
+    hadoopConf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
     provider.init(
       StateStoreId(newDir(), Random.nextInt(), 0),
       keySchema,
@@ -1450,7 +1452,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       NoPrefixKeyStateEncoderSpec(keySchema),
       useColumnFamilies = false,
       new StateStoreConf(),
-      new Configuration())
+      hadoopConf)
 
     val e = intercept[StateStoreUnsupportedOperationException] {
       provider.getStore(0, loadEmpty = true)

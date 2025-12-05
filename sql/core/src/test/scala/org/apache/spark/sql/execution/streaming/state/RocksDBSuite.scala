@@ -3942,8 +3942,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }}
   }
 
-  test(
-    "SPARK-54420: load with createEmpty creates empty store at specified version") {
+  test("SPARK-54420: load with createEmpty creates empty store") {
     val remoteDir = Utils.createTempDir().toString
     new File(remoteDir).delete()
 
