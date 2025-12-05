@@ -3351,9 +3351,13 @@ def main(infile, outfile):
             PythonEvalType.SQL_ARROW_TABLE_UDF,
             PythonEvalType.SQL_ARROW_UDTF,
         ):
-            func, profiler, deserializer, serializer = read_udtf(pickleSer, infile, eval_type, runner_conf)
+            func, profiler, deserializer, serializer = read_udtf(
+                pickleSer, infile, eval_type, runner_conf
+            )
         else:
-            func, profiler, deserializer, serializer = read_udfs(pickleSer, infile, eval_type, runner_conf)
+            func, profiler, deserializer, serializer = read_udfs(
+                pickleSer, infile, eval_type, runner_conf
+            )
 
         init_time = time.time()
 
