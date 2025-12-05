@@ -2921,13 +2921,12 @@ def read_udfs(pickleSer, infile, eval_type):
 
     # Read all UDFs
     num_udfs = read_int(infile)
-    udfs = []
-    for i in range(num_udfs):
-        udfs.append(
-            read_single_udf(
-                pickleSer, infile, eval_type, runner_conf, udf_index=i, profiler=profiler
-            )
+    udfs = [
+        read_single_udf(
+            pickleSer, infile, eval_type, runner_conf, udf_index=i, profiler=profiler
         )
+        for i in range(num_udfs)
+    ]
 
     is_scalar_iter = eval_type in (
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
