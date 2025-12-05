@@ -2049,8 +2049,9 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                         for i, c in enumerate(flatten_init_table.itercolumns())
                     ]
 
+                    assert not (bool(init_data_pandas) and bool(data_pandas))
+
                     if bool(data_pandas):
-                        assert not bool(init_data_pandas)
                         for row in pd.concat(data_pandas, axis=1).itertuples(index=False):
                             batch_key = tuple(row[s] for s in self.key_offsets)
                             yield (batch_key, row, None)
@@ -2273,8 +2274,9 @@ class TransformWithStateInPySparkRowInitStateSerializer(TransformWithStateInPySp
                 input_result = extract_rows(batch, "inputData", self.key_offsets)
                 init_result = extract_rows(batch, "initState", self.init_key_offsets)
 
+                assert not (input_result is not None and init_result is not None)
+
                 if input_result is not None:
-                    assert init_result is None
                     for key, input_data_row in input_result:
                         yield (key, input_data_row, None)
                 elif init_result is not None:
