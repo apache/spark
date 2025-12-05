@@ -116,15 +116,10 @@ object KubernetesClientUtils extends Logging {
     }.toList.sortBy(x => x.getKey) // List is sorted to make mocking based tests work
   }
 
-  /**
-   * Append user env vars to spark-env.sh end to prevent default overriding.
-   */
   @Since("4.1.0")
-  def overrideDefaultSparkEnv(
-                               conf: KubernetesDriverConf,
-                               confFilesMap: Map[String, String]): Map[String, String] = {
+  def overrideDefaultSparkEnv(conf: KubernetesDriverConf,
+      confFilesMap: Map[String, String]): Map[String, String] = {
     if (conf.environment.isEmpty) {
-      logInfo(s"No custom driver env will be appended.")
       return confFilesMap
     }
     val customEnvs = conf.environment.map {
