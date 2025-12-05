@@ -342,7 +342,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @param connection The connection object
    * @param properties The connection properties.  This is passed through from the relation.
    */
-  @deprecated("Use beforeFetch(Connection, JDBCOptions) instead", "4.0.0")
+  @deprecated("Use beforeFetch(Connection, JDBCOptions) instead", "4.2.0")
   def beforeFetch(connection: Connection, properties: Map[String, String]): Unit = {
   }
 
