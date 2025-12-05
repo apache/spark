@@ -73,6 +73,10 @@
           <groupId>com.kjetland</groupId>
           <artifactId>mbknor-jackson-jsonschema_2.12</artifactId>
         </exclusion>
+        <exclusion>
+          <groupId>org.lz4</groupId>
+          <artifactId>lz4-java</artifactId>
+        </exclusion>
       </exclusions>
     </dependency>
     <!-- manage this up explicitly to match Spark; com.amazonaws:aws-java-sdk-pom specifies
