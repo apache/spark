@@ -1452,42 +1452,6 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
         raise ValueError("Unknown eval type: {}".format(eval_type))
 
 
-def read_all_udfs(pickleSer, infile, eval_type, runner_conf, profiler):
-    """
-    Read all UDFs (functions and their argument offsets) upfront.
-
-    This helper function centralizes UDF reading logic to avoid duplication
-    across different eval_type branches in read_udfs().
-
-    Parameters
-    ----------
-    pickleSer : Serializer
-        Pickle serializer for deserializing UDF functions
-    infile : file-like object
-        Input stream to read UDF data from
-    eval_type : int
-        Evaluation type indicating the type of UDF
-    runner_conf : dict
-        Runner configuration dictionary
-    profiler : str or None
-        Profiler type, if any
-
-    Returns
-    -------
-    list
-        List of tuples, where each tuple contains (arg_offsets, udf_function)
-    """
-    num_udfs = read_int(infile)
-    udfs = []
-    for i in range(num_udfs):
-        udfs.append(
-            read_single_udf(
-                pickleSer, infile, eval_type, runner_conf, udf_index=i, profiler=profiler
-            )
-        )
-    return udfs
-
-
 # Used by SQL_GROUPED_MAP_PANDAS_UDF, SQL_GROUPED_MAP_ARROW_UDF,
 # SQL_COGROUPED_MAP_PANDAS_UDF, SQL_COGROUPED_MAP_ARROW_UDF,
 # SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
@@ -2955,8 +2919,15 @@ def read_udfs(pickleSer, infile, eval_type):
     else:
         profiler = None
 
-    udfs = read_all_udfs(pickleSer, infile, eval_type, runner_conf, profiler)
-    num_udfs = len(udfs)
+    # Read all UDFs
+    num_udfs = read_int(infile)
+    udfs = []
+    for i in range(num_udfs):
+        udfs.append(
+            read_single_udf(
+                pickleSer, infile, eval_type, runner_conf, udf_index=i, profiler=profiler
+            )
+        )
 
     is_scalar_iter = eval_type in (
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
