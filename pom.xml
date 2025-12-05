@@ -879,9 +879,9 @@
         <version>${snappy.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.lz4</groupId>
+        <groupId>at.yawk.lz4</groupId>
         <artifactId>lz4-java</artifactId>
-        <version>1.8.0</version>
+        <version>1.10.0</version>
       </dependency>
       <dependency>
         <groupId>com.github.luben</groupId>
@@ -2653,6 +2653,7 @@
                       <exclude>org.jboss.netty</exclude>
                       <exclude>org.codehaus.groovy</exclude>
                       <exclude>com.amazonaws:aws-java-sdk-bundle</exclude>
+                      <exclude>org.lz4:lz4-java</exclude>
                       <exclude>*:*_2.12</exclude>
                       <exclude>*:*_2.11</exclude>
                       <exclude>*:*_2.10</exclude>
