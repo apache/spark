@@ -1666,7 +1666,6 @@ class RowMinEventTimeStatefulProcessor(StatefulProcessor):
 
 # A stateful processor that contains composite python type inside Value, List and Map state variable
 class PandasStatefulProcessorCompositeType(StatefulProcessor):
-
     class Address(NamedTuple):
         road_id: int
         city: str
@@ -1790,7 +1789,6 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
 
 
 class RowStatefulProcessorCompositeType(StatefulProcessor):
-
     class Address(NamedTuple):
         road_id: int
         city: str
