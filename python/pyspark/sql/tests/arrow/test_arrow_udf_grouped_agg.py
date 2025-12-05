@@ -1199,6 +1199,108 @@ class GroupedAggArrowUDFTestsMixin:
                 group2_result["mean"], 5.5, places=5, msg="Group 2 should process 1 batch"
             )
 
+    def test_iterator_grouped_agg_sql_single_column(self):
+        """
+        Test iterator API for grouped aggregation with single column in SQL.
+        """
+        import pyarrow as pa
+
+        @arrow_udf("double")
+        def arrow_mean_iter(it: Iterator[pa.Array]) -> float:
+            sum_val = 0.0
+            cnt = 0
+            for v in it:
+                assert isinstance(v, pa.Array)
+                sum_val += pa.compute.sum(v).as_py()
+                cnt += len(v)
+            return sum_val / cnt if cnt > 0 else 0.0
+
+        df = self.spark.createDataFrame(
+            [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v")
+        )
+
+        with self.tempView("test_table"), self.temp_func("arrow_mean_iter"):
+            df.createOrReplaceTempView("test_table")
+            self.spark.udf.register("arrow_mean_iter", arrow_mean_iter)
+
+            # Test SQL query with GROUP BY
+            result_sql = self.spark.sql(
+                "SELECT id, arrow_mean_iter(v) as mean FROM test_table GROUP BY id ORDER BY id"
+            )
+            expected = df.groupby("id").agg(sf.mean(df["v"]).alias("mean")).sort("id").collect()
+
+            self.assertEqual(expected, result_sql.collect())
+
+    def test_iterator_grouped_agg_sql_multiple_columns(self):
+        """
+        Test iterator API for grouped aggregation with multiple columns in SQL.
+        """
+        import pyarrow as pa
+
+        @arrow_udf("double")
+        def arrow_weighted_mean_iter(it: Iterator[Tuple[pa.Array, pa.Array]]) -> float:
+            weighted_sum = 0.0
+            weight = 0.0
+            for v, w in it:
+                assert isinstance(v, pa.Array)
+                assert isinstance(w, pa.Array)
+                weighted_sum += pa.compute.sum(pa.compute.multiply(v, w)).as_py()
+                weight += pa.compute.sum(w).as_py()
+            return weighted_sum / weight if weight > 0 else 0.0
+
+        df = self.spark.createDataFrame(
+            [(1, 1.0, 1.0), (1, 2.0, 2.0), (2, 3.0, 1.0), (2, 5.0, 2.0), (2, 10.0, 3.0)],
+            ("id", "v", "w"),
+        )
+
+        with self.tempView("test_table"), self.temp_func("arrow_weighted_mean_iter"):
+            df.createOrReplaceTempView("test_table")
+            self.spark.udf.register("arrow_weighted_mean_iter", arrow_weighted_mean_iter)
+
+            # Test SQL query with GROUP BY and multiple columns
+            result_sql = self.spark.sql(
+                "SELECT id, arrow_weighted_mean_iter(v, w) as wm FROM test_table GROUP BY id ORDER BY id"
+            )
+
+            # Expected weighted means:
+            # Group 1: (1.0*1.0 + 2.0*2.0) / (1.0 + 2.0) = 5.0 / 3.0
+            # Group 2: (3.0*1.0 + 5.0*2.0 + 10.0*3.0) / (1.0 + 2.0 + 3.0) = 43.0 / 6.0
+            expected = [Row(id=1, wm=5.0 / 3.0), Row(id=2, wm=43.0 / 6.0)]
+
+            actual_results = result_sql.collect()
+            self.assertEqual(actual_results, expected)
+
+    def test_iterator_grouped_agg_sql_register_basic(self):
+        """
+        Test registering iterator grouped agg UDF and using it in SQL.
+        """
+        import pyarrow as pa
+
+        @arrow_udf("double")
+        def arrow_sum_iter(it: Iterator[pa.Array]) -> float:
+            total = 0.0
+            for v in it:
+                assert isinstance(v, pa.Array)
+                total += pa.compute.sum(v).as_py()
+            return total
+
+        self.assertEqual(arrow_sum_iter.evalType, PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF)
+
+        with self.temp_func("arrow_sum_iter"):
+            registered_udf = self.spark.udf.register("arrow_sum_iter", arrow_sum_iter)
+            self.assertEqual(
+                registered_udf.evalType, PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF
+            )
+
+            # Test SQL query
+            q = """
+                SELECT arrow_sum_iter(v1) as sum_v
+                FROM VALUES (3, 0), (2, 0), (1, 1) tbl(v1, v2) GROUP BY v2 ORDER BY v2
+                """
+            actual = sorted([row["sum_v"] for row in self.spark.sql(q).collect()])
+            expected = [1.0, 5.0]
+            self.assertEqual(actual, expected)
+
 
 class GroupedAggArrowUDFTests(GroupedAggArrowUDFTestsMixin, ReusedSQLTestCase):
     pass
