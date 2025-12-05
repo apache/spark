@@ -2009,20 +2009,21 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                         for i, c in enumerate(flatten_state_table.itercolumns())
                     ]
 
+                    flatten_init_table = flatten_columns(batch, "initState")
+                    init_data_pandas = [
+                        self.arrow_to_pandas(c, i)
+                        for i, c in enumerate(flatten_init_table.itercolumns())
+                    ]
+
                     if bool(data_pandas):
+                        assert not bool(init_data_pandas)
                         for row in pd.concat(data_pandas, axis=1).itertuples(index=False):
                             batch_key = tuple(row[s] for s in self.key_offsets)
                             yield (batch_key, row, None)
-                    else:
-                        flatten_init_table = flatten_columns(batch, "initState")
-                        init_data_pandas = [
-                            self.arrow_to_pandas(c, i)
-                            for i, c in enumerate(flatten_init_table.itercolumns())
-                        ]
-                        if bool(init_data_pandas):
-                            for row in pd.concat(init_data_pandas, axis=1).itertuples(index=False):
-                                batch_key = tuple(row[s] for s in self.init_key_offsets)
-                                yield (batch_key, None, row)
+                    elif bool(init_data_pandas):
+                        for row in pd.concat(init_data_pandas, axis=1).itertuples(index=False):
+                            batch_key = tuple(row[s] for s in self.init_key_offsets)
+                            yield (batch_key, None, row)
 
             EMPTY_DATAFRAME = pd.DataFrame()
             for batch_key, group_rows in groupby(row_stream(), key=lambda x: x[0]):
@@ -2236,15 +2237,15 @@ class TransformWithStateInPySparkRowInitStateSerializer(TransformWithStateInPySp
             for batch in batches:
                 # Detect which column has data - each batch contains only one type
                 input_result = extract_rows(batch, "inputData", self.key_offsets)
+                init_result = extract_rows(batch, "initState", self.init_key_offsets)
 
                 if input_result is not None:
+                    assert init_result is None
                     for key, input_data_row in input_result:
                         yield (key, input_data_row, None)
-                else:
-                    init_result = extract_rows(batch, "initState", self.init_key_offsets)
-                    if init_result is not None:
-                        for key, init_state_row in init_result:
-                            yield (key, None, init_state_row)
+                elif init_result is not None:
+                    for key, init_state_row in init_result:
+                        yield (key, None, init_state_row)
 
         _batches = super(ArrowStreamUDFSerializer, self).load_stream(stream)
         data_batches = generate_data_batches(_batches)

@@ -181,10 +181,11 @@ class TransformWithStateInPySparkPythonInitialStateRunner(
 
     val hasInput = if (currentDataIterator != null) {
       var isCurrentBatchFull = false
+      val isCurrentIterFromInitStateVal = isCurrentIterFromInitState.get
       // Stop writing when the current arrowBatch is finalized/full. If we have rows left
       while (currentDataIterator.hasNext && !isCurrentBatchFull) {
         val dataRow = currentDataIterator.next()
-        isCurrentBatchFull = if (isCurrentIterFromInitState.get) {
+        isCurrentBatchFull = if (isCurrentIterFromInitStateVal) {
           pandasWriter.writeRow(InternalRow(null, dataRow))
         } else {
           pandasWriter.writeRow(InternalRow(dataRow, null))
