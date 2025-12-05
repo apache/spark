@@ -75,7 +75,8 @@ object StatePartitionKeyExtractorFactory {
       case tws if TRANSFORM_WITH_STATE_OP_NAMES.contains(tws) =>
         TransformWithStatePartitionKeyExtractorFactory.create(
           storeName, colFamilyName, stateKeySchema, stateVariableInfo.get)
-      case _ => throw OfflineStateRepartitionErrors.unsupportedStatefulOperatorError(operatorName)
+      case _ => throw OfflineStateRepartitionErrors
+        .unsupportedStatefulOperatorError(checkpointLocation = "", operatorName)
     }
   }
 }

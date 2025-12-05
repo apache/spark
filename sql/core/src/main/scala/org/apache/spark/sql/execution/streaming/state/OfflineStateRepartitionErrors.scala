@@ -93,16 +93,16 @@ object OfflineStateRepartitionErrors {
   }
 
   def unsupportedStatefulOperatorError(
-      operatorName: String,
-      checkpointLocation: String = ""): StateRepartitionInvalidCheckpointError = {
+      checkpointLocation: String,
+      operatorName: String): StateRepartitionInvalidCheckpointError = {
     new StateRepartitionUnsupportedStatefulOperatorError(checkpointLocation, operatorName)
   }
 
   def unsupportedTransformWithStateVarTypeError(
+      checkpointLocation: String,
       variableType: String,
       ttlEnabled: Boolean,
-      colFamilyName: String,
-      checkpointLocation: String = ""): StateRepartitionInvalidCheckpointError = {
+      colFamilyName: String): StateRepartitionInvalidCheckpointError = {
     new StateRepartitionUnsupportedTransformWithStateVarTypeError(
       checkpointLocation, variableType, ttlEnabled, colFamilyName)
   }

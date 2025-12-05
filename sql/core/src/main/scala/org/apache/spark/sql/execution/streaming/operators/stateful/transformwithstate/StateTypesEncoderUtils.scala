@@ -392,6 +392,7 @@ object TransformWithStatePartitionKeyExtractorFactory {
         case StateVariableType.ListState | StateVariableType.ValueState =>
           new TTLStatePartitionKeyExtractor(stateKeySchema)
         case _ => throw OfflineStateRepartitionErrors.unsupportedTransformWithStateVarTypeError(
+          checkpointLocation = "",
           stateVariableInfo.stateVariableType.toString,
           stateVariableInfo.ttlEnabled,
           colFamilyName)
@@ -428,6 +429,7 @@ object TransformWithStatePartitionKeyExtractorFactory {
         new TimerStatePartitionKeyExtractor(
           stateKeySchema, TimerStateUtils.isTimerSecondaryIndexCF(colFamilyName))
       case _ => throw OfflineStateRepartitionErrors.unsupportedTransformWithStateVarTypeError(
+        checkpointLocation = "",
         stateVariableInfo.stateVariableType.toString,
         stateVariableInfo.ttlEnabled,
         colFamilyName)
