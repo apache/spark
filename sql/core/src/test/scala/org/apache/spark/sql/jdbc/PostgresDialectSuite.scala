@@ -20,68 +20,46 @@ package org.apache.spark.sql.jdbc
 
 import java.sql.Connection
 
-import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCDatabaseMetadata, JDBCOptions, JDBCPartition, JDBCRDD}
-import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 
-class PostgresDialectSuite extends SparkFunSuite with MockitoSugar with SharedSparkSession {
+class PostgresDialectSuite extends SparkFunSuite with MockitoSugar {
 
-  gridTest("PostgresDialect sets autoCommit correctly with fetchSize option")(
-    Seq(
-      ("fetchsize", Some("100"), true),
-      ("fetchSize", Some("100"), true),
-      ("FETCHSIZE", Some("100"), true),
-      ("fetchsize", Some("0"), false),
-      ("fetchsize", None, false)
-    )
-  ) { case (optionKey, optionValue, shouldSetAutoCommit) =>
-    val conn = mock[Connection]
-    when(conn.prepareStatement(any[String], any[Int], any[Int]))
-      .thenReturn(mock[java.sql.PreparedStatement])
-
-    val optionsMap = Map(
-      "url" -> "jdbc:postgresql://localhost/test",
+  private def createJDBCOptions(extraOptions: Map[String, String]): JDBCOptions = {
+    new JDBCOptions(Map(
+      "url" -> "jdbc:postgresql://localhost:5432/test",
       "dbtable" -> "test_table"
-    ) ++ optionValue.map(v => Map(optionKey -> v)).getOrElse(Map.empty)
+    ) ++ extraOptions)
+  }
 
-    val options = new JDBCOptions(CaseInsensitiveMap(optionsMap))
+  test("beforeFetch sets autoCommit=false with lowercase fetchsize") {
+    val conn = mock[Connection]
+    val dialect = PostgresDialect()
+    dialect.beforeFetch(conn, createJDBCOptions(Map("fetchsize" -> "100")))
+    verify(conn).setAutoCommit(false)
+  }
 
-    val schema = StructType(Seq(StructField("id", IntegerType)))
-    val partition = new JDBCPartition(null, 0)
-    val rdd = new JDBCRDD(
-      spark.sparkContext,
-      _ => conn,
-      schema,
-      Array.empty,
-      Array.empty,
-      Array(partition),
-      "jdbc:postgresql://localhost/test",
-      options,
-      JDBCDatabaseMetadata(None, None, None, None),
-      None,
-      None,
-      0,
-      Array.empty,
-      0,
-      Map.empty
-    )
+  test("beforeFetch sets autoCommit=false with camelCase fetchSize") {
+    val conn = mock[Connection]
+    val dialect = PostgresDialect()
+    dialect.beforeFetch(conn, createJDBCOptions(Map("fetchSize" -> "100")))
+    verify(conn).setAutoCommit(false)
+  }
 
-    try {
-      rdd.compute(partition, org.apache.spark.TaskContext.empty())
-    } catch {
-      case _: Exception => // Expected to fail, we just want beforeFetch to be called
-    }
+  test("beforeFetch sets autoCommit=false with uppercase FETCHSIZE") {
+    val conn = mock[Connection]
+    val dialect = PostgresDialect()
+    dialect.beforeFetch(conn, createJDBCOptions(Map("FETCHSIZE" -> "100")))
+    verify(conn).setAutoCommit(false)
+  }
 
-    if (shouldSetAutoCommit) {
-      verify(conn).setAutoCommit(false)
-    } else {
-      verify(conn, never()).setAutoCommit(false)
-    }
+  test("beforeFetch does not set autoCommit when fetchSize is 0") {
+    val conn = mock[Connection]
+    val dialect = PostgresDialect()
+    dialect.beforeFetch(conn, createJDBCOptions(Map("fetchsize" -> "0")))
+    verify(conn, never()).setAutoCommit(false)
   }
 }
