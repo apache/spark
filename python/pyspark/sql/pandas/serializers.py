@@ -1042,7 +1042,6 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
 
         if arrow_type is not None:
             dt = spark_type or from_arrow_type(arrow_type, prefer_timestamp_ntz=True)
-            # TODO(SPARK-43579): cache the converter for reuse
             conv = _create_converter_from_pandas(
                 dt,
                 timezone=self._timezone,
