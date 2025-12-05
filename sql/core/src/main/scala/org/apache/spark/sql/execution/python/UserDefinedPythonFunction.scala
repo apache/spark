@@ -68,7 +68,7 @@ case class UserDefinedPythonFunction(
     }
 
     // Py4J gives us nulls lets make them into options
-    val safe_src = src match {
+    val safeSrc = src match {
       case null | "" =>
         logDebug("No Python src provided for UDF")
         None
@@ -77,16 +77,16 @@ case class UserDefinedPythonFunction(
         Some(s)
     }
 
-    val safe_ast = ast match {
+    val safeAst = ast match {
       case null => None
       case a => Some(a)
     }
 
     if (pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
       || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF) {
-      PythonUDAF(name, func, dataType, e, udfDeterministic, pythonEvalType, safe_src, safe_ast)
+      PythonUDAF(name, func, dataType, e, udfDeterministic, pythonEvalType, safeSrc, safeAst)
     } else {
-      PythonUDF(name, func, dataType, e, pythonEvalType, udfDeterministic, safe_src, safe_ast)
+      PythonUDF(name, func, dataType, e, pythonEvalType, udfDeterministic, safeSrc, safeAst)
     }
   }
 

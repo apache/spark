@@ -103,8 +103,8 @@ case class PythonUDF(
     children: Seq[Expression],
     evalType: Int,
     udfDeterministic: Boolean,
-    safe_src: Option[String],
-    safe_ast: Option[Any],
+    safeSrc: Option[String],
+    safeAst: Option[Any],
     resultId: ExprId = NamedExpression.newExprId)
   extends Expression with PythonFuncExpression with Unevaluable with Logging {
 
@@ -127,7 +127,7 @@ case class PythonUDF(
    * possible, otherwise return None.
    */
   def toCatalyst(): Option[Expression] = {
-    safe_ast match {
+    safeAst match {
       case None => None
       case Some(ast) =>
         if (ast.isInstanceOf[java.util.List[_]]) {
@@ -317,8 +317,8 @@ case class PythonUDAF(
     children: Seq[Expression],
     udfDeterministic: Boolean,
     evalType: Int = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
-    safe_src: Option[String] = None,
-    safe_ast: Option[Any] = None,
+    safeSrc: Option[String] = None,
+    safeAst: Option[Any] = None,
     resultId: ExprId = NamedExpression.newExprId)
   extends UnevaluableAggregateFunc with PythonFuncExpression {
 
