@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector.read;
 
-import org.apache.spark.annotation.Evolving;
+import org.apache.spark.annotation.Experimental;
 
 /**
  * A mix-in interface for {@link Scan}. Data sources can implement this interface to
@@ -39,7 +39,7 @@ import org.apache.spark.annotation.Evolving;
  *
  * @since 4.1.0
  */
-@Evolving
+@Experimental
 public interface SupportsPushDownVariants extends Scan {
 
   /**
