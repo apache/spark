@@ -22,7 +22,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
-import org.apache.spark.sql.connector.read.{SupportsPushDownAggregates, SupportsPushDownVariants, VariantAccessInfo}
+import org.apache.spark.sql.connector.read.{SupportsPushDownAggregates, SupportsPushDownVariantExtractions, VariantExtraction}
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, PartitioningAwareFileIndex}
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, SparkToParquetSchemaConverter}
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
@@ -40,7 +40,7 @@ case class ParquetScanBuilder(
     options: CaseInsensitiveStringMap)
   extends FileScanBuilder(sparkSession, fileIndex, dataSchema)
     with SupportsPushDownAggregates
-    with SupportsPushDownVariants {
+    with SupportsPushDownVariantExtractions {
   lazy val hadoopConf = {
     val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
     // Hadoop Configurations are case sensitive.
@@ -51,7 +51,7 @@ case class ParquetScanBuilder(
 
   private var pushedAggregations = Option.empty[Aggregation]
 
-  private var pushedVariantAccessInfo = Array.empty[VariantAccessInfo]
+  private var pushedVariantExtractions = Array.empty[VariantExtraction]
 
   override protected val supportsNestedSchemaPruning: Boolean = true
 
@@ -102,19 +102,12 @@ case class ParquetScanBuilder(
     }
   }
 
-  // SupportsPushDownVariants API implementation
-  override def pushVariantAccess(variantAccessInfo: Array[VariantAccessInfo]): Boolean = {
-    // Parquet supports variant pushdown for all variant accesses
-    if (variantAccessInfo.nonEmpty) {
-      pushedVariantAccessInfo = variantAccessInfo
-      true
-    } else {
-      false
-    }
-  }
-
-  override def pushedVariantAccess(): Array[VariantAccessInfo] = {
-    pushedVariantAccessInfo
+  // SupportsPushDownVariantExtractions API implementation
+  override def pushVariantExtractions(extractions: Array[VariantExtraction]): Array[Boolean] = {
+    // Parquet supports variant pushdown for all variant extractions
+    pushedVariantExtractions = extractions
+    // Return true for all extractions (Parquet can handle all of them)
+    Array.fill(extractions.length)(true)
   }
 
   override def build(): ParquetScan = {
@@ -126,6 +119,6 @@ case class ParquetScanBuilder(
     }
     ParquetScan(sparkSession, hadoopConf, fileIndex, dataSchema, finalSchema,
       readPartitionSchema(), pushedDataFilters, options, pushedAggregations,
-      partitionFilters, dataFilters, pushedVariantAccessInfo)
+      partitionFilters, dataFilters, pushedVariantExtractions)
   }
 }

@@ -32,10 +32,10 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownJoin, SupportsPushDownVariants, V1Scan, VariantAccessInfo}
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, VariantInRelation, VariantMetadata}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownJoin, SupportsPushDownVariantExtractions, V1Scan, VariantExtraction}
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, VariantInRelation}
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.types.{BooleanType, DataType, DecimalType, IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, DecimalType, IntegerType, StructField, StructType}
 import org.apache.spark.sql.util.SchemaUtils._
 import org.apache.spark.util.ArrayImplicits._
 
@@ -322,17 +322,17 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
   def pushDownVariants(plan: LogicalPlan): LogicalPlan = plan.transformDown {
     case p@PhysicalOperation(projectList, filters, sHolder @ ScanBuilderHolder(_, _,
-        builder: SupportsPushDownVariants))
+        builder: SupportsPushDownVariantExtractions))
         if conf.getConf(org.apache.spark.sql.internal.SQLConf.PUSH_VARIANT_INTO_SCAN) =>
-      pushVariantAccess(p, projectList, filters, sHolder, builder)
+      pushVariantExtractions(p, projectList, filters, sHolder, builder)
   }
 
-  private def pushVariantAccess(
+  private def pushVariantExtractions(
       originalPlan: LogicalPlan,
       projectList: Seq[NamedExpression],
       filters: Seq[Expression],
       sHolder: ScanBuilderHolder,
-      builder: SupportsPushDownVariants): LogicalPlan = {
+      builder: SupportsPushDownVariantExtractions): LogicalPlan = {
     val variants = new VariantInRelation
 
     // Extract schema attributes from scan builder holder
@@ -358,37 +358,36 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     // If no variant columns remain after collection, return original plan
     if (variants.mapping.forall(_._2.isEmpty)) return originalPlan
 
-    // Build VariantAccessInfo array for the API
-    val variantAccessInfoArray = schemaAttributes.flatMap { attr =>
-      variants.mapping.get(attr.exprId).flatMap(_.get(Nil)).map { fields =>
-        // Build extracted schema for this variant column
-        val extractedFields = fields.toArray.sortBy(_._2).map { case (field, ordinal) =>
-          StructField(ordinal.toString, field.targetType, metadata = field.path.toMetadata)
+    // Build individual VariantExtraction for each field access
+    // Track which extraction corresponds to which (attr, field, ordinal)
+    val extractionInfo = schemaAttributes.flatMap { attr =>
+      variants.mapping.get(attr.exprId).flatMap(_.get(Nil)).toSeq.flatMap { fields =>
+        fields.toArray.sortBy(_._2).map { case (field, ordinal) =>
+          val extraction = new org.apache.spark.sql.connector.read.VariantExtractionImpl(
+            Array(attr.name),
+            field.path.path,
+            field.targetType
+          )
+          (extraction, attr, field, ordinal)
         }
-        val extractedSchema = if (extractedFields.isEmpty) {
-          // Add placeholder field to avoid empty struct
-          val placeholder = VariantMetadata("$.__placeholder_field__",
-            failOnError = false, timeZoneId = "UTC")
-          StructType(Array(StructField("0", BooleanType, metadata = placeholder.toMetadata)))
-        } else {
-          StructType(extractedFields)
-        }
-        new VariantAccessInfo(attr.name, extractedSchema)
       }
-    }.toArray
+    }
 
-    // Call the API to push down variant access
-    if (variantAccessInfoArray.isEmpty) return originalPlan
+    // Call the API to push down variant extractions
+    if (extractionInfo.isEmpty) return originalPlan
 
-    val pushed = builder.pushVariantAccess(variantAccessInfoArray)
-    if (!pushed) return originalPlan
+    val extractions: Array[VariantExtraction] = extractionInfo.map(_._1).toArray
+    val pushedResults = builder.pushVariantExtractions(extractions)
 
-    // Get what was actually pushed
-    val pushedVariantAccess = builder.pushedVariantAccess()
-    if (pushedVariantAccess.isEmpty) return originalPlan
+    // Filter to only the accepted extractions
+    val acceptedExtractions = extractionInfo.zip(pushedResults).filter(_._2).map(_._1)
+    if (acceptedExtractions.isEmpty) return originalPlan
 
-    // Build new attribute mapping based on pushed variant access
-    val pushedColumnNames = pushedVariantAccess.map(_.columnName()).toSet
+    // Group accepted extractions by attribute to rebuild the struct schemas
+    val extractionsByAttr = acceptedExtractions.groupBy(_._2)
+    val pushedColumnNames = extractionsByAttr.keys.map(_.name).toSet
+
+    // Build new attribute mapping based on pushed variant extractions
     val attributeMap = schemaAttributes.map { a =>
       if (pushedColumnNames.contains(a.name) && variants.mapping.get(a.exprId).exists(_.nonEmpty)) {
         val newType = variants.rewriteType(a.exprId, a.dataType, Nil)

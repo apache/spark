@@ -25,13 +25,13 @@ import org.apache.parquet.hadoop.ParquetInputFormat
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
-import org.apache.spark.sql.connector.read.{PartitionReaderFactory, VariantAccessInfo}
+import org.apache.spark.sql.connector.read.{PartitionReaderFactory, VariantExtraction}
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, PartitioningAwareFileIndex}
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetOptions, ParquetReadSupport, ParquetWriteSupport}
 import org.apache.spark.sql.execution.datasources.v2.FileScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SerializableConfiguration
@@ -48,7 +48,7 @@ case class ParquetScan(
     pushedAggregate: Option[Aggregation] = None,
     partitionFilters: Seq[Expression] = Seq.empty,
     dataFilters: Seq[Expression] = Seq.empty,
-    pushedVariantAccessInfo: Array[VariantAccessInfo] = Array.empty) extends FileScan {
+    pushedVariantExtractions: Array[VariantExtraction] = Array.empty) extends FileScan {
   override def isSplitable(path: Path): Boolean = {
     // If aggregate is pushed down, only the file footer will be read once,
     // so file should not be split across multiple tasks.
@@ -57,12 +57,20 @@ case class ParquetScan(
 
   // Build transformed schema if variant pushdown is active
   private def effectiveReadDataSchema: StructType = {
-    if (pushedVariantAccessInfo.isEmpty) {
+    if (pushedVariantExtractions.isEmpty) {
       readDataSchema
     } else {
-      // Build a mapping from column name to extracted schema
-      val variantSchemaMap = pushedVariantAccessInfo.map(info =>
-        info.columnName() -> info.extractedSchema()).toMap
+      // Group extractions by column name and build extracted schemas
+      val variantSchemaMap: Map[String, StructType] = pushedVariantExtractions
+        .groupBy(e => e.columnName()(0))  // Get top-level column name
+        .map { case (colName, extractions) =>
+          // Build struct schema with ordinal-named fields for each extraction
+          val fields = extractions.zipWithIndex.map { case (extraction, idx) =>
+            StructField(idx.toString, extraction.expectedDataType(), nullable = true)
+              .withComment(extraction.path())
+          }
+          colName -> StructType(fields)
+        }.toMap
 
       // Transform the read data schema by replacing variant columns with their extracted schemas
       StructType(readDataSchema.map { field =>
@@ -83,11 +91,21 @@ case class ParquetScan(
       // super.readSchema() combines readDataSchema + readPartitionSchema
       // Apply variant transformation if variant pushdown is active
       val baseSchema = super.readSchema()
-      if (pushedVariantAccessInfo.isEmpty) {
+      if (pushedVariantExtractions.isEmpty) {
         baseSchema
       } else {
-        val variantSchemaMap = pushedVariantAccessInfo.map(info =>
-          info.columnName() -> info.extractedSchema()).toMap
+        // Group extractions by column name and build extracted schemas
+        val variantSchemaMap: Map[String, StructType] = pushedVariantExtractions
+          .groupBy(e => e.columnName()(0))  // Get top-level column name
+          .map { case (colName, extractions) =>
+            // Build struct schema with ordinal-named fields for each extraction
+            val fields = extractions.zipWithIndex.map { case (extraction, idx) =>
+              StructField(idx.toString, extraction.expectedDataType(), nullable = true)
+                .withComment(extraction.path())
+            }
+            colName -> StructType(fields)
+          }.toMap
+
         StructType(baseSchema.map { field =>
           variantSchemaMap.get(field.name) match {
             case Some(extractedSchema) => field.copy(dataType = extractedSchema)
@@ -153,8 +171,8 @@ case class ParquetScan(
         pushedAggregate.isEmpty && p.pushedAggregate.isEmpty
       }
       val pushedVariantEqual =
-        java.util.Arrays.equals(pushedVariantAccessInfo.asInstanceOf[Array[Object]],
-          p.pushedVariantAccessInfo.asInstanceOf[Array[Object]])
+        java.util.Arrays.equals(pushedVariantExtractions.asInstanceOf[Array[Object]],
+          p.pushedVariantExtractions.asInstanceOf[Array[Object]])
       super.equals(p) && dataSchema == p.dataSchema && options == p.options &&
         equivalentFilters(pushedFilters, p.pushedFilters) && pushedDownAggEqual &&
         pushedVariantEqual
@@ -171,15 +189,17 @@ case class ParquetScan(
   }
 
   override def getMetaData(): Map[String, String] = {
-    val variantAccessStr = if (pushedVariantAccessInfo.nonEmpty) {
-      pushedVariantAccessInfo.map(info =>
-        s"${info.columnName()}->${info.extractedSchema()}").mkString("[", ", ", "]")
+    val variantExtractionStr = if (pushedVariantExtractions.nonEmpty) {
+      pushedVariantExtractions.map { extraction =>
+        val colName = extraction.columnName().mkString(".")
+        s"$colName:${extraction.path()}:${extraction.expectedDataType()}"
+      }.mkString("[", ", ", "]")
     } else {
       "[]"
     }
     super.getMetaData() ++ Map("PushedFilters" -> seqToString(pushedFilters.toImmutableArraySeq)) ++
       Map("PushedAggregation" -> pushedAggregationsStr) ++
       Map("PushedGroupBy" -> pushedGroupByStr) ++
-      Map("PushedVariantAccess" -> variantAccessStr)
+      Map("PushedVariantExtractions" -> variantExtractionStr)
   }
 }
