@@ -19,7 +19,7 @@ package org.apache.spark.sql.metricview.serde
 
 import scala.util.control.NonFatal
 
-object MetricViewFactory {
+private[sql] object MetricViewFactory {
   def fromYAML(yamlContent: String): MetricView = {
     try {
       val yamlVersion =

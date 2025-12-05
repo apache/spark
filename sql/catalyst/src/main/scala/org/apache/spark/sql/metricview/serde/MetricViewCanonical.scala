@@ -36,7 +36,9 @@ private[sql] sealed abstract class MetricViewSerdeException(
     cause: Option[Throwable] = None)
   extends Exception(message, cause.orNull)
 
-case class MetricViewValidationException(message: String, cause: Option[Throwable] = None)
+private[sql] case class MetricViewValidationException(
+    message: String,
+    cause: Option[Throwable] = None)
   extends MetricViewSerdeException(message, cause)
 
 private[sql] case class MetricViewFromProtoException(
@@ -44,7 +46,9 @@ private[sql] case class MetricViewFromProtoException(
     cause: Option[Throwable] = None)
   extends MetricViewSerdeException(message, cause)
 
-case class MetricViewYAMLParsingException(message: String, cause: Option[Throwable] = None)
+private[sql] case class MetricViewYAMLParsingException(
+    message: String,
+    cause: Option[Throwable] = None)
   extends MetricViewSerdeException(message, cause)
 
 // Expression types in a Metric View
@@ -86,7 +90,7 @@ private[sql] sealed trait Source extends Validatable {
 }
 
 // Asset source, representing a catalog table, view, or Metric View, etc.
-case class AssetSource(name: String) extends Source {
+private[sql] case class AssetSource(name: String) extends Source {
   val sourceType: SourceType = SourceType.ASSET
 
   def validate(): Unit = {
@@ -99,7 +103,7 @@ case class AssetSource(name: String) extends Source {
 }
 
 // SQL source, representing a SQL query
-case class SQLSource(sql: String) extends Source {
+private[sql] case class SQLSource(sql: String) extends Source {
   val sourceType: SourceType = SourceType.SQL
 
   def validate(): Unit = {
@@ -199,10 +203,8 @@ private[sql] object YAMLVersion {
   }
 }
 
-case class MetricView(
+private[sql] case class MetricView(
     version: String,
     from: Source,
     where: Option[String] = None,
-    select: Seq[Column]) {
-
-}
+    select: Seq[Column])
