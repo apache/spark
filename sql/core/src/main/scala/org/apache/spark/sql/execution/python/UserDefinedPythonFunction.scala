@@ -46,8 +46,9 @@ case class UserDefinedPythonFunction(
     pythonEvalType: Int,
     udfDeterministic: Boolean,
     // default values null for now until we get SparkConnect side implemented.
-    src: String = null, // this might be null.
-    ast: Any = null // for now? let's... think if we can do something smarter.
+    src: String = null,
+    ast: Any = null,
+    pureCatalystExpression: Expression = null
 ) extends Logging {
 
   def builder(e: Seq[Expression]): Expression = {
@@ -83,12 +84,17 @@ case class UserDefinedPythonFunction(
       case a => Some(a)
     }
 
+    val safePureCatalystExpression = pureCatalystExpression match {
+      case null => None
+      case a => Some(a)
+    }
+
     if (pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
       || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF
       || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF) {
-      PythonUDAF(name, func, dataType, e, udfDeterministic, pythonEvalType, safeSrc, safeAst)
+      PythonUDAF(name, func, dataType, e, udfDeterministic, pythonEvalType, safeSrc, safeAst, safePureCatalystExpression)
     } else {
-      PythonUDF(name, func, dataType, e, pythonEvalType, udfDeterministic, safeSrc, safeAst)
+      PythonUDF(name, func, dataType, e, pythonEvalType, udfDeterministic, safeSrc, safeAst, safePureCatalystExpression)
     }
   }
 
