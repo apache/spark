@@ -444,7 +444,8 @@ object IntegratedUDFTestUtils extends SQLHelper {
       evalType: Int,
       udfDeterministic: Boolean,
       resultId: ExprId)
-    extends PythonUDF(name, func, dataType, children, evalType, udfDeterministic, resultId) {
+    extends PythonUDF(name, func, dataType, children, evalType, udfDeterministic,
+      resultId = resultId) {
 
     def this(pudf: PythonUDF) = {
       this(pudf.name, pudf.func, pudf.dataType, pudf.children,
