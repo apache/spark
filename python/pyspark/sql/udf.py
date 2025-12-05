@@ -66,8 +66,9 @@ def _wrap_function(
         sc.pythonExec,
         sc.pythonVer,
         broadcast_vars,
-        sc._javaAccumulator
+        sc._javaAccumulator,
     )
+
 
 def _dump_to_tree(node):
     """
@@ -75,6 +76,7 @@ def _dump_to_tree(node):
     Lib/ast.py from the standard library, but modified to return
     basic types for sending over to the JVM side.
     """
+
     def _format(node, level=0):
         if isinstance(node, ast.AST):
             cls = type(node)
@@ -98,8 +100,9 @@ def _dump_to_tree(node):
         return node, True
 
     if not isinstance(node, ast.AST):
-        raise TypeError('expected AST, got %r' % node.__class__.__name__)
+        raise TypeError("expected AST, got %r" % node.__class__.__name__)
     return _format(node)[0]
+
 
 def _create_udf(
     f: Callable[..., Any],
@@ -196,7 +199,7 @@ class UserDefinedFunction:
         returnType: "DataTypeOrString" = StringType(),
         name: Optional[str] = None,
         evalType: int = PythonEvalType.SQL_BATCHED_UDF,
-        deterministic: bool = True
+        deterministic: bool = True,
     ):
         if not isinstance(returnType, (DataType, str)):
             raise PySparkTypeError(
@@ -475,7 +478,13 @@ class UserDefinedFunction:
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         assert sc._jvm is not None
         judf = getattr(sc._jvm, "org.apache.spark.sql.execution.python.UserDefinedPythonFunction")(
-            self._name, wrapped_func, jdt, self.evalType, self.deterministic, self.src, self.ast_dumped
+            self._name,
+            wrapped_func,
+            jdt,
+            self.evalType,
+            self.deterministic,
+            self.src,
+            self.ast_dumped,
         )
         return judf
 
