@@ -1088,7 +1088,7 @@ def wrap_grouped_agg_pandas_iter_udf(f, args_offsets, kwargs_offsets, return_typ
     func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
 
     arrow_return_type = to_arrow_type(
-        return_type, prefers_large_types=use_large_var_types(runner_conf)
+        return_type, prefers_large_types=runner_conf.use_large_var_types
     )
 
     def wrapped(series_iter):
