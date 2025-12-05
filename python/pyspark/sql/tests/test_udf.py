@@ -74,8 +74,8 @@ class BaseUDFTestsMixin(object):
         self.assertEqual(res.agg({"plus_four": "sum"}).collect()[0][0], 85)
         # Currently does not work because of inspect limitations.
         # Make sure we sent the extra bits over for transpilation.
-        #self.assertEqual(pudf._judf.src(), "")
-        #self.assertEqual(pudf._judf.ast(), "")
+        self.assertEqual(pudf._judf.src(), "")
+        self.assertEqual(pudf._judf.ast(), "")
 
     def test_udf_with_partial_function(self):
         data = self.spark.createDataFrame([(i, i**2) for i in range(10)], ["number", "squared"])
