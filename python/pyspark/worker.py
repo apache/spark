@@ -795,7 +795,6 @@ def wrap_grouped_map_arrow_iter_udf(f, return_type, argspec, runner_conf):
 
 
 def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
-
     def wrapped(key_series, value_batches):
         import pandas as pd
 
@@ -832,7 +831,6 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
 
 
 def wrap_grouped_map_pandas_iter_udf(f, return_type, argspec, runner_conf):
-
     def wrapped(key_series, value_batches):
         import pandas as pd
 
