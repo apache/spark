@@ -1259,7 +1259,8 @@ class GroupedAggArrowUDFTestsMixin:
 
             # Test SQL query with GROUP BY and multiple columns
             result_sql = self.spark.sql(
-                "SELECT id, arrow_weighted_mean_iter(v, w) as wm FROM test_table GROUP BY id ORDER BY id"
+                "SELECT id, arrow_weighted_mean_iter(v, w) as wm "
+                "FROM test_table GROUP BY id ORDER BY id"
             )
 
             # Expected weighted means:
@@ -1284,13 +1285,12 @@ class GroupedAggArrowUDFTestsMixin:
                 total += pa.compute.sum(v).as_py()
             return total
 
-        self.assertEqual(arrow_sum_iter.evalType, PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF)
+        expected_eval_type = PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF
+        self.assertEqual(arrow_sum_iter.evalType, expected_eval_type)
 
         with self.temp_func("arrow_sum_iter"):
             registered_udf = self.spark.udf.register("arrow_sum_iter", arrow_sum_iter)
-            self.assertEqual(
-                registered_udf.evalType, PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF
-            )
+            self.assertEqual(registered_udf.evalType, expected_eval_type)
 
             # Test SQL query
             q = """
