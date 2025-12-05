@@ -1134,7 +1134,8 @@ class GroupArrowUDFSerializer(ArrowStreamGroupUDFSerializer):
         return "GroupArrowUDFSerializer"
 
 
-# Serializer for SQL_GROUPED_AGG_ARROW_UDF, SQL_WINDOW_AGG_ARROW_UDF, and SQL_GROUPED_AGG_ARROW_ITER_UDF
+# Serializer for SQL_GROUPED_AGG_ARROW_UDF, SQL_WINDOW_AGG_ARROW_UDF,
+# and SQL_GROUPED_AGG_ARROW_ITER_UDF
 class ArrowStreamAggArrowUDFSerializer(ArrowStreamArrowUDFSerializer):
     def __init__(
         self,

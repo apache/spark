@@ -3282,7 +3282,9 @@ def read_udfs(pickleSer, infile, eval_type):
             batches = []
             for batch_columns in a:
                 # batch_columns is Tuple[pa.Array, ...] - convert to RecordBatch
-                batch = pa.RecordBatch.from_arrays(batch_columns)
+                batch = pa.RecordBatch.from_arrays(
+                    batch_columns, names=["_%d" % i for i in range(len(batch_columns))]
+                )
                 batches.append(batch)
 
             # Concatenate all batches into one
