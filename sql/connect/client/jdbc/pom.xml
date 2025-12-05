@@ -37,90 +37,14 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-connect-common_${scala.binary.version}</artifactId>
+      <artifactId>spark-connect-client-jvm_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.spark</groupId>
-      <artifactId>spark-sql-api_${scala.binary.version}</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.spark</groupId>
-      <artifactId>spark-connect-shims_${scala.binary.version}</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.spark</groupId>
-      <artifactId>spark-sketch_${scala.binary.version}</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.scala-lang</groupId>
-      <artifactId>scala-compiler</artifactId>
-      <scope>compile</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.scala-lang.modules</groupId>
-      <artifactId>scala-xml_${scala.binary.version}</artifactId>
-      <scope>compile</scope>
-    </dependency>
-    <!--
-      We need to define protobuf here because we need to change the scope of both from
-      provided to compile. If we don't do this we can't shade these libraries.
-    -->
-    <dependency>
-      <groupId>com.google.protobuf</groupId>
-      <artifactId>protobuf-java</artifactId>
-      <scope>compile</scope>
-    </dependency>
-    <dependency>
-      <groupId>com.google.guava</groupId>
-      <artifactId>guava</artifactId>
-      <scope>compile</scope>
-    </dependency>
-    <dependency>
-      <groupId>com.google.guava</groupId>
-      <artifactId>failureaccess</artifactId>
-      <scope>compile</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.spark</groupId>
-      <artifactId>spark-tags_${scala.binary.version}</artifactId>
-      <type>test-jar</type>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.scalacheck</groupId>
-      <artifactId>scalacheck_${scala.binary.version}</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.spark</groupId>
-      <artifactId>spark-sql-api_${scala.binary.version}</artifactId>
-      <version>${project.version}</version>
-      <classifier>tests</classifier>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.spark</groupId>
-      <artifactId>spark-common-utils_${scala.binary.version}</artifactId>
-      <version>${project.version}</version>
-      <classifier>tests</classifier>
-      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-connect-client-jvm_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
       <classifier>tests</classifier>
-      <scope>test</scope>
-    </dependency>
-    <!-- Use mima to perform the compatibility check -->
-    <dependency>
-      <groupId>com.typesafe</groupId>
-      <artifactId>mima-core_${scala.binary.version}</artifactId>
-      <version>${mima.version}</version>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -142,10 +66,10 @@
         <artifactId>maven-shade-plugin</artifactId>
         <configuration combine.self = "override">
           <shadedArtifactAttached>false</shadedArtifactAttached>
-          <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
+          <promoteTransitiveDependencies>false</promoteTransitiveDependencies>
           <artifactSet>
             <includes>
-              <include>org.apache.spark:spark-connect-client-jdbc_${scala.binary.version}</include>
+              <include>org.spark-project.spark:unused</include>
             </includes>
           </artifactSet>
           <relocations>

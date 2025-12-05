@@ -951,10 +951,13 @@ case class KeyGroupedShuffleSpec(
       }
 
   override def createPartitioning(clustering: Seq[Expression]): Partitioning = {
-    val newExpressions: Seq[Expression] = clustering.zip(partitioning.expressions).map {
-      case (c, e: TransformExpression) => TransformExpression(
-        e.function, Seq(c), e.numBucketsOpt)
-      case (c, _) => c
+    assert(clustering.size == distribution.clustering.size,
+      "Required distributions of join legs should be the same size.")
+
+    val newExpressions = partitioning.expressions.zip(keyPositions).map {
+      case (te: TransformExpression, positionSet) =>
+        te.copy(children = te.children.map(_ => clustering(positionSet.head)))
+      case (_, positionSet) => clustering(positionSet.head)
     }
     KeyGroupedPartitioning(newExpressions,
       partitioning.numPartitions,

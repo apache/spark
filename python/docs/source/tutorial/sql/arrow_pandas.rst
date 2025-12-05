@@ -60,8 +60,8 @@ Enabling for Conversion to/from Pandas
 
 Arrow is available as an optimization when converting a Spark DataFrame to a Pandas DataFrame
 using the call :meth:`DataFrame.toPandas` and when creating a Spark DataFrame from a Pandas DataFrame with
-:meth:`SparkSession.createDataFrame`. To use Arrow when executing these calls, users need to first set
-the Spark configuration ``spark.sql.execution.arrow.pyspark.enabled`` to ``true``. This is disabled by default.
+:meth:`SparkSession.createDataFrame`. To use Arrow when executing these calls,
+the Spark configuration ``spark.sql.execution.arrow.pyspark.enabled`` must be set to ``true``. This is enabled by default.
 
 In addition, optimizations enabled by ``spark.sql.execution.arrow.pyspark.enabled`` could fallback automatically
 to non-Arrow optimization implementation if an error occurs before the actual computation within Spark.
@@ -368,6 +368,9 @@ Here's an example that demonstrates the usage of both a default, pickled Python 
     :lines: 298-316
     :dedent: 4
 
+Type coercion:
+~~~~~~~~~~~~~~
+
 Compared to the default, pickled Python UDFs, Arrow Python UDFs provide a more coherent type coercion mechanism. UDF
 type coercion poses challenges when the Python instances returned by UDFs do not align with the user-specified
 return type. The default, pickled Python UDFs' type coercion has certain limitations, such as relying on None as a
@@ -375,11 +378,11 @@ fallback for type mismatches, leading to potential ambiguity and data loss. Addi
 and tuples to strings can yield ambiguous results. Arrow Python UDFs, on the other hand, leverage Arrow's
 capabilities to standardize type coercion and address these issues effectively.
 
-A note on Arrow Python UDF type coercion: In Spark 4.1, unnecessary conversion to pandas instances is removed in the serializer
-when ``spark.sql.execution.pythonUDF.arrow.enabled`` is enabled. As a result, the type coercion changes
-when the produced output has a schema different from the specified schema. To restore the previous behavior,
-enable ``spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled``. 
-The behavior difference is summarized in the tables `here <https://github.com/apache/spark/pull/51225>`__.
+Type coercion differences are introduced by the following changes:
+
+* Since Spark 4.2, Arrow optimization is enabled by default for regular Python UDFs. The full type coercion difference is summarized in the tables `here <https://github.com/apache/spark/pull/41706>`__. To disable Arrow optimization, set ``spark.sql.execution.pythonUDF.arrow.enabled`` to false.
+
+* Since Spark 4.1, unnecessary conversion to pandas instances in Arrow-optimized Python UDF is removed in the serializer when ``spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled`` is disabled. The behavior difference is summarized in the tables `here <https://github.com/apache/spark/pull/51225>`__. To restore the legacy behavior, set ``spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled`` to true.
 
 Usage Notes
 -----------

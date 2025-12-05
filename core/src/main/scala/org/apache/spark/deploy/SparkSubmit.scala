@@ -448,14 +448,16 @@ private[spark] class SparkSubmit extends Logging {
                 log" from ${MDC(LogKeys.SOURCE_PATH, source)}" +
                 log" to ${MDC(LogKeys.DESTINATION_PATH, dest)}")
               Utils.deleteRecursively(dest)
-              if (isArchive) {
+              val resourceUri = if (isArchive) {
                 Utils.unpack(source, dest)
+                localResources
               } else {
                 Files.copy(source.toPath, dest.toPath)
+                dest.toURI
               }
               // Keep the URIs of local files with the given fragments.
               Utils.getUriBuilder(
-                localResources).fragment(resolvedUri.getFragment).build().toString
+                resourceUri).fragment(resolvedUri.getFragment).build().toString
           } ++ avoidDownloads.map(_.toString)).mkString(",")
         }
 

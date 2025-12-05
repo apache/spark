@@ -95,6 +95,25 @@ class SparkShellSuite extends SparkFunSuite {
       }
     }
 
+    def handleException(cause: Throwable): Unit = lock.synchronized {
+      val message =
+        s"""
+           |=======================
+           |SparkShellSuite failure output
+           |=======================
+           |Spark Shell command line: ${command.mkString(" ")}
+           |Exception: $cause
+           |Failed to capture next expected output "${expectedAnswers(next)}" within $timeout.
+           |
+           |${buffer.mkString("\n")}
+           |===========================
+           |End SparkShellSuite failure output
+           |===========================
+         """.stripMargin
+      logError(message, cause)
+      fail(message, cause)
+    }
+
     val process = new ProcessBuilder(command: _*).start()
 
     val stdinWriter = new OutputStreamWriter(process.getOutputStream, StandardCharsets.UTF_8)
@@ -119,23 +138,8 @@ class SparkShellSuite extends SparkFunSuite {
       }
       ThreadUtils.awaitResult(foundAllExpectedAnswers.future, timeoutForQuery)
       log.info("Found all expected output.")
-    } catch { case cause: Throwable =>
-      val message =
-        s"""
-           |=======================
-           |SparkShellSuite failure output
-           |=======================
-           |Spark Shell command line: ${command.mkString(" ")}
-           |Exception: $cause
-           |Failed to capture next expected output "${expectedAnswers(next)}" within $timeout.
-           |
-           |${buffer.mkString("\n")}
-           |===========================
-           |End SparkShellSuite failure output
-           |===========================
-         """.stripMargin
-      logError(message, cause)
-      fail(message, cause)
+    } catch {
+      case cause: Throwable => handleException(cause)
     } finally {
       if (!process.waitFor(1, MINUTES)) {
         try {

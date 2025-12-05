@@ -185,6 +185,13 @@ private[sql] class RocksDBStateStoreProvider
       ctxt.addTaskFailureListener((_, _) => {
         if (!hasCommitted) abort()
       })
+      // Failure/completion listeners were invoked during adding if the task has
+      // failed already. Prevent further access (resulting in invalid stamp error)
+      // by throwing an error here.
+      ctxt.getTaskFailure match {
+        case Some(failure) => throw failure
+        case None =>
+      }
     }
 
     override def createColFamilyIfAbsent(
@@ -869,6 +876,9 @@ private[sql] class RocksDBStateStoreProvider
   @volatile private var stateSchemaProvider: Option[StateSchemaProvider] = _
   @volatile private var rocksDBEventForwarder: Option[RocksDBEventForwarder] = _
   @volatile private var stateStoreProviderId: StateStoreProviderId = _
+  // Exposed for testing
+  @volatile private[sql] var sparkConf: SparkConf = Option(SparkEnv.get).map(_.conf)
+    .getOrElse(new SparkConf)
 
   protected def createRocksDB(
       dfsRootDir: String,
@@ -899,8 +909,7 @@ private[sql] class RocksDBStateStoreProvider
     val storeIdStr = s"StateStoreId(opId=${stateStoreId.operatorId}," +
       s"partId=${stateStoreId.partitionId},name=${stateStoreId.storeName})"
     val loggingId = stateStoreProviderId.toString
-    val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
-    val localRootDir = Utils.createTempDir(Utils.getLocalDir(sparkConf), storeIdStr)
+    val localRootDir = Utils.createExecutorLocalTempDir(sparkConf, storeIdStr)
     createRocksDB(dfsRootDir, RocksDBConf(storeConf), localRootDir, hadoopConf, loggingId,
       useColumnFamilies, storeConf.enableStateStoreCheckpointIds, stateStoreId.partitionId,
       rocksDBEventForwarder,

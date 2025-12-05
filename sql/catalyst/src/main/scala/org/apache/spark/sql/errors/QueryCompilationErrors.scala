@@ -1726,7 +1726,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def userSpecifiedSchemaMismatchActualSchemaError(
       schema: StructType, actualSchema: StructType): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1133",
+      errorClass = "USER_SPECIFIED_AND_ACTUAL_SCHEMA_MISMATCH",
       messageParameters = Map(
         "schema" -> schema.toDDL,
         "actualSchema" -> actualSchema.toDDL))
@@ -2475,7 +2475,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def cannotResolveColumnNameAmongAttributesError(
       colName: String, fieldNames: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1201",
+      errorClass = "UNRESOLVED_COLUMN_AMONG_FIELD_NAMES",
       messageParameters = Map(
         "colName" -> colName,
         "fieldNames" -> fieldNames))

@@ -188,13 +188,13 @@
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
     <snappy.version>1.1.10.8</snappy.version>
     <netlib.ludovic.dev.version>3.0.4</netlib.ludovic.dev.version>
-    <commons-codec.version>1.19.0</commons-codec.version>
+    <commons-codec.version>1.20.0</commons-codec.version>
     <commons-compress.version>1.28.0</commons-compress.version>
     <commons-io.version>2.21.0</commons-io.version>
     <!-- To support Hive UDF jars built by Hive 2.0.0 ~ 2.3.9 and 3.0.0 ~ 3.1.3. -->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
-    <commons-lang3.version>3.19.0</commons-lang3.version>
+    <commons-lang3.version>3.20.0</commons-lang3.version>
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.12.1</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
@@ -219,7 +219,7 @@
     <datasketches.version>6.2.0</datasketches.version>
     <netty.version>4.2.7.Final</netty.version>
     <netty-tcnative.version>2.0.74.Final</netty-tcnative.version>
-    <icu4j.version>77.1</icu4j.version>
+    <icu4j.version>78.1</icu4j.version>
     <junit.version>6.0.1</junit.version>
     <jline.version>2.14.6</jline.version>
     <!--
@@ -879,9 +879,9 @@
         <version>${snappy.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.lz4</groupId>
+        <groupId>at.yawk.lz4</groupId>
         <artifactId>lz4-java</artifactId>
-        <version>1.8.0</version>
+        <version>1.10.1</version>
       </dependency>
       <dependency>
         <groupId>com.github.luben</groupId>
@@ -2653,6 +2653,7 @@
                       <exclude>org.jboss.netty</exclude>
                       <exclude>org.codehaus.groovy</exclude>
                       <exclude>com.amazonaws:aws-java-sdk-bundle</exclude>
+                      <exclude>org.lz4:lz4-java</exclude>
                       <exclude>*:*_2.12</exclude>
                       <exclude>*:*_2.11</exclude>
                       <exclude>*:*_2.10</exclude>

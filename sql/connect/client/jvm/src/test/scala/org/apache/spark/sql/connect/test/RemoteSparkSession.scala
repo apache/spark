@@ -77,7 +77,7 @@ object SparkConnectServerUtils {
     command += "--jars" += catalystTestJar
     command += "--conf" += s"spark.connect.grpc.binding.port=$port"
     command ++= testConfigs
-    command ++= debugConfigs
+    command ++= log4jConfigs
     command += connectJar
     val cmds = command.result()
     debug {
@@ -90,10 +90,8 @@ object SparkConnectServerUtils {
     builder.directory(new File(sparkHome))
     val environment = builder.environment()
     environment.remove("SPARK_DIST_CLASSPATH")
-    if (isDebug) {
-      builder.redirectError(Redirect.INHERIT)
-      builder.redirectOutput(Redirect.INHERIT)
-    }
+    builder.redirectError(Redirect.INHERIT)
+    builder.redirectOutput(Redirect.INHERIT)
 
     val process = builder.start()
     consoleOut = process.getOutputStream
@@ -135,6 +133,8 @@ object SparkConnectServerUtils {
       "spark.connect.execute.reattachable.senderMaxStreamSize=123",
       // Testing SPARK-49673, setting maxBatchSize to 10MiB
       s"spark.connect.grpc.arrow.maxBatchSize=${10 * 1024 * 1024}",
+      // Cache less sessions to save memory.
+      "spark.executor.isolatedSessionCache.size=5",
       // Disable UI
       "spark.ui.enabled=false").flatMap(v => "--conf" :: v :: Nil)
   }

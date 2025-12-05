@@ -98,7 +98,7 @@ class OrcSerializer(dataSchema: StructType) {
       }
 
 
-    case LongType | _: DayTimeIntervalType | _: TimestampNTZType =>
+    case LongType | _: DayTimeIntervalType | _: TimestampNTZType | _: TimeType =>
       if (reuseObj) {
         val result = new LongWritable()
         (getter, ordinal) =>

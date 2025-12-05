@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.collection.mutable.ArrayBuffer
+
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsRowLevelOperations, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -42,15 +45,19 @@ object ResolveMergeIntoSchemaEvolution extends Rule[LogicalPlan] {
       if (changes.isEmpty) {
         m
       } else {
-        m transformUpWithNewOutput {
-          case r @ DataSourceV2Relation(_: SupportsRowLevelOperations, _, _, _, _, _) =>
+        val finalAttrMapping = ArrayBuffer.empty[(Attribute, Attribute)]
+        val newTarget = m.targetTable.transform {
+          case r: DataSourceV2Relation =>
             val referencedSourceSchema = MergeIntoTable.sourceSchemaForSchemaEvolution(m)
             val newTarget = performSchemaEvolution(r, referencedSourceSchema, changes)
             val oldTargetOutput = m.targetTable.output
             val newTargetOutput = newTarget.output
             val attributeMapping = oldTargetOutput.zip(newTargetOutput)
-            newTarget -> attributeMapping
+            finalAttrMapping ++= attributeMapping
+            newTarget
         }
+        val res = m.copy(targetTable = newTarget)
+        res.rewriteAttrs(AttributeMap(finalAttrMapping.toSeq))
       }
   }
 

@@ -216,9 +216,9 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       assert(metaData.getColumnTypeName(1) === "STRING")
       assert(metaData.getColumnClassName(1) === "java.lang.String")
       assert(metaData.isSigned(1) === false)
-      assert(metaData.getPrecision(1) === 255)
+      assert(metaData.getPrecision(1) === Int.MaxValue)
       assert(metaData.getScale(1) === 0)
-      assert(metaData.getColumnDisplaySize(1) === 255)
+      assert(metaData.getColumnDisplaySize(1) === Int.MaxValue)
     }
   }
 
@@ -385,14 +385,35 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       assert(bytes.length === testBytes.length)
       assert(bytes.sameElements(testBytes))
       assert(!rs.wasNull)
+
+      val stringValue = rs.getString(1)
+      val expectedString = new String(testBytes, java.nio.charset.StandardCharsets.UTF_8)
+      assert(stringValue === expectedString)
+
       assert(!rs.next())
 
       val metaData = rs.getMetaData
       assert(metaData.getColumnCount === 1)
-      assert(metaData.getColumnType(1) === Types.BINARY)
+      assert(metaData.getColumnType(1) === Types.VARBINARY)
       assert(metaData.getColumnTypeName(1) === "BINARY")
       assert(metaData.getColumnClassName(1) === "[B")
       assert(metaData.isSigned(1) === false)
+    }
+  }
+
+  test("get binary type with UTF-8 text") {
+    val textBytes = "\\xDeAdBeEf".getBytes(java.nio.charset.StandardCharsets.UTF_8)
+    val hexString = textBytes.map(b => "%02X".format(b)).mkString
+    withExecuteQuery(s"SELECT CAST(X'$hexString' AS BINARY)") { rs =>
+      assert(rs.next())
+      val bytes = rs.getBytes(1)
+      assert(bytes !== null)
+      assert(bytes.sameElements(textBytes))
+
+      val stringValue = rs.getString(1)
+      assert(stringValue === "\\xDeAdBeEf")
+
+      assert(!rs.next())
     }
   }
 
@@ -405,7 +426,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
 
       val metaData = rs.getMetaData
       assert(metaData.getColumnCount === 1)
-      assert(metaData.getColumnType(1) === Types.BINARY)
+      assert(metaData.getColumnType(1) === Types.VARBINARY)
       assert(metaData.getColumnTypeName(1) === "BINARY")
       assert(metaData.getColumnClassName(1) === "[B")
     }
@@ -437,6 +458,9 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       assert(bytes !== null)
       assert(bytes.length === 0)
       assert(!rs.wasNull)
+
+      val stringValue = rs.getString(1)
+      assert(stringValue === "")
       assert(!rs.next())
     }
   }

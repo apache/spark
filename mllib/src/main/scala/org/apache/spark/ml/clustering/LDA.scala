@@ -826,7 +826,7 @@ class DistributedLDAModel private[ml] (
     s"DistributedLDAModel: uid=$uid, k=${$(k)}, numFeatures=$vocabSize"
   }
 
-  override def estimatedSize: Long = {
+  private[spark] override def estimatedSize: Long = {
     // TODO: Implement this method.
     throw new UnsupportedOperationException
   }

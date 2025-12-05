@@ -20,7 +20,7 @@ package org.apache.spark.executor
 import java.io.{File, NotSerializableException}
 import java.lang.Thread.UncaughtExceptionHandler
 import java.lang.management.ManagementFactory
-import java.net.{URI, URL}
+import java.net.{URI, URL, URLClassLoader}
 import java.nio.ByteBuffer
 import java.util.{Locale, Properties}
 import java.util.concurrent._
@@ -212,7 +212,7 @@ private[spark] class Executor(
   val defaultSessionState: IsolatedSessionState = newSessionState(JobArtifactState("default", None))
 
   val isolatedSessionCache: Cache[String, IsolatedSessionState] = CacheBuilder.newBuilder()
-    .maximumSize(100)
+    .maximumSize(conf.get(EXECUTOR_ISOLATED_SESSION_CACHE_SIZE))
     .expireAfterAccess(30, TimeUnit.MINUTES)
     .removalListener(new RemovalListener[String, IsolatedSessionState]() {
       override def onRemoval(
@@ -220,6 +220,20 @@ private[spark] class Executor(
         val state = notification.getValue
         // Cache is always used for isolated sessions.
         assert(!isDefaultState(state.sessionUUID))
+        // Close the urlClassLoader to release resources.
+        try {
+          state.urlClassLoader match {
+            case urlClassLoader: URLClassLoader =>
+              urlClassLoader.close()
+              logInfo(log"Closed urlClassLoader (URLClassLoader) for evicted session " +
+                log"${MDC(SESSION_ID, state.sessionUUID)}")
+            case _ =>
+          }
+        } catch {
+          case NonFatal(e) =>
+            logWarning(log"Failed to close urlClassLoader for session " +
+              log"${MDC(SESSION_ID, state.sessionUUID)}", e)
+        }
         val sessionBasedRoot = new File(SparkFiles.getRootDirectory(), state.sessionUUID)
         if (sessionBasedRoot.isDirectory && sessionBasedRoot.exists()) {
           Utils.deleteRecursively(sessionBasedRoot)
@@ -381,7 +395,28 @@ private[spark] class Executor(
       tr.kill(killMark._1, killMark._2)
       killMarks.remove(taskId)
     }
-    threadPool.execute(tr)
+    try {
+      threadPool.execute(tr)
+    } catch {
+      case t: Throwable =>
+        try {
+          logError(log"Executor launch task ${MDC(TASK_NAME, taskDescription.name)} failed," +
+            log" reason: ${MDC(REASON, t.getMessage)}")
+          context.statusUpdate(
+            taskDescription.taskId,
+            TaskState.FAILED,
+            env.closureSerializer.newInstance().serialize(new ExceptionFailure(t, Seq.empty)))
+        } catch {
+          case oom: OutOfMemoryError =>
+            logError(log"Executor update launching task ${MDC(TASK_NAME, taskDescription.name)} " +
+              log"failed status failed, reason: ${MDC(REASON, oom.getMessage)}")
+            System.exit(SparkExitCode.OOM)
+          case t: Throwable =>
+            logError(log"Executor update launching task ${MDC(TASK_NAME, taskDescription.name)} " +
+              log"failed status failed, reason: ${MDC(REASON, t.getMessage)}")
+            System.exit(-1)
+        }
+    }
     if (decommissioned) {
       log.error(s"Launching a task while in decommissioned state.")
     }
@@ -729,7 +764,6 @@ private[spark] class Executor(
           .inc(task.metrics.outputMetrics.bytesWritten)
         executorSource.METRIC_OUTPUT_RECORDS_WRITTEN
           .inc(task.metrics.outputMetrics.recordsWritten)
-        executorSource.METRIC_RESULT_SIZE.inc(task.metrics.resultSize)
         executorSource.METRIC_DISK_BYTES_SPILLED.inc(task.metrics.diskBytesSpilled)
         executorSource.METRIC_MEMORY_BYTES_SPILLED.inc(task.metrics.memoryBytesSpilled)
         incrementShuffleMetrics(executorSource, task.metrics)
@@ -743,6 +777,7 @@ private[spark] class Executor(
         val serializedDirectResult = SerializerHelper.serializeToChunkedBuffer(ser, directResult,
           valueByteBuffer.size + accumUpdates.size * 32 + metricPeaks.length * 8)
         val resultSize = serializedDirectResult.size
+        executorSource.METRIC_RESULT_SIZE.inc(resultSize)
 
         // directSend = sending directly back to the driver
         val serializedResult: ByteBuffer = {
