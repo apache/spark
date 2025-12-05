@@ -230,23 +230,32 @@ class UserDefinedFunction:
                 messageParameters={"arg_name": "func", "arg_type": type(func).__name__},
             )
 
+        # Extract Python UDF details if transpilation is enabled.
         ast_info = None
         ast_dumped = None
         src = None
-        try:
-            # Note: consider maybe dill? (see the JYTHON PR)
-            # inspect getsource does not work for functions defined in vanilla
-            # repl, but does for those in files or in ipython.
-            # It also fails when we give it an instance of a callable class.
+        from pyspark.sql import SparkSession
+
+        session = SparkSession._instantiatedSession
+        transpile_enabled = (
+            False
+            if session is None
+            else session.conf.get("spark.sql.optimizer.transpilePyUDFS") == "true"
+        )
+        if transpile_enabled:
             try:
-                src = inspect.getsource(func)
-            except Exception:
-                src = inspect.getsource(func.__call__)
-            ast_info = ast.parse(src)
-            ast_dumped = _dump_to_tree(ast_info)
-        except Exception as e:
-            warnings.warn(f"Error building AST for UDF: {e} -- proceeding without opportunity for transpilation")
-        print(f"Hiii! Using {src} AND {ast_dumped} to make my UDF")
+                # Note: consider maybe dill? (see the JYTHON PR)
+                # inspect getsource does not work for functions defined in vanilla
+                # repl, but does for those in files or in ipython.
+                # It also fails when we give it an instance of a callable class.
+                try:
+                    src = inspect.getsource(func)
+                except Exception:
+                    src = inspect.getsource(func.__call__)
+                ast_info = ast.parse(src)
+                ast_dumped = _dump_to_tree(ast_info)
+            except Exception as e:
+                warnings.warn(f"Error building AST for UDF: {e} -- will not transpile")
         self.src = src
         self.ast_dumped = ast_dumped
 

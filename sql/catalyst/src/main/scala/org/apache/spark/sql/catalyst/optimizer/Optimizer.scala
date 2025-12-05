@@ -979,8 +979,9 @@ object LimitPushDown extends Rule[LogicalPlan] {
 object ConvertToCatalyst extends Rule[LogicalPlan] {
   val UDFTypeCoercesExpressionTypes = new resolver.UDFTypeCoercesExpressionTypes()
   def apply(plan: LogicalPlan): LogicalPlan = {
-    // Short circuit if there is no Python UDFs in the plan.
-    if (!plan.containsPattern(PYTHON_UDF)) {
+    // Short circuit if we are not transpiling or there is no Python UDFs in the plan.
+    if (!conf.getConf(SQLConf.TRANSPILE_PY_UDFS) ||
+      !plan.containsPattern(PYTHON_UDF)) {
       return plan
     }
     plan.mapExpressions(applyExpr(_, false))
