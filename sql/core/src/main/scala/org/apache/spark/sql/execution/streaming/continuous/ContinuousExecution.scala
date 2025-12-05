@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, TableCapability}
 import org.apache.spark.sql.connector.distributions.UnspecifiedDistribution
-import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, PartitionOffset, ReadLimit}
+import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, PartitionOffset, ReadLimit, SparkDataStream}
 import org.apache.spark.sql.connector.write.{RequiresDistributionAndOrdering, Write}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.SQLExecution
@@ -64,6 +64,8 @@ class ContinuousExecution(
   }
 
   @volatile protected var sources: Seq[ContinuousStream] = Seq()
+
+  def sourceToIdMap: Map[SparkDataStream, String] = Map.empty
 
   // For use only in test harnesses.
   private[sql] var currentEpochCoordinatorId: String = _
@@ -186,7 +188,7 @@ class ContinuousExecution(
         val nextOffsets = offsetLog.get(latestEpochId).getOrElse {
           throw new IllegalStateException(
             s"Batch $latestEpochId was committed without end epoch offsets!")
-        }
+        }.asInstanceOf[OffsetSeq]
         committedOffsets = nextOffsets.toStreamProgress(sources)
         execCtx.batchId = latestEpochId + 1
 
@@ -210,7 +212,8 @@ class ContinuousExecution(
     val execCtx = latestExecutionContext
 
     if (execCtx.batchId > 0) {
-      AcceptsLatestSeenOffsetHandler.setLatestSeenOffsetOnSources(Some(offsets), sources)
+      AcceptsLatestSeenOffsetHandler.setLatestSeenOffsetOnSources(
+        Some(offsets), sources, Map.empty[String, SparkDataStream])
     }
 
     val withNewSources: LogicalPlan = logicalPlan transform {
