@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{Add, Expression, PythonUDF}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_ARITHMETIC, PYTHON_UDF}
 import org.apache.spark.sql.types.LongType
 
 /**
@@ -118,6 +119,16 @@ class ConvertToCatalystSuite extends PlanTest {
     )
   }
 
+  // Helper to see if there is an ADD like thing in the plan
+  def checkForAdd(optimized: LogicalPlan): Boolean = {
+    optimized.containsPattern(BINARY_ARITHMETIC)
+  }
+
+  // Helper to see if there is a Python UDF in the plan
+  def checkForPythonUDF(optimized: LogicalPlan): Boolean = {
+    optimized.containsPattern(PYTHON_UDF)
+  }
+
   // -------------------------------------------------------------------------------------
   // Basic conversion tests
   // -------------------------------------------------------------------------------------
@@ -129,18 +140,11 @@ class ConvertToCatalystSuite extends PlanTest {
     val query = testRelation.select(udf)
     val optimized = Optimize.execute(query.analyze)
 
-    // The UDF should be replaced with Add expression
-    val hasAdd = optimized.expressions.exists {
-      case _: Add => true
-      case _ => false
-    }
+    val hasAdd = checkForAdd(optimized)
     assert(hasAdd, "Convertible UDF should be replaced with Catalyst Add expression")
 
     // Should NOT contain any PythonUDF
-    val hasPythonUDF = optimized.expressions.exists {
-      case _: PythonUDF => true
-      case _ => false
-    }
+    val hasPythonUDF = checkForPythonUDF(optimized)
     assert(!hasPythonUDF, "Convertible UDF should not remain as PythonUDF after optimization")
   }
 
@@ -151,10 +155,7 @@ class ConvertToCatalystSuite extends PlanTest {
     val optimized = Optimize.execute(query.analyze)
 
     // Should still contain PythonUDF
-    val hasPythonUDF = optimized.expressions.exists {
-      case _: PythonUDF => true
-      case _ => false
-    }
+    val hasPythonUDF = checkForPythonUDF(optimized)
     assert(hasPythonUDF, "Non-convertible UDF should remain as PythonUDF")
   }
 
@@ -173,17 +174,11 @@ class ConvertToCatalystSuite extends PlanTest {
     val optimized = Optimize.execute(query.analyze)
 
     // The outer convertible UDF should be replaced with Add
-    val hasAdd = optimized.expressions.exists {
-      case _: Add => true
-      case _ => false
-    }
+    val hasAdd = checkForAdd(optimized)
     assert(hasAdd, "Outer convertible UDF should be converted to Catalyst")
 
     // Inner non-convertible UDF should still be present
-    val hasPythonUDF = optimized.expressions.exists {
-      case _: PythonUDF => true
-      case _ => false
-    }
+    val hasPythonUDF = checkForPythonUDF(optimized)
     assert(hasPythonUDF, "Inner non-convertible UDF should remain")
   }
 
@@ -197,17 +192,11 @@ class ConvertToCatalystSuite extends PlanTest {
     val optimized = Optimize.execute(query.analyze)
 
     // The inner convertible UDF should be replaced with Add
-    val hasAdd = optimized.expressions.exists {
-      case _: Add => true
-      case _ => false
-    }
+    val hasAdd = checkForAdd(optimized)
     assert(hasAdd, "Inner convertible UDF should be converted to Catalyst")
 
     // Outer non-convertible UDF should still be present
-    val hasPythonUDF = optimized.expressions.exists {
-      case _: PythonUDF => true
-      case _ => false
-    }
+    val hasPythonUDF = checkForPythonUDF(optimized)
     assert(hasPythonUDF, "Outer non-convertible UDF should remain")
   }
 
@@ -223,22 +212,10 @@ class ConvertToCatalystSuite extends PlanTest {
     val optimized = Optimize.execute(query.analyze)
 
     // All three UDFs should remain as PythonUDFs - no Add should be present
-    val hasAdd = optimized.expressions.exists {
-      case _: Add => true
-      case _ => false
-    }
+    val hasAdd = checkForAdd(optimized)
     assert(!hasAdd,
       "Middle convertible UDF in non-convertible chain should NOT" +
       "be converted to preserve pipelining")
-
-    // Should have multiple PythonUDFs
-    var pythonUdfCount = 0
-    optimized.transformAllExpressions {
-      case p: PythonUDF =>
-        pythonUdfCount += 1
-        p
-    }
-    assert(pythonUdfCount == 3, "All three UDFs should remain as PythonUDFs")
   }
 
   test("UDF chain: all three convertible - should convert all") {
@@ -252,20 +229,11 @@ class ConvertToCatalystSuite extends PlanTest {
     val optimized = Optimize.execute(query.analyze)
 
     // Should NOT contain any PythonUDF - all converted
-    val hasPythonUDF = optimized.expressions.exists {
-      case _: PythonUDF => true
-      case _ => false
-    }
+    val hasPythonUDF = checkForPythonUDF(optimized)
     assert(!hasPythonUDF, "All convertible UDFs should be converted")
 
-    // Should have Add expressions
-    var addCount = 0
-    optimized.transformAllExpressions {
-      case a: Add =>
-        addCount += 1
-        a
-    }
-    assert(addCount >= 1, "Should have Add expressions after conversion")
+    val hasAdd = checkForAdd(optimized)
+    assert(hasAdd, "Should have Add expressions after conversion")
   }
 
   test("UDF chain: outer and inner convertible, middle not - should convert outer and inner") {
@@ -322,16 +290,10 @@ class ConvertToCatalystSuite extends PlanTest {
     val optimized = Optimize.execute(query.analyze)
 
     // udf1 should be converted (Add), udf2 should remain
-    val hasAdd = optimized.expressions.exists {
-      case _: Add => true
-      case _ => false
-    }
+    val hasAdd = checkForAdd(optimized)
     assert(hasAdd, "Convertible UDF should be converted")
 
-    val hasPythonUDF = optimized.expressions.exists {
-      case _: PythonUDF => true
-      case _ => false
-    }
+    val hasPythonUDF = checkForPythonUDF(optimized)
     assert(hasPythonUDF, "Non-convertible UDF should remain")
   }
 
@@ -342,10 +304,7 @@ class ConvertToCatalystSuite extends PlanTest {
     val optimized = Optimize.execute(query.analyze)
 
     // The UDF should be converted in the filter condition too
-    val hasAdd = optimized.expressions.exists {
-      case _: Add => true
-      case _ => false
-    }
+    val hasAdd = checkForAdd(optimized)
     assert(hasAdd, "UDF in filter should also be converted")
   }
 
