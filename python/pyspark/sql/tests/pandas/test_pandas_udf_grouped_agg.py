@@ -931,7 +931,8 @@ class GroupedAggPandasUDFTestsMixin:
 
     def test_iterator_grouped_agg_multiple_columns(self):
         """
-        Test iterator grouped agg pandas UDF with multiple columns using Iterator[Tuple[pd.Series, ...]].
+        Test iterator grouped agg pandas UDF with multiple columns
+        using Iterator[Tuple[pd.Series, ...]].
         """
         from typing import Iterator, Tuple
 

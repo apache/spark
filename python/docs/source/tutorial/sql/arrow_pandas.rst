@@ -343,7 +343,7 @@ The following example shows how to use ``DataFrame.groupby().cogroup().applyInPa
 
 .. literalinclude:: ../../../../../examples/src/main/python/sql/arrow.py
     :language: python
-    :lines: 326-349
+    :lines: 272-294
     :dedent: 4
 
 
