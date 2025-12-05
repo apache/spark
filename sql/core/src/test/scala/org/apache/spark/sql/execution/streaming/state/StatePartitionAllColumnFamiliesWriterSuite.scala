@@ -53,31 +53,23 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
    *
    * @param sourceDir Source checkpoint directory
    * @param targetDir Target checkpoint directory
-   * @param keySchema Key schema for the state store
-   * @param valueSchema Value schema for the state store
-   * @param keyStateEncoderSpec Key state encoder spec
+   * @param columnFamilyToSchemaMap Map of column family names to their schemas
    * @param storeName Optional store name (for stream-stream join which has multiple stores)
    */
   private def performRoundTripTest(
       sourceDir: String,
       targetDir: String,
-      keySchema: StructType,
-      valueSchema: StructType,
-      keyStateEncoderSpec: KeyStateEncoderSpec,
+      columnFamilyToSchemaMap: HashMap[String, StateStoreColFamilySchema],
       storeName: Option[String] = None): Unit = {
 
-    // Step 1: Read original state using normal reader (for comparison later)
-    val sourceReader = spark.read
-      .format("statestore")
-      .option(StateSourceOptions.PATH, sourceDir)
-    val sourceNormalData = (storeName match {
-      case Some(name) => sourceReader.option(StateSourceOptions.STORE_NAME, name)
-      case None => sourceReader
-    }).load()
-      .selectExpr("key", "value", "partition_id")
-      .collect()
+    // Determine column families to validate based on storeName and map size
+    val columnFamiliesToValidate: Seq[String] = storeName match {
+      case Some(name) => Seq(name)
+      case None if columnFamilyToSchemaMap.size > 1 => columnFamilyToSchemaMap.keys.toSeq
+      case None => Seq.empty // Will use default reader without store name filter
+    }
 
-    // Step 2: Read from source using AllColumnFamiliesReader (raw bytes)
+    // Step 1: Read from source using AllColumnFamiliesReader (raw bytes)
     val sourceBytesReader = spark.read
       .format("statestore")
       .option(StateSourceOptions.PATH, sourceDir)
@@ -92,7 +84,7 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
     assert(schema.fieldNames === Array(
       "partition_key", "key_bytes", "value_bytes", "column_family_name"))
 
-    // Step 3: Write raw bytes to target checkpoint location
+    // Step 2: Write raw bytes to target checkpoint location
     val hadoopConf = spark.sessionState.newHadoopConf()
     val targetCpLocation = StreamingUtils.resolvedCheckpointLocation(
       hadoopConf, targetDir)
@@ -102,18 +94,6 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
     val targetOffsetSeq = targetCheckpointMetadata.offsetLog.get(lastBatch).get
     val currentBatchId = lastBatch + 1
     targetCheckpointMetadata.offsetLog.add(currentBatchId, targetOffsetSeq)
-
-    // Create column family to schema map
-    val columnFamilyToSchemaMap = HashMap(
-      StateStore.DEFAULT_COL_FAMILY_NAME -> StateStoreColFamilySchema(
-        StateStore.DEFAULT_COL_FAMILY_NAME,
-        keySchemaId = 0,
-        keySchema,
-        valueSchemaId = 0,
-        valueSchema,
-        keyStateEncoderSpec = Some(keyStateEncoderSpec)
-      )
-    )
 
     val storeConf: StateStoreConf = StateStoreConf(SQLConf.get)
     val serializableHadoopConf = new SerializableConfiguration(hadoopConf)
@@ -130,9 +110,21 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
         currentBatchId,
         columnFamilyToSchemaMap
       )
-      val rowConverter = CatalystTypeConverters.createToCatalystConverter(schema)
 
-      allCFWriter.write(partition.map(rowConverter(_).asInstanceOf[InternalRow]))
+      // Use per-column-family converters when there are multiple column families
+      if (columnFamilyToSchemaMap.size > 1) {
+        val colNameToRowConverter = columnFamilyToSchemaMap.view.mapValues { colSchema =>
+          val cfSchema = SchemaUtil.getScanAllColumnFamiliesSchema(colSchema.keySchema)
+          CatalystTypeConverters.createToCatalystConverter(cfSchema)
+        }
+        allCFWriter.write(partition.map { row =>
+          val rowConverter = colNameToRowConverter(row.getString(3))
+          rowConverter(row).asInstanceOf[InternalRow]
+        })
+      } else {
+        val rowConverter = CatalystTypeConverters.createToCatalystConverter(schema)
+        allCFWriter.write(partition.map(rowConverter(_).asInstanceOf[InternalRow]))
+      }
     }
 
     // Write raw bytes to target using foreachPartition
@@ -146,18 +138,54 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
     assert(!checkpointFileExists(new File(targetDir, storeNamePath), versionToCheck, ".changelog"))
     assert(checkpointFileExists(new File(targetDir, storeNamePath), versionToCheck, ".zip"))
 
-    // Step 4: Read from target using normal reader
-    val targetReader = spark.read
-      .format("statestore")
-      .option(StateSourceOptions.PATH, targetDir)
-    val targetNormalData = (storeName match {
-      case Some(name) => targetReader.option(StateSourceOptions.STORE_NAME, name)
-      case None => targetReader
-    }).load()
-      .selectExpr("key", "value", "partition_id")
-      .collect()
+    // Step 3: Validate by reading from both source and target using normal reader
+    if (columnFamiliesToValidate.nonEmpty) {
+      // Validate each column family separately
+      columnFamiliesToValidate.foreach { cfName =>
+        val sourceNormalData = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, sourceDir)
+          .option(StateSourceOptions.STORE_NAME, cfName)
+          .load()
+          .selectExpr("key", "value", "partition_id")
+          .collect()
 
-    // Step 5: Verify data matches
+        val targetNormalData = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, targetDir)
+          .option(StateSourceOptions.STORE_NAME, cfName)
+          .load()
+          .selectExpr("key", "value", "partition_id")
+          .collect()
+
+        validateDataMatches(sourceNormalData, targetNormalData)
+      }
+    } else {
+      // Default validation without store name filter
+      val sourceNormalData = spark.read
+        .format("statestore")
+        .option(StateSourceOptions.PATH, sourceDir)
+        .load()
+        .selectExpr("key", "value", "partition_id")
+        .collect()
+
+      val targetNormalData = spark.read
+        .format("statestore")
+        .option(StateSourceOptions.PATH, targetDir)
+        .load()
+        .selectExpr("key", "value", "partition_id")
+        .collect()
+
+      validateDataMatches(sourceNormalData, targetNormalData)
+    }
+  }
+
+  /**
+   * Helper method to validate that source and target data match.
+   */
+  private def validateDataMatches(
+      sourceNormalData: Array[Row],
+      targetNormalData: Array[Row]): Unit = {
     assert(sourceNormalData.length == targetNormalData.length,
       s"Row count mismatch: source=${sourceNormalData.length}, " +
         s"target=${targetNormalData.length}")
@@ -202,6 +230,26 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
           }
         }
     }
+
+  /**
+   * Helper method to create a single-entry column family schema map.
+   * This simplifies the common case where only the default column family is used.
+   */
+  private def createSingleColumnFamilySchemaMap(
+      keySchema: StructType,
+      valueSchema: StructType,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME
+  ): HashMap[String, StateStoreColFamilySchema] = {
+    HashMap(colFamilyName -> StateStoreColFamilySchema(
+      colFamilyName,
+      keySchemaId = 0,
+      keySchema,
+      valueSchemaId = 0,
+      valueSchema,
+      keyStateEncoderSpec = Some(keyStateEncoderSpec)
+    ))
+  }
 
   /**
    * Helper method to test SPARK-54420 read and write with different state format versions
@@ -263,9 +311,7 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
           performRoundTripTest(
             sourceDir.getAbsolutePath,
             targetDir.getAbsolutePath,
-            keySchema,
-            valueSchema,
-            keyStateEncoderSpec
+            createSingleColumnFamilySchemaMap(keySchema, valueSchema, keyStateEncoderSpec)
           )
         }
       }
@@ -329,9 +375,7 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
           performRoundTripTest(
             sourceDir.getAbsolutePath,
             targetDir.getAbsolutePath,
-            keySchema,
-            valueSchema,
-            keyStateEncoderSpec
+            createSingleColumnFamilySchemaMap(keySchema, valueSchema, keyStateEncoderSpec)
           )
         }
       }
@@ -359,7 +403,7 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
 
           // Step 2: Test all 4 state stores created by stream-stream join
           // Test keyToNumValues stores (both left and right)
-          Seq("left-keyToNumValues", "right-keyToNumValues").foreach { storeName =>
+          Seq("left-keyToNumValues", "right-keyToNumValues").foreach { sName =>
             val keySchema = StructType(Array(
               StructField("key", IntegerType)
             ))
@@ -372,15 +416,13 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
             performRoundTripTest(
               sourceDir.getAbsolutePath,
               targetDir.getAbsolutePath,
-              keySchema,
-              valueSchema,
-              keyStateEncoderSpec,
-              storeName = Some(storeName)
+              createSingleColumnFamilySchemaMap(keySchema, valueSchema, keyStateEncoderSpec),
+              storeName = Some(sName)
             )
           }
 
           // Test keyWithIndexToValue stores (both left and right)
-          Seq("left-keyWithIndexToValue", "right-keyWithIndexToValue").foreach { storeName =>
+          Seq("left-keyWithIndexToValue", "right-keyWithIndexToValue").foreach { sName =>
             val keySchema = StructType(Array(
               StructField("key", IntegerType, nullable = false),
               StructField("index", LongType)
@@ -403,10 +445,8 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
             performRoundTripTest(
               sourceDir.getAbsolutePath,
               targetDir.getAbsolutePath,
-              keySchema,
-              valueSchema,
-              keyStateEncoderSpec,
-              storeName = Some(storeName)
+              createSingleColumnFamilySchemaMap(keySchema, valueSchema, keyStateEncoderSpec),
+              storeName = Some(sName)
             )
           }
         }
@@ -414,6 +454,69 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
     }
   }
 
+  private def testStreamStreamJoinV3RoundTrip(): Unit = {
+    withSQLConf(
+      SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "3"
+    ) {
+      withTempDir { sourceDir =>
+        withTempDir { targetDir =>
+          val inputData = MemoryStream[(Int, Long)]
+          val query = getStreamStreamJoinQuery(inputData)
+
+          def runQuery(checkpointLocation: String, roundsOfData: Int): Unit = {
+            val dataActions = (1 to roundsOfData).flatMap { _ =>
+              Seq(
+                AddData(inputData, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
+                ProcessAllAvailable()
+              )
+            }
+            testStream(query)(
+              (Seq(StartStream(checkpointLocation = checkpointLocation)) ++
+                dataActions ++
+                Seq(StopStream)): _*
+            )
+          }
+
+          runQuery(sourceDir.getAbsolutePath, 2)
+          runQuery(targetDir.getAbsolutePath, 1)
+
+          // Define schemas for V3 join state stores
+          val keyToNumValuesKeySchema = StructType(Array(StructField("key", IntegerType)))
+          val keyToNumValuesValueSchema = StructType(Array(StructField("value", LongType)))
+          val keyToNumValuesEncoderSpec = NoPrefixKeyStateEncoderSpec(keyToNumValuesKeySchema)
+
+          val keyWithIndexKeySchema = StructType(Array(
+            StructField("key", IntegerType, nullable = false),
+            StructField("index", LongType)
+          ))
+          val keyWithIndexValueSchema = StructType(Array(
+            StructField("value", IntegerType, nullable = false),
+            StructField("time", TimestampType, nullable = false),
+            StructField("matched", BooleanType)
+          ))
+          val keyWithIndexEncoderSpec = NoPrefixKeyStateEncoderSpec(keyWithIndexKeySchema)
+
+          // Build column family to schema map for all 4 join stores
+          val columnFamilyToSchemaMap =
+            Seq("left-keyToNumValues", "right-keyToNumValues").map { name =>
+              createSingleColumnFamilySchemaMap(
+                keyToNumValuesKeySchema, keyToNumValuesValueSchema, keyToNumValuesEncoderSpec, name)
+            }.reduce(_ ++ _) ++
+            Seq("left-keyWithIndexToValue", "right-keyWithIndexToValue").map { name =>
+              createSingleColumnFamilySchemaMap(
+                keyWithIndexKeySchema, keyWithIndexValueSchema, keyWithIndexEncoderSpec, name)
+            }.reduce(_ ++ _)
+
+          // Perform round-trip test using common helper
+          performRoundTripTest(
+            sourceDir.getAbsolutePath,
+            targetDir.getAbsolutePath,
+            columnFamilyToSchemaMap
+          )
+        }
+      }
+    }
+  }
   /**
    * Helper method to test round-trip for flatMapGroupsWithState with different versions.
    */
@@ -468,9 +571,7 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
           performRoundTripTest(
             sourceDir.getAbsolutePath,
             targetDir.getAbsolutePath,
-            keySchema,
-            valueSchema,
-            keyStateEncoderSpec
+            createSingleColumnFamilySchemaMap(keySchema, valueSchema, keyStateEncoderSpec)
           )
         }
       }
@@ -537,9 +638,7 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
           performRoundTripTest(
             sourceDir.getAbsolutePath,
             targetDir.getAbsolutePath,
-            keySchema,
-            valueSchema,
-            keyStateEncoderSpec
+            createSingleColumnFamilySchemaMap(keySchema, valueSchema, keyStateEncoderSpec)
           )
         }
       }
@@ -573,9 +672,7 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
           performRoundTripTest(
             sourceDir.getAbsolutePath,
             targetDir.getAbsolutePath,
-            keySchema,
-            valueSchema,
-            keyStateEncoderSpec
+            createSingleColumnFamilySchemaMap(keySchema, valueSchema, keyStateEncoderSpec)
           )
         }
       }
@@ -620,9 +717,7 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
           performRoundTripTest(
             sourceDir.getAbsolutePath,
             targetDir.getAbsolutePath,
-            keySchema,
-            valueSchema,
-            keyStateEncoderSpec
+            createSingleColumnFamilySchemaMap(keySchema, valueSchema, keyStateEncoderSpec)
           )
         }
       }
@@ -657,9 +752,7 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
           performRoundTripTest(
             sourceDir.getAbsolutePath,
             targetDir.getAbsolutePath,
-            keySchema,
-            valueSchema,
-            keyStateEncoderSpec
+            createSingleColumnFamilySchemaMap(keySchema, valueSchema, keyStateEncoderSpec)
           )
         }
       }
@@ -675,6 +768,10 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
       testWithChangelogConfig(s"SPARK-54420: stream-stream join state ver $version") {
         testStreamStreamJoinRoundTrip(version)
       }
+    }
+
+    testWithChangelogConfig("SPARK-54420: stream-stream join state ver 3") {
+      testStreamStreamJoinV3RoundTrip()
     }
   } // End of foreach loop for changelog checkpointing dimension
 }
