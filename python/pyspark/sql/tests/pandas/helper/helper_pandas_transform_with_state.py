@@ -17,7 +17,10 @@
 
 from abc import abstractmethod
 import sys
-from typing import Iterator
+from typing import (
+    Iterator,
+    NamedTuple,
+)
 import unittest
 from pyspark.errors import PySparkRuntimeError
 from pyspark.sql.streaming import StatefulProcessor, StatefulProcessorHandle
@@ -1663,7 +1666,6 @@ class RowMinEventTimeStatefulProcessor(StatefulProcessor):
 
 # A stateful processor that contains composite python type inside Value, List and Map state variable
 class PandasStatefulProcessorCompositeType(StatefulProcessor):
-    from typing import NamedTuple
 
     class Address(NamedTuple):
         road_id: int
@@ -1788,7 +1790,6 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
 
 
 class RowStatefulProcessorCompositeType(StatefulProcessor):
-    from typing import NamedTuple
 
     class Address(NamedTuple):
         road_id: int
