@@ -24,10 +24,8 @@ import scala.collection.immutable.HashMap
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
 import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.DIR_NAME_STATE
 import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreColFamilySchema, StateStoreConf, StateStoreId, StateStoreProvider, StateStoreProviderId}
 
@@ -43,14 +41,14 @@ import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreCol
  * commit all changes as a snapshot
  */
 class StatePartitionAllColumnFamiliesWriter(
-     storeConf: StateStoreConf,
-     hadoopConf: Configuration,
-     partitionId: Int,
-     targetCpLocation: String,
-     operatorId: Int,
-     storeName: String,
-     batchId: Long,
-     columnFamilyToSchemaMap: HashMap[String, StateStoreColFamilySchema]) {
+    storeConf: StateStoreConf,
+    hadoopConf: Configuration,
+    partitionId: Int,
+    targetCpLocation: String,
+    operatorId: Int,
+    storeName: String,
+    currentBatchId: Long,
+    columnFamilyToSchemaMap: HashMap[String, StateStoreColFamilySchema]) {
   private val defaultSchema = {
     columnFamilyToSchemaMap.getOrElse(
       StateStore.DEFAULT_COL_FAMILY_NAME,
@@ -63,11 +61,6 @@ class StatePartitionAllColumnFamiliesWriter(
     columnFamilyToSchemaMap.view.mapValues(_.keySchema.length)
   private val columnFamilyToValueSchemaLenMap: MapView[String, Int] =
     columnFamilyToSchemaMap.view.mapValues(_.valueSchema.length)
-
-  private val rowConverter = {
-    val schema = SchemaUtil.getScanAllColumnFamiliesSchema(defaultSchema.keySchema)
-    CatalystTypeConverters.createToCatalystConverter(schema)
-  }
 
   protected lazy val provider: StateStoreProvider = {
     val stateCheckpointLocation = new Path(targetCpLocation, DIR_NAME_STATE).toString
@@ -91,7 +84,7 @@ class StatePartitionAllColumnFamiliesWriter(
     // We create the empty store AT version, and the next commit will
     // produce version + 1
     provider.getStore(
-      batchId + 1,
+      currentBatchId,
       stateStoreCkptId = None,
       loadEmpty = true
     )
@@ -102,9 +95,9 @@ class StatePartitionAllColumnFamiliesWriter(
   // - key_bytes, BinaryType
   // - value_bytes, BinaryType
   // - column_family_name, StringType
-  def put(rows: Iterator[Row]): Unit = {
+  def write(rows: Iterator[InternalRow]): Unit = {
     try {
-      rows.foreach(row => putRaw(row))
+      rows.foreach(row => writeRow(row))
       stateStore.commit()
     } finally {
       if (!stateStore.hasCommitted) {
@@ -113,8 +106,7 @@ class StatePartitionAllColumnFamiliesWriter(
     }
   }
 
-  private def putRaw(rawRecord: Row): Unit = {
-    val record = rowConverter(rawRecord).asInstanceOf[InternalRow]
+  private def writeRow(record: InternalRow): Unit = {
     assert(record.numFields == 4,
         s"Invalid record schema: expected 4 fields (partition_key, key_bytes, value_bytes, " +
           s"column_family_name), got ${record.numFields}")

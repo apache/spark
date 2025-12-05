@@ -22,6 +22,7 @@ import scala.collection.immutable.HashMap
 
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryCheckpointMetadata}
 import org.apache.spark.sql.execution.streaming.state.{KeyStateEncoderSpec, NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, RocksDBStateStoreProvider, StateStore, StateStoreColFamilySchema, StateStoreConf, StateStoreId}
 import org.apache.spark.sql.execution.streaming.utils.StreamingUtils
@@ -43,6 +44,7 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
     super.beforeAll()
     spark.conf.set(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
       classOf[RocksDBStateStoreProvider].getName)
+    spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "2")
   }
 
   /**
@@ -124,10 +126,12 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
         targetCpLocation,
         0,
         storeName.getOrElse(StateStoreId.DEFAULT_STORE_NAME),
-        lastBatch,
+        lastBatch + 1,
         columnFamilyToSchemaMap
       )
-      allCFWriter.put(partition)
+      val rowConverter = CatalystTypeConverters.createToCatalystConverter(schema)
+
+      allCFWriter.write(partition.map(rowConverter(_).asInstanceOf[InternalRow]))
     }
 
     // Write raw bytes to target using foreachPartition
@@ -137,8 +141,9 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
     val latestCommit = targetCheckpointMetadata.commitLog.get(lastBatch).get
     targetCheckpointMetadata.commitLog.add(lastBatch + 1, latestCommit)
     val batchToCheck = lastBatch + 2
-    assert(!checkpointFileExists(new File(targetDir, "state/0/0"), batchToCheck, ".changelog"))
-    assert(checkpointFileExists(new File(targetDir, "state/0/0"), batchToCheck, ".zip"))
+    val storeNamePath = s"state/0/0${storeName.fold("")("/" + _)}"
+    assert(!checkpointFileExists(new File(targetDir, storeNamePath), batchToCheck, ".changelog"))
+    assert(checkpointFileExists(new File(targetDir, storeNamePath), batchToCheck, ".zip"))
 
     // Step 4: Read from target using normal reader
     val targetReader = spark.read
@@ -181,6 +186,9 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
     private def checkpointFileExists(dir: File, version: Long, suffix: String): Boolean = {
       Option(dir.listFiles)
         .getOrElse(Array.empty)
+        .map { file =>
+          file
+        }
         .filter { file =>
           file.getName.endsWith(suffix) && !file.getName.startsWith(".")
         }
@@ -200,8 +208,7 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
    * @param stateVersion The state format version (1 or 2)
    */
   private def testRoundTripForAggrStateVersion(stateVersion: Int): Unit = {
-    withSQLConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION.key -> stateVersion.toString,
-      SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
+    withSQLConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION.key -> stateVersion.toString) {
       withTempDir { sourceDir =>
         withTempDir { targetDir =>
           // Step 1: Create state by running a streaming aggregation
@@ -270,8 +277,7 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
    * @param stateVersion The state format version (1 or 2)
    */
   private def testCompositeKeyRoundTripForStateVersion(stateVersion: Int): Unit = {
-    withSQLConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION.key -> stateVersion.toString,
-      SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
+    withSQLConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION.key -> stateVersion.toString) {
       withTempDir { sourceDir =>
         withTempDir { targetDir =>
           // Step 1: Create state by running a composite key streaming aggregation
@@ -624,41 +630,38 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
     }
 
     testWithChangelogConfig("SPARK-54420: dropDuplicates") {
-      withSQLConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION.key -> "2",
-        SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
-        withTempDir { sourceDir =>
-          withTempDir { targetDir =>
+      withTempDir { sourceDir =>
+        withTempDir { targetDir =>
 
-            // Step 1: Create state by running a streaming aggregation
-            runDropDuplicatesQuery(sourceDir.getAbsolutePath)
-            val inputData: MemoryStream[Int] = MemoryStream[Int]
-            val stream = getDropDuplicatesQuery(inputData)
-            testStream(stream, OutputMode.Append)(
-              StartStream(checkpointLocation = targetDir.getAbsolutePath),
-              AddData(inputData, (1 to 5).flatMap(_ => (10 to 15)): _*),
-              CheckAnswer(10 to 15: _*),
-              assertNumStateRows(total = 6, updated = 6)
-            )
+          // Step 1: Create state by running a streaming aggregation
+          runDropDuplicatesQuery(sourceDir.getAbsolutePath)
+          val inputData: MemoryStream[Int] = MemoryStream[Int]
+          val stream = getDropDuplicatesQuery(inputData)
+          testStream(stream, OutputMode.Append)(
+            StartStream(checkpointLocation = targetDir.getAbsolutePath),
+            AddData(inputData, (1 to 5).flatMap(_ => (10 to 15)): _*),
+            CheckAnswer(10 to 15: _*),
+            assertNumStateRows(total = 6, updated = 6)
+          )
 
-            // Step 2: Define schemas for dropDuplicates (state version 2)
-            val keySchema = StructType(Array(
-              StructField("value", IntegerType, nullable = false),
-              StructField("eventTime", org.apache.spark.sql.types.TimestampType)
-            ))
-            val valueSchema = StructType(Array(
-              StructField("__dummy__", NullType)
-            ))
-            val keyStateEncoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
+          // Step 2: Define schemas for dropDuplicates (state version 2)
+          val keySchema = StructType(Array(
+            StructField("value", IntegerType, nullable = false),
+            StructField("eventTime", org.apache.spark.sql.types.TimestampType)
+          ))
+          val valueSchema = StructType(Array(
+            StructField("__dummy__", NullType)
+          ))
+          val keyStateEncoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
 
-            // Perform round-trip test using common helper
-            performRoundTripTest(
-              sourceDir.getAbsolutePath,
-              targetDir.getAbsolutePath,
-              keySchema,
-              valueSchema,
-              keyStateEncoderSpec
-            )
-          }
+          // Perform round-trip test using common helper
+          performRoundTripTest(
+            sourceDir.getAbsolutePath,
+            targetDir.getAbsolutePath,
+            keySchema,
+            valueSchema,
+            keyStateEncoderSpec
+          )
         }
       }
     }
