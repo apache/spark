@@ -3267,14 +3267,6 @@ def read_udfs(pickleSer, infile, eval_type):
     ):
         import pyarrow as pa
 
-        udfs = []
-        for i in range(num_udfs):
-            udfs.append(
-                read_single_udf(
-                    pickleSer, infile, eval_type, runner_conf, udf_index=i, profiler=profiler
-                )
-            )
-
         # For SQL_GROUPED_AGG_ARROW_UDF and SQL_WINDOW_AGG_ARROW_UDF,
         # convert iterator of batch columns to a concatenated RecordBatch
         def mapper(a):
