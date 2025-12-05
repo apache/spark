@@ -22,6 +22,7 @@ import java.util.Locale
 import scala.collection.mutable
 
 import org.apache.spark.internal.LogKeys.{AGGREGATE_FUNCTIONS, COLUMN_NAMES, GROUP_BY_EXPRS, JOIN_CONDITION, JOIN_TYPE, POST_SCAN_FILTERS, PUSHED_FILTERS, RELATION_NAME, RELATION_OUTPUT}
+// import org.apache.spark.sql.catalyst.analysis.resolver.OrdinalResolver
 import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, Expression, ExprId, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
@@ -327,6 +328,37 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       pushVariantExtractions(p, projectList, filters, sHolder, builder)
   }
 
+  /**
+   * Converts an ordinal path to a field name path.
+   *
+   * @param structType The top-level struct type
+   * @param ordinals The ordinal path (e.g., [1, 1] for nested.field)
+   * @return The field name path (e.g., ["nested", "field"])
+   */
+  private def getColumnName(structType: StructType, ordinals: Seq[Int]): Seq[String] = {
+    ordinals match {
+      case Seq() =>
+        // Base case: no more ordinals
+        Seq.empty
+      case ordinal +: rest =>
+        // Get the field at this ordinal
+        val field = structType.fields(ordinal)
+        if (rest.isEmpty) {
+          // Last ordinal in the path
+          Seq(field.name)
+        } else {
+          // Recurse into nested struct
+          field.dataType match {
+            case nestedStruct: StructType =>
+              field.name +: getColumnName(nestedStruct, rest)
+            case _ =>
+              throw new IllegalArgumentException(
+                s"Expected StructType at field '${field.name}' but got ${field.dataType}")
+          }
+        }
+    }
+  }
+
   private def pushVariantExtractions(
       originalPlan: LogicalPlan,
       projectList: Seq[NamedExpression],
@@ -360,6 +392,35 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
     // Build individual VariantExtraction for each field access
     // Track which extraction corresponds to which (attr, field, ordinal)
+    val extractionInfo = schemaAttributes.flatMap { topAttr =>
+      val variantFields = variants.mapping.get(topAttr.exprId)
+      if (variantFields.isEmpty || variantFields.get.isEmpty) {
+        // No variant fields for this attribute
+        Seq.empty
+      } else {
+        variantFields.get.toSeq.flatMap { case (pathToVariant, fields) =>
+          val columnName = if (pathToVariant.isEmpty) {
+            Seq(topAttr.name).toArray
+          } else {
+            getColumnName(topAttr.dataType.asInstanceOf[StructType], pathToVariant)
+              .toArray
+          }
+          fields.toArray.sortBy(_._2).map { case (field, ordinal) =>
+            val extraction = new org.apache.spark.sql.connector.read.VariantExtractionImpl(
+              columnName,
+              field.path.path,
+              field.targetType
+            )
+            (extraction, topAttr, field, ordinal)
+          }
+        }
+      }
+    }
+
+    // scalastyle:off println
+    println(s"Extraction Info: $extractionInfo")
+
+    /*
     val extractionInfo = schemaAttributes.flatMap { attr =>
       variants.mapping.get(attr.exprId).flatMap(_.get(Nil)).toSeq.flatMap { fields =>
         fields.toArray.sortBy(_._2).map { case (field, ordinal) =>
@@ -372,6 +433,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         }
       }
     }
+     */
 
     // Call the API to push down variant extractions
     if (extractionInfo.isEmpty) return originalPlan
