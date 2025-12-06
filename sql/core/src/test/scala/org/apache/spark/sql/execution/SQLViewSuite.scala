@@ -50,6 +50,26 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("view can be dropped using DROP TABLE") {
+    val viewName = "v"
+    withView(viewName) {
+      sql(s"DROP VIEW IF EXISTS $viewName")
+      // First, create a simple view.
+      sql(s"CREATE VIEW $viewName AS SELECT 1 AS a")
+      checkAnswer(sql(s"SELECT * FROM $viewName"), Row(1))
+      // Then, drop the view using DROP TABLE.
+      sql(s"DROP TABLE $viewName")
+      // Finally, verify that the view is dropped.
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SELECT * FROM $viewName")
+        },
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" -> s"`$viewName`"),
+        ExpectedContext(s"$viewName", 14, 13 + viewName.length))
+    }
+  }
+
   test("create a permanent view on a permanent view") {
     withView("jtv1", "jtv2") {
       sql("CREATE VIEW jtv1 AS SELECT * FROM jt WHERE id > 3")
