@@ -204,8 +204,16 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
 
       val supportNestedPredicatePushdown =
         DataSourceUtils.supportNestedPredicatePushdown(fsRelation)
+      val translatableExprs = mutable.ArrayBuffer.empty[Expression]
       val pushedFilters = dataFilters
-        .flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown))
+        .flatMap { filter =>
+          val translated =
+            DataSourceStrategy.translateFilter(filter, supportNestedPredicatePushdown)
+          if (translated.nonEmpty) {
+            translatableExprs += filter
+          }
+          translated
+        }
       logInfo(log"Pushed Filters: ${MDC(PUSHED_FILTERS, pushedFilters.mkString(","))}")
 
       // Predicates with both partition keys and attributes need to be evaluated after the scan.
@@ -353,7 +361,10 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       }.getOrElse(scan)
 
       // bottom-most filters are put in the left of the list.
-      val finalFilters = afterScanFilters.toSeq.reduceOption(expressions.And).toSeq ++ stayUpFilters
+      val(translatableExprsInFilters, untranslatableExprsInFilters) =
+        afterScanFilters.toSeq.partition(ExpressionSet(translatableExprs))
+      val finalFilters = (translatableExprsInFilters ++ untranslatableExprsInFilters)
+        .reduceOption(expressions.And).toSeq ++ stayUpFilters
       val withFilter = finalFilters.foldLeft(withMetadataProjections)((plan, cond) => {
         execution.FilterExec(cond, plan)
       })
