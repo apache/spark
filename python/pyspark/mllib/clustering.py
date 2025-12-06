@@ -76,7 +76,7 @@ class BisectingKMeansModel(JavaModelWrapper):
     """
 
     def __init__(self, java_model: "JavaObject"):
-        super(BisectingKMeansModel, self).__init__(java_model)
+        super().__init__(java_model)
         self.centers = [c.toArray() for c in self.call("clusterCenters")]
 
     @property
@@ -943,7 +943,7 @@ class StreamingKMeansModel(KMeansModel):
     """
 
     def __init__(self, clusterCenters: List["VectorLike"], clusterWeights: "VectorLike"):
-        super(StreamingKMeansModel, self).__init__(centers=clusterCenters)
+        super().__init__(centers=clusterCenters)
         self._clusterWeights = list(clusterWeights)  # type: ignore[arg-type]
 
     @property

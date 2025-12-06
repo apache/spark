@@ -33,11 +33,11 @@ class ResampleTimezoneMixin:
     def setUpClass(cls):
         cls.timezone = os.environ.get("TZ", None)
         os.environ["TZ"] = "America/New_York"
-        super(ResampleTimezoneMixin, cls).setUpClass()
+        super().setUpClass()
 
     @classmethod
     def tearDownClass(cls):
-        super(ResampleTimezoneMixin, cls).tearDownClass()
+        super().tearDownClass()
         if cls.timezone is not None:
             os.environ["TZ"] = cls.timezone
 
