@@ -1109,15 +1109,15 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     }
   }
 
-  test("SPARK-40819: parquet file with TIMESTAMP(NANOS, true) (with default nanosAsLong=false)") {
+  test("SPARK-40819 & SPARK-44988: parquet file with TIMESTAMP(NANOS, true) " +
+    "(with default nanosAsLong=false)") {
+    // After SPARK-44988, TIMESTAMP(NANOS,*) is always converted to LongType regardless of
+    // nanosAsLong config to ensure files are readable
+    val tsAttribute = "birthday"
     val testDataPath = testFile("test-data/timestamp-nanos.parquet")
-    checkError(
-      exception = intercept[AnalysisException] {
-        spark.read.parquet(testDataPath).collect()
-      },
-      condition = "PARQUET_TYPE_ILLEGAL",
-      parameters = Map("parquetType" -> "INT64 (TIMESTAMP(NANOS,true))")
-    )
+    val data = spark.read.parquet(testDataPath).select(tsAttribute)
+    assert(data.schema.fields.head.dataType == LongType)
+    assert(data.orderBy(desc(tsAttribute)).take(1).head.getAs[Long](0) == 1668537129123534758L)
   }
 
   test("SPARK-47261: parquet file with unsupported type") {
