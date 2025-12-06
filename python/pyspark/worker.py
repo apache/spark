@@ -3308,9 +3308,7 @@ def read_udfs(pickleSer, infile, eval_type):
         # support combining multiple UDFs.
         assert num_udfs == 1
 
-        arg_offsets, f = read_single_udf(
-            pickleSer, infile, eval_type, runner_conf, udf_index=0, profiler=profiler
-        )
+        arg_offsets, f = udfs[0]
 
         # Convert to iterator of pandas Series:
         # - Iterator[pd.Series] for single column
