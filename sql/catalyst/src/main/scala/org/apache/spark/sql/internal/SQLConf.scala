@@ -241,6 +241,19 @@ object SQLConf {
     }
   }
 
+  val DELAY_LAST_RESORT_COLUMN_RESOLUTION =
+    buildConf("spark.sql.analyzer.delayLastResortColumnResolution")
+    .internal()
+    .doc(
+      "When true, delay resolution of a column to a local/session variable or outer reference " +
+        "until all unresolved aliases that come before the column in the project list are " +
+        "resolved. This is needed in order to prevent incorrectly resolving a column to a " +
+        "variable or outer reference instead of a lateral column reference (see SPARK-53733)."
+    )
+    .version("4.1.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val PREFER_COLUMN_OVER_LCA_IN_ARRAY_INDEX =
     buildConf("spark.sql.analyzer.preferColumnOverLcaInArrayIndex")
     .internal()
@@ -248,6 +261,7 @@ object SQLConf {
       "When true, prefer the column from the underlying relation over the lateral column alias " +
       "reference with the same name (see SPARK-53734)."
     )
+    .version("4.1.0")
     .booleanConf
     .createWithDefault(true)
 
