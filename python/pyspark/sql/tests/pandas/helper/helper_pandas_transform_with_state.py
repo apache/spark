@@ -17,7 +17,10 @@
 
 from abc import abstractmethod
 import sys
-from typing import Iterator
+from typing import (
+    Iterator,
+    NamedTuple,
+)
 import unittest
 from pyspark.errors import PySparkRuntimeError
 from pyspark.sql.streaming import StatefulProcessor, StatefulProcessorHandle
@@ -1663,10 +1666,15 @@ class RowMinEventTimeStatefulProcessor(StatefulProcessor):
 
 # A stateful processor that contains composite python type inside Value, List and Map state variable
 class PandasStatefulProcessorCompositeType(StatefulProcessor):
+    class Address(NamedTuple):
+        road_id: int
+        city: str
+
     TAGS = [["dummy1", "dummy2"], ["dummy3"]]
     METADATA = [{"key": "env", "value": "prod"}, {"key": "region", "value": "us-west"}]
     ATTRIBUTES_MAP = {"key1": [1], "key2": [10]}
     CONFS_MAP = {"e1": {"e2": 5, "e3": 10}}
+    ADDRESS = [Address(1, "Seattle"), Address(3, "SF")]
 
     def init(self, handle: StatefulProcessorHandle) -> None:
         obj_schema = StructType(
@@ -1678,6 +1686,17 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
                     ArrayType(
                         StructType(
                             [StructField("key", StringType()), StructField("value", StringType())]
+                        )
+                    ),
+                ),
+                StructField(
+                    "address",
+                    ArrayType(
+                        StructType(
+                            [
+                                StructField("road_id", IntegerType()),
+                                StructField("city", StringType()),
+                            ]
                         )
                     ),
                 ),
@@ -1700,25 +1719,28 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
 
     def _update_obj_state(self, total_temperature):
         if self.obj_state.exists():
-            ids, tags, metadata = self.obj_state.get()
+            ids, tags, metadata, address = self.obj_state.get()
             assert tags == self.TAGS, f"Tag mismatch: {tags}"
             assert metadata == [Row(**m) for m in self.METADATA], f"Metadata mismatch: {metadata}"
+            assert address == [
+                Row(**e._asdict()) for e in self.ADDRESS
+            ], f"Address mismatch: {address}"
             ids = [int(x + total_temperature) for x in ids]
         else:
             ids = [0]
-        self.obj_state.update((ids, self.TAGS, self.METADATA))
+        self.obj_state.update((ids, self.TAGS, self.METADATA, self.ADDRESS))
         return ids
 
     def _update_list_state(self, total_temperature, initial_obj):
         existing_list = self.list_state.get()
         updated_list = []
-        for ids, tags, metadata in existing_list:
+        for ids, tags, metadata, address in existing_list:
             ids.append(total_temperature)
-            updated_list.append((ids, tags, [row.asDict() for row in metadata]))
+            updated_list.append((ids, tags, [row.asDict() for row in metadata], address))
         if not updated_list:
             updated_list.append(initial_obj)
         self.list_state.put(updated_list)
-        return [id_val for ids, _, _ in updated_list for id_val in ids]
+        return [id_val for ids, _, _, _ in updated_list for id_val in ids]
 
     def _update_map_state(self, key, total_temperature):
         if not self.map_state.containsKey(key):
@@ -1736,7 +1758,7 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
 
         updated_ids = self._update_obj_state(total_temperature)
         flattened_ids = self._update_list_state(
-            total_temperature, (updated_ids, self.TAGS, self.METADATA)
+            total_temperature, (updated_ids, self.TAGS, self.METADATA, self.ADDRESS)
         )
         attributes_map, confs_map = self._update_map_state(key, total_temperature)
 
@@ -1767,10 +1789,15 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
 
 
 class RowStatefulProcessorCompositeType(StatefulProcessor):
+    class Address(NamedTuple):
+        road_id: int
+        city: str
+
     TAGS = [["dummy1", "dummy2"], ["dummy3"]]
     METADATA = [{"key": "env", "value": "prod"}, {"key": "region", "value": "us-west"}]
     ATTRIBUTES_MAP = {"key1": [1], "key2": [10]}
     CONFS_MAP = {"e1": {"e2": 5, "e3": 10}}
+    ADDRESS = [Address(1, "Seattle"), Address(3, "SF")]
 
     def init(self, handle: StatefulProcessorHandle) -> None:
         obj_schema = StructType(
@@ -1782,6 +1809,17 @@ class RowStatefulProcessorCompositeType(StatefulProcessor):
                     ArrayType(
                         StructType(
                             [StructField("key", StringType()), StructField("value", StringType())]
+                        )
+                    ),
+                ),
+                StructField(
+                    "address",
+                    ArrayType(
+                        StructType(
+                            [
+                                StructField("road_id", IntegerType()),
+                                StructField("city", StringType()),
+                            ]
                         )
                     ),
                 ),
@@ -1804,25 +1842,28 @@ class RowStatefulProcessorCompositeType(StatefulProcessor):
 
     def _update_obj_state(self, total_temperature):
         if self.obj_state.exists():
-            ids, tags, metadata = self.obj_state.get()
+            ids, tags, metadata, address = self.obj_state.get()
             assert tags == self.TAGS, f"Tag mismatch: {tags}"
             assert metadata == [Row(**m) for m in self.METADATA], f"Metadata mismatch: {metadata}"
+            assert address == [
+                Row(**e._asdict()) for e in self.ADDRESS
+            ], f"Address mismatch: {address}"
             ids = [int(x + total_temperature) for x in ids]
         else:
             ids = [0]
-        self.obj_state.update((ids, self.TAGS, self.METADATA))
+        self.obj_state.update((ids, self.TAGS, self.METADATA, self.ADDRESS))
         return ids
 
     def _update_list_state(self, total_temperature, initial_obj):
         existing_list = self.list_state.get()
         updated_list = []
-        for ids, tags, metadata in existing_list:
+        for ids, tags, metadata, address in existing_list:
             ids.append(total_temperature)
-            updated_list.append((ids, tags, [row.asDict() for row in metadata]))
+            updated_list.append((ids, tags, [row.asDict() for row in metadata], address))
         if not updated_list:
             updated_list.append(initial_obj)
         self.list_state.put(updated_list)
-        return [id_val for ids, _, _ in updated_list for id_val in ids]
+        return [id_val for ids, _, _, _ in updated_list for id_val in ids]
 
     def _update_map_state(self, key, total_temperature):
         if not self.map_state.containsKey(key):
@@ -1840,7 +1881,7 @@ class RowStatefulProcessorCompositeType(StatefulProcessor):
 
         updated_ids = self._update_obj_state(total_temperature)
         flattened_ids = self._update_list_state(
-            total_temperature, (updated_ids, self.TAGS, self.METADATA)
+            total_temperature, (updated_ids, self.TAGS, self.METADATA, self.ADDRESS)
         )
         attributes_map, confs_map = self._update_map_state(key, total_temperature)
 
