@@ -120,6 +120,9 @@ package object client {
         "org.apache.zookeeper:zookeeper" :: Nil ++
         {
           if (!Utils.isTesting) {
+            // HiveClientImpl#runHive which is used for testing refers
+            // `org.apache.hadoop.hive.ql.DriverContext` indirectly and `DriverContext` refers
+            // Tez APIs.
             Seq("org.apache.tez:tez-api")
           } else {
             Seq.empty
