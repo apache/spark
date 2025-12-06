@@ -185,4 +185,18 @@ class ComplexTypesSuite extends QueryTest with SharedSparkSession {
     val dataType = createNamedStruct.dataType
     assert(dataType.asInstanceOf[StructType].fields.head.metadata == metadata)
   }
+
+  test("SPARK-53396: Throw proper error message when child of GetStructField is not StructType") {
+    val withInvalidChildSchema = GetStructField(Literal("col1"), 1)
+    checkError(
+      exception = intercept[AnalysisException] {
+        withInvalidChildSchema.dataType
+      },
+      condition = "INVALID_SCHEMA.NON_STRUCT_TYPE",
+      parameters = Map(
+        "inputSchema" -> "\"col1\"",
+        "dataType" -> "\"STRING\""
+      )
+    )
+  }
 }
