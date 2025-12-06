@@ -238,7 +238,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _files: Seq[String] = _
   private var _archives: Seq[String] = _
   private var _shutdownHookRef: AnyRef = _
-  private var _statusStore: AppStatusStore = _
+  private[spark] var _statusStore: AppStatusStore = _
   private var _heartbeater: Heartbeater = _
   private var _resources: immutable.Map[String, ResourceInformation] = _
   private var _shuffleDriverComponents: ShuffleDriverComponents = _
