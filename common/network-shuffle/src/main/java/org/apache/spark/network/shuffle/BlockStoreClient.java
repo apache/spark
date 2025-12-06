@@ -69,15 +69,13 @@ public abstract class BlockStoreClient implements Closeable {
       String host,
       int port,
       String execId,
-      int shuffleId,
-      long mapId,
-      int reduceId,
+      String blockId,
       long checksum,
       String algorithm) {
     try {
       TransportClient client = clientFactory.createClient(host, port);
       ByteBuffer response = client.sendRpcSync(
-        new DiagnoseCorruption(appId, execId, shuffleId, mapId, reduceId, checksum, algorithm)
+        new DiagnoseCorruption(appId, execId, blockId, checksum, algorithm)
           .toByteBuffer(),
         transportConf.connectionTimeoutMs()
       );

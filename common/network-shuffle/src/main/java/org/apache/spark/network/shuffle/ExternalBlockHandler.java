@@ -52,6 +52,7 @@ import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.shuffle.checksum.Cause;
+import static org.apache.spark.network.shuffle.BlockIdUtils.*;
 import org.apache.spark.network.shuffle.protocol.*;
 import org.apache.spark.network.util.TimerWithCustomTimeUnit;
 import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
@@ -231,7 +232,7 @@ public class ExternalBlockHandler extends RpcHandler
     } else if (msgObj instanceof DiagnoseCorruption msg) {
       checkAuth(client, msg.appId);
       Cause cause = blockManager.diagnoseShuffleBlockCorruption(
-        msg.appId, msg.execId, msg.shuffleId, msg.mapId, msg.reduceId, msg.checksum, msg.algorithm);
+        msg.appId, msg.execId, msg.blockId, msg.checksum, msg.algorithm);
       // In any cases of the error, diagnoseShuffleBlockCorruption should return UNKNOWN_ISSUE,
       // so it should always reply as success.
       callback.onSuccess(new CorruptionCause(cause).toByteBuffer());
@@ -383,26 +384,29 @@ public class ExternalBlockHandler extends RpcHandler
       String appId = msg.appId;
       String execId = msg.execId;
       String[] blockIds = msg.blockIds;
+      size = blockIds.length;
       String[] blockId0Parts = blockIds[0].split("_");
-      if (blockId0Parts.length == 4 && blockId0Parts[0].equals(SHUFFLE_BLOCK_ID)) {
-        final int shuffleId = Integer.parseInt(blockId0Parts[1]);
-        final int[] mapIdAndReduceIds = shuffleMapIdAndReduceIds(blockIds, shuffleId);
-        size = mapIdAndReduceIds.length;
-        blockDataForIndexFn = index -> blockManager.getBlockData(appId, execId, shuffleId,
-          mapIdAndReduceIds[index], mapIdAndReduceIds[index + 1]);
-      } else if (blockId0Parts.length == 5 && blockId0Parts[0].equals(SHUFFLE_CHUNK_ID)) {
+      if (isShuffleBlock(blockIds[0])) {
+        blockDataForIndexFn = index -> {
+          if (!isShuffleBlock(blockIds[index])) {
+            throw new IllegalArgumentException("Unexpected block id format: " + blockIds[index]);
+          }
+          return blockManager.getBlockData(appId, execId, blockIds[index]);
+        };
+      } else if (blockId0Parts.length == 5 && isShuffleChunk(blockIds[0])) {
         final int shuffleId = Integer.parseInt(blockId0Parts[1]);
         final int shuffleMergeId = Integer.parseInt(blockId0Parts[2]);
         final int[] reduceIdAndChunkIds = shuffleReduceIdAndChunkIds(blockIds, shuffleId,
           shuffleMergeId);
-        size = reduceIdAndChunkIds.length;
         blockDataForIndexFn = index -> mergeManager.getMergedBlockData(msg.appId, shuffleId,
-          shuffleMergeId, reduceIdAndChunkIds[index], reduceIdAndChunkIds[index + 1]);
-      } else if (blockId0Parts.length == 3 && blockId0Parts[0].equals("rdd")) {
-        final int[] rddAndSplitIds = rddAndSplitIds(blockIds);
-        size = rddAndSplitIds.length;
-        blockDataForIndexFn = index -> blockManager.getRddBlockData(appId, execId,
-          rddAndSplitIds[index], rddAndSplitIds[index + 1]);
+          shuffleMergeId, reduceIdAndChunkIds[2 * index], reduceIdAndChunkIds[2 * index + 1]);
+      } else if (isRddBlock(blockIds[0])) {
+        blockDataForIndexFn = index -> {
+          if (!isRddBlock(blockIds[index])) {
+            throw new IllegalArgumentException("Unexpected block id format: " + blockIds[index]);
+          }
+          return blockManager.getRddBlockData(appId, execId, blockIds[index]);
+        };
       } else {
         throw new IllegalArgumentException("Unexpected block id format: " + blockIds[0]);
       }
@@ -489,7 +493,7 @@ public class ExternalBlockHandler extends RpcHandler
     @Override
     public ManagedBuffer next() {
       final ManagedBuffer block = blockDataForIndexFn.apply(index);
-      index += 2;
+      index += 1;
       metrics.blockTransferRate.mark();
       metrics.blockTransferMessageRate.mark();
       metrics.blockTransferRateBytes.mark(block != null ? block.size() : 0);
@@ -531,8 +535,9 @@ public class ExternalBlockHandler extends RpcHandler
     public ManagedBuffer next() {
       ManagedBuffer block;
       if (!batchFetchEnabled) {
-        block = blockManager.getBlockData(
-          appId, execId, shuffleId, mapIds[mapIdx], reduceIds[mapIdx][reduceIdx]);
+        int reduceId = reduceIds[mapIdx][reduceIdx];
+        block = blockManager.getContinuousBlocksData(
+          appId, execId, shuffleId, mapIds[mapIdx], reduceId, reduceId + 1);
         if (reduceIdx < reduceIds[mapIdx].length - 1) {
           reduceIdx += 1;
         } else {
