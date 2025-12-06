@@ -34,7 +34,6 @@ from pyspark.errors import (
     AnalysisException,
     PySparkPicklingError,
     IllegalArgumentException,
-    PySparkRuntimeError,
 )
 from pyspark.util import PythonEvalType
 from pyspark.sql.functions import (
