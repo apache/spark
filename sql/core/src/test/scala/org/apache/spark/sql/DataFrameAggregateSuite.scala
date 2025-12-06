@@ -2426,7 +2426,7 @@ class DataFrameAggregateSuite extends QueryTest
         val res = sql("""
             |select
             | id,
-            | theta_sketch_agg(value, 'text')
+            | theta_sketch_agg(value, 'text', 'ALPHA')
             |from
             | df1
             |group by 1
@@ -2435,13 +2435,29 @@ class DataFrameAggregateSuite extends QueryTest
       },
       condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
-        "sqlExpr" -> "\"theta_sketch_agg(value, text)\"",
+        "sqlExpr" -> "\"theta_sketch_agg(value, text, ALPHA)\"",
         "paramIndex" -> "second",
         "inputSql" -> "\"text\"",
         "inputType" -> "\"STRING\"",
         "requiredType" -> "\"INT\""),
       context =
-        ExpectedContext(fragment = "theta_sketch_agg(value, 'text')", start = 14, stop = 44))
+        ExpectedContext(fragment = "theta_sketch_agg(value, 'text', 'ALPHA')",
+          start = 14, stop = 53))
+
+    // Test invalid family names
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        df1.groupBy("id")
+          .agg(theta_sketch_agg("value", 12, "INVALID_FAMILY").as("sketch"))
+          .collect()
+      },
+      condition = "THETA_INVALID_FAMILY",
+      parameters = Map(
+        "function" -> "`theta_sketch_agg`",
+        "value" -> "'INVALID_FAMILY'",
+        "validFamilies" -> "`QUICKSELECT`, `ALPHA`"
+      )
+    )
 
     checkError(
       exception = intercept[AnalysisException] {
