@@ -39,8 +39,12 @@ private[spark] object BLAS extends Serializable {
   // For level-3 routines, we use the native BLAS.
   private[spark] def nativeBLAS: NetlibBLAS = {
     if (_nativeBLAS == null) {
-      _nativeBLAS =
+      // Replica SparkEnvUtils.allowNativeBlas to avoid pulling commons/utils as dependency
+      _nativeBLAS = if ("true".equals(System.getProperty("netlib.allowNativeBlas", "true"))) {
         try { NetlibNativeBLAS.getInstance } catch { case _: Throwable => javaBLAS }
+      } else {
+        javaBLAS
+      }
     }
     _nativeBLAS
   }
