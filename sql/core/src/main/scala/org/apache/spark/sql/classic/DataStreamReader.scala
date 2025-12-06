@@ -56,6 +56,17 @@ final class DataStreamReader private[sql](sparkSession: SparkSession)
   }
 
   /** @inheritdoc */
+  private[sql] def name(sourceName: String): this.type = {
+    // Enforce that source evolution must be enabled when naming sources
+    if (!sparkSession.sessionState.conf.enableStreamingSourceEvolution) {
+      throw QueryCompilationErrors.namedSourcesRequireEnforcementError()
+    }
+    DataStreamReader.validateSourceName(sourceName)
+    this.userProvidedSourceName = Some(sourceName)
+    this
+  }
+
+  /** @inheritdoc */
   def option(key: String, value: String): this.type = {
     this.extraOptions += (key -> value)
     this
@@ -76,7 +87,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession)
       userSpecifiedSchema,
       extraOptions,
       isStreaming = true,
-      path.toSeq
+      path.toSeq,
+      userProvidedSourceName
     )
     Dataset.ofRows(sparkSession, unresolved)
   }
@@ -161,4 +173,24 @@ final class DataStreamReader private[sql](sparkSession: SparkSession)
   private var userSpecifiedSchema: Option[StructType] = None
 
   private var extraOptions = CaseInsensitiveMap[String](Map.empty)
+
+  private var userProvidedSourceName: Option[String] = None
+}
+
+object DataStreamReader {
+  /**
+   * Validates that a source name only contains valid characters.
+   * Source names must only contain ASCII letters (a-z, A-Z), digits (0-9), and underscores (_).
+   * This matches Spark's identifier naming rules and ensures compatibility with filesystems.
+   *
+   * @param sourceName the source name to validate
+   * @throws AnalysisException if the source name contains invalid characters
+   */
+  private[sql] def validateSourceName(sourceName: String): Unit = {
+    // Source names must only contain ASCII letters, digits, and underscores
+    val validSourceNamePattern = "^[a-zA-Z0-9_]+$".r
+    if (!validSourceNamePattern.pattern.matcher(sourceName).matches()) {
+      throw QueryCompilationErrors.invalidStreamingSourceNameError(sourceName)
+    }
+  }
 }
