@@ -23,12 +23,16 @@ import java.nio.ByteOrder;
 import java.util.Arrays;
 
 // Catalyst-internal server-side execution wrapper for GEOMETRY.
-public final class Geometry implements Geo {
+public class Geometry implements Geo {
 
   /** Geometry internal implementation. */
 
   // The Geometry type is implemented as an array of bytes stored inside a `GeometryVal` object.
-  protected final GeometryVal value;
+  protected GeometryVal value;
+
+  // Geometry type and SRID information
+  protected GeoTypeId typeId;
+  protected int sridValue;
 
   /** Geometry constants. */
 
@@ -40,10 +44,25 @@ public final class Geometry implements Geo {
   // We make the constructors private. Use `fromBytes` or `fromValue` to create new instances.
   private Geometry(byte[] bytes) {
     this.value = GeometryVal.fromBytes(bytes);
+    this.typeId = null;
+    this.sridValue = srid();
   }
 
   private Geometry(GeometryVal value) {
     this.value = value;
+    this.typeId = null;
+    this.sridValue = srid();
+  }
+
+  // Protected constructor for subclasses
+  // Caller is expected to set GeometryVal
+  protected Geometry(GeoTypeId typeId, int srid) {
+    this.typeId = typeId;
+    this.sridValue = srid;
+  }
+
+  protected void setVal(GeometryVal val) {
+    this.value = val;
   }
 
   // Factory methods to create new Geometry instances from a byte array or a `GeometryVal`.
@@ -64,7 +83,114 @@ public final class Geometry implements Geo {
 
   // Returns the byte array containing the GEOMETRY representation/encoding.
   public byte[] getBytes() {
-    return value.getBytes();
+    return getValue().getBytes();
+  }
+
+  // Returns the geometry type ID
+  public GeoTypeId getTypeId() {
+    return typeId;
+  }
+
+  // Returns whether this geometry is empty (subclasses should override)
+  public boolean isEmpty() {
+    return false;
+  }
+
+  /** Type checking methods for Geometry subclasses. */
+
+  // Returns true if this geometry is a Point
+  public boolean isPoint() {
+    return this instanceof Point;
+  }
+
+  // Returns true if this geometry is a LineString
+  public boolean isLineString() {
+    return this instanceof LineString;
+  }
+
+  // Returns true if this geometry is a Polygon
+  public boolean isPolygon() {
+    return this instanceof Polygon;
+  }
+
+  // Returns true if this geometry is a MultiPoint
+  public boolean isMultiPoint() {
+    return this instanceof MultiPoint;
+  }
+
+  // Returns true if this geometry is a MultiLineString
+  public boolean isMultiLineString() {
+    return this instanceof MultiLineString;
+  }
+
+  // Returns true if this geometry is a MultiPolygon
+  public boolean isMultiPolygon() {
+    return this instanceof MultiPolygon;
+  }
+
+  // Returns true if this geometry is a GeometryCollection
+  public boolean isGeometryCollection() {
+    return this instanceof GeometryCollection;
+  }
+
+  /** Type casting methods for Geometry subclasses. */
+
+  // Casts this geometry to Point if it is an instance of Point
+  public Point asPoint() {
+    if (isPoint()) {
+      return (Point) this;
+    }
+    throw new ClassCastException("Cannot cast " + getClass().getSimpleName() + " to Point");
+  }
+
+  // Casts this geometry to LineString if it is an instance of LineString
+  public LineString asLineString() {
+    if (isLineString()) {
+      return (LineString) this;
+    }
+    throw new ClassCastException("Cannot cast " + getClass().getSimpleName() + " to LineString");
+  }
+
+  // Casts this geometry to Polygon if it is an instance of Polygon
+  public Polygon asPolygon() {
+    if (isPolygon()) {
+      return (Polygon) this;
+    }
+    throw new ClassCastException("Cannot cast " + getClass().getSimpleName() + " to Polygon");
+  }
+
+  // Casts this geometry to MultiPoint if it is an instance of MultiPoint
+  public MultiPoint asMultiPoint() {
+    if (isMultiPoint()) {
+      return (MultiPoint) this;
+    }
+    throw new ClassCastException("Cannot cast " + getClass().getSimpleName() + " to MultiPoint");
+  }
+
+  // Casts this geometry to MultiLineString if it is an instance of MultiLineString
+  public MultiLineString asMultiLineString() {
+    if (isMultiLineString()) {
+      return (MultiLineString) this;
+    }
+    throw new ClassCastException(
+      "Cannot cast " + getClass().getSimpleName() + " to MultiLineString");
+  }
+
+  // Casts this geometry to MultiPolygon if it is an instance of MultiPolygon
+  public MultiPolygon asMultiPolygon() {
+    if (isMultiPolygon()) {
+      return (MultiPolygon) this;
+    }
+    throw new ClassCastException("Cannot cast " + getClass().getSimpleName() + " to MultiPolygon");
+  }
+
+  // Casts this geometry to GeometryCollection if it is an instance of GeometryCollection
+  public GeometryCollection asGeometryCollection() {
+    if (isGeometryCollection()) {
+      return (GeometryCollection) this;
+    }
+    throw new ClassCastException(
+      "Cannot cast " + getClass().getSimpleName() + " to GeometryCollection");
   }
 
   // Returns a copy of this geometry.
@@ -77,10 +203,7 @@ public final class Geometry implements Geo {
 
   // Returns a Geometry object with the specified SRID value by parsing the input WKB.
   public static Geometry fromWkb(byte[] wkb, int srid) {
-    byte[] bytes = new byte[HEADER_SIZE + wkb.length];
-    ByteBuffer.wrap(bytes).order(DEFAULT_ENDIANNESS).putInt(srid);
-    System.arraycopy(wkb, 0, bytes, WKB_OFFSET, wkb.length);
-    return fromBytes(bytes);
+    return STUtils.fromWKB(wkb, srid);
   }
 
   // Overload for the WKB reader where we use the default SRID for Geometry.
@@ -161,13 +284,18 @@ public final class Geometry implements Geo {
 
   @Override
   public int srid() {
-    // This method gets the SRID value from the in-memory Geometry representation header.
+    // This method gets the SRID value
+    if (typeId != null) {
+      return sridValue;
+    }
+    // For geometries created from bytes, read from header
     return getWrapper().getInt(SRID_OFFSET);
   }
 
   @Override
   public void setSrid(int srid) {
     // This method sets the SRID value in the in-memory Geometry representation header.
+    this.sridValue = srid;
     getWrapper().putInt(SRID_OFFSET, srid);
   }
 
