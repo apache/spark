@@ -291,6 +291,12 @@ object SparkBuild extends PomBuild {
                             sparkGenjavadocSettings ++
                             compilerWarningSettings ++
       (if (noLintOnCompile) Nil else enableScalaStyle) ++ Seq(
+    (Compile / dependencyClasspath) := (Compile / dependencyClasspath).value
+      .filterNot(file => {
+        val name = file.toString
+        (name.contains("orc-core") || name.contains("orc-format")) &&
+          !name.contains("shaded-protobuf")
+      }),
     (Compile / exportJars) := true,
     (Test / exportJars) := false,
     javaHome := sys.env.get("JAVA_HOME")
@@ -355,6 +361,8 @@ object SparkBuild extends PomBuild {
       "-release", javaVersion.value,
       "-sourcepath", (ThisBuild / baseDirectory).value.getAbsolutePath  // Required for relative source links in scaladoc
     ),
+
+    (Test / javaOptions) += s"-Dmvn.executable=${BuildCommons.sparkHome.getAbsolutePath}/build/mvn",
 
     SbtPomKeys.profiles := profiles,
 
@@ -1193,11 +1201,17 @@ object DependencyOverrides {
         SbtPomKeys.effectivePom.value.getProperties.get("avro.version").asInstanceOf[String]
       val slf4jVersion =
         SbtPomKeys.effectivePom.value.getProperties.get("slf4j.version").asInstanceOf[String]
+      val log4jVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get("log4j.version").asInstanceOf[String]
+      val derbyVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get("derby.version").asInstanceOf[String]
       Seq(
         "com.google.guava" % "guava" % guavaVersion,
         "jline" % "jline" % jlineVersion,
         "org.apache.avro" % "avro" % avroVersion,
-        "org.slf4j" % "slf4j-api" % slf4jVersion
+        "org.slf4j" % "slf4j-api" % slf4jVersion,
+        "org.apache.logging.log4j" % "log4j-slf4j-impl" % log4jVersion,
+        "org.apache.derby" % "derby" % derbyVersion
       ) ++ jacksonDeps.key.value
     }
   )
@@ -1212,8 +1226,7 @@ object ExcludedDependencies {
     libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") },
     excludeDependencies ++= Seq(
       ExclusionRule(organization = "ch.qos.logback"),
-      ExclusionRule("org.slf4j", "slf4j-simple"),
-      ExclusionRule("javax.servlet", "javax.servlet-api"))
+      ExclusionRule("org.slf4j", "slf4j-simple"))
   )
 }
 
@@ -1294,7 +1307,7 @@ object SQL {
     // even if the project is not using it.
     PB.protocVersion := BuildCommons.protoVersion,
     // For some reason the resolution from the imported Maven build does not work for some
-    // of these dependendencies that we need to shade later on.
+    // of these dependencies that we need to shade later on.
     libraryDependencies ++= {
       Seq(
         "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"

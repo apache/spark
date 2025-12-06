@@ -17,8 +17,12 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.io.PrintStream
+import java.io.{PrintStream, UnsupportedEncodingException}
 import java.nio.charset.StandardCharsets.UTF_8
+
+import scala.sys.exit
+
+import org.apache.hadoop.hive.common.io.SessionStream
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
@@ -27,14 +31,23 @@ import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
+import org.apache.spark.util.SparkExitCode.ERROR_PATH_NOT_FOUND
 import org.apache.spark.util.Utils
 
 /** A singleton object for the master program. The executors should not access this. */
 private[hive] object SparkSQLEnv extends Logging {
   logDebug("Initializing SparkSQLEnv")
 
-  val out = new PrintStream(System.out, true, UTF_8)
-  val err = new PrintStream(System.err, true, UTF_8)
+  private def createSessionStream(s: PrintStream): SessionStream = {
+    try {
+      new SessionStream(s, true, UTF_8.name ())
+    } catch {
+      case e: UnsupportedEncodingException => exit(ERROR_PATH_NOT_FOUND)
+    }
+  }
+
+  val out: SessionStream = createSessionStream(System.out)
+  val err: SessionStream = createSessionStream(System.err)
 
   var sparkSession: SparkSession = _
   var sparkContext: SparkContext = _

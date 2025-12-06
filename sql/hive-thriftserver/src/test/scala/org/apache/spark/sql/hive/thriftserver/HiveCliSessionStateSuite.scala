@@ -37,6 +37,8 @@ class HiveCliSessionStateSuite extends SparkFunSuite {
       HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false).foreach {
         case (key, value) => hiveConf.set(key, value)
       }
+      // Set Hive execution engine to map-reduce for backward compatibility with Hive 2.3.x
+      HiveConf.setVar(hiveConf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE, "mr")
       val sessionState: SessionState = new CliSessionState(hiveConf)
       SessionState.start(sessionState)
       val s1 = SessionState.get

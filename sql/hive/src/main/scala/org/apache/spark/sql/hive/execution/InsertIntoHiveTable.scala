@@ -146,9 +146,9 @@ case class InsertIntoHiveTable(
       if (numDynamicPartitions > 0) {
         if (overwrite && table.tableType == CatalogTableType.EXTERNAL) {
           val numWrittenParts = writtenParts.size
-          val maxDynamicPartitionsKey = HiveConf.ConfVars.DYNAMICPARTITIONMAXPARTS.varname
+          val maxDynamicPartitionsKey = HiveConf.ConfVars.DYNAMIC_PARTITION_MAX_PARTS.varname
           val maxDynamicPartitions = hadoopConf.getInt(maxDynamicPartitionsKey,
-            HiveConf.ConfVars.DYNAMICPARTITIONMAXPARTS.defaultIntVal)
+            HiveConf.ConfVars.DYNAMIC_PARTITION_MAX_PARTS.defaultIntVal)
           if (numWrittenParts > maxDynamicPartitions) {
             throw QueryExecutionErrors.writePartitionExceedConfigSizeWhenDynamicPartitionError(
               numWrittenParts, maxDynamicPartitions, maxDynamicPartitionsKey)

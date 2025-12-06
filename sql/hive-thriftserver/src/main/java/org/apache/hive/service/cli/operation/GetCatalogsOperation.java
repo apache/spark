@@ -33,8 +33,8 @@ public class GetCatalogsOperation extends MetadataOperation {
 
   protected final RowSet rowSet;
 
-  protected GetCatalogsOperation(HiveSession parentSession) {
-    super(parentSession, OperationType.GET_CATALOGS);
+  protected GetCatalogsOperation(HiveSession parentSession, OperationManager operationManager) {
+    super(parentSession, operationManager, OperationType.GET_CATALOGS);
     rowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion(), false);
   }
 

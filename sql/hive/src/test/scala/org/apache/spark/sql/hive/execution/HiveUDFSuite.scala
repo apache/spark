@@ -18,11 +18,10 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.{DataInput, DataOutput, File, PrintWriter}
-import java.util.{ArrayList, Arrays, Properties}
+import java.util.{ArrayList, Arrays}
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.exec.UDF
 import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.hadoop.hive.ql.udf.{UDAFPercentile, UDFType}
@@ -739,7 +738,8 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
         val df = sql("SELECT CodeGenHiveGenericUDF(v) from HiveGenericUDFTable")
         val plan = df.queryExecution.executedPlan
         assert(plan.isInstanceOf[WholeStageCodegenExec])
-        checkAnswer(df, Seq(Row("14ab8df5135825bc9f5ff7c30609f02f")))
+        checkAnswer(df,
+          Seq(Row("95e053f9451c5f73215101a92682782327c69bca5f1450419c606b09b26534ab")))
       }
     }
   }
@@ -856,8 +856,6 @@ class TestPair(x: Int, y: Int) extends Writable with Serializable {
 }
 
 class PairSerDe extends AbstractSerDe {
-  override def initialize(p1: Configuration, p2: Properties): Unit = {}
-
   override def getObjectInspector: ObjectInspector = {
     ObjectInspectorFactory
       .getStandardStructObjectInspector(

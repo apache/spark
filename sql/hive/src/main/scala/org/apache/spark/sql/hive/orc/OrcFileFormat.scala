@@ -27,7 +27,7 @@ import com.esotericsoftware.kryo.io.Output
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.ql.io.orc._
-import org.apache.hadoop.hive.ql.io.sarg.SearchArgument
+import org.apache.hadoop.hive.ql.io.sarg.{ConvertAstToSearchArg, SearchArgument}
 import org.apache.hadoop.hive.serde2.objectinspector
 import org.apache.hadoop.hive.serde2.objectinspector.{SettableStructObjectInspector, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.typeinfo.{StructTypeInfo, TypeInfoUtils}
@@ -140,7 +140,7 @@ case class OrcFileFormat() extends FileFormat
     if (getSqlConf(sparkSession).orcFilterPushDown) {
       // Sets pushed predicates
       OrcFilters.createFilter(requiredSchema, filters).foreach { f =>
-        hadoopConf.set(OrcFileFormat.SARG_PUSHDOWN, toKryo(f))
+        hadoopConf.set(ConvertAstToSearchArg.SARG_PUSHDOWN, ConvertAstToSearchArg.sargToKryo(f))
         hadoopConf.setBoolean("hive.optimize.index.filter", true)
       }
     }
@@ -173,7 +173,11 @@ case class OrcFileFormat() extends FileFormat
           // ObjectInspector during recordReader creation itself and can
           // avoid NameNode call in unwrapOrcStructs per file.
           // Specifically would be helpful for partitioned datasets.
-          val orcReader = OrcFile.createReader(filePath, OrcFile.readerOptions(conf))
+          val orcReader = OrcFile.createReader(filePath,
+            // Hive blindly assumes that Timestamps are in UTC time zone
+            OrcFile.readerOptions(conf)
+              .convertToProlepticGregorian(false)
+              .useUTCTimestamp(true))
           new SparkOrcNewRecordReader(orcReader, conf, file.start, file.length)
         }
 
@@ -236,7 +240,7 @@ private[orc] class OrcSerializer(dataSchema: StructType, conf: Configuration)
     table.setProperty("columns.types", dataSchema.map(_.dataType.catalogString).mkString(":"))
 
     val serde = new OrcSerde
-    serde.initialize(conf, table)
+    serde.initialize(conf, table, null)
     serde
   }
 
@@ -311,7 +315,7 @@ private[orc] class OrcOutputWriter(
       // Hive ORC initializes its private `writer` field at the first write.
       // For empty write task, we need to create it manually to record our meta.
       val options = OrcFile.writerOptions(context.getConfiguration)
-      options.inspector(serializer.structOI)
+        .inspector(serializer.structOI)
       writer = OrcFile.createWriter(new Path(path), options)
       // set the writer to make it flush meta on close
       writerField.set(recordWriter, writer)
@@ -321,8 +325,6 @@ private[orc] class OrcOutputWriter(
 }
 
 private[orc] object OrcFileFormat extends HiveInspectors with Logging {
-  // This constant duplicates `OrcInputFormat.SARG_PUSHDOWN`, which is unfortunately not public.
-  private[orc] val SARG_PUSHDOWN = "sarg.pushdown"
 
   def unwrapOrcStructs(
       conf: Configuration,

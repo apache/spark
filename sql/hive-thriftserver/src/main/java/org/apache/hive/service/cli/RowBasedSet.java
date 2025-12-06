@@ -33,22 +33,20 @@ public class RowBasedSet implements RowSet {
   private long startOffset;
 
   private final TypeDescriptor[] descriptors; // non-null only for writing (server-side)
-  private final RemovableList<TRow> rows;
+  private final RemovableList rows;
 
   public RowBasedSet(TableSchema schema) {
     descriptors = schema.toTypeDescriptors();
-    rows = new RemovableList<TRow>();
+    rows = new RemovableList();
   }
 
   public RowBasedSet(TRowSet tRowSet) {
-    descriptors = null;
-    rows = new RemovableList<TRow>(tRowSet.getRows());
-    startOffset = tRowSet.getStartRowOffset();
+    this(null, tRowSet.getRows(), tRowSet.getStartRowOffset());
   }
 
   private RowBasedSet(TypeDescriptor[] descriptors, List<TRow> rows, long startOffset) {
     this.descriptors = descriptors;
-    this.rows = new RemovableList<TRow>(rows);
+    this.rows = rows != null ? new RemovableList(rows) : new RemovableList();
     this.startOffset = startOffset;
   }
 
@@ -128,9 +126,9 @@ public class RowBasedSet implements RowSet {
     };
   }
 
-  private static class RemovableList<E> extends ArrayList<E> {
+  private static class RemovableList extends ArrayList<TRow> {
     RemovableList() { super(); }
-    RemovableList(List<E> rows) { super(rows); }
+    RemovableList(List<TRow> rows) { super(rows); }
     @Override
     public void removeRange(int fromIndex, int toIndex) {
       super.removeRange(fromIndex, toIndex);

@@ -17,6 +17,9 @@
 
 package org.apache.hive.service.cli.operation;
 import java.io.CharArrayWriter;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.PrintStream;
 import java.io.Serializable;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -179,7 +182,7 @@ public class LogDivertAppender extends AbstractWriterAppender<WriterManager> {
 
     @Override
     public Result filter(LogEvent logEvent) {
-      OperationLog log = operationManager.getOperationLogByThread();
+      OperationLog log = operationManager.getCurrentOperationLog();
       boolean excludeMatches = (loggingMode == OperationLog.LoggingLevel.VERBOSE);
 
       if (log == null) {
@@ -295,7 +298,7 @@ public class LogDivertAppender extends AbstractWriterAppender<WriterManager> {
 
   @Override
   public void append(LogEvent event) {
-    OperationLog log = operationManager.getOperationLogByThread();
+    OperationLog log = operationManager.getCurrentOperationLog();
 
     // Set current layout depending on the verbose/non-verbose mode.
     if (log != null) {
@@ -317,6 +320,12 @@ public class LogDivertAppender extends AbstractWriterAppender<WriterManager> {
       LOG.debug(" ---+++=== Dropped log event from thread " + event.getThreadName());
       return;
     }
-    log.writeOperationLog(logOutput);
+    try {
+      PrintStream out =
+          new PrintStream(new FileOutputStream(operationManager.getCurrentOperationLogFile()));
+      out.print(logOutput);
+    } catch (FileNotFoundException e) {
+      LOG.debug(" ---+++=== Dropped log event from thread " + event.getThreadName());
+    }
   }
 }

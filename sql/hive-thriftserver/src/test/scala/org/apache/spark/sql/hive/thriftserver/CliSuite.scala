@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.io._
 import java.nio.charset.StandardCharsets
-import java.util.concurrent.CountDownLatch
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Promise
@@ -238,6 +238,7 @@ class CliSuite extends SparkFunSuite {
     // --hiveconf will overrides hive-site.xml
     runCliWithin(2.minute, useExternalHiveFile = true)(
       "desc database default;" -> warehousePath.getAbsolutePath,
+      "drop database if exists cliTestDb;" -> "",
       "create database cliTestDb;" -> "",
       "desc database cliTestDb;" -> warehousePath.getAbsolutePath,
       "set spark.sql.warehouse.dir;" -> warehousePath.getAbsolutePath)
@@ -255,6 +256,7 @@ class CliSuite extends SparkFunSuite {
         useExternalHiveFile = true,
         metastore = metastore)(
         "desc database default;" -> sparkWareHouseDir.getAbsolutePath,
+        "drop database if exists cliTestDb;" -> "",
         "create database cliTestDb;" -> "",
         "desc database cliTestDb;" -> sparkWareHouseDir.getAbsolutePath,
         "set spark.sql.warehouse.dir;" -> sparkWareHouseDir.getAbsolutePath)
@@ -697,7 +699,7 @@ class CliSuite extends SparkFunSuite {
     }
     t.start()
     t.start()
-    cd.await()
+    assert(cd.await(5, TimeUnit.MINUTES))
   }
 
   // scalastyle:off line.size.limit

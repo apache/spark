@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.test
 
-import java.io.File
+import java.io.{File, InputStream}
 import java.net.URI
 import java.nio.file.Files
 import java.util.{Locale, UUID}
@@ -28,9 +28,11 @@ import scala.language.implicitConversions
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
+import org.apache.maven.shared.invoker.{DefaultInvocationRequest, DefaultInvoker}
 import org.scalactic.source.Position
 import org.scalatest.{BeforeAndAfterAll, Suite, Tag}
 import org.scalatest.concurrent.Eventually
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{AnalysisException, Row}
@@ -535,4 +537,16 @@ private[sql] object SQLTestUtils {
       None
     }
   }
+
+  private val invoker = new DefaultInvoker()
+  invoker.setMavenExecutable(new File(System.getProperty("mvn.executable", "mvn")))
+
+  final def invokeMaven(pomFile: File): Unit = {
+    val request = new DefaultInvocationRequest()
+      .setPomFile(pomFile)
+      .addArgs(Seq("clean", "package", "-DskipTests").toList.asJava)
+      .setInputStream(InputStream.nullInputStream())
+    invoker.execute(request).getExitCode should equal (0)
+  }
+
 }

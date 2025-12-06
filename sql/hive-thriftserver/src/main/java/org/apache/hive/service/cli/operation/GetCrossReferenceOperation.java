@@ -99,10 +99,10 @@ public class GetCrossReferenceOperation extends MetadataOperation {
   private final String foreignTableName;
   private final RowSet rowSet;
 
-  public GetCrossReferenceOperation(HiveSession parentSession,
+  public GetCrossReferenceOperation(HiveSession parentSession, OperationManager operationManager,
                                     String parentCatalogName, String parentSchemaName, String parentTableName,
                                     String foreignCatalog, String foreignSchema, String foreignTable) {
-    super(parentSession, OperationType.GET_FUNCTIONS);
+    super(parentSession, operationManager, OperationType.GET_FUNCTIONS);
     this.parentCatalogName = parentCatalogName;
     this.parentSchemaName = parentSchemaName;
     this.parentTableName = parentTableName;

@@ -136,7 +136,8 @@
     <hive.group>org.apache.hive</hive.group>
     <hive.classifier>core</hive.classifier>
     <!-- Version used in Maven Hive dependency -->
-    <hive.version>2.3.10</hive.version>
+    <hive.version>4.1.0</hive.version>
+    <hive.storage.version>${hive.version}</hive.storage.version>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
     <kafka.version>3.9.1</kafka.version>
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
@@ -197,7 +198,7 @@
     <commons-lang3.version>3.20.0</commons-lang3.version>
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.12.1</commons-pool2.version>
-    <datanucleus-core.version>4.1.17</datanucleus-core.version>
+    <datanucleus-core.version>6.0.11</datanucleus-core.version>
     <guava.version>33.4.8-jre</guava.version>
     <guava.failureaccess.version>1.0.3</guava.failureaccess.version>
     <gson.version>2.13.2</gson.version>
@@ -207,7 +208,7 @@
     <jsr305.version>3.0.0</jsr305.version>
     <jaxb.version>2.2.11</jaxb.version>
     <libthrift.version>0.16.0</libthrift.version>
-    <antlr4.version>4.13.1</antlr4.version>
+    <antlr4.version>4.9.3</antlr4.version>
     <jpam.version>1.1</jpam.version>
     <selenium.version>4.32.0</selenium.version>
     <htmlunit3-driver.version>4.32.0</htmlunit3-driver.version>
@@ -278,10 +279,10 @@
       needing Hadoop classes in the classpath to compile).
     -->
     <derby.deps.scope>compile</derby.deps.scope>
+    <calcite.deps.scope>compile</calcite.deps.scope>
     <hadoop.deps.scope>compile</hadoop.deps.scope>
     <huaweicloud.deps.scope>compile</huaweicloud.deps.scope>
     <hive.deps.scope>compile</hive.deps.scope>
-    <hive.storage.version>2.8.1</hive.storage.version>
     <hive.storage.scope>compile</hive.storage.scope>
     <hive.common.scope>compile</hive.common.scope>
     <hive.llap.scope>test</hive.llap.scope>
@@ -337,6 +338,7 @@
       -Dio.netty.allocator.type=pooled
       -Dio.netty.handler.ssl.defaultEndpointVerificationAlgorithm=NONE
       --enable-native-access=ALL-UNNAMED
+      -Dmvn.executable=${maven.multiModuleProjectDirectory}/build/mvn
     </extraJavaTestArgs>
     <mariadb.java.client.version>2.7.12</mariadb.java.client.version>
     <mysql.connector.version>9.2.0</mysql.connector.version>
@@ -842,6 +844,11 @@
       <dependency>
         <groupId>org.apache.logging.log4j</groupId>
         <artifactId>log4j-slf4j2-impl</artifactId>
+        <version>${log4j.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-slf4j-impl</artifactId>
         <version>${log4j.version}</version>
       </dependency>
       <dependency>
@@ -1644,6 +1651,10 @@
           </exclusion>
           <exclusion>
             <groupId>${hive.group}</groupId>
+            <artifactId>hive-standalone-metastore-server</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
             <artifactId>hive-service</artifactId>
           </exclusion>
           <exclusion>
@@ -1673,6 +1684,10 @@
           <exclusion>
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j-impl</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -1739,6 +1754,18 @@
         <scope>${hive.deps.scope}</scope>
         <exclusions>
           <exclusion>
+            <groupId>org.apache.tez</groupId>
+            <artifactId>tez-api</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.github.joshelser</groupId>
+            <artifactId>dropwizard-metrics-hadoop-metrics2-reporter</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
+            <artifactId>hive-standalone-metastore-common</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>${hive.group}</groupId>
             <artifactId>hive-shims</artifactId>
           </exclusion>
@@ -1802,6 +1829,14 @@
             <groupId>${hive.group}</groupId>
             <artifactId>hive-storage-api</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-yarn-common</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-hdfs-client</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
 
@@ -1847,8 +1882,8 @@
             <artifactId>ant</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>com.esotericsoftware.kryo</groupId>
-            <artifactId>kryo</artifactId>
+            <groupId>org.datanucleus</groupId>
+            <artifactId>datanucleus-core</artifactId>
           </exclusion>
           <exclusion>
             <groupId>commons-codec</groupId>
@@ -1857,11 +1892,6 @@
           <exclusion>
             <groupId>org.apache.avro</groupId>
             <artifactId>avro-mapred</artifactId>
-          </exclusion>
-          <!--  Do not need Calcite because we disabled hive.cbo.enable -->
-          <exclusion>
-            <groupId>org.apache.calcite</groupId>
-            <artifactId>calcite-core</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.apache.calcite</groupId>
@@ -1954,6 +1984,46 @@
             <groupId>net.hydromatic</groupId>
             <artifactId>aggdesigner-algorithm</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>org.apache.atlas</groupId>
+            <artifactId>atlas-intg</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-yarn-registry</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.jayway.jsonpath</groupId>
+            <artifactId>json-path</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>om.amazonaws.secretsmanager</groupId>
+            <artifactId>caws-secretsmanager-caching-java</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.graalvm.js</groupId>
+            <artifactId>js-scriptengine</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.graalvm.js</groupId>
+            <artifactId>js</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.atlas</groupId>
+            <artifactId>atlas-client-v2</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.atlas</groupId>
+            <artifactId>atlas-client-common</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.amazonaws.secretsmanager</groupId>
+            <artifactId>aws-secretsmanager-caching-java</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-dbcp2</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -2036,11 +2106,19 @@
         <exclusions>
           <exclusion>
             <groupId>${hive.group}</groupId>
+            <artifactId>hive-common</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
             <artifactId>hive-serde</artifactId>
           </exclusion>
           <exclusion>
             <groupId>${hive.group}</groupId>
             <artifactId>hive-shims</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
+            <artifactId>hive-standalone-metastore-common</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.apache.thrift</groupId>
@@ -2079,9 +2157,12 @@
             <groupId>com.jolbox</groupId>
             <artifactId>bonecp</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>org.apache.orc</groupId>
+            <artifactId>orc-core</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
-
       <dependency>
         <groupId>${hive.group}</groupId>
         <artifactId>hive-serde</artifactId>
@@ -2163,7 +2244,7 @@
       <dependency>
         <groupId>${hive.group}</groupId>
         <artifactId>hive-service-rpc</artifactId>
-        <version>4.0.0</version>
+        <version>${hive.version}</version>
         <exclusions>
           <exclusion>
             <groupId>*</groupId>
@@ -2258,6 +2339,10 @@
             <artifactId>hive-serde</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-common</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
           </exclusion>
@@ -2299,6 +2384,116 @@
             <artifactId>slf4j-api</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>${hive.group}</groupId>
+        <artifactId>hive-udf</artifactId>
+        <version>${hive.version}</version>
+        <scope>${hive.deps.scope}</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
+            <artifactId>hive-common</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
+            <artifactId>hive-serde</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>${hive.group}</groupId>
+        <artifactId>hive-standalone-metastore-common</artifactId>
+        <version>${hive.version}</version>
+        <scope>${hive.deps.scope}</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>com.github.joshelser</groupId>
+            <artifactId>dropwizard-metrics-hadoop-metrics2-reporter</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.orc</groupId>
+            <artifactId>orc-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-netty-shaded</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-protobuf</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-stub</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>com.github.joshelser</groupId>
+        <artifactId>dropwizard-metrics-hadoop-metrics2-reporter</artifactId>
+        <version>0.1.2</version>
+        <scope>runtime</scope>
+      </dependency>
+      <dependency>
+        <groupId>${hive.group}</groupId>
+        <artifactId>hive-standalone-metastore-server</artifactId>
+        <version>${hive.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.antlr</groupId>
+            <artifactId>antlr-runtime</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.orc</groupId>
+            <artifactId>orc-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.datasketches</groupId>
+            <artifactId>datasketches-hive</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.github.joshelser</groupId>
+            <artifactId>dropwizard-metrics-hadoop-metrics2-reporter</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>sqlline</groupId>
+            <artifactId>sqlline</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.datasketches</groupId>
+        <artifactId>datasketches-hive</artifactId>
+        <version>2.0.0</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-simple</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>${hive.group}</groupId>
+        <artifactId>hive-parser</artifactId>
+        <version>${hive.version}</version>
+        <scope>runtime</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
+            <artifactId>hive-common</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
+            <artifactId>hive-serde</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.calcite</groupId>
+        <artifactId>calcite-core</artifactId>
+        <version>1.38.0</version>
+        <scope>runtime</scope>
       </dependency>
 
       <dependency>
@@ -2451,6 +2646,11 @@
         <groupId>org.datanucleus</groupId>
         <artifactId>datanucleus-core</artifactId>
         <version>${datanucleus-core.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.datanucleus</groupId>
+        <artifactId>datanucleus-api-jdo</artifactId>
+        <version>6.0.5</version>
       </dependency>
       <dependency>
         <groupId>org.apache.thrift</groupId>
@@ -2619,6 +2819,12 @@
         <groupId>javax.servlet</groupId>
         <artifactId>javax.servlet-api</artifactId>
         <version>${javaxservlet.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.maven.shared</groupId>
+        <artifactId>maven-invoker</artifactId>
+        <version>3.3.0</version>
+        <scope>test</scope>
       </dependency>
     </dependencies>
   </dependencyManagement>
@@ -2798,7 +3004,7 @@
             <jvmArgs>
               <jvmArg>-Xss128m</jvmArg>
               <jvmArg>-Xms4g</jvmArg>
-              <jvmArg>-Xmx4g</jvmArg>
+              <jvmArg>-Xmx8g</jvmArg>
               <jvmArg>-XX:MaxMetaspaceSize=2g</jvmArg>
               <jvmArg>-XX:ReservedCodeCacheSize=${CodeCacheSize}</jvmArg>
               <jvmArg>--enable-native-access=ALL-UNNAMED</jvmArg>

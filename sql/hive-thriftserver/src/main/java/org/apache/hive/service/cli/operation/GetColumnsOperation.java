@@ -33,7 +33,7 @@ import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.PrimaryKeysRequest;
 import org.apache.hadoop.hive.metastore.api.SQLPrimaryKey;
 import org.apache.hadoop.hive.metastore.api.Table;
-import org.apache.hadoop.hive.ql.metadata.TableIterable;
+import org.apache.hadoop.hive.metastore.TableIterable;
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType;
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObject;
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObject.HivePrivilegeObjectType;
@@ -119,9 +119,9 @@ public class GetColumnsOperation extends MetadataOperation {
 
   protected final RowSet rowSet;
 
-  protected GetColumnsOperation(HiveSession parentSession, String catalogName, String schemaName,
-      String tableName, String columnName) {
-    super(parentSession, OperationType.GET_COLUMNS);
+  protected GetColumnsOperation(HiveSession parentSession, OperationManager operationManager,
+      String catalogName, String schemaName, String tableName, String columnName) {
+    super(parentSession, operationManager, OperationType.GET_COLUMNS);
     this.catalogName = catalogName;
     this.schemaName = schemaName;
     this.tableName = tableName;
