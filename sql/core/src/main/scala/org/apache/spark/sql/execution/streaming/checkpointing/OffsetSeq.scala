@@ -172,9 +172,10 @@ trait OffsetSeqMetadataBase extends Serializable {
 case class OffsetSeqMetadata(
     batchWatermarkMs: Long = 0,
     batchTimestampMs: Long = 0,
-    conf: Map[String, String] = Map.empty,
-    version: Int = 1) extends OffsetSeqMetadataBase {
+    conf: Map[String, String] = Map.empty) extends OffsetSeqMetadataBase {
   override def json: String = Serialization.write(this)(OffsetSeqMetadata.format)
+
+  override def version: Int = OffsetSeqLog.VERSION_1
 
   override def sourceMetadataInfoOpt: Option[Map[String, SourceMetadataInfo]] = None
 
