@@ -2879,7 +2879,7 @@ class DatasetSuite extends QueryTest
     checkDataset(Seq(mapMutableSet).toDS(), mapMutableSet)
   }
 
-  test("SPARK-XXXXX: Observation should not blocking forever") {
+  test("SPARK-54620: Observation should not blocking forever") {
     val observation = Observation("row_count")
 
     var df = Seq.empty[(Int, Int)].toDF("v1", "v2")
