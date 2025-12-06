@@ -591,7 +591,8 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
             import pandas as pd
 
             series = [
-                super()
+                # Need to be explicit here because it's in a comprehension
+                super(ArrowStreamPandasUDFSerializer, self)
                 .arrow_to_pandas(
                     column,
                     i,
