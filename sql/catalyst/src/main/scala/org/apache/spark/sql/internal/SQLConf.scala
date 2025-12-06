@@ -5486,6 +5486,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val MSSQLSERVER_USE_DATETIME2_FOR_TIMESTAMP =
+    buildConf("spark.sql.mssqlserver.useDatetime2ForTimestamp.enabled")
+      .doc("When true (default), TimestampType and TimestampNTZType are mapped to SQL Server " +
+        "DATETIME2 type which supports up to 7 decimal places (100 nanoseconds precision). " +
+        "When false, they are mapped to the legacy DATETIME type which only supports 3 " +
+        "decimal places (milliseconds precision). DATETIME2 was introduced in SQL Server 2008 " +
+        "and is recommended by Microsoft for new development. Set this to false only if " +
+        "you need compatibility with SQL Server 2005 or earlier.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val LEGACY_MYSQL_BIT_ARRAY_MAPPING_ENABLED =
     buildConf("spark.sql.legacy.mysql.bitArrayMapping.enabled")
       .internal()
@@ -7247,6 +7259,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyMsSqlServerDatetimeOffsetMappingEnabled: Boolean =
     getConf(LEGACY_MSSQLSERVER_DATETIMEOFFSET_MAPPING_ENABLED)
+
+  def msSqlServerUseDatetime2ForTimestamp: Boolean =
+    getConf(MSSQLSERVER_USE_DATETIME2_FOR_TIMESTAMP)
 
   def legacyMySqlBitArrayMappingEnabled: Boolean =
     getConf(LEGACY_MYSQL_BIT_ARRAY_MAPPING_ENABLED)
