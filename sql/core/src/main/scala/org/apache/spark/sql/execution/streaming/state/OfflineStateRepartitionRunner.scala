@@ -21,7 +21,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.checkpointing.{CommitMetadata, OffsetSeq, OffsetSeqLog, OffsetSeqMetadata}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CommitMetadata, OffsetSeq, OffsetSeqLog, OffsetSeqMetadata, OffsetSeqMetadataBase}
 import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryCheckpointMetadata
 import org.apache.spark.sql.execution.streaming.utils.StreamingUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -208,8 +208,8 @@ class OfflineStateRepartitionRunner(
     // Create a new OffsetSeq from the last committed but with an update num shuffle partitions
     val newOffsetSeq = lastCommittedOffsetSeq match {
       case v1: OffsetSeq =>
-        val metadata = v1.metadata.get
-        v1.copy(metadata = Some(metadata.copy(
+        val metadata = v1.metadataOpt.get.asInstanceOf[OffsetSeqMetadata]
+        v1.copy(metadataOpt = Some(metadata.copy(
           conf = metadata.conf + (SQLConf.SHUFFLE_PARTITIONS.key -> numPartitions.toString))))
       case _ => throw OfflineStateRepartitionErrors.unsupportedOffsetSeqVersionError(
         checkpointLocation, version = -1)
@@ -267,7 +267,7 @@ object OfflineStateRepartitionUtils {
     }
   }
 
-  def getShufflePartitions(metadata: OffsetSeqMetadata): Option[Int] = {
+  def getShufflePartitions(metadata: OffsetSeqMetadataBase): Option[Int] = {
     metadata.conf.get(SQLConf.SHUFFLE_PARTITIONS.key).map(_.toInt)
   }
 }

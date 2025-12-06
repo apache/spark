@@ -19,8 +19,10 @@ package org.apache.spark.sql.execution.streaming
 
 import java.io.File
 
+import org.scalatest.Tag
+
 import org.apache.spark.sql.catalyst.util.stringToFile
-import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeq, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata}
+import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeq, OffsetSeqBase, OffsetSeqControlBatchInfo, OffsetSeqLog, OffsetSeqMetadata, OffsetSeqMetadataV2, OffsetSeqRewindBatchInfo, OffsetSeqV2}
 import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, SerializedOffset}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -236,5 +238,59 @@ class OffsetSeqLogSuite extends SharedSparkSession {
     val metadata = offsetSeq.metadataOpt.get
     assert(metadata.batchWatermarkMs === 0)
     assert(metadata.batchTimestampMs === 1758651405232L)
+  }
+
+  def getConfWith(shufflePartitions: Int): Map[String, String] = {
+    Map(SQLConf.SHUFFLE_PARTITIONS.key -> shufflePartitions.toString)
+  }
+
+  testWithOffsetV2("offsetSeqMetadata deserialization with controlBatchInfo") {
+    // controlBatchInfo with rewindBatchInfo
+    val offsetSeqMetadata = new OffsetSeqMetadataV2(controlBatchInfo = Some(
+      OffsetSeqControlBatchInfo(Some(OffsetSeqRewindBatchInfo(1)))))
+    assert(OffsetSeqMetadataV2(offsetSeqMetadata.json) === offsetSeqMetadata)
+
+    // All fields
+    assert(new OffsetSeqMetadataV2(1, 2, getConfWith(shufflePartitions = 3), Map.empty,
+      Some(OffsetSeqControlBatchInfo(
+        Some(OffsetSeqRewindBatchInfo(1))))) ===
+      OffsetSeqMetadataV2(
+        """{"batchTimestampMs":2,"batchWatermarkMs":1,
+          |"conf":{"spark.sql.shuffle.partitions":"3"},
+          |"controlBatchInfo":{"rewindInfo":{"oldBatchId":1}},"sourceMetadataInfo":{}}"""
+          .stripMargin))
+  }
+
+  testWithOffsetV2(
+      "offsetSeqLog serialization and deserialization with controlBatchInfo") {
+    withTempDir { checkpointDir =>
+      val metadataLog = new OffsetSeqLog(spark, checkpointDir.getAbsolutePath)
+      val batch0 = OffsetSeqV2(
+        Seq(Some(LongOffset(0))),
+        Some(OffsetSeqMetadataV2(
+          controlBatchInfo = Some(OffsetSeqControlBatchInfo(Some(
+            OffsetSeqRewindBatchInfo(1)))))))
+      assert(metadataLog.add(0, batch0))
+      assert(metadataLog.get(0) === Some(batch0))
+      // Verify the content on disk
+      val logFile = new File(checkpointDir, "0")
+      val lines = scala.io.Source.fromFile(logFile).getLines().toSeq
+      assert(lines.head === "v2")
+      assert(lines(1).contains("controlBatchInfo"))
+    }
+  }
+
+  def testWithOffsetV2(
+      testName: String, testTags: Tag*)(testBody: => Any): Unit = {
+    super.test(testName, testTags: _*) {
+      // in case tests have any code that needs to execute before every test
+      super.beforeEach()
+      withSQLConf(
+        SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key -> "2") {
+        testBody
+      }
+      // in case tests have any code that needs to execute after every test
+      super.afterEach()
+    }
   }
 }

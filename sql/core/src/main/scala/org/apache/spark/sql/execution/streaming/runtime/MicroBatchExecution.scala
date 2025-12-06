@@ -41,8 +41,8 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, RealTimeStreamScanExec, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
-import org.apache.spark.sql.execution.streaming.{AvailableNowTrigger, Offset, OneTimeTrigger, ProcessingTimeTrigger, RealTimeModeAllowlist, RealTimeTrigger, Sink, Source, StreamingQueryPlanTraverseHelper}
-import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CommitMetadata, OffsetSeqBase, OffsetSeqMetadata}
+import org.apache.spark.sql.execution.streaming.{AvailableNowTrigger, Offset, OneTimeTrigger, ProcessingTimeTrigger, RealTimeModeAllowlist, RealTimeTrigger, RewindProviderMetadata, Sink, Source, StreamingQueryPlanTraverseHelper, StreamingUtils}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CommitMetadata, OffsetSeqBase, OffsetSeqMetadata, OffsetSeqMetadataV2, SourceMetadataInfo}
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StatefulOpStateStoreCheckpointInfo, StateStoreWriter}
 import org.apache.spark.sql.execution.streaming.runtime.AcceptsLatestSeenOffsetHandler
 import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS, DIR_NAME_STATE}
@@ -813,9 +813,38 @@ class MicroBatchExecution(
       .map(p => p._1 -> p._2.get).toMap
 
     // Update the query metadata
-    execCtx.offsetSeqMetadata = execCtx.offsetSeqMetadata.copy(
-      batchWatermarkMs = watermarkTracker.currentWatermark,
-      batchTimestampMs = triggerClock.getTimeMillis())
+    if (sparkSession.conf.get(SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION) == 2) {
+      val sourceMetadataInfo = sources.zipWithIndex.map { case (provider, index) =>
+        val sourceId = index.toString
+        val providerName = if (provider.providerName.isEmpty) {
+          "undefined"
+        } else {
+          provider.providerName
+        }
+        val rewindProviderMetadata = RewindProviderMetadata(
+          providerName = if (provider.rewindProviderClassName.isEmpty) {
+            "undefined"
+          } else {
+            provider.rewindProviderClassName
+          }
+        )
+        sourceId -> SourceMetadataInfo(sourceId, providerName, provider.apiVersion,
+          rewindProviderMetadata)
+      }.toMap
+
+      execCtx.offsetSeqMetadata = OffsetSeqMetadataV2(
+        batchWatermarkMs = watermarkTracker.currentWatermark,
+        batchTimestampMs = triggerClock.getTimeMillis(),
+        conf = execCtx.offsetSeqMetadata.conf,
+        sourceMetadataInfo = sourceMetadataInfo
+      )
+    } else {
+      execCtx.offsetSeqMetadata = OffsetSeqMetadata(
+        batchWatermarkMs = watermarkTracker.currentWatermark,
+        batchTimestampMs = triggerClock.getTimeMillis(),
+        conf = execCtx.offsetSeqMetadata.conf
+      )
+    }
 
     // Check whether next batch should be constructed
     val lastExecutionRequiresAnotherBatch = noDataBatchesEnabled &&
