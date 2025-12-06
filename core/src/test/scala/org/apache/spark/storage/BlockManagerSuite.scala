@@ -2634,6 +2634,28 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     assert(logBlockIds.contains(logBlockId1) && logBlockIds.contains(logBlockId2))
   }
 
+  test("SPARK-53446: Optimize BlockManager remove operations with cached block mappings") {
+    val store = makeBlockManager(8000, "executor1")
+    val broadcastId = 0
+    val rddId = 1
+    val sessionId = UUID.randomUUID.toString
+    val data = new Array[Byte](100)
+
+    store.putSingle(BroadcastBlockId(broadcastId), data, StorageLevel.MEMORY_ONLY)
+    assert(store.blockInfoManager.broadcastBlockIds(broadcastId).nonEmpty)
+    store.putSingle(rdd(rddId, 3), data, StorageLevel.MEMORY_ONLY)
+    assert(store.blockInfoManager.rddBlockIds(rddId).nonEmpty)
+    store.putSingle(CacheId(sessionId, "abc"), data, StorageLevel.MEMORY_ONLY)
+    assert(store.blockInfoManager.sessionBlockIds(sessionId).nonEmpty)
+
+    store.removeBroadcast(broadcastId, false)
+    assert(store.blockInfoManager.broadcastBlockIds(broadcastId).isEmpty)
+    store.removeRdd(rddId)
+    assert(store.blockInfoManager.rddBlockIds(rddId).isEmpty)
+    store.removeCache(sessionId)
+    assert(store.blockInfoManager.sessionBlockIds(sessionId).isEmpty)
+  }
+
   private def createKryoSerializerWithDiskCorruptedInputStream(): KryoSerializer = {
     class TestDiskCorruptedInputStream extends InputStream {
       override def read(): Int = throw new IOException("Input/output error")
