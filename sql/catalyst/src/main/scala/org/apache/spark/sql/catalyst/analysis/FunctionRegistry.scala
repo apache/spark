@@ -701,6 +701,7 @@ object FunctionRegistry {
     expression[MakeDate]("make_date"),
     expression[MakeTime]("make_time"),
     expression[TimeTrunc]("time_trunc"),
+    expression[TimeBucket]("time_bucket", setAlias = true),
     expression[TimeFromSeconds]("time_from_seconds"),
     expression[TimeFromMillis]("time_from_millis"),
     expression[TimeFromMicros]("time_from_micros"),

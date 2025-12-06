@@ -248,6 +248,7 @@ __all__ = [  # noqa: F405
     "timestamp_micros",
     "timestamp_millis",
     "timestamp_seconds",
+    "time_bucket",
     "time_diff",
     "time_from_micros",
     "time_from_millis",

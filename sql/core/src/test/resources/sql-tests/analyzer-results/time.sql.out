@@ -2294,3 +2294,175 @@ SELECT time_from_micros(time_to_micros(TIME'14:30:00.5'))
 -- !query analysis
 Project [time_from_micros(time_to_micros(14:30:00.5)) AS time_from_micros(time_to_micros(TIME '14:30:00.5'))#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT time_bucket(INTERVAL '15' MINUTE, TIME'09:37:22.123456')
+-- !query analysis
+Project [time_bucket(INTERVAL '15' MINUTE, 09:37:22.123456) AS time_bucket(INTERVAL '15' MINUTE, TIME '09:37:22.123456')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_bucket(INTERVAL '30' MINUTE, TIME'14:47:00.987654')
+-- !query analysis
+Project [time_bucket(INTERVAL '30' MINUTE, 14:47:00.987654) AS time_bucket(INTERVAL '30' MINUTE, TIME '14:47:00.987654')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_bucket(INTERVAL '1' HOUR, TIME'16:35:00.500000')
+-- !query analysis
+Project [time_bucket(INTERVAL '01' HOUR, 16:35:00.5) AS time_bucket(INTERVAL '01' HOUR, TIME '16:35:00.5')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_bucket(INTERVAL '2' HOUR, TIME'15:20:00.123000')
+-- !query analysis
+Project [time_bucket(INTERVAL '02' HOUR, 15:20:00.123) AS time_bucket(INTERVAL '02' HOUR, TIME '15:20:00.123')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_bucket(INTERVAL '90' MINUTE, TIME'10:45:00.456789')
+-- !query analysis
+Project [time_bucket(INTERVAL '90' MINUTE, 10:45:00.456789) AS time_bucket(INTERVAL '90' MINUTE, TIME '10:45:00.456789')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_bucket(INTERVAL '1' HOUR, TIME'00:00:00.123456')
+-- !query analysis
+Project [time_bucket(INTERVAL '01' HOUR, 00:00:00.123456) AS time_bucket(INTERVAL '01' HOUR, TIME '00:00:00.123456')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_bucket(INTERVAL '30' MINUTE, TIME'23:59:59.888888')
+-- !query analysis
+Project [time_bucket(INTERVAL '30' MINUTE, 23:59:59.888888) AS time_bucket(INTERVAL '30' MINUTE, TIME '23:59:59.888888')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_bucket(INTERVAL '15' MINUTE, TIME'09:30:00.555555')
+-- !query analysis
+Project [time_bucket(INTERVAL '15' MINUTE, 09:30:00.555555) AS time_bucket(INTERVAL '15' MINUTE, TIME '09:30:00.555555')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_bucket(INTERVAL '1' SECOND, TIME'00:00:00.000001')
+-- !query analysis
+Project [time_bucket(INTERVAL '01' SECOND, 00:00:00.000001) AS time_bucket(INTERVAL '01' SECOND, TIME '00:00:00.000001')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_bucket(INTERVAL '100' MILLISECOND, TIME'12:34:56.789123')
+-- !query analysis
+Project [time_bucket(INTERVAL '00.1' SECOND, 12:34:56.789123) AS time_bucket(INTERVAL '00.1' SECOND, TIME '12:34:56.789123')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_bucket(INTERVAL '1000' MICROSECOND, TIME'14:30:00.555555')
+-- !query analysis
+Project [time_bucket(INTERVAL '00.001' SECOND, 14:30:00.555555) AS time_bucket(INTERVAL '00.001' SECOND, TIME '14:30:00.555555')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_bucket(INTERVAL '15' MINUTE, NULL)
+-- !query analysis
+Project [time_bucket(INTERVAL '15' MINUTE, cast(null as time(6))) AS time_bucket(INTERVAL '15' MINUTE, NULL)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_bucket(NULL, TIME'12:34:56.789012')
+-- !query analysis
+Project [time_bucket(cast(null as interval day to second), 12:34:56.789012) AS time_bucket(NULL, TIME '12:34:56.789012')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_bucket(NULL, NULL)
+-- !query analysis
+Project [time_bucket(cast(null as interval day to second), cast(null as time(6))) AS time_bucket(NULL, NULL)#x]
++- OneRowRelation
+
+
+-- !query
+WITH time_bucket_data AS (
+  SELECT * FROM VALUES
+    (1, TIME'09:15:30.123456'),
+    (2, TIME'09:37:45.654321'),
+    (3, TIME'10:05:12.987654'),
+    (4, TIME'14:42:00.111222'),
+    (5, TIME'14:55:30.333444')
+  AS t(id, event_time)
+)
+SELECT time_bucket(INTERVAL '30' MINUTE, event_time) AS time_slot,
+       COUNT(*) AS cnt
+FROM time_bucket_data
+GROUP BY time_slot
+ORDER BY time_slot
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias time_bucket_data
+:     +- Project [id#x, event_time#x]
+:        +- SubqueryAlias t
+:           +- LocalRelation [id#x, event_time#x]
++- Sort [time_slot#x ASC NULLS FIRST], true
+   +- Aggregate [time_bucket(INTERVAL '30' MINUTE, event_time#x)], [time_bucket(INTERVAL '30' MINUTE, event_time#x) AS time_slot#x, count(1) AS cnt#xL]
+      +- SubqueryAlias time_bucket_data
+         +- CTERelationRef xxxx, true, [id#x, event_time#x], false, false, 5
+
+
+-- !query
+SELECT time_bucket(INTERVAL '0' MINUTE, TIME'12:34:56.789123')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "currentValue" : "0L",
+    "exprName" : "bucket_width",
+    "sqlExpr" : "\"time_bucket(INTERVAL '00' MINUTE, TIME '12:34:56.789123')\"",
+    "valueRange" : "(0, 9223372036854775807]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 62,
+    "fragment" : "time_bucket(INTERVAL '0' MINUTE, TIME'12:34:56.789123')"
+  } ]
+}
+
+
+-- !query
+SELECT time_bucket(INTERVAL '-15' MINUTE, TIME'12:34:56.456789')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "currentValue" : "-900000000L",
+    "exprName" : "bucket_width",
+    "sqlExpr" : "\"time_bucket(INTERVAL '-15' MINUTE, TIME '12:34:56.456789')\"",
+    "valueRange" : "(0, 9223372036854775807]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 64,
+    "fragment" : "time_bucket(INTERVAL '-15' MINUTE, TIME'12:34:56.456789')"
+  } ]
+}
