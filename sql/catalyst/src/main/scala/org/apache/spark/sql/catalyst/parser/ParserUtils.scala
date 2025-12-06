@@ -24,7 +24,7 @@ import scala.util.matching.Regex
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.misc.Interval
-import org.antlr.v4.runtime.tree.{ParseTree, TerminalNodeImpl}
+import org.antlr.v4.runtime.tree.{ParseTree, TerminalNode, TerminalNodeImpl}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
@@ -86,6 +86,18 @@ object ParserUtils extends SparkParserUtils {
   def stringWithoutUnescape(node: Token): String = {
     // STRING parser rule forces that the input always has quotes at the starting and ending.
     node.getText.slice(1, node.getText.length - 1)
+  }
+
+  /**
+   * Obtain the string literal provided as a dollar quoted string.
+   * A dollar quoted string is defined as {{{$[tag]$<string literal>$[tag]$}}},
+   * where the string literal is parsed as a list of body sections.
+   * This helper method concatenates all body sections and restores the string literal back.
+   */
+  def dollarQuotedString(sections: util.List[TerminalNode]): String = {
+    val sb = new StringBuilder()
+    sections forEach (body => sb.append(body.getText))
+    sb.toString()
   }
 
   /** Collect the entries if any. */
