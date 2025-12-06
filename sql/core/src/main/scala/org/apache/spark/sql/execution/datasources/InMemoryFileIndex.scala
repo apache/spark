@@ -65,6 +65,7 @@ class InMemoryFileIndex(
 
   @volatile private var cachedLeafFiles: mutable.LinkedHashMap[Path, FileStatus] = _
   @volatile private var cachedLeafDirToChildrenFiles: Map[Path, Array[FileStatus]] = _
+  @volatile private var cachedPartitionDirToChildrenFiles: Map[Path, Array[FileStatus]] = _
   @volatile private var cachedPartitionSpec: PartitionSpec = _
 
   refresh0()
@@ -81,12 +82,50 @@ class InMemoryFileIndex(
     cachedPartitionSpec
   }
 
+  def getCachedPartitionDirToChildrenFiles(): Map[Path, Array[FileStatus]] = {
+    val partitionDirs = partitionSpec().partitions.map(_.path) match {
+      case seq if seq.nonEmpty => seq.toSet
+      // For non-partitioned tables or other paths, we consider the root paths as partition
+      // dirs. And if root paths are files, we consider their parent dirs as partition dirs.
+      case _ => rootPaths.map { path =>
+        val qualifiedPath = path.getFileSystem(hadoopConf).makeQualified(path)
+        leafFiles.get(qualifiedPath) match {
+          case Some(_) => qualifiedPath.getParent
+          case None => qualifiedPath
+        }
+      }.toSet
+    }
+
+    def findParentDir(dir: Path): Option[Path] = {
+      if (partitionDirs.contains(dir)) Some(dir)
+      else Option(dir.getParent).flatMap(findParentDir)
+    }
+
+    val tmpCachedPartitionDirToChildrenFiles = mutable.Map[Path, Array[FileStatus]]()
+    cachedLeafDirToChildrenFiles.foldLeft(tmpCachedPartitionDirToChildrenFiles) {
+      case (acc, (leafDir, childrenFiles)) =>
+        findParentDir(leafDir) match {
+          case Some(currDir) =>
+            val existingFiles = acc.getOrElse(currDir, Array.empty[FileStatus])
+            acc.clone.addOne((currDir, existingFiles ++ childrenFiles))
+          case None => acc
+        }
+    }.toMap
+  }
+
   override protected def leafFiles: mutable.LinkedHashMap[Path, FileStatus] = {
     cachedLeafFiles
   }
 
   override protected def leafDirToChildrenFiles: Map[Path, Array[FileStatus]] = {
     cachedLeafDirToChildrenFiles
+  }
+
+  override protected def partitionDirToChildrenFiles: Map[Path, Array[FileStatus]] = {
+    if (cachedPartitionDirToChildrenFiles == null) {
+      cachedPartitionDirToChildrenFiles = getCachedPartitionDirToChildrenFiles()
+    }
+    cachedPartitionDirToChildrenFiles
   }
 
   override def refresh(): Unit = {
@@ -99,6 +138,7 @@ class InMemoryFileIndex(
     cachedLeafFiles =
       new mutable.LinkedHashMap[Path, FileStatus]() ++= files.map(f => f.getPath -> f)
     cachedLeafDirToChildrenFiles = files.toArray.groupBy(_.getPath.getParent)
+    cachedPartitionDirToChildrenFiles = null
     cachedPartitionSpec = null
   }
 
