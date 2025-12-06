@@ -144,8 +144,11 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
         "Starting test(%s): %s (temp output: %s)", pyspark_python, test_name, per_test_output.name)
     start_time = time.time()
     try:
+        args = test_name.split()
+        if len(args) == 2:
+            args.insert(1, "-k")
         retcode = subprocess.Popen(
-            [os.path.join(SPARK_HOME, "bin/pyspark")] + test_name.split(),
+            [os.path.join(SPARK_HOME, "bin/pyspark")] + args,
             stderr=per_test_output, stdout=per_test_output, env=env).wait()
         if not keep_test_output:
             # There exists a race condition in Python and it causes flakiness in MacOS

@@ -40,8 +40,19 @@ You can run individual tests by using ``--testnames`` option. For example,
 
 .. code-block:: bash
 
+    # Run all tests in a module
     python/run-tests --testnames pyspark.sql.tests.test_dataframe
+    # Run a specific test case
     python/run-tests --testnames pyspark.sql.tests.test_dataframe.DataFrameTests.test_range
+    # Equivalent to the above
+    python/run-tests --testnames "pyspark.sql.tests.test_dataframe DataFrameTests.test_range"
+    # You don't need to specify everything, run-tests will do a pattern match
+    # It uses "-k" for unittest
+    python/run-tests --testnames "pyspark.sql.tests.test_dataframe test_range"
+    # This works too
+    python/run-tests --testnames pyspark.sql.tests.test_dataframe.test_range
+    # This will match all tests with "range" in their names
+    python/run-tests --testnames pyspark.sql.tests.test_dataframe.range
 
 Note that you may set ``OBJC_DISABLE_INITIALIZE_FORK_SAFETY`` environment variable to ``YES`` if you are running tests on Mac OS.
 
