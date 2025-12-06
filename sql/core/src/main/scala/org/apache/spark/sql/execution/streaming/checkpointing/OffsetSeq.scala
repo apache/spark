@@ -115,8 +115,8 @@ object OffsetSeq {
    * Returns a [[OffsetSeqV2]] with metadata and a variable sequence of offsets.
    * `nulls` in the sequence are converted to `None`s.
    */
-  def fillV2(metadata: Option[String], offsets: OffsetV2*): OffsetSeqV2 = {
-    OffsetSeqV2(offsets.map(Option(_)), metadata.map(OffsetSeqMetadataV2.apply))
+  def fillV2(metadataOpt: Option[String], offsets: OffsetV2*): OffsetSeqV2 = {
+    OffsetSeqV2(offsets.map(Option(_)), metadataOpt.map(OffsetSeqMetadataV2.apply))
   }
 }
 
