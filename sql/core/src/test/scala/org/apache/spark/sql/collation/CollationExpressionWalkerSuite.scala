@@ -18,6 +18,7 @@
 package org.apache.spark.sql.collation
 
 import java.sql.Timestamp
+import java.time.LocalTime
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.ExpressionBuilder
@@ -98,6 +99,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
     inputType match {
       // TODO: Try to make this a bit more random.
       case AnyTimestampType => Literal(Timestamp.valueOf("2009-07-30 12:58:59"))
+      case AnyTimeType => Literal(LocalTime.parse("03:25:45.678901"))
       case BinaryType => collationType match {
         case Utf8Binary =>
           Literal.create("dummy string".getBytes)
@@ -179,6 +181,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
     inputType match {
       // TODO: Try to make this a bit more random.
       case AnyTimestampType => "TIMESTAMP'2009-07-30 12:58:59'"
+      case AnyTimeType => "TIME'03:25:45.678901'"
       case BinaryType =>
         collationType match {
           case Utf8Binary => "Cast('dummy string' collate utf8_binary as BINARY)"
@@ -244,6 +247,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       collationType: CollationType): String =
     inputType match {
       case AnyTimestampType => "TIMESTAMP"
+      case AnyTimeType => "TIME"
       case BinaryType => "BINARY"
       case BooleanType => "BOOLEAN"
       case ByteType => "TINYINT"
@@ -384,8 +388,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       "sha2",
       "sha",
       "crc32",
-      "ascii",
-      "time_trunc"
+      "ascii"
     )
 
     logInfo("Total number of expression: " + expressionCounter)

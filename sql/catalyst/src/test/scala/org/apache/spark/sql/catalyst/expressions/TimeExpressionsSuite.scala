@@ -666,4 +666,66 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val timeVal = TimeFromSeconds(Literal(secondsValue))
     checkEvaluation(TimeToMicros(timeVal), 14500000L)
   }
+
+  test("TimeFormat - foldable and non-foldable formats with codegen") {
+    val time = localTime(14, 30, 45, 123456)
+    val timeLit = Literal(time, TimeType())
+
+    // Foldable format - formatter cached at planning time
+    val foldableExpr = TimeFormat(timeLit, Literal("HH:mm:ss"))
+    checkEvaluation(foldableExpr, "14:30:45")
+    checkEvaluation(
+      TimeFormat(Literal(localTime(9, 5, 0), TimeType()), Literal("hh:mm:ss a")),
+      "09:05:00 AM")
+    checkEvaluation(
+      TimeFormat(timeLit, Literal("HH:mm:ss.SSSSSS")),
+      "14:30:45.123456")
+
+    // Non-foldable format - formatter created per evaluation
+    val nonFoldableExpr = TimeFormat(timeLit, NonFoldableLiteral("HH:mm:ss", StringType))
+    checkEvaluation(nonFoldableExpr, "14:30:45")
+    checkEvaluation(
+      TimeFormat(timeLit, NonFoldableLiteral("hh:mm:ss a", StringType)),
+      "02:30:45 PM")
+    checkEvaluation(
+      TimeFormat(timeLit, NonFoldableLiteral("HH:mm:ss.SSSSSS", StringType)),
+      "14:30:45.123456")
+
+    // Multiple formats on same time
+    Seq("HH:mm:ss", "hh:mm a", "HH:mm", "HH").zip(
+      Seq("14:30:45", "02:30 PM", "14:30", "14")
+    ).foreach { case (format, expected) =>
+      checkEvaluation(
+        TimeFormat(timeLit, NonFoldableLiteral(format, StringType)),
+        expected)
+    }
+
+    // Edge cases
+    checkEvaluation(
+      TimeFormat(Literal(localTime(0, 0, 0), TimeType()), Literal("HH:mm:ss")),
+      "00:00:00")
+    checkEvaluation(
+      TimeFormat(Literal(localTime(23, 59, 59, 999999), TimeType()),
+        Literal("HH:mm:ss.SSSSSS")),
+      "23:59:59.999999")
+
+    // Null handling
+    checkEvaluation(
+      TimeFormat(Literal.create(null, TimeType()), Literal("HH:mm:ss")),
+      null)
+    checkEvaluation(
+      TimeFormat(timeLit, Literal.create(null, StringType)),
+      null)
+    checkEvaluation(
+      TimeFormat(Literal.create(null, TimeType()), NonFoldableLiteral("HH:mm:ss", StringType)),
+      null)
+    checkEvaluation(
+      TimeFormat(timeLit, NonFoldableLiteral(null, StringType)),
+      null)
+
+    // Verify foldable and non-foldable produce same result
+    val foldableResult = foldableExpr.eval()
+    val nonFoldableResult = nonFoldableExpr.eval()
+    assert(foldableResult == nonFoldableResult)
+  }
 }

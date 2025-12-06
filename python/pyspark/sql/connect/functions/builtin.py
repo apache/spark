@@ -3657,6 +3657,13 @@ def time_diff(unit: "ColumnOrName", start: "ColumnOrName", end: "ColumnOrName") 
 time_diff.__doc__ = pysparkfuncs.time_diff.__doc__
 
 
+def time_format(time: "ColumnOrName", format: str) -> Column:
+    return _invoke_function("time_format", _to_col(time), lit(format))
+
+
+time_format.__doc__ = pysparkfuncs.time_format.__doc__
+
+
 def time_trunc(unit: "ColumnOrName", time: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("time_trunc", unit, time)
 
