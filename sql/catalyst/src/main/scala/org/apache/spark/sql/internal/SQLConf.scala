@@ -2854,7 +2854,7 @@ object SQLConf {
     buildConf("spark.sql.streaming.offsetLog.formatVersion")
       .internal()
       .doc("The version of the offset log format. The default value is 1.")
-      .version("4.1.0")
+      .version("4.2.0")
       .intConf
       .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
       .createWithDefault(1)
