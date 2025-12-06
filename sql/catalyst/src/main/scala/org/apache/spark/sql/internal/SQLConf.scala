@@ -2850,6 +2850,15 @@ object SQLConf {
       .intConf
       .createWithDefault(1)
 
+  val STREAMING_OFFSET_LOG_FORMAT_VERSION =
+    buildConf("spark.sql.streaming.offsetLog.formatVersion")
+      .internal()
+      .doc("The version of the offset log format. The default value is 1.")
+      .version("4.1.0")
+      .intConf
+      .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
+      .createWithDefault(1)
+
   val STREAMING_MAX_NUM_STATE_SCHEMA_FILES =
     buildConf("spark.sql.streaming.stateStore.maxNumStateSchemaFiles")
       .internal()
@@ -7119,6 +7128,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def stateStoreCompressionCodec: String = getConf(STATE_STORE_COMPRESSION_CODEC)
 
   def stateStoreCheckpointFormatVersion: Int = getConf(STATE_STORE_CHECKPOINT_FORMAT_VERSION)
+
+  def streamingOffsetLogFormatVersion: Int = getConf(STREAMING_OFFSET_LOG_FORMAT_VERSION)
 
   def stateStoreEncodingFormat: String = getConf(STREAMING_STATE_STORE_ENCODING_FORMAT)
 

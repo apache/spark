@@ -88,7 +88,7 @@ class OffsetSeqLog(sparkSession: SparkSession, path: String)
         }
         sourceId -> offset
       }.toMap
-      OffsetMap(offsetsMap, metadata.map(OffsetSeqMetadata.apply))
+      OffsetMap(offsetsMap, metadata.map(OffsetSeqMetadataV2.apply))
     } else {
       OffsetSeq.fill(metadata,
         lines.map(OffsetSeqLog.parseOffset).toArray.toImmutableArraySeq: _*)
@@ -128,7 +128,7 @@ class OffsetSeqLog(sparkSession: SparkSession, path: String)
     }
   }
 
-  def offsetSeqMetadataForBatchId(batchId: Long): Option[OffsetSeqMetadata] = {
+  def offsetSeqMetadataForBatchId(batchId: Long): Option[OffsetSeqMetadataBase] = {
     if (batchId < 0) {
       None
     } else {
