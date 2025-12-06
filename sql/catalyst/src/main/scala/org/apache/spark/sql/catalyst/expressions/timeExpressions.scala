@@ -34,21 +34,10 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.TimeFormatter
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, AnyTimeType, ByteType, DataType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, IntegralType, LongType, NumericType, ObjectType, TimeType}
 import org.apache.spark.sql.types.DayTimeIntervalType.{HOUR, SECOND}
 import org.apache.spark.unsafe.types.UTF8String
-
-trait TimeExpression extends Expression {
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (SQLConf.get.isTimeTypeEnabled) {
-      super.checkInputDataTypes()
-    } else {
-      throw QueryCompilationErrors.unsupportedTimeTypeError()
-    }
-  }
-}
 
 /**
  * Parses a column to a time based on the given format.
@@ -77,7 +66,7 @@ trait TimeExpression extends Expression {
   since = "4.1.0")
 // scalastyle:on line.size.limit
 case class ToTime(str: Expression, format: Option[Expression])
-  extends RuntimeReplaceable with ExpectsInputTypes with TimeExpression {
+  extends RuntimeReplaceable with ExpectsInputTypes {
 
   def this(str: Expression, format: Expression) = this(str, Option(format))
   def this(str: Expression) = this(str, None)
@@ -213,7 +202,7 @@ object TryToTimeExpressionBuilder extends ExpressionBuilder {
 // scalastyle:on line.size.limit
 case class MinutesOfTime(child: Expression)
   extends RuntimeReplaceable
-    with ExpectsInputTypes with TimeExpression {
+    with ExpectsInputTypes {
 
   override def replacement: Expression = StaticInvoke(
     classOf[DateTimeUtils.type],
@@ -272,7 +261,7 @@ object MinuteExpressionBuilder extends ExpressionBuilder {
 
 case class HoursOfTime(child: Expression)
   extends RuntimeReplaceable
-    with ExpectsInputTypes with TimeExpression {
+    with ExpectsInputTypes {
 
   override def replacement: Expression = StaticInvoke(
     classOf[DateTimeUtils.type],
@@ -329,7 +318,7 @@ object HourExpressionBuilder extends ExpressionBuilder {
 
 case class SecondsOfTimeWithFraction(child: Expression)
   extends RuntimeReplaceable
-  with ExpectsInputTypes with TimeExpression {
+  with ExpectsInputTypes {
   override def replacement: Expression = {
     val precision = child.dataType match {
       case TimeType(p) => p
@@ -355,7 +344,7 @@ case class SecondsOfTimeWithFraction(child: Expression)
 
 case class SecondsOfTime(child: Expression)
   extends RuntimeReplaceable
-    with ExpectsInputTypes with TimeExpression {
+    with ExpectsInputTypes {
 
   override def replacement: Expression = StaticInvoke(
     classOf[DateTimeUtils.type],
@@ -446,8 +435,7 @@ object SecondExpressionBuilder extends ExpressionBuilder {
 case class CurrentTime(
     child: Expression = Literal(TimeType.MICROS_PRECISION),
     timeZoneId: Option[String] = None) extends UnaryExpression
-  with TimeZoneAwareExpression with ImplicitCastInputTypes with CodegenFallback
-  with TimeExpression {
+  with TimeZoneAwareExpression with ImplicitCastInputTypes with CodegenFallback {
 
   def this() = {
     this(Literal(TimeType.MICROS_PRECISION), None)
@@ -559,7 +547,7 @@ case class MakeTime(
     secsAndMicros: Expression)
   extends RuntimeReplaceable
     with ImplicitCastInputTypes
-    with ExpectsInputTypes with TimeExpression {
+    with ExpectsInputTypes {
 
   // Accept `sec` as DecimalType to avoid loosing precision of microseconds while converting
   // it to the fractional part of `sec`. If `sec` is an IntegerType, it can be cast into decimal
@@ -584,8 +572,7 @@ case class MakeTime(
  * Adds day-time interval to time.
  */
 case class TimeAddInterval(time: Expression, interval: Expression)
-  extends BinaryExpression with RuntimeReplaceable with ExpectsInputTypes
-  with TimeExpression {
+  extends BinaryExpression with RuntimeReplaceable with ExpectsInputTypes {
   override def nullIntolerant: Boolean = true
 
   override def left: Expression = time
@@ -626,8 +613,7 @@ case class TimeAddInterval(time: Expression, interval: Expression)
  * Returns a day-time interval between time values.
  */
 case class SubtractTimes(left: Expression, right: Expression)
-  extends BinaryExpression with RuntimeReplaceable with ExpectsInputTypes
-  with TimeExpression {
+  extends BinaryExpression with RuntimeReplaceable with ExpectsInputTypes {
   override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType, AnyTimeType)
 
@@ -684,8 +670,7 @@ case class TimeDiff(
     end: Expression)
   extends TernaryExpression
   with RuntimeReplaceable
-  with ImplicitCastInputTypes
-  with TimeExpression {
+  with ImplicitCastInputTypes {
 
   override def first: Expression = unit
   override def second: Expression = start
@@ -740,8 +725,7 @@ case class TimeDiff(
   since = "4.1.0")
 // scalastyle:on line.size.limit
 case class TimeTrunc(unit: Expression, time: Expression)
-  extends BinaryExpression with RuntimeReplaceable with ImplicitCastInputTypes
-  with TimeExpression {
+  extends BinaryExpression with RuntimeReplaceable with ImplicitCastInputTypes {
 
   override def left: Expression = unit
   override def right: Expression = time
@@ -769,8 +753,7 @@ case class TimeTrunc(unit: Expression, time: Expression)
 }
 
 abstract class IntegralToTimeBase
-  extends UnaryExpression with ExpectsInputTypes with CodegenFallback
-  with TimeExpression {
+  extends UnaryExpression with ExpectsInputTypes {
   protected def upScaleFactor: Long
 
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType)
@@ -787,10 +770,25 @@ abstract class IntegralToTimeBase
     val nanos = Math.multiplyExact(input.asInstanceOf[Number].longValue(), upScaleFactor)
     validateTimeNanos(nanos)
   }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, c => {
+      val nanos = if (upScaleFactor == 1) {
+        c
+      } else {
+        s"java.lang.Math.multiplyExact($c, ${upScaleFactor}L)"
+      }
+      s"""
+         |${ev.value} = $nanos;
+         |if (${ev.value} < 0L || ${ev.value} >= ${NANOS_PER_DAY}L) {
+         |  ${ev.isNull} = true;
+         |}
+         |""".stripMargin
+    })
+  }
 }
 
-abstract class TimeToLongBase extends UnaryExpression with ExpectsInputTypes
-  with TimeExpression {
+abstract class TimeToLongBase extends UnaryExpression with ExpectsInputTypes {
   protected def scaleFactor: Long
 
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType)
@@ -837,8 +835,7 @@ abstract class TimeToLongBase extends UnaryExpression with ExpectsInputTypes
   group = "datetime_funcs")
 // scalastyle:on line.size.limit
 case class TimeFromSeconds(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes with CodegenFallback
-  with TimeExpression {
+  extends UnaryExpression with ExpectsInputTypes {
   override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
   override def dataType: DataType = TimeType(TimeType.MICROS_PRECISION)
   override def nullable: Boolean = true
@@ -877,6 +874,46 @@ case class TimeFromSeconds(child: Expression)
   }
 
   override def nullSafeEval(input: Any): Any = evalFunc(input)
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = child.dataType match {
+    case _: IntegralType =>
+      nullSafeCodeGen(ctx, ev, c => {
+        val nanos = s"java.lang.Math.multiplyExact($c, ${NANOS_PER_SECOND}L)"
+        s"""
+           |${ev.value} = $nanos;
+           |if (${ev.value} < 0L || ${ev.value} >= ${NANOS_PER_DAY}L) {
+           |  ${ev.isNull} = true;
+           |}
+           |""".stripMargin
+      })
+    case _: DecimalType =>
+      val bd = ctx.addReferenceObj("nanoSecondFactor",
+        new java.math.BigDecimal(NANOS_PER_SECOND),
+        classOf[java.math.BigDecimal].getName)
+      nullSafeCodeGen(ctx, ev, c => {
+        s"""
+           |${ev.value} = $c.toJavaBigDecimal().multiply($bd).longValueExact();
+           |if (${ev.value} < 0L || ${ev.value} >= ${NANOS_PER_DAY}L) {
+           |  ${ev.isNull} = true;
+           |}
+           |""".stripMargin
+      })
+    case other =>
+      val castToDouble = if (other.isInstanceOf[FloatType]) "(double)" else ""
+      nullSafeCodeGen(ctx, ev, c => {
+        val typeStr = CodeGenerator.boxedType(other)
+        s"""
+           |if ($typeStr.isNaN($c) || $typeStr.isInfinite($c)) {
+           |  ${ev.isNull} = true;
+           |} else {
+           |  ${ev.value} = (long)($castToDouble$c * ${NANOS_PER_SECOND}L);
+           |  if (${ev.value} < 0L || ${ev.value} >= ${NANOS_PER_DAY}L) {
+           |    ${ev.isNull} = true;
+           |  }
+           |}
+           |""".stripMargin
+      })
+  }
 
   override def prettyName: String = "time_from_seconds"
 
@@ -971,7 +1008,7 @@ case class TimeFromMicros(child: Expression)
   group = "datetime_funcs")
 // scalastyle:on line.size.limit
 case class TimeToSeconds(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with CodegenFallback {
+  extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType)
   override def dataType: DataType = DecimalType(14, 6)
@@ -982,6 +1019,20 @@ case class TimeToSeconds(child: Expression)
     val nanos = input.asInstanceOf[Long]
     val result = Decimal(nanos) / Decimal(NANOS_PER_SECOND)
     if (result.changePrecision(14, 6)) result else null
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val divisor = ctx.addReferenceObj("nanoSecondDecimal",
+      Decimal(NANOS_PER_SECOND),
+      "org.apache.spark.sql.types.Decimal")
+    nullSafeCodeGen(ctx, ev, nanos => {
+      s"""
+         |${ev.value} = org.apache.spark.sql.types.Decimal.apply($nanos).$$div($divisor);
+         |if (!${ev.value}.changePrecision(14, 6)) {
+         |  ${ev.isNull} = true;
+         |}
+         |""".stripMargin
+    })
   }
 
   override def prettyName: String = "time_to_seconds"
