@@ -42,6 +42,7 @@ import org.apache.spark.util.Utils
  *   <li> SQL_GROUPED_AGG_ARROW_UDF for Arrow UDF
  *   <li> SQL_GROUPED_AGG_ARROW_ITER_UDF for Arrow UDF with iterator API
  *   <li> SQL_GROUPED_AGG_PANDAS_UDF for Pandas UDF
+ *   <li> SQL_GROUPED_AGG_PANDAS_ITER_UDF for Pandas UDF with iterator API
  * </ul>
  *
  * This plan works by sending the necessary (projected) input grouped data as Arrow record batches
@@ -240,7 +241,8 @@ case class ArrowAggregatePythonExec(
     Array(
       PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
       PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
-      PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF)
+      PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+      PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF)
 }
 
 object ArrowAggregatePythonExec {
