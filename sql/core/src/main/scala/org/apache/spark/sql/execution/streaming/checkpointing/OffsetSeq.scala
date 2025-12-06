@@ -244,7 +244,8 @@ object OffsetSeqMetadata extends Logging {
       case (confInSession, confInOffsetLog) =>
         confInOffsetLog.key -> sessionConf.get(confInSession.key)
     }.toMap
-    OffsetSeqMetadata(batchWatermarkMs, batchTimestampMs, confs++ confsFromRebind)
+    val version = sessionConf.get(STREAMING_OFFSET_LOG_FORMAT_VERSION.key).toInt
+    OffsetSeqMetadata(batchWatermarkMs, batchTimestampMs, confs++ confsFromRebind, version)
   }
 
   /** Set the SparkSession configuration with the values in the metadata */

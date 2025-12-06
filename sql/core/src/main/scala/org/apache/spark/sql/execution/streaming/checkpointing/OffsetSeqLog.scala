@@ -138,11 +138,11 @@ class OffsetSeqLog(sparkSession: SparkSession, path: String)
 }
 
 object OffsetSeqLog {
-  private[streaming] val VERSION_1 = 1
-  private[streaming] val VERSION_2 = 2
+  val VERSION_1 = 1
+  val VERSION_2 = 2
   private[streaming] val VERSION = VERSION_1  // Default version for backward compatibility
-  private[streaming] val MAX_VERSION = VERSION_2
-  private[streaming] val SERIALIZED_VOID_OFFSET = "-"
+  val MAX_VERSION = VERSION_2
+  private[spark] val SERIALIZED_VOID_OFFSET = "-"
 
   private[checkpointing] def parseOffset(value: String): OffsetV2 = value match {
     case SERIALIZED_VOID_OFFSET => null
