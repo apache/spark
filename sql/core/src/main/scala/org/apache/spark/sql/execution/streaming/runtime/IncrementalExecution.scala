@@ -649,7 +649,7 @@ class IncrementalExecution(
    * planned yet), which is required for asking the needs of another batch to each stateful
    * operator.
    */
-  def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
+  def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadataBase): Boolean = {
     val tentativeBatchId = currentBatchId + 1
     watermarkPropagator.propagate(tentativeBatchId, executedPlan, newMetadata.batchWatermarkMs)
     StreamingQueryPlanTraverseHelper

@@ -21,7 +21,7 @@ import scala.collection.immutable
 
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, SparkDataStream}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeq, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata}
+import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeq, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata, OffsetSeqMetadataBase}
 
 /**
  * A helper class that looks like a Map[Source, Offset].
@@ -38,7 +38,7 @@ class StreamProgress(
   def toOffsets(
       sources: Seq[SparkDataStream],
       sourceIdMap: Map[String, SparkDataStream],
-      metadata: OffsetSeqMetadata): OffsetSeqBase = {
+      metadata: OffsetSeqMetadataBase): OffsetSeqBase = {
     metadata.version match {
       case OffsetSeqLog.VERSION_1 =>
         toOffsetSeq(sources, metadata)
@@ -51,13 +51,13 @@ class StreamProgress(
 
   def toOffsetSeq(
       source: Seq[SparkDataStream],
-      metadata: OffsetSeqMetadata): OffsetSeq = {
-    OffsetSeq(source.map(get), Some(metadata))
+      metadata: OffsetSeqMetadataBase): OffsetSeq = {
+    OffsetSeq(source.map(get), Some(metadata.asInstanceOf[OffsetSeqMetadata]))
   }
 
   private def toOffsetMap(
       sourceIdMap: Map[String, SparkDataStream],
-      metadata: OffsetSeqMetadata): OffsetMap = {
+      metadata: OffsetSeqMetadataBase): OffsetMap = {
     // Compute reverse mapping only when needed
     val sourceToIdMap = sourceIdMap.map(_.swap)
     val offsetsMap = baseMap.map { case (source, offset) =>
