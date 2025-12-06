@@ -19,12 +19,15 @@ package org.apache.spark.sql.streaming
 
 import org.apache.spark.sql.{AnalysisException, Dataset, SaveMode}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Append
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorsUtils
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions.timestamp_seconds
+import org.apache.spark.sql.types.{LongType, StringType, StructType}
 import org.apache.spark.tags.SlowSQLTest
 
 @SlowSQLTest
-class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest {
+class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest
+  with StreamingDeduplicationSuiteBase {
 
   import testImplicits._
 
@@ -232,6 +235,26 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest {
     testStream(result, Append)(
       AddData(inputData, (1, 2)),
       CheckAnswer(2)
+    )
+  }
+
+  test("Partition key extraction - DedupeWithinWatermark") {
+    val df = (input: Dataset[(String, Int)]) => {
+      input.withColumn("eventTime", timestamp_seconds($"_2"))
+        .withWatermark("eventTime", "10 seconds")
+        .dropDuplicatesWithinWatermark("_1")
+        .select($"_1", $"eventTime".cast("long").as[Long])
+    }
+
+    testPartitionKeyExtraction(
+      StatefulOperatorsUtils.DEDUPLICATE_WITHIN_WATERMARK_EXEC_OP_NAME,
+      inputData = Seq(("a", 17), ("b", 22), ("c", 21)),
+      dedupeDF = df,
+      // The key schema for dedup within watermark is just the _1 column (String)
+      keySchema = new StructType().add("_1", StringType),
+      // Value schema includes the expiration time
+      valueSchema = new StructType().add("expiresAtMicros", LongType),
+      sqlConf = spark.sessionState.conf
     )
   }
 }

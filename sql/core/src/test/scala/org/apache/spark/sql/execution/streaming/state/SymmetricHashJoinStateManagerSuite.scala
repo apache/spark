@@ -22,6 +22,7 @@ import java.util.UUID
 
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.BeforeAndAfter
+import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, Expression, GenericInternalRow, LessThanOrEqual, Literal, UnsafeProjection, UnsafeRow}
@@ -29,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
+import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StatefulOperatorsUtils, StatePartitionKeyExtractorFactory}
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.{JoinStateManagerStoreGenerator, SymmetricHashJoinStateManager}
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.LeftSide
 import org.apache.spark.sql.internal.SQLConf
@@ -37,7 +38,8 @@ import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter {
+class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter
+  with PrivateMethodTester {
 
   before {
     SparkSession.setActiveSession(spark) // set this before force initializing 'joinExec'
@@ -81,6 +83,12 @@ class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter 
         val projectedRow = manager.getInternalRowOfKeyWithIndex(currentKey)
         assert(s"$projectedRow" == "[false,10.0,string,1623173150000]")
       }
+    }
+  }
+
+  SymmetricHashJoinStateManager.supportedVersions.foreach { version =>
+    test(s"Partition key extraction - SymmetricHashJoinStateManager v$version") {
+      testPartitionKeyExtraction(version)
     }
   }
 
@@ -349,5 +357,88 @@ class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter 
       }
     }
     StateStore.stop()
+  }
+
+  private def testPartitionKeyExtraction(stateFormatVersion: Int): Unit = {
+    withJoinStateManager(inputValueAttribs, joinKeyExprs, stateFormatVersion) { manager =>
+      implicit val mgr = manager
+
+      val joinKeySchema = StructType(
+        joinKeyExprs.zipWithIndex.map { case (expr, i) =>
+          StructField(s"field$i", expr.dataType, expr.nullable)
+        })
+
+      // Add some test data
+      append(key = 20, value = 100)
+      append(key = 20, value = 200)
+      append(key = 30, value = 150)
+
+      Seq(
+        (getKeyToNumValuesStoreAndKeySchema(), SymmetricHashJoinStateManager
+          .getStateStoreName(LeftSide, SymmetricHashJoinStateManager.KeyToNumValuesType),
+          // expect 1 for both key 20 & 30
+          1, 1),
+        (getKeyWithIndexToValueStoreAndKeySchema(), SymmetricHashJoinStateManager
+          .getStateStoreName(LeftSide, SymmetricHashJoinStateManager.KeyWithIndexToValueType),
+          // expect 2 for key 20 & 1 for key 30
+          2, 1)
+      ).foreach { case ((store, keySchema), name, expectedNumKey20, expectedNumKey30) =>
+        val storeName = if (stateFormatVersion == 3) {
+          StateStoreId.DEFAULT_STORE_NAME
+        } else {
+          name
+        }
+
+        val colFamilyName = if (stateFormatVersion == 3) {
+          name
+        } else {
+          StateStore.DEFAULT_COL_FAMILY_NAME
+        }
+
+        val extractor = StatePartitionKeyExtractorFactory.create(
+          StatefulOperatorsUtils.SYMMETRIC_HASH_JOIN_EXEC_OP_NAME,
+          keySchema,
+          storeName,
+          colFamilyName,
+          stateFormatVersion = Some(stateFormatVersion)
+        )
+
+        assert(extractor.partitionKeySchema === joinKeySchema,
+          "Partition key schema should match the join key schema")
+
+        // Copy both the state key and partition key to avoid UnsafeRow reuse issues
+        val stateKeys = store.iterator(colFamilyName).map(_.key.copy()).toList
+        val partitionKeys = stateKeys.map(extractor.partitionKey(_).copy())
+
+        assert(partitionKeys.length === expectedNumKey20 + expectedNumKey30,
+          "Should have same num partition keys as num state store keys")
+        assert(partitionKeys.count(_ === toJoinKeyRow(20)) === expectedNumKey20,
+          "Should have the expected num partition keys for join key 20")
+        assert(partitionKeys.count(_ === toJoinKeyRow(30)) === expectedNumKey30,
+          "Should have the expected num partition keys for join key 30")
+      }
+    }
+  }
+
+  def getKeyToNumValuesStoreAndKeySchema()
+      (implicit manager: SymmetricHashJoinStateManager): (StateStore, StructType) = {
+    val keyToNumValuesHandler = manager.keyToNumValues
+    val keyToNumValuesStoreMethod = PrivateMethod[StateStore](Symbol("stateStore"))
+    val keyToNumValuesStore = keyToNumValuesHandler.invokePrivate(keyToNumValuesStoreMethod())
+
+    (keyToNumValuesStore, manager.keySchema)
+  }
+
+  def getKeyWithIndexToValueStoreAndKeySchema()
+      (implicit manager: SymmetricHashJoinStateManager): (StateStore, StructType) = {
+    val keyWithIndexToValueHandler = manager.keyWithIndexToValue
+
+    val keyWithIndexToValueStoreMethod = PrivateMethod[StateStore](Symbol("stateStore"))
+    val keyWithIndexToValueStore =
+      keyWithIndexToValueHandler.invokePrivate(keyWithIndexToValueStoreMethod())
+
+    val keySchemaMethod = PrivateMethod[StructType](Symbol("keyWithIndexSchema"))
+    val keyWithIndexToValueKeySchema = keyWithIndexToValueHandler.invokePrivate(keySchemaMethod())
+    (keyWithIndexToValueStore, keyWithIndexToValueKeySchema)
   }
 }

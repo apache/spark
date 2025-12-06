@@ -22,7 +22,7 @@ import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
-import org.apache.spark.sql.execution.streaming.state.{ReadStateStore, StateStore, UnsafeRowPair}
+import org.apache.spark.sql.execution.streaming.state.{DropLastNFieldsStatePartitionKeyExtractor, ReadStateStore, StateStore, UnsafeRowPair}
 import org.apache.spark.sql.types.{StructType, TimestampType}
 import org.apache.spark.util.NextIterator
 
@@ -280,3 +280,10 @@ class StreamingSessionWindowHelper(sessionExpression: Attribute, inputSchema: Se
     (window.getLong(0), window.getLong(1))
   }
 }
+
+/**
+ * The State key is the session key (i.e. partition key) and the sessionStartTime.
+ * Drop the last field (sessionStartTime) to get the partition key.
+ */
+class StreamingSessionWindowStatePartitionKeyExtractor(stateKeySchema: StructType)
+  extends DropLastNFieldsStatePartitionKeyExtractor(stateKeySchema, numLastColsToDrop = 1)

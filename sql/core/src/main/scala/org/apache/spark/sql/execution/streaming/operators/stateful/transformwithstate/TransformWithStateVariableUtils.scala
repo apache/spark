@@ -56,7 +56,13 @@ object TransformWithStateVariableUtils {
     }
   }
 
-  def getRowCounterCFName(stateName: String): String = "$rowCounter_" + stateName
+  private val ROW_COUNTER_CF_PREFIX = "$rowCounter_"
+
+  def getRowCounterCFName(stateName: String): String = ROW_COUNTER_CF_PREFIX + stateName
+
+  def isRowCounterCFName(colFamilyName: String): Boolean = {
+    colFamilyName.startsWith(ROW_COUNTER_CF_PREFIX)
+  }
 }
 
 // Enum of possible State Variable types

@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming.state
 
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateVariableUtils
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.ImplicitGroupingKeyTracker
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.TimerStateImpl
 import org.apache.spark.sql.streaming.TimeMode
@@ -185,6 +186,26 @@ class TimerSuite extends StateVariableSuiteBase {
       timerState.deleteTimer(20000L)
       assert(timerState.listTimers().toSet === Set(1000L))
     }
+  }
+
+  testWithTimeMode("Partition key extraction - TimerState") { timeMode =>
+    testPartitionKeyExtraction(
+      addStateFunc = { (_, _, store) =>
+        ImplicitGroupingKeyTracker.setImplicitKey("key1")
+        val timerState1 = new TimerStateImpl(store, timeMode, stringEncoder)
+        timerState1.registerTimer(1000L)
+        timerState1.registerTimer(2000L)
+
+        ImplicitGroupingKeyTracker.setImplicitKey("key2")
+        val timerState2 = new TimerStateImpl(store, timeMode, stringEncoder)
+        timerState2.registerTimer(1500L)
+      },
+      stateVariableInfo = TransformWithStateVariableUtils.getTimerState("testState"),
+      ttlEnabled = false,
+      expectedNumColFamilies = 2,
+      groupingKeyToExpectedCount = Map("key1" -> 2, "key2" -> 1),
+      timeMode = timeMode
+    )
   }
 }
 
