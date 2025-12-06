@@ -26,7 +26,7 @@ on:
 
 jobs:
   test_report:
-    if: github.event.workflow_run.conclusion != 'skipped'
+    if: ${{ github.event.workflow_run.conclusion not in ['skipped', 'cancelled'] }}
     runs-on: ubuntu-latest
     permissions:
       actions: read
