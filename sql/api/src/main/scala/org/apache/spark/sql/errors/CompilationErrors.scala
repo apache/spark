@@ -143,6 +143,12 @@ private[sql] trait CompilationErrors extends DataTypeErrorsBase {
       errorClass = "CANNOT_MODIFY_CONFIG",
       messageParameters = Map("key" -> toSQLConf(key), "docroot" -> docroot))
   }
+
+  def unsupportedTimeTypeError(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_TIME_TYPE",
+      messageParameters = Map.empty)
+  }
 }
 
 private[sql] object CompilationErrors extends CompilationErrors

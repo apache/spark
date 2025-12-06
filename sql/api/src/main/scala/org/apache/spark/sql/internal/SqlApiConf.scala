@@ -53,6 +53,7 @@ private[sql] trait SqlApiConf {
   def parserDfaCacheFlushRatio: Double
   def legacyParameterSubstitutionConstantsOnly: Boolean
   def legacyIdentifierClauseOnly: Boolean
+  def isTimeTypeEnabled: Boolean
 }
 
 private[sql] object SqlApiConf {
@@ -110,4 +111,5 @@ private[sql] object DefaultSqlApiConf extends SqlApiConf {
   override def parserDfaCacheFlushRatio: Double = -1.0
   override def legacyParameterSubstitutionConstantsOnly: Boolean = false
   override def legacyIdentifierClauseOnly: Boolean = false
+  override def isTimeTypeEnabled: Boolean = false
 }

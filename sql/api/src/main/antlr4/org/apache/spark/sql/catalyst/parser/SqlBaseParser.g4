@@ -42,6 +42,11 @@ options { tokenVocab = SqlBaseLexer; }
   public boolean double_quoted_identifiers = false;
 
   /**
+   * When true, the TIME data type is recognized and supported.
+   */
+  public boolean time_type_enabled = false;
+
+  /**
    * When false, parameter markers (? and :param) are only allowed in constant contexts.
    * When true, parameter markers are allowed everywhere a literal is supported.
    */
@@ -1407,7 +1412,7 @@ nonTrivialPrimitiveType
         (fromYearMonth=(YEAR | MONTH) (TO to=MONTH)? |
          fromDayTime=(DAY | HOUR | MINUTE | SECOND) (TO to=(HOUR | MINUTE | SECOND))?)?
     | TIMESTAMP (WITHOUT TIME ZONE)?
-    | TIME (LEFT_PAREN precision=integerValue RIGHT_PAREN)? (WITHOUT TIME ZONE)?
+    | {time_type_enabled}? TIME (LEFT_PAREN precision=integerValue RIGHT_PAREN)? (WITHOUT TIME ZONE)?
     | GEOGRAPHY LEFT_PAREN (srid=integerValue | any=ANY) RIGHT_PAREN
     | GEOMETRY LEFT_PAREN (srid=integerValue | any=ANY) RIGHT_PAREN
     ;

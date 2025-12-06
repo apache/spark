@@ -408,6 +408,8 @@ class ParquetFileFormat
   }
 
   override def supportDataType(dataType: DataType): Boolean = dataType match {
+    case _: TimeType => SQLConf.get. isTimeTypeEnabled
+
     case _: AtomicType | _: NullType => true
 
     case st: StructType => st.forall { f => supportDataType(f.dataType) }
