@@ -108,6 +108,9 @@ class GlobalTempViewSuite extends QueryTest with SharedSparkSession {
         checkAnswer(spark.table(s"$globalTempDB.src"), Row(1, "a"))
         sql(s"INSERT INTO $globalTempDB.src SELECT 2, 'b'")
         checkAnswer(spark.table(s"$globalTempDB.src"), Row(1, "a") :: Row(2, "b") :: Nil)
+        // perform noop with IF NOT EXISTS if view already exists
+        sql(s"CREATE GLOBAL TEMP VIEW IF NOT EXISTS src USING csv OPTIONS (PATH '${path.toURI}')")
+        checkAnswer(spark.table(s"$globalTempDB.src"), Row(1, "a") :: Row(2, "b") :: Nil)
       }
     }
   }
