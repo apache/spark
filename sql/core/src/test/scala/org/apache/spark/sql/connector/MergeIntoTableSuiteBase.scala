@@ -2404,7 +2404,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
         sourceDF.createOrReplaceTempView("source")
 
         val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
-        val mergeStmt = s"""MERGE $schemaEvolutionClause
+        sql(s"""MERGE $schemaEvolutionClause
                            |INTO $tableNameAsString t
                            |USING source s
                            |ON t.pk = s.pk
@@ -2412,9 +2412,8 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
                            | UPDATE SET *
                            |WHEN NOT MATCHED THEN
                            | INSERT *
-                           |""".stripMargin
+                           |""".stripMargin)
         if (withSchemaEvolution && schemaEvolutionEnabled) {
-          sql(mergeStmt)
           checkAnswer(
             sql(s"SELECT * FROM $tableNameAsString"),
             Seq(
@@ -2425,12 +2424,15 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
               Row(5, 250, "executive", true),
               Row(6, 350, null, false)))
         } else {
-          val e = intercept[org.apache.spark.sql.AnalysisException] {
-            sql(mergeStmt)
-          }
-          assert(e.errorClass.get == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
-          assert(e.message.contains("A column, variable, or function parameter with name " +
-            "`dep` cannot be resolved"))
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Seq(
+              Row(1, 100, "hr"),
+              Row(2, 200, "software"),
+              Row(3, 300, "hr"),
+              Row(4, 150, "marketing"),
+              Row(5, 250, "executive"),
+              Row(6, 350, null)))
         }
         sql(s"DROP TABLE $tableNameAsString")
       }
@@ -2461,7 +2463,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           sourceDF.createOrReplaceTempView("source")
 
           val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
-          val mergeStmt = s"""MERGE $schemaEvolutionClause
+          sql(s"""MERGE $schemaEvolutionClause
                  |INTO $tableNameAsString t
                  |USING source s
                  |ON t.pk = s.pk
@@ -2469,9 +2471,8 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
                  | UPDATE SET *
                  |WHEN NOT MATCHED THEN
                  | INSERT *
-                 |""".stripMargin
+                 |""".stripMargin)
           if (withSchemaEvolution && schemaEvolutionEnabled) {
-            sql(mergeStmt)
             checkAnswer(
               sql(s"SELECT * FROM $tableNameAsString"),
               Seq(
@@ -2482,12 +2483,15 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
                 Row(5, 250, "executive", true),
                 Row(6, 350, "unknown", false)))
           } else {
-            val e = intercept[org.apache.spark.sql.AnalysisException] {
-              sql(mergeStmt)
-            }
-            assert(e.errorClass.get == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
-            assert(e.getMessage.contains("A column, variable, or function parameter with name " +
-              "`dep` cannot be resolved"))
+            checkAnswer(
+              sql(s"SELECT * FROM $tableNameAsString"),
+              Seq(
+                Row(1, 100, "hr"),
+                Row(2, 200, "software"),
+                Row(3, 300, "hr"),
+                Row(4, 150, "marketing"),
+                Row(5, 250, "executive"),
+                Row(6, 350, "unknown")))
           }
           sql(s"DROP TABLE $tableNameAsString")
         }
@@ -3235,13 +3239,23 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
                  |WHEN NOT MATCHED THEN
                  | INSERT *
                  |""".stripMargin
-            if (coerceNestedTypes && withSchemaEvolution) {
-              sql(mergeStmt)
-              checkAnswer(
-                sql(s"SELECT * FROM $tableNameAsString"),
-                Seq(
-                  Row(1, Row(10, Row(null, Map("c" -> "d"), false)), "sales"),
-                  Row(2, Row(20, Row(null, Map("e" -> "f"), true)), "engineering")))
+            if (coerceNestedTypes) {
+              if (withSchemaEvolution) {
+                sql(mergeStmt)
+                checkAnswer(
+                  sql(s"SELECT * FROM $tableNameAsString"),
+                  Seq(
+                    Row(1, Row(10, Row(null, Map("c" -> "d"), false)), "sales"),
+                    Row(2, Row(20, Row(null, Map("e" -> "f"), true)), "engineering")))
+              } else {
+                val exception = intercept[org.apache.spark.sql.AnalysisException] {
+                  sql(mergeStmt)
+                }
+                assert(exception.errorClass.get ==
+                  "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS")
+                assert(exception.getMessage.contains(
+                  "Cannot write extra fields `c3` to the struct `s`.`c2`"))
+              }
             } else {
               val exception = intercept[org.apache.spark.sql.AnalysisException] {
                 sql(mergeStmt)
@@ -3321,18 +3335,30 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
                  |WHEN NOT MATCHED THEN
                  | INSERT *
                  |""".stripMargin
-            if (coerceNestedTypes && withSchemaEvolution) {
-              sql(mergeStmt)
-              checkAnswer(
-                sql(s"SELECT * FROM $tableNameAsString"),
-                Seq(
-                  Row(1, Row(10, Row(null, Map("c" -> "d"), false)), "hr"),
-                  Row(2, Row(20, Row(null, Map("e" -> "f"), true)), "engineering")))
+            if (coerceNestedTypes) {
+              if (withSchemaEvolution) {
+                sql(mergeStmt)
+                checkAnswer(
+                  sql(s"SELECT * FROM $tableNameAsString"),
+                  Seq(
+                    Row(1, Row(10, Row(null, Map("c" -> "d"), false)), "hr"),
+                    Row(2, Row(20, Row(null, Map("e" -> "f"), true)), "engineering")))
+              } else {
+                val exception = intercept[org.apache.spark.sql.AnalysisException] {
+                  sql(mergeStmt)
+                }
+                assert(exception.errorClass.get ==
+                  "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS")
+                assert(exception.getMessage.contains(
+                  "Cannot write extra fields `c3` to the struct `s`.`c2`"))
+              }
             } else {
               val exception = intercept[org.apache.spark.sql.AnalysisException] {
                 sql(mergeStmt)
               }
               assert(exception.errorClass.get == "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
+              assert(exception.getMessage.contains(
+                "Cannot find data for the output column `s`.`c2`.`a`"))
             }
           }
           sql(s"DROP TABLE IF EXISTS $tableNameAsString")
@@ -3508,18 +3534,30 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
                  | INSERT *
                  |""".stripMargin
 
-            if (coerceNestedTypes && withSchemaEvolution) {
-              sql(mergeStmt)
-              checkAnswer(
-                sql(s"SELECT * FROM $tableNameAsString"),
-                Seq(Row(0, Map(Row(10, 10, null) -> Row("c", "c", null)), "hr"),
-                  Row(1, Map(Row(10, null, true) -> Row("y", null, false)), "sales"),
-                  Row(2, Map(Row(20, null, false) -> Row("z", null, true)), "engineering")))
+            if (coerceNestedTypes) {
+              if (withSchemaEvolution) {
+                sql(mergeStmt)
+                checkAnswer(
+                  sql(s"SELECT * FROM $tableNameAsString"),
+                  Seq(Row(0, Map(Row(10, 10, null) -> Row("c", "c", null)), "hr"),
+                    Row(1, Map(Row(10, null, true) -> Row("y", null, false)), "sales"),
+                    Row(2, Map(Row(20, null, false) -> Row("z", null, true)), "engineering")))
+              } else {
+                val exception = intercept[org.apache.spark.sql.AnalysisException] {
+                  sql(mergeStmt)
+                }
+                assert(exception.errorClass.get ==
+                  "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS")
+                assert(exception.getMessage.contains(
+                  "Cannot write extra fields `c3` to the struct `m`.`key`"))
+              }
             } else {
               val exception = intercept[org.apache.spark.sql.AnalysisException] {
                 sql(mergeStmt)
               }
               assert(exception.errorClass.get == "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
+              assert(exception.getMessage.contains(
+                "Cannot find data for the output column `m`.`key`.`c2`"))
             }
           }
           sql(s"DROP TABLE IF EXISTS $tableNameAsString")
@@ -3574,18 +3612,30 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
                  | INSERT (pk, m, dep) VALUES (src.pk, src.m, 'my_new_dep')
                  |""".stripMargin
 
-            if (coerceNestedTypes && withSchemaEvolution) {
-              sql(mergeStmt)
-              checkAnswer(
-                sql(s"SELECT * FROM $tableNameAsString"),
-                Seq(Row(0, Map(Row(10, 10, null) -> Row("c", "c", null)), "hr"),
-                  Row(1, Map(Row(10, null, true) -> Row("y", null, false)), "my_old_dep"),
-                  Row(2, Map(Row(20, null, false) -> Row("z", null, true)), "my_new_dep")))
+            if (coerceNestedTypes) {
+              if (withSchemaEvolution) {
+                sql(mergeStmt)
+                checkAnswer(
+                  sql(s"SELECT * FROM $tableNameAsString"),
+                  Seq(Row(0, Map(Row(10, 10, null) -> Row("c", "c", null)), "hr"),
+                    Row(1, Map(Row(10, null, true) -> Row("y", null, false)), "my_old_dep"),
+                    Row(2, Map(Row(20, null, false) -> Row("z", null, true)), "my_new_dep")))
+              } else {
+                val exception = intercept[org.apache.spark.sql.AnalysisException] {
+                  sql(mergeStmt)
+                }
+                assert(exception.errorClass.get ==
+                  "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS")
+                assert(exception.getMessage.contains(
+                  "Cannot write extra fields `c3` to the struct `m`.`key`"))
+              }
             } else {
               val exception = intercept[org.apache.spark.sql.AnalysisException] {
                 sql(mergeStmt)
               }
               assert(exception.errorClass.get == "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
+              assert(exception.getMessage.contains(
+                "Cannot find data for the output column `m`.`key`.`c2`"))
             }
           }
           sql(s"DROP TABLE IF EXISTS $tableNameAsString")
@@ -3638,18 +3688,30 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
                  | INSERT *
                  |""".stripMargin
 
-            if (coerceNestedTypes && withSchemaEvolution) {
-              sql(mergeStmt)
-              checkAnswer(
-                sql(s"SELECT * FROM $tableNameAsString"),
-                Seq(Row(0, Array(Row(10, 10, null)), "hr"),
-                  Row(1, Array(Row(10, null, true)), "sales"),
-                  Row(2, Array(Row(20, null, false)), "engineering")))
+            if (coerceNestedTypes) {
+              if (withSchemaEvolution) {
+                sql(mergeStmt)
+                checkAnswer(
+                  sql(s"SELECT * FROM $tableNameAsString"),
+                  Seq(Row(0, Array(Row(10, 10, null)), "hr"),
+                    Row(1, Array(Row(10, null, true)), "sales"),
+                    Row(2, Array(Row(20, null, false)), "engineering")))
+              } else {
+                val exception = intercept[org.apache.spark.sql.AnalysisException] {
+                  sql(mergeStmt)
+                }
+                assert(exception.errorClass.get ==
+                  "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS")
+                assert(exception.getMessage.contains(
+                  "Cannot write extra fields `c3` to the struct `a`.`element`"))
+              }
             } else {
               val exception = intercept[org.apache.spark.sql.AnalysisException] {
                 sql(mergeStmt)
               }
               assert(exception.errorClass.get == "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
+              assert(exception.getMessage.contains(
+                "Cannot find data for the output column `a`.`element`.`c2`"))
             }
           }
           sql(s"DROP TABLE IF EXISTS $tableNameAsString")
@@ -3702,18 +3764,30 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
                  | INSERT (pk, a, dep) VALUES (src.pk, src.a, 'my_new_dep')
                  |""".stripMargin
 
-            if (coerceNestedTypes && withSchemaEvolution) {
-              sql(mergeStmt)
-              checkAnswer(
-                sql(s"SELECT * FROM $tableNameAsString"),
-                Seq(Row(0, Array(Row(10, 10, null)), "hr"),
-                  Row(1, Array(Row(10, null, true)), "my_old_dep"),
-                  Row(2, Array(Row(20, null, false)), "my_new_dep")))
+            if (coerceNestedTypes) {
+              if (withSchemaEvolution) {
+                sql(mergeStmt)
+                checkAnswer(
+                  sql(s"SELECT * FROM $tableNameAsString"),
+                  Seq(Row(0, Array(Row(10, 10, null)), "hr"),
+                    Row(1, Array(Row(10, null, true)), "my_old_dep"),
+                    Row(2, Array(Row(20, null, false)), "my_new_dep")))
+              } else {
+                val exception = intercept[org.apache.spark.sql.AnalysisException] {
+                  sql(mergeStmt)
+                }
+                assert(exception.errorClass.get ==
+                  "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS")
+                assert(exception.getMessage.contains(
+                  "Cannot write extra fields `c3` to the struct `a`.`element`"))
+              }
             } else {
               val exception = intercept[org.apache.spark.sql.AnalysisException] {
                 sql(mergeStmt)
               }
               assert(exception.errorClass.get == "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
+              assert(exception.getMessage.contains(
+                "Cannot find data for the output column `a`.`element`.`c2`"))
             }
           }
           sql(s"DROP TABLE IF EXISTS $tableNameAsString")
@@ -3977,8 +4051,6 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
             sql(mergeStmt)
           }
           assert(exception.errorClass.get == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
-          assert(exception.message.contains(" A column, variable, or function parameter with name "
-            + "`bonus` cannot be resolved"))
         }
 
         sql(s"DROP TABLE $tableNameAsString")
@@ -4412,321 +4484,267 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
   }
 
   test("merge into with source missing fields in struct nested in array") {
-    Seq(true, false).foreach { withSchemaEvolution =>
-      Seq(true, false).foreach { coerceNestedTypes =>
-        withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
-          coerceNestedTypes.toString) {
-          withTempView("source") {
-            // Target table has struct with 3 fields (c1, c2, c3) in array
-            createAndInitTable(
-              s"""pk INT NOT NULL,
-                 |a ARRAY<STRUCT<c1: INT, c2: STRING, c3: BOOLEAN>>,
-                 |dep STRING""".stripMargin,
-              """{ "pk": 0, "a": [ { "c1": 1, "c2": "a", "c3": true } ], "dep": "sales" }
-                 |{ "pk": 1, "a": [ { "c1": 2, "c2": "b", "c3": false } ], "dep": "sales" }"""
-                .stripMargin)
+    Seq(true, false).foreach { coerceNestedTypes =>
+      withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
+        coerceNestedTypes.toString) {
+        withTempView("source") {
+          // Target table has struct with 3 fields (c1, c2, c3) in array
+          createAndInitTable(
+            s"""pk INT NOT NULL,
+               |a ARRAY<STRUCT<c1: INT, c2: STRING, c3: BOOLEAN>>,
+               |dep STRING""".stripMargin,
+            """{ "pk": 0, "a": [ { "c1": 1, "c2": "a", "c3": true } ], "dep": "sales" }
+               |{ "pk": 1, "a": [ { "c1": 2, "c2": "b", "c3": false } ], "dep": "sales" }"""
+              .stripMargin)
 
-            // Source table has struct with only 2 fields (c1, c2) - missing c3
-            val sourceTableSchema = StructType(Seq(
-              StructField("pk", IntegerType, nullable = false),
-              StructField("a", ArrayType(
-                StructType(Seq(
-                  StructField("c1", IntegerType),
-                  StructField("c2", StringType))))), // missing c3 field
-              StructField("dep", StringType)))
-            val data = Seq(
-              Row(1, Array(Row(10, "c")), "hr"),
-              Row(2, Array(Row(30, "e")), "engineering")
-            )
-            spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
-              .createOrReplaceTempView("source")
+          // Source table has struct with only 2 fields (c1, c2) - missing c3
+          val sourceTableSchema = StructType(Seq(
+            StructField("pk", IntegerType, nullable = false),
+            StructField("a", ArrayType(
+              StructType(Seq(
+                StructField("c1", IntegerType),
+                StructField("c2", StringType))))), // missing c3 field
+            StructField("dep", StringType)))
+          val data = Seq(
+            Row(1, Array(Row(10, "c")), "hr"),
+            Row(2, Array(Row(30, "e")), "engineering")
+          )
+          spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+            .createOrReplaceTempView("source")
 
-            val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
-            val mergeStmt =
-              s"""MERGE $schemaEvolutionClause INTO $tableNameAsString t
-                 |USING source src
-                 |ON t.pk = src.pk
-                 |WHEN MATCHED THEN
-                 | UPDATE SET *
-                 |WHEN NOT MATCHED THEN
-                 | INSERT *
-                 |""".stripMargin
+          val mergeStmt =
+            s"""MERGE INTO $tableNameAsString t
+               |USING source src
+               |ON t.pk = src.pk
+               |WHEN MATCHED THEN
+               | UPDATE SET *
+               |WHEN NOT MATCHED THEN
+               | INSERT *
+               |""".stripMargin
 
-            if (coerceNestedTypes && withSchemaEvolution) {
+          if (coerceNestedTypes) {
+            sql(mergeStmt)
+            // Missing field c3 should be filled with NULL
+            checkAnswer(
+              sql(s"SELECT * FROM $tableNameAsString"),
+              Seq(
+                Row(0, Array(Row(1, "a", true)), "sales"),
+                Row(1, Array(Row(10, "c", null)), "hr"),
+                Row(2, Array(Row(30, "e", null)), "engineering")))
+          } else {
+            val exception = intercept[org.apache.spark.sql.AnalysisException] {
               sql(mergeStmt)
-              // Missing field c3 should be filled with NULL
-              checkAnswer(
-                sql(s"SELECT * FROM $tableNameAsString"),
-                Seq(
-                  Row(0, Array(Row(1, "a", true)), "sales"),
-                  Row(1, Array(Row(10, "c", null)), "hr"),
-                  Row(2, Array(Row(30, "e", null)), "engineering")))
-            } else {
-              val exception = intercept[org.apache.spark.sql.AnalysisException] {
-                sql(mergeStmt)
-              }
-              assert(exception.errorClass.get ==
-                "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
             }
+            assert(exception.errorClass.get ==
+              "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
+            assert(exception.getMessage.contains(
+              "Cannot write incompatible data for the table ``: " +
+                "Cannot find data for the output column `a`.`element`.`c3`."))
           }
-          sql(s"DROP TABLE IF EXISTS $tableNameAsString")
         }
+        sql(s"DROP TABLE IF EXISTS $tableNameAsString")
       }
     }
   }
 
   test("merge into with source missing fields in struct nested in map key") {
-    Seq(true, false).foreach { withSchemaEvolution =>
-      Seq(true, false).foreach { coerceNestedTypes =>
-        withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
-          coerceNestedTypes.toString) {
-          withTempView("source") {
-            // Target table has struct with 2 fields in map key
-            val targetSchema =
-              StructType(Seq(
-                StructField("pk", IntegerType, nullable = false),
-                StructField("m", MapType(
-                  StructType(Seq(StructField("c1", IntegerType), StructField("c2", BooleanType))),
-                  StructType(Seq(StructField("c3", StringType))))),
-                StructField("dep", StringType)))
-            createTable(CatalogV2Util.structTypeToV2Columns(targetSchema))
-
-            val targetData = Seq(
-              Row(0, Map(Row(10, true) -> Row("x")), "hr"),
-              Row(1, Map(Row(20, false) -> Row("y")), "sales"))
-            spark.createDataFrame(spark.sparkContext.parallelize(targetData), targetSchema)
-              .writeTo(tableNameAsString).append()
-
-            // Source table has struct with only 1 field (c1) in map key - missing c2
-            val sourceTableSchema = StructType(Seq(
-              StructField("pk", IntegerType),
+    Seq(true, false).foreach { coerceNestedTypes =>
+      withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
+        coerceNestedTypes.toString) {
+        withTempView("source") {
+          // Target table has struct with 2 fields in map key
+          val targetSchema =
+            StructType(Seq(
+              StructField("pk", IntegerType, nullable = false),
               StructField("m", MapType(
-                StructType(Seq(StructField("c1", IntegerType))), // missing c2
+                StructType(Seq(StructField("c1", IntegerType), StructField("c2", BooleanType))),
                 StructType(Seq(StructField("c3", StringType))))),
               StructField("dep", StringType)))
-            val sourceData = Seq(
-              Row(1, Map(Row(10) -> Row("z")), "sales"),
-              Row(2, Map(Row(20) -> Row("w")), "engineering")
-            )
-            spark.createDataFrame(spark.sparkContext.parallelize(sourceData), sourceTableSchema)
-              .createOrReplaceTempView("source")
+          createTable(CatalogV2Util.structTypeToV2Columns(targetSchema))
 
-            val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
-            val mergeStmt =
-              s"""MERGE $schemaEvolutionClause INTO $tableNameAsString t
-                 |USING source src
-                 |ON t.pk = src.pk
-                 |WHEN MATCHED THEN
-                 | UPDATE SET *
-                 |WHEN NOT MATCHED THEN
-                 | INSERT *
-                 |""".stripMargin
+          val targetData = Seq(
+            Row(0, Map(Row(10, true) -> Row("x")), "hr"),
+            Row(1, Map(Row(20, false) -> Row("y")), "sales"))
+          spark.createDataFrame(spark.sparkContext.parallelize(targetData), targetSchema)
+            .writeTo(tableNameAsString).append()
 
-            if (coerceNestedTypes && withSchemaEvolution) {
+          // Source table has struct with only 1 field (c1) in map key - missing c2
+          val sourceTableSchema = StructType(Seq(
+            StructField("pk", IntegerType),
+            StructField("m", MapType(
+              StructType(Seq(StructField("c1", IntegerType))), // missing c2
+              StructType(Seq(StructField("c3", StringType))))),
+            StructField("dep", StringType)))
+          val sourceData = Seq(
+            Row(1, Map(Row(10) -> Row("z")), "sales"),
+            Row(2, Map(Row(20) -> Row("w")), "engineering")
+          )
+          spark.createDataFrame(spark.sparkContext.parallelize(sourceData), sourceTableSchema)
+            .createOrReplaceTempView("source")
+
+          val mergeStmt =
+            s"""MERGE INTO $tableNameAsString t
+               |USING source src
+               |ON t.pk = src.pk
+               |WHEN MATCHED THEN
+               | UPDATE SET *
+               |WHEN NOT MATCHED THEN
+               | INSERT *
+               |""".stripMargin
+
+          if (coerceNestedTypes) {
+            sql(mergeStmt)
+            // Missing field c2 should be filled with NULL
+            checkAnswer(
+              sql(s"SELECT * FROM $tableNameAsString"),
+              Seq(
+                Row(0, Map(Row(10, true) -> Row("x")), "hr"),
+                Row(1, Map(Row(10, null) -> Row("z")), "sales"),
+                Row(2, Map(Row(20, null) -> Row("w")), "engineering")))
+          } else {
+            val exception = intercept[org.apache.spark.sql.AnalysisException] {
               sql(mergeStmt)
-              // Missing field c2 should be filled with NULL
-              checkAnswer(
-                sql(s"SELECT * FROM $tableNameAsString"),
-                Seq(
-                  Row(0, Map(Row(10, true) -> Row("x")), "hr"),
-                  Row(1, Map(Row(10, null) -> Row("z")), "sales"),
-                  Row(2, Map(Row(20, null) -> Row("w")), "engineering")))
-            } else {
-              val exception = intercept[org.apache.spark.sql.AnalysisException] {
-                sql(mergeStmt)
-              }
-              assert(exception.errorClass.get ==
-                "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
             }
+            assert(exception.errorClass.get ==
+              "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
+            assert(exception.getMessage.contains(
+              "Cannot write incompatible data for the table ``: " +
+                "Cannot find data for the output column `m`.`key`.`c2`."))
           }
-          sql(s"DROP TABLE IF EXISTS $tableNameAsString")
         }
+        sql(s"DROP TABLE IF EXISTS $tableNameAsString")
       }
     }
   }
 
   test("merge into with source missing fields in struct nested in map value") {
-    Seq(true, false).foreach { withSchemaEvolution =>
-      Seq(true, false).foreach { coerceNestedTypes =>
-        withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
-          coerceNestedTypes.toString) {
-          withTempView("source") {
-            // Target table has struct with 2 fields in map value
-            val targetSchema =
-              StructType(Seq(
-                StructField("pk", IntegerType, nullable = false),
-                StructField("m", MapType(
-                  StructType(Seq(StructField("c1", IntegerType))),
-                  StructType(Seq(StructField("c1", StringType), StructField("c2", BooleanType))))),
-                StructField("dep", StringType)))
-            createTable(CatalogV2Util.structTypeToV2Columns(targetSchema))
-
-            val targetData = Seq(
-              Row(0, Map(Row(10) -> Row("x", true)), "hr"),
-              Row(1, Map(Row(20) -> Row("y", false)), "sales"))
-            spark.createDataFrame(spark.sparkContext.parallelize(targetData), targetSchema)
-              .writeTo(tableNameAsString).append()
-
-            // Source table has struct with only 1 field (c1) in map value - missing c2
-            val sourceTableSchema = StructType(Seq(
-              StructField("pk", IntegerType),
+    Seq(true, false).foreach { coerceNestedTypes =>
+      withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
+        coerceNestedTypes.toString) {
+        withTempView("source") {
+          // Target table has struct with 2 fields in map value
+          val targetSchema =
+            StructType(Seq(
+              StructField("pk", IntegerType, nullable = false),
               StructField("m", MapType(
                 StructType(Seq(StructField("c1", IntegerType))),
-                StructType(Seq(StructField("c1", StringType))))), // missing c2
+                StructType(Seq(StructField("c1", StringType), StructField("c2", BooleanType))))),
               StructField("dep", StringType)))
-            val sourceData = Seq(
-              Row(1, Map(Row(10) -> Row("z")), "sales"),
-              Row(2, Map(Row(20) -> Row("w")), "engineering")
-            )
-            spark.createDataFrame(spark.sparkContext.parallelize(sourceData), sourceTableSchema)
-              .createOrReplaceTempView("source")
+          createTable(CatalogV2Util.structTypeToV2Columns(targetSchema))
 
-            val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
-            val mergeStmt =
-              s"""MERGE $schemaEvolutionClause INTO $tableNameAsString t
-                 |USING source src
-                 |ON t.pk = src.pk
-                 |WHEN MATCHED THEN
-                 | UPDATE SET *
-                 |WHEN NOT MATCHED THEN
-                 | INSERT *
-                 |""".stripMargin
+          val targetData = Seq(
+            Row(0, Map(Row(10) -> Row("x", true)), "hr"),
+            Row(1, Map(Row(20) -> Row("y", false)), "sales"))
+          spark.createDataFrame(spark.sparkContext.parallelize(targetData), targetSchema)
+            .writeTo(tableNameAsString).append()
 
-            if (coerceNestedTypes && withSchemaEvolution) {
+          // Source table has struct with only 1 field (c1) in map value - missing c2
+          val sourceTableSchema = StructType(Seq(
+            StructField("pk", IntegerType),
+            StructField("m", MapType(
+              StructType(Seq(StructField("c1", IntegerType))),
+              StructType(Seq(StructField("c1", StringType))))), // missing c2
+            StructField("dep", StringType)))
+          val sourceData = Seq(
+            Row(1, Map(Row(10) -> Row("z")), "sales"),
+            Row(2, Map(Row(20) -> Row("w")), "engineering")
+          )
+          spark.createDataFrame(spark.sparkContext.parallelize(sourceData), sourceTableSchema)
+            .createOrReplaceTempView("source")
+
+          val mergeStmt =
+            s"""MERGE INTO $tableNameAsString t
+               |USING source src
+               |ON t.pk = src.pk
+               |WHEN MATCHED THEN
+               | UPDATE SET *
+               |WHEN NOT MATCHED THEN
+               | INSERT *
+               |""".stripMargin
+
+          if (coerceNestedTypes) {
+            sql(mergeStmt)
+            // Missing field c2 should be filled with NULL
+            checkAnswer(
+              sql(s"SELECT * FROM $tableNameAsString"),
+              Seq(
+                Row(0, Map(Row(10) -> Row("x", true)), "hr"),
+                Row(1, Map(Row(10) -> Row("z", null)), "sales"),
+                Row(2, Map(Row(20) -> Row("w", null)), "engineering")))
+          } else {
+            val exception = intercept[org.apache.spark.sql.AnalysisException] {
               sql(mergeStmt)
-              // Missing field c2 should be filled with NULL
-              checkAnswer(
-                sql(s"SELECT * FROM $tableNameAsString"),
-                Seq(
-                  Row(0, Map(Row(10) -> Row("x", true)), "hr"),
-                  Row(1, Map(Row(10) -> Row("z", null)), "sales"),
-                  Row(2, Map(Row(20) -> Row("w", null)), "engineering")))
-            } else {
-              val exception = intercept[org.apache.spark.sql.AnalysisException] {
-                sql(mergeStmt)
-              }
-              assert(exception.errorClass.get ==
-                "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
             }
+            assert(exception.errorClass.get ==
+              "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
+            assert(exception.getMessage.contains(
+              "Cannot write incompatible data for the table ``: " +
+                "Cannot find data for the output column `m`.`value`.`c2`."))
           }
-          sql(s"DROP TABLE IF EXISTS $tableNameAsString")
         }
+        sql(s"DROP TABLE IF EXISTS $tableNameAsString")
       }
     }
   }
 
   test("merge into with source missing fields in top-level struct") {
-    Seq(true, false).foreach { withSchemaEvolution =>
-      Seq(true, false).foreach { coerceNestedTypes =>
-        withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
-          coerceNestedTypes.toString) {
-          withTempView("source") {
-            // Target table has struct with 3 fields at top level
-            createAndInitTable(
-              s"""pk INT NOT NULL,
-                 |s STRUCT<c1: INT, c2: STRING, c3: BOOLEAN>,
-                 |dep STRING""".stripMargin,
-              """{ "pk": 0, "s": { "c1": 1, "c2": "a", "c3": true }, "dep": "sales"}""")
+    Seq(true, false).foreach { coerceNestedTypes =>
+      withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
+        coerceNestedTypes.toString) {
+        withTempView("source") {
+          // Target table has struct with 3 fields at top level
+          createAndInitTable(
+            s"""pk INT NOT NULL,
+               |s STRUCT<c1: INT, c2: STRING, c3: BOOLEAN>,
+               |dep STRING""".stripMargin,
+            """{ "pk": 0, "s": { "c1": 1, "c2": "a", "c3": true }, "dep": "sales"}""")
 
-            // Source table has struct with only 2 fields (c1, c2) - missing c3
-            val sourceTableSchema = StructType(Seq(
-              StructField("pk", IntegerType, nullable = false),
-              StructField("s", StructType(Seq(
-                StructField("c1", IntegerType),
-                StructField("c2", StringType)))), // missing c3 field
-              StructField("dep", StringType)))
-            val data = Seq(
-              Row(1, Row(10, "b"), "hr"),
-              Row(2, Row(20, "c"), "engineering")
-            )
-            spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
-              .createOrReplaceTempView("source")
+          // Source table has struct with only 2 fields (c1, c2) - missing c3
+          val sourceTableSchema = StructType(Seq(
+            StructField("pk", IntegerType, nullable = false),
+            StructField("s", StructType(Seq(
+              StructField("c1", IntegerType),
+              StructField("c2", StringType)))), // missing c3 field
+            StructField("dep", StringType)))
+          val data = Seq(
+            Row(1, Row(10, "b"), "hr"),
+            Row(2, Row(20, "c"), "engineering")
+          )
+          spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+            .createOrReplaceTempView("source")
 
-            val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
-            val mergeStmt =
-              s"""MERGE $schemaEvolutionClause INTO $tableNameAsString t
-                 |USING source src
-                 |ON t.pk = src.pk
-                 |WHEN MATCHED THEN
-                 | UPDATE SET *
-                 |WHEN NOT MATCHED THEN
-                 | INSERT *
-                 |""".stripMargin
+          val mergeStmt =
+            s"""MERGE INTO $tableNameAsString t
+               |USING source src
+               |ON t.pk = src.pk
+               |WHEN MATCHED THEN
+               | UPDATE SET *
+               |WHEN NOT MATCHED THEN
+               | INSERT *
+               |""".stripMargin
 
-            if (coerceNestedTypes && withSchemaEvolution) {
-              sql(mergeStmt)
-              // Missing field c3 should be filled with NULL
-              checkAnswer(
-                sql(s"SELECT * FROM $tableNameAsString"),
-                Seq(
-                  Row(0, Row(1, "a", true), "sales"),
-                  Row(1, Row(10, "b", null), "hr"),
-                  Row(2, Row(20, "c", null), "engineering")))
-            } else {
-              val exception = intercept[org.apache.spark.sql.AnalysisException] {
-                sql(mergeStmt)
-              }
-              assert(exception.errorClass.get ==
-                "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
-            }
-          }
-          sql(s"DROP TABLE IF EXISTS $tableNameAsString")
-        }
-      }
-    }
-  }
-
-  test("merge into with source missing top-level column") {
-    Seq(true, false).foreach { withSchemaEvolution =>
-      withTempView("source") {
-        // Target table has 3 columns: pk, salary, dep
-        createAndInitTable(
-          s"""pk INT NOT NULL,
-             |salary INT,
-             |dep STRING""".stripMargin,
-          """{ "pk": 0, "salary": 100, "dep": "sales" }
-            |{ "pk": 1, "salary": 200, "dep": "hr" }"""
-            .stripMargin)
-
-        // Source table has only 2 columns: pk, dep (missing salary)
-        val sourceTableSchema = StructType(Seq(
-          StructField("pk", IntegerType, nullable = false),
-          StructField("dep", StringType)))
-        val data = Seq(
-          Row(1, "engineering"),
-          Row(2, "finance")
-        )
-        spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
-          .createOrReplaceTempView("source")
-
-        val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
-        val mergeStmt =
-          s"""MERGE $schemaEvolutionClause INTO $tableNameAsString t
-             |USING source src
-             |ON t.pk = src.pk
-             |WHEN MATCHED THEN
-             | UPDATE SET *
-             |WHEN NOT MATCHED THEN
-             | INSERT *
-             |""".stripMargin
-
-        if (withSchemaEvolution) {
-          sql(mergeStmt)
-          checkAnswer(
-            sql(s"SELECT * FROM $tableNameAsString"),
-            Seq(
-              Row(0, 100, "sales"),
-              Row(1, 200, "engineering"),
-              Row(2, null, "finance")))
-        } else {
-          val exception = intercept[org.apache.spark.sql.AnalysisException] {
+          if (coerceNestedTypes) {
             sql(mergeStmt)
+            // Missing field c3 should be filled with NULL
+            checkAnswer(
+              sql(s"SELECT * FROM $tableNameAsString"),
+              Seq(
+                Row(0, Row(1, "a", true), "sales"),
+                Row(1, Row(10, "b", null), "hr"),
+                Row(2, Row(20, "c", null), "engineering")))
+          } else {
+            val exception = intercept[org.apache.spark.sql.AnalysisException] {
+              sql(mergeStmt)
+            }
+            assert(exception.errorClass.get ==
+              "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
+            assert(exception.getMessage.contains(
+              "Cannot write incompatible data for the table ``: " +
+                "Cannot find data for the output column `s`.`c3`."))
           }
-          assert(exception.errorClass.get ==
-            "UNRESOLVED_COLUMN.WITH_SUGGESTION")
         }
+        sql(s"DROP TABLE IF EXISTS $tableNameAsString")
       }
-      sql(s"DROP TABLE IF EXISTS $tableNameAsString")
     }
   }
 
@@ -4866,69 +4884,70 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
   }
 
   test("merge with with null struct with missing nested field") {
-    Seq(true, false).foreach { withSchemaEvolution =>
-      Seq(true, false).foreach { coerceNestedTypes =>
-        withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
-          coerceNestedTypes.toString) {
-          withTempView("source") {
-            // Target table has nested struct with fields c1 and c2
-            createAndInitTable(
-              s"""pk INT NOT NULL,
-                 |s STRUCT<c1: INT, c2: STRUCT<a: INT, b: STRING>>,
-                 |dep STRING""".stripMargin,
-              """{ "pk": 0, "s": { "c1": 1, "c2": { "a": 10, "b": "x" } }, "dep": "sales" }
-                |{ "pk": 1, "s": { "c1": 2, "c2": { "a": 20, "b": "y" } }, "dep": "hr" }"""
-                .stripMargin)
+    Seq(true, false).foreach { coerceNestedTypes =>
+      withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
+        coerceNestedTypes.toString) {
+        withTempView("source") {
+          // Target table has nested struct with fields c1 and c2
+          createAndInitTable(
+            s"""pk INT NOT NULL,
+               |s STRUCT<c1: INT, c2: STRUCT<a: INT, b: STRING>>,
+               |dep STRING""".stripMargin,
+            """{ "pk": 0, "s": { "c1": 1, "c2": { "a": 10, "b": "x" } }, "dep": "sales" }
+              |{ "pk": 1, "s": { "c1": 2, "c2": { "a": 20, "b": "y" } }, "dep": "hr" }"""
+              .stripMargin)
 
-            // Source table has null for the nested struct
-            val sourceTableSchema = StructType(Seq(
-              StructField("pk", IntegerType),
-              StructField("s", StructType(Seq(
-                StructField("c1", IntegerType),
-                StructField("c2", StructType(Seq(
-                  StructField("a", IntegerType)
-                  // missing field 'b'
-                )))
-              ))),
-              StructField("dep", StringType)
-            ))
+          // Source table has null for the nested struct
+          val sourceTableSchema = StructType(Seq(
+            StructField("pk", IntegerType),
+            StructField("s", StructType(Seq(
+              StructField("c1", IntegerType),
+              StructField("c2", StructType(Seq(
+                StructField("a", IntegerType)
+                // missing field 'b'
+              )))
+            ))),
+            StructField("dep", StringType)
+          ))
 
-            val data = Seq(
-              Row(1, null, "engineering"),
-              Row(2, null, "finance")
-            )
-            spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
-              .createOrReplaceTempView("source")
+          val data = Seq(
+            Row(1, null, "engineering"),
+            Row(2, null, "finance")
+          )
+          spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+            .createOrReplaceTempView("source")
 
-            val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
-            val mergeStmt =
-              s"""MERGE $schemaEvolutionClause INTO $tableNameAsString t USING source
-                 |ON t.pk = source.pk
-                 |WHEN MATCHED THEN
-                 | UPDATE SET *
-                 |WHEN NOT MATCHED THEN
-                 | INSERT *
-                 |""".stripMargin
+          val mergeStmt =
+            s"""MERGE INTO $tableNameAsString t USING source
+               |ON t.pk = source.pk
+               |WHEN MATCHED THEN
+               | UPDATE SET *
+               |WHEN NOT MATCHED THEN
+               | INSERT *
+               |""".stripMargin
 
-            if (coerceNestedTypes && withSchemaEvolution) {
+          if (coerceNestedTypes) {
+            sql(mergeStmt)
+            checkAnswer(
+              sql(s"SELECT * FROM $tableNameAsString"),
+              Seq(
+                Row(0, Row(1, Row(10, "x")), "sales"),
+                Row(1, null, "engineering"),
+                Row(2, null, "finance")))
+          } else {
+            // Without coercion, the merge should fail due to missing field
+            val exception = intercept[org.apache.spark.sql.AnalysisException] {
               sql(mergeStmt)
-              checkAnswer(
-                sql(s"SELECT * FROM $tableNameAsString"),
-                Seq(
-                  Row(0, Row(1, Row(10, "x")), "sales"),
-                  Row(1, null, "engineering"),
-                  Row(2, null, "finance")))
-            } else {
-              val exception = intercept[org.apache.spark.sql.AnalysisException] {
-                sql(mergeStmt)
-              }
-              assert(exception.errorClass.get ==
-                "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
             }
+            assert(exception.errorClass.get ==
+              "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
+            assert(exception.getMessage.contains(
+              "Cannot write incompatible data for the table ``: " +
+                "Cannot find data for the output column `s`.`c2`.`b`."))
           }
         }
-        sql(s"DROP TABLE IF EXISTS $tableNameAsString")
       }
+      sql(s"DROP TABLE IF EXISTS $tableNameAsString")
     }
   }
 
@@ -4979,21 +4998,37 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
                    | INSERT *
                    |""".stripMargin
 
-              if (coerceNestedTypes && withSchemaEvolution) {
-                // extra nested field is added
-                sql(mergeStmt)
-                checkAnswer(
-                  sql(s"SELECT * FROM $tableNameAsString"),
-                  Seq(
-                    Row(0, Row(1, Row(10, "x", null)), "sales"),
-                    Row(1, null, "engineering"),
-                    Row(2, null, "finance")))
+              if (coerceNestedTypes) {
+                if (withSchemaEvolution) {
+                  // extra nested field is added
+                  sql(mergeStmt)
+                  checkAnswer(
+                    sql(s"SELECT * FROM $tableNameAsString"),
+                    Seq(
+                      Row(0, Row(1, Row(10, "x", null)), "sales"),
+                      Row(1, null, "engineering"),
+                      Row(2, null, "finance")))
+                } else {
+                  // extra nested field is not added
+                  val exception = intercept[org.apache.spark.sql.AnalysisException] {
+                    sql(mergeStmt)
+                  }
+                  assert(exception.errorClass.get ==
+                    "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS")
+                  assert(exception.getMessage.contains(
+                    "Cannot write incompatible data for the table ``: " +
+                      "Cannot write extra fields `c` to the struct `s`.`c2`"))
+                }
               } else {
+                // Without source struct coercion, the merge should fail
                 val exception = intercept[org.apache.spark.sql.AnalysisException] {
                   sql(mergeStmt)
                 }
                 assert(exception.errorClass.get ==
                   "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
+                assert(exception.getMessage.contains(
+                  "Cannot write incompatible data for the table ``: " +
+                    "Cannot find data for the output column `s`.`c2`.`b`."))
               }
             }
           }
@@ -5062,83 +5097,82 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
   }
 
   test("merge with null struct using default value") {
-    Seq(true, false).foreach { withSchemaEvolution =>
-      Seq(true, false).foreach { coerceNestedTypes =>
-        withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
-          coerceNestedTypes.toString) {
-          withTempView("source") {
-            sql(
-              s"""CREATE TABLE $tableNameAsString (
-                 | pk INT NOT NULL,
-                 | s STRUCT<c1: INT, c2: STRUCT<a: INT, b: STRING>> DEFAULT
-                 |   named_struct('c1', 999, 'c2', named_struct('a', 999, 'b', 'default')),
-                 | dep STRING)
-                 |PARTITIONED BY (dep)
-                 |""".stripMargin)
+    Seq(true, false).foreach { coerceNestedTypes =>
+      withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
+        coerceNestedTypes.toString) {
+        withTempView("source") {
+          sql(
+            s"""CREATE TABLE $tableNameAsString (
+               | pk INT NOT NULL,
+               | s STRUCT<c1: INT, c2: STRUCT<a: INT, b: STRING>> DEFAULT
+               |   named_struct('c1', 999, 'c2', named_struct('a', 999, 'b', 'default')),
+               | dep STRING)
+               |PARTITIONED BY (dep)
+               |""".stripMargin)
 
-            val initialSchema = StructType(Seq(
-              StructField("pk", IntegerType, nullable = false),
-              StructField("s", StructType(Seq(
-                StructField("c1", IntegerType),
-                StructField("c2", StructType(Seq(
-                  StructField("a", IntegerType),
-                  StructField("b", StringType)
-                )))
-              ))),
-              StructField("dep", StringType)
-            ))
-            val initialData = Seq(
-              Row(0, Row(1, Row(10, "x")), "sales"),
-              Row(1, Row(2, Row(20, "y")), "hr")
-            )
-            spark.createDataFrame(spark.sparkContext.parallelize(initialData), initialSchema)
-              .writeTo(tableNameAsString).append()
+          val initialSchema = StructType(Seq(
+            StructField("pk", IntegerType, nullable = false),
+            StructField("s", StructType(Seq(
+              StructField("c1", IntegerType),
+              StructField("c2", StructType(Seq(
+                StructField("a", IntegerType),
+                StructField("b", StringType)
+              )))
+            ))),
+            StructField("dep", StringType)
+          ))
+          val initialData = Seq(
+            Row(0, Row(1, Row(10, "x")), "sales"),
+            Row(1, Row(2, Row(20, "y")), "hr")
+          )
+          spark.createDataFrame(spark.sparkContext.parallelize(initialData), initialSchema)
+            .writeTo(tableNameAsString).append()
 
-            val sourceTableSchema = StructType(Seq(
-              StructField("pk", IntegerType),
-              StructField("s", StructType(Seq(
-                StructField("c1", IntegerType),
-                StructField("c2", StructType(Seq(
-                  StructField("a", IntegerType)
-                )))
-              ))),
-              StructField("dep", StringType)
-            ))
+          val sourceTableSchema = StructType(Seq(
+            StructField("pk", IntegerType),
+            StructField("s", StructType(Seq(
+              StructField("c1", IntegerType),
+              StructField("c2", StructType(Seq(
+                StructField("a", IntegerType)
+              )))
+            ))),
+            StructField("dep", StringType)
+          ))
 
-            val data = Seq(
-              Row(1, null, "engineering"),
-              Row(2, null, "finance")
-            )
-            spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
-              .createOrReplaceTempView("source")
+          val data = Seq(
+            Row(1, null, "engineering"),
+            Row(2, null, "finance")
+          )
+          spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+            .createOrReplaceTempView("source")
 
-            val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
-            val mergeStmt =
-              s"""MERGE $schemaEvolutionClause INTO $tableNameAsString t USING source
-                 |ON t.pk = source.pk
-                 |WHEN MATCHED THEN
-                 | UPDATE SET *
-                 |WHEN NOT MATCHED THEN
-                 | INSERT *
-                 |""".stripMargin
+          val mergeStmt =
+            s"""MERGE INTO $tableNameAsString t USING source
+               |ON t.pk = source.pk
+               |WHEN MATCHED THEN
+               | UPDATE SET *
+               |WHEN NOT MATCHED THEN
+               | INSERT *
+               |""".stripMargin
 
-            if (coerceNestedTypes && withSchemaEvolution) {
+          if (coerceNestedTypes) {
+            sql(mergeStmt)
+            checkAnswer(
+              sql(s"SELECT * FROM $tableNameAsString"),
+              Seq(
+                Row(0, Row(1, Row(10, "x")), "sales"),
+                Row(1, null, "engineering"),
+                Row(2, null, "finance")))
+          } else {
+            val exception = intercept[org.apache.spark.sql.AnalysisException] {
               sql(mergeStmt)
-              checkAnswer(
-                sql(s"SELECT * FROM $tableNameAsString"),
-                Seq(
-                  Row(0, Row(1, Row(10, "x")), "sales"),
-                  Row(1, null, "engineering"),
-                  Row(2, null, "finance")))
-            } else {
-              val exception = intercept[org.apache.spark.sql.AnalysisException] {
-                sql(mergeStmt)
-              }
-              assert(exception.errorClass.get == "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
             }
+            assert(exception.errorClass.get == "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
+            assert(exception.getMessage.contains(
+              "Cannot find data for the output column `s`.`c2`.`b`"))
           }
-          sql(s"DROP TABLE IF EXISTS $tableNameAsString")
         }
+        sql(s"DROP TABLE IF EXISTS $tableNameAsString")
       }
     }
   }
@@ -5209,8 +5243,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
   }
 
   test("merge into with source missing fields in nested struct") {
-    Seq(true, false).foreach { withSchemaEvolution =>
-      Seq(true, false).foreach { nestedTypeCoercion =>
+    Seq(true, false).foreach { nestedTypeCoercion =>
         withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key
             -> nestedTypeCoercion.toString) {
           withTempView("source") {
@@ -5242,8 +5275,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
               .createOrReplaceTempView("source")
 
             // Missing field b should be filled with NULL
-            val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
-            val mergeStmt = s"""MERGE $schemaEvolutionClause INTO $tableNameAsString t
+            val mergeStmt = s"""MERGE INTO $tableNameAsString t
                                |USING source src
                                |ON t.pk = src.pk
                                |WHEN MATCHED THEN
@@ -5252,7 +5284,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
                                | INSERT *
                                |""".stripMargin
 
-            if (nestedTypeCoercion && withSchemaEvolution) {
+            if (nestedTypeCoercion) {
               sql(mergeStmt)
               checkAnswer(
                 sql(s"SELECT * FROM $tableNameAsString"),
@@ -5260,17 +5292,16 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
                   Row(1, Row(10, Row(20, null)), "sales"),
                   Row(2, Row(20, Row(30, null)), "engineering")))
             } else {
-              val exception = intercept[org.apache.spark.sql.AnalysisException] {
+              val exception = intercept[Exception] {
                 sql(mergeStmt)
               }
-              assert(exception.errorClass.get ==
-                "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
+              assert(exception.getMessage.contains(
+                """Cannot write incompatible data for the table ``""".stripMargin))
             }
           }
           sql(s"DROP TABLE IF EXISTS $tableNameAsString")
         }
       }
-    }
   }
 
   test("merge with named_struct missing non-nullable field") {
@@ -5895,18 +5926,30 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
               .whenNotMatched()
               .insertAll()
 
-            if (coerceNestedTypes && withSchemaEvolution) {
-              mergeBuilder.withSchemaEvolution().merge()
-              checkAnswer(
-                sql(s"SELECT * FROM $tableNameAsString"),
-                Seq(
-                  Row(1, Row(10, Row(null, Map("c" -> "d"), false)), "sales"),
-                  Row(2, Row(20, Row(null, Map("e" -> "f"), true)), "engineering")))
+            if (coerceNestedTypes) {
+              if (withSchemaEvolution) {
+                mergeBuilder.withSchemaEvolution().merge()
+                checkAnswer(
+                  sql(s"SELECT * FROM $tableNameAsString"),
+                  Seq(
+                    Row(1, Row(10, Row(null, Map("c" -> "d"), false)), "sales"),
+                    Row(2, Row(20, Row(null, Map("e" -> "f"), true)), "engineering")))
+              } else {
+                val exception = intercept[org.apache.spark.sql.AnalysisException] {
+                  mergeBuilder.merge()
+                }
+                assert(exception.errorClass.get ==
+                  "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS")
+                assert(exception.getMessage.contains(
+                  "Cannot write extra fields `c3` to the struct `s`.`c2`"))
+              }
             } else {
               val exception = intercept[org.apache.spark.sql.AnalysisException] {
                 mergeBuilder.merge()
               }
               assert(exception.errorClass.get == "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
+              assert(exception.getMessage.contains(
+                "Cannot find data for the output column `s`.`c2`.`a`"))
             }
 
             sql(s"DROP TABLE $tableNameAsString")
@@ -5995,18 +6038,30 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
               .whenNotMatched()
               .insertAll()
 
-            if (coerceNestedTypes && withSchemaEvolution) {
-              mergeBuilder.withSchemaEvolution().merge()
-              checkAnswer(
-                sql(s"SELECT * FROM $tableNameAsString"),
-                Seq(
-                  Row(1, Row(10, Row(null, Map("c" -> "d"), false)), "hr"),
-                  Row(2, Row(20, Row(null, Map("e" -> "f"), true)), "engineering")))
+            if (coerceNestedTypes) {
+              if (withSchemaEvolution) {
+                mergeBuilder.withSchemaEvolution().merge()
+                checkAnswer(
+                  sql(s"SELECT * FROM $tableNameAsString"),
+                  Seq(
+                    Row(1, Row(10, Row(null, Map("c" -> "d"), false)), "hr"),
+                    Row(2, Row(20, Row(null, Map("e" -> "f"), true)), "engineering")))
+              } else {
+                val exception = intercept[org.apache.spark.sql.AnalysisException] {
+                  mergeBuilder.merge()
+                }
+                assert(exception.errorClass.get ==
+                  "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS")
+                assert(exception.getMessage.contains(
+                  "Cannot write extra fields `c3` to the struct `s`.`c2`"))
+              }
             } else {
               val exception = intercept[org.apache.spark.sql.AnalysisException] {
                 mergeBuilder.merge()
               }
               assert(exception.errorClass.get == "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
+              assert(exception.getMessage.contains(
+                "Cannot find data for the output column `s`.`c2`.`a`"))
             }
 
             sql(s"DROP TABLE $tableNameAsString")
@@ -6077,190 +6132,198 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
   }
 
   test("merge into with source missing fields in top-level struct using dataframe API") {
-    Seq(true, false).foreach { withSchemaEvolution =>
-      Seq(true, false).foreach { coerceNestedTypes =>
-        withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
-          coerceNestedTypes.toString) {
-          val sourceTable = "cat.ns1.source_table"
-          withTable(sourceTable) {
-            // Target table has struct with 3 fields at top level
-            sql(
-              s"""CREATE TABLE $tableNameAsString (
-                 |pk INT NOT NULL,
-                 |s STRUCT<c1: INT, c2: STRING, c3: BOOLEAN>,
-                 |dep STRING)""".stripMargin)
+    Seq(true, false).foreach { coerceNestedTypes =>
+      withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
+        coerceNestedTypes.toString) {
+        val sourceTable = "cat.ns1.source_table"
+        withTable(sourceTable) {
+          // Target table has struct with 3 fields at top level
+          sql(
+            s"""CREATE TABLE $tableNameAsString (
+               |pk INT NOT NULL,
+               |s STRUCT<c1: INT, c2: STRING, c3: BOOLEAN>,
+               |dep STRING)""".stripMargin)
 
-            val targetData = Seq(
-              Row(0, Row(1, "a", true), "sales")
-            )
-            val targetSchema = StructType(Seq(
-              StructField("pk", IntegerType, nullable = false),
-              StructField("s", StructType(Seq(
-                StructField("c1", IntegerType),
-                StructField("c2", StringType),
-                StructField("c3", BooleanType)
-              ))),
-              StructField("dep", StringType)
-            ))
-            spark.createDataFrame(spark.sparkContext.parallelize(targetData), targetSchema)
-              .writeTo(tableNameAsString).append()
+          val targetData = Seq(
+            Row(0, Row(1, "a", true), "sales")
+          )
+          val targetSchema = StructType(Seq(
+            StructField("pk", IntegerType, nullable = false),
+            StructField("s", StructType(Seq(
+              StructField("c1", IntegerType),
+              StructField("c2", StringType),
+              StructField("c3", BooleanType)
+            ))),
+            StructField("dep", StringType)
+          ))
+          spark.createDataFrame(spark.sparkContext.parallelize(targetData), targetSchema)
+            .writeTo(tableNameAsString).append()
 
-            // Create source table with struct having only 2 fields (c1, c2) - missing c3
-            val sourceIdent = Identifier.of(Array("ns1"), "source_table")
-            val columns = Array(
-              Column.create("pk", IntegerType, false),
-              Column.create("s", StructType(Seq(
-                StructField("c1", IntegerType),
-                StructField("c2", StringType)))), // missing c3 field
-              Column.create("dep", StringType))
-            val tableInfo = new TableInfo.Builder()
-              .withColumns(columns)
-              .withProperties(extraTableProps)
-              .build()
-            catalog.createTable(sourceIdent, tableInfo)
+          // Create source table with struct having only 2 fields (c1, c2) - missing c3
+          val sourceIdent = Identifier.of(Array("ns1"), "source_table")
+          val columns = Array(
+            Column.create("pk", IntegerType, false),
+            Column.create("s", StructType(Seq(
+              StructField("c1", IntegerType),
+              StructField("c2", StringType)))), // missing c3 field
+            Column.create("dep", StringType))
+          val tableInfo = new TableInfo.Builder()
+            .withColumns(columns)
+            .withProperties(extraTableProps)
+            .build()
+          catalog.createTable(sourceIdent, tableInfo)
 
-            val data = Seq(
-              Row(1, Row(10, "b"), "hr"),
-              Row(2, Row(20, "c"), "engineering")
-            )
-            val sourceTableSchema = StructType(Seq(
-              StructField("pk", IntegerType, nullable = false),
-              StructField("s", StructType(Seq(
-                StructField("c1", IntegerType),
-                StructField("c2", StringType)))),
-              StructField("dep", StringType)))
-            spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
-              .createOrReplaceTempView("source_temp")
+          val data = Seq(
+            Row(1, Row(10, "b"), "hr"),
+            Row(2, Row(20, "c"), "engineering")
+          )
+          val sourceTableSchema = StructType(Seq(
+            StructField("pk", IntegerType, nullable = false),
+            StructField("s", StructType(Seq(
+              StructField("c1", IntegerType),
+              StructField("c2", StringType)))),
+            StructField("dep", StringType)))
+          spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+            .createOrReplaceTempView("source_temp")
 
-            sql(s"INSERT INTO $sourceTable SELECT * FROM source_temp")
+          sql(s"INSERT INTO $sourceTable SELECT * FROM source_temp")
 
-            val mergeBuilder = spark.table(sourceTable)
+          if (coerceNestedTypes) {
+            spark.table(sourceTable)
               .mergeInto(tableNameAsString, $"source_table.pk" === col(tableNameAsString + ".pk"))
               .whenMatched()
               .updateAll()
               .whenNotMatched()
               .insertAll()
+              .merge()
 
-            if (coerceNestedTypes && withSchemaEvolution) {
-              mergeBuilder.withSchemaEvolution().merge()
-
-              // Missing field c3 should be filled with NULL
-              checkAnswer(
-                sql(s"SELECT * FROM $tableNameAsString"),
-                Seq(
-                  Row(0, Row(1, "a", true), "sales"),
-                  Row(1, Row(10, "b", null), "hr"),
-                  Row(2, Row(20, "c", null), "engineering")))
-            } else {
-              val exception = intercept[org.apache.spark.sql.AnalysisException] {
-                mergeBuilder.merge()
-              }
-              assert(exception.errorClass.get ==
-                "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
+            // Missing field c3 should be filled with NULL
+            checkAnswer(
+              sql(s"SELECT * FROM $tableNameAsString"),
+              Seq(
+                Row(0, Row(1, "a", true), "sales"),
+                Row(1, Row(10, "b", null), "hr"),
+                Row(2, Row(20, "c", null), "engineering")))
+          } else {
+            val exception = intercept[org.apache.spark.sql.AnalysisException] {
+              spark.table(sourceTable)
+                .mergeInto(tableNameAsString, $"source_table.pk" === col(tableNameAsString + ".pk"))
+                .whenMatched()
+                .updateAll()
+                .whenNotMatched()
+                .insertAll()
+                .merge()
             }
-
-            sql(s"DROP TABLE $tableNameAsString")
+            assert(exception.errorClass.get ==
+              "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
+            assert(exception.getMessage.contains(
+              "Cannot write incompatible data for the table ``: " +
+                "Cannot find data for the output column `s`.`c3`."))
           }
+
+          sql(s"DROP TABLE $tableNameAsString")
         }
       }
     }
   }
 
   test("merge with null struct with missing nested field using dataframe API") {
-    Seq(true, false).foreach { withSchemaEvolution =>
-      Seq(true, false).foreach { coerceNestedTypes =>
-        withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
-          coerceNestedTypes.toString) {
-          val sourceTable = "cat.ns1.source_table"
-          withTable(sourceTable) {
-            // Target table has nested struct with fields c1 and c2
-            sql(
-              s"""CREATE TABLE $tableNameAsString (
-                 |pk INT NOT NULL,
-                 |s STRUCT<c1: INT, c2: STRUCT<a: INT, b: STRING>>,
-                 |dep STRING)""".stripMargin)
+    Seq(true, false).foreach { coerceNestedTypes =>
+      withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
+        coerceNestedTypes.toString) {
+        val sourceTable = "cat.ns1.source_table"
+        withTable(sourceTable) {
+          // Target table has nested struct with fields c1 and c2
+          sql(
+            s"""CREATE TABLE $tableNameAsString (
+               |pk INT NOT NULL,
+               |s STRUCT<c1: INT, c2: STRUCT<a: INT, b: STRING>>,
+               |dep STRING)""".stripMargin)
 
-            val targetData = Seq(
-              Row(0, Row(1, Row(10, "x")), "sales"),
-              Row(1, Row(2, Row(20, "y")), "hr")
-            )
-            val targetSchema = StructType(Seq(
-              StructField("pk", IntegerType, nullable = false),
-              StructField("s", StructType(Seq(
-                StructField("c1", IntegerType),
-                StructField("c2", StructType(Seq(
-                  StructField("a", IntegerType),
-                  StructField("b", StringType)
-                )))
-              ))),
-              StructField("dep", StringType)
-            ))
-            spark.createDataFrame(spark.sparkContext.parallelize(targetData), targetSchema)
-              .writeTo(tableNameAsString).append()
+          val targetData = Seq(
+            Row(0, Row(1, Row(10, "x")), "sales"),
+            Row(1, Row(2, Row(20, "y")), "hr")
+          )
+          val targetSchema = StructType(Seq(
+            StructField("pk", IntegerType, nullable = false),
+            StructField("s", StructType(Seq(
+              StructField("c1", IntegerType),
+              StructField("c2", StructType(Seq(
+                StructField("a", IntegerType),
+                StructField("b", StringType)
+              )))
+            ))),
+            StructField("dep", StringType)
+          ))
+          spark.createDataFrame(spark.sparkContext.parallelize(targetData), targetSchema)
+            .writeTo(tableNameAsString).append()
 
-            // Create source table with missing nested field 'b'
-            val sourceIdent = Identifier.of(Array("ns1"), "source_table")
-            val columns = Array(
-              Column.create("pk", IntegerType, false),
-              Column.create("s", StructType(Seq(
-                StructField("c1", IntegerType),
-                StructField("c2", StructType(Seq(
-                  StructField("a", IntegerType)
-                  // missing field 'b'
-                )))
-              ))),
-              Column.create("dep", StringType))
-            val tableInfo = new TableInfo.Builder()
-              .withColumns(columns)
-              .withProperties(extraTableProps)
-              .build()
-            catalog.createTable(sourceIdent, tableInfo)
+          // Create source table with missing nested field 'b'
+          val sourceIdent = Identifier.of(Array("ns1"), "source_table")
+          val columns = Array(
+            Column.create("pk", IntegerType, false),
+            Column.create("s", StructType(Seq(
+              StructField("c1", IntegerType),
+              StructField("c2", StructType(Seq(
+                StructField("a", IntegerType)
+                // missing field 'b'
+              )))
+            ))),
+            Column.create("dep", StringType))
+          val tableInfo = new TableInfo.Builder()
+            .withColumns(columns)
+            .withProperties(extraTableProps)
+            .build()
+          catalog.createTable(sourceIdent, tableInfo)
 
-            // Source table has null for the nested struct
-            val data = Seq(
-              Row(1, null, "engineering"),
-              Row(2, null, "finance")
-            )
-            val sourceTableSchema = StructType(Seq(
-              StructField("pk", IntegerType),
-              StructField("s", StructType(Seq(
-                StructField("c1", IntegerType),
-                StructField("c2", StructType(Seq(
-                  StructField("a", IntegerType)
-                )))
-              ))),
-              StructField("dep", StringType)
-            ))
-            spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
-              .createOrReplaceTempView("source_temp")
+          // Source table has null for the nested struct
+          val data = Seq(
+            Row(1, null, "engineering"),
+            Row(2, null, "finance")
+          )
+          val sourceTableSchema = StructType(Seq(
+            StructField("pk", IntegerType),
+            StructField("s", StructType(Seq(
+              StructField("c1", IntegerType),
+              StructField("c2", StructType(Seq(
+                StructField("a", IntegerType)
+              )))
+            ))),
+            StructField("dep", StringType)
+          ))
+          spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+            .createOrReplaceTempView("source_temp")
 
-            sql(s"INSERT INTO $sourceTable SELECT * FROM source_temp")
-            val mergeBuilder = spark.table(sourceTable)
-              .mergeInto(tableNameAsString,
-                $"source_table.pk" === col(tableNameAsString + ".pk"))
-              .whenMatched()
-              .updateAll()
-              .whenNotMatched()
-              .insertAll()
+          sql(s"INSERT INTO $sourceTable SELECT * FROM source_temp")
+          val mergeBuilder = spark.table(sourceTable)
+            .mergeInto(tableNameAsString,
+              $"source_table.pk" === col(tableNameAsString + ".pk"))
+            .whenMatched()
+            .updateAll()
+            .whenNotMatched()
+            .insertAll()
 
-            if (coerceNestedTypes && withSchemaEvolution) {
-              mergeBuilder.withSchemaEvolution().merge()
-              checkAnswer(
-                sql(s"SELECT * FROM $tableNameAsString"),
-                Seq(
-                  Row(0, Row(1, Row(10, "x")), "sales"),
-                  Row(1, null, "engineering"),
-                  Row(2, null, "finance")))
-            } else {
-              val exception = intercept[org.apache.spark.sql.AnalysisException] {
-                mergeBuilder.merge()
-              }
-              assert(exception.errorClass.get ==
-                "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
+          if (coerceNestedTypes) {
+            mergeBuilder.merge()
+            checkAnswer(
+              sql(s"SELECT * FROM $tableNameAsString"),
+              Seq(
+                Row(0, Row(1, Row(10, "x")), "sales"),
+                Row(1, null, "engineering"),
+                Row(2, null, "finance")))
+          } else {
+            // Without coercion, the merge should fail due to missing field
+            val exception = intercept[org.apache.spark.sql.AnalysisException] {
+              mergeBuilder.merge()
             }
-
-            sql(s"DROP TABLE $tableNameAsString")
+            assert(exception.errorClass.get ==
+              "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
+            assert(exception.getMessage.contains(
+              "Cannot write incompatible data for the table ``: " +
+                "Cannot find data for the output column `s`.`c2`.`b`."))
           }
+
+          sql(s"DROP TABLE $tableNameAsString")
         }
       }
     }
@@ -6346,21 +6409,37 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
                 .whenNotMatched()
                 .insertAll()
 
-              if (coerceNestedTypes && withSchemaEvolution) {
-                // extra nested field is added
-                mergeBuilder.withSchemaEvolution().merge()
-                checkAnswer(
-                  sql(s"SELECT * FROM $tableNameAsString"),
-                  Seq(
-                    Row(0, Row(1, Row(10, "x", null)), "sales"),
-                    Row(1, null, "engineering"),
-                    Row(2, null, "finance")))
+              if (coerceNestedTypes) {
+                if (withSchemaEvolution) {
+                  // extra nested field is added
+                  mergeBuilder.withSchemaEvolution().merge()
+                  checkAnswer(
+                    sql(s"SELECT * FROM $tableNameAsString"),
+                    Seq(
+                      Row(0, Row(1, Row(10, "x", null)), "sales"),
+                      Row(1, null, "engineering"),
+                      Row(2, null, "finance")))
+                } else {
+                  // extra nested field is not added
+                  val exception = intercept[org.apache.spark.sql.AnalysisException] {
+                    mergeBuilder.merge()
+                  }
+                  assert(exception.errorClass.get ==
+                    "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS")
+                  assert(exception.getMessage.contains(
+                    "Cannot write incompatible data for the table ``: " +
+                      "Cannot write extra fields `c` to the struct `s`.`c2`"))
+                }
               } else {
+                // Without source struct coercion, the merge should fail
                 val exception = intercept[org.apache.spark.sql.AnalysisException] {
                   mergeBuilder.merge()
                 }
                 assert(exception.errorClass.get ==
                   "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
+                assert(exception.getMessage.contains(
+                  "Cannot write incompatible data for the table ``: " +
+                    "Cannot find data for the output column `s`.`c2`.`b`."))
               }
 
               sql(s"DROP TABLE $tableNameAsString")
