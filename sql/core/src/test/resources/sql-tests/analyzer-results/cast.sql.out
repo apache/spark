@@ -207,11 +207,9 @@ SELECT HEX(CAST(CAST(123 AS byte) AS binary))
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "configVal" : "'false'",
     "sqlExpr" : "\"CAST(CAST(123 AS TINYINT) AS BINARY)\"",
     "srcType" : "\"TINYINT\"",
     "targetType" : "\"BINARY\""
@@ -231,11 +229,9 @@ SELECT HEX(CAST(CAST(-123 AS byte) AS binary))
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "configVal" : "'false'",
     "sqlExpr" : "\"CAST(CAST(-123 AS TINYINT) AS BINARY)\"",
     "srcType" : "\"TINYINT\"",
     "targetType" : "\"BINARY\""
@@ -255,11 +251,9 @@ SELECT HEX(CAST(123S AS binary))
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "configVal" : "'false'",
     "sqlExpr" : "\"CAST(123 AS BINARY)\"",
     "srcType" : "\"SMALLINT\"",
     "targetType" : "\"BINARY\""
@@ -279,11 +273,9 @@ SELECT HEX(CAST(-123S AS binary))
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "configVal" : "'false'",
     "sqlExpr" : "\"CAST(-123 AS BINARY)\"",
     "srcType" : "\"SMALLINT\"",
     "targetType" : "\"BINARY\""
@@ -303,11 +295,9 @@ SELECT HEX(CAST(123 AS binary))
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "configVal" : "'false'",
     "sqlExpr" : "\"CAST(123 AS BINARY)\"",
     "srcType" : "\"INT\"",
     "targetType" : "\"BINARY\""
@@ -327,11 +317,9 @@ SELECT HEX(CAST(-123 AS binary))
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "configVal" : "'false'",
     "sqlExpr" : "\"CAST(-123 AS BINARY)\"",
     "srcType" : "\"INT\"",
     "targetType" : "\"BINARY\""
@@ -351,11 +339,9 @@ SELECT HEX(CAST(123L AS binary))
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "configVal" : "'false'",
     "sqlExpr" : "\"CAST(123 AS BINARY)\"",
     "srcType" : "\"BIGINT\"",
     "targetType" : "\"BINARY\""
@@ -375,11 +361,9 @@ SELECT HEX(CAST(-123L AS binary))
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "configVal" : "'false'",
     "sqlExpr" : "\"CAST(-123 AS BINARY)\"",
     "srcType" : "\"BIGINT\"",
     "targetType" : "\"BINARY\""
@@ -1033,11 +1017,9 @@ SELECT HEX((123 :: byte) :: binary)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.CAST_WITH_CONF_SUGGESTION",
+  "errorClass" : "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\"",
-    "configVal" : "'false'",
     "sqlExpr" : "\"CAST(CAST(123 AS TINYINT) AS BINARY)\"",
     "srcType" : "\"TINYINT\"",
     "targetType" : "\"BINARY\""
