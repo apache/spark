@@ -400,15 +400,15 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       } else {
         variantFields.get.toSeq.flatMap { case (pathToVariant, fields) =>
           val columnName = if (pathToVariant.isEmpty) {
-            Seq(topAttr.name).toArray
+            Seq(topAttr.name)
           } else {
-            getColumnName(topAttr.dataType.asInstanceOf[StructType], pathToVariant)
-              .toArray
+            Seq(topAttr.name) ++
+              getColumnName(topAttr.dataType.asInstanceOf[StructType], pathToVariant)
           }
           fields.toArray.sortBy(_._2).map { case (field, ordinal) =>
             val extraction = new org.apache.spark.sql.connector.read.VariantExtractionImpl(
-              columnName,
-              field.path.path,
+              columnName.toArray,
+              field.path.toMetadata,
               field.targetType
             )
             (extraction, topAttr, field, ordinal)
@@ -416,24 +416,6 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         }
       }
     }
-
-    // scalastyle:off println
-    println(s"Extraction Info: $extractionInfo")
-
-    /*
-    val extractionInfo = schemaAttributes.flatMap { attr =>
-      variants.mapping.get(attr.exprId).flatMap(_.get(Nil)).toSeq.flatMap { fields =>
-        fields.toArray.sortBy(_._2).map { case (field, ordinal) =>
-          val extraction = new org.apache.spark.sql.connector.read.VariantExtractionImpl(
-            Array(attr.name),
-            field.path.path,
-            field.targetType
-          )
-          (extraction, attr, field, ordinal)
-        }
-      }
-    }
-     */
 
     // Call the API to push down variant extractions
     if (extractionInfo.isEmpty) return originalPlan

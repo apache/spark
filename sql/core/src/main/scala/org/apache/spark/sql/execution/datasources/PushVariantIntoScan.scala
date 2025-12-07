@@ -223,8 +223,11 @@ class VariantInRelation {
         case Some(variants) =>
           variants.get(path) match {
             case Some(fields) =>
+              // Accessing the full variant value
               addField(fields, RequestedVariantField.fullVariant)
             case _ =>
+              // Accessing the struct containing a variant.
+              // This variant is not eligible for push down.
               // Remove non-eligible variants.
               variants.filterInPlace { case (key, _) => !key.startsWith(path) }
           }

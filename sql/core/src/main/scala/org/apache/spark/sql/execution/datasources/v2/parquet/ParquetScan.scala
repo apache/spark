@@ -26,12 +26,12 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{PartitionReaderFactory, VariantExtraction}
-import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, PartitioningAwareFileIndex}
+import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, PartitioningAwareFileIndex, VariantMetadata}
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetOptions, ParquetReadSupport, ParquetWriteSupport}
 import org.apache.spark.sql.execution.datasources.v2.FileScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, DataType, StructField, StructType, VariantType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SerializableConfiguration
@@ -60,25 +60,54 @@ case class ParquetScan(
     if (pushedVariantExtractions.isEmpty) {
       readDataSchema
     } else {
-      // Group extractions by column name and build extracted schemas
-      val variantSchemaMap: Map[String, StructType] = pushedVariantExtractions
-        .groupBy(e => e.columnName()(0))  // Get top-level column name
-        .map { case (colName, extractions) =>
-          // Build struct schema with ordinal-named fields for each extraction
-          val fields = extractions.zipWithIndex.map { case (extraction, idx) =>
-            StructField(idx.toString, extraction.expectedDataType(), nullable = true)
-              .withComment(extraction.path())
-          }
-          colName -> StructType(fields)
-        }.toMap
+      rewriteVariantPushdownSchema(readDataSchema)
+    }
+  }
 
-      // Transform the read data schema by replacing variant columns with their extracted schemas
-      StructType(readDataSchema.map { field =>
-        variantSchemaMap.get(field.name) match {
-          case Some(extractedSchema) => field.copy(dataType = extractedSchema)
-          case None => field
+  private def rewriteVariantPushdownSchema(schema: StructType): StructType = {
+    // Group extractions by column name and build extracted schemas
+    val variantSchemaMap: Map[Seq[String], StructType] = pushedVariantExtractions
+      .groupBy(e => e.columnName().toSeq)
+      .map { case (colName, extractions) =>
+        // Build struct schema with ordinal-named fields for each extraction
+        var fields = extractions.zipWithIndex.map { case (extraction, idx) =>
+          // Attach VariantMetadata so Parquet reader knows this is a variant extraction
+          StructField(idx.toString, extraction.expectedDataType(), nullable = true,
+            extraction.metadata())
         }
-      })
+
+        // Avoid producing an empty struct of requested fields. This happens
+        // if the variant is not used, or only used in `IsNotNull/IsNull` expressions.
+        // The value of the placeholder field doesn't matter.
+        if (fields.size == 1 && fields.head.dataType.isInstanceOf[VariantType]) {
+          val placeholder = VariantMetadata("$.__placeholder_field__",
+            failOnError = false, timeZoneId = "UTC")
+          fields = Array(StructField("0", BooleanType,
+            metadata = placeholder.toMetadata))
+        }
+
+        colName -> StructType(fields)
+      }.toMap
+
+    rewriteType(schema, Seq.empty, variantSchemaMap).asInstanceOf[StructType]
+  }
+
+  private def rewriteType(
+      dataType: DataType,
+      path: Seq[String],
+      mapping: Map[Seq[String], StructType]): DataType = {
+    dataType match {
+      case structType: StructType if !VariantMetadata.isVariantStruct(structType) =>
+        val fields = structType.fields.map { field =>
+          mapping.get(path :+ field.name) match {
+            case Some(extractedSchema) =>
+              field.copy(dataType = extractedSchema)
+            case None =>
+              field.copy(dataType = rewriteType(field.dataType, path :+ field.name, mapping))
+          }
+        }
+        StructType(fields)
+      case otherType => otherType
     }
   }
 
@@ -94,24 +123,7 @@ case class ParquetScan(
       if (pushedVariantExtractions.isEmpty) {
         baseSchema
       } else {
-        // Group extractions by column name and build extracted schemas
-        val variantSchemaMap: Map[String, StructType] = pushedVariantExtractions
-          .groupBy(e => e.columnName()(0))  // Get top-level column name
-          .map { case (colName, extractions) =>
-            // Build struct schema with ordinal-named fields for each extraction
-            val fields = extractions.zipWithIndex.map { case (extraction, idx) =>
-              StructField(idx.toString, extraction.expectedDataType(), nullable = true)
-                .withComment(extraction.path())
-            }
-            colName -> StructType(fields)
-          }.toMap
-
-        StructType(baseSchema.map { field =>
-          variantSchemaMap.get(field.name) match {
-            case Some(extractedSchema) => field.copy(dataType = extractedSchema)
-            case None => field
-          }
-        })
+        rewriteVariantPushdownSchema(baseSchema)
       }
     }
   }
@@ -192,7 +204,7 @@ case class ParquetScan(
     val variantExtractionStr = if (pushedVariantExtractions.nonEmpty) {
       pushedVariantExtractions.map { extraction =>
         val colName = extraction.columnName().mkString(".")
-        s"$colName:${extraction.path()}:${extraction.expectedDataType()}"
+        s"$colName:${extraction.metadata()}:${extraction.expectedDataType()}"
       }.mkString("[", ", ", "]")
     } else {
       "[]"

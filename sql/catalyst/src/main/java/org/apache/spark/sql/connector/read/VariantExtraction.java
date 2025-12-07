@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector.read;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.types.DataType;
+import org.apache.spark.sql.types.Metadata;
 
 /**
  * Variant extraction information that describes a single field extraction from a variant column.
@@ -42,14 +43,20 @@ public interface VariantExtraction {
   String[] columnName();
 
   /**
-   * Returns the extraction path from variant_get or try_variant_get.
-   * This follows JSON path syntax (e.g., "$.a", "$.b.c", "$[0]").
-   */
-  String path();
-
-  /**
    * Returns the expected data type for the extracted value.
    * This is the target type specified in variant_get (e.g., IntegerType, StringType).
    */
   DataType expectedDataType();
+
+  /**
+   * Returns the metadata associated with this variant extraction.
+   * This may include additional information needed by the data source:
+   * - "path": the extraction path from variant_get or try_variant_get.
+   *           This follows JSON path syntax (e.g., "$.a", "$.b.c", "$[0]").
+   * - "failOnError": whether the extraction to expected data type should throw an exception
+   *                  or return null if the cast fails.
+   * - "timeZoneId": a string identifier of a time zone. It is required by timestamp-related casts.
+   *
+   */
+  Metadata metadata();
 }

@@ -23,6 +23,7 @@ import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.types.DataType;
+import org.apache.spark.sql.types.Metadata;
 
 /**
  * Default implementation of {@link VariantExtraction}.
@@ -32,20 +33,20 @@ import org.apache.spark.sql.types.DataType;
 @Evolving
 public final class VariantExtractionImpl implements VariantExtraction, Serializable {
   private final String[] columnName;
-  private final String path;
   private final DataType expectedDataType;
+  private final Metadata metadata;
 
   /**
    * Creates a variant extraction.
    *
    * @param columnName Path to the variant column (e.g., ["v"] for top-level,
    *                   ["struct1", "v"] for nested)
-   * @param path The JSON path for extraction (e.g., "$.a", "$.b.c")
+   * @param metadata The JSON path for extraction (e.g., "$.a", "$.b.c")
    * @param expectedDataType The expected data type for the extracted value
    */
-  public VariantExtractionImpl(String[] columnName, String path, DataType expectedDataType) {
+  public VariantExtractionImpl(String[] columnName, Metadata metadata, DataType expectedDataType) {
     this.columnName = Objects.requireNonNull(columnName, "columnName cannot be null");
-    this.path = Objects.requireNonNull(path, "path cannot be null");
+    this.metadata = Objects.requireNonNull(metadata, "metadata cannot be null");
     this.expectedDataType =
         Objects.requireNonNull(expectedDataType, "expectedDataType cannot be null");
     if (columnName.length == 0) {
@@ -59,14 +60,12 @@ public final class VariantExtractionImpl implements VariantExtraction, Serializa
   }
 
   @Override
-  public String path() {
-    return path;
-  }
-
-  @Override
   public DataType expectedDataType() {
     return expectedDataType;
   }
+
+  @Override
+  public Metadata metadata() { return metadata; }
 
   @Override
   public boolean equals(Object o) {
@@ -74,13 +73,13 @@ public final class VariantExtractionImpl implements VariantExtraction, Serializa
     if (o == null || getClass() != o.getClass()) return false;
     VariantExtractionImpl that = (VariantExtractionImpl) o;
     return Arrays.equals(columnName, that.columnName) &&
-           path.equals(that.path) &&
+            metadata.equals(that.metadata) &&
            expectedDataType.equals(that.expectedDataType);
   }
 
   @Override
   public int hashCode() {
-    int result = Objects.hash(path, expectedDataType);
+    int result = Objects.hash(metadata, expectedDataType);
     result = 31 * result + Arrays.hashCode(columnName);
     return result;
   }
@@ -89,7 +88,7 @@ public final class VariantExtractionImpl implements VariantExtraction, Serializa
   public String toString() {
     return "VariantExtraction{" +
            "columnName=" + Arrays.toString(columnName) +
-           ", path='" + path + '\'' +
+           ", metadata='" + metadata + '\'' +
            ", expectedDataType=" + expectedDataType +
            '}';
   }
