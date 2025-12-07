@@ -19,7 +19,7 @@ from pyspark.sql.connect.utils import check_dependencies
 check_dependencies(__name__)
 
 import sys
-from typing import Dict, Optional, TYPE_CHECKING, List, Callable
+from typing import Dict, Optional, TYPE_CHECKING, Callable
 
 from pyspark.sql.connect import proto
 from pyspark.sql.connect.column import Column
