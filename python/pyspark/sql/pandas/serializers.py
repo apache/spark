@@ -1626,7 +1626,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
                         state,
                     )
 
-        _batches = super().load_stream(stream)
+        _batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
 
         data_state_generator = gen_data_and_state(_batches)
 
