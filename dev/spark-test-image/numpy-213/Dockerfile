@@ -49,6 +49,7 @@ RUN apt-get update && apt-get install -y \
     libpython3-dev \
     libssl-dev \
     libtiff5-dev \
+    libwebp-dev \
     libxml2-dev \
     openjdk-17-jdk-headless \
     pkg-config \
@@ -68,12 +69,12 @@ RUN apt-get update && apt-get install -y \
 
 
 # Pin numpy==2.1.3
-ARG BASIC_PIP_PKGS="numpy==2.1.3 pyarrow>=21.0.0 six==1.16.0 pandas==2.2.3 scipy plotly<6.0.0 mlflow>=2.8.1 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2"
+ARG BASIC_PIP_PKGS="numpy==2.1.3 pyarrow>=22.0.0 six==1.16.0 pandas==2.2.3 scipy plotly<6.0.0 mlflow>=2.8.1 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2"
 # Python deps for Spark Connect
-ARG CONNECT_PIP_PKGS="grpcio==1.67.0 grpcio-status==1.67.0 protobuf==5.29.5 googleapis-common-protos==1.65.0 graphviz==0.20.3"
+ARG CONNECT_PIP_PKGS="grpcio==1.76.0 grpcio-status==1.76.0 protobuf==6.33.0 googleapis-common-protos==1.71.0 zstandard==0.25.0 graphviz==0.20.3"
 
 # Install Python 3.11 packages
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
-RUN python3.11 -m pip install --ignore-installed blinker>=1.6.2 # mlflow needs this
+RUN python3.11 -m pip install --ignore-installed 'blinker>=1.6.2' # mlflow needs this
 RUN python3.11 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS && \
     python3.11 -m pip cache purge

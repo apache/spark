@@ -17,13 +17,17 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.collection.mutable.ArrayBuffer
+
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.types.StructType
 
 
 /**
@@ -34,24 +38,40 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 object ResolveMergeIntoSchemaEvolution extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case m @ MergeIntoTable(_, _, _, _, _, _, _)
-      if m.needSchemaEvolution =>
+    // This rule should run only if all assignments are resolved, except those
+    // that will be satisfied by schema evolution
+    case m@MergeIntoTable(_, _, _, _, _, _, _) if m.evaluateSchemaEvolution =>
+      val changes = m.changesForSchemaEvolution
+      if (changes.isEmpty) {
+        m
+      } else {
+        val finalAttrMapping = ArrayBuffer.empty[(Attribute, Attribute)]
         val newTarget = m.targetTable.transform {
-          case r : DataSourceV2Relation => performSchemaEvolution(r, m.sourceTable)
+          case r: DataSourceV2Relation =>
+            val referencedSourceSchema = MergeIntoTable.sourceSchemaForSchemaEvolution(m)
+            val newTarget = performSchemaEvolution(r, referencedSourceSchema, changes)
+            val oldTargetOutput = m.targetTable.output
+            val newTargetOutput = newTarget.output
+            val attributeMapping = oldTargetOutput.zip(newTargetOutput)
+            finalAttrMapping ++= attributeMapping
+            newTarget
         }
-        m.copy(targetTable = newTarget)
+        val res = m.copy(targetTable = newTarget)
+        res.rewriteAttrs(AttributeMap(finalAttrMapping.toSeq))
+      }
   }
 
-  private def performSchemaEvolution(relation: DataSourceV2Relation, source: LogicalPlan)
-    : DataSourceV2Relation = {
+  private def performSchemaEvolution(
+      relation: DataSourceV2Relation,
+      referencedSourceSchema: StructType,
+      changes: Array[TableChange]): DataSourceV2Relation = {
     (relation.catalog, relation.identifier) match {
       case (Some(c: TableCatalog), Some(i)) =>
-        val changes = MergeIntoTable.schemaChanges(relation.schema, source.schema)
         c.alterTable(i, changes: _*)
         val newTable = c.loadTable(i)
         val newSchema = CatalogV2Util.v2ColumnsToStructType(newTable.columns())
         // Check if there are any remaining changes not applied.
-        val remainingChanges = MergeIntoTable.schemaChanges(newSchema, source.schema)
+        val remainingChanges = MergeIntoTable.schemaChanges(newSchema, referencedSourceSchema)
         if (remainingChanges.nonEmpty) {
           throw QueryCompilationErrors.unsupportedTableChangesInAutoSchemaEvolutionError(
             remainingChanges, i.toQualifiedNameParts(c))

@@ -115,7 +115,6 @@ case class JsonFileFormat() extends TextBasedFileFormat with DataSourceRegister 
   override def supportDataType(dataType: DataType): Boolean = dataType match {
     case _: VariantType => true
 
-    case _: TimeType => false
     case _: AtomicType => true
 
     case st: StructType => st.forall { f => supportDataType(f.dataType) }

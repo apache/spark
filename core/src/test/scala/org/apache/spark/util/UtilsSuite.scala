@@ -18,6 +18,7 @@
 package org.apache.spark.util
 
 import java.io._
+import java.lang.management.ThreadInfo
 import java.lang.reflect.Field
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
@@ -37,6 +38,8 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.fs.audit.CommonAuditContext.currentAuditContext
 import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
 import org.apache.logging.log4j.Level
+import org.mockito.Mockito.when
+import org.scalatestplus.mockito.MockitoSugar.mock
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.internal.config._
@@ -1124,6 +1127,40 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     val pValue = chi.chiSquareTest(expected, observed)
 
     assert(pValue > threshold)
+  }
+
+  test("ThreadInfoOrdering") {
+    val task1T = mock[ThreadInfo]
+    when(task1T.getThreadId).thenReturn(11L)
+    when(task1T.getThreadName)
+      .thenReturn("Executor task launch worker for task 1.0 in stage 1.0 (TID 11)")
+    when(task1T.toString)
+      .thenReturn("Executor task launch worker for task 1.0 in stage 1.0 (TID 11)")
+
+    val task2T = mock[ThreadInfo]
+    when(task2T.getThreadId).thenReturn(12L)
+    when(task2T.getThreadName)
+      .thenReturn("Executor task launch worker for task 2.0 in stage 1.0 (TID 22)")
+    when(task2T.toString)
+      .thenReturn("Executor task launch worker for task 2.0 in stage 1.0 (TID 22)")
+
+    val connectExecuteOp1T = mock[ThreadInfo]
+    when(connectExecuteOp1T.getThreadId).thenReturn(21L)
+    when(connectExecuteOp1T.getThreadName)
+      .thenReturn("SparkConnectExecuteThread_opId=16148fb4-4189-43c3-b8d4-8b3b6ddd41c7")
+    when(connectExecuteOp1T.toString)
+      .thenReturn("SparkConnectExecuteThread_opId=16148fb4-4189-43c3-b8d4-8b3b6ddd41c7")
+
+    val connectExecuteOp2T = mock[ThreadInfo]
+    when(connectExecuteOp2T.getThreadId).thenReturn(22L)
+    when(connectExecuteOp2T.getThreadName)
+      .thenReturn("SparkConnectExecuteThread_opId=4e4d1cac-ffde-46c1-b7c2-808b726cb47e")
+    when(connectExecuteOp2T.toString)
+      .thenReturn("SparkConnectExecuteThread_opId=4e4d1cac-ffde-46c1-b7c2-808b726cb47e")
+
+    val sorted = Seq(connectExecuteOp1T, connectExecuteOp2T, task1T, task2T)
+      .sorted(Utils.threadInfoOrdering)
+    assert(sorted === Seq(task1T, task2T, connectExecuteOp1T, connectExecuteOp2T))
   }
 
   test("redact sensitive information") {

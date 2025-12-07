@@ -438,17 +438,18 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
     val session = df.sparkSession
-    val canUseV2 = lookupV2Provider().isDefined || (hasCustomSessionCatalog &&
+    val v2ProviderOpt = lookupV2Provider()
+    val canUseV2 = v2ProviderOpt.isDefined || (hasCustomSessionCatalog &&
         !df.sparkSession.sessionState.catalogManager.catalog(CatalogManager.SESSION_CATALOG_NAME)
           .isInstanceOf[CatalogExtension])
 
     session.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
       case nameParts @ NonSessionCatalogAndIdentifier(catalog, ident) =>
-        saveAsTableCommand(catalog.asTableCatalog, ident, nameParts)
+        saveAsTableCommand(catalog.asTableCatalog, v2ProviderOpt, ident, nameParts)
 
       case nameParts @ SessionCatalogAndIdentifier(catalog, ident)
           if canUseV2 && ident.namespace().length <= 1 =>
-        saveAsTableCommand(catalog.asTableCatalog, ident, nameParts)
+        saveAsTableCommand(catalog.asTableCatalog, v2ProviderOpt, ident, nameParts)
 
       case AsTableIdentifier(tableIdentifier) =>
         saveAsV1TableCommand(tableIdentifier)
@@ -459,7 +460,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
   }
 
   private def saveAsTableCommand(
-      catalog: TableCatalog, ident: Identifier, nameParts: Seq[String]): LogicalPlan = {
+      catalog: TableCatalog,
+      v2ProviderOpt: Option[TableProvider],
+      ident: Identifier,
+      nameParts: Seq[String]): LogicalPlan = {
     val tableOpt = try Option(catalog.loadTable(ident, getWritePrivileges.toSet.asJava)) catch {
       case _: NoSuchTableException => None
     }
@@ -484,12 +488,19 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
           serde = None,
           external = false,
           constraints = Seq.empty)
+        val writeOptions = v2ProviderOpt match {
+          case Some(p: SupportsV1OverwriteWithSaveAsTable)
+              if p.addV1OverwriteWithSaveAsTableOption() =>
+            extraOptions + (SupportsV1OverwriteWithSaveAsTable.OPTION_NAME -> "true")
+          case _ =>
+            extraOptions
+        }
         ReplaceTableAsSelect(
           UnresolvedIdentifier(nameParts),
           partitioningAsV2,
           df.queryExecution.analyzed,
           tableSpec,
-          writeOptions = extraOptions.toMap,
+          writeOptions = writeOptions.toMap,
           orCreate = true) // Create the table if it doesn't exist
 
       case (other, _) =>

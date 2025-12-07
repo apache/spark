@@ -31,6 +31,12 @@ CreateViewCommand `t3`, select * from t, false, false, LocalTempView, UNSUPPORTE
 
 
 -- !query
+create table t4(col1 TIMESTAMP)
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`t4`, false
+
+
+-- !query
 WITH s AS (SELECT 1 FROM s) SELECT * FROM s
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -1032,6 +1038,94 @@ WithCTE
 
 
 -- !query
+SELECT * FROM (
+  WITH cte1 AS (SELECT * FROM t4) SELECT t4.col1 FROM t4 JOIN cte1 USING (col1)
+)
+-- !query analysis
+Project [col1#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- WithCTE
+      :- CTERelationDef xxxx, false
+      :  +- SubqueryAlias cte1
+      :     +- Project [col1#x]
+      :        +- SubqueryAlias spark_catalog.default.t4
+      :           +- Relation spark_catalog.default.t4[col1#x] parquet
+      +- Project [col1#x]
+         +- Project [col1#x]
+            +- Join Inner, (col1#x = col1#x)
+               :- SubqueryAlias spark_catalog.default.t4
+               :  +- Relation spark_catalog.default.t4[col1#x] parquet
+               +- SubqueryAlias cte1
+                  +- CTERelationRef xxxx, true, [col1#x], false, false
+
+
+-- !query
+SELECT * FROM (
+  WITH cte1 AS (SELECT * FROM t4) SELECT cte1.col1 FROM t4 JOIN cte1 USING (col1)
+)
+-- !query analysis
+Project [col1#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- WithCTE
+      :- CTERelationDef xxxx, false
+      :  +- SubqueryAlias cte1
+      :     +- Project [col1#x]
+      :        +- SubqueryAlias spark_catalog.default.t4
+      :           +- Relation spark_catalog.default.t4[col1#x] parquet
+      +- Project [col1#x]
+         +- Project [col1#x, col1#x]
+            +- Join Inner, (col1#x = col1#x)
+               :- SubqueryAlias spark_catalog.default.t4
+               :  +- Relation spark_catalog.default.t4[col1#x] parquet
+               +- SubqueryAlias cte1
+                  +- CTERelationRef xxxx, true, [col1#x], false, false
+
+
+-- !query
+SELECT * FROM (
+  WITH cte1 AS (SELECT * FROM t4) SELECT t4.col1 FROM cte1 JOIN t4 USING (col1)
+)
+-- !query analysis
+Project [col1#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- WithCTE
+      :- CTERelationDef xxxx, false
+      :  +- SubqueryAlias cte1
+      :     +- Project [col1#x]
+      :        +- SubqueryAlias spark_catalog.default.t4
+      :           +- Relation spark_catalog.default.t4[col1#x] parquet
+      +- Project [col1#x]
+         +- Project [col1#x, col1#x]
+            +- Join Inner, (col1#x = col1#x)
+               :- SubqueryAlias cte1
+               :  +- CTERelationRef xxxx, true, [col1#x], false, false
+               +- SubqueryAlias spark_catalog.default.t4
+                  +- Relation spark_catalog.default.t4[col1#x] parquet
+
+
+-- !query
+SELECT * FROM (
+  WITH cte1 AS (SELECT * FROM t4) SELECT cte1.col1 FROM cte1 JOIN t4 USING (col1)
+)
+-- !query analysis
+Project [col1#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- WithCTE
+      :- CTERelationDef xxxx, false
+      :  +- SubqueryAlias cte1
+      :     +- Project [col1#x]
+      :        +- SubqueryAlias spark_catalog.default.t4
+      :           +- Relation spark_catalog.default.t4[col1#x] parquet
+      +- Project [col1#x]
+         +- Project [col1#x]
+            +- Join Inner, (col1#x = col1#x)
+               :- SubqueryAlias cte1
+               :  +- CTERelationRef xxxx, true, [col1#x], false, false
+               +- SubqueryAlias spark_catalog.default.t4
+                  +- Relation spark_catalog.default.t4[col1#x] parquet
+
+
+-- !query
 DROP VIEW IF EXISTS t
 -- !query analysis
 DropTempViewCommand t
@@ -1047,3 +1141,10 @@ DropTempViewCommand t2
 DROP VIEW IF EXISTS t3
 -- !query analysis
 DropTempViewCommand t3
+
+
+-- !query
+DROP TABLE IF EXISTS t4
+-- !query analysis
+DropTable true, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t4

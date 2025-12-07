@@ -33,7 +33,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.{SparkConf, SparkContext, TaskContext, TestUtils}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.{AnalysisException, Encoders, Row, SQLContext, TestStrategy}
-import org.apache.spark.sql.catalyst.plans.logical.{Range, RepartitionByExpression}
+import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.catalyst.streaming.{InternalOutputModes, StreamingRelationV2}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -1116,7 +1116,7 @@ class StreamSuite extends StreamTest {
       )
       require(execPlan != null)
 
-      val localLimits = execPlan.collect {
+      val localLimits = StreamingQueryPlanTraverseHelper.collectFromUnfoldedPlan(execPlan) {
         case l: LocalLimitExec => l
         case l: StreamingLocalLimitExec => l
       }
@@ -1299,37 +1299,6 @@ class StreamSuite extends StreamTest {
     }
   }
 
-  test("SPARK-34482: correct active SparkSession for logicalPlan") {
-    withSQLConf(
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> "10") {
-      val df = spark.readStream.format(classOf[FakeDefaultSource].getName).load()
-      var query: StreamExecution = null
-      try {
-        query =
-          df.repartition($"a")
-            .writeStream
-            .format("memory")
-            .queryName("memory")
-            .start()
-            .asInstanceOf[StreamingQueryWrapper]
-            .streamingQuery
-        query.awaitInitialization(streamingTimeout.toMillis)
-        val plan = query.logicalPlan
-        val numPartition = plan
-          .find { _.isInstanceOf[RepartitionByExpression] }
-          .map(_.asInstanceOf[RepartitionByExpression].numPartitions)
-        // Before the fix of SPARK-34482, the numPartition is the value of
-        // `COALESCE_PARTITIONS_INITIAL_PARTITION_NUM`.
-        assert(numPartition.get === spark.sessionState.conf.getConf(SQLConf.SHUFFLE_PARTITIONS))
-      } finally {
-        if (query != null) {
-          query.stop()
-        }
-      }
-    }
-  }
-
   test("isInterruptionException should correctly unwrap classic py4j InterruptedException") {
     val e1 = new py4j.Py4JException(
       """
@@ -1491,7 +1460,10 @@ class TestStateStoreProvider extends StateStoreProvider {
 
   override def close(): Unit = { }
 
-  override def getStore(version: Long, stateStoreCkptId: Option[String] = None): StateStore = null
+  override def getStore(
+    version: Long,
+    stateStoreCkptId: Option[String] = None,
+    forceSnapshotOnCommit: Boolean = false): StateStore = null
 }
 
 /** A fake source that throws `ThrowingExceptionInCreateSource.exception` in `createSource` */

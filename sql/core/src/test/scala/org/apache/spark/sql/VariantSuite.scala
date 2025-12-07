@@ -197,36 +197,39 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
   }
 
   test("round trip tests") {
-    val rand = new Random(42)
-    val input = Seq.fill(50) {
-      if (rand.nextInt(10) == 0) {
-        null
-      } else {
-        val value = new Array[Byte](rand.nextInt(50))
-        rand.nextBytes(value)
-        val metadata = new Array[Byte](rand.nextInt(50))
-        rand.nextBytes(metadata)
-        // Generate a valid metadata, otherwise the shredded reader will fail.
-        new VariantVal(value, Array[Byte](VERSION, 0, 0) ++ metadata)
+    withSQLConf(SQLConf.VARIANT_INFER_SHREDDING_SCHEMA.key -> "false") {
+      val rand = new Random(42)
+      val input = Seq.fill(50) {
+        if (rand.nextInt(10) == 0) {
+          null
+        } else {
+          val value = new Array[Byte](rand.nextInt(50))
+          rand.nextBytes(value)
+          val metadata = new Array[Byte](rand.nextInt(50))
+          rand.nextBytes(metadata)
+          // Generate a valid metadata, otherwise the shredded reader will fail.
+          new VariantVal(value, Array[Byte](VERSION, 0, 0) ++ metadata)
+        }
       }
-    }
 
-    val df = spark.createDataFrame(
-      spark.sparkContext.parallelize(input.map(Row(_))),
-      StructType.fromDDL("v variant")
-    )
-    val result = df.collect().map(_.get(0).asInstanceOf[VariantVal])
+      val df = spark.createDataFrame(
+        spark.sparkContext.parallelize(input.map(Row(_))),
+        StructType.fromDDL("v variant")
+      )
+      val result = df.collect().map(_.get(0).asInstanceOf[VariantVal])
 
-    def prepareAnswer(values: Seq[VariantVal]): Seq[String] = {
-      values.map(v => if (v == null) "null" else v.debugString()).sorted
-    }
-    assert(prepareAnswer(input) == prepareAnswer(result.toImmutableArraySeq))
+      def prepareAnswer(values: Seq[VariantVal]): Seq[String] = {
+        values.map(v => if (v == null) "null" else v.debugString()).sorted
+      }
+      assert(prepareAnswer(input) == prepareAnswer(result.toImmutableArraySeq))
 
-    withTempDir { dir =>
-      val tempDir = new File(dir, "files").getCanonicalPath
-      df.write.parquet(tempDir)
-      val readResult = spark.read.parquet(tempDir).collect().map(_.get(0).asInstanceOf[VariantVal])
-      assert(prepareAnswer(input) == prepareAnswer(readResult.toImmutableArraySeq))
+      withTempDir { dir =>
+        val tempDir = new File(dir, "files").getCanonicalPath
+        df.write.parquet(tempDir)
+        val readResult = spark.read.parquet(tempDir).collect()
+          .map(_.get(0).asInstanceOf[VariantVal])
+        assert(prepareAnswer(input) == prepareAnswer(readResult.toImmutableArraySeq))
+      }
     }
   }
 
@@ -383,14 +386,19 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
     )
     cases.foreach { case (structDef, condition, parameters) =>
       Seq(false, true).foreach { vectorizedReader =>
-        withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorizedReader.toString) {
+        withSQLConf(
+          SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorizedReader.toString,
+          // Invalid variant binary fails during shredding schema inference.
+          SQLConf.VARIANT_INFER_SHREDDING_SCHEMA.key -> "false"
+        ) {
           withTempDir { dir =>
             val file = new File(dir, "dir").getCanonicalPath
             val df = spark.sql(s"select $structDef as v from range(10)")
             df.write.parquet(file)
             val schema = StructType(Seq(StructField("v", VariantType)))
             val result = spark.read.schema(schema).parquet(file).selectExpr("to_json(v)")
-            val e = withSQLConf(SQLConf.VARIANT_ALLOW_READING_SHREDDED.key -> "false") {
+            val e = withSQLConf(SQLConf.VARIANT_ALLOW_READING_SHREDDED.key -> "false",
+              SQLConf.PUSH_VARIANT_INTO_SCAN.key -> "false") {
               intercept[org.apache.spark.SparkException](result.collect())
             }
             checkError(
@@ -812,7 +820,9 @@ class VariantSuite extends QueryTest with SharedSparkSession with ExpressionEval
        // The initial size of the buffer backing a cached dataframe column is 128KB.
        // See `ColumnBuilder`.
       val numKeys = 128 * 1024
-      val keyIterator = (0 until numKeys).iterator
+      // We start in long range because the shredded writer writes int64 by default which wouldn't
+      // match narrower binaries.
+      val keyIterator = (Int.MaxValue + 1L until Int.MaxValue + 1L + numKeys).iterator
       val entries = Array.fill(numKeys)(s"""\"${keyIterator.next()}\": \"test\"""")
       val jsonStr = s"{${entries.mkString(", ")}}"
       val query = s"""select named_struct(

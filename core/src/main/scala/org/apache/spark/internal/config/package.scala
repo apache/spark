@@ -358,6 +358,15 @@ package object config {
       .intConf
       .createWithDefault(60)
 
+  private[spark] val EXECUTOR_ISOLATED_SESSION_CACHE_SIZE =
+    ConfigBuilder("spark.executor.isolatedSessionCache.size")
+      .doc("Maximum number of isolated sessions to cache in the executor. Each cached session " +
+        "maintains its own classloader for artifact isolation.")
+      .version("4.1.0")
+      .intConf
+      .checkValue(_ > 0, "The cache size must be positive.")
+      .createWithDefault(100)
+
   private[spark] val EXECUTOR_PROCESS_TREE_METRICS_ENABLED =
     ConfigBuilder("spark.executor.processTreeMetrics.enabled")
       .doc("Whether to collect process tree metrics (from the /proc filesystem) when collecting " +
@@ -407,7 +416,8 @@ package object config {
     .createWithDefault(1)
 
   private[spark] val EXECUTOR_MEMORY = ConfigBuilder(SparkLauncher.EXECUTOR_MEMORY)
-    .doc("Amount of memory to use per executor process, in MiB unless otherwise specified.")
+    .doc("Amount of memory to use per executor process, in MiB unless otherwise specified, " +
+      "and with minimum value 450m")
     .version("0.7.0")
     .bytesConf(ByteUnit.MiB)
     .createWithDefaultString("1g")
@@ -604,22 +614,26 @@ package object config {
         "cache block replication should be positive.")
       .createWithDefaultString("30s")
 
+  private[spark] val STORAGE_DECOMMISSION_FALLBACK_STORAGE_CLEANUP =
+    ConfigBuilder("spark.storage.decommission.fallbackStorage.cleanUp")
+      .doc("If true, Spark cleans up its fallback storage data once individual shuffles are " +
+        "freed (interval configured via spark.cleaner.periodicGC.interval), and during " +
+        "shutting down.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH =
     ConfigBuilder("spark.storage.decommission.fallbackStorage.path")
       .doc("The location for fallback storage during block manager decommissioning. " +
         "For example, `s3a://spark-storage/`. In case of empty, fallback storage is disabled. " +
-        "The storage should be managed by TTL because Spark will not clean it up.")
+        "The storage will not be cleaned up by Spark unless " +
+        s"${STORAGE_DECOMMISSION_FALLBACK_STORAGE_CLEANUP.key} is true. " +
+        "Use an external clean up mechanism when false, for instance a TTL.")
       .version("3.1.0")
       .stringConf
       .checkValue(_.endsWith(java.io.File.separator), "Path should end with separator.")
       .createOptional
-
-  private[spark] val STORAGE_DECOMMISSION_FALLBACK_STORAGE_CLEANUP =
-    ConfigBuilder("spark.storage.decommission.fallbackStorage.cleanUp")
-      .doc("If true, Spark cleans up its fallback storage data during shutting down.")
-      .version("3.2.0")
-      .booleanConf
-      .createWithDefault(false)
 
   private[spark] val STORAGE_DECOMMISSION_SHUFFLE_MAX_DISK_SIZE =
     ConfigBuilder("spark.storage.decommission.shuffleBlocks.maxDiskSize")
@@ -1963,6 +1977,11 @@ package object config {
       .version("1.4.0")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val CLEANER_REFERENCE_TRACKING_BLOCKING_TIMEOUT =
+    ConfigBuilder("spark.cleaner.referenceTracking.blocking.timeout")
+      .version("4.2.0")
+      .fallbackConf(Network.NETWORK_TIMEOUT)
 
   private[spark] val EXECUTOR_LOGS_ROLLING_STRATEGY =
     ConfigBuilder("spark.executor.logs.rolling.strategy")

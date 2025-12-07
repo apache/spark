@@ -142,4 +142,16 @@ trait SQLHelper {
       spark.sql(s"DROP VIEW IF EXISTS $name")
     })
   }
+
+  /**
+   * Drops database `dbName` after calling `f`.
+   */
+  protected def withDatabase(dbNames: String*)(f: => Unit): Unit = {
+    SparkErrorUtils.tryWithSafeFinally(f) {
+      dbNames.foreach { name =>
+        spark.sql(s"DROP DATABASE IF EXISTS $name CASCADE")
+      }
+      spark.sql(s"USE default")
+    }
+  }
 }

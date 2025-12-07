@@ -38,17 +38,18 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql
 import org.apache.spark.sql.{AnalysisException, Artifact, DataSourceRegistration, Encoder, Encoders, ExperimentalMethods, Row, SparkSessionBuilder, SparkSessionCompanion, SparkSessionExtensions, SparkSessionExtensionsProvider, UDTFRegistration}
+import org.apache.spark.sql.api.python.PythonSQLUtils
 import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalyst._
-import org.apache.spark.sql.catalyst.analysis.{GeneralParameterizedQuery, NameParameterizedQuery, PosParameterizedQuery, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{GeneralParameterizedQuery, NameParameterizedQuery, ParameterizedQueryArgumentsValidator, PosParameterizedQuery, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.encoders._
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, CreateArray, CreateMap, CreateNamedStruct, Expression, Literal, MapFromArrays, MapFromEntries, VariableReference}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Expression, Literal}
 import org.apache.spark.sql.catalyst.parser.{HybridParameterContext, NamedParameterContext, ParserInterface, PositionalParameterContext}
-import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LocalRelation, OneRowRelation, Project, Range}
+import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, LocalRelation, LogicalPlan, OneRowRelation, Project, Range}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.SparkSession.applyAndLoadExtensions
-import org.apache.spark.sql.errors.SqlScriptingErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, SqlScriptingErrors}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ExternalCommandExecutor
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -221,6 +222,8 @@ class SparkSession private(
   /** @inheritdoc */
   @Unstable
   def streams: StreamingQueryManager = sessionState.streamingQueryManager
+
+  private[spark] def streamingCheckpointManager = sessionState.streamingCheckpointManager
 
   /**
    * Returns an `ArtifactManager` that supports adding, managing and using session-scoped artifacts
@@ -453,27 +456,15 @@ class SparkSession private(
     // Analyze the plan to resolve expressions
     val analyzed = sessionState.analyzer.execute(fakePlan)
 
-    // Validate: the expression tree must only contain allowed expression types.
-    // This mirrors the validation in BindParameters.checkArgs.
-    // We check this BEFORE optimization to catch unsupported functions like str_to_map.
-    def isNotAllowed(expr: Expression): Boolean = expr.exists {
-      case _: Literal | _: CreateArray | _: CreateNamedStruct |
-        _: CreateMap | _: MapFromArrays | _: MapFromEntries | _: VariableReference => false
-      case a: Alias => isNotAllowed(a.child)
-      case _ => true
+    val expressionsToValidate = analyzed.asInstanceOf[Project].projectList.map {
+      case alias: Alias =>
+        (alias.name, alias.child)
+      case other =>
+        throw SparkException.internalError(
+          s"Expected an Alias, but got ${other.getClass.getSimpleName}"
+        )
     }
-
-    analyzed.asInstanceOf[Project].projectList.foreach { alias =>
-      val optimizedExpr = alias.asInstanceOf[Alias].child
-      if (isNotAllowed(optimizedExpr)) {
-        // Both modern and legacy modes use INVALID_SQL_ARG for sql() API argument validation.
-        // UNSUPPORTED_EXPR_FOR_PARAMETER is reserved for EXECUTE IMMEDIATE.
-        throw new AnalysisException(
-          errorClass = "INVALID_SQL_ARG",
-          messageParameters = Map("name" -> alias.name),
-          origin = optimizedExpr.origin)
-      }
-    }
+    ParameterizedQueryArgumentsValidator(expressionsToValidate)
 
     // Optimize to constant-fold expressions. After optimization, all allowed expressions
     // should be folded to Literals.
@@ -512,26 +503,31 @@ class SparkSession private(
   private[sql] def sql(sqlText: String, args: Array[_], tracker: QueryPlanningTracker): DataFrame =
     withActive {
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
-        val parsedPlan = if (args.nonEmpty) {
-          // Resolve and validate parameters first
-          val paramMap = args.zipWithIndex.map { case (arg, idx) =>
-            s"_pos_$idx" -> lit(arg).expr
-          }.toMap
-          val resolvedParams = resolveAndValidateParameters(paramMap)
+        val parsedPlan = {
+          // Always parse with parameter context to detect unbound parameter markers.
+          // Even if args is empty, we need to detect and reject parameter markers in the SQL.
+          val (paramMap, resolvedParams) = if (args.nonEmpty) {
+            val pMap = args.zipWithIndex.map { case (arg, idx) =>
+              s"_pos_$idx" -> lit(arg).expr
+            }.toMap
+            (pMap, resolveAndValidateParameters(pMap))
+          } else {
+            (Map.empty[String, Expression], Map.empty[String, Expression])
+          }
+
           val paramContext = PositionalParameterContext(resolvedParams.values.toSeq)
           val parsed = sessionState.sqlParser.parsePlanWithParameters(sqlText, paramContext)
+
           // Check for SQL scripting with positional parameters
-          if (parsed.isInstanceOf[CompoundBody]) {
+          if (parsed.isInstanceOf[CompoundBody] && args.nonEmpty) {
             throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
           }
           // In legacy mode, wrap with PosParameterizedQuery for analyzer binding
-          if (sessionState.conf.legacyParameterSubstitutionConstantsOnly) {
+          if (args.nonEmpty && sessionState.conf.legacyParameterSubstitutionConstantsOnly) {
             PosParameterizedQuery(parsed, paramContext.params)
           } else {
             parsed
           }
-        } else {
-          sessionState.sqlParser.parsePlan(sqlText)
         }
         parsedPlan
       }
@@ -565,30 +561,29 @@ class SparkSession private(
       args: Map[String, Any],
       tracker: QueryPlanningTracker): DataFrame =
     withActive {
-      // Always set parameter context if we have actual parameters
-      if (args.nonEmpty) {
-        // Resolve and validate parameters first
-        val resolvedParams = resolveAndValidateParameters(args.transform((_, v) => lit(v).expr))
-        val paramContext = NamedParameterContext(resolvedParams)
-        val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
-          val parsedPlan = sessionState.sqlParser.parsePlanWithParameters(sqlText, paramContext)
-          // In legacy mode, wrap the parsed plan with NameParameterizedQuery
-          // so that the BindParameters analyzer rule can bind the parameters
-          if (sessionState.conf.legacyParameterSubstitutionConstantsOnly) {
-            NameParameterizedQuery(parsedPlan, paramContext.params)
-          } else {
-            parsedPlan
-          }
-        }
-
-        Dataset.ofRows(self, plan, tracker)
+      // Always parse with parameter context to detect unbound parameter markers.
+      // Even if args is empty, we need to detect and reject parameter markers in the SQL.
+      val resolvedParams = if (args.nonEmpty) {
+        resolveAndValidateParameters(args.transform((_, v) => lit(v).expr))
       } else {
-        // No parameters - parse normally without parameter context
-        val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
-          sessionState.sqlParser.parsePlan(sqlText)
-        }
-        Dataset.ofRows(self, plan, tracker)
+        Map.empty[String, Expression]
       }
+      val paramContext = NamedParameterContext(resolvedParams)
+      val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
+        val parsedPlan = sessionState.sqlParser.parsePlanWithParameters(sqlText, paramContext)
+        val queryPlan = parsedPlan match {
+          case compoundBody: CompoundBody => compoundBody
+          case logicalPlan: LogicalPlan =>
+            // In legacy mode, wrap with NameParameterizedQuery for analyzer binding
+            if (args.nonEmpty && sessionState.conf.legacyParameterSubstitutionConstantsOnly) {
+              NameParameterizedQuery(logicalPlan, paramContext.params)
+            } else {
+              logicalPlan
+            }
+        }
+        queryPlan
+      }
+      Dataset.ofRows(self, plan, tracker)
     }
 
   /** @inheritdoc */
@@ -621,6 +616,8 @@ class SparkSession private(
       tracker: QueryPlanningTracker): DataFrame =
     withActive {
       val plan = tracker.measurePhase(QueryPlanningTracker.PARSING) {
+        // Always parse with parameter context to detect unbound parameter markers.
+        // Even if args is empty, we need to detect and reject parameter markers in the SQL.
         val parsedPlan = if (args.nonEmpty) {
           // Resolve and validate parameter arguments
           val paramMap = args.zipWithIndex.map { case (arg, idx) =>
@@ -654,11 +651,6 @@ class SparkSession private(
 
           val parsed = sessionState.sqlParser.parsePlanWithParameters(sqlText, paramContext)
 
-          // Check for SQL scripting with positional parameters
-          if (parsed.isInstanceOf[CompoundBody] && paramNames.isEmpty) {
-            throw SqlScriptingErrors.positionalParametersAreNotSupportedWithSqlScripting()
-          }
-
           // In legacy mode, wrap with GeneralParameterizedQuery for analyzer binding
           if (sessionState.conf.legacyParameterSubstitutionConstantsOnly) {
             GeneralParameterizedQuery(
@@ -670,8 +662,16 @@ class SparkSession private(
             parsed
           }
         } else {
-          sessionState.sqlParser.parsePlan(sqlText)
+          // No arguments provided, but still need to detect parameter markers
+          val paramContext = HybridParameterContext(Seq.empty, Seq.empty)
+          sessionState.sqlParser.parsePlanWithParameters(sqlText, paramContext)
         }
+
+        // Check for SQL scripts in EXECUTE IMMEDIATE (applies to both empty and non-empty args)
+        if (parsedPlan.isInstanceOf[CompoundBody]) {
+          throw QueryCompilationErrors.sqlScriptInExecuteImmediate(sqlText)
+        }
+
         parsedPlan
       }
 
@@ -887,6 +887,15 @@ class SparkSession private(
   private[sql] lazy val observationManager = new ObservationManager(this)
 
   override private[sql] def isUsable: Boolean = !sparkContext.isStopped
+
+  /**
+   * Cleans up Python worker logs.
+   *
+   * It is used by PySpark tests or Spark Connect when the session is closed.
+   */
+  private[sql] def cleanupPythonWorkerLogs(): Unit = {
+    PythonSQLUtils.cleanupPythonWorkerLogs(sessionUUID, sparkContext)
+  }
 }
 
 

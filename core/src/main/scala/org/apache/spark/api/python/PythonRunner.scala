@@ -32,8 +32,9 @@ import scala.util.control.NonFatal
 
 import org.apache.spark._
 import org.apache.spark.api.python.PythonFunction.PythonAccumulator
-import org.apache.spark.internal.{Logging, LogKeys, MessageWithContext}
-import org.apache.spark.internal.LogKeys.TASK_NAME
+import org.apache.spark.internal.{Logging, MessageWithContext}
+import org.apache.spark.internal.LogKeys
+import org.apache.spark.internal.LogKeys.{COUNT, PYTHON_WORKER_IDLE_TIMEOUT, SIZE, TASK_NAME, TIME, TOTAL_TIME}
 import org.apache.spark.internal.config.{BUFFER_SIZE, EXECUTOR_CORES}
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.rdd.InputFileBlockHolder
@@ -67,12 +68,14 @@ private[spark] object PythonEvalType {
   val SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF = 213
   val SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF = 214
   val SQL_GROUPED_MAP_ARROW_ITER_UDF = 215
+  val SQL_GROUPED_MAP_PANDAS_ITER_UDF = 216
 
   // Arrow UDFs
   val SQL_SCALAR_ARROW_UDF = 250
   val SQL_SCALAR_ARROW_ITER_UDF = 251
   val SQL_GROUPED_AGG_ARROW_UDF = 252
   val SQL_WINDOW_AGG_ARROW_UDF = 253
+  val SQL_GROUPED_AGG_ARROW_ITER_UDF = 254
 
   val SQL_TABLE_UDF = 300
   val SQL_ARROW_TABLE_UDF = 301
@@ -102,12 +105,15 @@ private[spark] object PythonEvalType {
     case SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF => "SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF"
     case SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF =>
       "SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF"
+    case SQL_GROUPED_MAP_ARROW_ITER_UDF => "SQL_GROUPED_MAP_ARROW_ITER_UDF"
+    case SQL_GROUPED_MAP_PANDAS_ITER_UDF => "SQL_GROUPED_MAP_PANDAS_ITER_UDF"
 
     // Arrow UDFs
     case SQL_SCALAR_ARROW_UDF => "SQL_SCALAR_ARROW_UDF"
     case SQL_SCALAR_ARROW_ITER_UDF => "SQL_SCALAR_ARROW_ITER_UDF"
     case SQL_GROUPED_AGG_ARROW_UDF => "SQL_GROUPED_AGG_ARROW_UDF"
     case SQL_WINDOW_AGG_ARROW_UDF => "SQL_WINDOW_AGG_ARROW_UDF"
+    case SQL_GROUPED_AGG_ARROW_ITER_UDF => "SQL_GROUPED_AGG_ARROW_ITER_UDF"
   }
 }
 
@@ -117,6 +123,27 @@ private[spark] object BasePythonRunner extends Logging {
 
   private[spark] def faultHandlerLogPath(pid: Int): Path = {
     new File(faultHandlerLogDir, pid.toString).toPath
+  }
+
+  private[spark] def tryReadFaultHandlerLog(
+      faultHandlerEnabled: Boolean, pid: Option[Int]): Option[String] = {
+    if (faultHandlerEnabled) {
+      pid.map(faultHandlerLogPath).collect {
+        case path if JavaFiles.exists(path) =>
+          val error = String.join("\n", JavaFiles.readAllLines(path)) + "\n"
+          JavaFiles.deleteIfExists(path)
+          error
+      }
+    } else None
+  }
+
+  /**
+   * Creates a task identifier string for logging following Spark's standard format.
+   * Format: "task <partition>.<attempt> in stage <stageId> (TID <taskAttemptId>)"
+   */
+  private[spark] def taskIdentifier(context: TaskContext): String = {
+    s"task ${context.partitionId()}.${context.attemptNumber()} in stage ${context.stageId()} " +
+    s"(TID ${context.taskAttemptId()})"
   }
 
   private[spark] def pythonWorkerStatusMessageWithContext(
@@ -173,12 +200,15 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   protected val timelyFlushEnabled: Boolean = false
   protected val timelyFlushTimeoutNanos: Long = 0
   protected val authSocketTimeout = conf.get(PYTHON_AUTH_SOCKET_TIMEOUT)
+  private val useDaemon = conf.get(PYTHON_USE_DAEMON)
   private val reuseWorker = conf.get(PYTHON_WORKER_REUSE)
   protected val faultHandlerEnabled: Boolean = conf.get(PYTHON_WORKER_FAULTHANLDER_ENABLED)
   protected val idleTimeoutSeconds: Long = conf.get(PYTHON_WORKER_IDLE_TIMEOUT_SECONDS)
   protected val killOnIdleTimeout: Boolean = conf.get(PYTHON_WORKER_KILL_ON_IDLE_TIMEOUT)
   protected val tracebackDumpIntervalSeconds: Long =
     conf.get(PYTHON_WORKER_TRACEBACK_DUMP_INTERVAL_SECONDS)
+  protected val killWorkerOnFlushFailure: Boolean =
+     conf.get(PYTHON_DAEMON_KILL_WORKER_ON_FLUSH_FAILURE)
   protected val hideTraceback: Boolean = false
   protected val simplifiedTraceback: Boolean = false
 
@@ -244,6 +274,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     val startTime = System.currentTimeMillis
     val env = SparkEnv.get
 
+    // Log task context information at the start of computation
+    logInfo(log"Starting Python task execution - ${MDC(TASK_NAME, taskIdentifier(context))}")
+
     // Get the executor cores and pyspark memory, they are passed via the local properties when
     // the user specified them in a ResourceProfile.
     val execCoresProp = Option(context.getLocalProperty(EXECUTOR_CORES_LOCAL_PROPERTY))
@@ -279,13 +312,16 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     if (tracebackDumpIntervalSeconds > 0L) {
       envVars.put("PYTHON_TRACEBACK_DUMP_INTERVAL_SECONDS", tracebackDumpIntervalSeconds.toString)
     }
+    if (useDaemon && killWorkerOnFlushFailure) {
+      envVars.put("PYTHON_DAEMON_KILL_WORKER_ON_FLUSH_FAILURE", "1")
+    }
     // allow the user to set the batch size for the BatchedSerializer on UDFs
     envVars.put("PYTHON_UDF_BATCH_SIZE", batchSizeForPythonUDF.toString)
 
     envVars.put("SPARK_JOB_ARTIFACT_UUID", jobArtifactUUID.getOrElse("default"))
 
     val (worker: PythonWorker, handle: Option[ProcessHandle]) = env.createPythonWorker(
-      pythonExec, workerModule, daemonModule, envVars.asScala.toMap)
+      pythonExec, workerModule, daemonModule, envVars.asScala.toMap, useDaemon)
     // Whether is the worker released into idle pool or closed. When any codes try to release or
     // close a worker, they should use `releasedOrClosed.compareAndSet` to flip the state to make
     // sure there is only one winner that is going to release or close the worker.
@@ -318,7 +354,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     // Return an iterator that read lines from the process's stdout
     val dataIn = new DataInputStream(new BufferedInputStream(
-      new ReaderInputStream(worker, writer, handle, idleTimeoutSeconds, killOnIdleTimeout),
+      new ReaderInputStream(worker, writer, handle,
+        faultHandlerEnabled, idleTimeoutSeconds, killOnIdleTimeout, context),
       bufferSize))
     val stdoutIterator = newReaderIterator(
       dataIn, writer, startTime, env, worker, handle.map(_.pid.toInt), releasedOrClosed, context)
@@ -569,6 +606,10 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     private var nextObj: OUT = _
     private var eos = false
 
+    // Track batches and data size for logging
+    protected var batchesProcessed: Long = 0
+    protected var totalDataReceived: Long = 0
+
     override def hasNext: Boolean = nextObj != null || {
       if (!eos) {
         nextObj = read()
@@ -604,10 +645,21 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       val init = initTime - bootTime
       val finish = finishTime - initTime
       val total = finishTime - startTime
-      logInfo(log"Times: total = ${MDC(LogKeys.TOTAL_TIME, total)}, " +
-        log"boot = ${MDC(LogKeys.BOOT_TIME, boot)}, " +
-        log"init = ${MDC(LogKeys.INIT_TIME, init)}, " +
-        log"finish = ${MDC(LogKeys.FINISH_TIME, finish)}")
+
+      // Format data size for readability
+      val dataKB = totalDataReceived / 1024.0
+      val dataMB = dataKB / 1024.0
+      val dataStr = if (dataMB >= 1.0) {
+        f"$dataMB%.2f MB"
+      } else {
+        f"$dataKB%.2f KB"
+      }
+
+      logInfo(log"Times: total = ${MDC(TOTAL_TIME, total)}, " +
+        log"boot = ${MDC(TIME, boot)}, init = ${MDC(TIME, init)}, " +
+        log"finish = ${MDC(TIME, finish)} - " +
+        log"Batches: ${MDC(COUNT, batchesProcessed)}, Data: ${MDC(SIZE, dataStr)} - " +
+        log"${MDC(TASK_NAME, taskIdentifier(context))}")
       metrics.get("pythonBootTime").foreach(_.add(boot))
       metrics.get("pythonInitTime").foreach(_.add(init))
       metrics.get("pythonTotalTime").foreach(_.add(total))
@@ -644,16 +696,12 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         throw new TaskKilledException(context.getKillReason().getOrElse("unknown reason"))
 
       case e: Exception if writer.exception.isDefined =>
-        logError("Python worker exited unexpectedly (crashed)", e)
-        logError("This may have been caused by a prior exception:", writer.exception.get)
+        logError(log"Python worker exited unexpectedly (crashed) - " +
+          log"${MDC(TASK_NAME, taskIdentifier(context))}", e)
+        logError(log"This may have been caused by a prior exception - " +
+          log"${MDC(TASK_NAME, taskIdentifier(context))}",
+          writer.exception.get)
         throw writer.exception.get
-
-      case e: IOException if faultHandlerEnabled && pid.isDefined &&
-          JavaFiles.exists(faultHandlerLogPath(pid.get)) =>
-        val path = faultHandlerLogPath(pid.get)
-        val error = String.join("\n", JavaFiles.readAllLines(path)) + "\n"
-        JavaFiles.deleteIfExists(path)
-        throw new SparkException(s"Python worker exited unexpectedly (crashed): $error", e)
 
       case e: IOException if !faultHandlerEnabled =>
         throw new SparkException(
@@ -663,7 +711,11 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
             "the better Python traceback.", e)
 
       case e: IOException =>
-        throw new SparkException("Python worker exited unexpectedly (crashed)", e)
+        val base = "Python worker exited unexpectedly (crashed)"
+        val msg = tryReadFaultHandlerLog(faultHandlerEnabled, pid)
+          .map(error => s"$base: $error")
+          .getOrElse(base)
+        throw new SparkException(msg, e)
     }
   }
 
@@ -690,16 +742,14 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         Thread.sleep(taskKillTimeout)
         if (!context.isCompleted()) {
           try {
-            // Mimic the task name used in `Executor` to help the user find out the task to blame.
-            val taskName = s"${context.partitionId()}.${context.attemptNumber()} " +
-              s"in stage ${context.stageId()} (TID ${context.taskAttemptId()})"
-            logWarning(log"Incomplete task ${MDC(TASK_NAME, taskName)} " +
-              log"interrupted: Attempting to kill Python Worker")
+            logWarning(log"Incomplete task interrupted: Attempting to kill Python Worker - " +
+              log"${MDC(TASK_NAME, taskIdentifier(context))}")
             env.destroyPythonWorker(
               pythonExec, workerModule, daemonModule, envVars.asScala.toMap, worker)
           } catch {
             case e: Exception =>
-              logError("Exception when trying to kill worker", e)
+              logError(log"Exception when trying to kill worker - " +
+                log"${MDC(TASK_NAME, taskIdentifier(context))}", e)
           }
         }
       }
@@ -721,8 +771,10 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       worker: PythonWorker,
       writer: Writer,
       handle: Option[ProcessHandle],
+      faultHandlerEnabled: Boolean,
       idleTimeoutSeconds: Long,
-      killOnIdleTimeout: Boolean) extends InputStream {
+      killOnIdleTimeout: Boolean,
+      context: TaskContext) extends InputStream {
     private[this] var writerIfbhThreadLocalValue: Object = null
     private[this] val temp = new Array[Byte](1)
     private[this] val bufferStream = new DirectByteBufferOutputStream()
@@ -798,15 +850,17 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
           } else {
             logWarning(
               log"Idle timeout reached for Python worker (timeout: " +
-              log"${MDC(LogKeys.PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} seconds). " +
-              log"No data received from the worker process: " +
-              pythonWorkerStatusMessageWithContext(handle, worker, hasInput || buffer.hasRemaining))
+              log"${MDC(PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} seconds). " +
+              log"No data received from the worker process - " +
+              pythonWorkerStatusMessageWithContext(
+                handle, worker, hasInput || buffer.hasRemaining) +
+              log" - ${MDC(TASK_NAME, taskIdentifier(context))}")
             if (killOnIdleTimeout) {
               handle.foreach { handle =>
                 if (handle.isAlive) {
-                  logWarning(
-                    log"Terminating Python worker process due to idle timeout (timeout: " +
-                    log"${MDC(LogKeys.PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} seconds)")
+                  logWarning(log"Terminating Python worker process due to idle timeout " +
+                    log"(timeout: ${MDC(PYTHON_WORKER_IDLE_TIMEOUT, idleTimeoutSeconds)} " +
+                    log"seconds) - ${MDC(TASK_NAME, taskIdentifier(context))}")
                   pythonWorkerKilled = handle.destroy()
                 }
               }
@@ -856,6 +910,14 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
             }
           }
         }
+      }
+      if (n == -1 && pythonWorkerKilled) {
+        val base = "Python worker process terminated due to idle timeout " +
+          s"(timeout: $idleTimeoutSeconds seconds)"
+        val msg = tryReadFaultHandlerLog(faultHandlerEnabled, handle.map(_.pid.toInt))
+          .map(error => s"$base: $error")
+          .getOrElse(base)
+        throw new PythonWorkerException(msg)
       }
       n
     }
@@ -993,7 +1055,10 @@ private[spark] class PythonRunner(
         try {
           stream.readInt() match {
             case length if length >= 0 =>
-              PythonWorkerUtils.readBytes(length, stream)
+              val data = PythonWorkerUtils.readBytes(length, stream)
+              batchesProcessed += 1
+              totalDataReceived += length
+              data
             case SpecialLengths.TIMING_DATA =>
               handleTimingData()
               read()
@@ -1007,6 +1072,12 @@ private[spark] class PythonRunner(
       }
     }
   }
+}
+
+class PythonWorkerException(msg: String, cause: Throwable)
+  extends SparkException(msg, cause) {
+
+  def this(msg: String) = this(msg, cause = null)
 }
 
 private[spark] object SpecialLengths {

@@ -508,6 +508,14 @@ class SparkConf(loadDefaults: Boolean)
       .map { case (k, v) => (k.substring(prefix.length), v) }
   }
 
+  /**
+   * Get all parameters that start with `prefix` and apply f.
+   */
+  def getAllWithPrefix[K](prefix: String, f: String => K): Array[(K, String)] = {
+    getAll.filter { case (k, _) => k.startsWith(prefix) }
+      .map { case (k, v) => (f(k), v) }
+  }
+
   /** Get all executor environment variables set on this SparkConf */
   def getExecutorEnv: Seq[(String, String)] = {
     getAllWithPrefix("spark.executorEnv.").toImmutableArraySeq
@@ -709,7 +717,13 @@ private[spark] object SparkConf extends Logging {
       DeprecatedConfig("spark.network.remoteReadNioBufferConversion", "3.5.2",
         "Please open a JIRA ticket to report it if you need to use this configuration."),
       DeprecatedConfig("spark.shuffle.unsafe.file.output.buffer", "4.0.0",
-        "Please use spark.shuffle.localDisk.file.output.buffer")
+        "Please use spark.shuffle.localDisk.file.output.buffer"),
+      DeprecatedConfig("spark.shuffle.server.chunkFetchHandlerThreadsPercent", "4.2.0",
+        "Using separate chunkFetchHandlers could be problematic according to the underlying" +
+          " netty layer"),
+      DeprecatedConfig("spark.shuffle.server.finalizeShuffleMergeThreadsPercent", "4.2.0",
+        "Using separate finalizeWorkers could be problematic according to the underlying" +
+          " netty layer")
     )
 
     Map(configs.map { cfg => (cfg.key -> cfg) } : _*)

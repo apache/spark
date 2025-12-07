@@ -395,12 +395,16 @@ private[spark] class PythonWorkerFactory(
     }
   }
 
+  private val workerLogCapture =
+    envVars.get("PYSPARK_SPARK_SESSION_UUID").map(new PythonWorkerLogCapture(_))
+
   /**
    * Redirect the given streams to our stderr in separate threads.
    */
   private def redirectStreamsToStderr(stdout: InputStream, stderr: InputStream): Unit = {
     try {
-      new RedirectThread(stdout, System.err, "stdout reader for " + pythonExec).start()
+      new RedirectThread(workerLogCapture.map(_.wrapInputStream(stdout)).getOrElse(stdout),
+        System.err, "stdout reader for " + pythonExec).start()
       new RedirectThread(stderr, System.err, "stderr reader for " + pythonExec).start()
     } catch {
       case e: Exception =>
@@ -460,6 +464,7 @@ private[spark] class PythonWorkerFactory(
   }
 
   def stop(): Unit = {
+    workerLogCapture.foreach(_.closeAllWriters())
     stopDaemon()
   }
 

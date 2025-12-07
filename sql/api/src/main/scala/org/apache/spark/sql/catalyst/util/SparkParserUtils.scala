@@ -171,6 +171,15 @@ trait SparkParserUtils {
   /** Convert a string token into a string. */
   def string(token: Token): String = unescapeSQLString(token.getText)
 
+  /** Convert an array of string tokens into a concatenated string. */
+  def string(tokens: Array[Token]): String = {
+    if (tokens == null || tokens.isEmpty) {
+      ""
+    } else {
+      tokens.map(token => unescapeSQLString(token.getText)).mkString
+    }
+  }
+
   /** Convert a string token into a string and remove `""` and `''`. */
   def stringIgnoreQuoteQuote(token: Token): String = unescapeSQLString(token.getText, true)
 

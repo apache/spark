@@ -35,6 +35,8 @@ private[sql] object SqlApiConfHelper {
   val LOCAL_RELATION_CHUNK_SIZE_ROWS_KEY: String = "spark.sql.session.localRelationChunkSizeRows"
   val LOCAL_RELATION_CHUNK_SIZE_BYTES_KEY: String =
     "spark.sql.session.localRelationChunkSizeBytes"
+  val LOCAL_RELATION_BATCH_OF_CHUNKS_SIZE_BYTES_KEY: String =
+    "spark.sql.session.localRelationBatchOfChunksSizeBytes"
   val ARROW_EXECUTION_USE_LARGE_VAR_TYPES = "spark.sql.execution.arrow.useLargeVarTypes"
   val PARSER_DFA_CACHE_FLUSH_THRESHOLD_KEY: String =
     "spark.sql.parser.parserDfaCacheFlushThreshold"

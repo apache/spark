@@ -19,7 +19,6 @@
 from pyspark.errors.exceptions.base import (
     SessionNotSameException,
     PySparkIndexError,
-    PySparkAttributeError,
 )
 from pyspark.resource import ResourceProfile
 from pyspark.sql.connect.logging import logger
@@ -587,7 +586,7 @@ class DataFrame(ParentDataFrame):
             if isinstance(c, Column):
                 _cols.append(c)
             elif isinstance(c, str):
-                _cols.append(self[c])
+                _cols.append(F.col(c))
             elif isinstance(c, int) and not isinstance(c, bool):
                 if c < 1:
                     raise PySparkIndexError(
@@ -619,7 +618,7 @@ class DataFrame(ParentDataFrame):
             if isinstance(c, Column):
                 _cols.append(c)
             elif isinstance(c, str):
-                _cols.append(self[c])
+                _cols.append(F.col(c))
             elif isinstance(c, int) and not isinstance(c, bool):
                 if c < 1:
                     raise PySparkIndexError(
@@ -649,7 +648,7 @@ class DataFrame(ParentDataFrame):
             if isinstance(c, Column):
                 _cols.append(c)
             elif isinstance(c, str):
-                _cols.append(self[c])
+                _cols.append(F.col(c))
             elif isinstance(c, int) and not isinstance(c, bool):
                 if c < 1:
                     raise PySparkIndexError(
@@ -675,7 +674,7 @@ class DataFrame(ParentDataFrame):
                 if isinstance(c, Column):
                     gset.append(c)
                 elif isinstance(c, str):
-                    gset.append(self[c])
+                    gset.append(F.col(c))
                 else:
                     raise PySparkTypeError(
                         errorClass="NOT_COLUMN_OR_STR",
@@ -691,7 +690,7 @@ class DataFrame(ParentDataFrame):
             if isinstance(c, Column):
                 gcols.append(c)
             elif isinstance(c, str):
-                gcols.append(self[c])
+                gcols.append(F.col(c))
             else:
                 raise PySparkTypeError(
                     errorClass="NOT_COLUMN_OR_STR",
@@ -2363,11 +2362,19 @@ def _test() -> None:
         del pyspark.sql.dataframe.DataFrame.rdd.__doc__
 
     if not have_pandas or not have_pyarrow:
-        del pyspark.sql.dataframe.DataFrame.toArrow.__doc__
         del pyspark.sql.dataframe.DataFrame.toPandas.__doc__
-        del pyspark.sql.dataframe.DataFrame.mapInArrow.__doc__
         del pyspark.sql.dataframe.DataFrame.mapInPandas.__doc__
         del pyspark.sql.dataframe.DataFrame.pandas_api.__doc__
+
+    if not have_pyarrow:
+        del pyspark.sql.dataframe.DataFrame.toArrow.__doc__
+        del pyspark.sql.dataframe.DataFrame.mapInArrow.__doc__
+    else:
+        import pyarrow as pa
+        from pyspark.loose_version import LooseVersion
+
+        if LooseVersion(pa.__version__) < LooseVersion("17.0.0"):
+            del pyspark.sql.dataframe.DataFrame.mapInArrow.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.dataframe tests")

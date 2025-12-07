@@ -111,17 +111,12 @@ class SqlGraphRegistrationContext(
   )
 
   def processSqlFile(sqlText: String, sqlFilePath: String, spark: SparkSession): Unit = {
-    // Create a registration context for this SQL registration request
-    val sqlGraphElementRegistrationContext = new SqlGraphRegistrationContext(
-      graphRegistrationContext
-    )
-
     splitSqlFileIntoQueries(
       spark = spark,
       sqlFileText = sqlText,
       sqlFilePath = sqlFilePath
     ).foreach { case SqlQueryPlanWithOrigin(logicalPlan, queryOrigin) =>
-      sqlGraphElementRegistrationContext.processSqlQuery(logicalPlan, queryOrigin)
+      processSqlQuery(logicalPlan, queryOrigin)
     }
   }
 
@@ -192,6 +187,7 @@ class SqlGraphRegistrationContext(
           specifiedSchema =
             Option.when(cst.columns.nonEmpty)(StructType(cst.columns.map(_.toV1Column))),
           partitionCols = Option(PartitionHelper.applyPartitioning(cst.partitioning, queryOrigin)),
+          clusterCols = None,
           properties = cst.tableSpec.properties,
           origin = queryOrigin.copy(
             objectName = Option(stIdentifier.unquotedString),
@@ -223,6 +219,7 @@ class SqlGraphRegistrationContext(
           specifiedSchema =
             Option.when(cst.columns.nonEmpty)(StructType(cst.columns.map(_.toV1Column))),
           partitionCols = Option(PartitionHelper.applyPartitioning(cst.partitioning, queryOrigin)),
+          clusterCols = None,
           properties = cst.tableSpec.properties,
           origin = queryOrigin.copy(
             objectName = Option(stIdentifier.unquotedString),
@@ -273,6 +270,7 @@ class SqlGraphRegistrationContext(
           specifiedSchema =
             Option.when(cmv.columns.nonEmpty)(StructType(cmv.columns.map(_.toV1Column))),
           partitionCols = Option(PartitionHelper.applyPartitioning(cmv.partitioning, queryOrigin)),
+          clusterCols = None,
           properties = cmv.tableSpec.properties,
           origin = queryOrigin.copy(
             objectName = Option(mvIdentifier.unquotedString),
@@ -413,7 +411,7 @@ class SqlGraphRegistrationContext(
         )
         .identifier
 
-      val (flowTargetDatasetIdentifier, flowQueryLogicalPlan, isOnce) = cf.flowOperation match {
+      val (flowTargetDatasetIdentifier, flowQueryLogicalPlan) = cf.flowOperation match {
         case i: InsertIntoStatement =>
           validateInsertIntoFlow(i, queryOrigin)
           val flowTargetDatasetName = i.table match {
@@ -432,7 +430,7 @@ class SqlGraphRegistrationContext(
               currentDatabase = context.getCurrentDatabaseOpt
             )
             .identifier
-          (qualifiedFlowTargetDatasetName, i.query, false)
+          (qualifiedFlowTargetDatasetName, i.query)
         case _ =>
           throw SqlGraphElementRegistrationException(
             msg = "Unable flow type. Only INSERT INTO flows are supported.",
@@ -454,7 +452,7 @@ class SqlGraphRegistrationContext(
           destinationIdentifier = qualifiedDestinationIdentifier,
           func = FlowAnalysis.createFlowFunctionFromLogicalPlan(flowQueryLogicalPlan),
           sqlConf = context.getSqlConf,
-          once = isOnce,
+          once = false,
           queryContext = QueryContext(
             currentCatalog = context.getCurrentCatalogOpt,
             currentDatabase = context.getCurrentDatabaseOpt
@@ -503,11 +501,10 @@ class SqlGraphRegistrationContext(
 
   private object SetCommandHandler {
     def handle(setCommand: SetCommand): Unit = {
-      val sqlConfKvPair = setCommand.kv.getOrElse(
+      val (sqlConfKey, valueOpt) = setCommand.kv.getOrElse(
         throw new RuntimeException("Invalid SET command without key-value pair")
       )
-      val sqlConfKey = sqlConfKvPair._1
-      val sqlConfValue = sqlConfKvPair._2.getOrElse(
+      val sqlConfValue = valueOpt.getOrElse(
         throw new RuntimeException("Invalid SET command without value")
       )
       context.setSqlConf(sqlConfKey, sqlConfValue)

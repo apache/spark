@@ -221,3 +221,9 @@ class ReusedSQLTestCase(ReusedPySparkTestCase, SQLTestUtils, PySparkErrorTestUti
         super(ReusedSQLTestCase, cls).tearDownClass()
         cls.spark.stop()
         shutil.rmtree(cls.tempdir.name, ignore_errors=True)
+
+    def tearDown(self):
+        try:
+            self.spark._jsparkSession.cleanupPythonWorkerLogs()
+        finally:
+            super().tearDown()

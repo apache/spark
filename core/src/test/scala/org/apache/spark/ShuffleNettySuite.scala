@@ -55,3 +55,7 @@ class ShuffleNettyKQueueSuite extends ShuffleNettySuite {
   override def shouldRunTests: Boolean = Utils.isMac
   override def ioMode: IOMode = IOMode.KQUEUE
 }
+
+class ShuffleNettyAutoSuite extends ShuffleNettySuite {
+  override def ioMode: IOMode = IOMode.AUTO
+}

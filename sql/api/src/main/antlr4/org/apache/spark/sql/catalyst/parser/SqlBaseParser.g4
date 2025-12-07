@@ -46,6 +46,40 @@ options { tokenVocab = SqlBaseLexer; }
    * When true, parameter markers are allowed everywhere a literal is supported.
    */
   public boolean parameter_substitution_enabled = true;
+
+  /**
+   * When false (default), IDENTIFIER('literal') is resolved to an identifier at parse time (identifier-lite).
+   * When true, only the legacy IDENTIFIER(expression) function syntax is allowed.
+   * Controlled by spark.sql.legacy.identifierClause configuration.
+   */
+  public boolean legacy_identifier_clause_only = false;
+
+  /**
+   * When true, the single character pipe token '|' can be used as an alternative to '|>' for
+   * SQL pipe operators. When false, only '|>' is recognized as a pipe operator.
+   */
+  public boolean single_character_pipe_operator_enabled = true;
+
+  /**
+   * Checks if the next token after PIPE can start an operator pipe right side.
+   * This disambiguates between bitwise OR (|) in expressions and pipe operator (|) in queries.
+   * Used to maintain backwards compatibility when allowing both | and |> as pipe operators.
+   * Only applies when single_character_pipe_operator_enabled is true.
+   */
+  public boolean isOperatorPipeStart() {
+    if (!single_character_pipe_operator_enabled) {
+      return false;
+    }
+    int la = _input.LA(2); // Look ahead 2 tokens (current is PIPE, check what follows)
+    return la == SELECT || la == EXTEND || la == SET || la == DROP || 
+           la == AS || la == WHERE || la == PIVOT || la == UNPIVOT ||
+           la == TABLESAMPLE || la == INNER || la == CROSS || la == LEFT ||
+           la == RIGHT || la == FULL || la == NATURAL || la == SEMI || 
+           la == ANTI || la == JOIN || la == UNION || la == EXCEPT || 
+           la == SETMINUS || la == INTERSECT || la == ORDER || la == CLUSTER ||
+           la == DISTRIBUTE || la == SORT || la == LIMIT || la == OFFSET ||
+           la == AGGREGATE || la == WINDOW || la == LATERAL;
+  }
 }
 
 compoundOrSingleStatement
@@ -92,7 +126,7 @@ sqlStateValue
     ;
 
 declareConditionStatement
-    : DECLARE multipartIdentifier CONDITION (FOR SQLSTATE VALUE? sqlStateValue)?
+    : DECLARE strictIdentifier CONDITION (FOR SQLSTATE VALUE? sqlStateValue)?
     ;
 
 conditionValue
@@ -125,11 +159,11 @@ repeatStatement
     ;
 
 leaveStatement
-    : LEAVE multipartIdentifier
+    : LEAVE strictIdentifier
     ;
 
 iterateStatement
-    : ITERATE multipartIdentifier
+    : ITERATE strictIdentifier
     ;
 
 caseStatement
@@ -144,7 +178,7 @@ loopStatement
     ;
 
 forStatement
-    : beginLabel? FOR (multipartIdentifier AS)? query DO compoundBody END FOR endLabel?
+    : beginLabel? FOR (strictIdentifier AS)? query DO compoundBody END FOR endLabel?
     ;
 
 singleStatement
@@ -152,11 +186,11 @@ singleStatement
     ;
 
 beginLabel
-    : multipartIdentifier COLON
+    : strictIdentifier COLON
     ;
 
 endLabel
-    : multipartIdentifier
+    : strictIdentifier
     ;
 
 singleExpression
@@ -315,13 +349,13 @@ statement
     | SHOW TABLE EXTENDED ((FROM | IN) ns=identifierReference)?
         LIKE pattern=stringLit partitionSpec?                             #showTableExtended
     | SHOW TBLPROPERTIES table=identifierReference
-        (LEFT_PAREN key=propertyKey RIGHT_PAREN)?                      #showTblProperties
+        (LEFT_PAREN key=propertyKeyOrStringLit RIGHT_PAREN)?           #showTblProperties
     | SHOW COLUMNS (FROM | IN) table=identifierReference
         ((FROM | IN) ns=multipartIdentifier)?                          #showColumns
     | SHOW VIEWS ((FROM | IN) identifierReference)?
         (LIKE? pattern=stringLit)?                                        #showViews
     | SHOW PARTITIONS identifierReference partitionSpec?               #showPartitions
-    | SHOW identifier? FUNCTIONS ((FROM | IN) ns=identifierReference)?
+    | SHOW functionScope=simpleIdentifier? FUNCTIONS ((FROM | IN) ns=identifierReference)?
         (LIKE? (legacy=multipartIdentifier | pattern=stringLit))?      #showFunctions
     | SHOW PROCEDURES ((FROM | IN) identifierReference)?               #showProcedures
     | SHOW CREATE TABLE identifierReference (AS SERDE)?                #showCreateTable
@@ -604,12 +638,22 @@ propertyList
     ;
 
 property
-    : key=propertyKey (EQ? value=propertyValue)?
+    : key=propertyKeyOrStringLit EQ value=propertyValue               #propertyWithKeyAndEquals
+    | key=propertyKeyOrStringLitNoCoalesce value=propertyValue?       #propertyWithKeyNoEquals
     ;
 
 propertyKey
     : errorCapturingIdentifier (DOT errorCapturingIdentifier)*
+    ;
+
+propertyKeyOrStringLit
+    : propertyKey
     | stringLit
+    ;
+
+propertyKeyOrStringLitNoCoalesce
+    : propertyKey
+    | singleStringLit
     ;
 
 propertyValue
@@ -624,7 +668,8 @@ expressionPropertyList
     ;
 
 expressionProperty
-    : key=propertyKey (EQ? value=expression)?
+    : key=propertyKeyOrStringLit EQ value=expression                  #expressionPropertyWithKeyAndEquals
+    | key=propertyKeyOrStringLitNoCoalesce value=expression?          #expressionPropertyWithKeyNoEquals
     ;
 
 constantList
@@ -701,6 +746,7 @@ queryTerm
     | left=queryTerm {!legacy_setops_precedence_enabled}?
         operator=(UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm              #setOperation
     | left=queryTerm OPERATOR_PIPE operatorPipeRightSide                                 #operatorPipeStatement
+    | left=queryTerm {isOperatorPipeStart()}? PIPE operatorPipeRightSide                 #operatorPipeStatement
     ;
 
 queryPrimary
@@ -822,8 +868,8 @@ hint
     ;
 
 hintStatement
-    : hintName=identifier
-    | hintName=identifier LEFT_PAREN parameters+=primaryExpression (COMMA parameters+=primaryExpression)* RIGHT_PAREN
+    : hintName=simpleIdentifier
+    | hintName=simpleIdentifier LEFT_PAREN parameters+=primaryExpression (COMMA parameters+=primaryExpression)* RIGHT_PAREN
     ;
 
 fromClause
@@ -1183,7 +1229,7 @@ valueExpression
     | left=valueExpression shiftOperator right=valueExpression                               #shiftExpression
     | left=valueExpression operator=AMPERSAND right=valueExpression                          #arithmeticBinary
     | left=valueExpression operator=HAT right=valueExpression                                #arithmeticBinary
-    | left=valueExpression operator=PIPE right=valueExpression                               #arithmeticBinary
+    | left=valueExpression {!isOperatorPipeStart()}? operator=PIPE right=valueExpression     #arithmeticBinary
     | left=valueExpression comparisonOperator right=valueExpression                          #comparison
     ;
 
@@ -1230,7 +1276,7 @@ primaryExpression
     | identifier                                                                               #columnReference
     | base=primaryExpression DOT fieldName=identifier                                          #dereference
     | LEFT_PAREN expression RIGHT_PAREN                                                        #parenthesizedExpression
-    | EXTRACT LEFT_PAREN field=identifier FROM source=valueExpression RIGHT_PAREN              #extract
+    | EXTRACT LEFT_PAREN field=simpleIdentifier FROM source=valueExpression RIGHT_PAREN              #extract
     | (SUBSTR | SUBSTRING) LEFT_PAREN str=valueExpression (FROM | COMMA) pos=valueExpression
       ((FOR | COMMA) len=valueExpression)? RIGHT_PAREN                                         #substring
     | TRIM LEFT_PAREN trimOption=(BOTH | LEADING | TRAILING)? (trimStr=valueExpression)?
@@ -1279,14 +1325,14 @@ constant
     | QUESTION                                                                                 #posParameterLiteral
     | namedParameterMarker                                                                     #namedParameterLiteral
     | interval                                                                                 #intervalLiteral
-    | literalType stringLitWithoutMarker                                                       #typeConstructor
+    | literalType singleStringLitWithoutMarker                                                     #typeConstructor
     | number                                                                                   #numericLiteral
     | booleanValue                                                                             #booleanLiteral
-    | stringLit+                                                                               #stringLiteral
+    | stringLit                                                                                #stringLiteral
     ;
 
 namedParameterMarker
-    : COLON identifier
+    : COLON simpleIdentifier
     ;
 comparisonOperator
     : EQ | NEQ | NEQJ | LT | LTE | GT | GTE | NSEQ
@@ -1588,11 +1634,30 @@ identifier
     | {!SQL_standard_keyword_behavior}? strictNonReserved
     ;
 
+// simpleIdentifier: like identifier but without IDENTIFIER('literal') support
+// Use this for contexts where IDENTIFIER() syntax is not appropriate:
+//   - Named parameters (:param_name)
+//   - Extract field names (EXTRACT(field FROM ...))
+//   - Other keyword-like or string-like uses
+simpleIdentifier
+    : simpleStrictIdentifier
+    | {!SQL_standard_keyword_behavior}? strictNonReserved
+    ;
+
 strictIdentifier
     : IDENTIFIER              #unquotedIdentifier
     | quotedIdentifier        #quotedIdentifierAlternative
+    | {!legacy_identifier_clause_only}? IDENTIFIER_KW LEFT_PAREN stringLit RIGHT_PAREN  #identifierLiteral
     | {SQL_standard_keyword_behavior}? ansiNonReserved #unquotedIdentifier
     | {!SQL_standard_keyword_behavior}? nonReserved    #unquotedIdentifier
+    ;
+
+// simpleStrictIdentifier: like strictIdentifier but without IDENTIFIER('literal') support
+simpleStrictIdentifier
+    : IDENTIFIER              #simpleUnquotedIdentifier
+    | quotedIdentifier        #simpleQuotedIdentifierAlternative
+    | {SQL_standard_keyword_behavior}? ansiNonReserved #simpleUnquotedIdentifier
+    | {!SQL_standard_keyword_behavior}? nonReserved    #simpleUnquotedIdentifier
     ;
 
 quotedIdentifier
@@ -1695,10 +1760,18 @@ alterColumnAction
     | dropDefault=DROP DEFAULT
     ;
 
-stringLitWithoutMarker
-    : STRING_LITERAL                                                                           #stringLiteralValue
-    | {!double_quoted_identifiers}? DOUBLEQUOTED_STRING                                        #doubleQuotedStringLiteralValue
-;
+// Matches exactly one string literal without coalescing or parameter markers.
+// Used in type constructors where coalescing is not allowed.
+singleStringLitWithoutMarker
+    : STRING_LITERAL                                                                           #singleStringLiteralValue
+    | {!double_quoted_identifiers}? DOUBLEQUOTED_STRING                                        #singleDoubleQuotedStringLiteralValue
+    ;
+
+// Matches one string literal or parameter marker (no coalescing).
+singleStringLit
+    : singleStringLitWithoutMarker
+    | parameterMarker
+    ;
 
 parameterMarker
     : {parameter_substitution_enabled}? namedParameterMarker                                   #namedParameterMarkerRule
@@ -1706,8 +1779,7 @@ parameterMarker
     ;
 
 stringLit
-    : stringLitWithoutMarker                                                                   #stringLiteralInContext
-    | parameterMarker                                                                          #parameterStringValue
+    : singleStringLit+
     ;
 
 comment
@@ -1721,7 +1793,7 @@ version
     ;
 
 operatorPipeRightSide
-    : selectClause windowClause?
+    : selectClause aggregationClause? windowClause?
     | EXTEND extendList=namedExpressionSeq
     | SET operatorPipeSetAssignmentSeq
     | DROP identifierSeq

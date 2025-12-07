@@ -38,6 +38,8 @@ object LogLine {
     logBlockType match {
       case LogBlockType.TEST =>
         classTag[TestLogLine]
+      case LogBlockType.PYTHON_WORKER =>
+        classTag[PythonWorkerLogLine]
       case unsupportedLogBlockType =>
         throw new RuntimeException("Not supported log type " + unsupportedLogBlockType)
     }
@@ -46,3 +48,6 @@ object LogLine {
 case class TestLogLine(eventTime: Long, sequenceId: Long, message: String)
   extends LogLine {
 }
+
+case class PythonWorkerLogLine(eventTime: Long, sequenceId: Long, message: String)
+  extends LogLine

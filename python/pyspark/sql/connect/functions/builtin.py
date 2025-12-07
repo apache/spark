@@ -3945,6 +3945,48 @@ def make_time(hour: "ColumnOrName", minute: "ColumnOrName", second: "ColumnOrNam
 make_time.__doc__ = pysparkfuncs.make_time.__doc__
 
 
+def time_from_seconds(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("time_from_seconds", col)
+
+
+time_from_seconds.__doc__ = pysparkfuncs.time_from_seconds.__doc__
+
+
+def time_from_millis(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("time_from_millis", col)
+
+
+time_from_millis.__doc__ = pysparkfuncs.time_from_millis.__doc__
+
+
+def time_from_micros(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("time_from_micros", col)
+
+
+time_from_micros.__doc__ = pysparkfuncs.time_from_micros.__doc__
+
+
+def time_to_seconds(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("time_to_seconds", col)
+
+
+time_to_seconds.__doc__ = pysparkfuncs.time_to_seconds.__doc__
+
+
+def time_to_millis(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("time_to_millis", col)
+
+
+time_to_millis.__doc__ = pysparkfuncs.time_to_millis.__doc__
+
+
+def time_to_micros(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("time_to_micros", col)
+
+
+time_to_micros.__doc__ = pysparkfuncs.time_to_micros.__doc__
+
+
 @overload
 def make_timestamp(
     years: "ColumnOrName",
@@ -4529,6 +4571,168 @@ def theta_intersection_agg(
 theta_intersection_agg.__doc__ = pysparkfuncs.theta_intersection_agg.__doc__
 
 
+def kll_sketch_agg_bigint(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+) -> Column:
+    fn = "kll_sketch_agg_bigint"
+    if k is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(k))
+
+
+kll_sketch_agg_bigint.__doc__ = pysparkfuncs.kll_sketch_agg_bigint.__doc__
+
+
+def kll_sketch_agg_float(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+) -> Column:
+    fn = "kll_sketch_agg_float"
+    if k is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(k))
+
+
+kll_sketch_agg_float.__doc__ = pysparkfuncs.kll_sketch_agg_float.__doc__
+
+
+def kll_sketch_agg_double(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+) -> Column:
+    fn = "kll_sketch_agg_double"
+    if k is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(k))
+
+
+kll_sketch_agg_double.__doc__ = pysparkfuncs.kll_sketch_agg_double.__doc__
+
+
+def kll_sketch_to_string_bigint(col: "ColumnOrName") -> Column:
+    fn = "kll_sketch_to_string_bigint"
+    return _invoke_function_over_columns(fn, col)
+
+
+kll_sketch_to_string_bigint.__doc__ = pysparkfuncs.kll_sketch_to_string_bigint.__doc__
+
+
+def kll_sketch_to_string_float(col: "ColumnOrName") -> Column:
+    fn = "kll_sketch_to_string_float"
+    return _invoke_function_over_columns(fn, col)
+
+
+kll_sketch_to_string_float.__doc__ = pysparkfuncs.kll_sketch_to_string_float.__doc__
+
+
+def kll_sketch_to_string_double(col: "ColumnOrName") -> Column:
+    fn = "kll_sketch_to_string_double"
+    return _invoke_function_over_columns(fn, col)
+
+
+kll_sketch_to_string_double.__doc__ = pysparkfuncs.kll_sketch_to_string_double.__doc__
+
+
+def kll_sketch_get_n_bigint(col: "ColumnOrName") -> Column:
+    fn = "kll_sketch_get_n_bigint"
+    return _invoke_function_over_columns(fn, col)
+
+
+kll_sketch_get_n_bigint.__doc__ = pysparkfuncs.kll_sketch_get_n_bigint.__doc__
+
+
+def kll_sketch_get_n_float(col: "ColumnOrName") -> Column:
+    fn = "kll_sketch_get_n_float"
+    return _invoke_function_over_columns(fn, col)
+
+
+kll_sketch_get_n_float.__doc__ = pysparkfuncs.kll_sketch_get_n_float.__doc__
+
+
+def kll_sketch_get_n_double(col: "ColumnOrName") -> Column:
+    fn = "kll_sketch_get_n_double"
+    return _invoke_function_over_columns(fn, col)
+
+
+kll_sketch_get_n_double.__doc__ = pysparkfuncs.kll_sketch_get_n_double.__doc__
+
+
+def kll_sketch_merge_bigint(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    fn = "kll_sketch_merge_bigint"
+    return _invoke_function_over_columns(fn, left, right)
+
+
+kll_sketch_merge_bigint.__doc__ = pysparkfuncs.kll_sketch_merge_bigint.__doc__
+
+
+def kll_sketch_merge_float(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    fn = "kll_sketch_merge_float"
+    return _invoke_function_over_columns(fn, left, right)
+
+
+kll_sketch_merge_float.__doc__ = pysparkfuncs.kll_sketch_merge_float.__doc__
+
+
+def kll_sketch_merge_double(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    fn = "kll_sketch_merge_double"
+    return _invoke_function_over_columns(fn, left, right)
+
+
+kll_sketch_merge_double.__doc__ = pysparkfuncs.kll_sketch_merge_double.__doc__
+
+
+def kll_sketch_get_quantile_bigint(sketch: "ColumnOrName", rank: "ColumnOrName") -> Column:
+    fn = "kll_sketch_get_quantile_bigint"
+    return _invoke_function_over_columns(fn, sketch, rank)
+
+
+kll_sketch_get_quantile_bigint.__doc__ = pysparkfuncs.kll_sketch_get_quantile_bigint.__doc__
+
+
+def kll_sketch_get_quantile_float(sketch: "ColumnOrName", rank: "ColumnOrName") -> Column:
+    fn = "kll_sketch_get_quantile_float"
+    return _invoke_function_over_columns(fn, sketch, rank)
+
+
+kll_sketch_get_quantile_float.__doc__ = pysparkfuncs.kll_sketch_get_quantile_float.__doc__
+
+
+def kll_sketch_get_quantile_double(sketch: "ColumnOrName", rank: "ColumnOrName") -> Column:
+    fn = "kll_sketch_get_quantile_double"
+    return _invoke_function_over_columns(fn, sketch, rank)
+
+
+kll_sketch_get_quantile_double.__doc__ = pysparkfuncs.kll_sketch_get_quantile_double.__doc__
+
+
+def kll_sketch_get_rank_bigint(sketch: "ColumnOrName", quantile: "ColumnOrName") -> Column:
+    fn = "kll_sketch_get_rank_bigint"
+    return _invoke_function_over_columns(fn, sketch, quantile)
+
+
+kll_sketch_get_rank_bigint.__doc__ = pysparkfuncs.kll_sketch_get_rank_bigint.__doc__
+
+
+def kll_sketch_get_rank_float(sketch: "ColumnOrName", quantile: "ColumnOrName") -> Column:
+    fn = "kll_sketch_get_rank_float"
+    return _invoke_function_over_columns(fn, sketch, quantile)
+
+
+kll_sketch_get_rank_float.__doc__ = pysparkfuncs.kll_sketch_get_rank_float.__doc__
+
+
+def kll_sketch_get_rank_double(sketch: "ColumnOrName", quantile: "ColumnOrName") -> Column:
+    fn = "kll_sketch_get_rank_double"
+    return _invoke_function_over_columns(fn, sketch, quantile)
+
+
+kll_sketch_get_rank_double.__doc__ = pysparkfuncs.kll_sketch_get_rank_double.__doc__
+
+
 def theta_sketch_estimate(col: "ColumnOrName") -> Column:
     fn = "theta_sketch_estimate"
     return _invoke_function_over_columns(fn, col)
@@ -4781,6 +4985,46 @@ def bitmap_and_agg(col: "ColumnOrName") -> Column:
 
 
 bitmap_and_agg.__doc__ = pysparkfuncs.bitmap_and_agg.__doc__
+
+
+# Geospatial ST Functions
+
+
+def st_asbinary(geo: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("st_asbinary", geo)
+
+
+st_asbinary.__doc__ = pysparkfuncs.st_asbinary.__doc__
+
+
+def st_geogfromwkb(wkb: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("st_geogfromwkb", wkb)
+
+
+st_geogfromwkb.__doc__ = pysparkfuncs.st_geogfromwkb.__doc__
+
+
+def st_geomfromwkb(wkb: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("st_geomfromwkb", wkb)
+
+
+st_geomfromwkb.__doc__ = pysparkfuncs.st_geomfromwkb.__doc__
+
+
+def st_setsrid(geo: "ColumnOrName", srid: Union["ColumnOrName", int]) -> Column:
+    srid = _enum_to_value(srid)
+    srid = lit(srid) if isinstance(srid, int) else srid
+    return _invoke_function_over_columns("st_setsrid", geo, srid)
+
+
+st_setsrid.__doc__ = pysparkfuncs.st_setsrid.__doc__
+
+
+def st_srid(geo: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("st_srid", geo)
+
+
+st_srid.__doc__ = pysparkfuncs.st_srid.__doc__
 
 
 # Call Functions

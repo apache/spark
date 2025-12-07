@@ -803,3 +803,9 @@ class RocksDBStateStoreLockHardeningSuite extends SparkFunSuite
         s"after load but was $threadId")
   }
 }
+
+/**
+ * Test suite that runs all RocksDBStateStoreLockHardeningSuite tests with row checksum enabled.
+ */
+class RocksDBStateStoreLockHardeningSuiteWithRowChecksum
+  extends RocksDBStateStoreLockHardeningSuite with EnableStateStoreRowChecksum

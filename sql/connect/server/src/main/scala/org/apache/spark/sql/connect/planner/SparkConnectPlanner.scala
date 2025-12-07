@@ -19,7 +19,6 @@ package org.apache.spark.sql.connect.planner
 
 import java.util.{HashMap, Properties, UUID}
 
-import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.util.Try
@@ -52,7 +51,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.parser.{NamedParameterContext, ParameterContext, ParseException, ParserUtils, PositionalParameterContext}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, CoGroup, CollectMetrics, CommandResult, CompoundBody, Deduplicate, DeduplicateWithinWatermark, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TimeModes, TransformWithState, TypedFilter, Union, Unpivot, UnresolvedHint, UpdateAction, UpdateEventTimeWatermarkColumn, UpdateStarAction}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, CoGroup, CollectMetrics, CommandResult, Deduplicate, DeduplicateWithinWatermark, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TimeModes, TransformWithState, TypedFilter, Union, Unpivot, UnresolvedHint, UpdateAction, UpdateEventTimeWatermarkColumn, UpdateStarAction}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -66,7 +65,7 @@ import org.apache.spark.sql.connect.ml.MLHandler
 import org.apache.spark.sql.connect.pipelines.PipelinesHandler
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.{ExecuteHolder, SessionHolder, SparkConnectService}
-import org.apache.spark.sql.connect.utils.MetricGenerator
+import org.apache.spark.sql.connect.utils.{MetricGenerator, PipelineAnalysisContextUtils}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, TypedAggregateExpression}
@@ -690,7 +689,8 @@ class SparkConnectPlanner(
           .groupBy(cols: _*)
 
         pythonUdf.evalType match {
-          case PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF =>
+          case PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF |
+              PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF =>
             group.flatMapGroupsInPandas(Column(pythonUdf)).logicalPlan
 
           case PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF |
@@ -1607,7 +1607,7 @@ class SparkConnectPlanner(
 
     schemaOpt match {
       case None =>
-        logical.LocalRelation(attributes, ArraySeq.unsafeWrapArray(data.map(_.copy()).toArray))
+        logical.LocalRelation(attributes, data.map(_.copy()).toArray.toImmutableArraySeq)
       case Some(schema) =>
         def normalize(dt: DataType): DataType = dt match {
           case udt: UserDefinedType[_] => normalize(udt.sqlType)
@@ -2945,6 +2945,10 @@ class SparkConnectPlanner(
       command: SqlCommand,
       responseObserver: StreamObserver[ExecutePlanResponse]): Unit = {
     val tracker = executeHolder.eventsManager.createQueryPlanningTracker()
+    val userContext = executeHolder.request.getUserContext
+    // To avoid explicit handling of the result on the client, we build the expected input
+    // of the relation on the server. The client has to simply forward the result.
+    val result = SqlCommandResult.newBuilder()
 
     val relation = if (command.hasInput) {
       command.getInput
@@ -2964,6 +2968,26 @@ class SparkConnectPlanner(
         .build()
     }
 
+    // Block unsupported SQL commands if the request comes from Spark Declarative Pipelines.
+    if (PipelineAnalysisContextUtils.hasPipelineAnalysisContext(userContext)) {
+      PipelinesHandler.blockUnsupportedSqlCommand(queryPlan = transformRelation(relation))
+    }
+
+    // If the spark.sql() is called inside a pipeline flow function, we don't need to execute
+    // the SQL command and defer the actual analysis and execution to the flow function.
+    if (PipelineAnalysisContextUtils.isInsidePipelineFlowFunction(userContext)) {
+      result.setRelation(relation)
+      executeHolder.eventsManager.postFinished()
+      responseObserver.onNext(
+        ExecutePlanResponse
+          .newBuilder()
+          .setSessionId(sessionHolder.sessionId)
+          .setServerSideSessionId(sessionHolder.serverSessionId)
+          .setSqlCommandResult(result)
+          .build)
+      return
+    }
+
     val df = relation.getRelTypeCase match {
       case proto.Relation.RelTypeCase.SQL =>
         executeSQL(relation.getSql, tracker)
@@ -2975,16 +2999,13 @@ class SparkConnectPlanner(
 
     // Check if command or SQL Script has been executed.
     val isCommand = df.queryExecution.commandExecuted.isInstanceOf[CommandResult]
-    val isSqlScript = df.queryExecution.logical.isInstanceOf[CompoundBody]
+    val isSqlScript = df.queryExecution.isSqlScript
     val rows = df.logicalPlan match {
       case lr: LocalRelation => lr.data
       case cr: CommandResult => cr.rows
       case _ => Seq.empty
     }
 
-    // To avoid explicit handling of the result on the client, we build the expected input
-    // of the relation on the server. The client has to simply forward the result.
-    val result = SqlCommandResult.newBuilder()
     // Only filled when isCommand
     val metrics = ExecutePlanResponse.Metrics.newBuilder()
     if (isCommand || isSqlScript) {

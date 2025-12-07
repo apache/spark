@@ -126,6 +126,22 @@ class GroupTestsMixin:
             with self.assertRaises(IndexError):
                 df.groupBy(10).agg(sf.sum("b"))
 
+    def test_numeric_agg_with_nest_type(self):
+        df = self.spark.createDataFrame(
+            [
+                Row(a="a", b=Row(c=1)),
+                Row(a="a", b=Row(c=2)),
+                Row(a="a", b=Row(c=3)),
+                Row(a="b", b=Row(c=4)),
+                Row(a="b", b=Row(c=5)),
+            ]
+        )
+
+        res = df.groupBy("a").max("b.c").sort("a").collect()
+        # [Row(a='a', max(b.c AS c)=3), Row(a='b', max(b.c AS c)=5)]
+
+        self.assertEqual([["a", 3], ["b", 5]], [list(r) for r in res])
+
     @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)  # type: ignore
     def test_order_by_ordinal(self):
@@ -176,9 +192,9 @@ class GroupTestsMixin:
             with self.assertRaises(IndexError):
                 df.orderBy(-3)
 
-        def test_pivot_exceed_max_values(self):
-            with self.assertRaises(AnalysisException):
-                spark.range(100001).groupBy(sf.lit(1)).pivot("id").count().show()
+    def test_pivot_exceed_max_values(self):
+        with self.assertRaises(AnalysisException):
+            self.spark.range(100001).groupBy(sf.lit(1)).pivot("id").count().show()
 
 
 class GroupTests(GroupTestsMixin, ReusedSQLTestCase):

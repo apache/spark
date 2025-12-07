@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import faulthandler
 import inspect
 import os
 import sys
@@ -23,6 +22,7 @@ from typing import IO, Iterable, Iterator
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.sql.conversion import ArrowTableToRowsConversion
 from pyspark.errors import PySparkAssertionError, PySparkRuntimeError, PySparkTypeError
+from pyspark.logger.worker_io import capture_outputs
 from pyspark.serializers import (
     read_bool,
     read_int,
@@ -45,7 +45,12 @@ from pyspark.sql.types import (
     BinaryType,
     _create_row,
 )
-from pyspark.util import handle_worker_exception, local_connect_and_auth
+from pyspark.util import (
+    handle_worker_exception,
+    local_connect_and_auth,
+    with_faulthandler,
+    start_faulthandler_periodic_traceback,
+)
 from pyspark.worker_util import (
     check_python_version,
     read_command,
@@ -58,6 +63,7 @@ from pyspark.worker_util import (
 )
 
 
+@with_faulthandler
 def main(infile: IO, outfile: IO) -> None:
     """
     Main method for saving into a Python data source.
@@ -77,18 +83,10 @@ def main(infile: IO, outfile: IO) -> None:
     instance and send a function using the writer instance that can be used
     in mapInPandas/mapInArrow back to the JVM.
     """
-    faulthandler_log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
-    tracebackDumpIntervalSeconds = os.environ.get("PYTHON_TRACEBACK_DUMP_INTERVAL_SECONDS", None)
     try:
-        if faulthandler_log_path:
-            faulthandler_log_path = os.path.join(faulthandler_log_path, str(os.getpid()))
-            faulthandler_log_file = open(faulthandler_log_path, "w")
-            faulthandler.enable(file=faulthandler_log_file)
-
         check_python_version(infile)
 
-        if tracebackDumpIntervalSeconds is not None and int(tracebackDumpIntervalSeconds) > 0:
-            faulthandler.dump_traceback_later(int(tracebackDumpIntervalSeconds), repeat=True)
+        start_faulthandler_periodic_traceback()
 
         memory_limit_mb = int(os.environ.get("PYSPARK_PLANNER_MEMORY_MB", "-1"))
         setup_memory_limits(memory_limit_mb)
@@ -122,85 +120,88 @@ def main(infile: IO, outfile: IO) -> None:
         # Receive the provider name.
         provider = utf8_deserializer.loads(infile)
 
-        # Check if the provider name matches the data source's name.
-        if provider.lower() != data_source_cls.name().lower():
-            raise PySparkAssertionError(
-                errorClass="DATA_SOURCE_TYPE_MISMATCH",
-                messageParameters={
-                    "expected": f"provider with name {data_source_cls.name()}",
-                    "actual": f"'{provider}'",
-                },
-            )
-
-        # Receive the input schema
-        schema = _parse_datatype_json_string(utf8_deserializer.loads(infile))
-        if not isinstance(schema, StructType):
-            raise PySparkAssertionError(
-                errorClass="DATA_SOURCE_TYPE_MISMATCH",
-                messageParameters={
-                    "expected": "the schema to be a 'StructType'",
-                    "actual": f"'{type(data_source_cls).__name__}'",
-                },
-            )
-
-        # Receive the return type
-        return_type = _parse_datatype_json_string(utf8_deserializer.loads(infile))
-        if not isinstance(return_type, StructType):
-            raise PySparkAssertionError(
-                errorClass="DATA_SOURCE_TYPE_MISMATCH",
-                messageParameters={
-                    "expected": "a return type of type 'StructType'",
-                    "actual": f"'{type(return_type).__name__}'",
-                },
-            )
-        assert len(return_type) == 1 and isinstance(return_type[0].dataType, BinaryType), (
-            "The output schema of Python data source write should contain only one column of type "
-            f"'BinaryType', but got '{return_type}'"
-        )
-        return_col_name = return_type[0].name
-
-        # Receive the options.
-        options = CaseInsensitiveDict()
-        num_options = read_int(infile)
-        for _ in range(num_options):
-            key = utf8_deserializer.loads(infile)
-            value = utf8_deserializer.loads(infile)
-            options[key] = value
-
-        # Receive the `overwrite` flag.
-        overwrite = read_bool(infile)
-
-        is_streaming = read_bool(infile)
-        binary_as_bytes = read_bool(infile)
-
-        # Instantiate a data source.
-        data_source = data_source_cls(options=options)  # type: ignore
-
-        if is_streaming:
-            # Instantiate the streaming data source writer.
-            writer = data_source.streamWriter(schema, overwrite)
-            if not isinstance(writer, (DataSourceStreamWriter, DataSourceStreamArrowWriter)):
+        with capture_outputs():
+            # Check if the provider name matches the data source's name.
+            name = data_source_cls.name()
+            if provider.lower() != name.lower():
                 raise PySparkAssertionError(
                     errorClass="DATA_SOURCE_TYPE_MISMATCH",
                     messageParameters={
-                        "expected": (
-                            "an instance of DataSourceStreamWriter or "
-                            "DataSourceStreamArrowWriter"
-                        ),
-                        "actual": f"'{type(writer).__name__}'",
+                        "expected": f"provider with name {name}",
+                        "actual": f"'{provider}'",
                     },
                 )
-        else:
-            # Instantiate the data source writer.
-            writer = data_source.writer(schema, overwrite)  # type: ignore[assignment]
-            if not isinstance(writer, DataSourceWriter):
+
+            # Receive the input schema
+            schema = _parse_datatype_json_string(utf8_deserializer.loads(infile))
+            if not isinstance(schema, StructType):
                 raise PySparkAssertionError(
                     errorClass="DATA_SOURCE_TYPE_MISMATCH",
                     messageParameters={
-                        "expected": "an instance of DataSourceWriter",
-                        "actual": f"'{type(writer).__name__}'",
+                        "expected": "the schema to be a 'StructType'",
+                        "actual": f"'{type(data_source_cls).__name__}'",
                     },
                 )
+
+            # Receive the return type
+            return_type = _parse_datatype_json_string(utf8_deserializer.loads(infile))
+            if not isinstance(return_type, StructType):
+                raise PySparkAssertionError(
+                    errorClass="DATA_SOURCE_TYPE_MISMATCH",
+                    messageParameters={
+                        "expected": "a return type of type 'StructType'",
+                        "actual": f"'{type(return_type).__name__}'",
+                    },
+                )
+            assert len(return_type) == 1 and isinstance(return_type[0].dataType, BinaryType), (
+                "The output schema of Python data source write should contain only one column "
+                f"of type 'BinaryType', but got '{return_type}'"
+            )
+            return_col_name = return_type[0].name
+
+            # Receive the options.
+            options = CaseInsensitiveDict()
+            num_options = read_int(infile)
+            for _ in range(num_options):
+                key = utf8_deserializer.loads(infile)
+                value = utf8_deserializer.loads(infile)
+                options[key] = value
+
+            # Receive the `overwrite` flag.
+            overwrite = read_bool(infile)
+
+            is_streaming = read_bool(infile)
+            binary_as_bytes = read_bool(infile)
+
+            # Instantiate a data source.
+            data_source = data_source_cls(options=options)  # type: ignore
+
+            if is_streaming:
+                # Instantiate the streaming data source writer.
+                writer = data_source.streamWriter(schema, overwrite)
+                if not isinstance(writer, (DataSourceStreamWriter, DataSourceStreamArrowWriter)):
+                    raise PySparkAssertionError(
+                        errorClass="DATA_SOURCE_TYPE_MISMATCH",
+                        messageParameters={
+                            "expected": (
+                                "an instance of DataSourceStreamWriter or "
+                                "DataSourceStreamArrowWriter"
+                            ),
+                            "actual": f"'{type(writer).__name__}'",
+                        },
+                    )
+            else:
+                # Instantiate the data source writer.
+
+                writer = data_source.writer(schema, overwrite)  # type: ignore[assignment]
+                if not isinstance(writer, DataSourceWriter):
+                    raise PySparkAssertionError(
+                        errorClass="DATA_SOURCE_TYPE_MISMATCH",
+                        messageParameters={
+                            "expected": "an instance of DataSourceWriter",
+                            "actual": f"'{type(writer).__name__}'",
+                        },
+                    )
 
         # Create a function that can be used in mapInArrow.
         import pyarrow as pa
@@ -260,11 +261,6 @@ def main(infile: IO, outfile: IO) -> None:
     except BaseException as e:
         handle_worker_exception(e, outfile)
         sys.exit(-1)
-    finally:
-        if faulthandler_log_path:
-            faulthandler.disable()
-            faulthandler_log_file.close()
-            os.remove(faulthandler_log_path)
 
     send_accumulator_updates(outfile)
 
@@ -275,9 +271,6 @@ def main(infile: IO, outfile: IO) -> None:
         # write a different value to tell JVM to not reuse this worker
         write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
         sys.exit(-1)
-
-    # Force to cancel dump_traceback_later
-    faulthandler.cancel_dump_traceback_later()
 
 
 if __name__ == "__main__":
