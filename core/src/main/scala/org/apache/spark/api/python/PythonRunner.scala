@@ -212,6 +212,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   protected val hideTraceback: Boolean = false
   protected val simplifiedTraceback: Boolean = false
 
+  protected val runnerConf: Map[String, String] = Map.empty
+
   // All the Python functions should have the same exec, version and envvars.
   protected val envVars: java.util.Map[String, String] = funcs.head.funcs.head.envVars
   protected val pythonExec: String = funcs.head.funcs.head.pythonExec
@@ -404,6 +406,17 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     protected def writeCommand(dataOut: DataOutputStream): Unit
 
     /**
+     * Writes worker configuration to the stream connected to the Python worker.
+     */
+    protected def writeRunnerConf(dataOut: DataOutputStream): Unit = {
+      dataOut.writeInt(runnerConf.size)
+      for ((k, v) <- runnerConf) {
+        PythonWorkerUtils.writeUTF(k, dataOut)
+        PythonWorkerUtils.writeUTF(v, dataOut)
+      }
+    }
+
+    /**
      * Writes input data to the stream connected to the Python worker.
      * Returns true if any data was written to the stream, false if the input is exhausted.
      */
@@ -532,6 +545,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         PythonWorkerUtils.writeBroadcasts(broadcastVars, worker, env, dataOut)
 
         dataOut.writeInt(evalType)
+        writeRunnerConf(dataOut)
         writeCommand(dataOut)
 
         dataOut.flush()
