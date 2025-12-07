@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.connect.client.jdbc
 
-import java.sql.{ResultSet, SQLException, Types}
+import java.math.BigDecimal
+import java.nio.charset.StandardCharsets
+import java.sql.{Date, ResultSet, SQLException, Time, Timestamp, Types}
+import java.util.{Calendar, TimeZone}
 
 import scala.util.Using
 
@@ -235,7 +238,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
         val decimalType = s"DECIMAL($precision,$scale)"
         withExecuteQuery(s"SELECT cast('$value' as $decimalType)") { rs =>
           assert(rs.next())
-          assert(rs.getBigDecimal(1) === new java.math.BigDecimal(value))
+          assert(rs.getBigDecimal(1) === new BigDecimal(value))
           assert(!rs.wasNull)
           assert(!rs.next())
 
@@ -295,14 +298,14 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       ("cast(1 AS FLOAT)", (rs: ResultSet) => rs.getFloat(1), 1.toFloat),
       ("cast(1 AS DOUBLE)", (rs: ResultSet) => rs.getDouble(1), 1.toDouble),
       ("cast(1 AS DECIMAL(10,5))", (rs: ResultSet) => rs.getBigDecimal(1),
-        new java.math.BigDecimal("1.00000")),
+        new BigDecimal("1.00000")),
       ("CAST(X'0A0B0C' AS BINARY)", (rs: ResultSet) => rs.getBytes(1),
         Array[Byte](0x0A, 0x0B, 0x0C)),
       ("date '2023-11-15'", (rs: ResultSet) => rs.getDate(1),
-          java.sql.Date.valueOf("2023-11-15")),
+          Date.valueOf("2023-11-15")),
       ("time '12:34:56.123456'", (rs: ResultSet) => rs.getTime(1), {
         val millis = timeToMillis(12, 34, 56, 123)
-        new java.sql.Time(millis)
+        new Time(millis)
       })
     ).foreach {
       case (query, getter, expectedValue) =>
@@ -327,7 +330,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
   test("get date type") {
     withExecuteQuery("SELECT date '2023-11-15'") { rs =>
       assert(rs.next())
-      assert(rs.getDate(1) === java.sql.Date.valueOf("2023-11-15"))
+      assert(rs.getDate(1) === Date.valueOf("2023-11-15"))
       assert(!rs.wasNull)
       assert(!rs.next())
 
@@ -369,7 +372,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
   test("get date type by column label") {
     withExecuteQuery("SELECT date '2025-11-15' as test_date") { rs =>
       assert(rs.next())
-      assert(rs.getDate("test_date") === java.sql.Date.valueOf("2025-11-15"))
+      assert(rs.getDate("test_date") === Date.valueOf("2025-11-15"))
       assert(!rs.wasNull)
       assert(!rs.next())
     }
@@ -387,7 +390,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       assert(!rs.wasNull)
 
       val stringValue = rs.getString(1)
-      val expectedString = new String(testBytes, java.nio.charset.StandardCharsets.UTF_8)
+      val expectedString = new String(testBytes, StandardCharsets.UTF_8)
       assert(stringValue === expectedString)
 
       assert(!rs.next())
@@ -402,7 +405,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
   }
 
   test("get binary type with UTF-8 text") {
-    val textBytes = "\\xDeAdBeEf".getBytes(java.nio.charset.StandardCharsets.UTF_8)
+    val textBytes = "\\xDeAdBeEf".getBytes(StandardCharsets.UTF_8)
     val hexString = textBytes.map(b => "%02X".format(b)).mkString
     withExecuteQuery(s"SELECT CAST(X'$hexString' AS BINARY)") { rs =>
       assert(rs.next())
@@ -443,8 +446,8 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       assert(bytes.sameElements(testBytes))
       assert(!rs.wasNull)
 
-      val stringValue = rs.getString(1)
-      val expectedString = new String(testBytes, java.nio.charset.StandardCharsets.UTF_8)
+      val stringValue = rs.getString("test_binary")
+      val expectedString = new String(testBytes, StandardCharsets.UTF_8)
       assert(stringValue === expectedString)
 
       assert(!rs.next())
@@ -575,7 +578,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
         stmt.execute(s"set spark.sql.datetime.java8API.enabled=$java8APIEnabled")
         Using.resource(stmt.executeQuery("SELECT date '2025-11-15'")) { rs =>
           assert(rs.next())
-          assert(rs.getDate(1) === java.sql.Date.valueOf("2025-11-15"))
+          assert(rs.getDate(1) === Date.valueOf("2025-11-15"))
           assert(!rs.wasNull)
           assert(!rs.next())
         }
@@ -604,7 +607,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       assert(rs.next())
       val timestamp = rs.getTimestamp(1)
       assert(timestamp !== null)
-      assert(timestamp === java.sql.Timestamp.valueOf("2025-11-15 10:30:45.123456"))
+      assert(timestamp === Timestamp.valueOf("2025-11-15 10:30:45.123456"))
       assert(!rs.wasNull)
       assert(!rs.next())
 
@@ -650,18 +653,18 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       // Test by column label
       val timestamp = rs.getTimestamp("test_timestamp")
       assert(timestamp !== null)
-      assert(timestamp === java.sql.Timestamp.valueOf("2025-11-15 10:30:45.987654"))
+      assert(timestamp === Timestamp.valueOf("2025-11-15 10:30:45.987654"))
       assert(!rs.wasNull)
 
       // Test with calendar - should return same value (Calendar is ignored)
       // Note: Spark Connect handles timezone at server, Calendar param is for API compliance
-      val calUTC = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+      val calUTC = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
       val timestampUTC = rs.getTimestamp(1, calUTC)
       assert(timestampUTC !== null)
       assert(timestampUTC.getTime === timestamp.getTime)
 
-      val calPST = java.util.Calendar.getInstance(
-        java.util.TimeZone.getTimeZone("America/Los_Angeles"))
+      val calPST = Calendar.getInstance(
+        TimeZone.getTimeZone("America/Los_Angeles"))
       val timestampPST = rs.getTimestamp(1, calPST)
       assert(timestampPST !== null)
       // Same value regardless of calendar
@@ -687,7 +690,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       assert(rs.next())
 
       // Calendar parameter should not affect null handling
-      val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+      val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
       val timestamp = rs.getTimestamp(1, cal)
       assert(timestamp === null)
       assert(rs.wasNull)
@@ -700,7 +703,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       assert(rs.next())
       val timestamp = rs.getTimestamp(1)
       assert(timestamp !== null)
-      assert(timestamp === java.sql.Timestamp.valueOf("2025-11-15 10:30:45.123456"))
+      assert(timestamp === Timestamp.valueOf("2025-11-15 10:30:45.123456"))
       assert(!rs.wasNull)
       assert(!rs.next())
 
@@ -726,11 +729,11 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       // Test by column label
       val timestamp = rs.getTimestamp("test_ts_ntz")
       assert(timestamp !== null)
-      assert(timestamp === java.sql.Timestamp.valueOf("2025-11-15 14:22:33.789456"))
+      assert(timestamp === Timestamp.valueOf("2025-11-15 14:22:33.789456"))
       assert(!rs.wasNull)
 
       // Test with calendar - should return same value (Calendar is ignored)
-      val calUTC = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+      val calUTC = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
       val timestampCal = rs.getTimestamp(1, calUTC)
       assert(timestampCal !== null)
       assert(timestampCal.getTime === timestamp.getTime)
@@ -762,13 +765,13 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
           // Test TIMESTAMP type
           val timestamp = rs.getTimestamp(1)
           assert(timestamp !== null)
-          assert(timestamp === java.sql.Timestamp.valueOf("2025-11-15 10:30:45.123456"))
+          assert(timestamp === Timestamp.valueOf("2025-11-15 10:30:45.123456"))
           assert(!rs.wasNull)
 
           // Test TIMESTAMP_NTZ type
           val timestampNtz = rs.getTimestamp(2)
           assert(timestampNtz !== null)
-          assert(timestampNtz === java.sql.Timestamp.valueOf("2025-11-15 14:22:33.789012"))
+          assert(timestampNtz === Timestamp.valueOf("2025-11-15 14:22:33.789012"))
           assert(!rs.wasNull)
 
           assert(!rs.next())
