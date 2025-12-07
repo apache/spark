@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connect.client.jdbc
 
-import java.math.BigDecimal
+import java.math.{BigDecimal => JBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, ResultSet, SQLException, Time, Timestamp, Types}
 import java.util.{Calendar, TimeZone}
@@ -238,7 +238,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
         val decimalType = s"DECIMAL($precision,$scale)"
         withExecuteQuery(s"SELECT cast('$value' as $decimalType)") { rs =>
           assert(rs.next())
-          assert(rs.getBigDecimal(1) === new BigDecimal(value))
+          assert(rs.getBigDecimal(1) === new JBigDecimal(value))
           assert(!rs.wasNull)
           assert(!rs.next())
 
@@ -298,7 +298,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       ("cast(1 AS FLOAT)", (rs: ResultSet) => rs.getFloat(1), 1.toFloat),
       ("cast(1 AS DOUBLE)", (rs: ResultSet) => rs.getDouble(1), 1.toDouble),
       ("cast(1 AS DECIMAL(10,5))", (rs: ResultSet) => rs.getBigDecimal(1),
-        new BigDecimal("1.00000")),
+        new JBigDecimal("1.00000")),
       ("CAST(X'0A0B0C' AS BINARY)", (rs: ResultSet) => rs.getBytes(1),
         Array[Byte](0x0A, 0x0B, 0x0C)),
       ("date '2023-11-15'", (rs: ResultSet) => rs.getDate(1),
