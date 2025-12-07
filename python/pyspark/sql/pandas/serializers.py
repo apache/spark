@@ -149,7 +149,7 @@ class ArrowStreamUDFSerializer(ArrowStreamSerializer):
         """
         import pyarrow as pa
 
-        batches = super(ArrowStreamUDFSerializer, self).load_stream(stream)
+        batches = super().load_stream(stream)
         for batch in batches:
             struct = batch.column(0)
             yield [pa.RecordBatch.from_arrays(struct.flatten(), schema=pa.schema(struct.type))]
@@ -184,7 +184,7 @@ class ArrowStreamUDFSerializer(ArrowStreamSerializer):
                     should_write_start_length = False
                 yield batch
 
-        return super(ArrowStreamUDFSerializer, self).dump_stream(wrap_and_init_stream(), stream)
+        return super().dump_stream(wrap_and_init_stream(), stream)
 
 
 class ArrowStreamUDTFSerializer(ArrowStreamUDFSerializer):
@@ -304,7 +304,7 @@ class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
     """
 
     def __init__(self, assign_cols_by_name):
-        super(ArrowStreamGroupUDFSerializer, self).__init__()
+        super().__init__()
         self._assign_cols_by_name = assign_cols_by_name
 
     def dump_stream(self, iterator, stream):
@@ -330,7 +330,7 @@ class ArrowStreamGroupUDFSerializer(ArrowStreamUDFSerializer):
                 for batch, arrow_type in batch_iter
             )
 
-        super(ArrowStreamGroupUDFSerializer, self).dump_stream(batch_iter, stream)
+        super().dump_stream(batch_iter, stream)
 
 
 class ArrowStreamPandasSerializer(ArrowStreamSerializer):
@@ -351,7 +351,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
     """
 
     def __init__(self, timezone, safecheck, int_to_decimal_coercion_enabled):
-        super(ArrowStreamPandasSerializer, self).__init__()
+        super().__init__()
         self._timezone = timezone
         self._safecheck = safecheck
         self._int_to_decimal_coercion_enabled = int_to_decimal_coercion_enabled
@@ -528,13 +528,13 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         a list of series accompanied by an optional pyarrow type to coerce the data to.
         """
         batches = (self._create_batch(series) for series in iterator)
-        super(ArrowStreamPandasSerializer, self).dump_stream(batches, stream)
+        super().dump_stream(batches, stream)
 
     def load_stream(self, stream):
         """
         Deserialize ArrowRecordBatches to an Arrow table and return as a list of pandas.Series.
         """
-        batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)
+        batches = super().load_stream(stream)
         import pyarrow as pa
         import pandas as pd
 
@@ -569,9 +569,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         input_types=None,
         int_to_decimal_coercion_enabled=False,
     ):
-        super(ArrowStreamPandasUDFSerializer, self).__init__(
-            timezone, safecheck, int_to_decimal_coercion_enabled
-        )
+        super().__init__(timezone, safecheck, int_to_decimal_coercion_enabled)
         self._assign_cols_by_name = assign_cols_by_name
         self._df_for_struct = df_for_struct
         self._struct_in_pandas = struct_in_pandas
@@ -593,6 +591,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
             import pandas as pd
 
             series = [
+                # Need to be explicit here because it's in a comprehension
                 super(ArrowStreamPandasUDFSerializer, self)
                 .arrow_to_pandas(
                     column,
@@ -610,7 +609,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
             ]
             s = pd.concat(series, axis=1)
         else:
-            s = super(ArrowStreamPandasUDFSerializer, self).arrow_to_pandas(
+            s = super().arrow_to_pandas(
                 arrow_column,
                 idx,
                 self._struct_in_pandas,
@@ -768,7 +767,7 @@ class ArrowStreamArrowUDFSerializer(ArrowStreamSerializer):
         assign_cols_by_name,
         arrow_cast,
     ):
-        super(ArrowStreamArrowUDFSerializer, self).__init__()
+        super().__init__()
         self._timezone = timezone
         self._safecheck = safecheck
         self._assign_cols_by_name = assign_cols_by_name
@@ -941,7 +940,7 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
     """
 
     def __init__(self, timezone, safecheck, input_types, int_to_decimal_coercion_enabled):
-        super(ArrowStreamPandasUDTFSerializer, self).__init__(
+        super().__init__(
             timezone=timezone,
             safecheck=safecheck,
             # The output pandas DataFrame's columns are unnamed.
@@ -1089,7 +1088,7 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
 
 class GroupArrowUDFSerializer(ArrowStreamGroupUDFSerializer):
     def __init__(self, assign_cols_by_name):
-        super(GroupArrowUDFSerializer, self).__init__(
+        super().__init__(
             assign_cols_by_name=assign_cols_by_name,
         )
 
@@ -1238,7 +1237,7 @@ class ArrowStreamAggPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
         assign_cols_by_name,
         int_to_decimal_coercion_enabled,
     ):
-        super(ArrowStreamAggPandasUDFSerializer, self).__init__(
+        super().__init__(
             timezone=timezone,
             safecheck=safecheck,
             assign_cols_by_name=False,
@@ -1295,7 +1294,7 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
         assign_cols_by_name,
         int_to_decimal_coercion_enabled,
     ):
-        super(GroupPandasUDFSerializer, self).__init__(
+        super().__init__(
             timezone=timezone,
             safecheck=safecheck,
             assign_cols_by_name=assign_cols_by_name,
@@ -1353,7 +1352,7 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
         """
         # Flatten: Iterator[Iterator[[(df, arrow_type)]]] -> Iterator[[(df, arrow_type)]]
         flattened_iter = (batch for generator in iterator for batch in generator)
-        super(GroupPandasUDFSerializer, self).dump_stream(flattened_iter, stream)
+        super().dump_stream(flattened_iter, stream)
 
     def __repr__(self):
         return "GroupPandasUDFSerializer"
@@ -1373,7 +1372,7 @@ class CogroupArrowUDFSerializer(ArrowStreamGroupUDFSerializer):
     """
 
     def __init__(self, assign_cols_by_name):
-        super(CogroupArrowUDFSerializer, self).__init__(assign_cols_by_name)
+        super().__init__(assign_cols_by_name)
 
     def load_stream(self, stream):
         """
@@ -1458,7 +1457,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         prefers_large_var_types,
         int_to_decimal_coercion_enabled,
     ):
-        super(ApplyInPandasWithStateSerializer, self).__init__(
+        super().__init__(
             timezone,
             safecheck,
             assign_cols_by_name,
@@ -1842,7 +1841,7 @@ class TransformWithStateInPandasSerializer(ArrowStreamPandasUDFSerializer):
         arrow_max_bytes_per_batch,
         int_to_decimal_coercion_enabled,
     ):
-        super(TransformWithStateInPandasSerializer, self).__init__(
+        super().__init__(
             timezone,
             safecheck,
             assign_cols_by_name,
@@ -1967,7 +1966,7 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
         arrow_max_bytes_per_batch,
         int_to_decimal_coercion_enabled,
     ):
-        super(TransformWithStateInPandasInitStateSerializer, self).__init__(
+        super().__init__(
             timezone,
             safecheck,
             assign_cols_by_name,
@@ -2108,7 +2107,7 @@ class TransformWithStateInPySparkRowSerializer(ArrowStreamUDFSerializer):
     """
 
     def __init__(self, arrow_max_records_per_batch):
-        super(TransformWithStateInPySparkRowSerializer, self).__init__()
+        super().__init__()
         self.arrow_max_records_per_batch = (
             arrow_max_records_per_batch if arrow_max_records_per_batch > 0 else 2**31 - 1
         )
@@ -2197,9 +2196,7 @@ class TransformWithStateInPySparkRowInitStateSerializer(TransformWithStateInPySp
     """
 
     def __init__(self, arrow_max_records_per_batch):
-        super(TransformWithStateInPySparkRowInitStateSerializer, self).__init__(
-            arrow_max_records_per_batch
-        )
+        super().__init__(arrow_max_records_per_batch)
         self.init_key_offsets = None
 
     def load_stream(self, stream):

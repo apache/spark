@@ -52,7 +52,7 @@ class JavaWrapper:
     """
 
     def __init__(self, java_obj: Optional["JavaObject"] = None):
-        super(JavaWrapper, self).__init__()
+        super().__init__()
         self._java_obj = java_obj
 
     @try_remote_del
@@ -355,7 +355,7 @@ class JavaParams(JavaWrapper, Params, metaclass=ABCMeta):
         """
         if extra is None:
             extra = dict()
-        that = super(JavaParams, self).copy(extra)
+        that = super().copy(extra)
         if self._java_obj is not None:
             from pyspark.ml.util import RemoteModelRef
 
@@ -374,7 +374,7 @@ class JavaParams(JavaWrapper, Params, metaclass=ABCMeta):
         """
         assert self._java_obj is not None
 
-        super(JavaParams, self).clear(param)
+        super().clear(param)
         java_param = self._java_obj.getParam(param.name)
         self._java_obj.clear(java_param)
 
@@ -457,7 +457,7 @@ class JavaModel(JavaTransformer, Model, metaclass=ABCMeta):
         these wrappers depend on pyspark.ml.util (both directly and via
         other ML classes).
         """
-        super(JavaModel, self).__init__(java_model)
+        super().__init__(java_model)
         if is_remote() and java_model is not None:
             from pyspark.ml.util import RemoteModelRef
 
