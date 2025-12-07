@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, RocksDBStateStoreProvider, StateRepartitionUnsupportedProviderError, StateStore}
 import org.apache.spark.sql.functions.{col, count, sum, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.{ExpiredTimerInfo, ListState, MapState, OutputMode, SimpleMapValue, StatefulProcessor, TimeMode, TimerValues, TransformWithStateSuiteUtils, Trigger, TTLConfig, ValueState}
+import org.apache.spark.sql.streaming.{ExpiredTimerInfo, ListState, MapState, OutputMode, SimpleMapValue, StatefulProcessor, TimeMode, TimerValues, Trigger, TTLConfig, ValueState}
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, LongType, NullType, StringType, StructField, StructType, TimestampType}
 
@@ -45,6 +45,7 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
     super.beforeAll()
     spark.conf.set(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
       classOf[RocksDBStateStoreProvider].getName)
+    spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "2")
   }
 
   private def getNormalReadDf(
@@ -645,222 +646,202 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
 
   test("SPARK-54419: transformWithState with multiple column families") {
     withTempDir { tempDir =>
-      withSQLConf(
-        SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
-        SQLConf.SHUFFLE_PARTITIONS.key ->
-          TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
-        val inputData = MemoryStream[String]
-        val result = inputData.toDS()
-          .groupByKey(x => x)
-          .transformWithState(new MultiStateVarProcessor(),
-            TimeMode.None(),
-            OutputMode.Update())
+      val inputData = MemoryStream[String]
+      val result = inputData.toDS()
+        .groupByKey(x => x)
+        .transformWithState(new MultiStateVarProcessor(),
+          TimeMode.None(),
+          OutputMode.Update())
 
-        testStream(result, OutputMode.Update())(
-          StartStream(checkpointLocation = tempDir.getAbsolutePath),
-          AddData(inputData, "a", "b", "a"),
-          CheckNewAnswer(("a", "2"), ("b", "1")),
-          AddData(inputData, "b", "c"),
-          CheckNewAnswer(("b", "2"), ("c", "1")),
-          StopStream
-        )
+      testStream(result, OutputMode.Update())(
+        StartStream(checkpointLocation = tempDir.getAbsolutePath),
+        AddData(inputData, "a", "b", "a"),
+        CheckNewAnswer(("a", "2"), ("b", "1")),
+        AddData(inputData, "b", "c"),
+        CheckNewAnswer(("b", "2"), ("c", "1")),
+        StopStream
+      )
 
-        // Read all column families using internalOnlyReadAllColumnFamilies
-        val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
-        validateBytesReadDfSchema(bytesDf)
-        val allBytesData = bytesDf.collect()
+      // Read all column families using internalOnlyReadAllColumnFamilies
+      val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
+      validateBytesReadDfSchema(bytesDf)
+      val allBytesData = bytesDf.collect()
 
-        val columnFamilies = allBytesData.map(_.getString(3)).distinct.sorted
+      val columnFamilies = allBytesData.map(_.getString(3)).distinct.sorted
 
-        // Verify countState column family exists
-        assert(columnFamilies.toSet ==
-          Set("countState", "itemsList", "$rowCounter_itemsList", "itemsMap"))
+      // Verify countState column family exists
+      assert(columnFamilies.toSet ==
+        Set("countState", "itemsList", "$rowCounter_itemsList", "itemsMap"))
 
-        // Define schemas for each column family based on provided schema info
-        val groupByKeySchema = StructType(Array(
-          StructField("value", StringType, nullable = true)
-        ))
-        val countStateValueSchema = StructType(Array(
-          StructField("value", LongType, nullable = false)
-        ))
-        val itemsListValueSchema = StructType(Array(
-          StructField("value", StringType, nullable = true)
-        ))
-        val rowCounterValueSchema = StructType(Array(
-          StructField("count", LongType, nullable = true)
-        ))
-        val itemsMapKeySchema = StructType(Array(
-          StructField("key", groupByKeySchema),
-          StructField("user_map_key", groupByKeySchema, nullable = true)
-        ))
-        val itemsMapValueSchema = StructType(Array(
-          StructField("user_map_value", IntegerType, nullable = true)
-        ))
+      // Define schemas for each column family based on provided schema info
+      val groupByKeySchema = StructType(Array(
+        StructField("value", StringType, nullable = true)
+      ))
+      val countStateValueSchema = StructType(Array(
+        StructField("value", LongType, nullable = false)
+      ))
+      val itemsListValueSchema = StructType(Array(
+        StructField("value", StringType, nullable = true)
+      ))
+      val rowCounterValueSchema = StructType(Array(
+        StructField("count", LongType, nullable = true)
+      ))
+      val itemsMapKeySchema = StructType(Array(
+        StructField("key", groupByKeySchema),
+        StructField("user_map_key", groupByKeySchema, nullable = true)
+      ))
+      val itemsMapValueSchema = StructType(Array(
+        StructField("user_map_value", IntegerType, nullable = true)
+      ))
 
-        // Validate countState
-        readAndValidateStateVar(
-          tempDir.getAbsolutePath, allBytesData,
-          stateVarName = "countState", groupByKeySchema, countStateValueSchema)
+      // Validate countState
+      readAndValidateStateVar(
+        tempDir.getAbsolutePath, allBytesData,
+        stateVarName = "countState", groupByKeySchema, countStateValueSchema)
 
-        // Validate itemsList
-        readAndValidateStateVar(
-          tempDir.getAbsolutePath, allBytesData,
-          stateVarName = "itemsList", groupByKeySchema, itemsListValueSchema,
-          extraOptions = Map(StateSourceOptions.FLATTEN_COLLECTION_TYPES -> "true"),
-          selectExprs = Seq("partition_id", "key", "list_element"))
+      // Validate itemsList
+      readAndValidateStateVar(
+        tempDir.getAbsolutePath, allBytesData,
+        stateVarName = "itemsList", groupByKeySchema, itemsListValueSchema,
+        extraOptions = Map(StateSourceOptions.FLATTEN_COLLECTION_TYPES -> "true"),
+        selectExprs = Seq("partition_id", "key", "list_element"))
 
-        // Validate $rowCounter_itemsList - intentionally reuses countState's data
-        val countStateNormalDf = getNormalReadDf(tempDir.getAbsolutePath, Option("countState"))
-        compareNormalAndBytesData(
-          countStateNormalDf.collect(),
-          allBytesData,
-          "$rowCounter_itemsList",
-          groupByKeySchema,
-          rowCounterValueSchema)
+      // Validate $rowCounter_itemsList - intentionally reuses countState's data
+      val countStateNormalDf = getNormalReadDf(tempDir.getAbsolutePath, Option("countState"))
+      compareNormalAndBytesData(
+        countStateNormalDf.collect(),
+        allBytesData,
+        "$rowCounter_itemsList",
+        groupByKeySchema,
+        rowCounterValueSchema)
 
-        // Validate itemsMap
-        readAndValidateStateVar(
-          tempDir.getAbsolutePath, allBytesData,
-          stateVarName = "itemsMap", itemsMapKeySchema, itemsMapValueSchema,
-          selectExprs = Seq("partition_id", "STRUCT(key, user_map_key) AS KEY",
-            "user_map_value AS value"))
-      }
+      // Validate itemsMap
+      readAndValidateStateVar(
+        tempDir.getAbsolutePath, allBytesData,
+        stateVarName = "itemsMap", itemsMapKeySchema, itemsMapValueSchema,
+        selectExprs = Seq("partition_id", "STRUCT(key, user_map_key) AS KEY",
+          "user_map_value AS value"))
     }
   }
 
   test("SPARK-54419: read all column families with event time timers") {
     withTempDir { tempDir =>
-      withSQLConf(
-        SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-          classOf[RocksDBStateStoreProvider].getName,
-        SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
-        val inputData = MemoryStream[(String, Long)]
-        val result = inputData.toDS()
-          .select(col("_1").as("key"), timestamp_seconds(col("_2")).as("eventTime"))
-          .withWatermark("eventTime", "10 seconds")
-          .as[(String, Timestamp)]
-          .groupByKey(_._1)
-          .transformWithState(
-            new EventTimeTimerProcessor(),
-            TimeMode.EventTime(),
-            OutputMode.Update())
+      val inputData = MemoryStream[(String, Long)]
+      val result = inputData.toDS()
+        .select(col("_1").as("key"), timestamp_seconds(col("_2")).as("eventTime"))
+        .withWatermark("eventTime", "10 seconds")
+        .as[(String, Timestamp)]
+        .groupByKey(_._1)
+        .transformWithState(
+          new EventTimeTimerProcessor(),
+          TimeMode.EventTime(),
+          OutputMode.Update())
 
-        testStream(result, OutputMode.Update())(
-          StartStream(checkpointLocation = tempDir.getAbsolutePath),
-          AddData(inputData, ("a", 1L), ("b", 2L), ("c", 3L)),
-          CheckLastBatch(("a", "1"), ("b", "1"), ("c", "1")),
-          StopStream
-        )
+      testStream(result, OutputMode.Update())(
+        StartStream(checkpointLocation = tempDir.getAbsolutePath),
+        AddData(inputData, ("a", 1L), ("b", 2L), ("c", 3L)),
+        CheckLastBatch(("a", "1"), ("b", "1"), ("c", "1")),
+        StopStream
+      )
 
-        validateTimerColumnFamilies(tempDir.getAbsolutePath, "event")
-      }
+      validateTimerColumnFamilies(tempDir.getAbsolutePath, "event")
     }
   }
 
   test("SPARK-54419: read all column families with processing time timers") {
     withTempDir { tempDir =>
-      withSQLConf(
-        SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
-          classOf[RocksDBStateStoreProvider].getName,
-        SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
-        val clock = new StreamManualClock
-        val inputData = MemoryStream[String]
-        val result = inputData.toDS()
-          .groupByKey(x => x)
-          .transformWithState(new RunningCountStatefulProcessorWithProcTimeTimer(),
-            TimeMode.ProcessingTime(),
-            OutputMode.Update())
+      val clock = new StreamManualClock
+      val inputData = MemoryStream[String]
+      val result = inputData.toDS()
+        .groupByKey(x => x)
+        .transformWithState(new RunningCountStatefulProcessorWithProcTimeTimer(),
+          TimeMode.ProcessingTime(),
+          OutputMode.Update())
 
-        testStream(result, OutputMode.Update())(
-          StartStream(checkpointLocation = tempDir.getAbsolutePath,
-            trigger = Trigger.ProcessingTime("1 second"),
-            triggerClock = clock),
-          AddData(inputData, "a"),
-          AdvanceManualClock(1 * 1000),
-          CheckNewAnswer(("a", "1")),
-          StopStream
-        )
+      testStream(result, OutputMode.Update())(
+        StartStream(checkpointLocation = tempDir.getAbsolutePath,
+          trigger = Trigger.ProcessingTime("1 second"),
+          triggerClock = clock),
+        AddData(inputData, "a"),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(("a", "1")),
+        StopStream
+      )
 
-        validateTimerColumnFamilies(tempDir.getAbsolutePath, "proc")
-      }
+      validateTimerColumnFamilies(tempDir.getAbsolutePath, "proc")
     }
   }
 
   test("SPARK-54419: transformWithState with list state and TTL") {
     withTempDir { tempDir =>
-      withSQLConf(
-        SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
-        SQLConf.SHUFFLE_PARTITIONS.key ->
-          TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
-        val clock = new StreamManualClock
-        val inputData = MemoryStream[String]
-        val result = inputData.toDS()
-          .groupByKey(x => x)
-          .transformWithState(new ListStateTTLProcessor(),
-            TimeMode.ProcessingTime(),
-            OutputMode.Update())
+      val clock = new StreamManualClock
+      val inputData = MemoryStream[String]
+      val result = inputData.toDS()
+        .groupByKey(x => x)
+        .transformWithState(new ListStateTTLProcessor(),
+          TimeMode.ProcessingTime(),
+          OutputMode.Update())
 
-        testStream(result, OutputMode.Update())(
-          StartStream(checkpointLocation = tempDir.getAbsolutePath,
-            trigger = Trigger.ProcessingTime("1 second"),
-            triggerClock = clock),
-          AddData(inputData, "a", "b", "a"),
-          AdvanceManualClock(1 * 1000),
-          CheckNewAnswer(("a", "2"), ("b", "1")),
-          StopStream
-        )
+      testStream(result, OutputMode.Update())(
+        StartStream(checkpointLocation = tempDir.getAbsolutePath,
+          trigger = Trigger.ProcessingTime("1 second"),
+          triggerClock = clock),
+        AddData(inputData, "a", "b", "a"),
+        AdvanceManualClock(1 * 1000),
+        CheckNewAnswer(("a", "2"), ("b", "1")),
+        StopStream
+      )
 
-        val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
-        validateBytesReadDfSchema(bytesDf)
+      val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
+      validateBytesReadDfSchema(bytesDf)
 
-        val allBytesData = bytesDf.collect()
-        val columnFamilies = allBytesData.map(_.getString(3)).distinct.sorted
+      val allBytesData = bytesDf.collect()
+      val columnFamilies = allBytesData.map(_.getString(3)).distinct.sorted
 
-        assert(columnFamilies.toSet ==
-          Set("listState", "$ttl_listState", "$min_listState", "$count_listState"))
+      assert(columnFamilies.toSet ==
+        Set("listState", "$ttl_listState", "$min_listState", "$count_listState"))
 
-        // Define schemas for list state with TTL column families
-        val groupByKeySchema = StructType(Array(
+      // Define schemas for list state with TTL column families
+      val groupByKeySchema = StructType(Array(
+        StructField("value", StringType, nullable = true)
+      ))
+      val listStateValueSchema = StructType(Array(
+        StructField("value", StructType(Array(
           StructField("value", StringType, nullable = true)
-        ))
-        val listStateValueSchema = StructType(Array(
-          StructField("value", StructType(Array(
-            StructField("value", StringType, nullable = true)
-          )), nullable = false),
-          StructField("ttlExpirationMs", LongType, nullable = false)
-        ))
+        )), nullable = false),
+        StructField("ttlExpirationMs", LongType, nullable = false)
+      ))
 
-        val listStateNormalDf = spark.read
-          .format("statestore")
-          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
-          .option(StateSourceOptions.STATE_VAR_NAME, "listState")
-          .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, "true")
-          .load()
-          .selectExpr("partition_id", "key", "list_element")
+      val listStateNormalDf = spark.read
+        .format("statestore")
+        .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+        .option(StateSourceOptions.STATE_VAR_NAME, "listState")
+        .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, "true")
+        .load()
+        .selectExpr("partition_id", "key", "list_element")
 
-        compareNormalAndBytesData(
-          listStateNormalDf.collect(),
-          allBytesData,
-          "listState",
-          groupByKeySchema,
-          listStateValueSchema)
+      compareNormalAndBytesData(
+        listStateNormalDf.collect(),
+        allBytesData,
+        "listState",
+        groupByKeySchema,
+        listStateValueSchema)
 
-        // Validate that TTL-related column families have the expected number of entries
-        val ttlIndexRows = allBytesData.filter(_.getString(3) == "$ttl_listState")
-        val minExpiryRows = allBytesData.filter(_.getString(3) == "$min_listState")
-        val countIndexRows = allBytesData.filter(_.getString(3) == "$count_listState")
+      // Validate that TTL-related column families have the expected number of entries
+      val ttlIndexRows = allBytesData.filter(_.getString(3) == "$ttl_listState")
+      val minExpiryRows = allBytesData.filter(_.getString(3) == "$min_listState")
+      val countIndexRows = allBytesData.filter(_.getString(3) == "$count_listState")
 
-        // We have 2 grouping keys (a, b), so each secondary index should have entries
-        // TTL index has one entry per unique (expirationMs, groupingKey) pair
-        // Min expiry and count indexes have one entry per grouping key
-        assert(minExpiryRows.length == 2,
-          s"Expected 2 min expiry entries (one per key), got ${minExpiryRows.length}")
-        assert(countIndexRows.length == 2,
-          s"Expected 2 count index entries (one per key), got ${countIndexRows.length}")
-        // TTL index entries depend on batching - we processed 2 batches with different timestamps
-        assert(ttlIndexRows.length >= 2,
-          s"Expected at least 2 TTL index entries, got ${ttlIndexRows.length}")
-      }
+      // We have 2 grouping keys (a, b), so each secondary index should have entries
+      // TTL index has one entry per unique (expirationMs, groupingKey) pair
+      // Min expiry and count indexes have one entry per grouping key
+      assert(minExpiryRows.length == 2,
+        s"Expected 2 min expiry entries (one per key), got ${minExpiryRows.length}")
+      assert(countIndexRows.length == 2,
+        s"Expected 2 count index entries (one per key), got ${countIndexRows.length}")
+      // TTL index entries depend on batching - we processed 2 batches with different timestamps
+      assert(ttlIndexRows.length >= 2,
+        s"Expected at least 2 TTL index entries, got ${ttlIndexRows.length}")
     }
   }
 
