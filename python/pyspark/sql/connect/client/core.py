@@ -502,6 +502,20 @@ class PlanObservedMetrics(ObservedMetrics):
     def keys(self) -> List[str]:
         return self._keys
 
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serializable dictionary representation of this observed metrics.
+
+        Returns
+        -------
+        dict
+            A dictionary with keys 'name', 'keys', and 'pairs'.
+        """
+        return {
+            "name": self._name,
+            "keys": self._keys,
+            "pairs": self.pairs,
+        }
+
 
 class AnalyzeResult:
     def __init__(
