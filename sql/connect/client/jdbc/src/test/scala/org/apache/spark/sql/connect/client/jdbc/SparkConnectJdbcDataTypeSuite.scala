@@ -442,6 +442,11 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       assert(bytes.length === testBytes.length)
       assert(bytes.sameElements(testBytes))
       assert(!rs.wasNull)
+
+      val stringValue = rs.getString(1)
+      val expectedString = new String(testBytes, java.nio.charset.StandardCharsets.UTF_8)
+      assert(stringValue === expectedString)
+
       assert(!rs.next())
 
       val metaData = rs.getMetaData
