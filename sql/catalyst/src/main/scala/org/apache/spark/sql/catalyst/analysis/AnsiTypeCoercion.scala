@@ -84,7 +84,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       InConversion ::
       PromoteStrings ::
       DecimalPrecision ::
-      FunctionArgumentConversion ::
+      AnsiFunctionArgumentConversion ::
       ConcatCoercion ::
       MapZipWithCoercion ::
       EltCoercion ::
@@ -97,6 +97,21 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       DateTimeOperations ::
       WindowFrameCoercion ::
       GetDateFieldOperations :: Nil) :: Nil
+
+  /**
+   * ANSI-compliant function argument type coercion rule.
+   * Unlike the default [[FunctionArgumentConversion]], this rule does NOT implicitly cast
+   * timestamp types to double for aggregate functions like Sum and Average.
+   * This ensures that in ANSI mode, applying these aggregate functions to timestamp types
+   * results in a proper type error, which is the expected behavior per SQL standards.
+   */
+  object AnsiFunctionArgumentConversion extends TypeCoercionRule {
+    override val transform: PartialFunction[Expression, Expression] = {
+      // Skip nodes who's children have not been resolved yet.
+      case e if !e.childrenResolved => e
+      case withChildrenResolved => AnsiFunctionArgumentTypeCoercion(withChildrenResolved)
+    }
+  }
 
   val findTightestCommonType: (DataType, DataType) => Option[DataType] = {
     case (t1, t2) if t1 == t2 => Some(t1)
