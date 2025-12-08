@@ -330,32 +330,29 @@ object OffsetSeqMetadata extends Logging {
  * @param sourceId: The ID of the source.
  * @param providerName: The name of the provider.
  * @param apiVersion: The API version for the source - whether it is DSv1 or DSv2.
- * @param rewindProviderMetadata: The metadata of the rewind provider.
  */
 case class SourceMetadataInfo(
     sourceId: String,
     providerName: String,
-    apiVersion: String,
-    rewindProviderMetadata: org.apache.spark.sql.execution.streaming.RewindProviderMetadata) {
+    apiVersion: String) {
   def json: String = Serialization.write(this)(OffsetSeqMetadata.format)
 }
 
 /**
- * This class is used to store the control batch information for a batch in the offset log.
- * Control batches are special batches that do not contain any data batches and is not used
- * for processing data, but only stores metadata or used for control operations (e.g. rewind batch).
- * Value of None means current batch is a data batch.
+ * This class is used to store metadata about the type of control batch in the offset log.
  *
- * @param rewindInfo: The rewind batch information if the current batch is a rewind batch.
+ * @param operationType The type of control batch operation.
+ * @param operationInfo Additional info about the control batch operation.
  */
-case class OffsetSeqControlBatchInfo(rewindInfo: Option[OffsetSeqRewindBatchInfo] = None)
+case class OffsetSeqControlBatchInfo(
+    operationType: String,
+    operationInfo: Option[String] = None) {
+  def json: String = Serialization.write(this)(OffsetSeqControlBatchInfo.format)
+}
 
-/**
- * This class is used to store the rewind batch information for a batch in the offset log.
- *
- * @param oldBatchId: The batch id of the old batch that was rewinded to.
- */
-case class OffsetSeqRewindBatchInfo(oldBatchId: Long)
+object OffsetSeqControlBatchInfo {
+  private implicit val format: Formats = Serialization.formats(NoTypeHints)
+}
 
 /**
  * Contains metadata associated with a [[OffsetMap]]. This information is
@@ -370,7 +367,7 @@ case class OffsetSeqRewindBatchInfo(oldBatchId: Long)
  * @param sourceMetadataInfo: The source related metadata for the streaming query,
  * mapped by sourceId.
  * @param controlBatchInfo: The control batch information if the current batch is a
- * control batch (e.g. rewind batch). Value of None means current batch is a data batch.
+ * control batch. Value of None means current batch is a data batch.
  */
 case class OffsetSeqMetadataV2(
     batchWatermarkMs: Long = 0,
