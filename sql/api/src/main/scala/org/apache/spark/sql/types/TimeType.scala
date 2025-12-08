@@ -18,8 +18,7 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.annotation.Unstable
-import org.apache.spark.sql.errors.{CompilationErrors, DataTypeErrors}
-import org.apache.spark.sql.internal.SqlApiConfHelper
+import org.apache.spark.sql.errors.DataTypeErrors
 
 /**
  * The time type represents a time value with fields hour, minute, second, up to microseconds. The
