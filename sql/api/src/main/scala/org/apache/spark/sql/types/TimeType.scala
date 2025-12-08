@@ -34,10 +34,6 @@ import org.apache.spark.sql.internal.SqlApiConfHelper
 @Unstable
 case class TimeType(precision: Int) extends AnyTimeType {
 
-  if (!SqlApiConfHelper.confGetter.get()().isTimeTypeEnabled) {
-    throw CompilationErrors.unsupportedTimeTypeError()
-  }
-
   if (precision < TimeType.MIN_PRECISION || precision > TimeType.MAX_PRECISION) {
     throw DataTypeErrors.unsupportedTimePrecisionError(precision)
   }
