@@ -13824,6 +13824,44 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         # we always wraps the given type hints by a tuple to mimic the variadic generic.
         return create_tuple_for_frame_type(params)
 
+    def __dataframe__(self, nan_as_null: bool = False, allow_copy: bool = True):
+        """
+        Return a DataFrame interchange protocol object.
+
+        Parameters
+        ----------
+        nan_as_null : bool, default False
+            Whether to treat NaN values as nulls.
+        allow_copy : bool, default True
+            Whether the implementation is allowed to return a copy of the data.
+
+        Returns
+        -------
+        SparkInterChangeDataFrame object.
+        """
+        from pyspark.interchange import SparkInterchangeDataFrame
+
+        return SparkInterchangeDataFrame(self._internal.spark_frame, nan_as_null, allow_copy)
+
+    def __arrow_c_stream__(self, requested_schema: Optional["pyarrow.Schema"] = None) -> object:
+        """
+        Export to a C PyCapsule stream object.
+
+        Parameters
+        ----------
+        requested_schema : pyarrow.Schema, optional
+            The schema to attempt to use for the output stream. This is a best effort request,
+
+        Returns
+        -------
+        A C PyCapsule stream object.
+        """
+        from pyspark.interchange import SparkArrowCStreamer
+
+        return SparkArrowCStreamer(
+            self._internal.to_internal_spark_frame
+        ).__arrow_c_stream__(requested_schema)
+
 
 def _reduce_spark_multi(sdf: PySparkDataFrame, aggs: List[PySparkColumn]) -> Any:
     """
