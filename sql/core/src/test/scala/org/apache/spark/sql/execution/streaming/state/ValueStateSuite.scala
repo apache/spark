@@ -188,17 +188,15 @@ class ValueStateSuite extends StateVariableSuiteBase {
     val storeId = StateStoreId(newDir(), Random.nextInt(), 0)
     val provider = new HDFSBackedStateStoreProvider()
     val storeConf = new StateStoreConf(new SQLConf())
-    val ex = intercept[StateStoreMultipleColumnFamiliesNotSupportedException] {
+    val ex = intercept[StateStoreHDFSMultipleColumnFamiliesNotSupportedException] {
       provider.init(
         storeId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
         useColumnFamilies = true, storeConf, new Configuration)
     }
     checkError(
       ex,
-      condition = "UNSUPPORTED_FEATURE.STATE_STORE_MULTIPLE_COLUMN_FAMILIES",
-      parameters = Map(
-        "stateStoreProvider" -> "HDFSBackedStateStoreProvider"
-      ),
+      condition = "UNSUPPORTED_FEATURE.STATE_STORE_MULTIPLE_COLUMN_FAMILIES_HDFS",
+      parameters = Map.empty,
       matchPVals = true
     )
   }

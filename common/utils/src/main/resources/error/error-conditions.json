@@ -5857,6 +5857,11 @@
           "Creating multiple column families with <stateStoreProvider> is not supported."
         ]
       },
+      "STATE_STORE_MULTIPLE_COLUMN_FAMILIES_HDFS" : {
+        "message" : [
+          "HDFS is not supported with TransformWithState when using multiple column families. Please use RocksDBStateStoreProvider."
+        ]
+      },
       "STATE_STORE_REMOVING_COLUMN_FAMILIES" : {
         "message" : [
           "Removing column families with <stateStoreProvider> is not supported."

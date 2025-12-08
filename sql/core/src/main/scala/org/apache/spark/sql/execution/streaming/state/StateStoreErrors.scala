@@ -59,6 +59,11 @@ object StateStoreErrors {
     new StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider)
   }
 
+  def hdfsMultipleColumnFamiliesNotSupported():
+    StateStoreHDFSMultipleColumnFamiliesNotSupportedException = {
+    new StateStoreHDFSMultipleColumnFamiliesNotSupportedException()
+  }
+
   def removingColumnFamiliesNotSupported(stateStoreProvider: String):
     StateStoreRemovingColumnFamiliesNotSupportedException = {
     new StateStoreRemovingColumnFamiliesNotSupportedException(stateStoreProvider)
@@ -250,6 +255,11 @@ class StateStoreMultipleColumnFamiliesNotSupportedException(stateStoreProvider: 
   extends SparkUnsupportedOperationException(
     errorClass = "UNSUPPORTED_FEATURE.STATE_STORE_MULTIPLE_COLUMN_FAMILIES",
     messageParameters = Map("stateStoreProvider" -> stateStoreProvider))
+
+class StateStoreHDFSMultipleColumnFamiliesNotSupportedException()
+  extends SparkUnsupportedOperationException(
+    errorClass = "UNSUPPORTED_FEATURE.STATE_STORE_MULTIPLE_COLUMN_FAMILIES_HDFS",
+    messageParameters = Map.empty[String, String])
 
 class StateStoreRemovingColumnFamiliesNotSupportedException(stateStoreProvider: String)
   extends SparkUnsupportedOperationException(

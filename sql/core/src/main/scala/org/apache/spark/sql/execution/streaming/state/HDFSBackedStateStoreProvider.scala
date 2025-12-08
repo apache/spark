@@ -131,15 +131,14 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
         keyStateEncoderSpec: KeyStateEncoderSpec,
         useMultipleValuesPerKey: Boolean = false,
         isInternal: Boolean = false): Unit = {
-      throw StateStoreErrors.multipleColumnFamiliesNotSupported(providerName)
+      throw StateStoreErrors.hdfsMultipleColumnFamiliesNotSupported()
     }
 
     // Multiple col families are not supported with HDFSBackedStateStoreProvider. Throw an exception
     // if the user tries to use a non-default col family.
     private def assertUseOfDefaultColFamily(colFamilyName: String): Unit = {
       if (colFamilyName != StateStore.DEFAULT_COL_FAMILY_NAME) {
-
-        throw StateStoreErrors.multipleColumnFamiliesNotSupported(providerName)
+        throw StateStoreErrors.hdfsMultipleColumnFamiliesNotSupported()
       }
     }
 
@@ -316,7 +315,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       keyStateEncoderSpec: KeyStateEncoderSpec): Unit = {
     // TODO: add support for multiple col families with HDFSBackedStateStoreProvider
     if (useColumnFamilies) {
-      throw StateStoreErrors.multipleColumnFamiliesNotSupported(providerName)
+      throw StateStoreErrors.hdfsMultipleColumnFamiliesNotSupported()
     }
 
     if (useMultipleValuesPerKey) {
@@ -1020,7 +1019,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     StateStoreChangeDataReader = {
     // Multiple column families are not supported with HDFSBackedStateStoreProvider
     if (colFamilyNameOpt.isDefined) {
-      throw StateStoreErrors.multipleColumnFamiliesNotSupported(providerName)
+      throw StateStoreErrors.hdfsMultipleColumnFamiliesNotSupported()
     }
 
     new HDFSBackedStateStoreChangeDataReader(fm, baseDir, startVersion, endVersion,
