@@ -565,9 +565,7 @@ class InheritableThread(threading.Thread):
                 thread_local.tags = self._tags  # type: ignore[has-type]
                 return target(*a, **k)
 
-            super(InheritableThread, self).__init__(
-                target=copy_local_properties, *args, **kwargs  # type: ignore[misc]
-            )
+            super().__init__(target=copy_local_properties, *args, **kwargs)  # type: ignore[misc]
         else:
             # Non Spark Connect
             from pyspark import SparkContext
@@ -586,13 +584,11 @@ class InheritableThread(threading.Thread):
                     SparkContext._active_spark_context._jsc.sc().setLocalProperties(self._props)
                     return target(*a, **k)
 
-                super(InheritableThread, self).__init__(
+                super().__init__(
                     target=copy_local_properties, *args, **kwargs  # type: ignore[misc]
                 )
             else:
-                super(InheritableThread, self).__init__(
-                    target=target, *args, **kwargs  # type: ignore[misc]
-                )
+                super().__init__(target=target, *args, **kwargs)  # type: ignore[misc]
 
     def start(self) -> None:
         from pyspark.sql import is_remote
@@ -620,7 +616,7 @@ class InheritableThread(threading.Thread):
                 if self._session is not None:
                     self._tags = self._session.getTags()
 
-        return super(InheritableThread, self).start()
+        return super().start()
 
 
 class PythonEvalType:

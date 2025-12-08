@@ -1624,12 +1624,12 @@ class SparkSession(SparkConversionMixin):
 
         if has_pandas and isinstance(data, pd.DataFrame):
             # Create a DataFrame from pandas DataFrame.
-            return super(SparkSession, self).createDataFrame(  # type: ignore[call-overload]
+            return super().createDataFrame(  # type: ignore[call-overload]
                 data, schema, samplingRatio, verifySchema
             )
         if has_pyarrow and isinstance(data, pa.Table):
             # Create a DataFrame from PyArrow Table.
-            return super(SparkSession, self).createDataFrame(  # type: ignore[call-overload]
+            return super().createDataFrame(  # type: ignore[call-overload]
                 data, schema, samplingRatio, verifySchema
             )
         return self._create_dataframe(

@@ -23,7 +23,7 @@ from pyspark.testing.mlutils import SparkSessionTestCase
 
 class ModelCacheTests(SparkSessionTestCase):
     def setUp(self):
-        super(ModelCacheTests, self).setUp()
+        super().setUp()
 
     def test_cache(self):
         def predict_fn(inputs):
