@@ -26,11 +26,6 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.metricview.serde.ColumnType.ColumnType
 import org.apache.spark.sql.metricview.serde.SourceType.SourceType
 
-// Trait representing the capability to validate an object
-private[sql] trait Validatable {
-  def validate(): Unit
-}
-
 private[sql] sealed abstract class MetricViewSerdeException(
     message: String,
     cause: Option[Throwable] = None)
@@ -52,15 +47,8 @@ private[sql] case class MetricViewYAMLParsingException(
   extends MetricViewSerdeException(message, cause)
 
 // Expression types in a Metric View
-private[sql] sealed trait Expression extends Validatable {
+private[sql] sealed trait Expression {
   def expr: String
-
-  // Validate that expression is not empty
-  def validate(): Unit = {
-    if (expr.isEmpty) {
-      throw MetricViewValidationException("expr cannot be empty")
-    }
-  }
 }
 
 // Dimension expression representing a scalar value
@@ -83,21 +71,13 @@ private[sql] object SourceType extends Enumeration {
 }
 
 // Representation of a source in the Metric View
-private[sql] sealed trait Source extends Validatable {
+private[sql] sealed trait Source {
   def sourceType: SourceType
-
-  def validate(): Unit
 }
 
 // Asset source, representing a catalog table, view, or Metric View, etc.
 private[sql] case class AssetSource(name: String) extends Source {
   val sourceType: SourceType = SourceType.ASSET
-
-  def validate(): Unit = {
-    if (name.isEmpty) {
-      throw MetricViewValidationException("Source cannot be empty")
-    }
-  }
 
   override def toString: String = this.name
 }
@@ -105,12 +85,6 @@ private[sql] case class AssetSource(name: String) extends Source {
 // SQL source, representing a SQL query
 private[sql] case class SQLSource(sql: String) extends Source {
   val sourceType: SourceType = SourceType.SQL
-
-  def validate(): Unit = {
-    if (sql.isEmpty) {
-      throw MetricViewValidationException("Source cannot be empty")
-    }
-  }
 
   override def toString: String = this.sql
 }
@@ -138,11 +112,7 @@ private[sql] object Source {
 private[sql] case class Column(
     name: String,
     expression: Expression,
-    ordinal: Int) extends Validatable {
-  override def validate(): Unit = {
-    // No validation needed
-  }
-
+    ordinal: Int) {
   def columnType: ColumnType = expression match {
     case _: DimensionExpression => ColumnType.Dimension
     case _: MeasureExpression => ColumnType.Measure
@@ -153,8 +123,14 @@ private[sql] case class Column(
   }
 
   def getColumnMetadata: ColumnMetadata = {
-    val truncatedExpr = expression.expr.take(Constants.MAXIMUM_PROPERTY_SIZE)
-    ColumnMetadata(columnType.toString, truncatedExpr)
+    val expr = expression.expr
+    if (expr.length > Constants.MAXIMUM_PROPERTY_SIZE) {
+      throw MetricViewValidationException(
+        s"Expression length ${expr.length} exceeds maximum allowed size " +
+        s"${Constants.MAXIMUM_PROPERTY_SIZE} for column '$name'"
+      )
+    }
+    ColumnMetadata(columnType.toString, expr)
   }
 }
 
@@ -184,22 +160,20 @@ private[sql] case class ColumnMetadata(
 
 // Only parse the "version" field and ignore all others
 @JsonIgnoreProperties(ignoreUnknown = true)
-private[sql] case class YAMLVersion(version: String) extends Validatable {
+private[sql] case class YAMLVersion(version: String) {
   private def validYAMLVersions: Set[String] = Set("0.1")
-  def validate(): Unit = {
+}
+
+private[sql] object YAMLVersion {
+  private def validYAMLVersions: Set[String] = Set("0.1")
+
+  def apply(version: String): YAMLVersion = {
     if (!validYAMLVersions.contains(version)) {
       throw MetricViewValidationException(
         s"Invalid YAML version: $version"
       )
     }
-  }
-}
-
-private[sql] object YAMLVersion {
-  def apply(version: String): YAMLVersion = {
-    val yamlVersion = new YAMLVersion(version)
-    yamlVersion.validate()
-    yamlVersion
+    new YAMLVersion(version)
   }
 }
 
