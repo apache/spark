@@ -73,9 +73,9 @@ class MergeIntoWriter:
 
         self._callback = callback if callback is not None else lambda _: None
         self._schema_evolution_enabled = False
-        self._matched_actions = list()  # type: List[proto.MergeAction]
-        self._not_matched_actions = list()  # type: List[proto.MergeAction]
-        self._not_matched_by_source_actions = list()  # type: List[proto.MergeAction]
+        self._matched_actions: list[proto.MergeAction] = list()
+        self._not_matched_actions: list[proto.MergeAction] = list()
+        self._not_matched_by_source_actions: list[proto.MergeAction] = list()
 
     def whenMatched(self, condition: Optional[Column] = None) -> "MergeIntoWriter.WhenMatched":
         return self.WhenMatched(self, condition)
