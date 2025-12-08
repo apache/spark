@@ -32,18 +32,6 @@ import org.apache.spark.annotation.Experimental;
  * Data sources should examine each extraction and determine which ones can be handled efficiently.
  * The return value is a boolean array of the same length, where each element indicates whether
  * the corresponding extraction was accepted.
- * <p>
- * Example usage:
- * <pre>{@code
- * // Query: SELECT variant_get(v, '$.a', 'int'), variant_get(v, '$.b', 'string') FROM table
- * VariantExtraction[] extractions = {
- *   new VariantExtraction(["v"], "$.a", IntegerType),
- *   new VariantExtraction(["v"], "$.b", StringType)
- * };
- * boolean[] pushed = scanBuilder.pushVariantExtractions(extractions);
- * // pushed[0] = true if first extraction was accepted
- * // pushed[1] = true if second extraction was accepted
- * }</pre>
  *
  * @since 4.1.0
  */
