@@ -176,7 +176,7 @@
     <scala.version>2.13.17</scala.version>
     <scala.binary.version>2.13</scala.binary.version>
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
-    <scala-maven-plugin.version>4.9.5</scala-maven-plugin.version>
+    <scala-maven-plugin.version>4.9.7</scala-maven-plugin.version>
     <maven.scaladoc.skip>false</maven.scaladoc.skip>
     <versions-maven-plugin.version>2.18.0</versions-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
@@ -200,7 +200,7 @@
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <guava.version>33.4.8-jre</guava.version>
     <guava.failureaccess.version>1.0.3</guava.failureaccess.version>
-    <gson.version>2.11.0</gson.version>
+    <gson.version>2.13.2</gson.version>
     <janino.version>3.1.9</janino.version>
     <jersey.version>3.0.18</jersey.version>
     <joda.version>2.14.0</joda.version>
@@ -215,7 +215,7 @@
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.10.0</commons-cli.version>
     <bouncycastle.version>1.82</bouncycastle.version>
-    <tink.version>1.16.0</tink.version>
+    <tink.version>1.19.0</tink.version>
     <datasketches.version>6.2.0</datasketches.version>
     <netty.version>4.2.7.Final</netty.version>
     <netty-tcnative.version>2.0.74.Final</netty-tcnative.version>
@@ -233,7 +233,7 @@
     ./python/packaging/client/setup.py, and ./python/packaging/connect/setup.py too.
     -->
     <arrow.version>18.3.0</arrow.version>
-    <ammonite.version>3.0.3</ammonite.version>
+    <ammonite.version>3.0.4</ammonite.version>
     <jjwt.version>0.12.6</jjwt.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
@@ -881,7 +881,7 @@
       <dependency>
         <groupId>at.yawk.lz4</groupId>
         <artifactId>lz4-java</artifactId>
-        <version>1.10.0</version>
+        <version>1.10.1</version>
       </dependency>
       <dependency>
         <groupId>com.github.luben</groupId>
