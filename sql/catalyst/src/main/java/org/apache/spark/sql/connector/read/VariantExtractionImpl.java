@@ -21,7 +21,7 @@ import java.io.Serializable;
 import java.util.Arrays;
 import java.util.Objects;
 
-import org.apache.spark.annotation.Evolving;
+import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Metadata;
 
@@ -30,7 +30,7 @@ import org.apache.spark.sql.types.Metadata;
  *
  * @since 4.1.0
  */
-@Evolving
+@Experimental
 public final class VariantExtractionImpl implements VariantExtraction, Serializable {
   private final String[] columnName;
   private final DataType expectedDataType;

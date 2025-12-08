@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector.read;
 
-import org.apache.spark.annotation.Evolving;
+import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Metadata;
 
@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.Metadata;
  *
  * @since 4.1.0
  */
-@Evolving
+@Experimental
 public interface VariantExtraction {
   /**
    * Returns the path to the variant column. For top-level variant columns, this is a single
