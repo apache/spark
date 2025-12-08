@@ -3559,7 +3559,8 @@ class AstBuilder extends DataTypeAstBuilder
         throw QueryParsingErrors.literalValueTypeUnsupportedError(
           unsupportedType = ctx.literalType.getText,
           supportedTypes =
-            Seq("DATE", "TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "TIMESTAMP", "INTERVAL", "X"),
+            // TODO: Remove TIME from the list.
+            Seq("DATE", "TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "TIMESTAMP", "INTERVAL", "X", "TIME"),
           ctx)
     }
   }
