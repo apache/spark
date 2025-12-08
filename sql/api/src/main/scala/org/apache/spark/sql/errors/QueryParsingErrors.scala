@@ -821,6 +821,15 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def emptyInPredicateError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_SQL_SYNTAX.EMPTY_IN_PREDICATE",
+      messageParameters = Map(
+        "alternative" -> ("Consider using 'WHERE FALSE' if you need an always-false condition, " +
+          "or provide at least one value in the IN list.")),
+      ctx)
+  }
+  
   /**
    * Throws an internal error for unexpected parameter markers found during AST building. This
    * should be unreachable in normal operation due to grammar-level blocking.
