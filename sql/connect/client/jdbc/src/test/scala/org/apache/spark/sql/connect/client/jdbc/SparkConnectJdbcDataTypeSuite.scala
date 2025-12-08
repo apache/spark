@@ -315,7 +315,8 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
           withExecuteQuery(stmt, s"SELECT $query") { rs =>
             assert(rs.next())
             expectedValue match {
-              case arr: Array[Byte] => assert(getter(rs).asInstanceOf[Array[Byte]].sameElements(arr))
+              case arr: Array[Byte] =>
+                assert(getter(rs).asInstanceOf[Array[Byte]].sameElements(arr))
               case other => assert(getter(rs) === other)
             }
             assert(!rs.wasNull)
@@ -648,13 +649,14 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       }
 
       // Test timestamp type by column label and with calendar
-      withExecuteQuery(stmt, "SELECT timestamp '2025-11-15 10:30:45.987654' as test_timestamp") { rs =>
+      val tsString = "2025-11-15 10:30:45.987654"
+      withExecuteQuery(stmt, s"SELECT timestamp '$tsString' as test_timestamp") { rs =>
         assert(rs.next())
 
         // Test by column label
         val timestamp = rs.getTimestamp("test_timestamp")
         assert(timestamp !== null)
-        assert(timestamp === java.sql.Timestamp.valueOf("2025-11-15 10:30:45.987654"))
+        assert(timestamp === java.sql.Timestamp.valueOf(tsString))
         assert(!rs.wasNull)
 
         // Test with calendar - should return same value (Calendar is ignored)
@@ -724,13 +726,14 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       }
 
       // Test timestamp_ntz by label, null, and with calendar - non-null value
-      withExecuteQuery(stmt, "SELECT timestamp_ntz '2025-11-15 14:22:33.789456' as test_ts_ntz") { rs =>
+      val tsString = "2025-11-15 14:22:33.789456"
+      withExecuteQuery(stmt, s"SELECT timestamp_ntz '$tsString' as test_ts_ntz") { rs =>
         assert(rs.next())
 
         // Test by column label
         val timestamp = rs.getTimestamp("test_ts_ntz")
         assert(timestamp !== null)
-        assert(timestamp === java.sql.Timestamp.valueOf("2025-11-15 14:22:33.789456"))
+        assert(timestamp === java.sql.Timestamp.valueOf(tsString))
         assert(!rs.wasNull)
 
         // Test with calendar - should return same value (Calendar is ignored)
