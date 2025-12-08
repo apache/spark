@@ -2700,13 +2700,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         args = locals()
 
         pdf = self._to_internal_pandas()
-        # SPARK-54068: Clear non-serializable attrs before feather write.
-        # PyArrow >= 22.0.0 serializes DataFrame.attrs to JSON metadata, but
-        # PlanMetrics/PlanObservedMetrics objects from Spark Connect are not
-        # JSON serializable. We clear these attrs since they are internal
-        # execution metadata not needed in the output file.
-        pdf.attrs = {k: v for k, v in pdf.attrs.items()
-                     if k not in ("metrics", "observed_metrics")}
+        # SPARK-54068: PyArrow >= 22.0.0 serializes DataFrame.attrs to JSON metadata,
+        # but PlanMetrics/PlanObservedMetrics objects from Spark Connect are not
+        # JSON serializable. We filter these internal attrs only for affected versions.
+        import pyarrow as pa
+        from pyspark.loose_version import LooseVersion
+
+        if LooseVersion(pa.__version__) >= LooseVersion("22.0.0"):
+            pdf.attrs = {
+                k: v for k, v in pdf.attrs.items() if k not in ("metrics", "observed_metrics")
+            }
 
         return validate_arguments_and_invoke_function(
             pdf, self.to_feather, pd.DataFrame.to_feather, args
