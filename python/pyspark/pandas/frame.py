@@ -2699,8 +2699,20 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         # Make sure locals() call is at the top of the function so we don't capture local variables.
         args = locals()
 
+        pdf = self._to_internal_pandas()
+        # SPARK-54068: PyArrow >= 22.0.0 serializes DataFrame.attrs to JSON metadata,
+        # but PlanMetrics/PlanObservedMetrics objects from Spark Connect are not
+        # JSON serializable. We filter these internal attrs only for affected versions.
+        import pyarrow as pa
+        from pyspark.loose_version import LooseVersion
+
+        if LooseVersion(pa.__version__) >= LooseVersion("22.0.0"):
+            pdf.attrs = {
+                k: v for k, v in pdf.attrs.items() if k not in ("metrics", "observed_metrics")
+            }
+
         return validate_arguments_and_invoke_function(
-            self._to_internal_pandas(), self.to_feather, pd.DataFrame.to_feather, args
+            pdf, self.to_feather, pd.DataFrame.to_feather, args
         )
 
     def to_stata(
