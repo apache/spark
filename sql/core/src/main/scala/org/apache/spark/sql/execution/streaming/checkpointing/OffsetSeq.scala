@@ -110,22 +110,7 @@ object OffsetSeq {
   def fill(metadataOpt: Option[String], offsets: OffsetV2*): OffsetSeq = {
     OffsetSeq(offsets.map(Option(_)), metadataOpt.map(OffsetSeqMetadata.apply))
   }
-
-  /**
-   * Returns a [[OffsetSeqV2]] with metadata and a variable sequence of offsets.
-   * `nulls` in the sequence are converted to `None`s.
-   */
-  def fillV2(metadataOpt: Option[String], offsets: OffsetV2*): OffsetSeqV2 = {
-    OffsetSeqV2(offsets.map(Option(_)), metadataOpt.map(OffsetSeqMetadataV2.apply))
-  }
 }
-
-/**
- * Version 2 of OffsetSeq that uses OffsetSeqMetadataV2 for metadata.
- */
-case class OffsetSeqV2(
-    offsets: Seq[Option[OffsetV2]],
-    metadataOpt: Option[OffsetSeqMetadataV2] = None) extends OffsetSeqBase
 
 /**
  * A map-based collection of offsets, used to track the progress of processing data from one or more
@@ -144,6 +129,16 @@ case class OffsetMap(
   }
 }
 
+/**
+ * Base trait for offset sequence metadata.
+ *
+ * Valid combinations of offset log versions and metadata types:
+ * - VERSION_1 (sequence-based offset log): Uses [[OffsetSeq]] with [[OffsetSeqMetadata]]
+ * - VERSION_2 (map-based offset log): Uses [[OffsetMap]] with [[OffsetSeqMetadataV2]]
+ *
+ * The metadata version must match the offset log version for proper serialization and
+ * deserialization.
+ */
 trait OffsetSeqMetadataBase extends Serializable {
   def batchWatermarkMs: Long
   def batchTimestampMs: Long
@@ -157,6 +152,8 @@ trait OffsetSeqMetadataBase extends Serializable {
 /**
  * Contains metadata associated with a [[OffsetSeq]]. This information is
  * persisted to the offset log in the checkpoint location via the [[OffsetSeq]] metadata field.
+ *
+ * This is VERSION_1 metadata, used with sequence-based [[OffsetSeq]].
  *
  * @param batchWatermarkMs: The current eventTime watermark, used to
  * bound the lateness of data that will processed. Time unit: milliseconds
@@ -357,6 +354,8 @@ object OffsetSeqControlBatchInfo {
 /**
  * Contains metadata associated with a [[OffsetMap]]. This information is
  * persisted to the offset log in the checkpoint location via the [[OffsetMap]] metadata field.
+ *
+ * This is VERSION_2 metadata, used with map-based [[OffsetMap]].
  *
  * @param batchWatermarkMs: The current eventTime watermark, used to
  * bound the lateness of data that will processed. Time unit: milliseconds
