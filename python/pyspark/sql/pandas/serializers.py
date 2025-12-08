@@ -1283,10 +1283,10 @@ class ArrowStreamAggPandasIterUDFSerializer(ArrowStreamPandasUDFSerializer):
         assign_cols_by_name,
         int_to_decimal_coercion_enabled,
     ):
-        super(ArrowStreamAggPandasIterUDFSerializer, self).__init__(
+        super().__init__(
             timezone=timezone,
             safecheck=safecheck,
-            assign_cols_by_name=False,
+            assign_cols_by_name=assign_cols_by_name,
             df_for_struct=False,
             struct_in_pandas="dict",
             ndarray_as_list=False,
@@ -1294,9 +1294,6 @@ class ArrowStreamAggPandasIterUDFSerializer(ArrowStreamPandasUDFSerializer):
             input_types=None,
             int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
         )
-        self._timezone = timezone
-        self._safecheck = safecheck
-        self._assign_cols_by_name = assign_cols_by_name
 
     def load_stream(self, stream):
         """
