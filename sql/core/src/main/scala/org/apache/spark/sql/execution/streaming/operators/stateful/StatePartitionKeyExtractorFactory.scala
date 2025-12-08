@@ -73,6 +73,8 @@ object StatePartitionKeyExtractorFactory {
       case fmg if FLAT_MAP_GROUPS_OP_NAMES.contains(fmg) =>
         new FlatMapGroupsWithStatePartitionKeyExtractor(stateKeySchema)
       case tws if TRANSFORM_WITH_STATE_OP_NAMES.contains(tws) =>
+        require(stateVariableInfo.isDefined,
+          "stateVariableInfo is required for TransformWithState")
         TransformWithStatePartitionKeyExtractorFactory.create(
           storeName, colFamilyName, stateKeySchema, stateVariableInfo.get)
       case _ => throw OfflineStateRepartitionErrors

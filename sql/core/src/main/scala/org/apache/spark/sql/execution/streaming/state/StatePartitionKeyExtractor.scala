@@ -83,8 +83,12 @@ class IndexBasedStatePartitionKeyExtractor(stateKeySchema: StructType, partition
  */
 class DropLastNFieldsStatePartitionKeyExtractor(stateKeySchema: StructType, numLastColsToDrop: Int)
   extends StatePartitionKeyExtractor {
-  override lazy val partitionKeySchema: StructType =
+  override lazy val partitionKeySchema: StructType = {
+    require(numLastColsToDrop < stateKeySchema.length,
+      s"numLastColsToDrop: $numLastColsToDrop must be less than the number of fields in the " +
+        s"state key schema: ${stateKeySchema.length}, to avoid empty partition key schema")
     StructType(stateKeySchema.dropRight(numLastColsToDrop))
+  }
 
   private lazy val partitionKeyExpr: Array[BoundReference] =
     partitionKeySchema.fields.zipWithIndex.map { case (field, index) =>
