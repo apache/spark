@@ -829,7 +829,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
           "or provide at least one value in the IN list.")),
       ctx)
   }
-  
+
   /**
    * Throws an internal error for unexpected parameter markers found during AST building. This
    * should be unreachable in normal operation due to grammar-level blocking.
