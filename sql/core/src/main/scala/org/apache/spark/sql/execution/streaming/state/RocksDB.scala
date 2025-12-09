@@ -560,6 +560,7 @@ class RocksDB(
     fileManager.setMaxSeenVersion(version)
     openLocalRocksDB(metadata)
   }
+
   private def loadWithoutCheckpointId(
       version: Long,
       readOnly: Boolean = false,
@@ -593,7 +594,7 @@ class RocksDB(
         nativeStats.reset
       }
       if (loadEmpty) {
-        logInfo(log"Created empty store at version ${MDC(LogKeys.VERSION_NUM, version)}")
+        logInfo(log"Loaded empty store at version ${MDC(LogKeys.VERSION_NUM, version)}")
       } else {
         logInfo(log"Loaded ${MDC(LogKeys.VERSION_NUM, version)}")
       }
@@ -744,7 +745,7 @@ class RocksDB(
     // mistakenly applying new changelog to older state version
     enableChangelogCheckpointing = if (loadEmpty) false else conf.enableChangelogCheckpointing
     if (stateStoreCkptId.isDefined || enableStateStoreCheckpointIds && version == 0) {
-      assert(!loadEmpty, "loadEmpty not support for checkpointV2 yet")
+      assert(!loadEmpty, "loadEmpty not supported for checkpointV2 yet")
       loadWithCheckpointId(version, stateStoreCkptId, readOnly)
     } else {
       loadWithoutCheckpointId(version, readOnly, loadEmpty)

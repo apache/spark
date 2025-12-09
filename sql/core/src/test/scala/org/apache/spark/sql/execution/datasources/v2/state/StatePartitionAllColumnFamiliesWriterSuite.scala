@@ -100,7 +100,8 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
       spark, targetCpLocation)
     val lastBatch = targetCheckpointMetadata.commitLog.getLatestBatchId().get
     val targetOffsetSeq = targetCheckpointMetadata.offsetLog.get(lastBatch).get
-    targetCheckpointMetadata.offsetLog.add(lastBatch + 1, targetOffsetSeq)
+    val currentBatchId = lastBatch + 1
+    targetCheckpointMetadata.offsetLog.add(currentBatchId, targetOffsetSeq)
 
     // Create column family to schema map
     val columnFamilyToSchemaMap = HashMap(
@@ -126,7 +127,7 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
         targetCpLocation,
         0,
         storeName.getOrElse(StateStoreId.DEFAULT_STORE_NAME),
-        lastBatch + 1,
+        currentBatchId,
         columnFamilyToSchemaMap
       )
       val rowConverter = CatalystTypeConverters.createToCatalystConverter(schema)
@@ -139,11 +140,11 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
 
     // Commit to commitLog
     val latestCommit = targetCheckpointMetadata.commitLog.get(lastBatch).get
-    targetCheckpointMetadata.commitLog.add(lastBatch + 1, latestCommit)
-    val batchToCheck = lastBatch + 2
+    targetCheckpointMetadata.commitLog.add(currentBatchId, latestCommit)
+    val versionToCheck = currentBatchId + 1
     val storeNamePath = s"state/0/0${storeName.fold("")("/" + _)}"
-    assert(!checkpointFileExists(new File(targetDir, storeNamePath), batchToCheck, ".changelog"))
-    assert(checkpointFileExists(new File(targetDir, storeNamePath), batchToCheck, ".zip"))
+    assert(!checkpointFileExists(new File(targetDir, storeNamePath), versionToCheck, ".changelog"))
+    assert(checkpointFileExists(new File(targetDir, storeNamePath), versionToCheck, ".zip"))
 
     // Step 4: Read from target using normal reader
     val targetReader = spark.read
@@ -502,12 +503,10 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
       testRoundTripForAggrStateVersion(2)
     }
 
-    testWithChangelogConfig("SPARK-54420: composite key aggregation state ver 1") {
-      testCompositeKeyRoundTripForStateVersion(1)
-    }
-
-    testWithChangelogConfig("SPARK-54420: composite key aggregation state ver 2") {
-      testCompositeKeyRoundTripForStateVersion(2)
+    Seq(1, 2).foreach { version =>
+      testWithChangelogConfig(s"SPARK-54420: composite key aggregation state ver $version") {
+        testCompositeKeyRoundTripForStateVersion(version)
+      }
     }
 
     testWithChangelogConfig("SPARK-54420: dropDuplicatesWithinWatermark") {
@@ -666,20 +665,16 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
       }
     }
 
-    testWithChangelogConfig("SPARK-54420: flatMapGroupsWithState state ver 1") {
-      testFlatMapGroupsWithStateRoundTrip(1)
+    Seq(1, 2).foreach { version =>
+      testWithChangelogConfig(s"SPARK-54420: flatMapGroupsWithState state ver $version") {
+        testFlatMapGroupsWithStateRoundTrip(version)
+      }
     }
 
-    testWithChangelogConfig("SPARK-54420: flatMapGroupsWithState state ver 2") {
-      testFlatMapGroupsWithStateRoundTrip(2)
-    }
-
-    testWithChangelogConfig("SPARK-54420: stream-stream join state ver 1") {
-      testStreamStreamJoinRoundTrip(1)
-    }
-
-    testWithChangelogConfig("SPARK-54420: stream-stream join state ver 2") {
-      testStreamStreamJoinRoundTrip(2)
+    Seq(1, 2).foreach { version =>
+      testWithChangelogConfig(s"SPARK-54420: stream-stream join state ver $version") {
+        testStreamStreamJoinRoundTrip(version)
+      }
     }
   } // End of foreach loop for changelog checkpointing dimension
 }

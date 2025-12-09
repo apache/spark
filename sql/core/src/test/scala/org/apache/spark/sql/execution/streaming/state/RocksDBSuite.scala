@@ -3967,6 +3967,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       db.put("c", "3")
       val (version3, _) = db.commit()
       assert(db.get("b") === null)
+      assert(db.get("a") === null)
       assert(toStr(db.get("c")) === "3")
       assert(version3 === version2 + 1)
 
@@ -3977,6 +3978,11 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
       assert(db.get("c") === null)
       assert(toStr(db.get("d")) === "4")
       assert(version4 === version3 + 1)
+
+      db.load(version4)
+      db.put("e", "5")
+      db.commit()
+      assert(db.iterator().map(toStr).toSet === Set(("d", "4"), ("e", "5")))
     }
   }
 
