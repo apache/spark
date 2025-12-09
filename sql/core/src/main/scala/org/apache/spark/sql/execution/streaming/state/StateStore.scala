@@ -1149,7 +1149,9 @@ object StateStore extends Logging {
         threadPool.shutdownNow() // Cancel currently executing tasks
 
         // Wait a while for tasks to respond to being cancelled
-        if (!threadPool.awaitTermination(60, TimeUnit.SECONDS)) {
+        // To avoid long test times, use minimum of timeout value or 60 seconds
+        if (!threadPool.awaitTermination(Math.min(60, shutdownTimeout),
+          TimeUnit.SECONDS)) {
           logError("MaintenanceThreadPool did not terminate")
         }
       }
