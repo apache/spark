@@ -469,6 +469,7 @@ package object config {
       s" (the adjustment happens if ${EXECUTOR_BURSTY_MEMORY_OVERHEAD_ENABLED.key} is enabled," +
       " in MiB unless otherwise specified. This parameter is here only for UI demonstration," +
       " there is not effect when user sets it directly")
+    .internal()
     .version("4.2.0")
     .bytesConf(ByteUnit.MiB)
     .createOptional
