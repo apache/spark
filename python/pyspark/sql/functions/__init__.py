@@ -244,6 +244,7 @@ __all__ = [  # noqa: F405
     "second",
     "session_window",
     "timestamp_add",
+    "timestamp_bucket",
     "timestamp_diff",
     "timestamp_micros",
     "timestamp_millis",

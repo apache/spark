@@ -6868,6 +6868,52 @@ object functions {
     Column.internalFn("timestampadd", lit(unit), quantity, ts)
 
   /**
+   * Returns the start of the timestamp bucket containing the input timestamp, aligned to the Unix
+   * epoch (1970-01-01 00:00:00 UTC).
+   *
+   * Buckets are fixed-width intervals specified by the `bucketWidth` parameter. For example,
+   * hourly (INTERVAL '1' HOUR), 6-hour (INTERVAL '6' HOUR), or weekly (INTERVAL '7' DAY) buckets.
+   *
+   * @param bucketWidth
+   *   A day-time interval expression specifying the width of each bucket. Must be a
+   *   constant/foldable positive interval.
+   * @param timestamp
+   *   The temporal value to bucket. Accepts DATE, TIMESTAMP, or TIMESTAMP_NTZ. DATE values are
+   *   implicitly cast to TIMESTAMP at midnight.
+   * @return
+   *   The start timestamp of the bucket (TIMESTAMP type).
+   * @group datetime_funcs
+   * @since 4.2.0
+   */
+  def timestamp_bucket(bucketWidth: Column, timestamp: Column): Column =
+    Column.fn("timestamp_bucket", bucketWidth, timestamp)
+
+  /**
+   * Returns the start of the timestamp bucket containing the input timestamp, aligned to the
+   * specified origin.
+   *
+   * Buckets are fixed-width intervals specified by the `bucketWidth` parameter, and aligned
+   * relative to the `origin` timestamp. This allows custom bucket boundaries such as
+   * Monday-aligned weeks, fiscal year starts, or shift times.
+   *
+   * @param bucketWidth
+   *   A day-time interval expression specifying the width of each bucket. Must be a
+   *   constant/foldable positive interval.
+   * @param timestamp
+   *   The temporal value to bucket. Accepts DATE, TIMESTAMP, or TIMESTAMP_NTZ. DATE values are
+   *   implicitly cast to TIMESTAMP at midnight.
+   * @param origin
+   *   The timestamp to align buckets to. Must be a constant/foldable TIMESTAMP. For example, use
+   *   TIMESTAMP'1970-01-05' for Monday-aligned weeks.
+   * @return
+   *   The start timestamp of the bucket (TIMESTAMP type).
+   * @group datetime_funcs
+   * @since 4.2.0
+   */
+  def timestamp_bucket(bucketWidth: Column, timestamp: Column, origin: Column): Column =
+    Column.fn("timestamp_bucket", bucketWidth, timestamp, origin)
+
+  /**
    * Returns the difference between two times, measured in specified units. Throws a
    * SparkIllegalArgumentException, in case the specified unit is not supported.
    *

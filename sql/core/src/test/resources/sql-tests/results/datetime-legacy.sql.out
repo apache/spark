@@ -1193,6 +1193,184 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
+select timestamp_bucket(INTERVAL '1' HOUR, timestamp'2024-12-04 14:30:00')
+-- !query schema
+struct<timestamp_bucket(INTERVAL '01' HOUR, TIMESTAMP '2024-12-04 14:30:00', TIMESTAMP '1969-12-31 16:00:00'):timestamp>
+-- !query output
+2024-12-04 14:00:00
+
+
+-- !query
+select timestamp_bucket(INTERVAL '6' HOUR, timestamp'2024-12-04 14:30:00')
+-- !query schema
+struct<timestamp_bucket(INTERVAL '06' HOUR, TIMESTAMP '2024-12-04 14:30:00', TIMESTAMP '1969-12-31 16:00:00'):timestamp>
+-- !query output
+2024-12-04 10:00:00
+
+
+-- !query
+select timestamp_bucket(INTERVAL '1' DAY, timestamp'2024-12-04 14:30:00')
+-- !query schema
+struct<timestamp_bucket(INTERVAL '1' DAY, TIMESTAMP '2024-12-04 14:30:00', TIMESTAMP '1969-12-31 16:00:00'):timestamp>
+-- !query output
+2024-12-03 16:00:00
+
+
+-- !query
+select timestamp_bucket(INTERVAL '7' DAY, timestamp'2024-12-04 14:30:00')
+-- !query schema
+struct<timestamp_bucket(INTERVAL '7' DAY, TIMESTAMP '2024-12-04 14:30:00', TIMESTAMP '1969-12-31 16:00:00'):timestamp>
+-- !query output
+2024-11-27 16:00:00
+
+
+-- !query
+select timestamp_bucket(INTERVAL '15' MINUTE, timestamp'2024-12-04 14:47:00')
+-- !query schema
+struct<timestamp_bucket(INTERVAL '15' MINUTE, TIMESTAMP '2024-12-04 14:47:00', TIMESTAMP '1969-12-31 16:00:00'):timestamp>
+-- !query output
+2024-12-04 14:45:00
+
+
+-- !query
+select timestamp_bucket(INTERVAL '7' DAY, date'2024-12-04', timestamp'1970-01-05 00:00:00')
+-- !query schema
+struct<timestamp_bucket(INTERVAL '7' DAY, DATE '2024-12-04', TIMESTAMP '1970-01-05 00:00:00'):timestamp>
+-- !query output
+2024-12-02 00:00:00
+
+
+-- !query
+select timestamp_bucket(INTERVAL '7' DAY, date'2024-12-04', timestamp'1970-01-04 00:00:00')
+-- !query schema
+struct<timestamp_bucket(INTERVAL '7' DAY, DATE '2024-12-04', TIMESTAMP '1970-01-04 00:00:00'):timestamp>
+-- !query output
+2024-12-01 00:00:00
+
+
+-- !query
+select timestamp_bucket(INTERVAL '6' HOUR, timestamp'2024-12-04 14:30:00', timestamp'2024-12-04 03:00:00')
+-- !query schema
+struct<timestamp_bucket(INTERVAL '06' HOUR, TIMESTAMP '2024-12-04 14:30:00', TIMESTAMP '2024-12-04 03:00:00'):timestamp>
+-- !query output
+2024-12-04 09:00:00
+
+
+-- !query
+select timestamp_bucket(INTERVAL '7' DAY, date'2024-12-04')
+-- !query schema
+struct<timestamp_bucket(INTERVAL '7' DAY, DATE '2024-12-04', TIMESTAMP '1969-12-31 16:00:00'):timestamp>
+-- !query output
+2024-11-27 16:00:00
+
+
+-- !query
+select timestamp_bucket(INTERVAL '1' HOUR, timestamp'2024-12-04 14:30:00')
+-- !query schema
+struct<timestamp_bucket(INTERVAL '01' HOUR, TIMESTAMP '2024-12-04 14:30:00', TIMESTAMP '1969-12-31 16:00:00'):timestamp>
+-- !query output
+2024-12-04 14:00:00
+
+
+-- !query
+select timestamp_bucket(INTERVAL '1' HOUR, timestamp_ntz'2024-12-04 14:30:00')
+-- !query schema
+struct<timestamp_bucket(INTERVAL '01' HOUR, TIMESTAMP_NTZ '2024-12-04 14:30:00', TIMESTAMP '1969-12-31 16:00:00'):timestamp>
+-- !query output
+2024-12-04 06:00:00
+
+
+-- !query
+select timestamp_bucket(INTERVAL '1' HOUR, timestamp'1969-12-31 23:30:00')
+-- !query schema
+struct<timestamp_bucket(INTERVAL '01' HOUR, TIMESTAMP '1969-12-31 23:30:00', TIMESTAMP '1969-12-31 16:00:00'):timestamp>
+-- !query output
+1969-12-31 23:00:00
+
+
+-- !query
+select timestamp_bucket(INTERVAL '6' HOUR, timestamp'2023-12-31 22:00:00', timestamp'2024-01-01 00:00:00')
+-- !query schema
+struct<timestamp_bucket(INTERVAL '06' HOUR, TIMESTAMP '2023-12-31 22:00:00', TIMESTAMP '2024-01-01 00:00:00'):timestamp>
+-- !query output
+2023-12-31 18:00:00
+
+
+-- !query
+select timestamp_bucket(INTERVAL '1' HOUR, CAST(NULL AS TIMESTAMP))
+-- !query schema
+struct<timestamp_bucket(INTERVAL '01' HOUR, CAST(NULL AS TIMESTAMP), TIMESTAMP '1969-12-31 16:00:00'):timestamp>
+-- !query output
+NULL
+
+
+-- !query
+select timestamp_bucket(CAST(NULL AS INTERVAL DAY), timestamp'2024-12-04 14:30:00')
+-- !query schema
+struct<timestamp_bucket(CAST(NULL AS INTERVAL DAY), TIMESTAMP '2024-12-04 14:30:00', TIMESTAMP '1969-12-31 16:00:00'):timestamp>
+-- !query output
+NULL
+
+
+-- !query
+select timestamp_bucket(INTERVAL '1' HOUR, timestamp'2024-12-04', CAST(NULL AS TIMESTAMP))
+-- !query schema
+struct<timestamp_bucket(INTERVAL '01' HOUR, TIMESTAMP '2024-12-04 00:00:00', CAST(NULL AS TIMESTAMP)):timestamp>
+-- !query output
+NULL
+
+
+-- !query
+select timestamp_bucket(INTERVAL '0' SECOND, timestamp'2024-12-04')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "currentValue" : "0",
+    "exprName" : "bucket_width",
+    "sqlExpr" : "\"timestamp_bucket(INTERVAL '00' SECOND, TIMESTAMP '2024-12-04 00:00:00', TIMESTAMP '1969-12-31 16:00:00')\"",
+    "valueRange" : "(0, 9223372036854775807]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 67,
+    "fragment" : "timestamp_bucket(INTERVAL '0' SECOND, timestamp'2024-12-04')"
+  } ]
+}
+
+
+-- !query
+select timestamp_bucket(INTERVAL '-1' HOUR, timestamp'2024-12-04')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "currentValue" : "-3600000000",
+    "exprName" : "bucket_width",
+    "sqlExpr" : "\"timestamp_bucket(INTERVAL '-01' HOUR, TIMESTAMP '2024-12-04 00:00:00', TIMESTAMP '1969-12-31 16:00:00')\"",
+    "valueRange" : "(0, 9223372036854775807]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 66,
+    "fragment" : "timestamp_bucket(INTERVAL '-1' HOUR, timestamp'2024-12-04')"
+  } ]
+}
+
+
+-- !query
 select timestamp '2019-01-01\t'
 -- !query schema
 struct<TIMESTAMP '2019-01-01 00:00:00':timestamp>

@@ -371,6 +371,7 @@
 | org.apache.spark.sql.catalyst.expressions.TimeToSeconds | time_to_seconds | SELECT time_to_seconds(TIME'00:00:00') | struct<time_to_seconds(TIME '00:00:00'):decimal(14,6)> |
 | org.apache.spark.sql.catalyst.expressions.TimeTrunc | time_trunc | SELECT time_trunc('HOUR', TIME'09:32:05.359') | struct<time_trunc(HOUR, TIME '09:32:05.359'):time(6)> |
 | org.apache.spark.sql.catalyst.expressions.TimeWindow | window | SELECT a, window.start, window.end, count(*) as cnt FROM VALUES ('A1', '2021-01-01 00:00:00'), ('A1', '2021-01-01 00:04:30'), ('A1', '2021-01-01 00:06:00'), ('A2', '2021-01-01 00:01:00') AS tab(a, b) GROUP by a, window(b, '5 minutes') ORDER BY a, start | struct<a:string,start:timestamp,end:timestamp,cnt:bigint> |
+| org.apache.spark.sql.catalyst.expressions.TimestampBucket | timestamp_bucket | SELECT timestamp_bucket(INTERVAL '1' HOUR, TIMESTAMP'2024-12-04 14:30:00', TIMESTAMP'2024-12-04 00:00:00') | struct<timestamp_bucket(INTERVAL '01' HOUR, TIMESTAMP '2024-12-04 14:30:00', TIMESTAMP '2024-12-04 00:00:00'):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.ToBinary | to_binary | SELECT to_binary('abc', 'utf-8') | struct<to_binary(abc, utf-8):binary> |
 | org.apache.spark.sql.catalyst.expressions.ToCharacterBuilder | to_char | SELECT to_char(454, '999') | struct<to_char(454, 999):string> |
 | org.apache.spark.sql.catalyst.expressions.ToCharacterBuilder | to_varchar | SELECT to_varchar(454, '999') | struct<to_char(454, 999):string> |
