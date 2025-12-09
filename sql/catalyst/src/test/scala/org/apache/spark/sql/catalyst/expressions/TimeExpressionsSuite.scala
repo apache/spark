@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch,
 import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLId, toSQLValue}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils.localTimeToNanos
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal, DecimalType, IntegerType, LongType, StringType, TimeType}
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, SECOND}
 
@@ -594,76 +593,49 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Numeric to TIME conversions - range validation") {
-    // Test non-ANSI mode: returns NULL for out-of-range values
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
-      // time_from_seconds - out of range [0, 86400)
-      checkEvaluation(TimeFromSeconds(Literal(-1L)), null)
-      checkEvaluation(TimeFromSeconds(Literal(86400L)), null)
-      checkEvaluation(TimeFromSeconds(Literal(90000L)), null)
-      checkEvaluation(TimeFromSeconds(Literal(Decimal(-0.1))), null)
-      checkEvaluation(TimeFromSeconds(Literal(Decimal(86400.0))), null)
 
-      // time_from_millis - out of range [0, 86400000)
-      checkEvaluation(TimeFromMillis(Literal(-1L)), null)
-      checkEvaluation(TimeFromMillis(Literal(86400000L)), null)
+    // time_from_seconds - out of range [0, 86400)
+    checkExceptionInExpression[SparkDateTimeException](
+      TimeFromSeconds(Literal(-1L)),
+      "Invalid TIME value")
+    checkExceptionInExpression[SparkDateTimeException](
+      TimeFromSeconds(Literal(86400L)),
+      "Invalid TIME value")
+    checkExceptionInExpression[SparkDateTimeException](
+      TimeFromSeconds(Literal(Decimal(-0.1))),
+      "Invalid TIME value")
+    checkExceptionInExpression[SparkDateTimeException](
+      TimeFromSeconds(Literal(Decimal(86400.0))),
+      "Invalid TIME value")
 
-      // time_from_micros - out of range [0, 86400000000)
-      checkEvaluation(TimeFromMicros(Literal(-1L)), null)
-      checkEvaluation(TimeFromMicros(Literal(86400000000L)), null)
+    // time_from_millis - out of range [0, 86400000)
+    checkExceptionInExpression[SparkDateTimeException](
+      TimeFromMillis(Literal(-1L)),
+      "Invalid TIME value")
+    checkExceptionInExpression[SparkDateTimeException](
+      TimeFromMillis(Literal(86400000L)),
+      "Invalid TIME value")
 
-      // Test overflow in TIME conversion - returns NULL in non-ANSI mode
-      checkEvaluation(TimeFromSeconds(Literal(Long.MaxValue)), null)
+    // time_from_micros - out of range [0, 86400000000)
+    checkExceptionInExpression[SparkDateTimeException](
+      TimeFromMicros(Literal(-1L)),
+      "Invalid TIME value")
+    checkExceptionInExpression[SparkDateTimeException](
+      TimeFromMicros(Literal(86400000000L)),
+      "Invalid TIME value")
 
-      // Test NaN and Infinite for floating point - returns NULL in non-ANSI mode
-      checkEvaluation(TimeFromSeconds(Literal(Float.NaN)), null)
-      checkEvaluation(TimeFromSeconds(Literal(Double.PositiveInfinity)), null)
-    }
+    // Test overflow in TIME conversion
+    checkExceptionInExpression[SparkDateTimeException](
+      TimeFromSeconds(Literal(Long.MaxValue)),
+      "Overflow in TIME conversion")
 
-    // Test ANSI mode: throws exceptions for out-of-range values
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      // time_from_seconds - out of range [0, 86400)
-      checkExceptionInExpression[SparkDateTimeException](
-        TimeFromSeconds(Literal(-1L)),
-        "Invalid TIME value")
-      checkExceptionInExpression[SparkDateTimeException](
-        TimeFromSeconds(Literal(86400L)),
-        "Invalid TIME value")
-      checkExceptionInExpression[SparkDateTimeException](
-        TimeFromSeconds(Literal(Decimal(-0.1))),
-        "Invalid TIME value")
-      checkExceptionInExpression[SparkDateTimeException](
-        TimeFromSeconds(Literal(Decimal(86400.0))),
-        "Invalid TIME value")
-
-      // time_from_millis - out of range [0, 86400000)
-      checkExceptionInExpression[SparkDateTimeException](
-        TimeFromMillis(Literal(-1L)),
-        "Invalid TIME value")
-      checkExceptionInExpression[SparkDateTimeException](
-        TimeFromMillis(Literal(86400000L)),
-        "Invalid TIME value")
-
-      // time_from_micros - out of range [0, 86400000000)
-      checkExceptionInExpression[SparkDateTimeException](
-        TimeFromMicros(Literal(-1L)),
-        "Invalid TIME value")
-      checkExceptionInExpression[SparkDateTimeException](
-        TimeFromMicros(Literal(86400000000L)),
-        "Invalid TIME value")
-
-      // Test overflow in TIME conversion
-      checkExceptionInExpression[SparkDateTimeException](
-        TimeFromSeconds(Literal(Long.MaxValue)),
-        "Overflow in TIME conversion")
-
-      // Test NaN and Infinite for floating point
-      checkExceptionInExpression[SparkDateTimeException](
-        TimeFromSeconds(Literal(Float.NaN)),
-        "Cannot convert NaN or Infinite value to TIME")
-      checkExceptionInExpression[SparkDateTimeException](
-        TimeFromSeconds(Literal(Double.PositiveInfinity)),
-        "Cannot convert NaN or Infinite value to TIME")
-    }
+    // Test NaN and Infinite for floating point
+    checkExceptionInExpression[SparkDateTimeException](
+      TimeFromSeconds(Literal(Float.NaN)),
+      "Cannot convert NaN or Infinite value to TIME")
+    checkExceptionInExpression[SparkDateTimeException](
+      TimeFromSeconds(Literal(Double.PositiveInfinity)),
+      "Cannot convert NaN or Infinite value to TIME")
   }
 
   test("Numeric to TIME conversions - NULL inputs") {

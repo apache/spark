@@ -28,7 +28,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.{QueryContext, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{DataType, Decimal, DecimalType, DoubleExactNumeric, DoubleType, FloatType, IntegralType, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{Decimal, DoubleExactNumeric, TimestampNTZType, TimestampType}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
@@ -897,33 +897,65 @@ object DateTimeUtils extends SparkDateTimeUtils {
     }
   }
 
+  private def withTimeConversionErrorHandling(f: => Long): Long = {
+    try {
+      val nanos = f
+      if (nanos < 0 || nanos >= NANOS_PER_DAY) {
+        throw new DateTimeException(
+          s"Invalid TIME value: must be between 00:00:00 and 23:59:59.999999999, " +
+          s"but got $nanos nanoseconds")
+      }
+      nanos
+    } catch {
+      case e: DateTimeException =>
+        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e)
+      case e: ArithmeticException =>
+        val wrapped = new DateTimeException(s"Overflow in TIME conversion: ${e.getMessage}", e)
+        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(wrapped)
+    }
+  }
+
   /**
-   * Creates a TIME value from seconds since midnight.
-   * @param seconds Numeric value (0 to 86399.999999)
-   * @param dataType Input data type
+   * Creates a TIME value from seconds since midnight (integral types).
+   * @param seconds Seconds (0 to 86399)
    * @return Nanoseconds since midnight
    */
-  def timeFromSeconds(seconds: Any, dataType: DataType): Long = {
-    val nanos = dataType match {
-      case _: IntegralType =>
-        Math.multiplyExact(seconds.asInstanceOf[Number].longValue(), NANOS_PER_SECOND)
-      case _: DecimalType =>
-        val operand = new java.math.BigDecimal(NANOS_PER_SECOND)
-        seconds.asInstanceOf[Decimal].toJavaBigDecimal.multiply(operand).longValueExact()
-      case FloatType =>
-        val f = seconds.asInstanceOf[Float]
-        if (f.isNaN || f.isInfinite) {
-          throw new DateTimeException("Cannot convert NaN or Infinite value to TIME")
-        }
-        (f.toDouble * NANOS_PER_SECOND).toLong
-      case DoubleType =>
-        val d = seconds.asInstanceOf[Double]
-        if (d.isNaN || d.isInfinite) {
-          throw new DateTimeException("Cannot convert NaN or Infinite value to TIME")
-        }
-        (d * NANOS_PER_SECOND).toLong
+  def timeFromSeconds(seconds: Long): Long = withTimeConversionErrorHandling {
+    Math.multiplyExact(seconds, NANOS_PER_SECOND)
+  }
+
+  /**
+   * Creates a TIME value from seconds since midnight (decimal type).
+   * @param seconds Seconds (0 to 86399.999999)
+   * @return Nanoseconds since midnight
+   */
+  def timeFromSeconds(seconds: Decimal): Long = withTimeConversionErrorHandling {
+    val operand = new java.math.BigDecimal(NANOS_PER_SECOND)
+    seconds.toJavaBigDecimal.multiply(operand).longValueExact()
+  }
+
+  /**
+   * Creates a TIME value from seconds since midnight (float type).
+   * @param seconds Seconds (0 to 86399.999999)
+   * @return Nanoseconds since midnight
+   */
+  def timeFromSeconds(seconds: Float): Long = withTimeConversionErrorHandling {
+    if (seconds.isNaN || seconds.isInfinite) {
+      throw new DateTimeException("Cannot convert NaN or Infinite value to TIME")
     }
-    validateTimeNanos(nanos)
+    (seconds.toDouble * NANOS_PER_SECOND).toLong
+  }
+
+  /**
+   * Creates a TIME value from seconds since midnight (double type).
+   * @param seconds Seconds (0 to 86399.999999)
+   * @return Nanoseconds since midnight
+   */
+  def timeFromSeconds(seconds: Double): Long = withTimeConversionErrorHandling {
+    if (seconds.isNaN || seconds.isInfinite) {
+      throw new DateTimeException("Cannot convert NaN or Infinite value to TIME")
+    }
+    (seconds * NANOS_PER_SECOND).toLong
   }
 
   /**
@@ -931,8 +963,8 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * @param millis Milliseconds (0 to 86399999)
    * @return Nanoseconds since midnight
    */
-  def timeFromMillis(millis: Long): Long = {
-    timeFromIntegral(millis, NANOS_PER_MILLIS)
+  def timeFromMillis(millis: Long): Long = withTimeConversionErrorHandling {
+    Math.multiplyExact(millis, NANOS_PER_MILLIS)
   }
 
   /**
@@ -940,33 +972,8 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * @param micros Microseconds (0 to 86399999999)
    * @return Nanoseconds since midnight
    */
-  def timeFromMicros(micros: Long): Long = {
-    timeFromIntegral(micros, NANOS_PER_MICROS)
-  }
-
-  /**
-   * Creates a TIME value from an integral value with a scale factor.
-   * @param value Integral value
-   * @param scaleFactor Conversion factor to nanoseconds
-   * @return Nanoseconds since midnight
-   */
-  def timeFromIntegral(value: Long, scaleFactor: Long): Long = {
-    val nanos = if (scaleFactor == 1) value else Math.multiplyExact(value, scaleFactor)
-    validateTimeNanos(nanos)
-  }
-
-  /**
-   * Validates nanoseconds is within valid TIME range [0, NANOS_PER_DAY).
-   * @param nanos Nanoseconds to validate
-   * @return Input nanos if valid
-   */
-  private def validateTimeNanos(nanos: Long): Long = {
-    if (nanos < 0 || nanos >= NANOS_PER_DAY) {
-      throw new DateTimeException(
-        s"Invalid TIME value: must be between 00:00:00 and 23:59:59.999999999, " +
-        s"but got $nanos nanoseconds")
-    }
-    nanos
+  def timeFromMicros(micros: Long): Long = withTimeConversionErrorHandling {
+    Math.multiplyExact(micros, NANOS_PER_MICROS)
   }
 
   /**

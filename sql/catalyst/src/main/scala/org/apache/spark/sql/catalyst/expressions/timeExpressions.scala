@@ -25,91 +25,17 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLId, toSQLType, toSQLValue}
-import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
-import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.TimeFormatter
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, AnyTimeType, ByteType, DataType, DayTimeIntervalType, DecimalType, IntegerType, IntegralType, LongType, NumericType, ObjectType, TimeType}
 import org.apache.spark.sql.types.DayTimeIntervalType.{HOUR, SECOND}
 import org.apache.spark.unsafe.types.UTF8String
-
-/**
- * Helper trait for TIME conversion expressions with consistent error handling.
- */
-trait TimeConversionErrorHandling {
-  def failOnError: Boolean
-
-  /** Wraps evaluation with error handling (throws in ANSI mode, null otherwise). */
-  protected def evalWithErrorHandling[T](f: => T): Any = {
-    try {
-      f
-    } catch {
-      case e: DateTimeException if failOnError =>
-        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e)
-      case e: ArithmeticException if failOnError =>
-        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(
-          new DateTimeException(s"Overflow in TIME conversion: ${e.getMessage}"))
-      case _: DateTimeException | _: ArithmeticException => null
-    }
-  }
-
-  /** Generates error handling code (DateTimeException + ArithmeticException). */
-  protected def doGenErrorHandling(
-      ctx: CodegenContext,
-      ev: ExprCode,
-      utilCall: String): String = {
-    val dateTimeErrorBranch = if (failOnError) {
-      "throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e);"
-    } else {
-      s"${ev.isNull} = true;"
-    }
-
-    val arithmeticErrorBranch = if (failOnError) {
-      s"""
-         |throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(
-         |  new java.time.DateTimeException("Overflow in TIME conversion: " + e.getMessage()));
-         |""".stripMargin
-    } else {
-      s"${ev.isNull} = true;"
-    }
-
-    s"""
-       |try {
-       |  ${ev.value} = $utilCall;
-       |} catch (java.time.DateTimeException e) {
-       |  $dateTimeErrorBranch
-       |} catch (java.lang.ArithmeticException e) {
-       |  $arithmeticErrorBranch
-       |}
-       |""".stripMargin
-  }
-
-  /** Generates error handling code (DateTimeException only). */
-  protected def doGenDateTimeError(
-      ctx: CodegenContext,
-      ev: ExprCode,
-      utilCall: String): String = {
-    val errorBranch = if (failOnError) {
-      "throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e);"
-    } else {
-      s"${ev.isNull} = true;"
-    }
-    s"""
-       |try {
-       |  ${ev.value} = $utilCall;
-       |} catch (java.time.DateTimeException e) {
-       |  $errorBranch
-       |}
-       |""".stripMargin
-  }
-}
 
 /**
  * Parses a column to a time based on the given format.
@@ -824,36 +750,6 @@ case class TimeTrunc(unit: Expression, time: Expression)
   }
 }
 
-abstract class IntegralToTimeBase
-  extends UnaryExpression with ExpectsInputTypes with TimeConversionErrorHandling {
-  protected def upScaleFactor: Long
-  def failOnError: Boolean = SQLConf.get.ansiEnabled
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType)
-  override def dataType: DataType = TimeType(TimeType.MICROS_PRECISION)
-  override def nullable: Boolean = true
-  override def nullIntolerant: Boolean = true
-
-  override protected def nullSafeEval(input: Any): Any = {
-    evalWithErrorHandling {
-      DateTimeUtils.timeFromIntegral(input.asInstanceOf[Number].longValue(), upScaleFactor)
-    }
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    nullSafeCodeGen(ctx, ev, c =>
-      doGenErrorHandling(ctx, ev, s"$dtu.timeFromIntegral($c, ${upScaleFactor}L)")
-    )
-  }
-}
-
-abstract class TimeToLongBase extends UnaryExpression with ExpectsInputTypes {
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType)
-  override def dataType: DataType = LongType
-  override def nullIntolerant: Boolean = true
-}
-
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(seconds) - Creates a TIME value from seconds since midnight.",
@@ -877,28 +773,18 @@ abstract class TimeToLongBase extends UnaryExpression with ExpectsInputTypes {
   group = "datetime_funcs")
 // scalastyle:on line.size.limit
 case class TimeFromSeconds(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes with TimeConversionErrorHandling {
+  extends UnaryExpression with RuntimeReplaceable with ExpectsInputTypes {
+
+  override def replacement: Expression = StaticInvoke(
+    classOf[DateTimeUtils.type],
+    TimeType(TimeType.MICROS_PRECISION),
+    "timeFromSeconds",
+    Seq(child),
+    Seq(child.dataType)
+  )
+
   override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
   override def dataType: DataType = TimeType(TimeType.MICROS_PRECISION)
-  override def nullable: Boolean = true
-  override def nullIntolerant: Boolean = true
-
-  def failOnError: Boolean = SQLConf.get.ansiEnabled
-
-  override def nullSafeEval(input: Any): Any = {
-    evalWithErrorHandling {
-      DateTimeUtils.timeFromSeconds(input, child.dataType)
-    }
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    val dt = ctx.addReferenceObj("childDataType", child.dataType)
-    nullSafeCodeGen(ctx, ev, c =>
-      doGenErrorHandling(ctx, ev, s"$dtu.timeFromSeconds($c, $dt)")
-    )
-  }
-
   override def prettyName: String = "time_from_seconds"
 
   override protected def withNewChildInternal(newChild: Expression): TimeFromSeconds =
@@ -927,10 +813,18 @@ case class TimeFromSeconds(child: Expression)
   group = "datetime_funcs")
 // scalastyle:on line.size.limit
 case class TimeFromMillis(child: Expression)
-  extends IntegralToTimeBase {
+  extends UnaryExpression with RuntimeReplaceable with ExpectsInputTypes {
 
-  override def upScaleFactor: Long = NANOS_PER_MILLIS
+  override def replacement: Expression = StaticInvoke(
+    classOf[DateTimeUtils.type],
+    TimeType(TimeType.MICROS_PRECISION),
+    "timeFromMillis",
+    Seq(child),
+    Seq(child.dataType)
+  )
 
+  override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType)
+  override def dataType: DataType = TimeType(TimeType.MICROS_PRECISION)
   override def prettyName: String = "time_from_millis"
 
   override protected def withNewChildInternal(newChild: Expression): TimeFromMillis =
@@ -959,10 +853,18 @@ case class TimeFromMillis(child: Expression)
   group = "datetime_funcs")
 // scalastyle:on line.size.limit
 case class TimeFromMicros(child: Expression)
-  extends IntegralToTimeBase {
+  extends UnaryExpression with RuntimeReplaceable with ExpectsInputTypes {
 
-  override def upScaleFactor: Long = NANOS_PER_MICROS
+  override def replacement: Expression = StaticInvoke(
+    classOf[DateTimeUtils.type],
+    TimeType(TimeType.MICROS_PRECISION),
+    "timeFromMicros",
+    Seq(child),
+    Seq(child.dataType)
+  )
 
+  override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType)
+  override def dataType: DataType = TimeType(TimeType.MICROS_PRECISION)
   override def prettyName: String = "time_from_micros"
 
   override protected def withNewChildInternal(newChild: Expression): TimeFromMicros =
@@ -992,28 +894,18 @@ case class TimeFromMicros(child: Expression)
   group = "datetime_funcs")
 // scalastyle:on line.size.limit
 case class TimeToSeconds(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with TimeConversionErrorHandling {
+  extends UnaryExpression with RuntimeReplaceable with ImplicitCastInputTypes {
+
+  override def replacement: Expression = StaticInvoke(
+    classOf[DateTimeUtils.type],
+    DecimalType(14, 6),
+    "timeToSeconds",
+    Seq(child),
+    Seq(child.dataType)
+  )
 
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType)
   override def dataType: DataType = DecimalType(14, 6)
-  override def nullable: Boolean = true
-  override def nullIntolerant: Boolean = true
-
-  def failOnError: Boolean = SQLConf.get.ansiEnabled
-
-  protected override def nullSafeEval(input: Any): Any = {
-    evalWithErrorHandling {
-      DateTimeUtils.timeToSeconds(input.asInstanceOf[Long])
-    }
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    nullSafeCodeGen(ctx, ev, nanos =>
-      doGenDateTimeError(ctx, ev, s"$dtu.timeToSeconds($nanos)")
-    )
-  }
-
   override def prettyName: String = "time_to_seconds"
 
   override protected def withNewChildInternal(newChild: Expression): TimeToSeconds =
@@ -1043,17 +935,18 @@ case class TimeToSeconds(child: Expression)
   group = "datetime_funcs")
 // scalastyle:on line.size.limit
 case class TimeToMillis(child: Expression)
-  extends TimeToLongBase {
+  extends UnaryExpression with RuntimeReplaceable with ExpectsInputTypes {
 
-  override def nullSafeEval(input: Any): Any = {
-    DateTimeUtils.timeToMillis(input.asInstanceOf[Number].longValue())
-  }
+  override def replacement: Expression = StaticInvoke(
+    classOf[DateTimeUtils.type],
+    LongType,
+    "timeToMillis",
+    Seq(child),
+    Seq(child.dataType)
+  )
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.timeToMillis($c)")
-  }
-
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType)
+  override def dataType: DataType = LongType
   override def prettyName: String = "time_to_millis"
 
   override protected def withNewChildInternal(newChild: Expression): TimeToMillis =
@@ -1083,17 +976,18 @@ case class TimeToMillis(child: Expression)
   group = "datetime_funcs")
 // scalastyle:on line.size.limit
 case class TimeToMicros(child: Expression)
-  extends TimeToLongBase {
+  extends UnaryExpression with RuntimeReplaceable with ExpectsInputTypes {
 
-  override def nullSafeEval(input: Any): Any = {
-    DateTimeUtils.timeToMicros(input.asInstanceOf[Number].longValue())
-  }
+  override def replacement: Expression = StaticInvoke(
+    classOf[DateTimeUtils.type],
+    LongType,
+    "timeToMicros",
+    Seq(child),
+    Seq(child.dataType)
+  )
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, c => s"$dtu.timeToMicros($c)")
-  }
-
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType)
+  override def dataType: DataType = LongType
   override def prettyName: String = "time_to_micros"
 
   override protected def withNewChildInternal(newChild: Expression): TimeToMicros =
