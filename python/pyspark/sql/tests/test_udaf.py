@@ -28,15 +28,19 @@ from pyspark.testing.utils import assertDataFrameEqual
 class UDAFTestsMixin:
     def test_udaf_basic_sum(self):
         """Test basic sum UDAF with df.agg()."""
+
         class MySum(Aggregator):
             def zero(self):
                 return 0
+
             def reduce(self, buffer, value):
                 if value is not None:
                     return buffer + value
                 return buffer
+
             def merge(self, buffer1, buffer2):
                 return buffer1 + buffer2
+
             def finish(self, reduction):
                 return reduction
 
@@ -48,15 +52,19 @@ class UDAFTestsMixin:
 
     def test_udaf_with_groupby(self):
         """Test UDAF with groupBy().agg()."""
+
         class MySum(Aggregator):
             def zero(self):
                 return 0
+
             def reduce(self, buffer, value):
                 if value is not None:
                     return buffer + value
                 return buffer
+
             def merge(self, buffer1, buffer2):
                 return buffer1 + buffer2
+
             def finish(self, reduction):
                 return reduction
 
@@ -77,15 +85,19 @@ class UDAFTestsMixin:
 
     def test_udaf_average(self):
         """Test average UDAF with df.agg()."""
+
         class MyAverage(Aggregator):
             def zero(self):
                 return (0.0, 0)  # (sum, count)
+
             def reduce(self, buffer, value):
                 if value is not None:
                     return (buffer[0] + value, buffer[1] + 1)
                 return buffer
+
             def merge(self, buffer1, buffer2):
                 return (buffer1[0] + buffer2[0], buffer1[1] + buffer2[1])
+
             def finish(self, reduction):
                 if reduction[1] == 0:
                     return None
@@ -99,21 +111,25 @@ class UDAFTestsMixin:
 
     def test_udaf_max(self):
         """Test max UDAF with df.agg()."""
+
         class MyMax(Aggregator):
             def zero(self):
                 return None
+
             def reduce(self, buffer, value):
                 if value is not None:
                     if buffer is None:
                         return value
                     return max(buffer, value)
                 return buffer
+
             def merge(self, buffer1, buffer2):
                 if buffer1 is None:
                     return buffer2
                 if buffer2 is None:
                     return buffer1
                 return max(buffer1, buffer2)
+
             def finish(self, reduction):
                 return reduction
 
@@ -125,15 +141,19 @@ class UDAFTestsMixin:
 
     def test_udaf_with_nulls(self):
         """Test UDAF handling null values with df.agg()."""
+
         class MySum(Aggregator):
             def zero(self):
                 return 0
+
             def reduce(self, buffer, value):
                 if value is not None:
                     return buffer + value
                 return buffer
+
             def merge(self, buffer1, buffer2):
                 return buffer1 + buffer2
+
             def finish(self, reduction):
                 return reduction
 
@@ -145,19 +165,24 @@ class UDAFTestsMixin:
 
     def test_udaf_empty_dataframe(self):
         """Test UDAF with empty DataFrame using df.agg()."""
+
         class MySum(Aggregator):
             def zero(self):
                 return 0
+
             def reduce(self, buffer, value):
                 if value is not None:
                     return buffer + value
                 return buffer
+
             def merge(self, buffer1, buffer2):
                 return buffer1 + buffer2
+
             def finish(self, reduction):
                 return reduction
 
         from pyspark.sql.types import StructType, StructField, LongType
+
         schema = StructType([StructField("value", LongType(), True)])
         df = self.spark.createDataFrame([], schema)
         sum_udaf = udaf(MySum(), "bigint", "MySum")
@@ -167,15 +192,19 @@ class UDAFTestsMixin:
 
     def test_udaf_aggregator_interface(self):
         """Test that Aggregator interface is properly defined."""
+
         class MySum(Aggregator):
             def zero(self):
                 return 0
+
             def reduce(self, buffer, value):
                 if value is not None:
                     return buffer + value
                 return buffer
+
             def merge(self, buffer1, buffer2):
                 return buffer1 + buffer2
+
             def finish(self, reduction):
                 return reduction
 
@@ -201,15 +230,19 @@ class UDAFTestsMixin:
 
     def test_udaf_creation(self):
         """Test UDAF creation with udaf() function."""
+
         class MySum(Aggregator):
             def zero(self):
                 return 0
+
             def reduce(self, buffer, value):
                 if value is not None:
                     return buffer + value
                 return buffer
+
             def merge(self, buffer1, buffer2):
                 return buffer1 + buffer2
+
             def finish(self, reduction):
                 return reduction
 
@@ -228,15 +261,19 @@ class UDAFTestsMixin:
 
     def test_udaf_invalid_return_type(self):
         """Test that invalid return type raises error."""
+
         class MySum(Aggregator):
             def zero(self):
                 return 0
+
             def reduce(self, buffer, value):
                 if value is not None:
                     return buffer + value
                 return buffer
+
             def merge(self, buffer1, buffer2):
                 return buffer1 + buffer2
+
             def finish(self, reduction):
                 return reduction
 
@@ -245,15 +282,19 @@ class UDAFTestsMixin:
 
     def test_udaf_multi_column_not_supported(self):
         """Test that multi-column UDAF is not yet supported."""
+
         class MySum(Aggregator):
             def zero(self):
                 return 0
+
             def reduce(self, buffer, value):
                 if value is not None:
                     return buffer + value
                 return buffer
+
             def merge(self, buffer1, buffer2):
                 return buffer1 + buffer2
+
             def finish(self, reduction):
                 return reduction
 
@@ -265,15 +306,19 @@ class UDAFTestsMixin:
 
     def test_udaf_large_dataset(self):
         """Test UDAF with large dataset (20000 rows) distributed across partitions."""
+
         class MySum(Aggregator):
             def zero(self):
                 return 0
+
             def reduce(self, buffer, value):
                 if value is not None:
                     return buffer + value
                 return buffer
+
             def merge(self, buffer1, buffer2):
                 return buffer1 + buffer2
+
             def finish(self, reduction):
                 return reduction
 
@@ -281,34 +326,40 @@ class UDAFTestsMixin:
         # Use repartition to ensure data is distributed across multiple partitions
         data = [(i,) for i in range(1, 20001)]  # 1 to 20000
         df = self.spark.createDataFrame(data, ["value"])
-        
+
         # Repartition to ensure data is distributed across partitions
         # This ensures each partition has data
         num_partitions = max(4, self.spark.sparkContext.defaultParallelism)
         df = df.repartition(num_partitions)
-        
+
         # Verify data is distributed
         actual_partitions = df.rdd.getNumPartitions()
-        self.assertGreater(actual_partitions, 1, "Data should be distributed across multiple partitions")
-        
+        self.assertGreater(
+            actual_partitions, 1, "Data should be distributed across multiple partitions"
+        )
+
         # Calculate expected sum: 1 + 2 + ... + 20000 = 20000 * 20001 / 2 = 200010000
         expected_sum = 20000 * 20001 // 2
-        
+
         sum_udaf = udaf(MySum(), "bigint", "MySum")
         result = df.agg(sum_udaf(df.value))
         assertDataFrameEqual(result, [Row(**{"MySum(value)": expected_sum})])
 
     def test_udaf_large_dataset_average(self):
         """Test average UDAF with large dataset using df.agg()."""
+
         class MyAverage(Aggregator):
             def zero(self):
                 return (0.0, 0)  # (sum, count)
+
             def reduce(self, buffer, value):
                 if value is not None:
                     return (buffer[0] + value, buffer[1] + 1)
                 return buffer
+
             def merge(self, buffer1, buffer2):
                 return (buffer1[0] + buffer2[0], buffer1[1] + buffer2[1])
+
             def finish(self, reduction):
                 if reduction[1] == 0:
                     return None
@@ -317,28 +368,33 @@ class UDAFTestsMixin:
         # Create a large dataset with 20000 rows
         data = [(float(i),) for i in range(1, 20001)]  # 1.0 to 20000.0
         df = self.spark.createDataFrame(data, ["value"])
-        
+
         # Repartition to ensure data is distributed
         num_partitions = max(4, self.spark.sparkContext.defaultParallelism)
         df = df.repartition(num_partitions)
-        
+
         # Expected average: (1 + 2 + ... + 20000) / 20000 = 20001 / 2 = 10000.5
         expected_avg = 20001.0 / 2.0
-        
+
         avg_udaf = udaf(MyAverage(), "double", "MyAverage")
         result = df.agg(avg_udaf(df.value))
-        assertDataFrameEqual(result, [Row(**{"MyAverage(value)": expected_avg})], checkRowOrder=False)
-
+        assertDataFrameEqual(
+            result, [Row(**{"MyAverage(value)": expected_avg})], checkRowOrder=False
+        )
 
     def test_udaf_column_attributes(self):
         """Test that UDAF Column has correct attributes."""
+
         class MySum(Aggregator):
             def zero(self):
                 return 0
+
             def reduce(self, buffer, value):
                 return buffer + (value or 0)
+
             def merge(self, buffer1, buffer2):
                 return buffer1 + buffer2
+
             def finish(self, reduction):
                 return reduction
 
@@ -353,13 +409,17 @@ class UDAFTestsMixin:
 
     def test_udaf_multiple_udaf_not_supported(self):
         """Test that multiple UDAFs in agg() raises error."""
+
         class MySum(Aggregator):
             def zero(self):
                 return 0
+
             def reduce(self, buffer, value):
                 return buffer + (value or 0)
+
             def merge(self, buffer1, buffer2):
                 return buffer1 + buffer2
+
             def finish(self, reduction):
                 return reduction
 
@@ -372,13 +432,17 @@ class UDAFTestsMixin:
 
     def test_udaf_mixed_with_other_agg_not_supported(self):
         """Test that mixing UDAF with other aggregate functions raises error."""
+
         class MySum(Aggregator):
             def zero(self):
                 return 0
+
             def reduce(self, buffer, value):
                 return buffer + (value or 0)
+
             def merge(self, buffer1, buffer2):
                 return buffer1 + buffer2
+
             def finish(self, reduction):
                 return reduction
 
@@ -406,4 +470,3 @@ if __name__ == "__main__":
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)
-

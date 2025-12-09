@@ -236,11 +236,11 @@ class UserDefinedAggregateFunction:
         # without introducing a special Column type
         from pyspark.sql.classic.column import Column as ClassicColumn
         from pyspark.sql.functions import col as spark_col
-        
+
         col_expr = args[0]
         if isinstance(col_expr, str):
             col_expr = spark_col(col_expr)
-        
+
         # Create a Column and attach UDAF information as an attribute
         # This is similar to how pandas UDF works - the Column contains metadata
         # that can be checked in agg() without requiring a special Column type
@@ -254,12 +254,12 @@ class UserDefinedAggregateFunction:
 def _extract_column_name(col_expr: "ColumnOrName") -> tuple[Column, str]:
     """Extract column name from Column or string, return (Column, name)."""
     from pyspark.sql.functions import col as spark_col
-    
+
     if isinstance(col_expr, str):
         return spark_col(col_expr), col_expr
     else:
         # Extract column name from expression string (e.g., "value" from "Column<'value'>")
-        col_name_str = col_expr._jc.toString() if hasattr(col_expr, '_jc') else str(col_expr)
+        col_name_str = col_expr._jc.toString() if hasattr(col_expr, "_jc") else str(col_expr)
         col_name = col_name_str.split("'")[1] if "'" in col_name_str else "value"
         return col_expr, col_name
 
@@ -268,7 +268,7 @@ def _extract_grouping_column_names(grouping_cols: List[Column]) -> List[str]:
     """Extract grouping column names from Column objects."""
     grouping_col_names = []
     for gc in grouping_cols:
-        gc_str = gc._jc.toString() if hasattr(gc, '_jc') else str(gc)
+        gc_str = gc._jc.toString() if hasattr(gc, "_jc") else str(gc)
         if "'" in gc_str:
             gc_name = gc_str.split("'")[1]
         else:
@@ -298,10 +298,10 @@ def _extract_grouping_columns_from_jvm(jgd: Any) -> List[Column]:
     try:
         jvm_string = jgd.toString()
         # Format: "RelationalGroupedDataset: [grouping expressions: [col1, col2], ...]"
-        match = re.search(r'grouping expressions:\s*\[([^\]]+)\]', jvm_string)
+        match = re.search(r"grouping expressions:\s*\[([^\]]+)\]", jvm_string)
         if match:
             grouping_exprs_str = match.group(1)
-            grouping_col_names = [name.strip() for name in grouping_exprs_str.split(',')]
+            grouping_col_names = [name.strip() for name in grouping_exprs_str.split(",")]
             return [spark_col(name.strip()) for name in grouping_col_names]
     except Exception:
         # If parsing fails, assume no grouping
@@ -383,16 +383,16 @@ def _convert_results_to_arrow(results: List[Any], return_type: DataType) -> Any:
     import pyarrow as pa
     from pyspark.sql.pandas.types import to_arrow_type
     from pyspark.sql.conversion import LocalDataToArrowConversion
-    
+
     # Use existing conversion utilities for accurate type handling
     arrow_type = to_arrow_type(return_type)
     converter = LocalDataToArrowConversion._create_converter(return_type, nullable=True)
-    
+
     if converter is not None:
         converted_results = [converter(r) for r in results]
     else:
         converted_results = results
-    
+
     return pa.array(converted_results, type=arrow_type)
 
 
@@ -402,6 +402,7 @@ def _create_reduce_func(
     num_grouping_cols: int,
 ):
     """Create reduce function for mapInArrow."""
+
     def reduce_func(iterator):
         import pyarrow as pa
         import cloudpickle
@@ -410,11 +411,15 @@ def _create_reduce_func(
         agg = cloudpickle.loads(serialized_aggregator)
         group_buffers = {}
         value_col_idx = num_grouping_cols
-        
+
         for batch in iterator:
-            if isinstance(batch, pa.RecordBatch) and batch.num_columns > value_col_idx and batch.num_rows > 0:
+            if (
+                isinstance(batch, pa.RecordBatch)
+                and batch.num_columns > value_col_idx
+                and batch.num_rows > 0
+            ):
                 value_col = batch.column(value_col_idx)
-                
+
                 for row_idx in range(batch.num_rows):
                     # Extract grouping key (None for non-grouped case, tuple for grouped case)
                     grouping_key = (
@@ -422,62 +427,66 @@ def _create_reduce_func(
                         if num_grouping_cols > 0
                         else None
                     )
-                    
+
                     value = value_col[row_idx].as_py()
-                    
+
                     if grouping_key not in group_buffers:
                         group_buffers[grouping_key] = agg.zero()
-                    
+
                     if value is not None:
                         group_buffers[grouping_key] = agg.reduce(group_buffers[grouping_key], value)
-        
+
         # Handle empty DataFrame case for non-grouped aggregation
         if not group_buffers and num_grouping_cols == 0:
             group_buffers[None] = agg.zero()
-        
+
         # Yield one record per group with random key (always serialize as (grouping_key, buffer))
         for grouping_key, buffer in group_buffers.items():
             key = random.randint(0, max_key)
             grouping_key_bytes = cloudpickle.dumps((grouping_key, buffer))
             yield pa.RecordBatch.from_arrays(
-                [pa.array([key], type=pa.int64()), pa.array([grouping_key_bytes], type=pa.binary())],
-                ["key", "buffer"]
+                [
+                    pa.array([key], type=pa.int64()),
+                    pa.array([grouping_key_bytes], type=pa.binary()),
+                ],
+                ["key", "buffer"],
             )
-    
+
     return reduce_func
 
 
 def _create_merge_func(serialized_aggregator: bytes):
     """Create merge function for applyInArrow using iterator API."""
     import pyarrow as pa
-    
+
     def merge_func(batches: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
         """Iterator-based merge function that processes batches one by one."""
         import cloudpickle
 
         agg = cloudpickle.loads(serialized_aggregator)
         group_buffers = {}
-        
+
         for batch in batches:
             if isinstance(batch, pa.RecordBatch) and batch.num_columns > 1 and batch.num_rows > 0:
                 buffer_col = batch.column(1)
                 for i in range(batch.num_rows):
                     buffer_bytes = buffer_col[i].as_py()
                     grouping_key, buffer_value = cloudpickle.loads(buffer_bytes)
-                    
+
                     if grouping_key not in group_buffers:
                         group_buffers[grouping_key] = buffer_value
                     else:
-                        group_buffers[grouping_key] = agg.merge(group_buffers[grouping_key], buffer_value)
-        
+                        group_buffers[grouping_key] = agg.merge(
+                            group_buffers[grouping_key], buffer_value
+                        )
+
         # Yield merged buffers (always serialize as (grouping_key, buffer))
         for grouping_key, buffer in group_buffers.items():
             grouping_key_bytes = cloudpickle.dumps((grouping_key, buffer))
             yield pa.RecordBatch.from_arrays(
-                [pa.array([grouping_key_bytes], type=pa.binary())],
-                ["buffer"]
+                [pa.array([grouping_key_bytes], type=pa.binary())], ["buffer"]
             )
-    
+
     return merge_func
 
 
@@ -492,38 +501,38 @@ def _create_final_merge_func(
     """Create final merge function for applyInArrow using iterator API."""
     import pyarrow as pa
     import cloudpickle
-    
+
     # Serialize return_type for use in worker
     serialized_return_type = cloudpickle.dumps(return_type)
-    
+
     def _convert_results_to_arrow_local(results: List[Any], serialized_dt: bytes) -> Any:
         """Convert a list of result values to Arrow array based on return type."""
         from pyspark.sql.pandas.types import to_arrow_type
         from pyspark.sql.conversion import LocalDataToArrowConversion
-        
+
         # Use DataType object for accurate conversion
         dt = cloudpickle.loads(serialized_dt)
         arrow_type = to_arrow_type(dt)
         converter = LocalDataToArrowConversion._create_converter(dt, nullable=True)
-        
+
         if converter is not None:
             converted_results = [converter(r) for r in results]
         else:
             converted_results = results
-        
+
         return pa.array(converted_results, type=arrow_type)
-    
+
     def final_merge_func(batches: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
         """Iterator-based final merge function that processes batches one by one."""
         import cloudpickle
 
         agg = cloudpickle.loads(serialized_aggregator)
-        
+
         # Unified logic: always deserialize as (grouping_key, buffer)
         # For non-grouped case, grouping_key is None
         group_results = {}
         has_data = False
-        
+
         for batch in batches:
             if isinstance(batch, pa.RecordBatch) and batch.num_columns > 1:
                 if batch.num_rows > 0:
@@ -533,30 +542,32 @@ def _create_final_merge_func(
                         buffer_bytes = buffer_col[i].as_py()
                         # Always deserialize as (grouping_key, buffer)
                         grouping_key, buffer_value = cloudpickle.loads(buffer_bytes)
-                        
+
                         if grouping_key not in group_results:
                             group_results[grouping_key] = buffer_value
                         else:
-                            group_results[grouping_key] = agg.merge(group_results[grouping_key], buffer_value)
-        
+                            group_results[grouping_key] = agg.merge(
+                                group_results[grouping_key], buffer_value
+                            )
+
         # Finish each group and collect all results
         all_grouping_vals = []
         all_results = []
-        
+
         for grouping_key, buffer in group_results.items():
             all_grouping_vals.append(grouping_key)
             all_results.append(agg.finish(buffer))
-        
+
         # Handle empty case: for non-grouped, use zero() result; for grouped, keep empty
         # Unified handling: both cases go through the same array building logic
         if not has_data and not has_grouping:
             # Non-grouped empty case: return zero() result
             all_results = [agg.finish(agg.zero())]
-        
+
         # Build result arrays - unified for both grouped and non-grouped cases
         result_arrays = []
         result_names = []
-        
+
         # Add grouping columns (empty list for non-grouped case, so loop won't execute)
         for i in range(len(grouping_col_names)):
             col_values = [grouping_vals[i] for grouping_vals in all_grouping_vals]
@@ -565,14 +576,14 @@ def _create_final_merge_func(
             else:
                 result_arrays.append(pa.array(col_values, type=pa.int64()))
             result_names.append(grouping_col_names[i])
-        
+
         # Add result column (always add, even if empty for grouped case)
         result_col_name_safe = f"{udaf_func_name}_{col_name}".replace("(", "_").replace(")", "_")
         result_arrays.append(_convert_results_to_arrow_local(all_results, serialized_return_type))
         result_names.append(result_col_name_safe if has_grouping else "result")
-        
+
         yield pa.RecordBatch.from_arrays(result_arrays, result_names)
-    
+
     return final_merge_func
 
 
@@ -647,18 +658,14 @@ def _apply_udaf_to_dataframe(
     serialized_aggregator = udaf_func._serialized_aggregator
     return_type = udaf_func.returnType
     return_type_str = (
-        return_type.simpleString()
-        if hasattr(return_type, "simpleString")
-        else str(return_type)
+        return_type.simpleString() if hasattr(return_type, "simpleString") else str(return_type)
     )
 
     # Get max key for random grouping
     max_key = _get_max_key_for_random_grouping(df)
 
     # Create aggregation functions
-    reduce_func = _create_reduce_func(
-        serialized_aggregator, max_key, len(grouping_col_names)
-    )
+    reduce_func = _create_reduce_func(serialized_aggregator, max_key, len(grouping_col_names))
     merge_func = _create_merge_func(serialized_aggregator)
     final_merge_func = _create_final_merge_func(
         serialized_aggregator,
@@ -671,6 +678,7 @@ def _apply_udaf_to_dataframe(
 
     # Step 1: Apply reduce via mapInArrow
     from pyspark.sql.functions import col as spark_col
+
     if has_grouping:
         select_cols = grouping_cols + [col_expr.alias("value")]
         intermediate_df = df.select(*select_cols).mapInArrow(
@@ -691,15 +699,18 @@ def _apply_udaf_to_dataframe(
 
     # Step 3: Merge all key groups into final result
     from pyspark.sql.functions import lit
+
     result_col_name_safe = f"{udaf_func._name}_{col_name}".replace("(", "_").replace(")", "_")
     schema_str = _build_result_schema(
         has_grouping, grouping_col_names, result_col_name_safe, return_type_str
     )
-    
-    result_df = merged_df.select(
-        lit(0).alias("final_key"), spark_col("buffer").alias("buffer")
-    ).groupBy("final_key").applyInArrow(final_merge_func, schema=schema_str)
-    
+
+    result_df = (
+        merged_df.select(lit(0).alias("final_key"), spark_col("buffer").alias("buffer"))
+        .groupBy("final_key")
+        .applyInArrow(final_merge_func, schema=schema_str)
+    )
+
     # Step 4: Return the result DataFrame with proper column names
     if has_grouping:
         result_col_name = f"{udaf_func._name}({col_name})"
@@ -757,4 +768,3 @@ def udaf(
     +------------+
     """
     return UserDefinedAggregateFunction(aggregator, returnType, name)
-
