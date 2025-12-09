@@ -21,8 +21,8 @@ import java.util.Locale
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.LogKeys.{AGGREGATE_FUNCTIONS, COLUMN_NAMES, GROUP_BY_EXPRS, JOIN_CONDITION, JOIN_TYPE, POST_SCAN_FILTERS, PUSHED_FILTERS, RELATION_NAME, RELATION_OUTPUT}
-// import org.apache.spark.sql.catalyst.analysis.resolver.OrdinalResolver
 import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, Expression, ExprId, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
@@ -352,7 +352,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
             case nestedStruct: StructType =>
               field.name +: getColumnName(nestedStruct, rest)
             case _ =>
-              throw new IllegalArgumentException(
+              throw SparkException.internalError(
                 s"Expected StructType at field '${field.name}' but got ${field.dataType}")
           }
         }
