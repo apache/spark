@@ -594,11 +594,11 @@ object ResourceProfile extends Logging {
     if (sparkContextOption.isDefined) {
       val sparkContext = sparkContextOption.get
       val klass = classOf[ApplicationEnvironmentInfoWrapper]
-      val currentAppEnvironment = sparkContext._statusStore.store.read(klass, klass.getName()).info
+      val currentAppEnvironment = sparkContext.statusStore.store.read(klass, klass.getName()).info
       val newAppEnvironment = ApplicationEnvironmentInfo.create(currentAppEnvironment,
         newSparkProperties = Map(EXECUTOR_BURSTY_MEMORY_OVERHEAD.key ->
           newMemoryOverheadMiB.toString))
-      sparkContext._statusStore.store.write(new ApplicationEnvironmentInfoWrapper(
+      sparkContext.statusStore.store.write(new ApplicationEnvironmentInfoWrapper(
         newAppEnvironment))
       this.synchronized {
         if (!loggedBurstyMemoryOverhead) {
