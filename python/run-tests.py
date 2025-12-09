@@ -237,8 +237,11 @@ def split_and_validate_testnames(testnames):
     for testname in testnames.split(','):
         if " " in testname:
             # "{module} {class.testcase_name}"
-            # Just add the testname as is
-            testnames_to_test.append(testname)
+            module, testcase = testname.split(" ")
+            if not module_exists(module):
+                print(f"Error: Can't find module '{module}'.")
+                sys.exit(-1)
+            testnames_to_test.append(f"{module} {testcase}")
         else:
             if module_exists(testname):
                 # "{module}"
@@ -252,8 +255,8 @@ def split_and_validate_testnames(testnames):
                         testnames_to_test.append(f"{module} {testcase}")
                         break
                 else:
-                    # "Can't find the module, the users must know what they are doing"
-                    testnames_to_test.append(testname)
+                    print(f"Error: Invalid testname '{testname}'.")
+                    sys.exit(-1)
 
     return testnames_to_test
 
