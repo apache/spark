@@ -234,7 +234,7 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
 class ReusedMixedTestCase(ReusedConnectTestCase, SQLTestUtils):
     @classmethod
     def setUpClass(cls):
-        super(ReusedMixedTestCase, cls).setUpClass()
+        super().setUpClass()
         # Disable the shared namespace so pyspark.sql.functions, etc point the regular
         # PySpark libraries.
         os.environ["PYSPARK_NO_NAMESPACE_SHARE"] = "1"
@@ -250,7 +250,7 @@ class ReusedMixedTestCase(ReusedConnectTestCase, SQLTestUtils):
             cls.spark = cls.connect
             del os.environ["PYSPARK_NO_NAMESPACE_SHARE"]
         finally:
-            super(ReusedMixedTestCase, cls).tearDownClass()
+            super().tearDownClass()
 
     def compare_by_show(self, df1, df2, n: int = 20, truncate: int = 20):
         from pyspark.sql.classic.dataframe import DataFrame as SDF

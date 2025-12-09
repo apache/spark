@@ -812,6 +812,111 @@ class BaseUDTFTestsMixin:
             with self.assertRaisesRegex(err_type, expected):
                 func().collect()
 
+    def test_udtf_nullable_check(self):
+        for ret_type, value, expected in [
+            (
+                StructType([StructField("value", ArrayType(IntegerType(), False))]),
+                ([None],),
+                "PySparkRuntimeError",
+            ),
+            (
+                StructType([StructField("value", ArrayType(IntegerType(), True))]),
+                ([None],),
+                [Row(value=[None])],
+            ),
+            (
+                StructType([StructField("value", MapType(StringType(), IntegerType(), False))]),
+                ({"a": None},),
+                "PySparkRuntimeError",
+            ),
+            (
+                StructType([StructField("value", MapType(StringType(), IntegerType(), True))]),
+                ({"a": None},),
+                [Row(value={"a": None})],
+            ),
+            (
+                StructType([StructField("value", MapType(StringType(), IntegerType(), True))]),
+                ({None: 1},),
+                "PySparkRuntimeError",
+            ),
+            (
+                StructType([StructField("value", MapType(StringType(), IntegerType(), False))]),
+                ({None: 1},),
+                "PySparkRuntimeError",
+            ),
+            (
+                StructType(
+                    [
+                        StructField(
+                            "value", MapType(StringType(), ArrayType(IntegerType(), False), False)
+                        )
+                    ]
+                ),
+                ({"s": [None]},),
+                "PySparkRuntimeError",
+            ),
+            (
+                StructType(
+                    [
+                        StructField(
+                            "value",
+                            MapType(
+                                StructType([StructField("value", StringType(), False)]),
+                                IntegerType(),
+                                False,
+                            ),
+                        )
+                    ]
+                ),
+                ({(None,): 1},),
+                "PySparkRuntimeError",
+            ),
+            (
+                StructType(
+                    [
+                        StructField(
+                            "value",
+                            MapType(
+                                StructType([StructField("value", StringType(), False)]),
+                                IntegerType(),
+                                True,
+                            ),
+                        )
+                    ]
+                ),
+                ({(None,): 1},),
+                "PySparkRuntimeError",
+            ),
+            (
+                StructType(
+                    [StructField("value", StructType([StructField("value", StringType(), False)]))]
+                ),
+                ((None,),),
+                "PySparkRuntimeError",
+            ),
+            (
+                StructType(
+                    [
+                        StructField(
+                            "value",
+                            StructType(
+                                [StructField("value", ArrayType(StringType(), False), False)]
+                            ),
+                        )
+                    ]
+                ),
+                (([None],),),
+                "PySparkRuntimeError",
+            ),
+        ]:
+
+            class TestUDTF:
+                def eval(self):
+                    yield value
+
+            with self.subTest(ret_type=ret_type, value=value):
+                self._check_result_or_exception(TestUDTF, ret_type, expected)
+
     def test_numeric_output_type_casting(self):
         class TestUDTF:
             def eval(self):
@@ -3183,7 +3288,7 @@ class BaseUDTFTestsMixin:
 class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
-        super(UDTFTests, cls).setUpClass()
+        super().setUpClass()
         cls.spark.conf.set("spark.sql.execution.pythonUDTF.arrow.enabled", "false")
 
     @classmethod
@@ -3191,7 +3296,7 @@ class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
         try:
             cls.spark.conf.unset("spark.sql.execution.pythonUDTF.arrow.enabled")
         finally:
-            super(UDTFTests, cls).tearDownClass()
+            super().tearDownClass()
 
 
 @unittest.skipIf(
@@ -3521,7 +3626,7 @@ class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
 class LegacyUDTFArrowTests(LegacyUDTFArrowTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
-        super(LegacyUDTFArrowTests, cls).setUpClass()
+        super().setUpClass()
         cls.spark.conf.set("spark.sql.execution.pythonUDTF.arrow.enabled", "true")
         cls.spark.conf.set(
             "spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled", "true"
@@ -3533,7 +3638,7 @@ class LegacyUDTFArrowTests(LegacyUDTFArrowTestsMixin, ReusedSQLTestCase):
             cls.spark.conf.unset("spark.sql.execution.pythonUDTF.arrow.enabled")
             cls.spark.conf.unset("spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled")
         finally:
-            super(LegacyUDTFArrowTests, cls).tearDownClass()
+            super().tearDownClass()
 
 
 class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
@@ -3780,7 +3885,7 @@ class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
 class UDTFArrowTests(UDTFArrowTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
-        super(UDTFArrowTests, cls).setUpClass()
+        super().setUpClass()
         cls.spark.conf.set("spark.sql.execution.pythonUDTF.arrow.enabled", "true")
         cls.spark.conf.set(
             "spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled", "false"
@@ -3792,7 +3897,7 @@ class UDTFArrowTests(UDTFArrowTestsMixin, ReusedSQLTestCase):
             cls.spark.conf.unset("spark.sql.execution.pythonUDTF.arrow.enabled")
             cls.spark.conf.unset("spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled")
         finally:
-            super(UDTFArrowTests, cls).tearDownClass()
+            super().tearDownClass()
 
 
 if __name__ == "__main__":

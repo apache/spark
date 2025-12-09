@@ -28,7 +28,7 @@ license: |
 
 ## Upgrading from Core 4.0 to 4.1
 
-- Since Spark 4.1, Spark Master deamon provides REST API by default. To restore the behavior before Spark 4.1, you can set `spark.master.rest.enabled` to `false`.
+- Since Spark 4.1, Spark Master daemon provides REST API by default. To restore the behavior before Spark 4.1, you can set `spark.master.rest.enabled` to `false`.
 - Since Spark 4.1, Spark will compress RDD checkpoints by default. To restore the behavior before Spark 4.1, you can set `spark.checkpoint.compress` to `false`.
 - Since Spark 4.1, Spark uses Apache Hadoop Magic Committer for all S3 buckets by default. To restore the behavior before Spark 4.0, you can set `spark.hadoop.fs.s3a.committer.magic.enabled=false`.
 - Since Spark 4.1, `java.lang.InternalError` encountered during file reading will no longer fail the task if the configuration `spark.sql.files.ignoreCorruptFiles` or the data source option `ignoreCorruptFiles` is set to `true`. 
