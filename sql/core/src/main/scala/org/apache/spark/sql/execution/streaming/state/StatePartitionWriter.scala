@@ -20,17 +20,18 @@ import java.util.UUID
 
 import scala.collection.MapView
 import scala.collection.immutable.HashMap
-import scala.collection.mutable.HashSet
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.StateStoreColumnFamilySchemaUtils
 import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.DIR_NAME_STATE
 
 case class StatePartitionWriterColumnFamilyInfo(
   schema: StateStoreColFamilySchema,
+  // set this to true if state variable is ListType in TransformWithState
   useMultipleValuesPerKey: Boolean = false)
 /**
  * A writer that can directly write binary data to the streaming state store.
@@ -52,24 +53,34 @@ class StatePartitionAllColumnFamiliesWriter(
     storeName: String,
     currentBatchId: Long,
     columnFamilyToSchemaMap: HashMap[String, StatePartitionWriterColumnFamilyInfo]) {
+  private val dummySchema: StructType =
+    StructType(Array(StructField("__dummy__", NullType)))
   private val defaultSchema = {
-    columnFamilyToSchemaMap.getOrElse(
-      StateStore.DEFAULT_COL_FAMILY_NAME,
-      columnFamilyToSchemaMap.head._2 // join V3 doesn't have default col family
-    ).schema
+    columnFamilyToSchemaMap.get(StateStore.DEFAULT_COL_FAMILY_NAME) match {
+      case Some(info) => info.schema
+      case None =>
+        // Return a dummy StateStoreColFamilySchema if not found
+        StateStoreColFamilySchema(
+          colFamilyName = "__dummy__",
+          keySchemaId = 0,
+          keySchema = dummySchema,
+          valueSchemaId = 0,
+          valueSchema = dummySchema,
+          keyStateEncoderSpec = Option(NoPrefixKeyStateEncoderSpec(dummySchema)))
+    }
   }
 
   private val columnFamilyToKeySchemaLenMap: MapView[String, Int] =
     columnFamilyToSchemaMap.view.mapValues(_.schema.keySchema.length)
   private val columnFamilyToValueSchemaLenMap: MapView[String, Int] =
     columnFamilyToSchemaMap.view.mapValues(_.schema.valueSchema.length)
-  private val colFamilyHasWritten: HashSet[String] = HashSet[String]()
 
   protected lazy val provider: StateStoreProvider = {
     val stateCheckpointLocation = new Path(targetCpLocation, DIR_NAME_STATE).toString
     val stateStoreId = StateStoreId(stateCheckpointLocation,
       operatorId, partitionId, storeName)
     val stateStoreProviderId = StateStoreProviderId(stateStoreId, UUID.randomUUID())
+
     val useColumnFamilies = columnFamilyToSchemaMap.size > 1
     val provider = StateStoreProvider.createAndInit(
       stateStoreProviderId, defaultSchema.keySchema, defaultSchema.valueSchema,
@@ -98,7 +109,7 @@ class StatePartitionAllColumnFamiliesWriter(
         colFamilyName match {
           case StateStore.DEFAULT_COL_FAMILY_NAME => // createAndInit has registered default
           case _ =>
-            val isInternal = colFamilyName.startsWith("$")
+            val isInternal = StateStoreColumnFamilySchemaUtils.isInternalColFamily(colFamilyName)
 
             require(cfSchema.keyStateEncoderSpec.isDefined,
               s"keyStateEncoderSpec must be defined for column family ${cfSchema.colFamilyName}")
@@ -124,7 +135,6 @@ class StatePartitionAllColumnFamiliesWriter(
     try {
       rows.foreach(row => writeRow(row))
       stateStore.commit()
-      colFamilyHasWritten.clear()
     } finally {
       if (!stateStore.hasCommitted) {
         stateStore.abort()
@@ -150,12 +160,12 @@ class StatePartitionAllColumnFamiliesWriter(
     val valueRow = new UnsafeRow(columnFamilyToValueSchemaLenMap(colFamilyName))
     valueRow.pointTo(valueBytes, valueBytes.length)
 
-    if (columnFamilyToSchemaMap(colFamilyName).useMultipleValuesPerKey
-      && colFamilyHasWritten(colFamilyName)) {
+    if (columnFamilyToSchemaMap(colFamilyName).useMultipleValuesPerKey) {
+      // if a column family useMultipleValuesPerKey (e.g. ListType), we will
+      // write with 1 put followed by merge
       stateStore.merge(keyRow, valueRow, colFamilyName)
     } else {
       stateStore.put(keyRow, valueRow, colFamilyName)
-      colFamilyHasWritten.add(colFamilyName)
     }
   }
 }
