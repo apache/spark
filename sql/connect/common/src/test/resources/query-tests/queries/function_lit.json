@@ -336,7 +336,13 @@
       }
     }, {
       "literal": {
-        "binary": "CAY="
+        "array": {
+          "elements": [{
+            "byte": 8
+          }, {
+            "byte": 6
+          }]
+        }
       },
       "common": {
         "origin": {
@@ -363,15 +369,6 @@
           }, {
             "integer": 6
           }]
-        },
-        "dataType": {
-          "array": {
-            "elementType": {
-              "integer": {
-              }
-            },
-            "containsNull": true
-          }
         }
       },
       "common": {
@@ -394,10 +391,6 @@
     }, {
       "literal": {
         "null": {
-          "null": {
-          }
-        },
-        "dataType": {
           "null": {
           }
         }

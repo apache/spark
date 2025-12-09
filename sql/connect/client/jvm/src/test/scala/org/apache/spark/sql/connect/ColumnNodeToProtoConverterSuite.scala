@@ -83,14 +83,11 @@ class ColumnNodeToProtoConverterSuite extends ConnectFunSuite {
           .addElements(proto.Expression.Literal.newBuilder().setString("north").build())
           .addElements(proto.Expression.Literal.newBuilder().setDouble(60.0).build())
           .addElements(proto.Expression.Literal.newBuilder().setString("west").build())
-        b.getLiteralBuilder.getDataTypeBuilder.setStruct(
-          proto.DataType.Struct
-            .newBuilder()
-            .addFields(structField("_1", ProtoDataTypes.DoubleType))
-            .addFields(structField("_2", stringTypeWithCollation))
-            .addFields(structField("_3", ProtoDataTypes.DoubleType))
-            .addFields(structField("_4", stringTypeWithCollation))
-            .build())
+          .getDataTypeStructBuilder
+          .addFields(structField("_1", ProtoDataTypes.DoubleType))
+          .addFields(structField("_2", stringTypeWithCollation))
+          .addFields(structField("_3", ProtoDataTypes.DoubleType))
+          .addFields(structField("_4", stringTypeWithCollation))
       })
   }
 

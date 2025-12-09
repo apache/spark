@@ -23,291 +23,25 @@ import java.sql.{Date, Timestamp}
 import java.time._
 
 import scala.collection.{immutable, mutable}
-import scala.reflect.ClassTag
-import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
 
 import com.google.protobuf.ByteString
 
 import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.Expression.Literal
+import org.apache.spark.connect.proto.Expression.Literal.{Array => CArray, LiteralTypeCase, Map => CMap, Struct}
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.util.{SparkDateTimeUtils, SparkIntervalUtils}
-import org.apache.spark.sql.connect.common.DataTypeProtoConverter._
+import org.apache.spark.sql.connect.common.InferringDataTypeBuilder.mergeDataTypes
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
+/**
+ * Conversions from Scala literals to Connect literals.
+ */
 object LiteralValueProtoConverter {
-
-  private def setNullValue(
-      builder: proto.Expression.Literal.Builder,
-      dataType: DataType,
-      needDataType: Boolean): proto.Expression.Literal.Builder = {
-    if (needDataType) {
-      builder.setNull(toConnectProtoType(dataType))
-    } else {
-      // No need data type but still set the null type to indicate that
-      // the value is null.
-      builder.setNull(ProtoDataTypes.NullType)
-    }
-  }
-
-  private def toLiteralProtoBuilderInternal(
-      literal: Any,
-      options: ToLiteralProtoOptions): proto.Expression.Literal.Builder = {
-    val builder = proto.Expression.Literal.newBuilder()
-
-    def decimalBuilder(precision: Int, scale: Int, value: String) = {
-      builder.getDecimalBuilder.setPrecision(precision).setScale(scale).setValue(value)
-    }
-
-    def calendarIntervalBuilder(months: Int, days: Int, microseconds: Long) = {
-      builder.getCalendarIntervalBuilder
-        .setMonths(months)
-        .setDays(days)
-        .setMicroseconds(microseconds)
-    }
-
-    def arrayBuilder(array: Array[_]) = {
-      val ab = builder.getArrayBuilder
-      array.foreach { x =>
-        ab.addElements(toLiteralProtoBuilderInternal(x, options).build())
-      }
-      if (options.useDeprecatedDataTypeFields) {
-        ab.setElementType(toConnectProtoType(toDataType(array.getClass.getComponentType)))
-      }
-      ab
-    }
-
-    literal match {
-      case v: Boolean => builder.setBoolean(v)
-      case v: Byte => builder.setByte(v)
-      case v: Short => builder.setShort(v)
-      case v: Int => builder.setInteger(v)
-      case v: Long => builder.setLong(v)
-      case v: Float => builder.setFloat(v)
-      case v: Double => builder.setDouble(v)
-      case v: BigDecimal =>
-        builder.setDecimal(decimalBuilder(v.precision, v.scale, v.toString))
-      case v: JBigDecimal =>
-        builder.setDecimal(decimalBuilder(v.precision, v.scale, v.toString))
-      case v: String => builder.setString(v)
-      case v: Char => builder.setString(v.toString)
-      case v: Array[Char] => builder.setString(String.valueOf(v))
-      case v: Array[Byte] => builder.setBinary(ByteString.copyFrom(v))
-      case v: mutable.ArraySeq[_] => toLiteralProtoBuilderInternal(v.array, options)
-      case v: immutable.ArraySeq[_] =>
-        toLiteralProtoBuilderInternal(v.unsafeArray, options)
-      case v: LocalDate => builder.setDate(v.toEpochDay.toInt)
-      case v: Decimal =>
-        builder.setDecimal(decimalBuilder(Math.max(v.precision, v.scale), v.scale, v.toString))
-      case v: Instant => builder.setTimestamp(SparkDateTimeUtils.instantToMicros(v))
-      case v: Timestamp => builder.setTimestamp(SparkDateTimeUtils.fromJavaTimestamp(v))
-      case v: LocalDateTime =>
-        builder.setTimestampNtz(SparkDateTimeUtils.localDateTimeToMicros(v))
-      case v: Date => builder.setDate(SparkDateTimeUtils.fromJavaDate(v))
-      case v: Duration => builder.setDayTimeInterval(SparkIntervalUtils.durationToMicros(v))
-      case v: Period => builder.setYearMonthInterval(SparkIntervalUtils.periodToMonths(v))
-      case v: LocalTime =>
-        builder.setTime(
-          builder.getTimeBuilder
-            .setNano(SparkDateTimeUtils.localTimeToNanos(v))
-            .setPrecision(TimeType.DEFAULT_PRECISION))
-      case v: Array[_] => builder.setArray(arrayBuilder(v))
-      case v: CalendarInterval =>
-        builder.setCalendarInterval(calendarIntervalBuilder(v.months, v.days, v.microseconds))
-      case null => builder.setNull(ProtoDataTypes.NullType)
-      case _ => throw new UnsupportedOperationException(s"literal $literal not supported (yet).")
-    }
-  }
-
-  private def toLiteralProtoBuilderInternal(
-      literal: Any,
-      dataType: DataType,
-      options: ToLiteralProtoOptions): proto.Expression.Literal.Builder = {
-    val builder = proto.Expression.Literal.newBuilder()
-
-    def arrayBuilder(scalaValue: Any, elementType: DataType) = {
-      val ab = builder.getArrayBuilder
-      scalaValue match {
-        case a: Array[_] =>
-          a.foreach { item =>
-            ab.addElements(toLiteralProtoBuilderInternal(item, elementType, options).build())
-          }
-        case s: scala.collection.Seq[_] =>
-          s.foreach { item =>
-            ab.addElements(toLiteralProtoBuilderInternal(item, elementType, options).build())
-          }
-        case other =>
-          throw new IllegalArgumentException(s"literal $other not supported (yet).")
-      }
-      if (options.useDeprecatedDataTypeFields) {
-        ab.setElementType(toConnectProtoType(elementType))
-      }
-      ab
-    }
-
-    def mapBuilder(scalaValue: Any, keyType: DataType, valueType: DataType) = {
-      val mb = builder.getMapBuilder
-      scalaValue match {
-        case map: scala.collection.Map[_, _] =>
-          map.foreach { case (k, v) =>
-            mb.addKeys(toLiteralProtoBuilderInternal(k, keyType, options).build())
-            mb.addValues(toLiteralProtoBuilderInternal(v, valueType, options).build())
-          }
-        case other =>
-          throw new IllegalArgumentException(s"literal $other not supported (yet).")
-      }
-      if (options.useDeprecatedDataTypeFields) {
-        mb.setKeyType(toConnectProtoType(keyType))
-        mb.setValueType(toConnectProtoType(valueType))
-      }
-      mb
-    }
-
-    def structBuilder(scalaValue: Any, structType: StructType) = {
-      val sb = builder.getStructBuilder
-      val fields = structType.fields
-
-      val iter = scalaValue match {
-        case p: Product =>
-          p.productIterator
-        case r: Row =>
-          r.toSeq.iterator
-        case other =>
-          throw new IllegalArgumentException(
-            s"literal ${other.getClass.getName}($other) not supported (yet).")
-      }
-
-      var idx = 0
-      while (idx < structType.size) {
-        val field = fields(idx)
-        val literalProto =
-          toLiteralProtoBuilderInternal(iter.next(), field.dataType, options)
-        sb.addElements(literalProto)
-        idx += 1
-      }
-      if (options.useDeprecatedDataTypeFields) {
-        sb.setStructType(toConnectProtoType(structType))
-      }
-
-      sb
-    }
-
-    (literal, dataType) match {
-      case (v: Option[_], _) =>
-        if (v.isDefined) {
-          toLiteralProtoBuilderInternal(v.get, dataType, options)
-        } else {
-          setNullValue(builder, dataType, options.useDeprecatedDataTypeFields)
-        }
-      case (null, _) =>
-        setNullValue(builder, dataType, options.useDeprecatedDataTypeFields)
-      case (v: mutable.ArraySeq[_], ArrayType(_, _)) =>
-        toLiteralProtoBuilderInternal(v.array, dataType, options)
-      case (v: immutable.ArraySeq[_], ArrayType(_, _)) =>
-        toLiteralProtoBuilderInternal(v.unsafeArray, dataType, options)
-      case (v: Array[Byte], ArrayType(_, _)) =>
-        toLiteralProtoBuilderInternal(v, options)
-      case (v, ArrayType(elementType, _)) =>
-        builder.setArray(arrayBuilder(v, elementType))
-      case (v, MapType(keyType, valueType, _)) =>
-        builder.setMap(mapBuilder(v, keyType, valueType))
-      case (v, structType: StructType) =>
-        builder.setStruct(structBuilder(v, structType))
-      case (v: LocalTime, timeType: TimeType) =>
-        builder.setTime(
-          builder.getTimeBuilder
-            .setNano(SparkDateTimeUtils.localTimeToNanos(v))
-            .setPrecision(timeType.precision))
-      case _ => toLiteralProtoBuilderInternal(literal, options)
-    }
-
-  }
-
-  /**
-   * Transforms literal value to the `proto.Expression.Literal.Builder`.
-   *
-   * @return
-   *   proto.Expression.Literal.Builder
-   */
-  def toLiteralProtoBuilder(literal: Any): proto.Expression.Literal.Builder = {
-    toLiteralProtoBuilderWithOptions(
-      literal,
-      None,
-      ToLiteralProtoOptions(useDeprecatedDataTypeFields = true))
-  }
-
-  def toLiteralProtoBuilder(
-      literal: Any,
-      dataType: DataType): proto.Expression.Literal.Builder = {
-    toLiteralProtoBuilderWithOptions(
-      literal,
-      Some(dataType),
-      ToLiteralProtoOptions(useDeprecatedDataTypeFields = true))
-  }
-
-  private def setDataTypeForRootLiteral(
-      builder: proto.Expression.Literal.Builder,
-      dataType: DataType): proto.Expression.Literal.Builder = {
-    if (builder.getLiteralTypeCase ==
-        proto.Expression.Literal.LiteralTypeCase.LITERALTYPE_NOT_SET) {
-      throw new IllegalArgumentException("Literal type should be set first")
-    }
-    // To be compatible with the current Scala behavior, we should convert bytes to binary.
-    val protoDataType = toConnectProtoType(dataType, bytesToBinary = true)
-    // If the value is not null and the data type is trivial, we don't need to
-    // set the data type field, because it will be inferred from the literal value, saving space.
-    val needDataType = protoDataType.getKindCase match {
-      case proto.DataType.KindCase.ARRAY => true
-      case proto.DataType.KindCase.STRUCT => true
-      case proto.DataType.KindCase.MAP => true
-      case _ => builder.getLiteralTypeCase == proto.Expression.Literal.LiteralTypeCase.NULL
-    }
-    if (needDataType) {
-      builder.setDataType(protoDataType)
-    }
-    builder
-  }
-
-  def toLiteralProtoBuilderWithOptions(
-      literal: Any,
-      dataTypeOpt: Option[DataType],
-      options: ToLiteralProtoOptions): proto.Expression.Literal.Builder = {
-    dataTypeOpt match {
-      case Some(dataType) =>
-        val builder = toLiteralProtoBuilderInternal(literal, dataType, options)
-        if (!options.useDeprecatedDataTypeFields) {
-          setDataTypeForRootLiteral(builder, dataType)
-        }
-        builder
-      case None =>
-        val builder = toLiteralProtoBuilderInternal(literal, options)
-        if (!options.useDeprecatedDataTypeFields) {
-          def unwrapArraySeq(value: Any): Any = value match {
-            case arraySeq: mutable.ArraySeq[_] => unwrapArraySeq(arraySeq.array)
-            case arraySeq: immutable.ArraySeq[_] => unwrapArraySeq(arraySeq.unsafeArray)
-            case _ => value
-          }
-          unwrapArraySeq(literal) match {
-            case null =>
-              setDataTypeForRootLiteral(builder, NullType)
-            case value =>
-              setDataTypeForRootLiteral(builder, toDataType(value.getClass))
-          }
-        }
-        builder
-    }
-
-  }
-
-  def create[T: TypeTag](v: T): proto.Expression.Literal.Builder = Try {
-    val ScalaReflection.Schema(dataType, _) = ScalaReflection.schemaFor[T]
-    toLiteralProtoBuilder(v, dataType)
-  }.getOrElse {
-    toLiteralProtoBuilder(v)
-  }
+  private val missing: Any = new Object
 
   case class ToLiteralProtoOptions(useDeprecatedDataTypeFields: Boolean)
 
@@ -317,28 +51,267 @@ object LiteralValueProtoConverter {
    * @return
    *   proto.Expression.Literal
    */
-  def toLiteralProto(literal: Any): proto.Expression.Literal = {
+  def toLiteralProto(literal: Any): Literal = {
     toLiteralProtoWithOptions(
       literal,
       None,
       ToLiteralProtoOptions(useDeprecatedDataTypeFields = true))
   }
 
-  def toLiteralProto(literal: Any, dataType: DataType): proto.Expression.Literal = {
+  def toLiteralProto(literal: Any, dataType: DataType): Literal = {
     toLiteralProtoWithOptions(
       literal,
       Some(dataType),
       ToLiteralProtoOptions(useDeprecatedDataTypeFields = true))
   }
 
-  def toLiteralProtoWithOptions(
-      literal: Any,
+  private[connect] def toLiteralProtoWithOptions(
+      value: Any,
       dataTypeOpt: Option[DataType],
-      options: ToLiteralProtoOptions): proto.Expression.Literal = {
-    toLiteralProtoBuilderWithOptions(literal, dataTypeOpt, options).build()
+      options: ToLiteralProtoOptions): Literal = {
+    val dataTypeBuilder = dataTypeOpt
+      .map(dataType => FixedDataTypeBuilder(dataType, value == null))
+      .getOrElse(InferringDataTypeBuilder())
+    val (literal, _) = toLiteralProtoBuilderInternal(
+      value,
+      dataTypeBuilder,
+      options,
+      enclosed = false)
+    literal
   }
 
-  private[sql] def toDataType(clz: Class[_]): DataType = clz match {
+  private def toLiteralProtoBuilderInternal(
+      value: Any,
+      dataTypeBuilder: DataTypeBuilder,
+      options: ToLiteralProtoOptions,
+      enclosed: Boolean): (Literal, DataTypeBuilder) = {
+    def result(
+        f: Literal.Builder => Literal.Builder,
+        dataType: DataType): (Literal, DataTypeBuilder) = {
+      val literal = f(Literal.newBuilder()).build()
+      (literal, dataTypeBuilder.merge(dataType, literal.hasNull))
+    }
+    value match {
+      case null | None =>
+        val dataType = dataTypeBuilder.result()
+        val protoDataType = if (enclosed) {
+          // Enclosed NULL value. The dataType is recorded in the enclosing dataType.
+          ProtoDataTypes.NullType
+        } else {
+          // Standalone NULL value. This needs the actual dataType.
+          DataTypeProtoConverter.toConnectProtoType(dataType)
+        }
+        result(_.setNull(protoDataType), dataType)
+      case v: Boolean =>
+        result(_.setBoolean(v), BooleanType)
+      case v: Byte =>
+        result(_.setByte(v), ByteType)
+      case v: Short =>
+        result(_.setShort(v), ShortType)
+      case v: Int =>
+        result(_.setInteger(v), IntegerType)
+      case v: Long =>
+        result(_.setLong(v), LongType)
+      case v: Float =>
+        result(_.setFloat(v), FloatType)
+      case v: Double =>
+        result(_.setDouble(v), DoubleType)
+      case v: BigDecimal =>
+        val dataType = DecimalType(v.precision, v.scale)
+        result(_.setDecimal(toProtoDecimal(v.toString(), dataType)), dataType)
+      case v: JBigDecimal =>
+        val dataType = DecimalType(v.precision, v.scale)
+        result(_.setDecimal(toProtoDecimal(v.toString, dataType)), dataType)
+      case v: Decimal =>
+        val dataType = DecimalType(Math.max(v.precision, v.scale), v.scale)
+        result(_.setDecimal(toProtoDecimal(v.toString, dataType)), dataType)
+      case v: String =>
+        result(_.setString(v), StringType)
+      case v: Char =>
+        result(_.setString(v.toString), StringType)
+      case v: Array[Char] =>
+        result(_.setString(String.valueOf(v)), StringType)
+      case v: Array[Byte] =>
+        result(_.setBinary(ByteString.copyFrom(v)), BinaryType)
+      case v: Instant =>
+        result(_.setTimestamp(SparkDateTimeUtils.instantToMicros(v)), TimestampType)
+      case v: Timestamp =>
+        result(_.setTimestamp(SparkDateTimeUtils.fromJavaTimestamp(v)), TimestampType)
+      case v: LocalDateTime =>
+        result(_.setTimestampNtz(SparkDateTimeUtils.localDateTimeToMicros(v)), TimestampNTZType)
+      case v: LocalDate =>
+        result(_.setDate(v.toEpochDay.toInt), DateType)
+      case v: Date =>
+        result(_.setDate(SparkDateTimeUtils.fromJavaDate(v)), DateType)
+      case v: LocalTime =>
+        val time = Literal.Time.newBuilder()
+          .setNano(SparkDateTimeUtils.localTimeToNanos(v))
+          .setPrecision(TimeType.DEFAULT_PRECISION)
+          .build()
+        result(_.setTime(time), TimeType())
+      case v: Duration =>
+        result(_.setDayTimeInterval(SparkIntervalUtils.durationToMicros(v)), DayTimeIntervalType())
+      case v: Period =>
+        result(
+          _.setYearMonthInterval(SparkIntervalUtils.periodToMonths(v)),
+          YearMonthIntervalType())
+      case v: CalendarInterval =>
+        val interval = Literal.CalendarInterval.newBuilder()
+          .setMonths(v.months)
+          .setDays(v.days)
+          .setMicroseconds(v.microseconds)
+          .build()
+        result(_.setCalendarInterval(interval), CalendarIntervalType)
+      case v: mutable.ArraySeq[_] =>
+        toProtoArrayOrBinary(v.array, dataTypeBuilder, options, enclosed)
+      case v: immutable.ArraySeq[_] =>
+        toProtoArrayOrBinary((v.unsafeArray, dataTypeBuilder, options, enclosed)
+      case v: Array[_] =>
+        toProtoArray(v, dataTypeBuilder, options, enclosed)
+      case s: scala.collection.Seq[_] =>
+        toProtoArray(s, dataTypeBuilder, options, enclosed, () => None)
+      case map: scala.collection.Map[_, _] =>
+        toProtoMap(map, dataTypeBuilder, options, enclosed)
+      case Some(value) =>
+        toLiteralProtoBuilderInternal(value, dataTypeBuilder, options, enclosed)
+      case product: Product =>
+        // If we don't have a schema, we could try to extract one from the class.
+        toProtoStruct(product.productIterator, dataTypeBuilder, options, enclosed)
+      case row: Row =>
+        var structTypeBuilder = dataTypeBuilder
+        if (row.schema != null) {
+          structTypeBuilder = structTypeBuilder.merge(row.schema, isNullable = false)
+        }
+        toProtoStruct(row.toSeq.iterator, structTypeBuilder, options, enclosed)
+      case v =>
+        throw new UnsupportedOperationException(s"literal $v not supported (yet).")
+    }
+  }
+
+  private def toProtoDecimal(value: String, dataType: DecimalType): Literal.Decimal = {
+    Literal.Decimal.newBuilder().setValue(value)
+      .setPrecision(dataType.precision)
+      .setScale(dataType.scale)
+      .build()
+  }
+
+  private def toProtoMap(
+      map: scala.collection.Map[_, _],
+      mapTypeBuilder: DataTypeBuilder,
+      options: ToLiteralProtoOptions,
+      enclosed: Boolean): (Literal, DataTypeBuilder) = {
+    var (keyTypeBuilder, valueTypeBuilder) = mapTypeBuilder.keyValueTypeBuilder()
+    val builder = Literal.newBuilder()
+    val mapBuilder = builder.getMapBuilder
+    map.foreach { case (k, v) =>
+      val (keyLiteral, updatedKeyTypeBuilder) = toLiteralProtoBuilderInternal(
+        k, keyTypeBuilder, options, enclosed = true)
+      mapBuilder.addKeys(keyLiteral)
+      keyTypeBuilder = updatedKeyTypeBuilder
+      val (valueLiteral, updatedValueTypeBuilder) = toLiteralProtoBuilderInternal(
+        v, valueTypeBuilder, options, enclosed = true)
+      mapBuilder.addValues(valueLiteral)
+      valueTypeBuilder = updatedValueTypeBuilder
+    }
+    val updatedMapTypeBuilder = mapTypeBuilder.mergeKeyValueBuilder(
+      keyTypeBuilder,
+      valueTypeBuilder)
+    lazy val protoMapType = DataTypeProtoConverter
+      .toConnectProtoType(updatedMapTypeBuilder.result())
+      .getMap
+    if (options.useDeprecatedDataTypeFields) {
+      mapBuilder.setKeyType(protoMapType.getKeyType)
+      mapBuilder.setValueType(protoMapType.getValueType)
+    } else if (!enclosed && updatedMapTypeBuilder.mustRecordDataType) {
+      mapBuilder.setDataType(protoMapType)
+    }
+    (builder.build(), updatedMapTypeBuilder)
+  }
+
+  private def toProtoArrayOrBinary(
+      array: Array[_],
+      arrayTypeBuilder: DataTypeBuilder,
+      options: ToLiteralProtoOptions,
+      enclosed: Boolean): (Literal, DataTypeBuilder) = {
+    (array, arrayTypeBuilder) match {
+      case (_: Array[Byte], _: InferringDataTypeBuilder | FixedDataTypeBuilder(BinaryType, _))=>
+        toLiteralProtoBuilderInternal(array, arrayTypeBuilder, options, enclosed)
+      case _ =>
+        toProtoArray(array, arrayTypeBuilder, options, enclosed)
+    }
+  }
+
+  private def toProtoArray(
+      array: Array[_],
+      arrayTypeBuilder: DataTypeBuilder,
+      options: ToLiteralProtoOptions,
+      enclosed: Boolean): (Literal, DataTypeBuilder) = {
+    val fallback = () => Try(toDataType(array.getClass.getComponentType)).toOption
+    toProtoArray(array, arrayTypeBuilder, options, enclosed, fallback)
+  }
+
+  private def toProtoArray(
+      iterable: Iterable[_],
+      arrayTypeBuilder: DataTypeBuilder,
+      options: ToLiteralProtoOptions,
+      enclosed: Boolean,
+      fallbackElementTypeGetter: () => Option[DataType]): (Literal, DataTypeBuilder) = {
+    var elementTypeBuilder = arrayTypeBuilder.elementTypeBuilder()
+    val builder = Literal.newBuilder()
+    val arrayBuilder = builder.getArrayBuilder
+    iterable.foreach { e =>
+      val (literal, updatedElementTypeBuilder) = toLiteralProtoBuilderInternal(
+        e, elementTypeBuilder, options, enclosed = true)
+      arrayBuilder.addElements(literal)
+      elementTypeBuilder = updatedElementTypeBuilder
+    }
+    if (!elementTypeBuilder.isDefined) {
+      val fallbackElementType = fallbackElementTypeGetter()
+      if (fallbackElementType.isDefined) {
+        elementTypeBuilder.merge(fallbackElementType.get, isNullable = false)
+      }
+    }
+    val updatedArrayTypeBuilder = arrayTypeBuilder.mergeElementTypeBuilder(elementTypeBuilder)
+    lazy val protoArrayType = DataTypeProtoConverter
+      .toConnectProtoType(updatedArrayTypeBuilder.result())
+      .getArray
+    if (options.useDeprecatedDataTypeFields) {
+      arrayBuilder.setElementType(protoArrayType.getElementType)
+    } else if (!enclosed && updatedArrayTypeBuilder.mustRecordDataType) {
+      arrayBuilder.setDataType(protoArrayType)
+    }
+    (builder.build(), updatedArrayTypeBuilder)
+  }
+
+  private def toProtoStruct(
+      fields: Iterator[_],
+      structTypeBuilder: DataTypeBuilder,
+      options: ToLiteralProtoOptions,
+      enclosed: Boolean): (Literal, DataTypeBuilder) = {
+    val structType = structTypeBuilder.result().asInstanceOf[StructType]
+    val builder = Literal.newBuilder()
+    val structBuilder = builder.getStructBuilder
+    fields.zipAll(structType.fields, missing, null).foreach {
+      case (value, field: StructField) =>
+        require(missing != null)
+        require(field != null)
+        val (literal, _) = toLiteralProtoBuilderInternal(
+          value,
+          FixedDataTypeBuilder(field.dataType, field.nullable),
+          options,
+          enclosed = true)
+        structBuilder.addElements(literal)
+    }
+    def protoStructType = DataTypeProtoConverter.toConnectProtoType(structType)
+    if (options.useDeprecatedDataTypeFields) {
+     structBuilder.setStructType(protoStructType)
+    } else if (!enclosed) {
+      structBuilder.setDataTypeStruct(protoStructType.getStruct)
+    }
+    (builder.build(), structTypeBuilder)
+  }
+
+  private def toDataType(clz: Class[_]): DataType = clz match {
     // primitive types
     case JShort.TYPE => ShortType
     case JInteger.TYPE => IntegerType
@@ -378,285 +351,413 @@ object LiteralValueProtoConverter {
     case _ =>
       throw new UnsupportedOperationException(s"Unsupported component type $clz in arrays.")
   }
+}
 
-  def toScalaValue(literal: proto.Expression.Literal): Any = {
-    getScalaConverter(getProtoDataType(literal))(literal)
+/**
+ * Base trait for converting a [[proto.Expression.Literal]] into either its Scala representation or
+ * into its Catalyst representation.
+ */
+trait FromProtoConvertor {
+  def convertToValue(literal: proto.Expression.Literal): Any = {
+    convert(literal, EmptyDataTypeBuilder)._2
   }
 
-  private def getScalaConverter(dataType: proto.DataType): proto.Expression.Literal => Any = {
-    val converter: proto.Expression.Literal => Any = dataType.getKindCase match {
-      case proto.DataType.KindCase.NULL =>
-        v => throw InvalidPlanInput(s"Expected null value, but got ${v.getLiteralTypeCase}")
-      case proto.DataType.KindCase.SHORT => v => v.getShort.toShort
-      case proto.DataType.KindCase.INTEGER => v => v.getInteger
-      case proto.DataType.KindCase.LONG => v => v.getLong
-      case proto.DataType.KindCase.DOUBLE => v => v.getDouble
-      case proto.DataType.KindCase.BYTE => v => v.getByte.toByte
-      case proto.DataType.KindCase.FLOAT => v => v.getFloat
-      case proto.DataType.KindCase.BOOLEAN => v => v.getBoolean
-      case proto.DataType.KindCase.STRING => v => v.getString
-      case proto.DataType.KindCase.BINARY => v => v.getBinary.toByteArray
-      case proto.DataType.KindCase.DATE =>
-        v => SparkDateTimeUtils.toJavaDate(v.getDate)
-      case proto.DataType.KindCase.TIMESTAMP =>
-        v => SparkDateTimeUtils.toJavaTimestamp(v.getTimestamp)
-      case proto.DataType.KindCase.TIMESTAMP_NTZ =>
-        v => SparkDateTimeUtils.microsToLocalDateTime(v.getTimestampNtz)
-      case proto.DataType.KindCase.DAY_TIME_INTERVAL =>
-        v => SparkIntervalUtils.microsToDuration(v.getDayTimeInterval)
-      case proto.DataType.KindCase.YEAR_MONTH_INTERVAL =>
-        v => SparkIntervalUtils.monthsToPeriod(v.getYearMonthInterval)
-      case proto.DataType.KindCase.TIME =>
-        v => SparkDateTimeUtils.nanosToLocalTime(v.getTime.getNano)
-      case proto.DataType.KindCase.DECIMAL => v => Decimal(v.getDecimal.getValue)
-      case proto.DataType.KindCase.CALENDAR_INTERVAL =>
-        v =>
-          val interval = v.getCalendarInterval
-          new CalendarInterval(interval.getMonths, interval.getDays, interval.getMicroseconds)
-      case proto.DataType.KindCase.ARRAY =>
-        v => toScalaArrayInternal(v, dataType.getArray)
-      case proto.DataType.KindCase.MAP =>
-        v => toScalaMapInternal(v, dataType.getMap)
-      case proto.DataType.KindCase.STRUCT =>
-        v => toScalaStructInternal(v, dataType.getStruct)
-      case _ =>
-        throw InvalidPlanInput(s"Unsupported Literal Type: ${dataType.getKindCase}")
+  def convert(literal: proto.Expression.Literal): (DataType, Any) = {
+    val (builder, value) = convert(literal, EmptyDataTypeBuilder)
+    (builder.result(), value)
+  }
+
+  private def convert(
+      literal: proto.Expression.Literal,
+      dataTypeBuilder: DataTypeBuilder): (DataTypeBuilder, Any) = {
+    def result(dataType: DataType, value: Any): (DataTypeBuilder, Any) = {
+      (dataTypeBuilder.merge(dataType, value == null), value)
     }
-    v => if (v.hasNull) null else converter(v)
-  }
-
-  private def isCompatible(
-      literalTypeCase: proto.Expression.Literal.LiteralTypeCase,
-      dataTypeCase: proto.DataType.KindCase): Boolean = {
-    (literalTypeCase, dataTypeCase) match {
-      case (proto.Expression.Literal.LiteralTypeCase.NULL, _) =>
-        true
-      case (proto.Expression.Literal.LiteralTypeCase.BINARY, proto.DataType.KindCase.BINARY) =>
-        true
-      case (proto.Expression.Literal.LiteralTypeCase.BOOLEAN, proto.DataType.KindCase.BOOLEAN) =>
-        true
-      case (proto.Expression.Literal.LiteralTypeCase.BYTE, proto.DataType.KindCase.BYTE) =>
-        true
-      case (proto.Expression.Literal.LiteralTypeCase.SHORT, proto.DataType.KindCase.SHORT) =>
-        true
-      case (proto.Expression.Literal.LiteralTypeCase.INTEGER, proto.DataType.KindCase.INTEGER) =>
-        true
-      case (proto.Expression.Literal.LiteralTypeCase.LONG, proto.DataType.KindCase.LONG) =>
-        true
-      case (proto.Expression.Literal.LiteralTypeCase.FLOAT, proto.DataType.KindCase.FLOAT) =>
-        true
-      case (proto.Expression.Literal.LiteralTypeCase.DOUBLE, proto.DataType.KindCase.DOUBLE) =>
-        true
-      case (proto.Expression.Literal.LiteralTypeCase.DECIMAL, proto.DataType.KindCase.DECIMAL) =>
-        true
-      case (proto.Expression.Literal.LiteralTypeCase.STRING, proto.DataType.KindCase.STRING) =>
-        true
-      case (proto.Expression.Literal.LiteralTypeCase.DATE, proto.DataType.KindCase.DATE) =>
-        true
-      case (
-            proto.Expression.Literal.LiteralTypeCase.TIMESTAMP,
-            proto.DataType.KindCase.TIMESTAMP) =>
-        true
-      case (
-            proto.Expression.Literal.LiteralTypeCase.TIMESTAMP_NTZ,
-            proto.DataType.KindCase.TIMESTAMP_NTZ) =>
-        true
-      case (
-            proto.Expression.Literal.LiteralTypeCase.CALENDAR_INTERVAL,
-            proto.DataType.KindCase.CALENDAR_INTERVAL) =>
-        true
-      case (
-            proto.Expression.Literal.LiteralTypeCase.DAY_TIME_INTERVAL,
-            proto.DataType.KindCase.DAY_TIME_INTERVAL) =>
-        true
-      case (
-            proto.Expression.Literal.LiteralTypeCase.YEAR_MONTH_INTERVAL,
-            proto.DataType.KindCase.YEAR_MONTH_INTERVAL) =>
-        true
-      case (proto.Expression.Literal.LiteralTypeCase.TIME, proto.DataType.KindCase.TIME) =>
-        true
-      case (proto.Expression.Literal.LiteralTypeCase.ARRAY, proto.DataType.KindCase.ARRAY) =>
-        true
-      case (proto.Expression.Literal.LiteralTypeCase.MAP, proto.DataType.KindCase.MAP) =>
-        true
-      case (proto.Expression.Literal.LiteralTypeCase.STRUCT, proto.DataType.KindCase.STRUCT) =>
-        true
-      case _ => false
-    }
-  }
-
-  def getProtoDataType(literal: proto.Expression.Literal): proto.DataType = {
-    val dataType = if (literal.hasDataType) {
-      literal.getDataType
-    } else {
-      // For backward compatibility, we still support the old way to
-      // define the data type of the literal.
-      if (literal.getLiteralTypeCase == proto.Expression.Literal.LiteralTypeCase.NULL) {
-        literal.getNull
-      } else {
-        val builder = proto.DataType.newBuilder()
-        literal.getLiteralTypeCase match {
-          case proto.Expression.Literal.LiteralTypeCase.BINARY =>
-            builder.setBinary(proto.DataType.Binary.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.BOOLEAN =>
-            builder.setBoolean(proto.DataType.Boolean.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.BYTE =>
-            builder.setByte(proto.DataType.Byte.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.SHORT =>
-            builder.setShort(proto.DataType.Short.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.INTEGER =>
-            builder.setInteger(proto.DataType.Integer.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.LONG =>
-            builder.setLong(proto.DataType.Long.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.FLOAT =>
-            builder.setFloat(proto.DataType.Float.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.DOUBLE =>
-            builder.setDouble(proto.DataType.Double.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.DECIMAL =>
-            val decimal = Decimal.apply(literal.getDecimal.getValue)
-            var precision = decimal.precision
-            if (literal.getDecimal.hasPrecision) {
-              precision = math.max(precision, literal.getDecimal.getPrecision)
-            }
-            var scale = decimal.scale
-            if (literal.getDecimal.hasScale) {
-              scale = math.max(scale, literal.getDecimal.getScale)
-            }
-            builder.setDecimal(
-              proto.DataType.Decimal
-                .newBuilder()
-                .setPrecision(math.max(precision, scale))
-                .setScale(scale)
-                .build())
-          case proto.Expression.Literal.LiteralTypeCase.STRING =>
-            builder.setString(proto.DataType.String.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.DATE =>
-            builder.setDate(proto.DataType.Date.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.TIMESTAMP =>
-            builder.setTimestamp(proto.DataType.Timestamp.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.TIMESTAMP_NTZ =>
-            builder.setTimestampNtz(proto.DataType.TimestampNTZ.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.CALENDAR_INTERVAL =>
-            builder.setCalendarInterval(proto.DataType.CalendarInterval.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.YEAR_MONTH_INTERVAL =>
-            builder.setYearMonthInterval(proto.DataType.YearMonthInterval.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.DAY_TIME_INTERVAL =>
-            builder.setDayTimeInterval(proto.DataType.DayTimeInterval.newBuilder().build())
-          case proto.Expression.Literal.LiteralTypeCase.TIME =>
-            val timeBuilder = proto.DataType.Time.newBuilder()
-            if (literal.getTime.hasPrecision) {
-              timeBuilder.setPrecision(literal.getTime.getPrecision)
-            }
-            builder.setTime(timeBuilder.build())
-          case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
-            if (literal.getArray.hasElementType) {
-              builder.setArray(
-                proto.DataType.Array
-                  .newBuilder()
-                  .setElementType(literal.getArray.getElementType)
-                  .setContainsNull(true)
-                  .build())
-            } else {
-              throw InvalidPlanInput("Data type information is missing in the array literal.")
-            }
-          case proto.Expression.Literal.LiteralTypeCase.MAP =>
-            if (literal.getMap.hasKeyType && literal.getMap.hasValueType) {
-              builder.setMap(
-                proto.DataType.Map
-                  .newBuilder()
-                  .setKeyType(literal.getMap.getKeyType)
-                  .setValueType(literal.getMap.getValueType)
-                  .setValueContainsNull(true)
-                  .build())
-            } else {
-              throw InvalidPlanInput("Data type information is missing in the map literal.")
-            }
-          case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
-            if (literal.getStruct.hasStructType) {
-              builder.setStruct(literal.getStruct.getStructType.getStruct)
-            } else {
-              throw InvalidPlanInput("Data type information is missing in the struct literal.")
-            }
-          case _ =>
-            throw InvalidPlanInput(
-              s"Unsupported Literal Type: ${literal.getLiteralTypeCase.name}" +
-                s"(${literal.getLiteralTypeCase.getNumber})")
+    literal.getLiteralTypeCase match {
+      case LiteralTypeCase.NULL =>
+        result(DataTypeProtoConverter.toCatalystType(literal.getNull), null)
+      case LiteralTypeCase.BOOLEAN =>
+        result(BooleanType, literal.getBoolean)
+      case LiteralTypeCase.BYTE =>
+        result(ByteType, literal.getByte.toByte)
+      case LiteralTypeCase.SHORT =>
+        result(ShortType, literal.getShort.toShort)
+      case LiteralTypeCase.INTEGER =>
+        result(IntegerType, literal.getInteger)
+      case LiteralTypeCase.LONG =>
+        result(LongType, literal.getLong)
+      case LiteralTypeCase.FLOAT =>
+        result(FloatType, literal.getFloat)
+      case LiteralTypeCase.DOUBLE =>
+        result(DoubleType, literal.getDouble)
+      case LiteralTypeCase.DECIMAL =>
+        val d = literal.getDecimal
+        val decimal = Decimal(d.getValue)
+        if (d.hasPrecision && d.getPrecision != decimal.precision) {
+          throw InvalidPlanInput("<DECIMAL PRECISION MISMATCH>")
         }
-        builder.build()
+        if (d.hasScale && d.getScale != decimal.scale) {
+          throw InvalidPlanInput("<DECIMAL SCALE MISMATCH>")
+        }
+        result(DecimalType(decimal.precision, decimal.scale), decimal)
+      case LiteralTypeCase.TIME =>
+        val time = literal.getTime
+        val dataType = if (time.hasPrecision) {
+          TimeType(time.getPrecision)
+        } else {
+          TimeType()
+        }
+        result(dataType, convertTime(time))
+      case LiteralTypeCase.DATE =>
+        result(DateType, convertDate(literal.getDate))
+      case LiteralTypeCase.TIMESTAMP =>
+        result(TimestampType, convertTimestamp(literal.getTimestamp))
+      case LiteralTypeCase.TIMESTAMP_NTZ =>
+        result(TimestampNTZType, convertTimestampNTZ(literal.getTimestampNtz))
+      case LiteralTypeCase.STRING =>
+        // We do not support collations yet.
+        result(StringType, convertString(literal.getStringBytes))
+      case LiteralTypeCase.BINARY =>
+        result(BinaryType, literal.getBinary.toByteArray)
+      case LiteralTypeCase.CALENDAR_INTERVAL =>
+        val i = literal.getCalendarInterval
+        result(
+          CalendarIntervalType,
+          new CalendarInterval(i.getMonths, i.getDays, i.getMicroseconds))
+      case LiteralTypeCase.DAY_TIME_INTERVAL =>
+        result(DayTimeIntervalType.DEFAULT, convertDayTimeInterval(literal.getDayTimeInterval))
+      case LiteralTypeCase.YEAR_MONTH_INTERVAL =>
+        result(
+          YearMonthIntervalType.DEFAULT,
+          convertYearMonthInterval(literal.getYearMonthInterval))
+      case LiteralTypeCase.ARRAY =>
+        convertArray(literal.getArray, dataTypeBuilder)
+      case LiteralTypeCase.MAP =>
+        convertMap(literal.getMap, dataTypeBuilder)
+      case LiteralTypeCase.STRUCT =>
+        var structTypeBuilder = dataTypeBuilder
+        val struct = literal.getStruct
+        if (struct.hasDataTypeStruct) {
+          val structType = DataTypeProtoConverter.toCatalystStructType(struct.getDataTypeStruct)
+          structTypeBuilder = structTypeBuilder.merge(structType, isNullable = false)
+        }
+        if (struct.hasStructType) {
+          val structType = DataTypeProtoConverter.toCatalystType(struct.getStructType)
+          structTypeBuilder = structTypeBuilder.merge(structType, isNullable = false)
+        }
+        val result = structTypeBuilder.result() match {
+          case structType: StructType =>
+            convertStruct(struct, structType)
+          case udt: UserDefinedType[_] =>
+            convertUdt(struct, udt)
+          case _ =>
+            throw InvalidPlanInput("<NO STRUCT SCHEMA>")
+        }
+        (structTypeBuilder, result)
+      case literalTypeCase =>
+        // At some point we may want to support specialized arrays...
+        throw InvalidPlanInput(
+          s"Unsupported Literal Type: ${literalTypeCase.name}(${literalTypeCase.getNumber})")
+    }
+  }
+
+  private def convertArray(
+      array: CArray,
+      arrayTypeBuilder: DataTypeBuilder): (DataTypeBuilder, Any) = {
+    var elementTypeBuilder = arrayTypeBuilder.elementTypeBuilder()
+    if (array.hasDataType) {
+      val arrayType = DataTypeProtoConverter.toCatalystArrayType(array.getDataType)
+      elementTypeBuilder = elementTypeBuilder.merge(
+        arrayType.elementType,
+        arrayType.containsNull)
+    }
+    if (array.hasElementType) {
+      elementTypeBuilder = elementTypeBuilder.merge(
+        DataTypeProtoConverter.toCatalystType(array.getElementType),
+        isNullable = true)
+    }
+    val numElements = array.getElementsCount
+    val builder = arrayBuilder(numElements)
+    var i = 0
+    while (i < numElements) {
+      val (updatedElementTypeBuilder, element) = convert(
+        array.getElements(i),
+        elementTypeBuilder)
+      elementTypeBuilder = updatedElementTypeBuilder
+      builder += element
+      i += 1
+    }
+    (arrayTypeBuilder.mergeElementTypeBuilder(elementTypeBuilder), builder.result())
+  }
+
+  private def convertMap(map: CMap, dataTypeBuilder: DataTypeBuilder): (DataTypeBuilder, Any) = {
+    var (keyTypeBuilder, valueTypeBuilder): (DataTypeBuilder, DataTypeBuilder) =
+      dataTypeBuilder.keyValueTypeBuilder()
+    if (map.hasDataType) {
+      val mapType = DataTypeProtoConverter.toCatalystMapType(map.getDataType)
+      keyTypeBuilder = keyTypeBuilder.merge(mapType.keyType, isNullable = false)
+      valueTypeBuilder = valueTypeBuilder.merge(mapType.valueType, mapType.valueContainsNull)
+    }
+    if (map.hasKeyType) {
+      val keyType = DataTypeProtoConverter.toCatalystType(map.getKeyType)
+      keyTypeBuilder = keyTypeBuilder.merge(keyType, isNullable = false)
+    }
+    if (map.hasValueType) {
+      val valueType = DataTypeProtoConverter.toCatalystType(map.getValueType)
+      valueTypeBuilder = valueTypeBuilder.merge(valueType, isNullable = true)
+    }
+    val numElements = map.getKeysCount
+    if (numElements != map.getValuesCount) {
+      throw InvalidPlanInput("<LENGTH MISMATCH>")
+    }
+    val builder = mapBuilder(numElements)
+    var i = 0
+    while (i < numElements) {
+      val (updatedKeyTypeBuilder, key) = convert(map.getKeys(i), keyTypeBuilder)
+      val (updatedValueTypeBuilder, value) = convert(map.getValues(i), valueTypeBuilder)
+      keyTypeBuilder = updatedKeyTypeBuilder
+      valueTypeBuilder = updatedValueTypeBuilder
+      builder += key -> value
+      i += 1
+    }
+    (dataTypeBuilder.mergeKeyValueBuilder(keyTypeBuilder, valueTypeBuilder), builder.result())
+  }
+
+  private def convertStruct(struct: Struct, structType: StructType): Any = {
+    val numFields = structType.length
+    if (numFields != struct.getElementsCount) {
+      throw InvalidPlanInput("<NUM FIELDS MISMATCH>")
+    }
+    val builder = structBuilder(structType)
+    var i = 0
+    while (i < numFields) {
+      val field = structType(i)
+      val fieldDataTypeBuilder = FixedDataTypeBuilder(field.dataType, field.nullable)
+      val (_, value) = convert(struct.getElements(i), fieldDataTypeBuilder)
+      builder += value
+      i += 1
+    }
+    builder.result()
+  }
+
+  protected def convertUdt(struct: Struct, udt: UserDefinedType[_]): Any =
+    throw InvalidPlanInput("<UDT_NOT_SUPPORTED")
+
+  protected def convertString(string: ByteString): Any
+  protected def convertTime(value: proto.Expression.Literal.Time): Any
+  protected def convertDate(value: Int): Any
+  protected def convertTimestamp(value: Long): Any
+  protected def convertTimestampNTZ(value: Long): Any
+  protected def convertDayTimeInterval(value: Long): Any
+  protected def convertYearMonthInterval(value: Int): Any
+
+  protected def arrayBuilder(size: Int): mutable.Builder[Any, Any]
+  protected def mapBuilder(size: Int): mutable.Builder[(Any, Any), Any]
+  protected def structBuilder(schema: StructType): mutable.Builder[Any, Any]
+}
+
+/**
+ * Class for converting a [[proto.Expression.Literal]] into either its Scala representation.
+ */
+class FromProtoToScalaConverter extends FromProtoConvertor {
+  override protected def convertString(value: ByteString): String = value.toStringUtf8
+  override protected def convertTime(value: Literal.Time): Any =
+    SparkDateTimeUtils.nanosToLocalTime(value.getNano)
+  override protected def convertDate(value: Int): Any =
+    SparkDateTimeUtils.toJavaDate(value)
+  override protected def convertTimestamp(value: Long): Any =
+    SparkDateTimeUtils.toJavaTimestamp(value)
+  override protected def convertTimestampNTZ(value: Long): Any =
+    SparkDateTimeUtils.microsToLocalDateTime(value)
+  override protected def convertDayTimeInterval(value: Long): Any =
+    SparkIntervalUtils.microsToDuration(value)
+  override protected def convertYearMonthInterval(value: Int): Any =
+    SparkIntervalUtils.monthsToPeriod(value)
+  override protected def arrayBuilder(size: Int): mutable.Builder[Any, Any] = Seq.newBuilder
+  override protected def mapBuilder(size: Int): mutable.Builder[(Any, Any), Any] = Map.newBuilder
+  override protected def structBuilder(schema: StructType): mutable.Builder[Any, Any] = {
+    new mutable.Builder[Any, Row] {
+      private var index = 0
+      private var values: Array[Any] = _
+      clear()
+
+      override def clear(): Unit = {
+        index = 0
+        values = new Array[Any](schema.length)
+      }
+
+      override def addOne(elem: Any): this.type = {
+        values(index) = elem
+        index += 1
+        this
+      }
+
+      override def result(): Row = {
+        assert(index == values.length)
+        new GenericRowWithSchema(values, schema)
       }
     }
+  }
+}
 
-    if (!isCompatible(literal.getLiteralTypeCase, dataType.getKindCase)) {
-      throw InvalidPlanInput(
-        s"Incompatible data type ${dataType.getKindCase} " +
-          s"for literal ${literal.getLiteralTypeCase}")
-    }
+object FromProtoToScalaConverter extends FromProtoToScalaConverter
 
-    dataType
+sealed trait DataTypeBuilder {
+  def merge(dataType: DataType, isNullable: Boolean): DataTypeBuilder
+  def nullable(): Boolean
+  def result(): DataType
+  def isDefined: Boolean
+  def mustRecordDataType: Boolean
+
+  protected def throwIncompatibleDataTypeException(
+      expectedDataType: DataType,
+      mergeDataType: DataType): Nothing = {
+    throw InvalidPlanInput(s"Literal contains a field of DataType `$mergeDataType` which is " +
+      s"incompatible with the expected DataType `$expectedDataType`")
   }
 
-  private def toScalaArrayInternal(
-      literal: proto.Expression.Literal,
-      arrayType: proto.DataType.Array): Array[_] = {
-    if (!literal.hasArray) {
-      throw InvalidPlanInput("Array literal is not set.")
-    }
-    val array = literal.getArray
-    def makeArrayData[T](converter: proto.Expression.Literal => T)(implicit
-        tag: ClassTag[T]): Array[T] = {
-      val size = array.getElementsCount
-      if (size > 0) {
-        Array.tabulate(size)(i => converter(array.getElements(i)))
-      } else {
-        Array.empty[T]
-      }
-    }
-
-    makeArrayData(getScalaConverter(arrayType.getElementType))
+  def keyValueTypeBuilder(): (DataTypeBuilder, DataTypeBuilder) = this match {
+    case FixedDataTypeBuilder(mapType: MapType, _) =>
+      (FixedDataTypeBuilder(mapType.keyType, isNullable = false),
+        FixedDataTypeBuilder(mapType.valueType, mapType.valueContainsNull))
+    case _: FixedDataTypeBuilder => throw InvalidPlanInput("<NO MAP TYPE>")
+    case _ => (InferringDataTypeBuilder(), InferringDataTypeBuilder())
   }
 
-  private def toScalaMapInternal(
-      literal: proto.Expression.Literal,
-      mapType: proto.DataType.Map): mutable.Map[_, _] = {
-    if (!literal.hasMap) {
-      throw InvalidPlanInput("Map literal is not set.")
+  def mergeKeyValueBuilder(
+      keyTypeBuilder: DataTypeBuilder,
+      valueTypeBuilder: DataTypeBuilder): DataTypeBuilder = {
+    if (keyTypeBuilder.nullable()) {
+      throw InvalidPlanInput("<KEY NOT NULL>")
     }
-    val map = literal.getMap
-    def makeMapData[K, V](
-        keyConverter: proto.Expression.Literal => K,
-        valueConverter: proto.Expression.Literal => V)(implicit
-        tagK: ClassTag[K],
-        tagV: ClassTag[V]): mutable.Map[K, V] = {
-      val size = map.getKeysCount
-      if (size > 0) {
-        val m = mutable.LinkedHashMap.empty[K, V]
-        m.sizeHint(size)
-        m.addAll(Iterator.tabulate(size)(i =>
-          (keyConverter(map.getKeys(i)), valueConverter(map.getValues(i)))))
-      } else {
-        mutable.Map.empty[K, V]
-      }
-    }
-
-    makeMapData(getScalaConverter(mapType.getKeyType), getScalaConverter(mapType.getValueType))
+    val mapType = MapType(
+      keyTypeBuilder.result(),
+      valueTypeBuilder.result(),
+      valueTypeBuilder.nullable())
+    merge(mapType, isNullable = false)
   }
 
-  private def toScalaStructInternal(
-      literal: proto.Expression.Literal,
-      structType: proto.DataType.Struct): Any = {
-    if (!literal.hasStruct) {
-      throw InvalidPlanInput("Struct literal is not set.")
-    }
-    val struct = literal.getStruct
-    val structData = Array.tabulate(struct.getElementsCount) { i =>
-      val element = struct.getElements(i)
-      val dataType = structType.getFields(i).getDataType
-      getScalaConverter(dataType)(element)
-    }
-    new GenericRowWithSchema(structData, DataTypeProtoConverter.toCatalystStructType(structType))
+  def elementTypeBuilder(): DataTypeBuilder = this match {
+    case FixedDataTypeBuilder(ArrayType(elementType, containsNull), _) =>
+      FixedDataTypeBuilder(elementType, containsNull)
+    case _: FixedDataTypeBuilder => throw InvalidPlanInput("<NO ARRAY TYPE>")
+    case _ => InferringDataTypeBuilder()
   }
 
-  def getDataType(literal: proto.Expression.Literal): DataType = {
-    DataTypeProtoConverter.toCatalystType(getProtoDataType(literal))
+  def mergeElementTypeBuilder(elementTypeBuilder: DataTypeBuilder): DataTypeBuilder = {
+    val arrayType = ArrayType(elementTypeBuilder.result(), elementTypeBuilder.nullable())
+    merge(arrayType, isNullable = false)
+  }
+}
+
+object EmptyDataTypeBuilder extends DataTypeBuilder {
+  override def merge(dataType: DataType, isNull: Boolean): DataTypeBuilder =
+    FixedDataTypeBuilder(dataType, isNull)
+  override def nullable(): Boolean = throw new NoSuchElementException("nullable()")
+  override def result(): DataType = throw new NoSuchElementException("result()")
+  override def isDefined: Boolean = false
+  override def mustRecordDataType: Boolean = false
+}
+
+case class FixedDataTypeBuilder(dataType: DataType, isNullable: Boolean) extends DataTypeBuilder {
+  override def merge(mergeDataType: DataType, mergeIsNull: Boolean): DataTypeBuilder = {
+    if (!isNullable && mergeIsNull) {
+      throw InvalidPlanInput("<NO NULLS ALLOWED>")
+    }
+    val ok = (dataType, mergeDataType) match {
+      case (l: DecimalType, r: DecimalType) =>
+        l.isWiderThan(r)
+      case (_, _: NullType) =>
+        mergeIsNull
+      case _ =>
+        // A merged dataType is allowed to be more strict than the dataType we are enforcing.
+        DataType.equalsIgnoreCompatibleNullability(mergeDataType, dataType)
+    }
+    if (!ok) {
+      throwIncompatibleDataTypeException(dataType, mergeDataType)
+    }
+    this
+  }
+  override def nullable(): Boolean = isNullable
+  override def result(): DataType = dataType
+  override def isDefined: Boolean = true
+
+  // This can be more subtle. We could also check if the inferred
+  // dataType matches the fixed dataType.
+  override def mustRecordDataType: Boolean = true
+}
+
+case class InferringDataTypeBuilder() extends DataTypeBuilder {
+  private var dataType: DataType = NullType
+  private var isNullable: Boolean = false
+  override def isDefined: Boolean = dataType != NullType
+
+  override def mustRecordDataType: Boolean = dataType.existsRecursively { dt =>
+    dt.isInstanceOf[StructType] || dt == NullType
+  }
+
+  override def merge(mergeDataType: DataType, mergeIsNull: Boolean): DataTypeBuilder = {
+    assert(mergeIsNull || mergeDataType != NullType)
+    dataType = mergeDataTypes(dataType, mergeDataType).getOrElse {
+      throwIncompatibleDataTypeException(dataType, mergeDataType)
+    }
+    isNullable |= mergeIsNull
+    this
+  }
+  override def nullable(): Boolean = isNullable
+  override def result(): DataType = dataType
+}
+
+object InferringDataTypeBuilder {
+  def mergeDataTypes(left: DataType, right: DataType): Option[DataType] = {
+    (left, right) match {
+      // Add Decimal support...
+      case (l, r) if l eq r => Some(l)
+      case (l: AtomicType, r: AtomicType) if l == r => Some(l)
+      case (l: DecimalType, r: DecimalType) =>
+        if (l.isWiderThan(r)) {
+          Some(l)
+        } else if (r.isWiderThan(l)) {
+          Some(r)
+        } else {
+          None
+        }
+      case (_: AtomicType, _: AtomicType) => None
+      case (_: NullType, dt) if !dt.isInstanceOf[NullType] => Some(dt)
+      case (dt, _: NullType) if !dt.isInstanceOf[NullType] => Some(dt)
+      case (l: NullType, _: NullType) => Some(l)
+
+      case (ArrayType(leftElemType, leftNulls),
+            ArrayType(rightElemType, rightNulls)) =>
+        mergeDataTypes(leftElemType, rightElemType).map { elemType =>
+          ArrayType(elemType, leftNulls || rightNulls)
+        }
+      case (MapType(leftKeyType, leftValueType, leftValueNulls),
+            MapType(rightKeyType, rightValueType, rightValueNulls)) =>
+        mergeDataTypes(leftKeyType, rightKeyType)
+          .zip(mergeDataTypes(leftValueType, rightValueType))
+          .map {
+            case (keyType, valueType) =>
+              MapType(keyType, valueType, leftValueNulls || rightValueNulls)
+          }
+      case (StructType(leftFields), StructType(rightFields)) =>
+        if (leftFields.length != rightFields.length) {
+          return None
+        }
+        val fields = leftFields.zip(rightFields).flatMap {
+          case (leftField, rightField) if leftField.name == rightField.name =>
+            mergeDataTypes(leftField.dataType, rightField.dataType).map { fieldType =>
+              val nullable = leftField.nullable || rightField.nullable
+              leftField.copy(dataType = fieldType, nullable = nullable)
+            }
+          case _ => None
+        }
+        if (fields.length == leftFields.length) {
+          Some(StructType(fields))
+        } else {
+          None
+        }
+      case _ => None
+    }
   }
 }

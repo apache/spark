@@ -33,8 +33,8 @@ import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.connect.client.arrow.{AbstractMessageIterator, ArrowDeserializingIterator, ConcatenatingArrowStreamReader, MessageIterator}
-import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, LiteralValueProtoConverter}
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, FromProtoToScalaConverter}
+import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.sql.util.ArrowUtils
 
 private[sql] class SparkResult[T](
@@ -376,17 +376,17 @@ private[sql] object SparkResult {
 
   /** Return value is a Seq of pairs, to preserve the order of values. */
   private[sql] def transformObservedMetrics(metric: ObservedMetrics): Row = {
-    assert(metric.getKeysCount == metric.getValuesCount)
-    var schema = new StructType()
+    require(metric.getKeysCount == metric.getValuesCount)
+    val fields = mutable.ArrayBuilder.make[StructField]
     val values = mutable.ArrayBuilder.make[Any]
+    fields.sizeHint(metric.getKeysCount)
     values.sizeHint(metric.getKeysCount)
-    (0 until metric.getKeysCount).foreach { i =>
-      val key = metric.getKeys(i)
-      val value = LiteralValueProtoConverter.toScalaValue(metric.getValues(i))
-      schema = schema.add(key, LiteralValueProtoConverter.getDataType(metric.getValues(i)))
+    Range(0, metric.getKeysCount).foreach { i =>
+      val (dataType, value) = FromProtoToScalaConverter.convert(metric.getValues(i))
+      fields += StructField(metric.getKeys(i), dataType, value == null)
       values += value
     }
-    new GenericRowWithSchema(values.result(), schema)
+    new GenericRowWithSchema(values.result(), new StructType(fields.result()))
   }
 }
 

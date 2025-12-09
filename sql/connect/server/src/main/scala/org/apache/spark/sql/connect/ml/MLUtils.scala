@@ -40,7 +40,7 @@ import org.apache.spark.ml.tree.{DecisionTreeModel, TreeEnsembleModel}
 import org.apache.spark.ml.util.{ConnectHelper, HasTrainingSummary, Identifiable, MLReader, MLWritable}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.classic.Dataset
-import org.apache.spark.sql.connect.common.{LiteralValueProtoConverter, ProtoSpecializedArray}
+import org.apache.spark.sql.connect.common.{FromProtoToScalaConverter, ProtoSpecializedArray}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.SessionHolder
@@ -140,7 +140,7 @@ private[ml] object MLUtils {
           }
 
         case _ =>
-          val paramValue = LiteralValueProtoConverter.toScalaValue(literal)
+          val paramValue = FromProtoToScalaConverter.convertToValue(literal)
           val paramType: Class[_] = if (p.dataClass == null) {
             if (paramValue.isInstanceOf[String]) {
               classOf[String]
