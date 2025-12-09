@@ -81,6 +81,7 @@ private[sql] object AvroUtils extends Logging {
   }
 
   def supportsDataType(dataType: DataType): Boolean = dataType match {
+    case _: TimeType => SQLConf.get.isTimeTypeEnabled
     case _: VariantType => false
 
     case _: AtomicType => true
