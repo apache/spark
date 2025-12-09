@@ -540,8 +540,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
 
         for batch in batches:
             pandas_batches = [
-                self.arrow_to_pandas(batch.column(i), i)
-                for i in range(batch.num_columns)
+                self.arrow_to_pandas(batch.column(i), i) for i in range(batch.num_columns)
             ]
             if len(pandas_batches) == 0:
                 yield [pd.Series([pyspark._NoValue] * batch.num_rows)]
@@ -1258,16 +1257,13 @@ class ArrowStreamAggPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
                     # Optimize single batch case: directly access columns without creating Table
                     batch = batches[0]
                     yield [
-                        self.arrow_to_pandas(batch.column(i), i)
-                        for i in range(batch.num_columns)
+                        self.arrow_to_pandas(batch.column(i), i) for i in range(batch.num_columns)
                     ]
                 else:
                     # Multiple batches: need Table to merge them
                     yield [
                         self.arrow_to_pandas(c, i)
-                        for i, c in enumerate(
-                            pa.Table.from_batches(batches).itercolumns()
-                        )
+                        for i, c in enumerate(pa.Table.from_batches(batches).itercolumns())
                     ]
 
             elif dataframes_in_group != 0:
@@ -1314,8 +1310,7 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
             for batch in batches:
                 # The batch from ArrowStreamSerializer is already flattened (no struct wrapper)
                 series = [
-                    self.arrow_to_pandas(batch.column(i), i)
-                    for i in range(batch.num_columns)
+                    self.arrow_to_pandas(batch.column(i), i) for i in range(batch.num_columns)
                 ]
                 yield series
 
