@@ -161,7 +161,6 @@ private[sql] case class ColumnMetadata(
 // Only parse the "version" field and ignore all others
 @JsonIgnoreProperties(ignoreUnknown = true)
 private[sql] case class YAMLVersion(version: String) {
-  private def validYAMLVersions: Set[String] = Set("0.1")
 }
 
 private[sql] object YAMLVersion {
