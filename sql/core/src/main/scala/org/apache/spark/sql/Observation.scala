@@ -81,7 +81,11 @@ class Observation(val name: String) {
    * @return observed dataset
    * @throws IllegalArgumentException If this is a streaming Dataset (ds.isStreaming == true)
    */
-  private[spark] def on[T](ds: Dataset[T], dataframeId: Long, expr: Column, exprs: Column*): Dataset[T] = {
+  private[spark] def on[T](
+      ds: Dataset[T],
+      dataframeId: Long,
+      expr: Column,
+      exprs: Column*): Dataset[T] = {
     if (ds.isStreaming) {
       throw new IllegalArgumentException("Observation does not support streaming Datasets")
     }
