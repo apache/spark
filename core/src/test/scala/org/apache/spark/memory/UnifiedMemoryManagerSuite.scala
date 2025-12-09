@@ -48,6 +48,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
       .set(TEST_MEMORY, maxOnHeapExecutionMemory)
       .set(MEMORY_OFFHEAP_SIZE, maxOffHeapExecutionMemory)
       .set(MEMORY_STORAGE_FRACTION, storageFraction)
+      .set(MEMORY_OFFHEAP_ENABLED, true)
     UnifiedMemoryManager(conf, numCores = 1)
   }
 
