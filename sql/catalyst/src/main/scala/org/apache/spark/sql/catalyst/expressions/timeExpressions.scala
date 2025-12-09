@@ -34,10 +34,82 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.TimeFormatter
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, AnyTimeType, ByteType, DataType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, IntegralType, LongType, NumericType, ObjectType, TimeType}
+import org.apache.spark.sql.types.{AbstractDataType, AnyTimeType, ByteType, DataType, DayTimeIntervalType, DecimalType, IntegerType, IntegralType, LongType, NumericType, ObjectType, TimeType}
 import org.apache.spark.sql.types.DayTimeIntervalType.{HOUR, SECOND}
 import org.apache.spark.unsafe.types.UTF8String
+
+/**
+ * Helper trait for TIME conversion expressions with consistent error handling.
+ */
+trait TimeConversionErrorHandling {
+  def failOnError: Boolean
+
+  /** Wraps evaluation with error handling (throws in ANSI mode, null otherwise). */
+  protected def evalWithErrorHandling[T](f: => T): Any = {
+    try {
+      f
+    } catch {
+      case e: DateTimeException if failOnError =>
+        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e)
+      case e: ArithmeticException if failOnError =>
+        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(
+          new DateTimeException(s"Overflow in TIME conversion: ${e.getMessage}"))
+      case _: DateTimeException | _: ArithmeticException => null
+    }
+  }
+
+  /** Generates error handling code (DateTimeException + ArithmeticException). */
+  protected def doGenErrorHandling(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      utilCall: String): String = {
+    val dateTimeErrorBranch = if (failOnError) {
+      "throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e);"
+    } else {
+      s"${ev.isNull} = true;"
+    }
+
+    val arithmeticErrorBranch = if (failOnError) {
+      s"""
+         |throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(
+         |  new java.time.DateTimeException("Overflow in TIME conversion: " + e.getMessage()));
+         |""".stripMargin
+    } else {
+      s"${ev.isNull} = true;"
+    }
+
+    s"""
+       |try {
+       |  ${ev.value} = $utilCall;
+       |} catch (java.time.DateTimeException e) {
+       |  $dateTimeErrorBranch
+       |} catch (java.lang.ArithmeticException e) {
+       |  $arithmeticErrorBranch
+       |}
+       |""".stripMargin
+  }
+
+  /** Generates error handling code (DateTimeException only). */
+  protected def doGenDateTimeError(
+      ctx: CodegenContext,
+      ev: ExprCode,
+      utilCall: String): String = {
+    val errorBranch = if (failOnError) {
+      "throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e);"
+    } else {
+      s"${ev.isNull} = true;"
+    }
+    s"""
+       |try {
+       |  ${ev.value} = $utilCall;
+       |} catch (java.time.DateTimeException e) {
+       |  $errorBranch
+       |}
+       |""".stripMargin
+  }
+}
 
 /**
  * Parses a column to a time based on the given format.
@@ -753,59 +825,33 @@ case class TimeTrunc(unit: Expression, time: Expression)
 }
 
 abstract class IntegralToTimeBase
-  extends UnaryExpression with ExpectsInputTypes {
+  extends UnaryExpression with ExpectsInputTypes with TimeConversionErrorHandling {
   protected def upScaleFactor: Long
+  def failOnError: Boolean = SQLConf.get.ansiEnabled
 
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType)
   override def dataType: DataType = TimeType(TimeType.MICROS_PRECISION)
   override def nullable: Boolean = true
   override def nullIntolerant: Boolean = true
 
-  @inline
-  protected final def validateTimeNanos(nanos: Long): Any = {
-    if (nanos < 0 || nanos >= NANOS_PER_DAY) null else nanos
-  }
-
   override protected def nullSafeEval(input: Any): Any = {
-    val nanos = Math.multiplyExact(input.asInstanceOf[Number].longValue(), upScaleFactor)
-    validateTimeNanos(nanos)
+    evalWithErrorHandling {
+      DateTimeUtils.timeFromIntegral(input.asInstanceOf[Number].longValue(), upScaleFactor)
+    }
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, c => {
-      val nanos = if (upScaleFactor == 1) {
-        c
-      } else {
-        s"java.lang.Math.multiplyExact($c, ${upScaleFactor}L)"
-      }
-      s"""
-         |${ev.value} = $nanos;
-         |if (${ev.value} < 0L || ${ev.value} >= ${NANOS_PER_DAY}L) {
-         |  ${ev.isNull} = true;
-         |}
-         |""".stripMargin
-    })
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    nullSafeCodeGen(ctx, ev, c =>
+      doGenErrorHandling(ctx, ev, s"$dtu.timeFromIntegral($c, ${upScaleFactor}L)")
+    )
   }
 }
 
 abstract class TimeToLongBase extends UnaryExpression with ExpectsInputTypes {
-  protected def scaleFactor: Long
-
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType)
   override def dataType: DataType = LongType
   override def nullIntolerant: Boolean = true
-
-  override def nullSafeEval(input: Any): Any = {
-    Math.floorDiv(input.asInstanceOf[Number].longValue(), scaleFactor)
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    if (scaleFactor == 1) {
-      defineCodeGen(ctx, ev, c => c)
-    } else {
-      defineCodeGen(ctx, ev, c => s"java.lang.Math.floorDiv($c, ${scaleFactor}L)")
-    }
-  }
 }
 
 // scalastyle:off line.size.limit
@@ -835,84 +881,26 @@ abstract class TimeToLongBase extends UnaryExpression with ExpectsInputTypes {
   group = "datetime_funcs")
 // scalastyle:on line.size.limit
 case class TimeFromSeconds(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes {
+  extends UnaryExpression with ExpectsInputTypes with TimeConversionErrorHandling {
   override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
   override def dataType: DataType = TimeType(TimeType.MICROS_PRECISION)
   override def nullable: Boolean = true
   override def nullIntolerant: Boolean = true
 
-  @inline
-  private def validateTimeNanos(nanos: Long): Any = {
-    if (nanos < 0 || nanos >= NANOS_PER_DAY) null else nanos
+  def failOnError: Boolean = SQLConf.get.ansiEnabled
+
+  override def nullSafeEval(input: Any): Any = {
+    evalWithErrorHandling {
+      DateTimeUtils.timeFromSeconds(input, child.dataType)
+    }
   }
 
-  @transient
-  private lazy val evalFunc: Any => Any = child.dataType match {
-    case _: IntegralType => input =>
-      val nanos = Math.multiplyExact(input.asInstanceOf[Number].longValue(), NANOS_PER_SECOND)
-      validateTimeNanos(nanos)
-    case _: DecimalType => input =>
-      val operand = new java.math.BigDecimal(NANOS_PER_SECOND)
-      val nanos = input.asInstanceOf[Decimal].toJavaBigDecimal.multiply(operand).longValueExact()
-      validateTimeNanos(nanos)
-    case _: FloatType => input =>
-      val f = input.asInstanceOf[Float]
-      if (f.isNaN || f.isInfinite) {
-        null
-      } else {
-        val nanos = (f.toDouble * NANOS_PER_SECOND).toLong
-        validateTimeNanos(nanos)
-      }
-    case _: DoubleType => input =>
-      val d = input.asInstanceOf[Double]
-      if (d.isNaN || d.isInfinite) {
-        null
-      } else {
-        val nanos = (d * NANOS_PER_SECOND).toLong
-        validateTimeNanos(nanos)
-      }
-  }
-
-  override def nullSafeEval(input: Any): Any = evalFunc(input)
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = child.dataType match {
-    case _: IntegralType =>
-      nullSafeCodeGen(ctx, ev, c => {
-        val nanos = s"java.lang.Math.multiplyExact($c, ${NANOS_PER_SECOND}L)"
-        s"""
-           |${ev.value} = $nanos;
-           |if (${ev.value} < 0L || ${ev.value} >= ${NANOS_PER_DAY}L) {
-           |  ${ev.isNull} = true;
-           |}
-           |""".stripMargin
-      })
-    case _: DecimalType =>
-      val bd = ctx.addReferenceObj("nanoSecondFactor",
-        new java.math.BigDecimal(NANOS_PER_SECOND),
-        classOf[java.math.BigDecimal].getName)
-      nullSafeCodeGen(ctx, ev, c => {
-        s"""
-           |${ev.value} = $c.toJavaBigDecimal().multiply($bd).longValueExact();
-           |if (${ev.value} < 0L || ${ev.value} >= ${NANOS_PER_DAY}L) {
-           |  ${ev.isNull} = true;
-           |}
-           |""".stripMargin
-      })
-    case other =>
-      val castToDouble = if (other.isInstanceOf[FloatType]) "(double)" else ""
-      nullSafeCodeGen(ctx, ev, c => {
-        val typeStr = CodeGenerator.boxedType(other)
-        s"""
-           |if ($typeStr.isNaN($c) || $typeStr.isInfinite($c)) {
-           |  ${ev.isNull} = true;
-           |} else {
-           |  ${ev.value} = (long)($castToDouble$c * ${NANOS_PER_SECOND}L);
-           |  if (${ev.value} < 0L || ${ev.value} >= ${NANOS_PER_DAY}L) {
-           |    ${ev.isNull} = true;
-           |  }
-           |}
-           |""".stripMargin
-      })
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    val dt = ctx.addReferenceObj("childDataType", child.dataType)
+    nullSafeCodeGen(ctx, ev, c =>
+      doGenErrorHandling(ctx, ev, s"$dtu.timeFromSeconds($c, $dt)")
+    )
   }
 
   override def prettyName: String = "time_from_seconds"
@@ -1008,31 +996,26 @@ case class TimeFromMicros(child: Expression)
   group = "datetime_funcs")
 // scalastyle:on line.size.limit
 case class TimeToSeconds(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes {
+  extends UnaryExpression with ImplicitCastInputTypes with TimeConversionErrorHandling {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType)
   override def dataType: DataType = DecimalType(14, 6)
   override def nullable: Boolean = true
   override def nullIntolerant: Boolean = true
 
+  def failOnError: Boolean = SQLConf.get.ansiEnabled
+
   protected override def nullSafeEval(input: Any): Any = {
-    val nanos = input.asInstanceOf[Long]
-    val result = Decimal(nanos) / Decimal(NANOS_PER_SECOND)
-    if (result.changePrecision(14, 6)) result else null
+    evalWithErrorHandling {
+      DateTimeUtils.timeToSeconds(input.asInstanceOf[Long])
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val divisor = ctx.addReferenceObj("nanoSecondDecimal",
-      Decimal(NANOS_PER_SECOND),
-      "org.apache.spark.sql.types.Decimal")
-    nullSafeCodeGen(ctx, ev, nanos => {
-      s"""
-         |${ev.value} = org.apache.spark.sql.types.Decimal.apply($nanos).$$div($divisor);
-         |if (!${ev.value}.changePrecision(14, 6)) {
-         |  ${ev.isNull} = true;
-         |}
-         |""".stripMargin
-    })
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    nullSafeCodeGen(ctx, ev, nanos =>
+      doGenDateTimeError(ctx, ev, s"$dtu.timeToSeconds($nanos)")
+    )
   }
 
   override def prettyName: String = "time_to_seconds"
@@ -1066,7 +1049,14 @@ case class TimeToSeconds(child: Expression)
 case class TimeToMillis(child: Expression)
   extends TimeToLongBase {
 
-  override def scaleFactor: Long = NANOS_PER_MILLIS
+  override def nullSafeEval(input: Any): Any = {
+    DateTimeUtils.timeToMillis(input.asInstanceOf[Number].longValue())
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, c => s"$dtu.timeToMillis($c)")
+  }
 
   override def prettyName: String = "time_to_millis"
 
@@ -1099,7 +1089,14 @@ case class TimeToMillis(child: Expression)
 case class TimeToMicros(child: Expression)
   extends TimeToLongBase {
 
-  override def scaleFactor: Long = NANOS_PER_MICROS
+  override def nullSafeEval(input: Any): Any = {
+    DateTimeUtils.timeToMicros(input.asInstanceOf[Number].longValue())
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, c => s"$dtu.timeToMicros($c)")
+  }
 
   override def prettyName: String = "time_to_micros"
 
