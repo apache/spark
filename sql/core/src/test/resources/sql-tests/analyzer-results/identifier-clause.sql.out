@@ -2021,22 +2021,11 @@ Project [map(mykey, 42)[mykey] AS result#x]
 EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:alias ''.c1'') FROM integration_test AS IDENTIFIER(:alias) ORDER BY ALL'
   USING 't' AS alias
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`t`.`c1`",
-    "proposal" : "`IDENTIFIER('t')`.`c1`, `IDENTIFIER('t')`.`c2`, `IDENTIFIER('t')`.`c4`"
-  },
-  "queryContext" : [ {
-    "objectType" : "EXECUTE IMMEDIATE",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 31,
-    "fragment" : "IDENTIFIER(:alias '.c1')"
-  } ]
-}
+Sort [c1#x ASC NULLS FIRST], true
++- Project [c1#x]
+   +- SubqueryAlias t
+      +- SubqueryAlias spark_catalog.identifier_clause_test_schema.integration_test
+         +- Relation spark_catalog.identifier_clause_test_schema.integration_test[c1#x,c2#x,c4#x] csv
 
 
 -- !query
@@ -2180,6 +2169,352 @@ DROP TABLE unpivot_test
 -- !query analysis
 DropTable false, false
 +- ResolvedIdentifier V2SessionCatalog(spark_catalog), identifier_clause_test_schema.unpivot_test
+
+
+-- !query
+CREATE TABLE unpivot_alias_test(id INT, a INT, b INT) USING CSV
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`identifier_clause_test_schema`.`unpivot_alias_test`, false
+
+
+-- !query
+INSERT INTO unpivot_alias_test VALUES (1, 10, 20)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/identifier_clause_test_schema.db/unpivot_alias_test, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/identifier_clause_test_schema.db/unpivot_alias_test], Append, `spark_catalog`.`identifier_clause_test_schema`.`unpivot_alias_test`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/identifier_clause_test_schema.db/unpivot_alias_test), [id, a, b]
++- Project [col1#x AS id#x, col2#x AS a#x, col3#x AS b#x]
+   +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+SELECT * FROM unpivot_alias_test UNPIVOT (val FOR col IN (a, b)) AS IDENTIFIER('unpivoted_result') ORDER BY ALL
+-- !query analysis
+Sort [id#x ASC NULLS FIRST, col#x ASC NULLS FIRST, val#x ASC NULLS FIRST], true
++- Project [id#x, col#x, val#x]
+   +- SubqueryAlias unpivoted_result
+      +- Filter isnotnull(coalesce(val#x))
+         +- Expand [[id#x, a, a#x], [id#x, b, b#x]], [id#x, col#x, val#x]
+            +- SubqueryAlias spark_catalog.identifier_clause_test_schema.unpivot_alias_test
+               +- Relation spark_catalog.identifier_clause_test_schema.unpivot_alias_test[id#x,a#x,b#x] csv
+
+
+-- !query
+DROP TABLE unpivot_alias_test
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), identifier_clause_test_schema.unpivot_alias_test
+
+
+-- !query
+CREATE TABLE pivot_test(product STRING, quarter STRING, revenue INT) USING CSV
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`identifier_clause_test_schema`.`pivot_test`, false
+
+
+-- !query
+INSERT INTO pivot_test VALUES ('A', 'Q1', 100), ('A', 'Q2', 150), ('B', 'Q1', 200), ('B', 'Q2', 250)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/identifier_clause_test_schema.db/pivot_test, false, CSV, [path=file:[not included in comparison]/{warehouse_dir}/identifier_clause_test_schema.db/pivot_test], Append, `spark_catalog`.`identifier_clause_test_schema`.`pivot_test`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/identifier_clause_test_schema.db/pivot_test), [product, quarter, revenue]
++- Project [col1#x AS product#x, col2#x AS quarter#x, col3#x AS revenue#x]
+   +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+SELECT * FROM pivot_test PIVOT (SUM(revenue) FOR IDENTIFIER('quarter') IN ('Q1', 'Q2')) ORDER BY product
+-- !query analysis
+Sort [product#x ASC NULLS FIRST], true
++- Project [product#x, Q1#xL, Q2#xL]
+   +- Project [product#x, __pivot_sum(spark_catalog.identifier_clause_test_schema.pivot_test.revenue) AS `sum(spark_catalog.identifier_clause_test_schema.pivot_test.revenue)`#x[0] AS Q1#xL, __pivot_sum(spark_catalog.identifier_clause_test_schema.pivot_test.revenue) AS `sum(spark_catalog.identifier_clause_test_schema.pivot_test.revenue)`#x[1] AS Q2#xL]
+      +- Aggregate [product#x], [product#x, pivotfirst(quarter#x, sum(spark_catalog.identifier_clause_test_schema.pivot_test.revenue)#xL, Q1, Q2, 0, 0) AS __pivot_sum(spark_catalog.identifier_clause_test_schema.pivot_test.revenue) AS `sum(spark_catalog.identifier_clause_test_schema.pivot_test.revenue)`#x]
+         +- Aggregate [product#x, quarter#x], [product#x, quarter#x, sum(revenue#x) AS sum(spark_catalog.identifier_clause_test_schema.pivot_test.revenue)#xL]
+            +- SubqueryAlias spark_catalog.identifier_clause_test_schema.pivot_test
+               +- Relation spark_catalog.identifier_clause_test_schema.pivot_test[product#x,quarter#x,revenue#x] csv
+
+
+-- !query
+SELECT * FROM pivot_test PIVOT (SUM(revenue) AS IDENTIFIER('total') FOR quarter IN ('Q1' AS IDENTIFIER('first_quarter'), 'Q2' AS IDENTIFIER('second_quarter'))) ORDER BY product
+-- !query analysis
+Sort [product#x ASC NULLS FIRST], true
++- Project [product#x, first_quarter#xL, second_quarter#xL]
+   +- Project [product#x, __pivot_sum(spark_catalog.identifier_clause_test_schema.pivot_test.revenue) AS total AS `sum(spark_catalog.identifier_clause_test_schema.pivot_test.revenue) AS total`#x[0] AS first_quarter#xL, __pivot_sum(spark_catalog.identifier_clause_test_schema.pivot_test.revenue) AS total AS `sum(spark_catalog.identifier_clause_test_schema.pivot_test.revenue) AS total`#x[1] AS second_quarter#xL]
+      +- Aggregate [product#x], [product#x, pivotfirst(quarter#x, sum(spark_catalog.identifier_clause_test_schema.pivot_test.revenue) AS total#xL, Q1, Q2, 0, 0) AS __pivot_sum(spark_catalog.identifier_clause_test_schema.pivot_test.revenue) AS total AS `sum(spark_catalog.identifier_clause_test_schema.pivot_test.revenue) AS total`#x]
+         +- Aggregate [product#x, quarter#x], [product#x, quarter#x, sum(revenue#x) AS sum(spark_catalog.identifier_clause_test_schema.pivot_test.revenue) AS total#xL]
+            +- SubqueryAlias spark_catalog.identifier_clause_test_schema.pivot_test
+               +- Relation spark_catalog.identifier_clause_test_schema.pivot_test[product#x,quarter#x,revenue#x] csv
+
+
+-- !query
+DROP TABLE pivot_test
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), identifier_clause_test_schema.pivot_test
+
+
+-- !query
+SELECT transform(array(1, 2, 3), IDENTIFIER('x') -> IDENTIFIER('x') + 1)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`x`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 53,
+    "stopIndex" : 67,
+    "fragment" : "IDENTIFIER('x')"
+  } ]
+}
+
+
+-- !query
+SELECT transform(array(1, 2, 3), IDENTIFIER('elem') -> IDENTIFIER('elem') * 2)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`elem`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 56,
+    "stopIndex" : 73,
+    "fragment" : "IDENTIFIER('elem')"
+  } ]
+}
+
+
+-- !query
+SELECT aggregate(array(1, 2, 3), 0, (IDENTIFIER('acc'), IDENTIFIER('x')) -> IDENTIFIER('acc') + IDENTIFIER('x'))
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`acc`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 77,
+    "stopIndex" : 93,
+    "fragment" : "IDENTIFIER('acc')"
+  } ]
+}
+
+
+-- !query
+CREATE TABLE index_test(c1 INT) USING PARQUET
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`identifier_clause_test_schema`.`index_test`, false
+
+
+-- !query
+CREATE INDEX idx_test ON index_test(c1)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1332",
+  "messageParameters" : {
+    "errorMessage" : "CreateIndex is not supported in this table identifier_clause_test_schema.index_test."
+  }
+}
+
+
+-- !query
+DROP INDEX IDENTIFIER('idx_test') ON index_test
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1332",
+  "messageParameters" : {
+    "errorMessage" : "DropIndex is not supported in this table identifier_clause_test_schema.index_test."
+  }
+}
+
+
+-- !query
+DROP TABLE index_test
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), identifier_clause_test_schema.index_test
+
+
+-- !query
+CREATE TABLE index_test2(c1 INT, c2 STRING) USING PARQUET
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`identifier_clause_test_schema`.`index_test2`, false
+
+
+-- !query
+CREATE INDEX IDENTIFIER('my_idx') ON index_test2(c1)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1332",
+  "messageParameters" : {
+    "errorMessage" : "CreateIndex is not supported in this table identifier_clause_test_schema.index_test2."
+  }
+}
+
+
+-- !query
+DROP INDEX my_idx ON index_test2
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1332",
+  "messageParameters" : {
+    "errorMessage" : "DropIndex is not supported in this table identifier_clause_test_schema.index_test2."
+  }
+}
+
+
+-- !query
+DROP TABLE index_test2
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), identifier_clause_test_schema.index_test2
+
+
+-- !query
+SELECT * FROM (TABLE VALUES(1, 2) AS T(c1, c2) |> AS IDENTIFIER('my_pipe_alias'))
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'1'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+TABLE VALUES(1, 2) AS T(c1, c2) |> AS IDENTIFIER('pipe_result') |> SELECT c1, c2
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+SELECT CAST(named_struct('field1', 1, 'field2', 'hello') AS STRUCT<IDENTIFIER('field1'): INT, IDENTIFIER('field2'): STRING>)
+-- !query analysis
+Project [cast(named_struct(field1, 1, field2, hello) as struct<field1:int,field2:string>) AS named_struct(field1, 1, field2, hello)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(named_struct('a', 10) AS STRUCT<IDENTIFIER('a'): INT>).a
+-- !query analysis
+Project [cast(named_struct(a, 10) as struct<a:int>).a AS named_struct(a, 10).a#x]
++- OneRowRelation
+
+
+-- !query
+CREATE TABLE describe_col_test(c1 INT, c2 STRING, c3 DOUBLE) USING CSV
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`identifier_clause_test_schema`.`describe_col_test`, false
+
+
+-- !query
+DESCRIBE describe_col_test IDENTIFIER('c1')
+-- !query analysis
+DescribeColumnCommand `spark_catalog`.`identifier_clause_test_schema`.`describe_col_test`, [spark_catalog, identifier_clause_test_schema, describe_col_test, c1], false, [info_name#x, info_value#x]
+
+
+-- !query
+DESCRIBE describe_col_test IDENTIFIER('c2')
+-- !query analysis
+DescribeColumnCommand `spark_catalog`.`identifier_clause_test_schema`.`describe_col_test`, [spark_catalog, identifier_clause_test_schema, describe_col_test, c2], false, [info_name#x, info_value#x]
+
+
+-- !query
+DESCRIBE describe_col_test IDENTIFIER('c1').IDENTIFIER('c2')
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_EXTRACT_BASE_FIELD_TYPE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "base" : "\"c1\"",
+    "other" : "\"INT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 60,
+    "fragment" : "DESCRIBE describe_col_test IDENTIFIER('c1').IDENTIFIER('c2')"
+  } ]
+}
+
+
+-- !query
+DROP TABLE describe_col_test
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), identifier_clause_test_schema.describe_col_test
+
+
+-- !query
+CREATE TABLE partition_spec_test(c1 INT, c2 STRING) USING CSV PARTITIONED BY (c2)
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`identifier_clause_test_schema`.`partition_spec_test`, false
+
+
+-- !query
+INSERT INTO partition_spec_test PARTITION (IDENTIFIER('c2') = 'value1') VALUES (1)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/identifier_clause_test_schema.db/partition_spec_test, [c2=value1], false, [c2#x], CSV, [path=file:[not included in comparison]/{warehouse_dir}/identifier_clause_test_schema.db/partition_spec_test], Append, `spark_catalog`.`identifier_clause_test_schema`.`partition_spec_test`, org.apache.spark.sql.execution.datasources.CatalogFileIndex(file:[not included in comparison]/{warehouse_dir}/identifier_clause_test_schema.db/partition_spec_test), [c1, c2]
++- Project [c1#x, cast(value1 as string) AS c2#x]
+   +- Project [col1#x AS c1#x]
+      +- LocalRelation [col1#x]
+
+
+-- !query
+INSERT INTO partition_spec_test PARTITION (IDENTIFIER('c2') = 'value2') VALUES (2)
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/identifier_clause_test_schema.db/partition_spec_test, [c2=value2], false, [c2#x], CSV, [path=file:[not included in comparison]/{warehouse_dir}/identifier_clause_test_schema.db/partition_spec_test], Append, `spark_catalog`.`identifier_clause_test_schema`.`partition_spec_test`, org.apache.spark.sql.execution.datasources.CatalogFileIndex(file:[not included in comparison]/{warehouse_dir}/identifier_clause_test_schema.db/partition_spec_test), [c1, c2]
++- Project [c1#x, cast(value2 as string) AS c2#x]
+   +- Project [col1#x AS c1#x]
+      +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT * FROM partition_spec_test ORDER BY c1
+-- !query analysis
+Sort [c1#x ASC NULLS FIRST], true
++- Project [c1#x, c2#x]
+   +- SubqueryAlias spark_catalog.identifier_clause_test_schema.partition_spec_test
+      +- Relation spark_catalog.identifier_clause_test_schema.partition_spec_test[c1#x,c2#x] csv
+
+
+-- !query
+SHOW PARTITIONS partition_spec_test
+-- !query analysis
+ShowPartitionsCommand `spark_catalog`.`identifier_clause_test_schema`.`partition_spec_test`, [partition#x]
+
+
+-- !query
+DROP TABLE partition_spec_test
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), identifier_clause_test_schema.partition_spec_test
 
 
 -- !query

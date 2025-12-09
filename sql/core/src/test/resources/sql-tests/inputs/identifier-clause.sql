@@ -367,6 +367,63 @@ SELECT * FROM unpivot_test UNPIVOT (val FOR col IN (a AS IDENTIFIER('col_a'), b 
 SELECT * FROM unpivot_test UNPIVOT ((v1, v2) FOR col IN ((a, b) AS IDENTIFIER('cols_ab'), (b, c) AS IDENTIFIER('cols_bc'))) ORDER BY ALL;
 DROP TABLE unpivot_test;
 
+-- UNPIVOT result table alias with IDENTIFIER()
+CREATE TABLE unpivot_alias_test(id INT, a INT, b INT) USING CSV;
+INSERT INTO unpivot_alias_test VALUES (1, 10, 20);
+SELECT * FROM unpivot_alias_test UNPIVOT (val FOR col IN (a, b)) AS IDENTIFIER('unpivoted_result') ORDER BY ALL;
+DROP TABLE unpivot_alias_test;
+
+-- PIVOT with IDENTIFIER() for pivot column and value aliases
+CREATE TABLE pivot_test(product STRING, quarter STRING, revenue INT) USING CSV;
+INSERT INTO pivot_test VALUES ('A', 'Q1', 100), ('A', 'Q2', 150), ('B', 'Q1', 200), ('B', 'Q2', 250);
+-- PIVOT column with IDENTIFIER()
+SELECT * FROM pivot_test PIVOT (SUM(revenue) FOR IDENTIFIER('quarter') IN ('Q1', 'Q2')) ORDER BY product;
+-- PIVOT value alias with IDENTIFIER()
+SELECT * FROM pivot_test PIVOT (SUM(revenue) AS IDENTIFIER('total') FOR quarter IN ('Q1' AS IDENTIFIER('first_quarter'), 'Q2' AS IDENTIFIER('second_quarter'))) ORDER BY product;
+DROP TABLE pivot_test;
+
+-- Lambda variable names with IDENTIFIER()
+SELECT transform(array(1, 2, 3), IDENTIFIER('x') -> IDENTIFIER('x') + 1);
+SELECT transform(array(1, 2, 3), IDENTIFIER('elem') -> IDENTIFIER('elem') * 2);
+SELECT aggregate(array(1, 2, 3), 0, (IDENTIFIER('acc'), IDENTIFIER('x')) -> IDENTIFIER('acc') + IDENTIFIER('x'));
+
+-- DROP INDEX with IDENTIFIER()
+CREATE TABLE index_test(c1 INT) USING PARQUET;
+CREATE INDEX idx_test ON index_test(c1);
+DROP INDEX IDENTIFIER('idx_test') ON index_test;
+DROP TABLE index_test;
+
+-- CREATE INDEX with IDENTIFIER()
+CREATE TABLE index_test2(c1 INT, c2 STRING) USING PARQUET;
+CREATE INDEX IDENTIFIER('my_idx') ON index_test2(c1);
+DROP INDEX my_idx ON index_test2;
+DROP TABLE index_test2;
+
+-- Pipe operator alias with IDENTIFIER()
+SELECT * FROM (TABLE VALUES(1, 2) AS T(c1, c2) |> AS IDENTIFIER('my_pipe_alias'));
+TABLE VALUES(1, 2) AS T(c1, c2) |> AS IDENTIFIER('pipe_result') |> SELECT c1, c2;
+
+-- Struct field names with IDENTIFIER() in CAST
+SELECT CAST(named_struct('field1', 1, 'field2', 'hello') AS STRUCT<IDENTIFIER('field1'): INT, IDENTIFIER('field2'): STRING>);
+SELECT CAST(named_struct('a', 10) AS STRUCT<IDENTIFIER('a'): INT>).a;
+
+-- DESCRIBE column with IDENTIFIER()
+CREATE TABLE describe_col_test(c1 INT, c2 STRING, c3 DOUBLE) USING CSV;
+DESCRIBE describe_col_test IDENTIFIER('c1');
+DESCRIBE describe_col_test IDENTIFIER('c2');
+-- Qualified column name with IDENTIFIER()
+DESCRIBE describe_col_test IDENTIFIER('c1').IDENTIFIER('c2');
+DROP TABLE describe_col_test;
+
+-- Partition spec with IDENTIFIER() for partition column name
+CREATE TABLE partition_spec_test(c1 INT, c2 STRING) USING CSV PARTITIONED BY (c2);
+INSERT INTO partition_spec_test PARTITION (IDENTIFIER('c2') = 'value1') VALUES (1);
+INSERT INTO partition_spec_test PARTITION (IDENTIFIER('c2') = 'value2') VALUES (2);
+SELECT * FROM partition_spec_test ORDER BY c1;
+-- Show partitions to verify
+SHOW PARTITIONS partition_spec_test;
+DROP TABLE partition_spec_test;
+
 -- All the following tests fail because they are not about "true" identifiers
 
 -- This should fail - named parameters don't support IDENTIFIER()

@@ -2227,24 +2227,11 @@ struct<result:int>
 EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:alias ''.c1'') FROM integration_test AS IDENTIFIER(:alias) ORDER BY ALL'
   USING 't' AS alias
 -- !query schema
-struct<>
+struct<c1:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`t`.`c1`",
-    "proposal" : "`IDENTIFIER('t')`.`c1`, `IDENTIFIER('t')`.`c2`, `IDENTIFIER('t')`.`c4`"
-  },
-  "queryContext" : [ {
-    "objectType" : "EXECUTE IMMEDIATE",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 31,
-    "fragment" : "IDENTIFIER(:alias '.c1')"
-  } ]
-}
+1
+2
+3
 
 
 -- !query
@@ -2390,6 +2377,392 @@ struct<id:int,col:string,v1:int,v2:int>
 
 -- !query
 DROP TABLE unpivot_test
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TABLE unpivot_alias_test(id INT, a INT, b INT) USING CSV
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+INSERT INTO unpivot_alias_test VALUES (1, 10, 20)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM unpivot_alias_test UNPIVOT (val FOR col IN (a, b)) AS IDENTIFIER('unpivoted_result') ORDER BY ALL
+-- !query schema
+struct<id:int,col:string,val:int>
+-- !query output
+1	a	10
+1	b	20
+
+
+-- !query
+DROP TABLE unpivot_alias_test
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TABLE pivot_test(product STRING, quarter STRING, revenue INT) USING CSV
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+INSERT INTO pivot_test VALUES ('A', 'Q1', 100), ('A', 'Q2', 150), ('B', 'Q1', 200), ('B', 'Q2', 250)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM pivot_test PIVOT (SUM(revenue) FOR IDENTIFIER('quarter') IN ('Q1', 'Q2')) ORDER BY product
+-- !query schema
+struct<product:string,Q1:bigint,Q2:bigint>
+-- !query output
+A	100	150
+B	200	250
+
+
+-- !query
+SELECT * FROM pivot_test PIVOT (SUM(revenue) AS IDENTIFIER('total') FOR quarter IN ('Q1' AS IDENTIFIER('first_quarter'), 'Q2' AS IDENTIFIER('second_quarter'))) ORDER BY product
+-- !query schema
+struct<product:string,first_quarter:bigint,second_quarter:bigint>
+-- !query output
+A	100	150
+B	200	250
+
+
+-- !query
+DROP TABLE pivot_test
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT transform(array(1, 2, 3), IDENTIFIER('x') -> IDENTIFIER('x') + 1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`x`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 53,
+    "stopIndex" : 67,
+    "fragment" : "IDENTIFIER('x')"
+  } ]
+}
+
+
+-- !query
+SELECT transform(array(1, 2, 3), IDENTIFIER('elem') -> IDENTIFIER('elem') * 2)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`elem`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 56,
+    "stopIndex" : 73,
+    "fragment" : "IDENTIFIER('elem')"
+  } ]
+}
+
+
+-- !query
+SELECT aggregate(array(1, 2, 3), 0, (IDENTIFIER('acc'), IDENTIFIER('x')) -> IDENTIFIER('acc') + IDENTIFIER('x'))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`acc`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 77,
+    "stopIndex" : 93,
+    "fragment" : "IDENTIFIER('acc')"
+  } ]
+}
+
+
+-- !query
+CREATE TABLE index_test(c1 INT) USING PARQUET
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE INDEX idx_test ON index_test(c1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1332",
+  "messageParameters" : {
+    "errorMessage" : "CreateIndex is not supported in this table identifier_clause_test_schema.index_test."
+  }
+}
+
+
+-- !query
+DROP INDEX IDENTIFIER('idx_test') ON index_test
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1332",
+  "messageParameters" : {
+    "errorMessage" : "DropIndex is not supported in this table identifier_clause_test_schema.index_test."
+  }
+}
+
+
+-- !query
+DROP TABLE index_test
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TABLE index_test2(c1 INT, c2 STRING) USING PARQUET
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE INDEX IDENTIFIER('my_idx') ON index_test2(c1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1332",
+  "messageParameters" : {
+    "errorMessage" : "CreateIndex is not supported in this table identifier_clause_test_schema.index_test2."
+  }
+}
+
+
+-- !query
+DROP INDEX my_idx ON index_test2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1332",
+  "messageParameters" : {
+    "errorMessage" : "DropIndex is not supported in this table identifier_clause_test_schema.index_test2."
+  }
+}
+
+
+-- !query
+DROP TABLE index_test2
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM (TABLE VALUES(1, 2) AS T(c1, c2) |> AS IDENTIFIER('my_pipe_alias'))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'1'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+TABLE VALUES(1, 2) AS T(c1, c2) |> AS IDENTIFIER('pipe_result') |> SELECT c1, c2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+SELECT CAST(named_struct('field1', 1, 'field2', 'hello') AS STRUCT<IDENTIFIER('field1'): INT, IDENTIFIER('field2'): STRING>)
+-- !query schema
+struct<named_struct(field1, 1, field2, hello):struct<field1:int,field2:string>>
+-- !query output
+{"field1":1,"field2":"hello"}
+
+
+-- !query
+SELECT CAST(named_struct('a', 10) AS STRUCT<IDENTIFIER('a'): INT>).a
+-- !query schema
+struct<named_struct(a, 10).a:int>
+-- !query output
+10
+
+
+-- !query
+CREATE TABLE describe_col_test(c1 INT, c2 STRING, c3 DOUBLE) USING CSV
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESCRIBE describe_col_test IDENTIFIER('c1')
+-- !query schema
+struct<info_name:string,info_value:string>
+-- !query output
+col_name	c1
+data_type	int
+comment	NULL
+
+
+-- !query
+DESCRIBE describe_col_test IDENTIFIER('c2')
+-- !query schema
+struct<info_name:string,info_value:string>
+-- !query output
+col_name	c2
+data_type	string
+comment	NULL
+
+
+-- !query
+DESCRIBE describe_col_test IDENTIFIER('c1').IDENTIFIER('c2')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_EXTRACT_BASE_FIELD_TYPE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "base" : "\"c1\"",
+    "other" : "\"INT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 60,
+    "fragment" : "DESCRIBE describe_col_test IDENTIFIER('c1').IDENTIFIER('c2')"
+  } ]
+}
+
+
+-- !query
+DROP TABLE describe_col_test
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TABLE partition_spec_test(c1 INT, c2 STRING) USING CSV PARTITIONED BY (c2)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+INSERT INTO partition_spec_test PARTITION (IDENTIFIER('c2') = 'value1') VALUES (1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+INSERT INTO partition_spec_test PARTITION (IDENTIFIER('c2') = 'value2') VALUES (2)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM partition_spec_test ORDER BY c1
+-- !query schema
+struct<c1:int,c2:string>
+-- !query output
+1	value1
+2	value2
+
+
+-- !query
+SHOW PARTITIONS partition_spec_test
+-- !query schema
+struct<partition:string>
+-- !query output
+c2=value1
+c2=value2
+
+
+-- !query
+DROP TABLE partition_spec_test
 -- !query schema
 struct<>
 -- !query output
