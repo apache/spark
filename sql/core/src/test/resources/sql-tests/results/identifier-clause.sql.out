@@ -2459,189 +2459,27 @@ struct<>
 
 
 -- !query
-SELECT transform(array(1, 2, 3), IDENTIFIER('x') -> IDENTIFIER('x') + 1)
+SELECT transform(array(1, 2, 3), IDENTIFIER('x') -> x + 1)
 -- !query schema
-struct<>
+struct<transform(array(1, 2, 3), lambdafunction((namedlambdavariable() + 1), namedlambdavariable())):array<int>>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`x`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 53,
-    "stopIndex" : 67,
-    "fragment" : "IDENTIFIER('x')"
-  } ]
-}
+[2,3,4]
 
 
 -- !query
-SELECT transform(array(1, 2, 3), IDENTIFIER('elem') -> IDENTIFIER('elem') * 2)
+SELECT * FROM VALUES(1, 2) AS T(c1, c2) |> AS IDENTIFIER('pipe_alias') |> SELECT c1, c2
 -- !query schema
-struct<>
+struct<c1:int,c2:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`elem`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 56,
-    "stopIndex" : 73,
-    "fragment" : "IDENTIFIER('elem')"
-  } ]
-}
+1	2
 
 
 -- !query
-SELECT aggregate(array(1, 2, 3), 0, (IDENTIFIER('acc'), IDENTIFIER('x')) -> IDENTIFIER('acc') + IDENTIFIER('x'))
+SELECT c1, c2 FROM VALUES(1, 2) AS T(c1, c2) |> AS IDENTIFIER('my_result') |> SELECT *
 -- !query schema
-struct<>
+struct<c1:int,c2:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`acc`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 77,
-    "stopIndex" : 93,
-    "fragment" : "IDENTIFIER('acc')"
-  } ]
-}
-
-
--- !query
-CREATE TABLE index_test(c1 INT) USING PARQUET
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-CREATE INDEX idx_test ON index_test(c1)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "_LEGACY_ERROR_TEMP_1332",
-  "messageParameters" : {
-    "errorMessage" : "CreateIndex is not supported in this table identifier_clause_test_schema.index_test."
-  }
-}
-
-
--- !query
-DROP INDEX IDENTIFIER('idx_test') ON index_test
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "_LEGACY_ERROR_TEMP_1332",
-  "messageParameters" : {
-    "errorMessage" : "DropIndex is not supported in this table identifier_clause_test_schema.index_test."
-  }
-}
-
-
--- !query
-DROP TABLE index_test
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-CREATE TABLE index_test2(c1 INT, c2 STRING) USING PARQUET
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-CREATE INDEX IDENTIFIER('my_idx') ON index_test2(c1)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "_LEGACY_ERROR_TEMP_1332",
-  "messageParameters" : {
-    "errorMessage" : "CreateIndex is not supported in this table identifier_clause_test_schema.index_test2."
-  }
-}
-
-
--- !query
-DROP INDEX my_idx ON index_test2
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "_LEGACY_ERROR_TEMP_1332",
-  "messageParameters" : {
-    "errorMessage" : "DropIndex is not supported in this table identifier_clause_test_schema.index_test2."
-  }
-}
-
-
--- !query
-DROP TABLE index_test2
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-SELECT * FROM (TABLE VALUES(1, 2) AS T(c1, c2) |> AS IDENTIFIER('my_pipe_alias'))
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'1'",
-    "hint" : ""
-  }
-}
-
-
--- !query
-TABLE VALUES(1, 2) AS T(c1, c2) |> AS IDENTIFIER('pipe_result') |> SELECT c1, c2
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'('",
-    "hint" : ""
-  }
-}
+1	2
 
 
 -- !query
@@ -2689,30 +2527,47 @@ comment	NULL
 
 
 -- !query
-DESCRIBE describe_col_test IDENTIFIER('c1').IDENTIFIER('c2')
+DROP TABLE describe_col_test
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_EXTRACT_BASE_FIELD_TYPE",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "base" : "\"c1\"",
-    "other" : "\"INT\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 60,
-    "fragment" : "DESCRIBE describe_col_test IDENTIFIER('c1').IDENTIFIER('c2')"
-  } ]
-}
+
 
 
 -- !query
-DROP TABLE describe_col_test
+CREATE TABLE struct_field_test(data STRUCT<field1: INT, field2: STRING>) USING PARQUET
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+INSERT INTO struct_field_test VALUES (named_struct('field1', 42, 'field2', 'hello'))
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT IDENTIFIER('data').IDENTIFIER('field1') FROM struct_field_test
+-- !query schema
+struct<data.field1:int>
+-- !query output
+42
+
+
+-- !query
+SELECT IDENTIFIER('data').IDENTIFIER('field2') FROM struct_field_test
+-- !query schema
+struct<data.field2:string>
+-- !query output
+hello
+
+
+-- !query
+DROP TABLE struct_field_test
 -- !query schema
 struct<>
 -- !query output
