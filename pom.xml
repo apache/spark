@@ -162,7 +162,7 @@
     <aws.kinesis.client.version>1.15.3</aws.kinesis.client.version>
     <!-- Should be consistent with Kinesis client dependency -->
     <aws.java.sdk.version>1.12.681</aws.java.sdk.version>
-    <aws.java.sdk.v2.version>2.29.52</aws.java.sdk.v2.version>
+    <aws.java.sdk.v2.version>2.35.4</aws.java.sdk.v2.version>
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>1.0.5</aws.kinesis.producer.version>
     <!-- Do not use 3.0.0: https://github.com/GoogleCloudDataproc/hadoop-connectors/issues/1114 -->
