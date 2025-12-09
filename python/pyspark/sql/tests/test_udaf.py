@@ -28,7 +28,6 @@ from pyspark.testing.utils import assertDataFrameEqual
 class UDAFTestsMixin:
     def test_udaf_basic_sum(self):
         """Test basic sum UDAF with df.agg()."""
-        # Define aggregator class inside test to avoid module path issues
         class MySum(Aggregator):
             def zero(self):
                 return 0
@@ -49,7 +48,6 @@ class UDAFTestsMixin:
 
     def test_udaf_with_groupby(self):
         """Test UDAF with groupBy().agg()."""
-        # Define aggregator class inside test to avoid module path issues
         class MySum(Aggregator):
             def zero(self):
                 return 0
@@ -79,7 +77,6 @@ class UDAFTestsMixin:
 
     def test_udaf_average(self):
         """Test average UDAF with df.agg()."""
-        # Define aggregator class inside test to avoid module path issues
         class MyAverage(Aggregator):
             def zero(self):
                 return (0.0, 0)  # (sum, count)
@@ -102,7 +99,6 @@ class UDAFTestsMixin:
 
     def test_udaf_max(self):
         """Test max UDAF with df.agg()."""
-        # Define aggregator class inside test to avoid module path issues
         class MyMax(Aggregator):
             def zero(self):
                 return None
@@ -129,7 +125,6 @@ class UDAFTestsMixin:
 
     def test_udaf_with_nulls(self):
         """Test UDAF handling null values with df.agg()."""
-        # Define aggregator class inside test to avoid module path issues
         class MySum(Aggregator):
             def zero(self):
                 return 0
@@ -150,7 +145,6 @@ class UDAFTestsMixin:
 
     def test_udaf_empty_dataframe(self):
         """Test UDAF with empty DataFrame using df.agg()."""
-        # Define aggregator class inside test to avoid module path issues
         class MySum(Aggregator):
             def zero(self):
                 return 0
@@ -173,7 +167,6 @@ class UDAFTestsMixin:
 
     def test_udaf_aggregator_interface(self):
         """Test that Aggregator interface is properly defined."""
-        # Define aggregator class inside test to avoid module path issues
         class MySum(Aggregator):
             def zero(self):
                 return 0
@@ -208,7 +201,6 @@ class UDAFTestsMixin:
 
     def test_udaf_creation(self):
         """Test UDAF creation with udaf() function."""
-        # Define aggregator class inside test to avoid module path issues
         class MySum(Aggregator):
             def zero(self):
                 return 0
@@ -236,7 +228,6 @@ class UDAFTestsMixin:
 
     def test_udaf_invalid_return_type(self):
         """Test that invalid return type raises error."""
-        # Define aggregator class inside test to avoid module path issues
         class MySum(Aggregator):
             def zero(self):
                 return 0
@@ -254,7 +245,6 @@ class UDAFTestsMixin:
 
     def test_udaf_multi_column_not_supported(self):
         """Test that multi-column UDAF is not yet supported."""
-        # Define aggregator class inside test to avoid module path issues
         class MySum(Aggregator):
             def zero(self):
                 return 0
@@ -270,17 +260,11 @@ class UDAFTestsMixin:
         df = self.spark.createDataFrame([(1, 2), (3, 4)], ["a", "b"])
         sum_udaf = udaf(MySum(), "bigint")
 
-        # Note: __call__ only uses the first argument, so sum_udaf(df.a, df.b) 
-        # would ignore df.b. The multi-column check happens in _apply_udaf_to_dataframe
-        # which is called internally by df.agg(). Since we can't directly test the private
-        # function, we test that multiple UDAFs in agg() raises an error instead.
-        # This test verifies that the public API correctly handles the limitation.
         with self.assertRaises(PySparkNotImplementedError):
             df.agg(sum_udaf(df.a), sum_udaf(df.b))
 
     def test_udaf_large_dataset(self):
         """Test UDAF with large dataset (20000 rows) distributed across partitions."""
-        # Define aggregator class inside test to avoid module path issues
         class MySum(Aggregator):
             def zero(self):
                 return 0
@@ -316,7 +300,6 @@ class UDAFTestsMixin:
 
     def test_udaf_large_dataset_average(self):
         """Test average UDAF with large dataset using df.agg()."""
-        # Define aggregator class inside test to avoid module path issues
         class MyAverage(Aggregator):
             def zero(self):
                 return (0.0, 0)  # (sum, count)
@@ -349,7 +332,6 @@ class UDAFTestsMixin:
 
     def test_udaf_column_attributes(self):
         """Test that UDAF Column has correct attributes."""
-        # Define aggregator class inside test to avoid module path issues
         class MySum(Aggregator):
             def zero(self):
                 return 0
@@ -371,7 +353,6 @@ class UDAFTestsMixin:
 
     def test_udaf_multiple_udaf_not_supported(self):
         """Test that multiple UDAFs in agg() raises error."""
-        # Define aggregator class inside test to avoid module path issues
         class MySum(Aggregator):
             def zero(self):
                 return 0
@@ -391,7 +372,6 @@ class UDAFTestsMixin:
 
     def test_udaf_mixed_with_other_agg_not_supported(self):
         """Test that mixing UDAF with other aggregate functions raises error."""
-        # Define aggregator class inside test to avoid module path issues
         class MySum(Aggregator):
             def zero(self):
                 return 0
