@@ -331,7 +331,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     }
     if (loadEmpty) {
       throw StateStoreErrors.unsupportedOperationException("getStore",
-        "loadEmpty parameter is not supported in HDFSBackedStateStoreProvider")
+        "Internal Error: HDFSBackedStateStoreProvider doesn't support loadEmpty")
     }
     val newMap = getLoadedMapForStore(version)
     logInfo(log"Retrieved version ${MDC(LogKeys.STATE_STORE_VERSION, version)} " +

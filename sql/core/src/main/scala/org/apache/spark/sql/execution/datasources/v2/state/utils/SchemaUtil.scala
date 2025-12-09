@@ -44,16 +44,6 @@ object SchemaUtil {
     }
   }
 
-  def getScanAllColumnFamiliesSchema(keySchema: StructType): StructType = {
-    new StructType()
-      // todo [SPARK-54443]: change keySchema to a more specific type after we
-      //  can extract partition key from keySchema
-      .add("partition_key", keySchema)
-      .add("key_bytes", BinaryType)
-      .add("value_bytes", BinaryType)
-      .add("column_family_name", StringType)
-  }
-
   def getSourceSchema(
       sourceOptions: StateSourceOptions,
       keySchema: StructType,
@@ -72,7 +62,13 @@ object SchemaUtil {
         .add("value", valueSchema)
         .add("partition_id", IntegerType)
     } else if (sourceOptions.internalOnlyReadAllColumnFamilies) {
-      getScanAllColumnFamiliesSchema(keySchema)
+      new StructType()
+        // TODO [SPARK-54443]: change keySchema to a more specific type after we
+        // can extract partition key from keySchema
+        .add("partition_key", keySchema)
+        .add("key_bytes", BinaryType)
+        .add("value_bytes", BinaryType)
+        .add("column_family_name", StringType)
     } else {
       new StructType()
         .add("key", keySchema)

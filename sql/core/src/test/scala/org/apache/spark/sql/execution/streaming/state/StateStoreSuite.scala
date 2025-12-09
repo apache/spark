@@ -1441,7 +1441,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       "HDFSBackedStateStoreProvider does not support checkpointFormatVersion > 1"))
   }
 
-  test("SPARK-54420: HDFSBackedStateStoreProvider does not support load empty store") {
+  test("SPARK-54420: HDFSBackedStateStoreProvider does not support loading empty store") {
     val provider = new HDFSBackedStateStoreProvider()
     val hadoopConf = new Configuration()
     hadoopConf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
