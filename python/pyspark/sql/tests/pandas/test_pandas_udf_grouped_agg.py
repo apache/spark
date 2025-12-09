@@ -1037,6 +1037,89 @@ class GroupedAggPandasUDFTestsMixin:
                 group2_result["count"], 2, msg="Group 2 should process 1 batch (2 values)"
             )
 
+    def test_grouped_agg_with_struct_type_input(self):
+        """
+        Test that grouped agg UDF works with struct type input.
+        Struct types should be passed as pd.DataFrame to the UDF (similar to scalar pandas UDFs).
+        """
+        from pyspark.sql import Row
+
+        # Create a DataFrame with struct column
+        df = self.spark.createDataFrame(
+            [
+                (1, Row(name="Alice", age=25)),
+                (1, Row(name="Bob", age=30)),
+                (2, Row(name="Charlie", age=35)),
+                (2, Row(name="David", age=40)),
+            ],
+            "id int, person struct<name:string,age:int>",
+        )
+
+        # Test non-iterator grouped agg UDF with struct input
+        # Note: Currently struct types are passed as Series of dicts when df_for_struct=False.
+        # This test verifies the behavior and documents the expected interface.
+        @pandas_udf("double", PandasUDFType.GROUPED_AGG)
+        def avg_age(person: pd.Series) -> float:
+            # Currently struct types are passed as Series of dicts
+            # In the future, they should be passed as pd.DataFrame (like scalar pandas UDFs)
+            assert isinstance(person, pd.Series), f"Expected Series, got {type(person)}"
+            # Extract age values from dicts
+            ages = [p["age"] for p in person]
+            return sum(ages) / len(ages) if ages else 0.0
+
+        result = df.groupby("id").agg(avg_age(df["person"]).alias("avg_age")).sort("id")
+        actual = result.collect()
+
+        # Group 1: (25 + 30) / 2 = 27.5
+        # Group 2: (35 + 40) / 2 = 37.5
+        expected = [Row(id=1, avg_age=27.5), Row(id=2, avg_age=37.5)]
+        self.assertEqual(actual, expected)
+
+    def test_iterator_grouped_agg_with_struct_type_input(self):
+        """
+        Test that iterator grouped agg UDF works with struct type input.
+        Struct types should be passed as pd.DataFrame to the UDF (similar to scalar pandas UDFs).
+        """
+        from pyspark.sql import Row
+
+        # Create a DataFrame with struct column
+        df = self.spark.createDataFrame(
+            [
+                (1, Row(name="Alice", age=25)),
+                (1, Row(name="Bob", age=30)),
+                (2, Row(name="Charlie", age=35)),
+                (2, Row(name="David", age=40)),
+            ],
+            "id int, person struct<name:string,age:int>",
+        )
+
+        # Test iterator grouped agg UDF with struct input
+        # Note: Currently struct types are passed as Series of dicts when df_for_struct=False.
+        # This test verifies the behavior and documents the expected interface.
+        @pandas_udf("double")
+        def avg_age_iter(it: Iterator[pd.Series]) -> float:
+            total_age = 0.0
+            count = 0
+            for person_series in it:
+                # Currently struct types are passed as Series of dicts
+                # In the future, they should be passed as pd.DataFrame (like scalar pandas UDFs)
+                assert isinstance(
+                    person_series, pd.Series
+                ), f"Expected Series, got {type(person_series)}"
+                # Extract age values from dicts
+                ages = [p["age"] for p in person_series]
+                total_age += sum(ages)
+                count += len(ages)
+            return total_age / count if count > 0 else 0.0
+
+        result = df.groupby("id").agg(avg_age_iter(df["person"]).alias("avg_age")).sort("id")
+        actual = result.collect()
+
+        # Group 1: (25 + 30) / 2 = 27.5
+        # Group 2: (35 + 40) / 2 = 37.5
+        expected = [Row(id=1, avg_age=27.5), Row(id=2, avg_age=37.5)]
+        self.assertEqual(actual, expected)
+
 
 class GroupedAggPandasUDFTests(GroupedAggPandasUDFTestsMixin, ReusedSQLTestCase):
     pass
