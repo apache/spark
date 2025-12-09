@@ -453,14 +453,13 @@ package object config {
       .createWithDefault(false)
 
   private[spark] val EXECUTOR_BURSTY_MEMORY_OVERHEAD_FACTOR =
-    ConfigBuilder("spark.executor.memoryOverheadBurstyFactor")
+    ConfigBuilder("spark.executor.memoryOverheadBursty.factor")
       .doc("the bursty control factor controlling the size of memory overhead space shared with" +
         s" other processes, newMemoryOverhead=oldMemoryOverhead-MIN((onheap + memoryoverhead) *" +
         s" (this value - 1), oldMemoryOverhead)")
       .version("4.2.0")
       .doubleConf
-      .checkValue((v: Double) => v >= 1.0,
-        "the value of bursty control factor has to be no less than 1")
+      .checkValue(_ >= 1.0, "the value of bursty control factor has to be no less than 1")
       .createWithDefault(1.2)
 
   private[spark] val EXECUTOR_BURSTY_MEMORY_OVERHEAD = ConfigBuilder(
