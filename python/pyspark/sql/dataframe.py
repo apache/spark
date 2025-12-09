@@ -7093,6 +7093,7 @@ class DataFrameNaFunctions:
 
         return SparkArrowCStreamer(self).__arrow_c_stream__(requested_schema)
 
+
 class DataFrameStatFunctions:
     """Functionality for statistic functions with :class:`DataFrame`.
 

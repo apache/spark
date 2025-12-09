@@ -13858,9 +13858,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         from pyspark.interchange import SparkArrowCStreamer
 
-        return SparkArrowCStreamer(
-            self._internal.to_internal_spark_frame
-        ).__arrow_c_stream__(requested_schema)
+        return SparkArrowCStreamer(self._internal.to_internal_spark_frame).__arrow_c_stream__(
+            requested_schema
+        )
 
 
 def _reduce_spark_multi(sdf: PySparkDataFrame, aggs: List[PySparkColumn]) -> Any:

@@ -1,7 +1,13 @@
 import dataclasses
 from typing import Iterable, Optional, Iterator, Any, Tuple
 import pyarrow
-from pyarrow.interchange.column import DtypeKind, _PyArrowColumn, ColumnBuffers, ColumnNullType, CategoricalDescription
+from pyarrow.interchange.column import (
+    DtypeKind,
+    _PyArrowColumn,
+    ColumnBuffers,
+    ColumnNullType,
+    CategoricalDescription,
+)
 from pyarrow.interchange.dataframe import _PyArrowDataFrame
 
 import pyspark.sql
@@ -14,7 +20,9 @@ def _get_arrow_array_partition_stream(df: pyspark.sql.DataFrame) -> Iterator[pya
     # We will be using mapInArrow to convert each partition to Arrow RecordBatches.
     # The return type of the function will be a single binary column containing
     # the serialized RecordBatch in Arrow IPC format.
-    binary_schema = StructType([StructField("interchange_arrow_bytes", BinaryType(), nullable=False)])
+    binary_schema = StructType(
+        [StructField("interchange_arrow_bytes", BinaryType(), nullable=False)]
+    )
 
     def batch_to_bytes_iter(batch_iter):
         """
@@ -56,6 +64,7 @@ class SparkArrowCStreamer:
     This class is implemented in a way that allows consumers to consume each partition
     one at a time without materializing all partitions at once on the driver side.
     """
+
     def __init__(self, df: pyspark.sql.DataFrame):
         self._df = df
         self._schema = to_arrow_schema(df.schema)
@@ -78,6 +87,7 @@ class SparkInterchangeColumn(_PyArrowColumn):
     This class leverages the Arrow-based dataframe interchange protocol by returning
     Spark partitions (chunks) in Arrow's dataframe interchange format.
     """
+
     _spark_dataframe: "pyspark.sql.DataFrame"
     _spark_column: "pyspark.sql.Column"
     _allow_copy: bool
@@ -135,8 +145,12 @@ class SparkInterchangeColumn(_PyArrowColumn):
         SparkInterchangeDataframe.get_chunks for details.
         """
         if n_chunks is not None:
-            raise NotImplementedError("n_chunks would require repartitioning, which is not implemented.")
-        arrow_array_partitions = _get_arrow_array_partition_stream(self._spark_dataframe.select(self._spark_column))
+            raise NotImplementedError(
+                "n_chunks would require repartitioning, which is not implemented."
+            )
+        arrow_array_partitions = _get_arrow_array_partition_stream(
+            self._spark_dataframe.select(self._spark_column)
+        )
         for part in arrow_array_partitions:
             yield _PyArrowColumn(
                 column=part.column(0),
@@ -145,7 +159,9 @@ class SparkInterchangeColumn(_PyArrowColumn):
 
     def get_buffers(self) -> ColumnBuffers:
         """Return a dictionary of buffers for the column."""
-        raise NotImplementedError("get_buffers would force materialization, so it is not implemented.")
+        raise NotImplementedError(
+            "get_buffers would force materialization, so it is not implemented."
+        )
 
 
 @dataclasses.dataclass(frozen=True)
@@ -158,11 +174,14 @@ class SparkInterchangeDataframe(_PyArrowDataFrame):
     implementation attempts to avoid materializing all the data on the driver side at
     once.
     """
+
     _spark_dataframe: "pyspark.sql.DataFrame"
     _allow_copy: bool
     _nan_as_null: bool
 
-    def __dataframe__(self, nan_as_null: bool = False, allow_copy: bool = True) -> "SparkInterchangeDataframe":
+    def __dataframe__(
+        self, nan_as_null: bool = False, allow_copy: bool = True
+    ) -> "SparkInterchangeDataframe":
         """Construct a new interchange dataframe, potentially changing the options."""
         return SparkInterchangeDataframe(
             _spark_dataframe=self._spark_dataframe,
@@ -234,12 +253,12 @@ class SparkInterchangeDataframe(_PyArrowDataFrame):
             _nan_as_null=self._nan_as_null,
         )
 
-    def get_chunks(
-        self, n_chunks: Optional[int] = None
-    ) -> Iterable[_PyArrowDataFrame]:
+    def get_chunks(self, n_chunks: Optional[int] = None) -> Iterable[_PyArrowDataFrame]:
         """Return an iterator yielding the chunks of the dataframe."""
         if n_chunks is not None:
-            raise NotImplementedError("n_chunks would require repartitioning, which is not implemented.")
+            raise NotImplementedError(
+                "n_chunks would require repartitioning, which is not implemented."
+            )
         arrow_array_partitions = _get_arrow_array_partition_stream(self._spark_dataframe)
         for part in arrow_array_partitions:
             yield _PyArrowDataFrame(
