@@ -44,6 +44,12 @@ if ! python3 -c "import debugpy" 2>/dev/null; then
   exit 1
 fi
 
+# If lib/pyspark.zip exists, issue a warning
+if [ -f "$FWDIR/lib/pyspark.zip" ]; then
+  echo "Warning: lib/pyspark.zip exists. VSCode debugger won't pick up your breakpoints in workers."
+  echo "You can remove it to avoid potential issues."
+fi
+
 # If --hook-daemon is in the arguments, set the env variable to hook the daemon process
 # Daemon is not hooked by default to avoid potential fork issues
 new_args=()
