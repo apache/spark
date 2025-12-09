@@ -872,10 +872,6 @@ abstract class TimeToLongBase extends UnaryExpression with ExpectsInputTypes {
        14:30:00.5
       > SELECT _FUNC_(86399.999999);
        23:59:59.999999
-      > SELECT _FUNC_(90000);
-       NULL
-      > SELECT _FUNC_(-1);
-       NULL
   """,
   since = "4.2.0",
   group = "datetime_funcs")
