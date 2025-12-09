@@ -37,6 +37,10 @@ try:
                 "worker" in frame.f_globals
             ):
 
+                if cov := coverage.Coverage.current():
+                    cov.stop()
+                cov = coverage.process_startup(force=True)
+
                 def save_when_exit(func):
                     def wrapper(*args, **kwargs):
                         try:
