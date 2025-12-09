@@ -325,16 +325,17 @@ trait SparkConnectServerTest extends SharedSparkSession {
   }
 
   /**
-   * Helper method to create a connect SparkSession that connects to the localhost server.
-   * Similar to withClient, but provides a full SparkSession API instead of just a client.
+   * Helper method to create a connect SparkSession that connects to the localhost server. Similar
+   * to withClient, but provides a full SparkSession API instead of just a client.
    *
-   * @param sessionId Optional session ID (defaults to defaultSessionId)
-   * @param userId Optional user ID (defaults to defaultUserId)
-   * @param f Function to execute with the session
+   * @param sessionId
+   *   Optional session ID (defaults to defaultSessionId)
+   * @param userId
+   *   Optional user ID (defaults to defaultUserId)
+   * @param f
+   *   Function to execute with the session
    */
-  protected def withSession(
-      sessionId: String = defaultSessionId,
-      userId: String = defaultUserId)(
+  protected def withSession(sessionId: String = defaultSessionId, userId: String = defaultUserId)(
       f: SparkSession => Unit): Unit = {
     withSession(f, sessionId, userId)
   }
@@ -342,16 +343,14 @@ trait SparkConnectServerTest extends SharedSparkSession {
   /**
    * Helper method to create a connect SparkSession with default session and user IDs.
    *
-   * @param f Function to execute with the session
+   * @param f
+   *   Function to execute with the session
    */
   protected def withSession(f: SparkSession => Unit): Unit = {
     withSession(f, defaultSessionId, defaultUserId)
   }
 
-  private def withSession(
-      f: SparkSession => Unit,
-      sessionId: String,
-      userId: String): Unit = {
+  private def withSession(f: SparkSession => Unit, sessionId: String, userId: String): Unit = {
     val client = SparkConnectClient
       .builder()
       .port(serverPort)
@@ -373,11 +372,13 @@ trait SparkConnectServerTest extends SharedSparkSession {
    * Get the server-side SparkSession corresponding to a client SparkSession.
    *
    * This helper takes a sql.SparkSession (which is assumed to be a connect.SparkSession),
-   * extracts the userId and sessionId from it, and looks up the corresponding server-side
-   * classic SparkSession using SparkConnectSessionManager.
+   * extracts the userId and sessionId from it, and looks up the corresponding server-side classic
+   * SparkSession using SparkConnectSessionManager.
    *
-   * @param clientSession The client SparkSession (must be a connect.SparkSession)
-   * @return The server-side classic SparkSession
+   * @param clientSession
+   *   The client SparkSession (must be a connect.SparkSession)
+   * @return
+   *   The server-side classic SparkSession
    */
   protected def getServerSession(clientSession: SparkSession): classic.SparkSession = {
     val connectSession = clientSession.asInstanceOf[connect.SparkSession]
@@ -385,6 +386,8 @@ trait SparkConnectServerTest extends SharedSparkSession {
     val sessionId = connectSession.sessionId
     val key = SessionKey(userId, sessionId)
     SparkConnectService.sessionManager
-      .getIsolatedSessionIfPresent(key).get.session
+      .getIsolatedSessionIfPresent(key)
+      .get
+      .session
   }
 }

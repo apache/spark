@@ -22,10 +22,10 @@ import org.scalatest.time.SpanSugar._
  * Test suite showcasing the APIs provided by SparkConnectServerTest trait.
  *
  * This suite demonstrates:
- * - Session and client helper methods (withSession, withClient, getServerSession)
- * - Low-level stub helpers (withRawBlockingStub, withCustomBlockingStub)
- * - Plan building helpers (buildPlan, buildExecutePlanRequest, etc.)
- * - Assertion helpers for execution state
+ *   - Session and client helper methods (withSession, withClient, getServerSession)
+ *   - Low-level stub helpers (withRawBlockingStub, withCustomBlockingStub)
+ *   - Plan building helpers (buildPlan, buildExecutePlanRequest, etc.)
+ *   - Assertion helpers for execution state
  */
 class SparkConnectServerTestSuite extends SparkConnectServerTest {
 
@@ -170,10 +170,8 @@ class SparkConnectServerTestSuite extends SparkConnectServerTest {
     val plan = buildPlan("SELECT 1")
     val customSessionId = "my-session"
     val customOperationId = "my-operation"
-    val request = buildExecutePlanRequest(
-      plan,
-      sessionId = customSessionId,
-      operationId = customOperationId)
+    val request =
+      buildExecutePlanRequest(plan, sessionId = customSessionId, operationId = customOperationId)
     assert(request.getSessionId == customSessionId)
     assert(request.getOperationId == customOperationId)
   }
