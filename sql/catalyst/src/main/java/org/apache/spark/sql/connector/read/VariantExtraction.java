@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector.read;
 
+import java.io.Serializable;
+
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Metadata;
@@ -34,11 +36,11 @@ import org.apache.spark.sql.types.Metadata;
  * @since 4.1.0
  */
 @Experimental
-public interface VariantExtraction {
+public interface VariantExtraction extends Serializable {
   /**
    * Returns the path to the variant column. For top-level variant columns, this is a single
    * element array containing the column name. For nested variant columns within structs,
-   * this is an array representing the path (e.g., ["struct1", "struct2", "variantCol"]).
+   * this is an array representing the path (e.g., ["structCol", "innerStruct", "variantCol"]).
    */
   String[] columnName();
 

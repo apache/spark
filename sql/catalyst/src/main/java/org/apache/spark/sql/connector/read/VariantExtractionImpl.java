@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.connector.read;
 
-import java.io.Serializable;
 import java.util.Arrays;
 import java.util.Objects;
 
@@ -31,7 +30,7 @@ import org.apache.spark.sql.types.Metadata;
  * @since 4.1.0
  */
 @Experimental
-public final class VariantExtractionImpl implements VariantExtraction, Serializable {
+public final class VariantExtractionImpl implements VariantExtraction {
   private final String[] columnName;
   private final DataType expectedDataType;
   private final Metadata metadata;
