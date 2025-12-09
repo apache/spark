@@ -407,10 +407,6 @@ private[spark] class Executor(
             TaskState.FAILED,
             env.closureSerializer.newInstance().serialize(new ExceptionFailure(t, Seq.empty)))
         } catch {
-          case oom: OutOfMemoryError =>
-            logError(log"Executor update launching task ${MDC(TASK_NAME, taskDescription.name)} " +
-              log"failed status failed, reason: ${MDC(REASON, oom.getMessage)}")
-            System.exit(SparkExitCode.OOM)
           case t: Throwable =>
             logError(log"Executor update launching task ${MDC(TASK_NAME, taskDescription.name)} " +
               log"failed status failed, reason: ${MDC(REASON, t.getMessage)}")
@@ -764,7 +760,6 @@ private[spark] class Executor(
           .inc(task.metrics.outputMetrics.bytesWritten)
         executorSource.METRIC_OUTPUT_RECORDS_WRITTEN
           .inc(task.metrics.outputMetrics.recordsWritten)
-        executorSource.METRIC_RESULT_SIZE.inc(task.metrics.resultSize)
         executorSource.METRIC_DISK_BYTES_SPILLED.inc(task.metrics.diskBytesSpilled)
         executorSource.METRIC_MEMORY_BYTES_SPILLED.inc(task.metrics.memoryBytesSpilled)
         incrementShuffleMetrics(executorSource, task.metrics)
@@ -778,6 +773,7 @@ private[spark] class Executor(
         val serializedDirectResult = SerializerHelper.serializeToChunkedBuffer(ser, directResult,
           valueByteBuffer.size + accumUpdates.size * 32 + metricPeaks.length * 8)
         val resultSize = serializedDirectResult.size
+        executorSource.METRIC_RESULT_SIZE.inc(resultSize)
 
         // directSend = sending directly back to the driver
         val serializedResult: ByteBuffer = {

@@ -65,7 +65,7 @@ class SparkConnectSQLTestCase(ReusedMixedTestCase, PandasOnSparkTestUtils):
 
     @classmethod
     def setUpClass(cls):
-        super(SparkConnectSQLTestCase, cls).setUpClass()
+        super().setUpClass()
 
         cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
         cls.testDataStr = [Row(key=str(i)) for i in range(100)]
@@ -88,7 +88,7 @@ class SparkConnectSQLTestCase(ReusedMixedTestCase, PandasOnSparkTestUtils):
         try:
             cls.spark_connect_clean_up_test_data()
         finally:
-            super(SparkConnectSQLTestCase, cls).tearDownClass()
+            super().tearDownClass()
 
     @classmethod
     def spark_connect_load_test_data(cls):
@@ -1480,11 +1480,11 @@ class SparkConnectGCTests(SparkConnectSQLTestCase):
     def setUpClass(cls):
         cls.origin = os.getenv("USER", None)
         os.environ["USER"] = "SparkConnectGCTests"
-        super(SparkConnectGCTests, cls).setUpClass()
+        super().setUpClass()
 
     @classmethod
     def tearDownClass(cls):
-        super(SparkConnectGCTests, cls).tearDownClass()
+        super().tearDownClass()
         if cls.origin is not None:
             os.environ["USER"] = cls.origin
         else:

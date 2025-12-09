@@ -208,7 +208,7 @@ class SQLTestUtils:
 class ReusedSQLTestCase(ReusedPySparkTestCase, SQLTestUtils, PySparkErrorTestUtils):
     @classmethod
     def setUpClass(cls):
-        super(ReusedSQLTestCase, cls).setUpClass()
+        super().setUpClass()
         cls._legacy_sc = cls.sc
         cls.spark = SparkSession(cls.sc)
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
@@ -218,7 +218,7 @@ class ReusedSQLTestCase(ReusedPySparkTestCase, SQLTestUtils, PySparkErrorTestUti
 
     @classmethod
     def tearDownClass(cls):
-        super(ReusedSQLTestCase, cls).tearDownClass()
+        super().tearDownClass()
         cls.spark.stop()
         shutil.rmtree(cls.tempdir.name, ignore_errors=True)
 

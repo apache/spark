@@ -204,6 +204,7 @@
 This project bundles some components that are also licensed under the Apache
 License Version 2.0:
 
+at.yawk.lz4:lz4-java
 com.clearspring.analytics:stream
 com.fasterxml.jackson.core:jackson-annotations
 com.fasterxml.jackson.core:jackson-core
@@ -388,7 +389,6 @@ org.json4s:json4s-core_2.13
 org.json4s:json4s-jackson-core_2.13
 org.json4s:json4s-jackson_2.13
 org.json4s:json4s-scalap_2.13
-org.lz4:lz4-java
 org.objenesis:objenesis
 org.roaringbitmap:RoaringBitmap
 org.rocksdb:rocksdbjni

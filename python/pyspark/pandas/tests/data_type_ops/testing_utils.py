@@ -43,7 +43,7 @@ class OpsTestBase:
 
     @classmethod
     def setUpClass(cls):
-        super(OpsTestBase, cls).setUpClass()
+        super().setUpClass()
         # Some nanosecond->microsecond conversions throw loss of precision errors
         cls.spark.conf.set("spark.sql.execution.pandas.convertToArrowArraySafely", "false")
 

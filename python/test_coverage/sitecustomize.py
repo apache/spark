@@ -39,8 +39,10 @@ try:
 
                 def save_when_exit(func):
                     def wrapper(*args, **kwargs):
-                        result = func(*args, **kwargs)
-                        cov.save()
+                        try:
+                            result = func(*args, **kwargs)
+                        finally:
+                            cov.save()
                         return result
                     return wrapper
 
