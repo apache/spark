@@ -228,6 +228,10 @@ def get_default_python_executables():
 def split_and_validate_testnames(testnames):
     testnames_to_test = []
 
+    py4j_module_path = os.path.join(SPARK_HOME, "python/lib/py4j-0.10.9.9-src.zip")
+    if py4j_module_path not in sys.path:
+        sys.path.append(py4j_module_path)
+
     def module_exists(module):
         try:
             return importlib.util.find_spec(module) is not None
