@@ -36,6 +36,8 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
 
 trait OffsetSeqBase {
+  def version: Int
+
   def offsets: Seq[Option[OffsetV2]]
 
   def metadataOpt: Option[OffsetSeqMetadataBase]
@@ -93,7 +95,9 @@ trait OffsetSeqBase {
  */
 case class OffsetSeq(
     offsets: Seq[Option[OffsetV2]],
-    metadataOpt: Option[OffsetSeqMetadata] = None) extends OffsetSeqBase
+    metadataOpt: Option[OffsetSeqMetadata] = None) extends OffsetSeqBase {
+  override def version: Int = OffsetSeqLog.VERSION_1
+}
 
 object OffsetSeq {
 
@@ -124,6 +128,7 @@ object OffsetSeq {
 case class OffsetMap(
     offsetsMap: Map[String, Option[OffsetV2]],
     metadata: OffsetSeqMetadataV2) extends OffsetSeqBase {
+  override def version: Int = OffsetSeqLog.VERSION_2
 
   // OffsetMap does not support sequence-based access
   override def offsets: Seq[Option[OffsetV2]] = {

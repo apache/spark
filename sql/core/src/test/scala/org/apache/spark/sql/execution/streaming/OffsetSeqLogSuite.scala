@@ -268,8 +268,7 @@ class OffsetSeqLogSuite extends SharedSparkSession {
           assert(offsetSeq.isInstanceOf[OffsetMap],
             s"Expected OffsetMap but got ${offsetSeq.getClass.getSimpleName}")
 
-          val metadata = offsetSeq.metadataOpt.get
-          assert(metadata.version === 2, s"Expected version 2 but got ${metadata.version}")
+          assert(offsetSeq.version === 2, s"Expected version 2 but got ${offsetSeq.version}")
         } finally {
           query.stop()
         }
@@ -299,8 +298,7 @@ class OffsetSeqLogSuite extends SharedSparkSession {
         assert(offsetSeq.isInstanceOf[OffsetSeq],
           s"Expected OffsetSeq but got ${offsetSeq.getClass.getSimpleName}")
 
-        val metadata = offsetSeq.metadataOpt.get
-        assert(metadata.version === 1, s"Expected version 1 but got ${metadata.version}")
+        assert(offsetSeq.version === 1, s"Expected version 1 but got ${offsetSeq.version}")
       } finally {
         query.stop()
       }
@@ -336,7 +334,7 @@ class OffsetSeqLogSuite extends SharedSparkSession {
           val batch1 = offsetLog.getLatest()
           assert(batch1.isDefined)
           assert(batch1.get._2.getClass === expectedClass)
-          assert(batch1.get._2.metadataOpt.get.version === startingVersion)
+          assert(batch1.get._2.version === startingVersion)
 
           // Restart query with different version config - should still use initial version
           withSQLConf(SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key ->
@@ -359,8 +357,7 @@ class OffsetSeqLogSuite extends SharedSparkSession {
               assert(offsetSeq.getClass === expectedClass,
                 s"Query should continue using VERSION_$startingVersion format from checkpoint")
 
-              val metadata = offsetSeq.metadataOpt.get
-              assert(metadata.version === startingVersion,
+              assert(offsetSeq.version === startingVersion,
                 s"Query should continue using version $startingVersion from checkpoint")
             } finally {
               query2.stop()

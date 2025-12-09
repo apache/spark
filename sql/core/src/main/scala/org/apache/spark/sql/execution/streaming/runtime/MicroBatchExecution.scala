@@ -421,7 +421,7 @@ class MicroBatchExecution(
     // Read the offset log format version from the last written offset log entry. If no entries
     // are found, use the set/default value from the config.
     val offsetLogFormatVersion = if (latestStartedBatch.isDefined) {
-      latestStartedBatch.get._2.metadataOpt.map(_.version).getOrElse(OffsetSeqLog.VERSION_1)
+      latestStartedBatch.get._2.version
     } else {
       // If no offset log entries are found, assert that the query does not have any committed
       // batches to be extra safe.
