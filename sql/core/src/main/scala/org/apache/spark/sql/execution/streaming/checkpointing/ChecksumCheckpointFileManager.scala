@@ -500,16 +500,11 @@ class ChecksumCancellableFSDataOutputStream(
   @volatile private var closed = false
 
   override def cancel(): Unit = {
-    val mainFuture = Future {
-      mainStream.cancel()
-    }(uploadThreadPool)
-
-    val checksumFuture = Future {
-      checksumStream.cancel()
-    }(uploadThreadPool)
-
-    awaitResult(mainFuture, Duration.Inf)
-    awaitResult(checksumFuture, Duration.Inf)
+    // Cancel both streams synchronously, because consider we want to cancel the while the thread
+    // is in the interrupted state, If we cancel each stream using a future, the thread will throw
+    // InterruptedException and the thread will not be cancelled.
+    mainStream.cancel()
+    checksumStream.cancel()
   }
 
   override def close(): Unit = {

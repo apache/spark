@@ -829,14 +829,10 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
   }
 
   /**
-   * Test that verifies the fix when changelogWriter.abort() throws an exception
-   * during rollback(), the changelogWriter is still set to None, allowing subsequent put()
-   * calls to succeed.
-   *
-   * Before the fix, if abort() threw an exception, changelogWriter would remain set to a
-   * writer with null streams, causing assertion failures on the next put().
+   * Test that verifies that when a task is interrupted, the store's rollback() method does not
+   * throw an exception and the store can still be used after the rollback.
    */
-  test("SPARK-54585: Interrupted task calling rollback leaves changelogWriter in a valid state") {
+  test("SPARK-54585: Interrupted task calling rollback does not throw an exception") {
     val hadoopConf = new Configuration()
     hadoopConf.set(
       STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key,
@@ -871,24 +867,17 @@ class RocksDBCheckpointFailureInjectionSuite extends StreamTest
         // the task failure listener invokes RocksDBStateStore.abort() -> rollback().
         Thread.currentThread().interrupt()
 
-        // rollback() calls changelogWriter.foreach(_.abort())
-        // abort() calls backingFileStream.cancel() which calls awaitResult() in
-        // the ChecksumCheckpointFileManager
-        // awaitResult() sees the interrupt flag and throws InterruptedException
-        intercept[InterruptedException] {
-          db.rollback()
-        }
+        // rollback() should not throw an exception
+        db.rollback()
 
         // Clear the interrupt flag for subsequent operations
         Thread.interrupted()
 
-        // Before the fix, changelogWriter would still be Some(...) but with null streams,
-        // causing assertion failures on the next put() while replaying the changelog files.
-        // After the fix, changelogWriter should be None despite the exception.
+        // Reload the store and insert a new value
         db.load(2, checkpointId2)
         db.put("key3", "value3")
 
-        // Verify the database has the correct values
+        // Verify the store has the correct values
         assert(db.iterator().map(toStr).toSet ===
           Set(("key0", "value0"), ("key1", "value1"), ("key3", "value3")))
       }

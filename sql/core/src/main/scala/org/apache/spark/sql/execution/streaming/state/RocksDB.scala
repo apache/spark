@@ -1650,7 +1650,8 @@ class RocksDB(
    * Drop uncommitted changes, and roll back to previous version.
    */
   def rollback(): Unit = {
-    logInfo(log"Rolling back to ${MDC(LogKeys.VERSION_NUM, loadedVersion)}")
+    logInfo(
+      log"Rolling back uncommitted changes on version ${MDC(LogKeys.VERSION_NUM, loadedVersion)}")
     numKeysOnWritingVersion = numKeysOnLoadedVersion
     numInternalKeysOnWritingVersion = numInternalKeysOnLoadedVersion
     loadedVersion = -1L
