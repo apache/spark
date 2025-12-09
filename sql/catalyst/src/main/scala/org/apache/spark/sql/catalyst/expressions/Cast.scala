@@ -505,6 +505,10 @@ object Cast extends QueryErrorsBase {
             "config" -> toSQLConf(fallbackConf.get._1),
             "configVal" -> toSQLValue(fallbackConf.get._2, StringType)))
 
+      case _ if fallbackConf.isEmpty && Cast.canTryCast(from, to) =>
+        // Suggest try_cast for valid casts that fail in ANSI mode
+        withFunSuggest("try_cast")
+
       case _ =>
         DataTypeMismatch(
           errorSubClass = "CAST_WITHOUT_SUGGESTION",
@@ -588,8 +592,19 @@ case class Cast(
           Some(SQLConf.STORE_ASSIGNMENT_POLICY.key ->
             SQLConf.StoreAssignmentPolicy.LEGACY.toString))
       } else {
-        Cast.typeCheckFailureMessage(child.dataType, dataType,
-          Some(SQLConf.ANSI_ENABLED.key -> "false"))
+        // Check if there's a config workaround for this cast failure:
+        // - If canTryCast supports this cast, pass None here and let typeCheckFailureMessage
+        //   suggest try_cast (which is more user-friendly than disabling ANSI mode)
+        // - If canTryCast doesn't support it BUT the cast works in non-ANSI mode,
+        //   suggest disabling ANSI mode as a migration path
+        // - Otherwise, pass None and let typeCheckFailureMessage decide
+        val fallbackConf = if (!Cast.canTryCast(child.dataType, dataType) &&
+            Cast.canCast(child.dataType, dataType)) {
+          Some(SQLConf.ANSI_ENABLED.key -> "false")
+        } else {
+          None
+        }
+        Cast.typeCheckFailureMessage(child.dataType, dataType, fallbackConf)
       }
     case EvalMode.TRY =>
       Cast.typeCheckFailureMessage(child.dataType, dataType, None)

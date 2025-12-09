@@ -162,28 +162,27 @@ def manager():
     reuse = os.environ.get("SPARK_REUSE_WORKER")
 
     # Initialization complete
-    rlist = [0, listen_sock.fileno()]
-    poller = None
     try:
-        if os.name == "posix" and os.getenv("PYSPARK_FORCE_SELECT", "false").lower() != "true":
-            # On posix systems use poll to avoid problems with file descriptor numbers above 1024
-            # (unless we force select by setting the PYSPARK_FORCE_SELECT environment variable to true).
+        poller = None
+        if os.name == "posix":
+            # select.select has a known limit on the number of file descriptors
+            # it can handle. We use select.poll instead to avoid this limit.
             poller = select.poll()
-            for fd in rlist:
-                poller.register(fd, select.POLLIN)
+            fd_reverse_map = {0: 0, listen_sock.fileno(): listen_sock}
+            poller.register(0, select.POLLIN)
+            poller.register(listen_sock, select.POLLIN)
 
         while True:
-            try:
-                if poller is not None:
-                    ready_fds = [fd for fd, event in poller.poll(1)]
-                else:
-                    # If poll is not available, use select.
-                    ready_fds = select.select(rlist, [], [], 1)[0]
-            except select.error as ex:
-                if ex[0] == EINTR:
-                    continue
-                else:
-                    raise
+            if poller is not None:
+                ready_fds = [fd_reverse_map[fd] for fd, _ in poller.poll(1000)]
+            else:
+                try:
+                    ready_fds = select.select([0, listen_sock], [], [], 1)[0]
+                except select.error as ex:
+                    if ex[0] == EINTR:
+                        continue
+                    else:
+                        raise
 
             if 0 in ready_fds:
                 try:
@@ -196,7 +195,7 @@ def manager():
                 except OSError:
                     pass  # process already died
 
-            if listen_sock.fileno() in ready_fds:
+            if listen_sock in ready_fds:
                 try:
                     sock, _ = listen_sock.accept()
                 except OSError as e:
@@ -221,6 +220,9 @@ def manager():
 
                 if pid == 0:
                     # in child process
+                    if poller is not None:
+                        poller.unregister(0)
+                        poller.unregister(listen_sock)
                     listen_sock.close()
 
                     # It should close the standard input in the child process so that
@@ -270,9 +272,8 @@ def manager():
 
     finally:
         if poller is not None:
-            for fd in rlist:
-                poller.unregister(fd)
-
+            poller.unregister(0)
+            poller.unregister(listen_sock)
         shutdown(1)
 
 

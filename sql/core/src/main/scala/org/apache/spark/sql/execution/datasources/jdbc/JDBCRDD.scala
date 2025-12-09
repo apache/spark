@@ -305,8 +305,7 @@ class JDBCRDD(
     val inputMetrics = context.taskMetrics().inputMetrics
     val part = thePart.asInstanceOf[JDBCPartition]
     conn = getConnection(part.idx)
-    import scala.jdk.CollectionConverters._
-    dialect.beforeFetch(conn, options.asProperties.asScala.toMap)
+    dialect.beforeFetch(conn, options)
 
     // This executes a generic SQL statement (or PL/SQL block) before reading
     // the table/query via JDBC. Use this feature to initialize the database

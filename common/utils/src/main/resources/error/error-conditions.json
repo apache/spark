@@ -173,6 +173,12 @@
     },
     "sqlState" : "42604"
   },
+  "ATTEMPT_ANALYSIS_IN_PIPELINE_QUERY_FUNCTION" : {
+    "message" : [
+      "Operations that trigger DataFrame analysis or execution are not allowed in pipeline query functions. Move code outside of the pipeline query function."
+    ],
+    "sqlState" : "0A000"
+  },
   "AVRO_CANNOT_WRITE_NULL_FIELD" : {
     "message" : [
       "Cannot write null value for field <name> defined as non-null Avro data type <dataType>.",
@@ -5514,6 +5520,22 @@
       "UNSUPPORTED_OFFSET_SEQ_VERSION" : {
         "message" : [
           "Unsupported offset sequence version <version>. Please make sure the checkpoint is from a supported Spark version (Spark 4.0+)."
+        ]
+      },
+      "UNSUPPORTED_PROVIDER" : {
+        "message" : [
+          "<provider> is not supported"
+        ]
+      },
+      "UNSUPPORTED_STATEFUL_OPERATOR" : {
+        "message" : [
+          "Unsupported stateful operator <operatorName>. Please use a checkpoint with supported stateful operators."
+        ]
+      },
+      "UNSUPPORTED_TRANSFORM_WITH_STATE_VARIABLE_TYPE" : {
+        "message" : [
+          "Unsupported transformWithState variable type <variableType> (TTL_Enabled: <ttlEnabled>, ColFamilyName: <colFamilyName>).",
+          "Please use a checkpoint with supported transform with state variable types."
         ]
       }
     },

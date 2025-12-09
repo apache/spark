@@ -407,10 +407,6 @@ private[spark] class Executor(
             TaskState.FAILED,
             env.closureSerializer.newInstance().serialize(new ExceptionFailure(t, Seq.empty)))
         } catch {
-          case oom: OutOfMemoryError =>
-            logError(log"Executor update launching task ${MDC(TASK_NAME, taskDescription.name)} " +
-              log"failed status failed, reason: ${MDC(REASON, oom.getMessage)}")
-            System.exit(SparkExitCode.OOM)
           case t: Throwable =>
             logError(log"Executor update launching task ${MDC(TASK_NAME, taskDescription.name)} " +
               log"failed status failed, reason: ${MDC(REASON, t.getMessage)}")
