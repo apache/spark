@@ -502,12 +502,13 @@ class ApplicationEnvironmentInfo private[spark] (
     val resourceProfiles: collection.Seq[ResourceProfileInfo])
 
 private[spark] object ApplicationEnvironmentInfo {
-  def create(appEnv: ApplicationEnvironmentInfo,
-             newSparkProperties: Map[String, String] = Map(),
-             newHadoopProperties: Map[String, String] = Map(),
-             newSystemProperties: Map[String, String] = Map(),
-             newClasspathProperties: Map[String, String] = Map(),
-             newResourceProfiles: Seq[ResourceProfileInfo] = Seq()): ApplicationEnvironmentInfo = {
+  def create(
+      appEnv: ApplicationEnvironmentInfo,
+      newSparkProperties: Map[String, String] = Map(),
+      newHadoopProperties: Map[String, String] = Map(),
+      newSystemProperties: Map[String, String] = Map(),
+      newClasspathProperties: Map[String, String] = Map(),
+      newResourceProfiles: Seq[ResourceProfileInfo] = Seq()): ApplicationEnvironmentInfo = {
     if (newResourceProfiles.nonEmpty) {
       require(!newResourceProfiles.exists(newRP => appEnv.resourceProfiles.map(_.id)
         .contains(newRP.id)), "duplicate resource profile id in newResourceProfile and existing" +
