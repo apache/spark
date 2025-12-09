@@ -21,7 +21,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.checkpointing.{CommitMetadata, OffsetMap, OffsetSeq, OffsetSeqLog, OffsetSeqMetadata, OffsetSeqMetadataBase, OffsetSeqMetadataV2}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CommitMetadata, OffsetMap, OffsetSeq, OffsetSeqLog, OffsetSeqMetadata, OffsetSeqMetadataBase}
 import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryCheckpointMetadata
 import org.apache.spark.sql.execution.streaming.utils.StreamingUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -212,9 +212,8 @@ class OfflineStateRepartitionRunner(
         v1.copy(metadataOpt = Some(metadata.copy(
           conf = metadata.conf + (SQLConf.SHUFFLE_PARTITIONS.key -> numPartitions.toString))))
       case v2: OffsetMap =>
-        val metadata = v2.metadataOpt.get.asInstanceOf[OffsetSeqMetadataV2]
-        v2.copy(metadataOpt = Some(metadata.copy(
-          conf = metadata.conf + (SQLConf.SHUFFLE_PARTITIONS.key -> numPartitions.toString))))
+        v2.copy(metadata = v2.metadata.copy(
+          conf = v2.metadata.conf + (SQLConf.SHUFFLE_PARTITIONS.key -> numPartitions.toString)))
       case _ => throw OfflineStateRepartitionErrors.unsupportedOffsetSeqVersionError(
         checkpointLocation, version = -1)
     }
@@ -264,8 +263,9 @@ object OfflineStateRepartitionUtils {
           case _: OffsetMap => 2
           case _ => -1
         }
-        val batchMetadata = batch.metadataOpt.getOrElse(throw OfflineStateRepartitionErrors
-          .missingOffsetSeqMetadataError(checkpointLocation, version = batchVersion, batchId = batchId))
+        val batchMetadata = batch.metadataOpt.getOrElse(
+          throw OfflineStateRepartitionErrors.missingOffsetSeqMetadataError(
+            checkpointLocation, version = batchVersion, batchId = batchId))
         val shufflePartitions = getShufflePartitions(batchMetadata).get
 
         val prevBatchVersion = previousBatch match {
@@ -274,8 +274,8 @@ object OfflineStateRepartitionUtils {
           case _ => -1
         }
         val previousBatchMetadata = previousBatch.metadataOpt.getOrElse(
-          throw OfflineStateRepartitionErrors
-            .missingOffsetSeqMetadataError(checkpointLocation, version = prevBatchVersion, batchId = prevBatchId))
+          throw OfflineStateRepartitionErrors.missingOffsetSeqMetadataError(
+            checkpointLocation, version = prevBatchVersion, batchId = prevBatchId))
         val previousShufflePartitions = getShufflePartitions(previousBatchMetadata).get
 
         previousShufflePartitions != shufflePartitions

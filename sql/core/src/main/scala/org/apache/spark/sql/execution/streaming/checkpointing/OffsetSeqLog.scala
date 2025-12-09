@@ -88,7 +88,10 @@ class OffsetSeqLog(sparkSession: SparkSession, path: String)
         }
         sourceId -> offset
       }.toMap
-      OffsetMap(offsetsMap, metadata.map(OffsetSeqMetadataV2.apply))
+      // V2 requires metadata
+      val metadataV2 = metadata.map(OffsetSeqMetadataV2.apply).getOrElse(
+        throw new IllegalStateException("VERSION_2 offset log requires metadata"))
+      OffsetMap(offsetsMap, metadataV2)
     } else {
       OffsetSeq.fill(metadata,
         lines.map(OffsetSeqLog.parseOffset).toArray.toImmutableArraySeq: _*)

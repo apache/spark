@@ -117,16 +117,21 @@ object OffsetSeq {
  * streaming sources. Each source is identified by a string key (initially sourceId.toString()).
  * This replaces the sequence-based approach with a more flexible map-based approach to support
  * named source identities.
+ *
+ * Unlike [[OffsetSeq]], metadata is required (not optional) for [[OffsetMap]] as it contains
+ * essential information like source metadata.
  */
 case class OffsetMap(
     offsetsMap: Map[String, Option[OffsetV2]],
-    metadataOpt: Option[OffsetSeqMetadataBase] = None) extends OffsetSeqBase {
+    metadata: OffsetSeqMetadataV2) extends OffsetSeqBase {
 
   // OffsetMap does not support sequence-based access
   override def offsets: Seq[Option[OffsetV2]] = {
     throw new UnsupportedOperationException(
       "OffsetMap does not support sequence-based offsets access. Use offsetsMap directly.")
   }
+
+  override def metadataOpt: Option[OffsetSeqMetadataBase] = Some(metadata)
 }
 
 /**

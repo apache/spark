@@ -21,7 +21,7 @@ import scala.collection.immutable
 
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, SparkDataStream}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeq, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata, OffsetSeqMetadataBase}
+import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeq, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata, OffsetSeqMetadataBase, OffsetSeqMetadataV2}
 
 /**
  * A helper class that looks like a Map[Source, Offset].
@@ -65,7 +65,8 @@ class StreamProgress(
         throw new IllegalArgumentException(s"Source $source not found in sourceToIdMap"))
       sourceId -> Some(offset)
     }
-    OffsetMap(offsetsMap, Some(metadata))
+    // OffsetMap requires OffsetSeqMetadataV2
+    OffsetMap(offsetsMap, metadata.asInstanceOf[OffsetSeqMetadataV2])
   }
 
   override def toString: String =
