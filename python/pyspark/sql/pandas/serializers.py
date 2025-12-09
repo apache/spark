@@ -19,7 +19,6 @@
 Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for more details.
 """
 
-from decimal import Decimal
 from itertools import groupby
 from typing import TYPE_CHECKING, Iterator, Optional
 
@@ -356,40 +355,6 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         self._safecheck = safecheck
         self._int_to_decimal_coercion_enabled = int_to_decimal_coercion_enabled
 
-    @staticmethod
-    def _apply_python_coercions(series, arrow_type):
-        """
-        Apply additional coercions to the series in Python before converting to Arrow:
-        - Convert integer series to decimal type.
-          When we have a pandas series of integers that needs to be converted to
-          pyarrow.decimal128 (with precision < 20), PyArrow fails with precision errors.
-          Explicitly cast to Decimal first.
-
-        Parameters
-        ----------
-        series : pandas.Series
-            The series to potentially convert
-        arrow_type : pyarrow.DataType
-            The target arrow type
-
-        Returns
-        -------
-        pandas.Series
-            The potentially converted pandas series
-        """
-        import pyarrow.types as types
-        import pandas as pd
-
-        # Convert integer series to Decimal objects
-        if (
-            types.is_decimal(arrow_type)
-            and series.dtype.kind in ["i", "u"]  # integer types (signed/unsigned)
-            and not series.empty
-        ):
-            series = series.apply(lambda x: Decimal(x) if pd.notna(x) else None)
-
-        return series
-
     def arrow_to_pandas(
         self, arrow_column, idx, struct_in_pandas="dict", ndarray_as_list=False, spark_type=None
     ):
@@ -442,12 +407,12 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         if arrow_type is not None:
             dt = spark_type or from_arrow_type(arrow_type, prefer_timestamp_ntz=True)
             conv = _create_converter_from_pandas(
-                dt, timezone=self._timezone, error_on_duplicated_field_names=False
+                dt,
+                timezone=self._timezone,
+                error_on_duplicated_field_names=False,
+                int_to_decimal_coercion_enabled=self._int_to_decimal_coercion_enabled,
             )
             series = conv(series)
-
-            if self._int_to_decimal_coercion_enabled:
-                series = self._apply_python_coercions(series, arrow_type)
 
         if hasattr(series.array, "__arrow_array__"):
             mask = None
@@ -1046,11 +1011,9 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
                 timezone=self._timezone,
                 error_on_duplicated_field_names=False,
                 ignore_unexpected_complex_type_values=True,
+                int_to_decimal_coercion_enabled=self._int_to_decimal_coercion_enabled,
             )
             series = conv(series)
-
-            if self._int_to_decimal_coercion_enabled:
-                series = self._apply_python_coercions(series, arrow_type)
 
         if hasattr(series.array, "__arrow_array__"):
             mask = None
