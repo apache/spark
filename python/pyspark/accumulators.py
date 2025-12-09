@@ -266,29 +266,26 @@ class UpdateRequestHandler(socketserver.StreamRequestHandler):
         auth_token = self.server.auth_token  # type: ignore[attr-defined]
 
         def poll(func: Callable[[], bool]) -> None:
-            rlist = [self.rfile.fileno()]
             poller = None
-            try:
-                if os.name == "posix" and os.getenv("PYSPARK_FORCE_SELECT", "false").lower() != "true":
-                    # On posix systems use poll to avoid problems with file descriptor numbers above 1024
-                    # (unless we force select by setting the PYSPARK_FORCE_SELECT environment variable to true).
-                    poller = select.poll()
-                    for fd in rlist:
-                        poller.register(fd, select.POLLIN)
+            if os.name == "posix":
+                # On posix systems use poll to avoid problems with file descriptor
+                # numbers above 1024.
+                poller = select.poll()
+                poller.register(self.rfile, select.POLLIN)
 
-                while not self.server.server_shutdown:  # type: ignore[attr-defined]
-                    # Poll every 1 second for new data -- don't block in case of shutdown.
-                    if poller is not None:
-                        r = [fd for fd, event in poller.poll(1) if event & select.POLLIN]
-                    else:
-                        # If poll is not available, use select.
-                        r, _, _ = select.select(rlist, [], [], 1)
-                    if self.rfile.fileno() in r and func():
-                        break
-            finally:
+            while not self.server.server_shutdown:  # type: ignore[attr-defined]
+                # Poll every 1 second for new data -- don't block in case of shutdown.
                 if poller is not None:
-                    for fd in rlist:
-                        poller.unregister(fd)
+                    # Unlike select, poll timeout is in millis. Rule out error events.
+                    r = [fd for fd, event in poller.poll(1000) if event & select.POLLIN]
+                else:
+                    # If poll is not available, use select.
+                    r, _, _ = select.select([self.rfile.fileno()], [], [], 1)
+                if self.rfile.fileno() in r and func():
+                    break
+
+            if poller is not None:
+                poller.unregister(self.rfile)
 
         def accum_updates() -> bool:
             num_updates = read_int(self.rfile)
