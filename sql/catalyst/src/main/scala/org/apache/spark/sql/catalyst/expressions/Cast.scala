@@ -602,6 +602,12 @@ case class Cast(
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
+    dataType match {
+      // If the cast is to a TIME type, first check if TIME type is enabled.
+      case _: TimeType if !SQLConf.get.isTimeTypeEnabled =>
+        throw QueryCompilationErrors.unsupportedTimeTypeError()
+      case _ =>
+    }
     val canCast = evalMode match {
       case EvalMode.LEGACY => Cast.canCast(child.dataType, dataType)
       case EvalMode.ANSI => Cast.canAnsiCast(child.dataType, dataType)
@@ -611,14 +617,7 @@ case class Cast(
         messageParameters = Map("other" -> other.toString))
     }
     if (canCast) {
-      dataType match {
-        // If the cast is to a time type, we first need to check if the time type is enabled.
-        case _: TimeType if !SQLConf.get.isTimeTypeEnabled =>
-          throw QueryCompilationErrors.unsupportedTimeTypeError()
-        // If the cast is not to a time type, we can skip the time type check and continue.
-        case _ =>
-          TypeCheckResult.TypeCheckSuccess
-      }
+      TypeCheckResult.TypeCheckSuccess
     } else {
       typeCheckFailureInCast
     }
