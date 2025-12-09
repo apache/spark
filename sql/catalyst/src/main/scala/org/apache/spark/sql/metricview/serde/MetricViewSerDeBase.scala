@@ -147,6 +147,11 @@ private[sql] trait MetricViewBase {
   def dimensions: Seq[ColumnBase]
   def measures: Seq[ColumnBase]
 
+  // Different YAML versions could have differnt syntax to describe a MetricView, but
+  // all of them should be able to be converted to the same canonical form.
+  // For example, in later versions, we may change the syntax of source to support
+  // multiple sources (e.g. joins, compared to the current single source). But the
+  // canonical form should be able to represent both syntaxes.
   def toCanonical: MetricView = {
     // Convert dimensions with proper ordinals (0 to dimensions.length-1)
     val dimensionsCanonical = dimensions.zipWithIndex.map {

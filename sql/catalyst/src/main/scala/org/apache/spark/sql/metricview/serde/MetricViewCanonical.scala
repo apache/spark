@@ -163,19 +163,6 @@ private[sql] case class ColumnMetadata(
 private[sql] case class YAMLVersion(version: String) {
 }
 
-private[sql] object YAMLVersion {
-  private def validYAMLVersions: Set[String] = Set("0.1")
-
-  def apply(version: String): YAMLVersion = {
-    if (!validYAMLVersions.contains(version)) {
-      throw MetricViewValidationException(
-        s"Invalid YAML version: $version"
-      )
-    }
-    new YAMLVersion(version)
-  }
-}
-
 private[sql] case class MetricView(
     version: String,
     from: Source,
