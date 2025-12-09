@@ -143,7 +143,9 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite {
    */
   protected def createMemoryManager(
      maxOnHeapExecutionMemory: Long,
-     maxOffHeapExecutionMemory: Long = 0L): MemoryManager
+     maxOffHeapExecutionMemory: Long = 0L,
+     isOffHeapEnabled: Boolean = true ): MemoryManager
+
 
   // -- Tests of sharing of execution memory between tasks ----------------------------------------
   // Prior to Spark 1.6, these tests were part of ShuffleMemoryManagerSuite.
@@ -336,10 +338,10 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite {
     assert(tMemManager.getMemoryConsumptionForThisTask === 0L)
   }
 
-  test("task peak execution memory usage") {
+  test("task peak execution memory usage when offheap memory is enabled") {
     val memoryManager = createMemoryManager(
       maxOnHeapExecutionMemory = 1000L,
-      maxOffHeapExecutionMemory = 1000L)
+      maxOffHeapExecutionMemory = 1000L, isOffHeapEnabled = true)
 
     val tMemManager = new TaskMemoryManager(memoryManager, 1)
     val offHeapConsumer = new TestMemoryConsumer(tMemManager, MemoryMode.OFF_HEAP)
@@ -352,6 +354,24 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite {
     assert(tMemManager.getMemoryConsumptionForThisTask === 900L)
     assert(tMemManager.getPeakOnHeapExecutionMemory === 400L)
     assert(tMemManager.getPeakOffHeapExecutionMemory === 500L)
+  }
+
+  test("task peak execution memory usage when offheap memory is disabled") {
+    val memoryManager = createMemoryManager(
+      maxOnHeapExecutionMemory = 1000L,
+      maxOffHeapExecutionMemory = 1000L, isOffHeapEnabled = false)
+
+    val tMemManager = new TaskMemoryManager(memoryManager, 1)
+    val offHeapConsumer = new TestMemoryConsumer(tMemManager, MemoryMode.OFF_HEAP)
+    val onHeapConsumer = new TestMemoryConsumer(tMemManager, MemoryMode.ON_HEAP)
+
+    val result1 = tMemManager.acquireExecutionMemory(500L, offHeapConsumer)
+    val result2 = tMemManager.acquireExecutionMemory(400L, onHeapConsumer)
+    assert(result1 === 0L)
+    assert(result2 === 400L)
+    assert(tMemManager.getMemoryConsumptionForThisTask === 400L)
+    assert(tMemManager.getPeakOnHeapExecutionMemory === 400L)
+    assert(tMemManager.getPeakOffHeapExecutionMemory === 0L)
   }
 }
 

@@ -587,6 +587,7 @@ class BlockManagerBasicStrategyReplicationSuite extends BlockManagerReplicationB
     new SparkConf(false)
       .set("spark.app.id", "test")
       .set(Kryo.KRYO_SERIALIZER_BUFFER_SIZE.key, "1m")
+      .set(MEMORY_OFFHEAP_ENABLED, true)
       .set(
         STORAGE_REPLICATION_POLICY,
         classOf[BasicBlockReplicationPolicy].getName)

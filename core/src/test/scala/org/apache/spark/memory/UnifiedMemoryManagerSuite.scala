@@ -42,13 +42,14 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
 
   override protected def createMemoryManager(
       maxOnHeapExecutionMemory: Long,
-      maxOffHeapExecutionMemory: Long): UnifiedMemoryManager = {
+      maxOffHeapExecutionMemory: Long,
+      isOffHeapEnabled: Boolean = false ): UnifiedMemoryManager = {
     val conf = new SparkConf()
       .set(MEMORY_FRACTION, 1.0)
       .set(TEST_MEMORY, maxOnHeapExecutionMemory)
       .set(MEMORY_OFFHEAP_SIZE, maxOffHeapExecutionMemory)
       .set(MEMORY_STORAGE_FRACTION, storageFraction)
-      .set(MEMORY_OFFHEAP_ENABLED, true)
+      .set(MEMORY_OFFHEAP_ENABLED, isOffHeapEnabled)
     UnifiedMemoryManager(conf, numCores = 1)
   }
 
