@@ -529,8 +529,8 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
 
   }
 
-  test("when turning on bursty memory overhead, configure request and limit correctly with" +
-    " default memoryOverhead profile") {
+  test("SPARK-54596: when turning on bursty memory overhead, configure request and" +
+    " limit correctly with default memoryOverhead profile") {
     baseConf.remove(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
     baseConf.set("spark.app.name", "xyz.abc _i_am_a_app_name_w/_some_abbrs")
     val basePod = SparkPod.initialPod()
@@ -552,8 +552,8 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(resource.getRequests.get("memory").getAmount.toLong === 64 * 1024)
   }
 
-  test("when turning on bursty memory overhead, configure request and limit correctly with" +
-    " small memoryOverhead profile") {
+  test("SPARK-54596: when turning on bursty memory overhead, configure request and limit" +
+    " correctly with small memoryOverhead profile") {
     baseConf.remove(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
     baseConf.set("spark.app.name", "xyz.abc _i_am_a_app_name_w/_some_abbrs")
     val basePod = SparkPod.initialPod()
@@ -576,8 +576,8 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(resource.getRequests.get("memory").getAmount.toLong === 64 * 1024)
   }
 
-  test("when turning on bursty memory overhead, configure request and limit correctly with" +
-    " big memoryOverhead profile") {
+  test("SPARK-54596: when turning on bursty memory overhead, configure request and" +
+    " limit correctly with big memoryOverhead profile") {
     baseConf.remove(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
     baseConf.set("spark.app.name", "xyz.abc _i_am_a_app_name_w/_some_abbrs")
     val basePod = SparkPod.initialPod()
@@ -600,8 +600,8 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(resource.getRequests.get("memory").getAmount.toLong === math.ceil((64 + 3.2) * 1024))
   }
 
-  test("when turning on bursty memory overhead, configure request and limit correctly with" +
-    " big memoryOverhead profile and non-default factor") {
+  test("SPARK-54596: when turning on bursty memory overhead, configure request and" +
+    " limit correctly with big memoryOverhead profile and non-default factor") {
     baseConf.remove(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
     baseConf.set("spark.app.name", "xyz.abc _i_am_a_app_name_w/_some_abbrs")
     val basePod = SparkPod.initialPod()
