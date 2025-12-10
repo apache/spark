@@ -114,16 +114,16 @@ class StreamRealTimeModeSuite extends StreamRealTimeModeSuiteBase {
     testStream(mapped, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
       AddData(inputData, 1, 2, 3),
       StartStream(),
-      CheckAnswerWithTimeout(10000, 2, 3, 4),
+      CheckAnswer(2, 3, 4),
       AddData(inputData, 4, 5, 6),
-      CheckAnswerWithTimeout(10000, 2, 3, 4, 5, 6, 7),
+      CheckAnswer(2, 3, 4, 5, 6, 7),
       AddData(inputData, 7),
-      CheckAnswerWithTimeout(10000, 2, 3, 4, 5, 6, 7, 8),
+      CheckAnswer(2, 3, 4, 5, 6, 7, 8),
       AddData(inputData, 10, 11),
       ProcessAllAvailable(),
       StopStream,
       StartStream(),
-      CheckAnswerWithTimeout(10000, 2, 3, 4, 5, 6, 7, 8, 11, 12)
+      CheckAnswer(2, 3, 4, 5, 6, 7, 8, 11, 12)
     )
   }
 
