@@ -434,7 +434,9 @@ class MicroBatchExecution(
       SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key, offsetLogFormatVersion)
 
     val execCtx = new MicroBatchExecutionContext(id, runId, name, triggerClock, sources, sink,
-      progressReporter, -1, sparkSession, Some(offsetLogFormatVersion), None)
+      progressReporter, -1, sparkSession,
+      offsetLogFormatVersionOpt = Some(offsetLogFormatVersion),
+      previousContext = None)
 
     execCtx.offsetSeqMetadata = offsetLogFormatVersion match {
       case OffsetSeqLog.VERSION_2 =>
