@@ -40,21 +40,6 @@ case class VariantExtractionImpl(
   require(expectedDataType != null, "expectedDataType cannot be null")
   require(columnName.nonEmpty, "columnName cannot be empty")
 
-  override def equals(obj: Any): Boolean = obj match {
-    case that: VariantExtractionImpl =>
-      java.util.Arrays.equals(columnName.asInstanceOf[Array[Object]],
-        that.columnName.asInstanceOf[Array[Object]]) &&
-        metadata == that.metadata &&
-        expectedDataType == that.expectedDataType
-    case _ => false
-  }
-
-  override def hashCode(): Int = {
-    var result = Objects.hash(metadata, expectedDataType)
-    result = 31 * result + java.util.Arrays.hashCode(columnName.asInstanceOf[Array[Object]])
-    result
-  }
-
   override def toString: String = {
     s"VariantExtraction{columnName=${columnName.mkString("[", ", ", "]")}, " +
       s"metadata='$metadata', expectedDataType=$expectedDataType}"
