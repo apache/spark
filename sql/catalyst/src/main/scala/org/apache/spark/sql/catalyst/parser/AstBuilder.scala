@@ -6719,7 +6719,7 @@ class AstBuilder extends DataTypeAstBuilder
           s"SQL pipe syntax |> SET operator with multi-part assignment key " +
             s"(only single-part keys are allowed)", ctx)
       }
-      val setIdentifiers: Seq[String] = ctx.errorCapturingIdentifier().asScala.map(getIdentifierText).toSeq
+      val setIdentifiers: Seq[String] = ctx.errorCapturingIdentifier().asScala.map(_.getText).toSeq
       val setTargets: Seq[Expression] = ctx.expression().asScala.map(typedVisit[Expression]).toSeq
       (setIdentifiers, setTargets)
     }
