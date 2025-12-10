@@ -70,6 +70,11 @@ import org.apache.spark.util.Utils
 // scalastyle:on line.size.limit
 class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServer with Logging {
 
+  // Test files that need UTF-8 validation disabled for binary-to-string casts.
+  // Related: SPARK-54586
+  private val needsInvalidUtf8 = Set(
+    "hll.sql", "thetasketch.sql"
+  )
 
   override def mode: ServerMode.Value = ServerMode.binary
 
@@ -123,6 +128,11 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
 
       configSet.foreach { case (k, v) =>
         statement.execute(s"SET $k = $v")
+      }
+
+      val testFileName = new File(testCase.name).getName
+      if (needsInvalidUtf8.contains(testFileName)) {
+        statement.execute("SET spark.sql.castBinaryToString.validateUtf8 = false")
       }
 
       testCase match {

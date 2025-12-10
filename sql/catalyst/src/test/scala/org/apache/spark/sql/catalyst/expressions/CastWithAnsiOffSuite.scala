@@ -930,4 +930,31 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
     checkEvaluation(cast(largeTime1, ShortType), null)
     checkEvaluation(cast(largeTime1, ByteType), null)
   }
+
+  test("LEGACY mode: cast invalid UTF-8 binary to string should return null") {
+    // In LEGACY mode, invalid UTF-8 returns null
+    checkEvaluation(cast(invalidUtf8Literal, StringType), null)
+
+    // Valid UTF-8 should work
+    checkEvaluation(cast(validUtf8Literal, StringType), UTF8String.fromString("Hello"))
+
+    // Empty binary should work
+    checkEvaluation(cast(emptyBinaryLiteral, StringType), UTF8String.fromString(""))
+  }
+
+  test("LEGACY mode: cast invalid UTF-8 with validation disabled (old behavior)") {
+    withSQLConf(SQLConf.VALIDATE_BINARY_TO_STRING_CAST.key -> "false") {
+      // With validation disabled, invalid UTF-8 passes through (old behavior)
+      val result = cast(invalidUtf8Literal, StringType).eval()
+      assert(result != null, "Should not return null when validation is disabled")
+      assert(!result.asInstanceOf[UTF8String].isValid(),
+        "Result should contain invalid UTF-8")
+
+      // Valid UTF-8 should still work
+      checkEvaluation(cast(validUtf8Literal, StringType), UTF8String.fromString("Hello"))
+
+      // Empty binary should work
+      checkEvaluation(cast(emptyBinaryLiteral, StringType), UTF8String.fromString(""))
+    }
+  }
 }

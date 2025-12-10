@@ -622,10 +622,15 @@ case class Cast(
   }
 
   override def nullable: Boolean = if (!isTryCast) {
-    child.nullable || Cast.forceNullable(child.dataType, dataType)
+    // In LEGACY mode with validation enabled, casting BinaryType to StringType can return null
+    val binaryToStringInLegacy = !ansiEnabled && validateUtf8 &&
+      child.dataType == BinaryType && dataType.isInstanceOf[StringType]
+    child.nullable || Cast.forceNullable(child.dataType, dataType) || binaryToStringInLegacy
   } else {
     (child.dataType, dataType) match {
       case (_: StringType, BinaryType) => child.nullable
+      // In TRY mode with validation enabled, BinaryType to StringType cast can return null
+      case (BinaryType, _: StringType) => validateUtf8 || child.nullable
       // TODO: Implement a more accurate method for checking whether a decimal value can be cast
       //       as integral types without overflow. Currently, the cast can overflow even if
       //       "Cast.canUpCast" method returns true.
@@ -665,6 +670,7 @@ case class Cast(
   @inline protected[this] def buildCast[T](a: Any, func: T => Any): Any = func(a.asInstanceOf[T])
 
   private val legacyCastToStr = SQLConf.get.getConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING)
+  private val validateUtf8 = SQLConf.get.getConf(SQLConf.VALIDATE_BINARY_TO_STRING_CAST)
 
   protected val (leftBracket, rightBracket) = if (legacyCastToStr) ("[", "]") else ("{", "}")
 
@@ -686,6 +692,24 @@ case class Cast(
     case IntegerType => buildCast[Int](_, NumberConverter.toBinary)
     case LongType => buildCast[Long](_, NumberConverter.toBinary)
   }
+
+  // Binary to String cast with UTF-8 validation
+  private[this] def castBinaryToString: Any => Any = buildCast[Array[Byte]](_, bytes => {
+    val utf8String = UTF8String.fromBytes(bytes)
+    // Check if validation is enabled
+    if (!validateUtf8) {
+      // Old behavior: no validation, allow invalid UTF-8
+      utf8String
+    } else if (utf8String.isValid()) {
+      utf8String
+    } else if (ansiEnabled) {
+      throw QueryExecutionErrors.invalidUtf8InBinaryCastError(
+        bytes, getContextOrNull())
+    } else {
+      // LEGACY mode with validation: return null
+      null
+    }
+  })
 
   // UDFToBoolean
   private[this] def castToBoolean(from: DataType): Any => Any = from match {
@@ -1270,7 +1294,12 @@ case class Cast(
       to match {
         case dt if dt == from => identity[Any]
         case VariantType => input => variant.VariantExpressionEvalUtils.castToVariant(input, from)
-        case s: StringType => castToString(from, s.constraint)
+        case s: StringType =>
+          // Special handling for BinaryType to StringType cast with UTF-8 validation
+          from match {
+            case BinaryType => castBinaryToString
+            case _ => castToString(from, s.constraint)
+          }
         case BinaryType => castToBinary(from)
         case DateType => castToDate(from)
         case it: TimeType => castToTime(from, it)
@@ -1380,7 +1409,41 @@ case class Cast(
       val fromArg = ctx.addReferenceObj("from", from)
       (c, evPrim, evNull) => code"$evPrim = $cls.castToVariant($c, $fromArg);"
     case s: StringType =>
-      (c, evPrim, _) => castToStringCode(from, ctx, s.constraint).apply(c, evPrim)
+      // BinaryType to StringType cast with UTF-8 validation
+      from match {
+        case BinaryType =>
+          val tmp = ctx.freshVariable("tmp", classOf[UTF8String])
+
+          if (!validateUtf8) {
+            // Old behavior: no validation
+            (c, evPrim, evNull) =>
+              code"$evPrim = UTF8String.fromBytes($c);"
+          } else if (ansiEnabled) {
+            // ANSI mode: throw on invalid UTF-8
+            val errorContext = getContextOrNullCode(ctx)
+            (c, evPrim, evNull) =>
+              code"""
+                UTF8String $tmp = UTF8String.fromBytes($c);
+                if (!$tmp.isValid()) {
+                  throw QueryExecutionErrors.invalidUtf8InBinaryCastError($c, $errorContext);
+                }
+                $evPrim = $tmp;
+              """
+          } else {
+            // LEGACY mode: return null on invalid UTF-8
+            (c, evPrim, evNull) =>
+              code"""
+                UTF8String $tmp = UTF8String.fromBytes($c);
+                if ($tmp.isValid()) {
+                  $evPrim = $tmp;
+                } else {
+                  $evNull = true;
+                }
+              """
+          }
+        case _ =>
+          (c, evPrim, _) => castToStringCode(from, ctx, s.constraint).apply(c, evPrim)
+      }
     case BinaryType => castToBinaryCode(from)
     case DateType => castToDateCode(from, ctx)
     case it: TimeType => castToTimeCode(from, it, ctx)

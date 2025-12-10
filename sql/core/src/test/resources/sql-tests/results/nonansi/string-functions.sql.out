@@ -2261,7 +2261,7 @@ select is_valid_utf8(x'80')
 -- !query schema
 struct<is_valid_utf8(X'80'):boolean>
 -- !query output
-false
+NULL
 
 
 -- !query
@@ -2285,7 +2285,7 @@ select make_valid_utf8(x'80')
 -- !query schema
 struct<make_valid_utf8(X'80'):string>
 -- !query output
-�
+NULL
 
 
 -- !query
@@ -2307,16 +2307,9 @@ abc
 -- !query
 select validate_utf8(x'80')
 -- !query schema
-struct<>
+struct<validate_utf8(X'80'):string>
 -- !query output
-org.apache.spark.SparkIllegalArgumentException
-{
-  "errorClass" : "INVALID_UTF8_STRING",
-  "sqlState" : "22029",
-  "messageParameters" : {
-    "str" : "\\x80"
-  }
-}
+NULL
 
 
 -- !query
@@ -2341,6 +2334,70 @@ select try_validate_utf8(x'80')
 struct<try_validate_utf8(X'80'):string>
 -- !query output
 NULL
+
+
+-- !query
+SET spark.sql.castBinaryToString.validateUtf8=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.castBinaryToString.validateUtf8	false
+
+
+-- !query
+select is_valid_utf8(x'80')
+-- !query schema
+struct<is_valid_utf8(X'80'):boolean>
+-- !query output
+false
+
+
+-- !query
+select is_valid_utf8(x'61C262')
+-- !query schema
+struct<is_valid_utf8(X'61C262'):boolean>
+-- !query output
+false
+
+
+-- !query
+select make_valid_utf8(x'80')
+-- !query schema
+struct<make_valid_utf8(X'80'):string>
+-- !query output
+�
+
+
+-- !query
+select make_valid_utf8(x'61C262')
+-- !query schema
+struct<make_valid_utf8(X'61C262'):string>
+-- !query output
+a�b
+
+
+-- !query
+select try_validate_utf8(x'80')
+-- !query schema
+struct<try_validate_utf8(X'80'):string>
+-- !query output
+NULL
+
+
+-- !query
+select try_validate_utf8(x'61C262')
+-- !query schema
+struct<try_validate_utf8(X'61C262'):string>
+-- !query output
+NULL
+
+
+-- !query
+SET spark.sql.castBinaryToString.validateUtf8=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.castBinaryToString.validateUtf8	true
 
 
 -- !query

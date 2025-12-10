@@ -256,6 +256,9 @@ if __name__ == "__main__":
     jvm = launch_gateway().jvm
     jspark = jvm.org.apache.spark.sql.SparkSession.builder().getOrCreate()
     jspark.sparkContext().setLogLevel("ERROR")  # Make it less noisy.
+    # Disable UTF-8 validation for binary-to-string casts to allow demonstration
+    # of UTF-8 validation functions (is_valid_utf8, make_valid_utf8, etc.) with invalid UTF-8.
+    jspark.conf().set("spark.sql.castBinaryToString.validateUtf8", "false")
     spark_root_dir = os.path.dirname(os.path.dirname(__file__))
     html_output_dir = os.path.join(spark_root_dir, "docs")
     generate_functions_table_html(jvm, html_output_dir)
