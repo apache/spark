@@ -27,9 +27,7 @@ def _get_arrow_array_partition_stream(df: pyspark.sql.DataFrame) -> Iterator[pya
     # We will be using mapInArrow to convert each partition to Arrow RecordBatches.
     # The return type of the function will be a single binary column containing
     # the serialized RecordBatch in Arrow IPC format.
-    binary_schema = StructType(
-        [StructField("arrow_ipc_bytes", BinaryType(), nullable=False)]
-    )
+    binary_schema = StructType([StructField("arrow_ipc_bytes", BinaryType(), nullable=False)])
 
     def batch_to_bytes_iter(batch_iter):
         """
@@ -54,14 +52,9 @@ def _get_arrow_array_partition_stream(df: pyspark.sql.DataFrame) -> Iterator[pya
             # Wrap the bytes in a new 1-row, 1-column RecordBatch to satisfy mapInArrow return
             # signature. This serializes the whole batch into a single pyarrow serialized cell.
             storage_arr = pyarrow.Array.from_buffers(
-                type=pyarrow.binary(),
-                length=1,
-                buffers=[null_bitmap, offset_buf, buf]
+                type=pyarrow.binary(), length=1, buffers=[null_bitmap, offset_buf, buf]
             )
-            yield pyarrow.RecordBatch.from_arrays(
-                [storage_arr],
-                names=["arrow_ipc_bytes"]
-            )
+            yield pyarrow.RecordBatch.from_arrays([storage_arr], names=["arrow_ipc_bytes"])
 
     # Convert all partitions to Arrow RecordBatches and map to binary blobs.
     byte_df = df.mapInArrow(batch_to_bytes_iter, binary_schema)
