@@ -102,8 +102,6 @@ class StreamingKafkaTestsMixin:
         self.source_topic = f"source-{uuid.uuid4().hex}"
         self.sink_topic = f"sink-{uuid.uuid4().hex}"
         self.kafka_utils.create_topics([self.source_topic, self.sink_topic])
-        # Set log level to INFO for better visibility during testing
-        self.spark.sparkContext.setLogLevel("INFO")
 
     def tearDown(self):
         # Clean up topics after each test
