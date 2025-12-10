@@ -39,7 +39,7 @@ import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType}
       dim_2, 200
   """,
   group = "agg_funcs",
-  since = "4.0.0")
+  since = "4.2.0")
 // scalastyle:on line.size.limit
 case class Measure(child: Expression)
   extends UnevaluableAggregateFunc with ExpectsInputTypes

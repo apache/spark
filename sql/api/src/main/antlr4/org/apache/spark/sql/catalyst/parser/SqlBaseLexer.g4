@@ -678,11 +678,11 @@ UNRECOGNIZED
 
 mode DOLLAR_QUOTED_STRING_MODE;
 
-    DOLLAR_QUOTED_STRING_BODY
-        : ~'$'+
-        | '$' ~'$'*
-        ;
+DOLLAR_QUOTED_STRING_BODY
+    : ~'$'+
+    | '$' ~'$'*
+    ;
 
-    END_DOLLAR_QUOTED_STRING
-        : DOLLAR_QUOTED_TAG {getText().equals(tags.peek())}? {tags.pop();} -> popMode
-        ;
+END_DOLLAR_QUOTED_STRING
+    : DOLLAR_QUOTED_TAG {getText().equals(tags.peek())}? {tags.pop();} -> popMode
+    ;

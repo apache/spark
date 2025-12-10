@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, SchemaUnsupported}
@@ -46,7 +47,8 @@ case class CreateMetricViewCommand(
     val name = child match {
       case v: ResolvedIdentifier =>
         v.identifier.asTableIdentifier
-      case _ => throw QueryCompilationErrors.loadDataNotSupportedForV2TablesError()
+      case _ => throw SparkException.internalError(
+        s"Failed to resolve identifier for creating metric view")
     }
     val analyzed = MetricViewHelper.analyzeMetricViewText(sparkSession, name, originalText)
 
