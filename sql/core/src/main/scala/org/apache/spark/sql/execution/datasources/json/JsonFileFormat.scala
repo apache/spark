@@ -114,7 +114,6 @@ case class JsonFileFormat() extends TextBasedFileFormat with DataSourceRegister 
   override def toString: String = "JSON"
 
   override def supportDataType(dataType: DataType): Boolean = dataType match {
-    case _: TimeType => SQLConf.get.isTimeTypeEnabled
     case _: VariantType => true
 
     case _: AtomicType => true

@@ -247,7 +247,6 @@ class OrcFileFormat
   }
 
   override def supportDataType(dataType: DataType): Boolean = dataType match {
-    case _: TimeType => SQLConf.get.isTimeTypeEnabled
     case _: VariantType => false
 
     case _: AtomicType => true

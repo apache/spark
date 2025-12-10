@@ -131,7 +131,6 @@ case class XmlFileFormat() extends TextBasedFileFormat with DataSourceRegister {
   override def toString: String = "XML"
 
   override def supportDataType(dataType: DataType): Boolean = dataType match {
-    case _: TimeType => SQLConf.get.isTimeTypeEnabled
     case _: VariantType => true
     case _: AtomicType => true
 
