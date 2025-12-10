@@ -201,7 +201,7 @@ class Dataset[T] private[sql](
   }
 
   // A globally unique id of this Dataset.
-  private val id = Dataset.curId.getAndIncrement()
+  private[spark] val id = Dataset.curId.getAndIncrement()
 
   queryExecution.assertAnalyzed()
 
@@ -2216,7 +2216,7 @@ class Dataset[T] private[sql](
    */
   @varargs
   def observe(observation: Observation, expr: Column, exprs: Column*): Dataset[T] = {
-    observation.on(this, id, expr, exprs: _*)
+    observation.on(this, expr, exprs: _*)
   }
 
   /**

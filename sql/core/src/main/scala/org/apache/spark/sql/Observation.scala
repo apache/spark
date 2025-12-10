@@ -83,12 +83,12 @@ class Observation(val name: String) {
    */
   private[spark] def on[T](
       ds: Dataset[T],
-      dataframeId: Long,
       expr: Column,
       exprs: Column*): Dataset[T] = {
     if (ds.isStreaming) {
       throw new IllegalArgumentException("Observation does not support streaming Datasets")
     }
+    val dataframeId = ds.id
     register(ds.sparkSession, dataframeId)
     ds.observe(name, expr, exprs: _*)
   }
