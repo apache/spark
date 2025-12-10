@@ -275,6 +275,7 @@ class UpdateRequestHandler(socketserver.StreamRequestHandler):
 
             while not self.server.server_shutdown:  # type: ignore[attr-defined]
                 # Poll every 1 second for new data -- don't block in case of shutdown.
+                r: set | list
                 if poller is not None:
                     r = set()
                     # Unlike select, poll timeout is in millis.

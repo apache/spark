@@ -174,6 +174,7 @@ def manager():
             poller.register(listen_sock, select.POLLIN)
 
         while True:
+            ready_fds: set | list
             if poller is not None:
                 ready_fds = set()
                 # Unlike select, poll timeout is in millis.
