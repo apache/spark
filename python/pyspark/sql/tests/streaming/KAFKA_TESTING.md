@@ -365,13 +365,13 @@ def test_multiple_topics(self):
 
 ```bash
 cd $SPARK_HOME/python
-python -m pytest pyspark/sql/tests/streaming/test_streaming_kafka.py -v
+python -m pytest pyspark/sql/tests/streaming/test_streaming_kafka_rtm.py -v
 ```
 
 ### Run Specific Test
 
 ```bash
-python -m pytest pyspark/sql/tests/streaming/test_streaming_kafka.py::StreamingKafkaTests::test_kafka_batch_read -v
+python -m pytest pyspark/sql/tests/streaming/test_streaming_kafka_rtm.py::StreamingKafkaTests::test_kafka_batch_read -v
 ```
 
 ### Run with unittest
@@ -481,7 +481,7 @@ Potential improvements:
 
 ## See Also
 
-- [test_streaming_kafka.py](test_streaming_kafka.py) - Example test implementations
+- [test_streaming_kafka.py](test_streaming_kafka_rtm.py) - Example test implementations
 - [kafka_utils.py](kafka_utils.py) - Source code and API documentation
 - [Spark Structured Streaming + Kafka Integration Guide](https://spark.apache.org/docs/latest/structured-streaming-kafka-integration.html)
 - [testcontainers-python Documentation](https://testcontainers-python.readthedocs.io/)
