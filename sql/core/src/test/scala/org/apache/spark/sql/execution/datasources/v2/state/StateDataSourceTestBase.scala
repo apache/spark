@@ -78,7 +78,7 @@ trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
     )
   }
 
-  private def getCompositeKeyStreamingAggregationQuery(
+  protected def getCompositeKeyStreamingAggregationQuery(
       inputData: MemoryStream[Int]): Dataset[(Int, String, Long, Long, Int, Int)] = {
     inputData.toDF()
       .selectExpr("value", "value % 2 AS groupKey",
@@ -140,7 +140,7 @@ trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
     )
   }
 
-  private def getLargeDataStreamingAggregationQuery(
+  protected def getLargeDataStreamingAggregationQuery(
       inputData: MemoryStream[Int]): Dataset[(Int, Long, Long, Int, Int)] = {
     inputData.toDF()
       .selectExpr("value", "value % 10 AS groupKey")
@@ -179,7 +179,7 @@ trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
     )
   }
 
-  private def getDropDuplicatesQuery(inputData: MemoryStream[Int]): Dataset[Long] = {
+  protected def getDropDuplicatesQuery(inputData: MemoryStream[Int]): Dataset[Long] = {
     inputData.toDS()
       .withColumn("eventTime", timestamp_seconds($"value"))
       .withWatermark("eventTime", "10 seconds")
@@ -204,7 +204,7 @@ trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
     )
   }
 
-  private def getDropDuplicatesQueryWithColumnSpecified(
+  protected def getDropDuplicatesQueryWithColumnSpecified(
       inputData: MemoryStream[(String, Int)]): Dataset[(String, Int)] = {
     inputData.toDS()
       .selectExpr("_1 AS col1", "_2 AS col2")
@@ -256,7 +256,7 @@ trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
     )
   }
 
-  private def getDropDuplicatesWithinWatermarkQuery(
+  protected def getDropDuplicatesWithinWatermarkQuery(
       inputData: MemoryStream[(String, Int)]): DataFrame = {
     inputData.toDS()
       .withColumn("eventTime", timestamp_seconds($"_2"))
@@ -293,7 +293,7 @@ trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
     )
   }
 
-  private def getFlatMapGroupsWithStateQuery(
+  protected def getFlatMapGroupsWithStateQuery(
       inputData: MemoryStream[(String, Long)]): Dataset[(String, Int, Long, Boolean)] = {
     // scalastyle:off line.size.limit
     // This test code is borrowed from Sessionization example, with modification a bit to run with testStream
@@ -405,8 +405,7 @@ trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
         col("rightId"), col("rightTime").cast("int"))
   }
 
-  protected def runSessionWindowAggregationQuery(checkpointRoot: String): Unit = {
-    val input = MemoryStream[(String, Long)]
+  protected def getSessionWindowAggregationQuery(input: MemoryStream[(String, Long)]): DataFrame = {
     val sessionWindow = session_window($"eventTime", "10 seconds")
 
     val events = input.toDF()
@@ -415,13 +414,17 @@ trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
       .withWatermark("eventTime", "30 seconds")
       .selectExpr("explode(split(value, ' ')) AS sessionId", "eventTime")
 
-    val streamingDf = events
+    events
       .groupBy(sessionWindow as Symbol("session"), $"sessionId")
       .agg(count("*").as("numEvents"))
       .selectExpr("sessionId", "CAST(session.start AS LONG)", "CAST(session.end AS LONG)",
         "CAST(session.end AS LONG) - CAST(session.start AS LONG) AS durationMs",
         "numEvents")
+  }
 
+  protected def runSessionWindowAggregationQuery(checkpointRoot: String): Unit = {
+    val input = MemoryStream[(String, Long)]
+    val streamingDf = getSessionWindowAggregationQuery(input)
     testStream(streamingDf, OutputMode.Complete())(
       StartStream(checkpointLocation = checkpointRoot),
       AddData(input,
