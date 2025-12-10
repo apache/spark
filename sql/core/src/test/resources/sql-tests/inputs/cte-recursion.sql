@@ -248,7 +248,6 @@ WITH
     SELECT * FROM t1
   )
 SELECT * FROM t2;
-SET spark.sql.legacy.ctePrecedencePolicy=EXCEPTION;
 
 -- recursive reference can't be used multiple times in a recursive term
 WITH RECURSIVE r(level, data) AS (

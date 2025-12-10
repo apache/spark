@@ -704,12 +704,6 @@ WithCTE
 
 
 -- !query
-SET spark.sql.legacy.ctePrecedencePolicy=EXCEPTION
--- !query analysis
-SetCommand (spark.sql.legacy.ctePrecedencePolicy,Some(EXCEPTION))
-
-
--- !query
 WITH RECURSIVE r(level, data) AS (
   VALUES (0, 0)
   UNION ALL
@@ -1907,7 +1901,7 @@ WithCTE
 :        +- UnionLoop xxxx
 :           :- Project [1 AS 1#x, cast(1 as bigint) AS CAST(1 AS BIGINT)#xL]
 :           :  +- OneRowRelation
-:           +- Project [cast((n + 1)#x as int) AS (n + 1)#x, cast((n + 1)#x as bigint) AS (n + 1)#xL]
+:           +- Project [(n + 1)#x, cast((n + 1)#x as bigint) AS (n + 1)#xL]
 :              +- Project [(n#x + 1) AS (n + 1)#x, (n#x + 1) AS (n + 1)#x]
 :                 +- Filter (n#x < 5)
 :                    +- SubqueryAlias t1
