@@ -58,6 +58,11 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession)
     this
   }
 
+  // TODO: Add support for naming sources in SparkConnect
+  private[sql] def name(name: String): this.type = {
+    throw new UnsupportedOperationException("Naming sources not supported on Spark Connect")
+  }
+
   /** @inheritdoc */
   def option(key: String, value: String): this.type = {
     sourceBuilder.putOptions(key, value)

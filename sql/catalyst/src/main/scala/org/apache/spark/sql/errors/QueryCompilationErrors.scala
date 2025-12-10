@@ -4492,4 +4492,54 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "colType" -> "metadata",
         "errors" -> errors.mkString("- ", "\n- ", "")))
   }
+
+  /**
+   * Error thrown when streaming source evolution enforcement is enabled but some sources are
+   * unnamed. Source evolution requires all sources to have explicit names to track them across
+   * query restarts.
+   *
+   * @param sourceInfo formatted string containing information about unnamed sources,
+   *                   including their index positions and provider names
+   *                   (e.g., "[index=0, provider=kafka], [index=2, provider=delta]")
+   */
+  def unnamedStreamingSourcesWithEnforcementError(sourceInfo: String): Throwable = {
+    new AnalysisException(
+      errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.UNNAMED_STREAMING_SOURCES_WITH_ENFORCEMENT",
+      messageParameters = Map("sourceInfo" -> sourceInfo))
+  }
+
+  def namedSourcesRequireOffsetLogV2Error(version: Int): Throwable = {
+    new SparkException(
+      errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.NAMED_SOURCES_REQUIRE_OFFSET_LOG_V2",
+      messageParameters = Map("version" -> version.toString),
+      cause = null)
+  }
+
+  def duplicateStreamingSourceNamesError(duplicateNames: String): Throwable = {
+    new AnalysisException(
+      errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.DUPLICATE_SOURCE_NAMES",
+      messageParameters = Map("duplicateNames" -> duplicateNames))
+  }
+
+  def invalidStreamingSourceNameError(sourceName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME",
+      messageParameters = Map("sourceName" -> sourceName))
+  }
+
+  def namedSourcesRequireEnforcementError(): Throwable = {
+    new AnalysisException(
+      errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.NAMED_SOURCES_REQUIRE_ENFORCEMENT",
+      messageParameters = Map.empty)
+  }
+
+  def tombstoneSourceNameReuseError(
+      sourceNames: Seq[String],
+      checkpointLocation: String): Throwable = {
+    new AnalysisException(
+      errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.TOMBSTONE_SOURCE_NAME_REUSE",
+      messageParameters = Map(
+        "sourceNames" -> sourceNames.mkString(", "),
+        "checkpointLocation" -> checkpointLocation))
+  }
 }

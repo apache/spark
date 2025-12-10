@@ -2997,6 +2997,19 @@ object SQLConf {
       .checkValue(v => Set(1).contains(v), "Valid version is 1")
       .createWithDefault(1)
 
+  val STREAMING_OFFSET_LOG_FORMAT_VERSION =
+    buildConf("spark.sql.streaming.offsetLog.formatVersion")
+      .doc("Offset log format version used in streaming query checkpoints. " +
+        "Version 1 uses sequence-based OffsetSeq format, version 2 uses map-based OffsetMap " +
+        "format which provides better flexibility for source management. " +
+        "Offset log format versions are incompatible, so this configuration only affects new " +
+        "streaming queries. Existing queries will continue using the format version from their " +
+        "checkpoint.")
+      .version("4.1.0")
+      .intConf
+      .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
+      .createWithDefault(1)
+
   val UNSUPPORTED_OPERATION_CHECK_ENABLED =
     buildConf("spark.sql.streaming.unsupportedOperationCheck")
       .internal()
@@ -3005,6 +3018,16 @@ object SQLConf {
       .version("2.0.0")
       .booleanConf
       .createWithDefault(true)
+
+  val ENABLE_STREAMING_SOURCE_EVOLUTION =
+    buildConf("spark.sql.streaming.queryEvolution.enableSourceEvolution")
+      .internal()
+      .doc("When true, all streaming sources must be named using the name() API. This enables " +
+        "source evolution capability where sources can be added, removed, or reordered " +
+        "without losing checkpoint state.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val USE_DEPRECATED_KAFKA_OFFSET_FETCHING =
     buildConf("spark.sql.streaming.kafka.useDeprecatedOffsetFetching")
@@ -6979,6 +7002,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(STREAMING_CHECKPOINT_FILE_CHECKSUM_SKIP_CREATION_IF_FILE_MISSING_CHECKSUM)
 
   def isUnsupportedOperationCheckEnabled: Boolean = getConf(UNSUPPORTED_OPERATION_CHECK_ENABLED)
+
+  def enableStreamingSourceEvolution: Boolean = getConf(ENABLE_STREAMING_SOURCE_EVOLUTION)
 
   def useDeprecatedKafkaOffsetFetching: Boolean = getConf(USE_DEPRECATED_KAFKA_OFFSET_FETCHING)
 

@@ -21,7 +21,7 @@ import java.io.File
 
 import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeq, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata}
-import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, SerializedOffset}
+import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, MemoryStream, SerializedOffset}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
@@ -236,5 +236,152 @@ class OffsetSeqLogSuite extends SharedSparkSession {
     val metadata = offsetSeq.metadataOpt.get
     assert(metadata.batchWatermarkMs === 0)
     assert(metadata.batchTimestampMs === 1758651405232L)
+  }
+
+  test("STREAMING_OFFSET_LOG_FORMAT_VERSION config - new query with VERSION_2") {
+    import testImplicits._
+    withTempDir { checkpointDir =>
+      withSQLConf(SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key -> "2") {
+        val inputData = MemoryStream[Int]
+        val query = inputData.toDF()
+          .writeStream
+          .format("memory")
+          .queryName("offsetlog_v2_test")
+          .option("checkpointLocation", checkpointDir.getAbsolutePath)
+          .start()
+
+        try {
+          // Add data and process batches
+          inputData.addData(1, 2, 3)
+          query.processAllAvailable()
+          inputData.addData(4, 5)
+          query.processAllAvailable()
+
+          // Read the offset log from checkpoint
+          val offsetLog = new OffsetSeqLog(spark, s"${checkpointDir.getAbsolutePath}/offsets")
+          val latestBatch = offsetLog.getLatest()
+          assert(latestBatch.isDefined, "Offset log should have at least one entry")
+
+          val (batchId, offsetSeq) = latestBatch.get
+
+          // Verify it's OffsetMap (VERSION_2)
+          assert(offsetSeq.isInstanceOf[OffsetMap],
+            s"Expected OffsetMap but got ${offsetSeq.getClass.getSimpleName}")
+
+          // Verify metadata version is 2
+          assert(offsetSeq.metadataOpt.isDefined)
+          val metadata = offsetSeq.metadataOpt.get
+          assert(metadata.version === 2, s"Expected version 2 but got ${metadata.version}")
+
+          // Verify the config is persisted
+          assert(metadata.conf.contains(SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key))
+          assert(metadata.conf(SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key) === "2")
+
+          // Verify OffsetMap uses string keys ("0", "1", etc.)
+          val offsetMap = offsetSeq.asInstanceOf[OffsetMap]
+          assert(offsetMap.offsetsMap.keys.forall(_.forall(_.isDigit)),
+            "OffsetMap keys should be string representations of ordinals (e.g., '0', '1')")
+        } finally {
+          query.stop()
+        }
+      }
+    }
+  }
+
+  test("STREAMING_OFFSET_LOG_FORMAT_VERSION config - default VERSION_1") {
+    import testImplicits._
+    withTempDir { checkpointDir =>
+      // Don't set the config, should default to VERSION_1
+      val inputData = MemoryStream[Int]
+      val query = inputData.toDF()
+        .writeStream
+        .format("memory")
+        .queryName("offsetlog_v1_test")
+        .option("checkpointLocation", checkpointDir.getAbsolutePath)
+        .start()
+
+      try {
+        // Add data and process batches
+        inputData.addData(1, 2, 3)
+        query.processAllAvailable()
+
+        // Read the offset log from checkpoint
+        val offsetLog = new OffsetSeqLog(spark, s"${checkpointDir.getAbsolutePath}/offsets")
+        val latestBatch = offsetLog.getLatest()
+        assert(latestBatch.isDefined, "Offset log should have at least one entry")
+
+        val (batchId, offsetSeq) = latestBatch.get
+
+        // Verify it's OffsetSeq (VERSION_1)
+        assert(offsetSeq.isInstanceOf[OffsetSeq],
+          s"Expected OffsetSeq but got ${offsetSeq.getClass.getSimpleName}")
+
+        // Verify metadata version is 1
+        assert(offsetSeq.metadataOpt.isDefined)
+        val metadata = offsetSeq.metadataOpt.get
+        assert(metadata.version === 1, s"Expected version 1 but got ${metadata.version}")
+      } finally {
+        query.stop()
+      }
+    }
+  }
+
+  test("STREAMING_OFFSET_LOG_FORMAT_VERSION config - checkpoint wins on restart") {
+    import testImplicits._
+    withTempDir { checkpointDir =>
+      withTempDir { outputDir =>
+        val inputData = MemoryStream[Int]
+
+        // Start query with VERSION_1 (default)
+        val query1 = inputData.toDF()
+          .writeStream
+          .format("parquet")
+          .option("path", outputDir.getAbsolutePath)
+          .option("checkpointLocation", checkpointDir.getAbsolutePath)
+          .start()
+
+        inputData.addData(1, 2)
+        query1.processAllAvailable()
+        query1.stop()
+
+        // Verify VERSION_1 was used in the initial checkpoint
+        val offsetLog = new OffsetSeqLog(spark, s"${checkpointDir.getAbsolutePath}/offsets")
+        val batch1 = offsetLog.getLatest()
+        assert(batch1.isDefined)
+        assert(batch1.get._2.isInstanceOf[OffsetSeq], "Initial checkpoint should use VERSION_1")
+        assert(batch1.get._2.metadataOpt.get.version === 1)
+
+        // Restart query with VERSION_2 config - should still use VERSION_1 from checkpoint
+        withSQLConf(SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key -> "2") {
+          val query2 = inputData.toDF()
+            .writeStream
+            .format("parquet")
+            .option("path", outputDir.getAbsolutePath)
+            .option("checkpointLocation", checkpointDir.getAbsolutePath)
+            .start()
+
+          try {
+            inputData.addData(3, 4)
+            query2.processAllAvailable()
+
+            // Read the latest offset log entry
+            val latestBatch = offsetLog.getLatest()
+            assert(latestBatch.isDefined)
+
+            val (batchId, offsetSeq) = latestBatch.get
+
+            // Should still be VERSION_1 because checkpoint was created with VERSION_1
+            assert(offsetSeq.isInstanceOf[OffsetSeq],
+              "Query should continue using VERSION_1 format from checkpoint despite config change")
+
+            val metadata = offsetSeq.metadataOpt.get
+            assert(metadata.version === 1,
+              "Query should continue using version 1 from checkpoint despite config being set to 2")
+          } finally {
+            query2.stop()
+          }
+        }
+      }
+    }
   }
 }
