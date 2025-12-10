@@ -15,21 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.read;
+package org.apache.spark.sql.execution.datasources;
 
 import java.util.Arrays;
 import java.util.Objects;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.sql.connector.read.VariantExtraction;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Metadata;
 
 /**
- * Default implementation of {@link VariantExtraction}.
- *
- * @since 4.1.0
+ * Implementation of {@link VariantExtraction}.
  */
-@Experimental
 public final class VariantExtractionImpl implements VariantExtraction {
   private final String[] columnName;
   private final DataType expectedDataType;

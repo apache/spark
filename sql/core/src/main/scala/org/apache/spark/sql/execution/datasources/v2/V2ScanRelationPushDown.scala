@@ -34,7 +34,7 @@ import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownJoin, SupportsPushDownVariantExtractions, V1Scan, VariantExtraction}
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, VariantInRelation}
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, VariantExtractionImpl, VariantInRelation}
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.{DataType, DecimalType, IntegerType, StructField, StructType}
 import org.apache.spark.sql.util.SchemaUtils._
@@ -406,7 +406,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
               getColumnName(topAttr.dataType.asInstanceOf[StructType], pathToVariant)
           }
           fields.toArray.sortBy(_._2).map { case (field, ordinal) =>
-            val extraction = new org.apache.spark.sql.connector.read.VariantExtractionImpl(
+            val extraction = new VariantExtractionImpl(
               columnName.toArray,
               field.path.toMetadata,
               field.targetType
