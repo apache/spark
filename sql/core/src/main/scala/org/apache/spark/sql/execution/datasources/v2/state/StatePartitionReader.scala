@@ -30,8 +30,8 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{NextIterator, SerializableConfiguration}
 
 case class AllColumnFamiliesReaderInfo(
-  colFamilySchemas: List[StateStoreColFamilySchema] = List.empty,
-  stateVariableInfos: List[TransformWithStateVariableInfo] = List.empty)
+    colFamilySchemas: List[StateStoreColFamilySchema] = List.empty,
+    stateVariableInfos: List[TransformWithStateVariableInfo] = List.empty)
 
 /**
  * An implementation of [[PartitionReaderFactory]] for State data source. This is used to support
@@ -55,9 +55,10 @@ class StatePartitionReaderFactory(
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val stateStoreInputPartition = partition.asInstanceOf[StateStoreInputPartition]
     if (stateStoreInputPartition.sourceOptions.internalOnlyReadAllColumnFamilies) {
+      require(allColumnFamiliesReaderInfo.isDefined)
       new StatePartitionAllColumnFamiliesReader(storeConf, hadoopConf,
-        stateStoreInputPartition, schema, keyStateEncoderSpec,
-        allColumnFamiliesReaderInfo.getOrElse(AllColumnFamiliesReaderInfo()))
+        stateStoreInputPartition, schema, keyStateEncoderSpec, stateStoreColFamilySchemaOpt,
+        stateSchemaProviderOpt, allColumnFamiliesReaderInfo.get)
     } else if (stateStoreInputPartition.sourceOptions.readChangeFeed) {
       new StateStoreChangeDataPartitionReader(storeConf, hadoopConf,
         stateStoreInputPartition, schema, keyStateEncoderSpec, stateVariableInfoOpt,
@@ -87,23 +88,25 @@ abstract class StatePartitionReaderBase(
   extends PartitionReader[InternalRow] with Logging {
   // Used primarily as a placeholder for the value schema in the context of
   // state variables used within the transformWithState operator.
-  private val dummySchema: StructType =
+  private val schemaForValueRow: StructType =
     StructType(Array(StructField("__dummy__", NullType)))
 
   protected val keySchema : StructType = {
     if (SchemaUtil.checkVariableType(stateVariableInfoOpt, StateVariableType.MapState)) {
       SchemaUtil.getCompositeKeySchema(schema, partition.sourceOptions)
     } else if (partition.sourceOptions.internalOnlyReadAllColumnFamilies) {
-      stateStoreColFamilySchemaOpt.map(_.keySchema).getOrElse(dummySchema)
+      require(stateStoreColFamilySchemaOpt.isDefined)
+      stateStoreColFamilySchemaOpt.map(_.keySchema).get
     } else {
       SchemaUtil.getSchemaAsDataType(schema, "key").asInstanceOf[StructType]
     }
   }
 
   protected val valueSchema : StructType = if (stateVariableInfoOpt.isDefined) {
-    dummySchema
+    schemaForValueRow
   } else if (partition.sourceOptions.internalOnlyReadAllColumnFamilies) {
-    stateStoreColFamilySchemaOpt.map(_.valueSchema).getOrElse(dummySchema)
+    require(stateStoreColFamilySchemaOpt.isDefined)
+    stateStoreColFamilySchemaOpt.map(_.valueSchema).get
   } else {
     SchemaUtil.getSchemaAsDataType(
       schema, "value").asInstanceOf[StructType]
@@ -262,14 +265,15 @@ class StatePartitionAllColumnFamiliesReader(
     partition: StateStoreInputPartition,
     schema: StructType,
     keyStateEncoderSpec: KeyStateEncoderSpec,
+    defaultStateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema],
+    stateSchemaProviderOpt: Option[StateSchemaProvider],
     allColumnFamiliesReaderInfo: AllColumnFamiliesReaderInfo)
   extends StatePartitionReaderBase(
     storeConf,
     hadoopConf, partition, schema,
     keyStateEncoderSpec, None,
-    allColumnFamiliesReaderInfo.colFamilySchemas.find(
-      _.colFamilyName == StateStore.DEFAULT_COL_FAMILY_NAME),
-    None, None) {
+    defaultStateStoreColFamilySchemaOpt,
+    stateSchemaProviderOpt, None) {
 
   private val stateStoreColFamilySchemas = allColumnFamiliesReaderInfo.colFamilySchemas
   private val stateVariableInfos = allColumnFamiliesReaderInfo.stateVariableInfos
@@ -280,7 +284,6 @@ class StatePartitionAllColumnFamiliesReader(
       StateVariableType.ListState)
   }
 
-  // Override provider to register ALL column families
   override protected lazy val provider: StateStoreProvider = {
     val stateStoreId = StateStoreId(partition.sourceOptions.stateCheckpointLocation.toString,
       partition.sourceOptions.operatorId, partition.partition, partition.sourceOptions.storeName)
@@ -289,7 +292,30 @@ class StatePartitionAllColumnFamiliesReader(
     StateStoreProvider.createAndInit(
       stateStoreProviderId, keySchema, valueSchema, keyStateEncoderSpec,
       useColumnFamilies, storeConf, hadoopConf.value,
-      useMultipleValuesPerKey = false, stateSchemaProvider = None)
+      useMultipleValuesPerKey = false, stateSchemaProviderOpt)
+  }
+
+
+  private def checkAllColFamiliesExist(
+      colFamilyNames: List[String], stateStore: StateStore
+    ): Unit = {
+    // Filter out DEFAULT column family from validation for two reasons:
+    // 1. Some operators (e.g., stream-stream join v3) don't include DEFAULT in their schema
+    //    because the underlying RocksDB creates "default" column family automatically
+    // 2. The default column family schema is handled separately via
+    //    defaultStateStoreColFamilySchemaOpt, so no need to verify it here
+    val actualCFs = colFamilyNames.toSet.filter(_ != StateStore.DEFAULT_COL_FAMILY_NAME)
+    val expectedCFs = stateStore.allColumnFamilyNames
+      .filter(_ != StateStore.DEFAULT_COL_FAMILY_NAME)
+
+    // Validation: All column families found in the checkpoint must be declared in the schema.
+    // It's acceptable if some schema CFs are not in expectedCFs - this just means those
+    // column families have no data yet in the checkpoint
+    // (they'll be created during registration).
+    // However, if the checkpoint contains CFs not in the schema, it indicates a mismatch.
+    require(expectedCFs.subsetOf(actualCFs),
+      s"Checkpoint contains unexpected column families. " +
+        s"Column families in checkpoint but not in schema: ${expectedCFs.diff(actualCFs)}")
   }
 
   // Use a single store instance for both registering column families and iteration.
@@ -305,6 +331,7 @@ class StatePartitionAllColumnFamiliesReader(
 
     // Register all column families from the schema
     if (stateStoreColFamilySchemas.length > 1) {
+      checkAllColFamiliesExist(stateStoreColFamilySchemas.map(_.colFamilyName), stateStore)
       stateStoreColFamilySchemas.foreach { cfSchema =>
         cfSchema.colFamilyName match {
           case StateStore.DEFAULT_COL_FAMILY_NAME => // createAndInit has registered default

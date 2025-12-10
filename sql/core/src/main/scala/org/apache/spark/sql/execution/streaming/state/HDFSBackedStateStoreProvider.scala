@@ -146,6 +146,9 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       throw StateStoreErrors.multipleColumnFamiliesNotSupported(providerName)
     }
 
+    override def allColumnFamilyNames: collection.Set[String] =
+      collection.Set[String](StateStore.DEFAULT_COL_FAMILY_NAME)
+
     // Multiple col families are not supported with HDFSBackedStateStoreProvider. Throw an exception
     // if the user tries to use a non-default col family.
     private def assertUseOfDefaultColFamily(colFamilyName: String): Unit = {
