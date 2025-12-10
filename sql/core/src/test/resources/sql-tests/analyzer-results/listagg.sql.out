@@ -272,6 +272,57 @@ Aggregate [listagg(col1#x, null, col2#x DESC NULLS LAST, col1#x DESC NULLS LAST,
 
 
 -- !query
+WITH t(col) AS (SELECT listagg(col1) FROM (VALUES (X'41'), (X'42'))) SELECT len(col), regexp_count(col, X'41'), regexp_count(col, X'42') FROM t
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [listagg(col1, NULL)#x AS col#x]
+:        +- Aggregate [listagg(col1#x, null, 0, 0) AS listagg(col1, NULL)#x]
+:           +- SubqueryAlias __auto_generated_subquery_name
+:              +- LocalRelation [col1#x]
++- Project [len(col#x) AS len(col)#x, regexp_count(cast(col#x as string), cast(0x41 as string)) AS regexp_count(col, X'41')#x, regexp_count(cast(col#x as string), cast(0x42 as string)) AS regexp_count(col, X'42')#x]
+   +- SubqueryAlias t
+      +- CTERelationRef xxxx, true, [col#x], false, false, 1
+
+
+-- !query
+WITH t(col) AS (SELECT listagg(col1, NULL) FROM (VALUES (X'41'), (X'42'))) SELECT len(col), regexp_count(col, X'41'), regexp_count(col, X'42') FROM t
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [listagg(col1, NULL)#x AS col#x]
+:        +- Aggregate [listagg(col1#x, null, 0, 0) AS listagg(col1, NULL)#x]
+:           +- SubqueryAlias __auto_generated_subquery_name
+:              +- LocalRelation [col1#x]
++- Project [len(col#x) AS len(col)#x, regexp_count(cast(col#x as string), cast(0x41 as string)) AS regexp_count(col, X'41')#x, regexp_count(cast(col#x as string), cast(0x42 as string)) AS regexp_count(col, X'42')#x]
+   +- SubqueryAlias t
+      +- CTERelationRef xxxx, true, [col#x], false, false, 1
+
+
+-- !query
+WITH t(col) AS (SELECT listagg(col1, X'43') FROM (VALUES (X'41'), (X'42'))) SELECT len(col), regexp_count(col, X'43'), regexp_count(col, X'41'), regexp_count(col, X'42') FROM t
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t
+:     +- Project [listagg(col1, X'43')#x AS col#x]
+:        +- Aggregate [listagg(col1#x, 0x43, 0, 0) AS listagg(col1, X'43')#x]
+:           +- SubqueryAlias __auto_generated_subquery_name
+:              +- LocalRelation [col1#x]
++- Project [len(col#x) AS len(col)#x, regexp_count(cast(col#x as string), cast(0x43 as string)) AS regexp_count(col, X'43')#x, regexp_count(cast(col#x as string), cast(0x41 as string)) AS regexp_count(col, X'41')#x, regexp_count(cast(col#x as string), cast(0x42 as string)) AS regexp_count(col, X'42')#x]
+   +- SubqueryAlias t
+      +- CTERelationRef xxxx, true, [col#x], false, false, 1
+
+
+-- !query
+SET spark.sql.castBinaryToString.validateUtf8=false
+-- !query analysis
+SetCommand (spark.sql.castBinaryToString.validateUtf8,Some(false))
+
+
+-- !query
 WITH t(col) AS (SELECT listagg(col1) FROM (VALUES (X'DEAD'), (X'BEEF'))) SELECT len(col), regexp_count(col, X'DEAD'), regexp_count(col, X'BEEF') FROM t
 -- !query analysis
 WithCTE
@@ -314,6 +365,12 @@ WithCTE
 +- Project [len(col#x) AS len(col)#x, regexp_count(cast(col#x as string), cast(0x42 as string)) AS regexp_count(col, X'42')#x, regexp_count(cast(col#x as string), cast(0xDEAD as string)) AS regexp_count(col, X'DEAD')#x, regexp_count(cast(col#x as string), cast(0xBEEF as string)) AS regexp_count(col, X'BEEF')#x]
    +- SubqueryAlias t
       +- CTERelationRef xxxx, true, [col#x], false, false, 1
+
+
+-- !query
+SET spark.sql.castBinaryToString.validateUtf8=true
+-- !query analysis
+SetCommand (spark.sql.castBinaryToString.validateUtf8,Some(true))
 
 
 -- !query
@@ -360,6 +417,34 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT listagg(c1, ', ') FROM (VALUES (X'41'), (X'42')) AS t(c1)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "dataType" : "(\"BINARY\" or \"STRING\")",
+    "functionName" : "`listagg`",
+    "sqlExpr" : "\"listagg(c1, , )\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "listagg(c1, ', ')"
+  } ]
+}
+
+
+-- !query
+SET spark.sql.castBinaryToString.validateUtf8=false
+-- !query analysis
+SetCommand (spark.sql.castBinaryToString.validateUtf8,Some(false))
+
+
+-- !query
 SELECT listagg(c1, ', ') FROM (VALUES (X'DEAD'), (X'BEEF')) AS t(c1)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -379,6 +464,12 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "listagg(c1, ', ')"
   } ]
 }
+
+
+-- !query
+SET spark.sql.castBinaryToString.validateUtf8=true
+-- !query analysis
+SetCommand (spark.sql.castBinaryToString.validateUtf8,Some(true))
 
 
 -- !query

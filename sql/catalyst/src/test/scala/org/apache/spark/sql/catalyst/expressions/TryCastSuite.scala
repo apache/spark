@@ -22,6 +22,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.{SparkFunSuite, SparkThrowable}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC_OPT
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -114,6 +115,33 @@ class TryCastSuite extends CastWithAnsiOnSuite {
       .add("a", BooleanType, nullable = true)
       .add("b", BooleanType, nullable = false))
     assert(!c4.resolved)
+  }
+
+  test("TRY mode: try_cast invalid UTF-8 binary to string should return null") {
+    // In TRY mode, invalid UTF-8 returns null instead of throwing
+    checkEvaluation(cast(invalidUtf8Literal, StringType), null)
+
+    // Valid UTF-8 should work
+    checkEvaluation(cast(validUtf8Literal, StringType), UTF8String.fromString("Hello"))
+
+    // Empty binary should work
+    checkEvaluation(cast(emptyBinaryLiteral, StringType), UTF8String.fromString(""))
+  }
+
+  test("TRY mode: try_cast invalid UTF-8 with validation disabled (old behavior)") {
+    withSQLConf(SQLConf.VALIDATE_BINARY_TO_STRING_CAST.key -> "false") {
+      // With validation disabled, invalid UTF-8 passes through (old behavior)
+      val result = cast(invalidUtf8Literal, StringType).eval()
+      assert(result != null, "Should not return null when validation is disabled")
+      assert(!result.asInstanceOf[UTF8String].isValid(),
+        "Result should contain invalid UTF-8")
+
+      // Valid UTF-8 should still work
+      checkEvaluation(cast(validUtf8Literal, StringType), UTF8String.fromString("Hello"))
+
+      // Empty binary should work
+      checkEvaluation(cast(emptyBinaryLiteral, StringType), UTF8String.fromString(""))
+    }
   }
 }
 

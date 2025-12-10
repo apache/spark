@@ -230,6 +230,22 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     )
   }
 
+  def invalidUtf8InBinaryCastError(
+      bytes: Array[Byte],
+      context: QueryContext): SparkRuntimeException = {
+    val hexBytes = bytes.take(20).map(byte => f"\\x$byte%02X").mkString
+    val suffix = if (bytes.length > 20) "..." else ""
+    new SparkRuntimeException(
+      errorClass = "CAST_INVALID_INPUT",
+      messageParameters = Map(
+        "expression" -> (hexBytes + suffix),
+        "sourceType" -> toSQLType(BinaryType),
+        "targetType" -> toSQLType(StringType),
+        "ansiConfig" -> toSQLConf("spark.sql.ansi.enabled")),
+      context = getQueryContext(context),
+      summary = getSummary(context))
+  }
+
   def invalidArrayIndexError(
       index: Int,
       numElements: Int,
