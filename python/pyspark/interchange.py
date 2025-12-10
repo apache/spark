@@ -28,7 +28,7 @@ def _get_arrow_array_partition_stream(df: pyspark.sql.DataFrame) -> Iterator[pya
     # The return type of the function will be a single binary column containing
     # the serialized RecordBatch in Arrow IPC format.
     binary_schema = StructType(
-        [StructField("interchange_arrow_bytes", BinaryType(), nullable=False)]
+        [StructField("arrow_ipc_bytes", BinaryType(), nullable=False)]
     )
 
     def batch_to_bytes_iter(batch_iter):
@@ -47,18 +47,27 @@ def _get_arrow_array_partition_stream(df: pyspark.sql.DataFrame) -> Iterator[pya
             # Write the batch to the stream using Arrow IPC format
             with pyarrow.ipc.new_stream(sink, arrow_batch.schema) as writer:
                 writer.write_batch(arrow_batch)
-            buf = sink.getvalue().to_pybytes()
+            buf = sink.getvalue()
+            # The second buffer contains the offsets we are manually creating.
+            offset_buf = pyarrow.array([0, len(buf)], type=pyarrow.int32()).buffers()[1]
+            null_bitmap = None
             # Wrap the bytes in a new 1-row, 1-column RecordBatch to satisfy mapInArrow return
             # signature. This serializes the whole batch into a single pyarrow serialized cell.
-            storage_arr = pyarrow.array([buf])
-            yield pyarrow.RecordBatch.from_arrays([storage_arr], names=["interchange_arrow_bytes"])
+            storage_arr = pyarrow.Array.from_buffers(
+                type=pyarrow.binary(),
+                length=1,
+                buffers=[null_bitmap, offset_buf, buf]
+            )
+            yield pyarrow.RecordBatch.from_arrays(
+                [storage_arr],
+                names=["arrow_ipc_bytes"]
+            )
 
     # Convert all partitions to Arrow RecordBatches and map to binary blobs.
     byte_df = df.mapInArrow(batch_to_bytes_iter, binary_schema)
-
     # A row is actually a batch of data in Arrow IPC format. Fetch the batches one by one.
     for row in byte_df.toLocalIterator():
-        with pyarrow.ipc.open_stream(row.interchange_arrow_bytes) as reader:
+        with pyarrow.ipc.open_stream(row.arrow_ipc_bytes) as reader:
             for batch in reader:
                 # Each batch corresponds to a chunk of data in the partition.
                 yield batch
