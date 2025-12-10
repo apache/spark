@@ -336,14 +336,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       sessionId: String,
       observationAndPlanIds: Map[String, Long],
       dataframe: DataFrame): Option[ExecutePlanResponse] = {
-    val allMetrics = dataframe.queryExecution.observedMetrics
-    // Eagerly capture observed metrics to avoid a race condition: if QueryExecutionListeners
-    // process events asynchronously with a delay, the observation manager may not receive
-    // the metrics in time. Capturing them here (immediately after DataFrame computation)
-    // guarantees the observation manager receives complete metrics and returns them
-    // to the client.
-    session.observationManager.tryComplete(dataframe.queryExecution, allMetrics)
-    val observedMetrics = allMetrics.collect {
+    val observedMetrics = dataframe.queryExecution.observedMetrics.collect {
       case (name, row) if !executeHolder.observations.contains(name) =>
         val values = SparkConnectPlanExecution.toObservedMetricsValues(row)
         name -> values

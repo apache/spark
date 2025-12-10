@@ -1837,6 +1837,26 @@ class ClientE2ETestSuite
     }
   }
 
+  test("SPARK-54620: Observation should not blocking forever") {
+    val session = spark
+    import session.implicits._
+    val observation = Observation("row_count")
+
+    var df = Seq.empty[(Int, Int)].toDF("v1", "v2")
+    df = df.observe(observation, functions.count(functions.lit(1)).alias("record_cnt"))
+    df = df
+      .repartition($"v1")
+      .select($"v1" + 1 as "v1", $"v2" + 1 as "v2")
+      .join(
+        Seq((1, 2), (3, 4)).toDF("v1", "v2").repartition($"v2").select($"v1", $"v2".as("v3")),
+        Seq("v1"),
+        "inner")
+    df.collect()
+
+    val metrics = observation.get
+    assert(metrics.isEmpty)
+  }
+
   test("SPARK-53553: null value handling in literals") {
     val df = spark.sql("select 1").select(typedlit(Array[Integer](1, null)).as("arr_col"))
     val result = df.collect()
