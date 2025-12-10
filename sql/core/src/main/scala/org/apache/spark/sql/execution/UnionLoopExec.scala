@@ -106,7 +106,7 @@ case class UnionLoopExec(
   private def executeAndCacheAndCount(plan: LogicalPlan, currentLimit: Int) = {
     // In case limit is defined, we create a (local) limit node above the plan and execute
     // the newly created plan.
-    val planWithLimit = if (limit.isDefined) {
+    val planWithLimit = if (limit.isDefined && limit.get >= 0) {
       LocalLimit(Literal(currentLimit), plan)
     } else {
       plan
@@ -166,6 +166,8 @@ case class UnionLoopExec(
     // spark.sql.cteRecursionRowLimit flag. If we breach this limit, then we report an error so that
     // the user knows they aren't getting all the rows they requested.
     var currentLimit = limit.getOrElse(rowLimit)
+
+    val unlimitedRecursion = currentLimit == -1
 
     val userSpecifiedLimit = limit.isDefined
 
@@ -240,7 +242,7 @@ case class UnionLoopExec(
 
       unionChildren += prevPlan
 
-      if (rowLimit != -1) {
+      if (!unlimitedRecursion) {
         currentLimit -= prevCount.toInt
         if (currentLimit <= 0) {
           if (userSpecifiedLimit) {

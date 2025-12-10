@@ -15,13 +15,24 @@
 # limitations under the License.
 #
 
+from decimal import Decimal
 import unittest
 
 from pyspark.errors import AnalysisException, PythonException, PySparkNotImplementedError
 from pyspark.sql import Row
-from pyspark.sql.functions import udf
+from pyspark.sql.functions import udf, col
 from pyspark.sql.tests.test_udf import BaseUDFTestsMixin
-from pyspark.sql.types import DayTimeIntervalType, VarcharType, StructType, StructField, StringType
+from pyspark.sql.types import (
+    ArrayType,
+    BinaryType,
+    DayTimeIntervalType,
+    DecimalType,
+    MapType,
+    StringType,
+    StructField,
+    StructType,
+    VarcharType,
+)
 from pyspark.testing.sqlutils import (
     have_pandas,
     have_pyarrow,
@@ -29,6 +40,7 @@ from pyspark.testing.sqlutils import (
     pyarrow_requirement_message,
     ReusedSQLTestCase,
 )
+from pyspark.testing.utils import assertDataFrameEqual
 from pyspark.util import PythonEvalType
 
 
@@ -38,15 +50,15 @@ from pyspark.util import PythonEvalType
 class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
     @unittest.skip("Unrelated test, and it fails when it runs duplicatedly.")
     def test_broadcast_in_udf(self):
-        super(ArrowPythonUDFTests, self).test_broadcast_in_udf()
+        super().test_broadcast_in_udf()
 
     @unittest.skip("Unrelated test, and it fails when it runs duplicatedly.")
     def test_register_java_function(self):
-        super(ArrowPythonUDFTests, self).test_register_java_function()
+        super().test_register_java_function()
 
     @unittest.skip("Unrelated test, and it fails when it runs duplicatedly.")
     def test_register_java_udaf(self):
-        super(ArrowPythonUDFTests, self).test_register_java_udaf()
+        super().test_register_java_udaf()
 
     def test_complex_input_types(self):
         row = (
@@ -116,20 +128,24 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
         df = self.spark.range(1).selectExpr(
             "array(1, 2, 3) as array",
         )
-        str_repr_func = self.spark.udf.register("str_repr", udf(lambda x: str(x), useArrow=True))
 
-        # To verify that Arrow optimization is on
-        self.assertIn(
-            df.selectExpr("str_repr(array) AS str_id").first()[0],
-            ["[1, 2, 3]", "[np.int32(1), np.int32(2), np.int32(3)]"],
-            # The input is a NumPy array when the Arrow optimization is on
-        )
+        with self.temp_func("str_repr"):
+            str_repr_func = self.spark.udf.register(
+                "str_repr", udf(lambda x: str(x), useArrow=True)
+            )
 
-        # To verify that a UserDefinedFunction is returned
-        self.assertListEqual(
-            df.selectExpr("str_repr(array) AS str_id").collect(),
-            df.select(str_repr_func("array").alias("str_id")).collect(),
-        )
+            # To verify that Arrow optimization is on
+            self.assertIn(
+                df.selectExpr("str_repr(array) AS str_id").first()[0],
+                ["[1, 2, 3]", "[np.int32(1), np.int32(2), np.int32(3)]"],
+                # The input is a NumPy array when the Arrow optimization is on
+            )
+
+            # To verify that a UserDefinedFunction is returned
+            self.assertListEqual(
+                df.selectExpr("str_repr(array) AS str_id").collect(),
+                df.select(str_repr_func("array").alias("str_id")).collect(),
+            )
 
     def test_nested_array_input(self):
         df = self.spark.range(1).selectExpr("array(array(1, 2), array(3, 4)) as nested_array")
@@ -181,8 +197,6 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
             df_floating_value.select(udf(lambda x: x, "decimal")("value").alias("res")).collect()
 
     def test_arrow_udf_int_to_decimal_coercion(self):
-        from decimal import Decimal
-
         with self.sql_conf(
             {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": False}
         ):
@@ -235,6 +249,19 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
                 ):
                     df.select(high_precision_udf("id").alias("decimal_val")).collect()
 
+    def test_decimal_round(self):
+        with self.sql_conf(
+            {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": False}
+        ):
+            df = self.spark.sql("SELECT DOUBLE(1.234) AS v")
+
+            @udf(returnType=DecimalType(38, 18))
+            def f(v: float):
+                return Decimal(v)
+
+            rounded = df.select(f("v").alias("d")).first().d
+            self.assertEqual(rounded, Decimal("1.233999999999999986"))
+
     def test_err_return_type(self):
         with self.assertRaises(PySparkNotImplementedError) as pe:
             udf(lambda x: x, VarcharType(10), useArrow=True)
@@ -252,22 +279,23 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
         def test_udf(a, b):
             return a + b
 
-        self.spark.udf.register("test_udf", test_udf)
+        with self.temp_func("test_udf"):
+            self.spark.udf.register("test_udf", test_udf)
 
-        with self.assertRaisesRegex(
-            AnalysisException,
-            "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
-        ):
-            self.spark.sql("SELECT test_udf(a => id, a => id * 10) FROM range(2)").show()
+            with self.assertRaisesRegex(
+                AnalysisException,
+                "DUPLICATE_ROUTINE_PARAMETER_ASSIGNMENT.DOUBLE_NAMED_ARGUMENT_REFERENCE",
+            ):
+                self.spark.sql("SELECT test_udf(a => id, a => id * 10) FROM range(2)").show()
 
-        with self.assertRaisesRegex(AnalysisException, "UNEXPECTED_POSITIONAL_ARGUMENT"):
-            self.spark.sql("SELECT test_udf(a => id, id * 10) FROM range(2)").show()
+            with self.assertRaisesRegex(AnalysisException, "UNEXPECTED_POSITIONAL_ARGUMENT"):
+                self.spark.sql("SELECT test_udf(a => id, id * 10) FROM range(2)").show()
 
-        with self.assertRaises(PythonException):
-            self.spark.sql("SELECT test_udf(c => 'x') FROM range(2)").show()
+            with self.assertRaises(PythonException):
+                self.spark.sql("SELECT test_udf(c => 'x') FROM range(2)").show()
 
-        with self.assertRaises(PythonException):
-            self.spark.sql("SELECT test_udf(id, a => id * 10) FROM range(2)").show()
+            with self.assertRaises(PythonException):
+                self.spark.sql("SELECT test_udf(id, a => id * 10) FROM range(2)").show()
 
     def test_udf_with_udt(self):
         for fallback in [False, True]:
@@ -364,6 +392,79 @@ class ArrowPythonUDFLegacyTestsMixin(ArrowPythonUDFTestsMixin):
         finally:
             super().tearDownClass()
 
+    def test_udf_binary_type(self):
+        def get_binary_type(x):
+            return type(x).__name__
+
+        binary_udf = udf(get_binary_type, returnType="string", useArrow=True)
+
+        df = self.spark.createDataFrame(
+            [Row(b=b"hello"), Row(b=b"world")], schema=StructType([StructField("b", BinaryType())])
+        )
+        expected = self.spark.createDataFrame([Row(type_name="bytes"), Row(type_name="bytes")])
+        # For Arrow Python UDF with legacy conversion BinaryType is always mapped to bytes
+        for conf_val in ["true", "false"]:
+            with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": conf_val}):
+                result = df.select(binary_udf(col("b")).alias("type_name"))
+                assertDataFrameEqual(result, expected)
+
+    def test_udf_binary_type_in_nested_structures(self):
+        # For Arrow Python UDF with legacy conversion BinaryType is always mapped to bytes
+        # Test binary in array
+        def check_array_binary_type(arr):
+            return type(arr[0]).__name__
+
+        array_udf = udf(check_array_binary_type, returnType="string")
+        df_array = self.spark.createDataFrame(
+            [Row(arr=[b"hello", b"world"])],
+            schema=StructType([StructField("arr", ArrayType(BinaryType()))]),
+        )
+        expected = self.spark.createDataFrame([Row(type_name="bytes")])
+        for conf_val in ["true", "false"]:
+            with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": conf_val}):
+                result = df_array.select(array_udf(col("arr")).alias("type_name"))
+                assertDataFrameEqual(result, expected)
+
+        # Test binary in map value
+        def check_map_binary_type(m):
+            return type(list(m.values())[0]).__name__
+
+        map_udf = udf(check_map_binary_type, returnType="string")
+        df_map = self.spark.createDataFrame(
+            [Row(m={"key": b"value"})],
+            schema=StructType([StructField("m", MapType(StringType(), BinaryType()))]),
+        )
+        for conf_val in ["true", "false"]:
+            with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": conf_val}):
+                result = df_map.select(map_udf(col("m")).alias("type_name"))
+                assertDataFrameEqual(result, expected)
+
+        # Test binary in struct
+        def check_struct_binary_type(s):
+            return type(s.binary_field).__name__
+
+        struct_udf = udf(check_struct_binary_type, returnType="string")
+        df_struct = self.spark.createDataFrame(
+            [Row(s=Row(binary_field=b"test", other_field="value"))],
+            schema=StructType(
+                [
+                    StructField(
+                        "s",
+                        StructType(
+                            [
+                                StructField("binary_field", BinaryType()),
+                                StructField("other_field", StringType()),
+                            ]
+                        ),
+                    )
+                ]
+            ),
+        )
+        for conf_val in ["true", "false"]:
+            with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": conf_val}):
+                result = df_struct.select(struct_udf(col("s")).alias("type_name"))
+                assertDataFrameEqual(result, expected)
+
 
 class ArrowPythonUDFNonLegacyTestsMixin(ArrowPythonUDFTestsMixin):
     @classmethod
@@ -384,7 +485,7 @@ class ArrowPythonUDFNonLegacyTestsMixin(ArrowPythonUDFTestsMixin):
 class ArrowPythonUDFTests(ArrowPythonUDFTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
-        super(ArrowPythonUDFTests, cls).setUpClass()
+        super().setUpClass()
         cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "true")
 
     @classmethod
@@ -392,27 +493,37 @@ class ArrowPythonUDFTests(ArrowPythonUDFTestsMixin, ReusedSQLTestCase):
         try:
             cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
         finally:
-            super(ArrowPythonUDFTests, cls).tearDownClass()
+            super().tearDownClass()
+
+    @unittest.skip("Duplicate test; it is tested separately in legacy and non-legacy tests")
+    def test_udf_binary_type(self):
+        super().test_udf_binary_type()
+
+    @unittest.skip("Duplicate test; it is tested separately in legacy and non-legacy tests")
+    def test_udf_binary_type_in_nested_structures(self):
+        super().test_udf_binary_type_in_nested_structures()
 
 
 class ArrowPythonUDFLegacyTests(ArrowPythonUDFLegacyTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
-        super(ArrowPythonUDFLegacyTests, cls).setUpClass()
+        super().setUpClass()
+        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.concurrency.level", "4")
         cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "true")
 
     @classmethod
     def tearDownClass(cls):
         try:
+            cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.concurrency.level")
             cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
         finally:
-            super(ArrowPythonUDFLegacyTests, cls).tearDownClass()
+            super().tearDownClass()
 
 
 class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
-        super(ArrowPythonUDFNonLegacyTests, cls).setUpClass()
+        super().setUpClass()
         cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "true")
 
     @classmethod
@@ -420,7 +531,7 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
         try:
             cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
         finally:
-            super(ArrowPythonUDFNonLegacyTests, cls).tearDownClass()
+            super().tearDownClass()
 
 
 if __name__ == "__main__":

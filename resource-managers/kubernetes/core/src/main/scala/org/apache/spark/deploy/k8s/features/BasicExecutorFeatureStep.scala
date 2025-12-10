@@ -16,6 +16,8 @@
  */
 package org.apache.spark.deploy.k8s.features
 
+import java.util.Locale
+
 import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model._
@@ -49,8 +51,13 @@ private[spark] class BasicExecutorFeatureStep(
 
   private val executorPodNamePrefix = kubernetesConf.resourceNamePrefix
 
+  private val driverAddress = if (kubernetesConf.get(KUBERNETES_EXECUTOR_USE_DRIVER_POD_IP)) {
+    kubernetesConf.get(DRIVER_BIND_ADDRESS)
+  } else {
+    kubernetesConf.get(DRIVER_HOST_ADDRESS)
+  }
   private val driverUrl = RpcEndpointAddress(
-    kubernetesConf.get(DRIVER_HOST_ADDRESS),
+    driverAddress,
     kubernetesConf.sparkConf.getInt(DRIVER_PORT.key, DEFAULT_DRIVER_PORT),
     CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
 
@@ -110,11 +117,16 @@ private[spark] class BasicExecutorFeatureStep(
     // hostname must be no longer than `KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH`(63) characters,
     // so take the last 63 characters of the pod name as the hostname.
     // This preserves uniqueness since the end of name contains executorId
-    val hostname = name.substring(Math.max(0, name.length - KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH))
+    var hostname = name.substring(Math.max(0, name.length - KUBERNETES_DNS_LABEL_NAME_MAX_LENGTH))
       // Remove non-word characters from the start of the hostname
       .replaceAll("^[^\\w]+", "")
       // Replace dangerous characters in the remaining string with a safe alternative.
       .replaceAll("[^\\w-]+", "_")
+
+    // Deployment resource does not support capital characters in the hostname
+    if (kubernetesConf.get(KUBERNETES_ALLOCATION_PODS_ALLOCATOR).equals("deployment")) {
+      hostname = hostname.toLowerCase(Locale.ROOT)
+    }
 
     val executorMemoryQuantity = new Quantity(s"${execResources.totalMemMiB}Mi")
     val executorCpuQuantity = new Quantity(executorCoresRequest)
@@ -265,7 +277,7 @@ private[spark] class BasicExecutorFeatureStep(
     }
 
     val policy = kubernetesConf.get(KUBERNETES_ALLOCATION_PODS_ALLOCATOR) match {
-      case "statefulset" => "Always"
+      case "statefulset" | "deployment" => "Always"
       case _ => "Never"
     }
 

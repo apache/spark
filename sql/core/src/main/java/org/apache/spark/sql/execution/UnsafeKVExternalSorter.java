@@ -61,9 +61,9 @@ public final class UnsafeKVExternalSorter {
       SerializerManager serializerManager,
       long pageSizeBytes,
       int numElementsForSpillThreshold,
-      long maxRecordsSizeForSpillThreshold) throws IOException {
+      long sizeInBytesForSpillThreshold) throws IOException {
     this(keySchema, valueSchema, blockManager, serializerManager, pageSizeBytes,
-      numElementsForSpillThreshold, maxRecordsSizeForSpillThreshold, null);
+      numElementsForSpillThreshold, sizeInBytesForSpillThreshold, null);
   }
 
   public UnsafeKVExternalSorter(
@@ -73,7 +73,7 @@ public final class UnsafeKVExternalSorter {
       SerializerManager serializerManager,
       long pageSizeBytes,
       int numElementsForSpillThreshold,
-      long maxRecordsSizeForSpillThreshold,
+      long sizeInBytesForSpillThreshold,
       @Nullable BytesToBytesMap map) throws IOException {
     this.keySchema = keySchema;
     this.valueSchema = valueSchema;
@@ -100,7 +100,7 @@ public final class UnsafeKVExternalSorter {
         (int) (long) SparkEnv.get().conf().get(package$.MODULE$.SHUFFLE_SORT_INIT_BUFFER_SIZE()),
         pageSizeBytes,
         numElementsForSpillThreshold,
-        maxRecordsSizeForSpillThreshold,
+        sizeInBytesForSpillThreshold,
         canUseRadixSort);
     } else {
       // During spilling, the pointer array in `BytesToBytesMap` will not be used, so we can borrow
@@ -168,7 +168,7 @@ public final class UnsafeKVExternalSorter {
         (int) (long) SparkEnv.get().conf().get(package$.MODULE$.SHUFFLE_SORT_INIT_BUFFER_SIZE()),
         pageSizeBytes,
         numElementsForSpillThreshold,
-        maxRecordsSizeForSpillThreshold,
+        sizeInBytesForSpillThreshold,
         inMemSorter,
         map.getTotalMemoryConsumption());
 

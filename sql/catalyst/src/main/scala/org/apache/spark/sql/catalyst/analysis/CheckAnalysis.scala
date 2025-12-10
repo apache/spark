@@ -340,6 +340,12 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           errorClass = "UNSUPPORTED_FEATURE.OVERWRITE_BY_SUBQUERY",
           messageParameters = Map.empty)
 
+      case p: PlanWithUnresolvedIdentifier if !p.identifierExpr.resolved =>
+        p.identifierExpr.failAnalysis(
+          errorClass = "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+          messageParameters = Map("name" -> "IDENTIFIER", "expr" -> p.identifierExpr.sql)
+        )
+
       case operator: LogicalPlan =>
         operator transformExpressionsDown {
           case hof: HigherOrderFunction if hof.arguments.exists {

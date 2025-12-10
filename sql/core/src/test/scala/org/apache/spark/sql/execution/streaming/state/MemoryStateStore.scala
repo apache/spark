@@ -51,6 +51,10 @@ class MemoryStateStore extends StateStore() {
   override def put(key: UnsafeRow, newValue: UnsafeRow, colFamilyName: String): Unit =
     map.put(key.copy(), newValue.copy())
 
+  override def putList(key: UnsafeRow, newValues: Array[UnsafeRow], colFamilyName: String): Unit = {
+    throw new UnsupportedOperationException("Doesn't support put multiple values put")
+  }
+
   override def remove(key: UnsafeRow, colFamilyName: String): Unit = map.remove(key)
 
   override def commit(): Long = version + 1
@@ -76,6 +80,10 @@ class MemoryStateStore extends StateStore() {
 
   override def merge(key: UnsafeRow, value: UnsafeRow, colFamilyName: String): Unit = {
     throw new UnsupportedOperationException("Doesn't support multiple values per key")
+  }
+
+  override def mergeList(key: UnsafeRow, values: Array[UnsafeRow], colFamilyName: String): Unit = {
+    throw new UnsupportedOperationException("Doesn't support multiple values merge")
   }
 
   override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {

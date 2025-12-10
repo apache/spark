@@ -72,13 +72,16 @@ trait FlowFunction extends Logging {
    * @param availableInputs the list of all [[Input]]s available to this flow
    * @param configuration the spark configurations that apply to this flow.
    * @param queryContext The context of the query being evaluated.
+   * @param queryOrigin The source code location of the flow definition this flow function was
+   *                    instantiated from.
    * @return the inputs actually used, and the DataFrame expression for the flow
    */
   def call(
       allInputs: Set[TableIdentifier],
       availableInputs: Seq[Input],
       configuration: Map[String, String],
-      queryContext: QueryContext
+      queryContext: QueryContext,
+      queryOrigin: QueryOrigin
   ): FlowFunctionResult
 }
 
@@ -146,8 +149,10 @@ trait ResolutionCompletedFlow extends Flow {
 }
 
 /** A [[Flow]] whose flow function has failed to resolve. */
-class ResolutionFailedFlow(val flow: UnresolvedFlow, val funcResult: FlowFunctionResult)
-    extends ResolutionCompletedFlow {
+class ResolutionFailedFlow(
+    val flow: UnresolvedFlow,
+    val funcResult: FlowFunctionResult)
+  extends ResolutionCompletedFlow {
   assert(!funcResult.resolved)
 
   def failure: Seq[Throwable] = funcResult.failure
@@ -171,14 +176,14 @@ class StreamingFlow(
     val flow: UnresolvedFlow,
     val funcResult: FlowFunctionResult,
     val mustBeAppend: Boolean = false
-) extends ResolvedFlow {}
+) extends ResolvedFlow
 
 /** A [[Flow]] that declares exactly what data should be in the target table. */
 class CompleteFlow(
     val flow: UnresolvedFlow,
     val funcResult: FlowFunctionResult,
     val mustBeAppend: Boolean = false
-) extends ResolvedFlow {}
+) extends ResolvedFlow
 
 /** A [[Flow]] that reads source[s] completely and appends data to the target, just once.
  */

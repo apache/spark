@@ -497,6 +497,7 @@ Below is a list of all the keywords in Spark SQL.
 |DEFAULT|non-reserved|non-reserved|non-reserved|
 |DEFINED|non-reserved|non-reserved|non-reserved|
 |DEFINER|non-reserved|non-reserved|non-reserved|
+|DELAY|non-reserved|non-reserved|non-reserved|
 |DELETE|non-reserved|non-reserved|reserved|
 |DELIMITED|non-reserved|non-reserved|non-reserved|
 |DESC|non-reserved|non-reserved|non-reserved|
@@ -549,6 +550,8 @@ Below is a list of all the keywords in Spark SQL.
 |FUNCTION|non-reserved|non-reserved|reserved|
 |FUNCTIONS|non-reserved|non-reserved|non-reserved|
 |GENERATED|non-reserved|non-reserved|non-reserved|
+|GEOGRAPHY|non-reserved|non-reserved|non-reserved|
+|GEOMETRY|non-reserved|non-reserved|non-reserved|
 |GLOBAL|non-reserved|non-reserved|reserved|
 |GRANT|reserved|non-reserved|reserved|
 |GROUP|reserved|non-reserved|reserved|
@@ -791,6 +794,7 @@ Below is a list of all the keywords in Spark SQL.
 |VIEW|non-reserved|non-reserved|non-reserved|
 |VIEWS|non-reserved|non-reserved|non-reserved|
 |VOID|non-reserved|non-reserved|non-reserved|
+|WATERMARK|non-reserved|non-reserved|non-reserved|
 |WEEK|non-reserved|non-reserved|non-reserved|
 |WEEKS|non-reserved|non-reserved|non-reserved|
 |WHEN|reserved|non-reserved|reserved|

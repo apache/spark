@@ -24,9 +24,10 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.{
+  ExpandStarParameters,
   LiteralFunctionResolution,
   Resolver => NameComparator,
-  UnresolvedStar
+  Star
 }
 import org.apache.spark.sql.catalyst.expressions.{
   Alias,
@@ -323,7 +324,7 @@ class NameScope(
   }
 
   /**
-   * Expand the [[UnresolvedStar]]. The expected use case for this method is star expansion inside
+   * Expand the [[Star]]. The expected use case for this method is star expansion inside
    * [[Project]].
    *
    * Star without a target:
@@ -360,16 +361,18 @@ class NameScope(
    * SELECT concat_ws('', *) AS result FROM VALUES (1, 2, 3);
    * }}}
    *
-   * Also, see [[UnresolvedStarBase.expandStar]] for more details.
+   * Also, see [[Star.expandStar]] for more details.
    */
-  def expandStar(unresolvedStar: UnresolvedStar): Seq[NamedExpression] = {
+  def expandStar(unresolvedStar: Star): Seq[NamedExpression] = {
     unresolvedStar.expandStar(
-      childOperatorOutput = output,
-      childOperatorMetadataOutput = hiddenOutput,
-      resolve = (nameParts, comparator) => resolveNameInStarExpansion(nameParts, comparator),
-      suggestedAttributes = output,
-      resolver = nameComparator,
-      cleanupNestedAliasesDuringStructExpansion = true
+      ExpandStarParameters(
+        childOperatorOutput = output,
+        childOperatorMetadataOutput = hiddenOutput,
+        resolve = (nameParts, comparator) => resolveNameInStarExpansion(nameParts, comparator),
+        suggestedAttributes = output,
+        resolver = nameComparator,
+        cleanupNestedAliasesDuringStructExpansion = true
+      )
     )
   }
 
@@ -697,7 +700,11 @@ class NameScope(
 
     val filteredCandidates = if (nestedFields.nonEmpty) {
       candidates.filter { attribute =>
-        ExtractValue.isExtractable(attribute, nestedFields, nameComparator)
+        ExtractValue.isExtractable(
+          attribute = attribute,
+          nestedFields = nestedFields,
+          resolver = nameComparator
+        )
       }
     } else {
       candidates

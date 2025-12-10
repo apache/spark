@@ -45,6 +45,7 @@ class ArrowWindowPythonEvaluatorFactory(
     val evalType: Int,
     val spillSize: SQLMetric,
     pythonMetrics: Map[String, SQLMetric],
+    sessionUUID: Option[String],
     profiler: Option[String])
   extends PartitionEvaluatorFactory[InternalRow, InternalRow] with WindowEvaluatorFactoryBase {
 
@@ -149,7 +150,7 @@ class ArrowWindowPythonEvaluatorFactory(
 
     private val inMemoryThreshold = conf.windowExecBufferInMemoryThreshold
     private val spillThreshold = conf.windowExecBufferSpillThreshold
-    private val spillSizeThreshold = conf.windowExecBufferSpillSizeThreshold
+    private val sizeInBytesSpillThreshold = conf.windowExecBufferSpillSizeThreshold
     private val sessionLocalTimeZone = conf.sessionLocalTimeZone
     private val largeVarTypes = conf.arrowUseLargeVarTypes
 
@@ -288,8 +289,13 @@ class ArrowWindowPythonEvaluatorFactory(
 
         // Manage the current partition.
         val buffer: ExternalAppendOnlyUnsafeRowArray =
-          new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold,
-            spillSizeThreshold)
+          new ExternalAppendOnlyUnsafeRowArray(
+            inMemoryThreshold,
+            // TODO: shall we have a new config to specify the max in-memory buffer size
+            //       of ExternalAppendOnlyUnsafeRowArray?
+            sizeInBytesSpillThreshold,
+            spillThreshold,
+            sizeInBytesSpillThreshold)
         var bufferIterator: Iterator[UnsafeRow] = _
 
         val indexRow =
@@ -363,7 +369,7 @@ class ArrowWindowPythonEvaluatorFactory(
         }
       }
 
-      val windowFunctionResult = new ArrowPythonWithNamedArgumentRunner(
+      val runner = new ArrowPythonWithNamedArgumentRunner(
         pyFuncs,
         evalType,
         argMetas,
@@ -373,7 +379,10 @@ class ArrowWindowPythonEvaluatorFactory(
         pythonRunnerConf,
         pythonMetrics,
         jobArtifactUUID,
-        profiler).compute(pythonInput, context.partitionId(), context)
+        sessionUUID,
+        profiler) with GroupedPythonArrowInput
+
+      val windowFunctionResult = runner.compute(pythonInput, context.partitionId(), context)
 
       val joined = new JoinedRow
 

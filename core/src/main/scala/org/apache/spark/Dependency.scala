@@ -29,6 +29,7 @@ import org.apache.spark.internal.LogKeys._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleHandle, ShuffleWriteProcessor}
+import org.apache.spark.shuffle.checksum.RowBasedChecksum
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.Utils
 
@@ -59,6 +60,9 @@ abstract class NarrowDependency[T](_rdd: RDD[T]) extends Dependency[T] {
   override def rdd: RDD[T] = _rdd
 }
 
+object ShuffleDependency {
+  private[spark] val EMPTY_ROW_BASED_CHECKSUMS: Array[RowBasedChecksum] = Array.empty
+}
 
 /**
  * :: DeveloperApi ::
@@ -74,6 +78,7 @@ abstract class NarrowDependency[T](_rdd: RDD[T]) extends Dependency[T] {
  * @param aggregator map/reduce-side aggregator for RDD's shuffle
  * @param mapSideCombine whether to perform partial aggregation (also known as map-side combine)
  * @param shuffleWriterProcessor the processor to control the write behavior in ShuffleMapTask
+ * @param rowBasedChecksums the row-based checksums for each shuffle partition
  */
 @DeveloperApi
 class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
@@ -83,8 +88,30 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     val keyOrdering: Option[Ordering[K]] = None,
     val aggregator: Option[Aggregator[K, V, C]] = None,
     val mapSideCombine: Boolean = false,
-    val shuffleWriterProcessor: ShuffleWriteProcessor = new ShuffleWriteProcessor)
+    val shuffleWriterProcessor: ShuffleWriteProcessor = new ShuffleWriteProcessor,
+    val rowBasedChecksums: Array[RowBasedChecksum] = ShuffleDependency.EMPTY_ROW_BASED_CHECKSUMS,
+    val checksumMismatchFullRetryEnabled: Boolean = false)
   extends Dependency[Product2[K, V]] with Logging {
+
+  def this(
+      rdd: RDD[_ <: Product2[K, V]],
+      partitioner: Partitioner,
+      serializer: Serializer,
+      keyOrdering: Option[Ordering[K]],
+      aggregator: Option[Aggregator[K, V, C]],
+      mapSideCombine: Boolean,
+      shuffleWriterProcessor: ShuffleWriteProcessor) = {
+    this(
+      rdd,
+      partitioner,
+      serializer,
+      keyOrdering,
+      aggregator,
+      mapSideCombine,
+      shuffleWriterProcessor,
+      ShuffleDependency.EMPTY_ROW_BASED_CHECKSUMS
+    )
+  }
 
   if (mapSideCombine) {
     require(aggregator.isDefined, "Map-side combine without Aggregator specified!")
@@ -100,14 +127,14 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
 
   val shuffleId: Int = _rdd.context.newShuffleId()
 
-  val shuffleHandle: ShuffleHandle = _rdd.context.env.shuffleManager.registerShuffle(
-    shuffleId, this)
-
   private[this] val numPartitions = rdd.partitions.length
 
   // By default, shuffle merge is allowed for ShuffleDependency if push based shuffle
   // is enabled
   private[this] var _shuffleMergeAllowed = canShuffleMergeBeEnabled()
+
+  val shuffleHandle: ShuffleHandle = _rdd.context.env.shuffleManager.registerShuffle(
+    shuffleId, this)
 
   private[spark] def setShuffleMergeAllowed(shuffleMergeAllowed: Boolean): Unit = {
     _shuffleMergeAllowed = shuffleMergeAllowed

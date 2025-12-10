@@ -71,22 +71,27 @@ object SparkConnectServerUtils {
       findJar("sql/catalyst", "spark-catalyst", "spark-catalyst", test = true).getCanonicalPath
 
     val command = Seq.newBuilder[String]
-    command += "bin/spark-submit"
+    command += s"$sparkHome/bin/spark-submit"
     command += "--driver-class-path" += connectJar
     command += "--class" += "org.apache.spark.sql.connect.SimpleSparkConnectService"
     command += "--jars" += catalystTestJar
     command += "--conf" += s"spark.connect.grpc.binding.port=$port"
     command ++= testConfigs
-    command ++= debugConfigs
+    command ++= log4jConfigs
     command += connectJar
-    val builder = new ProcessBuilder(command.result(): _*)
+    val cmds = command.result()
+    debug {
+      cmds.reduce[String] {
+        case (acc, cmd) if cmd startsWith "-" => acc + " \\\n    " + cmd
+        case (acc, cmd) => acc + " " + cmd
+      }
+    }
+    val builder = new ProcessBuilder(cmds: _*)
     builder.directory(new File(sparkHome))
     val environment = builder.environment()
     environment.remove("SPARK_DIST_CLASSPATH")
-    if (isDebug) {
-      builder.redirectError(Redirect.INHERIT)
-      builder.redirectOutput(Redirect.INHERIT)
-    }
+    builder.redirectError(Redirect.INHERIT)
+    builder.redirectOutput(Redirect.INHERIT)
 
     val process = builder.start()
     consoleOut = process.getOutputStream
@@ -128,6 +133,8 @@ object SparkConnectServerUtils {
       "spark.connect.execute.reattachable.senderMaxStreamSize=123",
       // Testing SPARK-49673, setting maxBatchSize to 10MiB
       s"spark.connect.grpc.arrow.maxBatchSize=${10 * 1024 * 1024}",
+      // Cache less sessions to save memory.
+      "spark.executor.isolatedSessionCache.size=5",
       // Disable UI
       "spark.ui.enabled=false").flatMap(v => "--conf" :: v :: Nil)
   }
@@ -173,26 +180,35 @@ object SparkConnectServerUtils {
         val fileName = e.substring(e.lastIndexOf(File.separatorChar) + 1)
         fileName.endsWith(".jar") &&
         (fileName.startsWith("scalatest") || fileName.startsWith("scalactic") ||
-          (fileName.startsWith("spark-catalyst") && fileName.endsWith("-tests")))
+          (fileName.startsWith("spark-catalyst") && fileName.endsWith("-tests")) ||
+          fileName.startsWith("grpc-"))
       }
       .map(e => Paths.get(e).toUri)
     spark.client.artifactManager.addArtifacts(jars.toImmutableArraySeq)
   }
 
   def createSparkSession(): SparkSession = {
+    createSparkSession(identity)
+  }
+
+  def createSparkSession(
+      customBuilderFunc: SparkConnectClient.Builder => SparkConnectClient.Builder)
+      : SparkSession = {
     SparkConnectServerUtils.start()
 
+    var builder = SparkConnectClient
+      .builder()
+      .userId("test")
+      .port(port)
+      .retryPolicy(
+        RetryPolicy
+          .defaultPolicy()
+          .copy(maxRetries = Some(10), maxBackoff = Some(FiniteDuration(30, "s"))))
+
+    builder = customBuilderFunc(builder)
     val spark = SparkSession
       .builder()
-      .client(
-        SparkConnectClient
-          .builder()
-          .userId("test")
-          .port(port)
-          .retryPolicy(RetryPolicy
-            .defaultPolicy()
-            .copy(maxRetries = Some(10), maxBackoff = Some(FiniteDuration(30, "s"))))
-          .build())
+      .client(builder.build())
       .create()
 
     // Execute an RPC which will get retried until the server is up.

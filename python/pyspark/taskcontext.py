@@ -252,8 +252,6 @@ class TaskContext:
         dict
             a dictionary of a string resource name, and :class:`ResourceInformation`.
         """
-        from pyspark.resource import ResourceInformation
-
         return cast(Dict[str, "ResourceInformation"], self._resources)
 
 

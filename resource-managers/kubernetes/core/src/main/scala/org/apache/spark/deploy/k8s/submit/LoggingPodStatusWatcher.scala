@@ -98,7 +98,7 @@ private[k8s] class LoggingPodStatusWatcherImpl(conf: KubernetesDriverConf)
   }
 
   override def watchOrStop(sId: String): Boolean = {
-    logInfo(log"Waiting for application ${MDC(APP_NAME, conf.appName)}} with application ID " +
+    logInfo(log"Waiting for application ${MDC(APP_NAME, conf.appName)} with application ID " +
       log"${MDC(APP_ID, appId)} and submission ID ${MDC(SUBMISSION_ID, sId)} to finish...")
     val interval = conf.get(REPORT_INTERVAL)
     synchronized {

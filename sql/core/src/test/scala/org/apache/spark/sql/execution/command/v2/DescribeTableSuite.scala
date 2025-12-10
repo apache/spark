@@ -29,6 +29,7 @@ import org.apache.spark.util.Utils
  */
 class DescribeTableSuite extends command.DescribeTableSuiteBase
   with CommandSuiteBase {
+  import testImplicits._
 
   test("Describing a partition is not supported") {
     withNamespaceAndTable("ns", "table") { tbl =>
@@ -46,7 +47,7 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
       sql(s"CREATE TABLE $tbl (s struct<id:INT, a:BIGINT>, data string) " +
         s"$defaultUsing PARTITIONED BY (s.id, s.a)")
       val descriptionDf = sql(s"DESCRIBE TABLE $tbl")
-      QueryTest.checkAnswer(
+      checkAnswer(
         descriptionDf.filter("col_name != 'Created Time'"),
         Seq(
           Row("data", "string", null),
@@ -70,7 +71,7 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
         ("col_name", StringType),
         ("data_type", StringType),
         ("comment", StringType)))
-      QueryTest.checkAnswer(
+      checkAnswer(
         descriptionDf,
         Seq(
           Row("id", "bigint", null),
@@ -162,7 +163,7 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
       assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
         ("info_name", StringType),
         ("info_value", StringType)))
-      QueryTest.checkAnswer(
+      checkAnswer(
         descriptionDf,
         Seq(
           Row("col_name", "key"),
@@ -189,7 +190,7 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
       assert(descriptionDf.schema.map(field => (field.name, field.dataType)) === Seq(
         ("info_name", StringType),
         ("info_value", StringType)))
-      QueryTest.checkAnswer(
+      checkAnswer(
         descriptionDf,
         Seq(
           Row("col_name", "key"),
@@ -266,6 +267,16 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
         assert(descDdL === expectedConstraintsDdl
           .filter(_ != "c1,CHECK (c IS NOT NULL) ENFORCED,"))
       }
+    }
+  }
+
+  test("describe table with column having only current default value") {
+    withNamespaceAndTable("ns", "tbl") { tbl =>
+      sql(s"CREATE TABLE $tbl (key int DEFAULT 13579) $defaultUsing " +
+        "TBLPROPERTIES ('dropExistsDefault'=true)")
+      checkAnswer(
+        sql(s"DESCRIBE TABLE EXTENDED $tbl").where($"comment" === "13579"),
+        Seq(Row("key", "int", "13579")))
     }
   }
 }

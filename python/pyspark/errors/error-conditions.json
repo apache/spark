@@ -14,11 +14,6 @@
       "Arrow legacy IPC format is not supported in PySpark, please unset ARROW_PRE_0_15_IPC_FORMAT."
     ]
   },
-  "ATTEMPT_ANALYSIS_IN_PIPELINE_QUERY_FUNCTION": {
-    "message": [
-      "Operations that trigger DataFrame analysis or execution are not allowed in pipeline query functions. Move code outside of the pipeline query function."
-    ]
-  },
   "ATTRIBUTE_NOT_CALLABLE": {
     "message": [
       "Attribute `<attr_name>` in provided object `<obj_name>` is not callable."
@@ -384,6 +379,11 @@
       "The return type of the arrow-optimized Python UDTF should be of type 'pandas.DataFrame', but the '<func>' method returned a value of type <return_type> with value: <value>."
     ]
   },
+  "INVALID_ARROW_UDTF_TABLE_ARGUMENT": {
+    "message": [
+      "Arrow UDTFs with PARTITION BY must have a TABLE argument that results in a PyArrow RecordBatch, but got <actual_type>."
+    ]
+  },
   "INVALID_ARROW_UDTF_WITH_ANALYZE": {
     "message": [
       "The arrow UDTF '<name>' is invalid. Arrow UDTFs do not support the 'analyze' method. Please remove the 'analyze' method from '<name>' and specify a returnType instead."
@@ -542,6 +542,16 @@
   "LENGTH_SHOULD_BE_THE_SAME": {
     "message": [
       "<arg1> and <arg2> should be of the same length, got <arg1_length> and <arg2_length>."
+    ]
+  },
+  "MALFORMED_GEOGRAPHY": {
+    "message": [
+      "Geography binary is malformed. Please check the data source is valid."
+    ]
+  },
+  "MALFORMED_GEOMETRY": {
+    "message": [
+      "Geometry binary is malformed. Please check the data source is valid."
     ]
   },
   "MALFORMED_VARIANT": {
@@ -893,7 +903,12 @@
   },
   "PIPELINE_SPEC_FILE_NOT_FOUND": {
     "message": [
-      "No pipeline.yaml or pipeline.yml file provided in arguments or found in directory `<dir_path>` or readable ancestor directories."
+      "No spark-pipeline.yaml or spark-pipeline.yml file provided in arguments or found in directory `<dir_path>` or readable ancestor directories."
+    ]
+  },
+  "PIPELINE_SPEC_INVALID_GLOB_PATTERN": {
+    "message": [
+      "Invalid glob pattern `<glob_pattern>` in libraries. Only file paths, or folder paths ending with /** are allowed."
     ]
   },
   "PIPELINE_SPEC_MISSING_REQUIRED_FIELD": {
@@ -965,6 +980,11 @@
   "RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDF": {
     "message": [
       "Column names of the returned pyarrow.Table do not match specified schema.<missing><extra>"
+    ]
+  },
+  "RESULT_COLUMNS_MISMATCH_FOR_ARROW_UDTF": {
+    "message": [
+      "Column names of the returned pyarrow.Table or pyarrow.RecordBatch do not match specified schema. Expected: <expected> Actual: <actual>"
     ]
   },
   "RESULT_COLUMNS_MISMATCH_FOR_PANDAS_UDF": {
@@ -1118,6 +1138,24 @@
     "message": [
       "Cannot serialize the function `<name>`. If you accessed the Spark session, or a DataFrame defined outside of the function, or any object that contains a Spark session, please be aware that they are not allowed in Spark Connect. For `foreachBatch`, please access the Spark session using `df.sparkSession`, where `df` is the first parameter in your `foreachBatch` function. For `StreamingQueryListener`, please access the Spark session using `self.spark`. For details please check out the PySpark doc for `foreachBatch` and `StreamingQueryListener`."
     ]
+  },
+  "ST_INVALID_ALGORITHM_VALUE" : {
+    "message" : [
+      "Invalid or unsupported edge interpolation algorithm value: '<alg>'."
+    ],
+    "sqlState" : "22023"
+  },
+  "ST_INVALID_CRS_VALUE" : {
+    "message" : [
+      "Invalid or unsupported CRS (coordinate reference system) value: '<crs>'."
+    ],
+    "sqlState" : "22023"
+  },
+  "ST_INVALID_SRID_VALUE" : {
+    "message" : [
+      "Invalid or unsupported SRID (spatial reference identifier) value: <srid>."
+    ],
+    "sqlState" : "22023"
   },
   "TEST_CLASS_NOT_COMPILED": {
     "message": [

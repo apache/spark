@@ -165,27 +165,28 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
   test("variables have implicit collation") {
     val v1Collation = UTF8_BINARY_COLLATION_NAME
     val v2Collation = UTF8_LCASE_COLLATION_NAME
-    sql(s"DECLARE v1 = 'a'")
-    sql(s"DECLARE v2 = 'b' collate $v2Collation")
+    withSessionVariable("v1", "a", collation = None) {
+      withSessionVariable("v2", "b", collation = Some(v2Collation)) {
+        checkAnswer(
+          sql(s"SELECT COLLATION(v1 || 'a')"),
+          Row(v1Collation))
 
-    checkAnswer(
-      sql(s"SELECT COLLATION(v1 || 'a')"),
-      Row(v1Collation))
+        checkAnswer(
+          sql(s"SELECT COLLATION(v2 || 'a')"),
+          Row(v2Collation))
 
-    checkAnswer(
-      sql(s"SELECT COLLATION(v2 || 'a')"),
-      Row(v2Collation))
+        checkAnswer(
+          sql(s"SELECT COLLATION(v2 || 'a' COLLATE UTF8_BINARY)"),
+          Row(UTF8_BINARY_COLLATION_NAME))
 
-    checkAnswer(
-      sql(s"SELECT COLLATION(v2 || 'a' COLLATE UTF8_BINARY)"),
-      Row(UTF8_BINARY_COLLATION_NAME))
+        checkAnswer(
+          sql(s"SELECT COLLATION(SUBSTRING(v2, 0, 1) || 'a')"),
+          Row(v2Collation))
 
-    checkAnswer(
-      sql(s"SELECT COLLATION(SUBSTRING(v2, 0, 1) || 'a')"),
-      Row(v2Collation))
-
-    assertIndeterminateCollation(sql(s"SELECT v1 = v2"))
-    assertIndeterminateCollation(sql(s"SELECT SUBSTRING(v1, 0, 1) = v2"))
+        assertIndeterminateCollation(sql(s"SELECT v1 = v2"))
+        assertIndeterminateCollation(sql(s"SELECT SUBSTRING(v1, 0, 1) = v2"))
+      }
+    }
   }
 
   test("subqueries have implicit collation strength") {
@@ -780,6 +781,16 @@ class CollationTypePrecedenceSuite extends QueryTest with SharedSparkSession {
           assertThrowsError(selectQuery(condition), "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE")
         }
       }
+    }
+  }
+
+  private def withSessionVariable(name: String, value: String, collation: Option[String] = None)(
+      body: => Unit): Unit = {
+    sql(s"DECLARE $name = '$value'" + collation.map(c => s" COLLATE $c").getOrElse(""))
+    try {
+      body
+    } finally {
+      sql(s"DROP TEMPORARY VARIABLE $name")
     }
   }
 }

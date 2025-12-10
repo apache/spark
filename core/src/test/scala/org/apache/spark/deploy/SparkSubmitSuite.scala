@@ -71,7 +71,7 @@ trait TestPrematureExit {
 
     @volatile var exitedCleanly = false
     val original = mainObject.exitFn
-    mainObject.exitFn = (_) => exitedCleanly = true
+    mainObject.exitFn = (_, _) => exitedCleanly = true
     try {
       @volatile var exception: Exception = null
       val thread = new Thread {
@@ -1593,6 +1593,44 @@ class SparkSubmitSuite
       runSparkSubmit(argsSuccess, expectFailure = false))
   }
 
+  test("spark.submit.callSystemExitOnMainExit returns non-zero exit code on unclean main exit") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val args = Seq(
+      "--class", MainThrowsUncaughtExceptionSparkApplicationTest.getClass.getName.stripSuffix("$"),
+      "--name", "testApp",
+      "--conf", s"${SUBMIT_CALL_SYSTEM_EXIT_ON_MAIN_EXIT.key}=true",
+      unusedJar.toString
+    )
+    assertResult(1)(runSparkSubmit(args, expectFailure = true))
+  }
+
+  test("spark.submit.callSystemExitOnMainExit calls system exit on clean main exit") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val args = Seq(
+      "--class", NonDaemonThreadSparkApplicationTest.getClass.getName.stripSuffix("$"),
+      "--name", "testApp",
+      "--conf", s"${SUBMIT_CALL_SYSTEM_EXIT_ON_MAIN_EXIT.key}=true",
+      unusedJar.toString
+    )
+    // With SUBMIT_CALL_SYSTEM_EXIT_ON_MAIN_EXIT set to false, the non-daemon thread will
+    // prevent the JVM from beginning shutdown and the following call will fail with a
+    // timeout:
+    assertResult(0)(runSparkSubmit(args))
+  }
+
+  test("spark.submit.callSystemExitOnMainExit with main that explicitly calls System.exit") {
+    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
+    val args = Seq(
+      "--class",
+      MainExplicitlyCallsSystemExit3SparkApplicationTest.getClass.getName.stripSuffix("$"),
+      "--name", "testApp",
+      "--conf", s"${SUBMIT_CALL_SYSTEM_EXIT_ON_MAIN_EXIT.key}=true",
+      unusedJar.toString
+    )
+    // This main class explicitly exits with System.exit(3), hence this expected exit code:
+    assertResult(3)(runSparkSubmit(args, expectFailure = true))
+  }
+
   private def testRemoteResources(
       enableHttpFs: Boolean,
       forceDownloadSchemes: Seq[String] = Nil): Unit = {
@@ -1807,6 +1845,48 @@ class SparkSubmitSuite
     assert(classpath.contains("."))
   }
 
+  test("SPARK-52334: Update all files, jars, and pyFiles to" +
+    "reference the working directory after they are downloaded") {
+    withTempDir { dir =>
+      val text1 = File.createTempFile("test1_", ".txt", dir)
+      val zipFile1 = File.createTempFile("test1_", ".zip", dir)
+      TestUtils.createJar(Seq(text1), zipFile1)
+      val testFile = "test_metrics_config.properties"
+      val testPyFile = "test_metrics_system.properties"
+      val testJar = "TestUDTF.jar"
+      val clArgs = Seq(
+        "--deploy-mode", "client",
+        "--proxy-user", "test.user",
+        "--master", "k8s://host:port",
+        "--executor-memory", "5g",
+        "--class", "org.SomeClass",
+        "--driver-memory", "4g",
+        "--conf", "spark.kubernetes.namespace=spark",
+        "--conf", "spark.kubernetes.driver.container.image=bar",
+        "--conf", "spark.kubernetes.submitInDriver=true",
+        "--files", s"src/test/resources/$testFile",
+        "--py-files", s"src/test/resources/$testPyFile",
+        "--jars", s"src/test/resources/$testJar",
+        "--archives", s"${zipFile1.getAbsolutePath}#test_archives",
+        "/home/thejar.jar",
+        "arg1")
+      val appArgs = new SparkSubmitArguments(clArgs)
+      val _ = submit.prepareSubmitEnvironment(appArgs)
+
+      appArgs.files should be (Utils.resolveURIs(s"$testFile,$testPyFile"))
+      appArgs.pyFiles should be (Utils.resolveURIs(testPyFile))
+      appArgs.jars should be (Utils.resolveURIs(testJar))
+      appArgs.archives should be (Utils.resolveURIs(s"${zipFile1.getAbsolutePath}#test_archives"))
+
+      Files.isDirectory(Paths.get("test_archives")) should be(true)
+      Files.delete(Paths.get(testFile))
+      Files.delete(Paths.get(testPyFile))
+      Files.delete(Paths.get(testJar))
+      Files.delete(Paths.get(s"test_archives/${text1.getName}"))
+      Files.delete(Paths.get("test_archives/META-INF/MANIFEST.MF"))
+    }
+  }
+
   // Requires Python dependencies for Spark Connect. Should be enabled by default.
   ignore("Spark Connect application submission (Python)") {
     val pyFile = File.createTempFile("remote_test", ".py")
@@ -1873,6 +1953,34 @@ object SimpleApplicationTest {
       }
     }
     sc.stop()
+  }
+}
+
+object MainThrowsUncaughtExceptionSparkApplicationTest {
+  def main(args: Array[String]): Unit = {
+    throw new Exception("User exception")
+  }
+}
+
+object NonDaemonThreadSparkApplicationTest {
+  def main(args: Array[String]): Unit = {
+    val nonDaemonThread: Thread = new Thread {
+      override def run(): Unit = {
+        while (true) {
+          Thread.sleep(1000)
+        }
+      }
+    }
+    nonDaemonThread.setDaemon(false)
+    nonDaemonThread.setName("Non-Daemon-Thread")
+    nonDaemonThread.start()
+    // Fall off the end of the main method.
+  }
+}
+
+object MainExplicitlyCallsSystemExit3SparkApplicationTest {
+  def main(args: Array[String]): Unit = {
+    System.exit(3)
   }
 }
 

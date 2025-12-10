@@ -89,9 +89,10 @@ try:
     _minimum_pandas_version = "2.0.0"
     _minimum_numpy_version = "1.21"
     _minimum_pyarrow_version = "11.0.0"
-    _minimum_grpc_version = "1.67.0"
-    _minimum_googleapis_common_protos_version = "1.65.0"
+    _minimum_grpc_version = "1.76.0"
+    _minimum_googleapis_common_protos_version = "1.71.0"
     _minimum_pyyaml_version = "3.11"
+    _minimum_zstandard_version = "0.25.0"
 
     with open("README.md") as f:
         long_description = f.read()
@@ -111,7 +112,7 @@ try:
         url="https://github.com/apache/spark/tree/master/python",
         packages=connect_packages,
         include_package_data=True,
-        license="http://www.apache.org/licenses/LICENSE-2.0",
+        license="Apache-2.0",
         # Don't forget to update python/docs/source/getting_started/install.rst
         # if you're updating the versions or dependencies.
         install_requires=[
@@ -121,18 +122,18 @@ try:
             "grpcio>=%s" % _minimum_grpc_version,
             "grpcio-status>=%s" % _minimum_grpc_version,
             "googleapis-common-protos>=%s" % _minimum_googleapis_common_protos_version,
+            "zstandard>=%s" % _minimum_zstandard_version,
             "numpy>=%s" % _minimum_numpy_version,
             "pyyaml>=%s" % _minimum_pyyaml_version,
         ],
-        python_requires=">=3.9",
+        python_requires=">=3.10",
         classifiers=[
             "Development Status :: 5 - Production/Stable",
-            "License :: OSI Approved :: Apache Software License",
-            "Programming Language :: Python :: 3.9",
             "Programming Language :: Python :: 3.10",
             "Programming Language :: Python :: 3.11",
             "Programming Language :: Python :: 3.12",
             "Programming Language :: Python :: 3.13",
+            "Programming Language :: Python :: 3.14",
             "Programming Language :: Python :: Implementation :: CPython",
             "Programming Language :: Python :: Implementation :: PyPy",
             "Typing :: Typed",

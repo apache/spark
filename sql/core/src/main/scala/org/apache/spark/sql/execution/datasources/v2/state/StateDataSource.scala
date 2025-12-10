@@ -41,7 +41,9 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.TimerStateUtils
 import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.DIR_NAME_STATE
 import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryCheckpointMetadata
-import org.apache.spark.sql.execution.streaming.state.{InMemoryStateSchemaProvider, KeyStateEncoderSpec, NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, StateSchemaCompatibilityChecker, StateSchemaMetadata, StateSchemaProvider, StateStore, StateStoreColFamilySchema, StateStoreConf, StateStoreId, StateStoreProviderId}
+import org.apache.spark.sql.execution.streaming.state.{InMemoryStateSchemaProvider, KeyStateEncoderSpec, NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, RocksDBStateStoreProvider, StateSchemaCompatibilityChecker, StateSchemaMetadata, StateSchemaProvider, StateStore, StateStoreColFamilySchema, StateStoreConf, StateStoreId, StateStoreProviderId}
+import org.apache.spark.sql.execution.streaming.state.OfflineStateRepartitionErrors
+import org.apache.spark.sql.execution.streaming.utils.StreamingUtils
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.streaming.TimeMode
 import org.apache.spark.sql.types.StructType
@@ -65,6 +67,14 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
     val sourceOptions = StateSourceOptions.modifySourceOptions(hadoopConf,
       StateSourceOptions.apply(session, hadoopConf, properties))
     val stateConf = buildStateStoreConf(sourceOptions.resolvedCpLocation, sourceOptions.batchId)
+    // We only support RocksDB because the repartition work that this option
+    // is built for only supports RocksDB
+    if (sourceOptions.internalOnlyReadAllColumnFamilies
+      && stateConf.providerClass != classOf[RocksDBStateStoreProvider].getName) {
+      throw OfflineStateRepartitionErrors.unsupportedStateStoreProviderError(
+        sourceOptions.resolvedCpLocation,
+        stateConf.providerClass)
+    }
     val stateStoreReaderInfo: StateStoreReaderInfo = getStoreMetadataAndRunChecks(
       sourceOptions)
 
@@ -125,7 +135,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
     val offsetLog = new StreamingQueryCheckpointMetadata(session, checkpointLocation).offsetLog
     offsetLog.get(batchId) match {
       case Some(value) =>
-        val metadata = value.metadata.getOrElse(
+        val metadata = value.metadataOpt.getOrElse(
           throw StateDataSourceErrors.offsetMetadataLogUnavailable(batchId, checkpointLocation)
         )
 
@@ -371,13 +381,15 @@ case class StateSourceOptions(
     stateVarName: Option[String],
     readRegisteredTimers: Boolean,
     flattenCollectionTypes: Boolean,
-    operatorStateUniqueIds: Option[Array[Array[String]]] = None) {
+    internalOnlyReadAllColumnFamilies: Boolean = false,
+    startOperatorStateUniqueIds: Option[Array[Array[String]]] = None,
+    endOperatorStateUniqueIds: Option[Array[Array[String]]] = None) {
   def stateCheckpointLocation: Path = new Path(resolvedCpLocation, DIR_NAME_STATE)
 
   override def toString: String = {
     var desc = s"StateSourceOptions(checkpointLocation=$resolvedCpLocation, batchId=$batchId, " +
       s"operatorId=$operatorId, storeName=$storeName, joinSide=$joinSide, " +
-      s"stateVarName=${stateVarName.getOrElse("None")}, +" +
+      s"stateVarName=${stateVarName.getOrElse("None")}, " +
       s"flattenCollectionTypes=$flattenCollectionTypes"
     if (fromSnapshotOptions.isDefined) {
       desc += s", snapshotStartBatchId=${fromSnapshotOptions.get.snapshotStartBatchId}"
@@ -391,7 +403,7 @@ case class StateSourceOptions(
   }
 }
 
-object StateSourceOptions extends DataSourceOptions {
+object StateSourceOptions extends DataSourceOptions with Logging{
   val PATH = newOption("path")
   val BATCH_ID = newOption("batchId")
   val OPERATOR_ID = newOption("operatorId")
@@ -405,6 +417,7 @@ object StateSourceOptions extends DataSourceOptions {
   val STATE_VAR_NAME = newOption("stateVarName")
   val READ_REGISTERED_TIMERS = newOption("readRegisteredTimers")
   val FLATTEN_COLLECTION_TYPES = newOption("flattenCollectionTypes")
+  val INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES = newOption("_readAllColumnFamilies")
 
   object JoinSideValues extends Enumeration {
     type JoinSideValues = Value
@@ -480,7 +493,8 @@ object StateSourceOptions extends DataSourceOptions {
       throw StateDataSourceErrors.conflictOptions(Seq(JOIN_SIDE, STORE_NAME))
     }
 
-    val resolvedCpLocation = resolvedCheckpointLocation(hadoopConf, checkpointLocation)
+    val resolvedCpLocation = StreamingUtils.resolvedCheckpointLocation(
+      hadoopConf, checkpointLocation)
 
     var batchId = Option(options.get(BATCH_ID)).map(_.toLong)
 
@@ -488,6 +502,33 @@ object StateSourceOptions extends DataSourceOptions {
     val snapshotPartitionId = Option(options.get(SNAPSHOT_PARTITION_ID)).map(_.toInt)
 
     val readChangeFeed = Option(options.get(READ_CHANGE_FEED)).exists(_.toBoolean)
+
+    val internalOnlyReadAllColumnFamilies = try {
+      Option(options.get(INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES)).exists(_.toBoolean)
+    } catch {
+      case _: IllegalArgumentException =>
+        throw StateDataSourceErrors.invalidOptionValue(INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES,
+          "Boolean value is expected")
+    }
+
+    // This config should only be used by internal callers e.g. repartitioning
+    if (internalOnlyReadAllColumnFamilies) {
+      logWarning("StateSourceOptions option INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES is enabled. " +
+        "This config should only be used for internal callers e.g. repartitioning")
+      if (stateVarName.isDefined) {
+        throw StateDataSourceErrors.conflictOptions(
+          Seq(INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES, STATE_VAR_NAME))
+      }
+      // Use storeName rather than joinSide to identify the specific join store
+      if (joinSide != JoinSideValues.none) {
+        throw StateDataSourceErrors.conflictOptions(
+          Seq(INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES, JOIN_SIDE))
+      }
+      if (readChangeFeed) {
+        throw StateDataSourceErrors.conflictOptions(
+          Seq(INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES, READ_CHANGE_FEED))
+      }
+    }
 
     val changeStartBatchId = Option(options.get(CHANGE_START_BATCH_ID)).map(_.toLong)
     var changeEndBatchId = Option(options.get(CHANGE_END_BATCH_ID)).map(_.toLong)
@@ -576,37 +617,44 @@ object StateSourceOptions extends DataSourceOptions {
       batchId.get
     }
 
-    val operatorStateUniqueIds = getOperatorStateUniqueIds(
+    val endBatchId = if (readChangeFeedOptions.isDefined) {
+      readChangeFeedOptions.get.changeEndBatchId
+    } else {
+      batchId.get
+    }
+
+    val startOperatorStateUniqueIds = getOperatorStateUniqueIds(
       sparkSession,
       startBatchId,
       operatorId,
       resolvedCpLocation)
 
-    if (operatorStateUniqueIds.isDefined) {
-      if (fromSnapshotOptions.isDefined) {
-        throw StateDataSourceErrors.invalidOptionValue(
-          SNAPSHOT_START_BATCH_ID,
-          "Snapshot reading is currently not supported with checkpoint v2.")
-      }
-      if (readChangeFeedOptions.isDefined) {
-        throw StateDataSourceErrors.invalidOptionValue(
-          READ_CHANGE_FEED,
-          "Read change feed is currently not supported with checkpoint v2.")
-      }
+    val endOperatorStateUniqueIds = if (startBatchId == endBatchId) {
+      startOperatorStateUniqueIds
+    } else {
+      getOperatorStateUniqueIds(
+        sparkSession,
+        endBatchId,
+        operatorId,
+        resolvedCpLocation)
+    }
+
+    if (startOperatorStateUniqueIds.isDefined != endOperatorStateUniqueIds.isDefined) {
+      val startFormatVersion = if (startOperatorStateUniqueIds.isDefined) 2 else 1
+      val endFormatVersion = if (endOperatorStateUniqueIds.isDefined) 2 else 1
+      throw StateDataSourceErrors.mixedCheckpointFormatVersionsNotSupported(
+        startBatchId,
+        endBatchId,
+        startFormatVersion,
+        endFormatVersion
+      )
     }
 
     StateSourceOptions(
       resolvedCpLocation, batchId.get, operatorId, storeName, joinSide,
       readChangeFeed, fromSnapshotOptions, readChangeFeedOptions,
-      stateVarName, readRegisteredTimers, flattenCollectionTypes, operatorStateUniqueIds)
-  }
-
-  private def resolvedCheckpointLocation(
-      hadoopConf: Configuration,
-      checkpointLocation: String): String = {
-    val checkpointPath = new Path(checkpointLocation)
-    val fs = checkpointPath.getFileSystem(hadoopConf)
-    checkpointPath.makeQualified(fs.getUri, fs.getWorkingDirectory).toUri.toString
+      stateVarName, readRegisteredTimers, flattenCollectionTypes, internalOnlyReadAllColumnFamilies,
+      startOperatorStateUniqueIds, endOperatorStateUniqueIds)
   }
 
   private def getLastCommittedBatch(session: SparkSession, checkpointLocation: String): Long = {

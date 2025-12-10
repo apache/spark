@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
-import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, Extract => V2Extract, FieldReference, GeneralScalarExpression, LiteralValue, NullOrdering, SortDirection, SortValue, UserDefinedScalarFunc}
+import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, Extract => V2Extract, FieldReference, GeneralScalarExpression, GetArrayItem => V2GetArrayItem, LiteralValue, NullOrdering, SortDirection, SortValue, UserDefinedScalarFunc}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, GeneralAggregateFunc, Max, Min, Sum, UserDefinedAggregateFunc}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate => V2Predicate}
 import org.apache.spark.sql.internal.SQLConf
@@ -93,7 +93,8 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
   private def generateExpression(
       expr: Expression, isPredicate: Boolean = false): Option[V2Expression] = expr match {
     case literal: Literal => Some(translateLiteral(literal))
-    case _ if expr.contextIndependentFoldable =>
+    case _ if expr.contextIndependentFoldable
+        && SQLConf.get.getConf(SQLConf.DATA_SOURCE_V2_EXPR_FOLDING) =>
       // If the expression is context independent foldable, we can convert it to a literal.
       // This is useful for increasing the coverage of V2 expressions.
       val constantExpr = ConstantFolding.constantFolding(expr)
@@ -325,6 +326,13 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
     case _: Sha2 => generateExpressionWithName("SHA2", expr, isPredicate)
     case _: StringLPad => generateExpressionWithName("LPAD", expr, isPredicate)
     case _: StringRPad => generateExpressionWithName("RPAD", expr, isPredicate)
+    case GetArrayItem(child, ordinal, failOnError) =>
+      (generateExpression(child), generateExpression(ordinal)) match {
+        case (Some(v2ArrayChild), Some(v2Ordinal)) =>
+          Some(new V2GetArrayItem(v2ArrayChild, v2Ordinal, failOnError))
+        case _ =>
+          None
+      }
     // TODO supports other expressions
     case ApplyFunctionExpression(function, children) =>
       val childrenExpressions = children.flatMap(generateExpression(_))

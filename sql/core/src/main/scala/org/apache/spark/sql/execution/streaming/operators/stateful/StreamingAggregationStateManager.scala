@@ -21,7 +21,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, GenerateUnsafeRowJoiner}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.execution.streaming.state.{ReadStateStore, StateStore, UnsafeRowPair}
+import org.apache.spark.sql.execution.streaming.state.{NoopStatePartitionKeyExtractor, ReadStateStore, StateStore, UnsafeRowPair}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -205,3 +205,9 @@ class StreamingAggregationStateManagerImplV2(
     }
   }
 }
+
+/**
+ * For aggregation state v1 and v2, the state key is the partition key i.e. the aggregation key
+ */
+class StreamingAggregationStatePartitionKeyExtractor(stateKeySchema: StructType)
+  extends NoopStatePartitionKeyExtractor(stateKeySchema)

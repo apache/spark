@@ -19,16 +19,15 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.util.control.NonFatal
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Cast, DefaultStringProducingExpression, Expression, Literal, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterViewAs, ColumnDefinition, CreateTable, CreateTempView, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, ReplaceTable, TableSpec, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, Table, TableCatalog}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.connector.catalog.{SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_COLLATION
-import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
-import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{CharType, DataType, StringType, StructField, VarcharType}
+import org.apache.spark.sql.types.{CharType, DataType, StringType, VarcharType}
 
 /**
  * Resolves string types in logical plans by assigning them the appropriate collation. The
@@ -180,9 +179,9 @@ object ApplyDefaultCollationToStringType extends Rule[LogicalPlan] {
       case replaceCols@ReplaceColumns(_: ResolvedTable, _) =>
         replaceCols.copy(columnsToAdd = replaceColumnTypes(replaceCols.columnsToAdd, newType))
 
-      case a @ AlterColumns(ResolvedTable(_, _, table: Table, _), specs: Seq[AlterColumnSpec]) =>
+      case a @ AlterColumns(ResolvedTable(_, _, _, _), specs: Seq[AlterColumnSpec]) =>
         val newSpecs = specs.map {
-          case spec if shouldApplyDefaultCollationToAlterColumn(spec, table) =>
+          case spec if shouldApplyDefaultCollationToAlterColumn(spec) =>
             spec.copy(newDataType = Some(replaceDefaultStringType(spec.newDataType.get, newType)))
           case col => col
         }
@@ -203,9 +202,9 @@ object ApplyDefaultCollationToStringType extends Rule[LogicalPlan] {
   private def pruneRedundantAlterColumnTypes(plan: LogicalPlan): LogicalPlan = {
     plan match {
       case alterColumns@AlterColumns(
-      ResolvedTable(_, _, table: Table, _), specs: Seq[AlterColumnSpec]) =>
+      ResolvedTable(_, _, _, _), specs: Seq[AlterColumnSpec]) =>
         val resolvedSpecs = specs.map { spec =>
-          if (spec.newDataType.isDefined && isStringTypeColumn(spec.column, table) &&
+          if (spec.newDataType.isDefined && isStringTypeColumn(spec.column) &&
             isDefaultStringType(spec.newDataType.get)) {
             spec.copy(newDataType = None)
           } else {
@@ -223,35 +222,28 @@ object ApplyDefaultCollationToStringType extends Rule[LogicalPlan] {
   }
 
   private def shouldApplyDefaultCollationToAlterColumn(
-      alterColumnSpec: AlterColumnSpec, table: Table): Boolean = {
+      alterColumnSpec: AlterColumnSpec): Boolean = {
     alterColumnSpec.newDataType.isDefined &&
       // Applies the default collation only if the original column's type is not StringType.
-      !isStringTypeColumn(alterColumnSpec.column, table) &&
+      !isStringTypeColumn(alterColumnSpec.column) &&
       hasDefaultStringType(alterColumnSpec.newDataType.get)
   }
 
   /**
-   * Checks whether the column's [[DataType]] is [[StringType]] in the given table. Throws an error
-   * if the column is not found.
+   * Checks whether the field's [[DataType]] is [[StringType]].
    */
-  private def isStringTypeColumn(fieldName: FieldName, table: Table): Boolean = {
-    CatalogV2Util.v2ColumnsToStructType(table.columns())
-      .findNestedField(fieldName.name, includeCollections = true, resolver = conf.resolver)
-      .map {
-        case (_, StructField(_, _: CharType, _, _)) =>
-          false
-        case (_, StructField(_, _: VarcharType, _, _)) =>
-          false
-        case (_, StructField(_, _: StringType, _, metadata))
-          if !metadata.contains(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY) =>
-          true
-        case (_, _) =>
-          false
-      }
-      .getOrElse {
-        throw QueryCompilationErrors.unresolvedColumnError(
-          toSQLId(fieldName.name), table.columns().map(_.name))
-      }
+  private def isStringTypeColumn(fieldName: FieldName): Boolean = {
+    fieldName match {
+      case ResolvedFieldName(_, field) =>
+        CharVarcharUtils.getRawType(field.metadata).getOrElse(field.dataType) match {
+          case _: CharType => false
+          case _: VarcharType => false
+          case _: StringType => true
+          case _ => false
+        }
+      case UnresolvedFieldName(name) =>
+        throw SparkException.internalError(s"Unexpected UnresolvedFieldName: $name")
+    }
   }
 
   /**

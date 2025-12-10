@@ -143,6 +143,43 @@ private[sql] object ArrowUtils {
               largeVarTypes)).asJava)
       case udt: UserDefinedType[_] =>
         toArrowField(name, udt.sqlType, nullable, timeZoneId, largeVarTypes)
+      case g: GeometryType =>
+        val fieldType =
+          new FieldType(nullable, ArrowType.Struct.INSTANCE, null)
+
+        // WKB field is tagged with additional metadata so we can identify that the arrow
+        // struct actually represents a geometry schema.
+        val wkbFieldType = new FieldType(
+          false,
+          toArrowType(BinaryType, timeZoneId, largeVarTypes),
+          null,
+          Map("geometry" -> "true", "srid" -> g.srid.toString).asJava)
+
+        new Field(
+          name,
+          fieldType,
+          Seq(
+            toArrowField("srid", IntegerType, false, timeZoneId, largeVarTypes),
+            new Field("wkb", wkbFieldType, Seq.empty[Field].asJava)).asJava)
+
+      case g: GeographyType =>
+        val fieldType =
+          new FieldType(nullable, ArrowType.Struct.INSTANCE, null, null)
+
+        // WKB field is tagged with additional metadata so we can identify that the arrow
+        // struct actually represents a geography schema.
+        val wkbFieldType = new FieldType(
+          false,
+          toArrowType(BinaryType, timeZoneId, largeVarTypes),
+          null,
+          Map("geography" -> "true", "srid" -> g.srid.toString).asJava)
+
+        new Field(
+          name,
+          fieldType,
+          Seq(
+            toArrowField("srid", IntegerType, false, timeZoneId, largeVarTypes),
+            new Field("wkb", wkbFieldType, Seq.empty[Field].asJava)).asJava)
       case _: VariantType =>
         val fieldType = new FieldType(nullable, ArrowType.Struct.INSTANCE, null)
         // The metadata field is tagged with additional metadata so we can identify that the arrow
@@ -175,6 +212,26 @@ private[sql] object ArrowUtils {
     }
   }
 
+  def isGeometryField(field: Field): Boolean = {
+    assert(field.getType.isInstanceOf[ArrowType.Struct])
+    field.getChildren.asScala
+      .map(_.getName)
+      .asJava
+      .containsAll(Seq("wkb", "srid").asJava) && field.getChildren.asScala.exists { child =>
+      child.getName == "wkb" && child.getMetadata.getOrDefault("geometry", "false") == "true"
+    }
+  }
+
+  def isGeographyField(field: Field): Boolean = {
+    assert(field.getType.isInstanceOf[ArrowType.Struct])
+    field.getChildren.asScala
+      .map(_.getName)
+      .asJava
+      .containsAll(Seq("wkb", "srid").asJava) && field.getChildren.asScala.exists { child =>
+      child.getName == "wkb" && child.getMetadata.getOrDefault("geography", "false") == "true"
+    }
+  }
+
   def fromArrowField(field: Field): DataType = {
     field.getType match {
       case _: ArrowType.Map =>
@@ -188,6 +245,26 @@ private[sql] object ArrowUtils {
         ArrayType(elementType, containsNull = elementField.isNullable)
       case ArrowType.Struct.INSTANCE if isVariantField(field) =>
         VariantType
+      case ArrowType.Struct.INSTANCE if isGeometryField(field) =>
+        // We expect that type metadata is associated with wkb field.
+        val metadataField =
+          field.getChildren.asScala.filter { child => child.getName == "wkb" }.head
+        val srid = metadataField.getMetadata.get("srid").toInt
+        if (srid == GeometryType.MIXED_SRID) {
+          GeometryType("ANY")
+        } else {
+          GeometryType(srid)
+        }
+      case ArrowType.Struct.INSTANCE if isGeographyField(field) =>
+        // We expect that type metadata is associated with wkb field.
+        val metadataField =
+          field.getChildren.asScala.filter { child => child.getName == "wkb" }.head
+        val srid = metadataField.getMetadata.get("srid").toInt
+        if (srid == GeographyType.MIXED_SRID) {
+          GeographyType("ANY")
+        } else {
+          GeographyType(srid)
+        }
       case ArrowType.Struct.INSTANCE =>
         val fields = field.getChildren().asScala.map { child =>
           val dt = fromArrowField(child)

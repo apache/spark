@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io._
-import java.nio.charset.StandardCharsets.UTF_8
 import java.util.{ArrayList => JArrayList, List => JList, Locale}
 import java.util.concurrent.TimeUnit
 
@@ -98,15 +97,9 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     val sessionState = new CliSessionState(cliConf)
 
     sessionState.in = System.in
-    try {
-      sessionState.out = new PrintStream(System.out, true, UTF_8.name())
-      sessionState.info = new PrintStream(System.err, true, UTF_8.name())
-      sessionState.err = new PrintStream(System.err, true, UTF_8.name())
-    } catch {
-      case e: UnsupportedEncodingException =>
-        closeHiveSessionStateIfStarted(sessionState)
-        exit(ERROR_PATH_NOT_FOUND)
-    }
+    sessionState.out = SparkSQLEnv.out
+    sessionState.err = SparkSQLEnv.err
+    sessionState.info = SparkSQLEnv.err
 
     if (!oproc.process_stage2(sessionState)) {
       closeHiveSessionStateIfStarted(sessionState)
@@ -178,17 +171,6 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     // Thus we can load all jars passed by --jars and AddJarsCommand.
     sessionState.getConf.setClassLoader(SparkSQLEnv.sparkSession.sharedState.jarClassLoader)
 
-    // TODO work around for set the log output to console, because the HiveContext
-    // will set the output into an invalid buffer.
-    sessionState.in = System.in
-    try {
-      sessionState.out = new PrintStream(System.out, true, UTF_8.name())
-      sessionState.info = new PrintStream(System.err, true, UTF_8.name())
-      sessionState.err = new PrintStream(System.err, true, UTF_8.name())
-    } catch {
-      case e: UnsupportedEncodingException => exit(ERROR_PATH_NOT_FOUND)
-    }
-
     // We don't propagate hive.metastore.warehouse.dir, because it might has been adjusted in
     // [[SharedState.loadHiveConfFile]] based on the user specified or default values of
     // spark.sql.warehouse.dir and hive.metastore.warehouse.dir.
@@ -219,7 +201,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
         exit(ERROR_PATH_NOT_FOUND)
     }
 
-    val reader = new ConsoleReader()
+    val reader = new ConsoleReader(new FileInputStream(FileDescriptor.in), sessionState.out)
     reader.setBellEnabled(false)
     reader.setExpandEvents(false)
     // reader.setDebug(new PrintWriter(new FileWriter("writer.debug", true)))
@@ -502,7 +484,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
             }
           } catch {
             case e: IOException =>
-              console.printError(
+              err.println(
                 s"""Failed with exception ${e.getClass.getName}: ${e.getMessage}
                    |${Utils.stringifyException(e)}
                  """.stripMargin)
@@ -518,7 +500,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           if (counter != 0) {
             responseMsg += s", Fetched $counter row(s)"
           }
-          console.printInfo(responseMsg, null)
+          err.println(responseMsg)
           // Destroy the driver to release all the locks.
           driver.destroy()
         } else {

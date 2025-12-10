@@ -67,7 +67,10 @@ object JDBCRDD extends Logging {
       case e: SQLException if dialect.isSyntaxErrorBestEffort(e) =>
         throw new SparkException(
           errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",
-          messageParameters = Map("jdbcQuery" -> fullQuery),
+          messageParameters = Map(
+            "jdbcQuery" -> fullQuery,
+            "externalEngineError" -> e.getMessage.replaceAll("\\.+$", "")
+          ),
           cause = e)
     }
   }
@@ -302,8 +305,7 @@ class JDBCRDD(
     val inputMetrics = context.taskMetrics().inputMetrics
     val part = thePart.asInstanceOf[JDBCPartition]
     conn = getConnection(part.idx)
-    import scala.jdk.CollectionConverters._
-    dialect.beforeFetch(conn, options.asProperties.asScala.toMap)
+    dialect.beforeFetch(conn, options)
 
     // This executes a generic SQL statement (or PL/SQL block) before reading
     // the table/query via JDBC. Use this feature to initialize the database
@@ -335,7 +337,10 @@ class JDBCRDD(
         case e: SQLException if dialect.isSyntaxErrorBestEffort(e) =>
           throw new SparkException(
             errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_QUERY_EXECUTION",
-            messageParameters = Map("jdbcQuery" -> sqlText),
+            messageParameters = Map(
+              "jdbcQuery" -> sqlText,
+              "externalEngineError" -> e.getMessage.replaceAll("\\.+$", "")
+            ),
             cause = e)
       }
     }

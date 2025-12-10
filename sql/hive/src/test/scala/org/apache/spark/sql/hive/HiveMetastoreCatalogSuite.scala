@@ -438,6 +438,43 @@ class DataSourceWithHiveMetastoreCatalogSuite
     }
   }
 
+  test("SPARK-54028: Table and View with complex nested schema and ALTER operations") {
+    withTable("t") {
+      val schema =
+          "struct_field STRUCT<" +
+          "`colon:field_name`:STRING" +
+          ">"
+      sql("CREATE TABLE t (" + schema + ")")
+
+      // Verify initial table schema
+      assert(spark.table("t").schema === CatalystSqlParser.parseTableSchema(schema))
+
+      withView("v") {
+        sql("CREATE VIEW v AS SELECT `struct_field` FROM t")
+
+        // Verify view schema matches the original schema
+        val expectedViewSchema = CatalystSqlParser.parseTableSchema(schema)
+        assert(spark.table("v").schema === expectedViewSchema)
+
+        // Add new column to table
+        sql("ALTER TABLE t ADD COLUMN (field_1 INT)")
+
+        // Update schema string to include new column
+        val updatedSchema = schema + ",field_1 INT"
+
+        // Verify table schema after ALTER
+        assert(spark.table("t").schema === CatalystSqlParser.parseTableSchema(updatedSchema))
+
+        // Alter view to include new column
+        sql("ALTER VIEW v AS " +
+          "SELECT `struct_field`,`field_1` FROM t")
+
+        // Verify view schema after ALTER
+        assert(spark.table("v").schema === CatalystSqlParser.parseTableSchema(updatedSchema))
+      }
+    }
+  }
+
   test("SPARK-46934: Handle special characters in struct types with CTAS") {
     withTable("t") {
       val schema = "`a.b` struct<`a.b.b`:array<string>, `a b c`:map<int, string>>"

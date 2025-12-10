@@ -28,16 +28,19 @@ jobs:
   test_report:
     if: github.event.workflow_run.conclusion != 'skipped'
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      checks: write
+      contents: read
     steps:
     - name: Download test results to report
-      uses: dawidd6/action-download-artifact@bf251b5aa9c2f7eeb574a96ee720e24f801b7c11 # pin @v6
+      uses: actions/download-artifact@v5
       with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        workflow: ${{ github.event.workflow_run.workflow_id }}
-        commit: ${{ github.event.workflow_run.head_commit.id }}
-        workflow_conclusion: completed
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        run-id: ${{ github.event.workflow_run.id }}
+        pattern: "test-*"
     - name: Publish test report
-      uses: scacap/action-surefire-report@a2911bd1a4412ec18dde2d93b1758b3e56d2a880 # pin @v1.8.0
+      uses: scacap/action-surefire-report@v1
       with:
         check_name: Report test results
         github_token: ${{ secrets.GITHUB_TOKEN }}

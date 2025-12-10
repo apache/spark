@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector.distributions;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.SortOrder;
 
 /**
@@ -26,7 +26,7 @@ import org.apache.spark.sql.connector.expressions.SortOrder;
  *
  * @since 3.2.0
  */
-@Experimental
+@Evolving
 public interface OrderedDistribution extends Distribution {
   /**
    * Returns ordering expressions.

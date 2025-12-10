@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.CollationStrength.{Default, Explicit, Implicit, Indeterminate}
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.haveSameType
 import org.apache.spark.sql.catalyst.expressions._
@@ -30,7 +31,7 @@ import org.apache.spark.sql.util.SchemaUtils
 /**
  * Type coercion helper that matches against expressions in order to apply collation type coercion.
  */
-object CollationTypeCoercion {
+object CollationTypeCoercion extends SQLConfHelper {
 
   private val COLLATION_CONTEXT_TAG = new TreeNodeTag[DataType]("collationContext")
 
@@ -74,7 +75,8 @@ object CollationTypeCoercion {
     case getMap @ GetMapValue(child, key) if getMap.keyType != key.dataType =>
       key match {
         case Literal(_, _: StringType) =>
-          GetMapValue(child, Cast(key, getMap.keyType))
+          GetMapValue(child,
+            Cast(key, getMap.keyType, timeZoneId = Some(conf.sessionLocalTimeZone)))
         case _ =>
           getMap
       }
@@ -117,7 +119,7 @@ object CollationTypeCoercion {
           case subquery: SubqueryExpression =>
             changeTypeInSubquery(subquery, newType)
 
-          case _ => Cast(expr, newDataType)
+          case _ => Cast(expr, newDataType, timeZoneId = Some(conf.sessionLocalTimeZone))
         }
 
       case _ =>

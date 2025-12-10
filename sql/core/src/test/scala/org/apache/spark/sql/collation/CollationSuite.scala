@@ -1865,6 +1865,34 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("inline COLLATE expressions in join conditions should not use nested loop join") {
+    withTable("table1", "table2", "table3") {
+      sql("CREATE TABLE table1 (id STRING, col1 STRING) USING PARQUET")
+      sql("INSERT INTO table1 VALUES ('1', 'a'), ('2', 'b')")
+
+      sql("CREATE TABLE table2 (id STRING, col1 STRING) USING PARQUET")
+      sql("INSERT INTO table2 VALUES ('1', 'a'), ('2', 'b')")
+
+      sql("CREATE TABLE table3 (col1 STRING COLLATE UTF8_LCASE_RTRIM) USING PARQUET")
+      sql("INSERT INTO table3 VALUES ('a'), ('b')")
+
+      val df = sql(
+        """SELECT t1.col1 COLLATE UTF8_LCASE_RTRIM AS result
+          |FROM table1 t1
+          |INNER JOIN table2 t2 ON t2.id = t1.id
+          |INNER JOIN table3 t3 ON t3.col1 = t1.col1 COLLATE UTF8_LCASE_RTRIM
+          |""".stripMargin
+      )
+
+      checkAnswer(df, Seq(Row("a"), Row("b")))
+
+      val queryPlan = df.queryExecution.executedPlan
+      assert(collectFirst(queryPlan) {
+        case _: BroadcastNestedLoopJoinExec => ()
+      }.isEmpty)
+    }
+  }
+
   test("hll sketch aggregate should respect collation") {
     case class HllSketchAggTestCase[R](c: String, result: R)
     val testCases = Seq(
@@ -1879,6 +1907,26 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     )
     testCases.foreach(t => {
       val q = s"SELECT hll_sketch_estimate(hll_sketch_agg(col collate ${t.c})) FROM " +
+        "VALUES ('a'), ('A'), ('b'), ('b'), ('c'), ('c ') tab(col)"
+      val df = sql(q)
+      checkAnswer(df, Seq(Row(t.result)))
+    })
+  }
+
+  test("theta sketch aggregate should respect collation") {
+    case class ThetaSketchAggTestCase[R](c: String, result: R)
+    val testCases = Seq(
+      ThetaSketchAggTestCase("UTF8_BINARY", 5),
+      ThetaSketchAggTestCase("UTF8_BINARY_RTRIM", 4),
+      ThetaSketchAggTestCase("UTF8_LCASE", 4),
+      ThetaSketchAggTestCase("UTF8_LCASE_RTRIM", 3),
+      ThetaSketchAggTestCase("UNICODE", 5),
+      ThetaSketchAggTestCase("UNICODE_RTRIM", 4),
+      ThetaSketchAggTestCase("UNICODE_CI", 4),
+      ThetaSketchAggTestCase("UNICODE_CI_RTRIM", 3)
+    )
+    testCases.foreach(t => {
+      val q = s"SELECT theta_sketch_estimate(theta_sketch_agg(col collate ${t.c})) FROM " +
         "VALUES ('a'), ('A'), ('b'), ('b'), ('c'), ('c ') tab(col)"
       val df = sql(q)
       checkAnswer(df, Seq(Row(t.result)))

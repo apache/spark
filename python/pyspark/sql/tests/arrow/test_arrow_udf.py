@@ -19,6 +19,7 @@ import os
 import time
 import unittest
 import datetime
+from typing import Iterator
 
 from pyspark.sql.functions import arrow_udf, ArrowUDFType, PandasUDFType
 from pyspark.sql import functions as F, Row
@@ -163,13 +164,13 @@ class ArrowUDFTestsMixin:
             with self.assertRaises(ParseException):
 
                 @arrow_udf("blah")
-                def foo(x):
+                def _(x):
                     return x
 
             with self.assertRaises(PySparkTypeError) as pe:
 
                 @arrow_udf(returnType="double", functionType=PandasUDFType.SCALAR)
-                def foo(df):
+                def _(df):
                     return df
 
             self.check_error(
@@ -184,7 +185,7 @@ class ArrowUDFTestsMixin:
             with self.assertRaises(PySparkTypeError) as pe:
 
                 @arrow_udf(functionType=ArrowUDFType.SCALAR)
-                def foo(x):
+                def _(x):
                     return x
 
             self.check_error(
@@ -196,7 +197,7 @@ class ArrowUDFTestsMixin:
             with self.assertRaises(PySparkTypeError) as pe:
 
                 @arrow_udf("double", 100)
-                def foo(x):
+                def _(x):
                     return x
 
             self.check_error(
@@ -208,7 +209,7 @@ class ArrowUDFTestsMixin:
             with self.assertRaises(PySparkTypeError) as pe:
 
                 @arrow_udf(returnType=PandasUDFType.GROUPED_MAP)
-                def foo(df):
+                def _(df):
                     return df
 
             self.check_error(
@@ -223,13 +224,13 @@ class ArrowUDFTestsMixin:
             with self.assertRaisesRegex(ValueError, "0-arg arrow_udfs.*not.*supported"):
 
                 @arrow_udf(LongType(), ArrowUDFType.SCALAR)
-                def zero_with_type():
+                def _():
                     return 1
 
             with self.assertRaisesRegex(ValueError, "0-arg arrow_udfs.*not.*supported"):
 
                 @arrow_udf(LongType(), ArrowUDFType.SCALAR_ITER)
-                def zero_with_type():
+                def _():
                     yield 1
                     yield 2
 
@@ -271,6 +272,40 @@ class ArrowUDFTestsMixin:
         ).collect()
         self.assertEqual(df.schema[0].dataType.simpleString(), "interval day to second")
         self.assertEqual(df.first()[0], datetime.timedelta(microseconds=123))
+
+    def test_scalar_arrow_udf_with_specified_eval_type(self):
+        import pyarrow as pa
+
+        df = self.spark.range(10).selectExpr("id", "id as v")
+        expected = df.selectExpr("(v + 1) as plus_one").collect()
+
+        @arrow_udf("long", ArrowUDFType.SCALAR)
+        def plus_one(v: pa.Array):
+            return pa.compute.add(v, 1)
+
+        result1 = df.select(plus_one("v").alias("plus_one")).collect()
+        self.assertEqual(expected, result1)
+
+        @arrow_udf("long", ArrowUDFType.SCALAR_ITER)
+        def plus_one_iter(it: Iterator[pa.Array]):
+            for v in it:
+                yield pa.compute.add(v, 1)
+
+        result2 = df.select(plus_one_iter("v").alias("plus_one")).collect()
+        self.assertEqual(expected, result2)
+
+    def test_agg_arrow_udf_with_specified_eval_type(self):
+        import pyarrow as pa
+
+        df = self.spark.range(10).selectExpr("id", "id as v")
+        expected = df.selectExpr("max(v) as m").collect()
+
+        @arrow_udf("long", ArrowUDFType.GROUPED_AGG)
+        def calc_max(v: pa.Array):
+            return pa.compute.max(v)
+
+        result = df.select(calc_max("v").alias("m")).collect()
+        self.assertEqual(expected, result)
 
 
 class ArrowUDFTests(ArrowUDFTestsMixin, ReusedSQLTestCase):

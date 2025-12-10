@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector.expressions;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Evolving;
 
 import static org.apache.spark.sql.connector.expressions.NullOrdering.NULLS_FIRST;
 import static org.apache.spark.sql.connector.expressions.NullOrdering.NULLS_LAST;
@@ -30,7 +30,7 @@ import static org.apache.spark.sql.connector.expressions.NullOrdering.NULLS_LAST
  *
  * @since 3.2.0
  */
-@Experimental
+@Evolving
 public enum SortDirection {
   ASCENDING(NULLS_FIRST), DESCENDING(NULLS_LAST);
 

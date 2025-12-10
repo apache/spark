@@ -78,5 +78,61 @@ public class JavaTypeInferenceBeans {
   static class JavaBeanWithGenericHierarchy extends JavaBeanWithGenericsABC<Integer> {
 
   }
+
+  // SPARK-46679: Test classes for nested parameterized types with multi-level inheritance
+  static class Foo<T> {
+    private T t;
+
+    public T getT() {
+      return t;
+    }
+
+    public void setT(T t) {
+      this.t = t;
+    }
+  }
+
+  static class FooWrapper<U> {
+    private Foo<U> foo;
+
+    public Foo<U> getFoo() {
+      return foo;
+    }
+
+    public void setFoo(Foo<U> foo) {
+      this.foo = foo;
+    }
+  }
+
+  static class StringFooWrapper extends FooWrapper<String> {
+  }
+
+  // SPARK-46679: Additional test classes for same type variable names at different levels
+  static class StringBarWrapper extends BarWrapper<String> {
+  }
+
+  static class BarWrapper<T> {
+    private Bar<T> bar;
+
+    public Bar<T> getBar() {
+      return bar;
+    }
+
+    public void setBar(Bar<T> bar) {
+      this.bar = bar;
+    }
+  }
+
+  static class Bar<T> {
+    private T t;
+
+    public T getT() {
+      return t;
+    }
+
+    public void setT(T t) {
+      this.t = t;
+    }
+  }
 }
 

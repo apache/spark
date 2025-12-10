@@ -53,7 +53,7 @@ import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.execution.streaming.runtime._
 import org.apache.spark.sql.execution.streaming.sinks.FileStreamSink
 import org.apache.spark.sql.execution.streaming.sources.{RateStreamProvider, TextSocketSourceProvider}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SessionStateHelper, SQLConf}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
@@ -100,12 +100,14 @@ case class DataSource(
     partitionColumns: Seq[String] = Seq.empty,
     bucketSpec: Option[BucketSpec] = None,
     options: Map[String, String] = Map.empty,
-    catalogTable: Option[CatalogTable] = None) extends Logging {
+    catalogTable: Option[CatalogTable] = None) extends SessionStateHelper with Logging {
 
   case class SourceInfo(name: String, schema: StructType, partitionColumns: Seq[String])
 
+  private val conf: SQLConf = getSqlConf(sparkSession)
+
   lazy val providingClass: Class[_] = {
-    val cls = DataSource.lookupDataSource(className, sparkSession.sessionState.conf)
+    val cls = DataSource.lookupDataSource(className, conf)
     // `providingClass` is used for resolving data source relation for catalog tables.
     // As now catalog for data source V2 is under development, here we fall back all the
     // [[FileDataSourceV2]] to [[FileFormat]] to guarantee the current catalog works.
@@ -120,8 +122,7 @@ case class DataSource(
 
   private[sql] def providingInstance(): Any = providingClass.getConstructor().newInstance()
 
-  private def newHadoopConfiguration(): Configuration =
-    sparkSession.sessionState.newHadoopConfWithOptions(options)
+  private def newHadoopConfiguration(): Configuration = getHadoopConf(sparkSession, options)
 
   private def makeQualified(path: Path): Path = {
     val fs = path.getFileSystem(newHadoopConfiguration())
@@ -130,7 +131,7 @@ case class DataSource(
 
   lazy val sourceInfo: SourceInfo = sourceSchema()
   private val caseInsensitiveOptions = CaseInsensitiveMap(options)
-  private val equality = sparkSession.sessionState.conf.resolver
+  private val equality = conf.resolver
 
   /**
    * Whether or not paths should be globbed before being used to access files.
@@ -262,7 +263,7 @@ case class DataSource(
           }
         }
 
-        val isSchemaInferenceEnabled = sparkSession.sessionState.conf.streamingSchemaInference
+        val isSchemaInferenceEnabled = conf.streamingSchemaInference
         val isTextSource = providingClass == classOf[text.TextFileFormat]
         val isSingleVariantColumn = (providingClass == classOf[json.JsonFileFormat] ||
           providingClass == classOf[csv.CSVFileFormat]) &&
@@ -281,8 +282,7 @@ case class DataSource(
             checkAndGlobPathIfNecessary(checkEmptyGlobPath = false, checkFilesExist = false)
           createInMemoryFileIndex(globbedPaths)
         })
-        val forceNullable = sparkSession.sessionState.conf
-          .getConf(SQLConf.FILE_SOURCE_SCHEMA_FORCE_NULLABLE)
+        val forceNullable = conf.getConf(SQLConf.FILE_SOURCE_SCHEMA_FORCE_NULLABLE)
         val sourceDataSchema = if (forceNullable) dataSchema.asNullable else dataSchema
         SourceInfo(
           s"FileSource[$path]",
@@ -381,7 +381,7 @@ case class DataSource(
           if FileStreamSink.hasMetadata(
             caseInsensitiveOptions.get("path").toSeq ++ paths,
             newHadoopConfiguration(),
-            sparkSession.sessionState.conf) =>
+            conf) =>
         val basePath = new Path((caseInsensitiveOptions.get("path").toSeq ++ paths).head)
         val fileCatalog = new MetadataLogFileIndex(sparkSession, basePath,
           caseInsensitiveOptions, userSpecifiedSchema)
@@ -407,11 +407,11 @@ case class DataSource(
 
       // This is a non-streaming file based datasource.
       case (format: FileFormat, _) =>
-        val useCatalogFileIndex = sparkSession.sessionState.conf.manageFilesourcePartitions &&
+        val useCatalogFileIndex = conf.manageFilesourcePartitions &&
           catalogTable.isDefined && catalogTable.get.tracksPartitionsInCatalog &&
           catalogTable.get.partitionColumnNames.nonEmpty
         val (fileCatalog, dataSchema, partitionSchema) = if (useCatalogFileIndex) {
-          val defaultTableSize = sparkSession.sessionState.conf.defaultSizeInBytes
+          val defaultTableSize = conf.defaultSizeInBytes
           val index = new CatalogFileIndex(
             sparkSession,
             catalogTable.get,
@@ -475,7 +475,7 @@ case class DataSource(
       throw QueryExecutionErrors.dataPathNotSpecifiedError()
     }
 
-    val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+    val caseSensitive = conf.caseSensitiveAnalysis
     PartitioningUtils.validatePartitionColumn(data.schema, partitionColumns, caseSensitive)
 
     val fileIndex = catalogTable.map(_.identifier).map { tableIdent =>
@@ -531,7 +531,7 @@ case class DataSource(
         disallowWritingIntervals(
           outputColumns.toStructType.asNullable, format.toString, forbidAnsiIntervals = false)
         val cmd = planForWritingFileFormat(format, mode, data)
-        val qe = sparkSession.sessionState.executePlan(cmd)
+        val qe = sessionState(sparkSession).executePlan(cmd)
         qe.assertCommandExecuted()
         // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring
         copy(userSpecifiedSchema = Some(outputColumns.toStructType.asNullable)).resolveRelation()
@@ -555,7 +555,7 @@ case class DataSource(
         SaveIntoDataSourceCommand(data, dataSource, caseInsensitiveOptions, mode)
       case format: FileFormat =>
         disallowWritingIntervals(data.schema, format.toString, forbidAnsiIntervals = false)
-        DataSource.validateSchema(format.toString, data.schema, sparkSession.sessionState.conf)
+        DataSource.validateSchema(format.toString, data.schema, conf)
         planForWritingFileFormat(format, mode, data)
       case _ => throw SparkException.internalError(
         s"${providingClass.getCanonicalName} does not allow create table as select.")

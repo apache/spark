@@ -1511,8 +1511,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "continuousSources" -> continuousSources.mkString(", ")))
   }
 
-  def noSuchTableError(ident: Identifier): NoSuchTableException = {
-    new NoSuchTableException(ident.asMultipartIdentifier)
+  def noSuchTableError(catalogName: String, ident: Identifier): NoSuchTableException = {
+    new NoSuchTableException(catalogName +: ident.asMultipartIdentifier)
   }
 
   def noSuchTableError(nameParts: Seq[String]): Throwable = {
@@ -1726,7 +1726,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def userSpecifiedSchemaMismatchActualSchemaError(
       schema: StructType, actualSchema: StructType): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1133",
+      errorClass = "USER_SPECIFIED_AND_ACTUAL_SCHEMA_MISMATCH",
       messageParameters = Map(
         "schema" -> schema.toDDL,
         "actualSchema" -> actualSchema.toDDL))
@@ -1768,6 +1768,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1140",
       messageParameters = Map("provider" -> provider))
+  }
+
+  def failedToCreatePlanForDirectQueryError(
+      dataSourceType: String, cause: Throwable): Throwable = {
+    new AnalysisException(
+      errorClass = "FAILED_TO_CREATE_PLAN_FOR_DIRECT_QUERY",
+      messageParameters = Map("dataSourceType" -> dataSourceType),
+      cause = Some(cause))
   }
 
   def findMultipleDataSourceError(provider: String, sourceNames: Seq[String]): Throwable = {
@@ -2113,6 +2121,38 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     }
   }
 
+  def tableIdChangedAfterAnalysis(
+      tableName: String,
+      capturedTableId: String,
+      currentTableId: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.TABLE_ID_MISMATCH",
+      messageParameters = Map(
+        "tableName" -> toSQLId(tableName),
+        "capturedTableId" -> capturedTableId,
+        "currentTableId" -> currentTableId))
+  }
+
+  def columnsChangedAfterAnalysis(
+      tableName: String,
+      errors: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
+      messageParameters = Map(
+        "tableName" -> toSQLId(tableName),
+        "errors" -> errors.mkString("- ", "\n- ", "")))
+  }
+
+  def metadataColumnsChangedAfterAnalysis(
+      tableName: String,
+      errors: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.METADATA_COLUMNS_MISMATCH",
+      messageParameters = Map(
+        "tableName" -> toSQLId(tableName),
+        "errors" -> errors.mkString("- ", "\n- ", "")))
+  }
+
   def numberOfPartitionsNotAllowedWithUnspecifiedDistributionError(): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_WRITE_DISTRIBUTION.PARTITION_NUM_WITH_UNSPECIFIED_DISTRIBUTION",
@@ -2198,12 +2238,58 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
-  def missingCatalogAbilityError(plugin: CatalogPlugin, ability: String): Throwable = {
+  def missingCatalogFunctionsAbilityError(plugin: CatalogPlugin): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1184",
-      messageParameters = Map(
-        "plugin" -> plugin.name,
-        "ability" -> ability))
+      errorClass = "MISSING_CATALOG_ABILITY.FUNCTIONS",
+      messageParameters = Map("plugin" -> plugin.name))
+  }
+
+  def missingCatalogTableValuedFunctionsAbilityError(plugin: CatalogPlugin): Throwable = {
+    new AnalysisException(
+      errorClass = "MISSING_CATALOG_ABILITY.TABLE_VALUED_FUNCTIONS",
+      messageParameters = Map("plugin" -> plugin.name))
+  }
+
+  def missingCatalogCreateFunctionAbilityError(plugin: CatalogPlugin): Throwable = {
+    new AnalysisException(
+      errorClass = "MISSING_CATALOG_ABILITY.CREATE_FUNCTION",
+      messageParameters = Map("plugin" -> plugin.name))
+  }
+
+  def missingCatalogDropFunctionAbilityError(plugin: CatalogPlugin): Throwable = {
+    new AnalysisException(
+      errorClass = "MISSING_CATALOG_ABILITY.DROP_FUNCTION",
+      messageParameters = Map("plugin" -> plugin.name))
+  }
+
+  def missingCatalogRefreshFunctionAbilityError(plugin: CatalogPlugin): Throwable = {
+    new AnalysisException(
+      errorClass = "MISSING_CATALOG_ABILITY.REFRESH_FUNCTION",
+      messageParameters = Map("plugin" -> plugin.name))
+  }
+
+  def missingCatalogNamespacesAbilityError(plugin: CatalogPlugin): Throwable = {
+    new AnalysisException(
+      errorClass = "MISSING_CATALOG_ABILITY.NAMESPACES",
+      messageParameters = Map("plugin" -> plugin.name))
+  }
+
+  def missingCatalogProceduresAbilityError(plugin: CatalogPlugin): Throwable = {
+    new AnalysisException(
+      errorClass = "MISSING_CATALOG_ABILITY.PROCEDURES",
+      messageParameters = Map("plugin" -> plugin.name))
+  }
+
+  def missingCatalogTablesAbilityError(plugin: CatalogPlugin): Throwable = {
+    new AnalysisException(
+      errorClass = "MISSING_CATALOG_ABILITY.TABLES",
+      messageParameters = Map("plugin" -> plugin.name))
+  }
+
+  def missingCatalogViewsAbilityError(plugin: CatalogPlugin): Throwable = {
+    new AnalysisException(
+      errorClass = "MISSING_CATALOG_ABILITY.VIEWS",
+      messageParameters = Map("plugin" -> plugin.name))
   }
 
   def tableValuedArgumentsNotYetImplementedForSqlFunctions(
@@ -2239,13 +2325,17 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def identifierTooManyNamePartsError(originalIdentifier: String): Throwable = {
     new AnalysisException(
       errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
-      messageParameters = Map("identifier" -> toSQLId(originalIdentifier)))
+      messageParameters = Map(
+        "identifier" -> toSQLId(originalIdentifier),
+        "limit" -> "2"))
   }
 
   def identifierTooManyNamePartsError(names: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "IDENTIFIER_TOO_MANY_NAME_PARTS",
-      messageParameters = Map("identifier" -> toSQLId(names)))
+      messageParameters = Map(
+        "identifier" -> toSQLId(names),
+        "limit" -> "2"))
   }
 
   def emptyMultipartIdentifierError(): Throwable = {
@@ -2385,7 +2475,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def cannotResolveColumnNameAmongAttributesError(
       colName: String, fieldNames: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1201",
+      errorClass = "UNRESOLVED_COLUMN_AMONG_FIELD_NAMES",
       messageParameters = Map(
         "colName" -> colName,
         "fieldNames" -> fieldNames))
@@ -3475,19 +3565,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "config" -> SQLConf.DATAFRAME_PIVOT_MAX_VALUES.key))
   }
 
-  def cannotModifyValueOfStaticConfigError(key: String): Throwable = {
-    new AnalysisException(
-      errorClass = "CANNOT_MODIFY_CONFIG",
-      messageParameters = Map("key" -> toSQLConf(key), "docroot" -> SPARK_DOC_ROOT)
-    )
-  }
-
-  def cannotModifyValueOfSparkConfigError(key: String, docroot: String): Throwable = {
-    new AnalysisException(
-      errorClass = "CANNOT_MODIFY_CONFIG",
-      messageParameters = Map("key" -> toSQLConf(key), "docroot" -> docroot))
-  }
-
   def commandExecutionInRunnerUnsupportedError(runner: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1327",
@@ -4131,10 +4208,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
-  def invalidExecuteImmediateVariableType(dataType: DataType): Throwable = {
+  def invalidExecuteImmediateExpressionType(dataType: DataType): Throwable = {
     throw new AnalysisException(
-      errorClass = "INVALID_VARIABLE_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
-      messageParameters = Map("varType" -> toSQLType(dataType)))
+      errorClass = "INVALID_EXPR_TYPE_FOR_QUERY_EXECUTE_IMMEDIATE",
+      messageParameters = Map("exprType" -> toSQLType(dataType)))
   }
 
   def nullSQLStringExecuteImmediate(varName: String): Throwable = {
@@ -4146,12 +4223,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def invalidStatementForExecuteInto(queryString: String): Throwable = {
     throw new AnalysisException(
       errorClass = "INVALID_STATEMENT_FOR_EXECUTE_INTO",
-      messageParameters = Map("sqlString" -> toSQLStmt(queryString)))
-  }
-
-  def nestedExecuteImmediate(queryString: String): Throwable = {
-    throw new AnalysisException(
-      errorClass = "NESTED_EXECUTE_IMMEDIATE",
       messageParameters = Map("sqlString" -> toSQLStmt(queryString)))
   }
 
@@ -4383,5 +4454,42 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       ),
       origin = origin
     )
+  }
+
+  def pythonWorkerLoggingNotEnabledError(): Throwable = {
+    new AnalysisException(
+      errorClass = "FEATURE_NOT_ENABLED",
+      messageParameters = Map(
+        "featureName" -> "Python Worker Logging",
+        "configKey" -> "spark.sql.pyspark.worker.logging.enabled",
+        "configValue" -> "true"
+      )
+    )
+  }
+
+  def columnsChangedAfterViewWithPlanCreation(
+      viewName: Seq[String],
+      tableName: Seq[String],
+      errors: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
+      messageParameters = Map(
+        "viewName" -> toSQLId(viewName),
+        "tableName" -> toSQLId(tableName),
+        "colType" -> "data",
+        "errors" -> errors.mkString("- ", "\n- ", "")))
+  }
+
+  def metadataColumnsChangedAfterViewWithPlanCreation(
+      viewName: Seq[String],
+      tableName: Seq[String],
+      errors: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
+      messageParameters = Map(
+        "viewName" -> toSQLId(viewName),
+        "tableName" -> toSQLId(tableName),
+        "colType" -> "metadata",
+        "errors" -> errors.mkString("- ", "\n- ", "")))
   }
 }

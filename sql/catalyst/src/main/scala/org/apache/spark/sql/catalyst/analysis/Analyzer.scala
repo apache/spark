@@ -80,7 +80,8 @@ object SimpleAnalyzer extends Analyzer(
       FunctionRegistry.builtin,
       TableFunctionRegistry.builtin) {
       override def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean): Unit = {}
-    })) {
+    }),
+  RelationCache.empty) {
   override def resolver: Resolver = caseSensitiveResolution
 }
 
@@ -135,13 +136,11 @@ object FakeV2SessionCatalog extends TableCatalog with FunctionCatalog with Suppo
  *                              if `t` was a permanent table when the current view was created, it
  *                              should still be a permanent table when resolving the current view,
  *                              even if a temp view `t` has been created.
- * @param isExecuteImmediate Whether the current plan is created by EXECUTE IMMEDIATE. Used when
- *                           resolving variables, as SQL Scripting local variables should not be
- *                           visible from EXECUTE IMMEDIATE.
  * @param outerPlan The query plan from the outer query that can be used to resolve star
  *                  expressions in a subquery.
  */
 case class AnalysisContext(
+    isDefault: Boolean = false,
     catalogAndNamespace: Seq[String] = Nil,
     nestedViewDepth: Int = 0,
     maxNestedViewDepth: Int = -1,
@@ -155,7 +154,6 @@ case class AnalysisContext(
     referredTempFunctionNames: mutable.Set[String] = mutable.Set.empty,
     referredTempVariableNames: Seq[Seq[String]] = Seq.empty,
     outerPlan: Option[LogicalPlan] = None,
-    isExecuteImmediate: Boolean = false,
     collation: Option[String] = None,
 
     /**
@@ -179,7 +177,7 @@ case class AnalysisContext(
 
 object AnalysisContext {
   private val value = new ThreadLocal[AnalysisContext]() {
-    override def initialValue: AnalysisContext = AnalysisContext()
+    override def initialValue: AnalysisContext = AnalysisContext(isDefault = true)
   }
 
   def get: AnalysisContext = value.get()
@@ -205,36 +203,30 @@ object AnalysisContext {
       originContext.maxNestedViewDepth
     }
     val context = AnalysisContext(
-      viewDesc.viewCatalogAndNamespace,
-      originContext.nestedViewDepth + 1,
-      maxNestedViewDepth,
-      originContext.relationCache,
-      viewDesc.viewReferredTempViewNames,
-      mutable.Set(viewDesc.viewReferredTempFunctionNames: _*),
-      viewDesc.viewReferredTempVariableNames,
-      isExecuteImmediate = originContext.isExecuteImmediate,
+      isDefault = false,
+      catalogAndNamespace = viewDesc.viewCatalogAndNamespace,
+      nestedViewDepth = originContext.nestedViewDepth + 1,
+      maxNestedViewDepth = maxNestedViewDepth,
+      relationCache = originContext.relationCache,
+      referredTempViewNames = viewDesc.viewReferredTempViewNames,
+      referredTempFunctionNames = mutable.Set(viewDesc.viewReferredTempFunctionNames: _*),
+      referredTempVariableNames = viewDesc.viewReferredTempVariableNames,
       collation = viewDesc.collation)
     set(context)
     try f finally { set(originContext) }
   }
 
-  def withExecuteImmediateContext[A](f: => A): A = {
-    val originContext = value.get()
-    val context = originContext.copy(isExecuteImmediate = true)
-
-    set(context)
-    try f finally { set(originContext) }
-  }
 
   def withNewAnalysisContext[A](f: => A): A = {
     val originContext = value.get()
     reset()
+    set(get.copy(isDefault = false))
     try f finally { set(originContext) }
   }
 
   def withOuterPlan[A](outerPlan: LogicalPlan)(f: => A): A = {
     val originContext = value.get()
-    val context = originContext.copy(outerPlan = Some(outerPlan))
+    val context = originContext.copy(isDefault = false, outerPlan = Some(outerPlan))
     set(context)
     try f finally { set(originContext) }
   }
@@ -294,11 +286,14 @@ object Analyzer {
  * Provides a logical query plan analyzer, which translates [[UnresolvedAttribute]]s and
  * [[UnresolvedRelation]]s into fully typed objects using information in a [[SessionCatalog]].
  */
-class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor[LogicalPlan]
+class Analyzer(
+    override val catalogManager: CatalogManager,
+    private[sql] val sharedRelationCache: RelationCache = RelationCache.empty)
+  extends RuleExecutor[LogicalPlan]
   with CheckAnalysis with AliasHelper with SQLConfHelper with ColumnResolutionHelper {
 
   private val v1SessionCatalog: SessionCatalog = catalogManager.v1SessionCatalog
-  private val relationResolution = new RelationResolution(catalogManager)
+  private val relationResolution = new RelationResolution(catalogManager, sharedRelationCache)
   private val functionResolution = new FunctionResolution(catalogManager, relationResolution)
 
   override protected def validatePlanChanges(
@@ -320,13 +315,21 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     if (plan.analyzed) {
       plan
     } else {
-      AnalysisContext.reset()
-      try {
-        AnalysisHelper.markInAnalyzer {
-          HybridAnalyzer.fromLegacyAnalyzer(legacyAnalyzer = this).apply(plan, tracker)
-        }
-      } finally {
+      if (AnalysisContext.get.isDefault) {
         AnalysisContext.reset()
+        try {
+          AnalysisHelper.markInAnalyzer {
+            HybridAnalyzer.fromLegacyAnalyzer(legacyAnalyzer = this, tracker = tracker).apply(plan)
+          }
+        } finally {
+          AnalysisContext.reset()
+        }
+      } else {
+        AnalysisContext.withNewAnalysisContext {
+          AnalysisHelper.markInAnalyzer {
+            HybridAnalyzer.fromLegacyAnalyzer(legacyAnalyzer = this, tracker = tracker).apply(plan)
+          }
+        }
       }
     }
   }
@@ -422,6 +425,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       WindowsSubstitution,
       EliminateUnions,
       EliminateLazyExpression),
+    Batch("Apply Limit All", Once, ApplyLimitAll),
     Batch("Disable Hints", Once,
       new ResolveHints.DisableHints),
     Batch("Hints", fixedPoint,
@@ -495,10 +499,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       RewriteMergeIntoTable ::
       MoveParameterizedQueriesDown ::
       BindParameters ::
-      new SubstituteExecuteImmediate(
-        catalogManager,
-        resolveChild = executeSameContext,
-        checkAnalysis = checkAnalysis) ::
       typeCoercionRules() ++
       Seq(
         ResolveWithCTE,
@@ -640,6 +640,10 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         case c: CollectMetrics
             if c.child.resolved && AliasResolution.hasUnresolvedAlias(c.metrics) =>
           c.copy(metrics = AliasResolution.assignAliases(c.metrics))
+
+        case u: UnresolvedEventTimeWatermark
+          if u.child.resolved && AliasResolution.hasUnresolvedAlias(Seq(u.eventTimeColExpr)) =>
+          u.copy(eventTimeColExpr = AliasResolution.assignAliases(Seq(u.eventTimeColExpr)).head)
       }
     }
   }
@@ -1185,12 +1189,26 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       }
     }
 
+    private def resolveAsV2Relation(plan: LogicalPlan): Option[DataSourceV2Relation] = {
+      plan match {
+        case ref: V2TableReference =>
+          EliminateSubqueryAliases(relationResolution.resolveReference(ref)) match {
+            case r: DataSourceV2Relation => Some(r)
+            case _ => None
+          }
+        case r: DataSourceV2Relation => Some(r)
+        case _ => None
+      }
+    }
+
     def apply(plan: LogicalPlan)
         : LogicalPlan = plan.resolveOperatorsUpWithPruning(AlwaysProcess.fn, ruleId) {
       case i @ InsertIntoStatement(table, _, _, _, _, _, _) =>
         val relation = table match {
           case u: UnresolvedRelation if !u.isStreaming =>
             resolveRelation(u).getOrElse(u)
+          case r: V2TableReference =>
+            relationResolution.resolveReference(r)
           case other => other
         }
 
@@ -1210,19 +1228,23 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             resolveRelation(u).map(unwrapRelationPlan).map {
               case v: View => throw QueryCompilationErrors.writeIntoViewNotAllowedError(
                 v.desc.identifier, write)
-              case r: DataSourceV2Relation => write.withNewTable(r)
               case u: UnresolvedCatalogRelation =>
                 throw QueryCompilationErrors.writeIntoV1TableNotAllowedError(
                   u.tableMeta.identifier, write)
-              case other =>
-                throw QueryCompilationErrors.writeIntoTempViewNotAllowedError(
-                  u.multipartIdentifier.quoted)
+              case plan =>
+                resolveAsV2Relation(plan).map(write.withNewTable).getOrElse {
+                  throw QueryCompilationErrors.writeIntoTempViewNotAllowedError(
+                    u.multipartIdentifier.quoted)
+                }
             }.getOrElse(write)
           case _ => write
         }
 
       case u: UnresolvedRelation =>
         resolveRelation(u).map(resolveViews(_, u.options)).getOrElse(u)
+
+      case r: V2TableReference =>
+        relationResolution.resolveReference(r)
 
       case r @ RelationTimeTravel(u: UnresolvedRelation, timestamp, version)
           if timestamp.forall(ts => ts.resolved && !SubqueryExpression.hasSubquery(ts)) =>
@@ -1670,7 +1692,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case u: UpdateTable => resolveReferencesInUpdate(u)
 
       case m @ MergeIntoTable(targetTable, sourceTable, _, _, _, _, _)
-        if !m.resolved && targetTable.resolved && sourceTable.resolved && !m.needSchemaEvolution =>
+        if !m.resolved && targetTable.resolved && sourceTable.resolved =>
+
+        // Do not throw exception for schema evolution case.
+        // This allows unresolved assignment keys a chance to be resolved by a second pass
+        // by newly column/nested fields added by schema evolution.
+        val throws = !m.schemaEvolutionEnabled
 
         EliminateSubqueryAliases(targetTable) match {
           case r: NamedRelation if r.skipSchemaResolution =>
@@ -1680,29 +1707,45 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             m
 
           case _ =>
+            def findAttrInTarget(name: String): Option[Attribute] = {
+              targetTable.output.find(targetAttr => conf.resolver(name, targetAttr.name))
+            }
             val newMatchedActions = m.matchedActions.map {
               case DeleteAction(deleteCondition) =>
                 val resolvedDeleteCondition = deleteCondition.map(
                   resolveExpressionByPlanChildren(_, m))
                 DeleteAction(resolvedDeleteCondition)
-              case UpdateAction(updateCondition, assignments) =>
+              case UpdateAction(updateCondition, assignments, fromStar) =>
                 val resolvedUpdateCondition = updateCondition.map(
                   resolveExpressionByPlanChildren(_, m))
                 UpdateAction(
                   resolvedUpdateCondition,
                   // The update value can access columns from both target and source tables.
-                  resolveAssignments(assignments, m, MergeResolvePolicy.BOTH))
+                  resolveAssignments(assignments, m, MergeResolvePolicy.BOTH,
+                    throws = throws),
+                  fromStar)
               case UpdateStarAction(updateCondition) =>
-                // Use only source columns.  Missing columns in target will be handled in
-                // ResolveRowLevelCommandAssignments.
-                val assignments = targetTable.output.flatMap{ targetAttr =>
-                  sourceTable.output.find(
-                      sourceCol => conf.resolver(sourceCol.name, targetAttr.name))
-                    .map(Assignment(targetAttr, _))}
+                // Expand star to top level source columns.  If source has less columns than target,
+                // assignments will be added by ResolveRowLevelCommandAssignments later.
+                val assignments = if (m.schemaEvolutionEnabled) {
+                  // For schema evolution case, generate assignments for missing target columns.
+                  // These columns will be added by ResolveMergeIntoTableSchemaEvolution later.
+                  sourceTable.output.map { sourceAttr =>
+                    val key = findAttrInTarget(sourceAttr.name).getOrElse(
+                      UnresolvedAttribute(sourceAttr.name))
+                    Assignment(key, sourceAttr)
+                  }
+                } else {
+                  targetTable.output.map { attr =>
+                    Assignment(attr, UnresolvedAttribute(Seq(attr.name)))
+                  }
+                }
                 UpdateAction(
                   updateCondition.map(resolveExpressionByPlanChildren(_, m)),
                   // For UPDATE *, the value must be from source table.
-                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE))
+                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE,
+                    throws = throws),
+                  fromStar = true)
               case o => o
             }
             val newNotMatchedActions = m.notMatchedActions.map {
@@ -1713,21 +1756,32 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   resolveExpressionByPlanOutput(_, m.sourceTable))
                 InsertAction(
                   resolvedInsertCondition,
-                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE))
+                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE,
+                    throws = throws))
               case InsertStarAction(insertCondition) =>
                 // The insert action is used when not matched, so its condition and value can only
                 // access columns from the source table.
                 val resolvedInsertCondition = insertCondition.map(
                   resolveExpressionByPlanOutput(_, m.sourceTable))
-                // Use only source columns.  Missing columns in target will be handled in
-                // ResolveRowLevelCommandAssignments.
-                val assignments = targetTable.output.flatMap{ targetAttr =>
-                  sourceTable.output.find(
-                      sourceCol => conf.resolver(sourceCol.name, targetAttr.name))
-                    .map(Assignment(targetAttr, _))}
+                // Expand star to top level source columns.  If source has less columns than target,
+                // assignments will be added by ResolveRowLevelCommandAssignments later.
+                val assignments = if (m.schemaEvolutionEnabled) {
+                  // For schema evolution case, generate assignments for missing target columns.
+                  // These columns will be added by ResolveMergeIntoTableSchemaEvolution later.
+                  sourceTable.output.map { sourceAttr =>
+                    val key = findAttrInTarget(sourceAttr.name).getOrElse(
+                      UnresolvedAttribute(sourceAttr.name))
+                    Assignment(key, sourceAttr)
+                  }
+                } else {
+                  targetTable.output.map { attr =>
+                    Assignment(attr, UnresolvedAttribute(Seq(attr.name)))
+                  }
+                }
                 InsertAction(
                   resolvedInsertCondition,
-                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE))
+                  resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE,
+                    throws = throws))
               case o => o
             }
             val newNotMatchedBySourceActions = m.notMatchedBySourceActions.map {
@@ -1735,13 +1789,15 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 val resolvedDeleteCondition = deleteCondition.map(
                   resolveExpressionByPlanOutput(_, targetTable))
                 DeleteAction(resolvedDeleteCondition)
-              case UpdateAction(updateCondition, assignments) =>
+              case UpdateAction(updateCondition, assignments, fromStar) =>
                 val resolvedUpdateCondition = updateCondition.map(
                   resolveExpressionByPlanOutput(_, targetTable))
                 UpdateAction(
                   resolvedUpdateCondition,
                   // The update value can access columns from the target table only.
-                  resolveAssignments(assignments, m, MergeResolvePolicy.TARGET))
+                  resolveAssignments(assignments, m, MergeResolvePolicy.TARGET,
+                    throws = throws),
+                  fromStar)
               case o => o
             }
 
@@ -1802,8 +1858,6 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       case s: Sort if !s.resolved || s.missingInput.nonEmpty =>
         resolveReferencesInSort(s)
 
-      // Pass for Execute Immediate as arguments will be resolved by [[SubstituteExecuteImmediate]].
-      case e : ExecuteImmediateQuery => e
 
       case d: DataFrameDropColumns if !d.resolved =>
         resolveDataFrameDropColumns(d)
@@ -1820,11 +1874,12 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
     def resolveAssignments(
         assignments: Seq[Assignment],
         mergeInto: MergeIntoTable,
-        resolvePolicy: MergeResolvePolicy.Value): Seq[Assignment] = {
+        resolvePolicy: MergeResolvePolicy.Value,
+        throws: Boolean): Seq[Assignment] = {
       assignments.map { assign =>
         val resolvedKey = assign.key match {
           case c if !c.resolved =>
-            resolveMergeExprOrFail(c, Project(Nil, mergeInto.targetTable))
+            resolveMergeExpr(c, Project(Nil, mergeInto.targetTable), throws)
           case o => o
         }
         val resolvedValue = assign.value match {
@@ -1844,7 +1899,9 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
             } else {
               resolvedExpr
             }
-            checkResolvedMergeExpr(withDefaultResolved, resolvePlan)
+            if (throws) {
+              checkResolvedMergeExpr(withDefaultResolved, resolvePlan)
+            }
             withDefaultResolved
           case o => o
         }
@@ -1852,9 +1909,11 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       }
     }
 
-    private def resolveMergeExprOrFail(e: Expression, p: LogicalPlan): Expression = {
-      val resolved = resolveExprInAssignment(e, p)
-      checkResolvedMergeExpr(resolved, p)
+    private def resolveMergeExpr(e: Expression, p: LogicalPlan, throws: Boolean): Expression = {
+      val resolved = resolveExprInAssignment(e, p, throws)
+      if (throws) {
+        checkResolvedMergeExpr(resolved, p)
+      }
       resolved
     }
 
@@ -1945,7 +2004,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
               f1.nameParts == Seq("count") &&
               f1.arguments.length == 1) {
             f1.arguments.foreach {
-              case u: UnresolvedStar if u.isQualifiedByTable(child, resolver) =>
+              case u: UnresolvedStar if u.isQualifiedByTable(child.output, resolver) =>
                 throw QueryCompilationErrors
                   .singleTableStarInCountNotAllowedError(u.target.get.mkString("."))
               case _ => // do nothing
@@ -2174,8 +2233,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 v1SessionCatalog.resolvePersistentTableFunction(
                   ident.asFunctionIdentifier, u.functionArgs)
               } else {
-                throw QueryCompilationErrors.missingCatalogAbilityError(
-                  catalog, "table-valued functions")
+                throw QueryCompilationErrors.missingCatalogTableValuedFunctionsAbilityError(
+                  catalog)
               }
             }
             resolvedFunc.transformAllExpressionsWithPruning(
@@ -2360,7 +2419,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         val inputType = extractInputType(args)
         val bound = unbound.bind(inputType)
         validateParameterModes(bound)
-        val rearrangedArgs = NamedParametersSupport.defaultRearrange(bound, args)
+        val rearrangedArgs =
+          NamedParametersSupport.defaultRearrange(bound, args, SQLConf.get.resolver)
         Call(ResolvedProcedure(catalog, ident, bound), rearrangedArgs, execute)
     }
 
@@ -3193,7 +3253,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   unrequiredChildIndex = Nil,
                   outer = outer,
                   qualifier = None,
-                  generatorOutput = ResolveGenerate.makeGeneratorOutput(generator, names),
+                  generatorOutput = GeneratorResolution.makeGeneratorOutput(generator, names),
                   child)
                 (Some(g), res._2 ++ g.nullableOutput)
               case other =>
@@ -3241,28 +3301,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         if (g.generator.children.exists(ExtractGenerator.hasGenerator)) {
           throw QueryCompilationErrors.nestedGeneratorError(g.generator)
         }
-        g.copy(generatorOutput = makeGeneratorOutput(g.generator, g.generatorOutput.map(_.name)))
-      }
-    }
-
-    /**
-     * Construct the output attributes for a [[Generator]], given a list of names.  If the list of
-     * names is empty names are assigned from field names in generator.
-     */
-    private[analysis] def makeGeneratorOutput(
-        generator: Generator,
-        names: Seq[String]): Seq[Attribute] = {
-      val elementAttrs = DataTypeUtils.toAttributes(generator.elementSchema)
-
-      if (names.length == elementAttrs.length) {
-        names.zip(elementAttrs).map {
-          case (name, attr) => attr.withName(name)
-        }
-      } else if (names.isEmpty) {
-        elementAttrs
-      } else {
-        throw QueryCompilationErrors.aliasesNumberNotMatchUDTFOutputError(
-          elementAttrs.size, names.mkString(","))
+        g.copy(generatorOutput =
+          GeneratorResolution.makeGeneratorOutput(g.generator, g.generatorOutput.map(_.name)))
       }
     }
   }

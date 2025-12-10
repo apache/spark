@@ -50,6 +50,8 @@ class ArrowUDFType:
 
     GROUPED_AGG = PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF
 
+    GROUPED_AGG_ITER = PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF
+
 
 def arrow_udf(f=None, returnType=None, functionType=None):
     """
@@ -301,6 +303,69 @@ def arrow_udf(f=None, returnType=None, functionType=None):
             Therefore, mutating the input arrays is not allowed and will cause incorrect results.
             For the same reason, users should also not rely on the index of the input arrays.
 
+    * Iterator of Arrays to Scalar
+        `Iterator[pyarrow.Array]` -> `Any`
+
+        The function takes an iterator of `pyarrow.Array` and returns a scalar value. This is
+        useful for grouped aggregations where the UDF can process all batches for a group
+        iteratively, which is more memory-efficient than loading all data at once. The returned
+        scalar can be a python primitive type, a numpy data type, or a `pyarrow.Scalar` instance.
+
+        .. note:: Only a single UDF is supported per aggregation.
+
+        >>> from typing import Iterator
+        >>> @arrow_udf("double")
+        ... def arrow_mean(it: Iterator[pa.Array]) -> float:
+        ...     sum_val = 0.0
+        ...     cnt = 0
+        ...     for v in it:
+        ...         assert isinstance(v, pa.Array)
+        ...         sum_val += pa.compute.sum(v).as_py()
+        ...         cnt += len(v)
+        ...     return sum_val / cnt
+        ...
+        >>> df = spark.createDataFrame(
+        ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v"))
+        >>> df.groupby("id").agg(arrow_mean(df['v'])).show()
+        +---+-------------+
+        | id|arrow_mean(v)|
+        +---+-------------+
+        |  1|          1.5|
+        |  2|          6.0|
+        +---+-------------+
+
+    * Iterator of Multiple Arrays to Scalar
+        `Iterator[Tuple[pyarrow.Array, ...]]` -> `Any`
+
+        The function takes an iterator of a tuple of multiple `pyarrow.Array` and returns a
+        scalar value. This is useful for grouped aggregations with multiple input columns.
+
+        .. note:: Only a single UDF is supported per aggregation.
+
+        >>> from typing import Iterator, Tuple
+        >>> import numpy as np
+        >>> @arrow_udf("double")
+        ... def arrow_weighted_mean(it: Iterator[Tuple[pa.Array, pa.Array]]) -> float:
+        ...     weighted_sum = 0.0
+        ...     weight = 0.0
+        ...     for v, w in it:
+        ...         assert isinstance(v, pa.Array)
+        ...         assert isinstance(w, pa.Array)
+        ...         weighted_sum += np.dot(v, w)
+        ...         weight += pa.compute.sum(w).as_py()
+        ...     return weighted_sum / weight
+        ...
+        >>> df = spark.createDataFrame(
+        ...     [(1, 1.0, 1.0), (1, 2.0, 2.0), (2, 3.0, 1.0), (2, 5.0, 2.0), (2, 10.0, 3.0)],
+        ...     ("id", "v", "w"))
+        >>> df.groupby("id").agg(arrow_weighted_mean(df["v"], df["w"])).show()
+        +---+-------------------------+
+        | id|arrow_weighted_mean(v, w)|
+        +---+-------------------------+
+        |  1|       1.6666666666666...|
+        |  2|        7.166666666666...|
+        +---+-------------------------+
+
     Notes
     -----
     The user-defined functions do not support conditional expressions or short circuiting
@@ -322,6 +387,7 @@ def arrow_udf(f=None, returnType=None, functionType=None):
     pyspark.sql.GroupedData.applyInArrow
     pyspark.sql.PandasCogroupedOps.applyInArrow
     pyspark.sql.UDFRegistration.register
+    pyspark.sql.GroupedData.applyInPandas
     """
     require_minimum_pyarrow_version()
 
@@ -345,6 +411,9 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 
     .. versionchanged:: 4.0.0
         Supports keyword-arguments in SCALAR and GROUPED_AGG type.
+
+    .. versionchanged:: 4.1.0
+        Supports iterator API in GROUPED_MAP type.
 
     Parameters
     ----------
@@ -632,37 +701,14 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     pyspark.sql.UDFRegistration.register
     """
 
-    # The following table shows most of Pandas data and SQL type conversions in Pandas UDFs that
-    # are not yet visible to the user. Some of behaviors are buggy and might be changed in the near
-    # future. The table might have to be eventually documented externally.
-    # Please see SPARK-52943's PR to see the codes in order to generate the table below.
-    #
-    # +-----------------------------+----------------------+------------------+------------------+------------------+--------------------+--------------------+------------------+------------------+------------------+------------------+--------------+--------------+--------------+-----------------------------------+-----------------------------------------------------+-----------------+------------------+--------------------+-----------------------------+--------------+-----------------+------------------+---------------+--------------------------------+  # noqa
-    # |SQL Type \ Pandas Value(Type)|None(object(NoneType))|        True(bool)|           1(int8)|          1(int16)|            1(int32)|            1(int64)|          1(uint8)|         1(uint16)|         1(uint32)|         1(uint64)|  1.0(float16)|  1.0(float32)|  1.0(float64)|1970-01-01 00:00:00(datetime64[ns])|1970-01-01 00:00:00-05:00(datetime64[ns, US/Eastern])|a(object(string))|12(object(string))|  1(object(Decimal))|[1 2 3](object(array[int32]))| 1.0(float128)|(1+0j)(complex64)|(1+0j)(complex128)|    A(category)|1 days 00:00:00(timedelta64[ns])|  # noqa
-    # +-----------------------------+----------------------+------------------+------------------+------------------+--------------------+--------------------+------------------+------------------+------------------+------------------+--------------+--------------+--------------+-----------------------------------+-----------------------------------------------------+-----------------+------------------+--------------------+-----------------------------+--------------+-----------------+------------------+---------------+--------------------------------+  # noqa
-    # |                      boolean|                  None|              True|              True|              True|                True|                True|              True|              True|              True|              True|          True|          True|          True|                                  X|                                                    X|                X|                 X|                   X|                            X|             X|                X|                 X|              X|                               X|  # noqa
-    # |                      tinyint|                  None|                 1|                 1|                 1|                   1|                   1|                 1|                 1|                 1|                 1|             1|             1|             1|                                  X|                                                    X|                X|                12|                   1|                            X|             X|                X|                 X|              X|                               X|  # noqa
-    # |                     smallint|                  None|                 1|                 1|                 1|                   1|                   1|                 1|                 1|                 1|                 1|             1|             1|             1|                                  X|                                                    X|                X|                12|                   1|                            X|             X|                X|                 X|              X|                               X|  # noqa
-    # |                          int|                  None|                 1|                 1|                 1|                   1|                   1|                 1|                 1|                 1|                 1|             1|             1|             1|                                  X|                                                    X|                X|                12|                   1|                            X|             X|                X|                 X|              X|                               X|  # noqa
-    # |                       bigint|                  None|                 1|                 1|                 1|                   1|                   1|                 1|                 1|                 1|                 1|             1|             1|             1|                                  0|                                       18000000000000|                X|                12|                   1|                            X|             X|                X|                 X|              X|                  86400000000000|  # noqa
-    # |                        float|                  None|               1.0|               1.0|               1.0|                 1.0|                 1.0|               1.0|               1.0|               1.0|               1.0|           1.0|           1.0|           1.0|                                  X|                                                    X|                X|              12.0|                 1.0|                            X|             X|                X|                 X|              X|                               X|  # noqa
-    # |                       double|                  None|               1.0|               1.0|               1.0|                 1.0|                 1.0|               1.0|               1.0|               1.0|               1.0|           1.0|           1.0|           1.0|                                  X|                                                    X|                X|              12.0|                 1.0|                            X|             X|                X|                 X|              X|                               X|  # noqa
-    # |                         date|                  None|                 X|                 X|                 X|datetime.date(197...|                   X|                 X|                 X|                 X|                 X|             X|             X|             X|               datetime.date(197...|                                 datetime.date(197...|                X|                 X|datetime.date(197...|                            X|             X|                X|                 X|              X|                               X|  # noqa
-    # |                    timestamp|                  None|                 X|                 X|                 X|                   X|datetime.datetime...|                 X|                 X|                 X|                 X|             X|             X|             X|               datetime.datetime...|                                 datetime.datetime...|                X|                 X|datetime.datetime...|                            X|             X|                X|                 X|              X|                               X|  # noqa
-    # |                       string|                  None|                 X|                 X|                 X|                   X|                   X|                 X|                 X|                 X|                 X|             X|             X|             X|                                  X|                                                    X|              'a'|              '12'|                   X|                            X|             X|                X|                 X|            'A'|                               X|  # noqa
-    # |                decimal(10,0)|                  None|                 X|      Decimal('1')|      Decimal('1')|        Decimal('1')|                   X|      Decimal('1')|      Decimal('1')|      Decimal('1')|                 X|  Decimal('1')|  Decimal('1')|  Decimal('1')|                                  X|                                                    X|                X|                 X|        Decimal('1')|                            X|             X|                X|                 X|              X|                               X|  # noqa
-    # |                   array<int>|                  None|                 X|                 X|                 X|                   X|                   X|                 X|                 X|                 X|                 X|             X|             X|             X|                                  X|                                                    X|                X|            [1, 2]|                   X|                    [1, 2, 3]|             X|                X|                 X|              X|                               X|  # noqa
-    # |              map<string,int>|                  None|                 X|                 X|                 X|                   X|                   X|                 X|                 X|                 X|                 X|             X|             X|             X|                                  X|                                                    X|                X|                 X|                   X|                            X|             X|                X|                 X|              X|                               X|  # noqa
-    # |               struct<_1:int>|                     X|                 X|                 X|                 X|                   X|                   X|                 X|                 X|                 X|                 X|             X|             X|             X|                                  X|                                                    X|                X|                 X|                   X|                            X|             X|                X|                 X|              X|                               X|  # noqa
-    # |                       binary|                  None|bytearray(b'\x01')|bytearray(b'\x01')|bytearray(b'\x01')|  bytearray(b'\x01')|  bytearray(b'\x01')|bytearray(b'\x01')|bytearray(b'\x01')|bytearray(b'\x01')|bytearray(b'\x01')|bytearray(b'')|bytearray(b'')|bytearray(b'')|                     bytearray(b'')|                                       bytearray(b'')|  bytearray(b'a')|  bytearray(b'12')|                   X|                            X|bytearray(b'')|   bytearray(b'')|    bytearray(b'')|bytearray(b'A')|                  bytearray(b'')|  # noqa
-    # +-----------------------------+----------------------+------------------+------------------+------------------+--------------------+--------------------+------------------+------------------+------------------+------------------+--------------+--------------+--------------+-----------------------------------+-----------------------------------------------------+-----------------+------------------+--------------------+-----------------------------+--------------+-----------------+------------------+---------------+--------------------------------+  # noqa
-    #
-    # Note: DDL formatted string is used for 'SQL Type' for simplicity. This string can be
-    #       used in `returnType`.
-    # Note: The values inside of the table are generated by `repr`.
-    # Note: Python 3.11.9, Pandas 2.2.3 and PyArrow 17.0.0 are used.
-    # Note: Timezone is KST.
-    # Note: 'X' means it throws an exception during the conversion.
+    # The return type and input type behavior of pandas_udfs is documented in
+    # python/pyspark/sql/tests/udf_type_tests.
+    # It shows most of Pandas data and SQL type conversions in Pandas UDFs that are not
+    # yet visible to the user.
+    # Some of behaviors are buggy and might be changed in the near future. The table might
+    # have to be eventually documented externally.
+    # The folder python/pyspark/sql/tests/udf_type_tests contains type tests and golden
+    # files, as well as the code to regenerate the tables.
     require_minimum_pandas_version()
     require_minimum_pyarrow_version()
 
@@ -713,6 +759,7 @@ def vectorized_udf(
         PythonEvalType.SQL_SCALAR_PANDAS_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+        PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
@@ -723,6 +770,7 @@ def vectorized_udf(
         PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF,
         PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF,
         PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
+        PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
         PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF,
         None,
     ]:  # None means it should infer the type from type hints.
@@ -737,6 +785,7 @@ def vectorized_udf(
         PythonEvalType.SQL_SCALAR_ARROW_UDF,
         PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
         PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
+        PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
         None,
     ]:  # None means it should infer the type from type hints.
         raise PySparkTypeError(
@@ -782,7 +831,19 @@ def _validate_vectorized_udf(f, evalType, kind: str = "pandas") -> int:
             UserWarning,
         )
     elif evalType in [
+        PythonEvalType.SQL_SCALAR_ARROW_UDF,
+        PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
+        PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
+        PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
+    ]:
+        warnings.warn(
+            "It is preferred to specify type hints for "
+            "arrow UDF instead of specifying arrow UDF type.",
+            UserWarning,
+        )
+    elif evalType in [
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+        PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
@@ -792,6 +853,7 @@ def _validate_vectorized_udf(f, evalType, kind: str = "pandas") -> int:
         PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF,
         PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF,
         PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
+        PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
         PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF,
         PythonEvalType.SQL_ARROW_BATCHED_UDF,
     ]:
@@ -847,6 +909,19 @@ def _validate_vectorized_udf(f, evalType, kind: str = "pandas") -> int:
             },
         )
 
+    if evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF and len(argspec.args) not in (
+        1,
+        2,
+    ):
+        raise PySparkValueError(
+            errorClass="INVALID_PANDAS_UDF",
+            messageParameters={
+                "detail": "the function in groupby.applyInPandas with iterator API must take "
+                "either one argument (batches: Iterator[pandas.DataFrame]) or two arguments "
+                "(key, batches: Iterator[pandas.DataFrame]).",
+            },
+        )
+
     if evalType == PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF and len(argspec.args) not in (1, 2):
         raise PySparkValueError(
             errorClass="INVALID_PANDAS_UDF",
@@ -893,8 +968,16 @@ def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession
     import pyspark.sql.pandas.functions
+    from pyspark.testing.utils import have_pandas, have_pyarrow
 
     globs = pyspark.sql.column.__dict__.copy()
+
+    if not have_pandas or not have_pyarrow:
+        del pyspark.sql.pandas.functions.pandas_udf.__doc__
+
+    if not have_pyarrow:
+        del pyspark.sql.pandas.functions.arrow_udf.__doc__
+
     spark = (
         SparkSession.builder.master("local[4]")
         .appName("pyspark.sql.pandas.functions tests")

@@ -428,8 +428,11 @@ case class KeyGroupedPartitioning(
   }
 
   lazy val uniquePartitionValues: Seq[InternalRow] = {
+    val internalRowComparableFactory =
+      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
+        expressions.map(_.dataType))
     partitionValues
-        .map(InternalRowComparableWrapper(_, expressions))
+        .map(internalRowComparableFactory)
         .distinct
         .map(_.row)
   }
@@ -448,11 +451,14 @@ object KeyGroupedPartitioning {
     val projectedPartitionValues = partitionValues.map(project(expressions, projectionPositions, _))
     val projectedOriginalPartitionValues =
       originalPartitionValues.map(project(expressions, projectionPositions, _))
+    val internalRowComparableFactory =
+      InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
+        projectedExpressions.map(_.dataType))
 
     val finalPartitionValues = projectedPartitionValues
-        .map(InternalRowComparableWrapper(_, projectedExpressions))
-        .distinct
-        .map(_.row)
+      .map(internalRowComparableFactory)
+      .distinct
+      .map(_.row)
 
     KeyGroupedPartitioning(projectedExpressions, finalPartitionValues.length,
       finalPartitionValues, projectedOriginalPartitionValues)
@@ -626,6 +632,50 @@ case class BroadcastPartitioning(mode: BroadcastMode) extends Partitioning {
  *   - Creating a partitioning that can be used to re-partition another child, so that to make it
  *      having a compatible partitioning as this node.
  */
+
+/**
+ * Represents a partitioning where partition IDs are passed through directly from the
+ * DirectShufflePartitionID expression. This partitioning scheme is used when users
+ * want to directly control partition placement rather than using hash-based partitioning.
+ *
+ * This partitioning maps directly to the PartitionIdPassthrough RDD partitioner.
+ */
+case class ShufflePartitionIdPassThrough(
+    expr: DirectShufflePartitionID,
+    numPartitions: Int) extends Expression with Partitioning with Unevaluable {
+
+  override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec = {
+    ShufflePartitionIdPassThroughSpec(this, distribution)
+  }
+
+  def partitionIdExpression: Expression = Pmod(expr.child, Literal(numPartitions))
+
+  def expressions: Seq[Expression] = expr :: Nil
+  override def children: Seq[Expression] = expr :: Nil
+  override def nullable: Boolean = false
+  override def dataType: DataType = IntegerType
+
+  override def satisfies0(required: Distribution): Boolean = {
+    super.satisfies0(required) || {
+      required match {
+        // TODO(SPARK-53428): Support Direct Passthrough Partitioning in the Streaming Joins
+        case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _) =>
+          val partitioningExpressions = expr.child :: Nil
+          if (requireAllClusterKeys) {
+            c.areAllClusterKeysMatched(partitioningExpressions)
+          } else {
+            partitioningExpressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
+          }
+        case _ => false
+      }
+    }
+  }
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): ShufflePartitionIdPassThrough =
+    copy(expr = newChildren.head.asInstanceOf[DirectShufflePartitionID])
+}
+
 trait ShuffleSpec {
   /**
    * Returns the number of partitions of this shuffle spec
@@ -823,12 +873,14 @@ case class KeyGroupedShuffleSpec(
     //        transform functions.
     //  4. the partition values from both sides are following the same order.
     case otherSpec @ KeyGroupedShuffleSpec(otherPartitioning, otherDistribution, _) =>
+      lazy val internalRowComparableFactory =
+        InternalRowComparableWrapper.getInternalRowComparableWrapperFactory(
+          partitioning.expressions.map(_.dataType))
       distribution.clustering.length == otherDistribution.clustering.length &&
         numPartitions == other.numPartitions && areKeysCompatible(otherSpec) &&
           partitioning.partitionValues.zip(otherPartitioning.partitionValues).forall {
             case (left, right) =>
-              InternalRowComparableWrapper(left, partitioning.expressions)
-                .equals(InternalRowComparableWrapper(right, partitioning.expressions))
+              internalRowComparableFactory(left).equals(internalRowComparableFactory(right))
           }
     case ShuffleSpecCollection(specs) =>
       specs.exists(isCompatibleWith)
@@ -899,10 +951,13 @@ case class KeyGroupedShuffleSpec(
       }
 
   override def createPartitioning(clustering: Seq[Expression]): Partitioning = {
-    val newExpressions: Seq[Expression] = clustering.zip(partitioning.expressions).map {
-      case (c, e: TransformExpression) => TransformExpression(
-        e.function, Seq(c), e.numBucketsOpt)
-      case (c, _) => c
+    assert(clustering.size == distribution.clustering.size,
+      "Required distributions of join legs should be the same size.")
+
+    val newExpressions = partitioning.expressions.zip(keyPositions).map {
+      case (te: TransformExpression, positionSet) =>
+        te.copy(children = te.children.map(_ => clustering(positionSet.head)))
+      case (_, positionSet) => clustering(positionSet.head)
     }
     KeyGroupedPartitioning(newExpressions,
       partitioning.numPartitions,
@@ -913,16 +968,62 @@ case class KeyGroupedShuffleSpec(
 object KeyGroupedShuffleSpec {
   def reducePartitionValue(
       row: InternalRow,
-      expressions: Seq[Expression],
-      reducers: Seq[Option[Reducer[_, _]]]):
-    InternalRowComparableWrapper = {
-    val partitionVals = row.toSeq(expressions.map(_.dataType))
+      reducers: Seq[Option[Reducer[_, _]]],
+      dataTypes: Seq[DataType],
+      internalRowComparableWrapperFactory: InternalRow => InternalRowComparableWrapper
+  ): InternalRowComparableWrapper = {
+    val partitionVals = row.toSeq(dataTypes)
     val reducedRow = partitionVals.zip(reducers).map{
       case (v, Some(reducer: Reducer[Any, Any])) => reducer.reduce(v)
       case (v, _) => v
     }.toArray
-    InternalRowComparableWrapper(new GenericInternalRow(reducedRow), expressions)
+    internalRowComparableWrapperFactory(new GenericInternalRow(reducedRow))
   }
+}
+
+case class ShufflePartitionIdPassThroughSpec(
+    partitioning: ShufflePartitionIdPassThrough,
+    distribution: ClusteredDistribution) extends ShuffleSpec {
+
+  /**
+   * A sequence where each element is a set of positions of the partition key to the cluster
+   * keys. Similar to HashShuffleSpec, this maps the partitioning expression to positions
+   * in the distribution clustering keys.
+   */
+  lazy val keyPositions: mutable.BitSet = {
+    val distKeyToPos = mutable.Map.empty[Expression, mutable.BitSet]
+    distribution.clustering.zipWithIndex.foreach { case (distKey, distKeyPos) =>
+      distKeyToPos.getOrElseUpdate(distKey.canonicalized, mutable.BitSet.empty).add(distKeyPos)
+    }
+    distKeyToPos.getOrElse(partitioning.expr.child.canonicalized, mutable.BitSet.empty)
+  }
+
+  override def isCompatibleWith(other: ShuffleSpec): Boolean = other match {
+    case SinglePartitionShuffleSpec =>
+      partitioning.numPartitions == 1
+    case otherPassThroughSpec @ ShufflePartitionIdPassThroughSpec(
+        otherPartitioning, otherDistribution) =>
+      // As ShufflePartitionIdPassThrough only allows a single expression
+      // as the partitioning expression, we check compatibility as follows:
+      // 1. Same number of clustering expressions
+      // 2. Same number of partitions
+      // 3. each partitioning expression from both sides has overlapping positions in their
+      //    corresponding distributions.
+      distribution.clustering.length == otherDistribution.clustering.length &&
+      partitioning.numPartitions == otherPartitioning.numPartitions && {
+        val otherKeyPositions = otherPassThroughSpec.keyPositions
+        keyPositions.intersect(otherKeyPositions).nonEmpty
+      }
+    case ShuffleSpecCollection(specs) =>
+      specs.exists(isCompatibleWith)
+    case _ =>
+      false
+  }
+
+  // We don't support creating partitioning for ShufflePartitionIdPassThrough.
+  override def canCreatePartitioning: Boolean = false
+
+  override def numPartitions: Int = partitioning.numPartitions
 }
 
 case class ShuffleSpecCollection(specs: Seq[ShuffleSpec]) extends ShuffleSpec {

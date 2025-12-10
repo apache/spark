@@ -22,6 +22,7 @@ import java.util.{Objects, UUID}
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.analysis.resolver.ResolverTag
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.trees.{TreeNodeTag, TreePattern}
@@ -254,6 +255,11 @@ case class Alias(child: Expression, name: String)(
     s"${child.sql} AS $qualifierPrefix${quoteIfNeeded(name)}"
   }
 
+  // Copying this alias with a new child expression.
+  def withNewChild(newChild: Expression): Alias = {
+    withNewChildInternal(newChild)
+  }
+
   override protected def withNewChildInternal(newChild: Expression): Alias =
     copy(child = newChild)(exprId, qualifier, explicitMetadata, nonInheritableMetadataKeys)
 }
@@ -410,7 +416,21 @@ case class PrettyAttribute(
   })
 
   override def toString: String = name
-  override def sql: String = toString
+  override def sql: String = {
+    if (getTagValue(ResolverTag.SINGLE_PASS_IS_LCA).nonEmpty) {
+      // For a query like:
+      //
+      // {{{ select 1 as a, a + 1 }}}
+      //
+      // the output schema will be: [a: int, lateralAliasReference(a): int]
+      //
+      // With current alias resolution single-pass cannot reproduce this behavior, therefore we
+      // need to explicitly assign this name if the attribute is an LCA.
+      s"lateralAliasReference($toString)"
+    } else {
+      toString
+    }
+  }
 
   override def withNullability(newNullability: Boolean): Attribute =
     throw SparkUnsupportedOperationException()

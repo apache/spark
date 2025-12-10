@@ -13,44 +13,6 @@ CreateVariable defaultvalueexpression(null, null), false
 
 
 -- !query
-DECLARE VARIABLE var1, var2, var3 INT
--- !query analysis
-CreateVariable defaultvalueexpression(null, null), false
-:- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
-:- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var2
-+- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var3
-
-
--- !query
-DECLARE OR REPLACE VARIABLE var1, var2 DOUBLE
--- !query analysis
-CreateVariable defaultvalueexpression(null, null), true
-:- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
-+- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var2
-
-
--- !query
-DROP TEMPORARY VARIABLE var1
--- !query analysis
-DropVariable false
-+- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
-
-
--- !query
-DROP TEMPORARY VARIABLE var2
--- !query analysis
-DropVariable false
-+- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var2
-
-
--- !query
-DROP TEMPORARY VARIABLE var3
--- !query analysis
-DropVariable false
-+- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var3
-
-
--- !query
 SET VARIABLE title = '-- Basic sanity --'
 -- !query analysis
 SetVariable [variablereference(system.session.title=CAST(NULL AS STRING))]
@@ -1285,6 +1247,147 @@ DropVariable false
 
 
 -- !query
+SET VARIABLE title = 'DECLARE VARIABLE - multiple variables declared at once'
+-- !query analysis
+SetVariable [variablereference(system.session.title='SET VARIABLE - comma separated target')]
++- Project [DECLARE VARIABLE - multiple variables declared at once AS title#x]
+   +- OneRowRelation
+
+
+-- !query
+DECLARE VARIABLE var1, var2, var3 INT
+-- !query analysis
+CreateVariable defaultvalueexpression(null, null), false
+:- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
+:- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var2
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var3
+
+
+-- !query
+DECLARE VARIABLE var4, var5, var6 INT DEFAULT CAST(RAND(0) * 10 AS INT)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+DECLARE VARIABLE var7, var8, var9 DEFAULT 5
+-- !query analysis
+CreateVariable defaultvalueexpression(5, 5), false
+:- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var7
+:- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var8
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var9
+
+
+-- !query
+SELECT var4 = var5, var4 = var6, var5 = var6
+-- !query analysis
+Project [(variablereference(system.session.var4=7) = variablereference(system.session.var5=7)) AS (variablereference(system.session.var4=7) = variablereference(system.session.var5=7))#x, (variablereference(system.session.var4=7) = variablereference(system.session.var6=7)) AS (variablereference(system.session.var4=7) = variablereference(system.session.var6=7))#x, (variablereference(system.session.var5=7) = variablereference(system.session.var6=7)) AS (variablereference(system.session.var5=7) = variablereference(system.session.var6=7))#x]
++- OneRowRelation
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE var1, var2, var3 DOUBLE
+-- !query analysis
+CreateVariable defaultvalueexpression(null, null), true
+:- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
+:- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var2
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var3
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE var4, var5, var6 DOUBLE DEFAULT RAND(0)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE var7, var8, var9 DEFAULT 1.5
+-- !query analysis
+CreateVariable defaultvalueexpression(1.5, 1.5), true
+:- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var7
+:- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var8
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var9
+
+
+-- !query
+SELECT var4 = var5, var4 = var6, var5 = var6
+-- !query analysis
+Project [(variablereference(system.session.var4=0.7604953758285915D) = variablereference(system.session.var5=0.7604953758285915D)) AS (variablereference(system.session.var4=0.7604953758285915D) = variablereference(system.session.var5=0.7604953758285915D))#x, (variablereference(system.session.var4=0.7604953758285915D) = variablereference(system.session.var6=0.7604953758285915D)) AS (variablereference(system.session.var4=0.7604953758285915D) = variablereference(system.session.var6=0.7604953758285915D))#x, (variablereference(system.session.var5=0.7604953758285915D) = variablereference(system.session.var6=0.7604953758285915D)) AS (variablereference(system.session.var5=0.7604953758285915D) = variablereference(system.session.var6=0.7604953758285915D))#x]
++- OneRowRelation
+
+
+-- !query
+DROP TEMPORARY VARIABLE var1
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var1
+
+
+-- !query
+DROP TEMPORARY VARIABLE var2
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var2
+
+
+-- !query
+DROP TEMPORARY VARIABLE var3
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var3
+
+
+-- !query
+DROP TEMPORARY VARIABLE var4
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var4
+
+
+-- !query
+DROP TEMPORARY VARIABLE var5
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var5
+
+
+-- !query
+DROP TEMPORARY VARIABLE var6
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var6
+
+
+-- !query
+DROP TEMPORARY VARIABLE var7
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var7
+
+
+-- !query
+DROP TEMPORARY VARIABLE var8
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var8
+
+
+-- !query
+DROP TEMPORARY VARIABLE var9
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.var9
+
+
+-- !query
+SET VARIABLE title = 'DECLARE VARIABLE - duplicate names'
+-- !query analysis
+SetVariable [variablereference(system.session.title='DECLARE VARIABLE - multiple variables declared at once')]
++- Project [DECLARE VARIABLE - duplicate names AS title#x]
+   +- OneRowRelation
+
+
+-- !query
 DECLARE VARIABLE var1, var2, vAr1 INT
 -- !query analysis
 org.apache.spark.sql.AnalysisException
@@ -1313,7 +1416,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SET VARIABLE title = 'SET VARIABLE - row assignment'
 -- !query analysis
-SetVariable [variablereference(system.session.title='SET VARIABLE - comma separated target')]
+SetVariable [variablereference(system.session.title='DECLARE VARIABLE - duplicate names')]
 +- Project [SET VARIABLE - row assignment AS title#x]
    +- OneRowRelation
 

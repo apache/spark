@@ -1012,7 +1012,7 @@ class DatasetSuite extends QueryTest
     assert(err.getMessage.contains("An Observation can be used with a Dataset only once"))
 
     // streaming datasets are not supported
-    val streamDf = new MemoryStream[Int](0, sqlContext).toDF()
+    val streamDf = new MemoryStream[Int](0, spark).toDF()
     val streamObservation = Observation("stream")
     val streamErr = intercept[IllegalArgumentException] {
       streamDf.observe(streamObservation, avg($"value").cast("int").as("avg_val"))
@@ -2877,6 +2877,24 @@ class DatasetSuite extends QueryTest
     checkDataset(Seq(arrayMutableSet).toDS(), arrayMutableSet)
     checkDataset(Seq(seqMutableSet).toDS(), seqMutableSet)
     checkDataset(Seq(mapMutableSet).toDS(), mapMutableSet)
+  }
+
+  test("SPARK-54620: Observation should not blocking forever") {
+    val observation = Observation("row_count")
+
+    var df = Seq.empty[(Int, Int)].toDF("v1", "v2")
+    df = df.observe(observation,
+      functions.count(functions.lit(1)).alias("record_cnt"))
+    df = df.repartition($"v1")
+      .select($"v1" + 1 as "v1", $"v2" + 1 as "v2")
+      .join(
+        Seq((1, 2), (3, 4)).toDF("v1", "v2").repartition($"v2"),
+        Seq("v1"),
+        "inner")
+    df.collect()
+
+    val metrics = observation.get
+    assert(metrics.isEmpty)
   }
 }
 

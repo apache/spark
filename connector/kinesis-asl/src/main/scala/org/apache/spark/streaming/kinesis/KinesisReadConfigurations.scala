@@ -44,9 +44,9 @@ private[kinesis] object KinesisReadConfigurations {
 
   def apply(ssc: StreamingContext): KinesisReadConfigurations = {
     KinesisReadConfigurations(
-      maxRetries = ssc.sc.getConf.getInt(RETRY_MAX_ATTEMPTS_KEY, DEFAULT_MAX_RETRIES),
+      maxRetries = ssc.sc.getReadOnlyConf.getInt(RETRY_MAX_ATTEMPTS_KEY, DEFAULT_MAX_RETRIES),
       retryWaitTimeMs = JavaUtils.timeStringAsMs(
-        ssc.sc.getConf.get(RETRY_WAIT_TIME_KEY, DEFAULT_RETRY_WAIT_TIME)),
+        ssc.sc.getReadOnlyConf.get(RETRY_WAIT_TIME_KEY, DEFAULT_RETRY_WAIT_TIME)),
       retryTimeoutMs = ssc.graph.batchDuration.milliseconds)
   }
 

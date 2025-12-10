@@ -658,6 +658,7 @@ abstract class SchemaPruningSuite
             |where not exists (select null from employees e where e.name.first = c.name.first
             |  and e.employer.name = c.employer.company.name)
             |""".stripMargin)
+        // TODO: SPARK-51381: Fix the schema pruning for nested columns
         checkScan(query,
           "struct<name:struct<first:string,middle:string,last:string>," +
             "employer:struct<id:int,company:struct<name:string,address:string>>>",
@@ -665,6 +666,21 @@ abstract class SchemaPruningSuite
             "employer:struct<name:string,address:string>>")
         checkAnswer(query, Row(3))
       }
+    }
+  }
+
+  testSchemaPruning("SPARK-51831: Column pruning with exists Join") {
+    withContacts {
+      val query = sql(
+        """
+          |select sum(t1.id) as sum_id
+          |from contacts as t1
+          |where exists(select * from contacts as t2 where t1.id == t2.id)
+          |""".stripMargin)
+      checkScan(query,
+        "struct<id:int>",
+        "struct<id:int>")
+      checkAnswer(query, Row(6))
     }
   }
 

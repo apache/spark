@@ -19,15 +19,16 @@ package org.apache.spark.sql.catalyst.plans
 
 import java.util.HashMap
 
-import org.apache.spark.sql.catalyst.analysis.{
-  DeduplicateRelations,
-  NormalizeableRelation
-}
+import org.apache.spark.sql.catalyst.analysis.NormalizeableRelation
+import org.apache.spark.sql.catalyst.analysis.resolver.ResolverTag
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions
 import org.apache.spark.sql.catalyst.plans.logical._
 
+/**
+ * Object that handles normalization of operators and expressions. Used when comparing plans.
+ */
 object NormalizePlan extends PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = {
     val withNormalizedExpressions = normalizeExpressions(plan)
@@ -36,10 +37,15 @@ object NormalizePlan extends PredicateHelper {
   }
 
   /**
-   * Normalizes expressions in a plan, that either produces non-deterministic results or
-   * will be different between fixed-point and single-pass analyzer, due to the nature
-   * of bottom-up resolution. Before normalization, pre-process the plan by replacing all
-   * [[RuntimeReplaceable]] nodes with their replacements.
+   * Normalizes expressions in a plan, needed because of differences between fixed-point and
+   * single-pass resolver, due to the nature of bottom-up resolution. Before normalization,
+   * pre-process the plan by replacing all [[RuntimeReplaceable]] nodes with their replacements.
+   * Normalization includes:
+   * - Replacing [[SubqueryExpression]] plans with normalized versions.
+   * - Replacing [[CommonExpressionDef]] and [[CommonExpressionRef]] ids with 0 - needed because
+   *   these ids are different for every node.
+   * - Replacing [[ExpressionWithRandomSeed]] seeds with 0 - needed because these seeds are
+   *   randomly generated.
    */
   def normalizeExpressions(plan: LogicalPlan): LogicalPlan = {
     val withNormalizedRuntimeReplaceable = normalizeRuntimeReplaceable(plan)
@@ -120,6 +126,8 @@ object NormalizePlan extends PredicateHelper {
    * - CTERelationRef ids will be remapped based on the new CTERelationDef IDs. This is possible,
    *   because WithCTE returns cteDefs as first children, and the defs will be traversed before the
    *   refs.
+   * - Normalizes inner [[Project]] nodes by sorting project lists alphabetically.
+   * - Normalizes inner [[Aggregate]] nodes by sorting aggregate expressions lists alphabetically.
    */
   def normalizePlan(plan: LogicalPlan): LogicalPlan = {
     val cteIdNormalizer = new CteIdNormalizer
@@ -149,9 +157,7 @@ object NormalizePlan extends PredicateHelper {
             .reduce(And)
         Join(left, right, newJoinType, Some(newCondition), hint)
       case project: Project
-          if project
-            .getTagValue(DeduplicateRelations.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION)
-            .isDefined =>
+          if project.getTagValue(ResolverTag.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION).isDefined =>
         project.child
 
       case aggregate @ Aggregate(_, _, innerProject: Project, _) =>
@@ -232,6 +238,9 @@ object NormalizePlan extends PredicateHelper {
   }
 }
 
+/**
+ * Helper class used for normalization of CTE ids in the plan.
+ */
 class CteIdNormalizer {
   private var cteIdCounter: Long = 0
   private val oldToNewIdMapping = new HashMap[Long, Long]
