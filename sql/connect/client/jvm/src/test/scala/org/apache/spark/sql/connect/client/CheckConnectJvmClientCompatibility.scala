@@ -234,6 +234,8 @@ object CheckConnectJvmClientCompatibility {
         "org.apache.spark.sql.artifact.ArtifactManager$"),
       ProblemFilters.exclude[MissingClassProblem](
         "org.apache.spark.sql.artifact.ArtifactManager$SparkContextResourceType$"),
+      ProblemFilters.exclude[MissingClassProblem](
+        "org.apache.spark.sql.artifact.RefCountedCacheId"),
 
       // ColumnNode conversions
       ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.sql.SparkSession"),

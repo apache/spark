@@ -92,6 +92,7 @@ DECLARE	false
 DEFAULT	false
 DEFINED	false
 DEFINER	false
+DELAY	false
 DELETE	false
 DELIMITED	false
 DESC	false
@@ -144,6 +145,8 @@ FULL	false
 FUNCTION	false
 FUNCTIONS	false
 GENERATED	false
+GEOGRAPHY	false
+GEOMETRY	false
 GLOBAL	false
 GRANT	false
 GROUP	false
@@ -382,6 +385,7 @@ VERSION	false
 VIEW	false
 VIEWS	false
 VOID	false
+WATERMARK	false
 WEEK	false
 WEEKS	false
 WHEN	false

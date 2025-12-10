@@ -477,7 +477,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def showFunctionsUnsupportedError(identifier: String, ctx: IdentifierContext): Throwable = {
+  def showFunctionsUnsupportedError(identifier: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.SHOW_FUNCTIONS_INVALID_SCOPE",
       messageParameters = Map("scope" -> toSQLId(identifier)),
@@ -819,5 +819,21 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       errorClass = "MULTIPLE_PRIMARY_KEYS",
       messageParameters = Map("columns" -> columns),
       ctx)
+  }
+
+  /**
+   * Throws an internal error for unexpected parameter markers found during AST building. This
+   * should be unreachable in normal operation due to grammar-level blocking.
+   *
+   * @param ctx
+   *   The parser context containing the parameter marker
+   * @throws ParseException
+   *   Always throws this exception
+   */
+  def unexpectedUseOfParameterMarker(ctx: ParserRuleContext): Nothing = {
+    throw new ParseException(
+      errorClass = "UNEXPECTED_USE_OF_PARAMETER_MARKER",
+      messageParameters = Map("parameterMarker" -> ctx.getText),
+      ctx = ctx)
   }
 }

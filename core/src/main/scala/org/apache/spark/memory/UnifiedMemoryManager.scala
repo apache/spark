@@ -274,6 +274,14 @@ object UnifiedMemoryManager extends Logging {
   private val pollingStarted = new AtomicBoolean(false)
 
   /**
+   * Returns the total unmanaged memory in bytes, including both
+   * on-heap unmanaged memory and off-heap unmanaged memory.
+   */
+  private[spark] def getUnmanagedMemoryUsed: Long = {
+    UnifiedMemoryManager.unmanagedOnHeapUsed.get() + UnifiedMemoryManager.unmanagedOffHeapUsed.get()
+  }
+
+  /**
    * Register an unmanaged memory consumer to track its memory usage.
    *
    * Unmanaged memory consumers are components that manage their own memory outside

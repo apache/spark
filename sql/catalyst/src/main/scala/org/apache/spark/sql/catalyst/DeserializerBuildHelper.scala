@@ -20,11 +20,12 @@ package org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.{expressions => exprs}
 import org.apache.spark.sql.catalyst.analysis.{GetColumnByOrdinal, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, AgnosticEncoders, AgnosticExpressionPathEncoder, Codec, JavaSerializationCodec, KryoSerializationCodec}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BoxedLeafEncoder, CharEncoder, DateEncoder, DayTimeIntervalEncoder, InstantEncoder, IterableEncoder, JavaBeanEncoder, JavaBigIntEncoder, JavaDecimalEncoder, JavaEnumEncoder, LocalDateEncoder, LocalDateTimeEncoder, LocalTimeEncoder, MapEncoder, OptionEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, ProductEncoder, ScalaBigIntEncoder, ScalaDecimalEncoder, ScalaEnumEncoder, StringEncoder, TimestampEncoder, TransformingEncoder, UDTEncoder, VarcharEncoder, YearMonthIntervalEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BoxedLeafEncoder, CharEncoder, DateEncoder, DayTimeIntervalEncoder, GeographyEncoder, GeometryEncoder, InstantEncoder, IterableEncoder, JavaBeanEncoder, JavaBigIntEncoder, JavaDecimalEncoder, JavaEnumEncoder, LocalDateEncoder, LocalDateTimeEncoder, LocalTimeEncoder, MapEncoder, OptionEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, ProductEncoder, ScalaBigIntEncoder, ScalaDecimalEncoder, ScalaEnumEncoder, StringEncoder, TimestampEncoder, TransformingEncoder, UDTEncoder, VarcharEncoder, YearMonthIntervalEncoder}
 import org.apache.spark.sql.catalyst.encoders.EncoderUtils.{dataTypeForClass, externalDataTypeFor, isNativeEncoder}
 import org.apache.spark.sql.catalyst.expressions.{Expression, GetStructField, IsNull, Literal, MapKeys, MapValues, UpCast}
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, CreateExternalRow, DecodeUsingSerializer, InitializeJavaBean, Invoke, NewInstance, StaticInvoke, UnresolvedCatalystToExternalMap, UnresolvedMapObjects, WrapOption}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CharVarcharCodegenUtils, DateTimeUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CharVarcharCodegenUtils, DateTimeUtils, IntervalUtils, STUtils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 object DeserializerBuildHelper {
@@ -77,6 +78,24 @@ object DeserializerBuildHelper {
       ObjectType(clazz),
       "valueOf",
       path :: Nil,
+      returnNullable = false)
+  }
+
+  def createDeserializerForGeometryType(inputObject: Expression, gt: GeometryType): Expression = {
+    StaticInvoke(
+      classOf[STUtils],
+      ObjectType(classOf[Geometry]),
+      "deserializeGeom",
+      inputObject :: Literal.fromObject(gt) :: Nil,
+      returnNullable = false)
+  }
+
+  def createDeserializerForGeographyType(inputObject: Expression, gt: GeographyType): Expression = {
+    StaticInvoke(
+      classOf[STUtils],
+      ObjectType(classOf[Geography]),
+      "deserializeGeog",
+      inputObject :: Literal.fromObject(gt) :: Nil,
       returnNullable = false)
   }
 
@@ -290,6 +309,14 @@ object DeserializerBuildHelper {
         "withName",
         createDeserializerForString(path, returnNullable = false) :: Nil,
         returnNullable = false)
+    case _ @ (_: GeographyEncoder | _: GeometryEncoder) if !SQLConf.get.geospatialEnabled =>
+      throw new org.apache.spark.sql.AnalysisException(
+        errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",
+        messageParameters = scala.collection.immutable.Map.empty)
+    case g: GeographyEncoder =>
+      createDeserializerForGeographyType(path, g.dt)
+    case g: GeometryEncoder =>
+      createDeserializerForGeometryType(path, g.dt)
     case CharEncoder(length) =>
       createDeserializerForChar(path, returnNullable = false, length)
     case VarcharEncoder(length) =>

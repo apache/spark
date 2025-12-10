@@ -41,6 +41,13 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
 
   def getErrorMessage(errorClass: String, messageParameters: Map[String, Any]): String = {
     val messageTemplate = getMessageTemplate(errorClass)
+    getErrorMessage(errorClass, messageTemplate, messageParameters)
+  }
+
+  def getErrorMessage(
+      errorClass: String,
+      messageTemplate: String,
+      messageParameters: Map[String, Any]): String = {
     val sanitizedParameters = messageParameters.map {
       case (key, null) => key -> "null"
       case (key, value) => key -> value
@@ -71,6 +78,10 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
 
   def getMessageParameters(errorClass: String): Seq[String] = {
     val messageTemplate = getMessageTemplate(errorClass)
+    getMessageParametersFromTemplate(messageTemplate)
+  }
+
+  def getMessageParametersFromTemplate(messageTemplate: String): Seq[String] = {
     val matches = ErrorClassesJsonReader.TEMPLATE_REGEX.findAllIn(messageTemplate).toSeq
     matches.map(m => m.stripSuffix(">").stripPrefix("<"))
   }
@@ -141,7 +152,7 @@ private object ErrorClassesJsonReader {
     .addModule(DefaultScalaModule)
     .build()
   private def readAsMap(url: URL): Map[String, ErrorInfo] = {
-    val map = mapper.readValue(url, new TypeReference[Map[String, ErrorInfo]]() {})
+    val map = mapper.readValue(url.openStream(), new TypeReference[Map[String, ErrorInfo]]() {})
     val errorClassWithDots = map.collectFirst {
       case (errorClass, _) if errorClass.contains('.') => errorClass
       case (_, ErrorInfo(_, Some(map), _, _)) if map.keys.exists(_.contains('.')) =>

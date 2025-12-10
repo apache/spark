@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.errors.CompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -47,9 +47,7 @@ trait SQLConfHelper {
     }
     keys.lazyZip(values).foreach { (k, v) =>
       if (SQLConf.isStaticConfigKey(k)) {
-        throw new AnalysisException(
-          errorClass = "_LEGACY_ERROR_TEMP_3050",
-          messageParameters = Map("k" -> k))
+        throw CompilationErrors.cannotModifyValueOfStaticConfigError(k)
       }
       conf.setConfString(k, v)
     }

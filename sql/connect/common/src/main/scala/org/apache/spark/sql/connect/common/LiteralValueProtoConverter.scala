@@ -165,7 +165,7 @@ object LiteralValueProtoConverter {
       case v: mutable.ArraySeq[_] =>
         toProtoArrayOrBinary(v.array, dataTypeBuilder, options, enclosed)
       case v: immutable.ArraySeq[_] =>
-        toProtoArrayOrBinary((v.unsafeArray, dataTypeBuilder, options, enclosed)
+        toProtoArrayOrBinary(v.unsafeArray, dataTypeBuilder, options, enclosed)
       case v: Array[_] =>
         toProtoArray(v, dataTypeBuilder, options, enclosed)
       case s: scala.collection.Seq[_] =>
@@ -234,7 +234,7 @@ object LiteralValueProtoConverter {
       options: ToLiteralProtoOptions,
       enclosed: Boolean): (Literal, DataTypeBuilder) = {
     (array, arrayTypeBuilder) match {
-      case (_: Array[Byte], _: InferringDataTypeBuilder | FixedDataTypeBuilder(BinaryType, _))=>
+      case (_: Array[Byte], _: InferringDataTypeBuilder | FixedDataTypeBuilder(BinaryType, _)) =>
         toLiteralProtoBuilderInternal(array, arrayTypeBuilder, options, enclosed)
       case _ =>
         toProtoArray(array, arrayTypeBuilder, options, enclosed)

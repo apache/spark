@@ -40,7 +40,7 @@ from pyspark.testing.mlutils import SparkSessionTestCase
 
 class HasInducedError(Params):
     def __init__(self):
-        super(HasInducedError, self).__init__()
+        super().__init__()
         self.inducedError = Param(
             self, "inducedError", "Uniformly-distributed error added to feature"
         )
@@ -51,7 +51,7 @@ class HasInducedError(Params):
 
 class InducedErrorModel(Model, HasInducedError):
     def __init__(self):
-        super(InducedErrorModel, self).__init__()
+        super().__init__()
 
     def _transform(self, dataset):
         return dataset.withColumn(
@@ -61,7 +61,7 @@ class InducedErrorModel(Model, HasInducedError):
 
 class InducedErrorEstimator(Estimator, HasInducedError):
     def __init__(self, inducedError=1.0):
-        super(InducedErrorEstimator, self).__init__()
+        super().__init__()
         self._set(inducedError=inducedError)
 
     def _fit(self, dataset):

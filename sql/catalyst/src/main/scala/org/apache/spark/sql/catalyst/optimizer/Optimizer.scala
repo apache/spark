@@ -146,6 +146,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         PruneFilters,
         SimplifyCasts,
         SimplifyCaseConversionExpressions,
+        SimplifyDateTimeConversions,
         RewriteCorrelatedScalarSubquery,
         RewriteLateralSubquery,
         EliminateSerialization,

@@ -19,7 +19,7 @@ package org.apache.spark.sql.pipelines.graph
 
 import org.scalatest.time.{Seconds, Span}
 
-import org.apache.spark.sql.{functions, Row}
+import org.apache.spark.sql.{functions, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog}
@@ -183,6 +183,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
 
     // Construct pipeline
     val pipelineDef = new TestGraphRegistrationContext(spark) {
+      implicit val sparkSession: SparkSession = spark
       private val ints = MemoryStream[Int]
       ints.addData(1 until 10: _*)
       registerView("input", query = dfFlowFunc(ints.toDF()))
@@ -259,6 +260,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
 
     // Construct pipeline
     val pipelineDef = new TestGraphRegistrationContext(spark) {
+      implicit val sparkSession: SparkSession = spark
       private val ints = MemoryStream[Int]
       registerView("input", query = dfFlowFunc(ints.toDF()))
       registerTable(
@@ -309,6 +311,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
     })
 
     val pipelineDef = new TestGraphRegistrationContext(spark) {
+      implicit val sparkSession: SparkSession = spark
       private val memoryStream = MemoryStream[Int]
       memoryStream.addData(1, 2)
       registerView("input_view", query = dfFlowFunc(memoryStream.toDF()))
@@ -548,6 +551,7 @@ class TriggeredGraphExecutionSuite extends ExecutionTest with SharedSparkSession
 
     // Construct pipeline
     val pipelineDef = new TestGraphRegistrationContext(spark) {
+      implicit val sparkSession: SparkSession = spark
       private val memoryStream = MemoryStream[Int]
       memoryStream.addData(1, 2)
       registerView("input_view", query = dfFlowFunc(memoryStream.toDF()))

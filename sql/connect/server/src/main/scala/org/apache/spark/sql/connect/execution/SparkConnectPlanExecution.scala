@@ -27,15 +27,16 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.SparkEnv
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.st.STExpressionUtils
 import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_ARROW_MAX_BATCH_SIZE, CONNECT_SESSION_RESULT_CHUNKING_MAX_CHUNK_SIZE}
 import org.apache.spark.sql.connect.planner.{InvalidInputErrors, SparkConnectPlanner}
 import org.apache.spark.sql.connect.service.ExecuteHolder
-import org.apache.spark.sql.connect.utils.MetricGenerator
+import org.apache.spark.sql.connect.utils.{MetricGenerator, PipelineAnalysisContextUtils}
 import org.apache.spark.sql.execution.{DoNotCleanup, LocalTableScanExec, QueryExecution, RemoveShuffleFiles, SkipMigration, SQLExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.internal.SQLConf
@@ -65,6 +66,16 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       } else {
         DoNotCleanup
       }
+    val userContext = request.getUserContext
+
+    // if the eager execution is triggered inside pipeline flow function,
+    // block the eager execution command that is not allowed.
+    if (PipelineAnalysisContextUtils.isUnsupportedEagerExecutionInsideFlowFunction(
+        userContext = userContext,
+        plan = request.getPlan)) {
+      throw new AnalysisException("ATTEMPT_ANALYSIS_IN_PIPELINE_QUERY_FUNCTION", Map())
+    }
+
     request.getPlan.getOpTypeCase match {
       case proto.Plan.OpTypeCase.ROOT =>
         val dataframe =
@@ -126,6 +137,12 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     val sessionId = executePlan.sessionHolder.sessionId
     val spark = dataframe.sparkSession
     val schema = dataframe.schema
+    val geospatialEnabled = spark.sessionState.conf.geospatialEnabled
+    if (!geospatialEnabled && schema.existsRecursively(STExpressionUtils.isGeoSpatialType)) {
+      throw new org.apache.spark.sql.AnalysisException(
+        errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",
+        messageParameters = scala.collection.immutable.Map.empty)
+    }
     val maxRecordsPerBatch = spark.sessionState.conf.arrowMaxRecordsPerBatch
     val timeZoneId = spark.sessionState.conf.sessionLocalTimeZone
     val largeVarTypes = spark.sessionState.conf.arrowUseLargeVarTypes

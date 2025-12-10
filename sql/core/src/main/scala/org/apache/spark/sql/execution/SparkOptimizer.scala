@@ -40,11 +40,11 @@ class SparkOptimizer(
       SchemaPruning,
       GroupBasedRowLevelOperationScanPlanning,
       V1Writes,
-      PushVariantIntoScan,
       V2ScanRelationPushDown,
       V2ScanPartitioningAndOrdering,
       V2Writes,
-      PruneFileSourcePartitions)
+      PruneFileSourcePartitions,
+      PushVariantIntoScan)
 
   override def preCBORules: Seq[Rule[LogicalPlan]] =
     Seq(OptimizeMetadataOnlyDeleteFromTable)
@@ -61,8 +61,8 @@ class SparkOptimizer(
       new RowLevelOperationRuntimeGroupFiltering(OptimizeSubqueries)),
     Batch("InjectRuntimeFilter", FixedPoint(1),
       InjectRuntimeFilter),
-    Batch("MergeScalarSubqueries", Once,
-      MergeScalarSubqueries,
+    Batch("MergeSubplans", Once,
+      MergeSubplans,
       RewriteDistinctAggregates),
     Batch("Pushdown Filters from PartitionPruning", fixedPoint,
       PushDownPredicates),

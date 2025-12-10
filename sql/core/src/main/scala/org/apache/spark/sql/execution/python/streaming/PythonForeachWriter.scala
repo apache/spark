@@ -89,7 +89,9 @@ class PythonForeachWriter(func: PythonFunction, schema: StructType)
 
   private lazy val inputByteIterator = {
     EvaluatePython.registerPicklers()
-    val objIterator = inputRowIterator.map { row => EvaluatePython.toJava(row, schema) }
+    val objIterator = inputRowIterator.map { row =>
+      EvaluatePython.toJava(row, schema, SQLConf.get.pysparkBinaryAsBytes)
+    }
     new SerDeUtil.AutoBatchedPickler(objIterator)
   }
 
@@ -104,6 +106,8 @@ class PythonForeachWriter(func: PythonFunction, schema: StructType)
       override val killOnIdleTimeout: Boolean = SQLConf.get.pythonUDFWorkerKillOnIdleTimeout
       override val tracebackDumpIntervalSeconds: Long =
         SQLConf.get.pythonUDFWorkerTracebackDumpIntervalSeconds
+      override val killWorkerOnFlushFailure: Boolean =
+        SQLConf.get.pythonUDFDaemonKillWorkerOnFlushFailure
 
       override val hideTraceback: Boolean = SQLConf.get.pysparkHideTraceback
       override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback

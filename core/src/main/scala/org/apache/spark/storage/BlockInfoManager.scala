@@ -18,7 +18,6 @@
 package org.apache.spark.storage
 
 import java.util
-import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.locks.{Condition, Lock}
 
@@ -478,7 +477,7 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = false
   def releaseAllLocksForTask(taskAttemptId: TaskAttemptId): Seq[BlockId] = {
     val blocksWithReleasedLocks = mutable.ArrayBuffer[BlockId]()
 
-    val writeLocks = Option(writeLocksByTask.remove(taskAttemptId)).getOrElse(Collections.emptySet)
+    val writeLocks = Option(writeLocksByTask.remove(taskAttemptId)).getOrElse(util.Set.of())
     writeLocks.forEach { blockId =>
       blockInfo(blockId) { (info, condition) =>
         assert(info.writerTask == taskAttemptId)

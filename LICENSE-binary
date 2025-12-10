@@ -204,6 +204,7 @@
 This project bundles some components that are also licensed under the Apache
 License Version 2.0:
 
+at.yawk.lz4:lz4-java
 com.clearspring.analytics:stream
 com.fasterxml.jackson.core:jackson-annotations
 com.fasterxml.jackson.core:jackson-core
@@ -215,10 +216,8 @@ com.github.joshelser:dropwizard-metrics-hadoop-metrics2-reporter
 com.google.code.findbugs:jsr305
 com.google.code.gson:gson
 com.google.crypto.tink:tink
-com.google.errorprone:error_prone_annotations
 com.google.flatbuffers:flatbuffers-java
 com.google.guava:guava
-com.google.j2objc:j2objc-annotations
 com.jamesmurty.utils:java-xmlbuilder
 com.ning:compress-lzf
 com.squareup.okhttp3:logging-interceptor
@@ -231,7 +230,6 @@ com.univocity:univocity-parsers
 com.zaxxer:HikariCP
 commons-cli:commons-cli
 commons-codec:commons-codec
-commons-collections:commons-collections
 commons-dbcp:commons-dbcp
 commons-io:commons-io
 commons-lang:commons-lang
@@ -391,7 +389,6 @@ org.json4s:json4s-core_2.13
 org.json4s:json4s-jackson-core_2.13
 org.json4s:json4s-jackson_2.13
 org.json4s:json4s-scalap_2.13
-org.lz4:lz4-java
 org.objenesis:objenesis
 org.roaringbitmap:RoaringBitmap
 org.rocksdb:rocksdbjni
@@ -479,7 +476,6 @@ dev.ludovic.netlib:blas
 dev.ludovic.netlib:arpack
 dev.ludovic.netlib:lapack
 net.razorvine:pickle
-org.checkerframework:checker-qual
 org.typelevel:algebra_2.13:jar
 org.typelevel:cats-kernel_2.13
 org.typelevel:spire_2.13

@@ -406,11 +406,12 @@ object InMemoryRelation {
   def apply(cacheBuilder: CachedRDDBuilder, qe: QueryExecution): InMemoryRelation = {
     val optimizedPlan = qe.optimizedPlan
     val serializer = cacheBuilder.serializer
-    val newBuilder = if (serializer.supportsColumnarInput(optimizedPlan.output)) {
-      cacheBuilder.copy(cachedPlan = serializer.convertToColumnarPlanIfPossible(qe.executedPlan))
+    val newCachedPlan = if (serializer.supportsColumnarInput(optimizedPlan.output)) {
+      serializer.convertToColumnarPlanIfPossible(qe.executedPlan)
     } else {
-      cacheBuilder.copy(cachedPlan = qe.executedPlan)
+      qe.executedPlan
     }
+    val newBuilder = cacheBuilder.copy(cachedPlan = newCachedPlan, logicalPlan = qe.logical)
     val relation = new InMemoryRelation(
       newBuilder.cachedPlan.output, newBuilder, optimizedPlan.outputOrdering)
     relation.statsOfPlanToCache = optimizedPlan.stats
@@ -439,9 +440,7 @@ case class InMemoryRelation(
   override def innerChildren: Seq[SparkPlan] = Seq(cachedPlan)
 
   override def doCanonicalize(): logical.LogicalPlan =
-    copy(output = output.map(QueryPlan.normalizeExpressions(_, output)),
-      cacheBuilder,
-      outputOrdering)
+    withOutput(output.map(QueryPlan.normalizeExpressions(_, output)))
 
   @transient val partitionStatistics = new PartitionStatistics(output)
 
@@ -469,8 +468,13 @@ case class InMemoryRelation(
     }
   }
 
-  def withOutput(newOutput: Seq[Attribute]): InMemoryRelation =
-    InMemoryRelation(newOutput, cacheBuilder, outputOrdering, statsOfPlanToCache)
+  def withOutput(newOutput: Seq[Attribute]): InMemoryRelation = {
+    val map = AttributeMap(output.zip(newOutput))
+    val newOutputOrdering = outputOrdering
+      .map(_.transform { case a: Attribute => map(a) })
+      .asInstanceOf[Seq[SortOrder]]
+    InMemoryRelation(newOutput, cacheBuilder, newOutputOrdering, statsOfPlanToCache)
+  }
 
   override def newInstance(): this.type = {
     InMemoryRelation(
@@ -485,6 +489,12 @@ case class InMemoryRelation(
     val cloned = this.copy()
     cloned.statsOfPlanToCache = this.statsOfPlanToCache
     cloned
+  }
+
+  override def makeCopy(newArgs: Array[AnyRef]): LogicalPlan = {
+    val copied = super.makeCopy(newArgs).asInstanceOf[InMemoryRelation]
+    copied.statsOfPlanToCache = this.statsOfPlanToCache
+    copied
   }
 
   override def simpleString(maxFields: Int): String =

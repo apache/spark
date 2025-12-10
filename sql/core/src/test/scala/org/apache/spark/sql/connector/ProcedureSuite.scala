@@ -149,7 +149,6 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
     val explain2 = spark.sql(
       "EXPLAIN EXTENDED CALL IDENTIFIER(:p1)(10, 10)",
       Map("p1" -> "cat.ns.sum")).head().getString(0)
-    assert(explain2.contains("'NameParameterizedQuery [p1], [cat.ns.sum]"))
     assert(explain2.contains("Call cat.ns.sum(10, 10)"))
   }
 
@@ -177,16 +176,16 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
         exception = intercept[AnalysisException](
           sql("CALL testcat.procedure(1, 2)")
         ),
-        condition = "_LEGACY_ERROR_TEMP_1184",
-        parameters = Map("plugin" -> "testcat", "ability" -> "procedures")
+        condition = "MISSING_CATALOG_ABILITY.PROCEDURES",
+        parameters = Map("plugin" -> "testcat")
       )
 
       checkError(
         exception = intercept[AnalysisException](
           sql("SHOW PROCEDURES IN testcat")
         ),
-        condition = "_LEGACY_ERROR_TEMP_1184",
-        parameters = Map("plugin" -> "testcat", "ability" -> "procedures")
+        condition = "MISSING_CATALOG_ABILITY.PROCEDURES",
+        parameters = Map("plugin" -> "testcat")
       )
     }
   }

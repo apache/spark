@@ -50,6 +50,8 @@ class ArrowUDFType:
 
     GROUPED_AGG = PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF
 
+    GROUPED_AGG_ITER = PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF
+
 
 def arrow_udf(f=None, returnType=None, functionType=None):
     """
@@ -301,6 +303,69 @@ def arrow_udf(f=None, returnType=None, functionType=None):
             Therefore, mutating the input arrays is not allowed and will cause incorrect results.
             For the same reason, users should also not rely on the index of the input arrays.
 
+    * Iterator of Arrays to Scalar
+        `Iterator[pyarrow.Array]` -> `Any`
+
+        The function takes an iterator of `pyarrow.Array` and returns a scalar value. This is
+        useful for grouped aggregations where the UDF can process all batches for a group
+        iteratively, which is more memory-efficient than loading all data at once. The returned
+        scalar can be a python primitive type, a numpy data type, or a `pyarrow.Scalar` instance.
+
+        .. note:: Only a single UDF is supported per aggregation.
+
+        >>> from typing import Iterator
+        >>> @arrow_udf("double")
+        ... def arrow_mean(it: Iterator[pa.Array]) -> float:
+        ...     sum_val = 0.0
+        ...     cnt = 0
+        ...     for v in it:
+        ...         assert isinstance(v, pa.Array)
+        ...         sum_val += pa.compute.sum(v).as_py()
+        ...         cnt += len(v)
+        ...     return sum_val / cnt
+        ...
+        >>> df = spark.createDataFrame(
+        ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v"))
+        >>> df.groupby("id").agg(arrow_mean(df['v'])).show()
+        +---+-------------+
+        | id|arrow_mean(v)|
+        +---+-------------+
+        |  1|          1.5|
+        |  2|          6.0|
+        +---+-------------+
+
+    * Iterator of Multiple Arrays to Scalar
+        `Iterator[Tuple[pyarrow.Array, ...]]` -> `Any`
+
+        The function takes an iterator of a tuple of multiple `pyarrow.Array` and returns a
+        scalar value. This is useful for grouped aggregations with multiple input columns.
+
+        .. note:: Only a single UDF is supported per aggregation.
+
+        >>> from typing import Iterator, Tuple
+        >>> import numpy as np
+        >>> @arrow_udf("double")
+        ... def arrow_weighted_mean(it: Iterator[Tuple[pa.Array, pa.Array]]) -> float:
+        ...     weighted_sum = 0.0
+        ...     weight = 0.0
+        ...     for v, w in it:
+        ...         assert isinstance(v, pa.Array)
+        ...         assert isinstance(w, pa.Array)
+        ...         weighted_sum += np.dot(v, w)
+        ...         weight += pa.compute.sum(w).as_py()
+        ...     return weighted_sum / weight
+        ...
+        >>> df = spark.createDataFrame(
+        ...     [(1, 1.0, 1.0), (1, 2.0, 2.0), (2, 3.0, 1.0), (2, 5.0, 2.0), (2, 10.0, 3.0)],
+        ...     ("id", "v", "w"))
+        >>> df.groupby("id").agg(arrow_weighted_mean(df["v"], df["w"])).show()
+        +---+-------------------------+
+        | id|arrow_weighted_mean(v, w)|
+        +---+-------------------------+
+        |  1|       1.6666666666666...|
+        |  2|        7.166666666666...|
+        +---+-------------------------+
+
     Notes
     -----
     The user-defined functions do not support conditional expressions or short circuiting
@@ -322,6 +387,7 @@ def arrow_udf(f=None, returnType=None, functionType=None):
     pyspark.sql.GroupedData.applyInArrow
     pyspark.sql.PandasCogroupedOps.applyInArrow
     pyspark.sql.UDFRegistration.register
+    pyspark.sql.GroupedData.applyInPandas
     """
     require_minimum_pyarrow_version()
 
@@ -345,6 +411,9 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 
     .. versionchanged:: 4.0.0
         Supports keyword-arguments in SCALAR and GROUPED_AGG type.
+
+    .. versionchanged:: 4.1.0
+        Supports iterator API in GROUPED_MAP type.
 
     Parameters
     ----------
@@ -690,6 +759,7 @@ def vectorized_udf(
         PythonEvalType.SQL_SCALAR_PANDAS_UDF,
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+        PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
@@ -715,6 +785,7 @@ def vectorized_udf(
         PythonEvalType.SQL_SCALAR_ARROW_UDF,
         PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
         PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
+        PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
         None,
     ]:  # None means it should infer the type from type hints.
         raise PySparkTypeError(
@@ -763,6 +834,7 @@ def _validate_vectorized_udf(f, evalType, kind: str = "pandas") -> int:
         PythonEvalType.SQL_SCALAR_ARROW_UDF,
         PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
         PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
+        PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
     ]:
         warnings.warn(
             "It is preferred to specify type hints for "
@@ -771,6 +843,7 @@ def _validate_vectorized_udf(f, evalType, kind: str = "pandas") -> int:
         )
     elif evalType in [
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+        PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
         PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
@@ -833,6 +906,19 @@ def _validate_vectorized_udf(f, evalType, kind: str = "pandas") -> int:
                 "detail": f"{kind_str} with function type GROUPED_MAP or the function in "
                 "groupby.applyInPandas must take either one argument (data) or "
                 "two arguments (key, data).",
+            },
+        )
+
+    if evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF and len(argspec.args) not in (
+        1,
+        2,
+    ):
+        raise PySparkValueError(
+            errorClass="INVALID_PANDAS_UDF",
+            messageParameters={
+                "detail": "the function in groupby.applyInPandas with iterator API must take "
+                "either one argument (batches: Iterator[pandas.DataFrame]) or two arguments "
+                "(key, batches: Iterator[pandas.DataFrame]).",
             },
         )
 

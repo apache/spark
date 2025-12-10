@@ -207,6 +207,9 @@ message Expression {
       Time time = 26;
     }
 
+    // Reserved for Geometry and Geography.
+    reserved 27, 28;
+
     message Decimal {
       // the string representation.
       string value = 1;

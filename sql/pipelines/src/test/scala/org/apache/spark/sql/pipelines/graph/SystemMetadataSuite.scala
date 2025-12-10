@@ -19,6 +19,7 @@ package org.apache.spark.sql.pipelines.graph
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.pipelines.utils.{ExecutionTest, TestGraphRegistrationContext}
@@ -38,6 +39,7 @@ class SystemMetadataSuite
 
       // create a pipeline with only a single ST
       val graph = new TestGraphRegistrationContext(spark) {
+        implicit val sparkSession: SparkSession = spark
         val mem: MemoryStream[Int] = MemoryStream[Int]
         mem.addData(1, 2, 3)
         registerView("a", query = dfFlowFunc(mem.toDF()))
@@ -105,6 +107,7 @@ class SystemMetadataSuite
     import session.implicits._
 
     val graph = new TestGraphRegistrationContext(spark) {
+      implicit val sparkSession: SparkSession = spark
       val mem: MemoryStream[Int] = MemoryStream[Int]
       mem.addData(1, 2, 3)
       registerView("a", query = dfFlowFunc(mem.toDF()))
@@ -169,6 +172,7 @@ class SystemMetadataSuite
     import session.implicits._
 
     val graph = new TestGraphRegistrationContext(spark) {
+      implicit val sparkSession: SparkSession = spark
       val mem: MemoryStream[Int] = MemoryStream[Int]
       mem.addData(1, 2, 3)
       registerView("a", query = dfFlowFunc(mem.toDF()))
@@ -223,6 +227,38 @@ class SystemMetadataSuite
       updateContext2
     )
   }
+
+  test("checkpoint dirs for tables with same name but different schema don't collide") {
+    val session = spark
+    import session.implicits._
+
+    // create a pipeline with only a single ST
+    val graph = new TestGraphRegistrationContext(spark) {
+      implicit val sparkSession: SparkSession = spark
+      val mem: MemoryStream[Int] = MemoryStream[Int]
+      mem.addData(1, 2, 3)
+      registerView("a", query = dfFlowFunc(mem.toDF()))
+      registerTable("st")
+      registerFlow("st", "st", query = readStreamFlowFunc("a"))
+      registerTable("schema2.st")
+      registerFlow("schema2.st", "schema2.st", query = readStreamFlowFunc("a"))
+    }.toDataflowGraph
+
+    val updateContext = TestPipelineUpdateContext(
+      unresolvedGraph = graph,
+      spark = spark,
+      storageRoot = storageRoot,
+      failOnErrorEvent = true
+    )
+
+    val stFlow = graph.flow(fullyQualifiedIdentifier("st"))
+    val schema2StFlow = graph.flow(fullyQualifiedIdentifier("st", database = Option("schema2")))
+    val stSystemMetadata = FlowSystemMetadata(updateContext, stFlow, graph)
+    val schema2StSystemMetadata = FlowSystemMetadata(updateContext, schema2StFlow, graph)
+    assert(
+      stSystemMetadata.flowCheckpointsDirOpt() != schema2StSystemMetadata.flowCheckpointsDirOpt()
+    )
+  }
 }
 
 trait SystemMetadataTestHelpers {
@@ -238,8 +274,9 @@ trait SystemMetadataTestHelpers {
   ): Path = {
     val expectedRawCheckPointDir = tableOrSinkElement match {
       case t if t.isInstanceOf[Table] || t.isInstanceOf[Sink] =>
+        val tableId = t.identifier.nameParts.mkString(Path.SEPARATOR)
         new Path(updateContext.storageRoot)
-        .suffix(s"/_checkpoints/${t.identifier.table}/${flowElement.identifier.table}")
+        .suffix(s"/_checkpoints/$tableId/${flowElement.identifier.table}")
         .toString
       case _ =>
         fail(

@@ -38,13 +38,14 @@ import org.apache.spark.internal.LogKeys.{CLASS_NAME, CONFIG}
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.JoinedRow
+import org.apache.spark.sql.catalyst.expressions.variant.VariantExpressionEvalUtils
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED
-import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, StructField, StructType, UserDefinedType, VariantType}
+import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, NullType, StructField, StructType, UserDefinedType, VariantType}
 import org.apache.spark.util.ArrayImplicits._
 
 object ParquetUtils extends Logging {
@@ -208,6 +209,8 @@ object ParquetUtils extends Logging {
   def isBatchReadSupported(sqlConf: SQLConf, dt: DataType): Boolean = dt match {
     case _: AtomicType =>
       true
+    case _: NullType =>
+      sqlConf.parquetVectorizedReaderNullTypeEnabled
     case at: ArrayType =>
       sqlConf.parquetVectorizedReaderNestedColumnEnabled &&
         isBatchReadSupported(sqlConf, at.elementType)
@@ -435,6 +438,21 @@ object ParquetUtils extends Logging {
     StructType(newFields)
   }
 
+  private def needShreddingInference(
+      parquetOptions: ParquetOptions,
+      schema: StructType): Boolean = {
+    // If shredding inference is enabled, use the shredding writer, but only if the schema
+    // actually contains at least one Variant column.
+    if (parquetOptions.inferShreddingForVariant) {
+      // This will return true even if the type contains Variant as an array or map element.
+      // Even though we don't try to infer a schema right now, there isn't much downside, and
+      // we may want to allow schema inference for these cases in the future.
+      VariantExpressionEvalUtils.typeContainsVariant(schema)
+    } else {
+      false
+    }
+  }
+
   def prepareWrite(
       sqlConf: SQLConf,
       job: Job,
@@ -505,6 +523,10 @@ object ParquetUtils extends Logging {
       SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key,
       sqlConf.legacyParquetNanosAsLong.toString)
 
+    conf.set(
+      SQLConf.PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE.key,
+      sqlConf.parquetAnnotateVariantLogicalType.toString)
+
     // Sets compression scheme
     conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodecClassName)
 
@@ -522,12 +544,22 @@ object ParquetUtils extends Logging {
         log"${MDC(CONFIG, ParquetOutputFormat.JOB_SUMMARY_LEVEL)} to NONE.")
     }
 
+    val useVariantShreddingWriter = needShreddingInference(parquetOptions, dataSchema)
+    val shreddingSchemaForced =
+        sqlConf.getConf(SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST).nonEmpty
+
     new OutputWriterFactory {
       override def newInstance(
           path: String,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new ParquetOutputWriter(path, context)
+        if (useVariantShreddingWriter) {
+          val inferenceHelper = new InferVariantShreddingSchema(dataSchema)
+          new ParquetOutputWriterWithVariantShredding(path, context, inferenceHelper,
+              shreddingSchemaForced)
+        } else {
+          new ParquetOutputWriter(path, context)
+        }
       }
 
       override def getFileExtension(context: TaskAttemptContext): String = {

@@ -40,6 +40,7 @@ import org.apache.spark.util.Utils
  *
  * <ul>
  *   <li> SQL_GROUPED_AGG_ARROW_UDF for Arrow UDF
+ *   <li> SQL_GROUPED_AGG_ARROW_ITER_UDF for Arrow UDF with iterator API
  *   <li> SQL_GROUPED_AGG_PANDAS_UDF for Pandas UDF
  * </ul>
  *
@@ -144,6 +145,12 @@ case class ArrowAggregatePythonExec(
 
 
     val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
+    val sessionUUID = {
+      Option(session).collect {
+        case session if session.sessionState.conf.pythonWorkerLoggingEnabled =>
+          session.sessionUUID
+      }
+    }
 
     // Map grouped rows to ArrowPythonRunner results, Only execute if partition is not empty
     inputRDD.mapPartitionsInternal { iter => if (iter.isEmpty) iter else {
@@ -180,31 +187,18 @@ case class ArrowAggregatePythonExec(
         rows
       }
 
-      val runner = if (evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF) {
-        new ArrowPythonWithNamedArgumentRunner(
-          pyFuncs,
-          evalType,
-          argMetas,
-          aggInputSchema,
-          sessionLocalTimeZone,
-          largeVarTypes,
-          pythonRunnerConf,
-          pythonMetrics,
-          jobArtifactUUID,
-          conf.pythonUDFProfiler) with GroupedPythonArrowInput
-      } else {
-        new ArrowPythonWithNamedArgumentRunner(
-          pyFuncs,
-          evalType,
-          argMetas,
-          aggInputSchema,
-          sessionLocalTimeZone,
-          largeVarTypes,
-          pythonRunnerConf,
-          pythonMetrics,
-          jobArtifactUUID,
-          conf.pythonUDFProfiler)
-      }
+      val runner = new ArrowPythonWithNamedArgumentRunner(
+        pyFuncs,
+        evalType,
+        argMetas,
+        aggInputSchema,
+        sessionLocalTimeZone,
+        largeVarTypes,
+        pythonRunnerConf,
+        pythonMetrics,
+        jobArtifactUUID,
+        sessionUUID,
+        conf.pythonUDFProfiler) with GroupedPythonArrowInput
 
       val columnarBatchIter = runner.compute(projectedRowIter, context.partitionId(), context)
 
@@ -245,6 +239,7 @@ case class ArrowAggregatePythonExec(
   private def supportedPythonEvalTypes: Array[Int] =
     Array(
       PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
+      PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
       PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF)
 }
 

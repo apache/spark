@@ -101,4 +101,13 @@ DECLARE foo = 'sum';
 EXECUTE IMMEDIATE 'SELECT ' || foo || '(c1) FROM VALUES(?), (?) AS t(c1)'
    USING 5 + 6, 7 + length('hello');
  33
+
+-- Parameter markers can be anywhere in the statement
+EXECUTE IMMEDIATE 'SELECT "5" :tens "9"::DECIMAL(:p, :s) AS IDENTIFIER(:col)' 
+   USING '8' AS tens, 10 AS p, 4 AS s, 'result_col' AS col;
++----------+                                                                    
+|result_col|
++----------+
+|  589.0000|
++----------+
 ```

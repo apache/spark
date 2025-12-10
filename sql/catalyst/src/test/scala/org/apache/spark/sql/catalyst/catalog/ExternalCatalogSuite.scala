@@ -573,7 +573,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite {
         // then be caught and converted to a RuntimeException with a descriptive message.
         case ex: RuntimeException if ex.getMessage.contains("MetaException") =>
           throw new AnalysisException(
-            errorClass = "_LEGACY_ERROR_TEMP_2193",
+            errorClass = "INTERNAL_ERROR_HIVE_METASTORE_PARTITION_FILTER",
             messageParameters = Map(
               "hiveMetastorePartitionPruningFallbackOnException" ->
                 SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key))
