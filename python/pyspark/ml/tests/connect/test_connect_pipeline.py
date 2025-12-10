@@ -36,7 +36,7 @@ if should_test_connect:
     class PipelineTestsOnConnect(PipelineTestsMixin, ReusedConnectTestCase):
         @classmethod
         def conf(cls):
-            config = super(PipelineTestsOnConnect, cls).conf()
+            config = super().conf()
             config.set("spark.sql.artifact.copyFromLocalToFs.allowDestLocal", "true")
             return config
 

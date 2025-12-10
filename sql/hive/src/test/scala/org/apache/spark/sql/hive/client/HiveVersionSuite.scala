@@ -35,7 +35,8 @@ private[client] abstract class HiveVersionSuite(version: String) extends SparkFu
     hadoopConf.set("datanucleus.autoStartMechanismMode", "ignored")
     hadoopConf.set("hive.metastore.schema.verification", "false")
     // Since Hive 3.0, HIVE-19310 skipped `ensureDbInit` if `hive.in.test=false`.
-    if (version == "3.0" || version == "3.1" || version == "4.0") {
+    val ver = IsolatedClientLoader.hiveVersion(version)
+    if (hive.v3_0 <= ver) {
       hadoopConf.set("hive.in.test", "true")
       hadoopConf.set("hive.query.reexecution.enabled", "false")
     }

@@ -319,7 +319,7 @@ class Analyzer(
         AnalysisContext.reset()
         try {
           AnalysisHelper.markInAnalyzer {
-            HybridAnalyzer.fromLegacyAnalyzer(legacyAnalyzer = this).apply(plan, tracker)
+            HybridAnalyzer.fromLegacyAnalyzer(legacyAnalyzer = this, tracker = tracker).apply(plan)
           }
         } finally {
           AnalysisContext.reset()
@@ -327,7 +327,7 @@ class Analyzer(
       } else {
         AnalysisContext.withNewAnalysisContext {
           AnalysisHelper.markInAnalyzer {
-            HybridAnalyzer.fromLegacyAnalyzer(legacyAnalyzer = this).apply(plan, tracker)
+            HybridAnalyzer.fromLegacyAnalyzer(legacyAnalyzer = this, tracker = tracker).apply(plan)
           }
         }
       }
@@ -1736,9 +1736,8 @@ class Analyzer(
                     Assignment(key, sourceAttr)
                   }
                 } else {
-                  sourceTable.output.flatMap { sourceAttr =>
-                    findAttrInTarget(sourceAttr.name).map(
-                      targetAttr => Assignment(targetAttr, sourceAttr))
+                  targetTable.output.map { attr =>
+                    Assignment(attr, UnresolvedAttribute(Seq(attr.name)))
                   }
                 }
                 UpdateAction(
@@ -1775,9 +1774,8 @@ class Analyzer(
                     Assignment(key, sourceAttr)
                   }
                 } else {
-                  sourceTable.output.flatMap { sourceAttr =>
-                    findAttrInTarget(sourceAttr.name).map(
-                      targetAttr => Assignment(targetAttr, sourceAttr))
+                  targetTable.output.map { attr =>
+                    Assignment(attr, UnresolvedAttribute(Seq(attr.name)))
                   }
                 }
                 InsertAction(

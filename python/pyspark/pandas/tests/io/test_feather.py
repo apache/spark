@@ -17,10 +17,8 @@
 import unittest
 
 import pandas as pd
-import sys
 
 from pyspark import pandas as ps
-from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
@@ -36,16 +34,6 @@ class FeatherMixin:
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    has_arrow_21_or_below = False
-    try:
-        import pyarrow as pa
-
-        if LooseVersion(pa.__version__) < LooseVersion("22.0.0"):
-            has_arrow_21_or_below = True
-    except ImportError:
-        pass
-
-    @unittest.skipIf(not has_arrow_21_or_below, "SPARK-54068")
     def test_to_feather(self):
         with self.temp_dir() as dirpath:
             path1 = f"{dirpath}/file1.feather"
