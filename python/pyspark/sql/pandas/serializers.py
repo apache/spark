@@ -500,7 +500,6 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         Deserialize ArrowRecordBatches to an Arrow table and return as a list of pandas.Series.
         """
         batches = super().load_stream(stream)
-        import pyarrow as pa
         import pandas as pd
 
         for batch in batches:
