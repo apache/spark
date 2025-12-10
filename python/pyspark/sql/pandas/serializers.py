@@ -347,13 +347,23 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
     int_to_decimal_coercion_enabled : bool
         If True, applies additional coercions in Python before converting to Arrow
         This has performance penalties.
+    pandas_backend : str
+        (Experimental) Back-end data type applied to the pandas DataFrame or Series.
+        Supported options are: numpy and pyarrow.
     """
 
-    def __init__(self, timezone, safecheck, int_to_decimal_coercion_enabled):
+    def __init__(
+        self,
+        timezone,
+        safecheck,
+        int_to_decimal_coercion_enabled,
+        pandas_backend,
+    ):
         super().__init__()
         self._timezone = timezone
         self._safecheck = safecheck
         self._int_to_decimal_coercion_enabled = int_to_decimal_coercion_enabled
+        self._pandas_backend = pandas_backend
 
     def arrow_to_pandas(
         self, arrow_column, idx, struct_in_pandas="dict", ndarray_as_list=False, spark_type=None
@@ -366,6 +376,17 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             "date_as_object": True,
             "coerce_temporal_nanoseconds": True,
         }
+
+        if self._pandas_backend == "pyarrow":
+            import pandas as pd
+
+            pandas_options.update(
+                {
+                    "types_mapper": pd.ArrowDtype,
+                    "zero_copy_only": True,  # Raise an ArrowException if copy the underlying data
+                }
+            )
+
         s = arrow_column.to_pandas(**pandas_options)
 
         converter = _create_converter_to_pandas(
@@ -375,6 +396,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             struct_in_pandas=struct_in_pandas,
             error_on_duplicated_field_names=True,
             ndarray_as_list=ndarray_as_list,
+            pandas_backend=self._pandas_backend,
         )
         return converter(s)
 
@@ -411,6 +433,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                 timezone=self._timezone,
                 error_on_duplicated_field_names=False,
                 int_to_decimal_coercion_enabled=self._int_to_decimal_coercion_enabled,
+                pandas_backend=self._pandas_backend,
             )
             series = conv(series)
 
@@ -531,8 +554,9 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         arrow_cast=False,
         input_types=None,
         int_to_decimal_coercion_enabled=False,
+        pandas_backend="numpy",
     ):
-        super().__init__(timezone, safecheck, int_to_decimal_coercion_enabled)
+        super().__init__(timezone, safecheck, int_to_decimal_coercion_enabled, pandas_backend)
         self._assign_cols_by_name = assign_cols_by_name
         self._df_for_struct = df_for_struct
         self._struct_in_pandas = struct_in_pandas
@@ -1143,6 +1167,7 @@ class ArrowStreamAggPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
         safecheck,
         assign_cols_by_name,
         int_to_decimal_coercion_enabled,
+        pandas_backend,
     ):
         super().__init__(
             timezone=timezone,
@@ -1154,6 +1179,7 @@ class ArrowStreamAggPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
             arrow_cast=True,
             input_types=None,
             int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+            pandas_backend=pandas_backend,
         )
 
     def load_stream(self, stream):
@@ -1197,6 +1223,7 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
         safecheck,
         assign_cols_by_name,
         int_to_decimal_coercion_enabled,
+        pandas_backend,
     ):
         super().__init__(
             timezone=timezone,
@@ -1208,6 +1235,7 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
             arrow_cast=True,
             input_types=None,
             int_to_decimal_coercion_enabled=int_to_decimal_coercion_enabled,
+            pandas_backend=pandas_backend,
         )
 
     def load_stream(self, stream):

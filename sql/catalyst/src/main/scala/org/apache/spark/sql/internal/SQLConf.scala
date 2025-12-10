@@ -4246,6 +4246,15 @@ object SQLConf {
       .checkValues(Set("legacy", "row", "dict"))
       .createWithDefaultString("legacy")
 
+  val PANDAS_EXECUTION_BACKEND =
+    buildConf("spark.sql.execution.pandas.backend")
+      .doc("(Experimental) The backend of Pandas Series/DataFrame in Python execution. " +
+        "This configuration applies to Pandas UDFs.")
+      .version("4.2.0")
+      .stringConf
+      .checkValues(Set("numpy", "pyarrow"))
+      .createWithDefaultString("numpy")
+
   val PYSPARK_HIDE_TRACEBACK =
     buildConf("spark.sql.execution.pyspark.udf.hideTraceback.enabled")
       .doc(
@@ -7626,6 +7635,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pandasUDFBufferSize: Int = getConf(PANDAS_UDF_BUFFER_SIZE)
 
   def pandasStructHandlingMode: String = getConf(PANDAS_STRUCT_HANDLING_MODE)
+
+  def pandasExecutionBackend: String = getConf(PANDAS_EXECUTION_BACKEND)
 
   def pysparkHideTraceback: Boolean = getConf(PYSPARK_HIDE_TRACEBACK)
 
