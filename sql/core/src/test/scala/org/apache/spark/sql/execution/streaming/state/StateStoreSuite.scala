@@ -1458,8 +1458,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       provider.getStore(0, loadEmpty = true)
     }
     assert(e.getMessage.contains(
-      "getStore operation not supported with loadEmpty parameter is not supported " +
-        "in HDFSBackedStateStoreProvider"))
+      "Internal Error: HDFSBackedStateStoreProvider doesn't support loadEmpty"))
   }
 
   test("Auto snapshot repair") {
