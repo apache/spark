@@ -1650,17 +1650,23 @@ class RocksDB(
    * Drop uncommitted changes, and roll back to previous version.
    */
   def rollback(): Unit = {
-    numKeysOnWritingVersion = numKeysOnLoadedVersion
-    numInternalKeysOnWritingVersion = numInternalKeysOnLoadedVersion
-    loadedVersion = -1L
-    lastCommitBasedStateStoreCkptId = None
-    lastCommittedStateStoreCkptId = None
-    loadedStateStoreCkptId = None
-    sessionStateStoreCkptId = None
-    lineageManager.clear()
-    changelogWriter.foreach(_.abort())
-    // Make sure changelogWriter gets recreated next time.
-    changelogWriter = None
+    logInfo(
+      log"Rolling back uncommitted changes on version ${MDC(LogKeys.VERSION_NUM, loadedVersion)}")
+    try {
+      numKeysOnWritingVersion = numKeysOnLoadedVersion
+      numInternalKeysOnWritingVersion = numInternalKeysOnLoadedVersion
+      loadedVersion = -1L
+      lastCommitBasedStateStoreCkptId = None
+      lastCommittedStateStoreCkptId = None
+      loadedStateStoreCkptId = None
+      sessionStateStoreCkptId = None
+      lineageManager.clear()
+      changelogWriter.foreach(_.abort())
+    } finally {
+      // Make sure changelogWriter gets recreated next time even if the changelogWriter aborts with
+      // an exception.
+      changelogWriter = None
+    }
     logInfo(log"Rolled back to ${MDC(LogKeys.VERSION_NUM, loadedVersion)}")
   }
 
