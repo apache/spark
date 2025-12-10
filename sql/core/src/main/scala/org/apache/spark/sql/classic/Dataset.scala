@@ -1562,6 +1562,14 @@ class Dataset[T] private[sql](
     }
   }
 
+  override def optimizePartitions(targetMB: Int): Dataset[T] = {
+    val currentPartitions = rdd.getNumPartitions
+
+    withTypedPlan {
+      OptimizePartitionsCommand(logicalPlan, targetMB, currentPartitions)
+    }
+  }
+
   /** @inheritdoc */
   def coalesce(numPartitions: Int): Dataset[T] = withSameTypedPlan {
     Repartition(numPartitions, shuffle = false, logicalPlan)
