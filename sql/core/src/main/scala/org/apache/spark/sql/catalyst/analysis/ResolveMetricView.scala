@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.METRIC_VIEW_PLACEHOLDER
 import org.apache.spark.sql.metricview.logical.{MetricViewPlaceholder, ResolvedMetricView}
-import org.apache.spark.sql.metricview.serde.{Column => CanonicalColumn, Constants => MetricViewConstants, Expression => CanonicalExpression, JsonUtils, MetricView => CanonicalMetricView, _}
+import org.apache.spark.sql.metricview.serde.{Column => CanonicalColumn, Constants => MetricViewConstants, DimensionExpression, JsonUtils, MeasureExpression, MetricView => CanonicalMetricView}
 import org.apache.spark.sql.types.{DataType, Metadata, MetadataBuilder}
 
 case class ResolveMetricView(session: SparkSession) extends Rule[LogicalPlan] {
@@ -128,7 +128,7 @@ case class ResolveMetricView(session: SparkSession) extends Rule[LogicalPlan] {
 
   private def parseMetricViewColumns(
       metricViewOutput: Seq[Attribute],
-      columns: Seq[CanonicalColumn[_ <: CanonicalExpression]]
+      columns: Seq[CanonicalColumn]
   ): (Seq[MetricViewDimension], Seq[MetricViewMeasure]) = {
     val dimensions = new mutable.ArrayBuffer[MetricViewDimension]()
     val measures = new mutable.ArrayBuffer[MetricViewMeasure]()
