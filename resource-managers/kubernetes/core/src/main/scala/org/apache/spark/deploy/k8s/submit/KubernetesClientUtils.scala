@@ -116,7 +116,7 @@ object KubernetesClientUtils extends Logging {
     }.toList.sortBy(x => x.getKey) // List is sorted to make mocking based tests work
   }
 
-  @Since("4.1.0")
+  @Since("4.2.0")
   def overrideDefaultSparkEnv(conf: KubernetesDriverConf,
       confFilesMap: Map[String, String]): Map[String, String] = {
     if (conf.environment.isEmpty) {
