@@ -40,7 +40,7 @@ import org.apache.spark.ml.tree.{DecisionTreeModel, TreeEnsembleModel}
 import org.apache.spark.ml.util.{ConnectHelper, HasTrainingSummary, Identifiable, MLReader, MLWritable}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.classic.Dataset
-import org.apache.spark.sql.connect.common.{FromProtoToScalaConverter, ProtoSpecializedArray}
+import org.apache.spark.sql.connect.common.ProtoSpecializedArray
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
 import org.apache.spark.sql.connect.service.SessionHolder
@@ -129,33 +129,16 @@ private[ml] object MLUtils {
   def setInstanceParams(instance: Params, params: proto.MlParams): Unit = {
     params.getParamsMap.asScala.foreach { case (name, literal) =>
       val p = instance.getParam(name)
-      val value = literal.getLiteralTypeCase match {
-        case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
-          val s = literal.getStruct
-          s.getStructType.getUdt.getJvmClass match {
-            case "org.apache.spark.ml.linalg.VectorUDT" => deserializeVector(s)
-            case "org.apache.spark.ml.linalg.MatrixUDT" => deserializeMatrix(s)
-            case _ =>
-              throw MlUnsupportedException(s"Unsupported struct ${literal.getStruct} for ${name}")
-          }
-
+      val paramValue = MLParamConverter.convertToValue(literal)
+      val value = paramValue match {
+        case _: Matrix | _: Vector => paramValue
+        case _: String | _: Boolean if p.dataClass == null => paramValue
+        case _ if p.dataClass != null => reconcileParam(p.dataClass, paramValue)
         case _ =>
-          val paramValue = FromProtoToScalaConverter.convertToValue(literal)
-          val paramType: Class[_] = if (p.dataClass == null) {
-            if (paramValue.isInstanceOf[String]) {
-              classOf[String]
-            } else if (paramValue.isInstanceOf[Boolean]) {
-              classOf[Boolean]
-            } else {
-              throw MlUnsupportedException(
-                "Spark Connect ML requires the customized ML Param class setting 'dataClass' " +
-                  "parameter if the param value type is not String or Boolean type, " +
-                  s"but the param $name does not have the required dataClass.")
-            }
-          } else {
-            p.dataClass
-          }
-          reconcileParam(paramType, paramValue)
+          throw MlUnsupportedException(
+            "Spark Connect ML requires the customized ML Param class setting 'dataClass' " +
+              "parameter if the param value type is not String or Boolean type, " +
+              s"but the param $name does not have the required dataClass.")
       }
       instance.set(p, value)
     }

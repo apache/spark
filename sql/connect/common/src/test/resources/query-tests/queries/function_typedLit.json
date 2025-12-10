@@ -77,10 +77,6 @@
     }, {
       "literal": {
         "null": {
-          "null": {
-          }
-        },
-        "dataType": {
           "string": {
             "collation": "UTF8_BINARY"
           }
@@ -386,7 +382,19 @@
       }
     }, {
       "literal": {
-        "binary": "CAY="
+        "array": {
+          "elements": [{
+            "byte": 8
+          }, {
+            "byte": 6
+          }],
+          "dataType": {
+            "elementType": {
+              "byte": {
+              }
+            }
+          }
+        }
       },
       "common": {
         "origin": {
@@ -412,10 +420,8 @@
             "integer": 8
           }, {
             "integer": 6
-          }]
-        },
-        "dataType": {
-          "array": {
+          }],
+          "dataType": {
             "elementType": {
               "integer": {
               }
@@ -443,10 +449,6 @@
     }, {
       "literal": {
         "null": {
-          "null": {
-          }
-        },
-        "dataType": {
           "null": {
           }
         }
@@ -717,10 +719,8 @@
               "days": 20,
               "microseconds": "100"
             }
-          }]
-        },
-        "dataType": {
-          "struct": {
+          }],
+          "dataTypeStruct": {
             "fields": [{
               "name": "_1",
               "dataType": {
@@ -840,10 +840,8 @@
             "integer": 2
           }, {
             "integer": 3
-          }]
-        },
-        "dataType": {
-          "array": {
+          }],
+          "dataType": {
             "elementType": {
               "integer": {
               }
@@ -881,10 +879,8 @@
               "null": {
               }
             }
-          }]
-        },
-        "dataType": {
-          "array": {
+          }],
+          "dataType": {
             "elementType": {
               "integer": {
               }
@@ -942,10 +938,8 @@
                 }
               }]
             }
-          }]
-        },
-        "dataType": {
-          "array": {
+          }],
+          "dataType": {
             "elementType": {
               "struct": {
                 "fields": [{
@@ -1007,10 +1001,8 @@
                 "string": "a"
               }]
             }
-          }]
-        },
-        "dataType": {
-          "array": {
+          }],
+          "dataType": {
             "elementType": {
               "struct": {
                 "fields": [{
@@ -1060,10 +1052,8 @@
             "integer": 2
           }, {
             "integer": 3
-          }]
-        },
-        "dataType": {
-          "array": {
+          }],
+          "dataType": {
             "elementType": {
               "integer": {
               }
@@ -1100,10 +1090,8 @@
             "integer": 1
           }, {
             "integer": 2
-          }]
-        },
-        "dataType": {
-          "map": {
+          }],
+          "dataType": {
             "keyType": {
               "string": {
                 "collation": "UTF8_BINARY"
@@ -1151,10 +1139,8 @@
               "null": {
               }
             }
-          }]
-        },
-        "dataType": {
-          "map": {
+          }],
+          "dataType": {
             "keyType": {
               "string": {
                 "collation": "UTF8_BINARY"
@@ -1194,10 +1180,8 @@
             "integer": 2
           }, {
             "double": 1.0
-          }]
-        },
-        "dataType": {
-          "struct": {
+          }],
+          "dataTypeStruct": {
             "fields": [{
               "name": "_1",
               "dataType": {
@@ -1242,10 +1226,6 @@
     }, {
       "literal": {
         "null": {
-          "null": {
-          }
-        },
-        "dataType": {
           "integer": {
           }
         }
@@ -1272,10 +1252,8 @@
         "array": {
           "elements": [{
             "integer": 1
-          }]
-        },
-        "dataType": {
-          "array": {
+          }],
+          "dataType": {
             "elementType": {
               "integer": {
               }
@@ -1312,10 +1290,8 @@
               "null": {
               }
             }
-          }]
-        },
-        "dataType": {
-          "map": {
+          }],
+          "dataType": {
             "keyType": {
               "integer": {
               }
@@ -1356,10 +1332,8 @@
               "null": {
               }
             }
-          }]
-        },
-        "dataType": {
-          "map": {
+          }],
+          "dataType": {
             "keyType": {
               "integer": {
               }
@@ -1400,10 +1374,8 @@
               "null": {
               }
             }
-          }]
-        },
-        "dataType": {
-          "map": {
+          }],
+          "dataType": {
             "keyType": {
               "integer": {
               }
@@ -1466,10 +1438,8 @@
                 "integer": 9
               }]
             }
-          }]
-        },
-        "dataType": {
-          "array": {
+          }],
+          "dataType": {
             "elementType": {
               "array": {
                 "elementType": {
@@ -1529,10 +1499,8 @@
                 }
               }]
             }
-          }]
-        },
-        "dataType": {
-          "array": {
+          }],
+          "dataType": {
             "elementType": {
               "struct": {
                 "fields": [{
@@ -1613,10 +1581,8 @@
                 "string": "6"
               }]
             }
-          }]
-        },
-        "dataType": {
-          "array": {
+          }],
+          "dataType": {
             "elementType": {
               "struct": {
                 "fields": [{
@@ -1699,10 +1665,8 @@
                 "integer": 6
               }]
             }
-          }]
-        },
-        "dataType": {
-          "array": {
+          }],
+          "dataType": {
             "elementType": {
               "map": {
                 "keyType": {
@@ -1805,10 +1769,8 @@
                 }
               }]
             }
-          }]
-        },
-        "dataType": {
-          "array": {
+          }],
+          "dataType": {
             "elementType": {
               "map": {
                 "keyType": {
@@ -1884,10 +1846,8 @@
                 "integer": 4
               }]
             }
-          }]
-        },
-        "dataType": {
-          "map": {
+          }],
+          "dataType": {
             "keyType": {
               "integer": {
               }
@@ -1971,10 +1931,8 @@
                 }
               }]
             }
-          }]
-        },
-        "dataType": {
-          "struct": {
+          }],
+          "dataTypeStruct": {
             "fields": [{
               "name": "_1",
               "dataType": {

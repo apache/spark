@@ -70,7 +70,7 @@ object LiteralValueProtoConverter {
       dataTypeOpt: Option[DataType],
       options: ToLiteralProtoOptions): Literal = {
     val dataTypeBuilder = dataTypeOpt
-      .map(dataType => FixedDataTypeBuilder(dataType, value == null))
+      .map(dataType => FixedDataTypeBuilder(dataType, value == null || value == None))
       .getOrElse(InferringDataTypeBuilder())
     val (literal, _) = toLiteralProtoBuilderInternal(
       value,
@@ -387,7 +387,7 @@ trait FromProtoConvertor {
       case LiteralTypeCase.LONG =>
         result(LongType, literal.getLong)
       case LiteralTypeCase.FLOAT =>
-        result(FloatType, literal.getFloat)
+        convertFloat(literal, dataTypeBuilder)
       case LiteralTypeCase.DOUBLE =>
         result(DoubleType, literal.getDouble)
       case LiteralTypeCase.DECIMAL =>
@@ -461,7 +461,13 @@ trait FromProtoConvertor {
     }
   }
 
-  private def convertArray(
+  protected def convertFloat(
+      literal: Literal,
+      dataTypeBuilder: DataTypeBuilder): (DataTypeBuilder, Any) = {
+    (dataTypeBuilder.merge(FloatType, isNullable = false), literal.getFloat)
+  }
+
+  protected def convertArray(
       array: CArray,
       arrayTypeBuilder: DataTypeBuilder): (DataTypeBuilder, Any) = {
     var elementTypeBuilder = arrayTypeBuilder.elementTypeBuilder()

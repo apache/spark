@@ -24,9 +24,9 @@ import org.apache.spark.connect.proto.Expression.Literal
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.Params
 import org.apache.spark.sql.Dataset
-import org.apache.spark.sql.connect.common.{FromProtoToScalaConverter, LiteralValueProtoConverter, ProtoDataTypes}
+import org.apache.spark.sql.connect.common.{DataTypeBuilder, FromProtoToScalaConverter, LiteralValueProtoConverter, ProtoDataTypes}
 import org.apache.spark.sql.connect.service.SessionHolder
-import org.apache.spark.sql.types.{ArrayType, DoubleType, FloatType, StringType, UserDefinedType}
+import org.apache.spark.sql.types.{ArrayType, DoubleType, UserDefinedType}
 
 private[ml] object Serializer {
 
@@ -146,16 +146,8 @@ private[ml] object Serializer {
       sessionHolder: SessionHolder): Array[(Object, Class[_])] = {
     args.map { arg =>
       if (arg.hasParam) {
-        MLParamConverter.convert(arg.getParam) match {
-          case (ArrayType(DoubleType, false), array: Array[_]) =>
-            (MLUtils.reconcileArray(classOf[Double], array), classOf[Array[Double]])
-          case (ArrayType(ArrayType(StringType, _), _), array: Array[Array[_]]) =>
-            (MLUtils.reconcileArray(classOf[Array[String]], array), classOf[Array[Array[String]]])
-          case (FloatType, value: Float) =>
-            (Double.box(value.toDouble), classOf[Double])
-          case (_, value) =>
-            (value.asInstanceOf[Object], value.getClass)
-        }
+        val value = MLParamConverter.convertToValue(arg.getParam).asInstanceOf[AnyRef]
+        (value, value.getClass)
       } else if (arg.hasInput) {
         (MLUtils.parseRelationProto(arg.getInput, sessionHolder), classOf[Dataset[_]])
       } else {
@@ -184,6 +176,14 @@ private[ml] object Serializer {
 }
 
 object MLParamConverter extends FromProtoToScalaConverter {
+  private val DOUBLE_ARRAY = ArrayType(DoubleType, containsNull = false)
+
+  override protected def convertFloat(
+      literal: Literal,
+      dataTypeBuilder: DataTypeBuilder): (DataTypeBuilder, Any) = {
+    (dataTypeBuilder.merge(DoubleType, isNullable = false), literal.getFloat.toDouble)
+  }
+
   override protected def convertUdt(struct: Literal.Struct, udt: UserDefinedType[_]): Any = {
     if (udt.userClass == classOf[Vector]) {
       MLUtils.deserializeVector(struct)
@@ -196,4 +196,14 @@ object MLParamConverter extends FromProtoToScalaConverter {
 
   override protected def arrayBuilder(size: Int): mutable.Builder[Any, Any] =
     mutable.ArrayBuilder.make[Any]
+
+  override protected def convertArray(
+      array: Literal.Array,
+      arrayTypeBuilder: DataTypeBuilder): (DataTypeBuilder, Any) = {
+    super.convertArray(array, arrayTypeBuilder) match {
+      case (builder, value: Array[_]) if builder.result().acceptsType(DOUBLE_ARRAY) =>
+        (builder, value.map(_.asInstanceOf[Double]))
+      case result => result
+    }
+  }
 }
