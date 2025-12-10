@@ -118,7 +118,19 @@ class RunnerConf:
 
     def load(self, infile):
         num_conf = read_int(infile)
-        for i in range(num_conf):
+        # We do a sanity check here to reduce the possibility to stuck indefinitely
+        # due to an invalid messsage. If the numer of configurations is obviously
+        # wrong, we just raise an error directly.
+        # We hand-pick the configurations to send to the worker so the number should
+        # be very small (less than 100).
+        if num_conf < 0 or num_conf > 10000:
+            raise PySparkRuntimeError(
+                errorClass="PROTOCOL_ERROR",
+                messageParameters={
+                    "failure": f"Invalid number of configurations: {num_conf}",
+                },
+            )
+        for _ in range(num_conf):
             k = utf8_deserializer.loads(infile)
             v = utf8_deserializer.loads(infile)
             self._conf[k] = v
