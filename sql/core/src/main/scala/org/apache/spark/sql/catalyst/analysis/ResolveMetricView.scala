@@ -98,7 +98,7 @@ import org.apache.spark.sql.types.{DataType, Metadata, MetadataBuilder}
  * 5. The resolved schema (with metadata about dimensions/measures) is stored in the catalog
  *
  * Key insight: We construct an Aggregate node even though it won't be executed. This allows
- * the analyzer to infer proper data types for measures (e.g., sum(int) → long).
+ * the analyzer to infer proper data types for measures (e.g., sum(int) -> long).
  *
  * == Workflow 2: SELECT FROM METRIC VIEW ==
  * Purpose: Rewrite user queries to replace MEASURE() function calls with actual aggregations.
@@ -148,16 +148,16 @@ import org.apache.spark.sql.types.{DataType, Metadata, MetadataBuilder}
  * {{{
  *   -- Dimension only (no aggregation needed)
  *   SELECT region_upper FROM sales_metrics GROUP BY 1
- *   → SELECT upper(region) FROM sales_table WHERE product = 'product_1' GROUP BY 1
+ *   => SELECT upper(region) FROM sales_table WHERE product = 'product_1' GROUP BY 1
  *
  *   -- Measure only (aggregates entire dataset)
  *   SELECT MEASURE(total_sales) FROM sales_metrics
- *   → SELECT sum(amount) FROM sales_table WHERE product = 'product_1'
+ *   => SELECT sum(amount) FROM sales_table WHERE product = 'product_1'
  *
  *   -- Dimensions + Measures (group by dimensions)
  *   SELECT region, MEASURE(total_sales) FROM sales_metrics GROUP BY region
- *   → SELECT region, sum(amount) FROM sales_table
- *     WHERE product = 'product_1' GROUP BY region
+ *   => SELECT region, sum(amount) FROM sales_table
+ *      WHERE product = 'product_1' GROUP BY region
  * }}}
  *
  * The rule operates on unresolved plans and transforms [[MetricViewPlaceholder]] nodes
