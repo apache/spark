@@ -248,6 +248,7 @@ WITH
     SELECT * FROM t1
   )
 SELECT * FROM t2;
+SET spark.sql.legacy.ctePrecedencePolicy=EXCEPTION;
 
 -- recursive reference can't be used multiple times in a recursive term
 WITH RECURSIVE r(level, data) AS (
@@ -725,6 +726,13 @@ WITH RECURSIVE t1(n, m) AS (
     SELECT 1, 1
     UNION ALL
     SELECT n+1, CAST(n+1 AS BIGINT) FROM t1 WHERE n < 5)
+SELECT * FROM t1;
+
+-- Type coercion with timeZone sensitive type
+WITH RECURSIVE t1(n, stamp) AS (
+    SELECT 1, CAST(DATE '2024-01-15' AS TIMESTAMP)
+    UNION ALL
+    SELECT n+1, stamp FROM t1 WHERE n < 5)
 SELECT * FROM t1;
 
 -- Recursive CTE with nullable recursion and non-recursive anchor

@@ -263,7 +263,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
               val widerType = findWiderTypeForTwo(attr.dataType, dt)
               if (widerType.isDefined && widerType.get == dt) {
                 if (attr.dataType != dt) {
-                  Alias(Cast(attr, dt, Some(conf.sessionLocalTimeZone)), attr.name)()
+                  Alias(Cast(attr, dt), attr.name)()
                 } else {
                   attr
                 }
