@@ -4529,7 +4529,7 @@ class AstBuilder extends DataTypeAstBuilder
       case applyCtx: ApplyTransformContext =>
         val arguments = applyCtx.argument.asScala.map(visitTransformArgument).toSeq
 
-        getIdentifierText(applyCtx.identifier) match {
+        applyCtx.identifier.getText match {
           case "bucket" =>
             val numBuckets: Int = arguments.head match {
               case LiteralValue(shortValue, ShortType) =>
@@ -4887,7 +4887,7 @@ class AstBuilder extends DataTypeAstBuilder
     (rowFormatCtx, createFileFormatCtx.fileFormat) match {
       case (_, ffTable: TableFileFormatContext) => // OK
       case (rfSerde: RowFormatSerdeContext, ffGeneric: GenericFileFormatContext) =>
-        getIdentifierText(ffGeneric.identifier).toLowerCase(Locale.ROOT) match {
+        ffGeneric.identifier.getText.toLowerCase(Locale.ROOT) match {
           case ("sequencefile" | "textfile" | "rcfile") => // OK
           case fmt =>
             operationNotAllowed(
@@ -5838,7 +5838,7 @@ class AstBuilder extends DataTypeAstBuilder
       }
     }
     if (ctx.identifier != null &&
-        getIdentifierText(ctx.identifier).toLowerCase(Locale.ROOT) != "noscan") {
+        ctx.identifier.getText.toLowerCase(Locale.ROOT) != "noscan") {
       throw QueryParsingErrors.computeStatisticsNotExpectedError(ctx.identifier())
     }
 
@@ -5879,7 +5879,7 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitAnalyzeTables(ctx: AnalyzeTablesContext): LogicalPlan = withOrigin(ctx) {
     if (ctx.identifier != null &&
-      getIdentifierText(ctx.identifier).toLowerCase(Locale.ROOT) != "noscan") {
+      ctx.identifier.getText.toLowerCase(Locale.ROOT) != "noscan") {
       throw QueryParsingErrors.computeStatisticsNotExpectedError(ctx.identifier())
     }
     val ns = if (ctx.identifierReference() != null) {
@@ -6719,7 +6719,7 @@ class AstBuilder extends DataTypeAstBuilder
           s"SQL pipe syntax |> SET operator with multi-part assignment key " +
             s"(only single-part keys are allowed)", ctx)
       }
-      val setIdentifiers: Seq[String] = ctx.errorCapturingIdentifier().asScala.map(_.getText).toSeq
+      val setIdentifiers: Seq[String] = ctx.errorCapturingIdentifier().asScala.map(getIdentifierText).toSeq
       val setTargets: Seq[Expression] = ctx.expression().asScala.map(typedVisit[Expression]).toSeq
       (setIdentifiers, setTargets)
     }

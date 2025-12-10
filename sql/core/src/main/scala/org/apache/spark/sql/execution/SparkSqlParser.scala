@@ -575,14 +575,14 @@ class SparkSqlAstBuilder extends AstBuilder {
 
     ctx.op.getType match {
       case SqlBaseParser.ADD =>
-        getIdentifierText(ctx.identifier).toLowerCase(Locale.ROOT) match {
+        ctx.identifier.getText.toLowerCase(Locale.ROOT) match {
           case "files" | "file" => AddFilesCommand(maybePaths)
           case "jars" | "jar" => AddJarsCommand(maybePaths)
           case "archives" | "archive" => AddArchivesCommand(maybePaths)
           case other => operationNotAllowed(s"ADD with resource type '$other'", ctx)
         }
       case SqlBaseParser.LIST =>
-        getIdentifierText(ctx.identifier()).toLowerCase(Locale.ROOT) match {
+        ctx.identifier.getText.toLowerCase(Locale.ROOT) match {
           case "files" | "file" =>
             if (maybePaths.length > 0) {
               ListFilesCommand(maybePaths)
@@ -735,7 +735,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitCreateFunction(ctx: CreateFunctionContext): LogicalPlan = withOrigin(ctx) {
     val resources = ctx.resource.asScala.map { resource =>
-      val resourceType = getIdentifierText(resource.identifier).toLowerCase(Locale.ROOT)
+      val resourceType = resource.identifier.getText.toLowerCase(Locale.ROOT)
       resourceType match {
         case "jar" | "file" | "archive" =>
           FunctionResource(FunctionResourceType.fromString(resourceType),
