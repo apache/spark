@@ -27,7 +27,6 @@ from pyspark.sql.functions import (
     col,
     lit,
     mean,
-    sum,
     udf,
     pandas_udf,
     PandasUDFType,
@@ -246,16 +245,16 @@ class GroupedAggPandasUDFTestsMixin:
 
         # Mix group aggregate pandas UDF with sql expression
         result1 = df.groupby("id").agg(sum_udf(df.v) + 1).sort("id")
-        expected1 = df.groupby("id").agg(sum(df.v) + 1).sort("id")
+        expected1 = df.groupby("id").agg(sf.sum(df.v) + 1).sort("id")
 
         # Mix group aggregate pandas UDF with sql expression (order swapped)
         result2 = df.groupby("id").agg(sum_udf(df.v + 1)).sort("id")
 
-        expected2 = df.groupby("id").agg(sum(df.v + 1)).sort("id")
+        expected2 = df.groupby("id").agg(sf.sum(df.v + 1)).sort("id")
 
         # Wrap group aggregate pandas UDF with two sql expressions
         result3 = df.groupby("id").agg(sum_udf(df.v + 1) + 2).sort("id")
-        expected3 = df.groupby("id").agg(sum(df.v + 1) + 2).sort("id")
+        expected3 = df.groupby("id").agg(sf.sum(df.v + 1) + 2).sort("id")
 
         assert_frame_equal(expected1.toPandas(), result1.toPandas())
         assert_frame_equal(expected2.toPandas(), result2.toPandas())
@@ -272,26 +271,26 @@ class GroupedAggPandasUDFTestsMixin:
 
         # Mix group aggregate pandas UDF and python UDF
         result1 = df.groupby("id").agg(plus_one(sum_udf(df.v))).sort("id")
-        expected1 = df.groupby("id").agg(plus_one(sum(df.v))).sort("id")
+        expected1 = df.groupby("id").agg(plus_one(sf.sum(df.v))).sort("id")
 
         # Mix group aggregate pandas UDF and python UDF (order swapped)
         result2 = df.groupby("id").agg(sum_udf(plus_one(df.v))).sort("id")
-        expected2 = df.groupby("id").agg(sum(plus_one(df.v))).sort("id")
+        expected2 = df.groupby("id").agg(sf.sum(plus_one(df.v))).sort("id")
 
         # Mix group aggregate pandas UDF and scalar pandas UDF
         result3 = df.groupby("id").agg(sum_udf(plus_two(df.v))).sort("id")
-        expected3 = df.groupby("id").agg(sum(plus_two(df.v))).sort("id")
+        expected3 = df.groupby("id").agg(sf.sum(plus_two(df.v))).sort("id")
 
         # Mix group aggregate pandas UDF and scalar pandas UDF (order swapped)
         result4 = df.groupby("id").agg(plus_two(sum_udf(df.v))).sort("id")
-        expected4 = df.groupby("id").agg(plus_two(sum(df.v))).sort("id")
+        expected4 = df.groupby("id").agg(plus_two(sf.sum(df.v))).sort("id")
 
         # Wrap group aggregate pandas UDF with two python UDFs and use python UDF in groupby
         result5 = (
             df.groupby(plus_one(df.id)).agg(plus_one(sum_udf(plus_one(df.v)))).sort("plus_one(id)")
         )
         expected5 = (
-            df.groupby(plus_one(df.id)).agg(plus_one(sum(plus_one(df.v)))).sort("plus_one(id)")
+            df.groupby(plus_one(df.id)).agg(plus_one(sf.sum(plus_one(df.v)))).sort("plus_one(id)")
         )
 
         # Wrap group aggregate pandas UDF with two scala pandas UDF and user scala pandas UDF in
@@ -300,7 +299,7 @@ class GroupedAggPandasUDFTestsMixin:
             df.groupby(plus_two(df.id)).agg(plus_two(sum_udf(plus_two(df.v)))).sort("plus_two(id)")
         )
         expected6 = (
-            df.groupby(plus_two(df.id)).agg(plus_two(sum(plus_two(df.v)))).sort("plus_two(id)")
+            df.groupby(plus_two(df.id)).agg(plus_two(sf.sum(plus_two(df.v)))).sort("plus_two(id)")
         )
 
         assert_frame_equal(expected1.toPandas(), result1.toPandas())
@@ -327,7 +326,7 @@ class GroupedAggPandasUDFTestsMixin:
         )
         expected1 = (
             df.groupBy("id")
-            .agg(mean(df.v), sum(df.v), mean(df.v).alias("weighted_mean(v, w)"))
+            .agg(mean(df.v), sf.sum(df.v), mean(df.v).alias("weighted_mean(v, w)"))
             .sort("id")
             .toPandas()
         )
@@ -342,23 +341,23 @@ class GroupedAggPandasUDFTestsMixin:
 
         # groupby one expression
         result1 = df.groupby(df.v % 2).agg(sum_udf(df.v))
-        expected1 = df.groupby(df.v % 2).agg(sum(df.v))
+        expected1 = df.groupby(df.v % 2).agg(sf.sum(df.v))
 
         # empty groupby
         result2 = df.groupby().agg(sum_udf(df.v))
-        expected2 = df.groupby().agg(sum(df.v))
+        expected2 = df.groupby().agg(sf.sum(df.v))
 
         # groupby one column and one sql expression
         result3 = df.groupby(df.id, df.v % 2).agg(sum_udf(df.v)).orderBy(df.id, df.v % 2)
-        expected3 = df.groupby(df.id, df.v % 2).agg(sum(df.v)).orderBy(df.id, df.v % 2)
+        expected3 = df.groupby(df.id, df.v % 2).agg(sf.sum(df.v)).orderBy(df.id, df.v % 2)
 
         # groupby one python UDF
         result4 = df.groupby(plus_one(df.id)).agg(sum_udf(df.v)).sort("plus_one(id)")
-        expected4 = df.groupby(plus_one(df.id)).agg(sum(df.v)).sort("plus_one(id)")
+        expected4 = df.groupby(plus_one(df.id)).agg(sf.sum(df.v)).sort("plus_one(id)")
 
         # groupby one scalar pandas UDF
         result5 = df.groupby(plus_two(df.id)).agg(sum_udf(df.v)).sort("sum(v)")
-        expected5 = df.groupby(plus_two(df.id)).agg(sum(df.v)).sort("sum(v)")
+        expected5 = df.groupby(plus_two(df.id)).agg(sf.sum(df.v)).sort("sum(v)")
 
         # groupby one expression and one python UDF
         result6 = (
@@ -367,7 +366,7 @@ class GroupedAggPandasUDFTestsMixin:
             .sort(["(v % 2)", "plus_one(id)"])
         )
         expected6 = (
-            df.groupby(df.v % 2, plus_one(df.id)).agg(sum(df.v)).sort(["(v % 2)", "plus_one(id)"])
+            df.groupby(df.v % 2, plus_one(df.id)).agg(sf.sum(df.v)).sort(["(v % 2)", "plus_one(id)"])
         )
 
         # groupby one expression and one scalar pandas UDF
@@ -377,7 +376,7 @@ class GroupedAggPandasUDFTestsMixin:
             .sort(["sum(v)", "plus_two(id)"])
         )
         expected7 = (
-            df.groupby(df.v % 2, plus_two(df.id)).agg(sum(df.v)).sort(["sum(v)", "plus_two(id)"])
+            df.groupby(df.v % 2, plus_two(df.id)).agg(sf.sum(df.v)).sort(["sum(v)", "plus_two(id)"])
         )
 
         assert_frame_equal(expected1.toPandas(), result1.toPandas())
@@ -417,11 +416,11 @@ class GroupedAggPandasUDFTestsMixin:
             .withColumn("v2", df.v + 2)
             .groupby(df.id, df.v % 2)
             .agg(
-                sum(col("v")),
-                sum(col("v1") + 3),
-                sum(col("v2")) + 5,
-                plus_one(sum(col("v1"))),
-                sum(plus_one(col("v2"))),
+                sf.sum(col("v")),
+                sf.sum(col("v1") + 3),
+                sf.sum(col("v2")) + 5,
+                plus_one(sf.sum(col("v1"))),
+                sf.sum(plus_one(col("v2"))),
             )
             .sort(["id", "(v % 2)"])
             .toPandas()
@@ -451,11 +450,11 @@ class GroupedAggPandasUDFTestsMixin:
             .withColumn("v2", df.v + 2)
             .groupby(df.id, df.v % 2)
             .agg(
-                sum(col("v")),
-                sum(col("v1") + 3),
-                sum(col("v2")) + 5,
-                plus_two(sum(col("v1"))),
-                sum(plus_two(col("v2"))),
+                sf.sum(col("v")),
+                sf.sum(col("v1") + 3),
+                sf.sum(col("v2")) + 5,
+                plus_two(sf.sum(col("v1"))),
+                sf.sum(plus_two(col("v2"))),
             )
             .sort(["id", "(v % 2)"])
             .toPandas()
@@ -474,9 +473,9 @@ class GroupedAggPandasUDFTestsMixin:
 
         expected3 = (
             df.groupby("id")
-            .agg(sum(df.v).alias("v"))
+            .agg(sf.sum(df.v).alias("v"))
             .groupby("id")
-            .agg(sum(col("v")))
+            .agg(sf.sum(col("v")))
             .sort("id")
             .toPandas()
         )
@@ -491,7 +490,7 @@ class GroupedAggPandasUDFTestsMixin:
             sum_udf = self.pandas_agg_sum_udf
 
             result1 = df.groupby(df.id).agg(sum_udf(df.v))
-            expected1 = df.groupby(df.id).agg(sum(df.v))
+            expected1 = df.groupby(df.id).agg(sf.sum(df.v))
             assert_frame_equal(expected1.toPandas(), result1.toPandas())
 
     def test_array_type(self):
@@ -706,7 +705,7 @@ class GroupedAggPandasUDFTestsMixin:
             ):
                 with self.subTest(with_w=False, query_no=i):
                     assertDataFrameEqual(
-                        aggregated, df.groupby("id").agg((sum(df.v) + lit(100)).alias("s"))
+                        aggregated, df.groupby("id").agg((sf.sum(df.v) + lit(100)).alias("s"))
                     )
 
             # with "w"
@@ -722,7 +721,7 @@ class GroupedAggPandasUDFTestsMixin:
             ):
                 with self.subTest(with_w=True, query_no=i):
                     assertDataFrameEqual(
-                        aggregated, df.groupby("id").agg((sum(df.v) + sum(df.w)).alias("s"))
+                        aggregated, df.groupby("id").agg((sf.sum(df.v) + sf.sum(df.w)).alias("s"))
                     )
 
     def test_arrow_cast_enabled_numeric_to_decimal(self):
