@@ -900,4 +900,32 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
       )
     }
   }
+
+  test("ANSI mode: cast invalid UTF-8 binary to string should throw error") {
+    checkExceptionInExpression[SparkRuntimeException](
+      cast(invalidUtf8Literal, StringType),
+      "CAST_INVALID_INPUT")
+
+    // Valid UTF-8 should work
+    checkEvaluation(cast(validUtf8Literal, StringType), UTF8String.fromString("Hello"))
+
+    // Empty binary should work
+    checkEvaluation(cast(emptyBinaryLiteral, StringType), UTF8String.fromString(""))
+  }
+
+  test("ANSI mode: cast invalid UTF-8 with validation disabled (old behavior)") {
+    withSQLConf(SQLConf.VALIDATE_BINARY_TO_STRING_CAST.key -> "false") {
+      // With validation disabled, invalid UTF-8 passes through (old behavior)
+      val result = cast(invalidUtf8Literal, StringType).eval()
+      assert(result != null, "Should not throw when validation is disabled")
+      assert(!result.asInstanceOf[UTF8String].isValid(),
+        "Result should contain invalid UTF-8")
+
+      // Valid UTF-8 should still work
+      checkEvaluation(cast(validUtf8Literal, StringType), UTF8String.fromString("Hello"))
+
+      // Empty binary should work
+      checkEvaluation(cast(emptyBinaryLiteral, StringType), UTF8String.fromString(""))
+    }
+  }
 }
