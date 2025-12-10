@@ -66,7 +66,6 @@ from pyspark.sql.pandas.serializers import (
     ArrowStreamArrowUDFSerializer,
     ArrowStreamAggPandasUDFSerializer,
     ArrowStreamAggArrowUDFSerializer,
-    ArrowStreamAggArrowIterUDFSerializer,
     ArrowBatchUDFSerializer,
     ArrowStreamUDTFSerializer,
     ArrowStreamArrowUDTFSerializer,
@@ -2732,12 +2731,9 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
             or eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF
         ):
             ser = GroupArrowUDFSerializer(runner_conf.assign_cols_by_name)
-        elif eval_type == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF:
-            ser = ArrowStreamAggArrowIterUDFSerializer(
-                runner_conf.timezone, True, runner_conf.assign_cols_by_name, True
-            )
         elif eval_type in (
             PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
             PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
         ):
             ser = ArrowStreamAggArrowUDFSerializer(
@@ -3258,6 +3254,44 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
             else:
                 batch_iter = (tuple(batch_columns[o] for o in arg_offsets) for batch_columns in a)
             return f(batch_iter)
+
+    elif eval_type in (
+        PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
+        PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
+    ):
+        import pyarrow as pa
+
+        # For SQL_GROUPED_AGG_ARROW_UDF and SQL_WINDOW_AGG_ARROW_UDF,
+        # convert iterator of batch columns to a concatenated RecordBatch
+        def mapper(a):
+            # a is Iterator[Tuple[pa.Array, ...]] - convert to RecordBatch
+            batches = []
+            for batch_columns in a:
+                # batch_columns is Tuple[pa.Array, ...] - convert to RecordBatch
+                batch = pa.RecordBatch.from_arrays(
+                    batch_columns, names=["_%d" % i for i in range(len(batch_columns))]
+                )
+                batches.append(batch)
+
+            # Concatenate all batches into one
+            if hasattr(pa, "concat_batches"):
+                concatenated_batch = pa.concat_batches(batches)
+            else:
+                # pyarrow.concat_batches not supported in old versions
+                concatenated_batch = pa.RecordBatch.from_struct_array(
+                    pa.concat_arrays([b.to_struct_array() for b in batches])
+                )
+
+            # Extract series using offsets (concatenated_batch.columns[o] gives pa.Array)
+            result = tuple(
+                f(*[concatenated_batch.columns[o] for o in arg_offsets]) for arg_offsets, f in udfs
+            )
+            # In the special case of a single UDF this will return a single result rather
+            # than a tuple of results; this is the format that the JVM side expects.
+            if len(result) == 1:
+                return result[0]
+            else:
+                return result
 
     else:
 

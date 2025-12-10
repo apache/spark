@@ -1566,11 +1566,13 @@ pyspark_pipelines = Module(
     dependencies=[pyspark_core, pyspark_sql, pyspark_connect],
     source_file_regexes=["python/pyspark/pipelines"],
     python_test_goals=[
+        "pyspark.pipelines.tests.test_add_pipeline_analysis_context",
         "pyspark.pipelines.tests.test_block_session_mutations",
         "pyspark.pipelines.tests.test_cli",
         "pyspark.pipelines.tests.test_decorators",
         "pyspark.pipelines.tests.test_graph_element_registry",
         "pyspark.pipelines.tests.test_init_cli",
+        "pyspark.pipelines.tests.test_spark_connect",
     ],
 )
 

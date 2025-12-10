@@ -1736,9 +1736,8 @@ class Analyzer(
                     Assignment(key, sourceAttr)
                   }
                 } else {
-                  sourceTable.output.flatMap { sourceAttr =>
-                    findAttrInTarget(sourceAttr.name).map(
-                      targetAttr => Assignment(targetAttr, sourceAttr))
+                  targetTable.output.map { attr =>
+                    Assignment(attr, UnresolvedAttribute(Seq(attr.name)))
                   }
                 }
                 UpdateAction(
@@ -1775,9 +1774,8 @@ class Analyzer(
                     Assignment(key, sourceAttr)
                   }
                 } else {
-                  sourceTable.output.flatMap { sourceAttr =>
-                    findAttrInTarget(sourceAttr.name).map(
-                      targetAttr => Assignment(targetAttr, sourceAttr))
+                  targetTable.output.map { attr =>
+                    Assignment(attr, UnresolvedAttribute(Seq(attr.name)))
                   }
                 }
                 InsertAction(
