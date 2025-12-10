@@ -3729,6 +3729,37 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Proactively optimizes the partition count of this Dataset based on its estimated size.
+   *
+   * == Best Practice: Use on Ingest ==
+   * This method is best used immediately after reading a dataset to ensure the initial
+   * parallelism matches the data size. This prevents "Small File" issues (too many partitions)
+   * or "Giant Partition" issues (too few partitions) before heavy transformations begin.
+   *
+   * {{{
+   * val raw = spark.read.parquet("...")
+   * val optimized = raw.optimizePartitions() // Perfect start for transformations
+   * optimized.filter(...).groupBy(...)
+   * }}}
+   *
+   * == Warning: Use on Write ==
+   * This method uses Round Robin partitioning (random shuffle) to balance sizes.
+   * If used immediately before writing to a partitioned table (e.g., `write.partitionBy("city")`),
+   * it may degrade performance by breaking data locality, causing the writer to create
+   * many small files across directories.
+   *
+   * @param targetMB The target partition size in Megabytes. Defaults to 128MB.
+
+   * @group typedrel
+   */
+  def optimizePartitions(targetMB: Int = 128): Dataset[T] = {
+    val currentPartitions = this.rdd.getNumPartitions
+    withTypedPlan {
+      OptimizePartitionsCommand(logicalPlan, targetMB, currentPartitions)
+    }
+  }
+
+  /**
    * Returns a new Dataset that has exactly `numPartitions` partitions, when the fewer partitions
    * are requested. If a larger number of partitions is requested, it will stay at the current
    * number of partitions. Similar to coalesce defined on an `RDD`, this operation results in

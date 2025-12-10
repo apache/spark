@@ -92,7 +92,8 @@ class SparkOptimizer(
       EliminateLimits,
       ConstantFolding) :+
     Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*) :+
-    Batch("Replace CTE with Repartition", Once, ReplaceCTERefWithRepartition)
+    Batch("Replace CTE with Repartition", Once, ReplaceCTERefWithRepartition) :+
+    Batch("Optimizer Partitions", Once, OptimizePartitionsRule)
 
   override def nonExcludableRules: Seq[String] = super.nonExcludableRules :+
     ExtractPythonUDFFromJoinCondition.ruleName :+
