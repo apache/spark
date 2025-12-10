@@ -1652,15 +1652,15 @@ class RocksDB(
   def rollback(): Unit = {
     logInfo(
       log"Rolling back uncommitted changes on version ${MDC(LogKeys.VERSION_NUM, loadedVersion)}")
-    numKeysOnWritingVersion = numKeysOnLoadedVersion
-    numInternalKeysOnWritingVersion = numInternalKeysOnLoadedVersion
-    loadedVersion = -1L
-    lastCommitBasedStateStoreCkptId = None
-    lastCommittedStateStoreCkptId = None
-    loadedStateStoreCkptId = None
-    sessionStateStoreCkptId = None
-    lineageManager.clear()
     try {
+      numKeysOnWritingVersion = numKeysOnLoadedVersion
+      numInternalKeysOnWritingVersion = numInternalKeysOnLoadedVersion
+      loadedVersion = -1L
+      lastCommitBasedStateStoreCkptId = None
+      lastCommittedStateStoreCkptId = None
+      loadedStateStoreCkptId = None
+      sessionStateStoreCkptId = None
+      lineageManager.clear()
       changelogWriter.foreach(_.abort())
     } finally {
       // Make sure changelogWriter gets recreated next time even if the changelogWriter aborts with

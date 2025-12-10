@@ -39,6 +39,7 @@ import org.apache.spark.internal.LogKeys.{CHECKSUM, NUM_BYTES, PATH, TIMEOUT}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager.CancellableFSDataOutputStream
 import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.Utils
 
 /** Information about the creator of the checksum file. Useful for debugging */
 case class ChecksumFileCreatorInfo(
@@ -500,11 +501,14 @@ class ChecksumCancellableFSDataOutputStream(
   @volatile private var closed = false
 
   override def cancel(): Unit = {
-    // Cancel both streams synchronously, because consider we want to cancel the while the thread
-    // is in the interrupted state, If we cancel each stream using a future, the thread will throw
-    // InterruptedException and the thread will not be cancelled.
-    mainStream.cancel()
-    checksumStream.cancel()
+    // Cancel both streams synchronously rather than using futures. If the current thread is
+    // interrupted and we call this method, scheduling work on futures would immediately throw
+    // InterruptedException leaving the streams in an inconsistent state.
+    Utils.tryWithSafeFinally {
+      mainStream.cancel()
+    } {
+      checksumStream.cancel()
+    }
   }
 
   override def close(): Unit = {
