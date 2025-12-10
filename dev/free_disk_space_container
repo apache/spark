@@ -29,5 +29,9 @@ echo "Removing large packages"
 rm -rf /__t/CodeQL
 rm -rf /__t/go
 rm -rf /__t/node
+# remove Haskell runtime: about 6.3GB (host /usr/local/.ghcup)
+rm -rf /host/usr/local/.ghcup || true
+# remove Android library: about 7.8GB (host /usr/local/lib/android)
+rm -rf /host/usr/local/lib/android || true
 
 df -h

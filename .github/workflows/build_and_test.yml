@@ -349,6 +349,8 @@ jobs:
     runs-on: ubuntu-22.04
     container:
       image: ${{ needs.precondition.outputs.image_url }}
+      volumes:
+        - /usr/local:/host/usr/local
     strategy:
       fail-fast: false
       matrix:
