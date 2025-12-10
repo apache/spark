@@ -1168,19 +1168,16 @@ class ArrowStreamAggPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
             dataframes_in_group = read_int(stream)
 
             if dataframes_in_group == 1:
-                batches = list(ArrowStreamSerializer.load_stream(self, stream))
-                if len(batches) == 1:
-                    # Optimize single batch case: directly access columns without creating Table
-                    batch = batches[0]
-                    yield [
-                        self.arrow_to_pandas(batch.column(i), i) for i in range(batch.num_columns)
-                    ]
-                else:
-                    # Multiple batches: need Table to merge them
-                    yield [
+                yield (
+                    [
                         self.arrow_to_pandas(c, i)
-                        for i, c in enumerate(pa.Table.from_batches(batches).itercolumns())
+                        for i, c in enumerate(
+                            pa.Table.from_batches(
+                                ArrowStreamSerializer.load_stream(self, stream)
+                            ).itercolumns()
+                        )
                     ]
+                )
 
             elif dataframes_in_group != 0:
                 raise PySparkValueError(
