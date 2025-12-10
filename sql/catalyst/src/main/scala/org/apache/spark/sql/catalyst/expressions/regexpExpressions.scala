@@ -86,7 +86,7 @@ abstract class StringRegexExpression extends BinaryExpression
 
   override def expensive: Boolean = hasExpensiveChild || _expensiveRegex
 
-  lazy val _expensiveRegex = {
+  private lazy val _expensiveRegex = {
     // A quick heuristic for expensive a pattern is.
     left match {
       case StringLiteral(str) =>
