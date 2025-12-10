@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.internal.connector
 
-import java.util.Objects
-
 import org.apache.spark.sql.connector.read.VariantExtraction
 import org.apache.spark.sql.types.{DataType, Metadata}
 
