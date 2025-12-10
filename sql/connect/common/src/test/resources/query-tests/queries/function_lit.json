@@ -336,13 +336,7 @@
       }
     }, {
       "literal": {
-        "array": {
-          "elements": [{
-            "byte": 8
-          }, {
-            "byte": 6
-          }]
-        }
+        "binary": "CAY="
       },
       "common": {
         "origin": {
