@@ -7057,32 +7057,13 @@ class DataFrameNaFunctions:
 
     replace.__doc__ = DataFrame.replace.__doc__
 
-    def __dataframe__(self, nan_as_null: bool = False, allow_copy: bool = True):
-        """
-        Return a DataFrame interchange protocol object.
-
-        Parameters
-        ----------
-        nan_as_null : bool, default False
-            Whether to treat NaN values as nulls.
-        allow_copy : bool, default True
-            Whether the implementation is allowed to return a copy of the data.
-
-        Returns
-        -------
-        SparkInterChangeDataFrame object.
-        """
-        from pyspark.interchange import SparkInterchangeDataFrame
-
-        return SparkInterchangeDataFrame(self, nan_as_null, allow_copy)
-
-    def __arrow_c_stream__(self, requested_schema: Optional["pyarrow.Schema"] = None) -> object:
+    def __arrow_c_stream__(self, requested_schema: Optional[object] = None) -> object:
         """
         Export to a C PyCapsule stream object.
 
         Parameters
         ----------
-        requested_schema : pyarrow.Schema, optional
+        requested_schema : PyCapsule, optional
             The schema to attempt to use for the output stream. This is a best effort request,
 
         Returns
