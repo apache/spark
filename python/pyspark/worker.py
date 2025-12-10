@@ -67,7 +67,6 @@ from pyspark.sql.pandas.serializers import (
     ArrowStreamAggPandasUDFSerializer,
     ArrowStreamAggPandasIterUDFSerializer,
     ArrowStreamAggArrowUDFSerializer,
-    ArrowStreamAggArrowIterUDFSerializer,
     ArrowBatchUDFSerializer,
     ArrowStreamUDTFSerializer,
     ArrowStreamArrowUDTFSerializer,
@@ -120,7 +119,19 @@ class RunnerConf:
 
     def load(self, infile):
         num_conf = read_int(infile)
-        for i in range(num_conf):
+        # We do a sanity check here to reduce the possibility to stuck indefinitely
+        # due to an invalid messsage. If the numer of configurations is obviously
+        # wrong, we just raise an error directly.
+        # We hand-pick the configurations to send to the worker so the number should
+        # be very small (less than 100).
+        if num_conf < 0 or num_conf > 10000:
+            raise PySparkRuntimeError(
+                errorClass="PROTOCOL_ERROR",
+                messageParameters={
+                    "failure": f"Invalid number of configurations: {num_conf}",
+                },
+            )
+        for _ in range(num_conf):
             k = utf8_deserializer.loads(infile)
             v = utf8_deserializer.loads(infile)
             self._conf[k] = v
@@ -2761,12 +2772,9 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
             or eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF
         ):
             ser = GroupArrowUDFSerializer(runner_conf.assign_cols_by_name)
-        elif eval_type == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF:
-            ser = ArrowStreamAggArrowIterUDFSerializer(
-                runner_conf.timezone, True, runner_conf.assign_cols_by_name, True
-            )
         elif eval_type in (
             PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
             PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
         ):
             ser = ArrowStreamAggArrowUDFSerializer(
@@ -3318,6 +3326,43 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
                     tuple(batch_series[o] for o in arg_offsets) for batch_series in batch_iter
                 )
             return f(series_iter)
+    elif eval_type in (
+        PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
+        PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
+    ):
+        import pyarrow as pa
+
+        # For SQL_GROUPED_AGG_ARROW_UDF and SQL_WINDOW_AGG_ARROW_UDF,
+        # convert iterator of batch columns to a concatenated RecordBatch
+        def mapper(a):
+            # a is Iterator[Tuple[pa.Array, ...]] - convert to RecordBatch
+            batches = []
+            for batch_columns in a:
+                # batch_columns is Tuple[pa.Array, ...] - convert to RecordBatch
+                batch = pa.RecordBatch.from_arrays(
+                    batch_columns, names=["_%d" % i for i in range(len(batch_columns))]
+                )
+                batches.append(batch)
+
+            # Concatenate all batches into one
+            if hasattr(pa, "concat_batches"):
+                concatenated_batch = pa.concat_batches(batches)
+            else:
+                # pyarrow.concat_batches not supported in old versions
+                concatenated_batch = pa.RecordBatch.from_struct_array(
+                    pa.concat_arrays([b.to_struct_array() for b in batches])
+                )
+
+            # Extract series using offsets (concatenated_batch.columns[o] gives pa.Array)
+            result = tuple(
+                f(*[concatenated_batch.columns[o] for o in arg_offsets]) for arg_offsets, f in udfs
+            )
+            # In the special case of a single UDF this will return a single result rather
+            # than a tuple of results; this is the format that the JVM side expects.
+            if len(result) == 1:
+                return result[0]
+            else:
+                return result
 
     else:
 

@@ -665,11 +665,13 @@ trait StateStoreProvider {
   /**
    * Return an instance of [[StateStore]] representing state data of the given version.
    * If `stateStoreCkptId` is provided, the instance also needs to match the ID.
+   * If `loadEmpty` is true, creates an empty store at this version without loading previous data.
    * */
   def getStore(
       version: Long,
       stateStoreCkptId: Option[String] = None,
-      forceSnapshotOnCommit: Boolean = false): StateStore
+      forceSnapshotOnCommit: Boolean = false,
+      loadEmpty: Boolean = false): StateStore
 
   /**
    * Return an instance of [[ReadStateStore]] representing state data of the given version

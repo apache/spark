@@ -20,7 +20,6 @@
 import logging
 from argparse import ArgumentParser
 import os
-import importlib
 import platform
 import re
 import shutil
@@ -225,39 +224,6 @@ def get_default_python_executables():
     return python_execs
 
 
-def split_and_validate_testnames(testnames):
-    testnames_to_test = []
-
-    def module_exists(module):
-        try:
-            return importlib.util.find_spec(module) is not None
-        except ModuleNotFoundError:
-            return False
-
-    for testname in testnames.split(','):
-        if " " in testname:
-            # "{module} {class.testcase_name}"
-            # Just add the testname as is
-            testnames_to_test.append(testname)
-        else:
-            if module_exists(testname):
-                # "{module}"
-                testnames_to_test.append(testname)
-            else:
-                # "{module.class.testcase_name}"
-                index = len(testname)
-                while (index := testname.rfind(".", 0, index)) != -1:
-                    module, testcase = testname[:index], testname[index + 1:]
-                    if module_exists(module):
-                        testnames_to_test.append(f"{module} {testcase}")
-                        break
-                else:
-                    # "Can't find the module, the users must know what they are doing"
-                    testnames_to_test.append(testname)
-
-    return testnames_to_test
-
-
 def parse_opts():
     parser = ArgumentParser(
         prog="run-tests"
@@ -290,7 +256,6 @@ def parse_opts():
             "For example, 'pyspark.sql.foo' to run the module as unittests or doctests, "
             "'pyspark.sql.tests FooTests' to run the specific class of unittests, "
             "'pyspark.sql.tests FooTests.test_foo' to run the specific unittest in the class. "
-            "'pyspark.sql.tests.FooTests.test_foo' will work too. "
             "'--modules' option is ignored if they are given.")
     )
     group.add_argument(
@@ -347,7 +312,7 @@ def main():
                 sys.exit(-1)
         LOGGER.info("Will test the following Python modules: %s", [x.name for x in modules_to_test])
     else:
-        testnames_to_test = split_and_validate_testnames(opts.testnames)
+        testnames_to_test = opts.testnames.split(',')
         LOGGER.info("Will test the following Python tests: %s", testnames_to_test)
 
     task_queue = Queue.PriorityQueue()

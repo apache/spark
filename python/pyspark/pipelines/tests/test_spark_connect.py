@@ -58,7 +58,7 @@ class SparkConnectPipelinesTest(ReusedConnectTestCase):
             refresh=None,
             full_refresh_all=False,
             dry=True,
-            storage="storage_path",
+            storage="file:///tmp/storage_path",
         )
         handle_pipeline_events(result_iter)
 
@@ -80,7 +80,7 @@ class SparkConnectPipelinesTest(ReusedConnectTestCase):
             refresh=None,
             full_refresh_all=False,
             dry=True,
-            storage="storage_path",
+            storage="file:///tmp/storage_path",
         )
         with self.assertRaises(AnalysisException) as context:
             handle_pipeline_events(result_iter)

@@ -5526,6 +5526,17 @@
         "message" : [
           "<provider> is not supported"
         ]
+      },
+      "UNSUPPORTED_STATEFUL_OPERATOR" : {
+        "message" : [
+          "Unsupported stateful operator <operatorName>. Please use a checkpoint with supported stateful operators."
+        ]
+      },
+      "UNSUPPORTED_TRANSFORM_WITH_STATE_VARIABLE_TYPE" : {
+        "message" : [
+          "Unsupported transformWithState variable type <variableType> (TTL_Enabled: <ttlEnabled>, ColFamilyName: <colFamilyName>).",
+          "Please use a checkpoint with supported transform with state variable types."
+        ]
       }
     },
     "sqlState" : "55019"
