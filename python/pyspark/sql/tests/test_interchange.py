@@ -27,12 +27,9 @@ except ImportError:
     DUCKDB_TESTS = False
 
 
-@unittest.skipIf(not DUCKDB_TESTS, " ... ")
+@unittest.skipIf(not DUCKDB_TESTS, "duckdb is not installed")
 class TestSparkArrowCStreamer(unittest.TestCase):
     def test_spark_arrow_c_streamer(self):
-        if not DUCKDB_TESTS:
-            self.skipTest("duckdb is not installed")
-
         pdf = pd.DataFrame([[1, "a"], [2, "b"], [3, "c"], [4, "d"]], columns=["id", "value"])
         psdf = ps.from_pandas(pdf)
         # Use Spark Arrow C Streamer to convert PyArrow Table to DuckDB relation
