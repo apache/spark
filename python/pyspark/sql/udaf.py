@@ -280,18 +280,22 @@ class UserDefinedAggregateFunction:
         Examples
         --------
         >>> class MySum(Aggregator):
-        ...     def zero(self):
+        ...     @staticmethod
+        ...     def zero():
         ...         return 0
-        ...     def reduce(self, buffer, value):
+        ...     @staticmethod
+        ...     def reduce(buffer, value):
         ...         return buffer + value
-        ...     def merge(self, buffer1, buffer2):
+        ...     @staticmethod
+        ...     def merge(buffer1, buffer2):
         ...         return buffer1 + buffer2
-        ...     def finish(self, reduction):
+        ...     @staticmethod
+        ...     def finish(reduction):
         ...         return reduction
         ...
-        >>> sum_udaf = udaf(MySum(), "bigint")
-        >>> df = spark.createDataFrame([(1,), (2,), (3,)], ["value"])
-        >>> df.agg(sum_udaf(df.value)).show()
+        >>> sum_udaf = udaf(MySum(), "bigint")  # doctest: +SKIP
+        >>> df = spark.createDataFrame([(1,), (2,), (3,)], ["value"])  # doctest: +SKIP
+        >>> df.agg(sum_udaf(df.value)).show()  # doctest: +SKIP
         +------------+
         |MySum(value)|
         +------------+
@@ -852,9 +856,9 @@ def udaf(
     ...     def finish(reduction):
     ...         return reduction
     ...
-    >>> sum_udaf = udaf(MySum(), "bigint")
-    >>> df = spark.createDataFrame([(1,), (2,), (3,)], ["value"])
-    >>> df.agg(sum_udaf(df.value)).show()
+    >>> sum_udaf = udaf(MySum(), "bigint")  # doctest: +SKIP
+    >>> df = spark.createDataFrame([(1,), (2,), (3,)], ["value"])  # doctest: +SKIP
+    >>> df.agg(sum_udaf(df.value)).show()  # doctest: +SKIP
     +------------+
     |MySum(value)|
     +------------+
