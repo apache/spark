@@ -535,14 +535,10 @@ case class TupleSketchAggString(
       case str: UTF8String =>
         Array(str.toString)
       case arr: ArrayData =>
-        val length = arr.numElements()
-        Array.tabulate(length) { i =>
-          if (arr.isNullAt(i)) {
-            null
-          } else {
-            arr.getUTF8String(i).toString
-          }
-        }
+        (0 until arr.numElements())
+          .filter(i => !arr.isNullAt(i))
+          .map(i => arr.getUTF8String(i).toString)
+          .toArray
       case _ =>
         val actualType = input.getClass.getSimpleName
         throw QueryExecutionErrors.tupleInvalidSummaryValueType(prettyName, actualType)

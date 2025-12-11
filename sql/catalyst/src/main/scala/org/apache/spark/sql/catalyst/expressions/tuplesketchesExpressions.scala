@@ -588,7 +588,9 @@ case class TupleUnionThetaString(first: Expression, second: Expression, third: E
     val tupleSketch = ThetaSketchUtils.heapifyStringTupleSketch(sketch1Bytes, prettyName)
     val thetaSketch = ThetaSketchUtils.wrapCompactSketch(sketch2Bytes, prettyName)
 
+    // This doesn't mean nothing since there are no set operations for string variants
     val defaultSummary = new ArrayOfStringsSummaryFactory().newSummary()
+    defaultSummary.update(Array.empty[String])
 
     union.union(tupleSketch)
     union.union(thetaSketch, defaultSummary)
@@ -964,7 +966,9 @@ case class TupleIntersectionThetaString(left: Expression, right: Expression)
     val tupleSketch = ThetaSketchUtils.heapifyStringTupleSketch(sketch1Bytes, prettyName)
     val thetaSketch = ThetaSketchUtils.wrapCompactSketch(sketch2Bytes, prettyName)
 
+    // This doesn't mean nothing since there are no set operations for string variants
     val defaultSummary = new ArrayOfStringsSummaryFactory().newSummary()
+    defaultSummary.update(Array.empty[String])
 
     intersection.intersect(tupleSketch)
     intersection.intersect(thetaSketch, defaultSummary)
