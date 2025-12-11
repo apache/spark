@@ -987,7 +987,7 @@ class SparkConnectClient(object):
         return table, schema, ei
 
     def to_pandas(
-        self, plan: pb2.Plan, observations: Dict[str, Observation], **kwargs
+        self, plan: pb2.Plan, observations: Dict[str, Observation], **kwargs: Any
     ) -> Tuple["pd.DataFrame", "ExecutionInfo"]:
         """
         Return given plan as a pandas DataFrame.

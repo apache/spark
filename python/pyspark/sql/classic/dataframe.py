@@ -1841,10 +1841,10 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         return PandasConversionMixin.toArrow(self)
 
     def toPandas(self) -> "PandasDataFrameLike":
-        return self._to_pandas()
+        return PandasConversionMixin._to_pandas(self)
 
     def _to_pandas(self, **kwargs) -> "PandasDataFrameLike":
-        return PandasConversionMixin.toPandas(self, **kwargs)
+        return PandasConversionMixin._to_pandas(self, **kwargs)
 
     def transpose(self, indexColumn: Optional["ColumnOrName"] = None) -> ParentDataFrame:
         if indexColumn is not None:

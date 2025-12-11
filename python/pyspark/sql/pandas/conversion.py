@@ -175,7 +175,7 @@ class PandasConversionMixin:
     :class:`DataFrame` can use this class.
     """
 
-    def toPandas(self, **kwargs) -> "PandasDataFrameLike":
+    def _to_pandas(self, **kwargs: Any) -> "PandasDataFrameLike":
         from pyspark.sql.dataframe import DataFrame
 
         assert isinstance(self, DataFrame)
