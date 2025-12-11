@@ -34,8 +34,8 @@ import org.apache.spark.unsafe.types.UTF8String
 @ExpressionDescription(
   usage = """
     _FUNC_(child) - Returns the estimated number of unique values
-    given the binary representation of a Datasketches TupleSketch. The summaryType
-    parameter must be a double type. """,
+    given the binary representation of a Datasketches TupleSketch. The sketch's
+    summary type must be a double. """,
   examples = """
     Examples:
       > SELECT _FUNC_(tuple_sketch_agg_double(key, summary)) FROM VALUES (1, 1.0D), (1, 2.0D), (2, 3.0D) tab(key, summary);
@@ -71,8 +71,8 @@ case class TupleSketchEstimateDouble(child: Expression)
 @ExpressionDescription(
   usage = """
     _FUNC_(child) - Returns the estimated number of unique values
-    given the binary representation of a Datasketches TupleSketch. The summaryType
-    parameter must be an integer type. """,
+    given the binary representation of a Datasketches TupleSketch. The sketch's
+    summary type must be an integer. """,
   examples = """
     Examples:
       > SELECT _FUNC_(tuple_sketch_agg_integer(key, summary)) FROM VALUES (1, 1), (1, 2), (2, 3) tab(key, summary);
@@ -108,8 +108,8 @@ case class TupleSketchEstimateInteger(child: Expression)
 @ExpressionDescription(
   usage = """
     _FUNC_(child) - Returns the estimated number of unique values
-    given the binary representation of a Datasketches TupleSketch. The summaryType
-    parameter must be a string or array of strings type. """,
+    given the binary representation of a Datasketches TupleSketch. The sketch's
+    summary type be a string or array of strings. """,
   examples = """
     Examples:
       > SELECT _FUNC_(tuple_sketch_agg_string(key, summary)) FROM VALUES (1, 'a'), (1, 'b'), (2, 'c') tab(key, summary);
