@@ -444,4 +444,23 @@ SELECT EXTRACT(IDENTIFIER('YEAR') FROM DATE'2024-01-15');
 -- TIMESTAMPADD unit is a token, not identifier - should fail
 SELECT TIMESTAMPADD(IDENTIFIER('YEAR'), 1, DATE'2024-01-15');
 
+-- Resource type is a keyword - should fail
+ADD IDENTIFIER('file') '/tmp/test.txt';
+LIST IDENTIFIER('files');
+CREATE FUNCTION keyword_test_func AS 'com.example.Test' USING IDENTIFIER('jar') '/path/to.jar';
+
+-- ANALYZE TABLE with NOSCAN is a keyword - should fail
+CREATE TABLE analyze_keyword_test(c1 INT) USING CSV;
+ANALYZE TABLE analyze_keyword_test COMPUTE STATISTICS IDENTIFIER('noscan');
+DROP TABLE IF EXISTS analyze_keyword_test;
+
+-- Partition transform type (bucket, years, months, days, hours) is a keyword - should fail
+CREATE TABLE transform_keyword_test(c1 INT, c2 TIMESTAMP) USING PARQUET
+PARTITIONED BY (IDENTIFIER('years')(c2));
+DROP TABLE IF EXISTS transform_keyword_test;
+
+CREATE TABLE bucket_keyword_test(c1 INT, c2 STRING) USING PARQUET
+PARTITIONED BY (IDENTIFIER('bucket')(4, c2));
+DROP TABLE IF EXISTS bucket_keyword_test;
+
 DROP SCHEMA identifier_clause_test_schema;

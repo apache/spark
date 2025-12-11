@@ -4895,7 +4895,7 @@ class AstBuilder extends DataTypeAstBuilder
               parentCtx)
         }
       case (rfDelimited: RowFormatDelimitedContext, ffGeneric: GenericFileFormatContext) =>
-        getIdentifierText(ffGeneric.identifier).toLowerCase(Locale.ROOT) match {
+        ffGeneric.identifier.getText.toLowerCase(Locale.ROOT) match {
           case "textfile" => // OK
           case fmt => operationNotAllowed(
             s"ROW FORMAT DELIMITED is only compatible with 'textfile', not '$fmt'", parentCtx)

@@ -2752,6 +2752,155 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+ADD IDENTIFIER('file') '/tmp/test.txt'
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0035",
+  "messageParameters" : {
+    "message" : "ADD with resource type 'identifier('file')'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 38,
+    "fragment" : "ADD IDENTIFIER('file') '/tmp/test.txt'"
+  } ]
+}
+
+
+-- !query
+LIST IDENTIFIER('files')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0035",
+  "messageParameters" : {
+    "message" : "LIST with resource type 'identifier('files')'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 24,
+    "fragment" : "LIST IDENTIFIER('files')"
+  } ]
+}
+
+
+-- !query
+CREATE FUNCTION keyword_test_func AS 'com.example.Test' USING IDENTIFIER('jar') '/path/to.jar'
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_0035",
+  "messageParameters" : {
+    "message" : "CREATE FUNCTION with resource type 'identifier('jar')'"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 94,
+    "fragment" : "CREATE FUNCTION keyword_test_func AS 'com.example.Test' USING IDENTIFIER('jar') '/path/to.jar'"
+  } ]
+}
+
+
+-- !query
+CREATE TABLE analyze_keyword_test(c1 INT) USING CSV
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+ANALYZE TABLE analyze_keyword_test COMPUTE STATISTICS IDENTIFIER('noscan')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_SQL_SYNTAX.ANALYZE_TABLE_UNEXPECTED_NOSCAN",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "ctx" : "IDENTIFIER('NOSCAN')"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 74,
+    "fragment" : "ANALYZE TABLE analyze_keyword_test COMPUTE STATISTICS IDENTIFIER('noscan')"
+  } ]
+}
+
+
+-- !query
+DROP TABLE IF EXISTS analyze_keyword_test
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TABLE transform_keyword_test(c1 INT, c2 TIMESTAMP) USING PARQUET
+PARTITIONED BY (IDENTIFIER('years')(c2))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkUnsupportedOperationException
+{
+  "errorClass" : "UNSUPPORTED_PARTITION_TRANSFORM",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "transform" : "`IDENTIFIER('years')(c2)`"
+  }
+}
+
+
+-- !query
+DROP TABLE IF EXISTS transform_keyword_test
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TABLE bucket_keyword_test(c1 INT, c2 STRING) USING PARQUET
+PARTITIONED BY (IDENTIFIER('bucket')(4, c2))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkUnsupportedOperationException
+{
+  "errorClass" : "UNSUPPORTED_PARTITION_TRANSFORM",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "transform" : "`IDENTIFIER('bucket')(4, c2)`"
+  }
+}
+
+
+-- !query
+DROP TABLE IF EXISTS bucket_keyword_test
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 DROP SCHEMA identifier_clause_test_schema
 -- !query schema
 struct<>
