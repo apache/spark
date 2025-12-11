@@ -6691,7 +6691,7 @@ object SQLConf {
       .createWithDefault(false)
 
   val LEGACY_XML_PARSER_ENABLED = {
-    buildConf("spark.sql.xml.legacyXMLParser.enabled")
+    buildConf("spark.sql.legacy.useLegacyXMLParser")
       .internal()
       .doc(
         "When set to true, use the legacy XML parser for parsing XML files. " +
