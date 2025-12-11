@@ -30,18 +30,22 @@ class UDAFTestsMixin:
         """Test basic sum UDAF with df.agg()."""
 
         class MySum(Aggregator):
-            def zero(self):
+            @staticmethod
+            def zero():
                 return 0
 
-            def reduce(self, buffer, value):
+            @staticmethod
+            def reduce(buffer, value):
                 if value is not None:
                     return buffer + value
                 return buffer
 
-            def merge(self, buffer1, buffer2):
+            @staticmethod
+            def merge(buffer1, buffer2):
                 return buffer1 + buffer2
 
-            def finish(self, reduction):
+            @staticmethod
+            def finish(reduction):
                 return reduction
 
         df = self.spark.createDataFrame([(1,), (2,), (3,), (4,), (5,)], ["value"])
@@ -54,18 +58,22 @@ class UDAFTestsMixin:
         """Test UDAF with groupBy().agg()."""
 
         class MySum(Aggregator):
-            def zero(self):
+            @staticmethod
+            def zero():
                 return 0
 
-            def reduce(self, buffer, value):
+            @staticmethod
+            def reduce(buffer, value):
                 if value is not None:
                     return buffer + value
                 return buffer
 
-            def merge(self, buffer1, buffer2):
+            @staticmethod
+            def merge(buffer1, buffer2):
                 return buffer1 + buffer2
 
-            def finish(self, reduction):
+            @staticmethod
+            def finish(reduction):
                 return reduction
 
         df = self.spark.createDataFrame(
@@ -87,18 +95,22 @@ class UDAFTestsMixin:
         """Test average UDAF with df.agg()."""
 
         class MyAverage(Aggregator):
-            def zero(self):
+            @staticmethod
+            def zero():
                 return (0.0, 0)  # (sum, count)
 
-            def reduce(self, buffer, value):
+            @staticmethod
+            def reduce(buffer, value):
                 if value is not None:
                     return (buffer[0] + value, buffer[1] + 1)
                 return buffer
 
-            def merge(self, buffer1, buffer2):
+            @staticmethod
+            def merge(buffer1, buffer2):
                 return (buffer1[0] + buffer2[0], buffer1[1] + buffer2[1])
 
-            def finish(self, reduction):
+            @staticmethod
+            def finish(reduction):
                 if reduction[1] == 0:
                     return None
                 return reduction[0] / reduction[1]
@@ -113,24 +125,28 @@ class UDAFTestsMixin:
         """Test max UDAF with df.agg()."""
 
         class MyMax(Aggregator):
-            def zero(self):
+            @staticmethod
+            def zero():
                 return None
 
-            def reduce(self, buffer, value):
+            @staticmethod
+            def reduce(buffer, value):
                 if value is not None:
                     if buffer is None:
                         return value
                     return max(buffer, value)
                 return buffer
 
-            def merge(self, buffer1, buffer2):
+            @staticmethod
+            def merge(buffer1, buffer2):
                 if buffer1 is None:
                     return buffer2
                 if buffer2 is None:
                     return buffer1
                 return max(buffer1, buffer2)
 
-            def finish(self, reduction):
+            @staticmethod
+            def finish(reduction):
                 return reduction
 
         df = self.spark.createDataFrame([(5,), (10,), (3,), (8,)], ["value"])
@@ -143,18 +159,22 @@ class UDAFTestsMixin:
         """Test UDAF handling null values with df.agg()."""
 
         class MySum(Aggregator):
-            def zero(self):
+            @staticmethod
+            def zero():
                 return 0
 
-            def reduce(self, buffer, value):
+            @staticmethod
+            def reduce(buffer, value):
                 if value is not None:
                     return buffer + value
                 return buffer
 
-            def merge(self, buffer1, buffer2):
+            @staticmethod
+            def merge(buffer1, buffer2):
                 return buffer1 + buffer2
 
-            def finish(self, reduction):
+            @staticmethod
+            def finish(reduction):
                 return reduction
 
         df = self.spark.createDataFrame([(1,), (None,), (3,), (None,), (5,)], ["value"])
@@ -167,18 +187,22 @@ class UDAFTestsMixin:
         """Test UDAF with empty DataFrame using df.agg()."""
 
         class MySum(Aggregator):
-            def zero(self):
+            @staticmethod
+            def zero():
                 return 0
 
-            def reduce(self, buffer, value):
+            @staticmethod
+            def reduce(buffer, value):
                 if value is not None:
                     return buffer + value
                 return buffer
 
-            def merge(self, buffer1, buffer2):
+            @staticmethod
+            def merge(buffer1, buffer2):
                 return buffer1 + buffer2
 
-            def finish(self, reduction):
+            @staticmethod
+            def finish(reduction):
                 return reduction
 
         from pyspark.sql.types import StructType, StructField, LongType
@@ -194,18 +218,22 @@ class UDAFTestsMixin:
         """Test that Aggregator interface is properly defined."""
 
         class MySum(Aggregator):
-            def zero(self):
+            @staticmethod
+            def zero():
                 return 0
 
-            def reduce(self, buffer, value):
+            @staticmethod
+            def reduce(buffer, value):
                 if value is not None:
                     return buffer + value
                 return buffer
 
-            def merge(self, buffer1, buffer2):
+            @staticmethod
+            def merge(buffer1, buffer2):
                 return buffer1 + buffer2
 
-            def finish(self, reduction):
+            @staticmethod
+            def finish(reduction):
                 return reduction
 
         agg = MySum()
@@ -232,18 +260,22 @@ class UDAFTestsMixin:
         """Test UDAF creation with udaf() function."""
 
         class MySum(Aggregator):
-            def zero(self):
+            @staticmethod
+            def zero():
                 return 0
 
-            def reduce(self, buffer, value):
+            @staticmethod
+            def reduce(buffer, value):
                 if value is not None:
                     return buffer + value
                 return buffer
 
-            def merge(self, buffer1, buffer2):
+            @staticmethod
+            def merge(buffer1, buffer2):
                 return buffer1 + buffer2
 
-            def finish(self, reduction):
+            @staticmethod
+            def finish(reduction):
                 return reduction
 
         sum_udaf = udaf(MySum(), "bigint")
@@ -263,39 +295,134 @@ class UDAFTestsMixin:
         """Test that invalid return type raises error."""
 
         class MySum(Aggregator):
-            def zero(self):
+            @staticmethod
+            def zero():
                 return 0
 
-            def reduce(self, buffer, value):
+            @staticmethod
+            def reduce(buffer, value):
                 if value is not None:
                     return buffer + value
                 return buffer
 
-            def merge(self, buffer1, buffer2):
+            @staticmethod
+            def merge(buffer1, buffer2):
                 return buffer1 + buffer2
 
-            def finish(self, reduction):
+            @staticmethod
+            def finish(reduction):
                 return reduction
 
         with self.assertRaises(PySparkTypeError):
             udaf(MySum(), 123)  # type: ignore  # Not a DataType or string
 
+    def test_udaf_non_static_method_raises_error(self):
+        """Test that non-static methods in Aggregator raise error."""
+
+        # Test with non-static zero method
+        class BadAggregatorZero(Aggregator):
+            def zero(self):  # Missing @staticmethod
+                return 0
+
+            @staticmethod
+            def reduce(buffer, value):
+                return buffer + (value or 0)
+
+            @staticmethod
+            def merge(buffer1, buffer2):
+                return buffer1 + buffer2
+
+            @staticmethod
+            def finish(reduction):
+                return reduction
+
+        with self.assertRaises(PySparkTypeError) as cm:
+            udaf(BadAggregatorZero(), "bigint")
+        self.assertIn("zero", str(cm.exception))
+
+        # Test with non-static reduce method
+        class BadAggregatorReduce(Aggregator):
+            @staticmethod
+            def zero():
+                return 0
+
+            def reduce(self, buffer, value):  # Missing @staticmethod
+                return buffer + (value or 0)
+
+            @staticmethod
+            def merge(buffer1, buffer2):
+                return buffer1 + buffer2
+
+            @staticmethod
+            def finish(reduction):
+                return reduction
+
+        with self.assertRaises(PySparkTypeError) as cm:
+            udaf(BadAggregatorReduce(), "bigint")
+        self.assertIn("reduce", str(cm.exception))
+
+        # Test with non-static merge method
+        class BadAggregatorMerge(Aggregator):
+            @staticmethod
+            def zero():
+                return 0
+
+            @staticmethod
+            def reduce(buffer, value):
+                return buffer + (value or 0)
+
+            def merge(self, buffer1, buffer2):  # Missing @staticmethod
+                return buffer1 + buffer2
+
+            @staticmethod
+            def finish(reduction):
+                return reduction
+
+        with self.assertRaises(PySparkTypeError) as cm:
+            udaf(BadAggregatorMerge(), "bigint")
+        self.assertIn("merge", str(cm.exception))
+
+        # Test with non-static finish method
+        class BadAggregatorFinish(Aggregator):
+            @staticmethod
+            def zero():
+                return 0
+
+            @staticmethod
+            def reduce(buffer, value):
+                return buffer + (value or 0)
+
+            @staticmethod
+            def merge(buffer1, buffer2):
+                return buffer1 + buffer2
+
+            def finish(self, reduction):  # Missing @staticmethod
+                return reduction
+
+        with self.assertRaises(PySparkTypeError) as cm:
+            udaf(BadAggregatorFinish(), "bigint")
+        self.assertIn("finish", str(cm.exception))
+
     def test_udaf_multi_column_not_supported(self):
         """Test that multi-column UDAF is not yet supported."""
 
         class MySum(Aggregator):
-            def zero(self):
+            @staticmethod
+            def zero():
                 return 0
 
-            def reduce(self, buffer, value):
+            @staticmethod
+            def reduce(buffer, value):
                 if value is not None:
                     return buffer + value
                 return buffer
 
-            def merge(self, buffer1, buffer2):
+            @staticmethod
+            def merge(buffer1, buffer2):
                 return buffer1 + buffer2
 
-            def finish(self, reduction):
+            @staticmethod
+            def finish(reduction):
                 return reduction
 
         df = self.spark.createDataFrame([(1, 2), (3, 4)], ["a", "b"])
@@ -308,18 +435,22 @@ class UDAFTestsMixin:
         """Test UDAF with large dataset (20000 rows) distributed across partitions."""
 
         class MySum(Aggregator):
-            def zero(self):
+            @staticmethod
+            def zero():
                 return 0
 
-            def reduce(self, buffer, value):
+            @staticmethod
+            def reduce(buffer, value):
                 if value is not None:
                     return buffer + value
                 return buffer
 
-            def merge(self, buffer1, buffer2):
+            @staticmethod
+            def merge(buffer1, buffer2):
                 return buffer1 + buffer2
 
-            def finish(self, reduction):
+            @staticmethod
+            def finish(reduction):
                 return reduction
 
         # Create a large dataset with 20000 rows
@@ -349,18 +480,22 @@ class UDAFTestsMixin:
         """Test average UDAF with large dataset using df.agg()."""
 
         class MyAverage(Aggregator):
-            def zero(self):
+            @staticmethod
+            def zero():
                 return (0.0, 0)  # (sum, count)
 
-            def reduce(self, buffer, value):
+            @staticmethod
+            def reduce(buffer, value):
                 if value is not None:
                     return (buffer[0] + value, buffer[1] + 1)
                 return buffer
 
-            def merge(self, buffer1, buffer2):
+            @staticmethod
+            def merge(buffer1, buffer2):
                 return (buffer1[0] + buffer2[0], buffer1[1] + buffer2[1])
 
-            def finish(self, reduction):
+            @staticmethod
+            def finish(reduction):
                 if reduction[1] == 0:
                     return None
                 return reduction[0] / reduction[1]
@@ -386,16 +521,20 @@ class UDAFTestsMixin:
         """Test that UDAF Column has correct attributes."""
 
         class MySum(Aggregator):
-            def zero(self):
+            @staticmethod
+            def zero():
                 return 0
 
-            def reduce(self, buffer, value):
+            @staticmethod
+            def reduce(buffer, value):
                 return buffer + (value or 0)
 
-            def merge(self, buffer1, buffer2):
+            @staticmethod
+            def merge(buffer1, buffer2):
                 return buffer1 + buffer2
 
-            def finish(self, reduction):
+            @staticmethod
+            def finish(reduction):
                 return reduction
 
         df = self.spark.createDataFrame([(1,), (2,)], ["value"])
@@ -411,16 +550,20 @@ class UDAFTestsMixin:
         """Test that multiple UDAFs in agg() raises error."""
 
         class MySum(Aggregator):
-            def zero(self):
+            @staticmethod
+            def zero():
                 return 0
 
-            def reduce(self, buffer, value):
+            @staticmethod
+            def reduce(buffer, value):
                 return buffer + (value or 0)
 
-            def merge(self, buffer1, buffer2):
+            @staticmethod
+            def merge(buffer1, buffer2):
                 return buffer1 + buffer2
 
-            def finish(self, reduction):
+            @staticmethod
+            def finish(reduction):
                 return reduction
 
         df = self.spark.createDataFrame([(1,), (2,)], ["value"])
@@ -434,16 +577,20 @@ class UDAFTestsMixin:
         """Test that mixing UDAF with other aggregate functions raises error."""
 
         class MySum(Aggregator):
-            def zero(self):
+            @staticmethod
+            def zero():
                 return 0
 
-            def reduce(self, buffer, value):
+            @staticmethod
+            def reduce(buffer, value):
                 return buffer + (value or 0)
 
-            def merge(self, buffer1, buffer2):
+            @staticmethod
+            def merge(buffer1, buffer2):
                 return buffer1 + buffer2
 
-            def finish(self, reduction):
+            @staticmethod
+            def finish(reduction):
                 return reduction
 
         from pyspark.sql.functions import min as spark_min
