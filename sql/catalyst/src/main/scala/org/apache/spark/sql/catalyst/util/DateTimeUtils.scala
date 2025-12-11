@@ -908,10 +908,10 @@ object DateTimeUtils extends SparkDateTimeUtils {
       nanos
     } catch {
       case e: DateTimeException =>
-        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e)
+        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRangeWithoutSuggestion(e)
       case e: ArithmeticException =>
-        val wrapped = new DateTimeException(s"Overflow in TIME conversion: ${e.getMessage}", e)
-        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(wrapped)
+        throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRangeWithoutSuggestion(
+          new DateTimeException("Overflow in TIME conversion", e))
     }
   }
 
@@ -935,19 +935,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
-   * Creates a TIME value from seconds since midnight (float type).
-   * @param seconds Seconds (0 to 86399.999999)
-   * @return Nanoseconds since midnight
-   */
-  def timeFromSeconds(seconds: Float): Long = withTimeConversionErrorHandling {
-    if (seconds.isNaN || seconds.isInfinite) {
-      throw new DateTimeException("Cannot convert NaN or Infinite value to TIME")
-    }
-    (seconds.toDouble * NANOS_PER_SECOND).toLong
-  }
-
-  /**
-   * Creates a TIME value from seconds since midnight (double type).
+   * Creates a TIME value from seconds since midnight (floating point type).
    * @param seconds Seconds (0 to 86399.999999)
    * @return Nanoseconds since midnight
    */
@@ -983,10 +971,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
    */
   def timeToSeconds(nanos: Long): Decimal = {
     val result = Decimal(nanos) / Decimal(NANOS_PER_SECOND)
-    if (!result.changePrecision(14, 6)) {
-      throw new DateTimeException(
-        "TIME to seconds conversion resulted in value that cannot fit in Decimal(14, 6)")
-    }
+    result.changePrecision(14, 6)
     result
   }
 

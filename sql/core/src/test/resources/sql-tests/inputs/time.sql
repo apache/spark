@@ -304,14 +304,15 @@ SELECT '00:00:00.1234' :: TIME(4) - TIME'23:59:59';
 
 -- Numeric constructor and extractor functions for TIME type
 
+
 -- time_from_seconds (valid: 0 to 86399.999999)
 SELECT time_from_seconds(0);
 SELECT time_from_seconds(43200);
 SELECT time_from_seconds(52200.5);
 SELECT time_from_seconds(86399.999999);
-SELECT time_from_seconds(-1);           -- invalid: negative → exception
-SELECT time_from_seconds(86400);        -- invalid: >= 86400 → exception
-SELECT time_from_seconds(90000);        -- invalid: >= 86400 → exception
+SELECT time_from_seconds(-1);           -- invalid: negative -> exception
+SELECT time_from_seconds(86400);        -- invalid: >= 86400 -> exception
+SELECT time_from_seconds(90000);        -- invalid: >= 86400 -> exception
 SELECT time_from_seconds(NULL);
 
 -- time_from_millis (valid: 0 to 86399999)
@@ -320,8 +321,8 @@ SELECT time_from_millis(43200);
 SELECT time_from_millis(52200000);
 SELECT time_from_millis(52200500);
 SELECT time_from_millis(86399999);
-SELECT time_from_millis(-1);            -- invalid: negative → exception
-SELECT time_from_millis(86400000);      -- invalid: >= 86400000 → exception
+SELECT time_from_millis(-1);            -- invalid: negative -> exception
+SELECT time_from_millis(86400000);      -- invalid: >= 86400000 -> exception
 SELECT time_from_millis(NULL);
 
 -- time_from_micros (valid: 0 to 86399999999)
@@ -330,8 +331,8 @@ SELECT time_from_micros(43200);
 SELECT time_from_micros(52200000000);
 SELECT time_from_micros(52200500000);
 SELECT time_from_micros(86399999999);
-SELECT time_from_micros(-1);            -- invalid: negative → exception
-SELECT time_from_micros(86400000000);   -- invalid: >= 86400000000 → exception
+SELECT time_from_micros(-1);            -- invalid: negative -> exception
+SELECT time_from_micros(86400000000);   -- invalid: >= 86400000000 -> exception
 SELECT time_from_micros(NULL);
 
 -- time_to_seconds
