@@ -63,7 +63,7 @@ class XmlSuite
   protected val legacyParserEnabled: Boolean = false
 
   override protected def sparkConf: SparkConf = super.sparkConf
-    .set("spark.sql.xml.legacyXMLParser.enabled", legacyParserEnabled.toString)
+    .set(SQLConf.LEGACY_XML_PARSER_ENABLED, legacyParserEnabled)
 
   protected val resDir = "test-data/xml-resources/"
 
