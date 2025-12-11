@@ -13837,7 +13837,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         -------
         A C PyCapsule stream object.
         """
-        from pyspark.interchange import SparkArrowCStreamer
+        from pyspark.sql.interchange import SparkArrowCStreamer
 
         return SparkArrowCStreamer(self._internal.to_internal_spark_frame).__arrow_c_stream__(
             requested_schema

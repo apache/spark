@@ -33,13 +33,25 @@ class TestSparkArrowCStreamer(unittest.TestCase):
         if not DUCKDB_TESTS:
             self.skipTest("duckdb is not installed")
 
-        pdf = pd.DataFrame({"A": [1, "a"], "B": [2, "b"], "C": [3, "c"], "D": [4, "d"]})
+        pdf = pd.DataFrame([[1, "a"], [2, "b"], [3, "c"], [4, "d"]], columns=["id", "value"])
         psdf = ps.from_pandas(pdf)
         # Use Spark Arrow C Streamer to convert PyArrow Table to DuckDB relation
         stream = pa.RecordBatchReader.from_stream(psdf)
         assert isinstance(stream, pa.RecordBatchReader)
 
         # Verify the contents of the DuckDB relation
-        result = duckdb.execute("SELECT * from stream").fetchall()
+        result = duckdb.execute("SELECT id, value from stream").fetchall()
         expected = [(1, "a"), (2, "b"), (3, "c"), (4, "d")]
         self.assertEqual(result, expected)
+
+
+if __name__ == "__main__":
+    from pyspark.sql.tests.test_interchange import *  # noqa: F401
+
+    try:
+        import xmlrunner  # type: ignore
+
+        test_runner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
+    except ImportError:
+        test_runner = None
+    unittest.main(testRunner=test_runner, verbosity=2)

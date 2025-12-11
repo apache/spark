@@ -7070,7 +7070,7 @@ class DataFrameNaFunctions:
         -------
         A C PyCapsule stream object.
         """
-        from pyspark.interchange import SparkArrowCStreamer
+        from pyspark.sql.interchange import SparkArrowCStreamer
 
         return SparkArrowCStreamer(self).__arrow_c_stream__(requested_schema)
 
