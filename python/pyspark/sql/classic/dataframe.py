@@ -1843,7 +1843,7 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def toPandas(self) -> "PandasDataFrameLike":
         return PandasConversionMixin._to_pandas(self)
 
-    def _to_pandas(self, **kwargs) -> "PandasDataFrameLike":
+    def _to_pandas(self, **kwargs: Any) -> "PandasDataFrameLike":
         return PandasConversionMixin._to_pandas(self, **kwargs)
 
     def transpose(self, indexColumn: Optional["ColumnOrName"] = None) -> ParentDataFrame:
