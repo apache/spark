@@ -1998,19 +1998,20 @@ org.apache.spark.SparkException
 
 
 -- !query
-WITH RECURSIVE t1(n, stamp) AS (
-    SELECT 1, CAST(DATE '2024-01-15' AS TIMESTAMP)
+WITH RECURSIVE t1(n, str, ts) AS (
+    SELECT 1, '2024-01-15 00:00:00' ,CAST('2024-01-15 00:00:00' AS TIMESTAMP)
     UNION ALL
-    SELECT n+1, stamp FROM t1 WHERE n < 5)
+    SELECT n + 1, str, str FROM t1 WHERE n < 5
+)
 SELECT * FROM t1
 -- !query schema
-struct<n:int,stamp:timestamp>
+struct<n:int,str:string,ts:timestamp>
 -- !query output
-1	2024-01-15 00:00:00
-2	2024-01-15 00:00:00
-3	2024-01-15 00:00:00
-4	2024-01-15 00:00:00
-5	2024-01-15 00:00:00
+1	2024-01-15 00:00:00	2024-01-15 00:00:00
+2	2024-01-15 00:00:00	2024-01-15 00:00:00
+3	2024-01-15 00:00:00	2024-01-15 00:00:00
+4	2024-01-15 00:00:00	2024-01-15 00:00:00
+5	2024-01-15 00:00:00	2024-01-15 00:00:00
 
 
 -- !query
