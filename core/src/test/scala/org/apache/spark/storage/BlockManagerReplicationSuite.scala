@@ -75,9 +75,11 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
   protected def makeBlockManager(
       maxMem: Long,
       name: String = SparkContext.DRIVER_IDENTIFIER,
-      memoryManager: Option[UnifiedMemoryManager] = None): BlockManager = {
+      memoryManager: Option[UnifiedMemoryManager] = None,
+      isOffHeapEnabled: Boolean = false ): BlockManager = {
     conf.set(TEST_MEMORY, maxMem)
     conf.set(MEMORY_OFFHEAP_SIZE, maxMem)
+    conf.set(MEMORY_OFFHEAP_ENABLED, isOffHeapEnabled)
     val serializerManager = new SerializerManager(serializer, conf)
     val transfer = new NettyBlockTransferService(
       conf, securityMgr, serializerManager, "localhost", "localhost", 0, 1)
@@ -98,6 +100,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
     conf.set(MEMORY_FRACTION, 1.0)
     conf.set(MEMORY_STORAGE_FRACTION, 0.999)
     conf.set(STORAGE_UNROLL_MEMORY_THRESHOLD, 512L)
+    conf.set(MEMORY_OFFHEAP_ENABLED, false)
 
     // to make cached peers refresh frequently
     conf.set(STORAGE_CACHED_PEERS_TTL, 10)
@@ -403,7 +406,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
 
     // As many stores as the replication factor
     val stores = (1 to maxReplication).map {
-      i => makeBlockManager(storeSize, s"store$i")
+      i => makeBlockManager(storeSize, s"store$i", isOffHeapEnabled = true)
     }
 
     storageLevels.foreach { storageLevel =>

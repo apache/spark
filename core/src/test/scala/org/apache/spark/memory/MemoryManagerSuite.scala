@@ -320,7 +320,7 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite {
   test("off-heap execution allocations cannot exceed limit") {
     val memoryManager = createMemoryManager(
       maxOnHeapExecutionMemory = 2L,
-      maxOffHeapExecutionMemory = 1000L)
+      maxOffHeapExecutionMemory = 1000L, isOffHeapEnabled = true)
 
     val tMemManager = new TaskMemoryManager(memoryManager, 1)
     val c = new TestMemoryConsumer(tMemManager, MemoryMode.OFF_HEAP)
