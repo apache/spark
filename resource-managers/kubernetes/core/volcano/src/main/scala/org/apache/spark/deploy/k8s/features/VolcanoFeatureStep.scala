@@ -18,14 +18,10 @@ package org.apache.spark.deploy.k8s.features
 
 import java.io.ByteArrayInputStream
 
-import com.fasterxml.jackson.core.JsonParseException
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.volcano.api.model.scheduling.v1beta1.{PodGroup, PodGroupSpec}
 import io.fabric8.volcano.client.DefaultVolcanoClient
 
-import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverConf, KubernetesExecutorConf, SparkPod}
 import org.apache.spark.internal.Logging
 
@@ -81,18 +77,7 @@ private[spark] class VolcanoFeatureStep extends KubernetesDriverCustomFeatureCon
   private def getPodGroupByTemplateJson(volcanoClient: DefaultVolcanoClient): Option[PodGroup] = {
     kubernetesConf.getOption(POD_GROUP_TEMPLATE_JSON_KEY).map { templateJson =>
       logDebug("Loading Volcano PodGroup configuration from template json")
-      try {
-        val templateYaml = new ObjectMapper()
-          .writerWithDefaultPrettyPrinter()
-          .writeValueAsString(new ObjectMapper(new YAMLFactory()).readTree(templateJson))
-        volcanoClient
-          .podGroups()
-          .load(new ByteArrayInputStream(templateYaml.getBytes()))
-          .item()
-      } catch {
-        case e: JsonParseException =>
-          throw new SparkException(f"The ${POD_GROUP_TEMPLATE_JSON_KEY} provided is invalid", e)
-      }
+      volcanoClient.podGroups().load(new ByteArrayInputStream(templateJson.getBytes())).item()
     }
   }
 
