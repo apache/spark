@@ -254,7 +254,7 @@ case class TupleSketchSummaryInteger(left: Expression, right: Expression)
     or 'alwaysone' (defaults to 'sum'). """,
   examples = """
     Examples:
-      > SELECT tuple_sketch_estimate_double(_FUNC_(tuple_sketch_agg_double(col1, val1), tuple_sketch_agg_double(col2, val2))) FROM VALUES (1, 1.0D, 4, 4.D), (2, 2.0D, 5, 5.0D), (3, 3.0D, 6, 6.0D) tab(col1, val1, col2, val2);
+      > SELECT tuple_sketch_estimate_double(_FUNC_(tuple_sketch_agg_double(col1, val1), tuple_sketch_agg_double(col2, val2))) FROM VALUES (1, 1.0D, 4, 4.0D), (2, 2.0D, 5, 5.0D), (3, 3.0D, 6, 6.0D) tab(col1, val1, col2, val2);
        6.0
   """,
   group = "misc_funcs",
@@ -590,7 +590,7 @@ case class TupleUnionThetaString(first: Expression, second: Expression, third: E
     val tupleSketch = ThetaSketchUtils.heapifyStringTupleSketch(sketch1Bytes, prettyName)
     val thetaSketch = ThetaSketchUtils.wrapCompactSketch(sketch2Bytes, prettyName)
 
-    // This doesn't mean nothing since there are no set operations for string variants
+    // This doesn't mean anything since there are no set operations for string variants
     val defaultSummary = new ArrayOfStringsSummaryFactory().newSummary()
     defaultSummary.update(Array.empty[String])
 
@@ -968,7 +968,7 @@ case class TupleIntersectionThetaString(left: Expression, right: Expression)
     val tupleSketch = ThetaSketchUtils.heapifyStringTupleSketch(sketch1Bytes, prettyName)
     val thetaSketch = ThetaSketchUtils.wrapCompactSketch(sketch2Bytes, prettyName)
 
-    // This doesn't mean nothing since there are no set operations for string variants
+    // This doesn't mean anything since there are no set operations for string variants
     val defaultSummary = new ArrayOfStringsSummaryFactory().newSummary()
     defaultSummary.update(Array.empty[String])
 
