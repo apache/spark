@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch,
 import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLId, toSQLValue}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils.localTimeToNanos
-import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal, DecimalType, IntegerType, StringType, TimeType}
+import org.apache.spark.sql.types.{DayTimeIntervalType, Decimal, DecimalType, IntegerType, LongType, StringType, TimeType}
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, SECOND}
 
 class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -569,5 +569,101 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val timeTruncSec = TimeTrunc(Literal("SECOND"), Literal(timeWithMicroPrecision, TimeType(3)))
     assert(timeTruncSec.dataType == TimeType(3))
     checkEvaluation(timeTruncSec, localTime(15, 30, 45, 0))
+  }
+
+  test("Numeric to TIME conversions") {
+    // time_from_seconds (supports Long and Decimal for fractional seconds)
+    checkEvaluation(TimeFromSeconds(Literal(0L)), 0L)
+    checkEvaluation(TimeFromSeconds(Literal(43200L)), 43200000000000L)
+    checkEvaluation(TimeFromSeconds(Literal(52200L)), 52200000000000L)
+    checkEvaluation(TimeFromSeconds(Literal(Decimal(52200.5))), 52200500000000L)
+    checkEvaluation(TimeFromSeconds(Literal(Decimal(86399.999999))), 86399999999000L)
+
+    // time_from_millis
+    checkEvaluation(TimeFromMillis(Literal(0L)), 0L)
+    checkEvaluation(TimeFromMillis(Literal(52200000L)), 52200000000000L)
+    checkEvaluation(TimeFromMillis(Literal(52200500L)), 52200500000000L)
+    checkEvaluation(TimeFromMillis(Literal(86399999L)), 86399999000000L)
+
+    // time_from_micros
+    checkEvaluation(TimeFromMicros(Literal(0L)), 0L)
+    checkEvaluation(TimeFromMicros(Literal(52200000000L)), 52200000000000L)
+    checkEvaluation(TimeFromMicros(Literal(52200500000L)), 52200500000000L)
+    checkEvaluation(TimeFromMicros(Literal(86399999999L)), 86399999999000L)
+  }
+
+  test("Numeric to TIME conversions - range validation") {
+    // time_from_seconds - out of range [0, 86400)
+    checkEvaluation(TimeFromSeconds(Literal(-1L)), null)
+    checkEvaluation(TimeFromSeconds(Literal(86400L)), null)
+    checkEvaluation(TimeFromSeconds(Literal(90000L)), null)
+    checkEvaluation(TimeFromSeconds(Literal(Decimal(-0.1))), null)
+    checkEvaluation(TimeFromSeconds(Literal(Decimal(86400.0))), null)
+
+    // time_from_millis - out of range [0, 86400000)
+    checkEvaluation(TimeFromMillis(Literal(-1L)), null)
+    checkEvaluation(TimeFromMillis(Literal(86400000L)), null)
+
+    // time_from_micros - out of range [0, 86400000000)
+    checkEvaluation(TimeFromMicros(Literal(-1L)), null)
+    checkEvaluation(TimeFromMicros(Literal(86400000000L)), null)
+  }
+
+  test("Numeric to TIME conversions - NULL inputs") {
+    checkEvaluation(TimeFromSeconds(Literal.create(null, LongType)), null)
+    checkEvaluation(TimeFromSeconds(Literal.create(null, DecimalType(14, 6))), null)
+    checkEvaluation(TimeFromMillis(Literal.create(null, LongType)), null)
+    checkEvaluation(TimeFromMicros(Literal.create(null, LongType)), null)
+  }
+
+  test("TIME to numeric extractions") {
+    val midnight = Literal.create(0L, TimeType())
+    val afternoon = Literal.create(52200000000000L, TimeType())  // 14:30:00
+    val fractional = Literal.create(52200500000000L, TimeType()) // 14:30:00.5
+    val maxTime = Literal.create(86399999999000L, TimeType())    // 23:59:59.999999
+
+    // time_to_seconds (returns DECIMAL to preserve fractional seconds)
+    checkEvaluation(TimeToSeconds(midnight), Decimal(0))
+    checkEvaluation(TimeToSeconds(afternoon), Decimal(52200))
+    checkEvaluation(TimeToSeconds(fractional), Decimal(52200.5))
+    checkEvaluation(TimeToSeconds(maxTime), Decimal(86399.999999))
+
+    // time_to_millis (returns LONG)
+    checkEvaluation(TimeToMillis(midnight), 0L)
+    checkEvaluation(TimeToMillis(afternoon), 52200000L)
+    checkEvaluation(TimeToMillis(fractional), 52200500L)
+    checkEvaluation(TimeToMillis(maxTime), 86399999L)
+
+    // time_to_micros (returns LONG)
+    checkEvaluation(TimeToMicros(midnight), 0L)
+    checkEvaluation(TimeToMicros(afternoon), 52200000000L)
+    checkEvaluation(TimeToMicros(fractional), 52200500000L)
+    checkEvaluation(TimeToMicros(maxTime), 86399999999L)
+  }
+
+  test("TIME to numeric extractions - NULL inputs") {
+    val nullTime = Literal.create(null, TimeType())
+    checkEvaluation(TimeToSeconds(nullTime), null)
+    checkEvaluation(TimeToMillis(nullTime), null)
+    checkEvaluation(TimeToMicros(nullTime), null)
+  }
+
+  test("Round-trip conversions preserve precision") {
+    // Seconds (with fractional precision)
+    val seconds = Decimal(52200.123456)
+    checkEvaluation(TimeToSeconds(TimeFromSeconds(Literal(seconds))), seconds)
+
+    // Millis
+    val millis = 52200500L
+    checkEvaluation(TimeToMillis(TimeFromMillis(Literal(millis))), millis)
+
+    // Micros
+    val micros = 52200500000L
+    checkEvaluation(TimeToMicros(TimeFromMicros(Literal(micros))), micros)
+
+    // Cross-precision: seconds -> TIME -> micros
+    val secondsValue = Decimal(14.5)
+    val timeVal = TimeFromSeconds(Literal(secondsValue))
+    checkEvaluation(TimeToMicros(timeVal), 14500000L)
   }
 }

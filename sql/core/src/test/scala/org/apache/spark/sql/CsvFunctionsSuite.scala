@@ -878,4 +878,61 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       "\"[{math -> 100, english -> 200, science -> -}, " +
       "{math -> 300, english -> 400, science -> 500}]\""))
   }
+
+  test("from_csv/to_csv with TIME type - all precisions") {
+    import java.time.LocalTime
+
+    val testData = Seq(
+      (0, LocalTime.of(14, 30, 45), "14:30:45"),
+      (1, LocalTime.of(14, 30, 45, 100000000), "14:30:45.1"),
+      (2, LocalTime.of(14, 30, 45, 120000000), "14:30:45.12"),
+      (3, LocalTime.of(14, 30, 45, 123000000), "14:30:45.123"),
+      (4, LocalTime.of(14, 30, 45, 123400000), "14:30:45.1234"),
+      (5, LocalTime.of(14, 30, 45, 123450000), "14:30:45.12345"),
+      (6, LocalTime.of(14, 30, 45, 123456000), "14:30:45.123456")
+    )
+
+    testData.foreach { case (precision, time, timeStr) =>
+      val schema = new StructType().add("time", TimeType(precision))
+
+      val parseResult = Seq(timeStr).toDF("csv")
+        .select(from_csv($"csv", schema, Map.empty[String, String]))
+        .collect().head.getAs[Row](0).getAs[LocalTime](0)
+      assert(parseResult == time, s"from_csv failed for precision $precision")
+
+      val df = Seq(time).toDF("time").select($"time".cast(TimeType(precision)))
+      val csvResult = df.select(to_csv(struct($"time"))).collect().head.getString(0)
+      assert(csvResult == timeStr, s"to_csv failed for precision $precision")
+
+      val roundtrip = df
+        .select(to_csv(struct($"time")).as("csv"))
+        .select(from_csv($"csv", schema, Map.empty[String, String]).as("struct"))
+        .select($"struct.time").collect().head.getAs[LocalTime](0)
+      assert(roundtrip == time, s"Roundtrip failed for precision $precision")
+    }
+
+    val customFormat = "HH-mm-ss.SSSSSS"
+    val customTime = LocalTime.of(14, 30, 45, 123456000)
+    val customSchema = new StructType().add("time", TimeType(6))
+    val customOptions = Map("timeFormat" -> customFormat)
+
+    val customParse = Seq("14-30-45.123456").toDF("csv")
+      .select(from_csv($"csv", customSchema, customOptions))
+      .collect().head.getAs[Row](0).getAs[LocalTime](0)
+    assert(customParse == customTime, "Custom format from_csv failed")
+
+    val customDF = Seq(customTime).toDF("time").select($"time".cast(TimeType(6)))
+    val customCsv = customDF.select(to_csv(struct($"time"), customOptions.asJava))
+      .collect().head.getString(0)
+    assert(customCsv == "14-30-45.123456", "Custom format to_csv failed")
+  }
+
+  test("TIME type with nulls") {
+    val schema = new StructType().add("time", TimeType(3))
+
+    val parseNull = Seq(null.asInstanceOf[String]).toDF("csv")
+      .select(from_csv($"csv", schema, Map.empty[String, String]))
+      .collect().head
+    assert(parseNull.isNullAt(0), "Null input should parse to null")
+  }
 }

@@ -16,18 +16,15 @@
 #
 import shutil
 import tempfile
-import typing
 import os
 import functools
 import unittest
 import uuid
 import contextlib
+from typing import Callable, Optional
 
-import pyspark.sql.connect.proto as pb2
 from pyspark import Row, SparkConf
-from pyspark.util import is_remote_only
-from pyspark.testing.utils import PySparkErrorTestUtils
-from pyspark import Row, SparkConf
+from pyspark.loose_version import LooseVersion
 from pyspark.util import is_remote_only
 from pyspark.testing.utils import (
     have_pandas,
@@ -53,6 +50,7 @@ if should_test_connect:
     from pyspark.sql.connect.dataframe import DataFrame
     from pyspark.sql.connect.plan import Read, Range, SQL, LogicalPlan
     from pyspark.sql.connect.session import SparkSession
+    import pyspark.sql.connect.proto as pb2
 
 
 class MockRemoteSession:
@@ -133,7 +131,6 @@ class PlanOnlyTestFixture(unittest.TestCase, PySparkErrorTestUtils):
         @classmethod
         def setUpClass(cls):
             cls.connect = MockRemoteSession()
-            cls.session = SparkSession.builder.remote().getOrCreate()
             cls.tbl_name = "test_connect_plan_only_table_1"
 
             cls.connect.set_hook("readTable", cls._read_table)
@@ -237,7 +234,7 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
 class ReusedMixedTestCase(ReusedConnectTestCase, SQLTestUtils):
     @classmethod
     def setUpClass(cls):
-        super(ReusedMixedTestCase, cls).setUpClass()
+        super().setUpClass()
         # Disable the shared namespace so pyspark.sql.functions, etc point the regular
         # PySpark libraries.
         os.environ["PYSPARK_NO_NAMESPACE_SHARE"] = "1"
@@ -253,7 +250,7 @@ class ReusedMixedTestCase(ReusedConnectTestCase, SQLTestUtils):
             cls.spark = cls.connect
             del os.environ["PYSPARK_NO_NAMESPACE_SHARE"]
         finally:
-            super(ReusedMixedTestCase, cls).tearDownClass()
+            super().tearDownClass()
 
     def compare_by_show(self, df1, df2, n: int = 20, truncate: int = 20):
         from pyspark.sql.classic.dataframe import DataFrame as SDF
@@ -308,3 +305,28 @@ class ReusedMixedTestCase(ReusedConnectTestCase, SQLTestUtils):
                 yield
 
         return _both_conf()
+
+
+def skip_if_server_version_is(
+    cond: Callable[[LooseVersion], bool], reason: Optional[str] = None
+) -> Callable:
+    def decorator(f: Callable) -> Callable:
+        @functools.wraps(f)
+        def wrapper(self, *args, **kwargs):
+            version = self.spark.version
+            if cond(LooseVersion(version)):
+                raise unittest.SkipTest(
+                    f"Skipping test {f.__name__} because server version is {version}"
+                    + (f" ({reason})" if reason else "")
+                )
+            return f(self, *args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
+def skip_if_server_version_is_greater_than_or_equal_to(
+    version: str, reason: Optional[str] = None
+) -> Callable:
+    return skip_if_server_version_is(lambda v: v >= LooseVersion(version), reason)

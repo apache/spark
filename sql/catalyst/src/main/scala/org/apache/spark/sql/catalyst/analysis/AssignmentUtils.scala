@@ -50,6 +50,9 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
    *
    * @param attrs table attributes
    * @param assignments assignments to align
+   * @param fromStar whether the assignments were resolved from an UPDATE SET * clause.
+   *                 These updates may assign struct fields individually
+   *                 (preserving existing fields).
    * @param coerceNestedTypes whether to coerce nested types to match the target type
    *                         for complex types
    * @return aligned update assignments that match table attributes
@@ -57,6 +60,7 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
   def alignUpdateAssignments(
       attrs: Seq[Attribute],
       assignments: Seq[Assignment],
+      fromStar: Boolean,
       coerceNestedTypes: Boolean): Seq[Assignment] = {
 
     val errors = new mutable.ArrayBuffer[String]()
@@ -176,7 +180,9 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
     } else if (exactAssignments.nonEmpty) {
       val value = exactAssignments.head.value
       val coerceMode = if (coerceNestedTypes) RECURSE else NONE
-      TableOutputResolver.resolveUpdate("", value, col, conf, addError, colPath, coerceMode)
+      val resolvedValue = TableOutputResolver.resolveUpdate("", value, col, conf, addError,
+        colPath, coerceMode)
+      resolvedValue
     } else {
       applyFieldAssignments(col, colExpr, fieldAssignments, addError, colPath, coerceNestedTypes)
     }
@@ -188,7 +194,7 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
       assignments: Seq[Assignment],
       addError: String => Unit,
       colPath: Seq[String],
-      coerceNestedTyptes: Boolean): Expression = {
+      coerceNestedTypes: Boolean): Expression = {
 
     col.dataType match {
       case structType: StructType =>
@@ -198,7 +204,7 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
         }
         val updatedFieldExprs = fieldAttrs.zip(fieldExprs).map { case (fieldAttr, fieldExpr) =>
           applyAssignments(fieldAttr, fieldExpr, assignments, addError, colPath :+ fieldAttr.name,
-            coerceNestedTyptes)
+            coerceNestedTypes)
         }
         toNamedStruct(structType, updatedFieldExprs)
 

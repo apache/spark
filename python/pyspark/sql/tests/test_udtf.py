@@ -40,7 +40,6 @@ from pyspark.sql.functions import (
     array,
     col,
     create_map,
-    array,
     lit,
     named_struct,
     udf,
@@ -812,6 +811,111 @@ class BaseUDTFTestsMixin:
         else:
             with self.assertRaisesRegex(err_type, expected):
                 func().collect()
+
+    def test_udtf_nullable_check(self):
+        for ret_type, value, expected in [
+            (
+                StructType([StructField("value", ArrayType(IntegerType(), False))]),
+                ([None],),
+                "PySparkRuntimeError",
+            ),
+            (
+                StructType([StructField("value", ArrayType(IntegerType(), True))]),
+                ([None],),
+                [Row(value=[None])],
+            ),
+            (
+                StructType([StructField("value", MapType(StringType(), IntegerType(), False))]),
+                ({"a": None},),
+                "PySparkRuntimeError",
+            ),
+            (
+                StructType([StructField("value", MapType(StringType(), IntegerType(), True))]),
+                ({"a": None},),
+                [Row(value={"a": None})],
+            ),
+            (
+                StructType([StructField("value", MapType(StringType(), IntegerType(), True))]),
+                ({None: 1},),
+                "PySparkRuntimeError",
+            ),
+            (
+                StructType([StructField("value", MapType(StringType(), IntegerType(), False))]),
+                ({None: 1},),
+                "PySparkRuntimeError",
+            ),
+            (
+                StructType(
+                    [
+                        StructField(
+                            "value", MapType(StringType(), ArrayType(IntegerType(), False), False)
+                        )
+                    ]
+                ),
+                ({"s": [None]},),
+                "PySparkRuntimeError",
+            ),
+            (
+                StructType(
+                    [
+                        StructField(
+                            "value",
+                            MapType(
+                                StructType([StructField("value", StringType(), False)]),
+                                IntegerType(),
+                                False,
+                            ),
+                        )
+                    ]
+                ),
+                ({(None,): 1},),
+                "PySparkRuntimeError",
+            ),
+            (
+                StructType(
+                    [
+                        StructField(
+                            "value",
+                            MapType(
+                                StructType([StructField("value", StringType(), False)]),
+                                IntegerType(),
+                                True,
+                            ),
+                        )
+                    ]
+                ),
+                ({(None,): 1},),
+                "PySparkRuntimeError",
+            ),
+            (
+                StructType(
+                    [StructField("value", StructType([StructField("value", StringType(), False)]))]
+                ),
+                ((None,),),
+                "PySparkRuntimeError",
+            ),
+            (
+                StructType(
+                    [
+                        StructField(
+                            "value",
+                            StructType(
+                                [StructField("value", ArrayType(StringType(), False), False)]
+                            ),
+                        )
+                    ]
+                ),
+                (([None],),),
+                "PySparkRuntimeError",
+            ),
+        ]:
+
+            class TestUDTF:
+                def eval(self):
+                    yield value
+
+            with self.subTest(ret_type=ret_type, value=value):
+                self._check_result_or_exception(TestUDTF, ret_type, expected)
 
     def test_numeric_output_type_casting(self):
         class TestUDTF:
@@ -3079,20 +3183,20 @@ class BaseUDTFTestsMixin:
                 [Row(x=x, a=x * 2, b=x + 10) for x in [5, 10]],
             )
 
-        logs = self.spark.table("system.session.python_worker_logs")
+            logs = self.spark.tvf.python_worker_logs()
 
-        assertDataFrameEqual(
-            logs.select("level", "msg", "context", "logger"),
-            [
-                Row(
-                    level="WARNING",
-                    msg=f"udtf with logging: {x}",
-                    context={"class_name": "TestUDTFWithLogging", "func_name": "eval"},
-                    logger="test_udtf",
-                )
-                for x in [5, 10]
-            ],
-        )
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg=f"udtf with logging: {x}",
+                        context={"class_name": "TestUDTFWithLogging", "func_name": "eval"},
+                        logger="test_udtf",
+                    )
+                    for x in [5, 10]
+                ],
+            )
 
     @unittest.skipIf(is_remote_only(), "Requires JVM access")
     def test_udtf_analyze_with_logging(self):
@@ -3115,26 +3219,26 @@ class BaseUDTFTestsMixin:
                 [Row(x=x, a=x * 2, b=x + 10) for x in [5, 10]],
             )
 
-        logs = self.spark.table("system.session.python_worker_logs")
+            logs = self.spark.tvf.python_worker_logs()
 
-        assertDataFrameEqual(
-            logs.select(
-                "level",
-                "msg",
-                col("context.class_name").alias("context_class_name"),
-                col("context.func_name").alias("context_func_name"),
-                "logger",
-            ).distinct(),
-            [
-                Row(
-                    level="WARNING",
-                    msg='udtf analyze: "long"',
-                    context_class_name="TestUDTFWithLogging",
-                    context_func_name="analyze",
-                    logger="test_udtf",
-                )
-            ],
-        )
+            assertDataFrameEqual(
+                logs.select(
+                    "level",
+                    "msg",
+                    col("context.class_name").alias("context_class_name"),
+                    col("context.func_name").alias("context_func_name"),
+                    "logger",
+                ).distinct(),
+                [
+                    Row(
+                        level="WARNING",
+                        msg='udtf analyze: "long"',
+                        context_class_name="TestUDTFWithLogging",
+                        context_func_name="analyze",
+                        logger="test_udtf",
+                    )
+                ],
+            )
 
     @unittest.skipIf(is_remote_only(), "Requires JVM access")
     def test_udtf_analyze_with_pyspark_logger(self):
@@ -3157,34 +3261,34 @@ class BaseUDTFTestsMixin:
                 [Row(x=x, a=x * 2, b=x + 10) for x in [5, 10]],
             )
 
-        logs = self.spark.table("system.session.python_worker_logs")
+            logs = self.spark.tvf.python_worker_logs()
 
-        assertDataFrameEqual(
-            logs.select(
-                "level",
-                "msg",
-                col("context.class_name").alias("context_class_name"),
-                col("context.func_name").alias("context_func_name"),
-                col("context.dt").alias("context_dt"),
-                "logger",
-            ).distinct(),
-            [
-                Row(
-                    level="WARNING",
-                    msg='udtf analyze: "long"',
-                    context_class_name="TestUDTFWithLogging",
-                    context_func_name="analyze",
-                    context_dt='"long"',
-                    logger="PySparkLogger",
-                )
-            ],
-        )
+            assertDataFrameEqual(
+                logs.select(
+                    "level",
+                    "msg",
+                    col("context.class_name").alias("context_class_name"),
+                    col("context.func_name").alias("context_func_name"),
+                    col("context.dt").alias("context_dt"),
+                    "logger",
+                ).distinct(),
+                [
+                    Row(
+                        level="WARNING",
+                        msg='udtf analyze: "long"',
+                        context_class_name="TestUDTFWithLogging",
+                        context_func_name="analyze",
+                        context_dt='"long"',
+                        logger="PySparkLogger",
+                    )
+                ],
+            )
 
 
 class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
-        super(UDTFTests, cls).setUpClass()
+        super().setUpClass()
         cls.spark.conf.set("spark.sql.execution.pythonUDTF.arrow.enabled", "false")
 
     @classmethod
@@ -3192,7 +3296,7 @@ class UDTFTests(BaseUDTFTestsMixin, ReusedSQLTestCase):
         try:
             cls.spark.conf.unset("spark.sql.execution.pythonUDTF.arrow.enabled")
         finally:
-            super(UDTFTests, cls).tearDownClass()
+            super().tearDownClass()
 
 
 @unittest.skipIf(
@@ -3522,7 +3626,7 @@ class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
 class LegacyUDTFArrowTests(LegacyUDTFArrowTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
-        super(LegacyUDTFArrowTests, cls).setUpClass()
+        super().setUpClass()
         cls.spark.conf.set("spark.sql.execution.pythonUDTF.arrow.enabled", "true")
         cls.spark.conf.set(
             "spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled", "true"
@@ -3534,7 +3638,7 @@ class LegacyUDTFArrowTests(LegacyUDTFArrowTestsMixin, ReusedSQLTestCase):
             cls.spark.conf.unset("spark.sql.execution.pythonUDTF.arrow.enabled")
             cls.spark.conf.unset("spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled")
         finally:
-            super(LegacyUDTFArrowTests, cls).tearDownClass()
+            super().tearDownClass()
 
 
 class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
@@ -3781,7 +3885,7 @@ class UDTFArrowTestsMixin(LegacyUDTFArrowTestsMixin):
 class UDTFArrowTests(UDTFArrowTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
-        super(UDTFArrowTests, cls).setUpClass()
+        super().setUpClass()
         cls.spark.conf.set("spark.sql.execution.pythonUDTF.arrow.enabled", "true")
         cls.spark.conf.set(
             "spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled", "false"
@@ -3793,7 +3897,7 @@ class UDTFArrowTests(UDTFArrowTestsMixin, ReusedSQLTestCase):
             cls.spark.conf.unset("spark.sql.execution.pythonUDTF.arrow.enabled")
             cls.spark.conf.unset("spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled")
         finally:
-            super(UDTFArrowTests, cls).tearDownClass()
+            super().tearDownClass()
 
 
 if __name__ == "__main__":

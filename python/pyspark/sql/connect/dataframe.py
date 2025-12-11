@@ -19,7 +19,6 @@
 from pyspark.errors.exceptions.base import (
     SessionNotSameException,
     PySparkIndexError,
-    PySparkAttributeError,
 )
 from pyspark.resource import ResourceProfile
 from pyspark.sql.connect.logging import logger
@@ -619,7 +618,7 @@ class DataFrame(ParentDataFrame):
             if isinstance(c, Column):
                 _cols.append(c)
             elif isinstance(c, str):
-                _cols.append(self[c])
+                _cols.append(F.col(c))
             elif isinstance(c, int) and not isinstance(c, bool):
                 if c < 1:
                     raise PySparkIndexError(
@@ -649,7 +648,7 @@ class DataFrame(ParentDataFrame):
             if isinstance(c, Column):
                 _cols.append(c)
             elif isinstance(c, str):
-                _cols.append(self[c])
+                _cols.append(F.col(c))
             elif isinstance(c, int) and not isinstance(c, bool):
                 if c < 1:
                     raise PySparkIndexError(
@@ -675,7 +674,7 @@ class DataFrame(ParentDataFrame):
                 if isinstance(c, Column):
                     gset.append(c)
                 elif isinstance(c, str):
-                    gset.append(self[c])
+                    gset.append(F.col(c))
                 else:
                     raise PySparkTypeError(
                         errorClass="NOT_COLUMN_OR_STR",
@@ -691,7 +690,7 @@ class DataFrame(ParentDataFrame):
             if isinstance(c, Column):
                 gcols.append(c)
             elif isinstance(c, str):
-                gcols.append(self[c])
+                gcols.append(F.col(c))
             else:
                 raise PySparkTypeError(
                     errorClass="NOT_COLUMN_OR_STR",

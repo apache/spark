@@ -38,8 +38,8 @@ import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, MergingSessi
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.python.streaming.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPySparkExec}
-import org.apache.spark.sql.execution.streaming.StreamingQueryPlanTraverseHelper
-import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, OffsetSeqMetadata}
+import org.apache.spark.sql.execution.streaming.{StreamingErrors, StreamingQueryPlanTraverseHelper}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, OffsetSeqMetadata, OffsetSeqMetadataBase}
 import org.apache.spark.sql.execution.streaming.operators.stateful.{SessionWindowStateStoreRestoreExec, SessionWindowStateStoreSaveExec, StatefulOperator, StatefulOperatorStateInfo, StateStoreRestoreExec, StateStoreSaveExec, StateStoreWriter, StreamingDeduplicateExec, StreamingDeduplicateWithinWatermarkExec, StreamingGlobalLimitExec, StreamingLocalLimitExec, UpdateEventTimeColumnExec}
 import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.FlatMapGroupsWithStateExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.{StreamingSymmetricHashJoinExec, StreamingSymmetricHashJoinHelper}
@@ -69,8 +69,8 @@ class IncrementalExecution(
     val queryId: UUID,
     val runId: UUID,
     val currentBatchId: Long,
-    val prevOffsetSeqMetadata: Option[OffsetSeqMetadata],
-    val offsetSeqMetadata: OffsetSeqMetadata,
+    val prevOffsetSeqMetadata: Option[OffsetSeqMetadataBase],
+    val offsetSeqMetadata: OffsetSeqMetadataBase,
     val watermarkPropagator: WatermarkPropagator,
     val isFirstBatch: Boolean,
     val currentStateStoreCkptId:
@@ -563,6 +563,18 @@ class IncrementalExecution(
           stateStoreWriter.getStateInfo.operatorId -> stateStoreWriter.shortName
       }.toMap
 
+      // Check if state directory is empty when we have stateful operators
+      if (opMapInPhysicalPlan.nonEmpty) {
+        val stateDirPath = new Path(new Path(checkpointLocation).getParent, "state")
+        val fileManager = CheckpointFileManager.create(stateDirPath, hadoopConf)
+
+        val stateDirectoryEmpty = !fileManager.exists(stateDirPath) ||
+          fileManager.list(stateDirPath).isEmpty
+        if (stateDirectoryEmpty) {
+          throw StreamingErrors.statefulOperatorMissingStateDirectory(opMapInPhysicalPlan)
+        }
+      }
+
       // A map of all (operatorId -> operatorName) in the state metadata
       val opMapInMetadata: Map[Long, String] = {
         var ret = Map.empty[Long, String]
@@ -637,7 +649,7 @@ class IncrementalExecution(
    * planned yet), which is required for asking the needs of another batch to each stateful
    * operator.
    */
-  def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
+  def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadataBase): Boolean = {
     val tentativeBatchId = currentBatchId + 1
     watermarkPropagator.propagate(tentativeBatchId, executedPlan, newMetadata.batchWatermarkMs)
     StreamingQueryPlanTraverseHelper

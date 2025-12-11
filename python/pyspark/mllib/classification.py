@@ -34,7 +34,6 @@ from pyspark.mllib.regression import (
 )
 from pyspark.mllib.util import Saveable, Loader, inherit_doc
 from pyspark.mllib.linalg import Vector
-from pyspark.mllib.regression import LabeledPoint
 
 if TYPE_CHECKING:
     from pyspark.mllib._typing import VectorLike
@@ -59,7 +58,7 @@ class LinearClassificationModel(LinearModel):
     """
 
     def __init__(self, weights: Vector, intercept: float) -> None:
-        super(LinearClassificationModel, self).__init__(weights, intercept)
+        super().__init__(weights, intercept)
         self._threshold: Optional[float] = None
 
     @since("1.4.0")
@@ -199,7 +198,7 @@ class LogisticRegressionModel(LinearClassificationModel):
     def __init__(
         self, weights: Vector, intercept: float, numFeatures: int, numClasses: int
     ) -> None:
-        super(LogisticRegressionModel, self).__init__(weights, intercept)
+        super().__init__(weights, intercept)
         self._numFeatures = int(numFeatures)
         self._numClasses = int(numClasses)
         self._threshold = 0.5
@@ -585,7 +584,7 @@ class SVMModel(LinearClassificationModel):
     """
 
     def __init__(self, weights: Vector, intercept: float) -> None:
-        super(SVMModel, self).__init__(weights, intercept)
+        super().__init__(weights, intercept)
         self._threshold = 0.0
 
     @overload
@@ -932,7 +931,7 @@ class StreamingLogisticRegressionWithSGD(StreamingLinearAlgorithm):
         self.miniBatchFraction = miniBatchFraction
         self.convergenceTol = convergenceTol
         self._model: Optional[LogisticRegressionModel] = None
-        super(StreamingLogisticRegressionWithSGD, self).__init__(model=self._model)
+        super().__init__(model=self._model)
 
     @since("1.5.0")
     def setInitialWeights(

@@ -26,7 +26,6 @@ class DataFrameQueryContextParityTests(DataFrameQueryContextTestsMixin, ReusedCo
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.sql.tests.connect.test_parity_dataframe_query_context import *  # noqa: F401
 
     try:

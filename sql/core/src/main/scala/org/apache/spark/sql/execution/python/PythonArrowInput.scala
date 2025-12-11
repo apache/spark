@@ -27,7 +27,7 @@ import org.apache.arrow.vector.ipc.WriteChannel
 import org.apache.arrow.vector.ipc.message.MessageSerializer
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
-import org.apache.spark.api.python.{BasePythonRunner, PythonRDD, PythonWorker}
+import org.apache.spark.api.python.{BasePythonRunner, PythonWorker}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow
 import org.apache.spark.sql.execution.arrow.{ArrowWriter, ArrowWriterWrapper}
@@ -42,8 +42,6 @@ import org.apache.spark.util.Utils
  * JVM (an iterator of internal rows + additional data if required) to Python (Arrow).
  */
 private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
-  protected val workerConf: Map[String, String]
-
   protected val schema: StructType
 
   protected val timeZoneId: String
@@ -62,14 +60,8 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
 
   protected def writeUDF(dataOut: DataOutputStream): Unit
 
-  protected def handleMetadataBeforeExec(stream: DataOutputStream): Unit = {
-    // Write config for the worker as a number of key -> value pairs of strings
-    stream.writeInt(workerConf.size)
-    for ((k, v) <- workerConf) {
-      PythonRDD.writeUTF(k, stream)
-      PythonRDD.writeUTF(v, stream)
-    }
-  }
+  protected def handleMetadataBeforeExec(stream: DataOutputStream): Unit = {}
+
   private val arrowSchema = ArrowUtils.toArrowSchema(
     schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
   protected val allocator =
@@ -301,7 +293,6 @@ private[python] trait GroupedPythonArrowInput { self: RowInputArrowPythonRunner 
       context: TaskContext): Writer = {
     new Writer(env, worker, inputIterator, partitionIndex, context) {
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
-        handleMetadataBeforeExec(dataOut)
         writeUDF(dataOut)
       }
 

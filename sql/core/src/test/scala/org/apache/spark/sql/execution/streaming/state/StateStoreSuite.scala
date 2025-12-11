@@ -94,7 +94,9 @@ class SignalingStateStoreProvider extends StateStoreProvider with Logging {
    */
   override def getStore(
       version: Long,
-      uniqueId: Option[String]): StateStore = null
+      uniqueId: Option[String],
+      forceSnapshotOnCommit: Boolean = false,
+      loadEmpty: Boolean = false): StateStore = null
 
   /**
    * Simulates a maintenance operation that blocks until a signal is received.
@@ -173,7 +175,9 @@ class FakeStateStoreProviderTracksCloseThread extends StateStoreProvider {
 
   override def getStore(
       version: Long,
-      uniqueId: Option[String]): StateStore = null
+      uniqueId: Option[String],
+      forceSnapshotOnCommit: Boolean = false,
+      loadEmpty: Boolean = false): StateStore = null
 
   override def doMaintenance(): Unit = {}
 }
@@ -242,7 +246,11 @@ class FakeStateStoreProviderWithMaintenanceError extends StateStoreProvider {
 
   override def close(): Unit = {}
 
-  override def getStore(version: Long, uniqueId: Option[String]): StateStore = null
+  override def getStore(
+    version: Long,
+    uniqueId: Option[String],
+    forceSnapshotOnCommit: Boolean = false,
+    loadEmpty: Boolean = false): StateStore = null
 
   override def doMaintenance(): Unit = {
     Thread.currentThread.setUncaughtExceptionHandler(exceptionHandler)
@@ -947,7 +955,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       }
     }
 
-    val timeoutDuration = 1.minute
+    val timeoutDuration = 2.minutes
 
     quietly {
       withSpark(SparkContext.getOrCreate(conf)) { sc =>
@@ -1431,6 +1439,26 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
     assert(e.getMessage.contains(
       "HDFSBackedStateStoreProvider does not support checkpointFormatVersion > 1"))
+  }
+
+  test("SPARK-54420: HDFSBackedStateStoreProvider does not support loading empty store") {
+    val provider = new HDFSBackedStateStoreProvider()
+    val hadoopConf = new Configuration()
+    hadoopConf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
+    provider.init(
+      StateStoreId(newDir(), Random.nextInt(), 0),
+      keySchema,
+      valueSchema,
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      useColumnFamilies = false,
+      new StateStoreConf(),
+      hadoopConf)
+
+    val e = intercept[StateStoreUnsupportedOperationException] {
+      provider.getStore(0, loadEmpty = true)
+    }
+    assert(e.getMessage.contains(
+      "Internal Error: HDFSBackedStateStoreProvider doesn't support loadEmpty"))
   }
 
   test("Auto snapshot repair") {
@@ -2728,6 +2756,21 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     val jsonMap = JsonMethods.parse(encoderSpec.json).extract[Map[String, Any]]
     val deserializedEncoderSpec = KeyStateEncoderSpec.fromJson(keySchema, jsonMap)
     assert(encoderSpec == deserializedEncoderSpec)
+  }
+
+  test("SPARK-54063: forceSnapshot metric populated when shouldForceSnapshotOnCommit is true") {
+    tryWithProviderResource(newStoreProvider()) { provider =>
+      val store = provider.getStore(0, forceSnapshotOnCommit = true)
+      put(store, "a", 0, 1)
+      store.commit()
+      // Verify that a snapshot file was created for version 1
+      val metricPair = store.metrics.customMetrics.find { case (metric, _) =>
+        metric.name.contains("rocksdbForceSnapshotCount") ||
+        metric.name.contains("forceSnapshotCount")
+      }
+      assert(metricPair.isDefined)
+      assert(metricPair.get._2 == 1L, s"forceSnapshot should be 1 but was ${metricPair.get._2}")
+    }
   }
 
   /** Return a new provider with a random id */

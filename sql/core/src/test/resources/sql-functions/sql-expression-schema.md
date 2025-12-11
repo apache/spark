@@ -363,6 +363,12 @@
 | org.apache.spark.sql.catalyst.expressions.ThetaSketchEstimate | theta_sketch_estimate | SELECT theta_sketch_estimate(theta_sketch_agg(col)) FROM VALUES (1), (1), (2), (2), (3) tab(col) | struct<theta_sketch_estimate(theta_sketch_agg(col, 12)):bigint> |
 | org.apache.spark.sql.catalyst.expressions.ThetaUnion | theta_union | SELECT theta_sketch_estimate(theta_union(theta_sketch_agg(col1), theta_sketch_agg(col2))) FROM VALUES (1, 4), (1, 4), (2, 5), (2, 5), (3, 6) tab(col1, col2) | struct<theta_sketch_estimate(theta_union(theta_sketch_agg(col1, 12), theta_sketch_agg(col2, 12), 12)):bigint> |
 | org.apache.spark.sql.catalyst.expressions.TimeDiff | time_diff | SELECT time_diff('HOUR', TIME'20:30:29', TIME'21:30:28') | struct<time_diff(HOUR, TIME '20:30:29', TIME '21:30:28'):bigint> |
+| org.apache.spark.sql.catalyst.expressions.TimeFromMicros | time_from_micros | SELECT time_from_micros(0) | struct<time_from_micros(0):time(6)> |
+| org.apache.spark.sql.catalyst.expressions.TimeFromMillis | time_from_millis | SELECT time_from_millis(0) | struct<time_from_millis(0):time(6)> |
+| org.apache.spark.sql.catalyst.expressions.TimeFromSeconds | time_from_seconds | SELECT time_from_seconds(0) | struct<time_from_seconds(0):time(6)> |
+| org.apache.spark.sql.catalyst.expressions.TimeToMicros | time_to_micros | SELECT time_to_micros(TIME'00:00:00') | struct<time_to_micros(TIME '00:00:00'):bigint> |
+| org.apache.spark.sql.catalyst.expressions.TimeToMillis | time_to_millis | SELECT time_to_millis(TIME'00:00:00') | struct<time_to_millis(TIME '00:00:00'):bigint> |
+| org.apache.spark.sql.catalyst.expressions.TimeToSeconds | time_to_seconds | SELECT time_to_seconds(TIME'00:00:00') | struct<time_to_seconds(TIME '00:00:00'):decimal(14,6)> |
 | org.apache.spark.sql.catalyst.expressions.TimeTrunc | time_trunc | SELECT time_trunc('HOUR', TIME'09:32:05.359') | struct<time_trunc(HOUR, TIME '09:32:05.359'):time(6)> |
 | org.apache.spark.sql.catalyst.expressions.TimeWindow | window | SELECT a, window.start, window.end, count(*) as cnt FROM VALUES ('A1', '2021-01-01 00:00:00'), ('A1', '2021-01-01 00:04:30'), ('A1', '2021-01-01 00:06:00'), ('A2', '2021-01-01 00:01:00') AS tab(a, b) GROUP by a, window(b, '5 minutes') ORDER BY a, start | struct<a:string,start:timestamp,end:timestamp,cnt:bigint> |
 | org.apache.spark.sql.catalyst.expressions.ToBinary | to_binary | SELECT to_binary('abc', 'utf-8') | struct<to_binary(abc, utf-8):binary> |

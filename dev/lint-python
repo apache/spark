@@ -18,6 +18,8 @@
 # define test binaries + versions
 FLAKE8_BUILD="flake8"
 MINIMUM_FLAKE8="3.9.0"
+RUFF_BUILD="ruff"
+MINIMUM_RUFF="0.14.0"
 MINIMUM_MYPY="1.8.0"
 MYPY_BUILD="mypy"
 PYTEST_BUILD="pytest"
@@ -52,6 +54,9 @@ while (( "$#" )); do
     --flake8)
       FLAKE8_TEST=true
       ;;
+    --ruff)
+      RUFF_TEST=true
+      ;;
     --mypy)
       MYPY_TEST=true
       ;;
@@ -69,7 +74,7 @@ while (( "$#" )); do
   shift
 done
 
-if [[ -z "$COMPILE_TEST$BLACK_TEST$PYSPARK_CUSTOM_ERRORS_CHECK_TEST$FLAKE8_TEST$MYPY_TEST$MYPY_EXAMPLES_TEST$MYPY_DATA_TEST" ]]; then
+if [[ -z "$COMPILE_TEST$BLACK_TEST$PYSPARK_CUSTOM_ERRORS_CHECK_TEST$FLAKE8_TEST$RUFF_TEST$MYPY_TEST$MYPY_EXAMPLES_TEST$MYPY_DATA_TEST" ]]; then
   COMPILE_TEST=true
   BLACK_TEST=true
   PYSPARK_CUSTOM_ERRORS_CHECK_TEST=true
@@ -270,6 +275,45 @@ flake8 checks failed."
     fi
 }
 
+function ruff_test {
+    local RUFF_VERSION=
+    local EXPECTED_RUFF=
+    local RUFF_REPORT=
+    local RUFF_STATUS=
+
+    if ! hash "$RUFF_BUILD" 2> /dev/null; then
+        echo "The ruff command was not found. Skipping for now."
+        return
+    fi
+
+    _RUFF_VERSION=($($RUFF_BUILD --version))
+    RUFF_VERSION="${_RUFF_VERSION[1]}"
+    EXPECTED_RUFF="$(satisfies_min_version $RUFF_VERSION $MINIMUM_RUFF)"
+
+    if [[ "$EXPECTED_RUFF" == "False" ]]; then
+        echo "\
+The minimum ruff version needs to be $MINIMUM_RUFF. Your current version is $RUFF_VERSION
+
+ruff checks failed."
+        exit 1
+    fi
+
+    echo "starting $RUFF_BUILD test..."
+    RUFF_REPORT=$( ($RUFF_BUILD check --config dev/pyproject.toml) 2>&1)
+    RUFF_STATUS=$?
+
+    if [ "$RUFF_STATUS" -ne 0 ]; then
+        echo "ruff checks failed:"
+        echo "$RUFF_REPORT"
+        echo "$RUFF_STATUS"
+        exit "$RUFF_STATUS"
+    else
+        echo "ruff checks passed."
+        echo
+    fi
+
+}
+
 function black_test {
     local BLACK_REPORT=
     local BLACK_STATUS=
@@ -334,6 +378,9 @@ if [[ "$PYSPARK_CUSTOM_ERRORS_CHECK_TEST" == "true" ]]; then
 fi
 if [[ "$FLAKE8_TEST" == "true" ]]; then
     flake8_test
+fi
+if [[ "$RUFF_TEST" == "true" ]]; then
+    ruff_test
 fi
 if [[ "$MYPY_TEST" == "true" ]] || [[ "$MYPY_EXAMPLES_TEST" == "true" ]] || [[ "$MYPY_DATA_TEST" == "true" ]]; then
     mypy_test

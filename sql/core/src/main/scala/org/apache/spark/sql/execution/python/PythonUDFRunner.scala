@@ -59,6 +59,8 @@ abstract class BasePythonUDFRunner(
   override val killOnIdleTimeout: Boolean = SQLConf.get.pythonUDFWorkerKillOnIdleTimeout
   override val tracebackDumpIntervalSeconds: Long =
     SQLConf.get.pythonUDFWorkerTracebackDumpIntervalSeconds
+  override val killWorkerOnFlushFailure: Boolean =
+    SQLConf.get.pythonUDFDaemonKillWorkerOnFlushFailure
 
   override val bufferSize: Int = SQLConf.get.getConf(SQLConf.PYTHON_UDF_BUFFER_SIZE)
   override val batchSizeForPythonUDF: Int =
@@ -113,6 +115,8 @@ abstract class BasePythonUDFRunner(
             case length if length >= 0 =>
               val obj = PythonWorkerUtils.readBytes(length, stream)
               pythonMetrics("pythonDataReceived") += length
+              batchesProcessed += 1
+              totalDataReceived += length
               obj
             case SpecialLengths.TIMING_DATA =>
               handleTimingData()

@@ -251,6 +251,22 @@ private[spark] object Utils
   }
 
   /**
+   * Create a temporary directy that will always be cleaned up when the executor stops,
+   * even in the case of a hard shutdown when the shutdown hooks don't get run.
+   *
+   * Currently this only provides special behavior on YARN, where the local dirs are not
+   * guaranteed to be cleaned up on executors hard shutdown.
+   */
+  def createExecutorLocalTempDir(conf: SparkConf, namePrefix: String): File = {
+    if (Utils.isRunningInYarnContainer(conf)) {
+      // Just use the default Java tmp dir which is set to inside the container directory on YARN
+      createTempDir(namePrefix = namePrefix)
+    } else {
+      createTempDir(getLocalDir(conf), namePrefix)
+    }
+  }
+
+  /**
    * Copy the first `maxSize` bytes of data from the InputStream to an in-memory
    * buffer, primarily to check for corruption.
    *
@@ -1856,16 +1872,6 @@ private[spark] object Utils
   }
 
   /**
-   * Whether the underlying Java version is at most 17.
-   */
-  val isJavaVersionAtMost17 = Runtime.version().feature() <= 17
-
-  /**
-   * Whether the underlying Java version is at least 21.
-   */
-  val isJavaVersionAtLeast21 = Runtime.version().feature() >= 21
-
-  /**
    * Whether the underlying JVM prefer IPv6 addresses.
    */
   val preferIPv6 = "true".equals(System.getProperty("java.net.preferIPv6Addresses"))
@@ -2089,7 +2095,7 @@ private[spark] object Utils
 
   val CONNECT_EXECUTE_THREAD_PREFIX = "SparkConnectExecuteThread"
 
-  private val threadInfoOrdering = Ordering.fromLessThan {
+  private[spark] val threadInfoOrdering = Ordering.fromLessThan {
     (threadTrace1: ThreadInfo, threadTrace2: ThreadInfo) => {
       def priority(ti: ThreadInfo): Int = ti.getThreadName match {
         case name if name.startsWith(TASK_THREAD_NAME_PREFIX) => 100

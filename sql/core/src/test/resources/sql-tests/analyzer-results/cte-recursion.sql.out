@@ -1907,7 +1907,7 @@ WithCTE
 :        +- UnionLoop xxxx
 :           :- Project [1 AS 1#x, cast(1 as bigint) AS CAST(1 AS BIGINT)#xL]
 :           :  +- OneRowRelation
-:           +- Project [cast((n + 1)#x as int) AS (n + 1)#x, cast((n + 1)#x as bigint) AS (n + 1)#xL]
+:           +- Project [(n + 1)#x, cast((n + 1)#x as bigint) AS (n + 1)#xL]
 :              +- Project [(n#x + 1) AS (n + 1)#x, (n#x + 1) AS (n + 1)#x]
 :                 +- Filter (n#x < 5)
 :                    +- SubqueryAlias t1
@@ -1934,6 +1934,32 @@ org.apache.spark.SparkException
     "right" : "\"BIGINT\""
   }
 }
+
+
+-- !query
+WITH RECURSIVE t1(n, str, ts) AS (
+    SELECT 1, '2024-01-15 00:00:00' ,CAST('2024-01-15 00:00:00' AS TIMESTAMP)
+    UNION ALL
+    SELECT n + 1, str, str FROM t1 WHERE n < 5
+)
+SELECT * FROM t1
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias t1
+:     +- Project [1#x AS n#x, 2024-01-15 00:00:00#x AS str#x, CAST(2024-01-15 00:00:00 AS TIMESTAMP)#x AS ts#x]
+:        +- UnionLoop xxxx
+:           :- Project [1 AS 1#x, 2024-01-15 00:00:00 AS 2024-01-15 00:00:00#x, cast(2024-01-15 00:00:00 as timestamp) AS CAST(2024-01-15 00:00:00 AS TIMESTAMP)#x]
+:           :  +- OneRowRelation
+:           +- Project [(n + 1)#x, str#x, cast(str#x as timestamp) AS str#x]
+:              +- Project [(n#x + 1) AS (n + 1)#x, str#x, str#x]
+:                 +- Filter (n#x < 5)
+:                    +- SubqueryAlias t1
+:                       +- Project [1#x AS n#x, 2024-01-15 00:00:00#x AS str#x, CAST(2024-01-15 00:00:00 AS TIMESTAMP)#x AS ts#x]
+:                          +- UnionLoopRef xxxx, [1#x, 2024-01-15 00:00:00#x, CAST(2024-01-15 00:00:00 AS TIMESTAMP)#x], false
++- Project [n#x, str#x, ts#x]
+   +- SubqueryAlias t1
+      +- CTERelationRef xxxx, true, [n#x, str#x, ts#x], false, false
 
 
 -- !query

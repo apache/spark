@@ -66,7 +66,7 @@ abstract class InMemoryBaseTable(
   extends Table with SupportsRead with SupportsWrite with SupportsMetadataColumns {
 
   // Tracks the current version number of the table.
-  protected var currentTableVersion: Int = 0
+  protected var tableVersion: Int = 0
 
   // Stores the table version validated during the last `ALTER TABLE ... ADD CONSTRAINT` operation.
   private var validatedTableVersion: String = null
@@ -75,14 +75,14 @@ abstract class InMemoryBaseTable(
 
   override def columns(): Array[Column] = tableColumns
 
-  override def currentVersion(): String = currentTableVersion.toString
+  override def version(): String = tableVersion.toString
 
-  def setCurrentVersion(version: String): Unit = {
-    currentTableVersion = version.toInt
+  def setVersion(version: String): Unit = {
+    tableVersion = version.toInt
   }
 
-  def increaseCurrentVersion(): Unit = {
-    currentTableVersion += 1
+  def increaseVersion(): Unit = {
+    tableVersion += 1
   }
 
   def validatedVersion(): String = {

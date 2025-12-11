@@ -61,6 +61,7 @@ class HybridAnalyzer(
     legacyAnalyzer: Analyzer,
     resolverGuard: ResolverGuard,
     resolver: Resolver,
+    tracker: QueryPlanningTracker,
     extendedResolutionChecks: Seq[LogicalPlan => Unit] = Seq.empty,
     extendedRewriteRules: Seq[Rule[LogicalPlan]] = Seq.empty,
     exposeExplicitlyUnsupportedResolverFeature: Boolean = false)
@@ -74,7 +75,7 @@ class HybridAnalyzer(
   )
   private val sampleRateGenerator = new Random()
 
-  def apply(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
+  def apply(plan: LogicalPlan): LogicalPlan = {
     val dualRun =
       conf.getConf(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER) &&
       checkDualRunSampleRate() &&
@@ -296,16 +297,19 @@ object HybridAnalyzer {
    */
   def fromLegacyAnalyzer(
       legacyAnalyzer: Analyzer,
-      exposeExplicitlyUnsupportedResolverFeature: Boolean = false): HybridAnalyzer = {
+      exposeExplicitlyUnsupportedResolverFeature: Boolean = false,
+      tracker: QueryPlanningTracker): HybridAnalyzer = {
     new HybridAnalyzer(
       legacyAnalyzer = legacyAnalyzer,
       resolverGuard = new ResolverGuard(legacyAnalyzer.catalogManager),
       resolver = new Resolver(
         catalogManager = legacyAnalyzer.catalogManager,
+        sharedRelationCache = legacyAnalyzer.sharedRelationCache,
         extensions = legacyAnalyzer.singlePassResolverExtensions,
         metadataResolverExtensions = legacyAnalyzer.singlePassMetadataResolverExtensions,
         externalRelationResolution = Some(legacyAnalyzer.getRelationResolution)
       ),
+      tracker = tracker,
       extendedResolutionChecks = legacyAnalyzer.singlePassExtendedResolutionChecks,
       extendedRewriteRules = legacyAnalyzer.singlePassPostHocResolutionRules,
       exposeExplicitlyUnsupportedResolverFeature = exposeExplicitlyUnsupportedResolverFeature

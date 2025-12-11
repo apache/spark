@@ -444,7 +444,7 @@ class PandasUDFTypeHintsTests(ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.pandas.test_pandas_udf_typehints import *  # noqa: #401
+    from pyspark.sql.tests.pandas.test_pandas_udf_typehints import *  # noqa: #F401
 
     try:
         import xmlrunner

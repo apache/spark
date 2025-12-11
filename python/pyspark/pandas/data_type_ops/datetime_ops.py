@@ -166,4 +166,4 @@ class DatetimeNTZOps(DatetimeOps):
             )
             return index_ops._with_new_scol(scol, field=InternalField(dtype=dtype))
         else:
-            return super(DatetimeNTZOps, self).astype(index_ops, dtype)
+            return super().astype(index_ops, dtype)

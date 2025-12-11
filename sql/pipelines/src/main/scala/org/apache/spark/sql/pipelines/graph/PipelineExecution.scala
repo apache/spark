@@ -53,7 +53,7 @@ class PipelineExecution(context: PipelineUpdateContext) {
     val initializedGraph = DatasetManager.materializeDatasets(resolvedGraph, context)
 
     // Execute the graph.
-    graphExecution = Option(
+    graphExecution = Some(
       new TriggeredGraphExecution(initializedGraph, context, onCompletion = terminationReason => {
         context.eventCallback(constructTerminationEvent(terminationReason))
       })
@@ -118,7 +118,7 @@ class PipelineExecution(context: PipelineUpdateContext) {
     }
   }
 
-  /** Waits for the execution to complete. Only used in tests */
+  /** Waits for the execution to complete. */
   private[sql] def awaitCompletion(): Unit = {
     graphExecution.foreach(_.awaitCompletion())
   }
