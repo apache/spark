@@ -44,6 +44,7 @@ import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryCheckpoint
 import org.apache.spark.sql.execution.streaming.state.{InMemoryStateSchemaProvider, KeyStateEncoderSpec, NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, RocksDBStateStoreProvider, StateSchemaCompatibilityChecker, StateSchemaMetadata, StateSchemaProvider, StateStore, StateStoreColFamilySchema, StateStoreConf, StateStoreId, StateStoreProviderId}
 import org.apache.spark.sql.execution.streaming.state.OfflineStateRepartitionErrors
 import org.apache.spark.sql.execution.streaming.utils.StreamingUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.streaming.TimeMode
 import org.apache.spark.sql.types.StructType
@@ -75,8 +76,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
         sourceOptions.resolvedCpLocation,
         stateConf.providerClass)
     }
-    val stateStoreReaderInfo: StateStoreReaderInfo = getStoreMetadataAndRunChecks(
-      sourceOptions)
+    val stateStoreReaderInfo = getStoreMetadataAndRunChecks(sourceOptions)
 
     // The key state encoder spec should be available for all operators except stream-stream joins
     val keyStateEncoderSpec = if (stateStoreReaderInfo.keyStateEncoderSpecOpt.isDefined) {
@@ -98,9 +98,9 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
     val sourceOptions = StateSourceOptions.modifySourceOptions(hadoopConf,
       StateSourceOptions.apply(session, hadoopConf, options))
 
-    val stateStoreReaderInfo: StateStoreReaderInfo = getStoreMetadataAndRunChecks(
-      sourceOptions)
+    val stateStoreReaderInfo = getStoreMetadataAndRunChecks(sourceOptions)
     val oldSchemaFilePaths = StateDataSource.getOldSchemaFilePaths(sourceOptions, hadoopConf)
+    val allCFReaderInfo = stateStoreReaderInfo.allColumnFamiliesReaderInfo
 
     val stateCheckpointLocation = sourceOptions.stateCheckpointLocation
     try {
@@ -120,10 +120,13 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
           (resultSchema.keySchema, resultSchema.valueSchema)
       }
 
+      val stateVarInfo = stateStoreReaderInfo.transformWithStateVariableInfoOpt
       SchemaUtil.getSourceSchema(sourceOptions, keySchema,
         valueSchema,
-        stateStoreReaderInfo.transformWithStateVariableInfoOpt,
-        stateStoreReaderInfo.stateStoreColFamilySchemaOpt)
+        stateVarInfo,
+        stateStoreReaderInfo.stateStoreColFamilySchemaOpt,
+        allCFReaderInfo.operatorName,
+        allCFReaderInfo.stateFormatVersion)
     } catch {
       case NonFatal(e) =>
         throw StateDataSourceErrors.failedToReadStateSchema(sourceOptions, e)
@@ -131,6 +134,22 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
   }
 
   override def supportsExternalMetadata(): Boolean = false
+
+  /**
+   * Return the state format version for SYMMETRIC_HASH_JOIN operators.
+   * This currently only support join operators because this function is only used by
+   * PartitionKeyExtractor and PartitionKeyExtractor only needs state format version for
+   * join operators.
+   */
+  private def getStateFormatVersion(
+      storeMetadata: Array[StateMetadataTableEntry]): Option[Int] = {
+    if (storeMetadata.nonEmpty &&
+      storeMetadata.head.operatorName == StatefulOperatorsUtils.SYMMETRIC_HASH_JOIN_EXEC_OP_NAME) {
+      Some(session.conf.get(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION))
+    } else {
+      None
+    }
+  }
 
   /**
    * Returns true if this is a read-all-column-families request for a stream-stream join
@@ -260,8 +279,8 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
     }
   }
 
-  private def getStoreMetadataAndRunChecks(sourceOptions: StateSourceOptions):
-    StateStoreReaderInfo = {
+  private def getStoreMetadataAndRunChecks(
+      sourceOptions: StateSourceOptions): StateStoreReaderInfo = {
     val storeMetadata = StateDataSource.getStateStoreMetadata(sourceOptions, hadoopConf)
     if (!sourceOptions.internalOnlyReadAllColumnFamilies) {
       // Skip runStateVarChecks when reading all column families (for repartitioning) because:
@@ -296,29 +315,33 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
 
           if (sourceOptions.readRegisteredTimers) {
             stateVarName = TimerStateUtils.getTimerStateVarNames(timeMode)._1
+          } else if (sourceOptions.internalOnlyReadAllColumnFamilies) {
+            // When reading all column families (for repartitioning) for TWS operator,
+            // we will just choose a random state as placeholder for default column family,
+            // because we need to use matching stateVariableInfo and stateStoreColFamilySchemaOpt
+            // to inferSchema (partitionKey in particular) later
+            stateVarName = operatorProperties.stateVariables.head.stateName
           }
-          // When reading all column families (for repartitioning), we collect all state variable
-          // infos instead of validating a specific stateVarName. This skips the normal validation
-          // logic because we're not reading a specific state variable - we're reading all of them.
+
           if (sourceOptions.internalOnlyReadAllColumnFamilies) {
             stateVariableInfos = operatorProperties.stateVariables
-          } else {
-            var stateVarInfoList = operatorProperties.stateVariables
-              .filter(stateVar => stateVar.stateName == stateVarName)
-            if (stateVarInfoList.isEmpty &&
-              StateStoreColumnFamilySchemaUtils.isTestingInternalColFamily(stateVarName)) {
-              // pass this dummy TWSStateVariableInfo for TWS internal column family during testing,
-              // because internalColumns are not register in operatorProperties.stateVariables,
-              // thus stateVarInfoList will be empty.
-              stateVarInfoList = List(TransformWithStateVariableInfo(
-                stateVarName, StateVariableType.ValueState, false
-              ))
-            }
-            require(stateVarInfoList.size == 1, s"Failed to find unique state variable info " +
-              s"for state variable $stateVarName in operator ${sourceOptions.operatorId}")
-            val stateVarInfo = stateVarInfoList.head
-            transformWithStateVariableInfoOpt = Some(stateVarInfo)
           }
+          var stateVarInfoList = operatorProperties.stateVariables
+            .filter(stateVar => stateVar.stateName == stateVarName)
+          if (stateVarInfoList.isEmpty &&
+            StateStoreColumnFamilySchemaUtils.isTestingInternalColFamily(stateVarName)) {
+            // pass this dummy TWSStateVariableInfo for TWS internal column family during testing,
+            // because internalColumns are not register in operatorProperties.stateVariables,
+            // thus stateVarInfoList will be empty.
+            stateVarInfoList = List(TransformWithStateVariableInfo(
+              stateVarName, StateVariableType.ValueState, false
+            ))
+          }
+          require(stateVarInfoList.size == 1, s"Failed to find unique state variable info " +
+            s"for state variable $stateVarName in operator ${sourceOptions.operatorId}")
+          val stateVarInfo = stateVarInfoList.head
+          transformWithStateVariableInfoOpt = Some(stateVarInfo)
+
           val schemaFilePaths = storeMetadataEntry.stateSchemaFilePaths
           val stateSchemaMetadata = StateSchemaMetadata.createStateSchemaMetadata(
             sourceOptions.stateCheckpointLocation.toString,
@@ -374,13 +397,16 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       }
     }
 
+    val operatorName = if (storeMetadata.nonEmpty) storeMetadata.head.operatorName else ""
+    val stateFormatVersion = getStateFormatVersion(storeMetadata)
     StateStoreReaderInfo(
       keyStateEncoderSpecOpt,
       stateStoreColFamilySchemaOpt,
       transformWithStateVariableInfoOpt,
       stateSchemaProvider,
       joinColFamilyOpt,
-      AllColumnFamiliesReaderInfo(stateStoreColFamilySchemas, stateVariableInfos)
+      AllColumnFamiliesReaderInfo(
+        stateStoreColFamilySchemas, stateVariableInfos, operatorName, stateFormatVersion)
     )
   }
 
