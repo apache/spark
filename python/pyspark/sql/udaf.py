@@ -531,8 +531,6 @@ def _handle_udaf_aggregation_in_grouped_data(
     DataFrame
         Aggregated result DataFrame
     """
-    from pyspark.errors import PySparkNotImplementedError
-
     # Validate UDAF usage constraints
     if len(udaf_cols) > 1:
         raise PySparkNotImplementedError(
