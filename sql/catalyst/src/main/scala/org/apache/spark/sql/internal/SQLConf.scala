@@ -6731,6 +6731,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val TIME_TYPE_ENABLED =
+    buildConf("spark.sql.timeType.enabled")
+      .doc("When true, the TIME data type is supported.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(Utils.isTesting)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -7937,6 +7944,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def coerceMergeNestedTypes: Boolean =
     getConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED)
+
+  def isTimeTypeEnabled: Boolean = getConf(SQLConf.TIME_TYPE_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 

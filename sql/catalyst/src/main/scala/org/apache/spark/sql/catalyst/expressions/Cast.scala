@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{dayTimeIntervalToByte, dayTimeIntervalToDecimal, dayTimeIntervalToInt, dayTimeIntervalToLong, dayTimeIntervalToShort, yearMonthIntervalToByte, yearMonthIntervalToInt, yearMonthIntervalToShort}
-import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{GeographyVal, UTF8String, VariantVal}
@@ -617,6 +617,12 @@ case class Cast(
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
+    dataType match {
+      // If the cast is to a TIME type, first check if TIME type is enabled.
+      case _: TimeType if !SQLConf.get.isTimeTypeEnabled =>
+        throw QueryCompilationErrors.unsupportedTimeTypeError()
+      case _ =>
+    }
     val canCast = evalMode match {
       case EvalMode.LEGACY => Cast.canCast(child.dataType, dataType)
       case EvalMode.ANSI => Cast.canAnsiCast(child.dataType, dataType)
