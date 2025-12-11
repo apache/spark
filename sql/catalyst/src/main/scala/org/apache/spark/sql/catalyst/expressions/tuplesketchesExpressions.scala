@@ -245,21 +245,6 @@ case class TupleSketchSummaryInteger(left: Expression, right: Expression)
   }
 }
 
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = """
-    _FUNC_(tupleSketch1, tupleSketch2, lgNomEntries, mode) - Merges two binary representations of Datasketches
-    TupleSketch objects with double summary data type using a TupleSketch Union object. Users can
-    set lgNomEntries to a value between 4 and 26 (defaults to 12) and mode to 'sum', 'min', 'max',
-    or 'alwaysone' (defaults to 'sum'). """,
-  examples = """
-    Examples:
-      > SELECT tuple_sketch_estimate_double(_FUNC_(tuple_sketch_agg_double(col1, val1), tuple_sketch_agg_double(col2, val2))) FROM VALUES (1, 1.0D, 4, 4.0D), (2, 2.0D, 5, 5.0D), (3, 3.0D, 6, 6.0D) tab(col1, val1, col2, val2);
-       6.0
-  """,
-  group = "misc_funcs",
-  since = "4.2.0")
-// scalastyle:on line.size.limit
 case class TupleUnionDouble(
     first: Expression,
     second: Expression,
@@ -308,22 +293,6 @@ case class TupleUnionDouble(
   }
 }
 
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = """
-    _FUNC_(tupleSketch, thetaSketch, lgNomEntries, mode) - Merges the binary representation of a
-    Datasketches TupleSketch with double summary data type with the binary representation of a
-    Datasketches ThetaSketch using a TupleSketch Union object. The ThetaSketch entries are assigned
-    a default double summary value. Users can set lgNomEntries to a value between 4 and 26 (defaults to 12),
-    and mode to 'sum', 'min', 'max', or 'alwaysone' (defaults to 'sum'). """,
-  examples = """
-    Examples:
-      > SELECT tuple_sketch_estimate_double(_FUNC_(tuple_sketch_agg_double(col1, val1), theta_sketch_agg(col2))) FROM VALUES (1, 1.0D, 4), (2, 2.0D, 5), (3, 3.0D, 6) tab(col1, val1, col2);
-       6.0
-  """,
-  group = "misc_funcs",
-  since = "4.2.0")
-// scalastyle:on line.size.limit
 case class TupleUnionThetaDouble(
     first: Expression,
     second: Expression,
@@ -374,21 +343,6 @@ case class TupleUnionThetaDouble(
   }
 }
 
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = """
-    _FUNC_(tupleSketch1, tupleSketch2, lgNomEntries, mode) - Merges two binary representations of Datasketches
-    TupleSketch objects with integer summary data type using a TupleSketch Union object. Users can
-    set lgNomEntries to a value between 4 and 26 (defaults to 12) and mode to 'sum', 'min', 'max',
-    or 'alwaysone' (defaults to 'sum'). """,
-  examples = """
-    Examples:
-      > SELECT tuple_sketch_estimate_integer(_FUNC_(tuple_sketch_agg_integer(col1, val1), tuple_sketch_agg_integer(col2, val2))) FROM VALUES (1, 1, 4, 4), (2, 2, 5, 5), (3, 3, 6, 6) tab(col1, val1, col2, val2);
-       6.0
-  """,
-  group = "misc_funcs",
-  since = "4.2.0")
-// scalastyle:on line.size.limit
 case class TupleUnionInteger(
     first: Expression,
     second: Expression,
@@ -437,22 +391,6 @@ case class TupleUnionInteger(
   }
 }
 
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = """
-    _FUNC_(tupleSketch, thetaSketch, lgNomEntries, mode) - Merges the binary representation of a
-    Datasketches TupleSketch with integer summary data type with the binary representation of a
-    Datasketches ThetaSketch using a TupleSketch Union object. The ThetaSketch entries are assigned
-    a default integer summary value. Users can set lgNomEntries to a value between 4 and 26 (defaults to 12),
-    and mode to 'sum', 'min', 'max', or 'alwaysone' (defaults to 'sum'). """,
-  examples = """
-    Examples:
-      > SELECT tuple_sketch_estimate_integer(_FUNC_(tuple_sketch_agg_integer(col1, val1), theta_sketch_agg(col2))) FROM VALUES (1, 1, 4), (2, 2, 5), (3, 3, 6) tab(col1, val1, col2);
-       6.0
-  """,
-  group = "misc_funcs",
-  since = "4.2.0")
-// scalastyle:on line.size.limit
 case class TupleUnionThetaInteger(
     first: Expression,
     second: Expression,
@@ -1297,11 +1235,21 @@ abstract class TupleDifferenceBase[S <: Summary]
   }
 }
 
-/**
- * ExpressionBuilder for TupleUnionDouble to support SQL named parameters.
- * Supports 2-4 parameters: first and second are required, lgNomEntries and mode are optional.
- * The rearrange method will always fill in defaults, so build() receives exactly 4 expressions.
- */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(tupleSketch1, tupleSketch2, lgNomEntries, mode) - Merges two binary representations of Datasketches
+    TupleSketch objects with double summary data type using a TupleSketch Union object. Users can
+    set lgNomEntries to a value between 4 and 26 (defaults to 12) and mode to 'sum', 'min', 'max',
+    or 'alwaysone' (defaults to 'sum'). """,
+  examples = """
+    Examples:
+      > SELECT tuple_sketch_estimate_double(_FUNC_(tuple_sketch_agg_double(col1, val1), tuple_sketch_agg_double(col2, val2))) FROM VALUES (1, 1.0D, 4, 4.0D), (2, 2.0D, 5, 5.0D), (3, 3.0D, 6, 6.0D) tab(col1, val1, col2, val2);
+       6.0
+  """,
+  group = "misc_funcs",
+  since = "4.2.0")
+// scalastyle:on line.size.limit
 object TupleUnionDoubleExpressionBuilder extends ExpressionBuilder {
   final val defaultFunctionSignature = FunctionSignature(Seq(
     InputParameter("first"),
@@ -1317,11 +1265,22 @@ object TupleUnionDoubleExpressionBuilder extends ExpressionBuilder {
   }
 }
 
-/**
- * ExpressionBuilder for TupleUnionThetaDouble to support SQL named parameters.
- * Supports 2-4 parameters: first and second are required, lgNomEntries and mode are optional.
- * The rearrange method will always fill in defaults, so build() receives exactly 4 expressions.
- */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(tupleSketch, thetaSketch, lgNomEntries, mode) - Merges the binary representation of a
+    Datasketches TupleSketch with double summary data type with the binary representation of a
+    Datasketches ThetaSketch using a TupleSketch Union object. The ThetaSketch entries are assigned
+    a default double summary value. Users can set lgNomEntries to a value between 4 and 26 (defaults to 12),
+    and mode to 'sum', 'min', 'max', or 'alwaysone' (defaults to 'sum'). """,
+  examples = """
+    Examples:
+      > SELECT tuple_sketch_estimate_double(_FUNC_(tuple_sketch_agg_double(col1, val1), theta_sketch_agg(col2))) FROM VALUES (1, 1.0D, 4), (2, 2.0D, 5), (3, 3.0D, 6) tab(col1, val1, col2);
+       6.0
+  """,
+  group = "misc_funcs",
+  since = "4.2.0")
+// scalastyle:on line.size.limit
 object TupleUnionThetaDoubleExpressionBuilder extends ExpressionBuilder {
   final val defaultFunctionSignature = FunctionSignature(Seq(
     InputParameter("first"),
@@ -1337,11 +1296,21 @@ object TupleUnionThetaDoubleExpressionBuilder extends ExpressionBuilder {
   }
 }
 
-/**
- * ExpressionBuilder for TupleUnionInteger to support SQL named parameters.
- * Supports 2-4 parameters: first and second are required, lgNomEntries and mode are optional.
- * The rearrange method will always fill in defaults, so build() receives exactly 4 expressions.
- */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(tupleSketch1, tupleSketch2, lgNomEntries, mode) - Merges two binary representations of Datasketches
+    TupleSketch objects with integer summary data type using a TupleSketch Union object. Users can
+    set lgNomEntries to a value between 4 and 26 (defaults to 12) and mode to 'sum', 'min', 'max',
+    or 'alwaysone' (defaults to 'sum'). """,
+  examples = """
+    Examples:
+      > SELECT tuple_sketch_estimate_integer(_FUNC_(tuple_sketch_agg_integer(col1, val1), tuple_sketch_agg_integer(col2, val2))) FROM VALUES (1, 1, 4, 4), (2, 2, 5, 5), (3, 3, 6, 6) tab(col1, val1, col2, val2);
+       6.0
+  """,
+  group = "misc_funcs",
+  since = "4.2.0")
+// scalastyle:on line.size.limit
 object TupleUnionIntegerExpressionBuilder extends ExpressionBuilder {
   final val defaultFunctionSignature = FunctionSignature(Seq(
     InputParameter("first"),
@@ -1357,11 +1326,22 @@ object TupleUnionIntegerExpressionBuilder extends ExpressionBuilder {
   }
 }
 
-/**
- * ExpressionBuilder for TupleUnionThetaInteger to support SQL named parameters.
- * Supports 2-4 parameters: first and second are required, lgNomEntries and mode are optional.
- * The rearrange method will always fill in defaults, so build() receives exactly 4 expressions.
- */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(tupleSketch, thetaSketch, lgNomEntries, mode) - Merges the binary representation of a
+    Datasketches TupleSketch with integer summary data type with the binary representation of a
+    Datasketches ThetaSketch using a TupleSketch Union object. The ThetaSketch entries are assigned
+    a default integer summary value. Users can set lgNomEntries to a value between 4 and 26 (defaults to 12),
+    and mode to 'sum', 'min', 'max', or 'alwaysone' (defaults to 'sum'). """,
+  examples = """
+    Examples:
+      > SELECT tuple_sketch_estimate_integer(_FUNC_(tuple_sketch_agg_integer(col1, val1), theta_sketch_agg(col2))) FROM VALUES (1, 1, 4), (2, 2, 5), (3, 3, 6) tab(col1, val1, col2);
+       6.0
+  """,
+  group = "misc_funcs",
+  since = "4.2.0")
+// scalastyle:on line.size.limit
 object TupleUnionThetaIntegerExpressionBuilder extends ExpressionBuilder {
   final val defaultFunctionSignature = FunctionSignature(Seq(
     InputParameter("first"),

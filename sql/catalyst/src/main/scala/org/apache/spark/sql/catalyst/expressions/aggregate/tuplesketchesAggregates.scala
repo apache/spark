@@ -84,23 +84,6 @@ case class FinalizedTupleSketch[S <: Summary](sketch: Sketch[S]) extends TupleSk
  * @param inputAggBufferOffset
  *   offset for input aggregation buffer
  */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = """
-    _FUNC_(key, summary, lgNomEntries, mode) - Returns the TupleSketch compact binary representation.
-      `key` is the expression for unique value counting.
-      `summary` is the double value to be aggregated.
-      `lgNomEntries` is the log-base-2 of nominal entries, with nominal entries deciding
-      the number buckets or slots for the TupleSketch. Default is 12.
-      `mode` is the aggregation mode for numeric summaries (sum, min, max, alwaysone). Default is sum. """,
-  examples = """
-    Examples:
-      > SELECT tuple_sketch_estimate_double(_FUNC_(key, summary, 12, 'sum')) FROM VALUES (1, 5.0D), (1, 1.0D), (2, 2.0D), (2, 3.0D), (3, 2.2D) tab(key, summary);
-       3.0
-  """,
-  group = "agg_funcs",
-  since = "4.2.0")
-// scalastyle:on line.size.limit
 case class TupleSketchAggDouble(
     key: Expression,
     summary: Expression,
@@ -258,23 +241,6 @@ case class TupleSketchAggDouble(
  * @param inputAggBufferOffset
  *   offset for input aggregation buffer
  */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = """
-    _FUNC_(key, summary, lgNomEntries, mode) - Returns the TupleSketch compact binary representation.
-      `key` is the expression for unique value counting.
-      `summary` is the integer value to be aggregated.
-      `lgNomEntries` is the log-base-2 of nominal entries, with nominal entries deciding
-      the number buckets or slots for the TupleSketch. Default is 12.
-      `mode` is the aggregation mode for numeric summaries (sum, min, max, alwaysone). Default is sum. """,
-  examples = """
-    Examples:
-      > SELECT tuple_sketch_estimate_integer(_FUNC_(key, summary, 12, 'sum')) FROM VALUES (1, 5), (1, 1), (2, 2), (2, 3), (3, 2) tab(key, summary);
-       3.0
-  """,
-  group = "agg_funcs",
-  since = "4.2.0")
-// scalastyle:on line.size.limit
 case class TupleSketchAggInteger(
     key: Expression,
     summary: Expression,
@@ -771,21 +737,6 @@ abstract class TupleSketchAggBase[U, S <: UpdatableSummary[U]]
  * @param inputAggBufferOffset
  *   offset for input aggregation buffer
  */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = """
-    _FUNC_(child, lgNomEntries, mode) - Returns the unioned TupleSketch compact binary representation.
-      `child` should be a binary TupleSketch representation created with a double type summary.
-      `lgNomEntries` is the log-base-2 of nominal entries for the union operation. Default is 12.
-      `mode` is the aggregation mode for numeric summaries during union (sum, min, max, alwaysone). Default is sum. """,
-  examples = """
-    Examples:
-      > SELECT tuple_sketch_estimate_double(_FUNC_(sketch)) FROM (SELECT tuple_sketch_agg_double(key, summary) as sketch FROM VALUES (1, 5.0D), (2, 10.0D) tab(key, summary) UNION ALL SELECT tuple_sketch_agg_double(key, summary) as sketch FROM VALUES (2, 3.0D), (3, 7.0D) tab(key, summary));
-       3.0
-  """,
-  group = "agg_funcs",
-  since = "4.2.0")
-// scalastyle:on line.size.limit
 case class TupleUnionAggDouble(
     child: Expression,
     lgNomEntries: Expression,
@@ -912,21 +863,6 @@ case class TupleUnionAggDouble(
  * @param inputAggBufferOffset
  *   offset for input aggregation buffer
  */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = """
-    _FUNC_(child, lgNomEntries, mode) - Returns the unioned TupleSketch compact binary representation.
-      `child` should be a binary TupleSketch representation created with an integer type summary.
-      `lgNomEntries` is the log-base-2 of nominal entries for the union operation. Default is 12.
-      `mode` is the aggregation mode for numeric summaries during union (sum, min, max, alwaysone). Default is sum. """,
-  examples = """
-    Examples:
-      > SELECT tuple_sketch_estimate_integer(_FUNC_(sketch)) FROM (SELECT tuple_sketch_agg_integer(key, summary) as sketch FROM VALUES (1, 5), (2, 10) tab(key, summary) UNION ALL SELECT tuple_sketch_agg_integer(key, summary) as sketch FROM VALUES (2, 3), (3, 7) tab(key, summary));
-       3.0
-  """,
-  group = "agg_funcs",
-  since = "4.2.0")
-// scalastyle:on line.size.limit
 case class TupleUnionAggInteger(
     child: Expression,
     lgNomEntries: Expression,
@@ -1836,11 +1772,23 @@ trait SummaryAggregateMode extends AggregateFunction {
   }
 }
 
-/**
- * ExpressionBuilder for TupleSketchAggDouble to support SQL named parameters.
- * Supports 2-4 parameters: key and summary are required, lgNomEntries and mode are optional.
- * The rearrange method will always fill in defaults, so build() receives exactly 4 expressions.
- */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(key, summary, lgNomEntries, mode) - Returns the TupleSketch compact binary representation.
+      `key` is the expression for unique value counting.
+      `summary` is the double value to be aggregated.
+      `lgNomEntries` is the log-base-2 of nominal entries, with nominal entries deciding
+      the number buckets or slots for the TupleSketch. Default is 12.
+      `mode` is the aggregation mode for numeric summaries (sum, min, max, alwaysone). Default is sum. """,
+  examples = """
+    Examples:
+      > SELECT tuple_sketch_estimate_double(_FUNC_(key, summary, 12, 'sum')) FROM VALUES (1, 5.0D), (1, 1.0D), (2, 2.0D), (2, 3.0D), (3, 2.2D) tab(key, summary);
+       3.0
+  """,
+  group = "agg_funcs",
+  since = "4.2.0")
+// scalastyle:on line.size.limit
 object TupleSketchAggDoubleExpressionBuilder extends ExpressionBuilder {
   final val defaultFunctionSignature = FunctionSignature(Seq(
     InputParameter("key"),
@@ -1856,11 +1804,23 @@ object TupleSketchAggDoubleExpressionBuilder extends ExpressionBuilder {
   }
 }
 
-/**
- * ExpressionBuilder for TupleSketchAggInteger to support SQL named parameters.
- * Supports 2-4 parameters: key and summary are required, lgNomEntries and mode are optional.
- * The rearrange method will always fill in defaults, so build() receives exactly 4 expressions.
- */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(key, summary, lgNomEntries, mode) - Returns the TupleSketch compact binary representation.
+      `key` is the expression for unique value counting.
+      `summary` is the integer value to be aggregated.
+      `lgNomEntries` is the log-base-2 of nominal entries, with nominal entries deciding
+      the number buckets or slots for the TupleSketch. Default is 12.
+      `mode` is the aggregation mode for numeric summaries (sum, min, max, alwaysone). Default is sum. """,
+  examples = """
+    Examples:
+      > SELECT tuple_sketch_estimate_integer(_FUNC_(key, summary, 12, 'sum')) FROM VALUES (1, 5), (1, 1), (2, 2), (2, 3), (3, 2) tab(key, summary);
+       3.0
+  """,
+  group = "agg_funcs",
+  since = "4.2.0")
+// scalastyle:on line.size.limit
 object TupleSketchAggIntegerExpressionBuilder extends ExpressionBuilder {
   final val defaultFunctionSignature = FunctionSignature(Seq(
     InputParameter("key"),
@@ -1876,11 +1836,21 @@ object TupleSketchAggIntegerExpressionBuilder extends ExpressionBuilder {
   }
 }
 
-/**
- * ExpressionBuilder for TupleUnionAggDouble to support SQL named parameters.
- * Supports 1-3 parameters: child is required, lgNomEntries and mode are optional.
- * The rearrange method will always fill in defaults, so build() receives exactly 3 expressions.
- */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(child, lgNomEntries, mode) - Returns the unioned TupleSketch compact binary representation.
+      `child` should be a binary TupleSketch representation created with a double type summary.
+      `lgNomEntries` is the log-base-2 of nominal entries for the union operation. Default is 12.
+      `mode` is the aggregation mode for numeric summaries during union (sum, min, max, alwaysone). Default is sum. """,
+  examples = """
+    Examples:
+      > SELECT tuple_sketch_estimate_double(_FUNC_(sketch)) FROM (SELECT tuple_sketch_agg_double(key, summary) as sketch FROM VALUES (1, 5.0D), (2, 10.0D) tab(key, summary) UNION ALL SELECT tuple_sketch_agg_double(key, summary) as sketch FROM VALUES (2, 3.0D), (3, 7.0D) tab(key, summary));
+       3.0
+  """,
+  group = "agg_funcs",
+  since = "4.2.0")
+// scalastyle:on line.size.limit
 object TupleUnionAggDoubleExpressionBuilder extends ExpressionBuilder {
   final val defaultFunctionSignature = FunctionSignature(Seq(
     InputParameter("child"),
@@ -1895,11 +1865,21 @@ object TupleUnionAggDoubleExpressionBuilder extends ExpressionBuilder {
   }
 }
 
-/**
- * ExpressionBuilder for TupleUnionAggInteger to support SQL named parameters.
- * Supports 1-3 parameters: child is required, lgNomEntries and mode are optional.
- * The rearrange method will always fill in defaults, so build() receives exactly 3 expressions.
- */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(child, lgNomEntries, mode) - Returns the unioned TupleSketch compact binary representation.
+      `child` should be a binary TupleSketch representation created with an integer type summary.
+      `lgNomEntries` is the log-base-2 of nominal entries for the union operation. Default is 12.
+      `mode` is the aggregation mode for numeric summaries during union (sum, min, max, alwaysone). Default is sum. """,
+  examples = """
+    Examples:
+      > SELECT tuple_sketch_estimate_integer(_FUNC_(sketch)) FROM (SELECT tuple_sketch_agg_integer(key, summary) as sketch FROM VALUES (1, 5), (2, 10) tab(key, summary) UNION ALL SELECT tuple_sketch_agg_integer(key, summary) as sketch FROM VALUES (2, 3), (3, 7) tab(key, summary));
+       3.0
+  """,
+  group = "agg_funcs",
+  since = "4.2.0")
+// scalastyle:on line.size.limit
 object TupleUnionAggIntegerExpressionBuilder extends ExpressionBuilder {
   final val defaultFunctionSignature = FunctionSignature(Seq(
     InputParameter("child"),
