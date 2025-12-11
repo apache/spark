@@ -473,12 +473,13 @@ def _apply_udaf_via_catalyst(
         functionType=PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
     )
 
-    # Apply UDFs to the original DataFrame's columns
-    # This ensures attribute IDs match between Python UDF expressions and Scala logical plan
-    all_cols = [df[c] for c in df.columns]
-    reduce_udf_col = reduce_udf(*all_cols)
-    merge_udf_col = merge_udf(*all_cols)
-    final_udf_col = final_udf(*all_cols)
+    # Apply UDFs to the columns in correct order: grouping columns first, then value column
+    # This ensures reduce_func receives columns in the expected order:
+    # [group_col_0, group_col_1, ..., group_col_n, value_col]
+    ordered_cols = [df[c] for c in grouping_col_names] + [col_expr]
+    reduce_udf_col = reduce_udf(*ordered_cols)
+    merge_udf_col = merge_udf(*ordered_cols)
+    final_udf_col = final_udf(*ordered_cols)
 
     # Get result type as JSON string
     spark_session = df.sparkSession

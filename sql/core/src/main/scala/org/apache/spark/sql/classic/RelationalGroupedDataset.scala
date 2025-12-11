@@ -363,9 +363,12 @@ class RelationalGroupedDataset protected[sql](
       case other => Alias(other, other.toString)()
     }
 
+    // Use the UDF's children directly - they already specify the correct columns in order
+    // The partialReduceUDF contains (grouping_cols..., value_col) as specified by Python
+    val udfChildren = partialReduceUDF.expr.asInstanceOf[PythonUDF].children
     val child = df.logicalPlan
     val project = df.sparkSession.sessionState.executePlan(
-      Project(groupingNamedExpressions ++ child.output, child)).analyzed
+      Project(udfChildren.map(_.asInstanceOf[NamedExpression]), child)).analyzed
     val groupingAttributes = project.output.take(groupingNamedExpressions.length)
 
     val resultAttribute = AttributeReference("result", resultType, nullable = true)()

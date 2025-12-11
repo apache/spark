@@ -61,11 +61,13 @@ object RewritePythonAggregatorUDAF extends Rule[LogicalPlan] {
         AttributeReference("buffer", BinaryType, nullable = true)()
       )
 
-      // Create a new PythonUDF that references the child's actual output
+      // Use the original UDF's children (columns specified by Python in correct order)
+      // This preserves the ordering: [grouping_cols..., value_col]
+      val originalReduceChildren = partialReduceUDF.asInstanceOf[PythonUDF].children
       val reduceUDFWithCorrectChildren = createPythonUDF(
         reduceFunc,
         partialReduceUDF,
-        child.output,  // Reference the child's actual output
+        originalReduceChildren,  // Preserve original column ordering from Python
         StructType(mapInArrowOutput.map(a => StructField(a.name, a.dataType, a.nullable)))
       )
 
