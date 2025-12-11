@@ -22,11 +22,10 @@ import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, SchemaUnsupported}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.metricview.util.MetricViewPlanner
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types.StructType
 
 case class CreateMetricViewCommand(
     child: LogicalPlan,
@@ -39,9 +38,6 @@ case class CreateMetricViewCommand(
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
-  override val output: Seq[Attribute] = Seq(
-    AttributeReference("result", StringType, nullable = false)()
-  )
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val name = child match {

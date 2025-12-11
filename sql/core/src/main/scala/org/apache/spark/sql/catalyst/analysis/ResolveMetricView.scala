@@ -132,8 +132,9 @@ import org.apache.spark.sql.types.{DataType, Metadata, MetadataBuilder}
  *        Aggregate(
  *          groupingExpressions = [region],
  *          aggregateExpressions = [region, sum(amount), avg(price)],
- *          child = Filter(upper(region) = 'REGION_1',
- *                   Filter(product = 'product_1', sales_table))
+ *          child = Filter(region_upper = 'REGION_1',
+ *                   Project([upper(region) AS region_upper, region, amount, price],
+ *                     Filter(product = 'product_1', sales_table)))
  *        )
  *    }}}
  * 6. Return the rewritten plan for further optimization and execution
@@ -142,7 +143,7 @@ import org.apache.spark.sql.types.{DataType, Metadata, MetadataBuilder}
  * - Dimensions can be used directly in SELECT, WHERE, GROUP BY, ORDER BY
  * - Measures must be accessed via MEASURE() function and can only appear in aggregate context
  * - The WHERE clause from the metric view definition is automatically applied
- * - Source table columns (except dimensions) are hidden from the metric view
+ * - Source table columns are hidden from the metric view
  *
  * Example query patterns:
  * {{{

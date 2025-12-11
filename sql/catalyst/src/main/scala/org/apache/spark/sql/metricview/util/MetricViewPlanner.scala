@@ -70,7 +70,7 @@ object MetricViewPlanner {
         throw QueryCompilationErrors.invalidLiteralForWindowDurationError()
     }
     val source = metricView.from match {
-      case asset: AssetSource => UnresolvedRelation(sqlParser.parseTableIdentifier(asset.name))
+      case asset: AssetSource => UnresolvedRelation(sqlParser.parseMultipartIdentifier(asset.name))
       case sqlSource: SQLSource => sqlParser.parsePlan(sqlSource.sql)
       case _ => throw SparkException.internalError("Either SQLSource or AssetSource")
     }

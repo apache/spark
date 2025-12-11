@@ -54,7 +54,7 @@ case class Measure(child: Expression)
 
   override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("measure")
 
-  override def nullable: Boolean = true
+  override def nullable: Boolean = child.nullable
 
   override val nodePatterns: Seq[TreePattern] = Seq(MEASURE)
 }

@@ -210,6 +210,7 @@ MAP	false
 MATCHED	false
 MATERIALIZED	false
 MAX	false
+MEASURE	false
 MERGE	false
 METRICS	false
 MICROSECOND	false

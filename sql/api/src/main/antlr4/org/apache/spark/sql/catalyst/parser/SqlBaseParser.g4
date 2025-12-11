@@ -2016,7 +2016,9 @@ ansiNonReserved
     | MATCHED
     | MATERIALIZED
     | MAX
+    | MEASURE
     | MERGE
+    | METRICS
     | MICROSECOND
     | MICROSECONDS
     | MILLISECOND
@@ -2406,7 +2408,9 @@ nonReserved
     | MATCHED
     | MATERIALIZED
     | MAX
+    | MEASURE
     | MERGE
+    | METRICS
     | MICROSECOND
     | MICROSECONDS
     | MILLISECOND
