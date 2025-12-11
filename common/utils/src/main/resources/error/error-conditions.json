@@ -7309,6 +7309,12 @@
     ],
     "sqlState" : "0A001"
   },
+  "UNSUPPORTED_TIME_TYPE" : {
+    "message" : [
+      "The data type TIME is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_TYPED_LITERAL" : {
     "message" : [
       "Literals of the type <unsupportedType> are not supported. Supported types are <supportedTypes>."
