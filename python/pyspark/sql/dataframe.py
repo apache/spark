@@ -6983,6 +6983,23 @@ class DataFrame:
         """
         ...
 
+    def __arrow_c_stream__(self, requested_schema: Optional[object] = None) -> object:
+        """
+        Export to a C PyCapsule stream object.
+
+        Parameters
+        ----------
+        requested_schema : PyCapsule, optional
+            The schema to attempt to use for the output stream. This is a best effort request,
+
+        Returns
+        -------
+        A C PyCapsule stream object.
+        """
+        from pyspark.sql.interchange import SparkArrowCStreamer
+
+        return SparkArrowCStreamer(self).__arrow_c_stream__(requested_schema)
+
 
 class DataFrameNaFunctions:
     """Functionality for working with missing data in :class:`DataFrame`.
@@ -7063,23 +7080,6 @@ class DataFrameNaFunctions:
         ...
 
     replace.__doc__ = DataFrame.replace.__doc__
-
-    def __arrow_c_stream__(self, requested_schema: Optional[object] = None) -> object:
-        """
-        Export to a C PyCapsule stream object.
-
-        Parameters
-        ----------
-        requested_schema : PyCapsule, optional
-            The schema to attempt to use for the output stream. This is a best effort request,
-
-        Returns
-        -------
-        A C PyCapsule stream object.
-        """
-        from pyspark.sql.interchange import SparkArrowCStreamer
-
-        return SparkArrowCStreamer(self).__arrow_c_stream__(requested_schema)
 
 
 class DataFrameStatFunctions:

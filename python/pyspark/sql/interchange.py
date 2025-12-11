@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Iterator
+from typing import Iterator, Optional
 
 import pyarrow as pa
 
@@ -30,7 +30,7 @@ def _get_arrow_array_partition_stream(df: pyspark.sql.DataFrame) -> Iterator[pa.
     # the serialized RecordBatch in Arrow IPC format.
     binary_schema = StructType([StructField("arrow_ipc_bytes", BinaryType(), nullable=False)])
 
-    def batch_to_bytes_iter(batch_iter):
+    def batch_to_bytes_iter(batch_iter: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
         """
         A generator function that converts RecordBatches to serialized Arrow IPC format.
 
@@ -79,7 +79,7 @@ class SparkArrowCStreamer:
         self._df = df
         self._schema = to_arrow_schema(df.schema)
 
-    def __arrow_c_stream__(self, requested_schema=None):
+    def __arrow_c_stream__(self, requested_schema: Optional[object] = None) -> object:
         """
         Return the Arrow C stream for the dataframe partitions.
         """
