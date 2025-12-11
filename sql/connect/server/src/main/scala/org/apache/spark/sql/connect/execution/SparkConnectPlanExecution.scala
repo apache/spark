@@ -87,10 +87,6 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
         responseObserver.onNext(createSchemaResponse(request.getSessionId, dataframe.schema))
         processAsArrowBatches(dataframe, responseObserver, executeHolder)
         responseObserver.onNext(MetricGenerator.createMetricsResponse(sessionHolder, dataframe))
-        createObservedMetricsResponse(
-          request.getSessionId,
-          executeHolder.allObservationAndPlanIds,
-          dataframe).foreach(responseObserver.onNext)
       case proto.Plan.OpTypeCase.COMMAND =>
         val command = request.getPlan.getCommand
         planner.transformCommand(command) match {
@@ -330,26 +326,6 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       .setServerSideSessionId(sessionHolder.serverSessionId)
       .setSchema(DataTypeProtoConverter.toConnectProtoType(schema))
       .build()
-  }
-
-  private def createObservedMetricsResponse(
-      sessionId: String,
-      observationAndPlanIds: Map[String, Long],
-      dataframe: DataFrame): Option[ExecutePlanResponse] = {
-    val observedMetrics = dataframe.queryExecution.observedMetrics.collect {
-      case (name, row) if !executeHolder.observations.contains(name) =>
-        val values = SparkConnectPlanExecution.toObservedMetricsValues(row)
-        name -> values
-    }
-    if (observedMetrics.nonEmpty) {
-      Some(
-        SparkConnectPlanExecution
-          .createObservedMetricsResponse(
-            sessionId,
-            sessionHolder.serverSessionId,
-            observationAndPlanIds,
-            observedMetrics))
-    } else None
   }
 }
 
