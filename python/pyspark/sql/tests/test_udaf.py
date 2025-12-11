@@ -15,10 +15,24 @@
 # limitations under the License.
 #
 
+import datetime
 import unittest
+from collections import Counter
+from decimal import Decimal as D
 
 from pyspark.sql import Row
 from pyspark.sql.functions import udaf
+from pyspark.sql.types import (
+    ArrayType,
+    BinaryType,
+    DecimalType,
+    IntegerType,
+    LongType,
+    MapType,
+    StringType,
+    StructField,
+    StructType,
+)
 from pyspark.sql.udaf import Aggregator, UserDefinedAggregateFunction
 from pyspark.errors import PySparkTypeError, PySparkNotImplementedError
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -26,19 +40,19 @@ from pyspark.testing.utils import assertDataFrameEqual
 
 
 class UDAFTestsMixin:
-    def test_udaf_basic_sum(self):
-        """Test basic sum UDAF with df.agg()."""
+    # ============ Core Functionality Tests ============
 
-        class MySum(Aggregator):
+    def test_udaf_basic_aggregations(self):
+        """Test basic aggregation types: sum, average, max."""
+
+        class SumAgg(Aggregator):
             @staticmethod
             def zero():
                 return 0
 
             @staticmethod
             def reduce(buffer, value):
-                if value is not None:
-                    return buffer + value
-                return buffer
+                return buffer + (value or 0)
 
             @staticmethod
             def merge(buffer1, buffer2):
@@ -48,56 +62,10 @@ class UDAFTestsMixin:
             def finish(reduction):
                 return reduction
 
-        df = self.spark.createDataFrame([(1,), (2,), (3,), (4,), (5,)], ["value"])
-        sum_udaf = udaf(MySum(), "bigint", "MySum")
-
-        result = df.agg(sum_udaf(df.value))
-        assertDataFrameEqual(result, [Row(**{"MySum(value)": 15})])
-
-    def test_udaf_with_groupby(self):
-        """Test UDAF with groupBy().agg()."""
-
-        class MySum(Aggregator):
+        class AvgAgg(Aggregator):
             @staticmethod
             def zero():
-                return 0
-
-            @staticmethod
-            def reduce(buffer, value):
-                if value is not None:
-                    return buffer + value
-                return buffer
-
-            @staticmethod
-            def merge(buffer1, buffer2):
-                return buffer1 + buffer2
-
-            @staticmethod
-            def finish(reduction):
-                return reduction
-
-        df = self.spark.createDataFrame(
-            [(1, "a"), (2, "a"), (3, "b"), (4, "b"), (5, "b")], ["value", "group"]
-        )
-        sum_udaf = udaf(MySum(), "bigint", "MySum")
-
-        # Test using groupBy().agg()
-        result = df.groupBy("group").agg(sum_udaf(df.value))
-        assertDataFrameEqual(
-            result.sort("group"),
-            [
-                Row(group="a", **{"MySum(value)": 3}),
-                Row(group="b", **{"MySum(value)": 12}),
-            ],
-        )
-
-    def test_udaf_average(self):
-        """Test average UDAF with df.agg()."""
-
-        class MyAverage(Aggregator):
-            @staticmethod
-            def zero():
-                return (0.0, 0)  # (sum, count)
+                return (0.0, 0)
 
             @staticmethod
             def reduce(buffer, value):
@@ -111,31 +79,18 @@ class UDAFTestsMixin:
 
             @staticmethod
             def finish(reduction):
-                if reduction[1] == 0:
-                    return None
-                return reduction[0] / reduction[1]
+                return reduction[0] / reduction[1] if reduction[1] else None
 
-        df = self.spark.createDataFrame([(10,), (20,), (30,)], ["value"])
-        avg_udaf = udaf(MyAverage(), "double", "MyAverage")
-
-        result = df.agg(avg_udaf(df.value))
-        assertDataFrameEqual(result, [Row(**{"MyAverage(value)": 20.0})], checkRowOrder=False)
-
-    def test_udaf_max(self):
-        """Test max UDAF with df.agg()."""
-
-        class MyMax(Aggregator):
+        class MaxAgg(Aggregator):
             @staticmethod
             def zero():
                 return None
 
             @staticmethod
             def reduce(buffer, value):
-                if value is not None:
-                    if buffer is None:
-                        return value
-                    return max(buffer, value)
-                return buffer
+                if value is None:
+                    return buffer
+                return max(buffer, value) if buffer is not None else value
 
             @staticmethod
             def merge(buffer1, buffer2):
@@ -149,25 +104,34 @@ class UDAFTestsMixin:
             def finish(reduction):
                 return reduction
 
-        df = self.spark.createDataFrame([(5,), (10,), (3,), (8,)], ["value"])
-        max_udaf = udaf(MyMax(), "bigint", "MyMax")
+        df = self.spark.createDataFrame([(1.0,), (2.0,), (3.0,), (4.0,), (5.0,)], ["value"])
 
+        # Sum
+        sum_udaf = udaf(SumAgg(), "double", "MySum")
+        result = df.agg(sum_udaf(df.value))
+        assertDataFrameEqual(result, [Row(**{"MySum(value)": 15.0})])
+
+        # Average (uses tuple buffer)
+        avg_udaf = udaf(AvgAgg(), "double", "MyAvg")
+        result = df.agg(avg_udaf(df.value))
+        assertDataFrameEqual(result, [Row(**{"MyAvg(value)": 3.0})])
+
+        # Max
+        max_udaf = udaf(MaxAgg(), "double", "MyMax")
         result = df.agg(max_udaf(df.value))
-        assertDataFrameEqual(result, [Row(**{"MyMax(value)": 10})])
+        assertDataFrameEqual(result, [Row(**{"MyMax(value)": 5.0})])
 
-    def test_udaf_with_nulls(self):
-        """Test UDAF handling null values with df.agg()."""
+    def test_udaf_with_groupby(self):
+        """Test UDAF with groupBy - multiple groups, column order independent."""
 
-        class MySum(Aggregator):
+        class SumAgg(Aggregator):
             @staticmethod
             def zero():
                 return 0
 
             @staticmethod
             def reduce(buffer, value):
-                if value is not None:
-                    return buffer + value
-                return buffer
+                return buffer + (value or 0)
 
             @staticmethod
             def merge(buffer1, buffer2):
@@ -177,312 +141,59 @@ class UDAFTestsMixin:
             def finish(reduction):
                 return reduction
 
+        # Test with key column BEFORE value column (previously failed)
+        df = self.spark.createDataFrame(
+            [("a", 1), ("a", 2), ("a", 3), ("b", 10), ("b", 20), ("c", 100)],
+            ["key", "value"],
+        )
+        sum_udaf = udaf(SumAgg(), "bigint", "MySum")
+        result = df.groupBy("key").agg(sum_udaf(df.value))
+        expected = [
+            Row(key="a", **{"MySum(value)": 6}),
+            Row(key="b", **{"MySum(value)": 30}),
+            Row(key="c", **{"MySum(value)": 100}),
+        ]
+        assertDataFrameEqual(result, expected, checkRowOrder=False)
+
+    def test_udaf_edge_cases(self):
+        """Test edge cases: nulls, empty dataframe."""
+
+        class SumAgg(Aggregator):
+            @staticmethod
+            def zero():
+                return 0
+
+            @staticmethod
+            def reduce(buffer, value):
+                return buffer + (value or 0)
+
+            @staticmethod
+            def merge(buffer1, buffer2):
+                return buffer1 + buffer2
+
+            @staticmethod
+            def finish(reduction):
+                return reduction
+
+        sum_udaf = udaf(SumAgg(), "bigint", "MySum")
+
+        # Nulls
         df = self.spark.createDataFrame([(1,), (None,), (3,), (None,), (5,)], ["value"])
-        sum_udaf = udaf(MySum(), "bigint", "MySum")
-
         result = df.agg(sum_udaf(df.value))
-        assertDataFrameEqual(result, [Row(**{"MySum(value)": 9})])  # 1+3+5 = 9 (nulls ignored)
+        assertDataFrameEqual(result, [Row(**{"MySum(value)": 9})])
 
-    def test_udaf_empty_dataframe(self):
-        """Test UDAF with empty DataFrame using df.agg()."""
-
-        class MySum(Aggregator):
-            @staticmethod
-            def zero():
-                return 0
-
-            @staticmethod
-            def reduce(buffer, value):
-                if value is not None:
-                    return buffer + value
-                return buffer
-
-            @staticmethod
-            def merge(buffer1, buffer2):
-                return buffer1 + buffer2
-
-            @staticmethod
-            def finish(reduction):
-                return reduction
-
-        from pyspark.sql.types import StructType, StructField, LongType
-
-        schema = StructType([StructField("value", LongType(), True)])
-        df = self.spark.createDataFrame([], schema)
-        sum_udaf = udaf(MySum(), "bigint", "MySum")
-
-        result = df.agg(sum_udaf(df.value))
+        # Empty DataFrame
+        empty_df = self.spark.createDataFrame([], "value: int")
+        result = empty_df.agg(sum_udaf(empty_df.value))
         assertDataFrameEqual(result, [Row(**{"MySum(value)": 0})])
 
-    def test_udaf_aggregator_interface(self):
-        """Test that Aggregator interface is properly defined."""
-
-        class MySum(Aggregator):
-            @staticmethod
-            def zero():
-                return 0
-
-            @staticmethod
-            def reduce(buffer, value):
-                if value is not None:
-                    return buffer + value
-                return buffer
-
-            @staticmethod
-            def merge(buffer1, buffer2):
-                return buffer1 + buffer2
-
-            @staticmethod
-            def finish(reduction):
-                return reduction
-
-        agg = MySum()
-
-        # Test zero
-        zero_val = agg.zero()
-        self.assertEqual(zero_val, 0)
-
-        # Test reduce
-        buffer = agg.reduce(agg.zero(), 5)
-        self.assertEqual(buffer, 5)
-        buffer = agg.reduce(buffer, 10)
-        self.assertEqual(buffer, 15)
-
-        # Test merge
-        merged = agg.merge(5, 10)
-        self.assertEqual(merged, 15)
-
-        # Test finish
-        result = agg.finish(merged)
-        self.assertEqual(result, 15)
-
-    def test_udaf_creation(self):
-        """Test UDAF creation with udaf() function."""
-
-        class MySum(Aggregator):
-            @staticmethod
-            def zero():
-                return 0
-
-            @staticmethod
-            def reduce(buffer, value):
-                if value is not None:
-                    return buffer + value
-                return buffer
-
-            @staticmethod
-            def merge(buffer1, buffer2):
-                return buffer1 + buffer2
-
-            @staticmethod
-            def finish(reduction):
-                return reduction
-
-        sum_udaf = udaf(MySum(), "bigint")
-        self.assertIsInstance(sum_udaf, UserDefinedAggregateFunction)
-        self.assertEqual(sum_udaf._name, "MySum")
-
-        # Test with custom name
-        custom_udaf = udaf(MySum(), "bigint", "CustomSum")
-        self.assertEqual(custom_udaf._name, "CustomSum")
-
-    def test_udaf_invalid_aggregator(self):
-        """Test that invalid aggregator raises error."""
-        with self.assertRaises(PySparkTypeError):
-            udaf("not an aggregator", "bigint")  # type: ignore
-
-    def test_udaf_invalid_return_type(self):
-        """Test that invalid return type raises error."""
-
-        class MySum(Aggregator):
-            @staticmethod
-            def zero():
-                return 0
-
-            @staticmethod
-            def reduce(buffer, value):
-                if value is not None:
-                    return buffer + value
-                return buffer
-
-            @staticmethod
-            def merge(buffer1, buffer2):
-                return buffer1 + buffer2
-
-            @staticmethod
-            def finish(reduction):
-                return reduction
-
-        with self.assertRaises(PySparkTypeError):
-            udaf(MySum(), 123)  # type: ignore  # Not a DataType or string
-
-    def test_udaf_non_static_method_raises_error(self):
-        """Test that non-static methods in Aggregator raise error."""
-
-        # Test with non-static zero method
-        class BadAggregatorZero(Aggregator):
-            def zero(self):  # Missing @staticmethod
-                return 0
-
-            @staticmethod
-            def reduce(buffer, value):
-                return buffer + (value or 0)
-
-            @staticmethod
-            def merge(buffer1, buffer2):
-                return buffer1 + buffer2
-
-            @staticmethod
-            def finish(reduction):
-                return reduction
-
-        with self.assertRaises(PySparkTypeError) as cm:
-            udaf(BadAggregatorZero(), "bigint")
-        self.assertIn("zero", str(cm.exception))
-
-        # Test with non-static reduce method
-        class BadAggregatorReduce(Aggregator):
-            @staticmethod
-            def zero():
-                return 0
-
-            def reduce(self, buffer, value):  # Missing @staticmethod
-                return buffer + (value or 0)
-
-            @staticmethod
-            def merge(buffer1, buffer2):
-                return buffer1 + buffer2
-
-            @staticmethod
-            def finish(reduction):
-                return reduction
-
-        with self.assertRaises(PySparkTypeError) as cm:
-            udaf(BadAggregatorReduce(), "bigint")
-        self.assertIn("reduce", str(cm.exception))
-
-        # Test with non-static merge method
-        class BadAggregatorMerge(Aggregator):
-            @staticmethod
-            def zero():
-                return 0
-
-            @staticmethod
-            def reduce(buffer, value):
-                return buffer + (value or 0)
-
-            def merge(self, buffer1, buffer2):  # Missing @staticmethod
-                return buffer1 + buffer2
-
-            @staticmethod
-            def finish(reduction):
-                return reduction
-
-        with self.assertRaises(PySparkTypeError) as cm:
-            udaf(BadAggregatorMerge(), "bigint")
-        self.assertIn("merge", str(cm.exception))
-
-        # Test with non-static finish method
-        class BadAggregatorFinish(Aggregator):
-            @staticmethod
-            def zero():
-                return 0
-
-            @staticmethod
-            def reduce(buffer, value):
-                return buffer + (value or 0)
-
-            @staticmethod
-            def merge(buffer1, buffer2):
-                return buffer1 + buffer2
-
-            def finish(self, reduction):  # Missing @staticmethod
-                return reduction
-
-        with self.assertRaises(PySparkTypeError) as cm:
-            udaf(BadAggregatorFinish(), "bigint")
-        self.assertIn("finish", str(cm.exception))
-
-    def test_udaf_multi_column_not_supported(self):
-        """Test that multi-column UDAF is not yet supported."""
-
-        class MySum(Aggregator):
-            @staticmethod
-            def zero():
-                return 0
-
-            @staticmethod
-            def reduce(buffer, value):
-                if value is not None:
-                    return buffer + value
-                return buffer
-
-            @staticmethod
-            def merge(buffer1, buffer2):
-                return buffer1 + buffer2
-
-            @staticmethod
-            def finish(reduction):
-                return reduction
-
-        df = self.spark.createDataFrame([(1, 2), (3, 4)], ["a", "b"])
-        sum_udaf = udaf(MySum(), "bigint")
-
-        with self.assertRaises(PySparkNotImplementedError):
-            df.agg(sum_udaf(df.a), sum_udaf(df.b))
-
     def test_udaf_large_dataset(self):
-        """Test UDAF with large dataset (20000 rows) distributed across partitions."""
+        """Test UDAF with large dataset to verify multi-partition aggregation."""
 
-        class MySum(Aggregator):
+        class AvgAgg(Aggregator):
             @staticmethod
             def zero():
-                return 0
-
-            @staticmethod
-            def reduce(buffer, value):
-                if value is not None:
-                    return buffer + value
-                return buffer
-
-            @staticmethod
-            def merge(buffer1, buffer2):
-                return buffer1 + buffer2
-
-            @staticmethod
-            def finish(reduction):
-                return reduction
-
-        # Create a large dataset with 20000 rows
-        # Use repartition to ensure data is distributed across multiple partitions
-        data = [(i,) for i in range(1, 20001)]  # 1 to 20000
-        df = self.spark.createDataFrame(data, ["value"])
-
-        # Repartition to ensure data is distributed across partitions
-        # This ensures each partition has data
-        num_partitions = max(4, self.spark.sparkContext.defaultParallelism)
-        df = df.repartition(num_partitions)
-
-        # Verify data is distributed
-        actual_partitions = df.rdd.getNumPartitions()
-        self.assertGreater(
-            actual_partitions, 1, "Data should be distributed across multiple partitions"
-        )
-
-        # Calculate expected sum: 1 + 2 + ... + 20000 = 20000 * 20001 / 2 = 200010000
-        expected_sum = 20000 * 20001 // 2
-
-        sum_udaf = udaf(MySum(), "bigint", "MySum")
-        result = df.agg(sum_udaf(df.value))
-        assertDataFrameEqual(result, [Row(**{"MySum(value)": expected_sum})])
-
-    def test_udaf_large_dataset_average(self):
-        """Test average UDAF with large dataset using df.agg()."""
-
-        class MyAverage(Aggregator):
-            @staticmethod
-            def zero():
-                return (0.0, 0)  # (sum, count)
+                return (0.0, 0)
 
             @staticmethod
             def reduce(buffer, value):
@@ -496,38 +207,29 @@ class UDAFTestsMixin:
 
             @staticmethod
             def finish(reduction):
-                if reduction[1] == 0:
-                    return None
-                return reduction[0] / reduction[1]
+                return reduction[0] / reduction[1] if reduction[1] else None
 
-        # Create a large dataset with 20000 rows
-        data = [(float(i),) for i in range(1, 20001)]  # 1.0 to 20000.0
-        df = self.spark.createDataFrame(data, ["value"])
+        data = [(float(i),) for i in range(1, 20001)]
+        df = self.spark.createDataFrame(data, ["value"]).repartition(8)
 
-        # Repartition to ensure data is distributed
-        num_partitions = max(4, self.spark.sparkContext.defaultParallelism)
-        df = df.repartition(num_partitions)
-
-        # Expected average: (1 + 2 + ... + 20000) / 20000 = 20001 / 2 = 10000.5
-        expected_avg = 20001.0 / 2.0
-
-        avg_udaf = udaf(MyAverage(), "double", "MyAverage")
+        avg_udaf = udaf(AvgAgg(), "double", "MyAvg")
         result = df.agg(avg_udaf(df.value))
-        assertDataFrameEqual(
-            result, [Row(**{"MyAverage(value)": expected_avg})], checkRowOrder=False
-        )
+        expected_avg = 20001.0 / 2.0
+        assertDataFrameEqual(result, [Row(**{"MyAvg(value)": expected_avg})])
 
-    def test_udaf_column_attributes(self):
-        """Test that UDAF Column has correct attributes."""
+    # ============ Input Type Tests (Consolidated) ============
 
-        class MySum(Aggregator):
+    def test_udaf_various_input_types(self):
+        """Test UDAF with various Spark input types."""
+
+        class CountAgg(Aggregator):
             @staticmethod
             def zero():
                 return 0
 
             @staticmethod
             def reduce(buffer, value):
-                return buffer + (value or 0)
+                return buffer + (1 if value is not None else 0)
 
             @staticmethod
             def merge(buffer1, buffer2):
@@ -537,318 +239,52 @@ class UDAFTestsMixin:
             def finish(reduction):
                 return reduction
 
-        df = self.spark.createDataFrame([(1,), (2,)], ["value"])
-        sum_udaf = udaf(MySum(), "bigint", "MySum")
+        count_udaf = udaf(CountAgg(), "bigint", "Count")
 
-        # Test that __call__ returns a Column with UDAF attributes
-        udaf_col = sum_udaf(df.value)
-        self.assertTrue(hasattr(udaf_col, "_udaf_func"))
-        self.assertTrue(hasattr(udaf_col, "_udaf_col"))
-        self.assertEqual(udaf_col._udaf_func, sum_udaf)  # type: ignore[attr-defined]
+        # String input
+        df_str = self.spark.createDataFrame([("a",), ("b",), ("c",)], ["value"])
+        result = df_str.agg(count_udaf(df_str.value))
+        assertDataFrameEqual(result, [Row(**{"Count(value)": 3})])
 
-    def test_udaf_multiple_udaf_not_supported(self):
-        """Test that multiple UDAFs in agg() raises error."""
+        # Boolean input
+        df_bool = self.spark.createDataFrame([(True,), (False,), (True,), (None,)], ["flag"])
+        result = df_bool.agg(count_udaf(df_bool.flag))
+        assertDataFrameEqual(result, [Row(**{"Count(flag)": 3})])
 
-        class MySum(Aggregator):
-            @staticmethod
-            def zero():
-                return 0
-
-            @staticmethod
-            def reduce(buffer, value):
-                return buffer + (value or 0)
-
-            @staticmethod
-            def merge(buffer1, buffer2):
-                return buffer1 + buffer2
-
-            @staticmethod
-            def finish(reduction):
-                return reduction
-
-        df = self.spark.createDataFrame([(1,), (2,)], ["value"])
-        sum_udaf1 = udaf(MySum(), "bigint", "MySum1")
-        sum_udaf2 = udaf(MySum(), "bigint", "MySum2")
-
-        with self.assertRaises(PySparkNotImplementedError):
-            df.agg(sum_udaf1(df.value), sum_udaf2(df.value))
-
-    def test_udaf_mixed_with_other_agg_not_supported(self):
-        """Test that mixing UDAF with other aggregate functions raises error."""
-
-        class MySum(Aggregator):
-            @staticmethod
-            def zero():
-                return 0
-
-            @staticmethod
-            def reduce(buffer, value):
-                return buffer + (value or 0)
-
-            @staticmethod
-            def merge(buffer1, buffer2):
-                return buffer1 + buffer2
-
-            @staticmethod
-            def finish(reduction):
-                return reduction
-
-        from pyspark.sql.functions import min as spark_min
-
-        df = self.spark.createDataFrame([(1,), (2,), (3,)], ["value"])
-        sum_udaf = udaf(MySum(), "bigint", "MySum")
-
-        with self.assertRaises(PySparkNotImplementedError):
-            df.agg(sum_udaf(df.value), spark_min(df.value))
-
-    def test_udaf_with_dict_buffer(self):
-        """Test UDAF using dictionary as buffer (complex buffer type)."""
-
-        class WordCount(Aggregator):
-            @staticmethod
-            def zero():
-                return {}
-
-            @staticmethod
-            def reduce(buffer, value):
-                if value is not None:
-                    buffer = dict(buffer)
-                    buffer[value] = buffer.get(value, 0) + 1
-                return buffer
-
-            @staticmethod
-            def merge(buffer1, buffer2):
-                result = dict(buffer1)
-                for k, v in buffer2.items():
-                    result[k] = result.get(k, 0) + v
-                return result
-
-            @staticmethod
-            def finish(reduction):
-                return len(reduction)
-
-        df = self.spark.createDataFrame(
-            [("apple",), ("banana",), ("apple",), ("cherry",)], ["fruit"]
-        )
-        count_udaf = udaf(WordCount(), "bigint", "UniqueCount")
-        result = df.agg(count_udaf(df.fruit))
-        assertDataFrameEqual(result, [Row(**{"UniqueCount(fruit)": 3})])
-
-    # ============ Input Type Tests ============
-
-    def test_udaf_input_type_string(self):
-        """Test UDAF with string input type."""
-
-        class ConcatStrings(Aggregator):
-            @staticmethod
-            def zero():
-                return []
-
-            @staticmethod
-            def reduce(buffer, value):
-                if value is not None:
-                    buffer = list(buffer)
-                    buffer.append(value)
-                return buffer
-
-            @staticmethod
-            def merge(buffer1, buffer2):
-                return list(buffer1) + list(buffer2)
-
-            @staticmethod
-            def finish(reduction):
-                return ",".join(sorted(reduction)) if reduction else ""
-
-        df = self.spark.createDataFrame([("c",), ("a",), ("b",)], ["value"])
-        concat_udaf = udaf(ConcatStrings(), "string", "ConcatStr")
-        result = df.agg(concat_udaf(df.value))
-        assertDataFrameEqual(result, [Row(**{"ConcatStr(value)": "a,b,c"})])
-
-    def test_udaf_input_type_boolean(self):
-        """Test UDAF with boolean input type."""
-
-        class CountTrue(Aggregator):
-            @staticmethod
-            def zero():
-                return 0
-
-            @staticmethod
-            def reduce(buffer, value):
-                if value is True:
-                    return buffer + 1
-                return buffer
-
-            @staticmethod
-            def merge(buffer1, buffer2):
-                return buffer1 + buffer2
-
-            @staticmethod
-            def finish(reduction):
-                return reduction
-
-        df = self.spark.createDataFrame([(True,), (False,), (True,), (True,), (False,)], ["flag"])
-        count_udaf = udaf(CountTrue(), "bigint", "CountTrue")
-        result = df.agg(count_udaf(df.flag))
-        assertDataFrameEqual(result, [Row(**{"CountTrue(flag)": 3})])
-
-    def test_udaf_input_type_date(self):
-        """Test UDAF with date input type."""
-        import datetime
-
-        class DateRange(Aggregator):
-            @staticmethod
-            def zero():
-                return (None, None)  # (min_date, max_date)
-
-            @staticmethod
-            def reduce(buffer, value):
-                if value is None:
-                    return buffer
-                min_d, max_d = buffer
-                if min_d is None or value < min_d:
-                    min_d = value
-                if max_d is None or value > max_d:
-                    max_d = value
-                return (min_d, max_d)
-
-            @staticmethod
-            def merge(buffer1, buffer2):
-                min1, max1 = buffer1
-                min2, max2 = buffer2
-                min_d = min1 if min2 is None or (min1 and min1 < min2) else min2
-                max_d = max1 if max2 is None or (max1 and max1 > max2) else max2
-                return (min_d, max_d)
-
-            @staticmethod
-            def finish(reduction):
-                min_d, max_d = reduction
-                if min_d is None or max_d is None:
-                    return None
-                return (max_d - min_d).days
-
-        df = self.spark.createDataFrame(
-            [
-                (datetime.date(2024, 1, 1),),
-                (datetime.date(2024, 1, 10),),
-                (datetime.date(2024, 1, 5),),
-            ],
+        # Date input
+        df_date = self.spark.createDataFrame(
+            [(datetime.date(2024, 1, 1),), (datetime.date(2024, 1, 10),), (None,)],
             ["dt"],
         )
-        range_udaf = udaf(DateRange(), "bigint", "DateRange")
-        result = df.agg(range_udaf(df.dt))
-        assertDataFrameEqual(result, [Row(**{"DateRange(dt)": 9})])  # 10 - 1 = 9 days
+        result = df_date.agg(count_udaf(df_date.dt))
+        assertDataFrameEqual(result, [Row(**{"Count(dt)": 2})])
 
-    def test_udaf_input_type_timestamp(self):
-        """Test UDAF with timestamp input type."""
-        import datetime
-
-        class TimestampCount(Aggregator):
-            @staticmethod
-            def zero():
-                return 0
-
-            @staticmethod
-            def reduce(buffer, value):
-                if value is not None:
-                    return buffer + 1
-                return buffer
-
-            @staticmethod
-            def merge(buffer1, buffer2):
-                return buffer1 + buffer2
-
-            @staticmethod
-            def finish(reduction):
-                return reduction
-
-        df = self.spark.createDataFrame(
-            [
-                (datetime.datetime(2024, 1, 1, 10, 0, 0),),
-                (datetime.datetime(2024, 1, 1, 11, 0, 0),),
-                (datetime.datetime(2024, 1, 1, 12, 0, 0),),
-            ],
+        # Timestamp input
+        df_ts = self.spark.createDataFrame(
+            [(datetime.datetime(2024, 1, 1, 10, 0),), (datetime.datetime(2024, 1, 1, 11, 0),)],
             ["ts"],
         )
-        count_udaf = udaf(TimestampCount(), "bigint", "TsCount")
-        result = df.agg(count_udaf(df.ts))
-        assertDataFrameEqual(result, [Row(**{"TsCount(ts)": 3})])
+        result = df_ts.agg(count_udaf(df_ts.ts))
+        assertDataFrameEqual(result, [Row(**{"Count(ts)": 2})])
 
-    def test_udaf_input_type_decimal(self):
-        """Test UDAF with decimal input type."""
-        from decimal import Decimal as D
-        from pyspark.sql.types import DecimalType, StructField, StructType
-
-        class DecimalSum(Aggregator):
-            @staticmethod
-            def zero():
-                return D("0.00")
-
-            @staticmethod
-            def reduce(buffer, value):
-                if value is not None:
-                    return buffer + value
-                return buffer
-
-            @staticmethod
-            def merge(buffer1, buffer2):
-                return buffer1 + buffer2
-
-            @staticmethod
-            def finish(reduction):
-                return float(reduction)
-
+        # Decimal input
         schema = StructType([StructField("amount", DecimalType(10, 2), True)])
-        df = self.spark.createDataFrame([(D("10.50"),), (D("20.25"),), (D("30.25"),)], schema)
-        sum_udaf = udaf(DecimalSum(), "double", "DecSum")
-        result = df.agg(sum_udaf(df.amount))
-        collected = result.collect()[0][0]
-        self.assertAlmostEqual(collected, 61.0, places=2)
+        df_dec = self.spark.createDataFrame([(D("10.50"),), (D("20.25"),)], schema)
+        result = df_dec.agg(count_udaf(df_dec.amount))
+        assertDataFrameEqual(result, [Row(**{"Count(amount)": 2})])
 
-    def test_udaf_input_type_binary(self):
-        """Test UDAF with binary input type."""
-        from pyspark.sql.types import BinaryType, StructField, StructType
+    def test_udaf_complex_types(self):
+        """Test UDAF with complex types: array, map, struct, binary."""
 
-        class BinaryLen(Aggregator):
+        # Array input - sum all elements
+        class ArraySumAgg(Aggregator):
             @staticmethod
             def zero():
                 return 0
 
             @staticmethod
             def reduce(buffer, value):
-                if value is not None:
-                    return buffer + len(value)
-                return buffer
-
-            @staticmethod
-            def merge(buffer1, buffer2):
-                return buffer1 + buffer2
-
-            @staticmethod
-            def finish(reduction):
-                return reduction
-
-        schema = StructType([StructField("data", BinaryType(), True)])
-        df = self.spark.createDataFrame(
-            [(bytearray(b"abc"),), (bytearray(b"de"),), (bytearray(b"f"),)], schema
-        )
-        len_udaf = udaf(BinaryLen(), "bigint", "TotalLen")
-        result = df.agg(len_udaf(df.data))
-        assertDataFrameEqual(result, [Row(**{"TotalLen(data)": 6})])  # 3 + 2 + 1
-
-    def test_udaf_input_type_array(self):
-        """Test UDAF with array input type."""
-        from pyspark.sql.types import ArrayType, IntegerType, StructField, StructType
-
-        class ArraySum(Aggregator):
-            @staticmethod
-            def zero():
-                return 0
-
-            @staticmethod
-            def reduce(buffer, value):
-                if value is not None:
-                    return buffer + sum(value)
-                return buffer
+                return buffer + sum(value) if value else buffer
 
             @staticmethod
             def merge(buffer1, buffer2):
@@ -859,26 +295,20 @@ class UDAFTestsMixin:
                 return reduction
 
         schema = StructType([StructField("nums", ArrayType(IntegerType()), True)])
-        df = self.spark.createDataFrame([([1, 2, 3],), ([4, 5],), ([6],)], schema)
-        sum_udaf = udaf(ArraySum(), "bigint", "ArraySum")
-        result = df.agg(sum_udaf(df.nums))
-        assertDataFrameEqual(result, [Row(**{"ArraySum(nums)": 21})])  # 1+2+3+4+5+6
+        df_arr = self.spark.createDataFrame([([1, 2, 3],), ([4, 5],)], schema)
+        arr_udaf = udaf(ArraySumAgg(), "bigint", "ArraySum")
+        result = df_arr.agg(arr_udaf(df_arr.nums))
+        assertDataFrameEqual(result, [Row(**{"ArraySum(nums)": 15})])
 
-    def test_udaf_input_type_map(self):
-        """Test UDAF with map input type."""
-        from pyspark.sql.types import IntegerType, MapType, StringType, StructField, StructType
-
-        class MapEntryCount(Aggregator):
+        # Map input - count entries
+        class MapCountAgg(Aggregator):
             @staticmethod
             def zero():
                 return 0
 
             @staticmethod
             def reduce(buffer, value):
-                if value is not None:
-                    # Map comes as list of (key, value) tuples in Arrow
-                    return buffer + len(value)
-                return buffer
+                return buffer + len(value) if value else buffer
 
             @staticmethod
             def merge(buffer1, buffer2):
@@ -889,25 +319,20 @@ class UDAFTestsMixin:
                 return reduction
 
         schema = StructType([StructField("kv", MapType(StringType(), IntegerType()), True)])
-        df = self.spark.createDataFrame(
-            [({"a": 1, "b": 2},), ({"c": 3},), ({"d": 4, "e": 5},)], schema
-        )
-        count_udaf = udaf(MapEntryCount(), "bigint", "MapEntryCount")
-        result = df.agg(count_udaf(df.kv))
-        assertDataFrameEqual(result, [Row(**{"MapEntryCount(kv)": 5})])  # 2+1+2 entries
+        df_map = self.spark.createDataFrame([({"a": 1, "b": 2},), ({"c": 3},)], schema)
+        map_udaf = udaf(MapCountAgg(), "bigint", "MapCount")
+        result = df_map.agg(map_udaf(df_map.kv))
+        assertDataFrameEqual(result, [Row(**{"MapCount(kv)": 3})])
 
-    def test_udaf_input_type_struct(self):
-        """Test UDAF with struct input type."""
-        from pyspark.sql.types import IntegerType, StringType, StructField, StructType
-
-        class StructAgg(Aggregator):
+        # Struct input - average age
+        class StructAvgAgg(Aggregator):
             @staticmethod
             def zero():
-                return (0, 0)  # (total_age, count)
+                return (0, 0)
 
             @staticmethod
             def reduce(buffer, value):
-                if value is not None:
+                if value and value["age"]:
                     return (buffer[0] + value["age"], buffer[1] + 1)
                 return buffer
 
@@ -917,9 +342,7 @@ class UDAFTestsMixin:
 
             @staticmethod
             def finish(reduction):
-                if reduction[1] == 0:
-                    return None
-                return reduction[0] / reduction[1]
+                return reduction[0] / reduction[1] if reduction[1] else None
 
         schema = StructType(
             [
@@ -935,12 +358,241 @@ class UDAFTestsMixin:
                 )
             ]
         )
-        df = self.spark.createDataFrame(
+        df_struct = self.spark.createDataFrame(
             [({"name": "Alice", "age": 30},), ({"name": "Bob", "age": 40},)], schema
         )
-        avg_udaf = udaf(StructAgg(), "double", "AvgAge")
-        result = df.agg(avg_udaf(df.person))
+        struct_udaf = udaf(StructAvgAgg(), "double", "AvgAge")
+        result = df_struct.agg(struct_udaf(df_struct.person))
         assertDataFrameEqual(result, [Row(**{"AvgAge(person)": 35.0})])
+
+        # Binary input - total length
+        class BinaryLenAgg(Aggregator):
+            @staticmethod
+            def zero():
+                return 0
+
+            @staticmethod
+            def reduce(buffer, value):
+                return buffer + len(value) if value else buffer
+
+            @staticmethod
+            def merge(buffer1, buffer2):
+                return buffer1 + buffer2
+
+            @staticmethod
+            def finish(reduction):
+                return reduction
+
+        schema = StructType([StructField("data", BinaryType(), True)])
+        df_bin = self.spark.createDataFrame([(bytearray(b"abc"),), (bytearray(b"de"),)], schema)
+        bin_udaf = udaf(BinaryLenAgg(), "bigint", "BinLen")
+        result = df_bin.agg(bin_udaf(df_bin.data))
+        assertDataFrameEqual(result, [Row(**{"BinLen(data)": 5})])
+
+    # ============ Complex Aggregation Tests ============
+
+    def test_udaf_statistical_and_special(self):
+        """Test statistical aggregations and special return types."""
+
+        # Standard deviation
+        class StdDevAgg(Aggregator):
+            @staticmethod
+            def zero():
+                return (0, 0.0, 0.0)
+
+            @staticmethod
+            def reduce(buffer, value):
+                if value is not None:
+                    return (buffer[0] + 1, buffer[1] + value, buffer[2] + value * value)
+                return buffer
+
+            @staticmethod
+            def merge(buffer1, buffer2):
+                return (
+                    buffer1[0] + buffer2[0],
+                    buffer1[1] + buffer2[1],
+                    buffer1[2] + buffer2[2],
+                )
+
+            @staticmethod
+            def finish(reduction):
+                count, total, sq_total = reduction
+                if count < 2:
+                    return None
+                mean = total / count
+                variance = (sq_total / count) - (mean * mean)
+                return variance**0.5
+
+        df = self.spark.createDataFrame(
+            [(2.0,), (4.0,), (4.0,), (4.0,), (5.0,), (5.0,), (7.0,), (9.0,)], ["value"]
+        )
+        stddev_udaf = udaf(StdDevAgg(), "double", "StdDev")
+        result = df.agg(stddev_udaf(df.value))
+        collected = result.collect()[0][0]
+        self.assertAlmostEqual(collected, 2.0, places=5)
+
+        # Mode (uses Counter buffer)
+        class ModeAgg(Aggregator):
+            @staticmethod
+            def zero():
+                return Counter()
+
+            @staticmethod
+            def reduce(buffer, value):
+                if value is not None:
+                    buffer = Counter(buffer)
+                    buffer[value] += 1
+                return buffer
+
+            @staticmethod
+            def merge(buffer1, buffer2):
+                return Counter(buffer1) + Counter(buffer2)
+
+            @staticmethod
+            def finish(reduction):
+                return reduction.most_common(1)[0][0] if reduction else None
+
+        df_int = self.spark.createDataFrame([(1,), (2,), (2,), (3,), (3,), (3,)], ["value"])
+        mode_udaf = udaf(ModeAgg(), "bigint", "Mode")
+        result = df_int.agg(mode_udaf(df_int.value))
+        assertDataFrameEqual(result, [Row(**{"Mode(value)": 3})])
+
+        # Return Array type (Top-3)
+        class Top3Agg(Aggregator):
+            @staticmethod
+            def zero():
+                return []
+
+            @staticmethod
+            def reduce(buffer, value):
+                if value is not None:
+                    buffer = list(buffer)
+                    buffer.append(value)
+                    buffer.sort(reverse=True)
+                    return buffer[:3]
+                return buffer
+
+            @staticmethod
+            def merge(buffer1, buffer2):
+                combined = list(buffer1) + list(buffer2)
+                combined.sort(reverse=True)
+                return combined[:3]
+
+            @staticmethod
+            def finish(reduction):
+                return reduction
+
+        df = self.spark.createDataFrame([(5,), (1,), (9,), (3,), (7,), (2,)], ["value"])
+        top3_udaf = udaf(Top3Agg(), ArrayType(LongType()), "Top3")
+        result = df.agg(top3_udaf(df.value))
+        collected = result.collect()[0][0]
+        self.assertEqual(sorted(collected, reverse=True), [9, 7, 5])
+
+    # ============ Validation Tests ============
+
+    def test_udaf_creation_and_interface(self):
+        """Test UDAF creation, interface validation, and column attributes."""
+        # Interface
+        self.assertTrue(hasattr(Aggregator, "zero"))
+        self.assertTrue(hasattr(Aggregator, "reduce"))
+        self.assertTrue(hasattr(Aggregator, "merge"))
+        self.assertTrue(hasattr(Aggregator, "finish"))
+
+        # Creation
+        class SumAgg(Aggregator):
+            @staticmethod
+            def zero():
+                return 0
+
+            @staticmethod
+            def reduce(buffer, value):
+                return buffer + (value or 0)
+
+            @staticmethod
+            def merge(buffer1, buffer2):
+                return buffer1 + buffer2
+
+            @staticmethod
+            def finish(reduction):
+                return reduction
+
+        sum_udaf = udaf(SumAgg(), "bigint", "MySum")
+        self.assertIsInstance(sum_udaf, UserDefinedAggregateFunction)
+        self.assertEqual(sum_udaf._name, "MySum")
+
+        # Column attributes
+        df = self.spark.createDataFrame([(1,)], ["value"])
+        col = sum_udaf(df.value)
+        self.assertTrue(hasattr(col, "_udaf_func"))
+        self.assertTrue(hasattr(col, "_udaf_col"))
+
+    def test_udaf_invalid_inputs(self):
+        """Test error handling for invalid inputs."""
+
+        # Invalid aggregator (missing required methods)
+        class MissingMethods:
+            @staticmethod
+            def zero():
+                return 0
+
+            # Missing reduce, merge, finish
+
+        with self.assertRaises(PySparkTypeError):
+            udaf(MissingMethods(), "bigint")
+
+        # Non-static method raises error
+        class NonStaticZero(Aggregator):
+            def zero(self):  # Missing @staticmethod
+                return 0
+
+            @staticmethod
+            def reduce(buffer, value):
+                return buffer
+
+            @staticmethod
+            def merge(buffer1, buffer2):
+                return buffer1
+
+            @staticmethod
+            def finish(reduction):
+                return reduction
+
+        with self.assertRaises(PySparkTypeError) as ctx:
+            udaf(NonStaticZero(), "bigint")
+        self.assertIn("NOT_CALLABLE", str(ctx.exception))
+
+    def test_udaf_unsupported_operations(self):
+        """Test unsupported operations raise appropriate errors."""
+
+        class SumAgg(Aggregator):
+            @staticmethod
+            def zero():
+                return 0
+
+            @staticmethod
+            def reduce(buffer, value):
+                return buffer + (value or 0)
+
+            @staticmethod
+            def merge(buffer1, buffer2):
+                return buffer1 + buffer2
+
+            @staticmethod
+            def finish(reduction):
+                return reduction
+
+        df = self.spark.createDataFrame([(1, 2)], ["a", "b"])
+        sum_udaf = udaf(SumAgg(), "bigint", "MySum")
+
+        # Multiple UDAFs not supported
+        with self.assertRaises(PySparkNotImplementedError):
+            df.agg(sum_udaf(df.a), sum_udaf(df.b))
+
+        # Mixed UDAF with other agg not supported
+        from pyspark.sql.functions import min as spark_min
+
+        with self.assertRaises(PySparkNotImplementedError):
+            df.agg(sum_udaf(df.a), spark_min(df.b))
 
 
 class UDAFTests(UDAFTestsMixin, ReusedSQLTestCase):
@@ -949,7 +601,7 @@ class UDAFTests(UDAFTestsMixin, ReusedSQLTestCase):
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.testing.utils import have_pandas, have_pyarrow, pandas_requirement_message
+    from pyspark.testing.utils import have_pandas, have_pyarrow
 
     try:
         import xmlrunner
