@@ -262,7 +262,11 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
             case (attr, dt) =>
               val widerType = findWiderTypeForTwo(attr.dataType, dt)
               if (widerType.isDefined && widerType.get == dt) {
-                Alias(Cast(attr, dt), attr.name)()
+                if (attr.dataType != dt) {
+                  Alias(Cast(attr, dt), attr.name)()
+                } else {
+                  attr
+                }
               } else {
                 throw cannotMergeIncompatibleDataTypesError(dt, attr.dataType)
               }

@@ -1633,10 +1633,10 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
 
       if (starInUpdate) {
         assert(updateAssigns.size == 2)
-        assert(updateAssigns(0).key.asInstanceOf[AttributeReference].sameRef(ts))
-        assert(updateAssigns(0).value.asInstanceOf[AttributeReference].sameRef(ss))
-        assert(updateAssigns(1).key.asInstanceOf[AttributeReference].sameRef(ti))
-        assert(updateAssigns(1).value.asInstanceOf[AttributeReference].sameRef(si))
+        assert(updateAssigns(0).key.asInstanceOf[AttributeReference].sameRef(ti))
+        assert(updateAssigns(0).value.asInstanceOf[AttributeReference].sameRef(si))
+        assert(updateAssigns(1).key.asInstanceOf[AttributeReference].sameRef(ts))
+        assert(updateAssigns(1).value.asInstanceOf[AttributeReference].sameRef(ss))
       } else {
         assert(updateAssigns.size == 1)
         assert(updateAssigns.head.key.asInstanceOf[AttributeReference].sameRef(ts))
@@ -1656,10 +1656,10 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
 
       if (starInInsert) {
         assert(insertAssigns.size == 2)
-        assert(insertAssigns(0).key.asInstanceOf[AttributeReference].sameRef(ts))
-        assert(insertAssigns(0).value.asInstanceOf[AttributeReference].sameRef(ss))
-        assert(insertAssigns(1).key.asInstanceOf[AttributeReference].sameRef(ti))
-        assert(insertAssigns(1).value.asInstanceOf[AttributeReference].sameRef(si))
+        assert(insertAssigns(0).key.asInstanceOf[AttributeReference].sameRef(ti))
+        assert(insertAssigns(0).value.asInstanceOf[AttributeReference].sameRef(si))
+        assert(insertAssigns(1).key.asInstanceOf[AttributeReference].sameRef(ts))
+        assert(insertAssigns(1).value.asInstanceOf[AttributeReference].sameRef(ss))
       } else {
         assert(insertAssigns.size == 2)
         assert(insertAssigns(0).key.asInstanceOf[AttributeReference].sameRef(ti))
@@ -1720,8 +1720,40 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
           case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
         }
 
+        // star with schema evolution
+        val sqlStarSchemaEvolution =
+          s"""
+             |MERGE WITH SCHEMA EVOLUTION INTO $target AS target
+             |USING $source AS source
+             |ON target.i = source.i
+             |WHEN MATCHED AND (target.s='delete') THEN DELETE
+             |WHEN MATCHED AND (target.s='update') THEN UPDATE SET *
+             |WHEN NOT MATCHED AND (source.s='insert') THEN INSERT *
+           """.stripMargin
+        parseAndResolve(sqlStarSchemaEvolution) match {
+          case MergeIntoTable(
+          SubqueryAlias(AliasIdentifier("target", Seq()), AsDataSourceV2Relation(target)),
+          SubqueryAlias(AliasIdentifier("source", Seq()), AsDataSourceV2Relation(source)),
+          mergeCondition,
+          Seq(DeleteAction(Some(EqualTo(dl: AttributeReference, StringLiteral("delete")))),
+          UpdateAction(Some(EqualTo(ul: AttributeReference,
+          StringLiteral("update"))), updateAssigns, _)),
+          Seq(InsertAction(Some(EqualTo(il: AttributeReference, StringLiteral("insert"))),
+          insertAssigns)),
+          Seq(),
+          withSchemaEvolution) =>
+            checkMergeConditionResolution(target, source, mergeCondition)
+            checkMatchedClausesResolution(target, source, Some(dl), Some(ul), updateAssigns,
+              starInUpdate = true)
+            checkNotMatchedClausesResolution(target, source, Some(il), insertAssigns,
+              starInInsert = true)
+            assert(withSchemaEvolution === true)
+
+          case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
+        }
+
         // star
-        val sql2 =
+        val sqlStarWithoutSchemaEvolution =
           s"""
              |MERGE INTO $target AS target
              |USING $source AS source
@@ -1730,7 +1762,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
              |WHEN MATCHED AND (target.s='update') THEN UPDATE SET *
              |WHEN NOT MATCHED AND (source.s='insert') THEN INSERT *
            """.stripMargin
-        parseAndResolve(sql2) match {
+        parseAndResolve(sqlStarWithoutSchemaEvolution) match {
           case MergeIntoTable(
               SubqueryAlias(AliasIdentifier("target", Seq()), AsDataSourceV2Relation(target)),
               SubqueryAlias(AliasIdentifier("source", Seq()), AsDataSourceV2Relation(source)),
@@ -2336,24 +2368,11 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
          |USING testcat.tab2
          |ON 1 = 1
          |WHEN MATCHED THEN UPDATE SET *""".stripMargin
-    val parsed2 = parseAndResolve(sql2)
-    parsed2 match {
-      case MergeIntoTable(
-          AsDataSourceV2Relation(target),
-          AsDataSourceV2Relation(source),
-          EqualTo(IntegerLiteral(1), IntegerLiteral(1)),
-          Seq(UpdateAction(None, updateAssigns, _)), // Matched actions
-          Seq(), // Not matched actions
-          Seq(), // Not matched by source actions
-          withSchemaEvolution) =>
-        val ti = target.output.find(_.name == "i").get
-        val si = source.output.find(_.name == "i").get
-        assert(updateAssigns.size == 1)
-        assert(updateAssigns.head.key.asInstanceOf[AttributeReference].sameRef(ti))
-        assert(updateAssigns.head.value.asInstanceOf[AttributeReference].sameRef(si))
-        assert(withSchemaEvolution === false)
-      case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
-    }
+    checkError(
+      exception = intercept[AnalysisException](parseAndResolve(sql2)),
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`s`", "proposal" -> "`i`, `x`"),
+      context = ExpectedContext(fragment = sql2, start = 0, stop = 80))
 
     // INSERT * with incompatible schema between source and target tables.
     val sql3 =
@@ -2361,24 +2380,11 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         |USING testcat.tab2
         |ON 1 = 1
         |WHEN NOT MATCHED THEN INSERT *""".stripMargin
-    val parsed3 = parseAndResolve(sql3)
-    parsed3 match {
-      case MergeIntoTable(
-          AsDataSourceV2Relation(target),
-          AsDataSourceV2Relation(source),
-          EqualTo(IntegerLiteral(1), IntegerLiteral(1)),
-          Seq(), // Matched action
-          Seq(InsertAction(None, insertAssigns)), // Not matched actions
-          Seq(), // Not matched by source actions
-          withSchemaEvolution) =>
-        val ti = target.output.find(_.name == "i").get
-        val si = source.output.find(_.name == "i").get
-        assert(insertAssigns.size == 1)
-        assert(insertAssigns.head.key.asInstanceOf[AttributeReference].sameRef(ti))
-        assert(insertAssigns.head.value.asInstanceOf[AttributeReference].sameRef(si))
-        assert(withSchemaEvolution === false)
-      case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
-    }
+    checkError(
+      exception = intercept[AnalysisException](parseAndResolve(sql3)),
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`s`", "proposal" -> "`i`, `x`"),
+      context = ExpectedContext(fragment = sql3, start = 0, stop = 80))
 
     val sql4 =
       """

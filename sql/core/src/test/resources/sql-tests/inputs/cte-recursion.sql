@@ -728,6 +728,14 @@ WITH RECURSIVE t1(n, m) AS (
     SELECT n+1, CAST(n+1 AS BIGINT) FROM t1 WHERE n < 5)
 SELECT * FROM t1;
 
+-- Type coercion with timeZone sensitive type
+WITH RECURSIVE t1(n, str, ts) AS (
+    SELECT 1, '2024-01-15 00:00:00' ,CAST('2024-01-15 00:00:00' AS TIMESTAMP)
+    UNION ALL
+    SELECT n + 1, str, str FROM t1 WHERE n < 5
+)
+SELECT * FROM t1;
+
 -- Recursive CTE with nullable recursion and non-recursive anchor
 WITH RECURSIVE t1(n) AS (
     SELECT 1
