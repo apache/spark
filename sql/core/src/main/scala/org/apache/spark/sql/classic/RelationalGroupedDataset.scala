@@ -36,7 +36,7 @@ import org.apache.spark.sql.classic.TypedAggUtils.withInputType
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.{IntegerType, NumericType, StructType}
+import org.apache.spark.sql.types.{DataType, IntegerType, NumericType, StructType}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -328,6 +328,56 @@ class RelationalGroupedDataset protected[sql](
     val groupingAttributes = project.output.take(groupingNamedExpressions.length)
     val output = toAttributes(expr.dataType.asInstanceOf[StructType])
     val plan = FlatMapGroupsInArrow(groupingAttributes, expr, output, project)
+
+    Dataset.ofRows(df.sparkSession, plan)
+  }
+
+  /**
+   * Applies a Python Aggregator UDAF to the grouped data.
+   *
+   * NOTE: This method is currently not used. The Python UDAF implementation uses
+   * a Python-only path via mapInArrow and applyInArrow. This method and the
+   * corresponding PythonAggregatorUDAF logical plan are reserved for future
+   * Catalyst optimizer integration.
+   *
+   * The Aggregator pattern uses three phases:
+   * 1. Partial reduce (mapInArrow): Each partition applies reduce() to local data
+   * 2. Intermediate merge (flatMapGroupsInArrow): Merge partial results by random key
+   * 3. Final merge (flatMapGroupsInArrow): Final merge by group keys + finish()
+   *
+   * @param partialReduceUDF UDF for the partial reduce phase
+   * @param mergeUDF UDF for the intermediate merge phase
+   * @param finalMergeUDF UDF for the final merge + finish phase
+   * @param resultTypeJson The return type of the UDAF as JSON string
+   */
+  private[sql] def pythonAggregatorUDAF(
+      partialReduceUDF: Column,
+      mergeUDF: Column,
+      finalMergeUDF: Column,
+      resultTypeJson: String): DataFrame = {
+
+    val resultType = DataType.fromJson(resultTypeJson)
+
+    val groupingNamedExpressions = groupingExprs.map {
+      case ne: NamedExpression => ne
+      case other => Alias(other, other.toString)()
+    }
+
+    val child = df.logicalPlan
+    val project = df.sparkSession.sessionState.executePlan(
+      Project(groupingNamedExpressions ++ child.output, child)).analyzed
+    val groupingAttributes = project.output.take(groupingNamedExpressions.length)
+
+    val resultAttribute = AttributeReference("result", resultType, nullable = true)()
+
+    val plan = PythonAggregatorUDAF(
+      groupingAttributes,
+      partialReduceUDF.expr,
+      mergeUDF.expr,
+      finalMergeUDF.expr,
+      resultAttribute,
+      project
+    )
 
     Dataset.ofRows(df.sparkSession, plan)
   }
