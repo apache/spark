@@ -32,10 +32,21 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.TimeFormatter
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, AnyTimeType, ByteType, DataType, DayTimeIntervalType, DecimalType, IntegerType, LongType, ObjectType, TimeType}
 import org.apache.spark.sql.types.DayTimeIntervalType.{HOUR, SECOND}
 import org.apache.spark.unsafe.types.UTF8String
+
+trait TimeExpression extends Expression {
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (SQLConf.get.isTimeTypeEnabled) {
+      super.checkInputDataTypes()
+    } else {
+      throw QueryCompilationErrors.unsupportedTimeTypeError()
+    }
+  }
+}
 
 /**
  * Parses a column to a time based on the given format.
@@ -64,7 +75,7 @@ import org.apache.spark.unsafe.types.UTF8String
   since = "4.1.0")
 // scalastyle:on line.size.limit
 case class ToTime(str: Expression, format: Option[Expression])
-  extends RuntimeReplaceable with ExpectsInputTypes {
+  extends RuntimeReplaceable with ExpectsInputTypes with TimeExpression {
 
   def this(str: Expression, format: Expression) = this(str, Option(format))
   def this(str: Expression) = this(str, None)
@@ -200,7 +211,7 @@ object TryToTimeExpressionBuilder extends ExpressionBuilder {
 // scalastyle:on line.size.limit
 case class MinutesOfTime(child: Expression)
   extends RuntimeReplaceable
-    with ExpectsInputTypes {
+    with ExpectsInputTypes with TimeExpression {
 
   override def replacement: Expression = StaticInvoke(
     classOf[DateTimeUtils.type],
@@ -259,7 +270,7 @@ object MinuteExpressionBuilder extends ExpressionBuilder {
 
 case class HoursOfTime(child: Expression)
   extends RuntimeReplaceable
-    with ExpectsInputTypes {
+    with ExpectsInputTypes with TimeExpression {
 
   override def replacement: Expression = StaticInvoke(
     classOf[DateTimeUtils.type],
@@ -316,7 +327,7 @@ object HourExpressionBuilder extends ExpressionBuilder {
 
 case class SecondsOfTimeWithFraction(child: Expression)
   extends RuntimeReplaceable
-  with ExpectsInputTypes {
+  with ExpectsInputTypes with TimeExpression {
   override def replacement: Expression = {
     val precision = child.dataType match {
       case TimeType(p) => p
@@ -342,7 +353,7 @@ case class SecondsOfTimeWithFraction(child: Expression)
 
 case class SecondsOfTime(child: Expression)
   extends RuntimeReplaceable
-    with ExpectsInputTypes {
+    with ExpectsInputTypes with TimeExpression {
 
   override def replacement: Expression = StaticInvoke(
     classOf[DateTimeUtils.type],
@@ -433,7 +444,8 @@ object SecondExpressionBuilder extends ExpressionBuilder {
 case class CurrentTime(
     child: Expression = Literal(TimeType.MICROS_PRECISION),
     timeZoneId: Option[String] = None) extends UnaryExpression
-  with TimeZoneAwareExpression with ImplicitCastInputTypes with CodegenFallback {
+  with TimeZoneAwareExpression with ImplicitCastInputTypes with CodegenFallback
+  with TimeExpression {
 
   def this() = {
     this(Literal(TimeType.MICROS_PRECISION), None)
@@ -545,7 +557,7 @@ case class MakeTime(
     secsAndMicros: Expression)
   extends RuntimeReplaceable
     with ImplicitCastInputTypes
-    with ExpectsInputTypes {
+    with ExpectsInputTypes with TimeExpression {
 
   // Accept `sec` as DecimalType to avoid loosing precision of microseconds while converting
   // it to the fractional part of `sec`. If `sec` is an IntegerType, it can be cast into decimal
@@ -570,7 +582,8 @@ case class MakeTime(
  * Adds day-time interval to time.
  */
 case class TimeAddInterval(time: Expression, interval: Expression)
-  extends BinaryExpression with RuntimeReplaceable with ExpectsInputTypes {
+  extends BinaryExpression with RuntimeReplaceable with ExpectsInputTypes
+  with TimeExpression {
   override def nullIntolerant: Boolean = true
 
   override def left: Expression = time
@@ -611,7 +624,8 @@ case class TimeAddInterval(time: Expression, interval: Expression)
  * Returns a day-time interval between time values.
  */
 case class SubtractTimes(left: Expression, right: Expression)
-  extends BinaryExpression with RuntimeReplaceable with ExpectsInputTypes {
+  extends BinaryExpression with RuntimeReplaceable with ExpectsInputTypes
+  with TimeExpression {
   override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType, AnyTimeType)
 
@@ -668,7 +682,8 @@ case class TimeDiff(
     end: Expression)
   extends TernaryExpression
   with RuntimeReplaceable
-  with ImplicitCastInputTypes {
+  with ImplicitCastInputTypes
+  with TimeExpression {
 
   override def first: Expression = unit
   override def second: Expression = start
@@ -723,7 +738,8 @@ case class TimeDiff(
   since = "4.1.0")
 // scalastyle:on line.size.limit
 case class TimeTrunc(unit: Expression, time: Expression)
-  extends BinaryExpression with RuntimeReplaceable with ImplicitCastInputTypes {
+  extends BinaryExpression with RuntimeReplaceable with ImplicitCastInputTypes
+  with TimeExpression {
 
   override def left: Expression = unit
   override def right: Expression = time
