@@ -93,15 +93,14 @@ object DataSourceUtils extends PredicateHelper {
    * in a driver side.
    */
   def verifySchema(format: FileFormat, schema: StructType, readOnly: Boolean = false): Unit = {
+    if (!SQLConf.get.isTimeTypeEnabled && schema.existsRecursively(_.isInstanceOf[TimeType])) {
+      throw QueryCompilationErrors.unsupportedTimeTypeError()
+    }
     schema.foreach { field =>
-      var supported = !field.dataType.existsRecursively(_.isInstanceOf[TimeType]) ||
-        SQLConf.get.isTimeTypeEnabled
-      if (supported) {
-        supported = if (readOnly) {
-          format.supportReadDataType(field.dataType)
-        } else {
-          format.supportDataType(field.dataType)
-        }
+      val supported = if (readOnly) {
+        format.supportReadDataType(field.dataType)
+      } else {
+        format.supportDataType(field.dataType)
       }
       if (!supported) {
         throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(format.toString, field)
