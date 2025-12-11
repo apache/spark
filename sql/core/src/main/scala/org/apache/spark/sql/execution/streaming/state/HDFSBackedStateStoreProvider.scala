@@ -322,11 +322,16 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
   override def getStore(
       version: Long,
       uniqueId: Option[String] = None,
-      forceSnapshotOnCommit: Boolean = false): StateStore = {
+      forceSnapshotOnCommit: Boolean = false,
+      loadEmpty: Boolean = false): StateStore = {
     if (uniqueId.isDefined) {
       throw StateStoreErrors.stateStoreCheckpointIdsNotSupported(
         "HDFSBackedStateStoreProvider does not support checkpointFormatVersion > 1 " +
         "but a state store checkpointID is passed in")
+    }
+    if (loadEmpty) {
+      throw StateStoreErrors.unsupportedOperationException("getStore",
+        "Internal Error: HDFSBackedStateStoreProvider doesn't support loadEmpty")
     }
     val newMap = getLoadedMapForStore(version)
     logInfo(log"Retrieved version ${MDC(LogKeys.STATE_STORE_VERSION, version)} " +

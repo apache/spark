@@ -3942,6 +3942,50 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }}
   }
 
+  test("SPARK-54420: load with createEmpty creates empty store") {
+    val remoteDir = Utils.createTempDir().toString
+    new File(remoteDir).delete()
+
+    withDB(remoteDir) { db =>
+      // loading batch 0 with loadEmpty = true
+      db.load(0, None, loadEmpty = true)
+      assert(iterator(db).isEmpty)
+      db.put("a", "1")
+      val (version1, _) = db.commit()
+      assert(toStr(db.get("a")) === "1")
+
+      // check we can load store normally even the previous one loadEmpty = true
+      db.load(version1)
+      db.put("b", "2")
+      val (version2, _) = db.commit()
+      assert(version2 === version1 + 1)
+      assert(toStr(db.get("b")) === "2")
+      assert(toStr(db.get("a")) === "1")
+
+      // load an empty store
+      db.load(version2, loadEmpty = true)
+      db.put("c", "3")
+      val (version3, _) = db.commit()
+      assert(db.get("b") === null)
+      assert(db.get("a") === null)
+      assert(toStr(db.get("c")) === "3")
+      assert(version3 === version2 + 1)
+
+      // load 2 empty store in a row
+      db.load(version3, loadEmpty = true)
+      db.put("d", "4")
+      val (version4, _) = db.commit()
+      assert(db.get("c") === null)
+      assert(toStr(db.get("d")) === "4")
+      assert(version4 === version3 + 1)
+
+      db.load(version4)
+      db.put("e", "5")
+      db.commit()
+      assert(db.iterator().map(toStr).toSet === Set(("d", "4"), ("e", "5")))
+    }
+  }
+
   test("SPARK-44639: Use Java tmp dir instead of configured local dirs on Yarn") {
     val conf = new Configuration()
     conf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
@@ -3981,7 +4025,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     override def load(
         version: Long,
         ckptId: Option[String] = None,
-        readOnly: Boolean = false): RocksDB = {
+        readOnly: Boolean = false,
+        createEmpty: Boolean = false): RocksDB = {
       // When a ckptId is defined, it means the test is explicitly using v2 semantic
       // When it is not, it is possible that implicitly uses it.
       // So still do a versionToUniqueId.get

@@ -240,6 +240,8 @@ def generate_functions_examples_html(jvm, jspark, html_output_dir):
     </pre></div>
 
     """
+    print("Enabling TIME data type")
+    jspark.sql("SET spark.sql.timeType.enabled = true")
     print("Running SQL examples to generate formatted output.")
     for key, infos in _list_grouped_function_infos(jvm):
         examples = _make_pretty_examples(jspark, infos)

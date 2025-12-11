@@ -4492,4 +4492,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "colType" -> "metadata",
         "errors" -> errors.mkString("- ", "\n- ", "")))
   }
+
+  def unsupportedTimeTypeError(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_TIME_TYPE",
+      messageParameters = Map.empty)
+  }
 }
