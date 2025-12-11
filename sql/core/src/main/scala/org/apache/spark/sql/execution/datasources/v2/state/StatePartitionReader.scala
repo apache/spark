@@ -21,8 +21,10 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorsUtils
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.SymmetricHashJoinStateManager
-import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.{StateStoreColumnFamilySchemaUtils, StateVariableType, TransformWithStateVariableInfo}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.{StateStoreColumnFamilySchemaUtils, StateVariableType, TransformWithStateVariableInfo, TransformWithStateVariableUtils}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.TimerStateUtils
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.execution.streaming.state.RecordType.{getRecordTypeAsString, RecordType}
 import org.apache.spark.sql.types.{NullType, StructField, StructType}
@@ -38,7 +40,9 @@ import org.apache.spark.util.{NextIterator, SerializableConfiguration}
  */
 case class AllColumnFamiliesReaderInfo(
     colFamilySchemas: Set[StateStoreColFamilySchema] = Set.empty,
-    stateVariableInfos: List[TransformWithStateVariableInfo] = List.empty)
+    stateVariableInfos: List[TransformWithStateVariableInfo] = List.empty,
+    operatorName: String = "",
+    stateFormatVersion: Option[Int] = None)
 
 /**
  * An implementation of [[PartitionReaderFactory]] for State data source. This is used to support
@@ -285,6 +289,56 @@ class StatePartitionAllColumnFamiliesReader(
 
   private val stateStoreColFamilySchemas = allColumnFamiliesReaderInfo.colFamilySchemas
   private val stateVariableInfos = allColumnFamiliesReaderInfo.stateVariableInfos
+  private val operatorName = allColumnFamiliesReaderInfo.operatorName
+  private val stateFormatVersion = allColumnFamiliesReaderInfo.stateFormatVersion
+
+  private def isDefaultColFamilyInTWS(operatorName: String, colFamilyName: String): Boolean = {
+    StatefulOperatorsUtils.TRANSFORM_WITH_STATE_OP_NAMES.contains(operatorName) &&
+      colFamilyName == StateStore.DEFAULT_COL_FAMILY_NAME
+  }
+
+  /**
+   * Extracts the base state variable name from internal column family names.
+   */
+  private def getBaseStateName(colFamilyName: String): String = {
+    if (StateStoreColumnFamilySchemaUtils.isTtlColFamilyName(colFamilyName)) {
+      StateStoreColumnFamilySchemaUtils.getStateNameFromTtlColFamily(colFamilyName)
+    } else if (StateStoreColumnFamilySchemaUtils.isMinExpiryIndexCFName(colFamilyName)) {
+      StateStoreColumnFamilySchemaUtils.getStateNameFromMinExpiryIndexCFName(colFamilyName)
+    } else if (StateStoreColumnFamilySchemaUtils.isCountIndexCFName(colFamilyName)) {
+      StateStoreColumnFamilySchemaUtils.getStateNameFromCountIndexCFName(colFamilyName)
+    } else if (TransformWithStateVariableUtils.isRowCounterCFName(colFamilyName)) {
+      TransformWithStateVariableUtils.getStateNameFromRowCounterCFName(colFamilyName)
+    } else {
+      colFamilyName
+    }
+  }
+
+
+  private def getStateVarInfo(
+      colFamilyName: String): Option[TransformWithStateVariableInfo] = {
+    if (TimerStateUtils.isTimerSecondaryIndexCF(colFamilyName)) {
+      Some(TransformWithStateVariableUtils.getTimerState(colFamilyName))
+    } else {
+      stateVariableInfos.find(_.stateName == getBaseStateName(colFamilyName))
+    }
+  }
+
+  // Create extractors for each column family - each column family may have different key schema
+  private lazy val partitionKeyExtractors: Map[String, StatePartitionKeyExtractor] = {
+    stateStoreColFamilySchemas
+      .filter(schema => !isDefaultColFamilyInTWS(operatorName, schema.colFamilyName))
+      .map { cfSchema =>
+        val extractor = SchemaUtil.getPartitionKeyExtractor(
+          operatorName,
+          cfSchema.keySchema,
+          partition.sourceOptions.storeName,
+          cfSchema.colFamilyName,
+          getStateVarInfo(cfSchema.colFamilyName),
+          stateFormatVersion)
+        cfSchema.colFamilyName -> extractor
+      }.toMap
+  }
 
   private def isListType(colFamilyName: String): Boolean = {
     SchemaUtil.checkVariableType(
@@ -364,21 +418,25 @@ class StatePartitionAllColumnFamiliesReader(
 
   override lazy val iter: Iterator[InternalRow] = {
     // Iterate all column families and concatenate results
-    stateStoreColFamilySchemas.iterator.flatMap { cfSchema =>
-      if (isListType(cfSchema.colFamilyName)) {
-        store.iterator(cfSchema.colFamilyName).flatMap(
-          pair =>
-            store.valuesIterator(pair.key, cfSchema.colFamilyName).map {
-              value =>
-                SchemaUtil.unifyStateRowPairAsRawBytes((pair.key, value), cfSchema.colFamilyName)
-            }
-        )
-      } else {
-        store.iterator(cfSchema.colFamilyName).map { pair =>
-          SchemaUtil.unifyStateRowPairAsRawBytes(
-            (pair.key, pair.value), cfSchema.colFamilyName)
+    stateStoreColFamilySchemas.iterator
+      .filter(schema => !isDefaultColFamilyInTWS(operatorName, schema.colFamilyName))
+      .flatMap { cfSchema =>
+        val extractor = partitionKeyExtractors(cfSchema.colFamilyName)
+        if (isListType(cfSchema.colFamilyName)) {
+          store.iterator(cfSchema.colFamilyName).flatMap(
+            pair =>
+              store.valuesIterator(pair.key, cfSchema.colFamilyName).map {
+                value =>
+                  SchemaUtil.unifyStateRowPairAsRawBytes(
+                    (pair.key, value), cfSchema.colFamilyName, extractor)
+              }
+          )
+        } else {
+          store.iterator(cfSchema.colFamilyName).map { pair =>
+            SchemaUtil.unifyStateRowPairAsRawBytes(
+              (pair.key, pair.value), cfSchema.colFamilyName, extractor)
+          }
         }
-      }
     }
   }
 

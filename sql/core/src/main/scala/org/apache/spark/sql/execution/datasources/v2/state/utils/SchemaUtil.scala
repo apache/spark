@@ -25,9 +25,12 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.execution.datasources.v2.state.{StateDataSourceErrors, StateSourceOptions}
+import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorsUtils, StatePartitionKeyExtractorFactory}
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.LeftSide
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.SymmetricHashJoinStateManager
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.{StateVariableType, TransformWithStateVariableInfo}
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.StateVariableType._
-import org.apache.spark.sql.execution.streaming.state.{ReadStateStore, StateStoreColFamilySchema, UnsafeRowPair}
+import org.apache.spark.sql.execution.streaming.state.{ReadStateStore, StatePartitionKeyExtractor, StateStore, StateStoreColFamilySchema, UnsafeRowPair}
 import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, IntegerType, LongType, MapType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
@@ -49,8 +52,35 @@ object SchemaUtil {
       keySchema: StructType,
       valueSchema: StructType,
       transformWithStateVariableInfoOpt: Option[TransformWithStateVariableInfo],
-      stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema]): StructType = {
-    if (transformWithStateVariableInfoOpt.isDefined) {
+      stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema],
+      operatorName: String,
+      stateFormatVersion: Option[Int] = None): StructType = {
+    if (sourceOptions.internalOnlyReadAllColumnFamilies) {
+      val colFamilyName: String =
+        if (
+          operatorName == StatefulOperatorsUtils.SYMMETRIC_HASH_JOIN_EXEC_OP_NAME
+        ) {
+          SymmetricHashJoinStateManager.allStateStoreNames(LeftSide).head
+        } else if (
+          StatefulOperatorsUtils.TRANSFORM_WITH_STATE_OP_NAMES.contains(operatorName)
+        ) {
+          require(
+            transformWithStateVariableInfoOpt.isDefined,
+            "transformWithStateVariableInfo is required for TransformWithState"
+          )
+          transformWithStateVariableInfoOpt.get.stateName
+        } else {
+          StateStore.DEFAULT_COL_FAMILY_NAME
+        }
+      val extractor = getPartitionKeyExtractor(
+        operatorName, keySchema, sourceOptions.storeName,
+        colFamilyName, transformWithStateVariableInfoOpt, stateFormatVersion)
+      new StructType()
+        .add("partition_key", extractor.partitionKeySchema)
+        .add("key_bytes", BinaryType)
+        .add("value_bytes", BinaryType)
+        .add("column_family_name", StringType)
+    } else if (transformWithStateVariableInfoOpt.isDefined) {
       require(stateStoreColFamilySchemaOpt.isDefined)
       generateSchemaForStateVar(transformWithStateVariableInfoOpt.get,
         stateStoreColFamilySchemaOpt.get, sourceOptions)
@@ -61,20 +91,33 @@ object SchemaUtil {
         .add("key", keySchema)
         .add("value", valueSchema)
         .add("partition_id", IntegerType)
-    } else if (sourceOptions.internalOnlyReadAllColumnFamilies) {
-      new StructType()
-        // TODO [SPARK-54443]: change keySchema to a more specific type after we
-        // can extract partition key from keySchema
-        .add("partition_key", keySchema)
-        .add("key_bytes", BinaryType)
-        .add("value_bytes", BinaryType)
-        .add("column_family_name", StringType)
     } else {
       new StructType()
         .add("key", keySchema)
         .add("value", valueSchema)
         .add("partition_id", IntegerType)
     }
+  }
+
+  /**
+   * Creates a StatePartitionKeyExtractor for the given operator.
+   * This is used to extract partition keys from state store keys for state repartitioning.
+   */
+  def getPartitionKeyExtractor(
+      operatorName: String,
+      keySchema: StructType,
+      storeName: String,
+      colFamilyName: String,
+      transformWithStateVariableInfoOpt: Option[TransformWithStateVariableInfo],
+      stateFormatVersion: Option[Int]): StatePartitionKeyExtractor = {
+    StatePartitionKeyExtractorFactory.create(
+      operatorName,
+      keySchema,
+      storeName = storeName,
+      colFamilyName = colFamilyName,
+      stateFormatVersion = stateFormatVersion,
+      transformWithStateVariableInfoOpt
+    )
   }
 
   def unifyStateRowPair(pair: (UnsafeRow, UnsafeRow), partition: Int): InternalRow = {
@@ -87,18 +130,18 @@ object SchemaUtil {
 
   /**
    * Returns an InternalRow representing
-   * 1. partitionKey
+   * 1. partitionKey (extracted using the StatePartitionKeyExtractor)
    * 2. key in bytes
    * 3. value in bytes
    * 4. column family name
    */
   def unifyStateRowPairAsRawBytes(
       pair: (UnsafeRow, UnsafeRow),
-      colFamilyName: String): InternalRow = {
+      colFamilyName: String,
+      extractor: StatePartitionKeyExtractor): InternalRow = {
     val row = new GenericInternalRow(4)
-    // todo [SPARK-54443]: change keySchema to more specific type after we
-    //  can extract partition key from keySchema
-    row.update(0, pair._1)
+    val partitionKey = extractor.partitionKey(pair._1)
+    row.update(0, partitionKey)
     row.update(1, pair._1.getBytes)
     row.update(2, pair._2.getBytes)
     row.update(3, UTF8String.fromString(colFamilyName))
@@ -266,7 +309,9 @@ object SchemaUtil {
       "value_bytes" -> classOf[BinaryType],
       "column_family_name" -> classOf[StringType])
 
-    val expectedFieldNames = if (transformWithStateVariableInfoOpt.isDefined) {
+    val expectedFieldNames = if (sourceOptions.internalOnlyReadAllColumnFamilies) {
+      Seq("partition_key", "key_bytes", "value_bytes", "column_family_name")
+    } else if (transformWithStateVariableInfoOpt.isDefined) {
       val stateVarInfo = transformWithStateVariableInfoOpt.get
       val stateVarType = stateVarInfo.stateVariableType
 
@@ -305,8 +350,6 @@ object SchemaUtil {
       }
     } else if (sourceOptions.readChangeFeed) {
       Seq("batch_id", "change_type", "key", "value", "partition_id")
-    } else if (sourceOptions.internalOnlyReadAllColumnFamilies) {
-      Seq("partition_key", "key_bytes", "value_bytes", "column_family_name")
     } else {
       Seq("key", "value", "partition_id")
     }
