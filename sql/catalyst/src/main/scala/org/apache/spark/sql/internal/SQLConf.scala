@@ -2553,6 +2553,15 @@ object SQLConf {
       .timeConf(TimeUnit.SECONDS)
       .createWithDefault(300L)
 
+  val STATE_STORE_MAINTENANCE_FORCE_SHUTDOWN_TIMEOUT =
+    buildConf("spark.sql.streaming.stateStore.maintenanceForceShutdownTimeout")
+      .internal()
+      .doc("Timeout in seconds to wait for tasks to respond to cancellation after " +
+        "force shutdown is initiated. This applies after the graceful shutdown timeout " +
+        "has been exceeded.")
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefault(60L)
+
   val STATE_STORE_MAINTENANCE_PROCESSING_TIMEOUT =
     buildConf("spark.sql.streaming.stateStore.maintenanceProcessingTimeout")
       .internal()
@@ -6920,6 +6929,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(STATE_STORE_INSTANCE_METRICS_REPORT_LIMIT)
 
   def stateStoreMaintenanceShutdownTimeout: Long = getConf(STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT)
+
+  def stateStoreMaintenanceForceShutdownTimeout: Long =
+    getConf(STATE_STORE_MAINTENANCE_FORCE_SHUTDOWN_TIMEOUT)
 
   def stateStoreMaintenanceProcessingTimeout: Long =
     getConf(STATE_STORE_MAINTENANCE_PROCESSING_TIMEOUT)
