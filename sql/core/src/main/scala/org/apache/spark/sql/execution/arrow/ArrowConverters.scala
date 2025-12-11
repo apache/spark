@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.execution.arrowcollect.ArrowBatch
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
@@ -88,7 +89,7 @@ private[sql] object ArrowConverters extends Logging {
       timeZoneId: String,
       errorOnDuplicatedFieldNames: Boolean,
       largeVarTypes: Boolean,
-      context: TaskContext) extends Iterator[Array[Byte]] with AutoCloseable {
+      context: TaskContext) extends Iterator[ArrowBatch] with AutoCloseable {
 
     protected val arrowSchema =
       ArrowUtils.toArrowSchema(schema, timeZoneId, errorOnDuplicatedFieldNames, largeVarTypes)
@@ -127,11 +128,11 @@ private[sql] object ArrowConverters extends Logging {
       false
     }
 
-    override def next(): Array[Byte] = {
+    override def next(): ArrowBatch = {
       var bytes: Array[Byte] = null
+      var rowCount = 0L
 
       Utils.tryWithSafeFinally {
-        var rowCount = 0L
         while (rowIter.hasNext && (maxRecordsPerBatch <= 0 || rowCount < maxRecordsPerBatch)) {
           val row = rowIter.next()
           arrowWriter.write(row)
@@ -145,7 +146,7 @@ private[sql] object ArrowConverters extends Logging {
         arrowWriter.reset()
       }
 
-      bytes
+      ArrowBatch(rowCount.toInt, bytes)
     }
 
     override def close(): Unit = {
@@ -175,7 +176,7 @@ private[sql] object ArrowConverters extends Logging {
     private val arrowSchemaSize = SizeEstimator.estimate(arrowSchema)
     var rowCountInLastBatch: Long = 0
 
-    override def next(): Array[Byte] = {
+    override def next(): ArrowBatch = {
       val out = new ByteArrayOutputStream()
       val writeChannel = new WriteChannel(Channels.newChannel(out))
 
@@ -222,7 +223,8 @@ private[sql] object ArrowConverters extends Logging {
         arrowWriter.reset()
       }
 
-      out.toByteArray
+      val bytes = out.toByteArray
+      ArrowBatch(rowCountInLastBatch.toInt, bytes)
     }
   }
 
@@ -276,7 +278,7 @@ private[sql] object ArrowConverters extends Logging {
       override def hasNext: Boolean = true
     }
     Utils.tryWithSafeFinally {
-      batches.next()
+      batches.next().batch
     } {
       // If taskContext is null, `batches.close()` should be called to avoid memory leak.
       if (TaskContext.get() == null) {
