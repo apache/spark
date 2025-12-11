@@ -72,11 +72,8 @@ object LiteralValueProtoConverter {
     val dataTypeBuilder = dataTypeOpt
       .map(dataType => FixedDataTypeBuilder(dataType, value == null || value == None))
       .getOrElse(InferringDataTypeBuilder())
-    val (literal, _) = toLiteralProtoBuilderInternal(
-      value,
-      dataTypeBuilder,
-      options,
-      enclosed = false)
+    val (literal, _) =
+      toLiteralProtoBuilderInternal(value, dataTypeBuilder, options, enclosed = false)
     literal
   }
 
@@ -144,19 +141,23 @@ object LiteralValueProtoConverter {
       case v: Date =>
         result(_.setDate(SparkDateTimeUtils.fromJavaDate(v)), DateType)
       case v: LocalTime =>
-        val time = Literal.Time.newBuilder()
+        val time = Literal.Time
+          .newBuilder()
           .setNano(SparkDateTimeUtils.localTimeToNanos(v))
           .setPrecision(TimeType.DEFAULT_PRECISION)
           .build()
         result(_.setTime(time), TimeType())
       case v: Duration =>
-        result(_.setDayTimeInterval(SparkIntervalUtils.durationToMicros(v)), DayTimeIntervalType())
+        result(
+          _.setDayTimeInterval(SparkIntervalUtils.durationToMicros(v)),
+          DayTimeIntervalType())
       case v: Period =>
         result(
           _.setYearMonthInterval(SparkIntervalUtils.periodToMonths(v)),
           YearMonthIntervalType())
       case v: CalendarInterval =>
-        val interval = Literal.CalendarInterval.newBuilder()
+        val interval = Literal.CalendarInterval
+          .newBuilder()
           .setMonths(v.months)
           .setDays(v.days)
           .setMicroseconds(v.microseconds)
@@ -189,7 +190,9 @@ object LiteralValueProtoConverter {
   }
 
   private def toProtoDecimal(value: String, dataType: DecimalType): Literal.Decimal = {
-    Literal.Decimal.newBuilder().setValue(value)
+    Literal.Decimal
+      .newBuilder()
+      .setValue(value)
       .setPrecision(dataType.precision)
       .setScale(dataType.scale)
       .build()
@@ -204,18 +207,17 @@ object LiteralValueProtoConverter {
     val builder = Literal.newBuilder()
     val mapBuilder = builder.getMapBuilder
     map.foreach { case (k, v) =>
-      val (keyLiteral, updatedKeyTypeBuilder) = toLiteralProtoBuilderInternal(
-        k, keyTypeBuilder, options, enclosed = true)
+      val (keyLiteral, updatedKeyTypeBuilder) =
+        toLiteralProtoBuilderInternal(k, keyTypeBuilder, options, enclosed = true)
       mapBuilder.addKeys(keyLiteral)
       keyTypeBuilder = updatedKeyTypeBuilder
-      val (valueLiteral, updatedValueTypeBuilder) = toLiteralProtoBuilderInternal(
-        v, valueTypeBuilder, options, enclosed = true)
+      val (valueLiteral, updatedValueTypeBuilder) =
+        toLiteralProtoBuilderInternal(v, valueTypeBuilder, options, enclosed = true)
       mapBuilder.addValues(valueLiteral)
       valueTypeBuilder = updatedValueTypeBuilder
     }
-    val updatedMapTypeBuilder = mapTypeBuilder.mergeKeyValueBuilder(
-      keyTypeBuilder,
-      valueTypeBuilder)
+    val updatedMapTypeBuilder =
+      mapTypeBuilder.mergeKeyValueBuilder(keyTypeBuilder, valueTypeBuilder)
     lazy val protoMapType = DataTypeProtoConverter
       .toConnectProtoType(updatedMapTypeBuilder.result())
       .getMap
@@ -260,8 +262,8 @@ object LiteralValueProtoConverter {
     val builder = Literal.newBuilder()
     val arrayBuilder = builder.getArrayBuilder
     iterable.foreach { e =>
-      val (literal, updatedElementTypeBuilder) = toLiteralProtoBuilderInternal(
-        e, elementTypeBuilder, options, enclosed = true)
+      val (literal, updatedElementTypeBuilder) =
+        toLiteralProtoBuilderInternal(e, elementTypeBuilder, options, enclosed = true)
       arrayBuilder.addElements(literal)
       elementTypeBuilder = updatedElementTypeBuilder
     }
@@ -291,20 +293,19 @@ object LiteralValueProtoConverter {
     val structType = structTypeBuilder.result().asInstanceOf[StructType]
     val builder = Literal.newBuilder()
     val structBuilder = builder.getStructBuilder
-    fields.zipAll(structType.fields, missing, null).foreach {
-      case (value, field: StructField) =>
-        require(missing != null)
-        require(field != null)
-        val (literal, _) = toLiteralProtoBuilderInternal(
-          value,
-          FixedDataTypeBuilder(field.dataType, field.nullable),
-          options,
-          enclosed = true)
-        structBuilder.addElements(literal)
+    fields.zipAll(structType.fields, missing, null).foreach { case (value, field: StructField) =>
+      require(missing != null)
+      require(field != null)
+      val (literal, _) = toLiteralProtoBuilderInternal(
+        value,
+        FixedDataTypeBuilder(field.dataType, field.nullable),
+        options,
+        enclosed = true)
+      structBuilder.addElements(literal)
     }
     def protoStructType = DataTypeProtoConverter.toConnectProtoType(structType)
     if (options.useDeprecatedDataTypeFields) {
-     structBuilder.setStructType(protoStructType)
+      structBuilder.setStructType(protoStructType)
     } else if (!enclosed) {
       structBuilder.setDataTypeStruct(protoStructType.getStruct)
     }
@@ -354,8 +355,8 @@ object LiteralValueProtoConverter {
 }
 
 /**
- * Base trait for converting a [[proto.Expression.Literal]] into either its Scala representation or
- * into its Catalyst representation.
+ * Base trait for converting a [[proto.Expression.Literal]] into either its Scala representation
+ * or into its Catalyst representation.
  */
 trait FromProtoConvertor {
   def convertToValue(literal: proto.Expression.Literal): Any = {
@@ -473,9 +474,7 @@ trait FromProtoConvertor {
     var elementTypeBuilder = arrayTypeBuilder.elementTypeBuilder()
     if (array.hasDataType) {
       val arrayType = DataTypeProtoConverter.toCatalystArrayType(array.getDataType)
-      elementTypeBuilder = elementTypeBuilder.merge(
-        arrayType.elementType,
-        arrayType.containsNull)
+      elementTypeBuilder = elementTypeBuilder.merge(arrayType.elementType, arrayType.containsNull)
     }
     if (array.hasElementType) {
       elementTypeBuilder = elementTypeBuilder.merge(
@@ -486,9 +485,7 @@ trait FromProtoConvertor {
     val builder = arrayBuilder(numElements)
     var i = 0
     while (i < numElements) {
-      val (updatedElementTypeBuilder, element) = convert(
-        array.getElements(i),
-        elementTypeBuilder)
+      val (updatedElementTypeBuilder, element) = convert(array.getElements(i), elementTypeBuilder)
       elementTypeBuilder = updatedElementTypeBuilder
       builder += element
       i += 1
@@ -618,13 +615,15 @@ sealed trait DataTypeBuilder {
   protected def throwIncompatibleDataTypeException(
       expectedDataType: DataType,
       mergeDataType: DataType): Nothing = {
-    throw InvalidPlanInput(s"Literal contains a field of DataType `$mergeDataType` which is " +
-      s"incompatible with the expected DataType `$expectedDataType`")
+    throw InvalidPlanInput(
+      s"Literal contains a field of DataType `$mergeDataType` which is " +
+        s"incompatible with the expected DataType `$expectedDataType`")
   }
 
   def keyValueTypeBuilder(): (DataTypeBuilder, DataTypeBuilder) = this match {
     case FixedDataTypeBuilder(mapType: MapType, _) =>
-      (FixedDataTypeBuilder(mapType.keyType, isNullable = false),
+      (
+        FixedDataTypeBuilder(mapType.keyType, isNullable = false),
         FixedDataTypeBuilder(mapType.valueType, mapType.valueContainsNull))
     case _: FixedDataTypeBuilder => throw InvalidPlanInput("<NO MAP TYPE>")
     case _ => (InferringDataTypeBuilder(), InferringDataTypeBuilder())
@@ -636,10 +635,8 @@ sealed trait DataTypeBuilder {
     if (keyTypeBuilder.nullable()) {
       throw InvalidPlanInput("<KEY NOT NULL>")
     }
-    val mapType = MapType(
-      keyTypeBuilder.result(),
-      valueTypeBuilder.result(),
-      valueTypeBuilder.nullable())
+    val mapType =
+      MapType(keyTypeBuilder.result(), valueTypeBuilder.result(), valueTypeBuilder.nullable())
     merge(mapType, isNullable = false)
   }
 
@@ -654,6 +651,10 @@ sealed trait DataTypeBuilder {
     val arrayType = ArrayType(elementTypeBuilder.result(), elementTypeBuilder.nullable())
     merge(arrayType, isNullable = false)
   }
+}
+
+object DataTypeBuilder {
+  def unapply(dt: DataTypeBuilder): Option[DataType] = Some(dt.result())
 }
 
 object EmptyDataTypeBuilder extends DataTypeBuilder {
@@ -733,18 +734,17 @@ object InferringDataTypeBuilder {
       case (dt, _: NullType) if !dt.isInstanceOf[NullType] => Some(dt)
       case (l: NullType, _: NullType) => Some(l)
 
-      case (ArrayType(leftElemType, leftNulls),
-            ArrayType(rightElemType, rightNulls)) =>
+      case (ArrayType(leftElemType, leftNulls), ArrayType(rightElemType, rightNulls)) =>
         mergeDataTypes(leftElemType, rightElemType).map { elemType =>
           ArrayType(elemType, leftNulls || rightNulls)
         }
-      case (MapType(leftKeyType, leftValueType, leftValueNulls),
+      case (
+            MapType(leftKeyType, leftValueType, leftValueNulls),
             MapType(rightKeyType, rightValueType, rightValueNulls)) =>
         mergeDataTypes(leftKeyType, rightKeyType)
           .zip(mergeDataTypes(leftValueType, rightValueType))
-          .map {
-            case (keyType, valueType) =>
-              MapType(keyType, valueType, leftValueNulls || rightValueNulls)
+          .map { case (keyType, valueType) =>
+            MapType(keyType, valueType, leftValueNulls || rightValueNulls)
           }
       case (StructType(leftFields), StructType(rightFields)) =>
         if (leftFields.length != rightFields.length) {

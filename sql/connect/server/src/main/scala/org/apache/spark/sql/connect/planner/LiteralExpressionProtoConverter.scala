@@ -43,7 +43,6 @@ object LiteralExpressionProtoConverter {
     expressions.Literal(value, dataType)
   }
 
-
   private object FromProtoToCatalystConverter extends FromProtoConvertor {
     override protected def convertString(string: ByteString): UTF8String =
       UTF8String.fromBytes(string.toByteArray)

@@ -26,7 +26,7 @@ import org.apache.spark.ml.param.Params
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.connect.common.{DataTypeBuilder, FromProtoToScalaConverter, LiteralValueProtoConverter, ProtoDataTypes}
 import org.apache.spark.sql.connect.service.SessionHolder
-import org.apache.spark.sql.types.{ArrayType, DoubleType, UserDefinedType}
+import org.apache.spark.sql.types.{ArrayType, DoubleType, StringType, UserDefinedType}
 
 private[ml] object Serializer {
 
@@ -176,7 +176,6 @@ private[ml] object Serializer {
 }
 
 object MLParamConverter extends FromProtoToScalaConverter {
-  private val DOUBLE_ARRAY = ArrayType(DoubleType, containsNull = false)
 
   override protected def convertFloat(
       literal: Literal,
@@ -201,8 +200,12 @@ object MLParamConverter extends FromProtoToScalaConverter {
       array: Literal.Array,
       arrayTypeBuilder: DataTypeBuilder): (DataTypeBuilder, Any) = {
     super.convertArray(array, arrayTypeBuilder) match {
-      case (builder, value: Array[_]) if builder.result().acceptsType(DOUBLE_ARRAY) =>
-        (builder, value.map(_.asInstanceOf[Double]))
+      case (DataTypeBuilder(ArrayType(DoubleType, false)), value: Array[_]) =>
+        (arrayTypeBuilder, MLUtils.reconcileArray(classOf[Double], value))
+      case (DataTypeBuilder(ArrayType(ArrayType(_: StringType, _), _)), value: Array[_]) =>
+        (arrayTypeBuilder, MLUtils.reconcileArray(classOf[Array[Array[String]]], value))
+      case (DataTypeBuilder(ArrayType(_: StringType, _)), value: Array[_]) =>
+        (arrayTypeBuilder, MLUtils.reconcileArray(classOf[Array[String]], value))
       case result => result
     }
   }

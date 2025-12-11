@@ -167,7 +167,8 @@ class LiteralExpressionProtoConverterSuite extends SparkFunSuite {
 
   test("backward compatibility for struct literal proto") {
     // Test the old way of defining structs with structType field and elements
-    val schema = StructType(Seq(
+    val schema = StructType(
+      Seq(
         StructField("a", IntegerType, nullable = true),
         StructField("b", StringType, nullable = false)))
     val structProto = LiteralValueProtoConverter.toLiteralProtoWithOptions(
