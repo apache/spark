@@ -309,6 +309,132 @@ def _extract_grouping_columns_from_jvm(jgd: Any) -> List[Column]:
     return []
 
 
+def _apply_udaf_via_catalyst(
+    df: "DataFrame",
+    jgd: Any,
+    udaf_func: "UserDefinedAggregateFunction",
+    udaf_col_expr: Column,
+    grouping_cols: Optional[List[Column]],
+) -> "DataFrame":
+    """
+    Apply UDAF via the Catalyst optimizer path (Scala).
+
+    This creates three Arrow UDFs and passes them to the Scala
+    pythonAggregatorUDAF method, which uses the Catalyst optimizer
+    to execute the aggregation.
+
+    Parameters
+    ----------
+    df : DataFrame
+        The original DataFrame.
+    jgd : JavaObject
+        The JVM GroupedData object.
+    udaf_func : UserDefinedAggregateFunction
+        The UDAF function.
+    udaf_col_expr : Column
+        The column expression to aggregate.
+    grouping_cols : Optional[List[Column]]
+        The grouping columns if this is a grouped aggregation.
+
+    Returns
+    -------
+    DataFrame
+        Aggregated result DataFrame
+    """
+    from pyspark.sql import DataFrame
+    from pyspark.sql.pandas.functions import pandas_udf
+    from pyspark.util import PythonEvalType
+    from pyspark.sql.types import StructType, StructField, LongType, BinaryType
+
+    # Get aggregator info
+    serialized_aggregator = udaf_func._serialized_aggregator
+    return_type = udaf_func.returnType
+    has_grouping = grouping_cols is not None and len(grouping_cols) > 0
+    grouping_col_names = _extract_grouping_column_names(grouping_cols) if has_grouping else []
+    col_expr, col_name = _extract_column_name(udaf_col_expr)
+
+    # Get max key for random grouping
+    max_key = _get_max_key_for_random_grouping(df)
+
+    # Create the three phase functions
+    reduce_func = _create_reduce_func(serialized_aggregator, max_key, len(grouping_col_names))
+    merge_func = _create_merge_func(serialized_aggregator)
+
+    return_type_str = (
+        return_type.simpleString() if hasattr(return_type, "simpleString") else str(return_type)
+    )
+    result_col_name_safe = f"{udaf_func._name}_{col_name}".replace("(", "_").replace(")", "_")
+    final_merge_func = _create_final_merge_func(
+        serialized_aggregator,
+        return_type,
+        has_grouping,
+        grouping_col_names,
+        udaf_func._name,
+        col_name,
+    )
+
+    # Create Arrow UDFs for each phase
+    reduce_schema = StructType(
+        [
+            StructField("key", LongType(), False),
+            StructField("buffer", BinaryType(), True),
+        ]
+    )
+    reduce_udf = pandas_udf(
+        reduce_func,
+        returnType=reduce_schema,
+        functionType=PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
+    )
+
+    merge_schema = StructType([StructField("buffer", BinaryType(), True)])
+    merge_udf = pandas_udf(
+        merge_func,
+        returnType=merge_schema,
+        functionType=PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
+    )
+
+    final_schema_str = _build_result_schema(
+        has_grouping, grouping_col_names, result_col_name_safe, return_type_str
+    )
+    final_udf = pandas_udf(
+        final_merge_func,
+        returnType=final_schema_str,
+        functionType=PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
+    )
+
+    # Apply UDFs to the original DataFrame's columns
+    # This ensures attribute IDs match between Python UDF expressions and Scala logical plan
+    all_cols = [df[c] for c in df.columns]
+    reduce_udf_col = reduce_udf(*all_cols)
+    merge_udf_col = merge_udf(*all_cols)
+    final_udf_col = final_udf(*all_cols)
+
+    # Get result type as JSON string
+    spark_session = df.sparkSession
+    result_type_json = return_type.json()
+
+    # Call the Scala pythonAggregatorUDAF method
+    jdf = jgd.pythonAggregatorUDAF(
+        reduce_udf_col._jc,
+        merge_udf_col._jc,
+        final_udf_col._jc,
+        result_type_json,
+    )
+
+    result_df = DataFrame(jdf, spark_session)
+
+    # Rename result column to match expected format
+    from pyspark.sql.functions import col as spark_col
+
+    result_col_name = f"{udaf_func._name}({col_name})"
+    if has_grouping:
+        select_exprs = [spark_col(gc_name) for gc_name in grouping_col_names]
+        select_exprs.append(spark_col("result").alias(result_col_name))
+        return result_df.select(*select_exprs)
+    else:
+        return result_df.select(spark_col("result").alias(result_col_name))
+
+
 def _handle_udaf_aggregation_in_grouped_data(
     df: "DataFrame",
     jgd: Any,
@@ -357,8 +483,24 @@ def _handle_udaf_aggregation_in_grouped_data(
     udaf_func = udaf_col._udaf_func  # type: ignore[attr-defined]
     udaf_col_expr = udaf_col._udaf_col  # type: ignore[attr-defined]
 
-    # Get grouping columns and apply UDAF
+    # Get grouping columns
     grouping_cols = _extract_grouping_columns_from_jvm(jgd)
+
+    # Try Catalyst optimizer path first (via Scala pythonAggregatorUDAF)
+    try:
+        if hasattr(jgd, "pythonAggregatorUDAF"):
+            return _apply_udaf_via_catalyst(
+                df,
+                jgd,
+                udaf_func,
+                udaf_col_expr,
+                grouping_cols if grouping_cols else None,
+            )
+    except Exception:
+        # Fall back to Python-only path on any error
+        pass
+
+    # Python-only implementation (fallback)
     return _apply_udaf_to_dataframe(
         df,
         udaf_func,
@@ -460,15 +602,22 @@ def _create_merge_func(serialized_aggregator: bytes):
     import pyarrow as pa
 
     def merge_func(batches: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
-        """Iterator-based merge function that processes batches one by one."""
+        """Iterator-based merge function that processes batches one by one.
+
+        Note: When called via FlatMapGroupsInArrow, batches contain only the value columns
+        (key is handled separately by the executor). The buffer column is at index 0.
+        When called via Python-only path (applyInArrow), batches contain all columns
+        (key at 0, buffer at 1).
+        """
         import cloudpickle
 
         agg = cloudpickle.loads(serialized_aggregator)
         group_buffers = {}
 
         for batch in batches:
-            if isinstance(batch, pa.RecordBatch) and batch.num_columns > 1 and batch.num_rows > 0:
-                buffer_col = batch.column(1)
+            if isinstance(batch, pa.RecordBatch) and batch.num_columns > 0 and batch.num_rows > 0:
+                # Buffer is at last column position (handles both 1-column and 2-column cases)
+                buffer_col = batch.column(batch.num_columns - 1)
                 for i in range(batch.num_rows):
                     buffer_bytes = buffer_col[i].as_py()
                     grouping_key, buffer_value = cloudpickle.loads(buffer_bytes)
@@ -523,7 +672,13 @@ def _create_final_merge_func(
         return pa.array(converted_results, type=arrow_type)
 
     def final_merge_func(batches: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
-        """Iterator-based final merge function that processes batches one by one."""
+        """Iterator-based final merge function that processes batches one by one.
+
+        Note: When called via FlatMapGroupsInArrow, batches contain only the value columns
+        (key is handled separately by the executor). The buffer column is at index 0.
+        When called via Python-only path (applyInArrow), batches contain all columns
+        (final_key at 0, buffer at 1).
+        """
         import cloudpickle
 
         agg = cloudpickle.loads(serialized_aggregator)
@@ -534,10 +689,11 @@ def _create_final_merge_func(
         has_data = False
 
         for batch in batches:
-            if isinstance(batch, pa.RecordBatch) and batch.num_columns > 1:
+            if isinstance(batch, pa.RecordBatch) and batch.num_columns > 0:
                 if batch.num_rows > 0:
                     has_data = True
-                    buffer_col = batch.column(1)
+                    # Buffer is at last column position (handles both 1-column and 2-column cases)
+                    buffer_col = batch.column(batch.num_columns - 1)
                     for i in range(batch.num_rows):
                         buffer_bytes = buffer_col[i].as_py()
                         # Always deserialize as (grouping_key, buffer)
