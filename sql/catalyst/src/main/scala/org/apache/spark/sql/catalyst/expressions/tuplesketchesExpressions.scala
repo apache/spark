@@ -22,7 +22,9 @@ import org.apache.datasketches.tuple.adouble.{DoubleSummary, DoubleSummaryFactor
 import org.apache.datasketches.tuple.aninteger.{IntegerSummary, IntegerSummaryFactory, IntegerSummarySetOperations}
 import org.apache.datasketches.tuple.strings.{ArrayOfStringsSummary, ArrayOfStringsSummaryFactory, ArrayOfStringsSummarySetOperations}
 
+import org.apache.spark.sql.catalyst.analysis.ExpressionBuilder
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
 import org.apache.spark.sql.catalyst.util.ThetaSketchUtils
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, DoubleType, IntegerType, LongType}
@@ -1292,5 +1294,85 @@ abstract class TupleDifferenceBase[S <: Summary]
     differenceSketches(sketch1Bytes, sketch2Bytes, aNotB)
 
     aNotB.getResult(true).toByteArray
+  }
+}
+
+/**
+ * ExpressionBuilder for TupleUnionDouble to support SQL named parameters.
+ * Supports 2-4 parameters: first and second are required, lgNomEntries and mode are optional.
+ * The rearrange method will always fill in defaults, so build() receives exactly 4 expressions.
+ */
+object TupleUnionDoubleExpressionBuilder extends ExpressionBuilder {
+  final val defaultFunctionSignature = FunctionSignature(Seq(
+    InputParameter("first"),
+    InputParameter("second"),
+    InputParameter("lgNomEntries", Some(Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))),
+    InputParameter("mode", Some(Literal(ThetaSketchUtils.MODE_SUM)))
+  ))
+  override def functionSignature: Option[FunctionSignature] = Some(defaultFunctionSignature)
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    // The rearrange method ensures expressions.size == 4 with defaults filled in
+    assert(expressions.size == 4)
+    new TupleUnionDouble(expressions(0), expressions(1), expressions(2), expressions(3))
+  }
+}
+
+/**
+ * ExpressionBuilder for TupleUnionThetaDouble to support SQL named parameters.
+ * Supports 2-4 parameters: first and second are required, lgNomEntries and mode are optional.
+ * The rearrange method will always fill in defaults, so build() receives exactly 4 expressions.
+ */
+object TupleUnionThetaDoubleExpressionBuilder extends ExpressionBuilder {
+  final val defaultFunctionSignature = FunctionSignature(Seq(
+    InputParameter("first"),
+    InputParameter("second"),
+    InputParameter("lgNomEntries", Some(Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))),
+    InputParameter("mode", Some(Literal(ThetaSketchUtils.MODE_SUM)))
+  ))
+  override def functionSignature: Option[FunctionSignature] = Some(defaultFunctionSignature)
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    // The rearrange method ensures expressions.size == 4 with defaults filled in
+    assert(expressions.size == 4)
+    new TupleUnionThetaDouble(expressions(0), expressions(1), expressions(2), expressions(3))
+  }
+}
+
+/**
+ * ExpressionBuilder for TupleUnionInteger to support SQL named parameters.
+ * Supports 2-4 parameters: first and second are required, lgNomEntries and mode are optional.
+ * The rearrange method will always fill in defaults, so build() receives exactly 4 expressions.
+ */
+object TupleUnionIntegerExpressionBuilder extends ExpressionBuilder {
+  final val defaultFunctionSignature = FunctionSignature(Seq(
+    InputParameter("first"),
+    InputParameter("second"),
+    InputParameter("lgNomEntries", Some(Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))),
+    InputParameter("mode", Some(Literal(ThetaSketchUtils.MODE_SUM)))
+  ))
+  override def functionSignature: Option[FunctionSignature] = Some(defaultFunctionSignature)
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    // The rearrange method ensures expressions.size == 4 with defaults filled in
+    assert(expressions.size == 4)
+    new TupleUnionInteger(expressions(0), expressions(1), expressions(2), expressions(3))
+  }
+}
+
+/**
+ * ExpressionBuilder for TupleUnionThetaInteger to support SQL named parameters.
+ * Supports 2-4 parameters: first and second are required, lgNomEntries and mode are optional.
+ * The rearrange method will always fill in defaults, so build() receives exactly 4 expressions.
+ */
+object TupleUnionThetaIntegerExpressionBuilder extends ExpressionBuilder {
+  final val defaultFunctionSignature = FunctionSignature(Seq(
+    InputParameter("first"),
+    InputParameter("second"),
+    InputParameter("lgNomEntries", Some(Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))),
+    InputParameter("mode", Some(Literal(ThetaSketchUtils.MODE_SUM)))
+  ))
+  override def functionSignature: Option[FunctionSignature] = Some(defaultFunctionSignature)
+  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
+    // The rearrange method ensures expressions.size == 4 with defaults filled in
+    assert(expressions.size == 4)
+    new TupleUnionThetaInteger(expressions(0), expressions(1), expressions(2), expressions(3))
   }
 }

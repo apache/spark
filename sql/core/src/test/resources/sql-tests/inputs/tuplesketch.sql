@@ -594,6 +594,31 @@ SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1 COLLATE UTF8_LC
 SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1 COLLATE UNICODE_RTRIM, val1)) unicode_rt FROM t_string_collation;
 SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1 COLLATE UNICODE_CI_RTRIM, val1)) unicode_ci_rt FROM t_string_collation;
 
+-- Test tuple_sketch_agg_string with arrays containing null elements (nulls should be filtered out)
+SELECT tuple_sketch_estimate_string(tuple_sketch_agg_string(key, val))
+FROM VALUES
+  (1, ARRAY('a', null, 'b')),
+  (2, ARRAY('c')),
+  (3, ARRAY(null, 'd', null))
+AS tab(key, val);
+
+-- Test tuple_sketch_agg_string with arrays where some arrays are entirely null elements
+SELECT tuple_sketch_estimate_string(tuple_sketch_agg_string(key, val))
+FROM VALUES
+  (1, ARRAY(null, null)),
+  (2, ARRAY('a', 'b')),
+  (3, ARRAY('c'))
+AS tab(key, val);
+
+-- Test tuple_sketch_agg_string with mix of single strings and arrays with nulls
+SELECT tuple_sketch_estimate_string(tuple_sketch_agg_string(key, val))
+FROM VALUES
+  (1, ARRAY('a')),
+  (2, ARRAY('b', null, 'c')),
+  (3, ARRAY(null)),
+  (4, ARRAY('d', 'e'))
+AS tab(key, val);
+
 -- Comprehensive test using all TupleSketch functions in a single query
 WITH sketches AS (
   SELECT 'int_sketch' as sketch_type, tuple_sketch_agg_double(key1, val1, 12, 'sum') as sketch
@@ -629,6 +654,136 @@ SELECT
   -- Difference of two individual sketches
   tuple_sketch_estimate_double(tuple_difference_double(sketch1, sketch2)) as difference_estimate
 FROM individual_sketches;
+
+-- Named parameter tests for tuple sketch functions
+
+-- Test tuple_sketch_agg_double with named parameters - only required params
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key => key1, summary => val1))
+FROM t_int_double_1_5_through_7_11;
+
+-- Test tuple_sketch_agg_double with named parameters - setting only lgNomEntries
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key => key1, summary => val1, lgNomEntries => 14))
+FROM t_int_double_1_5_through_7_11;
+
+-- Test tuple_sketch_agg_double with named parameters - setting only mode
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key => key1, summary => val1, mode => 'max'))
+FROM t_int_double_1_5_through_7_11;
+
+-- Test tuple_sketch_agg_double with named parameters - setting both lgNomEntries and mode
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key => key1, summary => val1, lgNomEntries => 10, mode => 'min'))
+FROM t_int_double_1_5_through_7_11;
+
+-- Test tuple_sketch_agg_double with named parameters - different order
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(mode => 'max', lgNomEntries => 15, summary => val1, key => key1))
+FROM t_int_double_1_5_through_7_11;
+
+-- Test tuple_sketch_agg_integer with named parameters - only required params
+SELECT tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key => key1, summary => val1))
+FROM t_int_int_1_5_through_7_11;
+
+-- Test tuple_sketch_agg_integer with named parameters - setting only mode
+SELECT tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key => key1, summary => val1, mode => 'max'))
+FROM t_int_int_1_5_through_7_11;
+
+-- Test tuple_sketch_agg_integer with named parameters - different order
+SELECT tuple_sketch_estimate_integer(tuple_sketch_agg_integer(lgNomEntries => 14, key => key1, mode => 'sum', summary => val1))
+FROM t_int_int_1_5_through_7_11;
+
+-- Test tuple_union_agg_double with named parameters - only required param
+SELECT tuple_sketch_estimate_double(tuple_union_agg_double(child => sketch))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_int_double_1_5_through_7_11
+      UNION ALL
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_int_double_1_5_through_7_11);
+
+-- Test tuple_union_agg_double with named parameters - setting only lgNomEntries
+SELECT tuple_sketch_estimate_double(tuple_union_agg_double(child => sketch, lgNomEntries => 14))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_int_double_1_5_through_7_11
+      UNION ALL
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_int_double_1_5_through_7_11);
+
+-- Test tuple_union_agg_double with named parameters - setting only mode
+SELECT tuple_sketch_estimate_double(tuple_union_agg_double(child => sketch, mode => 'max'))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_int_double_1_5_through_7_11
+      UNION ALL
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_int_double_1_5_through_7_11);
+
+-- Test tuple_union_agg_double with named parameters - different order
+SELECT tuple_sketch_estimate_double(tuple_union_agg_double(mode => 'min', lgNomEntries => 13, child => sketch))
+FROM (SELECT tuple_sketch_agg_double(key1, val1) as sketch FROM t_int_double_1_5_through_7_11
+      UNION ALL
+      SELECT tuple_sketch_agg_double(key2, val2) as sketch FROM t_int_double_1_5_through_7_11);
+
+-- Test tuple_union_agg_integer with named parameters - setting only mode
+SELECT tuple_sketch_estimate_integer(tuple_union_agg_integer(child => sketch, mode => 'max'))
+FROM (SELECT tuple_sketch_agg_integer(key1, val1, 12, 'sum') as sketch FROM t_int_int_1_5_through_7_11
+      UNION ALL
+      SELECT tuple_sketch_agg_integer(key2, val2, 12, 'sum') as sketch FROM t_int_int_1_5_through_7_11);
+
+-- Test tuple_union_double with named parameters - only required params
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    first => tuple_sketch_agg_double(key1, val1),
+    second => tuple_sketch_agg_double(key2, val2)))
+FROM t_int_double_1_5_through_7_11;
+
+-- Test tuple_union_double with named parameters - setting only lgNomEntries
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    first => tuple_sketch_agg_double(key1, val1),
+    second => tuple_sketch_agg_double(key2, val2),
+    lgNomEntries => 14))
+FROM t_int_double_1_5_through_7_11;
+
+-- Test tuple_union_double with named parameters - setting only mode
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    first => tuple_sketch_agg_double(key1, val1),
+    second => tuple_sketch_agg_double(key2, val2),
+    mode => 'max'))
+FROM t_int_double_1_5_through_7_11;
+
+-- Test tuple_union_double with named parameters - different order
+SELECT tuple_sketch_estimate_double(
+  tuple_union_double(
+    mode => 'min',
+    lgNomEntries => 15,
+    second => tuple_sketch_agg_double(key2, val2),
+    first => tuple_sketch_agg_double(key1, val1)))
+FROM t_int_double_1_5_through_7_11;
+
+-- Test tuple_union_theta_double with named parameters - setting only mode
+SELECT tuple_sketch_estimate_double(
+  tuple_union_theta_double(
+    first => tuple_sketch_agg_double(key1, val1),
+    second => theta_sketch_agg(key2),
+    mode => 'max'))
+FROM t_int_double_1_5_through_7_11;
+
+-- Test tuple_union_theta_double with named parameters - different order
+SELECT tuple_sketch_estimate_double(
+  tuple_union_theta_double(
+    mode => 'min',
+    second => theta_sketch_agg(key2),
+    lgNomEntries => 14,
+    first => tuple_sketch_agg_double(key1, val1)))
+FROM t_int_double_1_5_through_7_11;
+
+-- Test tuple_union_integer with named parameters - setting only lgNomEntries
+SELECT tuple_sketch_estimate_integer(
+  tuple_union_integer(
+    first => tuple_sketch_agg_integer(key1, val1),
+    second => tuple_sketch_agg_integer(key2, val2),
+    lgNomEntries => 14))
+FROM t_int_int_1_5_through_7_11;
+
+-- Test tuple_union_theta_integer with named parameters - different order
+SELECT tuple_sketch_estimate_integer(
+  tuple_union_theta_integer(
+    lgNomEntries => 13,
+    mode => 'max',
+    second => theta_sketch_agg(key2),
+    first => tuple_sketch_agg_integer(key1, val1)))
+FROM t_int_int_1_5_through_7_11;
 
 -- Negative test cases
 
