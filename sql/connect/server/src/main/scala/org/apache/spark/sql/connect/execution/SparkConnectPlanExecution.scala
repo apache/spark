@@ -29,7 +29,6 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.st.STExpressionUtils
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
@@ -38,11 +37,10 @@ import org.apache.spark.sql.connect.config.Connect.{CONNECT_GRPC_ARROW_MAX_BATCH
 import org.apache.spark.sql.connect.planner.{InvalidInputErrors, SparkConnectPlanner}
 import org.apache.spark.sql.connect.service.ExecuteHolder
 import org.apache.spark.sql.connect.utils.{MetricGenerator, PipelineAnalysisContextUtils}
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{DoNotCleanup, LocalTableScanExec, QueryExecution, RemoveShuffleFiles, SkipMigration, SQLExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, StructType, TimeType}
+import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.ThreadUtils
 
 /**
