@@ -25,9 +25,13 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.execution.datasources.v2.state.{StateDataSourceErrors, StateSourceOptions}
+import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataTableEntry
+import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorsUtils, StatePartitionKeyExtractorFactory}
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.LeftSide
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.SymmetricHashJoinStateManager
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.{StateVariableType, TransformWithStateVariableInfo}
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.StateVariableType._
-import org.apache.spark.sql.execution.streaming.state.{ReadStateStore, StateStoreColFamilySchema, UnsafeRowPair}
+import org.apache.spark.sql.execution.streaming.state.{ReadStateStore, StatePartitionKeyExtractor, StateStore, StateStoreColFamilySchema, UnsafeRowPair}
 import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, IntegerType, LongType, MapType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
@@ -49,8 +53,21 @@ object SchemaUtil {
       keySchema: StructType,
       valueSchema: StructType,
       transformWithStateVariableInfoOpt: Option[TransformWithStateVariableInfo],
-      stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema]): StructType = {
-    if (transformWithStateVariableInfoOpt.isDefined) {
+      stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema],
+      storeMetadata: Array[StateMetadataTableEntry],
+      stateFormatVersion: Option[Int] = None): StructType = {
+    if (sourceOptions.internalOnlyReadAllColumnFamilies) {
+      // Extract partition key schema using StatePartitionKeyExtractor
+      require(storeMetadata.nonEmpty)
+      val extractor = getExtractor(
+        storeMetadata.head.operatorName, keySchema, sourceOptions.storeName,
+        transformWithStateVariableInfoOpt, stateFormatVersion)
+      new StructType()
+        .add("partition_key", extractor.partitionKeySchema)
+        .add("key_bytes", BinaryType)
+        .add("value_bytes", BinaryType)
+        .add("column_family_name", StringType)
+    } else if (transformWithStateVariableInfoOpt.isDefined) {
       require(stateStoreColFamilySchemaOpt.isDefined)
       generateSchemaForStateVar(transformWithStateVariableInfoOpt.get,
         stateStoreColFamilySchemaOpt.get, sourceOptions)
@@ -61,20 +78,39 @@ object SchemaUtil {
         .add("key", keySchema)
         .add("value", valueSchema)
         .add("partition_id", IntegerType)
-    } else if (sourceOptions.internalOnlyReadAllColumnFamilies) {
-      new StructType()
-        // TODO [SPARK-54443]: change keySchema to a more specific type after we
-        // can extract partition key from keySchema
-        .add("partition_key", keySchema)
-        .add("key_bytes", BinaryType)
-        .add("value_bytes", BinaryType)
-        .add("column_family_name", StringType)
     } else {
       new StructType()
         .add("key", keySchema)
         .add("value", valueSchema)
         .add("partition_id", IntegerType)
     }
+  }
+
+  /**
+   * Creates a StatePartitionKeyExtractor for the given operator.
+   * This is used to extract partition keys from state store keys for state repartitioning.
+   */
+  def getExtractor(
+      operatorName: String,
+      keySchema: StructType,
+      storeName: String,
+      transformWithStateVariableInfoOpt: Option[TransformWithStateVariableInfo],
+      stateFormatVersion: Option[Int]): StatePartitionKeyExtractor = {
+    val colFamilyName: String =
+      if (operatorName == StatefulOperatorsUtils.SYMMETRIC_HASH_JOIN_EXEC_OP_NAME) {
+        SymmetricHashJoinStateManager.allStateStoreNames(LeftSide).head
+      } else {
+        transformWithStateVariableInfoOpt.map(_.stateName)
+          .getOrElse(StateStore.DEFAULT_COL_FAMILY_NAME)
+      }
+    StatePartitionKeyExtractorFactory.create(
+      operatorName,
+      keySchema,
+      storeName = storeName,
+      colFamilyName = colFamilyName,
+      stateFormatVersion = stateFormatVersion,
+      transformWithStateVariableInfoOpt
+    )
   }
 
   def unifyStateRowPair(pair: (UnsafeRow, UnsafeRow), partition: Int): InternalRow = {

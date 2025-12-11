@@ -44,6 +44,7 @@ import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryCheckpoint
 import org.apache.spark.sql.execution.streaming.state.{InMemoryStateSchemaProvider, KeyStateEncoderSpec, NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, RocksDBStateStoreProvider, StateSchemaCompatibilityChecker, StateSchemaMetadata, StateSchemaProvider, StateStore, StateStoreColFamilySchema, StateStoreConf, StateStoreId, StateStoreProviderId}
 import org.apache.spark.sql.execution.streaming.state.OfflineStateRepartitionErrors
 import org.apache.spark.sql.execution.streaming.utils.StreamingUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.streaming.TimeMode
 import org.apache.spark.sql.types.StructType
@@ -75,8 +76,17 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
         sourceOptions.resolvedCpLocation,
         stateConf.providerClass)
     }
-    val stateStoreReaderInfo: StateStoreReaderInfo = getStoreMetadataAndRunChecks(
+    val (stateStoreReaderInfo, storeMetadata) = getStoreMetadataAndRunChecks(
       sourceOptions)
+
+    // Extract stateFormatVersion from StateStoreConf for SYMMETRIC_HASH_JOIN operator
+    val isJoin = (
+      storeMetadata.head.operatorName == StatefulOperatorsUtils.SYMMETRIC_HASH_JOIN_EXEC_OP_NAME)
+    val stateFormatVersion: Int = if (storeMetadata.nonEmpty && isJoin) {
+      session.conf.get(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION)
+    } else {
+      1
+    }
 
     // The key state encoder spec should be available for all operators except stream-stream joins
     val keyStateEncoderSpec = if (stateStoreReaderInfo.keyStateEncoderSpecOpt.isDefined) {
@@ -91,16 +101,25 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       stateStoreReaderInfo.stateStoreColFamilySchemaOpt,
       stateStoreReaderInfo.stateSchemaProviderOpt,
       stateStoreReaderInfo.joinColFamilyOpt,
-      Option(stateStoreReaderInfo.allColumnFamiliesReaderInfo))
+      Option(stateStoreReaderInfo.allColumnFamiliesReaderInfo),
+      Option(stateFormatVersion))
   }
 
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
     val sourceOptions = StateSourceOptions.modifySourceOptions(hadoopConf,
       StateSourceOptions.apply(session, hadoopConf, options))
 
-    val stateStoreReaderInfo: StateStoreReaderInfo = getStoreMetadataAndRunChecks(
-      sourceOptions)
+    val (stateStoreReaderInfo, storeMetadata) = getStoreMetadataAndRunChecks(sourceOptions)
     val oldSchemaFilePaths = StateDataSource.getOldSchemaFilePaths(sourceOptions, hadoopConf)
+
+    // Extract stateFormatVersion from StateStoreConf for SYMMETRIC_HASH_JOIN operator
+    val stateFormatVersion = if (storeMetadata.nonEmpty &&
+      (storeMetadata.head.operatorName ==
+        StatefulOperatorsUtils.SYMMETRIC_HASH_JOIN_EXEC_OP_NAME)) {
+        Some(session.conf.get(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION))
+    } else {
+      None
+    }
 
     val stateCheckpointLocation = sourceOptions.stateCheckpointLocation
     try {
@@ -120,10 +139,18 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
           (resultSchema.keySchema, resultSchema.valueSchema)
       }
 
+      val stateVarInfo: Option[TransformWithStateVariableInfo] = if (
+        sourceOptions.internalOnlyReadAllColumnFamilies) {
+        stateStoreReaderInfo.allColumnFamiliesReaderInfo.stateVariableInfos.headOption
+      } else {
+        stateStoreReaderInfo.transformWithStateVariableInfoOpt
+      }
       SchemaUtil.getSourceSchema(sourceOptions, keySchema,
         valueSchema,
-        stateStoreReaderInfo.transformWithStateVariableInfoOpt,
-        stateStoreReaderInfo.stateStoreColFamilySchemaOpt)
+        stateVarInfo,
+        stateStoreReaderInfo.stateStoreColFamilySchemaOpt,
+        storeMetadata,
+        stateFormatVersion)
     } catch {
       case NonFatal(e) =>
         throw StateDataSourceErrors.failedToReadStateSchema(sourceOptions, e)
@@ -257,7 +284,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
   }
 
   private def getStoreMetadataAndRunChecks(sourceOptions: StateSourceOptions):
-    StateStoreReaderInfo = {
+    (StateStoreReaderInfo, Array[StateMetadataTableEntry]) = {
     val storeMetadata = StateDataSource.getStateStoreMetadata(sourceOptions, hadoopConf)
     if (!sourceOptions.internalOnlyReadAllColumnFamilies) {
       // skipping runStateVarChecks for StatePartitionAllColumnFamiliesReader because
@@ -362,14 +389,14 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       }
     }
 
-    StateStoreReaderInfo(
+    (StateStoreReaderInfo(
       keyStateEncoderSpecOpt,
       stateStoreColFamilySchemaOpt,
       transformWithStateVariableInfoOpt,
       stateSchemaProvider,
       joinColFamilyOpt,
       AllColumnFamiliesReaderInfo(stateStoreColFamilySchemas, stateVariableInfos)
-    )
+    ), storeMetadata)
   }
 
   private def getKeyStateEncoderSpec(

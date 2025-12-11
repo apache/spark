@@ -46,7 +46,8 @@ class StateTable(
     stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema],
     stateSchemaProviderOpt: Option[StateSchemaProvider],
     joinColFamilyOpt: Option[String],
-    allColumnFamiliesReaderInfo: Option[AllColumnFamiliesReaderInfo] = None)
+    allColumnFamiliesReaderInfo: Option[AllColumnFamiliesReaderInfo] = None,
+    stateFormatVersion: Option[Int] = None)
   extends Table with SupportsRead with SupportsMetadataColumns {
 
   import StateTable._
@@ -88,7 +89,7 @@ class StateTable(
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
     new StateScanBuilder(session, schema, sourceOptions, stateConf, keyStateEncoderSpec,
       stateVariableInfoOpt, stateStoreColFamilySchemaOpt, stateSchemaProviderOpt,
-      joinColFamilyOpt, allColumnFamiliesReaderInfo)
+      joinColFamilyOpt, allColumnFamiliesReaderInfo, stateFormatVersion)
 
   override def properties(): util.Map[String, String] = Map.empty[String, String].asJava
 

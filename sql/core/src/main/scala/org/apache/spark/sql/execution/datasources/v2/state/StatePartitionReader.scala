@@ -49,7 +49,8 @@ class StatePartitionReaderFactory(
     stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema],
     stateSchemaProviderOpt: Option[StateSchemaProvider],
     joinColFamilyOpt: Option[String],
-    allColumnFamiliesReaderInfo: Option[AllColumnFamiliesReaderInfo])
+    allColumnFamiliesReaderInfo: Option[AllColumnFamiliesReaderInfo],
+    stateFormatVersion: Option[Int])
   extends PartitionReaderFactory {
 
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
@@ -58,7 +59,7 @@ class StatePartitionReaderFactory(
       require(allColumnFamiliesReaderInfo.isDefined)
       new StatePartitionAllColumnFamiliesReader(storeConf, hadoopConf,
         stateStoreInputPartition, schema, keyStateEncoderSpec, stateStoreColFamilySchemaOpt,
-        stateSchemaProviderOpt, allColumnFamiliesReaderInfo.get)
+        stateSchemaProviderOpt, allColumnFamiliesReaderInfo.get, stateFormatVersion)
     } else if (stateStoreInputPartition.sourceOptions.readChangeFeed) {
       new StateStoreChangeDataPartitionReader(storeConf, hadoopConf,
         stateStoreInputPartition, schema, keyStateEncoderSpec, stateVariableInfoOpt,
@@ -268,7 +269,8 @@ class StatePartitionAllColumnFamiliesReader(
     keyStateEncoderSpec: KeyStateEncoderSpec,
     defaultStateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema],
     stateSchemaProviderOpt: Option[StateSchemaProvider],
-    allColumnFamiliesReaderInfo: AllColumnFamiliesReaderInfo)
+    allColumnFamiliesReaderInfo: AllColumnFamiliesReaderInfo,
+    stateFormatVersion: Option[Int])
   extends StatePartitionReaderBase(
     storeConf,
     hadoopConf, partition, schema,
