@@ -486,26 +486,13 @@ def _handle_udaf_aggregation_in_grouped_data(
     # Get grouping columns
     grouping_cols = _extract_grouping_columns_from_jvm(jgd)
 
-    # Try Catalyst optimizer path first (via Scala pythonAggregatorUDAF)
-    try:
-        if hasattr(jgd, "pythonAggregatorUDAF"):
-            return _apply_udaf_via_catalyst(
-                df,
-                jgd,
-                udaf_func,
-                udaf_col_expr,
-                grouping_cols if grouping_cols else None,
-            )
-    except Exception:
-        # Fall back to Python-only path on any error
-        pass
-
-    # Python-only implementation (fallback)
-    return _apply_udaf_to_dataframe(
+    # Use Catalyst optimizer path (via Scala pythonAggregatorUDAF)
+    return _apply_udaf_via_catalyst(
         df,
+        jgd,
         udaf_func,
         udaf_col_expr,
-        grouping_cols=grouping_cols if grouping_cols else None,
+        grouping_cols if grouping_cols else None,
     )
 
 
@@ -756,126 +743,6 @@ def _build_result_schema(
         return ", ".join(schema_parts)
     else:
         return f"result {return_type_str}"
-
-
-def _apply_udaf_to_dataframe(
-    df: "DataFrame",
-    udaf_func: UserDefinedAggregateFunction,
-    *cols: "ColumnOrName",
-    grouping_cols: Optional[List[Column]] = None,
-) -> "DataFrame":
-    """
-    Apply a UDAF to a DataFrame using mapInArrow and applyInArrow.
-
-    This is an internal helper function that implements the aggregation pattern:
-    1. Apply reduce via mapInArrow (with random key for distribution)
-    2. Group by key and apply merge via applyInArrow
-    3. Merge all key groups into final result via applyInArrow
-    4. Select and rename the result column
-
-    Parameters
-    ----------
-    df : DataFrame
-        The input DataFrame.
-    udaf_func : UserDefinedAggregateFunction
-        The UDAF to apply.
-    *cols : ColumnOrName
-        The columns to aggregate.
-    grouping_cols : Optional[List[Column]], optional
-        The grouping columns if this is a grouped aggregation.
-
-    Returns
-    -------
-    DataFrame
-        The aggregated result.
-    """
-    if not cols:
-        raise PySparkTypeError(
-            errorClass="CANNOT_BE_EMPTY",
-            messageParameters={"arg_name": "cols"},
-        )
-
-    if len(cols) > 1:
-        raise PySparkNotImplementedError(
-            errorClass="NOT_IMPLEMENTED",
-            messageParameters={
-                "feature": "Multi-column UDAF. Currently only single column is supported."
-            },
-        )
-
-    # Extract column name and expression
-    col_expr, col_name = _extract_column_name(cols[0])
-
-    # Handle grouping columns
-    has_grouping = grouping_cols is not None and len(grouping_cols) > 0
-    grouping_col_names = _extract_grouping_column_names(grouping_cols) if has_grouping else []
-
-    # Get aggregator info
-    serialized_aggregator = udaf_func._serialized_aggregator
-    return_type = udaf_func.returnType
-    return_type_str = (
-        return_type.simpleString() if hasattr(return_type, "simpleString") else str(return_type)
-    )
-
-    # Get max key for random grouping
-    max_key = _get_max_key_for_random_grouping(df)
-
-    # Create aggregation functions
-    reduce_func = _create_reduce_func(serialized_aggregator, max_key, len(grouping_col_names))
-    merge_func = _create_merge_func(serialized_aggregator)
-    final_merge_func = _create_final_merge_func(
-        serialized_aggregator,
-        return_type,
-        has_grouping,
-        grouping_col_names,
-        udaf_func._name,
-        col_name,
-    )
-
-    # Step 1: Apply reduce via mapInArrow
-    from pyspark.sql.functions import col as spark_col
-
-    if has_grouping:
-        select_cols = grouping_cols + [col_expr.alias("value")]
-        intermediate_df = df.select(*select_cols).mapInArrow(
-            reduce_func,
-            schema="key bigint, buffer binary",
-        )
-    else:
-        intermediate_df = df.select(col_expr.alias("value")).mapInArrow(
-            reduce_func,
-            schema="key bigint, buffer binary",
-        )
-
-    # Step 2: Group by key and apply merge via applyInArrow
-    merged_df = intermediate_df.groupBy("key").applyInArrow(
-        merge_func,
-        schema="buffer binary",
-    )
-
-    # Step 3: Merge all key groups into final result
-    from pyspark.sql.functions import lit
-
-    result_col_name_safe = f"{udaf_func._name}_{col_name}".replace("(", "_").replace(")", "_")
-    schema_str = _build_result_schema(
-        has_grouping, grouping_col_names, result_col_name_safe, return_type_str
-    )
-
-    result_df = (
-        merged_df.select(lit(0).alias("final_key"), spark_col("buffer").alias("buffer"))
-        .groupBy("final_key")
-        .applyInArrow(final_merge_func, schema=schema_str)
-    )
-
-    # Step 4: Return the result DataFrame with proper column names
-    if has_grouping:
-        result_col_name = f"{udaf_func._name}({col_name})"
-        select_exprs = [spark_col(gc_name) for gc_name in grouping_col_names]
-        select_exprs.append(spark_col(result_col_name_safe).alias(result_col_name))
-        return result_df.select(*select_exprs)
-    else:
-        result_col_name = f"{udaf_func._name}({col_name})"
-        return result_df.select(spark_col("result").alias(result_col_name))
 
 
 def udaf(
