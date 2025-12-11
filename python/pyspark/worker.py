@@ -3326,6 +3326,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
                     tuple(batch_series[o] for o in arg_offsets) for batch_series in batch_iter
                 )
             return f(series_iter)
+
     elif eval_type in (
         PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
         PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,

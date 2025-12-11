@@ -366,7 +366,9 @@ class GroupedAggPandasUDFTestsMixin:
             .sort(["(v % 2)", "plus_one(id)"])
         )
         expected6 = (
-            df.groupby(df.v % 2, plus_one(df.id)).agg(sf.sum(df.v)).sort(["(v % 2)", "plus_one(id)"])
+            df.groupby(df.v % 2, plus_one(df.id))
+            .agg(sf.sum(df.v))
+            .sort(["(v % 2)", "plus_one(id)"])
         )
 
         # groupby one expression and one scalar pandas UDF
