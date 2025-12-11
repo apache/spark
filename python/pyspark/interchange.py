@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 from typing import Iterator
-import pyarrow
+import pyarrow as pa
 
 import pyspark.sql
 from pyspark.sql.types import StructType, StructField, BinaryType

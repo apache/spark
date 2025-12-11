@@ -27,6 +27,7 @@ except ImportError:
     DUCKDB_TESTS = False
 
 
+@unittest.skipIf(not DUCKDB_TESTS, " ... ")
 class TestSparkArrowCStreamer(unittest.TestCase):
     def test_spark_arrow_c_streamer(self):
         if not DUCKDB_TESTS:
