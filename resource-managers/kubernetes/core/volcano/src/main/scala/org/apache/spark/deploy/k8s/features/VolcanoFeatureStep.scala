@@ -18,6 +18,7 @@ package org.apache.spark.deploy.k8s.features
 
 import java.io.ByteArrayInputStream
 
+import com.fasterxml.jackson.core.JsonParseException
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory
 import io.fabric8.kubernetes.api.model._
@@ -89,7 +90,7 @@ private[spark] class VolcanoFeatureStep extends KubernetesDriverCustomFeatureCon
           .load(new ByteArrayInputStream(templateYaml.getBytes()))
           .item()
       } catch {
-        case e: Exception =>
+        case e: JsonParseException =>
           throw new SparkException(f"The ${POD_GROUP_TEMPLATE_JSON_KEY} provided is invalid", e)
       }
     }
