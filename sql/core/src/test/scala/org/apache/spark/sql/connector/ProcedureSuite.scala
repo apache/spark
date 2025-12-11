@@ -518,47 +518,64 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
       checkAnswer(
         sql("DESC PROCEDURE cat.ns.foo"),
         Row("Procedure:   sum") ::
-          Row("Description: sum integers") :: Nil)
+          Row("Description: sum integers") ::
+          Row("Parameters:  IN in1 INT") ::
+          Row("             IN in2 INT") :: Nil)
 
       checkAnswer(
         // use DESCRIBE instead of DESC
         sql("DESCRIBE PROCEDURE cat.ns.foo"),
         Row("Procedure:   sum") ::
-          Row("Description: sum integers") :: Nil)
+          Row("Description: sum integers") ::
+          Row("Parameters:  IN in1 INT") ::
+          Row("             IN in2 INT") :: Nil)
 
       checkAnswer(
         // use default catalog
         sql("DESC PROCEDURE ns.foo"),
         Row("Procedure:   sum") ::
-          Row("Description: sum integers") :: Nil)
+          Row("Description: sum integers") ::
+          Row("Parameters:  IN in1 INT") ::
+          Row("             IN in2 INT") :: Nil)
 
       checkAnswer(
         // use multi-part namespace
         sql("DESCRIBE PROCEDURE cat.ns.db.abc"),
         Row("Procedure:   long_sum") ::
-          Row("Description: sum longs") :: Nil)
+          Row("Description: sum longs") ::
+          Row("Parameters:  IN in1 BIGINT") ::
+          Row("             IN in2 BIGINT") :: Nil)
 
       checkAnswer(
         // use multi-part namespace with default catalog
         sql("DESCRIBE PROCEDURE ns.db.abc"),
         Row("Procedure:   long_sum") ::
-          Row("Description: sum longs") :: Nil)
+          Row("Description: sum longs") ::
+          Row("Parameters:  IN in1 BIGINT") ::
+          Row("             IN in2 BIGINT") :: Nil)
 
       checkAnswer(
         sql("DESC PROCEDURE cat.``.xyz"),
         Row("Procedure:   complex") ::
-          Row("Description: complex procedure") :: Nil)
+          Row("Description: complex procedure") ::
+          Row("Parameters:  IN in1 STRING DEFAULT 'A'") ::
+          Row("             IN in2 STRING DEFAULT 'B'") ::
+          Row("             IN in3 INT    DEFAULT 1 + 1 - 1") :: Nil)
 
       checkAnswer(
         sql("DESC PROCEDURE cat.xxx"),
         Row("Procedure:   struct_input") ::
-          Row("Description: struct procedure") :: Nil)
+          Row("Description: struct procedure") ::
+          Row("Parameters:  IN in1 STRUCT<nested1: INT, nested2: STRING>") ::
+          Row("             IN in2 STRING                               ") :: Nil)
 
       checkAnswer(
         // check across catalogs
         sql("DESC PROCEDURE cat2.ns_1.db_1.foo"),
         Row("Procedure:   void") ::
-          Row("Description: void procedure") :: Nil)
+          Row("Description: void procedure") ::
+          Row("Parameters:  IN in1 STRING") ::
+          Row("             IN in2 STRING") :: Nil)
     }
   }
 
