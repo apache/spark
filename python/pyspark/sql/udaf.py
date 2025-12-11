@@ -293,9 +293,9 @@ class UserDefinedAggregateFunction:
         ...     def finish(reduction):
         ...         return reduction
         ...
-        >>> sum_udaf = udaf(MySum(), "bigint")  # doctest: +SKIP
-        >>> df = spark.createDataFrame([(1,), (2,), (3,)], ["value"])  # doctest: +SKIP
-        >>> df.agg(sum_udaf(df.value)).show()  # doctest: +SKIP
+        >>> sum_udaf = udaf(MySum(), "bigint")
+        >>> df = spark.createDataFrame([(1,), (2,), (3,)], ["value"])
+        >>> df.agg(sum_udaf(df.value)).show()
         +------------+
         |MySum(value)|
         +------------+
@@ -856,9 +856,9 @@ def udaf(
     ...     def finish(reduction):
     ...         return reduction
     ...
-    >>> sum_udaf = udaf(MySum(), "bigint")  # doctest: +SKIP
-    >>> df = spark.createDataFrame([(1,), (2,), (3,)], ["value"])  # doctest: +SKIP
-    >>> df.agg(sum_udaf(df.value)).show()  # doctest: +SKIP
+    >>> sum_udaf = udaf(MySum(), "bigint")
+    >>> df = spark.createDataFrame([(1,), (2,), (3,)], ["value"])
+    >>> df.agg(sum_udaf(df.value)).show()
     +------------+
     |MySum(value)|
     +------------+
@@ -866,3 +866,33 @@ def udaf(
     +------------+
     """
     return UserDefinedAggregateFunction(aggregator, returnType, name)
+
+
+def _test() -> None:
+    import doctest
+    import sys
+    from pyspark.sql import SparkSession
+    from pyspark.testing.utils import have_pandas, have_pyarrow
+    import pyspark.sql.udaf
+
+    globs = pyspark.sql.udaf.__dict__.copy()
+
+    if not have_pandas or not have_pyarrow:
+        del pyspark.sql.udaf.udaf.__doc__
+        del pyspark.sql.udaf.UserDefinedAggregateFunction.__call__.__doc__
+
+    spark = SparkSession.builder.master("local[4]").appName("sql.udaf tests").getOrCreate()
+    globs["spark"] = spark
+
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.udaf,
+        globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,
+    )
+    spark.stop()
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()
