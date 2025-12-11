@@ -686,9 +686,7 @@ class UDAFTestsMixin:
             def finish(reduction):
                 return reduction
 
-        df = self.spark.createDataFrame(
-            [(True,), (False,), (True,), (True,), (False,)], ["flag"]
-        )
+        df = self.spark.createDataFrame([(True,), (False,), (True,), (True,), (False,)], ["flag"])
         count_udaf = udaf(CountTrue(), "bigint", "CountTrue")
         result = df.agg(count_udaf(df.flag))
         assertDataFrameEqual(result, [Row(**{"CountTrue(flag)": 3})])
@@ -800,9 +798,7 @@ class UDAFTestsMixin:
                 return float(reduction)
 
         schema = StructType([StructField("amount", DecimalType(10, 2), True)])
-        df = self.spark.createDataFrame(
-            [(D("10.50"),), (D("20.25"),), (D("30.25"),)], schema
-        )
+        df = self.spark.createDataFrame([(D("10.50"),), (D("20.25"),), (D("30.25"),)], schema)
         sum_udaf = udaf(DecimalSum(), "double", "DecSum")
         result = df.agg(sum_udaf(df.amount))
         collected = result.collect()[0][0]
@@ -863,9 +859,7 @@ class UDAFTestsMixin:
                 return reduction
 
         schema = StructType([StructField("nums", ArrayType(IntegerType()), True)])
-        df = self.spark.createDataFrame(
-            [([1, 2, 3],), ([4, 5],), ([6],)], schema
-        )
+        df = self.spark.createDataFrame([([1, 2, 3],), ([4, 5],), ([6],)], schema)
         sum_udaf = udaf(ArraySum(), "bigint", "ArraySum")
         result = df.agg(sum_udaf(df.nums))
         assertDataFrameEqual(result, [Row(**{"ArraySum(nums)": 21})])  # 1+2+3+4+5+6
@@ -894,9 +888,7 @@ class UDAFTestsMixin:
             def finish(reduction):
                 return reduction
 
-        schema = StructType(
-            [StructField("kv", MapType(StringType(), IntegerType()), True)]
-        )
+        schema = StructType([StructField("kv", MapType(StringType(), IntegerType()), True)])
         df = self.spark.createDataFrame(
             [({"a": 1, "b": 2},), ({"c": 3},), ({"d": 4, "e": 5},)], schema
         )
