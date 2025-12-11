@@ -53,20 +53,19 @@ class StatePartitionAllColumnFamiliesWriter(
     storeName: String,
     currentBatchId: Long,
     columnFamilyToSchemaMap: HashMap[String, StatePartitionWriterColumnFamilyInfo]) {
-  private val dummySchema: StructType =
-    StructType(Array(StructField("__dummy__", NullType)))
   private val defaultSchema = {
     columnFamilyToSchemaMap.get(StateStore.DEFAULT_COL_FAMILY_NAME) match {
       case Some(info) => info.schema
       case None =>
         // Return a dummy StateStoreColFamilySchema if not found
+        val placeholderSchema = columnFamilyToSchemaMap.head._2.schema
         StateStoreColFamilySchema(
           colFamilyName = "__dummy__",
           keySchemaId = 0,
-          keySchema = dummySchema,
+          keySchema = placeholderSchema.keySchema,
           valueSchemaId = 0,
-          valueSchema = dummySchema,
-          keyStateEncoderSpec = Option(NoPrefixKeyStateEncoderSpec(dummySchema)))
+          valueSchema = placeholderSchema.valueSchema,
+          keyStateEncoderSpec = Option(NoPrefixKeyStateEncoderSpec(placeholderSchema.keySchema)))
     }
   }
 
