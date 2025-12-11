@@ -1216,7 +1216,6 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
         Each outer iterator element represents a group, containing an iterator of Series lists
         (one list per batch).
         """
-        import pyarrow as pa
 
         def process_group(batches: "Iterator[pa.RecordBatch]"):
             # Convert each Arrow batch to pandas Series list on-demand, yielding one list per batch
