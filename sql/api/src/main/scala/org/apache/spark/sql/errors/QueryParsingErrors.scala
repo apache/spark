@@ -780,11 +780,8 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       operation: String): Throwable =
     new ParseException(
       errorClass = "MISSING_CLAUSES_FOR_OPERATION",
-      messageParameters = Map(
-        "clauses" -> clauses,
-        "operation" -> operation),
-      ctx
-    )
+      messageParameters = Map("clauses" -> clauses, "operation" -> operation),
+      ctx)
 
   def invalidDatetimeUnitError(
       ctx: ParserRuleContext,
