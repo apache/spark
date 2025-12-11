@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.SymmetricHashJoinStateManager
-import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.{StateVariableType, TransformWithStateVariableInfo}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.{StateStoreColumnFamilySchemaUtils, StateVariableType, TransformWithStateVariableInfo}
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.execution.streaming.state.RecordType.{getRecordTypeAsString, RecordType}
 import org.apache.spark.sql.types.{NullType, StructField, StructType}
@@ -143,14 +143,15 @@ abstract class StatePartitionReaderBase(
       useColumnFamilies = useColFamilies, storeConf, hadoopConf.value,
       useMultipleValuesPerKey = useMultipleValuesPerKey, stateSchemaProviderOpt)
 
-    val isInternal = partition.sourceOptions.readRegisteredTimers
-
     if (useColFamilies) {
       val store = provider.getStore(
         partition.sourceOptions.batchId + 1,
         getEndStoreUniqueId)
       require(stateStoreColFamilySchemaOpt.isDefined)
       val stateStoreColFamilySchema = stateStoreColFamilySchemaOpt.get
+      val isInternal = partition.sourceOptions.readRegisteredTimers ||
+        StateStoreColumnFamilySchemaUtils.isInternalColFamilyTestOnly(
+          stateStoreColFamilySchema.colFamilyName)
       require(stateStoreColFamilySchema.keyStateEncoderSpec.isDefined)
       store.createColFamilyIfAbsent(
         stateStoreColFamilySchema.colFamilyName,

@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadata
 import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorsUtils
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.SymmetricHashJoinStateManager
-import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.{TransformWithStateOperatorProperties, TransformWithStateVariableInfo}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.{StateStoreColumnFamilySchemaUtils, StateVariableType, TransformWithStateOperatorProperties, TransformWithStateVariableInfo}
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.TimerStateUtils
 import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.DIR_NAME_STATE
 import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryCheckpointMetadata
@@ -193,7 +193,8 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
 
       val stateVars = twsOperatorProperties.stateVariables
       val stateVarInfo = stateVars.filter(stateVar => stateVar.stateName == stateVarName)
-      if (stateVarInfo.size != 1) {
+      if (stateVarInfo.size != 1 &&
+        !StateStoreColumnFamilySchemaUtils.isInternalColFamilyTestOnly(stateVarName)) {
         throw StateDataSourceErrors.invalidOptionValue(STATE_VAR_NAME,
           s"State variable $stateVarName is not defined for the transformWithState operator.")
       }
@@ -293,8 +294,15 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
           if (sourceOptions.internalOnlyReadAllColumnFamilies) {
             stateVariableInfos = operatorProperties.stateVariables
           } else {
-            val stateVarInfoList = operatorProperties.stateVariables
+            var stateVarInfoList = operatorProperties.stateVariables
               .filter(stateVar => stateVar.stateName == stateVarName)
+            if (stateVarInfoList.isEmpty &&
+              StateStoreColumnFamilySchemaUtils.isInternalColFamilyTestOnly(stateVarName)) {
+              // pass this dummy TWSStateVariableInfo for TWS internal column family during testing,
+              stateVarInfoList = List(TransformWithStateVariableInfo(
+                stateVarName, StateVariableType.ValueState, false
+              ))
+            }
             require(stateVarInfoList.size == 1, s"Failed to find unique state variable info " +
               s"for state variable $stateVarName in operator ${sourceOptions.operatorId}")
             val stateVarInfo = stateVarInfoList.head

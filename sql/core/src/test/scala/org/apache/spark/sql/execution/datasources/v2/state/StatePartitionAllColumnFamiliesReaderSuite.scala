@@ -826,22 +826,38 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
         "listState",
         groupByKeySchema,
         listStateValueSchema)
+      val dummyValueSchema = StructType(Array(StructField("__dummy__", NullType)))
+      val ttlIndexKeySchema = StructType(Array(
+        StructField("expirationMs", LongType, nullable = false),
+        StructField("elementKey", groupByKeySchema)
+      ))
+      val minExpiryValueSchema = StructType(Array(
+        StructField("minExpiry", LongType)
+      ))
+      val countValueSchema = StructType(Array(
+        StructField("count", LongType)
+      ))
+      val columnFamilyAndKeyValueSchema = Seq(
+        ("$ttl_listState", ttlIndexKeySchema, dummyValueSchema),
+        ("$min_listState", groupByKeySchema, minExpiryValueSchema),
+        ("$count_listState", groupByKeySchema, countValueSchema)
+      )
+      columnFamilyAndKeyValueSchema.foreach(pair => {
+        val normalDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, pair._1)
+          .load()
+          .selectExpr("partition_id", "key", "value")
 
-      // Validate that TTL-related column families have the expected number of entries
-      val ttlIndexRows = allBytesData.filter(_.getString(3) == "$ttl_listState")
-      val minExpiryRows = allBytesData.filter(_.getString(3) == "$min_listState")
-      val countIndexRows = allBytesData.filter(_.getString(3) == "$count_listState")
-
-      // We have 2 grouping keys (a, b), so each secondary index should have entries
-      // TTL index has one entry per unique (expirationMs, groupingKey) pair
-      // Min expiry and count indexes have one entry per grouping key
-      assert(minExpiryRows.length == 2,
-        s"Expected 2 min expiry entries (one per key), got ${minExpiryRows.length}")
-      assert(countIndexRows.length == 2,
-        s"Expected 2 count index entries (one per key), got ${countIndexRows.length}")
-      // TTL index entries depend on batching - we processed 2 batches with different timestamps
-      assert(ttlIndexRows.length >= 2,
-        s"Expected at least 2 TTL index entries, got ${ttlIndexRows.length}")
+        compareNormalAndBytesData(
+          normalDf.collect(),
+          allBytesData,
+          pair._1,
+          pair._2,
+          pair._3)
+      }
+      )
     }
   }
 
