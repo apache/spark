@@ -19,16 +19,13 @@ package org.apache.spark.sql.execution.command
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{SparkException, SparkThrowable}
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{Row, SparkSession}
-import org.apache.spark.sql.catalyst.analysis.ResolvedIdentifier
+import org.apache.spark.sql.catalyst.analysis.ResolvedProcedure
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connector.catalog.{Identifier, ProcedureCatalog}
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.connector.catalog.procedures.UnboundProcedure
-import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.connector.catalog.procedures.{ProcedureParameter, UnboundProcedure}
+import org.apache.spark.sql.types.{StringType, StructType}
 
 /**
  * A command for users to describe a procedure.
@@ -45,32 +42,61 @@ case class DescribeProcedureCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     child match {
-      case ResolvedIdentifier(catalog, ident) =>
-        val procedure = load(catalog.asProcedureCatalog, ident)
-        describeV2Procedure(procedure)
+      case ResolvedProcedure(catalog, ident, procedure) =>
+        describeV2Procedure(procedure.asInstanceOf[UnboundProcedure])
       case _ =>
         throw SparkException.internalError(s"Invalid procedure identifier: ${child.getClass}")
     }
   }
 
-  private def load(catalog: ProcedureCatalog, ident: Identifier): UnboundProcedure = {
-    try {
-      catalog.loadProcedure(ident)
-    } catch {
-      case e: Exception if !e.isInstanceOf[SparkThrowable] =>
-        val nameParts = catalog.name +: ident.asMultipartIdentifier
-        throw QueryCompilationErrors.failedToLoadRoutineError(nameParts, e)
-    }
-  }
 
   private def describeV2Procedure(procedure: UnboundProcedure): Seq[Row] = {
     val buffer = new ArrayBuffer[(String, String)]
     append(buffer, "Procedure:", procedure.name())
     append(buffer, "Description:", procedure.description())
 
+    // UnboundProcedure requires binding to retrieve parameters. We try to bind with an empty
+    // argument list to get the parameters. If the procedure requires arguments, binding might
+    // fail. In that case, we suppress the exception and just show the procedure metadata
+    // without parameters.
+    try {
+      val bound = procedure.bind(new StructType())
+      val params = bound.parameters()
+      if (params != null && params.nonEmpty) {
+        val formattedParams = formatProcedureParameters(params)
+        append(buffer, "Parameters:", formattedParams.head)
+        formattedParams.tail.foreach(s => append(buffer, "", s))
+      } else {
+        append(buffer, "Parameters:", "()")
+      }
+    } catch {
+      case _: Exception =>
+        // Ignore if binding fails
+    }
+
     val keys = tabulate(buffer.map(_._1).toSeq)
     val values = buffer.map(_._2)
     keys.zip(values).map { case (key, value) => Row(s"$key $value") }
+  }
+
+  // This helper is needed because the V2 Procedure API returns an array of ProcedureParameter,
+  // which differs from the StructType used by internal stored procedures (handled by
+  // formatParameters).
+  private def formatProcedureParameters(params: Array[ProcedureParameter]): Seq[String] = {
+    val modes = tabulate(params.map(_.mode().toString).toSeq)
+    val names = tabulate(params.map(_.name()).toSeq)
+    val dataTypes = tabulate(params.map(_.dataType().sql).toSeq)
+    val comments = params.map { p =>
+      if (p.comment() != null) s" '${p.comment()}'" else ""
+    }
+    val defaults = params.map { p =>
+      val defaultVal = if (p.defaultValue() != null) p.defaultValue().getSql else null
+      if (defaultVal != null) s" DEFAULT $defaultVal" else ""
+    }
+    modes zip names zip dataTypes zip defaults zip comments map {
+      case ((((mode, name), dataType), default), comment) =>
+        s"$mode $name $dataType$default$comment"
+    }
   }
 
   private def append(buffer: ArrayBuffer[(String, String)], key: String, value: String): Unit = {
