@@ -16,6 +16,8 @@
  */
 package org.apache.spark.deploy.k8s.features
 
+import java.io.ByteArrayInputStream
+
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory
 import io.fabric8.kubernetes.api.model._
@@ -26,10 +28,8 @@ import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverConf, KubernetesExecutorConf, SparkPod}
 import org.apache.spark.internal.Logging
 
-private[spark] class VolcanoFeatureStep
-    extends KubernetesDriverCustomFeatureConfigStep
-    with KubernetesExecutorCustomFeatureConfigStep
-    with Logging {
+private[spark] class VolcanoFeatureStep extends KubernetesDriverCustomFeatureConfigStep
+  with KubernetesExecutorCustomFeatureConfigStep with Logging {
   import VolcanoFeatureStep._
 
   private var kubernetesConf: KubernetesConf = _
@@ -47,9 +47,8 @@ private[spark] class VolcanoFeatureStep
 
   override def getAdditionalPreKubernetesResources(): Seq[HasMetadata] = {
     if (kubernetesConf.isInstanceOf[KubernetesExecutorConf]) {
-      logWarning(
-        "VolcanoFeatureStep#getAdditionalPreKubernetesResources() is not supported " +
-          "for executor.")
+      logWarning("VolcanoFeatureStep#getAdditionalPreKubernetesResources() is not supported " +
+        "for executor.")
       return Seq.empty
     }
     lazy val client = new DefaultVolcanoClient
@@ -87,13 +86,11 @@ private[spark] class VolcanoFeatureStep
           .writeValueAsString(new ObjectMapper(new YAMLFactory()).readTree(templateJson))
         volcanoClient
           .podGroups()
-          .load(new java.io.ByteArrayInputStream(templateYaml.getBytes()))
+          .load(new ByteArrayInputStream(templateYaml.getBytes()))
           .item()
       } catch {
         case e: Exception =>
-          throw new SparkException(
-            f"The ${POD_GROUP_TEMPLATE_JSON_KEY} provided is not validated",
-            e)
+          throw new SparkException(f"The ${POD_GROUP_TEMPLATE_JSON_KEY} provided is invalid", e)
       }
     }
   }
@@ -101,7 +98,7 @@ private[spark] class VolcanoFeatureStep
   override def configurePod(pod: SparkPod): SparkPod = {
     val k8sPodBuilder = new PodBuilder(pod.pod)
       .editMetadata()
-      .addToAnnotations(POD_GROUP_ANNOTATION, podGroupName)
+        .addToAnnotations(POD_GROUP_ANNOTATION, podGroupName)
       .endMetadata()
     val k8sPod = k8sPodBuilder.build()
     SparkPod(k8sPod, pod.container)

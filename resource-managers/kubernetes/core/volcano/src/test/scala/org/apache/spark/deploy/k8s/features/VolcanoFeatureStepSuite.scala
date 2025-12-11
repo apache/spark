@@ -34,8 +34,7 @@ class VolcanoFeatureStepSuite extends SparkFunSuite {
 
     val annotations = configuredPod.pod.getMetadata.getAnnotations
 
-    assert(
-      annotations.get("scheduling.k8s.io/group-name") === s"${kubernetesConf.appId}-podgroup")
+    assert(annotations.get("scheduling.k8s.io/group-name") === s"${kubernetesConf.appId}-podgroup")
     val podGroup = step.getAdditionalPreKubernetesResources().head.asInstanceOf[PodGroup]
     assert(podGroup.getMetadata.getName === s"${kubernetesConf.appId}-podgroup")
   }
@@ -47,13 +46,12 @@ class VolcanoFeatureStepSuite extends SparkFunSuite {
     step.init(kubernetesConf)
     val configuredPod = step.configurePod(SparkPod.initialPod())
     val annotations = configuredPod.pod.getMetadata.getAnnotations
-    assert(
-      annotations.get("scheduling.k8s.io/group-name") === s"${kubernetesConf.appId}-podgroup")
+    assert(annotations.get("scheduling.k8s.io/group-name") === s"${kubernetesConf.appId}-podgroup")
   }
 
   test("SPARK-38455: Support driver podgroup template") {
-    val templatePath =
-      new File(getClass.getResource("/driver-podgroup-template.yml").getFile).getAbsolutePath
+    val templatePath = new File(
+      getClass.getResource("/driver-podgroup-template.yml").getFile).getAbsolutePath
     val sparkConf = new SparkConf()
       .set(VolcanoFeatureStep.POD_GROUP_TEMPLATE_FILE_KEY, templatePath)
     val kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf)
@@ -69,7 +67,7 @@ class VolcanoFeatureStepSuite extends SparkFunSuite {
     assert(podGroup.getSpec.getQueue == "driver-queue")
   }
 
-  test("SPARK-38455: Support create driver podgroup by attributes") {
+  test("SPARK-54553: Support create driver podgroup by attributes") {
     val sparkConf = new SparkConf()
       .set(
         VolcanoFeatureStep.POD_GROUP_TEMPLATE_JSON_KEY,

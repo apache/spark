@@ -1991,6 +1991,7 @@ Volcano defines PodGroup spec using [CRD yaml](https://volcano.sh/en/docs/podgro
 
 Similar to [Pod template](#pod-template), Spark users can use Volcano PodGroup Template to define the PodGroup spec configurations.
 Below is an example of PodGroup template:
+
 ```yaml
 apiVersion: scheduling.volcano.sh/v1beta1
 kind: PodGroup
@@ -2009,13 +2010,13 @@ spec:
   queue: default
 ```
 
-You have two options to provide the PodGroup template in spark.
+You have two options to provide the PodGroup template in spark. If both are provided, the `podGroupTemplateFile` will takes precedence.
 1. Use `spark.kubernetes.scheduler.volcano.podGroupTemplateFile` to point to files accessible to the `spark-submit` process
 ```bash
 --conf spark.kubernetes.scheduler.volcano.podGroupTemplateFile=/path/to/podgroup
 ```
 
-2. Use `spark.kubernetes.scheduler.volcano.podGroupTemplateJson` to provide the template in json format.
+2. Use `spark.kubernetes.scheduler.volcano.podGroupTemplateJson` to pass the template directly in JSON format:.
 ```bash
 --conf spark.kubernetes.scheduler.volcano.podGroupTemplateJson={"spec": {"minMember": 1,"minResources": {"cpu": "2","memory": "3Gi"},"priorityClassName": "system-node-critical","queue": "default"}}
 ```
