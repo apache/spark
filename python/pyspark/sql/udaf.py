@@ -44,24 +44,34 @@ class Aggregator:
     This class defines the interface for implementing user-defined aggregate functions (UDAFs)
     in Python. Users should subclass this class and implement the required methods.
 
+    All methods (zero, reduce, merge, finish) MUST be decorated with @staticmethod.
+    This ensures the aggregator can be properly serialized and executed across Spark workers.
+
     .. versionadded:: 4.2.0
 
     Examples
     --------
     >>> class MySum(Aggregator):
-    ...     def zero(self):
+    ...     @staticmethod
+    ...     def zero():
     ...         return 0
-    ...     def reduce(self, buffer, value):
+    ...     @staticmethod
+    ...     def reduce(buffer, value):
     ...         return buffer + value
-    ...     def merge(self, buffer1, buffer2):
+    ...     @staticmethod
+    ...     def merge(buffer1, buffer2):
     ...         return buffer1 + buffer2
-    ...     def finish(self, reduction):
+    ...     @staticmethod
+    ...     def finish(reduction):
     ...         return reduction
     """
 
-    def zero(self) -> Any:
+    @staticmethod
+    def zero() -> Any:
         """
         A zero value for this aggregation. Should satisfy the property that any b + zero = b.
+
+        Must be decorated with @staticmethod.
 
         Returns
         -------
@@ -70,12 +80,15 @@ class Aggregator:
         """
         raise NotImplementedError
 
-    def reduce(self, buffer: Any, value: Any) -> Any:
+    @staticmethod
+    def reduce(buffer: Any, value: Any) -> Any:
         """
         Combine an input value into the current intermediate value.
 
         For performance, the function may modify `buffer` and return it instead of
         constructing a new object.
+
+        Must be decorated with @staticmethod.
 
         Parameters
         ----------
@@ -91,9 +104,12 @@ class Aggregator:
         """
         raise NotImplementedError
 
-    def merge(self, buffer1: Any, buffer2: Any) -> Any:
+    @staticmethod
+    def merge(buffer1: Any, buffer2: Any) -> Any:
         """
         Merge two intermediate values.
+
+        Must be decorated with @staticmethod.
 
         Parameters
         ----------
@@ -109,9 +125,12 @@ class Aggregator:
         """
         raise NotImplementedError
 
-    def finish(self, reduction: Any) -> Any:
+    @staticmethod
+    def finish(reduction: Any) -> Any:
         """
         Transform the output of the reduction.
+
+        Must be decorated with @staticmethod.
 
         Parameters
         ----------
@@ -124,6 +143,51 @@ class Aggregator:
             The final output value.
         """
         raise NotImplementedError
+
+
+def _validate_aggregator_methods(aggregator: Aggregator) -> None:
+    """
+    Validate that all required Aggregator methods are decorated with @staticmethod.
+
+    Parameters
+    ----------
+    aggregator : Aggregator
+        The aggregator instance to validate.
+
+    Raises
+    ------
+    PySparkTypeError
+        If any required method is not a static method.
+    """
+    required_methods = ["zero", "reduce", "merge", "finish"]
+    aggregator_class = type(aggregator)
+
+    for method_name in required_methods:
+        # Check if the method exists on the class (not just inherited from Aggregator base)
+        if not hasattr(aggregator_class, method_name):
+            raise PySparkTypeError(
+                errorClass="NOT_CALLABLE",
+                messageParameters={
+                    "arg_name": f"aggregator.{method_name}",
+                    "arg_type": "missing",
+                },
+            )
+
+        # Get the method from the class definition (not the instance)
+        class_attr = getattr(aggregator_class, method_name)
+
+        # Check if it's a staticmethod by looking at the class __dict__
+        # (methods bound to instances lose their staticmethod wrapper)
+        if method_name in aggregator_class.__dict__:
+            raw_method = aggregator_class.__dict__[method_name]
+            if not isinstance(raw_method, staticmethod):
+                raise PySparkTypeError(
+                    errorClass="NOT_CALLABLE",
+                    messageParameters={
+                        "arg_name": f"aggregator.{method_name}",
+                        "arg_type": f"non-static method (must use @staticmethod decorator)",
+                    },
+                )
 
 
 class UserDefinedAggregateFunction:
@@ -160,6 +224,9 @@ class UserDefinedAggregateFunction:
                     "arg_type": type(returnType).__name__,
                 },
             )
+
+        # Validate that all required methods are static methods
+        _validate_aggregator_methods(aggregator)
 
         self.aggregator = aggregator
         self._returnType = returnType
@@ -772,13 +839,17 @@ def udaf(
     Examples
     --------
     >>> class MySum(Aggregator):
-    ...     def zero(self):
+    ...     @staticmethod
+    ...     def zero():
     ...         return 0
-    ...     def reduce(self, buffer, value):
+    ...     @staticmethod
+    ...     def reduce(buffer, value):
     ...         return buffer + value
-    ...     def merge(self, buffer1, buffer2):
+    ...     @staticmethod
+    ...     def merge(buffer1, buffer2):
     ...         return buffer1 + buffer2
-    ...     def finish(self, reduction):
+    ...     @staticmethod
+    ...     def finish(reduction):
     ...         return reduction
     ...
     >>> sum_udaf = udaf(MySum(), "bigint")
