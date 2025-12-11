@@ -7922,7 +7922,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def coerceMergeNestedTypes: Boolean =
     getConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED)
 
-  override def isTimeTypeEnabled: Boolean = getConf(SQLConf.TIME_TYPE_ENABLED)
+  def isTimeTypeEnabled: Boolean = getConf(SQLConf.TIME_TYPE_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 
