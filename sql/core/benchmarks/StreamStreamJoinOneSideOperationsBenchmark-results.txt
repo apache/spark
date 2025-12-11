@@ -1,0 +1,180 @@
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.7.1
+Apple M3 Max
+[Time-window Join] Append 1000000 rows (changelog checkpoint: true):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------------------------------
+state format version: 1                                                       5847           5847           0          0.2        5846.8       1.0X
+state format version: 2                                                       5894           5894           0          0.2        5893.8       1.0X
+state format version: 3                                                       5983           5983           0          0.2        5982.8       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.7.1
+Apple M3 Max
+[Time-window Join] Append 1000000 rows (changelog checkpoint: false):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------------------
+state format version: 1                                                        5440           5440           0          0.2        5439.9       1.0X
+state format version: 2                                                        5923           5923           0          0.2        5922.9       0.9X
+state format version: 3                                                        5881           5881           0          0.2        5880.9       0.9X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.7.1
+Apple M3 Max
+[Time-window Join] GetJoinedRows 100000 from 1000000 rows (changelog checkpoint: true):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+state format version: 1                                                                          1032           1084          46          0.1       10320.3       1.0X
+state format version: 2                                                                           993           1125         148          0.1        9931.8       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.7.1
+Apple M3 Max
+[Time-window Join] GetJoinedRows 100000 from 1000000 rows (changelog checkpoint: false):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+state format version: 1                                                                            910            915           5          0.1        9096.4       1.0X
+state format version: 2                                                                            889            904          21          0.1        8889.8       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.7.1
+Apple M3 Max
+[Time-window Join] Eviction with 100 from 1000000 rows (changelog checkpoint: true):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+state format version: 1                                                                        305            309           3          0.0     3054322.5       1.0X
+state format version: 2                                                                        313            319           8          0.0     3126385.0       1.0X
+state format version: 3                                                                        411            432          26          0.0     4113978.8       0.7X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.7.1
+Apple M3 Max
+[Time-window Join] Eviction with 100 from 1000000 rows (changelog checkpoint: false):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+state format version: 1                                                                         304            306           3          0.0     3040710.0       1.0X
+state format version: 2                                                                         302            310          10          0.0     3020641.3       1.0X
+state format version: 3                                                                         413            417           2          0.0     4131814.2       0.7X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.7.1
+Apple M3 Max
+[Time-window Join] Eviction with 300000 from 1000000 rows (changelog checkpoint: true):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+state format version: 1                                                                          1294           1335          59          0.2        4312.5       1.0X
+state format version: 2                                                                          1325           1395          99          0.2        4417.1       1.0X
+state format version: 3                                                                          1645           1680          31          0.2        5483.5       0.8X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.7.1
+Apple M3 Max
+[Time-window Join] Eviction with 300000 from 1000000 rows (changelog checkpoint: false):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+state format version: 1                                                                           1129           1133           5          0.3        3762.5       1.0X
+state format version: 2                                                                           1171           1204          55          0.3        3903.6       1.0X
+state format version: 3                                                                           1610           1645          48          0.2        5366.9       0.7X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.7.1
+Apple M3 Max
+[Time-window Join] Eviction with 600000 from 1000000 rows (changelog checkpoint: true):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+state format version: 1                                                                          2200           2220          35          0.3        3665.9       1.0X
+state format version: 2                                                                          2371           2389          16          0.3        3952.4       0.9X
+state format version: 3                                                                          2926           2987         105          0.2        4875.9       0.8X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.7.1
+Apple M3 Max
+[Time-window Join] Eviction with 600000 from 1000000 rows (changelog checkpoint: false):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+state format version: 1                                                                           1928           1934           6          0.3        3213.2       1.0X
+state format version: 2                                                                           1999           2034          48          0.3        3331.9       1.0X
+state format version: 3                                                                           2808           2871          95          0.2        4680.6       0.7X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.7.1
+Apple M3 Max
+[Time-window Join] Eviction with 900000 from 1000000 rows (changelog checkpoint: true):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+state format version: 1                                                                          3029           3058          30          0.3        3365.9       1.0X
+state format version: 2                                                                          3102           3155          85          0.3        3447.0       1.0X
+state format version: 3                                                                          4106           4177          78          0.2        4562.3       0.7X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.7.1
+Apple M3 Max
+[Time-window Join] Eviction with 900000 from 1000000 rows (changelog checkpoint: false):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+state format version: 1                                                                           2744           2790          42          0.3        3049.0       1.0X
+state format version: 2                                                                           2740           2832         142          0.3        3044.2       1.0X
+state format version: 3                                                                           4016           4045          49          0.2        4462.6       0.7X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.7.1
+Apple M3 Max
+[Time-interval Join] Append 1000000 rows (changelog checkpoint: true):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+state format version: 1                                                         3532           3532           0          0.3        3531.6       1.0X
+state format version: 2                                                         3655           3655           0          0.3        3654.7       1.0X
+state format version: 3                                                         3870           3870           0          0.3        3870.4       0.9X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.7.1
+Apple M3 Max
+[Time-interval Join] Append 1000000 rows (changelog checkpoint: false):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------------------
+state format version: 1                                                          3308           3308           0          0.3        3308.0       1.0X
+state format version: 2                                                          3649           3649           0          0.3        3649.4       0.9X
+state format version: 3                                                          3596           3596           0          0.3        3595.7       0.9X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.7.1
+Apple M3 Max
+[Time-interval Join] GetJoinedRows 10000 from 1000000 rows:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------
+state format version: 1                                             25828          26048         205          0.0     2582839.2       1.0X
+state format version: 2                                             13590          13666         121          0.0     1358999.8       1.9X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.7.1
+Apple M3 Max
+[Time-interval Join] GetJoinedRows 10000 from 1000000 rows:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------
+state format version: 1                                             24435          24898         796          0.0     2443472.6       1.0X
+state format version: 2                                             14788          14838          44          0.0     1478761.8       1.7X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.7.1
+Apple M3 Max
+[Time-interval Join] Eviction with 100 from 1000000 rows (changelog checkpoint: true):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+state format version: 1                                                                         1351           1421         109          0.0    13509112.9       1.0X
+state format version: 2                                                                         1310           1445         118          0.0    13095082.5       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.7.1
+Apple M3 Max
+[Time-interval Join] Eviction with 100 from 1000000 rows (changelog checkpoint: false):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+state format version: 1                                                                          1239           1270          27          0.0    12389847.1       1.0X
+state format version: 2                                                                          1265           1310          70          0.0    12648639.6       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.7.1
+Apple M3 Max
+[Time-interval Join] Eviction with 300000 from 1000000 rows (changelog checkpoint: true):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+state format version: 1                                                                            2302           2394         144          0.1        7673.0       1.0X
+state format version: 2                                                                            2348           2409          59          0.1        7826.5       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.7.1
+Apple M3 Max
+[Time-interval Join] Eviction with 300000 from 1000000 rows (changelog checkpoint: false):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+state format version: 1                                                                             2310           2416         120          0.1        7700.0       1.0X
+state format version: 2                                                                             2397           2457          54          0.1        7990.1       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.7.1
+Apple M3 Max
+[Time-interval Join] Eviction with 600000 from 1000000 rows (changelog checkpoint: true):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+state format version: 1                                                                            3186           3291         108          0.2        5309.4       1.0X
+state format version: 2                                                                            3309           3418         124          0.2        5515.8       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.7.1
+Apple M3 Max
+[Time-interval Join] Eviction with 600000 from 1000000 rows (changelog checkpoint: false):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+state format version: 1                                                                             3211           3266          88          0.2        5352.0       1.0X
+state format version: 2                                                                             3170           3251          73          0.2        5282.5       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.7.1
+Apple M3 Max
+[Time-interval Join] Eviction with 900000 from 1000000 rows (changelog checkpoint: true):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+state format version: 1                                                                            4081           4244         214          0.2        4534.1       1.0X
+state format version: 2                                                                            4099           4160         100          0.2        4554.9       1.0X
+
+OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Mac OS X 15.7.1
+Apple M3 Max
+[Time-interval Join] Eviction with 900000 from 1000000 rows (changelog checkpoint: false):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+state format version: 1                                                                             4018           4111          95          0.2        4464.2       1.0X
+state format version: 2                                                                             3982           4071          90          0.2        4424.9       1.0X
+
