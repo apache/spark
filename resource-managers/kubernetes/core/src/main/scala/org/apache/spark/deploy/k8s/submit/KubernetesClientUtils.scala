@@ -122,8 +122,9 @@ object KubernetesClientUtils extends Logging {
    */
   @Since("4.1.0")
   def buildConfigMapJava(configMapName: String, confFileMap: JMap[String, String],
-      withLabels: JMap[String, String]): ConfigMap = {
-    buildConfigMap(configMapName, confFileMap.asScala.toMap, withLabels.asScala.toMap)
+      conf: SparkConf, withLabels: JMap[String, String]): ConfigMap = {
+    buildConfigMap(configMapName, confFileMap.asScala.toMap,
+      conf, withLabels.asScala.toMap)
   }
 
   /**
@@ -132,16 +133,27 @@ object KubernetesClientUtils extends Logging {
    */
   @Since("3.1.0")
   def buildConfigMap(configMapName: String, confFileMap: Map[String, String],
-      withLabels: Map[String, String] = Map()): ConfigMap = {
-    val configMapNameSpace =
-      confFileMap.getOrElse(KUBERNETES_NAMESPACE.key, KUBERNETES_NAMESPACE.defaultValueString)
+      conf: SparkConf, withLabels: Map[String, String] = Map(),
+      immutable: Boolean = true, inNameSpace: Boolean = true): ConfigMap = {
+    val maxSize = conf.get(Config.CONFIG_MAP_MAXSIZE)
+    val mapSize = confFileMap.map {
+      case (k, v) => k.length + v.length
+    }.sum
+    if (mapSize >= maxSize) {
+      throw new IllegalArgumentException(s"Exceed the configMap max size: $maxSize")
+    }
+    var configMapNameSpace: String = null
+    if (inNameSpace) {
+      configMapNameSpace = confFileMap.getOrElse(
+        KUBERNETES_NAMESPACE.key, KUBERNETES_NAMESPACE.defaultValueString)
+    }
     new ConfigMapBuilder()
       .withNewMetadata()
         .withName(configMapName)
         .withNamespace(configMapNameSpace)
         .withLabels(withLabels.asJava)
         .endMetadata()
-      .withImmutable(true)
+      .withImmutable(immutable)
       .addToData(confFileMap.asJava)
       .build()
   }
@@ -156,24 +168,16 @@ object KubernetesClientUtils extends Logging {
   private[submit] def loadSparkConfDirFiles(conf: SparkConf): Map[String, String] = {
     val confDir = Option(conf.getenv(ENV_SPARK_CONF_DIR)).orElse(
       conf.getOption("spark.home").map(dir => s"$dir/conf"))
-    val maxSize = conf.get(Config.CONFIG_MAP_MAXSIZE)
     if (confDir.isDefined) {
-      val confFiles: Seq[File] = listConfFiles(confDir.get, maxSize)
+      val confFiles: Seq[File] = listConfFiles(confDir.get)
       val orderedConfFiles = orderFilesBySize(confFiles)
-      var truncatedMapSize: Long = 0
-      val truncatedMap = mutable.HashMap[String, String]()
-      val skippedFiles = mutable.HashSet[String]()
+      val confFileMap = mutable.HashMap[String, String]()
       var source: Source = Source.fromString("") // init with empty source.
       for (file <- orderedConfFiles) {
         try {
           source = Source.fromFile(file)(Codec.UTF8)
           val (fileName, fileContent) = file.getName -> source.mkString
-          if ((truncatedMapSize + fileName.length + fileContent.length) < maxSize) {
-            truncatedMap.put(fileName, fileContent)
-            truncatedMapSize = truncatedMapSize + (fileName.length + fileContent.length)
-          } else {
-            skippedFiles.add(fileName)
-          }
+          confFileMap.put(fileName, fileContent)
         } catch {
           case e: MalformedInputException =>
             logWarning(log"Unable to read a non UTF-8 encoded file " +
@@ -182,27 +186,22 @@ object KubernetesClientUtils extends Logging {
           source.close()
         }
       }
-      if (truncatedMap.nonEmpty) {
+      if (confFileMap.nonEmpty) {
         logInfo(log"Spark configuration files loaded from ${MDC(PATH, confDir)} : " +
-          log"${MDC(PATHS, truncatedMap.keys.mkString(","))}")
+          log"${MDC(PATHS, confFileMap.keys.mkString(","))}")
       }
-      if (skippedFiles.nonEmpty) {
-        logWarning(log"Skipped conf file(s) ${MDC(PATHS, skippedFiles.mkString(","))}, due to " +
-          log"size constraint. Please see, config: " +
-          log"`${MDC(CONFIG, Config.CONFIG_MAP_MAXSIZE.key)}` for more details.")
-      }
-      truncatedMap.toMap
+      confFileMap.toMap
     } else {
       Map.empty[String, String]
     }
   }
 
-  private def listConfFiles(confDir: String, maxSize: Long): Seq[File] = {
+  private def listConfFiles(confDir: String): Seq[File] = {
     // At the moment configmaps do not support storing binary content (i.e. skip jar,tar,gzip,zip),
     // and configMaps do not allow for size greater than 1.5 MiB(configurable).
     // https://etcd.io/docs/v3.4.0/dev-guide/limit/
-    def testIfTooLargeOrBinary(f: File): Boolean = (f.length() + f.getName.length > maxSize) ||
-      f.getName.matches(".*\\.(gz|zip|jar|tar)")
+    def testIfTooLargeOrBinary(f: File): Boolean = f.getName.matches(
+      ".*\\.(gz|zip|jar|tar)")
 
     // We exclude all the template files and user provided spark conf or properties,
     // Spark properties are resolved in a different step.
