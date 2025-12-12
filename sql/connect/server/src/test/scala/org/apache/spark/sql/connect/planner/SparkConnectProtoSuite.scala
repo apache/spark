@@ -1130,7 +1130,8 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       .next()
     proto.Relation
       .newBuilder()
-      .setLocalRelation(localRelationBuilder.setData(ByteString.copyFrom(arrowBatch.batch)).build())
+      .setLocalRelation(
+        localRelationBuilder.setData(ByteString.copyFrom(arrowBatch.batch)).build())
       .build()
   }
 
