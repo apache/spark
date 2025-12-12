@@ -17,12 +17,16 @@
 
 package org.apache.spark.sql.connect.ml
 
+import scala.collection.mutable
+
 import org.apache.spark.connect.proto
+import org.apache.spark.connect.proto.Expression.Literal
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.Params
 import org.apache.spark.sql.Dataset
-import org.apache.spark.sql.connect.common.{LiteralValueProtoConverter, ProtoDataTypes}
+import org.apache.spark.sql.connect.common.{DataTypeBuilder, FromProtoToScalaConverter, LiteralValueProtoConverter, ProtoDataTypes}
 import org.apache.spark.sql.connect.service.SessionHolder
+import org.apache.spark.sql.types.{ArrayType, DoubleType, StringType, UserDefinedType}
 
 private[ml] object Serializer {
 
@@ -142,53 +146,8 @@ private[ml] object Serializer {
       sessionHolder: SessionHolder): Array[(Object, Class[_])] = {
     args.map { arg =>
       if (arg.hasParam) {
-        val literal = arg.getParam
-        literal.getLiteralTypeCase match {
-          case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
-            val struct = literal.getStruct
-            struct.getStructType.getUdt.getJvmClass match {
-              case "org.apache.spark.ml.linalg.VectorUDT" =>
-                (MLUtils.deserializeVector(struct), classOf[Vector])
-              case "org.apache.spark.ml.linalg.MatrixUDT" =>
-                (MLUtils.deserializeMatrix(struct), classOf[Matrix])
-              case _ =>
-                throw MlUnsupportedException(s"Unsupported struct ${literal.getStruct}")
-            }
-          case proto.Expression.Literal.LiteralTypeCase.INTEGER =>
-            (literal.getInteger.asInstanceOf[Object], classOf[Int])
-          case proto.Expression.Literal.LiteralTypeCase.FLOAT =>
-            (literal.getFloat.toDouble.asInstanceOf[Object], classOf[Double])
-          case proto.Expression.Literal.LiteralTypeCase.STRING =>
-            (literal.getString, classOf[String])
-          case proto.Expression.Literal.LiteralTypeCase.DOUBLE =>
-            (literal.getDouble.asInstanceOf[Object], classOf[Double])
-          case proto.Expression.Literal.LiteralTypeCase.BOOLEAN =>
-            (literal.getBoolean.asInstanceOf[Object], classOf[Boolean])
-          case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
-            val scalaArray =
-              LiteralValueProtoConverter.toScalaValue(literal).asInstanceOf[Array[_]]
-            val dataType = LiteralValueProtoConverter.getProtoDataType(literal)
-            dataType.getArray.getElementType.getKindCase match {
-              case proto.DataType.KindCase.DOUBLE =>
-                (MLUtils.reconcileArray(classOf[Double], scalaArray), classOf[Array[Double]])
-              case proto.DataType.KindCase.STRING =>
-                (MLUtils.reconcileArray(classOf[String], scalaArray), classOf[Array[String]])
-              case proto.DataType.KindCase.ARRAY =>
-                dataType.getArray.getElementType.getArray.getElementType.getKindCase match {
-                  case proto.DataType.KindCase.STRING =>
-                    (
-                      MLUtils.reconcileArray(classOf[Array[String]], scalaArray),
-                      classOf[Array[Array[String]]])
-                  case _ =>
-                    throw MlUnsupportedException(s"Unsupported inner array ${literal.getArray}")
-                }
-              case _ =>
-                throw MlUnsupportedException(s"Unsupported array $literal")
-            }
-
-          case other =>
-            throw MlUnsupportedException(s"$other not supported")
-        }
+        val value = MLParamConverter.convertToValue(arg.getParam).asInstanceOf[AnyRef]
+        (value, value.getClass)
       } else if (arg.hasInput) {
         (MLUtils.parseRelationProto(arg.getInput, sessionHolder), classOf[Dataset[_]])
       } else {
@@ -213,5 +172,41 @@ private[ml] object Serializer {
       }
     }
     builder.build()
+  }
+}
+
+object MLParamConverter extends FromProtoToScalaConverter {
+
+  override protected def convertFloat(
+      literal: Literal,
+      dataTypeBuilder: DataTypeBuilder): (DataTypeBuilder, Any) = {
+    (dataTypeBuilder.merge(DoubleType, isNullable = false), literal.getFloat.toDouble)
+  }
+
+  override protected def convertUdt(struct: Literal.Struct, udt: UserDefinedType[_]): Any = {
+    if (udt.userClass == classOf[Vector]) {
+      MLUtils.deserializeVector(struct)
+    } else if (udt.userClass == classOf[Matrix]) {
+      MLUtils.deserializeMatrix(struct)
+    } else {
+      throw MlUnsupportedException(s"Unsupported UDT $struct")
+    }
+  }
+
+  override protected def arrayBuilder(size: Int): mutable.Builder[Any, Any] =
+    mutable.ArrayBuilder.make[Any]
+
+  override protected def convertArray(
+      array: Literal.Array,
+      arrayTypeBuilder: DataTypeBuilder): (DataTypeBuilder, Any) = {
+    super.convertArray(array, arrayTypeBuilder) match {
+      case (DataTypeBuilder(ArrayType(DoubleType, false)), value: Array[_]) =>
+        (arrayTypeBuilder, MLUtils.reconcileArray(classOf[Double], value))
+      case (DataTypeBuilder(ArrayType(ArrayType(_: StringType, _), _)), value: Array[_]) =>
+        (arrayTypeBuilder, MLUtils.reconcileArray(classOf[Array[String]], value))
+      case (DataTypeBuilder(ArrayType(_: StringType, _)), value: Array[_]) =>
+        (arrayTypeBuilder, MLUtils.reconcileArray(classOf[String], value))
+      case result => result
+    }
   }
 }

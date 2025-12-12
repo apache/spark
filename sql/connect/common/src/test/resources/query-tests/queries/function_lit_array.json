@@ -14,15 +14,6 @@
     "expressions": [{
       "literal": {
         "array": {
-        },
-        "dataType": {
-          "array": {
-            "elementType": {
-              "double": {
-              }
-            },
-            "containsNull": true
-          }
         }
       },
       "common": {
@@ -64,20 +55,6 @@
               }]
             }
           }]
-        },
-        "dataType": {
-          "array": {
-            "elementType": {
-              "array": {
-                "elementType": {
-                  "integer": {
-                  }
-                },
-                "containsNull": true
-              }
-            },
-            "containsNull": true
-          }
         }
       },
       "common": {
@@ -131,25 +108,6 @@
               }]
             }
           }]
-        },
-        "dataType": {
-          "array": {
-            "elementType": {
-              "array": {
-                "elementType": {
-                  "array": {
-                    "elementType": {
-                      "integer": {
-                      }
-                    },
-                    "containsNull": true
-                  }
-                },
-                "containsNull": true
-              }
-            },
-            "containsNull": true
-          }
         }
       },
       "common": {
@@ -177,15 +135,6 @@
           }, {
             "boolean": false
           }]
-        },
-        "dataType": {
-          "array": {
-            "elementType": {
-              "boolean": {
-              }
-            },
-            "containsNull": true
-          }
         }
       },
       "common": {
@@ -236,15 +185,6 @@
           }, {
             "short": 9874
           }]
-        },
-        "dataType": {
-          "array": {
-            "elementType": {
-              "short": {
-              }
-            },
-            "containsNull": true
-          }
         }
       },
       "common": {
@@ -274,15 +214,6 @@
           }, {
             "integer": -8726533
           }]
-        },
-        "dataType": {
-          "array": {
-            "elementType": {
-              "integer": {
-              }
-            },
-            "containsNull": true
-          }
         }
       },
       "common": {
@@ -312,15 +243,6 @@
           }, {
             "long": "7834609328726533"
           }]
-        },
-        "dataType": {
-          "array": {
-            "elementType": {
-              "long": {
-              }
-            },
-            "containsNull": true
-          }
         }
       },
       "common": {
@@ -350,15 +272,6 @@
           }, {
             "double": 2.0
           }]
-        },
-        "dataType": {
-          "array": {
-            "elementType": {
-              "double": {
-              }
-            },
-            "containsNull": true
-          }
         }
       },
       "common": {
@@ -388,15 +301,6 @@
           }, {
             "float": -0.9
           }]
-        },
-        "dataType": {
-          "array": {
-            "elementType": {
-              "float": {
-              }
-            },
-            "containsNull": true
-          }
         }
       },
       "common": {
@@ -432,17 +336,6 @@
               "scale": 5
             }
           }]
-        },
-        "dataType": {
-          "array": {
-            "elementType": {
-              "decimal": {
-                "scale": 18,
-                "precision": 38
-              }
-            },
-            "containsNull": true
-          }
         }
       },
       "common": {
@@ -478,17 +371,6 @@
               "scale": 7
             }
           }]
-        },
-        "dataType": {
-          "array": {
-            "elementType": {
-              "decimal": {
-                "scale": 18,
-                "precision": 38
-              }
-            },
-            "containsNull": true
-          }
         }
       },
       "common": {
@@ -516,16 +398,6 @@
           }, {
             "string": "disconnect!"
           }]
-        },
-        "dataType": {
-          "array": {
-            "elementType": {
-              "string": {
-                "collation": "UTF8_BINARY"
-              }
-            },
-            "containsNull": true
-          }
         }
       },
       "common": {
@@ -574,16 +446,6 @@
           }, {
             "string": "BCDEFGHIJK"
           }]
-        },
-        "dataType": {
-          "array": {
-            "elementType": {
-              "string": {
-                "collation": "UTF8_BINARY"
-              }
-            },
-            "containsNull": true
-          }
         }
       },
       "common": {
@@ -611,15 +473,6 @@
           }, {
             "date": 18546
           }]
-        },
-        "dataType": {
-          "array": {
-            "elementType": {
-              "date": {
-              }
-            },
-            "containsNull": true
-          }
         }
       },
       "common": {
@@ -647,15 +500,6 @@
           }, {
             "timestamp": "1677155519809000"
           }]
-        },
-        "dataType": {
-          "array": {
-            "elementType": {
-              "timestamp": {
-              }
-            },
-            "containsNull": true
-          }
         }
       },
       "common": {
@@ -683,15 +527,6 @@
           }, {
             "timestamp": "23456000"
           }]
-        },
-        "dataType": {
-          "array": {
-            "elementType": {
-              "timestamp": {
-              }
-            },
-            "containsNull": true
-          }
         }
       },
       "common": {
@@ -719,15 +554,6 @@
           }, {
             "timestampNtz": "1677188160000000"
           }]
-        },
-        "dataType": {
-          "array": {
-            "elementType": {
-              "timestampNtz": {
-              }
-            },
-            "containsNull": true
-          }
         }
       },
       "common": {
@@ -755,15 +581,6 @@
           }, {
             "date": 19417
           }]
-        },
-        "dataType": {
-          "array": {
-            "elementType": {
-              "date": {
-              }
-            },
-            "containsNull": true
-          }
         }
       },
       "common": {
@@ -791,17 +608,6 @@
           }, {
             "dayTimeInterval": "200000000"
           }]
-        },
-        "dataType": {
-          "array": {
-            "elementType": {
-              "dayTimeInterval": {
-                "startField": 0,
-                "endField": 3
-              }
-            },
-            "containsNull": true
-          }
         }
       },
       "common": {
@@ -829,17 +635,6 @@
           }, {
             "yearMonthInterval": 0
           }]
-        },
-        "dataType": {
-          "array": {
-            "elementType": {
-              "yearMonthInterval": {
-                "startField": 0,
-                "endField": 1
-              }
-            },
-            "containsNull": true
-          }
         }
       },
       "common": {
@@ -875,15 +670,6 @@
               "microseconds": "200"
             }
           }]
-        },
-        "dataType": {
-          "array": {
-            "elementType": {
-              "calendarInterval": {
-              }
-            },
-            "containsNull": true
-          }
         }
       },
       "common": {

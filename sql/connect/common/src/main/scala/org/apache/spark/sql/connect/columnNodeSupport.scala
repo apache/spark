@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.connect.ConnectConversions._
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
-import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.{toLiteralProtoBuilderWithOptions, ToLiteralProtoOptions}
+import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.{toLiteralProtoWithOptions, ToLiteralProtoOptions}
 import org.apache.spark.sql.expressions.{Aggregator, UserDefinedAggregateFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.internal.{Alias, CaseWhenOtherwise, Cast, ColumnNode, ColumnNodeLike, InvokeInlineUserDefinedFunction, LambdaFunction, LazyExpression, Literal, SortOrder, SqlExpression, SubqueryExpression, SubqueryType, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedNamedLambdaVariable, UnresolvedRegex, UnresolvedStar, UpdateFields, Window, WindowFrame}
 
@@ -67,7 +67,7 @@ object ColumnNodeToProtoConverter extends (ColumnNode => proto.Expression) {
     n match {
       case Literal(value, dataTypeOpt, _) =>
         builder.setLiteral(
-          toLiteralProtoBuilderWithOptions(
+          toLiteralProtoWithOptions(
             value,
             dataTypeOpt,
             ToLiteralProtoOptions(useDeprecatedDataTypeFields = false)))

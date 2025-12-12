@@ -120,7 +120,7 @@ object DataTypeProtoConverter {
     }
   }
 
-  private def toCatalystArrayType(t: proto.DataType.Array): ArrayType = {
+  private[common] def toCatalystArrayType(t: proto.DataType.Array): ArrayType = {
     ArrayType(toCatalystType(t.getElementType), t.getContainsNull)
   }
 
@@ -140,7 +140,7 @@ object DataTypeProtoConverter {
     StructType.apply(fields)
   }
 
-  private def toCatalystMapType(t: proto.DataType.Map): MapType = {
+  private[common] def toCatalystMapType(t: proto.DataType.Map): MapType = {
     MapType(toCatalystType(t.getKeyType), toCatalystType(t.getValueType), t.getValueContainsNull)
   }
 
