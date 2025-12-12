@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.TableOutputResolver.DefaultValueFillMode.{NONE, RECURSE}
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, CreateNamedStruct, Expression, GetStructField, If, IsNull, Literal}
@@ -56,7 +57,6 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
    *                 (preserving existing fields).
    * @param coerceNestedTypes whether to coerce nested types to match the target type
    *                         for complex types
-   * @param missingSourcePaths paths that exist in target but not in source
    * @return aligned update assignments that match table attributes
    */
   def alignUpdateAssignments(
@@ -203,9 +203,8 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
       } else {
         val value = exactAssignments.head.value
         val coerceMode = if (coerceNestedTypes) RECURSE else NONE
-        val resolvedValue = TableOutputResolver.resolveUpdate("", value, col, conf, addError,
+        TableOutputResolver.resolveUpdate("", value, col, conf, addError,
           colPath, coerceMode)
-        resolvedValue
       }
     } else {
       applyFieldAssignments(col, colExpr, fieldAssignments, addError, colPath, coerceNestedTypes)
@@ -218,7 +217,7 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
       assignments: Seq[Assignment],
       addError: String => Unit,
       colPath: Seq[String],
-      coerceNestedTyptes: Boolean): Expression = {
+      coerceNestedTypes: Boolean): Expression = {
 
     col.dataType match {
       case structType: StructType =>
@@ -228,7 +227,7 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
         }
         val updatedFieldExprs = fieldAttrs.zip(fieldExprs).map { case (fieldAttr, fieldExpr) =>
           applyAssignments(fieldAttr, fieldExpr, assignments, addError, colPath :+ fieldAttr.name,
-            coerceNestedTyptes)
+            coerceNestedTypes)
         }
         toNamedStruct(structType, updatedFieldExprs)
 
@@ -323,7 +322,9 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
           }
         }
       case _ =>
-        false
+        // Should be caught earlier
+        throw SparkException.internalError(
+          s"Source type must be StructType but found: $sourceType")
     }
   }
 
