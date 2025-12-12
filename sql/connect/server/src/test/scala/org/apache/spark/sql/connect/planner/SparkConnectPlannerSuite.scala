@@ -95,7 +95,7 @@ trait SparkConnectPlanTest extends SharedSparkSession {
       schema: Option[StructType] = None): proto.Relation = {
     val localRelationBuilder = proto.LocalRelation.newBuilder()
 
-    val bytes = ArrowConverters
+    val arrowBatch = ArrowConverters
       .toBatchWithSchemaIterator(
         data.iterator,
         DataTypeUtils.fromAttributes(attrs.map(_.toAttribute)),
@@ -106,7 +106,7 @@ trait SparkConnectPlanTest extends SharedSparkSession {
         false)
       .next()
 
-    localRelationBuilder.setData(ByteString.copyFrom(bytes))
+    localRelationBuilder.setData(ByteString.copyFrom(arrowBatch.batch))
     schema.foreach(s => localRelationBuilder.setSchema(s.json))
     proto.Relation.newBuilder().setLocalRelation(localRelationBuilder.build()).build()
   }

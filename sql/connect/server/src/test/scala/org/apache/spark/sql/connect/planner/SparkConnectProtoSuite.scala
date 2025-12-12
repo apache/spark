@@ -1118,7 +1118,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     val localRelationBuilder = proto.LocalRelation.newBuilder()
 
     val attributes = attrs.map(exp => AttributeReference(exp.name, exp.dataType)())
-    val buffer = ArrowConverters
+    val arrowBatch = ArrowConverters
       .toBatchWithSchemaIterator(
         Iterator.empty,
         DataTypeUtils.fromAttributes(attributes),
@@ -1130,7 +1130,7 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       .next()
     proto.Relation
       .newBuilder()
-      .setLocalRelation(localRelationBuilder.setData(ByteString.copyFrom(buffer)).build())
+      .setLocalRelation(localRelationBuilder.setData(ByteString.copyFrom(arrowBatch.batch)).build())
       .build()
   }
 
