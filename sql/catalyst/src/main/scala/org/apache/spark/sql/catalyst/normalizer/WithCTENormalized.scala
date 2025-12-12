@@ -42,7 +42,7 @@ object WithCTENormalized extends Rule[LogicalPlan]{
   }
 
   def canonicalizeCTE(plan: LogicalPlan, defIdToNewId: Map[Long, Long]): LogicalPlan = {
-    plan.transformDownWithPruning(
+    plan.transformDownWithSubqueriesAndPruning(
       _.containsAnyPattern(CTE, PLAN_EXPRESSION)) {
       // For nested WithCTE, if defIndex didn't contain the cteId,
       // means it's not current WithCTE's ref.
