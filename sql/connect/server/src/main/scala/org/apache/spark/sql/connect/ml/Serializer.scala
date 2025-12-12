@@ -203,9 +203,9 @@ object MLParamConverter extends FromProtoToScalaConverter {
       case (DataTypeBuilder(ArrayType(DoubleType, false)), value: Array[_]) =>
         (arrayTypeBuilder, MLUtils.reconcileArray(classOf[Double], value))
       case (DataTypeBuilder(ArrayType(ArrayType(_: StringType, _), _)), value: Array[_]) =>
-        (arrayTypeBuilder, MLUtils.reconcileArray(classOf[Array[Array[String]]], value))
-      case (DataTypeBuilder(ArrayType(_: StringType, _)), value: Array[_]) =>
         (arrayTypeBuilder, MLUtils.reconcileArray(classOf[Array[String]], value))
+      case (DataTypeBuilder(ArrayType(_: StringType, _)), value: Array[_]) =>
+        (arrayTypeBuilder, MLUtils.reconcileArray(classOf[String], value))
       case result => result
     }
   }
