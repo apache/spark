@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.TableOutputResolver.DefaultValueFillMode.{NONE, RECURSE}
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, CreateNamedStruct, Expression, GetStructField, If, IsNull, Literal, Or}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, CreateNamedStruct, Expression, GetStructField, If, IsNull, Literal}
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans.logical.Assignment
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -304,20 +304,27 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
     CreateNamedStruct(namedStructExprs)
   }
 
-  private def getMissingSourcePaths(targetType: StructType,
-                                    sourceType: DataType,
-                                    colPath: Seq[String],
-                                    addError: String => Unit): Seq[Seq[String]] = {
-    val nestedTargetPaths = DataTypeUtils.extractLeafFieldPaths(targetType, Seq.empty)
-    val nestedSourcePaths = sourceType match {
+  /**
+   * Checks if target struct has extra fields compared to source struct, recursively.
+   */
+  private def hasExtraTargetFields(targetType: StructType, sourceType: DataType): Boolean = {
+    sourceType match {
       case sourceStructType: StructType =>
-        DataTypeUtils.extractLeafFieldPaths(sourceStructType, Seq.empty)
+        targetType.fields.exists { targetField =>
+          sourceStructType.fields.find(f => conf.resolver(f.name, targetField.name)) match {
+            case Some(sourceField) =>
+              // Check nested structs recursively
+              (targetField.dataType, sourceField.dataType) match {
+                case (targetNested: StructType, sourceNested) =>
+                  hasExtraTargetFields(targetNested, sourceNested)
+                case _ => false
+              }
+            case None => true // target has extra field not in source
+          }
+        }
       case _ =>
-        addError(s"Value for struct type: " +
-          s"${colPath.quoted} must be a struct but was ${sourceType.simpleString}")
-        Seq()
+        false
     }
-    nestedTargetPaths.diff(nestedSourcePaths)
   }
 
   /**
@@ -354,15 +361,14 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
     if (!col.nullable) {
       AssertNotNull(value)
     } else {
-      // Check if there are missing source paths (nested fields in target but not in source)
-      val missingSourcePaths = getMissingSourcePaths(structType, value.dataType, colPath, addError)
-      val missingPathsEmpty =
-        if (missingSourcePaths.isEmpty) Literal.TrueLiteral else Literal.FalseLiteral
+      val condition = if (hasExtraTargetFields(structType, value.dataType)) {
+        // extra target fields: return null iff source struct is null and target struct is null
+        And(IsNull(value), IsNull(col))
+      } else {
+        // schemas match: return null iff source struct is null
+        IsNull(value)
+      }
 
-      // Condition: (source struct IS NULL) AND (target struct IS NULL OR missingSourcePaths empty)
-      val condition = And(IsNull(value), Or(IsNull(col), missingPathsEmpty))
-
-      // Return: If (condition) THEN NULL ELSE structAssignment
       If(condition, Literal(null, structAssignment.dataType), structAssignment)
     }
   }
