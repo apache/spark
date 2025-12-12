@@ -18,16 +18,13 @@ import unittest
 import pyarrow as pa
 import pandas as pd
 import pyspark.pandas as ps
+from pyspark.testing.utils import have_duckdb
 
-try:
+if have_duckdb:
     import duckdb
 
-    DUCKDB_TESTS = True
-except ImportError:
-    DUCKDB_TESTS = False
 
-
-@unittest.skipIf(not DUCKDB_TESTS, "duckdb is not installed")
+@unittest.skipIf(not have_duckdb, "duckdb is not installed")
 class TestSparkArrowCStreamer(unittest.TestCase):
     def test_spark_arrow_c_streamer(self):
         pdf = pd.DataFrame([[1, "a"], [2, "b"], [3, "c"], [4, "d"]], columns=["id", "value"])
