@@ -589,6 +589,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_connect_compatibility",
         "pyspark.sql.tests.udf_type_tests.test_udf_input_types",
         "pyspark.sql.tests.udf_type_tests.test_udf_return_types",
+        "pyspark.sql.tests.test_interchange",
     ],
 )
 
