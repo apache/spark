@@ -49,7 +49,7 @@ class ArrowPythonUDTFRunner(
   with BatchedPythonArrowInput
   with BasicPythonArrowOutput {
 
-  override protected val runnerConf: Map[String, String] = super.runnerConf ++ pythonRunnerConf
+  override protected def runnerConf: Map[String, String] = super.runnerConf ++ pythonRunnerConf
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
     // For arrow-optimized Python UDTFs (@udtf(useArrow=True)), we need to write

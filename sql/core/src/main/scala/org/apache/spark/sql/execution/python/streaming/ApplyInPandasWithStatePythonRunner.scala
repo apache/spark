@@ -113,7 +113,7 @@ class ApplyInPandasWithStatePythonRunner(
   // applyInPandasWithState has its own mechanism to construct the Arrow RecordBatch instance.
   // Configurations are both applied to executor and Python worker, set them to the worker conf
   // to let Python worker read the config properly.
-  override protected val runnerConf: Map[String, String] =
+  override protected def runnerConf: Map[String, String] =
     super.runnerConf ++ initialRunnerConf ++ Map(
       SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> arrowMaxRecordsPerBatch.toString,
       SQLConf.ARROW_EXECUTION_MAX_BYTES_PER_BATCH.key -> arrowMaxBytesPerBatch.toString

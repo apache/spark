@@ -113,7 +113,7 @@ class ArrowPythonRunner(
     funcs, evalType, argOffsets, _schema, _timeZoneId, largeVarTypes,
     pythonMetrics, jobArtifactUUID, sessionUUID) {
 
-  override protected val runnerConf: Map[String, String] = super.runnerConf ++ pythonRunnerConf
+  override protected def runnerConf: Map[String, String] = super.runnerConf ++ pythonRunnerConf
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit =
     PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets, profiler)
@@ -139,7 +139,7 @@ class ArrowPythonWithNamedArgumentRunner(
     funcs, evalType, argMetas.map(_.map(_.offset)), _schema, _timeZoneId, largeVarTypes,
     pythonMetrics, jobArtifactUUID, sessionUUID) {
 
-  override protected val runnerConf: Map[String, String] = super.runnerConf ++ pythonRunnerConf
+  override protected def runnerConf: Map[String, String] = super.runnerConf ++ pythonRunnerConf
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
     if (evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF) {

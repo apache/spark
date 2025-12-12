@@ -55,7 +55,7 @@ class CoGroupedArrowPythonRunner(
     funcs.map(_._1), evalType, argOffsets, jobArtifactUUID, pythonMetrics)
   with BasicPythonArrowOutput {
 
-  override protected val runnerConf: Map[String, String] = super.runnerConf ++ pythonRunnerConf
+  override protected def runnerConf: Map[String, String] = super.runnerConf ++ pythonRunnerConf
 
   override val envVars: util.Map[String, String] = {
     val envVars = new util.HashMap(funcs.head._1.funcs.head.envVars)
