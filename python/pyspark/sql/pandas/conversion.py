@@ -175,7 +175,7 @@ class PandasConversionMixin:
     :class:`DataFrame` can use this class.
     """
 
-    def toPandas(self) -> "PandasDataFrameLike":
+    def _to_pandas(self, **kwargs: Any) -> "PandasDataFrameLike":
         from pyspark.sql.dataframe import DataFrame
 
         assert isinstance(self, DataFrame)
@@ -204,6 +204,11 @@ class PandasConversionMixin:
                 "spark.sql.execution.pandas.structHandlingMode",
             ]
         )
+
+        # if pandasStructHandlingMode is explicitly set, override the runtime config
+        if "pandasStructHandlingMode" in kwargs:
+            pandasStructHandlingMode = str(kwargs["pandasStructHandlingMode"])
+
         prefers_large_var_types = arrowUseLargeVarTypes == "true"
 
         if arrowPySparkEnabled == "true":
