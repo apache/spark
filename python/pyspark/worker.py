@@ -65,7 +65,6 @@ from pyspark.sql.pandas.serializers import (
     TransformWithStateInPySparkRowInitStateSerializer,
     ArrowStreamArrowUDFSerializer,
     ArrowStreamAggPandasUDFSerializer,
-    ArrowStreamAggPandasIterUDFSerializer,
     ArrowStreamAggArrowUDFSerializer,
     ArrowBatchUDFSerializer,
     ArrowStreamUDTFSerializer,
@@ -2780,15 +2779,9 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
             ser = ArrowStreamAggArrowUDFSerializer(
                 runner_conf.timezone, True, runner_conf.assign_cols_by_name, True
             )
-        elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF:
-            ser = ArrowStreamAggPandasIterUDFSerializer(
-                runner_conf.timezone,
-                runner_conf.safecheck,
-                runner_conf.assign_cols_by_name,
-                runner_conf.int_to_decimal_coercion_enabled,
-            )
         elif eval_type in (
             PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
             PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
         ):
             ser = ArrowStreamAggPandasUDFSerializer(
@@ -3358,6 +3351,39 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
             result = tuple(
                 f(*[concatenated_batch.columns[o] for o in arg_offsets]) for arg_offsets, f in udfs
             )
+            # In the special case of a single UDF this will return a single result rather
+            # than a tuple of results; this is the format that the JVM side expects.
+            if len(result) == 1:
+                return result[0]
+            else:
+                return result
+
+    elif eval_type in (
+        PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+        PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+    ):
+        import pandas as pd
+
+        # For SQL_GROUPED_AGG_PANDAS_UDF and SQL_WINDOW_AGG_PANDAS_UDF,
+        # convert iterator of batch tuples to concatenated pandas Series
+        def mapper(batch_iter):
+            # batch_iter is Iterator[Tuple[pd.Series, ...]] where each tuple represents one batch
+            # Collect all batches and concatenate into single Series per column
+            batches = list(batch_iter)
+            if not batches:
+                # Empty batches - determine num_columns from all UDFs' arg_offsets
+                all_offsets = [o for arg_offsets, _ in udfs for o in arg_offsets]
+                num_columns = max(all_offsets) + 1 if all_offsets else 0
+                concatenated = [pd.Series(dtype=object) for _ in range(num_columns)]
+            else:
+                # Use actual number of columns from the first batch
+                num_columns = len(batches[0])
+                concatenated = [
+                    pd.concat([batch[i] for batch in batches], ignore_index=True)
+                    for i in range(num_columns)
+                ]
+
+            result = tuple(f(*[concatenated[o] for o in arg_offsets]) for arg_offsets, f in udfs)
             # In the special case of a single UDF this will return a single result rather
             # than a tuple of results; this is the format that the JVM side expects.
             if len(result) == 1:
