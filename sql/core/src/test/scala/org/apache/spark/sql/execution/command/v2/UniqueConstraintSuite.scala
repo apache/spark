@@ -42,7 +42,7 @@ class UniqueConstraintSuite extends QueryTest with CommandSuiteBase with DDLComm
         assert(table.constraints.length == 1)
         val constraint = table.constraints.head
         assert(constraint.name() == "uk1")
-        assert(constraint.toDDL == s"CONSTRAINT uk1 UNIQUE (id) $expectedDDL")
+        assert(constraint.toDDL == s"CONSTRAINT `uk1` UNIQUE (`id`) $expectedDDL")
       }
     }
   }
@@ -56,7 +56,7 @@ class UniqueConstraintSuite extends QueryTest with CommandSuiteBase with DDLComm
         assert(table.constraints.length == 1)
         val constraint = table.constraints.head
         assert(constraint.name() == "uk1")
-        assert(constraint.toDDL == s"CONSTRAINT uk1 UNIQUE (id) $expectedDDL")
+        assert(constraint.toDDL == s"CONSTRAINT `uk1` UNIQUE (`id`) $expectedDDL")
       }
     }
   }
@@ -71,7 +71,7 @@ class UniqueConstraintSuite extends QueryTest with CommandSuiteBase with DDLComm
         assert(table.constraints.length == 1)
         val constraint = table.constraints.head
         assert(constraint.name() == "uk1")
-        assert(constraint.toDDL == s"CONSTRAINT uk1 UNIQUE (id) $expectedDDL")
+        assert(constraint.toDDL == s"CONSTRAINT `uk1` UNIQUE (`id`) $expectedDDL")
       }
     }
   }
@@ -92,7 +92,7 @@ class UniqueConstraintSuite extends QueryTest with CommandSuiteBase with DDLComm
           condition = "CONSTRAINT_ALREADY_EXISTS",
           sqlState = "42710",
           parameters = Map("constraintName" -> "uk1",
-            "oldConstraint" -> "CONSTRAINT uk1 UNIQUE (id) NOT ENFORCED NORELY")
+            "oldConstraint" -> "CONSTRAINT `uk1` UNIQUE (`id`) NOT ENFORCED NORELY")
         )
       }
     }
@@ -109,7 +109,7 @@ class UniqueConstraintSuite extends QueryTest with CommandSuiteBase with DDLComm
       val constraint = table.constraints.head
       assert(constraint.name() == "uk1")
       assert(constraint.toDDL ==
-        "CONSTRAINT uk1 UNIQUE (id1, id2) NOT ENFORCED NORELY")
+        "CONSTRAINT `uk1` UNIQUE (`id1`, `id2`) NOT ENFORCED NORELY")
     }
   }
 }
