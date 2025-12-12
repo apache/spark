@@ -83,6 +83,27 @@ abstract class StringRegexExpression extends BinaryExpression
       matches(regex, input1.asInstanceOf[UTF8String].toString)
     }
   }
+
+  override def expensive: Boolean = hasExpensiveChild || _expensiveRegex
+
+  private lazy val _expensiveRegex = {
+    // A quick heuristic for expensive a pattern is.
+    left match {
+      case StringLiteral(str) =>
+        // If we have a clear start limited back tracking required.
+        if (str.startsWith("^") || str.startsWith("\\b")) {
+          false
+        } else if (str.contains("+")) {
+          // Greedy matching can be tricky.
+          true
+        } else {
+          // Default to pushdown for now.
+          false
+        }
+      case _ =>
+        true // per row regex compilation.
+    }
+  }
 }
 
 private[catalyst] object StringRegexExpression {

@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -52,10 +53,13 @@ class FilterPushdownSuite extends PlanTest {
   val attrB = $"b".int
   val attrC = $"c".int
   val attrD = $"d".int
+  val attrE = $"e".string
 
   val testRelation = LocalRelation(attrA, attrB, attrC)
 
   val testRelation1 = LocalRelation(attrD)
+
+  val testStringRelation = LocalRelation(attrA, attrB, attrE)
 
   val simpleDisjunctivePredicate =
     ("x.a".attr > 3) && ("y.a".attr > 13) || ("x.a".attr > 1) && ("y.a".attr > 11)
@@ -152,7 +156,7 @@ class FilterPushdownSuite extends PlanTest {
   test("can't push without rewrite") {
     val originalQuery =
       testRelation
-        .select($"a" + $"b" as "e")
+        .select($"a" + $"b" as "e", $"a" - $"b" as "f")
         .where($"e" === 1)
         .analyze
 
@@ -160,11 +164,113 @@ class FilterPushdownSuite extends PlanTest {
     val correctAnswer =
       testRelation
         .where($"a" + $"b" === 1)
-        .select($"a" + $"b" as "e")
+        .select($"a" + $"b" as "e", $"a" - $"b" as "f")
         .analyze
 
     comparePlans(optimized, correctAnswer)
   }
+
+  test("SPARK-47672: Avoid double evaluation with projections but push components that can be") {
+    val originalQuery = testStringRelation
+      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("notmagic") as "j", $"b")
+      .where($"a" > 5 && $"f")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    val correctAnswer = testStringRelation
+      .where($"a" > 5)
+      .select($"a", $"b", $"e", $"e".rlike("magic") as "f")
+      .where($"f")
+      .select($"a", $"f", $"e".rlike("notmagic") as "j", $"b")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-47672: Do double evaluation when configured") {
+    withSQLConf(SQLConf.AVOID_DOUBLE_FILTER_EVAL.key -> "false") {
+      val originalQuery = testStringRelation
+        .select($"a", $"e".rlike("magic") as "f", $"e".rlike("notmagic") as "j", $"b")
+        .where($"a" > 5 && $"f")
+        .analyze
+
+      val optimized = Optimize.execute(originalQuery)
+
+      val correctAnswer = testStringRelation
+        .where($"a" > 5 && $"e".rlike("magic"))
+        .select($"a", $"e".rlike("magic") as "f", $"e".rlike("notmagic") as "j", $"b")
+        .analyze
+
+      comparePlans(optimized, correctAnswer)
+    }
+  }
+
+  test("SPARK-47672: Make sure that we handle the case where everything is expensive") {
+    val originalQuery = testStringRelation
+      .select($"e".rlike("magic") as "f")
+      .where($"f")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    val correctAnswer = testStringRelation
+      .select($"e".rlike("magic") as "f")
+      .where($"f")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-47672: Ensure filter pushdown without alias reference does not move a projection.") {
+    val originalQuery = testStringRelation
+      .select($"a", $"e".rlike("magic") as "f", $"b" + $"a")
+      .where($"a" > 5)
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    val correctAnswer = testStringRelation
+      .where($"a" > 5)
+      .select($"a", $"e".rlike("magic") as "f", $"b" + $"a")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+
+  test("SPARK-47672: Inexpensive filter pushdown should not move projections") {
+    val originalQuery = testStringRelation
+      .select($"a" as "c", $"b" + $"a")
+      .where($"c" > 5)
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    val correctAnswer = testStringRelation
+      .where($"a" > 5)
+      .select($"a" as "c", $"b" + $"a")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-47672: Avoid double evaluation with projections can't push past certain items") {
+    val originalQuery = testStringRelation
+      .select($"a", $"e".rlike("magic") as "f")
+      .where($"a" > 5 || $"f")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    val correctAnswer = testStringRelation
+      .select($"a", $"e".rlike("magic") as "f")
+      .where($"a" > 5 || $"f")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
 
   test("nondeterministic: can always push down filter through project with deterministic field") {
     val originalQuery = testRelation
