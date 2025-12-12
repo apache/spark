@@ -2356,7 +2356,7 @@ class Dataset[T] private[sql](
         timeZoneId,
         errorOnDuplicatedFieldNames,
         largeVarTypes,
-        context)
+        context).map(_.batch)
     }
   }
 
