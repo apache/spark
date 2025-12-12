@@ -711,6 +711,7 @@ Table-Valued Functions
     TableValuedFunction.json_tuple
     TableValuedFunction.posexplode
     TableValuedFunction.posexplode_outer
+    TableValuedFunction.python_worker_logs
     TableValuedFunction.range
     TableValuedFunction.sql_keywords
     TableValuedFunction.stack
