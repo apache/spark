@@ -365,3 +365,47 @@ SELECT time_to_millis(time_from_millis(52200500));
 SELECT time_from_millis(time_to_millis(TIME'14:30:00.5'));
 SELECT time_to_micros(time_from_micros(52200500000));
 SELECT time_from_micros(time_to_micros(TIME'14:30:00.5'));
+
+-- time_bucket function tests
+
+-- Basic bucketing with various intervals
+SELECT time_bucket(INTERVAL '15' MINUTE, TIME'09:37:22.123456');
+SELECT time_bucket(INTERVAL '30' MINUTE, TIME'14:47:00.987654');
+SELECT time_bucket(INTERVAL '1' HOUR, TIME'16:35:00.500000');
+SELECT time_bucket(INTERVAL '2' HOUR, TIME'15:20:00.123000');
+SELECT time_bucket(INTERVAL '90' MINUTE, TIME'10:45:00.456789');
+
+-- Edge cases (midnight, end of day, exact bucket boundary)
+SELECT time_bucket(INTERVAL '1' HOUR, TIME'00:00:00.123456');
+SELECT time_bucket(INTERVAL '30' MINUTE, TIME'23:59:59.888888');
+SELECT time_bucket(INTERVAL '15' MINUTE, TIME'09:30:00.555555');
+
+-- Sub-second buckets
+SELECT time_bucket(INTERVAL '1' SECOND, TIME'00:00:00.000001');
+SELECT time_bucket(INTERVAL '100' MILLISECOND, TIME'12:34:56.789123');
+SELECT time_bucket(INTERVAL '1000' MICROSECOND, TIME'14:30:00.555555');
+
+-- Null handling
+SELECT time_bucket(INTERVAL '15' MINUTE, NULL);
+SELECT time_bucket(NULL, TIME'12:34:56.789012');
+SELECT time_bucket(NULL, NULL);
+
+-- Aggregation and grouping with CTE
+WITH time_bucket_data AS (
+  SELECT * FROM VALUES
+    (1, TIME'09:15:30.123456'),
+    (2, TIME'09:37:45.654321'),
+    (3, TIME'10:05:12.987654'),
+    (4, TIME'14:42:00.111222'),
+    (5, TIME'14:55:30.333444')
+  AS t(id, event_time)
+)
+SELECT time_bucket(INTERVAL '30' MINUTE, event_time) AS time_slot,
+       COUNT(*) AS cnt
+FROM time_bucket_data
+GROUP BY time_slot
+ORDER BY time_slot;
+
+-- Error cases
+SELECT time_bucket(INTERVAL '0' MINUTE, TIME'12:34:56.789123');
+SELECT time_bucket(INTERVAL '-15' MINUTE, TIME'12:34:56.456789');

@@ -478,6 +478,159 @@ abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession 
     )
   }
 
+  test("time_bucket with various intervals") {
+    // 15-minute buckets
+    checkAnswer(
+      sql("SELECT time_bucket(INTERVAL '15' MINUTE, TIME'09:37:22')"),
+      Row(LocalTime.of(9, 30, 0)) :: Nil)
+
+    // 30-minute buckets
+    checkAnswer(
+      sql("SELECT time_bucket(INTERVAL '30' MINUTE, TIME'14:47:00')"),
+      Row(LocalTime.of(14, 30, 0)) :: Nil)
+
+    // 1-hour buckets
+    checkAnswer(
+      sql("SELECT time_bucket(INTERVAL '1' HOUR, TIME'16:35:00')"),
+      Row(LocalTime.of(16, 0, 0)) :: Nil)
+
+    // 2-hour buckets
+    checkAnswer(
+      sql("SELECT time_bucket(INTERVAL '2' HOUR, TIME'15:20:00')"),
+      Row(LocalTime.of(14, 0, 0)) :: Nil)
+
+    // Complex interval (90 minutes = 1.5 hours)
+    checkAnswer(
+      sql("SELECT time_bucket(INTERVAL '90' MINUTE, TIME'10:45:00')"),
+      Row(LocalTime.of(10, 30, 0)) :: Nil)
+  }
+
+  test("time_bucket edge cases") {
+    // Midnight (start of day)
+    checkAnswer(
+      sql("SELECT time_bucket(INTERVAL '1' HOUR, TIME'00:00:00')"),
+      Row(LocalTime.of(0, 0, 0)) :: Nil)
+
+    // End of day
+    checkAnswer(
+      sql("SELECT time_bucket(INTERVAL '30' MINUTE, TIME'23:59:59.999999')"),
+      Row(LocalTime.of(23, 30, 0)) :: Nil)
+
+    // Exact bucket boundary
+    checkAnswer(
+      sql("SELECT time_bucket(INTERVAL '15' MINUTE, TIME'09:30:00')"),
+      Row(LocalTime.of(9, 30, 0)) :: Nil)
+  }
+
+  test("time_bucket with null inputs") {
+    checkAnswer(
+      sql("SELECT time_bucket(INTERVAL '15' MINUTE, NULL)"),
+      Row(null) :: Nil)
+
+    checkAnswer(
+      sql("SELECT time_bucket(NULL, TIME'12:34:56')"),
+      Row(null) :: Nil)
+
+    checkAnswer(
+      sql("SELECT time_bucket(NULL, NULL)"),
+      Row(null) :: Nil)
+  }
+
+  test("time_bucket with table data") {
+    withTable("time_bucket_test") {
+      sql("""
+        CREATE TABLE time_bucket_test (
+          id INT,
+          event_time TIME(6)
+        ) USING parquet
+      """)
+
+      sql("""
+        INSERT INTO time_bucket_test VALUES
+          (1, TIME'09:15:30'),
+          (2, TIME'09:37:45'),
+          (3, TIME'10:05:12'),
+          (4, TIME'14:42:00'),
+          (5, TIME'14:55:30')
+      """)
+
+      // Group by 30-minute buckets
+      checkAnswer(
+        sql("""
+          SELECT time_bucket(INTERVAL '30' MINUTE, event_time) AS time_slot,
+                 COUNT(*) AS cnt
+          FROM time_bucket_test
+          GROUP BY time_slot
+          ORDER BY time_slot
+        """),
+        Row(LocalTime.of(9, 0, 0), 1L) ::
+        Row(LocalTime.of(9, 30, 0), 1L) ::
+        Row(LocalTime.of(10, 0, 0), 1L) ::
+        Row(LocalTime.of(14, 30, 0), 2L) :: Nil)
+    }
+  }
+
+  test("time_bucket error handling - zero interval") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT time_bucket(INTERVAL '0' MINUTE, TIME'12:34:56')").collect()
+      },
+      condition = "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+      parameters = Map(
+        "sqlExpr" -> "\"time_bucket(INTERVAL '00' MINUTE, TIME '12:34:56')\"",
+        "exprName" -> "bucket_width",
+        "valueRange" -> "(0, 9223372036854775807]",
+        "currentValue" -> "0L"
+      ),
+      context = ExpectedContext(
+        fragment = "time_bucket(INTERVAL '0' MINUTE, TIME'12:34:56')",
+        start = 7,
+        stop = 54
+      )
+    )
+  }
+
+  test("time_bucket error handling - negative interval") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("SELECT time_bucket(INTERVAL '-15' MINUTE, TIME'12:34:56')").collect()
+      },
+      condition = "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+      parameters = Map(
+        "sqlExpr" -> "\"time_bucket(INTERVAL '-15' MINUTE, TIME '12:34:56')\"",
+        "exprName" -> "bucket_width",
+        "valueRange" -> "(0, 9223372036854775807]",
+        "currentValue" -> "-900000000L"
+      ),
+      context = ExpectedContext(
+        fragment = "time_bucket(INTERVAL '-15' MINUTE, TIME'12:34:56')",
+        start = 7,
+        stop = 56
+      )
+    )
+  }
+
+  test("time_bucket DataFrame API") {
+    val df = Seq(
+      (1, "09:37:22"),
+      (2, "14:47:00"),
+      (3, "10:05:30")
+    ).toDF("id", "t")
+      .withColumn("t", to_time(col("t")))
+
+    // Using expr for interval
+    val result = df.withColumn(
+      "bucket",
+      time_bucket(expr("INTERVAL '30' MINUTE"), col("t"))
+    )
+
+    checkAnswer(
+      result.select("bucket"),
+      Row(LocalTime.of(9, 30, 0)) ::
+      Row(LocalTime.of(14, 30, 0)) ::
+      Row(LocalTime.of(10, 0, 0)) :: Nil)
+  }
+
   test("SPARK-52883: to_time function without format") {
     // Input data for the function.
     val schema = StructType(Seq(

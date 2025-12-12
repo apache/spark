@@ -18,6 +18,7 @@
 package org.apache.spark.sql.collation
 
 import java.sql.Timestamp
+import java.time.Duration
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.ExpressionBuilder
@@ -98,6 +99,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
     inputType match {
       // TODO: Try to make this a bit more random.
       case AnyTimestampType => Literal(Timestamp.valueOf("2009-07-30 12:58:59"))
+      case AnyTimeType => Literal(java.time.LocalTime.of(12, 30, 0))
       case BinaryType => collationType match {
         case Utf8Binary =>
           Literal.create("dummy string".getBytes)
@@ -107,6 +109,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       case BooleanType => Literal(true)
       case ByteType => Literal(5.toByte)
       case _: DatetimeType => Literal(Timestamp.valueOf("2009-07-30 12:58:59"))
+      case DayTimeIntervalType => Literal(Duration.ofMinutes(15))
       case DecimalType => Literal((new Decimal).set(5))
       case _: DecimalType => Literal((new Decimal).set(5))
       case _: DoubleType => Literal(5.0)
@@ -179,6 +182,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
     inputType match {
       // TODO: Try to make this a bit more random.
       case AnyTimestampType => "TIMESTAMP'2009-07-30 12:58:59'"
+      case AnyTimeType => "TIME'12:30:00'"
       case BinaryType =>
         collationType match {
           case Utf8Binary => "Cast('dummy string' collate utf8_binary as BINARY)"
@@ -187,6 +191,7 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       case BooleanType => "True"
       case ByteType => "cast(5 as tinyint)"
       case _: DatetimeType => "date'2016-04-08'"
+      case DayTimeIntervalType => "CAST(INTERVAL '15' MINUTE AS INTERVAL DAY TO SECOND)"
       case DecimalType => "5.0"
       case _: DecimalType => "5.0"
       case _: DoubleType => "5.0"
@@ -244,10 +249,12 @@ class CollationExpressionWalkerSuite extends SparkFunSuite with SharedSparkSessi
       collationType: CollationType): String =
     inputType match {
       case AnyTimestampType => "TIMESTAMP"
+      case AnyTimeType => "TIME"
       case BinaryType => "BINARY"
       case BooleanType => "BOOLEAN"
       case ByteType => "TINYINT"
       case _: DatetimeType => "DATE"
+      case DayTimeIntervalType => "INTERVAL DAY TO SECOND"
       case DecimalType => "DECIMAL(2, 1)"
       case _: DecimalType => "DECIMAL(2, 1)"
       case _: DoubleType => "DOUBLE"
