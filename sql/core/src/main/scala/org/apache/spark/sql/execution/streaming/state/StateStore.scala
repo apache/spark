@@ -310,6 +310,13 @@ trait StateStore extends ReadStateStore {
    * Whether all updates have been committed
    */
   def hasCommitted: Boolean
+
+  /**
+   * Returns all column family names in this state store.
+   *
+   * @return Set of all column family names
+   */
+  def allColumnFamilyNames: collection.Set[String]
 }
 
 /** Wraps the instance of StateStore to make the instance read-only. */
