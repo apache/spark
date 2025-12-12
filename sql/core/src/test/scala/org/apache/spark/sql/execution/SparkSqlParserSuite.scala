@@ -502,10 +502,10 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
 
   test("SPARK-33118 CREATE TEMPORARY TABLE with LOCATION") {
     assertEqual("CREATE TEMPORARY TABLE t USING parquet OPTIONS (path '/data/tmp/testspark1')",
-      CreateTempViewUsing(TableIdentifier("t", None), None, false, false, "parquet",
+      CreateTempViewUsing(TableIdentifier("t", None), None, false, false, false, "parquet",
         Map("path" -> "/data/tmp/testspark1")))
     assertEqual("CREATE TEMPORARY TABLE t USING parquet LOCATION '/data/tmp/testspark1'",
-      CreateTempViewUsing(TableIdentifier("t", None), None, false, false, "parquet",
+      CreateTempViewUsing(TableIdentifier("t", None), None, false, false, false, "parquet",
         Map("path" -> "/data/tmp/testspark1")))
   }
 
