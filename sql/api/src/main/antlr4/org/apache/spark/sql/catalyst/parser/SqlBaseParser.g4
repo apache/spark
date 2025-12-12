@@ -323,6 +323,14 @@ statement
          (PARTITIONED ON identifierList) |
          (TBLPROPERTIES propertyList))*
         AS query                                                       #createView
+    | CREATE (OR REPLACE)?
+        VIEW (IF errorCapturingNot EXISTS)? identifierReference
+        identifierCommentList?
+        ((WITH METRICS) |
+         routineLanguage |
+         commentSpec |
+         (TBLPROPERTIES propertyList))*
+        AS codeLiteral                                                 #createMetricView
     | CREATE (OR REPLACE)? GLOBAL? TEMPORARY VIEW
         tableIdentifier (LEFT_PAREN colTypeList RIGHT_PAREN)? tableProvider
         (OPTIONS propertyList)?                                        #createTempViewUsing
@@ -1523,6 +1531,17 @@ complexColType
     : errorCapturingIdentifier COLON? dataType (errorCapturingNot NULL)? commentSpec?
     ;
 
+// The code literal is defined as a dollar quoted string.
+// A dollar quoted string consists of
+// - a begin tag which contains a dollar sign, an optional tag, and another dollar sign,
+// - a string literal that is made up of arbitrary sequence of characters, and
+// - an end tag which has to be exact the same as the begin tag.
+// As the string literal can contain dollar signs, we add + to DOLLAR_QUOTED_STRING_BODY to avoid
+// the parser eagarly matching END_DOLLAR_QUOTED_STRING when seeing a dollar sign.
+codeLiteral
+    : BEGIN_DOLLAR_QUOTED_STRING DOLLAR_QUOTED_STRING_BODY+ END_DOLLAR_QUOTED_STRING
+    ;
+
 routineCharacteristics
     : (routineLanguage
     | specificName
@@ -1997,7 +2016,9 @@ ansiNonReserved
     | MATCHED
     | MATERIALIZED
     | MAX
+    | MEASURE
     | MERGE
+    | METRICS
     | MICROSECOND
     | MICROSECONDS
     | MILLISECOND
@@ -2387,7 +2408,9 @@ nonReserved
     | MATCHED
     | MATERIALIZED
     | MAX
+    | MEASURE
     | MERGE
+    | METRICS
     | MICROSECOND
     | MICROSECONDS
     | MILLISECOND

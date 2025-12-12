@@ -16,6 +16,11 @@
 
 lexer grammar SqlBaseLexer;
 
+@header {
+import java.util.ArrayDeque;
+import java.util.Deque;
+}
+
 @members {
   /**
    * When true, parser should throw ParseException for unclosed bracketed comment.
@@ -69,6 +74,11 @@ lexer grammar SqlBaseLexer;
   public void markUnclosedComment() {
     has_unclosed_bracketed_comment = true;
   }
+
+  /**
+   * This field stores the tags which are used to detect the end of a dollar quoted string literal.
+   */
+  private final Deque<String> tags = new ArrayDeque<String>();
 
   /**
    * When greater than zero, it's in the middle of parsing ARRAY/MAP/STRUCT type.
@@ -324,7 +334,9 @@ MAP: 'MAP' {incComplexTypeLevelCounter();};
 MATCHED: 'MATCHED';
 MATERIALIZED: 'MATERIALIZED';
 MAX: 'MAX';
+MEASURE: 'MEASURE';
 MERGE: 'MERGE';
+METRICS: 'METRICS';
 MICROSECOND: 'MICROSECOND';
 MICROSECONDS: 'MICROSECONDS';
 MILLISECOND: 'MILLISECOND';
@@ -557,6 +569,10 @@ STRING_LITERAL
     | 'R"'(~'"')* '"'
     ;
 
+BEGIN_DOLLAR_QUOTED_STRING
+    : DOLLAR_QUOTED_TAG {tags.push(getText());} -> pushMode(DOLLAR_QUOTED_STRING_MODE)
+    ;
+
 DOUBLEQUOTED_STRING
     :'"' ( ~('"'|'\\') | '""' | ('\\' .) )* '"'
     ;
@@ -634,6 +650,10 @@ fragment LETTER
     : [A-Z]
     ;
 
+fragment DOLLAR_QUOTED_TAG
+    : '$' LETTER* '$'
+    ;
+
 fragment UNICODE_LETTER
     : [\p{L}]
     ;
@@ -655,4 +675,14 @@ WS
 // when splitting statements with DelimiterLexer
 UNRECOGNIZED
     : .
+    ;
+
+mode DOLLAR_QUOTED_STRING_MODE;
+DOLLAR_QUOTED_STRING_BODY
+    : ~'$'+
+    | '$' ~'$'*
+    ;
+
+END_DOLLAR_QUOTED_STRING
+    : DOLLAR_QUOTED_TAG {getText().equals(tags.peek())}? {tags.pop();} -> popMode
     ;

@@ -3711,6 +3711,16 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
+   * Create a String from a dollar-quoted string literal (e.g., $$text$$).
+   * This is used for code literals in features like metric views where the content
+   * may contain special characters that would be difficult to escape in regular strings.
+   */
+  override def visitCodeLiteral(ctx: CodeLiteralContext): String = {
+    assert(ctx != null)
+    dollarQuotedString(ctx.DOLLAR_QUOTED_STRING_BODY())
+  }
+
+  /**
    * Create a String from a string literal context. This supports:
    *   - Consecutive string literals: `'hello' 'world'` becomes `'helloworld'`
    *   - R-strings (raw strings): `R'\n'` preserves the literal backslash
