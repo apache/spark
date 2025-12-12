@@ -357,7 +357,15 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     // scalastyle:off
     checkAnswer(Seq("大千世界").toDF("a").select(is_valid_utf8($"a")), Row(true))
     checkAnswer(Seq(("abc", null)).toDF("a", "b").select(is_valid_utf8($"b")), Row(null))
-    checkAnswer(Seq(Array[Byte](-1)).toDF("a").select(is_valid_utf8($"a")), Row(false))
+    // Test the function's validation logic with invalid UTF-8 bytes.
+    // Requires disabling cast validation (legacy behavior). With the new default
+    // (validateUtf8=true), the implicit BinaryType->StringType cast would fail before
+    // the function receives the data. This tests the function's implementation for users
+    // who explicitly disable cast validation.
+    // Related: SPARK-54586
+    withSQLConf(SQLConf.VALIDATE_BINARY_TO_STRING_CAST.key -> "false") {
+      checkAnswer(Seq(Array[Byte](-1)).toDF("a").select(is_valid_utf8($"a")), Row(false))
+    }
     // scalastyle:on
   }
 
@@ -365,7 +373,15 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     // scalastyle:off
     checkAnswer(Seq("大千世界").toDF("a").select(make_valid_utf8($"a")), Row("大千世界"))
     checkAnswer(Seq(("abc", null)).toDF("a", "b").select(make_valid_utf8($"b")), Row(null))
-    checkAnswer(Seq(Array[Byte](-1)).toDF("a").select(make_valid_utf8($"a")), Row("\uFFFD"))
+    // Test the function's validation logic with invalid UTF-8 bytes.
+    // Requires disabling cast validation (legacy behavior). With the new default
+    // (validateUtf8=true), the implicit BinaryType->StringType cast would fail before
+    // the function receives the data. This tests the function's implementation for users
+    // who explicitly disable cast validation.
+    // Related: SPARK-54586
+    withSQLConf(SQLConf.VALIDATE_BINARY_TO_STRING_CAST.key -> "false") {
+      checkAnswer(Seq(Array[Byte](-1)).toDF("a").select(make_valid_utf8($"a")), Row("\uFFFD"))
+    }
     // scalastyle:on
   }
 
@@ -373,13 +389,21 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     // scalastyle:off
     checkAnswer(Seq("大千世界").toDF("a").select(validate_utf8($"a")), Row("大千世界"))
     checkAnswer(Seq(("abc", null)).toDF("a", "b").select(validate_utf8($"b")), Row(null))
-    checkError(
-      exception = intercept[SparkIllegalArgumentException] {
-        Seq(Array[Byte](-1)).toDF("a").select(validate_utf8($"a")).collect()
-      },
-      condition = "INVALID_UTF8_STRING",
-      parameters = Map("str" -> "\\xFF")
-    )
+    // Test the function's validation logic with invalid UTF-8 bytes.
+    // Requires disabling cast validation (legacy behavior). With the new default
+    // (validateUtf8=true), the implicit BinaryType->StringType cast would fail before
+    // the function receives the data. This tests the function's implementation for users
+    // who explicitly disable cast validation.
+    // Related: SPARK-54586
+    withSQLConf(SQLConf.VALIDATE_BINARY_TO_STRING_CAST.key -> "false") {
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          Seq(Array[Byte](-1)).toDF("a").select(validate_utf8($"a")).collect()
+        },
+        condition = "INVALID_UTF8_STRING",
+        parameters = Map("str" -> "\\xFF")
+      )
+    }
     // scalastyle:on
   }
 
@@ -387,7 +411,15 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     // scalastyle:off
     checkAnswer(Seq("大千世界").toDF("a").select(try_validate_utf8($"a")), Row("大千世界"))
     checkAnswer(Seq(("abc", null)).toDF("a", "b").select(try_validate_utf8($"b")), Row(null))
-    checkAnswer(Seq(Array[Byte](-1)).toDF("a").select(try_validate_utf8($"a")), Row(null))
+    // Test the function's validation logic with invalid UTF-8 bytes.
+    // Requires disabling cast validation (legacy behavior). With the new default
+    // (validateUtf8=true), the implicit BinaryType->StringType cast would fail before
+    // the function receives the data. This tests the function's implementation for users
+    // who explicitly disable cast validation.
+    // Related: SPARK-54586
+    withSQLConf(SQLConf.VALIDATE_BINARY_TO_STRING_CAST.key -> "false") {
+      checkAnswer(Seq(Array[Byte](-1)).toDF("a").select(try_validate_utf8($"a")), Row(null))
+    }
     // scalastyle:on
   }
 
