@@ -25,11 +25,12 @@ import java.time.{Duration, Instant, LocalDate, LocalDateTime, LocalTime, Period
 import java.util.{Map => JavaMap}
 import javax.annotation.Nullable
 
+import scala.language.existentials
+
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType._
@@ -60,6 +61,7 @@ object CatalystTypeConverters {
   }
 
   private def getConverterForType(dataType: DataType): CatalystTypeConverter[Any, Any, Any] = {
+    TypeUtils.failUnsupportedDataType(dataType, SQLConf.get)
     val converter = dataType match {
       case udt: UserDefinedType[_] => UDTConverter(udt)
       case arrayType: ArrayType => ArrayConverter(arrayType.elementType)
@@ -68,18 +70,12 @@ object CatalystTypeConverters {
       case CharType(length) => new CharConverter(length)
       case VarcharType(length) => new VarcharConverter(length)
       case _: StringType => StringConverter
-      case _ @ (_: GeographyType | _: GeometryType) if !SQLConf.get.geospatialEnabled =>
-        throw new org.apache.spark.sql.AnalysisException(
-          errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",
-          messageParameters = scala.collection.immutable.Map.empty)
       case g: GeographyType =>
         new GeographyConverter(g)
       case g: GeometryType =>
         new GeometryConverter(g)
       case DateType if SQLConf.get.datetimeJava8ApiEnabled => LocalDateConverter
       case DateType => DateConverter
-      case _: TimeType if !SQLConf.get.isTimeTypeEnabled =>
-        QueryCompilationErrors.unsupportedTimeTypeError()
       case _: TimeType => TimeConverter
       case TimestampType if SQLConf.get.datetimeJava8ApiEnabled => InstantConverter
       case TimestampType => TimestampConverter
