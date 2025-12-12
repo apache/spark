@@ -903,7 +903,6 @@ class FilterPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer = testRelation
-      .where("s" === "s")
       .select($"a", $"b")
       .groupBy($"a")($"a", count($"b") as "c", "s" as "d")
       .where($"c" === 2L)
