@@ -2047,14 +2047,14 @@ object PushDownPredicates extends Rule[LogicalPlan] {
  * Pushes [[Filter]] operators through many operators iff:
  * 1) the operator is deterministic
  * 2) the predicate is deterministic and the operator will not change any of rows.
+ * 3) We don't add double evaluation OR double evaluation would be cheap OR we're configured to.
  *
- * This heuristic is valid assuming the expression evaluation cost is minimal.
  */
 object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform applyLocally
 
-  // Match the column ordering. It's not something we guarantee but seems like it
-  // could be useful especially for folks writing out to "raw" files.
+  // Match the column ordering, this is important as we shouldn't change the schema
+  // , even the positional one, during optimization.
   private def matchColumnOrdering(original: Seq[NamedExpression], updated: Seq[NamedExpression]):
       Seq[NamedExpression] = {
     val nameToIndex = original.map(_.name).zipWithIndex.toMap
@@ -2067,6 +2067,25 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
   }
 
   val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
+    // Projections are a special case because the filter _may_ contain references to fields added in
+    // the projection that we wish to copy. We shouldn't blindly copy everything
+    // since double evaluation all operations can be expensive (unless the broken behavior is
+    // enabled by the user). The double filter eval regression was added in Spark 3 fixed in 4.2.
+    // The _new_ default algorithm works as follows:
+    // Provided filters are broken up based on their &&s for separate evaluation.
+    // We track which components of the projection are used in the filters.
+    // 1) All filters which do not reference anything in the projection are pushed.
+    // 2) Filters which reference _inexpensive_ items in projection are pushed along with a copy
+    //    of the what they reference.
+    // (Case 1 & 2 are treated as "cheap" predicates)
+    // 3) When an expensive filters is present referencing different projections we
+    //    check to see if we should split the projection into multiple parts.
+    //  3a) If the filter references everything in the projection we can't split it any further.
+    //  3b) If the filter does not reference the entire projection then we can potentially reduce
+    //     the amount of expensive projection computation but splitting the referenced parts of the
+    //     projection and
+    // Case 3 is treated as an "expensive" predicate.
+    // Additional restriction:
     // SPARK-13473: We can't push the predicate down when the underlying projection output non-
     // deterministic field(s).  Non-deterministic expressions are essentially stateful. This
     // implies that, for a given input row, the output are determined by the expression's initial
@@ -2079,46 +2098,78 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       // Projection aliases that the filter references
       val expensiveFilterAliasesBuf = mutable.ArrayBuffer.empty[Alias]
       // Projection aliases that are not used in the filter, so we don't need to push
-      var leftBehindAliases: Map[ExprId, Alias] = aliasMap.baseMap.values.map {
-        kv => (kv._2.exprId, kv._2)
-      }.toMap
-      val (cheap, expensive) = splitConjunctivePredicates(condition).partition { cond =>
+      val usedAliasesForCondition = condition.map {
+        if (!SQLConf.getAvoidDoubleFilterEval) {
+          Set[Alias].empty()
+        } else {
+          val (replaced, usedAliases) = replaceAliasWhileTracking(cond, aliasMap)
+          // Didn't swap anything? empty list :)
+          if (cond == replaced) {
+            Set[Alias].empty()
+          } else {
+            Set[Alias](usedAliases)
+          }
+        }
+      }
+      val (cheapWithUsed, expensiveWithUsed) = splitConjunctivePredicates(usedAliasesForCondition).partition { (cond, used) =>
         if (!SQLConf.get.avoidDoubleFilterEvail) {
           // If we are always pushing through short circuit the check.
           true
         } else {
-          val (replaced, usedAliases) = replaceAliasWhileTracking(cond, aliasMap)
-          if (cond == replaced) {
-          // If nothing changes then our alias is cheap
+          // Didn't use anything? We're good
+          if (used.isEmpty) {
             true
-          } else if (usedAliases.iterator.map(_._2.child.expensive).forall(_ == false)) {
+          } else if (used.iterator.map(_._2.child.expensive).forall(_ == false)) {
             // If it's cheap we can push it because it might eliminate more data quickly and
             // it may also be something which could be evaluated at the storage layer.
             // We may wish to improve this heuristic in the future.
             true
           } else {
-            // This is an expensive replacement so we see resolve it
-            usedAliases.iterator.foreach {
-              e: (Attribute, Alias) =>
-              if (leftBehindAliases.contains(e._2.exprId)) {
-                leftBehindAliases = leftBehindAliases.removed(e._2.exprId)
-                expensiveFilterAliasesBuf += e._2
-              }
-            }
             false
           }
         }
       }
+      val cheap = cheapWithUsed.map(_._1)
 
-      val expensiveFilterAliases = expensiveFilterAliasesBuf.toArray.toSeq
-      val expensiveLeftBehindAliases: Map[ExprId, Alias] = leftBehindAliases.filter {
-        kv => kv._2.child.expensive
-      }
-
-      if (expensiveFilterAliases.isEmpty) {
+      // Handle case 1 & 2 case 2
+      val cheapPushed = if (!cheap.isEmpty) {
         // If the filter does not reference any expensive aliases then we
         // just push the filter while resolving the non-expensive aliases.
         project.copy(child = Filter(replaceAlias(condition, aliasMap), child = grandChild))
+      } else {
+        project
+      }
+      // Case 3
+      val expensiveSplit = if (!expensiveWithUsed.isEmpty) {
+        // Do group by on usedAliases
+        val expensiveByUsed = ...
+        // For each expensive alias figure out if they're in case 3A or 3B
+        val (toSplit, leaveAsIs) = expensiveByUsed.partition {
+          case (used, expensive) =>
+            // We can't split these filters from this projection since they
+            // have a 1:1 mapping with all of the aliases.
+            if (used == allAliases) {
+              false
+            } else {
+              true
+            }
+        }
+        if (toSplit.isEmpty) {
+          cheapPushed
+        } else {
+          // We're going to now add projections one at a time for the expensive components needed by
+          // each group of filters. We'll keep track of what we added for the previous so we
+          // don't double add anything.
+          var addedAliases = Set[Alias].empty()
+          // We do this with a fold:
+          toSplit.foldl {
+            ...
+          }
+        }
+      } else {
+        cheapPushed
+      }
+
       } else if (leftBehindAliases.isEmpty) {
         // If there are no left behind aliases then we've used all of the aliases in our filter.
         // We don't need to introduce any more projections since we already have the "minimal"
