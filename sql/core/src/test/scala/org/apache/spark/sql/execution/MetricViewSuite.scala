@@ -396,4 +396,43 @@ abstract class MetricViewSuite extends QueryTest with SQLTestUtils {
       )
     }
   }
+
+  test("test union of same aggregated metric view dataframe") {
+    val metricView = MetricView(
+      "0.1", AssetSource(testTableName), None, testMetricViewColumns)
+    withMetricView(testMetricViewName, metricView) {
+      // Create a DataFrame with aggregation and groupBy from metric view
+      val df = sql(
+        s"""SELECT region, measure(count_sum) as total_count, measure(price_avg) as avg_price
+           |FROM $testMetricViewName
+           |GROUP BY region
+           |""".stripMargin)
+
+      // Union the same DataFrame with itself - tests DeduplicateRelations
+      val unionDf = df.union(df)
+
+      // Expected result: each region should appear twice with identical values
+      val expectedDf = sql(
+        """
+          |SELECT region, sum(count) as total_count, avg(price) as avg_price
+          |FROM test_table
+          |GROUP BY region
+          |UNION ALL
+          |SELECT region, sum(count) as total_count, avg(price) as avg_price
+          |FROM test_table
+          |GROUP BY region
+          |""".stripMargin)
+
+      checkAnswer(unionDf, expectedDf)
+
+      unionDf.explain(true)
+
+      // Verify the result has duplicate rows
+      assert(unionDf.count() == df.count() * 2,
+        "Union should double the row count")
+
+      // Verify that distinct values are the same as the original
+      checkAnswer(unionDf.distinct(), df)
+    }
+  }
 }
