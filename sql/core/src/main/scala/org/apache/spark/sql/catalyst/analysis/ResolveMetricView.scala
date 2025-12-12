@@ -116,7 +116,7 @@ import org.apache.spark.sql.types.{DataType, Metadata, MetadataBuilder}
  * 2. Load and parse the stored metric view definition from catalog metadata
  * 3. Build a [[Project]] node that:
  *    - Projects dimension expressions: [region, upper(region) AS region_upper]
- *    - Includes non-conflicting source columns for filters
+ *    - Includes non-conflicting source columns for measure aggregate functions to reference
  *    - Result: The metric view now exposes dimensions as queryable columns
  * 4. Locate [[Aggregate]] nodes containing MEASURE() function calls
  * 5. Substitute each MEASURE() call with its corresponding aggregate expression:
@@ -201,11 +201,14 @@ case class ResolveMetricView(session: SparkSession) extends Rule[LogicalPlan] {
         // 1. hide the column conflict with dimensions
         // 2. add an alias to the source column so they are stable with DeduplicateRelation
         // 3. metric view output should use the same exprId
+        val dimensionAttrs = metricView.outputMetrics.filter(a =>
+          dimensions.exists(_.exprId == a.exprId)
+        )
         val sourceProjList = sourceOutput.filterNot { attr =>
           // conflict with dimensions
-          metricView.outputMetrics
+          dimensionAttrs
             .resolve(Seq(attr.name), session.sessionState.conf.resolver)
-            .exists(a => dimensions.exists(_.exprId == a.exprId))
+            .nonEmpty
         }.map { attr =>
           if (attr.metadata.contains(MetricViewConstants.COLUMN_TYPE_PROPERTY_KEY)) {
             // no alias for metric view column since the measure reference needs to use the
@@ -227,7 +230,7 @@ case class ResolveMetricView(session: SparkSession) extends Rule[LogicalPlan] {
         }
 
         // step 3: resolve the measure references in Aggregate node
-        val res = withDimensions match {
+        withDimensions match {
           case aggregate: Aggregate => transformAggregateWithMeasures(
             aggregate,
             measures
@@ -235,7 +238,6 @@ case class ResolveMetricView(session: SparkSession) extends Rule[LogicalPlan] {
           case other =>
             throw SparkException.internalError("ran into unexpected node: " + other)
         }
-        res
     }
   }
 

@@ -425,8 +425,6 @@ abstract class MetricViewSuite extends QueryTest with SQLTestUtils {
 
       checkAnswer(unionDf, expectedDf)
 
-      unionDf.explain(true)
-
       // Verify the result has duplicate rows
       assert(unionDf.count() == df.count() * 2,
         "Union should double the row count")
