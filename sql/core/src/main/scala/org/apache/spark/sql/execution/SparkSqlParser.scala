@@ -187,7 +187,7 @@ class SparkSqlAstBuilder extends AstBuilder {
         (ident, _) => builder(ident))
     } else if (ctx.errorCapturingIdentifier() != null) {
       // resolve immediately
-      builder.apply(Seq(ctx.errorCapturingIdentifier().getText))
+      builder.apply(Seq(getIdentifierText(ctx.errorCapturingIdentifier())))
     } else if (ctx.stringLit() != null) {
       // resolve immediately
       builder.apply(Seq(string(visitStringLit(ctx.stringLit()))))
@@ -1308,7 +1308,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       } else {
         DescribeColumn(
           relation,
-          UnresolvedAttribute(ctx.describeColName.nameParts.asScala.map(_.getText).toSeq),
+          UnresolvedAttribute(ctx.describeColName.nameParts.asScala.map(getIdentifierText).toSeq),
           isExtended)
       }
     } else {
