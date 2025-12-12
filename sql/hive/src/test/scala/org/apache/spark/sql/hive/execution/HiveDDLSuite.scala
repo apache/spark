@@ -1155,17 +1155,16 @@ class HiveDDLSuite
       spark.range(10).write.saveAsTable("tab1")
       withView("view1") {
         sql("CREATE VIEW view1 AS SELECT * FROM tab1")
-        assertAnalysisErrorCondition(
-          sqlText = "DROP TABLE view1",
-          condition = "WRONG_COMMAND_FOR_OBJECT_TYPE",
-          parameters = Map(
-            "alternative" -> "DROP VIEW",
-            "operation" -> "DROP TABLE",
-            "foundType" -> "VIEW",
-            "requiredType" -> "EXTERNAL or MANAGED",
-            "objectName" -> "spark_catalog.default.view1"
-          )
-        )
+        // Dropping a VIEW using DROP TABLE is allowed.
+        sql("DROP TABLE view1")
+        // Verify that the VIEW has been dropped.
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"SELECT * FROM view1")
+          },
+          condition = "TABLE_OR_VIEW_NOT_FOUND",
+          parameters = Map("relationName" -> s"`view1`"),
+          ExpectedContext("view1", 14, 18))
       }
     }
   }
