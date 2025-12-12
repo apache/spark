@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.TableOutputResolver.DefaultValueFillMode.{NONE, RECURSE}
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, CreateNamedStruct, Expression, GetStructField, If, IsNull, Literal}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, CreateNamedStruct, Expression, GetStructField, If, IsNull, Literal, Or}
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans.logical.Assignment
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -317,42 +317,22 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
           s"${colPath.quoted} must be a struct but was ${sourceType.simpleString}")
         Seq()
     }
-    nestedSourcePaths.diff(nestedTargetPaths)
+    nestedTargetPaths.diff(nestedSourcePaths)
   }
 
   /**
-   * Creates a null check for a field at the given path within a struct expression.
-   * Navigates through the struct hierarchy following the path and returns an IsNull check
-   * for the final field.
+   * As UPDATE SET * assigns struct fields individually (preserving existing fields),
+   * this will lead to indiscriminate null expansion, ie, a struct is created where all
+   * fields are null.  Wraps a struct assignment with a condition to return null
+   * if both conditions are true:
    *
-   * @param rootExpr the root expression to navigate from
-   * @param path the field path to navigate (sequence of field names)
-   * @return an IsNull expression checking if the field at the path is null
-   */
-  private def createNullCheckForFieldPath(
-      rootExpr: Expression,
-      path: Seq[String]): Expression = {
-    var currentExpr: Expression = rootExpr
-    path.foreach { fieldName =>
-      currentExpr.dataType match {
-        case st: StructType =>
-          st.fields.find(f => conf.resolver(f.name, fieldName)) match {
-            case Some(field) =>
-              val fieldIndex = st.fieldIndex(field.name)
-              currentExpr = GetStructField(currentExpr, fieldIndex, Some(field.name))
-            case None => // No-op, should error later in TableOutputResolver
-          }
-        case _ => // Not a struct- no-op, should error later in TableOutputResolver
-      }
-    }
-    IsNull(currentExpr)
-  }
-
-  /**
-   * As UPDATE SET * can assign struct fields individually (preserving existing fields),
-   * this will lead to null expansion, ie, a struct is created where all fields are null.
-   * Wraps a struct assignment with null checks for the source and missing source fields.
-   * Return null if all are null.
+   * - source struct is null
+   * - target struct is null OR target struct is same as source struct
+   *
+   * If the condition is not true, we preserve the original structure.
+   * This includes cases where the source was a struct of nulls,
+   * or there were any extra target fields (including null ones),
+   * both cases retain the assignment to a struct of nulls.
    *
    * @param col the target column attribute
    * @param value the source value expression
@@ -374,23 +354,13 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
     if (!col.nullable) {
       AssertNotNull(value)
     } else {
-      // Check if source struct is null
-      val valueIsNull = IsNull(value)
-
-      // Check if missing source paths (paths in target but not in source) are not null
-      // These will be null for the case of UPDATE SET * and
+      // Check if there are missing source paths (nested fields in target but not in source)
       val missingSourcePaths = getMissingSourcePaths(structType, value.dataType, colPath, addError)
-      val condition = if (missingSourcePaths.nonEmpty) {
-        // Check if all target attributes at missing source paths are null
-        val missingFieldNullChecks = missingSourcePaths.map { path =>
-          createNullCheckForFieldPath(col, path)
-        }
-        // Combine all null checks with AND
-        val allMissingFieldsNull = missingFieldNullChecks.reduce[Expression]((a, b) => And(a, b))
-        And(valueIsNull, allMissingFieldsNull)
-      } else {
-        valueIsNull
-      }
+      val missingPathsEmpty =
+        if (missingSourcePaths.isEmpty) Literal.TrueLiteral else Literal.FalseLiteral
+
+      // Condition: (source struct IS NULL) AND (target struct IS NULL OR missingSourcePaths empty)
+      val condition = And(IsNull(value), Or(IsNull(col), missingPathsEmpty))
 
       // Return: If (condition) THEN NULL ELSE structAssignment
       If(condition, Literal(null, structAssignment.dataType), structAssignment)
