@@ -1567,8 +1567,8 @@ class SparkConnectPlanner(
     }
 
     // Load and combine all batches
-    val (rows, structType) = ArrowConverters.fromIPCStream(
-      dataHashes.iterator.map(readChunkedCachedLocalRelationBlock))
+    val (rows, structType) =
+      ArrowConverters.fromIPCStream(dataHashes.iterator.map(readChunkedCachedLocalRelationBlock))
     try {
       buildLocalRelationFromRows(rows, structType, Option(schema))
     } finally {
