@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import org.apache.datasketches.common.Family
 import org.apache.datasketches.memory.Memory
 import org.apache.datasketches.theta.{CompactSketch, Intersection, SetOperation, Sketch, Union, UpdateSketch, UpdateSketchBuilder}
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
-import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggregate
-import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, ThetaSketchUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
@@ -59,10 +59,12 @@ case class FinalizedSketch(sketch: CompactSketch) extends ThetaSketchState {
  *
  * See [[https://datasketches.apache.org/docs/Theta/ThetaSketches.html]] for more information.
  *
- * @param left
+ * @param first
  *   child expression against which unique counting will occur
- * @param right
+ * @param second
  *   the log-base-2 of nomEntries decides the number of buckets for the sketch
+ * @param third
+ *   the family of the sketch (QUICKSELECT or ALPHA)
  * @param mutableAggBufferOffset
  *   offset for mutable aggregation buffer
  * @param inputAggBufferOffset
@@ -71,49 +73,73 @@ case class FinalizedSketch(sketch: CompactSketch) extends ThetaSketchState {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr, lgNomEntries) - Returns the ThetaSketch compact binary representation.
+    _FUNC_(expr, lgNomEntries, family) - Returns the ThetaSketch compact binary representation.
       `lgNomEntries` (optional) is the log-base-2 of nominal entries, with nominal entries deciding
-      the number buckets or slots for the ThetaSketch. """,
+      the number buckets or slots for the ThetaSketch.
+      `family` (optional) is the sketch family, either 'QUICKSELECT' or 'ALPHA' (defaults to
+      'QUICKSELECT').""",
   examples = """
     Examples:
+      > SELECT theta_sketch_estimate(_FUNC_(col)) FROM VALUES (1), (1), (2), (2), (3) tab(col);
+       3
       > SELECT theta_sketch_estimate(_FUNC_(col, 12)) FROM VALUES (1), (1), (2), (2), (3) tab(col);
+       3
+      > SELECT theta_sketch_estimate(_FUNC_(col, 15, 'ALPHA')) FROM VALUES (1), (1), (2), (2), (3) tab(col);
        3
   """,
   group = "agg_funcs",
   since = "4.1.0")
 // scalastyle:on line.size.limit
 case class ThetaSketchAgg(
-    left: Expression,
-    right: Expression,
-    override val mutableAggBufferOffset: Int,
-    override val inputAggBufferOffset: Int)
+       first: Expression,
+       second: Expression,
+       third: Expression,
+       override val mutableAggBufferOffset: Int,
+       override val inputAggBufferOffset: Int)
     extends TypedImperativeAggregate[ThetaSketchState]
-    with BinaryLike[Expression]
+    with TernaryLike[Expression]
     with ExpectsInputTypes {
 
   // ThetaSketch config - mark as lazy so that they're not evaluated during tree transformation.
 
-  lazy val lgNomEntries: Int = {
-    if (!right.foldable) {
+
+  private lazy val lgNomEntries: Int = {
+    if (!second.foldable) {
       throw QueryExecutionErrors.thetaLgNomEntriesMustBeConstantError(prettyName)
     }
-    val lgNomEntriesInput = right.eval().asInstanceOf[Int]
+    val lgNomEntriesInput = second.eval().asInstanceOf[Int]
     ThetaSketchUtils.checkLgNomLongs(lgNomEntriesInput, prettyName)
     lgNomEntriesInput
   }
 
-  // Constructors
+  private lazy val family: Family = {
+    if (!third.foldable) {
+      throw QueryExecutionErrors.thetaFamilyMustBeConstantError(prettyName)
+    }
+    val familyName = third.eval().asInstanceOf[UTF8String]
+    ThetaSketchUtils.parseFamily(familyName.toString, prettyName)
+  }
 
   def this(child: Expression) = {
-    this(child, Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS), 0, 0)
+    this(child,
+      Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS),
+      Literal(UTF8String.fromString(ThetaSketchUtils.DEFAULT_FAMILY)),
+      0, 0)
   }
 
   def this(child: Expression, lgNomEntries: Expression) = {
-    this(child, lgNomEntries, 0, 0)
+    this(child,
+      lgNomEntries,
+      Literal(UTF8String.fromString(ThetaSketchUtils.DEFAULT_FAMILY)),
+      0, 0)
+  }
+
+  def this(child: Expression, lgNomEntries: Expression, family: Expression) = {
+    this(child, lgNomEntries, family, 0, 0)
   }
 
   def this(child: Expression, lgNomEntries: Int) = {
-    this(child, Literal(lgNomEntries), 0, 0)
+      this(child, Literal(lgNomEntries))
   }
 
   // Copy constructors required by ImperativeAggregate
@@ -124,16 +150,11 @@ case class ThetaSketchAgg(
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ThetaSketchAgg =
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
-  override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): ThetaSketchAgg =
-    copy(left = newLeft, right = newRight)
-
   // Overrides for TypedImperativeAggregate
 
   override def prettyName: String = "theta_sketch_agg"
 
-  override def inputTypes: Seq[AbstractDataType] =
+  override def inputTypes: Seq[AbstractDataType] = {
     Seq(
       TypeCollection(
         ArrayType(IntegerType),
@@ -144,14 +165,16 @@ case class ThetaSketchAgg(
         IntegerType,
         LongType,
         StringTypeWithCollation(supportsTrimCollation = true)),
-      IntegerType)
+      IntegerType,
+      StringType)
+  }
 
   override def dataType: DataType = BinaryType
 
   override def nullable: Boolean = false
 
   /**
-   * Instantiate an UpdateSketch instance using the lgNomEntries param.
+   * Instantiate an UpdateSketch instance using the lgNomEntries and family params.
    *
    * @return
    *   an UpdateSketch instance wrapped with UpdatableSketchBuffer
@@ -159,6 +182,7 @@ case class ThetaSketchAgg(
   override def createAggregationBuffer(): ThetaSketchState = {
     val builder = new UpdateSketchBuilder
     builder.setLogNominalEntries(lgNomEntries)
+    builder.setFamily(family)
     UpdatableSketchBuffer(builder.build)
   }
 
@@ -179,7 +203,7 @@ case class ThetaSketchAgg(
    */
   override def update(updateBuffer: ThetaSketchState, input: InternalRow): ThetaSketchState = {
     // Return early for null values.
-    val v = left.eval(input)
+    val v = first.eval(input)
     if (v == null) return updateBuffer
 
     // Initialized buffer should be UpdatableSketchBuffer, else error out.
@@ -189,7 +213,7 @@ case class ThetaSketchAgg(
     }
 
     // Handle the different data types for sketch updates.
-    left.dataType match {
+    first.dataType match {
       case ArrayType(IntegerType, _) =>
         val arr = v.asInstanceOf[ArrayData].toIntArray()
         sketch.update(arr)
@@ -216,7 +240,7 @@ case class ThetaSketchAgg(
       case _ =>
         throw new SparkUnsupportedOperationException(
           errorClass = "_LEGACY_ERROR_TEMP_3121",
-          messageParameters = Map("dataType" -> left.dataType.toString))
+          messageParameters = Map("dataType" -> first.dataType.toString))
     }
 
     UpdatableSketchBuffer(sketch)
@@ -292,6 +316,9 @@ case class ThetaSketchAgg(
       this.createAggregationBuffer()
     }
   }
+
+  override protected def withNewChildrenInternal(newFirst: Expression, newSecond: Expression,
+     newThird: Expression): ThetaSketchAgg = copy(newFirst, newSecond, newThird)
 }
 
 /**
@@ -333,6 +360,7 @@ case class ThetaUnionAgg(
     with ExpectsInputTypes {
 
   // ThetaSketch config - mark as lazy so that they're not evaluated during tree transformation.
+
 
   lazy val lgNomEntries: Int = {
     if (!right.foldable) {
