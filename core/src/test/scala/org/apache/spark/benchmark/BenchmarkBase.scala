@@ -70,6 +70,8 @@ abstract class BenchmarkBase {
       output = Some(new FileOutputStream(file))
     }
 
+    beforeAll()
+
     runBenchmarkSuite(args)
 
     output.foreach { o =>
@@ -82,6 +84,11 @@ abstract class BenchmarkBase {
   }
 
   def suffix: String = ""
+
+  /**
+   * Any code before running any benchmark, e.g., data preparation
+   */
+  def beforeAll(): Unit = {}
 
   /**
    * Any shutdown code to ensure a clean shutdown
