@@ -762,6 +762,97 @@ abstract class TimeFunctionsSuiteBase extends QueryTest with SharedSparkSession 
     checkAnswer(result1, expected)
     checkAnswer(result2, expected)
   }
+
+  test("time_format") {
+    // Basic formats: 24-hour and 12-hour with AM/PM
+    checkAnswer(
+      sql("""
+        SELECT
+          time_format(TIME'14:30:45', 'HH:mm:ss') as format_24hr,
+          time_format(TIME'14:30:45', 'hh:mm:ss a') as format_12hr_pm,
+          time_format(TIME'09:15:30', 'hh:mm:ss a') as format_12hr_am
+      """),
+      Row("14:30:45", "02:30:45 PM", "09:15:30 AM")
+    )
+
+    // Precision: milliseconds, microseconds, single-digit hour
+    checkAnswer(
+      sql("""
+        SELECT
+          time_format(TIME'14:30:45.123', 'HH:mm:ss.SSS') as millis,
+          time_format(TIME'14:30:45.123456', 'HH:mm:ss.SSSSSS') as micros,
+          time_format(TIME'09:05:00', 'H:mm a') as single_digit
+      """),
+      Row("14:30:45.123", "14:30:45.123456", "9:05 AM")
+    )
+
+    // Edge cases: midnight, noon, max time, different patterns
+    checkAnswer(
+      sql("""
+        SELECT
+          time_format(TIME'00:00:00', 'HH:mm:ss') as midnight_24hr,
+          time_format(TIME'00:00:00', 'hh:mm:ss a') as midnight_12hr,
+          time_format(TIME'12:00:00', 'hh:mm:ss a') as noon,
+          time_format(TIME'23:59:59.999999', 'HH:mm:ss.SSSSSS') as max_time,
+          time_format(TIME'14:30:45', 'HH:mm') as hour_min,
+          time_format(TIME'14:30:45', 'HH') as hour_only
+      """),
+      Row("00:00:00", "12:00:00 AM", "12:00:00 PM", "23:59:59.999999", "14:30", "14")
+    )
+
+    // Custom separators and text literals
+    checkAnswer(
+      sql("""
+        SELECT
+          time_format(TIME'14:30:45', 'hh-mm-ss a') as hyphen,
+          time_format(TIME'14:30:45', 'HH.mm.ss') as dot,
+          time_format(TIME'14:30:45', '''Time:'' HH:mm:ss') as with_text
+      """),
+      Row("02-30-45 PM", "14.30.45", "Time: 14:30:45")
+    )
+
+    // Null handling
+    checkAnswer(
+      sql("""
+        SELECT
+          time_format(NULL, 'HH:mm:ss') as null_time,
+          time_format(TIME'14:30:45', NULL) as null_format
+      """),
+      Row(null, null)
+    )
+
+    // DataFrame API with column expressions
+    val df = Seq(
+      ("morning", LocalTime.of(9, 30, 0)),
+      ("afternoon", LocalTime.of(14, 30, 45)),
+      ("evening", LocalTime.of(19, 45, 30))
+    ).toDF("label", "time_col")
+
+    checkAnswer(
+      df.select($"label", time_format($"time_col", "hh:mm a")).orderBy($"label"),
+      Seq(
+        Row("afternoon", "02:30 PM"),
+        Row("evening", "07:45 PM"),
+        Row("morning", "09:30 AM")
+      )
+    )
+
+    // Verbose format with natural language
+    checkAnswer(
+      sql("SELECT time_format(TIME'02:20:30.040', " +
+        "'H ''hours'' mm ''mins'' ss ''seconds'' SSS ''milliseconds''')"),
+      Row("2 hours 20 mins 30 seconds 040 milliseconds")
+    )
+
+    // Invalid format pattern should throw
+    val ex = intercept[Exception] {
+      sql("SELECT time_format(TIME'14:30:45', 'invalid[[[')").collect()
+    }
+    assert(ex.getMessage.contains("Illegal pattern") ||
+           ex.getMessage.contains("Unknown pattern") ||
+           ex.getMessage.contains("Invalid") ||
+           ex.getMessage.contains("Unrecognized datetime pattern"))
+  }
 }
 
 // This class is used to run the same tests with ANSI mode enabled explicitly.

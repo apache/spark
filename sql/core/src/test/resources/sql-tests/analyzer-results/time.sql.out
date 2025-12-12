@@ -2294,3 +2294,447 @@ SELECT time_from_micros(time_to_micros(TIME'14:30:00.5'))
 -- !query analysis
 Project [time_from_micros(time_to_micros(14:30:00.5)) AS time_from_micros(time_to_micros(TIME '14:30:00.5'))#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', 'HH:mm:ss')
+-- !query analysis
+Project [time_format(14:30:45, HH:mm:ss) AS time_format(TIME '14:30:45', HH:mm:ss)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', 'hh:mm:ss a')
+-- !query analysis
+Project [time_format(14:30:45, hh:mm:ss a) AS time_format(TIME '14:30:45', hh:mm:ss a)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'09:15:30', 'hh:mm:ss a')
+-- !query analysis
+Project [time_format(09:15:30, hh:mm:ss a) AS time_format(TIME '09:15:30', hh:mm:ss a)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'14:30:45.123', 'HH:mm:ss.SSS')
+-- !query analysis
+Project [time_format(14:30:45.123, HH:mm:ss.SSS) AS time_format(TIME '14:30:45.123', HH:mm:ss.SSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'14:30:45.123456', 'HH:mm:ss.SSSSSS')
+-- !query analysis
+Project [time_format(14:30:45.123456, HH:mm:ss.SSSSSS) AS time_format(TIME '14:30:45.123456', HH:mm:ss.SSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', 'HH:mm')
+-- !query analysis
+Project [time_format(14:30:45, HH:mm) AS time_format(TIME '14:30:45', HH:mm)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', 'HH')
+-- !query analysis
+Project [time_format(14:30:45, HH) AS time_format(TIME '14:30:45', HH)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'09:05:00', 'H:mm a')
+-- !query analysis
+Project [time_format(09:05:00, H:mm a) AS time_format(TIME '09:05:00', H:mm a)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'00:00:00', 'HH:mm:ss')
+-- !query analysis
+Project [time_format(00:00:00, HH:mm:ss) AS time_format(TIME '00:00:00', HH:mm:ss)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'00:00:00', 'hh:mm:ss a')
+-- !query analysis
+Project [time_format(00:00:00, hh:mm:ss a) AS time_format(TIME '00:00:00', hh:mm:ss a)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'12:00:00', 'HH:mm:ss')
+-- !query analysis
+Project [time_format(12:00:00, HH:mm:ss) AS time_format(TIME '12:00:00', HH:mm:ss)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'12:00:00', 'hh:mm:ss a')
+-- !query analysis
+Project [time_format(12:00:00, hh:mm:ss a) AS time_format(TIME '12:00:00', hh:mm:ss a)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'23:59:59', 'HH:mm:ss')
+-- !query analysis
+Project [time_format(23:59:59, HH:mm:ss) AS time_format(TIME '23:59:59', HH:mm:ss)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'23:59:59.999999', 'HH:mm:ss.SSSSSS')
+-- !query analysis
+Project [time_format(23:59:59.999999, HH:mm:ss.SSSSSS) AS time_format(TIME '23:59:59.999999', HH:mm:ss.SSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(NULL, 'HH:mm:ss')
+-- !query analysis
+Project [time_format(cast(null as time(6)), HH:mm:ss) AS time_format(NULL, HH:mm:ss)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', NULL)
+-- !query analysis
+Project [time_format(14:30:45, cast(null as string)) AS time_format(TIME '14:30:45', NULL)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(CAST(NULL AS TIME), 'HH:mm:ss')
+-- !query analysis
+Project [time_format(cast(null as time(6)), HH:mm:ss) AS time_format(CAST(NULL AS TIME(6)), HH:mm:ss)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', 'hh-mm-ss a')
+-- !query analysis
+Project [time_format(14:30:45, hh-mm-ss a) AS time_format(TIME '14:30:45', hh-mm-ss a)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', 'HH.mm.ss')
+-- !query analysis
+Project [time_format(14:30:45, HH.mm.ss) AS time_format(TIME '14:30:45', HH.mm.ss)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', 'HH_mm_ss')
+-- !query analysis
+Project [time_format(14:30:45, HH_mm_ss) AS time_format(TIME '14:30:45', HH_mm_ss)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', '''Time:'' HH:mm:ss')
+-- !query analysis
+Project [time_format(14:30:45, 'Time:' HH:mm:ss) AS time_format(TIME '14:30:45', 'Time:' HH:mm:ss)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'02:20:30.040', 'H ''hours'' mm ''mins'' ss ''seconds'' SSS ''milliseconds''')
+-- !query analysis
+Project [time_format(02:20:30.04, H 'hours' mm 'mins' ss 'seconds' SSS 'milliseconds') AS time_format(TIME '02:20:30.04', H 'hours' mm 'mins' ss 'seconds' SSS 'milliseconds')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'14:05:15', 'H ''hours,'' mm ''minutes and'' ss ''seconds''')
+-- !query analysis
+Project [time_format(14:05:15, H 'hours,' mm 'minutes and' ss 'seconds') AS time_format(TIME '14:05:15', H 'hours,' mm 'minutes and' ss 'seconds')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'00:00:00', 'a')
+-- !query analysis
+Project [time_format(00:00:00, a) AS time_format(TIME '00:00:00', a)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'11:59:59', 'a')
+-- !query analysis
+Project [time_format(11:59:59, a) AS time_format(TIME '11:59:59', a)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'12:00:00', 'a')
+-- !query analysis
+Project [time_format(12:00:00, a) AS time_format(TIME '12:00:00', a)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'13:00:00', 'a')
+-- !query analysis
+Project [time_format(13:00:00, a) AS time_format(TIME '13:00:00', a)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'23:59:59', 'a')
+-- !query analysis
+Project [time_format(23:59:59, a) AS time_format(TIME '23:59:59', a)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'00:00:00', 'hh:mm a')
+-- !query analysis
+Project [time_format(00:00:00, hh:mm a) AS time_format(TIME '00:00:00', hh:mm a)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'00:30:00', 'hh:mm a')
+-- !query analysis
+Project [time_format(00:30:00, hh:mm a) AS time_format(TIME '00:30:00', hh:mm a)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'01:00:00', 'hh:mm a')
+-- !query analysis
+Project [time_format(01:00:00, hh:mm a) AS time_format(TIME '01:00:00', hh:mm a)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'11:00:00', 'hh:mm a')
+-- !query analysis
+Project [time_format(11:00:00, hh:mm a) AS time_format(TIME '11:00:00', hh:mm a)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'12:00:00', 'hh:mm a')
+-- !query analysis
+Project [time_format(12:00:00, hh:mm a) AS time_format(TIME '12:00:00', hh:mm a)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'13:00:00', 'hh:mm a')
+-- !query analysis
+Project [time_format(13:00:00, hh:mm a) AS time_format(TIME '13:00:00', hh:mm a)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'09:15:30', 'H:mm:ss')
+-- !query analysis
+Project [time_format(09:15:30, H:mm:ss) AS time_format(TIME '09:15:30', H:mm:ss)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'09:15:30', 'HH:mm:ss')
+-- !query analysis
+Project [time_format(09:15:30, HH:mm:ss) AS time_format(TIME '09:15:30', HH:mm:ss)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'09:15:30', 'h:mm a')
+-- !query analysis
+Project [time_format(09:15:30, h:mm a) AS time_format(TIME '09:15:30', h:mm a)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'09:15:30', 'hh:mm a')
+-- !query analysis
+Project [time_format(09:15:30, hh:mm a) AS time_format(TIME '09:15:30', hh:mm a)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'14:30:45.1', 'HH:mm:ss.S')
+-- !query analysis
+Project [time_format(14:30:45.1, HH:mm:ss.S) AS time_format(TIME '14:30:45.1', HH:mm:ss.S)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'14:30:45.12', 'HH:mm:ss.SS')
+-- !query analysis
+Project [time_format(14:30:45.12, HH:mm:ss.SS) AS time_format(TIME '14:30:45.12', HH:mm:ss.SS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT coalesce(time_format(NULL, 'HH:mm'), 'N/A')
+-- !query analysis
+Project [coalesce(time_format(cast(null as time(6)), HH:mm), N/A) AS coalesce(time_format(NULL, HH:mm), N/A)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT coalesce(time_format(TIME'14:30:45', NULL), 'N/A')
+-- !query analysis
+Project [coalesce(time_format(14:30:45, cast(null as string)), N/A) AS coalesce(time_format(TIME '14:30:45', NULL), N/A)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT concat('The time is ', time_format(TIME'14:30:45', 'hh:mm a'))
+-- !query analysis
+Project [concat(The time is , time_format(14:30:45, hh:mm a)) AS concat(The time is , time_format(TIME '14:30:45', hh:mm a))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', 'HH:mm:ss (hh:mm:ss a)')
+-- !query analysis
+Project [time_format(14:30:45, HH:mm:ss (hh:mm:ss a)) AS time_format(TIME '14:30:45', HH:mm:ss (hh:mm:ss a))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'09:15:30', 'HH:mm (h:mm a)')
+-- !query analysis
+Project [time_format(09:15:30, HH:mm (h:mm a)) AS time_format(TIME '09:15:30', HH:mm (h:mm a))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'23:45:00', '''24hr:'' HH:mm ''12hr:'' hh:mm a')
+-- !query analysis
+Project [time_format(23:45:00, '24hr:' HH:mm '12hr:' hh:mm a) AS time_format(TIME '23:45:00', '24hr:' HH:mm '12hr:' hh:mm a)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'00:30:00', 'HH:mm:ss = hh:mm:ss a')
+-- !query analysis
+Project [time_format(00:30:00, HH:mm:ss = hh:mm:ss a) AS time_format(TIME '00:30:00', HH:mm:ss = hh:mm:ss a)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', 'HH:mm:ss ''(24h)'' / hh:mm:ss a ''(12h)''')
+-- !query analysis
+Project [time_format(14:30:45, HH:mm:ss '(24h)' / hh:mm:ss a '(12h)') AS time_format(TIME '14:30:45', HH:mm:ss '(24h)' / hh:mm:ss a '(12h)')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', 'HH:mm:ss'), time_format(TIME'14:30:45', 'hh:mm:ss a')
+-- !query analysis
+Project [time_format(14:30:45, HH:mm:ss) AS time_format(TIME '14:30:45', HH:mm:ss)#x, time_format(14:30:45, hh:mm:ss a) AS time_format(TIME '14:30:45', hh:mm:ss a)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'09:15:30', 'HH:mm'), time_format(TIME'09:15:30', 'h:mm a')
+-- !query analysis
+Project [time_format(09:15:30, HH:mm) AS time_format(TIME '09:15:30', HH:mm)#x, time_format(09:15:30, h:mm a) AS time_format(TIME '09:15:30', h:mm a)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT
+  time_format(TIME'14:30:45.123456', 'HH:mm:ss') as format_24hr,
+  time_format(TIME'14:30:45.123456', 'hh:mm:ss a') as format_12hr,
+  time_format(TIME'14:30:45.123456', 'HH:mm:ss.SSSSSS') as format_with_micros
+-- !query analysis
+Project [time_format(14:30:45.123456, HH:mm:ss) AS format_24hr#x, time_format(14:30:45.123456, hh:mm:ss a) AS format_12hr#x, time_format(14:30:45.123456, HH:mm:ss.SSSSSS) AS format_with_micros#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', 'HH:mm:ss ''UTC''')
+-- !query analysis
+Project [time_format(14:30:45, HH:mm:ss 'UTC') AS time_format(TIME '14:30:45', HH:mm:ss 'UTC')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', '[HH:mm:ss]')
+-- !query analysis
+Project [time_format(14:30:45, [HH:mm:ss]) AS time_format(TIME '14:30:45', [HH:mm:ss])#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', 'HH|mm|ss')
+-- !query analysis
+Project [time_format(14:30:45, HH|mm|ss) AS time_format(TIME '14:30:45', HH|mm|ss)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', 'HH-mm-ss')
+-- !query analysis
+Project [time_format(14:30:45, HH-mm-ss) AS time_format(TIME '14:30:45', HH-mm-ss)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'14:30:45', 'HH:MM:ss')
+-- !query analysis
+Project [time_format(14:30:45, HH:MM:ss) AS time_format(TIME '14:30:45', HH:MM:ss)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'14:30:45.000', 'HH:mm:ss.SSS')
+-- !query analysis
+Project [time_format(14:30:45, HH:mm:ss.SSS) AS time_format(TIME '14:30:45', HH:mm:ss.SSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'14:30:45.999', 'HH:mm:ss.SSS')
+-- !query analysis
+Project [time_format(14:30:45.999, HH:mm:ss.SSS) AS time_format(TIME '14:30:45.999', HH:mm:ss.SSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'14:30:45.001', 'HH:mm:ss.SSS')
+-- !query analysis
+Project [time_format(14:30:45.001, HH:mm:ss.SSS) AS time_format(TIME '14:30:45.001', HH:mm:ss.SSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'14:30:45.000000', 'HH:mm:ss.SSSSSS')
+-- !query analysis
+Project [time_format(14:30:45, HH:mm:ss.SSSSSS) AS time_format(TIME '14:30:45', HH:mm:ss.SSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'14:30:45.999999', 'HH:mm:ss.SSSSSS')
+-- !query analysis
+Project [time_format(14:30:45.999999, HH:mm:ss.SSSSSS) AS time_format(TIME '14:30:45.999999', HH:mm:ss.SSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_format(TIME'14:30:45.000001', 'HH:mm:ss.SSSSSS')
+-- !query analysis
+Project [time_format(14:30:45.000001, HH:mm:ss.SSSSSS) AS time_format(TIME '14:30:45.000001', HH:mm:ss.SSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT cast(time_format(TIME'14:30:45', 'HH:mm:ss') as string)
+-- !query analysis
+Project [cast(time_format(14:30:45, HH:mm:ss) as string) AS CAST(time_format(TIME '14:30:45', HH:mm:ss) AS STRING)#x]
++- OneRowRelation

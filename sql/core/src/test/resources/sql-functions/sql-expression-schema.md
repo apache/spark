@@ -363,6 +363,7 @@
 | org.apache.spark.sql.catalyst.expressions.ThetaSketchEstimate | theta_sketch_estimate | SELECT theta_sketch_estimate(theta_sketch_agg(col)) FROM VALUES (1), (1), (2), (2), (3) tab(col) | struct<theta_sketch_estimate(theta_sketch_agg(col, 12)):bigint> |
 | org.apache.spark.sql.catalyst.expressions.ThetaUnion | theta_union | SELECT theta_sketch_estimate(theta_union(theta_sketch_agg(col1), theta_sketch_agg(col2))) FROM VALUES (1, 4), (1, 4), (2, 5), (2, 5), (3, 6) tab(col1, col2) | struct<theta_sketch_estimate(theta_union(theta_sketch_agg(col1, 12), theta_sketch_agg(col2, 12), 12)):bigint> |
 | org.apache.spark.sql.catalyst.expressions.TimeDiff | time_diff | SELECT time_diff('HOUR', TIME'20:30:29', TIME'21:30:28') | struct<time_diff(HOUR, TIME '20:30:29', TIME '21:30:28'):bigint> |
+| org.apache.spark.sql.catalyst.expressions.TimeFormat | time_format | SELECT time_format(TIME'14:30:45', 'HH:mm:ss') | struct<time_format(TIME '14:30:45', HH:mm:ss):string> |
 | org.apache.spark.sql.catalyst.expressions.TimeFromMicros | time_from_micros | SELECT time_from_micros(0) | struct<time_from_micros(0):time(6)> |
 | org.apache.spark.sql.catalyst.expressions.TimeFromMillis | time_from_millis | SELECT time_from_millis(0) | struct<time_from_millis(0):time(6)> |
 | org.apache.spark.sql.catalyst.expressions.TimeFromSeconds | time_from_seconds | SELECT time_from_seconds(0) | struct<time_from_seconds(0):time(6)> |
