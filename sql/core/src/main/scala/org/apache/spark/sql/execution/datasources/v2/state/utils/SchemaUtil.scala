@@ -123,18 +123,18 @@ object SchemaUtil {
 
   /**
    * Returns an InternalRow representing
-   * 1. partitionKey
+   * 1. partitionKey (extracted using the StatePartitionKeyExtractor)
    * 2. key in bytes
    * 3. value in bytes
    * 4. column family name
    */
   def unifyStateRowPairAsRawBytes(
       pair: (UnsafeRow, UnsafeRow),
-      colFamilyName: String): InternalRow = {
+      colFamilyName: String,
+      extractor: StatePartitionKeyExtractor): InternalRow = {
     val row = new GenericInternalRow(4)
-    // todo [SPARK-54443]: change keySchema to more specific type after we
-    //  can extract partition key from keySchema
-    row.update(0, pair._1)
+    val partitionKey = extractor.partitionKey(pair._1)
+    row.update(0, partitionKey)
     row.update(1, pair._1.getBytes)
     row.update(2, pair._2.getBytes)
     row.update(3, UTF8String.fromString(colFamilyName))

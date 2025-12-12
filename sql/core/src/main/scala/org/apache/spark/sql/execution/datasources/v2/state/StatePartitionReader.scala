@@ -31,7 +31,8 @@ import org.apache.spark.util.{NextIterator, SerializableConfiguration}
 
 case class AllColumnFamiliesReaderInfo(
     colFamilySchemas: List[StateStoreColFamilySchema] = List.empty,
-    stateVariableInfos: List[TransformWithStateVariableInfo] = List.empty)
+    stateVariableInfos: List[TransformWithStateVariableInfo] = List.empty,
+    operatorName: String = "")
 
 /**
  * An implementation of [[PartitionReaderFactory]] for State data source. This is used to support
@@ -280,6 +281,15 @@ class StatePartitionAllColumnFamiliesReader(
 
   private val stateStoreColFamilySchemas = allColumnFamiliesReaderInfo.colFamilySchemas
   private val stateVariableInfos = allColumnFamiliesReaderInfo.stateVariableInfos
+  private val operatorName = allColumnFamiliesReaderInfo.operatorName
+
+  // Create the extractor for partition key extraction
+  private lazy val partitionKeyExtractor = SchemaUtil.getExtractor(
+    operatorName,
+    keySchema,
+    partition.sourceOptions.storeName,
+    stateVariableInfos.headOption,
+    stateFormatVersion)
 
   private def isListType(colFamilyName: String): Boolean = {
     SchemaUtil.checkVariableType(
@@ -364,13 +374,14 @@ class StatePartitionAllColumnFamiliesReader(
           pair =>
             store.valuesIterator(pair.key, cfSchema.colFamilyName).map {
               value =>
-                SchemaUtil.unifyStateRowPairAsRawBytes((pair.key, value), cfSchema.colFamilyName)
+                SchemaUtil.unifyStateRowPairAsRawBytes(
+                  (pair.key, value), cfSchema.colFamilyName, partitionKeyExtractor)
             }
         )
       } else {
         store.iterator(cfSchema.colFamilyName).map { pair =>
           SchemaUtil.unifyStateRowPairAsRawBytes(
-            (pair.key, pair.value), cfSchema.colFamilyName)
+            (pair.key, pair.value), cfSchema.colFamilyName, partitionKeyExtractor)
         }
       }
     }

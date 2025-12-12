@@ -79,14 +79,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
     val (stateStoreReaderInfo, storeMetadata) = getStoreMetadataAndRunChecks(
       sourceOptions)
 
-    // Extract stateFormatVersion from StateStoreConf for SYMMETRIC_HASH_JOIN operator
-    val isJoin = (
-      storeMetadata.head.operatorName == StatefulOperatorsUtils.SYMMETRIC_HASH_JOIN_EXEC_OP_NAME)
-    val stateFormatVersion: Int = if (storeMetadata.nonEmpty && isJoin) {
-      session.conf.get(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION)
-    } else {
-      1
-    }
+    val stateFormatVersion = getStateFormatVersion(storeMetadata)
 
     // The key state encoder spec should be available for all operators except stream-stream joins
     val keyStateEncoderSpec = if (stateStoreReaderInfo.keyStateEncoderSpecOpt.isDefined) {
@@ -102,7 +95,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       stateStoreReaderInfo.stateSchemaProviderOpt,
       stateStoreReaderInfo.joinColFamilyOpt,
       Option(stateStoreReaderInfo.allColumnFamiliesReaderInfo),
-      Option(stateFormatVersion))
+      stateFormatVersion)
   }
 
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
@@ -112,14 +105,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
     val (stateStoreReaderInfo, storeMetadata) = getStoreMetadataAndRunChecks(sourceOptions)
     val oldSchemaFilePaths = StateDataSource.getOldSchemaFilePaths(sourceOptions, hadoopConf)
 
-    // Extract stateFormatVersion from StateStoreConf for SYMMETRIC_HASH_JOIN operator
-    val stateFormatVersion = if (storeMetadata.nonEmpty &&
-      (storeMetadata.head.operatorName ==
-        StatefulOperatorsUtils.SYMMETRIC_HASH_JOIN_EXEC_OP_NAME)) {
-        Some(session.conf.get(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION))
-    } else {
-      None
-    }
+    val stateFormatVersion = getStateFormatVersion(storeMetadata)
 
     val stateCheckpointLocation = sourceOptions.stateCheckpointLocation
     try {
@@ -158,6 +144,20 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
   }
 
   override def supportsExternalMetadata(): Boolean = false
+
+  /**
+   * Returns the state format version for SYMMETRIC_HASH_JOIN operators.
+   * For join operators, returns the configured version; for other operators returns None.
+   */
+  private def getStateFormatVersion(
+      storeMetadata: Array[StateMetadataTableEntry]): Option[Int] = {
+    if (storeMetadata.nonEmpty &&
+      storeMetadata.head.operatorName == StatefulOperatorsUtils.SYMMETRIC_HASH_JOIN_EXEC_OP_NAME) {
+      Some(session.conf.get(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION))
+    } else {
+      None
+    }
+  }
 
   /**
    * Returns true if this is a read-all-column-families request for a stream-stream join
@@ -389,13 +389,14 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       }
     }
 
+    val operatorName = if (storeMetadata.nonEmpty) storeMetadata.head.operatorName else ""
     (StateStoreReaderInfo(
       keyStateEncoderSpecOpt,
       stateStoreColFamilySchemaOpt,
       transformWithStateVariableInfoOpt,
       stateSchemaProvider,
       joinColFamilyOpt,
-      AllColumnFamiliesReaderInfo(stateStoreColFamilySchemas, stateVariableInfos)
+      AllColumnFamiliesReaderInfo(stateStoreColFamilySchemas, stateVariableInfos, operatorName)
     ), storeMetadata)
   }
 
