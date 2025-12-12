@@ -2162,7 +2162,13 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
           // don't double add anything.
           var addedAliases = Set[Alias].empty()
           // We do this with a fold:
-          toSplit.foldl {
+          toSplit match {
+            case head :: tail =>
+              tail.foldLeft {
+              }
+            case head :: None =>
+          }
+          toSplit.tail.foldl {
             ...
           }
         }
