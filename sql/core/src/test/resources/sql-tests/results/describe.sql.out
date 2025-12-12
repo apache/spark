@@ -1038,3 +1038,11 @@ DROP TABLE f
 struct<>
 -- !query output
 
+
+
+-- !query
+DROP SCHEMA IF EXISTS test_schema
+-- !query schema
+struct<>
+-- !query output
+

@@ -1341,9 +1341,14 @@ class SparkSqlAstBuilder extends AstBuilder {
 
   override def visitShowNamespaces(ctx: ShowNamespacesContext): LogicalPlan = withOrigin(ctx) {
     val multiPart = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
-    ShowNamespacesCommand(
-      UnresolvedNamespace(multiPart.getOrElse(Seq.empty[String])),
-      Option(ctx.pattern).map(x => string(visitStringLit(x))))
+    val pattern = Option(ctx.pattern).map(x => string(visitStringLit(x)))
+    val namespace = UnresolvedNamespace(multiPart.getOrElse(Seq.empty[String]))
+
+    if (ctx.JSON != null) {
+      ShowNamespacesJsonCommand(namespace, pattern)
+    } else {
+      ShowNamespacesCommand(namespace, pattern)
+    }
   }
 
   override def visitDescribeProcedure(
