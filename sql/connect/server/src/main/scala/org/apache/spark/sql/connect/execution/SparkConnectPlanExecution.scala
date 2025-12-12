@@ -127,7 +127,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
       timeZoneId,
       errorOnDuplicatedFieldNames,
       largeVarTypes)
-    batches.map(b => b -> batches.rowCountInLastBatch)
+    batches.map(b => b.batch -> b.rowCount.toLong)
   }
 
   def processAsArrowBatches(

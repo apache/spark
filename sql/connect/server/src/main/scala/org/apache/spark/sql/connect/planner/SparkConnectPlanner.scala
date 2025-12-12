@@ -3032,9 +3032,9 @@ class SparkConnectPlanner(
           errorOnDuplicatedFieldNames = false,
           largeVarTypes = largeVarTypes)
         assert(batches.hasNext)
-        val bytes = batches.next()
+        val arrowBatch = batches.next()
         assert(!batches.hasNext, s"remaining batches: ${batches.size}")
-        bytes
+        arrowBatch.batch
       }
 
       result.setRelation(
