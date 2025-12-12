@@ -26,8 +26,13 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.StateStoreColumnFamilySchemaUtils
 import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.DIR_NAME_STATE
 
+case class StatePartitionWriterColumnFamilyInfo(
+  schema: StateStoreColFamilySchema,
+  // set this to true if state variable is ListType in TransformWithState
+  useMultipleValuesPerKey: Boolean = false)
 /**
  * A writer that can directly write binary data to the streaming state store.
  *
@@ -47,19 +52,27 @@ class StatePartitionAllColumnFamiliesWriter(
     operatorId: Int,
     storeName: String,
     currentBatchId: Long,
-    columnFamilyToSchemaMap: HashMap[String, StateStoreColFamilySchema]) {
+    columnFamilyToSchemaMap: HashMap[String, StatePartitionWriterColumnFamilyInfo]) {
   private val defaultSchema = {
-    columnFamilyToSchemaMap.getOrElse(
-      StateStore.DEFAULT_COL_FAMILY_NAME,
-      throw new IllegalArgumentException(
-        s"Column family ${StateStore.DEFAULT_COL_FAMILY_NAME} not found in schema map")
-    )
+    columnFamilyToSchemaMap.get(StateStore.DEFAULT_COL_FAMILY_NAME) match {
+      case Some(info) => info.schema
+      case None =>
+        // Return a dummy StateStoreColFamilySchema if not found
+        val placeholderSchema = columnFamilyToSchemaMap.head._2.schema
+        StateStoreColFamilySchema(
+          colFamilyName = "__dummy__",
+          keySchemaId = 0,
+          keySchema = placeholderSchema.keySchema,
+          valueSchemaId = 0,
+          valueSchema = placeholderSchema.valueSchema,
+          keyStateEncoderSpec = Option(NoPrefixKeyStateEncoderSpec(placeholderSchema.keySchema)))
+    }
   }
 
   private val columnFamilyToKeySchemaLenMap: MapView[String, Int] =
-    columnFamilyToSchemaMap.view.mapValues(_.keySchema.length)
+    columnFamilyToSchemaMap.view.mapValues(_.schema.keySchema.length)
   private val columnFamilyToValueSchemaLenMap: MapView[String, Int] =
-    columnFamilyToSchemaMap.view.mapValues(_.valueSchema.length)
+    columnFamilyToSchemaMap.view.mapValues(_.schema.valueSchema.length)
 
   protected lazy val provider: StateStoreProvider = {
     val stateCheckpointLocation = new Path(targetCpLocation, DIR_NAME_STATE).toString
@@ -67,10 +80,11 @@ class StatePartitionAllColumnFamiliesWriter(
       operatorId, partitionId, storeName)
     val stateStoreProviderId = StateStoreProviderId(stateStoreId, UUID.randomUUID())
 
+    val useColumnFamilies = columnFamilyToSchemaMap.size > 1
     val provider = StateStoreProvider.createAndInit(
       stateStoreProviderId, defaultSchema.keySchema, defaultSchema.valueSchema,
       defaultSchema.keyStateEncoderSpec.get,
-      useColumnFamilies = false, storeConf, hadoopConf,
+      useColumnFamilies = useColumnFamilies, storeConf, hadoopConf,
       useMultipleValuesPerKey = false, stateSchemaProvider = None)
     provider
   }
@@ -82,11 +96,33 @@ class StatePartitionAllColumnFamiliesWriter(
     // Use loadEmpty=true to create a fresh state store without loading previous versions
     // We create the empty store AT version, and the next commit will
     // produce version + 1
-    provider.getStore(
+    val store = provider.getStore(
       currentBatchId,
       stateStoreCkptId = None,
       loadEmpty = true
     )
+    if (columnFamilyToSchemaMap.size > 1) {
+      columnFamilyToSchemaMap.foreach { pair =>
+        val colFamilyName = pair._1
+        val cfSchema = pair._2.schema
+        colFamilyName match {
+          case StateStore.DEFAULT_COL_FAMILY_NAME => // createAndInit has registered default
+          case _ =>
+            val isInternal = StateStoreColumnFamilySchemaUtils.isInternalColFamily(colFamilyName)
+
+            require(cfSchema.keyStateEncoderSpec.isDefined,
+              s"keyStateEncoderSpec must be defined for column family ${cfSchema.colFamilyName}")
+            store.createColFamilyIfAbsent(
+              colFamilyName,
+              cfSchema.keySchema,
+              cfSchema.valueSchema,
+              cfSchema.keyStateEncoderSpec.get,
+              columnFamilyToSchemaMap(colFamilyName).useMultipleValuesPerKey,
+              isInternal)
+        }
+      }
+    }
+    store
   }
 
   // The function that writes and commits data to state store. It takes in rows with schema
@@ -123,6 +159,12 @@ class StatePartitionAllColumnFamiliesWriter(
     val valueRow = new UnsafeRow(columnFamilyToValueSchemaLenMap(colFamilyName))
     valueRow.pointTo(valueBytes, valueBytes.length)
 
-    stateStore.put(keyRow, valueRow, colFamilyName)
+    if (columnFamilyToSchemaMap(colFamilyName).useMultipleValuesPerKey) {
+      // if a column family useMultipleValuesPerKey (e.g. ListType), we will
+      // write with 1 put followed by merge
+      stateStore.merge(keyRow, valueRow, colFamilyName)
+    } else {
+      stateStore.put(keyRow, valueRow, colFamilyName)
+    }
   }
 }
