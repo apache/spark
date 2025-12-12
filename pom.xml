@@ -92,6 +92,7 @@
     <module>mllib-local</module>
     <module>tools</module>
     <module>streaming</module>
+    <module>sql/parser</module>
     <module>sql/api</module>
     <module>sql/catalyst</module>
     <module>sql/core</module>
@@ -2482,6 +2483,7 @@
         <groupId>org.antlr</groupId>
         <artifactId>antlr4-runtime</artifactId>
         <version>${antlr4.version}</version>
+        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>com.ibm.icu</groupId>
@@ -2819,11 +2821,6 @@
             <skipMain>true</skipMain> <!-- skip compile -->
             <skip>true</skip> <!-- skip testCompile -->
           </configuration>
-        </plugin>
-        <plugin>
-          <groupId>org.antlr</groupId>
-          <artifactId>antlr4-maven-plugin</artifactId>
-          <version>${antlr4.version}</version>
         </plugin>
         <!-- Surefire runs all Java tests -->
         <plugin>
