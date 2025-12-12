@@ -26,6 +26,7 @@ import io.fabric8.kubernetes.api.model._
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.submit.KubernetesClientUtils
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -116,15 +117,10 @@ private[spark] class HadoopConfDriverFeatureStep(conf: KubernetesConf)
     if (confDir.isDefined) {
       val fileMap = confFiles.map { file =>
         (file.getName(), Files.readString(file.toPath))
-      }.toMap.asJava
+      }.toMap
 
-      Seq(new ConfigMapBuilder()
-        .withNewMetadata()
-          .withName(newConfigMapName)
-          .endMetadata()
-        .withImmutable(true)
-        .addToData(fileMap)
-        .build())
+      Seq(Seq(KubernetesClientUtils.buildConfigMap(newConfigMapName,
+        fileMap, conf.sparkConf, Map(), inNameSpace = false)))
     } else {
       Nil
     }
