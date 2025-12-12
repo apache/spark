@@ -3370,13 +3370,18 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
             # batch_iter is Iterator[Tuple[pd.Series, ...]] where each tuple represents one batch
             # Collect all batches and concatenate into single Series per column
             batches = list(batch_iter)
-            num_columns = len(udfs[0][0])  # arg_offsets length
-            concatenated = [
-                pd.concat([batch[i] for batch in batches], ignore_index=True)
-                if batches
-                else pd.Series(dtype=object)
-                for i in range(num_columns)
-            ]
+            if not batches:
+                # Empty batches - determine num_columns from all UDFs' arg_offsets
+                all_offsets = [o for arg_offsets, _ in udfs for o in arg_offsets]
+                num_columns = max(all_offsets) + 1 if all_offsets else 0
+                concatenated = [pd.Series(dtype=object) for _ in range(num_columns)]
+            else:
+                # Use actual number of columns from the first batch
+                num_columns = len(batches[0])
+                concatenated = [
+                    pd.concat([batch[i] for batch in batches], ignore_index=True)
+                    for i in range(num_columns)
+                ]
 
             result = tuple(f(*[concatenated[o] for o in arg_offsets]) for arg_offsets, f in udfs)
             # In the special case of a single UDF this will return a single result rather
