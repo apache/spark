@@ -25,18 +25,16 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLId, toSQLType, toSQLValue}
-import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, TreePattern}
-import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.TimeFormatter
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, AnyTimeType, ByteType, DataType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, IntegralType, LongType, NumericType, ObjectType, TimeType}
+import org.apache.spark.sql.types.{AbstractDataType, AnyTimeType, ByteType, DataType, DayTimeIntervalType, DecimalType, IntegerType, IntegralType, LongType, NumericType, ObjectType, TimeType}
 import org.apache.spark.sql.types.DayTimeIntervalType.{HOUR, SECOND}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -768,46 +766,20 @@ case class TimeTrunc(unit: Expression, time: Expression)
   }
 }
 
-abstract class IntegralToTimeBase
-  extends UnaryExpression with ExpectsInputTypes with CodegenFallback
+abstract class TimeFromBase extends UnaryExpression with RuntimeReplaceable with ExpectsInputTypes
   with TimeExpression {
-  protected def upScaleFactor: Long
+  protected def timeConversionMethod: String
 
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType)
   override def dataType: DataType = TimeType(TimeType.MICROS_PRECISION)
-  override def nullable: Boolean = true
-  override def nullIntolerant: Boolean = true
 
-  @inline
-  protected final def validateTimeNanos(nanos: Long): Any = {
-    if (nanos < 0 || nanos >= NANOS_PER_DAY) null else nanos
-  }
-
-  override protected def nullSafeEval(input: Any): Any = {
-    val nanos = Math.multiplyExact(input.asInstanceOf[Number].longValue(), upScaleFactor)
-    validateTimeNanos(nanos)
-  }
-}
-
-abstract class TimeToLongBase extends UnaryExpression with ExpectsInputTypes
-  with TimeExpression {
-  protected def scaleFactor: Long
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType)
-  override def dataType: DataType = LongType
-  override def nullIntolerant: Boolean = true
-
-  override def nullSafeEval(input: Any): Any = {
-    Math.floorDiv(input.asInstanceOf[Number].longValue(), scaleFactor)
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    if (scaleFactor == 1) {
-      defineCodeGen(ctx, ev, c => c)
-    } else {
-      defineCodeGen(ctx, ev, c => s"java.lang.Math.floorDiv($c, ${scaleFactor}L)")
-    }
-  }
+  override def replacement: Expression = StaticInvoke(
+    classOf[DateTimeUtils.type],
+    dataType,
+    timeConversionMethod,
+    Seq(child),
+    Seq(child.dataType)
+  )
 }
 
 // scalastyle:off line.size.limit
@@ -828,57 +800,14 @@ abstract class TimeToLongBase extends UnaryExpression with ExpectsInputTypes
        14:30:00.5
       > SELECT _FUNC_(86399.999999);
        23:59:59.999999
-      > SELECT _FUNC_(90000);
-       NULL
-      > SELECT _FUNC_(-1);
-       NULL
   """,
   since = "4.2.0",
   group = "datetime_funcs")
 // scalastyle:on line.size.limit
-case class TimeFromSeconds(child: Expression)
-  extends UnaryExpression with ExpectsInputTypes with CodegenFallback
-  with TimeExpression {
+case class TimeFromSeconds(child: Expression) extends TimeFromBase {
   override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
-  override def dataType: DataType = TimeType(TimeType.MICROS_PRECISION)
-  override def nullable: Boolean = true
-  override def nullIntolerant: Boolean = true
-
-  @inline
-  private def validateTimeNanos(nanos: Long): Any = {
-    if (nanos < 0 || nanos >= NANOS_PER_DAY) null else nanos
-  }
-
-  @transient
-  private lazy val evalFunc: Any => Any = child.dataType match {
-    case _: IntegralType => input =>
-      val nanos = Math.multiplyExact(input.asInstanceOf[Number].longValue(), NANOS_PER_SECOND)
-      validateTimeNanos(nanos)
-    case _: DecimalType => input =>
-      val operand = new java.math.BigDecimal(NANOS_PER_SECOND)
-      val nanos = input.asInstanceOf[Decimal].toJavaBigDecimal.multiply(operand).longValueExact()
-      validateTimeNanos(nanos)
-    case _: FloatType => input =>
-      val f = input.asInstanceOf[Float]
-      if (f.isNaN || f.isInfinite) {
-        null
-      } else {
-        val nanos = (f.toDouble * NANOS_PER_SECOND).toLong
-        validateTimeNanos(nanos)
-      }
-    case _: DoubleType => input =>
-      val d = input.asInstanceOf[Double]
-      if (d.isNaN || d.isInfinite) {
-        null
-      } else {
-        val nanos = (d * NANOS_PER_SECOND).toLong
-        validateTimeNanos(nanos)
-      }
-  }
-
-  override def nullSafeEval(input: Any): Any = evalFunc(input)
-
   override def prettyName: String = "time_from_seconds"
+  override protected def timeConversionMethod: String = "timeFromSeconds"
 
   override protected def withNewChildInternal(newChild: Expression): TimeFromSeconds =
     copy(child = newChild)
@@ -905,12 +834,9 @@ case class TimeFromSeconds(child: Expression)
   since = "4.2.0",
   group = "datetime_funcs")
 // scalastyle:on line.size.limit
-case class TimeFromMillis(child: Expression)
-  extends IntegralToTimeBase {
-
-  override def upScaleFactor: Long = NANOS_PER_MILLIS
-
+case class TimeFromMillis(child: Expression) extends TimeFromBase {
   override def prettyName: String = "time_from_millis"
+  override protected def timeConversionMethod: String = "timeFromMillis"
 
   override protected def withNewChildInternal(newChild: Expression): TimeFromMillis =
     copy(child = newChild)
@@ -937,15 +863,28 @@ case class TimeFromMillis(child: Expression)
   since = "4.2.0",
   group = "datetime_funcs")
 // scalastyle:on line.size.limit
-case class TimeFromMicros(child: Expression)
-  extends IntegralToTimeBase {
-
-  override def upScaleFactor: Long = NANOS_PER_MICROS
-
+case class TimeFromMicros(child: Expression) extends TimeFromBase {
   override def prettyName: String = "time_from_micros"
+  override protected def timeConversionMethod: String = "timeFromMicros"
 
   override protected def withNewChildInternal(newChild: Expression): TimeFromMicros =
     copy(child = newChild)
+}
+
+abstract class TimeToBase extends UnaryExpression with RuntimeReplaceable with ExpectsInputTypes
+  with TimeExpression {
+  protected def timeConversionMethod: String
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType)
+  override def dataType: DataType = LongType
+
+  override def replacement: Expression = StaticInvoke(
+    classOf[DateTimeUtils.type],
+    dataType,
+    timeConversionMethod,
+    Seq(child),
+    Seq(child.dataType)
+  )
 }
 
 // scalastyle:off line.size.limit
@@ -970,21 +909,11 @@ case class TimeFromMicros(child: Expression)
   since = "4.2.0",
   group = "datetime_funcs")
 // scalastyle:on line.size.limit
-case class TimeToSeconds(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with CodegenFallback {
+case class TimeToSeconds(child: Expression) extends TimeToBase {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimeType)
   override def dataType: DataType = DecimalType(14, 6)
-  override def nullable: Boolean = true
-  override def nullIntolerant: Boolean = true
-
-  protected override def nullSafeEval(input: Any): Any = {
-    val nanos = input.asInstanceOf[Long]
-    val result = Decimal(nanos) / Decimal(NANOS_PER_SECOND)
-    if (result.changePrecision(14, 6)) result else null
-  }
-
   override def prettyName: String = "time_to_seconds"
+  override protected def timeConversionMethod: String = "timeToSeconds"
 
   override protected def withNewChildInternal(newChild: Expression): TimeToSeconds =
     copy(child = newChild)
@@ -1012,12 +941,9 @@ case class TimeToSeconds(child: Expression)
   since = "4.2.0",
   group = "datetime_funcs")
 // scalastyle:on line.size.limit
-case class TimeToMillis(child: Expression)
-  extends TimeToLongBase {
-
-  override def scaleFactor: Long = NANOS_PER_MILLIS
-
+case class TimeToMillis(child: Expression) extends TimeToBase {
   override def prettyName: String = "time_to_millis"
+  override protected def timeConversionMethod: String = "timeToMillis"
 
   override protected def withNewChildInternal(newChild: Expression): TimeToMillis =
     copy(child = newChild)
@@ -1045,12 +971,9 @@ case class TimeToMillis(child: Expression)
   since = "4.2.0",
   group = "datetime_funcs")
 // scalastyle:on line.size.limit
-case class TimeToMicros(child: Expression)
-  extends TimeToLongBase {
-
-  override def scaleFactor: Long = NANOS_PER_MICROS
-
+case class TimeToMicros(child: Expression) extends TimeToBase {
   override def prettyName: String = "time_to_micros"
+  override protected def timeConversionMethod: String = "timeToMicros"
 
   override protected def withNewChildInternal(newChild: Expression): TimeToMicros =
     copy(child = newChild)
