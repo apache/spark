@@ -248,7 +248,7 @@ case class TupleSketchAggInteger(
     mode: Expression,
     override val mutableAggBufferOffset: Int,
     override val inputAggBufferOffset: Int)
-    extends TupleSketchAggBase[java.lang.Integer, IntegerSummary]
+    extends TupleSketchAggBase[Integer, IntegerSummary]
     with QuaternaryLike[Expression]
     with SummaryAggregateMode {
 
