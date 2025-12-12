@@ -181,7 +181,8 @@ case class UnionLoopExec(
 
     var limitReached: Boolean = false
 
-    val numPartitions = prevDF.queryExecution.toRdd.partitions.length
+    // Defensive: ensure at least one partition.
+    val numPartitions = Math.max(1, prevDF.queryExecution.toRdd.partitions.length)
 
     // Main loop for obtaining the result of the recursive query.
     while (prevCount > 0 && !limitReached) {
