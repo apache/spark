@@ -64,7 +64,7 @@ object JDBCRDD extends Logging {
     try {
       getQueryOutputSchema(fullQuery, options, dialect, conn)
     } catch {
-      case e: SQLException if dialect.isSyntaxErrorBestEffort(e) =>
+      case e: SQLException if dialect.isSyntaxErrorBestEffort(e).contains(true) =>
         throw new SparkException(
           errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",
           messageParameters = Map(
@@ -334,7 +334,7 @@ class JDBCRDD(
       try {
         stmt.executeQuery()
       } catch {
-        case e: SQLException if dialect.isSyntaxErrorBestEffort(e) =>
+        case e: SQLException if dialect.isSyntaxErrorBestEffort(e).contains(true) =>
           throw new SparkException(
             errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_QUERY_EXECUTION",
             messageParameters = Map(

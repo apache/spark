@@ -50,8 +50,8 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
-  override def isObjectNotFoundException(e: SQLException): Boolean = {
-    e.getErrorCode == 1146
+  override def isObjectNotFoundException(e: SQLException): Option[Boolean] = {
+    Some(e.getErrorCode == 1146)
   }
 
   class MySQLSQLBuilder extends JDBCSQLBuilder {
@@ -227,8 +227,8 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 
   // See https://dev.mysql.com/doc/mysql-errors/8.0/en/server-error-reference.html
-  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
-    "42000".equals(exception.getSQLState)
+  override def isSyntaxErrorBestEffort(exception: SQLException): Option[Boolean] = {
+    Some("42000".equals(exception.getSQLState))
   }
 
   // See https://dev.mysql.com/doc/refman/8.0/en/alter-table.html

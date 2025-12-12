@@ -27,8 +27,8 @@ private case class SnowflakeDialect() extends JdbcDialect with NoLegacyJDBCError
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:snowflake")
 
-  override def isObjectNotFoundException(e: SQLException): Boolean = {
-    e.getSQLState == "002003"
+  override def isObjectNotFoundException(e: SQLException): Option[Boolean] = {
+    Some(e.getSQLState == "002003")
   }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
@@ -39,10 +39,10 @@ private case class SnowflakeDialect() extends JdbcDialect with NoLegacyJDBCError
     case _ => JdbcUtils.getCommonJDBCType(dt)
   }
 
-  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+  override def isSyntaxErrorBestEffort(exception: SQLException): Option[Boolean] = {
     // There is no official documentation for SQL state in Snowflake, but they follow ANSI standard
     // where 42000 SQLState is used for syntax errors.
     // Manual tests also show that this is the error state for syntax error
-    "42000".equals(exception.getSQLState)
+    Some("42000".equals(exception.getSQLState))
   }
 }

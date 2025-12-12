@@ -57,7 +57,7 @@ private class AggregatedDialect(dialects: List[JdbcDialect])
     dialects.head.getSchemaQuery(table)
   }
 
-  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+  override def isSyntaxErrorBestEffort(exception: SQLException): Option[Boolean] = {
     dialects.head.isSyntaxErrorBestEffort(exception)
   }
 

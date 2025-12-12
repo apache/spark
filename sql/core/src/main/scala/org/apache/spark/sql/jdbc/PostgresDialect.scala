@@ -53,10 +53,10 @@ private case class PostgresDialect()
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
-  override def isObjectNotFoundException(e: SQLException): Boolean = {
-    e.getSQLState == "42P01" ||
+  override def isObjectNotFoundException(e: SQLException): Option[Boolean] = {
+    Some(e.getSQLState == "42P01" ||
       e.getSQLState == "3F000" ||
-      e.getSQLState == "42704"
+      e.getSQLState == "42704")
   }
 
   override def getCatalystType(
@@ -243,8 +243,8 @@ private case class PostgresDialect()
   }
 
   // See https://www.postgresql.org/docs/current/errcodes-appendix.html
-  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
-    Option(exception.getSQLState).exists(_.startsWith("42"))
+  override def isSyntaxErrorBestEffort(exception: SQLException): Option[Boolean] = {
+    Option(exception.getSQLState).map(_.startsWith("42"))
   }
 
   // SHOW INDEX syntax

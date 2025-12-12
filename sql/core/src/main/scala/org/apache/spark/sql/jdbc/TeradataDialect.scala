@@ -39,8 +39,8 @@ private case class TeradataDialect() extends JdbcDialect with NoLegacyJDBCError 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
-  override def isObjectNotFoundException(e: SQLException): Boolean = {
-    e.getErrorCode == 3807
+  override def isObjectNotFoundException(e: SQLException): Option[Boolean] = {
+    Some(e.getErrorCode == 3807)
   }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
@@ -56,8 +56,8 @@ private case class TeradataDialect() extends JdbcDialect with NoLegacyJDBCError 
   // scalastyle:off line.size.limit
   // See https://docs.teradata.com/r/Enterprise_IntelliFlex_VMware/SQL-Stored-Procedures-and-Embedded-SQL/SQLSTATE-Mappings/SQLSTATE-Codes
   // scalastyle:on line.size.limit
-  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
-    Option(exception.getSQLState).exists(_.startsWith("42"))
+  override def isSyntaxErrorBestEffort(exception: SQLException): Option[Boolean] = {
+    Option(exception.getSQLState).map(_.startsWith("42"))
   }
 
   /**

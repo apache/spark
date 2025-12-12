@@ -600,7 +600,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @return true if the exception is confidently identified as a syntax error; false otherwise.
    */
   @Since("4.1.0")
-  def isSyntaxErrorBestEffort(exception: java.sql.SQLException): Boolean = false
+  def isSyntaxErrorBestEffort(exception: java.sql.SQLException): Option[Boolean] = None
 
   /**
    * Rename an existing table.
@@ -783,7 +783,9 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   @Since("4.1.0")
-  def isObjectNotFoundException(e: SQLException): Boolean = true
+  def isObjectNotFoundException(e: SQLException): Option[Boolean] = {
+    Option(e.getSQLState).map(_.startsWith("42"))
+  }
 
   /**
    * Gets a dialect exception, classifies it and wraps it by `AnalysisException`.

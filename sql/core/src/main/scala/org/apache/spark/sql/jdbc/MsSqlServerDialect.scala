@@ -38,8 +38,8 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
   override def canHandle(url: String): Boolean =
     url.toLowerCase(Locale.ROOT).startsWith("jdbc:sqlserver")
 
-  override def isObjectNotFoundException(e: SQLException): Boolean = {
-    e.getErrorCode == 208
+  override def isObjectNotFoundException(e: SQLException): Option[Boolean] = {
+    Some(e.getErrorCode == 208)
   }
 
   // Microsoft SQL Server does not have the boolean type.
@@ -273,7 +273,7 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
   override def getJdbcSQLQueryBuilder(options: JDBCOptions): JdbcSQLQueryBuilder =
     new MsSqlServerSQLQueryBuilder(this, options)
 
-  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+  override def isSyntaxErrorBestEffort(exception: SQLException): Option[Boolean] = {
     val exceptionMessage = Option(exception.getMessage)
       .map(_.toLowerCase(Locale.ROOT))
       .getOrElse("")
@@ -282,7 +282,7 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
     // most syntax errors so we have to base off the exception message.
     // https://learn.microsoft.com/en-us/sql/relational-databases/errors-events/database-engine-events-and-errors?view=sql-server-ver16
     // scalastyle:on line.size.limit
-    exceptionMessage.contains("incorrect syntax") || exceptionMessage.contains("syntax error")
+    Some(exceptionMessage.contains("incorrect syntax") || exceptionMessage.contains("syntax error"))
   }
 
   override def supportsLimit: Boolean = true

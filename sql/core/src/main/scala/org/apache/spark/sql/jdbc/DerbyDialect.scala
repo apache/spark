@@ -38,10 +38,10 @@ private case class DerbyDialect() extends JdbcDialect with NoLegacyJDBCError {
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
 
-  override def isObjectNotFoundException(e: SQLException): Boolean = {
-    e.getSQLState.equalsIgnoreCase("42Y07") ||
+  override def isObjectNotFoundException(e: SQLException): Option[Boolean] = {
+    Some(e.getSQLState.equalsIgnoreCase("42Y07") ||
       e.getSQLState.equalsIgnoreCase("42X05") ||
-      e.getSQLState.equalsIgnoreCase("X0X05")
+      e.getSQLState.equalsIgnoreCase("X0X05"))
   }
 
   override def getCatalystType(
@@ -69,8 +69,8 @@ private case class DerbyDialect() extends JdbcDialect with NoLegacyJDBCError {
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 
   // See https://db.apache.org/derby/docs/10.15/ref/rrefexcept71493.html
-  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
-    Option(exception.getSQLState).exists(_.startsWith("42"))
+  override def isSyntaxErrorBestEffort(exception: SQLException): Option[Boolean] = {
+    Option(exception.getSQLState).map(_.startsWith("42"))
   }
 
   // See https://db.apache.org/derby/docs/10.15/ref/rrefsqljrenametablestatement.html

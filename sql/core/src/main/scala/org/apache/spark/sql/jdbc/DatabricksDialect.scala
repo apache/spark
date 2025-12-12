@@ -31,8 +31,8 @@ private case class DatabricksDialect() extends JdbcDialect with NoLegacyJDBCErro
     url.startsWith("jdbc:databricks")
   }
 
-  override def isObjectNotFoundException(e: SQLException): Boolean = {
-    e.getSQLState == "42P01" || e.getSQLState == "42704"
+  override def isObjectNotFoundException(e: SQLException): Option[Boolean] = {
+    Some(e.getSQLState == "42P01" || e.getSQLState == "42704")
   }
 
   override def getCatalystType(
@@ -54,8 +54,8 @@ private case class DatabricksDialect() extends JdbcDialect with NoLegacyJDBCErro
   }
 
   // See https://docs.databricks.com/aws/en/error-messages/sqlstates
-  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
-    Option(exception.getSQLState).exists(_.startsWith("42"))
+  override def isSyntaxErrorBestEffort(exception: SQLException): Option[Boolean] = {
+    Option(exception.getSQLState).map(_.startsWith("42"))
   }
 
   override def quoteIdentifier(colName: String): String = {
