@@ -4096,8 +4096,14 @@ trait ArraySetLike {
     case _ => false
   }
 
-  @transient protected lazy val ordering: Ordering[Any] =
-    TypeUtils.getInterpretedOrdering(et)
+  // If the element type supports proper equals, we use the values directly for comparison,
+  // otherwise we use the generic comparable wrapper so all types support hash-based operations
+  @transient protected lazy val keyGenerator: (Any => Any) =
+    if (TypeUtils.typeWithProperEquals(et)) {
+      identity
+    } else {
+      GenericComparableWrapper.getGenericComparableWrapperFactory(et)
+    }
 
   protected def resultArrayElementNullable = dt.asInstanceOf[ArrayType].containsNull
 
@@ -4203,62 +4209,32 @@ case class ArrayDistinct(child: Expression)
     }
   }
 
-  override def nullSafeEval(array: Any): Any = {
-    val data = array.asInstanceOf[ArrayData]
-    doEvaluation(data)
-  }
-
-  @transient private lazy val doEvaluation = if (TypeUtils.typeWithProperEquals(elementType)) {
-    (array: ArrayData) =>
-      val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
-      val hs = new SQLOpenHashSet[Any]()
-      val withNaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
-        (value: Any) =>
-          if (!hs.contains(value)) {
-            if (arrayBuffer.size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-              throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
-                prettyName, arrayBuffer.size)
-            }
-            arrayBuffer += value
-            hs.add(value)
-          },
-        (valueNaN: Any) => arrayBuffer += valueNaN)
-      val withNullCheckFunc = SQLOpenHashSet.withNullCheckFunc(elementType, hs,
-        (value: Any) => withNaNCheckFunc(value),
-        () => arrayBuffer += null)
-      var i = 0
-      while (i < array.numElements()) {
-        withNullCheckFunc(array, i)
-        i += 1
-      }
-      new GenericArrayData(arrayBuffer)
-  } else {
-    (data: ArrayData) => {
-      val array = data.toArray[AnyRef](elementType)
-      val arrayBuffer = new scala.collection.mutable.ArrayBuffer[AnyRef]
-      var alreadyStoredNull = false
-      for (i <- array.indices) {
-        if (array(i) != null) {
-          var found = false
-          var j = 0
-          while (!found && j < arrayBuffer.size) {
-            val va = arrayBuffer(j)
-            found = (va != null) && ordering.equiv(va, array(i))
-            j += 1
+  override def nullSafeEval(input: Any): Any = {
+    val array = input.asInstanceOf[ArrayData]
+    val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
+    val hs = new SQLOpenHashSet[Any]()
+    val withNaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
+      (value: Any) => {
+        val key = keyGenerator(value)
+        if (!hs.contains(key)) {
+          if (arrayBuffer.size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+            throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
+              prettyName, arrayBuffer.size)
           }
-          if (!found) {
-            arrayBuffer += array(i)
-          }
-        } else {
-          // De-duplicate the null values.
-          if (!alreadyStoredNull) {
-            arrayBuffer += array(i)
-            alreadyStoredNull = true
-          }
+          arrayBuffer += value
+          hs.add(key)
         }
-      }
-      new GenericArrayData(arrayBuffer)
+      },
+      (valueNaN: Any) => arrayBuffer += valueNaN)
+    val withNullCheckFunc = SQLOpenHashSet.withNullCheckFunc(elementType, hs,
+      (value: Any) => withNaNCheckFunc(value),
+      () => arrayBuffer += null)
+    var i = 0
+    while (i < array.numElements()) {
+      withNullCheckFunc(array, i)
+      i += 1
     }
+    new GenericArrayData(arrayBuffer)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -4381,74 +4357,37 @@ trait ArrayBinaryLike
 case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLike
   with ComplexTypeMergingExpression {
 
-  @transient lazy val evalUnion: (ArrayData, ArrayData) => ArrayData = {
-    if (TypeUtils.typeWithProperEquals(elementType)) {
-      (array1, array2) =>
-        val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
-        val hs = new SQLOpenHashSet[Any]()
-        val withNaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
-          (value: Any) =>
-            if (!hs.contains(value)) {
-              if (arrayBuffer.size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-                throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
-                  prettyName, arrayBuffer.size)
-              }
-              arrayBuffer += value
-              hs.add(value)
-            },
-          (valueNaN: Any) => arrayBuffer += valueNaN)
-        val withNullCheckFunc = SQLOpenHashSet.withNullCheckFunc(elementType, hs,
-          (value: Any) => withNaNCheckFunc(value),
-          () => arrayBuffer += null
-        )
-        Seq(array1, array2).foreach { array =>
-          var i = 0
-          while (i < array.numElements()) {
-            withNullCheckFunc(array, i)
-            i += 1
-          }
-        }
-        new GenericArrayData(arrayBuffer)
-    } else {
-      (array1, array2) =>
-        val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
-        var alreadyIncludeNull = false
-        Seq(array1, array2).foreach(_.foreach(elementType, (_, elem) => {
-          var found = false
-          if (elem == null) {
-            if (alreadyIncludeNull) {
-              found = true
-            } else {
-              alreadyIncludeNull = true
-            }
-          } else {
-            // check elem is already stored in arrayBuffer or not?
-            var j = 0
-            while (!found && j < arrayBuffer.size) {
-              val va = arrayBuffer(j)
-              if (va != null && ordering.equiv(va, elem)) {
-                found = true
-              }
-              j = j + 1
-            }
-          }
-          if (!found) {
-            if (arrayBuffer.length > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-              throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
-                prettyName, arrayBuffer.length)
-            }
-            arrayBuffer += elem
-          }
-        }))
-        new GenericArrayData(arrayBuffer)
-    }
-  }
-
   override def nullSafeEval(input1: Any, input2: Any): Any = {
     val array1 = input1.asInstanceOf[ArrayData]
     val array2 = input2.asInstanceOf[ArrayData]
 
-    evalUnion(array1, array2)
+    val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
+    val hs = new SQLOpenHashSet[Any]()
+    val withNaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
+      (value: Any) => {
+        val key = keyGenerator(value)
+        if (!hs.contains(key)) {
+          if (arrayBuffer.size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
+            throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
+              prettyName, arrayBuffer.size)
+          }
+          arrayBuffer += value
+          hs.add(key)
+        }
+      },
+      (valueNaN: Any) => arrayBuffer += valueNaN)
+    val withNullCheckFunc = SQLOpenHashSet.withNullCheckFunc(elementType, hs,
+      (value: Any) => withNaNCheckFunc(value),
+      () => arrayBuffer += null
+    )
+    Seq(array1, array2).foreach { array =>
+      var i = 0
+      while (i < array.numElements()) {
+        withNullCheckFunc(array, i)
+        i += 1
+      }
+    }
+    new GenericArrayData(arrayBuffer)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -4565,108 +4504,55 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
 
   override def dataType: DataType = internalDataType
 
-  @transient lazy val evalIntersect: (ArrayData, ArrayData) => ArrayData = {
-    if (TypeUtils.typeWithProperEquals(elementType)) {
-      (array1, array2) =>
-        if (array1.numElements() != 0 && array2.numElements() != 0) {
-          val hs = new SQLOpenHashSet[Any]
-          val hsResult = new SQLOpenHashSet[Any]
-          val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
-          val withArray2NaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
-            (value: Any) => hs.add(value),
-            (valueNaN: Any) => {} )
-          val withArray2NullCheckFunc = SQLOpenHashSet.withNullCheckFunc(elementType, hs,
-            (value: Any) => withArray2NaNCheckFunc(value),
-            () => {}
-          )
-          val withArray1NaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hsResult,
-            (value: Any) =>
-              if (hs.contains(value) && !hsResult.contains(value)) {
-                arrayBuffer += value
-                hsResult.add(value)
-              },
-            (valueNaN: Any) =>
-              if (hs.containsNaN()) {
-                arrayBuffer += valueNaN
-              })
-          val withArray1NullCheckFunc = SQLOpenHashSet.withNullCheckFunc(elementType, hsResult,
-            (value: Any) => withArray1NaNCheckFunc(value),
-            () =>
-              if (hs.containsNull()) {
-                arrayBuffer += null
-              }
-          )
-
-          var i = 0
-          while (i < array2.numElements()) {
-            withArray2NullCheckFunc(array2, i)
-            i += 1
-          }
-          i = 0
-          while (i < array1.numElements()) {
-            withArray1NullCheckFunc(array1, i)
-            i += 1
-          }
-          new GenericArrayData(arrayBuffer)
-        } else {
-          new GenericArrayData(Array.emptyObjectArray)
-        }
-    } else {
-      (array1, array2) =>
-        if (array1.numElements() != 0 && array2.numElements() != 0) {
-          val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
-          var alreadySeenNull = false
-          var i = 0
-          while (i < array1.numElements()) {
-            var found = false
-            val elem1 = array1.get(i, elementType)
-            if (array1.isNullAt(i)) {
-              if (!alreadySeenNull) {
-                var j = 0
-                while (!found && j < array2.numElements()) {
-                  found = array2.isNullAt(j)
-                  j += 1
-                }
-                // array2 is scanned only once for null element
-                alreadySeenNull = true
-              }
-            } else {
-              var j = 0
-              while (!found && j < array2.numElements()) {
-                if (!array2.isNullAt(j)) {
-                  val elem2 = array2.get(j, elementType)
-                  if (ordering.equiv(elem1, elem2)) {
-                    // check whether elem1 is already stored in arrayBuffer
-                    var foundArrayBuffer = false
-                    var k = 0
-                    while (!foundArrayBuffer && k < arrayBuffer.size) {
-                      val va = arrayBuffer(k)
-                      foundArrayBuffer = (va != null) && ordering.equiv(va, elem1)
-                      k += 1
-                    }
-                    found = !foundArrayBuffer
-                  }
-                }
-                j += 1
-              }
-            }
-            if (found) {
-              arrayBuffer += elem1
-            }
-            i += 1
-          }
-          new GenericArrayData(arrayBuffer)
-        } else {
-          new GenericArrayData(Array.emptyObjectArray)
-        }
-    }
-  }
-
   override def nullSafeEval(input1: Any, input2: Any): Any = {
     val array1 = input1.asInstanceOf[ArrayData]
     val array2 = input2.asInstanceOf[ArrayData]
 
-    evalIntersect(array1, array2)
+    if (array1.numElements() != 0 && array2.numElements() != 0) {
+      val hs = new SQLOpenHashSet[Any]
+      val hsResult = new SQLOpenHashSet[Any]
+      val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
+      val withArray2NaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
+        (value: Any) => hs.add(keyGenerator(value)),
+        (valueNaN: Any) => {} )
+      val withArray2NullCheckFunc = SQLOpenHashSet.withNullCheckFunc(elementType, hs,
+        (value: Any) => withArray2NaNCheckFunc(value),
+        () => {}
+      )
+      val withArray1NaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hsResult,
+        (value: Any) => {
+          val key = keyGenerator(value)
+          if (hs.contains(key) && !hsResult.contains(key)) {
+            arrayBuffer += value
+            hsResult.add(key)
+          }
+        },
+        (valueNaN: Any) =>
+          if (hs.containsNaN()) {
+            arrayBuffer += valueNaN
+          })
+      val withArray1NullCheckFunc = SQLOpenHashSet.withNullCheckFunc(elementType, hsResult,
+        (value: Any) => withArray1NaNCheckFunc(value),
+        () =>
+          if (hs.containsNull()) {
+            arrayBuffer += null
+          }
+      )
+
+      var i = 0
+      while (i < array2.numElements()) {
+        withArray2NullCheckFunc(array2, i)
+        i += 1
+      }
+      i = 0
+      while (i < array1.numElements()) {
+        withArray1NullCheckFunc(array1, i)
+        i += 1
+      }
+      new GenericArrayData(arrayBuffer)
+    } else {
+      new GenericArrayData(Array.emptyObjectArray)
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -4797,93 +4683,43 @@ case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryL
 
   override def dataType: DataType = internalDataType
 
-  @transient lazy val evalExcept: (ArrayData, ArrayData) => ArrayData = {
-    if (TypeUtils.typeWithProperEquals(elementType)) {
-      (array1, array2) =>
-        val hs = new SQLOpenHashSet[Any]
-        val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
-        val withArray2NaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
-          (value: Any) => hs.add(value),
-          (valueNaN: Any) => {})
-        val withArray2NullCheckFunc = SQLOpenHashSet.withNullCheckFunc(elementType, hs,
-          (value: Any) => withArray2NaNCheckFunc(value),
-          () => {}
-        )
-        val withArray1NaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
-          (value: Any) =>
-            if (!hs.contains(value)) {
-              arrayBuffer += value
-              hs.add(value)
-            },
-          (valueNaN: Any) => arrayBuffer += valueNaN)
-        val withArray1NullCheckFunc = SQLOpenHashSet.withNullCheckFunc(elementType, hs,
-          (value: Any) => withArray1NaNCheckFunc(value),
-          () => arrayBuffer += null
-        )
-        var i = 0
-        while (i < array2.numElements()) {
-          withArray2NullCheckFunc(array2, i)
-          i += 1
-        }
-        i = 0
-        while (i < array1.numElements()) {
-          withArray1NullCheckFunc(array1, i)
-          i += 1
-        }
-        new GenericArrayData(arrayBuffer)
-    } else {
-      (array1, array2) =>
-        val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
-        var scannedNullElements = false
-        var i = 0
-        while (i < array1.numElements()) {
-          var found = false
-          val elem1 = array1.get(i, elementType)
-          if (elem1 == null) {
-            if (!scannedNullElements) {
-              var j = 0
-              while (!found && j < array2.numElements()) {
-                found = array2.isNullAt(j)
-                j += 1
-              }
-              // array2 is scanned only once for null element
-              scannedNullElements = true
-            } else {
-              found = true
-            }
-          } else {
-            var j = 0
-            while (!found && j < array2.numElements()) {
-              val elem2 = array2.get(j, elementType)
-              if (elem2 != null) {
-                found = ordering.equiv(elem1, elem2)
-              }
-              j += 1
-            }
-            if (!found) {
-              // check whether elem1 is already stored in arrayBuffer
-              var k = 0
-              while (!found && k < arrayBuffer.size) {
-                val va = arrayBuffer(k)
-                found = (va != null) && ordering.equiv(va, elem1)
-                k += 1
-              }
-            }
-          }
-          if (!found) {
-            arrayBuffer += elem1
-          }
-          i += 1
-        }
-        new GenericArrayData(arrayBuffer)
-    }
-  }
-
   override def nullSafeEval(input1: Any, input2: Any): Any = {
     val array1 = input1.asInstanceOf[ArrayData]
     val array2 = input2.asInstanceOf[ArrayData]
 
-    evalExcept(array1, array2)
+    val hs = new SQLOpenHashSet[Any]
+    val arrayBuffer = new scala.collection.mutable.ArrayBuffer[Any]
+    val withArray2NaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
+      (value: Any) => hs.add(keyGenerator(value)),
+      (valueNaN: Any) => {})
+    val withArray2NullCheckFunc = SQLOpenHashSet.withNullCheckFunc(elementType, hs,
+      (value: Any) => withArray2NaNCheckFunc(value),
+      () => {}
+    )
+    val withArray1NaNCheckFunc = SQLOpenHashSet.withNaNCheckFunc(elementType, hs,
+      (value: Any) => {
+        val key = keyGenerator(value)
+        if (!hs.contains(key)) {
+          arrayBuffer += value
+          hs.add(key)
+        }
+      },
+      (valueNaN: Any) => arrayBuffer += valueNaN)
+    val withArray1NullCheckFunc = SQLOpenHashSet.withNullCheckFunc(elementType, hs,
+      (value: Any) => withArray1NaNCheckFunc(value),
+      () => arrayBuffer += null
+    )
+    var i = 0
+    while (i < array2.numElements()) {
+      withArray2NullCheckFunc(array2, i)
+      i += 1
+    }
+    i = 0
+    while (i < array1.numElements()) {
+      withArray1NullCheckFunc(array1, i)
+      i += 1
+    }
+    new GenericArrayData(arrayBuffer)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
