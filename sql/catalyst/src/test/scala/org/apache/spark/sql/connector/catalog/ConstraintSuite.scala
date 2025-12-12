@@ -33,7 +33,7 @@ class ConstraintSuite extends SparkFunSuite {
       .validationStatus(ValidationStatus.VALID)
       .rely(true)
       .build()
-    assert(con1.toDDL == "CONSTRAINT con1 CHECK (id > 10) ENFORCED RELY")
+    assert(con1.toDDL == "CONSTRAINT `con1` CHECK (id > 10) ENFORCED RELY")
     assert(con1.validationStatus() == ValidationStatus.VALID)
 
     val con2 = Constraint.check("con2")
@@ -47,7 +47,7 @@ class ConstraintSuite extends SparkFunSuite {
       .validationStatus(ValidationStatus.VALID)
       .rely(true)
       .build()
-    assert(con2.toDDL == "CONSTRAINT con2 CHECK (a.`b.c`.d = 1) NOT ENFORCED RELY")
+    assert(con2.toDDL == "CONSTRAINT `con2` CHECK (a.`b.c`.d = 1) NOT ENFORCED RELY")
     assert(con2.validationStatus() == ValidationStatus.VALID)
 
     val con3 = Constraint.check("con3")
@@ -62,11 +62,11 @@ class ConstraintSuite extends SparkFunSuite {
       .validationStatus(ValidationStatus.INVALID)
       .rely(false)
       .build()
-    assert(con3.toDDL == "CONSTRAINT con3 CHECK (a.b.c <=> 1) NOT ENFORCED NORELY")
+    assert(con3.toDDL == "CONSTRAINT `con3` CHECK (a.b.c <=> 1) NOT ENFORCED NORELY")
     assert(con3.validationStatus() == ValidationStatus.INVALID)
 
     val con4 = Constraint.check("con4").predicateSql("a = 1").build()
-    assert(con4.toDDL == "CONSTRAINT con4 CHECK (a = 1) ENFORCED NORELY")
+    assert(con4.toDDL == "CONSTRAINT `con4` CHECK (a = 1) ENFORCED NORELY")
     assert(con4.validationStatus() == ValidationStatus.UNVALIDATED)
   }
 
@@ -78,7 +78,7 @@ class ConstraintSuite extends SparkFunSuite {
       .validationStatus(ValidationStatus.UNVALIDATED)
       .rely(true)
       .build()
-    assert(con1.toDDL == "CONSTRAINT con1 UNIQUE (a.b.c, d) NOT ENFORCED RELY")
+    assert(con1.toDDL == "CONSTRAINT `con1` UNIQUE (`a`.`b`.`c`, `d`) NOT ENFORCED RELY")
     assert(con1.validationStatus() == ValidationStatus.UNVALIDATED)
 
     val con2 = Constraint.unique(
@@ -88,7 +88,7 @@ class ConstraintSuite extends SparkFunSuite {
       .validationStatus(ValidationStatus.VALID)
       .rely(true)
       .build()
-    assert(con2.toDDL == "CONSTRAINT con2 UNIQUE (`a.b`.x.y, d) NOT ENFORCED RELY")
+    assert(con2.toDDL == "CONSTRAINT `con2` UNIQUE (`a.b`.`x`.`y`, `d`) NOT ENFORCED RELY")
     assert(con2.validationStatus() == ValidationStatus.VALID)
   }
 
@@ -100,7 +100,7 @@ class ConstraintSuite extends SparkFunSuite {
       .validationStatus(ValidationStatus.VALID)
       .rely(true)
       .build()
-    assert(pk1.toDDL == "CONSTRAINT pk1 PRIMARY KEY (a.b.c, d) ENFORCED RELY")
+    assert(pk1.toDDL == "CONSTRAINT `pk1` PRIMARY KEY (`a`.`b`.`c`, `d`) ENFORCED RELY")
     assert(pk1.validationStatus() == ValidationStatus.VALID)
 
     val pk2 = Constraint.primaryKey(
@@ -110,7 +110,7 @@ class ConstraintSuite extends SparkFunSuite {
       .validationStatus(ValidationStatus.INVALID)
       .rely(false)
       .build()
-    assert(pk2.toDDL == "CONSTRAINT pk2 PRIMARY KEY (`x.y`.z, id) NOT ENFORCED NORELY")
+    assert(pk2.toDDL == "CONSTRAINT `pk2` PRIMARY KEY (`x.y`.`z`, `id`) NOT ENFORCED NORELY")
     assert(pk2.validationStatus() == ValidationStatus.INVALID)
   }
 
@@ -124,8 +124,8 @@ class ConstraintSuite extends SparkFunSuite {
       .validationStatus(ValidationStatus.VALID)
       .rely(true)
       .build()
-    assert(fk1.toDDL == "CONSTRAINT fk1 FOREIGN KEY (col1, col2) " +
-      "REFERENCES schema.table (ref_col1, ref_col2) " +
+    assert(fk1.toDDL == "CONSTRAINT `fk1` FOREIGN KEY (`col1`, `col2`) " +
+      "REFERENCES schema.table (`ref_col1`, `ref_col2`) " +
       "ENFORCED RELY")
     assert(fk1.validationStatus() == ValidationStatus.VALID)
 
@@ -138,8 +138,8 @@ class ConstraintSuite extends SparkFunSuite {
       .validationStatus(ValidationStatus.INVALID)
       .rely(false)
       .build()
-    assert(fk2.toDDL == "CONSTRAINT fk2 FOREIGN KEY (`x.y`.z) " +
-      "REFERENCES other_table (other_id) " +
+    assert(fk2.toDDL == "CONSTRAINT `fk2` FOREIGN KEY (`x.y`.`z`) " +
+      "REFERENCES other_table (`other_id`) " +
       "NOT ENFORCED NORELY")
     assert(fk2.validationStatus() == ValidationStatus.INVALID)
   }

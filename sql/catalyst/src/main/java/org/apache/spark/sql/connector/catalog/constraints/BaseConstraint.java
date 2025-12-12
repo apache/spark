@@ -17,8 +17,12 @@
 
 package org.apache.spark.sql.connector.catalog.constraints;
 
+import java.util.Arrays;
 import java.util.StringJoiner;
 
+import scala.jdk.javaapi.CollectionConverters;
+
+import org.apache.spark.sql.catalyst.util.QuotingUtils;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
 abstract class BaseConstraint implements Constraint {
@@ -67,7 +71,7 @@ abstract class BaseConstraint implements Constraint {
     // the Spark SQL syntax for constraints.
     return String.format(
         "CONSTRAINT %s %s %s %s",
-        name,
+        QuotingUtils.quoteIdentifier(name),
         definition(),
         enforced ? "ENFORCED" : "NOT ENFORCED",
         rely ? "RELY" : "NORELY");
@@ -92,7 +96,8 @@ abstract class BaseConstraint implements Constraint {
     StringJoiner joiner = new StringJoiner(", ");
 
     for (NamedReference column : columns) {
-      joiner.add(column.toString());
+      joiner.add(QuotingUtils.quoteNameParts(
+          CollectionConverters.asScala(Arrays.asList(column.fieldNames())).toSeq()));
     }
 
     return joiner.toString();

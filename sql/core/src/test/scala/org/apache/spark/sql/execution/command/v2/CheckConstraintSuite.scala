@@ -135,7 +135,7 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       val constraint = getCheckConstraint(table)
       assert(constraint.name() == "c1")
       assert(constraint.toDDL ==
-        "CONSTRAINT c1 CHECK (from_json(j, 'a INT').a > 1) ENFORCED NORELY")
+        "CONSTRAINT `c1` CHECK (from_json(j, 'a INT').a > 1) ENFORCED NORELY")
       assert(constraint.predicateSql() == "from_json(j, 'a INT').a > 1")
       assert(constraint.predicate() == null)
     }
@@ -160,7 +160,7 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         val table = loadTable(nonPartitionCatalog, "ns", "tbl")
         val constraint = getCheckConstraint(table)
         assert(constraint.name() == "c1")
-        assert(constraint.toDDL == s"CONSTRAINT c1 CHECK (id > 0) $expectedDDL")
+        assert(constraint.toDDL == s"CONSTRAINT `c1` CHECK (id > 0) $expectedDDL")
       }
     }
   }
@@ -177,7 +177,7 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
             val constraint = getCheckConstraint(table)
             assert(constraint.name() == "c1")
             assert(constraint.toDDL ==
-              s"CONSTRAINT c1 CHECK (LENGTH(name) > 0) ENFORCED NORELY")
+              s"CONSTRAINT `c1` CHECK (LENGTH(name) > 0) ENFORCED NORELY")
             assert(constraint.predicateSql() == "LENGTH(name) > 0")
           }
         }
@@ -194,7 +194,7 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         val table = loadTable(nonPartitionCatalog, "ns", "tbl")
         val constraint = getCheckConstraint(table)
         assert(constraint.name() == "c1")
-        assert(constraint.toDDL == s"CONSTRAINT c1 CHECK (id > 0) $expectedDDL")
+        assert(constraint.toDDL == s"CONSTRAINT `c1` CHECK (id > 0) $expectedDDL")
       }
     }
   }
@@ -211,7 +211,7 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         assert(table.validatedVersion() == "1")
         val constraint = getCheckConstraint(table)
         assert(constraint.name() == "c1")
-        assert(constraint.toDDL == s"CONSTRAINT c1 CHECK (id > 0) $expectedDDL")
+        assert(constraint.toDDL == s"CONSTRAINT `c1` CHECK (id > 0) $expectedDDL")
       }
     }
   }
@@ -259,7 +259,7 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       val constraint = getCheckConstraint(table)
       assert(constraint.name() == "valid_positive_num")
       assert(constraint.toDDL ==
-        "CONSTRAINT valid_positive_num CHECK (s.num >= -1) ENFORCED NORELY")
+        "CONSTRAINT `valid_positive_num` CHECK (s.num >= -1) ENFORCED NORELY")
     }
   }
 
@@ -289,7 +289,7 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       val constraint = getCheckConstraint(table)
       assert(constraint.name() == "valid_map_val")
       assert(constraint.toDDL ==
-        "CONSTRAINT valid_map_val CHECK (m['a'] >= -1) ENFORCED NORELY")
+        "CONSTRAINT `valid_map_val` CHECK (m['a'] >= -1) ENFORCED NORELY")
     }
   }
 
@@ -317,7 +317,7 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       val constraint = getCheckConstraint(table)
       assert(constraint.name() == "valid_array")
       assert(constraint.toDDL ==
-        "CONSTRAINT valid_array CHECK (a[1] >= -2) ENFORCED NORELY")
+        "CONSTRAINT `valid_array` CHECK (a[1] >= -2) ENFORCED NORELY")
     }
   }
 
@@ -337,7 +337,7 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
           condition = "CONSTRAINT_ALREADY_EXISTS",
           sqlState = "42710",
           parameters = Map("constraintName" -> "abc",
-            "oldConstraint" -> "CONSTRAINT abc CHECK (id > 0) ENFORCED NORELY")
+            "oldConstraint" -> "CONSTRAINT `abc` CHECK (id > 0) ENFORCED NORELY")
         )
       }
     }

@@ -44,8 +44,8 @@ class ForeignKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDL
         assert(table.constraints.length == 1)
         val constraint = table.constraints.head
         assert(constraint.name() == "fk1")
-        assert(constraint.toDDL == s"CONSTRAINT fk1 FOREIGN KEY (fk) " +
-          s"REFERENCES test_catalog.ns.tbl_ref (id) $expectedDDL")
+        assert(constraint.toDDL == s"CONSTRAINT `fk1` FOREIGN KEY (`fk`) " +
+          s"REFERENCES test_catalog.ns.tbl_ref (`id`) $expectedDDL")
       }
     }
   }
@@ -61,8 +61,8 @@ class ForeignKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDL
         assert(table.constraints.length == 1)
         val constraint = table.constraints.head
         assert(constraint.name() == "fk1")
-        assert(constraint.toDDL == s"CONSTRAINT fk1 FOREIGN KEY (fk) " +
-          s"REFERENCES non_part_test_catalog.ns.tbl_ref (id) $expectedDDL")
+        assert(constraint.toDDL == s"CONSTRAINT `fk1` FOREIGN KEY (`fk`) " +
+          s"REFERENCES non_part_test_catalog.ns.tbl_ref (`id`) $expectedDDL")
       }
     }
   }
@@ -79,8 +79,8 @@ class ForeignKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDL
         assert(table.constraints.length == 1)
         val constraint = table.constraints.head
         assert(constraint.name() == "fk1")
-        assert(constraint.toDDL == s"CONSTRAINT fk1 FOREIGN KEY (fk) " +
-          s"REFERENCES non_part_test_catalog.ns.tbl_ref (id) $expectedDDL")
+        assert(constraint.toDDL == s"CONSTRAINT `fk1` FOREIGN KEY (`fk`) " +
+          s"REFERENCES non_part_test_catalog.ns.tbl_ref (`id`) $expectedDDL")
       }
     }
   }
@@ -103,8 +103,8 @@ class ForeignKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDL
           sqlState = "42710",
           parameters = Map("constraintName" -> "fk1",
             "oldConstraint" ->
-              ("CONSTRAINT fk1 FOREIGN KEY (fk) " +
-                "REFERENCES test_catalog.ns.tbl_ref (id) NOT ENFORCED NORELY"))
+              ("CONSTRAINT `fk1` FOREIGN KEY (`fk`) " +
+                "REFERENCES test_catalog.ns.tbl_ref (`id`) NOT ENFORCED NORELY"))
         )
       }
     }
@@ -123,8 +123,8 @@ class ForeignKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDL
       val constraint = table.constraints.head
       assert(constraint.name() == "fk1")
       assert(constraint.toDDL ==
-        s"CONSTRAINT fk1 FOREIGN KEY (fk1, fk2) " +
-          s"REFERENCES test_catalog.ns.tbl_ref (id1, id2) NOT ENFORCED NORELY")
+        s"CONSTRAINT `fk1` FOREIGN KEY (`fk1`, `fk2`) " +
+          s"REFERENCES test_catalog.ns.tbl_ref (`id1`, `id2`) NOT ENFORCED NORELY")
     }
   }
 }

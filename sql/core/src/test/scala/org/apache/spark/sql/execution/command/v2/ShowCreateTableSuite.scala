@@ -212,27 +212,27 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
           "a INT NOT NULL,",
           "b STRING,",
           "c STRING,",
-          "CONSTRAINT tbl_pk PRIMARY KEY (a) NOT ENFORCED NORELY,",
-          "CONSTRAINT uk_b UNIQUE (b) NOT ENFORCED NORELY,",
-          "CONSTRAINT fk_c FOREIGN KEY (c) REFERENCES other_table (id) NOT ENFORCED RELY,",
-          "CONSTRAINT c1 CHECK (c IS NOT NULL) ENFORCED NORELY,"
+          "CONSTRAINT `tbl_pk` PRIMARY KEY (`a`) NOT ENFORCED NORELY,",
+          "CONSTRAINT `uk_b` UNIQUE (`b`) NOT ENFORCED NORELY,",
+          "CONSTRAINT `fk_c` FOREIGN KEY (`c`) REFERENCES other_table (`id`) NOT ENFORCED RELY,",
+          "CONSTRAINT `c1` CHECK (c IS NOT NULL) ENFORCED NORELY,"
         )
         assert(showDDL === expectedDDLPrefix ++ Array(
-          "CONSTRAINT c2 CHECK (a > 0) ENFORCED NORELY)",
+          "CONSTRAINT `c2` CHECK (a > 0) ENFORCED NORELY)",
           defaultUsing))
 
         sql(s"ALTER TABLE $t ADD CONSTRAINT c3 CHECK (b IS NOT NULL) ENFORCED RELY")
         showDDL = getShowCreateDDL(t)
         val expectedDDLArrayWithNewConstraint = expectedDDLPrefix ++ Array(
-          "CONSTRAINT c2 CHECK (a > 0) ENFORCED NORELY,",
-          "CONSTRAINT c3 CHECK (b IS NOT NULL) ENFORCED RELY)",
+          "CONSTRAINT `c2` CHECK (a > 0) ENFORCED NORELY,",
+          "CONSTRAINT `c3` CHECK (b IS NOT NULL) ENFORCED RELY)",
           defaultUsing
         )
         assert(showDDL === expectedDDLArrayWithNewConstraint)
         sql(s"ALTER TABLE $t DROP CONSTRAINT c1")
         showDDL = getShowCreateDDL(t)
         val expectedDDLArrayAfterDrop = expectedDDLArrayWithNewConstraint.filterNot(
-          _.contains("c1 CHECK (c IS NOT NULL) ENFORCED NORELY"))
+          _.contains("`c1` CHECK (c IS NOT NULL) ENFORCED NORELY"))
         assert(showDDL === expectedDDLArrayAfterDrop)
       }
     }

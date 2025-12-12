@@ -42,7 +42,7 @@ class PrimaryKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDL
         assert(table.constraints.length == 1)
         val constraint = table.constraints.head
         assert(constraint.name() == "pk1")
-        assert(constraint.toDDL == s"CONSTRAINT pk1 PRIMARY KEY (id) $expectedDDL")
+        assert(constraint.toDDL == s"CONSTRAINT `pk1` PRIMARY KEY (`id`) $expectedDDL")
       }
     }
   }
@@ -56,7 +56,7 @@ class PrimaryKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDL
         assert(table.constraints.length == 1)
         val constraint = table.constraints.head
         assert(constraint.name() == "pk1")
-        assert(constraint.toDDL == s"CONSTRAINT pk1 PRIMARY KEY (id) $expectedDDL")
+        assert(constraint.toDDL == s"CONSTRAINT `pk1` PRIMARY KEY (`id`) $expectedDDL")
       }
     }
   }
@@ -71,7 +71,7 @@ class PrimaryKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDL
         assert(table.constraints.length == 1)
         val constraint = table.constraints.head
         assert(constraint.name() == "pk1")
-        assert(constraint.toDDL == s"CONSTRAINT pk1 PRIMARY KEY (id) $expectedDDL")
+        assert(constraint.toDDL == s"CONSTRAINT `pk1` PRIMARY KEY (`id`) $expectedDDL")
       }
     }
   }
@@ -92,7 +92,7 @@ class PrimaryKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDL
           condition = "CONSTRAINT_ALREADY_EXISTS",
           sqlState = "42710",
           parameters = Map("constraintName" -> "pk1",
-            "oldConstraint" -> "CONSTRAINT pk1 PRIMARY KEY (id) NOT ENFORCED NORELY")
+            "oldConstraint" -> "CONSTRAINT `pk1` PRIMARY KEY (`id`) NOT ENFORCED NORELY")
         )
       }
     }
@@ -109,7 +109,7 @@ class PrimaryKeyConstraintSuite extends QueryTest with CommandSuiteBase with DDL
       val constraint = table.constraints.head
       assert(constraint.name() == "pk1")
       assert(constraint.toDDL ==
-        "CONSTRAINT pk1 PRIMARY KEY (id1, id2) NOT ENFORCED NORELY")
+        "CONSTRAINT `pk1` PRIMARY KEY (`id1`, `id2`) NOT ENFORCED NORELY")
     }
   }
 }
