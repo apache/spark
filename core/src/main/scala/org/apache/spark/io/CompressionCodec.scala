@@ -153,11 +153,11 @@ class LZ4CompressionCodec(conf: SparkConf) extends CompressionCodec {
 
   override def compressedInputStream(s: InputStream): InputStream = {
     val disableConcatenationOfByteStream = false
-    new LZ4BlockInputStream(
-      s,
-      lz4Factory.fastDecompressor(),
-      xxHashFactory.newStreamingHash32(defaultSeed).asChecksum,
-      disableConcatenationOfByteStream)
+    LZ4BlockInputStream.newBuilder()
+      .withDecompressor(lz4Factory.safeDecompressor())
+      .withChecksum(xxHashFactory.newStreamingHash32(defaultSeed).asChecksum)
+      .withStopOnEmptyBlock(disableConcatenationOfByteStream)
+      .build(s)
   }
 }
 
