@@ -176,6 +176,10 @@ class RunnerConf:
         return self.get("spark.sql.execution.pandas.convertToArrowArraySafely", "false") == "true"
 
     @property
+    def pandas_backend(self) -> str:
+        return self.get("spark.sql.execution.pandas.backend", "numpy")
+
+    @property
     def int_to_decimal_coercion_enabled(self) -> bool:
         return (
             self.get("spark.sql.execution.pythonUDF.pandas.intToDecimalCoercionEnabled", "false")
@@ -2796,6 +2800,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
                 runner_conf.safecheck,
                 runner_conf.assign_cols_by_name,
                 runner_conf.int_to_decimal_coercion_enabled,
+                pandas_backend=runner_conf.pandas_backend,
             )
         elif (
             eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
@@ -2806,6 +2811,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
                 runner_conf.safecheck,
                 runner_conf.assign_cols_by_name,
                 runner_conf.int_to_decimal_coercion_enabled,
+                pandas_backend=runner_conf.pandas_backend,
             )
         elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
             ser = CogroupArrowUDFSerializer(runner_conf.assign_cols_by_name)
@@ -2816,6 +2822,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
                 runner_conf.assign_cols_by_name,
                 int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
                 arrow_cast=True,
+                pandas_backend=runner_conf.pandas_backend,
             )
         elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
             ser = ApplyInPandasWithStateSerializer(
@@ -2905,6 +2912,7 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
                 True,
                 input_types,
                 int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
+                pandas_backend=runner_conf.pandas_backend,
             )
     else:
         batch_size = int(os.environ.get("PYTHON_UDF_BATCH_SIZE", "100"))
