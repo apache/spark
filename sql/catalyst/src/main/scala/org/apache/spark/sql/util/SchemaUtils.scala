@@ -29,7 +29,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdenti
 import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, NamedTransform, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.SchemaValidationMode.PROHIBIT_CHANGES
+import org.apache.spark.sql.util.SchemaValidationMode.{ALLOW_NEW_TOP_LEVEL_FIELDS, PROHIBIT_CHANGES}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkSchemaUtils
 
@@ -459,7 +459,7 @@ private[spark] object SchemaUtils {
           }
         }
 
-        if (mode == PROHIBIT_CHANGES) {
+        if (mode == PROHIBIT_CHANGES || (mode == ALLOW_NEW_TOP_LEVEL_FIELDS && colPath.nonEmpty)) {
           otherFieldsByName.foreach { case (normalizedName, otherField) =>
             if (!fieldsByName.contains(normalizedName)) {
               errors += s"${formatField(colPath, otherField)} has been added"
@@ -529,4 +529,5 @@ private[spark] sealed trait SchemaValidationMode
 private[spark] object SchemaValidationMode {
   case object PROHIBIT_CHANGES extends SchemaValidationMode
   case object ALLOW_NEW_FIELDS extends SchemaValidationMode
+  case object ALLOW_NEW_TOP_LEVEL_FIELDS extends SchemaValidationMode
 }
