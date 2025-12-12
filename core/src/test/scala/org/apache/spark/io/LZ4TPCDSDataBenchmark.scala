@@ -33,27 +33,17 @@ import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
  *      Results will be written to "benchmarks/LZ4TPCDSDataBenchmark-results.txt".
  * }}}
  */
-object LZ4TPCDSDataBenchmark extends BenchmarkBase {
-
-  val N = 4
-
-  // the size of TPCDS catalog_sales.dat (SF1) is about 283M
-  val data = Files.readAllBytes(Paths.get(sys.env("SPARK_TPCDS_DATA_TEXT"), "catalog_sales.dat"))
+object LZ4TPCDSDataBenchmark extends TPCDSDataBenchmark {
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    val name = "Benchmark LZ4CompressionCodec"
-    runBenchmark(name) {
-      val benchmark1 = new Benchmark(name, N, output = output)
-      compressionBenchmark(benchmark1, N)
-      benchmark1.run()
-
-      val benchmark2 = new Benchmark(name, N, output = output)
-      decompressionBenchmark(benchmark2, N)
-      benchmark2.run()
+    runBenchmark("Benchmark LZ4CompressionCodec") {
+      compressionBenchmark()
+      decompressionBenchmark()
     }
   }
 
-  private def compressionBenchmark(benchmark: Benchmark, N: Int): Unit = {
+  private def compressionBenchmark(): Unit = {
+    val benchmark = new Benchmark("Compression", N, output = output)
     val conf = new SparkConf(false)
     benchmark.addCase(s"Compression $N times") { _ =>
       (1 until N).foreach { _ =>
@@ -63,9 +53,11 @@ object LZ4TPCDSDataBenchmark extends BenchmarkBase {
         os.close()
       }
     }
+    benchmark.run()
   }
 
-  private def decompressionBenchmark(benchmark: Benchmark, N: Int): Unit = {
+  private def decompressionBenchmark(): Unit = {
+    val benchmark = new Benchmark("Decompression", N, output = output)
     val conf = new SparkConf(false)
     val outputStream = new ByteArrayOutputStream()
     val out = new LZ4CompressionCodec(conf).compressedOutputStream(outputStream)
@@ -81,5 +73,6 @@ object LZ4TPCDSDataBenchmark extends BenchmarkBase {
         is.close()
       }
     }
+    benchmark.run()
   }
 }
