@@ -1129,7 +1129,7 @@ final class ShuffleBlockFetcherIterator(
           while (checkedIn.read(buffer) != -1) {}
           val checksum = checkedIn.getChecksum.getValue
           cause = shuffleClient.diagnoseCorruption(address.host, address.port, address.executorId,
-            shuffleBlock.shuffleId, shuffleBlock.mapId, shuffleBlock.reduceId, checksum,
+            shuffleBlock.name, checksum,
             checksumAlgorithm)
         } catch {
           case e: Exception =>
