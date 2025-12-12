@@ -7797,7 +7797,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def preserveCharVarcharTypeInfo: Boolean = getConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO)
 
-  def avoidDoubleFilterEvail: Boolean = getConf(AVOID_DOUBLE_FILTER_EVAL)
+  def avoidDoubleFilterEval: Boolean = getConf(AVOID_DOUBLE_FILTER_EVAL)
 
   def readSideCharPadding: Boolean = getConf(SQLConf.READ_SIDE_CHAR_PADDING)
 
