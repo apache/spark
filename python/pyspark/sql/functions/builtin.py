@@ -13092,6 +13092,147 @@ def timestamp_add(unit: str, quantity: "ColumnOrName", ts: "ColumnOrName") -> Co
 
 
 @_try_remote_functions
+def timestamp_bucket(
+    bucket_width: "ColumnOrName", timestamp: "ColumnOrName", origin: Optional["ColumnOrName"] = None
+) -> Column:
+    """
+    Returns the start of the timestamp bucket containing the input timestamp.
+
+    Buckets are fixed-width intervals aligned to a specified origin (default: Unix epoch).
+    This function supports arbitrary interval bucketing of dates and timestamps.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    bucket_width : :class:`~pyspark.sql.Column` or column name
+        A day-time interval expression specifying the width of each bucket.
+        Use ``sf.expr("INTERVAL '1' HOUR")`` for interval literals.
+        Must be a constant/foldable positive interval.
+    timestamp : :class:`~pyspark.sql.Column` or column name
+        The temporal value to bucket. Accepts:
+
+        - DATE: Implicitly cast to TIMESTAMP at midnight UTC
+        - TIMESTAMP: Used directly (timezone-aware)
+        - TIMESTAMP_NTZ: Used directly (no timezone)
+    origin : :class:`~pyspark.sql.Column` or column name, optional
+        The timestamp to align buckets to. Defaults to Unix epoch
+        (1970-01-01 00:00:00 UTC). Use this to customize bucket alignment:
+
+        - Monday weeks: ``sf.expr("TIMESTAMP'1970-01-05 00:00:00'")``
+        - Sunday weeks: ``sf.expr("TIMESTAMP'1970-01-04 00:00:00'")``
+        - Fiscal year starts: ``sf.expr("TIMESTAMP'2024-04-01 00:00:00'")``
+
+        Must be a constant TIMESTAMP expression.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The start timestamp of the bucket (TIMESTAMP type).
+        Always returns TIMESTAMP regardless of input types.
+
+    Notes
+    -----
+    - Bucket boundaries are aligned to the specified origin
+    - When origin is not specified, defaults to Unix epoch (1970-01-01 00:00:00 UTC)
+    - The return type is always TIMESTAMP (not TIMESTAMP_NTZ)
+    - For DATE inputs, the date is treated as midnight in the session timezone
+    - Sub-day intervals (hours, minutes, seconds) are supported
+    - Timestamps before the origin are handled correctly using floor division
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.date_trunc`
+    :meth:`pyspark.sql.functions.window`
+
+    Examples
+    --------
+    Example 1: Basic hourly bucketing (using default origin)
+
+    >>> import datetime
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([
+    ...     (1, datetime.datetime(2024, 12, 4, 14, 30, 0)),
+    ...     (2, datetime.datetime(2024, 12, 4, 15, 45, 0)),
+    ...     (3, datetime.datetime(2024, 12, 4, 16, 20, 0))
+    ... ], ['id', 'ts'])
+    >>> df.select(
+    ...     sf.timestamp_bucket(sf.expr("INTERVAL '1' HOUR"), df.ts).alias("hour")
+    ... ).show()
+    +-------------------+
+    |               hour|
+    +-------------------+
+    |2024-12-04 14:00:00|
+    |2024-12-04 15:00:00|
+    |2024-12-04 16:00:00|
+    +-------------------+
+
+    Example 2: Aggregation with 15-minute buckets
+
+    >>> df.groupBy(
+    ...     sf.timestamp_bucket(sf.expr("INTERVAL '15' MINUTE"), df.ts).alias("interval")
+    ... ).count().orderBy("interval").show()
+    +-------------------+-----+
+    |           interval|count|
+    +-------------------+-----+
+    |2024-12-04 14:30:00|    1|
+    |2024-12-04 15:45:00|    1|
+    |2024-12-04 16:15:00|    1|
+    +-------------------+-----+
+
+    Example 3: Custom origin for Monday-aligned weeks
+
+    1970-01-05 was a Monday, so using it as origin aligns buckets to Mondays:
+
+    >>> import datetime
+    >>> df_dates = spark.createDataFrame([
+    ...     (1, datetime.datetime(2024, 12, 1)),   # Sunday
+    ...     (2, datetime.datetime(2024, 12, 4)),   # Wednesday
+    ...     (3, datetime.datetime(2024, 12, 9))    # Monday
+    ... ], ['id', 'ts'])
+    >>> df_dates.select(
+    ...     sf.timestamp_bucket(
+    ...         sf.expr("INTERVAL '7' DAY"),
+    ...         df_dates.ts,
+    ...         sf.lit(datetime.datetime(1970, 1, 5))  # Monday origin
+    ...     ).alias("monday_week")
+    ... ).show()
+    +-------------------+
+    |        monday_week|
+    +-------------------+
+    |2024-11-25 00:00:00|
+    |2024-12-02 00:00:00|
+    |2024-12-09 00:00:00|
+    +-------------------+
+
+    Example 4: Using with TIMESTAMP_NTZ (no timezone)
+
+    >>> df_ntz = spark.createDataFrame([
+    ...     (1, datetime.datetime(2024, 12, 4, 14, 30, 0)),
+    ...     (2, datetime.datetime(2024, 12, 4, 15, 45, 0))
+    ... ], ['id', 'ts'])
+    >>> df_ntz = df_ntz.selectExpr("id", "CAST(ts AS TIMESTAMP_NTZ) AS ts_ntz")
+    >>> df_ntz.select(
+    ...     sf.timestamp_bucket(
+    ...         sf.expr("INTERVAL '1' HOUR"),
+    ...         df_ntz.ts_ntz,
+    ...         sf.lit(datetime.datetime(2024, 12, 4))
+    ...     ).alias("hour")
+    ... ).show()
+    +-------------------+
+    |               hour|
+    +-------------------+
+    |2024-12-04 14:00:00|
+    |2024-12-04 15:00:00|
+    +-------------------+
+    """
+    if origin is None:
+        return _invoke_function_over_columns("timestamp_bucket", bucket_width, timestamp)
+    else:
+        return _invoke_function_over_columns("timestamp_bucket", bucket_width, timestamp, origin)
+
+
+@_try_remote_functions
 def window(
     timeColumn: "ColumnOrName",
     windowDuration: str,
