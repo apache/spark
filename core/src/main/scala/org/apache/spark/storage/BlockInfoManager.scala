@@ -397,7 +397,10 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = false
     blockInfo(blockId) { (info, condition) =>
       if (info.writerTask != BlockInfo.NO_WRITER) {
         info.writerTask = BlockInfo.NO_WRITER
-        writeLocksByTask.get(taskAttemptId).remove(blockId)
+        val blockIds = writeLocksByTask.get(taskAttemptId)
+        if (blockIds != null) {
+          blockIds.remove(blockId)
+        }
       } else {
         // There can be a race between unlock and releaseAllLocksForTask which causes negative
         // reader counts. We need to check if the readLocksByTask per tasks are present, if they
