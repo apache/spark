@@ -1958,3 +1958,339 @@ SELECT '00:00:00.1234' :: TIME(4) - TIME'23:59:59'
 -- !query analysis
 Project [cast(00:00:00.1234 as time(4)) - 23:59:59 AS CAST(00:00:00.1234 AS TIME(4)) - TIME '23:59:59'#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT time_from_seconds(0)
+-- !query analysis
+Project [time_from_seconds(0) AS time_from_seconds(0)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_seconds(43200)
+-- !query analysis
+Project [time_from_seconds(43200) AS time_from_seconds(43200)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_seconds(52200.5)
+-- !query analysis
+Project [time_from_seconds(52200.5) AS time_from_seconds(52200.5)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_seconds(86399.999999)
+-- !query analysis
+Project [time_from_seconds(86399.999999) AS time_from_seconds(86399.999999)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_seconds(-1)
+-- !query analysis
+Project [time_from_seconds(-1) AS time_from_seconds(-1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_seconds(86400)
+-- !query analysis
+Project [time_from_seconds(86400) AS time_from_seconds(86400)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_seconds(90000)
+-- !query analysis
+Project [time_from_seconds(90000) AS time_from_seconds(90000)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_seconds(NULL)
+-- !query analysis
+Project [time_from_seconds(null) AS time_from_seconds(NULL)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_millis(0)
+-- !query analysis
+Project [time_from_millis(0) AS time_from_millis(0)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_millis(43200)
+-- !query analysis
+Project [time_from_millis(43200) AS time_from_millis(43200)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_millis(52200000)
+-- !query analysis
+Project [time_from_millis(52200000) AS time_from_millis(52200000)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_millis(52200500)
+-- !query analysis
+Project [time_from_millis(52200500) AS time_from_millis(52200500)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_millis(86399999)
+-- !query analysis
+Project [time_from_millis(86399999) AS time_from_millis(86399999)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_millis(-1)
+-- !query analysis
+Project [time_from_millis(-1) AS time_from_millis(-1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_millis(86400000)
+-- !query analysis
+Project [time_from_millis(86400000) AS time_from_millis(86400000)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_millis(NULL)
+-- !query analysis
+Project [time_from_millis(null) AS time_from_millis(NULL)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_micros(0)
+-- !query analysis
+Project [time_from_micros(0) AS time_from_micros(0)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_micros(43200)
+-- !query analysis
+Project [time_from_micros(43200) AS time_from_micros(43200)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_micros(52200000000)
+-- !query analysis
+Project [time_from_micros(52200000000) AS time_from_micros(52200000000)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_micros(52200500000)
+-- !query analysis
+Project [time_from_micros(52200500000) AS time_from_micros(52200500000)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_micros(86399999999)
+-- !query analysis
+Project [time_from_micros(86399999999) AS time_from_micros(86399999999)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_micros(-1)
+-- !query analysis
+Project [time_from_micros(-1) AS time_from_micros(-1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_micros(86400000000)
+-- !query analysis
+Project [time_from_micros(86400000000) AS time_from_micros(86400000000)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_micros(NULL)
+-- !query analysis
+Project [time_from_micros(null) AS time_from_micros(NULL)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_to_seconds(TIME'00:00:00')
+-- !query analysis
+Project [time_to_seconds(00:00:00) AS time_to_seconds(TIME '00:00:00')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_to_seconds(TIME'12:00:00')
+-- !query analysis
+Project [time_to_seconds(12:00:00) AS time_to_seconds(TIME '12:00:00')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_to_seconds(TIME'14:30:00.5')
+-- !query analysis
+Project [time_to_seconds(14:30:00.5) AS time_to_seconds(TIME '14:30:00.5')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_to_seconds(TIME'23:59:59.999')
+-- !query analysis
+Project [time_to_seconds(23:59:59.999) AS time_to_seconds(TIME '23:59:59.999')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_to_seconds(TIME'23:59:59.999999')
+-- !query analysis
+Project [time_to_seconds(23:59:59.999999) AS time_to_seconds(TIME '23:59:59.999999')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_to_seconds(NULL)
+-- !query analysis
+Project [time_to_seconds(cast(null as time(6))) AS time_to_seconds(NULL)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_to_millis(TIME'00:00:00')
+-- !query analysis
+Project [time_to_millis(00:00:00) AS time_to_millis(TIME '00:00:00')#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT time_to_millis(TIME'14:30:00')
+-- !query analysis
+Project [time_to_millis(14:30:00) AS time_to_millis(TIME '14:30:00')#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT time_to_millis(TIME'14:30:00.5')
+-- !query analysis
+Project [time_to_millis(14:30:00.5) AS time_to_millis(TIME '14:30:00.5')#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT time_to_millis(TIME'23:59:59.999')
+-- !query analysis
+Project [time_to_millis(23:59:59.999) AS time_to_millis(TIME '23:59:59.999')#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT time_to_millis(TIME'23:59:59.999999')
+-- !query analysis
+Project [time_to_millis(23:59:59.999999) AS time_to_millis(TIME '23:59:59.999999')#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT time_to_millis(NULL)
+-- !query analysis
+Project [time_to_millis(null) AS time_to_millis(NULL)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT time_to_micros(TIME'00:00:00')
+-- !query analysis
+Project [time_to_micros(00:00:00) AS time_to_micros(TIME '00:00:00')#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT time_to_micros(TIME'14:30:00')
+-- !query analysis
+Project [time_to_micros(14:30:00) AS time_to_micros(TIME '14:30:00')#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT time_to_micros(TIME'14:30:00.5')
+-- !query analysis
+Project [time_to_micros(14:30:00.5) AS time_to_micros(TIME '14:30:00.5')#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT time_to_micros(TIME'23:59:59.999')
+-- !query analysis
+Project [time_to_micros(23:59:59.999) AS time_to_micros(TIME '23:59:59.999')#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT time_to_micros(TIME'23:59:59.999999')
+-- !query analysis
+Project [time_to_micros(23:59:59.999999) AS time_to_micros(TIME '23:59:59.999999')#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT time_to_micros(NULL)
+-- !query analysis
+Project [time_to_micros(null) AS time_to_micros(NULL)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT time_to_seconds(time_from_seconds(52200.5))
+-- !query analysis
+Project [time_to_seconds(time_from_seconds(52200.5)) AS time_to_seconds(time_from_seconds(52200.5))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_seconds(time_to_seconds(TIME'14:30:00.5'))
+-- !query analysis
+Project [time_from_seconds(time_to_seconds(14:30:00.5)) AS time_from_seconds(time_to_seconds(TIME '14:30:00.5'))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_to_millis(time_from_millis(52200500))
+-- !query analysis
+Project [time_to_millis(time_from_millis(52200500)) AS time_to_millis(time_from_millis(52200500))#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_millis(time_to_millis(TIME'14:30:00.5'))
+-- !query analysis
+Project [time_from_millis(time_to_millis(14:30:00.5)) AS time_from_millis(time_to_millis(TIME '14:30:00.5'))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT time_to_micros(time_from_micros(52200500000))
+-- !query analysis
+Project [time_to_micros(time_from_micros(52200500000)) AS time_to_micros(time_from_micros(52200500000))#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT time_from_micros(time_to_micros(TIME'14:30:00.5'))
+-- !query analysis
+Project [time_from_micros(time_to_micros(14:30:00.5)) AS time_from_micros(time_to_micros(TIME '14:30:00.5'))#x]
++- OneRowRelation

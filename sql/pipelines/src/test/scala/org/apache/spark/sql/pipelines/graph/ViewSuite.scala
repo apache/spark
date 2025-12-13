@@ -48,7 +48,8 @@ class ViewSuite extends ExecutionTest with SharedSparkSession {
     val unresolvedDataflowGraph = unresolvedDataflowGraphFromSql(
       sqlText = s"CREATE VIEW $viewName AS SELECT * FROM range(1, 4);"
     )
-    val updateContext = TestPipelineUpdateContext(spark, unresolvedDataflowGraph)
+    val updateContext =
+      TestPipelineUpdateContext(spark, unresolvedDataflowGraph, storageRoot)
     updateContext.pipelineExecution.startPipeline()
     updateContext.pipelineExecution.awaitCompletion()
 
@@ -81,7 +82,8 @@ class ViewSuite extends ExecutionTest with SharedSparkSession {
     val unresolvedDataflowGraph = unresolvedDataflowGraphFromSql(
       sqlText = s"CREATE VIEW $viewName AS SELECT * FROM $source;"
     )
-    val updateContext = TestPipelineUpdateContext(spark, unresolvedDataflowGraph)
+    val updateContext =
+      TestPipelineUpdateContext(spark, unresolvedDataflowGraph, storageRoot)
     updateContext.pipelineExecution.startPipeline()
     updateContext.pipelineExecution.awaitCompletion()
 
@@ -108,7 +110,8 @@ class ViewSuite extends ExecutionTest with SharedSparkSession {
       sqlText = s"""CREATE TEMPORARY VIEW temp_view AS SELECT * FROM range(1, 4);
                    |CREATE VIEW $viewName AS SELECT * FROM temp_view;""".stripMargin
     )
-    val updateContext = TestPipelineUpdateContext(spark, unresolvedDataflowGraph)
+    val updateContext =
+      TestPipelineUpdateContext(spark, unresolvedDataflowGraph, storageRoot)
 
     val ex = intercept[AnalysisException] {
       updateContext.pipelineExecution.startPipeline()
@@ -131,7 +134,8 @@ class ViewSuite extends ExecutionTest with SharedSparkSession {
     val unresolvedDataflowGraph = unresolvedDataflowGraphFromSql(
       sqlText = s"CREATE VIEW myview AS SELECT * FROM nonexistent_view;"
     )
-    val updateContext = TestPipelineUpdateContext(spark, unresolvedDataflowGraph)
+    val updateContext =
+      TestPipelineUpdateContext(spark, unresolvedDataflowGraph, storageRoot)
 
     val ex = intercept[Exception] {
       updateContext.pipelineExecution.startPipeline()
@@ -150,7 +154,8 @@ class ViewSuite extends ExecutionTest with SharedSparkSession {
       sqlText = s"""CREATE STREAMING TABLE source AS SELECT * FROM STREAM($externalTable1Ident);
                    |CREATE VIEW $viewName AS SELECT * FROM STREAM(source);""".stripMargin
     )
-    val updateContext = TestPipelineUpdateContext(spark, unresolvedDataflowGraph)
+    val updateContext =
+      TestPipelineUpdateContext(spark, unresolvedDataflowGraph, storageRoot)
 
     val ex = intercept[AnalysisException] {
       updateContext.pipelineExecution.startPipeline()
@@ -168,7 +173,8 @@ class ViewSuite extends ExecutionTest with SharedSparkSession {
     val unresolvedDataflowGraph = unresolvedDataflowGraphFromSql(
       sqlText = s"CREATE VIEW $viewName AS SELECT * FROM STREAM($externalTable1Ident);"
     )
-    val updateContext = TestPipelineUpdateContext(spark, unresolvedDataflowGraph)
+    val updateContext =
+      TestPipelineUpdateContext(spark, unresolvedDataflowGraph, storageRoot)
 
     val ex = intercept[AnalysisException] {
       updateContext.pipelineExecution.startPipeline()
@@ -190,7 +196,8 @@ class ViewSuite extends ExecutionTest with SharedSparkSession {
                    |CREATE VIEW pv2 AS SELECT * FROM pv1;
                    |CREATE VIEW pv1 AS SELECT * FROM range(1, 4);""".stripMargin
     )
-    val updateContext = TestPipelineUpdateContext(spark, unresolvedDataflowGraph)
+    val updateContext =
+      TestPipelineUpdateContext(spark, unresolvedDataflowGraph, storageRoot)
     updateContext.pipelineExecution.startPipeline()
     updateContext.pipelineExecution.awaitCompletion()
 
@@ -217,7 +224,8 @@ class ViewSuite extends ExecutionTest with SharedSparkSession {
         |CREATE VIEW pv2 AS SELECT * FROM pv1;
         |CREATE VIEW pv1 AS SELECT 1 + 1;""".stripMargin
     )
-    val updateContext = TestPipelineUpdateContext(spark, unresolvedDataflowGraph)
+    val updateContext =
+      TestPipelineUpdateContext(spark, unresolvedDataflowGraph, storageRoot)
     updateContext.pipelineExecution.startPipeline()
     updateContext.pipelineExecution.awaitCompletion()
 
@@ -253,7 +261,8 @@ class ViewSuite extends ExecutionTest with SharedSparkSession {
       sqlText = s"""CREATE MATERIALIZED VIEW mymv AS SELECT * FROM RANGE(1, 4);
                    |CREATE VIEW $viewName AS SELECT * FROM $source;""".stripMargin
     )
-    val updateContext = TestPipelineUpdateContext(spark, unresolvedDataflowGraph)
+    val updateContext =
+      TestPipelineUpdateContext(spark, unresolvedDataflowGraph, storageRoot)
     updateContext.pipelineExecution.startPipeline()
     updateContext.pipelineExecution.awaitCompletion()
 
@@ -286,7 +295,8 @@ class ViewSuite extends ExecutionTest with SharedSparkSession {
       sqlText = s"""CREATE STREAMING TABLE myst AS SELECT * FROM STREAM($externalTable1Ident);
                    |CREATE VIEW $viewName AS SELECT * FROM $source;""".stripMargin
     )
-    val updateContext = TestPipelineUpdateContext(spark, unresolvedDataflowGraph)
+    val updateContext =
+      TestPipelineUpdateContext(spark, unresolvedDataflowGraph, storageRoot)
     updateContext.pipelineExecution.startPipeline()
     updateContext.pipelineExecution.awaitCompletion()
 
@@ -317,7 +327,8 @@ class ViewSuite extends ExecutionTest with SharedSparkSession {
         |CREATE VIEW $viewName AS SELECT * FROM range(1, 4);
         |CREATE MATERIALIZED VIEW myviewreader AS SELECT * FROM $viewName;""".stripMargin
     )
-    val updateContext = TestPipelineUpdateContext(spark, unresolvedDataflowGraph)
+    val updateContext =
+      TestPipelineUpdateContext(spark, unresolvedDataflowGraph, storageRoot)
     updateContext.pipelineExecution.startPipeline()
     updateContext.pipelineExecution.awaitCompletion()
 

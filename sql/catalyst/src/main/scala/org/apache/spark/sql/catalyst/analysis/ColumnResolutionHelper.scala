@@ -180,6 +180,12 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
             u.copy(child = newChild, extraction = resolvedField)
           }
 
+        // Default value expression can not reference real columns,
+        // so we only need to resolve special literal columns like CURRENT_DATE.
+        // See {@link LiteralFunctionResolution} for details.
+        case d @ DefaultValueExpression(c: Expression, _, _) =>
+          d.copy(child = resolveLiteralColumns(c))
+
         case _ => e.mapChildren(innerResolve(_, isTopLevel = false))
       }
       resolved.copyTagsFrom(e)
@@ -197,6 +203,13 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       case ae: AnalysisException if !throws =>
         logDebug(ae.getMessage)
         expr
+    }
+  }
+
+  private def resolveLiteralColumns(e: Expression) = {
+    e.transformWithPruning(_.containsPattern(UNRESOLVED_ATTRIBUTE)) {
+      case u @ UnresolvedAttribute(nameParts) =>
+        LiteralFunctionResolution.resolve(nameParts).getOrElse(u)
     }
   }
 
@@ -412,7 +425,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
   def resolveExpressionByPlanChildren(
       e: Expression,
       q: LogicalPlan,
-      includeLastResort: Boolean = false): Expression = {
+      includeLastResort: Boolean = false,
+      throws: Boolean = true): Expression = {
     resolveExpression(
       tryResolveDataFrameColumns(e, q.children),
       resolveColumnByName = nameParts => {
@@ -422,7 +436,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
         assert(q.children.length == 1)
         q.children.head.output
       },
-      throws = true,
+      throws,
       includeLastResort = includeLastResort)
   }
 
@@ -462,8 +476,14 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     resolveVariables(resolveOuterRef(e))
   }
 
-  def resolveExprInAssignment(expr: Expression, hostPlan: LogicalPlan): Expression = {
-    resolveExpressionByPlanChildren(expr, hostPlan) match {
+  def resolveExprInAssignment(
+      expr: Expression,
+      hostPlan: LogicalPlan,
+      throws: Boolean = true): Expression = {
+    resolveExpressionByPlanChildren(expr,
+      hostPlan,
+      includeLastResort = false,
+      throws = throws) match {
       // Assignment key and value does not need the alias when resolving nested columns.
       case Alias(child: ExtractValue, _) => child
       case other => other

@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 
 import java.util.{ArrayList => JArrayList, Collections => JCollections, Properties}
 import java.util.concurrent.{CountDownLatch, Delayed, LinkedBlockingQueue, ScheduledFuture, TimeUnit}
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong, AtomicReference}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong, AtomicReference}
 
 import scala.annotation.meta.param
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
@@ -44,6 +44,7 @@ import org.apache.spark.network.shuffle.ExternalBlockStoreClient
 import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, ResourceProfileBuilder, TaskResourceProfile, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
+import org.apache.spark.rpc.RpcTimeoutException
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedException}
@@ -327,7 +328,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         }.getOrElse(Seq())
       }.toIndexedSeq
     }
-    override def removeExecutor(execId: String): Unit = {
+    override def removeExecutorAsync(execId: String): Unit = {
       // don't need to propagate to the driver, which we don't have
     }
 
@@ -751,7 +752,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // Now the executor on hostA is lost
     runEvent(ExecutorLost("hostA-exec", ExecutorExited(-100, false, "Container marked as failed")))
     // Executor is removed but shuffle files are not unregistered
-    verify(blockManagerMaster, times(1)).removeExecutor("hostA-exec")
+    verify(blockManagerMaster, times(1)).removeExecutorAsync("hostA-exec")
     verify(mapOutputTracker, times(0)).removeOutputsOnExecutor("hostA-exec")
 
     // The MapOutputTracker has all the shuffle files
@@ -764,9 +765,9 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     complete(taskSets(1), Seq(
       (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0L, 0, 0, "ignored"), null)
     ))
-    // blockManagerMaster.removeExecutor is not called again
+    // blockManagerMaster.removeExecutorAsync is not called again
     // but shuffle files are unregistered
-    verify(blockManagerMaster, times(1)).removeExecutor("hostA-exec")
+    verify(blockManagerMaster, times(1)).removeExecutorAsync("hostA-exec")
     verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("hostA-exec")
 
     // Shuffle files for hostA-exec should be lost
@@ -1010,7 +1011,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     complete(taskSets(1), Seq(
       (Success, 42),
       (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0L, 0, 0, "ignored"), null)))
-    verify(blockManagerMaster, times(1)).removeExecutor("hostA-exec")
+    verify(blockManagerMaster, times(1)).removeExecutorAsync("hostA-exec")
     // ask the scheduler to try it again
     scheduler.resubmitFailedStages()
     // have the 2nd attempt pass
@@ -1050,7 +1051,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         case _ => false
       }
       runEvent(ExecutorLost("hostA-exec", event))
-      verify(blockManagerMaster, times(1)).removeExecutor("hostA-exec")
+      verify(blockManagerMaster, times(1)).removeExecutorAsync("hostA-exec")
       if (expectFileLoss) {
         if (expectHostFileLoss) {
           verify(mapOutputTracker, times(1)).removeOutputsOnHost("hostA")
@@ -1085,7 +1086,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     submit(reduceRdd, Array(0))
     completeShuffleMapStageSuccessfully(0, 0, 1)
     runEvent(ExecutorLost("hostA-exec", event))
-    verify(blockManagerMaster, times(1)).removeExecutor("hostA-exec")
+    verify(blockManagerMaster, times(1)).removeExecutorAsync("hostA-exec")
     verify(mapOutputTracker, times(0)).removeOutputsOnExecutor("hostA-exec")
     assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1).toSet ===
       HashSet(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
@@ -2187,7 +2188,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // fail the third stage because hostA went down
     completeNextStageWithFetchFailure(2, 0, shuffleDepTwo)
     // TODO assert this:
-    // blockManagerMaster.removeExecutor("hostA-exec")
+    // blockManagerMaster.removeExecutorAsync("hostA-exec")
     // have DAGScheduler try again
     scheduler.resubmitFailedStages()
     complete(taskSets(3), Seq((Success, makeMapStatus("hostA", 2))))
@@ -2213,7 +2214,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // pretend stage 2 failed because hostA went down
     completeNextStageWithFetchFailure(2, 0, shuffleDepTwo)
     // TODO assert this:
-    // blockManagerMaster.removeExecutor("hostA-exec")
+    // blockManagerMaster.removeExecutorAsync("hostA-exec")
     // DAGScheduler should notice the cached copy of the second shuffle and try to get it rerun.
     scheduler.resubmitFailedStages()
     assertLocations(taskSets(3), Seq(Seq("hostD")))
@@ -5072,7 +5073,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       ExecutorExited(-100, false, "Container marked as failed")))
 
     // Shuffle push merger executor should not be removed and the shuffle files are not unregistered
-    verify(blockManagerMaster, times(0)).removeExecutor(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)
+    verify(blockManagerMaster, times(0))
+      .removeExecutorAsync(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)
     verify(mapOutputTracker,
       times(0)).removeOutputsOnExecutor(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)
 
@@ -5084,7 +5086,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     // Verify that we are not removing the executor,
     // and that we are only removing the outputs on the host
-    verify(blockManagerMaster, times(0)).removeExecutor(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)
+    verify(blockManagerMaster, times(0))
+      .removeExecutorAsync(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER)
     verify(blockManagerMaster, times(1)).removeShufflePushMergerLocation("hostA")
     verify(mapOutputTracker,
       times(1)).removeOutputsOnHost("hostA")
@@ -5470,6 +5473,67 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         assert(reason.getMessage.contains(expectedMsg))
       case other => fail(s"expected JobFailed, not $other")
     }
+  }
+
+  test("SPARK-53564: RpcTimeout while submitting stage should not fail the job/application") {
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+    shuffleMapRdd.cache()
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
+    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep), tracker = mapOutputTracker)
+
+    val callCount = new AtomicInteger(0)
+    doAnswer(invocation => {
+      if (callCount.incrementAndGet() == 1) {
+        // First call for finding missing parents, throw RpcTimeoutException
+        throw new RpcTimeoutException("RpcTimeout", null)
+      } else {
+        invocation.callRealMethod()
+      }
+    }).when(blockManagerMaster)
+      .getLocations(any(classOf[Array[BlockId]]))
+
+    submit(reduceRdd, Array(0))
+    assert(scheduler.stageIdToStage.size === 2)
+    completeShuffleMapStageSuccessfully(0, 0, 2)
+    completeAndCheckAnswer(taskSets(1), Seq((Success, 42)), Map(0 -> 42))
+    assertDataStructuresEmpty()
+    verify(blockManagerMaster, times(2))
+      .getLocations(any(classOf[Array[BlockId]]))
+  }
+
+  test("SPARK-53564: Resubmit missing parent when failed to get cache locations") {
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+    val shuffleMapRdd1 = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
+    shuffleMapRdd1.cache()
+    val shuffleDep1 = new ShuffleDependency(shuffleMapRdd1, new HashPartitioner(1))
+    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep1), tracker = mapOutputTracker)
+
+    // Cache for shuffleMapRdd1 are available
+    cacheLocations(shuffleMapRdd1.id -> 0) = Seq(makeBlockManagerId("hostA"))
+    cacheLocations(shuffleMapRdd1.id -> 1) = Seq(makeBlockManagerId("hostB"))
+
+    val callCount = new AtomicInteger(0)
+    doAnswer(invocation => {
+      if (callCount.incrementAndGet() == 1) {
+        // First call for finding missing parents, throw RpcTimeoutException
+        throw new RpcTimeoutException("RpcTimeout", null)
+      } else {
+        invocation.callRealMethod()
+      }
+    }).when(blockManagerMaster)
+      .getLocations(any(classOf[Array[BlockId]]))
+
+    submit(reduceRdd, Array(0))
+    // All 3 stages should be submitted even though caches are available for shuffleMapRdd1
+    // but failed to get cache locations.
+    assert(scheduler.stageIdToStage.size === 3)
+    completeShuffleMapStageSuccessfully(0, 0, 2)
+    completeShuffleMapStageSuccessfully(1, 0, 2)
+    completeAndCheckAnswer(taskSets(2), Seq((Success, 42)), Map(0 -> 42))
+    assertDataStructuresEmpty()
+    verify(blockManagerMaster, times(2))
+      .getLocations(any(classOf[Array[BlockId]]))
   }
 
   /**

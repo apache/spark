@@ -19,6 +19,7 @@ import time
 import unittest
 
 from pyspark.sql import Row, Observation, functions as F
+from pyspark.sql.types import StructType, LongType
 from pyspark.errors import (
     PySparkAssertionError,
     PySparkTypeError,
@@ -173,22 +174,32 @@ class DataFrameObservationTestsMixin:
 
     def test_observe_on_commands(self):
         df = self.spark.range(50)
+        schema = StructType().add("id", LongType(), nullable=False)
 
         test_table = "test_table"
 
         # DataFrameWriter
-        with self.table(test_table):
-            for command, action in [
-                ("collect", lambda df: df.collect()),
-                ("show", lambda df: df.show(50)),
-                ("save", lambda df: df.write.format("noop").mode("overwrite").save()),
-                ("create", lambda df: df.writeTo(test_table).using("parquet").create()),
-            ]:
-                with self.subTest(command=command):
-                    observation = Observation()
-                    observed_df = df.observe(observation, F.count(F.lit(1)).alias("cnt"))
-                    action(observed_df)
-                    self.assertEqual(observation.get, dict(cnt=50))
+        for cache_enabled in [False, True]:
+            with self.subTest(cache_enabled=cache_enabled), self.sql_conf(
+                {"spark.connect.session.planCache.enabled": cache_enabled}
+            ):
+                for command, action in [
+                    ("collect", lambda df: df.collect()),
+                    ("show", lambda df: df.show(50)),
+                    ("save", lambda df: df.write.format("noop").mode("overwrite").save()),
+                    ("create", lambda df: df.writeTo(test_table).using("parquet").create()),
+                ]:
+                    for select_star in [True, False]:
+                        with self.subTest(command=command, select_star=select_star), self.table(
+                            test_table
+                        ):
+                            observation = Observation()
+                            observed_df = df.observe(observation, F.count(F.lit(1)).alias("cnt"))
+                            if select_star:
+                                observed_df = observed_df.select("*")
+                            self.assertEqual(observed_df.schema, schema)
+                            action(observed_df)
+                            self.assertEqual(observation.get, dict(cnt=50))
 
     def test_observe_with_struct_type(self):
         observation = Observation("struct")

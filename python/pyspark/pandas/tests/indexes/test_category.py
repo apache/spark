@@ -402,7 +402,6 @@ class CategoricalIndexTests(CategoricalIndexTestsMixin, PandasOnSparkTestCase, T
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.pandas.tests.indexes.test_category import *  # noqa: F401
 
     try:

@@ -94,7 +94,8 @@ object SqlScriptingFrameType extends Enumeration {
  * @param executionPlan CompoundBody which need to be executed.
  * @param frameType Type of the frame.
  * @param scopeLabel Label of the scope where handler is defined.
- *                   Available only for frameType = HANDLER.
+ *                   Available only for frameType = EXIT_HANDLER, frameType = CONTINUE_HANDLER
+ *                   and frameType = SQL_STORED_PROCEDURE.
  */
 class SqlScriptingExecutionFrame(
     val executionPlan: CompoundBodyExec,

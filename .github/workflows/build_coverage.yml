@@ -43,7 +43,9 @@ jobs:
         }
       jobs: >-
         {
-          "pyspark": "true"
+          "pyspark": "true",
+          "pyspark-pandas": "true",
+          "pyspark-install": "true"
         }
     secrets:
       codecov_token: ${{ secrets.CODECOV_TOKEN }}

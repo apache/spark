@@ -30,6 +30,7 @@ import org.apache.spark.sql.QueryTest.checkAnswer
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.util.Utils
 
 /**
  * Representation of a pipeline specification
@@ -454,6 +455,60 @@ trait APITest
     checkAnswer(spark.sql(s"SELECT * FROM mv_1"), Seq(Row(0), Row(1), Row(2), Row(3), Row(4)))
   }
 
+  Seq("parquet", "json").foreach { format =>
+    test(s"Python Pipeline with $format sink") {
+      val session = spark
+      import session.implicits._
+
+      // create source data
+      spark.sql(s"CREATE TABLE src AS SELECT * FROM RANGE(5)")
+
+      val dir = Utils.createTempDir()
+      try {
+        val pipelineSpec =
+          TestPipelineSpec(include = Seq("transformations/definition.py"))
+        val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
+
+        val sources = Seq(
+          PipelineSourceFile(
+            name = "transformations/definition.py",
+            contents =
+              s"""
+                 |from pyspark import pipelines as dp
+                 |from pyspark.sql import DataFrame, SparkSession
+                 |
+                 |spark = SparkSession.active()
+                 |
+                 |dp.create_sink(
+                 |  "mySink",
+                 |  format = "$format",
+                 |  options = {"path": "${dir.getPath}"}
+                 |)
+                 |
+                 |@dp.append_flow(
+                 |  target = "mySink",
+                 |)
+                 |def mySinkFlow():
+                 |  return spark.readStream.table("src")
+                 |""".stripMargin
+          )
+        )
+
+        val pipeline = createAndRunPipeline(pipelineConfig, sources)
+        awaitPipelineTermination(pipeline)
+
+        // verify sink output
+        checkAnswer(
+          spark.read.format(format).load(dir.getPath),
+          Seq(0, 1, 2, 3, 4).toDF().collect().toSeq
+        )
+      } finally {
+        // clean up temp directory
+        Utils.deleteRecursively(dir)
+      }
+    }
+  }
+
   test("Python Pipeline with partition columns") {
     val pipelineSpec =
       TestPipelineSpec(include = Seq("transformations/**"))
@@ -485,6 +540,66 @@ trait APITest
         spark.sql(s"SELECT * FROM $fullName"),
         Seq(Row(0, 0), Row(1, 1), Row(2, 0), Row(3, 1), Row(4, 0)))
     }
+  }
+
+  test("Python Pipeline with cluster columns") {
+    val pipelineSpec =
+      TestPipelineSpec(include = Seq("transformations/**"))
+    val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
+    val sources = Seq(
+      PipelineSourceFile(
+        name = "transformations/definition.py",
+        contents = """
+                     |from pyspark import pipelines as dp
+                     |from pyspark.sql import DataFrame, SparkSession
+                     |from pyspark.sql.functions import col
+                     |
+                     |spark = SparkSession.active()
+                     |
+                     |@dp.materialized_view(cluster_by = ["cluster_col1"])
+                     |def mv():
+                     |  df = spark.range(10)
+                     |  df = df.withColumn("cluster_col1", col("id") % 3)
+                     |  df = df.withColumn("cluster_col2", col("id") % 2)
+                     |  return df
+                     |
+                     |@dp.table(cluster_by = ["cluster_col1"])
+                     |def st():
+                     |  return spark.readStream.table("mv")
+                     |""".stripMargin))
+    val pipeline = createAndRunPipeline(pipelineConfig, sources)
+    awaitPipelineTermination(pipeline)
+
+    // Verify tables have correct data
+    Seq("mv", "st").foreach { tbl =>
+      val fullName = s"$tbl"
+      checkAnswer(
+        spark.sql(s"SELECT * FROM $fullName ORDER BY id"),
+        Seq(
+          Row(0, 0, 0), Row(1, 1, 1), Row(2, 2, 0), Row(3, 0, 1), Row(4, 1, 0),
+          Row(5, 2, 1), Row(6, 0, 0), Row(7, 1, 1), Row(8, 2, 0), Row(9, 0, 1)
+        ))
+    }
+
+    // Verify clustering information is stored in catalog
+    val catalog = spark.sessionState.catalogManager.currentCatalog
+      .asInstanceOf[org.apache.spark.sql.connector.catalog.TableCatalog]
+    // Check materialized view has clustering transform
+    val mvIdentifier = org.apache.spark.sql.connector.catalog.Identifier
+      .of(Array("default"), "mv")
+    val mvTable = catalog.loadTable(mvIdentifier)
+    val mvTransforms = mvTable.partitioning()
+    assert(mvTransforms.length == 1)
+    assert(mvTransforms.head.name() == "cluster_by")
+    assert(mvTransforms.head.toString.contains("cluster_col1"))
+    // Check streaming table has clustering transform
+    val stIdentifier = org.apache.spark.sql.connector.catalog.Identifier
+      .of(Array("default"), "st")
+    val stTable = catalog.loadTable(stIdentifier)
+    val stTransforms = stTable.partitioning()
+    assert(stTransforms.length == 1)
+    assert(stTransforms.head.name() == "cluster_by")
+    assert(stTransforms.head.toString.contains("cluster_col1"))
   }
 
   /* Below tests pipeline execution configurations */

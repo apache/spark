@@ -20,6 +20,8 @@ package org.apache.spark.sql.scripting
 import java.util
 import java.util.{Locale, UUID}
 
+import scala.annotation.tailrec
+
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.Row
@@ -110,6 +112,15 @@ trait NonLeafStatementExec extends CompoundStatementExec {
  * Conditional node in the execution tree. It is a conditional non-leaf node.
  */
 trait ConditionalStatementExec extends NonLeafStatementExec {
+  /**
+   * Interrupted flag indicates if the statement has been interrupted, and is used
+   * for skipping the execution of the conditional statements, by setting the hasNext
+   * to be false.
+   * Interrupt is issued by the CONTINUE HANDLER when the conditional statement's
+   * conditional expression throws an exception, and is issued by the Leave Statement
+   * when the ForStatementExec executes the Leave Statement injected by the EXIT
+   * HANDLER.
+   */
   protected[scripting] var interrupted: Boolean = false
 }
 
@@ -300,7 +311,7 @@ class CompoundBodyExec(
         !stopIteration && (localIterator.hasNext || childHasNext)
       }
 
-      @scala.annotation.tailrec
+      @tailrec
       override def next(): CompoundStatementExec = {
         curr match {
           case None => throw SparkException.internalError(
@@ -1047,6 +1058,7 @@ class ForStatementExec(
         case ForState.Body => bodyWithVariables.exists(_.getTreeIterator.hasNext)
       })
 
+      @tailrec
       override def next(): CompoundStatementExec = state match {
 
         case ForState.VariableAssignment =>

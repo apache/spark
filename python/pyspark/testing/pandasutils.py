@@ -473,7 +473,7 @@ class PandasOnSparkTestUtils:
 class PandasOnSparkTestCase(ReusedSQLTestCase, PandasOnSparkTestUtils):
     @classmethod
     def setUpClass(cls):
-        super(PandasOnSparkTestCase, cls).setUpClass()
+        super().setUpClass()
         cls.spark.conf.set(SPARK_CONF_ARROW_ENABLED, True)
 
     def setUp(self):

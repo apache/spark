@@ -99,6 +99,9 @@ def _convert_exception(
     if resp and resp.HasField("root_error_idx"):
         root_error = resp.errors[resp.root_error_idx]
         if hasattr(root_error, "spark_throwable"):
+            # Extract errorClass from FetchErrorDetailsResponse if not in metadata
+            if error_class is None and root_error.spark_throwable.HasField("error_class"):
+                error_class = root_error.spark_throwable.error_class
             message_parameters = dict(root_error.spark_throwable.message_parameters)
             contexts = [
                 SQLQueryContext(c)
