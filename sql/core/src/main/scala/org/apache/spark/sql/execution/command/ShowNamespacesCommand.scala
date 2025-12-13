@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.command
 
+import org.json4s.JsonAST.{JArray, JObject, JString}
+import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.ResolvedNamespace
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
@@ -24,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{CatalogHelper, NamespaceHelper}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{MetadataBuilder, StringType}
 
 /**
  * The command for `SHOW NAMESPACES`.
@@ -36,6 +39,13 @@ case class ShowNamespacesCommand(
   extends UnaryRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
+    getFilteredNamespaces(sparkSession).map(Row(_))
+  }
+
+  /**
+   * Returns filtered namespace names based on the pattern.
+   */
+  private[command] def getFilteredNamespaces(sparkSession: SparkSession): Seq[String] = {
     val ResolvedNamespace(cat, ns, _) = child
     val nsCatalog = cat.asNamespaceCatalog
     val namespaces = if (ns.nonEmpty) {
@@ -55,7 +65,6 @@ case class ShowNamespacesCommand(
 
     namespaceNames
       .filter{ns => pattern.forall(StringUtils.filterPattern(Seq(ns), _).nonEmpty)}
-      .map(Row(_))
       .toSeq
   }
 
@@ -72,6 +81,59 @@ object ShowNamespacesCommand {
       } else {
         AttributeReference("namespace", StringType, nullable = false)()
       }
+    )
+  }
+}
+
+/**
+ * The command for `SHOW DATABASES AS JSON` / `SHOW SCHEMAS AS JSON`.
+ *
+ * Example output:
+ * {{{
+ * {
+ *   "databases": [
+ *     {"name": "default"},
+ *     {"name": "test_db"}
+ *   ]
+ * }
+ * }}}
+ */
+case class ShowNamespacesJsonCommand(
+    child: LogicalPlan,
+    pattern: Option[String],
+    override val output: Seq[AttributeReference] = ShowNamespacesJsonCommand.output)
+  extends UnaryRunnableCommand {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val filteredNamespaces = ShowNamespacesCommand(child, pattern)
+      .getFilteredNamespaces(sparkSession)
+
+    val databasesJson = filteredNamespaces.map { name =>
+      JObject("name" -> JString(name))
+    }
+
+    val jsonOutput = JObject(
+      (if (SQLConf.get.legacyOutputSchema) "databases" else "namespaces") ->
+        JArray(databasesJson.toList))
+
+    Seq(Row(compact(render(jsonOutput))))
+  }
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = {
+    copy(child = newChild)
+  }
+}
+
+object ShowNamespacesJsonCommand {
+  def output: Seq[AttributeReference] = {
+    val (columnName, comment) = if (SQLConf.get.legacyOutputSchema) {
+      ("databaseName", "JSON list of databases")
+    } else {
+      ("namespace", "JSON list of namespaces")
+    }
+    Seq(
+      AttributeReference(columnName, StringType, nullable = false,
+        new MetadataBuilder().putString("comment", comment).build())()
     )
   }
 }

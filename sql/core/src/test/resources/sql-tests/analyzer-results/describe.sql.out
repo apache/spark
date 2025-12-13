@@ -493,3 +493,10 @@ DROP TABLE f
 -- !query analysis
 DropTable false, false
 +- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.f
+
+
+-- !query
+DROP SCHEMA IF EXISTS test_schema
+-- !query analysis
+DropNamespace true, false
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [test_schema]

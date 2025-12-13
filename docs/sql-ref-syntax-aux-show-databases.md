@@ -29,7 +29,7 @@ and mean the same thing.
 ### Syntax
 
 ```sql
-SHOW { DATABASES | SCHEMAS } [ LIKE regex_pattern ]
+SHOW { DATABASES | SCHEMAS } [ LIKE regex_pattern ] [ AS JSON ]
 ```
 
 ### Parameters
@@ -42,6 +42,10 @@ SHOW { DATABASES | SCHEMAS } [ LIKE regex_pattern ]
     * `*` alone matches 0 or more characters and `|` is used to separate multiple different regular expressions,
        any of which can match.
     * The leading and trailing blanks are trimmed in the input pattern before processing. The pattern match is case-insensitive.
+
+* **AS JSON**
+
+    Returns the output in JSON format instead of tabular format. The JSON output contains a single column with a JSON string containing the list of databases.
 
 ### Examples
 
@@ -79,7 +83,65 @@ SHOW SCHEMAS;
 | payments_db|
 |  payroll_db|
 +------------+
+
+-- Get database list in JSON format
+SHOW DATABASES AS JSON;
++-------------------------------------------------------------------------------------+
+|namespace                                                                            |
++-------------------------------------------------------------------------------------+
+|{"namespaces":[{"name":"default"},{"name":"payments_db"},{"name":"payroll_db"}]}    |
++-------------------------------------------------------------------------------------+
+
+-- Get filtered databases in JSON format
+SHOW DATABASES LIKE 'pay*' AS JSON;
++--------------------------------------------------------------------+
+|namespace                                                           |
++--------------------------------------------------------------------+
+|{"namespaces":[{"name":"payments_db"},{"name":"payroll_db"}]}      |
++--------------------------------------------------------------------+
+
+-- JSON output with legacy schema (if spark.sql.legacy.keepCommandOutputSchema=true)
+SET spark.sql.legacy.keepCommandOutputSchema=true;
+SHOW DATABASES AS JSON;
++-------------------------------------------------------------------------------------+
+|databaseName                                                                         |
++-------------------------------------------------------------------------------------+
+|{"databases":[{"name":"default"},{"name":"payments_db"},{"name":"payroll_db"}]}     |
++-------------------------------------------------------------------------------------+
+
+-- Back to default mode
+SET spark.sql.legacy.keepCommandOutputSchema=false;
 ```
+
+### JSON Output Schema
+
+When using `AS JSON`, the output structure depends on the `spark.sql.legacy.keepCommandOutputSchema` configuration:
+
+**Default mode** (`spark.sql.legacy.keepCommandOutputSchema=false`):
+- Column name: `namespace`
+- JSON structure:
+```json
+{
+  "namespaces": [
+    {"name": "database1"},
+    {"name": "database2"}
+  ]
+}
+```
+
+**Legacy mode** (`spark.sql.legacy.keepCommandOutputSchema=true`):
+- Column name: `databaseName`
+- JSON structure:
+```json
+{
+  "databases": [
+    {"name": "database1"},
+    {"name": "database2"}
+  ]
+}
+```
+
+Both modes return a single array of database/namespace objects, each with a `name` field.
 
 ### Related Statements
 
