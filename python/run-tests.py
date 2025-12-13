@@ -20,7 +20,7 @@
 import logging
 from argparse import ArgumentParser
 import os
-import importlib
+import importlib.util
 import platform
 import re
 import shutil
@@ -31,6 +31,7 @@ from threading import Thread, Lock
 import time
 import uuid
 import queue as Queue
+import warnings
 from multiprocessing import Manager
 
 
@@ -228,11 +229,16 @@ def get_default_python_executables():
 def split_and_validate_testnames(testnames):
     testnames_to_test = []
 
-    def module_exists(module):
+    def module_exists(module, testname):
         try:
             return importlib.util.find_spec(module) is not None
-        except ModuleNotFoundError:
-            return False
+        except ModuleNotFoundError as exc:
+            # If the module we can't find is part of the testname, we are just
+            # filtering out the testname. Otherwise we miss some dependencies
+            # and we will just raise the exception.
+            if testname.startswith(exc.name):
+                return False
+            raise
 
     for testname in testnames.split(','):
         if " " in testname:
@@ -240,20 +246,27 @@ def split_and_validate_testnames(testnames):
             # Just add the testname as is
             testnames_to_test.append(testname)
         else:
-            if module_exists(testname):
-                # "{module}"
-                testnames_to_test.append(testname)
-            else:
-                # "{module.class.testcase_name}"
-                index = len(testname)
-                while (index := testname.rfind(".", 0, index)) != -1:
-                    module, testcase = testname[:index], testname[index + 1:]
-                    if module_exists(module):
-                        testnames_to_test.append(f"{module} {testcase}")
-                        break
-                else:
-                    # "Can't find the module, the users must know what they are doing"
+            try:
+                if module_exists(testname, testname):
+                    # "{module}"
                     testnames_to_test.append(testname)
+                else:
+                    # "{module.class.testcase_name}"
+                    index = len(testname)
+                    while (index := testname.rfind(".", 0, index)) != -1:
+                        module, testcase = testname[:index], testname[index + 1:]
+                        if module_exists(module, testname):
+                            testnames_to_test.append(f"{module} {testcase}")
+                            break
+                    else:
+                        # "Can't find the module, the users must know what they are doing"
+                        testnames_to_test.append(testname)
+            except ModuleNotFoundError as exc:
+                warnings.warn(
+                    f"Can't find the module '{exc.name}'. The python being used does not "
+                    "have the access to all test dependencies. Will just pass testname as is.",
+                    stacklevel=2
+                )
 
     return testnames_to_test
 
