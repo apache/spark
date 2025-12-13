@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.command
 import java.time.ZoneOffset
 
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.json4s._
 import org.json4s.JsonAST.JObject
@@ -27,14 +28,15 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedPersistentView, ResolvedTable, ResolvedTempView}
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, ClusterBySpec, SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table, TableCatalog, V1Table, V2TableUtil}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.connector.catalog.V1Table
+import org.apache.spark.sql.connector.expressions.{ClusterByTransform, IdentityTransform, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.PartitioningUtils
@@ -95,6 +97,14 @@ case class DescribeRelationJsonCommand(
         } else {
           describeFormattedTableInfoJson(metadata, jsonMap)
         }
+
+      case ResolvedTable(catalog, identifier, table, _) =>
+        // V2 table support
+        if (partitionSpec.nonEmpty) {
+          throw QueryCompilationErrors.describeDoesNotSupportPartitionForV2TablesError()
+        }
+        describeIdentifier(identifier.toQualifiedNameParts(catalog), jsonMap)
+        describeV2TableJson(table, sparkSession, jsonMap)
 
       case _ => throw QueryCompilationErrors.describeAsJsonNotSupportedForV2TablesError()
     }
@@ -290,7 +300,7 @@ case class DescribeRelationJsonCommand(
 
     val filteredTableInfo = table.toJsonLinkedHashMap
 
-    filteredTableInfo.map { case (key, value) =>
+    filteredTableInfo.foreach { case (key, value) =>
       addKeyValueToMap(key, value, jsonMap)
     }
   }
@@ -333,6 +343,115 @@ case class DescribeRelationJsonCommand(
     }
     metadata.storage.toJsonLinkedHashMap.foreach { case (key, value) =>
       addKeyValueToMap(key, value, jsonMap)
+    }
+  }
+
+  private def describeV2TableJson(
+      table: Table,
+      sparkSession: SparkSession,
+      jsonMap: mutable.LinkedHashMap[String, JValue]): Unit = {
+    // Add schema
+    describeColsJson(CatalogV2Util.v2ColumnsToStructType(table.columns()), jsonMap)
+
+    val tableProps = table.properties().asScala
+
+
+    val capabilities = table.capabilities()
+    if (!capabilities.isEmpty) {
+      val capsJson = JArray(capabilities.asScala.map(cap => JString(cap.toString)).toList)
+      addKeyValueToMap("capabilities", capsJson, jsonMap)
+    }
+
+    val allPartitioning = table.partitioning.toIndexedSeq
+
+    // Add partitioning (non-clustering transforms)
+    val nonClusteringPartitions = allPartitioning.filterNot(_.isInstanceOf[ClusterByTransform])
+    if (nonClusteringPartitions.nonEmpty) {
+      val partitioningJson = JArray(nonClusteringPartitions.map(describeTransformJson).toList)
+      addKeyValueToMap("partitioning", partitioningJson, jsonMap)
+    }
+
+    // Add clustering
+    ClusterBySpec.extractClusterBySpec(allPartitioning).foreach { clusterBySpec =>
+      val clusteringJson = JArray(clusterBySpec.columnNames.map { fieldNames =>
+        JString(fieldNames.fieldNames.map(quoteIfNeeded).mkString("."))
+      }.toList)
+      addKeyValueToMap("clustering_columns", clusteringJson, jsonMap)
+    }
+
+    // Add extended information
+    if (isExtended) {
+      val tableType = if (tableProps.contains(TableCatalog.PROP_EXTERNAL)) {
+        CatalogTableType.EXTERNAL.name
+      } else {
+        CatalogTableType.MANAGED.name
+      }
+      addKeyValueToMap("type", JString(tableType), jsonMap)
+
+      CatalogV2Util.TABLE_RESERVED_PROPERTIES
+        .filterNot(_ == TableCatalog.PROP_EXTERNAL)
+        .foreach { propKey =>
+          if (tableProps.contains(propKey)) {
+            addKeyValueToMap(propKey, JString(tableProps(propKey)), jsonMap)
+          }
+        }
+
+      val metaCols = V2TableUtil.extractMetadataColumns(table)
+      if (metaCols.nonEmpty) {
+        val metaColumnsJson = JArray(metaCols.map { case (name, dataType, isNullable, comment) =>
+          val baseFields = List(
+            "name" -> JString(name),
+            "type" -> jsonType(dataType),
+            "nullable" -> JBool(isNullable)
+          )
+          val commentFields = comment.map(c => "comment" -> JString(c)).toList
+          JObject(baseFields ++ commentFields: _*)
+        }.toList)
+        addKeyValueToMap("metadata_columns", metaColumnsJson, jsonMap)
+      }
+
+      // Add table properties (excluding reserved ones)
+      val properties = V2TableUtil.extractProperties(table, conf.redactOptions(_))
+      if (properties.nonEmpty) {
+        val propsJson = JObject(properties.map { case (k, v) => k -> JString(v) })
+        addKeyValueToMap("table_properties", propsJson, jsonMap)
+      }
+
+      // Add table statistics
+      val (sizeOpt, rowsOpt) = V2TableUtil.extractStatistics(table)
+      val statsFields = mutable.ListBuffer[(String, JValue)]()
+      sizeOpt.foreach(s => statsFields += "size_in_bytes" -> JLong(s))
+      rowsOpt.foreach(r => statsFields += "num_rows" -> JLong(r))
+      if (statsFields.nonEmpty) {
+        addKeyValueToMap("statistics", JObject(statsFields.toList), jsonMap)
+      }
+
+      // Add constraints
+      val constraints = V2TableUtil.extractConstraints(table)
+      if (constraints.nonEmpty) {
+        val constraintsJson = JArray(constraints.map { case (name, desc) =>
+          JObject(
+            "name" -> JString(name),
+            "description" -> JString(desc)
+          )
+        }.toList)
+        addKeyValueToMap("constraints", constraintsJson, jsonMap)
+      }
+    }
+  }
+
+  private def describeTransformJson(transform: Transform): JValue = {
+    transform match {
+      case IdentityTransform(ref) =>
+        JObject(
+          "type" -> JString("identity"),
+          "column" -> JString(ref.fieldNames().mkString("."))
+        )
+      case _ =>
+        JObject(
+          "type" -> JString("transform"),
+          "description" -> JString(transform.describe())
+        )
     }
   }
 

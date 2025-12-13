@@ -19,12 +19,17 @@ package org.apache.spark.sql.connector.catalog
 
 import java.util.Locale
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, MetadataColumnHelper}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
+import org.apache.spark.sql.connector.read.SupportsReportStatistics
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
 import org.apache.spark.sql.util.SchemaValidationMode
 import org.apache.spark.sql.util.SchemaValidationMode.PROHIBIT_CHANGES
 import org.apache.spark.util.ArrayImplicits._
@@ -136,4 +141,92 @@ private[sql] object V2TableUtil extends SQLConfHelper {
   }
 
   private def resolver: Resolver = conf.resolver
+
+  // Metadata extraction utilities
+
+  /**
+   * Extract statistics from a V2 table.
+   *
+   * @param table The V2 table to extract statistics from
+   * @return A tuple of (sizeInBytes, numRows), both as Option[Long]
+   */
+  def extractStatistics(table: Table): (Option[Long], Option[Long]) = {
+    table match {
+      case read: SupportsRead =>
+        read.newScanBuilder(CaseInsensitiveStringMap.empty()).build() match {
+          case s: SupportsReportStatistics =>
+            val stats = s.estimateStatistics()
+            val sizeInBytes =
+              Option.when(stats.sizeInBytes().isPresent)(stats.sizeInBytes().getAsLong)
+            val numRows =
+              Option.when(stats.numRows().isPresent)(stats.numRows().getAsLong)
+            (sizeInBytes, numRows)
+          case _ => (None, None)
+        }
+      case _ => (None, None)
+    }
+  }
+
+  /**
+   * Extract table properties from a V2 table, filtering out reserved properties
+   * and applying redaction for sensitive values.
+   *
+   * @param table The V2 table
+   * @param redactFunc Function to redact sensitive values from the property map
+   * @return A sorted list of (key, value) pairs
+   */
+  def extractProperties(
+      table: Table,
+      redactFunc: Map[String, String] => Map[String, String]): List[(String, String)] = {
+    redactFunc(table.properties.asScala.toMap)
+      .filter(kv => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(kv._1))
+      .toList
+      .sortBy(_._1)
+  }
+
+  /**
+   * Extract metadata columns from a V2 table.
+   *
+   * @param table The V2 table
+   * @return A sequence of (name, dataType, isNullable, comment) tuples
+   */
+  def extractMetadataColumns(table: Table): Seq[(String, DataType, Boolean, Option[String])] = {
+    table match {
+      case hasMeta: SupportsMetadataColumns if hasMeta.metadataColumns.nonEmpty =>
+        hasMeta.metadataColumns.map { column =>
+          (column.name, column.dataType, column.isNullable, Option(column.comment()))
+        }.toSeq
+      case _ => Seq.empty
+    }
+  }
+
+  /**
+   * Extract constraints from a V2 table.
+   *
+   * @param table The V2 table
+   * @return A sequence of (name, description) tuples
+   */
+  def extractConstraints(table: Table): Seq[(String, String)] = {
+    if (table.constraints.nonEmpty) {
+      table.constraints().map { constraint =>
+        (constraint.name(), constraint.toDescription)
+      }.toSeq
+    } else {
+      Seq.empty
+    }
+  }
+
+  /**
+   * Determine the table type (EXTERNAL or MANAGED) for a V2 table.
+   *
+   * @param table The V2 table
+   * @return CatalogTableType.EXTERNAL.name or CatalogTableType.MANAGED.name
+   */
+  def getTableType(table: Table): String = {
+    if (table.properties().containsKey(TableCatalog.PROP_EXTERNAL)) {
+      CatalogTableType.EXTERNAL.name
+    } else {
+      CatalogTableType.MANAGED.name
+    }
+  }
 }

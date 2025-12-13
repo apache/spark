@@ -18,17 +18,14 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable.ArrayBuffer
-import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, ClusterBySpec}
+import org.apache.spark.sql.catalyst.catalog.ClusterBySpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, ResolveDefaultColumns}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsMetadataColumns, SupportsRead, Table, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table, TableCatalog, V2TableUtil}
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, IdentityTransform}
-import org.apache.spark.sql.connector.read.SupportsReportStatistics
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
 case class DescribeTableExec(
@@ -55,11 +52,7 @@ case class DescribeTableExec(
     rows += toCatalystRow("# Detailed Table Information", "", "")
     rows += toCatalystRow("Name", table.name(), "")
 
-    val tableType = if (table.properties().containsKey(TableCatalog.PROP_EXTERNAL)) {
-      CatalogTableType.EXTERNAL.name
-    } else {
-      CatalogTableType.MANAGED.name
-    }
+    val tableType = V2TableUtil.getTableType(table)
     rows += toCatalystRow("Type", tableType, "")
     CatalogV2Util.TABLE_RESERVED_PROPERTIES
       .filterNot(_ == TableCatalog.PROP_EXTERNAL)
@@ -68,12 +61,9 @@ case class DescribeTableExec(
           rows += toCatalystRow(propKey.capitalize, table.properties.get(propKey), "")
         }
       })
-    val properties =
-      conf.redactOptions(table.properties.asScala.toMap).toList
-        .filter(kv => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(kv._1))
-        .sortBy(_._1).map {
-        case (key, value) => key + "=" + value
-      }.mkString("[", ",", "]")
+    val properties = V2TableUtil.extractProperties(table, conf.redactOptions(_))
+      .map { case (key, value) => key + "=" + value }
+      .mkString("[", ",", "]")
     rows += toCatalystRow("Table Properties", properties, "")
 
     // If any columns have default values, append them to the result.
@@ -90,26 +80,25 @@ case class DescribeTableExec(
   }
 
   private def addTableConstraints(rows: ArrayBuffer[InternalRow]): Unit = {
-    if (table.constraints.nonEmpty) {
+    val constraints = V2TableUtil.extractConstraints(table)
+    if (constraints.nonEmpty) {
       rows += emptyRow()
       rows += toCatalystRow("# Constraints", "", "")
-      rows ++= table.constraints().map{ constraint =>
-        toCatalystRow(constraint.name(), constraint.toDescription, "")
+      rows ++= constraints.map { case (name, desc) =>
+        toCatalystRow(name, desc, "")
       }
     }
   }
 
-  private def addMetadataColumns(rows: ArrayBuffer[InternalRow]): Unit = table match {
-    case hasMeta: SupportsMetadataColumns if hasMeta.metadataColumns.nonEmpty =>
+  private def addMetadataColumns(rows: ArrayBuffer[InternalRow]): Unit = {
+    val metaCols = V2TableUtil.extractMetadataColumns(table)
+    if (metaCols.nonEmpty) {
       rows += emptyRow()
       rows += toCatalystRow("# Metadata Columns", "", "")
-      rows ++= hasMeta.metadataColumns.map { column =>
-        toCatalystRow(
-          column.name,
-          column.dataType.simpleString,
-          Option(column.comment()).getOrElse(""))
+      rows ++= metaCols.map { case (name, dataType, _, comment) =>
+        toCatalystRow(name, dataType.simpleString, comment.getOrElse(""))
       }
-    case _ =>
+    }
   }
 
   private def addClusteringToRows(
@@ -139,21 +128,15 @@ case class DescribeTableExec(
     }
   }
 
-  private def addTableStats(rows: ArrayBuffer[InternalRow]): Unit = table match {
-    case read: SupportsRead =>
-      read.newScanBuilder(CaseInsensitiveStringMap.empty()).build() match {
-        case s: SupportsReportStatistics =>
-          val stats = s.estimateStatistics()
-          val statsComponents = Seq(
-            Option.when(stats.sizeInBytes().isPresent)(s"${stats.sizeInBytes().getAsLong} bytes"),
-            Option.when(stats.numRows().isPresent)(s"${stats.numRows().getAsLong} rows")
-          ).flatten
-          if (statsComponents.nonEmpty) {
-            rows += toCatalystRow("Statistics", statsComponents.mkString(", "), null)
-          }
-        case _ =>
-      }
-    case _ =>
+  private def addTableStats(rows: ArrayBuffer[InternalRow]): Unit = {
+    val (sizeOpt, rowsOpt) = V2TableUtil.extractStatistics(table)
+    val statsComponents = Seq(
+      sizeOpt.map(s => s"$s bytes"),
+      rowsOpt.map(r => s"$r rows")
+    ).flatten
+    if (statsComponents.nonEmpty) {
+      rows += toCatalystRow("Statistics", statsComponents.mkString(", "), null)
+    }
   }
 
   private def addPartitioning(rows: ArrayBuffer[InternalRow]): Unit = {

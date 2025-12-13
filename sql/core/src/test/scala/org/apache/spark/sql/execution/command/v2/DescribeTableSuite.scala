@@ -279,4 +279,33 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
         Seq(Row("key", "int", "13579")))
     }
   }
+
+  test("DESCRIBE AS JSON for V2 table") {
+    withNamespaceAndTable("ns", "tbl") { tbl =>
+      sql(s"CREATE TABLE $tbl (id bigint, data string) $defaultUsing " +
+        "PARTITIONED BY (id) COMMENT 'test table'")
+
+      // Test without EXTENDED/FORMATTED should throw error
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"DESCRIBE TABLE $tbl AS JSON")
+        },
+        condition = "DESCRIBE_JSON_NOT_EXTENDED",
+        parameters = Map("tableName" -> "tbl")
+      )
+
+      // DESCRIBE EXTENDED AS JSON should include V2-specific fields
+      val extendedJson = sql(s"DESCRIBE EXTENDED $tbl AS JSON").collect()(0).getString(0)
+      val expectedFields = Seq(
+        "\"table_name\":\"tbl\"", "\"namespace\":[\"ns\"]", "\"type\":\"MANAGED\"",
+        "\"provider\":", "\"comment\":\"test table\"", "\"partitioning\":[",
+        "\"capabilities\":[", "\"columns\":[", "\"name\":\"id\"", "\"name\":\"data\""
+      )
+      expectedFields.foreach(field => assert(extendedJson.contains(field), s"Missing: $field"))
+
+      // DESCRIBE FORMATTED AS JSON should produce identical output
+      val formattedJson = sql(s"DESCRIBE FORMATTED $tbl AS JSON").collect()(0).getString(0)
+      assert(extendedJson === formattedJson)
+    }
+  }
 }

@@ -72,7 +72,7 @@ to return the metadata pertaining to a partition or column respectively.
 
   **Syntax:** `[ AS JSON ]`
 
-  **Schema:**
+  **V1 Table JSON Schema:**
 
   Below is the full JSON schema.
   In actual output, null fields are omitted and the JSON is not pretty-printed (see Examples).
@@ -130,6 +130,69 @@ to return the metadata pertaining to a partition or column respectively.
       "last_access": "<yyyy-MM-dd'T'HH:mm:ss'Z'>",
       "partition_provider": "<partition_provider>",
       "collation": "<default_collation>"
+    }
+  ```
+
+  **V2 Table JSON Schema (DataSource V2):**
+
+  ```sql
+    {
+      "table_name": "<table_name>",
+      "catalog_name": "<catalog_name>",
+      "schema_name": "<innermost_namespace_name>",
+      "namespace": ["<namespace_names>"],
+      "type": "<table_type>",
+      "provider": "<provider>",
+      "columns": [
+        {
+          "name": "<name>",
+          "type": <type_json>,
+          "comment": "<comment>",
+          "nullable": <boolean>,
+          "default": "<default_val>"
+        }
+      ],
+      "partition_values": {
+        "<col_name>": "<val>"
+      },
+      "partitioning": [
+        {
+          "type": "identity",
+          "column": "<col_name>"
+        }
+      ],
+      "capabilities": ["<capability1>", "<capability2>"],
+      "location": "<path>",
+      "owner": "<owner>",
+      "view_text": "<view_text>",
+      "view_original_text": "<view_original_text>",
+      "view_schema_mode": "<view_schema_mode>",
+      "view_catalog_and_namespace": "<view_catalog_and_namespace>",
+      "view_query_output_columns": ["col1", "col2"],
+      "comment": "<comment>",
+      "table_properties": {
+        "property1": "<property1>",
+        "property2": "<property2>"
+      },
+      "metadata_columns": [
+        {
+          "name": "<name>",
+          "type": <type_json>,
+          "nullable": <boolean>,
+          "comment": "<comment>"
+        }
+      ],
+      "constraints": [
+        {
+          "name": "<constraint_name>",
+          "description": "<constraint_description>"
+        }
+      ],
+      "statistics": {
+        "size_in_bytes": <size>,
+        "num_rows": <row_count>
+      },
+      "collation": "<collation>"
     }
   ```
   
@@ -271,9 +334,24 @@ DESCRIBE customer salesdb.customer.name;
 |  comment|Short name|
 +---------+----------+
 
--- Returns the table metadata in JSON format.
+-- Returns the V1 table metadata in JSON format.
 DESC FORMATTED customer AS JSON;
 {"table_name":"customer","catalog_name":"spark_catalog","schema_name":"default","namespace":["default"],"columns":[{"name":"cust_id","type":{"name":"integer"},"nullable":true},{"name":"name","type":{"name":"string"},"comment":"Short name","nullable":true},{"name":"state","type":{"name":"varchar","length":20},"nullable":true}],"location": "file:/tmp/salesdb.db/custom...","created_time":"2020-04-07T14:05:43Z","last_access":"UNKNOWN","created_by":"None","type":"MANAGED","provider":"parquet","partition_provider":"Catalog","partition_columns":["state"]}
+
+-- Example: V2 table with DESCRIBE EXTENDED tablename AS JSON
+CREATE TABLE v2_users (
+    id BIGINT,
+    name STRING,
+    email STRING,
+    created_date DATE
+)
+USING delta
+PARTITIONED BY (created_date)
+TBLPROPERTIES ('delta.minReaderVersion'='3', 'delta.minWriterVersion'='7');
+
+-- Returns the V2 table metadata in JSON format.
+DESC FORMATTED v2_users AS JSON;
+{"table_name":"v2_users","catalog_name":"spark_catalog","schema_name":"default","namespace":["default"],"columns":[{"name":"id","type":{"name":"bigint"},"nullable":true},{"name":"name","type":{"name":"string","collation":"UTF8_BINARY"},"nullable":true},{"name":"email","type":{"name":"string","collation":"UTF8_BINARY"},"nullable":true},{"name":"created_date","type":{"name":"date"},"nullable":true}],"capabilities":["BATCH_READ","BATCH_WRITE","STREAMING_WRITE","OVERWRITE_BY_FILTER","TRUNCATE","ACCEPT_ANY_SCHEMA"],"partitioning":[{"type":"identity","column":"created_date"}],"type":"MANAGED","provider":"delta","location":"file:/tmp/warehouse/v2_users","table_properties":{"delta.minReaderVersion":"3","delta.minWriterVersion":"7"},"statistics":{"size_in_bytes":2048,"num_rows":3},"collation":"UTF8_BINARY"}
 ```
 
 ### Related Statements
