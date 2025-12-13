@@ -21,7 +21,8 @@
 # variable is set or not. If set, it starts to run the coverage.
 try:
     import coverage
-    cov = coverage.process_startup()
+    if (cov := coverage.Coverage.current()) is None:
+        cov = coverage.process_startup()
     if cov:
         import os
 
