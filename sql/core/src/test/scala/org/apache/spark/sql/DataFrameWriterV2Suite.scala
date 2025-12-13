@@ -169,17 +169,20 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       exception = intercept[AnalysisException] {
         spark.table("source").writeTo("temp_view").append()
       },
-      condition = "TEMP_VIEW_WRITE_NOT_ALLOWED",
+      condition = "VIEW_WRITE_NOT_ALLOWED",
       parameters = Map("quoted" -> "temp_view")
     )
   }
 
   test("Append: fail if it writes to a view") {
     spark.sql("CREATE VIEW v AS SELECT 1")
-    val exc = intercept[AnalysisException] {
-      spark.table("source").writeTo("v").append()
-    }
-    assert(exc.getMessage.contains("Writing into a view is not allowed"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").writeTo("v").append()
+      },
+      condition = "VIEW_WRITE_NOT_ALLOWED",
+      parameters = Map("quoted" -> "`spark_catalog`.`default`.`v`")
+    )
   }
 
   test("Append: fail if it writes to a v1 table") {
@@ -276,17 +279,20 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       exception = intercept[AnalysisException] {
         spark.table("source").writeTo("temp_view").overwrite(lit(true))
       },
-      condition = "TEMP_VIEW_WRITE_NOT_ALLOWED",
+      condition = "VIEW_WRITE_NOT_ALLOWED",
       parameters = Map("quoted" -> "temp_view")
     )
   }
 
   test("Overwrite: fail if it writes to a view") {
     spark.sql("CREATE VIEW v AS SELECT 1")
-    val exc = intercept[AnalysisException] {
-      spark.table("source").writeTo("v").overwrite(lit(true))
-    }
-    assert(exc.getMessage.contains("Writing into a view is not allowed"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").writeTo("v").overwrite(lit(true))
+      },
+      condition = "VIEW_WRITE_NOT_ALLOWED",
+      parameters = Map("quoted" -> "`spark_catalog`.`default`.`v`")
+    )
   }
 
   test("Overwrite: fail if it writes to a v1 table") {
@@ -383,17 +389,20 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       exception = intercept[AnalysisException] {
         spark.table("source").writeTo("temp_view").overwritePartitions()
       },
-      condition = "TEMP_VIEW_WRITE_NOT_ALLOWED",
+      condition = "VIEW_WRITE_NOT_ALLOWED",
       parameters = Map("quoted" -> "temp_view")
     )
   }
 
   test("OverwritePartitions: fail if it writes to a view") {
     spark.sql("CREATE VIEW v AS SELECT 1")
-    val exc = intercept[AnalysisException] {
-      spark.table("source").writeTo("v").overwritePartitions()
-    }
-    assert(exc.getMessage.contains("Writing into a view is not allowed"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").writeTo("v").overwritePartitions()
+      },
+      condition = "VIEW_WRITE_NOT_ALLOWED",
+      parameters = Map("quoted" -> "`spark_catalog`.`default`.`v`")
+    )
   }
 
   test("OverwritePartitions: fail if it writes to a v1 table") {

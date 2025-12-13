@@ -6029,9 +6029,9 @@
     ],
     "sqlState" : "428EK"
   },
-  "TEMP_VIEW_WRITE_NOT_ALLOWED" : {
+  "VIEW_WRITE_NOT_ALLOWED" : {
     "message" : [
-      "Cannot write into temp view <quoted> as it's not a data source v2 relation."
+      "Cannot write into view <quoted> as it's not a data source v2 relation."
     ],
     "sqlState" : "42809"
   },
@@ -7637,11 +7637,6 @@
   "_LEGACY_ERROR_TEMP_1008" : {
     "message" : [
       "<quoted> is not a temp view of streaming logical plan, please use batch API such as `DataFrameReader.table` to read it."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1011" : {
-    "message" : [
-      "Writing into a view is not allowed. View: <identifier>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1012" : {
