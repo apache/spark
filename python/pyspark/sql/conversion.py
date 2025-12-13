@@ -113,7 +113,7 @@ class LocalDataToArrowConversion:
         dataType: DataType,
         nullable: bool = True,
         *,
-        none_on_identity: bool = True,
+        none_on_identity: bool = False,
         int_to_decimal_coercion_enabled: bool = False,
     ) -> Optional[Callable]:
         pass
