@@ -267,6 +267,7 @@ def split_and_validate_testnames(testnames):
                     "have the access to all test dependencies. Will just pass testname as is.",
                     stacklevel=2
                 )
+                testnames_to_test.append(testname)
 
     return testnames_to_test
 
