@@ -811,7 +811,9 @@ class ArrowTableToRowsConversion:
 
     @overload
     @staticmethod
-    def convert(table: "pa.Table", schema: StructType, *, return_as_tuples: bool) -> List[tuple]:
+    def convert(
+        table: "pa.Table", schema: StructType, *, return_as_tuples: bool
+    ) -> List[Row | tuple]:
         pass
 
     @staticmethod  # type: ignore[misc]
