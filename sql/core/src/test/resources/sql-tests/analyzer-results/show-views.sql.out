@@ -114,6 +114,54 @@ org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 
 
 -- !query
+SHOW VIEWS AS JSON
+-- !query analysis
+ShowViewsJsonCommand showdb, [namespace#x]
+
+
+-- !query
+SHOW VIEWS FROM showdb AS JSON
+-- !query analysis
+ShowViewsJsonCommand showdb, [namespace#x]
+
+
+-- !query
+SHOW VIEWS IN showdb AS JSON
+-- !query analysis
+ShowViewsJsonCommand showdb, [namespace#x]
+
+
+-- !query
+SHOW VIEWS IN global_temp AS JSON
+-- !query analysis
+ShowViewsJsonCommand global_temp, [namespace#x]
+
+
+-- !query
+SHOW VIEWS 'view_*' AS JSON
+-- !query analysis
+ShowViewsJsonCommand showdb, view_*, [namespace#x]
+
+
+-- !query
+SHOW VIEWS LIKE 'view_1*|view_2*' AS JSON
+-- !query analysis
+ShowViewsJsonCommand showdb, view_1*|view_2*, [namespace#x]
+
+
+-- !query
+SHOW VIEWS IN showdb 'view_*' AS JSON
+-- !query analysis
+ShowViewsJsonCommand showdb, view_*, [namespace#x]
+
+
+-- !query
+SHOW VIEWS IN showdb LIKE 'view_*' AS JSON
+-- !query analysis
+ShowViewsJsonCommand showdb, view_*, [namespace#x]
+
+
+-- !query
 DROP VIEW global_temp.view_3
 -- !query analysis
 DropTempViewCommand global_temp.view_3

@@ -1289,6 +1289,20 @@ object ShowViews {
     AttributeReference("isTemporary", BooleanType, nullable = false)())
 }
 
+case class ShowViewsJson(
+    namespace: LogicalPlan,
+    pattern: Option[String],
+    override val output: Seq[Attribute] = ShowViewsJson.getOutputAttrs) extends UnaryCommand {
+  override def child: LogicalPlan = namespace
+  override protected def withNewChildInternal(newChild: LogicalPlan): ShowViewsJson =
+    copy(namespace = newChild)
+}
+
+object ShowViewsJson {
+  def getOutputAttrs: Seq[Attribute] = Seq(
+    AttributeReference("namespace", StringType, nullable = false)())
+}
+
 /**
  * The logical plan of the USE command.
  */

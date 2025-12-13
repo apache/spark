@@ -21,6 +21,18 @@ SHOW VIEWS IN showdb LIKE 'view_*';
 -- Error when database not exists
 SHOW VIEWS IN wrongdb LIKE 'view_*';
 
+-- SHOW VIEWS AS JSON
+SHOW VIEWS AS JSON;
+SHOW VIEWS FROM showdb AS JSON;
+SHOW VIEWS IN showdb AS JSON;
+SHOW VIEWS IN global_temp AS JSON;
+
+-- SHOW VIEWS AS JSON WITH wildcard match
+SHOW VIEWS 'view_*' AS JSON;
+SHOW VIEWS LIKE 'view_1*|view_2*' AS JSON;
+SHOW VIEWS IN showdb 'view_*' AS JSON;
+SHOW VIEWS IN showdb LIKE 'view_*' AS JSON;
+
 -- Clean Up
 DROP VIEW global_temp.view_3;
 DROP VIEW view_4;

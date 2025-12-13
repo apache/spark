@@ -448,6 +448,13 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           throw QueryCompilationErrors.missingCatalogViewsAbilityError(ns.catalog)
       }
 
+    case ShowViewsJson(ns: ResolvedNamespace, pattern, output) =>
+      ns match {
+        case ResolvedDatabaseInSessionCatalog(db) => ShowViewsJsonCommand(db, pattern, output)
+        case _ =>
+          throw QueryCompilationErrors.missingCatalogViewsAbilityError(ns.catalog)
+      }
+
     // If target is view, force use v1 command
     case ShowTableProperties(ResolvedViewIdentifier(ident), propertyKey, output) =>
       ShowTablePropertiesCommand(ident, propertyKey, output)

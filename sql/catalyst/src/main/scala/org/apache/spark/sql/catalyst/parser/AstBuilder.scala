@@ -5293,7 +5293,13 @@ class AstBuilder extends DataTypeAstBuilder
     } else {
       CurrentNamespace
     }
-    ShowViews(ns, Option(ctx.pattern).map(x => string(visitStringLit(x))))
+    val pattern = Option(ctx.pattern).map(x => string(visitStringLit(x)))
+
+    if (ctx.JSON != null) {
+      ShowViewsJson(ns, pattern)
+    } else {
+      ShowViews(ns, pattern)
+    }
   }
 
   override def visitColPosition(ctx: ColPositionContext): ColumnPosition = {

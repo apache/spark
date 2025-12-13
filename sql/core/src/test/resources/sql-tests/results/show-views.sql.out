@@ -149,6 +149,70 @@ org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 
 
 -- !query
+SHOW VIEWS AS JSON
+-- !query schema
+struct<namespace:string>
+-- !query output
+{"views":[{"namespace":"showdb","viewName":"view_1","isTemporary":false},{"namespace":"showdb","viewName":"view_2","isTemporary":false},{"namespace":"","viewName":"view_4","isTemporary":true}]}
+
+
+-- !query
+SHOW VIEWS FROM showdb AS JSON
+-- !query schema
+struct<namespace:string>
+-- !query output
+{"views":[{"namespace":"showdb","viewName":"view_1","isTemporary":false},{"namespace":"showdb","viewName":"view_2","isTemporary":false},{"namespace":"","viewName":"view_4","isTemporary":true}]}
+
+
+-- !query
+SHOW VIEWS IN showdb AS JSON
+-- !query schema
+struct<namespace:string>
+-- !query output
+{"views":[{"namespace":"showdb","viewName":"view_1","isTemporary":false},{"namespace":"showdb","viewName":"view_2","isTemporary":false},{"namespace":"","viewName":"view_4","isTemporary":true}]}
+
+
+-- !query
+SHOW VIEWS IN global_temp AS JSON
+-- !query schema
+struct<namespace:string>
+-- !query output
+{"views":[{"namespace":"global_temp","viewName":"view_3","isTemporary":true},{"namespace":"","viewName":"view_4","isTemporary":true}]}
+
+
+-- !query
+SHOW VIEWS 'view_*' AS JSON
+-- !query schema
+struct<namespace:string>
+-- !query output
+{"views":[{"namespace":"showdb","viewName":"view_1","isTemporary":false},{"namespace":"showdb","viewName":"view_2","isTemporary":false},{"namespace":"","viewName":"view_4","isTemporary":true}]}
+
+
+-- !query
+SHOW VIEWS LIKE 'view_1*|view_2*' AS JSON
+-- !query schema
+struct<namespace:string>
+-- !query output
+{"views":[{"namespace":"showdb","viewName":"view_1","isTemporary":false},{"namespace":"showdb","viewName":"view_2","isTemporary":false}]}
+
+
+-- !query
+SHOW VIEWS IN showdb 'view_*' AS JSON
+-- !query schema
+struct<namespace:string>
+-- !query output
+{"views":[{"namespace":"showdb","viewName":"view_1","isTemporary":false},{"namespace":"showdb","viewName":"view_2","isTemporary":false},{"namespace":"","viewName":"view_4","isTemporary":true}]}
+
+
+-- !query
+SHOW VIEWS IN showdb LIKE 'view_*' AS JSON
+-- !query schema
+struct<namespace:string>
+-- !query output
+{"views":[{"namespace":"showdb","viewName":"view_1","isTemporary":false},{"namespace":"showdb","viewName":"view_2","isTemporary":false},{"namespace":"","viewName":"view_4","isTemporary":true}]}
+
+
+-- !query
 DROP VIEW global_temp.view_3
 -- !query schema
 struct<>

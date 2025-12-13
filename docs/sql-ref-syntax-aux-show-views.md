@@ -30,7 +30,7 @@ regardless of a given database.
 
 ### Syntax
 ```sql
-SHOW VIEWS [ { FROM | IN } database_name ] [ LIKE regex_pattern ]
+SHOW VIEWS [ { FROM | IN } database_name ] [ LIKE regex_pattern ] [ AS JSON ]
 ```
 
 ### Parameters
@@ -46,6 +46,10 @@ SHOW VIEWS [ { FROM | IN } database_name ] [ LIKE regex_pattern ]
      * `*` alone matches 0 or more characters and `|` is used to separate multiple different regular expressions,
        any of which can match.
      * The leading and trailing blanks are trimmed in the input pattern before processing. The pattern match is case-insensitive.
+
+* **AS JSON**
+
+     Returns the output in JSON format. The output contains a single column named `namespace` with a JSON string representing all views. Each view is represented as a JSON object with fields: `namespace`, `viewName`, and `isTemporary`.
 
 ### Examples
 ```sql
@@ -108,6 +112,30 @@ SHOW VIEWS LIKE 'sam|suj|temp*';
 | default     | suj        | false        |
 |             | temp2      | true         |
 +-------------+------------+--------------+
+
+-- List all views in JSON format
+SHOW VIEWS AS JSON;
++-------------------------------------------------------------------------------------+
+| namespace                                                                           |
++-------------------------------------------------------------------------------------+
+|{"views":[{"namespace":"default","viewName":"sam","isTemporary":false},{"namespace":"default","viewName":"sam1","isTemporary":false},{"namespace":"default","viewName":"suj","isTemporary":false},{"namespace":"","viewName":"temp2","isTemporary":true}]}|
++-------------------------------------------------------------------------------------+
+
+-- List views from userdb database in JSON format
+SHOW VIEWS FROM userdb AS JSON;
++-------------------------------------------------------------------------------------+
+| namespace                                                                           |
++-------------------------------------------------------------------------------------+
+|{"views":[{"namespace":"userdb","viewName":"user1","isTemporary":false},{"namespace":"userdb","viewName":"user2","isTemporary":false},{"namespace":"","viewName":"temp2","isTemporary":true}]}|
++-------------------------------------------------------------------------------------+
+
+-- List views matching pattern in JSON format
+SHOW VIEWS LIKE 'sam*' AS JSON;
++-------------------------------------------------------------------------------------+
+| namespace                                                                           |
++-------------------------------------------------------------------------------------+
+|{"views":[{"namespace":"default","viewName":"sam","isTemporary":false},{"namespace":"default","viewName":"sam1","isTemporary":false}]}|
++-------------------------------------------------------------------------------------+
 ```
 
 ### Related statements

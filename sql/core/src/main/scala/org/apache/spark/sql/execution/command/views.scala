@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import scala.collection.mutable
 
-import org.json4s.JsonAST.{JArray, JString}
+import org.json4s.JsonAST.{JArray, JBool, JObject, JString}
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkException
@@ -400,6 +400,16 @@ case class ShowViewsCommand(
     override val output: Seq[Attribute]) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
+    getViewInfo(sparkSession).map { case (namespace, tableName, isTemp) =>
+      Row(namespace, tableName, isTemp)
+    }
+  }
+
+  /**
+   * Returns filtered view information as tuples of (namespace, tableName, isTemporary).
+   */
+  private[command] def getViewInfo(
+      sparkSession: SparkSession): Seq[(String, String, Boolean)] = {
     val catalog = sparkSession.sessionState.catalog
 
     // Show the information of views.
@@ -409,9 +419,43 @@ case class ShowViewsCommand(
       val namespace = tableIdent.database.toArray.quoted
       val tableName = tableIdent.table
       val isTemp = catalog.isTempView(tableIdent)
-
-      Row(namespace, tableName, isTemp)
+      (namespace, tableName, isTemp)
     }
+  }
+}
+
+/**
+ * The command for `SHOW VIEWS AS JSON`.
+ *
+ * Example output:
+ * {{{
+ * {
+ *   "views": [
+ *     {"namespace": "default", "viewName": "view1", "isTemporary": false},
+ *     {"namespace": "default", "viewName": "view2", "isTemporary": true}
+ *   ]
+ * }
+ * }}}
+ */
+case class ShowViewsJsonCommand(
+    databaseName: String,
+    tableIdentifierPattern: Option[String],
+    override val output: Seq[Attribute]) extends LeafRunnableCommand {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val viewInfo = ShowViewsCommand(databaseName, tableIdentifierPattern, output)
+      .getViewInfo(sparkSession)
+
+    val viewsJson = viewInfo.map { case (namespace, tableName, isTemp) =>
+      JObject(
+        "namespace" -> JString(namespace),
+        "viewName" -> JString(tableName),
+        "isTemporary" -> JBool(isTemp))
+    }
+
+    val jsonOutput = JObject("views" -> JArray(viewsJson.toList))
+
+    Seq(Row(compact(render(jsonOutput))))
   }
 }
 
