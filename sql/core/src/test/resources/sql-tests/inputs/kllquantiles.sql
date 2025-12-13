@@ -464,6 +464,41 @@ FROM (
     FROM t_double_1_5_through_7_11
 );
 
+-- Negative tests for non-foldable (non-constant) rank/quantile arguments
+-- These tests verify that get_quantile and get_rank functions require compile-time constant arguments
+
+-- Non-foldable scalar rank argument to get_quantile (column reference)
+SELECT kll_sketch_get_quantile_bigint(agg, CAST(col1 AS DOUBLE) / 10.0) AS non_foldable_scalar_rank
+FROM (
+    SELECT kll_sketch_agg_bigint(col1) AS agg, col1
+    FROM t_long_1_5_through_7_11
+    GROUP BY col1
+);
+
+-- Non-foldable array rank argument to get_quantile (array containing column reference)
+SELECT kll_sketch_get_quantile_bigint(agg, array(0.25, CAST(col1 AS DOUBLE) / 10.0, 0.75)) AS non_foldable_array_rank
+FROM (
+    SELECT kll_sketch_agg_bigint(col1) AS agg, col1
+    FROM t_long_1_5_through_7_11
+    GROUP BY col1
+);
+
+-- Non-foldable scalar quantile argument to get_rank (column reference)
+SELECT kll_sketch_get_rank_bigint(agg, col1) AS non_foldable_scalar_quantile
+FROM (
+    SELECT kll_sketch_agg_bigint(col1) AS agg, col1
+    FROM t_long_1_5_through_7_11
+    GROUP BY col1
+);
+
+-- Non-foldable array quantile argument to get_rank (array containing column reference)
+SELECT kll_sketch_get_rank_bigint(agg, array(1L, col1, 5L)) AS non_foldable_array_quantile
+FROM (
+    SELECT kll_sketch_agg_bigint(col1) AS agg, col1
+    FROM t_long_1_5_through_7_11
+    GROUP BY col1
+);
+
 -- Clean up
 DROP TABLE IF EXISTS t_int_1_5_through_7_11;
 DROP TABLE IF EXISTS t_long_1_5_through_7_11;
