@@ -291,6 +291,85 @@ class SparkConnectCollectionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
             ).collect(),
         )
 
+    def test_collect_binary_type(self):
+        """Test that df.collect() respects binary_as_bytes configuration for server-side data"""
+        query = """
+            SELECT * FROM VALUES
+            (CAST('hello' AS BINARY)),
+            (CAST('world' AS BINARY))
+            AS tab(b)
+        """
+
+        for conf_value in ["true", "false"]:
+            expected_type = bytes if conf_value == "true" else bytearray
+            with self.both_conf({"spark.sql.execution.pyspark.binaryAsBytes": conf_value}):
+                connect_rows = self.connect.sql(query).collect()
+                self.assertEqual(len(connect_rows), 2)
+                for row in connect_rows:
+                    self.assertIsInstance(row.b, expected_type)
+
+                spark_rows = self.spark.sql(query).collect()
+                self.assertEqual(len(spark_rows), 2)
+                for row in spark_rows:
+                    self.assertIsInstance(row.b, expected_type)
+
+    def test_to_local_iterator_binary_type(self):
+        """Test that df.toLocalIterator() respects binary_as_bytes configuration"""
+        query = """
+            SELECT * FROM VALUES
+            (CAST('data1' AS BINARY)),
+            (CAST('data2' AS BINARY))
+            AS tab(b)
+        """
+
+        for conf_value in ["true", "false"]:
+            expected_type = bytes if conf_value == "true" else bytearray
+            with self.both_conf({"spark.sql.execution.pyspark.binaryAsBytes": conf_value}):
+                connect_count = 0
+                for row in self.connect.sql(query).toLocalIterator():
+                    self.assertIsInstance(row.b, expected_type)
+                    connect_count += 1
+                self.assertEqual(connect_count, 2)
+
+                spark_count = 0
+                for row in self.spark.sql(query).toLocalIterator():
+                    self.assertIsInstance(row.b, expected_type)
+                    spark_count += 1
+                self.assertEqual(spark_count, 2)
+
+    def test_foreach_partition_binary_type(self):
+        """Test that df.foreachPartition() respects binary_as_bytes configuration
+
+        Since foreachPartition() runs on executors and cannot return data to the driver,
+        we test by ensuring the function doesn't throw exceptions when it expects the correct types.
+        """
+        query = """
+            SELECT * FROM VALUES
+            (CAST('partition1' AS BINARY)),
+            (CAST('partition2' AS BINARY))
+            AS tab(b)
+        """
+
+        for conf_value in ["true", "false"]:
+            expected_type = bytes if conf_value == "true" else bytearray
+            expected_type_name = "bytes" if conf_value == "true" else "bytearray"
+
+            with self.both_conf({"spark.sql.execution.pyspark.binaryAsBytes": conf_value}):
+
+                def assert_type(iterator):
+                    count = 0
+                    for row in iterator:
+                        # This will raise an exception if the type is not as expected
+                        assert isinstance(
+                            row.b, expected_type
+                        ), f"Expected {expected_type_name}, got {type(row.b).__name__}"
+                        count += 1
+                    # Ensure we actually processed rows
+                    assert count > 0, "No rows were processed"
+
+                self.connect.sql(query).foreachPartition(assert_type)
+                self.spark.sql(query).foreachPartition(assert_type)
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.connect.test_connect_collection import *  # noqa: F401

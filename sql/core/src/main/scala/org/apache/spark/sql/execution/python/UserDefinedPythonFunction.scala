@@ -32,7 +32,7 @@ import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.classic.ExpressionUtils.expression
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.internal.TableValuedFunctionArgument
+import org.apache.spark.sql.internal.{SQLConf, TableValuedFunctionArgument}
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
@@ -50,20 +50,24 @@ case class UserDefinedPythonFunction(
         || pythonEvalType ==PythonEvalType.SQL_ARROW_BATCHED_UDF
         || pythonEvalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
         || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
+        || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF
         || pythonEvalType == PythonEvalType.SQL_SCALAR_ARROW_UDF
-        || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF) {
+        || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF
+        || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF) {
       /*
        * Check if the named arguments:
        * - don't have duplicated names
        * - don't contain positional arguments after named arguments
        */
-      NamedParametersSupport.splitAndCheckNamedArguments(e, name)
+      NamedParametersSupport.splitAndCheckNamedArguments(e, name, SQLConf.get.resolver)
     } else if (e.exists(_.isInstanceOf[NamedArgumentExpression])) {
       throw QueryCompilationErrors.namedArgumentsNotSupported(name)
     }
 
     if (pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
-      || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF) {
+      || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF
+      || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF
+      || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF) {
       PythonUDAF(name, func, dataType, e, udfDeterministic, pythonEvalType)
     } else {
       PythonUDF(name, func, dataType, e, pythonEvalType, udfDeterministic)
@@ -121,7 +125,7 @@ case class UserDefinedPythonTableFunction(
      * - don't have duplicated names
      * - don't contain positional arguments after named arguments
      */
-    NamedParametersSupport.splitAndCheckNamedArguments(exprs, name)
+    NamedParametersSupport.splitAndCheckNamedArguments(exprs, name, SQLConf.get.resolver)
 
     // Check which argument is a table argument here since it will be replaced with
     // `UnresolvedAttribute` to construct lateral join.
@@ -231,7 +235,8 @@ class UserDefinedPythonTableFunctionAnalyzeRunner(
       }
       if (value.foldable) {
         dataOut.writeBoolean(true)
-        val obj = pickler.dumps(EvaluatePython.toJava(value.eval(), value.dataType))
+        val obj = pickler.dumps(EvaluatePython.toJava(
+          value.eval(), value.dataType, SQLConf.get.pysparkBinaryAsBytes))
         PythonWorkerUtils.writeBytes(obj, dataOut)
       } else {
         dataOut.writeBoolean(false)

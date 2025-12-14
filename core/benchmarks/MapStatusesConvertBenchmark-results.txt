@@ -6,8 +6,8 @@ OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 MapStatuses Convert:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Num Maps: 50000 Fetch partitions:500                868            871           3          0.0   867735046.0       1.0X
-Num Maps: 50000 Fetch partitions:1000              1472           1492          29          0.0  1471850953.0       0.6X
-Num Maps: 50000 Fetch partitions:1500              2239           2252          14          0.0  2238836298.0       0.4X
+Num Maps: 50000 Fetch partitions:500                718            733          13          0.0   717768191.0       1.0X
+Num Maps: 50000 Fetch partitions:1000              1724           1748          24          0.0  1723517357.0       0.4X
+Num Maps: 50000 Fetch partitions:1500              2652           2676          39          0.0  2652037093.0       0.3X
 
 

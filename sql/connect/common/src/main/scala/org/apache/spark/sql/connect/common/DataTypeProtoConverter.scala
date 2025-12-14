@@ -71,6 +71,21 @@ object DataTypeProtoConverter {
       case proto.DataType.KindCase.MAP => toCatalystMapType(t.getMap)
       case proto.DataType.KindCase.VARIANT => VariantType
 
+      case proto.DataType.KindCase.GEOMETRY =>
+        val srid = t.getGeometry.getSrid
+        if (srid == GeometryType.MIXED_SRID) {
+          GeometryType("ANY")
+        } else {
+          GeometryType(srid)
+        }
+      case proto.DataType.KindCase.GEOGRAPHY =>
+        val srid = t.getGeography.getSrid
+        if (srid == GeographyType.MIXED_SRID) {
+          GeographyType("ANY")
+        } else {
+          GeographyType(srid)
+        }
+
       case proto.DataType.KindCase.UDT => toCatalystUDT(t.getUdt)
 
       case _ =>
@@ -154,7 +169,11 @@ object DataTypeProtoConverter {
     }
   }
 
-  def toConnectProtoType(t: DataType): proto.DataType = {
+  def toConnectProtoType(t: DataType, bytesToBinary: Boolean = false): proto.DataType = {
+    toConnectProtoTypeInternal(t, bytesToBinary)
+  }
+
+  private def toConnectProtoTypeInternal(t: DataType, bytesToBinary: Boolean): proto.DataType = {
     t match {
       case NullType => ProtoDataTypes.NullType
 
@@ -241,15 +260,22 @@ object DataTypeProtoConverter {
           .build()
 
       case ArrayType(elementType: DataType, containsNull: Boolean) =>
-        proto.DataType
-          .newBuilder()
-          .setArray(
-            proto.DataType.Array
-              .newBuilder()
-              .setElementType(toConnectProtoType(elementType))
-              .setContainsNull(containsNull)
-              .build())
-          .build()
+        if (elementType == ByteType && bytesToBinary) {
+          proto.DataType
+            .newBuilder()
+            .setBinary(proto.DataType.Binary.newBuilder().build())
+            .build()
+        } else {
+          proto.DataType
+            .newBuilder()
+            .setArray(
+              proto.DataType.Array
+                .newBuilder()
+                .setElementType(toConnectProtoTypeInternal(elementType, bytesToBinary))
+                .setContainsNull(containsNull)
+                .build())
+            .build()
+        }
 
       case StructType(fields: Array[StructField]) =>
         val protoFields = fields.toImmutableArraySeq.map {
@@ -262,14 +288,14 @@ object DataTypeProtoConverter {
               proto.DataType.StructField
                 .newBuilder()
                 .setName(name)
-                .setDataType(toConnectProtoType(dataType))
+                .setDataType(toConnectProtoTypeInternal(dataType, bytesToBinary))
                 .setNullable(nullable)
                 .build()
             } else {
               proto.DataType.StructField
                 .newBuilder()
                 .setName(name)
-                .setDataType(toConnectProtoType(dataType))
+                .setDataType(toConnectProtoTypeInternal(dataType, bytesToBinary))
                 .setNullable(nullable)
                 .setMetadata(metadata.json)
                 .build()
@@ -290,9 +316,29 @@ object DataTypeProtoConverter {
           .setMap(
             proto.DataType.Map
               .newBuilder()
-              .setKeyType(toConnectProtoType(keyType))
-              .setValueType(toConnectProtoType(valueType))
+              .setKeyType(toConnectProtoTypeInternal(keyType, bytesToBinary))
+              .setValueType(toConnectProtoTypeInternal(valueType, bytesToBinary))
               .setValueContainsNull(valueContainsNull)
+              .build())
+          .build()
+
+      case g: GeographyType =>
+        proto.DataType
+          .newBuilder()
+          .setGeography(
+            proto.DataType.Geography
+              .newBuilder()
+              .setSrid(g.srid)
+              .build())
+          .build()
+
+      case g: GeometryType =>
+        proto.DataType
+          .newBuilder()
+          .setGeometry(
+            proto.DataType.Geometry
+              .newBuilder()
+              .setSrid(g.srid)
               .build())
           .build()
 
@@ -307,7 +353,7 @@ object DataTypeProtoConverter {
               .newBuilder()
               .setType("udt")
               .setPythonClass(pyudt.pyUDT)
-              .setSqlType(toConnectProtoType(pyudt.sqlType))
+              .setSqlType(toConnectProtoTypeInternal(pyudt.sqlType, bytesToBinary))
               .setSerializedPythonClass(pyudt.serializedPyClass)
               .build())
           .build()
@@ -328,7 +374,7 @@ object DataTypeProtoConverter {
             builder
               .setType("udt")
               .setJvmClass(className)
-              .setSqlType(toConnectProtoType(udt.sqlType))
+              .setSqlType(toConnectProtoTypeInternal(udt.sqlType, bytesToBinary))
 
             if (udt.pyUDT != null) {
               builder.setPythonClass(udt.pyUDT)

@@ -18,9 +18,9 @@
 import array
 import datetime
 import os
+import platform
 import unittest
 from decimal import Decimal
-import numpy as np
 import pandas as pd
 
 from pyspark.sql import Row
@@ -43,17 +43,40 @@ from pyspark.sql.types import (
     StructType,
     TimestampType,
 )
+from pyspark.loose_version import LooseVersion
+from pyspark.testing.utils import (
+    have_pyarrow,
+    have_pandas,
+    have_numpy,
+    pyarrow_requirement_message,
+    pandas_requirement_message,
+    numpy_requirement_message,
+)
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from .type_table_utils import generate_table_diff, format_type_table
 
+if have_numpy:
+    import numpy as np
 
+
+@unittest.skipIf(
+    not have_pandas
+    or not have_pyarrow
+    or not have_numpy
+    or LooseVersion(np.__version__) < LooseVersion("2.0.0")
+    or platform.system() == "Darwin",
+    pandas_requirement_message
+    or pyarrow_requirement_message
+    or numpy_requirement_message
+    or "float128 not supported on macos",
+)
 class UDFReturnTypeTests(ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
-        super(UDFReturnTypeTests, cls).setUpClass()
+        super().setUpClass()
 
     def setUp(self):
-        super(UDFReturnTypeTests, self).setUp()
+        super().setUp()
         self.test_data = [
             None,
             True,

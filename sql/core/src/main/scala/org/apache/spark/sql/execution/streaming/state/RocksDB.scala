@@ -40,6 +40,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.internal.{LogEntry, Logging, LogKeys}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.{NextIterator, Utils}
 
 // RocksDB operations that could acquire/release the instance lock
@@ -68,7 +69,7 @@ case object StoreTaskCompletionListener extends RocksDBOpType("store_task_comple
 class RocksDB(
     dfsRootDir: String,
     val conf: RocksDBConf,
-    localRootDir: File = Utils.createTempDir(),
+    val localRootDir: File = Utils.createTempDir(),
     hadoopConf: Configuration = new Configuration,
     loggingId: String = "",
     useColumnFamilies: Boolean = false,
@@ -138,23 +139,40 @@ class RocksDB(
 
   private val workingDir = createTempDir("workingDir")
 
+  // We need 2 threads per fm caller to avoid blocking
+  // (one for main file and another for checksum file).
+  // Since this fm is used by both query task and maintenance thread,
+  // then we need 2 * 2 = 4 threads.
+  protected val fileChecksumThreadPoolSize: Option[Int] = Some(4)
+
   protected def createFileManager(
       dfsRootDir: String,
       localTempDir: File,
       hadoopConf: Configuration,
       codecName: String,
-      loggingId: String): RocksDBFileManager = {
+      loggingId: String,
+      storeConf: StateStoreConf): RocksDBFileManager = {
     new RocksDBFileManager(
       dfsRootDir,
       localTempDir,
       hadoopConf,
       codecName,
-      loggingId = loggingId
+      loggingId = loggingId,
+      storeConf,
+      fileChecksumEnabled = conf.fileChecksumEnabled,
+      fileChecksumThreadPoolSize = fileChecksumThreadPoolSize
     )
   }
 
-  private[spark] val fileManager = createFileManager(dfsRootDir, createTempDir("fileManager"),
-    hadoopConf, conf.compressionCodec, loggingId = loggingId)
+  private[spark] val fileManager = createFileManager(
+    dfsRootDir,
+    createTempDir("fileManager"),
+    hadoopConf,
+    conf.compressionCodec,
+    loggingId = loggingId,
+    storeConf = conf.stateStoreConf
+  )
+
   private val byteArrayPair = new ByteArrayPair()
   private val commitLatencyMs = new mutable.HashMap[String, Long]()
 
@@ -162,7 +180,7 @@ class RocksDB(
 
   @volatile private var db: NativeRocksDB = _
   @volatile private var changelogWriter: Option[StateStoreChangelogWriter] = None
-  private val enableChangelogCheckpointing: Boolean = conf.enableChangelogCheckpointing
+  @volatile private var enableChangelogCheckpointing: Boolean = conf.enableChangelogCheckpointing
   @volatile protected var loadedVersion: Long = -1L   // -1 = nothing valid is loaded
 
   // Can be updated by whichever thread uploaded a snapshot, which could be either task,
@@ -210,6 +228,9 @@ class RocksDB(
   @volatile private var numInternalKeysOnLoadedVersion = 0L
   @volatile private var numInternalKeysOnWritingVersion = 0L
 
+  // Was snapshot auto repair performed when loading the current version
+  @volatile private var performedSnapshotAutoRepair = false
+
   @volatile private var fileManagerMetrics = RocksDBFileManagerMetrics.EMPTY_METRICS
 
   // SPARK-46249 - Keep track of recorded metrics per version which can be used for querying later
@@ -223,6 +244,12 @@ class RocksDB(
   private val maxColumnFamilyId: AtomicInteger = new AtomicInteger(-1)
 
   private val shouldForceSnapshot: AtomicBoolean = new AtomicBoolean(false)
+
+  // Integrity verifier that is only used when clients read from the db e.g. db.get()
+  private val readVerifier: Option[KeyValueIntegrityVerifier] = KeyValueIntegrityVerifier.create(
+    loggingId,
+    conf.rowChecksumEnabled,
+    conf.rowChecksumReadVerificationRatio)
 
   private def getColumnFamilyInfo(cfName: String): ColumnFamilyInfo = {
     colFamilyNameToInfoMap.get(cfName)
@@ -526,36 +553,36 @@ class RocksDB(
     this
   }
 
+  private def loadEmptyStoreWithoutCheckpointId(version: Long): Unit = {
+    // Use version 0 logic to create empty directory with no SST files
+    val metadata = fileManager.loadCheckpointFromDfs(0, workingDir, rocksDBFileMapping, None)
+    loadedVersion = version
+    fileManager.setMaxSeenVersion(version)
+    openLocalRocksDB(metadata)
+  }
+
   private def loadWithoutCheckpointId(
       version: Long,
-      readOnly: Boolean = false): RocksDB = {
+      readOnly: Boolean = false,
+      loadEmpty: Boolean = false): RocksDB = {
+
     try {
-      if (loadedVersion != version) {
+      // For loadEmpty, always proceed; otherwise, only if version changed
+      if (loadEmpty || loadedVersion != version) {
         closeDB(ignoreException = false)
-        val latestSnapshotVersion = fileManager.getLatestSnapshotVersion(version)
-        val metadata = fileManager.loadCheckpointFromDfs(
-          latestSnapshotVersion,
-          workingDir,
-          rocksDBFileMapping)
 
-        loadedVersion = latestSnapshotVersion
+        if (loadEmpty) {
+          loadEmptyStoreWithoutCheckpointId(version)
+        } else {
+          // load the latest snapshot
+          loadSnapshotWithoutCheckpointId(version)
 
-        // reset the last snapshot version to the latest available snapshot version
-        lastSnapshotVersion = latestSnapshotVersion
-
-        // Initialize maxVersion upon successful load from DFS
-        fileManager.setMaxSeenVersion(version)
-
-        // Report this snapshot version to the coordinator
-        reportSnapshotUploadToCoordinator(latestSnapshotVersion)
-
-        openLocalRocksDB(metadata)
-
-        if (loadedVersion != version) {
-          val versionsAndUniqueIds: Array[(Long, Option[String])] =
-            (loadedVersion + 1 to version).map((_, None)).toArray
-          replayChangelog(versionsAndUniqueIds)
-          loadedVersion = version
+          if (loadedVersion != version) {
+            val versionsAndUniqueIds: Array[(Long, Option[String])] =
+              (loadedVersion + 1 to version).map((_, None)).toArray
+            replayChangelog(versionsAndUniqueIds)
+            loadedVersion = version
+          }
         }
         // After changelog replay the numKeysOnWritingVersion will be updated to
         // the correct number of keys in the loaded version.
@@ -566,18 +593,77 @@ class RocksDB(
       if (conf.resetStatsOnLoad) {
         nativeStats.reset
       }
-      logInfo(log"Loaded ${MDC(LogKeys.VERSION_NUM, version)}")
+      if (loadEmpty) {
+        logInfo(log"Loaded empty store at version ${MDC(LogKeys.VERSION_NUM, version)}")
+      } else {
+        logInfo(log"Loaded ${MDC(LogKeys.VERSION_NUM, version)}")
+      }
     } catch {
       case t: Throwable =>
         loadedVersion = -1  // invalidate loaded data
         throw t
     }
-    if (enableChangelogCheckpointing && !readOnly) {
+    // Checking conf.enableChangelogCheckpointing instead of enableChangelogCheckpointing.
+    // enableChangelogCheckpointing is set to false when loadEmpty is true, but we still want
+    // to abort previous used changelogWriter if there is any
+    if (conf.enableChangelogCheckpointing && !readOnly) {
       // Make sure we don't leak resource.
       changelogWriter.foreach(_.abort())
-      changelogWriter = Some(fileManager.getChangeLogWriter(version + 1, useColumnFamilies))
+      if (loadEmpty) {
+        changelogWriter = None
+      } else {
+        changelogWriter = Some(fileManager.getChangeLogWriter(version + 1, useColumnFamilies))
+      }
     }
     this
+  }
+
+  private def loadSnapshotWithoutCheckpointId(versionToLoad: Long): Long = {
+    // Don't allow auto snapshot repair if changelog checkpointing is not enabled
+    // since it relies on changelog to rebuild state.
+    val allowAutoSnapshotRepair = if (enableChangelogCheckpointing) {
+      conf.stateStoreConf.autoSnapshotRepairEnabled
+    } else {
+      false
+    }
+    val snapshotLoader = new AutoSnapshotLoader(
+      allowAutoSnapshotRepair,
+      conf.stateStoreConf.autoSnapshotRepairNumFailuresBeforeActivating,
+      conf.stateStoreConf.autoSnapshotRepairMaxChangeFileReplay,
+      loggingId) {
+      override protected def beforeLoad(): Unit = closeDB(ignoreException = false)
+
+      override protected def loadSnapshotFromCheckpoint(snapshotVersion: Long): Unit = {
+        val remoteMetaData = fileManager.loadCheckpointFromDfs(snapshotVersion,
+          workingDir, rocksDBFileMapping)
+
+        loadedVersion = snapshotVersion
+        // Initialize maxVersion upon successful load from DFS
+        fileManager.setMaxSeenVersion(snapshotVersion)
+
+        openLocalRocksDB(remoteMetaData)
+
+        // By setting this to the snapshot version we successfully loaded,
+        // if auto snapshot repair is enabled, and we end up skipping the latest snapshot
+        // and used an older one, we will create a new snapshot at commit time
+        // if the loaded one is old enough.
+        lastSnapshotVersion = snapshotVersion
+        // Report this snapshot version to the coordinator
+        reportSnapshotUploadToCoordinator(snapshotVersion)
+      }
+
+      override protected def onLoadSnapshotFromCheckpointFailure(): Unit = {
+        loadedVersion = -1  // invalidate loaded data
+      }
+
+      override protected def getEligibleSnapshots(version: Long): Seq[Long] = {
+        fileManager.getEligibleSnapshotsForVersion(version)
+      }
+    }
+
+    val (version, autoRepairCompleted) = snapshotLoader.loadSnapshot(versionToLoad)
+    performedSnapshotAutoRepair = autoRepairCompleted
+    version
   }
 
   /**
@@ -643,20 +729,26 @@ class RocksDB(
   def load(
       version: Long,
       stateStoreCkptId: Option[String] = None,
-      readOnly: Boolean = false): RocksDB = {
+      readOnly: Boolean = false,
+      loadEmpty: Boolean = false): RocksDB = {
     val startTime = System.currentTimeMillis()
 
     assert(version >= 0)
     recordedMetrics = None
+    performedSnapshotAutoRepair = false
     // Reset the load metrics before loading
     loadMetrics.clear()
 
     logInfo(log"Loading ${MDC(LogKeys.VERSION_NUM, version)} with stateStoreCkptId: ${
       MDC(LogKeys.UUID, stateStoreCkptId.getOrElse(""))}")
+    // If loadEmpty is true, we will not generate a changelog but only a snapshot file to prevent
+    // mistakenly applying new changelog to older state version
+    enableChangelogCheckpointing = if (loadEmpty) false else conf.enableChangelogCheckpointing
     if (stateStoreCkptId.isDefined || enableStateStoreCheckpointIds && version == 0) {
+      assert(!loadEmpty, "loadEmpty not supported for checkpointV2 yet")
       loadWithCheckpointId(version, stateStoreCkptId, readOnly)
     } else {
-      loadWithoutCheckpointId(version, readOnly)
+      loadWithoutCheckpointId(version, readOnly, loadEmpty)
     }
 
     // Record the metrics after loading
@@ -823,31 +915,26 @@ class RocksDB(
       try {
         changelogReader = fileManager.getChangelogReader(v, uniqueId)
 
-        if (useColumnFamilies) {
-          changelogReader.foreach { case (recordType, key, value) =>
-            recordType match {
-              case RecordType.PUT_RECORD =>
-                put(key, value, includesPrefix = true, deriveCfName = true)
+        // If row checksum is enabled, verify every record in the changelog file
+        val kvVerifier = KeyValueIntegrityVerifier
+          .create(loggingId, conf.rowChecksumEnabled, verificationRatio = 1)
 
-              case RecordType.DELETE_RECORD =>
-                remove(key, includesPrefix = true, deriveCfName = true)
+        changelogReader.foreach { case (recordType, key, value) =>
+          recordType match {
+            case RecordType.PUT_RECORD =>
+              verifyChangelogRecord(kvVerifier, key, Some(value))
+              put(key, value, includesPrefix = useColumnFamilies,
+                deriveCfName = useColumnFamilies, includesChecksum = conf.rowChecksumEnabled)
 
-              case RecordType.MERGE_RECORD =>
-                merge(key, value, includesPrefix = true, deriveCfName = true)
-            }
-          }
-        } else {
-          changelogReader.foreach { case (recordType, key, value) =>
-            recordType match {
-              case RecordType.PUT_RECORD =>
-                put(key, value)
+            case RecordType.DELETE_RECORD =>
+              verifyChangelogRecord(kvVerifier, key, None)
+              remove(key, includesPrefix = useColumnFamilies,
+                deriveCfName = useColumnFamilies, includesChecksum = conf.rowChecksumEnabled)
 
-              case RecordType.DELETE_RECORD =>
-                remove(key)
-
-              case RecordType.MERGE_RECORD =>
-                merge(key, value)
-            }
+            case RecordType.MERGE_RECORD =>
+              verifyChangelogRecord(kvVerifier, key, Some(value))
+              merge(key, value, includesPrefix = useColumnFamilies,
+                deriveCfName = useColumnFamilies, includesChecksum = conf.rowChecksumEnabled)
           }
         }
       } finally {
@@ -860,6 +947,28 @@ class RocksDB(
       "replayChangelog" -> Math.max(duration, 1L), // avoid flaky tests
       "numReplayChangeLogFiles" -> versionsAndUniqueIds.length
     )
+  }
+
+  private def verifyChangelogRecord(
+      verifier: Option[KeyValueIntegrityVerifier],
+      keyBytes: Array[Byte],
+      valueBytes: Option[Array[Byte]]): Unit = {
+    verifier match {
+      case Some(v) if v.isInstanceOf[KeyValueChecksumVerifier] =>
+        // Do checksum verification inline using array index without copying bytes
+        valueBytes.map { value =>
+          // Checksum is on the value side for PUT/MERGE record
+          val (valueIndex, checksum) = KeyValueChecksumEncoder
+            .decodeOneValueRowIndexWithChecksum(value)
+          v.verify(ArrayIndexRange(keyBytes, 0, keyBytes.length), Some(valueIndex), checksum)
+        }.getOrElse {
+          // For DELETE valueBytes is None, we only check the key
+          val (keyIndex, checksum) = KeyValueChecksumEncoder
+            .decodeKeyRowIndexWithChecksum(keyBytes)
+          v.verify(keyIndex, None, checksum)
+        }
+      case _ =>
+    }
   }
 
   /**
@@ -896,13 +1005,61 @@ class RocksDB(
       key: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Array[Byte] = {
     updateMemoryUsageIfNeeded()
+    val (finalKey, value) = getValue(key, cfName)
+    if (conf.rowChecksumEnabled && value != null) {
+      KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
+        readVerifier, finalKey, value)
+    } else {
+      value
+    }
+  }
+
+  /**
+   * This method should gives a 100% guarantee of a correct result, whether the key exists or
+   * not.
+   *
+   * @param key The key to check
+   * @param cfName The column family name
+   * @return true if the key exists, false otherwise
+   */
+  def keyExists(
+      key: Array[Byte],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Boolean = {
+    updateMemoryUsageIfNeeded()
+    val keyWithPrefix = if (useColumnFamilies) {
+      encodeStateRowWithPrefix(key, cfName)
+    } else {
+      key
+    }
+    db.keyExists(keyWithPrefix)
+  }
+
+  /**
+   * Get the values for a given key if present, that were merged (via merge).
+   * This returns the values as an iterator of index range, to allow inline access
+   * of each value bytes without copying, for better performance.
+   * Note: This method is currently only supported when row checksum is enabled.
+   * */
+  def multiGet(
+      key: Array[Byte],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[ArrayIndexRange[Byte]] = {
+    assert(conf.rowChecksumEnabled, "multiGet is only allowed when row checksum is enabled")
+    updateMemoryUsageIfNeeded()
+
+    val (finalKey, value) = getValue(key, cfName)
+    KeyValueChecksumEncoder.decodeAndVerifyMultiValueRowWithChecksum(
+      readVerifier, finalKey, value)
+  }
+
+  /** Returns a tuple of the final key used to store the value in the db and the value. */
+  private def getValue(key: Array[Byte], cfName: String): (Array[Byte], Array[Byte]) = {
     val keyWithPrefix = if (useColumnFamilies) {
       encodeStateRowWithPrefix(key, cfName)
     } else {
       key
     }
 
-    db.get(readOptions, keyWithPrefix)
+    (keyWithPrefix, db.get(readOptions, keyWithPrefix))
   }
 
   /**
@@ -963,7 +1120,8 @@ class RocksDB(
       value: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
       includesPrefix: Boolean = false,
-      deriveCfName: Boolean = false): Unit = {
+      deriveCfName: Boolean = false,
+      includesChecksum: Boolean = false): Unit = {
     updateMemoryUsageIfNeeded()
     val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
       encodeStateRowWithPrefix(key, cfName)
@@ -978,10 +1136,92 @@ class RocksDB(
       cfName
     }
 
+    val valueWithChecksum = if (conf.rowChecksumEnabled && !includesChecksum) {
+      KeyValueChecksumEncoder.encodeValueRowWithChecksum(value,
+        KeyValueChecksum.create(keyWithPrefix, Some(value)))
+    } else {
+      value
+    }
+
     handleMetricsUpdate(keyWithPrefix, columnFamilyName, isPutOrMerge = true)
-    db.put(writeOptions, keyWithPrefix, value)
-    changelogWriter.foreach(_.put(keyWithPrefix, value))
+    db.put(writeOptions, keyWithPrefix, valueWithChecksum)
+    changelogWriter.foreach(_.put(keyWithPrefix, valueWithChecksum))
   }
+
+  /**
+   * Convert the given list of value row bytes into a single byte array. The returned array
+   * bytes supports additional values to be later merged to it.
+   */
+  private def getListValuesInArrayByte(
+      keyWithPrefix: Array[Byte],
+      values: List[Array[Byte]],
+      includesChecksum: Boolean): Array[Byte] = {
+    val valueWithChecksum = if (conf.rowChecksumEnabled && !includesChecksum) {
+      values.map { value =>
+        KeyValueChecksumEncoder.encodeValueRowWithChecksum(value,
+          KeyValueChecksum.create(keyWithPrefix, Some(value)))
+      }
+    } else {
+      values
+    }
+    // Delimit each value row bytes with a single byte delimiter, the last
+    // value row won't have a delimiter at the end.
+    val delimiterNum = valueWithChecksum.length - 1
+    // The bytes in valueWithChecksum already include the bytes length prefix
+    val totalSize = valueWithChecksum.map(_.length).sum +
+      delimiterNum // for each delimiter
+
+    val result = new Array[Byte](totalSize)
+    var pos = Platform.BYTE_ARRAY_OFFSET
+
+    valueWithChecksum.zipWithIndex.foreach { case (rowBytes, idx) =>
+      // Write the data
+      Platform.copyMemory(rowBytes, Platform.BYTE_ARRAY_OFFSET, result, pos, rowBytes.length)
+      pos += rowBytes.length
+
+      // Add the delimiter - we are using "," as the delimiter
+      if (idx < delimiterNum) {
+        result(pos - Platform.BYTE_ARRAY_OFFSET) = 44.toByte
+      }
+      // Move the position for delimiter
+      pos += 1
+    }
+    result
+  }
+
+  /**
+   * Put the given list of values for the given key.
+   * @note
+   *   This update is not committed to disk until commit() is called.
+   */
+  def putList(
+      key: Array[Byte],
+      values: List[Array[Byte]],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
+      includesPrefix: Boolean = false,
+      includesChecksum: Boolean = false,
+      deriveCfName: Boolean = false): Unit = {
+    updateMemoryUsageIfNeeded()
+    val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
+      encodeStateRowWithPrefix(key, cfName)
+    } else {
+      key
+    }
+
+    val valuesInArrayByte = getListValuesInArrayByte(keyWithPrefix, values, includesChecksum)
+
+    val columnFamilyName = if (deriveCfName && useColumnFamilies) {
+      val (_, cfName) = decodeStateRowWithPrefix(keyWithPrefix)
+      cfName
+    } else {
+      cfName
+    }
+
+    handleMetricsUpdate(keyWithPrefix, columnFamilyName, isPutOrMerge = true)
+    db.put(writeOptions, keyWithPrefix, valuesInArrayByte)
+    changelogWriter.foreach(_.put(keyWithPrefix, valuesInArrayByte))
+  }
+
 
   /**
    * Merge the given value for the given key. This is equivalent to the Atomic
@@ -999,6 +1239,46 @@ class RocksDB(
       value: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
       includesPrefix: Boolean = false,
+      deriveCfName: Boolean = false,
+      includesChecksum: Boolean = false): Unit = {
+    updateMemoryUsageIfNeeded()
+    val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
+      encodeStateRowWithPrefix(key, cfName)
+    } else {
+      key
+    }
+
+    val columnFamilyName = if (deriveCfName && useColumnFamilies) {
+      val (_, cfName) = decodeStateRowWithPrefix(keyWithPrefix)
+      cfName
+    } else {
+      cfName
+    }
+
+    val valueWithChecksum = if (conf.rowChecksumEnabled && !includesChecksum) {
+      KeyValueChecksumEncoder.encodeValueRowWithChecksum(value,
+        KeyValueChecksum.create(keyWithPrefix, Some(value)))
+    } else {
+      value
+    }
+
+    handleMetricsUpdate(keyWithPrefix, columnFamilyName, isPutOrMerge = true)
+    db.merge(writeOptions, keyWithPrefix, valueWithChecksum)
+    changelogWriter.foreach(_.merge(keyWithPrefix, valueWithChecksum))
+  }
+
+  /**
+   * Merge the given list of values for the given key.
+   *
+   * This is similar to the merge() function, but allows merging multiple values at once. The
+   * provided values will be appended to the current list of values for the given key.
+   */
+  def mergeList(
+      key: Array[Byte],
+      values: List[Array[Byte]],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
+      includesPrefix: Boolean = false,
+      includesChecksum: Boolean = false,
       deriveCfName: Boolean = false): Unit = {
     updateMemoryUsageIfNeeded()
     val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
@@ -1014,9 +1294,11 @@ class RocksDB(
       cfName
     }
 
+    val valueInArrayByte = getListValuesInArrayByte(keyWithPrefix, values, includesChecksum)
+
     handleMetricsUpdate(keyWithPrefix, columnFamilyName, isPutOrMerge = true)
-    db.merge(writeOptions, keyWithPrefix, value)
-    changelogWriter.foreach(_.merge(keyWithPrefix, value))
+    db.merge(writeOptions, keyWithPrefix, valueInArrayByte)
+    changelogWriter.foreach(_.merge(keyWithPrefix, valueInArrayByte))
   }
 
   /**
@@ -1027,12 +1309,21 @@ class RocksDB(
       key: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
       includesPrefix: Boolean = false,
-      deriveCfName: Boolean = false): Unit = {
+      deriveCfName: Boolean = false,
+      includesChecksum: Boolean = false): Unit = {
     updateMemoryUsageIfNeeded()
-    val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
-      encodeStateRowWithPrefix(key, cfName)
+    val originalKey = if (conf.rowChecksumEnabled && includesChecksum) {
+      // When we are replaying changelog record, the delete key in the file includes checksum.
+      // Remove the checksum, so we use the original key for db.delete.
+      KeyValueChecksumEncoder.decodeKeyRowWithChecksum(key)._1
     } else {
       key
+    }
+
+    val keyWithPrefix = if (useColumnFamilies && !includesPrefix) {
+      encodeStateRowWithPrefix(originalKey, cfName)
+    } else {
+      originalKey
     }
 
     val columnFamilyName = if (deriveCfName && useColumnFamilies) {
@@ -1044,7 +1335,18 @@ class RocksDB(
 
     handleMetricsUpdate(keyWithPrefix, columnFamilyName, isPutOrMerge = false)
     db.delete(writeOptions, keyWithPrefix)
-    changelogWriter.foreach(_.delete(keyWithPrefix))
+    changelogWriter match {
+      case Some(writer) =>
+        val keyWithChecksum = if (conf.rowChecksumEnabled) {
+          // For delete, we will write a checksum with the key row only to the changelog file.
+          KeyValueChecksumEncoder.encodeKeyRowWithChecksum(keyWithPrefix,
+            KeyValueChecksum.create(keyWithPrefix, None))
+        } else {
+          keyWithPrefix
+        }
+        writer.delete(keyWithChecksum)
+      case None => // During changelog replay, there is no changelog writer.
+    }
   }
 
   /**
@@ -1071,7 +1373,14 @@ class RocksDB(
             iter.key
           }
 
-          byteArrayPair.set(key, iter.value)
+          val value = if (conf.rowChecksumEnabled) {
+            KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
+              readVerifier, iter.key, iter.value)
+          } else {
+            iter.value
+          }
+
+          byteArrayPair.set(key, value)
           iter.next()
           byteArrayPair
         } else {
@@ -1162,7 +1471,14 @@ class RocksDB(
             iter.key
           }
 
-          byteArrayPair.set(key, iter.value)
+          val value = if (conf.rowChecksumEnabled) {
+            KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
+              readVerifier, iter.key, iter.value)
+          } else {
+            iter.value
+          }
+
+          byteArrayPair.set(key, value)
           iter.next()
           byteArrayPair
         } else {
@@ -1184,12 +1500,16 @@ class RocksDB(
    * - Create a RocksDB checkpoint in a new local dir
    * - Sync the checkpoint dir files to DFS
    */
-  def commit(): (Long, StateStoreCheckpointInfo) = {
+  def commit(forceSnapshot: Boolean = false): (Long, StateStoreCheckpointInfo) = {
     commitLatencyMs.clear()
     updateMemoryUsageIfNeeded()
     val newVersion = loadedVersion + 1
     try {
       logInfo(log"Flushing updates for ${MDC(LogKeys.VERSION_NUM, newVersion)}")
+
+      if (forceSnapshot) {
+        shouldForceSnapshot.set(true)
+      }
 
       var snapshot: Option[RocksDBSnapshot] = None
       if (shouldCreateSnapshot() || shouldForceSnapshot.get()) {
@@ -1361,17 +1681,23 @@ class RocksDB(
    * Drop uncommitted changes, and roll back to previous version.
    */
   def rollback(): Unit = {
-    numKeysOnWritingVersion = numKeysOnLoadedVersion
-    numInternalKeysOnWritingVersion = numInternalKeysOnLoadedVersion
-    loadedVersion = -1L
-    lastCommitBasedStateStoreCkptId = None
-    lastCommittedStateStoreCkptId = None
-    loadedStateStoreCkptId = None
-    sessionStateStoreCkptId = None
-    lineageManager.clear()
-    changelogWriter.foreach(_.abort())
-    // Make sure changelogWriter gets recreated next time.
-    changelogWriter = None
+    logInfo(
+      log"Rolling back uncommitted changes on version ${MDC(LogKeys.VERSION_NUM, loadedVersion)}")
+    try {
+      numKeysOnWritingVersion = numKeysOnLoadedVersion
+      numInternalKeysOnWritingVersion = numInternalKeysOnLoadedVersion
+      loadedVersion = -1L
+      lastCommitBasedStateStoreCkptId = None
+      lastCommittedStateStoreCkptId = None
+      loadedStateStoreCkptId = None
+      sessionStateStoreCkptId = None
+      lineageManager.clear()
+      changelogWriter.foreach(_.abort())
+    } finally {
+      // Make sure changelogWriter gets recreated next time even if the changelogWriter aborts with
+      // an exception.
+      changelogWriter = None
+    }
     logInfo(log"Rolled back to ${MDC(LogKeys.VERSION_NUM, loadedVersion)}")
   }
 
@@ -1396,6 +1722,7 @@ class RocksDB(
     val cleanupTime = timeTakenMs {
       fileManager.deleteOldVersions(
         numVersionsToRetain = conf.minVersionsToRetain,
+        maxVersionsToDeletePerMaintenance = conf.maxVersionsToDeletePerMaintenance,
         minVersionsToDelete = conf.minVersionsToDelete)
     }
     logInfo(log"Cleaned old data, time taken: ${MDC(LogKeys.TIME_UNITS, cleanupTime)} ms")
@@ -1431,6 +1758,7 @@ class RocksDB(
       silentDeleteRecursively(localRootDir, "closing RocksDB")
       // Clear internal maps to reset the state
       clearColFamilyMaps()
+      fileManager.close()
     } catch {
       case e: Exception =>
         logWarning("Error closing RocksDB", e)
@@ -1460,7 +1788,6 @@ class RocksDB(
   private def metrics: RocksDBMetrics = {
     import HistogramType._
     val totalSSTFilesBytes = getDBProperty("rocksdb.total-sst-files-size")
-    val pinnedBlocksMemUsage = getDBProperty("rocksdb.block-cache-pinned-usage")
     val nativeOpsHistograms = Seq(
       "get" -> DB_GET,
       "put" -> DB_WRITE,
@@ -1496,6 +1823,10 @@ class RocksDB(
     // Use RocksDBMemoryManager to calculate the memory usage accounting
     val memoryUsage = RocksDBMemoryManager.getInstanceMemoryUsage(instanceUniqueId, getMemoryUsage)
 
+    val totalPinnedBlocksMemUsage = lruCache.getPinnedUsage()
+    val pinnedBlocksMemUsage = RocksDBMemoryManager.getInstancePinnedBlocksMemUsage(
+      instanceUniqueId, totalPinnedBlocksMemUsage)
+
     RocksDBMetrics(
       numKeysOnLoadedVersion,
       numKeysOnWritingVersion,
@@ -1512,7 +1843,8 @@ class RocksDB(
       filesReused = fileManagerMetrics.filesReused,
       lastUploadedSnapshotVersion = lastUploadedSnapshotVersion.get(),
       zipFileBytesUncompressed = fileManagerMetrics.zipFileBytesUncompressed,
-      nativeOpsMetrics = nativeOpsMetrics)
+      nativeOpsMetrics = nativeOpsMetrics,
+      numSnapshotsAutoRepaired = if (performedSnapshotAutoRepair) 1 else 0)
   }
 
   /**
@@ -1621,7 +1953,8 @@ class RocksDB(
           snapshot.fileMapping,
           Some(snapshot.columnFamilyMapping),
           Some(snapshot.maxColumnFamilyId),
-          snapshot.uniqueId
+          snapshot.uniqueId,
+          verifyNonEmptyFilesInZip = conf.verifyNonEmptyFilesInZip
         )
         fileManagerMetrics = fileManager.latestSaveCheckpointMetrics
 
@@ -1951,9 +2284,15 @@ case class RocksDBConf(
     highPriorityPoolRatio: Double,
     memoryUpdateIntervalMs: Long,
     compressionCodec: String,
+    verifyNonEmptyFilesInZip: Boolean,
     allowFAllocate: Boolean,
     compression: String,
-    reportSnapshotUploadLag: Boolean)
+    reportSnapshotUploadLag: Boolean,
+    maxVersionsToDeletePerMaintenance: Int,
+    fileChecksumEnabled: Boolean,
+    rowChecksumEnabled: Boolean,
+    rowChecksumReadVerificationRatio: Long,
+    stateStoreConf: StateStoreConf)
 
 object RocksDBConf {
   /** Common prefix of all confs in SQLConf that affects RocksDB */
@@ -2054,6 +2393,12 @@ object RocksDBConf {
   val COMPRESSION_KEY = "compression"
   private val COMPRESSION_CONF = SQLConfEntry(COMPRESSION_KEY, "lz4")
 
+  // Config to determine whether we should verify that the files written
+  // to the RocksDB snapshot zip file are not empty.
+  val VERIFY_NON_EMPTY_FILES_IN_ZIP_CONF_KEY = "verifyNonEmptyFilesInZip"
+  private val VERIFY_NON_EMPTY_FILES_IN_ZIP_CONF =
+    SQLConfEntry(VERIFY_NON_EMPTY_FILES_IN_ZIP_CONF_KEY, "true")
+
   def apply(storeConf: StateStoreConf): RocksDBConf = {
     val sqlConfs = CaseInsensitiveMap[String](storeConf.sqlConfs)
     val extraConfs = CaseInsensitiveMap[String](storeConf.extraOptions)
@@ -2142,9 +2487,15 @@ object RocksDBConf {
       getRatioConf(HIGH_PRIORITY_POOL_RATIO_CONF),
       getPositiveLongConf(MEMORY_UPDATE_INTERVAL_MS_CONF),
       storeConf.compressionCodec,
+      getBooleanConf(VERIFY_NON_EMPTY_FILES_IN_ZIP_CONF),
       getBooleanConf(ALLOW_FALLOCATE_CONF),
       getStringConf(COMPRESSION_CONF),
-      storeConf.reportSnapshotUploadLag)
+      storeConf.reportSnapshotUploadLag,
+      storeConf.maxVersionsToDeletePerMaintenance,
+      storeConf.checkpointFileChecksumEnabled,
+      storeConf.rowChecksumEnabled,
+      storeConf.rowChecksumReadVerificationRatio,
+      storeConf)
   }
 
   def apply(): RocksDBConf = apply(new StateStoreConf())
@@ -2166,7 +2517,8 @@ case class RocksDBMetrics(
     filesReused: Long,
     zipFileBytesUncompressed: Option[Long],
     nativeOpsMetrics: Map[String, Long],
-    lastUploadedSnapshotVersion: Long) {
+    lastUploadedSnapshotVersion: Long,
+    numSnapshotsAutoRepaired: Long) {
   def json: String = Serialization.write(this)(RocksDBMetrics.format)
 }
 

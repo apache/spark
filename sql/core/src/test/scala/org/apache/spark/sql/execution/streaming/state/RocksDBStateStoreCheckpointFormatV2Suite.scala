@@ -70,6 +70,12 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
     innerStore.get(key, colFamilyName)
   }
 
+  override def keyExists(
+      key: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Boolean = {
+    innerStore.keyExists(key, colFamilyName)
+  }
+
   override def valuesIterator(
       key: UnsafeRow,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[UnsafeRow] = {
@@ -123,6 +129,13 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
     innerStore.put(key, value, colFamilyName)
   }
 
+  override def putList(
+      key: UnsafeRow,
+      values: Array[UnsafeRow],
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    innerStore.putList(key, values, colFamilyName)
+  }
+
   override def remove(
       key: UnsafeRow,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
@@ -134,6 +147,13 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
       value: UnsafeRow,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
     innerStore.merge(key, value, colFamilyName)
+  }
+
+  override def mergeList(
+      key: UnsafeRow,
+      values: Array[UnsafeRow],
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    innerStore.mergeList(key, values, colFamilyName)
   }
 
   override def commit(): Long = innerStore.commit()
@@ -177,8 +197,13 @@ class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
 
   override def close(): Unit = innerProvider.close()
 
-  override def getStore(version: Long, stateStoreCkptId: Option[String] = None): StateStore = {
-    val innerStateStore = innerProvider.getStore(version, stateStoreCkptId)
+  override def getStore(
+      version: Long,
+      stateStoreCkptId: Option[String] = None,
+      forceSnapshotOnCommit: Boolean = false,
+      loadEmpty: Boolean = false): StateStore = {
+    val innerStateStore = innerProvider.getStore(version, stateStoreCkptId,
+      forceSnapshotOnCommit, loadEmpty)
     CkptIdCollectingStateStoreWrapper(innerStateStore)
   }
 
@@ -191,7 +216,8 @@ class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
   override def upgradeReadStoreToWriteStore(
       readStore: ReadStateStore,
       version: Long,
-      uniqueId: Option[String] = None): StateStore = {
+      uniqueId: Option[String] = None,
+      forceSnapshotOnCommit: Boolean = false): StateStore = {
     // Following the pattern from RocksDBStateStoreProvider, we verify version and id match
     assert(version == readStore.version,
       s"Can only upgrade readStore to writeStore with the same version," +
@@ -210,7 +236,7 @@ class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
 
     // Delegate to inner provider to upgrade the store
     val upgradedStore = innerProvider.upgradeReadStoreToWriteStore(
-      innerReadStore, version, uniqueId)
+      innerReadStore, version, uniqueId, forceSnapshotOnCommit)
 
     // Wrap the upgraded store with CkptIdCollectingStateStoreWrapper
     CkptIdCollectingStateStoreWrapper(upgradedStore)
@@ -1304,3 +1330,10 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
     }
   }
 }
+
+/**
+ * Test suite that runs all RocksDBStateStoreCheckpointFormatV2Suite tests
+ * with row checksum enabled.
+ */
+class RocksDBStateStoreCheckpointFormatV2SuiteWithRowChecksum
+  extends RocksDBStateStoreCheckpointFormatV2Suite with EnableStateStoreRowChecksum

@@ -2699,8 +2699,20 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         # Make sure locals() call is at the top of the function so we don't capture local variables.
         args = locals()
 
+        pdf = self._to_internal_pandas()
+        # SPARK-54068: PyArrow >= 22.0.0 serializes DataFrame.attrs to JSON metadata,
+        # but PlanMetrics/PlanObservedMetrics objects from Spark Connect are not
+        # JSON serializable. We filter these internal attrs only for affected versions.
+        import pyarrow as pa
+        from pyspark.loose_version import LooseVersion
+
+        if LooseVersion(pa.__version__) >= LooseVersion("22.0.0"):
+            pdf.attrs = {
+                k: v for k, v in pdf.attrs.items() if k not in ("metrics", "observed_metrics")
+            }
+
         return validate_arguments_and_invoke_function(
-            self._to_internal_pandas(), self.to_feather, pd.DataFrame.to_feather, args
+            pdf, self.to_feather, pd.DataFrame.to_feather, args
         )
 
     def to_stata(
@@ -11129,8 +11141,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         return self._result_aggregated(column_labels, applied)
 
-    # TODO(SPARK-46166): axis, skipna and **kwargs should be implemented.
-    def any(self, axis: Axis = 0, bool_only: Optional[bool] = None) -> "Series":
+    # TODO(SPARK-46166): axis and **kwargs should be implemented.
+    def any(
+        self, axis: Axis = 0, bool_only: Optional[bool] = None, skipna: bool = True
+    ) -> "Series":
         """
         Return whether any element is True.
 
@@ -11148,6 +11162,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         bool_only : bool, default None
             Include only boolean columns. If None, will attempt to use everything,
             then use only boolean data.
+
+        skipna : bool, default True
+            Exclude NA/null values. If the entire row/column is NA and skipna is True,
+            then the result will be False, as for an empty row/column. If skipna is False,
+            then NA are treated as True, because these are not equal to zero.
 
         Returns
         -------
@@ -11189,22 +11208,55 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Series([], dtype: bool)
         """
         axis = validate_axis(axis)
-        if axis != 0:
-            raise NotImplementedError('axis should be either 0 or "index" currently.')
-
         column_labels = self._internal.column_labels
         if bool_only:
             column_labels = self._bool_column_labels(column_labels)
         if len(column_labels) == 0:
             return ps.Series([], dtype=bool)
+        if axis == 0:
+            applied: List[PySparkColumn] = []
+            for label in column_labels:
+                scol = self._internal.spark_column_for(label)
+                if skipna:
+                    # When skipna=True, nulls count as False
+                    any_col = F.max(scol.cast("boolean"))
+                    applied.append(F.when(any_col.isNull(), False).otherwise(any_col))
+                else:
+                    # When skipna=False, nulls count as True
+                    any_col = F.max(scol.cast("boolean"))
+                    applied.append(F.when(any_col.isNull(), True).otherwise(any_col))
+            return self._result_aggregated(column_labels, applied)
+        elif axis == 1:
+            from pyspark.pandas.series import first_series
 
-        applied: List[PySparkColumn] = []
-        for label in column_labels:
-            scol = self._internal.spark_column_for(label)
-            any_col = F.max(F.coalesce(scol.cast("boolean"), F.lit(False)))
-            applied.append(F.when(any_col.isNull(), False).otherwise(any_col))
-
-        return self._result_aggregated(column_labels, applied)
+            sdf = self._internal.spark_frame.select(
+                *self._internal_frame.index_spark_columns,
+                F.greatest(
+                    *[
+                        F.coalesce(
+                            self._internal.spark_column_for(label).cast("boolean"),
+                            # When skipna=True, nulls count as False and vice versa
+                            F.lit(not skipna),
+                        )
+                        for label in column_labels
+                    ],
+                    F.lit(False),  # Handle one-column DataFrame case
+                ).alias(SPARK_DEFAULT_SERIES_NAME),
+            )
+            return first_series(
+                DataFrame(
+                    InternalFrame(
+                        spark_frame=sdf,
+                        index_spark_columns=self._internal.index_spark_columns,
+                        index_names=self._internal.index_names,
+                        index_fields=self._internal.index_fields,
+                        column_labels=[None],
+                    )
+                )
+            )
+        else:
+            # axis=None case - return single boolean value
+            raise NotImplementedError('axis should be 0, 1, "index", or "columns" currently.')
 
     def _bool_column_labels(self, column_labels: List[Label]) -> List[Label]:
         """

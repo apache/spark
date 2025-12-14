@@ -170,7 +170,7 @@ private[spark] class SparkSubmit extends Logging {
         // Here we are checking for client mode because when job is sumbitted in cluster
         // deploy mode with k8s resource manager, the spark submit in the driver container
         // is done in client mode.
-        val isKubernetesClusterModeDriver = args.master.startsWith("k8s") &&
+        val isKubernetesClusterModeDriver = SparkMasterRegex.isK8s(args.master) &&
           "client".equals(args.deployMode) &&
           sparkConf.getBoolean("spark.kubernetes.submitInDriver", false)
         if (isKubernetesClusterModeDriver) {
@@ -257,7 +257,7 @@ private[spark] class SparkSubmit extends Logging {
         v match {
           case "yarn" => YARN
           case m if m.startsWith("spark") => STANDALONE
-          case m if m.startsWith("k8s") => KUBERNETES
+          case m if SparkMasterRegex.isK8s(m) => KUBERNETES
           case m if m.startsWith("local") => LOCAL
           case _ =>
             error("Master must either be yarn or start with spark, k8s, or local")
@@ -448,14 +448,16 @@ private[spark] class SparkSubmit extends Logging {
                 log" from ${MDC(LogKeys.SOURCE_PATH, source)}" +
                 log" to ${MDC(LogKeys.DESTINATION_PATH, dest)}")
               Utils.deleteRecursively(dest)
-              if (isArchive) {
+              val resourceUri = if (isArchive) {
                 Utils.unpack(source, dest)
+                localResources
               } else {
                 Files.copy(source.toPath, dest.toPath)
+                dest.toURI
               }
               // Keep the URIs of local files with the given fragments.
               Utils.getUriBuilder(
-                localResources).fragment(resolvedUri.getFragment).build().toString
+                resourceUri).fragment(resolvedUri.getFragment).build().toString
           } ++ avoidDownloads.map(_.toString)).mkString(",")
         }
 
@@ -1023,20 +1025,25 @@ private[spark] class SparkSubmit extends Logging {
     }
 
     var exitCode: Int = 1
+    var cause: Throwable = null
     try {
       app.start(childArgs.toArray, sparkConf)
       exitCode = 0
     } catch {
       case t: Throwable =>
-        val cause = findCause(t)
+        cause = findCause(t)
         cause match {
           case e: SparkUserAppException =>
             exitCode = e.exitCode
           case _ =>
         }
+        // Store the diagnostics externally if enabled, but still throw to complete the application.
+        if (sparkConf.getBoolean("spark.kubernetes.driver.annotateExitException", false)) {
+          annotateExitException(args, sparkConf, cause)
+        }
         throw cause
     } finally {
-      if (args.master.startsWith("k8s") && !isShell(args.primaryResource) &&
+      if (SparkMasterRegex.isK8s(args.master) && !isShell(args.primaryResource) &&
           !isSqlShell(args.mainClass) && !isThriftServer(args.mainClass) &&
           !isConnectServer(args.mainClass)) {
         try {
@@ -1049,7 +1056,7 @@ private[spark] class SparkSubmit extends Logging {
         logInfo(
           log"Calling System.exit() with exit code ${MDC(LogKeys.EXIT_CODE, exitCode)} " +
           log"because ${MDC(LogKeys.CONFIG, SUBMIT_CALL_SYSTEM_EXIT_ON_MAIN_EXIT.key)}=true")
-        exitFn(exitCode)
+        exitFn(exitCode, Option(cause))
       }
     }
   }
@@ -1057,6 +1064,24 @@ private[spark] class SparkSubmit extends Logging {
   /** Throw a SparkException with the given error message. */
   private def error(msg: String): Unit = throw new SparkException(msg)
 
+  /**
+   * Store the exit exception using the SparkDiagnosticsSetter.
+   */
+  private def annotateExitException(
+      args: SparkSubmitArguments,
+      sparkConf: SparkConf,
+      throwable: Throwable): Unit = {
+    // Swallow exceptions when storing diagnostics, this shouldn't fail the application.
+    try {
+      if (!isShell(args.primaryResource) && !isSqlShell(args.mainClass)
+          && !isThriftServer(args.mainClass) && !isConnectServer(args.mainClass)) {
+        SparkSubmitUtils.getSparkDiagnosticsSetters(args.master)
+          .foreach(_.setDiagnostics(throwable, sparkConf))
+      }
+    } catch {
+      case e: Throwable => logDebug(s"Failed to set diagnostics: $e")
+    }
+  }
 }
 
 
@@ -1143,7 +1168,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
           super.doSubmit(args)
         } catch {
           case e: SparkUserAppException =>
-            exitFn(e.exitCode)
+            exitFn(e.exitCode, Option(e.getCause))
         }
       }
 
@@ -1232,6 +1257,23 @@ private[spark] object SparkSubmitUtils {
       case _ => throw new SparkException(s"Spark config without '=': $pair")
     }
   }
+
+  private[deploy] def getSparkDiagnosticsSetters(
+      master: String): Option[SparkDiagnosticsSetter] = {
+    val loader = Utils.getContextOrSparkClassLoader
+    val serviceLoaders =
+      ServiceLoader.load(classOf[SparkDiagnosticsSetter], loader)
+        .asScala
+        .filter(_.supports(master))
+
+    serviceLoaders.size match {
+      case x if x > 1 =>
+        throw new SparkException(s"Multiple($x) external SparkDiagnosticsSetter registered.")
+      case 1 =>
+        Some(serviceLoaders.headOption.get)
+      case _ => None
+    }
+  }
 }
 
 /**
@@ -1253,4 +1295,21 @@ private[spark] trait SparkSubmitOperation {
   def printSubmissionStatus(submissionId: String, conf: SparkConf): Unit
 
   def supports(master: String): Boolean
+}
+
+/**
+ * Provides a hook to set the application failure details in some external system.
+ */
+private[spark] trait SparkDiagnosticsSetter {
+
+  /**
+   * Set the failure details.
+   */
+  def setDiagnostics(throwable: Throwable, conf: SparkConf): Unit
+
+  /**
+   * Whether this implementation of the SparkDiagnosticsSetter supports setting the exit
+   * exception for this application.
+   */
+  def supports(clusterManagerUrl: String): Boolean
 }

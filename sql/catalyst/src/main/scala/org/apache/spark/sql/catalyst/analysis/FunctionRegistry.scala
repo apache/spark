@@ -30,11 +30,13 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.st._
 import org.apache.spark.sql.catalyst.expressions.variant._
 import org.apache.spark.sql.catalyst.expressions.xml._
-import org.apache.spark.sql.catalyst.plans.logical.{FunctionBuilderBase, Generate, LogicalPlan, OneRowRelation, Range}
+import org.apache.spark.sql.catalyst.plans.logical.{FunctionBuilderBase, Generate, LogicalPlan, OneRowRelation, PythonWorkerLogs, Range}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
@@ -529,7 +531,29 @@ object FunctionRegistry {
     expression[HllSketchAgg]("hll_sketch_agg"),
     expression[HllUnionAgg]("hll_union_agg"),
     expression[ApproxTopK]("approx_top_k"),
+    expression[ThetaSketchAgg]("theta_sketch_agg"),
+    expression[ThetaUnionAgg]("theta_union_agg"),
+    expression[ThetaIntersectionAgg]("theta_intersection_agg"),
     expression[ApproxTopKAccumulate]("approx_top_k_accumulate"),
+    expression[ApproxTopKCombine]("approx_top_k_combine"),
+    expression[KllSketchAggBigint]("kll_sketch_agg_bigint"),
+    expression[KllSketchAggFloat]("kll_sketch_agg_float"),
+    expression[KllSketchAggDouble]("kll_sketch_agg_double"),
+    expression[KllSketchToStringBigint]("kll_sketch_to_string_bigint"),
+    expression[KllSketchToStringFloat]("kll_sketch_to_string_float"),
+    expression[KllSketchToStringDouble]("kll_sketch_to_string_double"),
+    expression[KllSketchGetNBigint]("kll_sketch_get_n_bigint"),
+    expression[KllSketchGetNFloat]("kll_sketch_get_n_float"),
+    expression[KllSketchGetNDouble]("kll_sketch_get_n_double"),
+    expression[KllSketchMergeBigint]("kll_sketch_merge_bigint"),
+    expression[KllSketchMergeFloat]("kll_sketch_merge_float"),
+    expression[KllSketchMergeDouble]("kll_sketch_merge_double"),
+    expression[KllSketchGetQuantileBigint]("kll_sketch_get_quantile_bigint"),
+    expression[KllSketchGetQuantileFloat]("kll_sketch_get_quantile_float"),
+    expression[KllSketchGetQuantileDouble]("kll_sketch_get_quantile_double"),
+    expression[KllSketchGetRankBigint]("kll_sketch_get_rank_bigint"),
+    expression[KllSketchGetRankFloat]("kll_sketch_get_rank_float"),
+    expression[KllSketchGetRankDouble]("kll_sketch_get_rank_double"),
 
     // string functions
     expression[Ascii]("ascii"),
@@ -677,8 +701,14 @@ object FunctionRegistry {
     expression[MakeDate]("make_date"),
     expression[MakeTime]("make_time"),
     expression[TimeTrunc]("time_trunc"),
+    expression[TimeFromSeconds]("time_from_seconds"),
+    expression[TimeFromMillis]("time_from_millis"),
+    expression[TimeFromMicros]("time_from_micros"),
+    expression[TimeToSeconds]("time_to_seconds"),
+    expression[TimeToMillis]("time_to_millis"),
+    expression[TimeToMicros]("time_to_micros"),
     expressionBuilder("make_timestamp", MakeTimestampExpressionBuilder),
-    expression[TryMakeTimestamp]("try_make_timestamp"),
+    expressionBuilder("try_make_timestamp", TryMakeTimestampExpressionBuilder),
     expression[MonthName]("monthname"),
     // We keep the 2 expression builders below to have different function docs.
     expressionBuilder("make_timestamp_ntz", MakeTimestampNTZExpressionBuilder, setAlias = true),
@@ -790,6 +820,10 @@ object FunctionRegistry {
     expression[EqualNull]("equal_null"),
     expression[HllSketchEstimate]("hll_sketch_estimate"),
     expression[HllUnion]("hll_union"),
+    expression[ThetaSketchEstimate]("theta_sketch_estimate"),
+    expression[ThetaUnion]("theta_union"),
+    expression[ThetaDifference]("theta_difference"),
+    expression[ThetaIntersection]("theta_intersection"),
     expression[ApproxTopKEstimate]("approx_top_k_estimate"),
 
     // grouping sets
@@ -845,6 +879,7 @@ object FunctionRegistry {
     expression[BitmapConstructAgg]("bitmap_construct_agg"),
     expression[BitmapCount]("bitmap_count"),
     expression[BitmapOrAgg]("bitmap_or_agg"),
+    expression[BitmapAndAgg]("bitmap_and_agg"),
 
     // json
     expression[StructsToJson]("to_json"),
@@ -862,6 +897,13 @@ object FunctionRegistry {
     expression[SchemaOfVariant]("schema_of_variant"),
     expression[SchemaOfVariantAgg]("schema_of_variant_agg"),
     expression[ToVariantObject]("to_variant_object"),
+
+    // Spatial
+    expression[ST_AsBinary]("st_asbinary"),
+    expression[ST_GeogFromWKB]("st_geogfromwkb"),
+    expression[ST_GeomFromWKB]("st_geomfromwkb"),
+    expression[ST_Srid]("st_srid"),
+    expression[ST_SetSrid]("st_setsrid"),
 
     // cast
     expression[Cast]("cast"),
@@ -1024,9 +1066,9 @@ object FunctionRegistry {
       name: String,
       builder: T,
       expressions: Seq[Expression]) : Seq[Expression] = {
-    val rearrangedExpressions = if (!builder.functionSignature.isEmpty) {
+    val rearrangedExpressions = if (builder.functionSignature.isDefined) {
       val functionSignature = builder.functionSignature.get
-      builder.rearrange(functionSignature, expressions, name)
+      builder.rearrange(functionSignature, expressions, name, SQLConf.get.resolver)
     } else {
       expressions
     }
@@ -1197,7 +1239,8 @@ object TableFunctionRegistry {
     generator[Collations]("collations"),
     generator[SQLKeywords]("sql_keywords"),
     generatorBuilder("variant_explode", VariantExplodeGeneratorBuilder),
-    generatorBuilder("variant_explode_outer", VariantExplodeOuterGeneratorBuilder)
+    generatorBuilder("variant_explode_outer", VariantExplodeOuterGeneratorBuilder),
+    PythonWorkerLogs.functionBuilder
   )
 
   val builtin: SimpleTableFunctionRegistry = {

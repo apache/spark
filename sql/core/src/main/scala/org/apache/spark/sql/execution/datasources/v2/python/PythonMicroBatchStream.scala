@@ -95,7 +95,7 @@ class PythonMicroBatchStream(
 
   override def createReaderFactory(): PartitionReaderFactory = {
     new PythonStreamingPartitionReaderFactory(
-      ds.source, readInfo.func, outputSchema, None)
+      ds.source, readInfo.func, outputSchema, None, None)
   }
 
   override def commit(end: Offset): Unit = {

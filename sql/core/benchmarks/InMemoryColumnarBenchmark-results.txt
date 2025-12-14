@@ -6,7 +6,7 @@ OpenJDK 64-Bit Server VM 17.0.16+8-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Int In-Memory scan:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 --------------------------------------------------------------------------------------------------------------------------
-columnar deserialization + columnar-to-row            222            257          41          4.5         222.3       1.0X
-row-based deserialization                             140            178          63          7.2         139.8       1.6X
+columnar deserialization + columnar-to-row            160            169          13          6.3         159.8       1.0X
+row-based deserialization                             124            128           7          8.1         123.7       1.3X
 
 

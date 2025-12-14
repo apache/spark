@@ -165,15 +165,16 @@ private[ml] object Serializer {
           case proto.Expression.Literal.LiteralTypeCase.BOOLEAN =>
             (literal.getBoolean.asInstanceOf[Object], classOf[Boolean])
           case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
-            val scalaArray = LiteralValueProtoConverter.toScalaArray(literal.getArray)
-            val arrayType = LiteralValueProtoConverter.getProtoArrayType(literal.getArray)
-            arrayType.getElementType.getKindCase match {
+            val scalaArray =
+              LiteralValueProtoConverter.toScalaValue(literal).asInstanceOf[Array[_]]
+            val dataType = LiteralValueProtoConverter.getProtoDataType(literal)
+            dataType.getArray.getElementType.getKindCase match {
               case proto.DataType.KindCase.DOUBLE =>
                 (MLUtils.reconcileArray(classOf[Double], scalaArray), classOf[Array[Double]])
               case proto.DataType.KindCase.STRING =>
                 (MLUtils.reconcileArray(classOf[String], scalaArray), classOf[Array[String]])
               case proto.DataType.KindCase.ARRAY =>
-                arrayType.getElementType.getArray.getElementType.getKindCase match {
+                dataType.getArray.getElementType.getArray.getElementType.getKindCase match {
                   case proto.DataType.KindCase.STRING =>
                     (
                       MLUtils.reconcileArray(classOf[Array[String]], scalaArray),

@@ -386,6 +386,7 @@ class CheckpointSuite extends TestSuiteBase with LocalStreamingContext with DStr
 
     val cp = new Checkpoint(ssc, Time(1000))
     ssc.stop()
+    Thread.sleep(100)
 
     // Serialize/deserialize to simulate write to storage and reading it back
     val newCp = Utils.deserialize[Checkpoint](Utils.serialize(cp))

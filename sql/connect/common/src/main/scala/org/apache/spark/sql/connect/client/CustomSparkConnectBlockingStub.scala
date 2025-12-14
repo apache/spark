@@ -131,4 +131,17 @@ private[connect] class CustomSparkConnectBlockingStub(
       }
     }
   }
+
+  def cloneSession(request: CloneSessionRequest): CloneSessionResponse = {
+    grpcExceptionConverter.convert(
+      request.getSessionId,
+      request.getUserContext,
+      request.getClientType) {
+      retryHandler.retry {
+        stubState.responseValidator.verifyResponse {
+          stub.cloneSession(request)
+        }
+      }
+    }
+  }
 }

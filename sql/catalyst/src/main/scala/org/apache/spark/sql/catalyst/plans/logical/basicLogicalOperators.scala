@@ -580,19 +580,18 @@ case class Union(
     allowMissingCol: Boolean = false) extends UnionBase {
   assert(!allowMissingCol || byName, "`allowMissingCol` can be true only if `byName` is true.")
 
-  override def maxRows: Option[Long] = {
-    var sum = BigInt(0)
-    children.foreach { child =>
-      if (child.maxRows.isDefined) {
-        sum += child.maxRows.get
-        if (!sum.isValidLong) {
-          return None
+  override lazy val maxRows: Option[Long] = {
+    val sum = children.foldLeft(Option(BigInt(0))) {
+      case (Some(acc), child) =>
+        child.maxRows match {
+          case Some(n) =>
+            val newSum = acc + n
+            if (newSum.isValidLong) Some(newSum) else None
+          case None => None
         }
-      } else {
-        return None
-      }
+      case (None, _) => None
     }
-    Some(sum.toLong)
+    sum.map(_.toLong)
   }
 
   final override val nodePatterns: Seq[TreePattern] = Seq(UNION)
@@ -600,19 +599,18 @@ case class Union(
   /**
    * Note the definition has assumption about how union is implemented physically.
    */
-  override def maxRowsPerPartition: Option[Long] = {
-    var sum = BigInt(0)
-    children.foreach { child =>
-      if (child.maxRowsPerPartition.isDefined) {
-        sum += child.maxRowsPerPartition.get
-        if (!sum.isValidLong) {
-          return None
+  override lazy val maxRowsPerPartition: Option[Long] = {
+    val sum = children.foldLeft(Option(BigInt(0))) {
+      case (Some(acc), child) =>
+        child.maxRowsPerPartition match {
+          case Some(n) =>
+            val newSum = acc + n
+            if (newSum.isValidLong) Some(newSum) else None
+          case None => None
         }
-      } else {
-        return None
-      }
+      case (None, _) => None
     }
-    Some(sum.toLong)
+    sum.map(_.toLong)
   }
 
   private def duplicatesResolvedPerBranch: Boolean =
@@ -666,7 +664,7 @@ case class Join(
     hint: JoinHint)
   extends BinaryNode with PredicateHelper {
 
-  override def maxRows: Option[Long] = {
+  override lazy val maxRows: Option[Long] = {
     joinType match {
       case Inner | Cross | FullOuter | LeftOuter | RightOuter | LeftSingle
           if left.maxRows.isDefined && right.maxRows.isDefined =>
@@ -1659,6 +1657,22 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends OrderPr
     copy(child = newChild)
 }
 
+/**
+ * Logical node that represents the LIMIT ALL operation. This operation is usually no-op and exists
+ * to provide compatability with other databases. However, in case of recursive CTEs, Limit nodes
+ * serve another purpose, to override the default row limit which is determined by a flag. As a
+ * result, LIMIT ALL should also be used to completely negate the row limit, which is exactly what
+ * this node is used for.
+ */
+case class LimitAll(child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(LIMIT)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): LimitAll =
+    copy(child = newChild)
+}
+
 object OffsetAndLimit {
   def unapply(p: GlobalLimit): Option[(Int, Int, LogicalPlan)] = {
     p match {
@@ -2048,6 +2062,8 @@ case class CollectMetrics(
   override def doCanonicalize(): LogicalPlan = {
     super.doCanonicalize().asInstanceOf[CollectMetrics].copy(dataframeId = 0L)
   }
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(COLLECT_METRICS)
 }
 
 /**

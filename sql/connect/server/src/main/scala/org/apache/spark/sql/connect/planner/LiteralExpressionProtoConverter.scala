@@ -18,10 +18,9 @@
 package org.apache.spark.sql.connect.planner
 
 import org.apache.spark.connect.proto
-import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters}
-import org.apache.spark.sql.connect.common.{InvalidPlanInput, LiteralValueProtoConverter}
-import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.expressions
+import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
 
 object LiteralExpressionProtoConverter {
 
@@ -33,86 +32,8 @@ object LiteralExpressionProtoConverter {
    */
   def toCatalystExpression(lit: proto.Expression.Literal): expressions.Literal = {
     val dataType = LiteralValueProtoConverter.getDataType(lit)
-    lit.getLiteralTypeCase match {
-      case proto.Expression.Literal.LiteralTypeCase.NULL =>
-        expressions.Literal(null, dataType)
-
-      case proto.Expression.Literal.LiteralTypeCase.BINARY =>
-        expressions.Literal(lit.getBinary.toByteArray, dataType)
-
-      case proto.Expression.Literal.LiteralTypeCase.BOOLEAN =>
-        expressions.Literal(lit.getBoolean, dataType)
-
-      case proto.Expression.Literal.LiteralTypeCase.BYTE =>
-        expressions.Literal(lit.getByte.toByte, dataType)
-
-      case proto.Expression.Literal.LiteralTypeCase.SHORT =>
-        expressions.Literal(lit.getShort.toShort, dataType)
-
-      case proto.Expression.Literal.LiteralTypeCase.INTEGER =>
-        expressions.Literal(lit.getInteger, dataType)
-
-      case proto.Expression.Literal.LiteralTypeCase.LONG =>
-        expressions.Literal(lit.getLong, dataType)
-
-      case proto.Expression.Literal.LiteralTypeCase.FLOAT =>
-        expressions.Literal(lit.getFloat, dataType)
-
-      case proto.Expression.Literal.LiteralTypeCase.DOUBLE =>
-        expressions.Literal(lit.getDouble, dataType)
-
-      case proto.Expression.Literal.LiteralTypeCase.DECIMAL =>
-        expressions.Literal(Decimal.apply(lit.getDecimal.getValue), dataType)
-
-      case proto.Expression.Literal.LiteralTypeCase.STRING =>
-        expressions.Literal(UTF8String.fromString(lit.getString), dataType)
-
-      case proto.Expression.Literal.LiteralTypeCase.DATE =>
-        expressions.Literal(lit.getDate, dataType)
-
-      case proto.Expression.Literal.LiteralTypeCase.TIMESTAMP =>
-        expressions.Literal(lit.getTimestamp, dataType)
-
-      case proto.Expression.Literal.LiteralTypeCase.TIMESTAMP_NTZ =>
-        expressions.Literal(lit.getTimestampNtz, dataType)
-
-      case proto.Expression.Literal.LiteralTypeCase.CALENDAR_INTERVAL =>
-        val interval = new CalendarInterval(
-          lit.getCalendarInterval.getMonths,
-          lit.getCalendarInterval.getDays,
-          lit.getCalendarInterval.getMicroseconds)
-        expressions.Literal(interval, dataType)
-
-      case proto.Expression.Literal.LiteralTypeCase.YEAR_MONTH_INTERVAL =>
-        expressions.Literal(lit.getYearMonthInterval, dataType)
-
-      case proto.Expression.Literal.LiteralTypeCase.DAY_TIME_INTERVAL =>
-        expressions.Literal(lit.getDayTimeInterval, dataType)
-
-      case proto.Expression.Literal.LiteralTypeCase.TIME =>
-        var precision = TimeType.DEFAULT_PRECISION
-        if (lit.getTime.hasPrecision) {
-          precision = lit.getTime.getPrecision
-        }
-        expressions.Literal(lit.getTime.getNano, dataType)
-
-      case proto.Expression.Literal.LiteralTypeCase.ARRAY =>
-        val arrayData = LiteralValueProtoConverter.toScalaArray(lit.getArray)
-        expressions.Literal.create(arrayData, dataType)
-
-      case proto.Expression.Literal.LiteralTypeCase.MAP =>
-        val mapData = LiteralValueProtoConverter.toScalaMap(lit.getMap)
-        expressions.Literal.create(mapData, dataType)
-
-      case proto.Expression.Literal.LiteralTypeCase.STRUCT =>
-        val structData = LiteralValueProtoConverter.toScalaStruct(lit.getStruct)
-        val convert = CatalystTypeConverters.createToCatalystConverter(dataType)
-        expressions.Literal(convert(structData), dataType)
-
-      case _ =>
-        throw InvalidPlanInput(
-          s"Unsupported Literal Type: ${lit.getLiteralTypeCase.name}" +
-            s"(${lit.getLiteralTypeCase.getNumber})")
-    }
+    val scalaValue = LiteralValueProtoConverter.toScalaValue(lit)
+    val convert = CatalystTypeConverters.createToCatalystConverter(dataType)
+    expressions.Literal(convert(scalaValue), dataType)
   }
 }

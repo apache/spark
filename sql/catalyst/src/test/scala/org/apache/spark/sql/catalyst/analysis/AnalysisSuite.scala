@@ -30,7 +30,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{AliasIdentifier, QueryPlanningTracker, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog, VariableDefinition}
+import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
+import org.apache.spark.sql.connector.catalog.InMemoryTable
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -1520,46 +1520,18 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertAnalysisSuccess(finalPlan)
   }
 
-  test("Execute Immediate plan transformation") {
-    try {
-    val varDef1 = VariableDefinition(Identifier.of(Array("res"), "res"), "1", Literal(1))
-    SimpleAnalyzer.catalogManager.tempVariableManager.create(
-      Seq("res", "res"), varDef1, overrideIfExists = true)
-
-    val varDef2 = VariableDefinition(Identifier.of(Array("res2"), "res2"), "1", Literal(1))
-    SimpleAnalyzer.catalogManager.tempVariableManager.create(
-      Seq("res2", "res2"), varDef2, overrideIfExists = true)
-    val actual1 = parsePlan("EXECUTE IMMEDIATE 'SELECT 42 WHERE ? = 1' USING 2").analyze
-    val expected1 = parsePlan("SELECT 42 where 2 = 1").analyze
-    comparePlans(actual1, expected1)
-    val actual2 = parsePlan(
-      "EXECUTE IMMEDIATE 'SELECT 42 WHERE :first = 1' USING 2 as first").analyze
-    val expected2 = parsePlan("SELECT 42 where 2 = 1").analyze
-    comparePlans(actual2, expected2)
-    // Test that plan is transformed to SET operation
-    val actual3 = parsePlan(
-      "EXECUTE IMMEDIATE 'SELECT 17, 7 WHERE ? = 1' INTO res, res2 USING 2").analyze
-      // Normalize to make the plan equivalent to the below set statement.
-    val expected3 = parsePlan("SET var (res, res2) = (SELECT 17, 7 where 2 = 1)").analyze
-      comparePlans(actual3, expected3)
-    } finally {
-      SimpleAnalyzer.catalogManager.tempVariableManager.remove(Seq("res"))
-      SimpleAnalyzer.catalogManager.tempVariableManager.remove(Seq("res2"))
-    }
-  }
-
   test("SPARK-41271: bind named parameters to literals") {
     CTERelationDef.curId.set(0)
-    val actual1 = NameParameterizedQuery(
-      child = parsePlan("WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT :limitA"),
+    val actual1 = PreprocessedNamedQuery(
+      sql = "WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT :limitA",
       args = Map("limitA" -> Literal(10))).analyze
     CTERelationDef.curId.set(0)
     val expected1 = parsePlan("WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT 10").analyze
     comparePlans(actual1, expected1)
     // Ignore unused arguments
     CTERelationDef.curId.set(0)
-    val actual2 = NameParameterizedQuery(
-      child = parsePlan("WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < :param2"),
+    val actual2 = PreprocessedNamedQuery(
+      sql = "WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < :param2",
       args = Map("param1" -> Literal(10), "param2" -> Literal(20))).analyze
     CTERelationDef.curId.set(0)
     val expected2 = parsePlan("WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < 20").analyze
@@ -1568,16 +1540,16 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-44066: bind positional parameters to literals") {
     CTERelationDef.curId.set(0)
-    val actual1 = PosParameterizedQuery(
-      child = parsePlan("WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT ?"),
+    val actual1 = PreprocessedPositionalQuery(
+      sql = "WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT ?",
       args = Seq(Literal(10))).analyze
     CTERelationDef.curId.set(0)
     val expected1 = parsePlan("WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT 10").analyze
     comparePlans(actual1, expected1)
     // Ignore unused arguments
     CTERelationDef.curId.set(0)
-    val actual2 = PosParameterizedQuery(
-      child = parsePlan("WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < ?"),
+    val actual2 = PreprocessedPositionalQuery(
+      sql = "WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < ?",
       args = Seq(Literal(20), Literal(10))).analyze
     CTERelationDef.curId.set(0)
     val expected2 = parsePlan("WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < 20").analyze
@@ -1893,5 +1865,66 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     // The expected Project (root node) should only have column "i".
     val expectedPlan = Project(Seq(UnresolvedAttribute("i")), addColumnF).analyze
     checkAnalysis(inputPlan, expectedPlan)
+  }
+}
+
+/**
+ * Utility classes for testing parameter preprocessing during SQL parsing.
+ * These classes provide a clean API similar to NameParameterizedQuery while implementing
+ * the new text-level parameter substitution approach using SubstituteParamsParser.
+ *
+ * This approach replaces parameter markers in SQL text before parsing, rather than
+ * binding them at the logical plan level, which matches the new parameter preprocessing
+ * implementation in SparkSqlParser.
+ */
+case class PreprocessedNamedQuery(sql: String, args: Map[String, Literal]) {
+  def parsePlan: LogicalPlan = {
+    // Use text-level parameter substitution with SubstituteParamsParser
+    val substitutedSql = substituteParameters()
+    org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan(substitutedSql)
+  }
+
+  def analyze: LogicalPlan = {
+    // Parse with substituted parameters and analyze
+    parsePlan.analyze
+  }
+
+  private def substituteParameters(): String = {
+    val paramSubstitutor = new org.apache.spark.sql.catalyst.parser.SubstituteParamsParser()
+
+    // Convert Literal args to String values for substitution
+    val namedParams = args.map { case (name, literal) =>
+      name -> literal.sql
+    }
+
+    val (substituted, _, _) = paramSubstitutor.substitute(
+      sql,
+      namedParams = namedParams)
+    substituted
+  }
+}
+
+case class PreprocessedPositionalQuery(sql: String, args: Seq[Literal]) {
+  def parsePlan: LogicalPlan = {
+    // Use text-level parameter substitution with SubstituteParamsParser
+    val substitutedSql = substituteParameters()
+    org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan(substitutedSql)
+  }
+
+  def analyze: LogicalPlan = {
+    // Parse with substituted parameters and analyze
+    parsePlan.analyze
+  }
+
+  private def substituteParameters(): String = {
+    val paramSubstitutor = new org.apache.spark.sql.catalyst.parser.SubstituteParamsParser()
+
+    // Convert Literal args to String values for substitution
+    val positionalParams = args.map(_.sql).toList
+
+    val (substituted, _, _) = paramSubstitutor.substitute(
+      sql,
+      positionalParams = positionalParams)
+    substituted
   }
 }

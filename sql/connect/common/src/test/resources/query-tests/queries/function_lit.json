@@ -362,8 +362,14 @@
             "integer": 8
           }, {
             "integer": 6
-          }],
-          "dataType": {
+          }]
+        },
+        "dataType": {
+          "array": {
+            "elementType": {
+              "integer": {
+              }
+            },
             "containsNull": true
           }
         }
@@ -388,6 +394,10 @@
     }, {
       "literal": {
         "null": {
+          "null": {
+          }
+        },
+        "dataType": {
           "null": {
           }
         }

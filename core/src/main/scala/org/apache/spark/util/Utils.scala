@@ -65,6 +65,7 @@ import org.slf4j.Logger
 
 import org.apache.spark.{SPARK_VERSION, _}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.executor.Executor.TASK_THREAD_NAME_PREFIX
 import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
@@ -247,6 +248,22 @@ private[spark] object Utils
     val dir = createDirectory(root, namePrefix)
     ShutdownHookManager.registerShutdownDeleteDir(dir)
     dir
+  }
+
+  /**
+   * Create a temporary directy that will always be cleaned up when the executor stops,
+   * even in the case of a hard shutdown when the shutdown hooks don't get run.
+   *
+   * Currently this only provides special behavior on YARN, where the local dirs are not
+   * guaranteed to be cleaned up on executors hard shutdown.
+   */
+  def createExecutorLocalTempDir(conf: SparkConf, namePrefix: String): File = {
+    if (Utils.isRunningInYarnContainer(conf)) {
+      // Just use the default Java tmp dir which is set to inside the container directory on YARN
+      createTempDir(namePrefix = namePrefix)
+    } else {
+      createTempDir(getLocalDir(conf), namePrefix)
+    }
   }
 
   /**
@@ -1855,16 +1872,6 @@ private[spark] object Utils
   }
 
   /**
-   * Whether the underlying Java version is at most 17.
-   */
-  val isJavaVersionAtMost17 = Runtime.version().feature() <= 17
-
-  /**
-   * Whether the underlying Java version is at least 21.
-   */
-  val isJavaVersionAtLeast21 = Runtime.version().feature() >= 21
-
-  /**
    * Whether the underlying JVM prefer IPv6 addresses.
    */
   val preferIPv6 = "true".equals(System.getProperty("java.net.preferIPv6Addresses"))
@@ -2086,27 +2093,39 @@ private[spark] object Utils
     }
   }
 
+  val CONNECT_EXECUTE_THREAD_PREFIX = "SparkConnectExecuteThread"
+
+  private[spark] val threadInfoOrdering = Ordering.fromLessThan {
+    (threadTrace1: ThreadInfo, threadTrace2: ThreadInfo) => {
+      def priority(ti: ThreadInfo): Int = ti.getThreadName match {
+        case name if name.startsWith(TASK_THREAD_NAME_PREFIX) => 100
+        case name if name.startsWith(CONNECT_EXECUTE_THREAD_PREFIX) => 80
+        case _ => 0
+      }
+
+      val v1 = priority(threadTrace1)
+      val v2 = priority(threadTrace2)
+      if (v1 == v2) {
+        val name1 = threadTrace1.getThreadName.toLowerCase(Locale.ROOT)
+        val name2 = threadTrace2.getThreadName.toLowerCase(Locale.ROOT)
+        val nameCmpRes = name1.compareTo(name2)
+        if (nameCmpRes == 0) {
+          threadTrace1.getThreadId < threadTrace2.getThreadId
+        } else {
+          nameCmpRes < 0
+        }
+      } else {
+        v1 > v2
+      }
+    }
+  }
+
   /** Return a thread dump of all threads' stacktraces.  Used to capture dumps for the web UI */
   def getThreadDump(): Array[ThreadStackTrace] = {
     // We need to filter out null values here because dumpAllThreads() may return null array
     // elements for threads that are dead / don't exist.
-    val threadInfos = ManagementFactory.getThreadMXBean.dumpAllThreads(true, true).filter(_ != null)
-    threadInfos.sortWith { case (threadTrace1, threadTrace2) =>
-        val v1 = if (threadTrace1.getThreadName.contains("Executor task launch")) 1 else 0
-        val v2 = if (threadTrace2.getThreadName.contains("Executor task launch")) 1 else 0
-        if (v1 == v2) {
-          val name1 = threadTrace1.getThreadName().toLowerCase(Locale.ROOT)
-          val name2 = threadTrace2.getThreadName().toLowerCase(Locale.ROOT)
-          val nameCmpRes = name1.compareTo(name2)
-          if (nameCmpRes == 0) {
-            threadTrace1.getThreadId < threadTrace2.getThreadId
-          } else {
-            nameCmpRes < 0
-          }
-        } else {
-          v1 > v2
-        }
-    }.map(threadInfoToThreadStackTrace)
+    ManagementFactory.getThreadMXBean.dumpAllThreads(true, true).filter(_ != null)
+      .sorted(threadInfoOrdering).map(threadInfoToThreadStackTrace)
   }
 
   /** Return a heap dump. Used to capture dumps for the web UI */
@@ -2302,7 +2321,7 @@ private[spark] object Utils
       case e: MultiException =>
         e.getThrowables.asScala.exists(isBindCollision)
       case e: NativeIoException =>
-        (e.getMessage != null && e.getMessage.startsWith("bind() failed: ")) ||
+        (e.getMessage != null && e.getMessage.matches("bind.*failed.*")) ||
           isBindCollision(e.getCause)
       case e: IOException =>
         (e.getMessage != null && e.getMessage.startsWith("Failed to bind to address")) ||
@@ -2865,7 +2884,7 @@ private[spark] object Utils
    * in canCreate to determine if the KubernetesClusterManager should be used.
    */
   def checkAndGetK8sMasterUrl(rawMasterURL: String): String = {
-    require(rawMasterURL.startsWith("k8s://"),
+    require(SparkMasterRegex.isK8s(rawMasterURL),
       "Kubernetes master URL must start with k8s://.")
     val masterWithoutK8sPrefix = rawMasterURL.substring("k8s://".length)
 
@@ -3136,9 +3155,31 @@ private[spark] object Utils
   }
 
   /**
+   * Return whether we are using SerialGC or not
+   */
+  lazy val isSerialGC: Boolean = checkUseGC("UseSerialGC")
+
+  /**
+   * Return whether we are using ParallelGC or not
+   */
+  lazy val isParallelGC: Boolean = checkUseGC("UseParallelGC")
+
+  /**
    * Return whether we are using G1GC or not
    */
-  lazy val isG1GC: Boolean = {
+  lazy val isG1GC: Boolean = checkUseGC("UseG1GC")
+
+  /**
+   * Return whether we are using ZGC or not
+   */
+  lazy val isZGC: Boolean = checkUseGC("UseZGC")
+
+  /**
+   * Return whether we are using ShenandoahGC or not
+   */
+  lazy val isShenandoahGC: Boolean = checkUseGC("UseShenandoahGC")
+
+  def checkUseGC(useGCObjectStr: String): Boolean = {
     Try {
       val clazz = Utils.classForName("com.sun.management.HotSpotDiagnosticMXBean")
         .asInstanceOf[Class[_ <: PlatformManagedObject]]
@@ -3147,9 +3188,9 @@ private[spark] object Utils
       val vmOptionMethod = clazz.getMethod("getVMOption", classOf[String])
       val valueMethod = vmOptionClazz.getMethod("getValue")
 
-      val useG1GCObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, "UseG1GC")
-      val useG1GC = valueMethod.invoke(useG1GCObject).asInstanceOf[String]
-      "true".equals(useG1GC)
+      val useGCObject = vmOptionMethod.invoke(hotSpotDiagnosticMXBean, useGCObjectStr)
+      val useGC = valueMethod.invoke(useGCObject).asInstanceOf[String]
+      "true".equals(useGC)
     }.getOrElse(false)
   }
 

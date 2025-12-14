@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.lang
-import java.util
-
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
@@ -34,12 +31,13 @@ import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{DELETE_OPERATION, INSER
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog, TableInfo, TableWritePrivilege}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.CustomMetric
-import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, PhysicalWriteInfoImpl, Write, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, MergeSummaryImpl, PhysicalWriteInfoImpl, Write, WriterCommitMessage, WriteSummary}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.{SparkPlan, SQLExecution, UnaryExecNode}
+import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SQLExecution, UnaryExecNode}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.SchemaValidationMode.PROHIBIT_CHANGES
 import org.apache.spark.util.{LongAccumulator, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -156,7 +154,7 @@ case class ReplaceTableAsSelectExec(
     tableSpec: TableSpec,
     writeOptions: Map[String, String],
     orCreate: Boolean,
-    invalidateCache: (TableCatalog, Table, Identifier) => Unit)
+    invalidateCache: (TableCatalog, Identifier) => Unit)
   extends V2CreateTableAsSelectBaseExec {
 
   val properties = CatalogV2Util.convertTableProperties(tableSpec)
@@ -170,21 +168,30 @@ case class ReplaceTableAsSelectExec(
     // 1. Creating the new table fails,
     // 2. Writing to the new table fails,
     // 3. The table returned by catalog.createTable doesn't support writing.
+    //
+    // RTAS must refresh and pin versions in query to read from original table versions instead of
+    // newly created empty table that is meant to serve as target for append/overwrite
+    val refreshedQuery = V2TableRefreshUtil.refresh(
+      session,
+      query,
+      versionedOnly = true,
+      schemaValidationMode = PROHIBIT_CHANGES)
     if (catalog.tableExists(ident)) {
-      val table = catalog.loadTable(ident)
-      invalidateCache(catalog, table, ident)
+      invalidateCache(catalog, ident)
       catalog.dropTable(ident)
     } else if (!orCreate) {
       throw QueryCompilationErrors.cannotReplaceMissingTableError(ident)
     }
     val tableInfo = new TableInfo.Builder()
-      .withColumns(getV2Columns(query.schema, catalog.useNullableQuerySchema))
+      .withColumns(getV2Columns(refreshedQuery.schema, catalog.useNullableQuerySchema))
       .withPartitions(partitioning.toArray)
       .withProperties(properties.asJava)
       .build()
     val table = Option(catalog.createTable(ident, tableInfo))
       .getOrElse(catalog.loadTable(ident, Set(TableWritePrivilege.INSERT).asJava))
-    writeToTable(catalog, table, writeOptions, ident, query, overwrite = true)
+    writeToTable(
+      catalog, table, writeOptions, ident, refreshedQuery,
+      overwrite = true, refreshPhaseEnabled = false)
   }
 }
 
@@ -208,7 +215,7 @@ case class AtomicReplaceTableAsSelectExec(
     tableSpec: TableSpec,
     writeOptions: Map[String, String],
     orCreate: Boolean,
-    invalidateCache: (TableCatalog, Table, Identifier) => Unit)
+    invalidateCache: (TableCatalog, Identifier) => Unit)
   extends V2CreateTableAsSelectBaseExec {
 
   val properties = CatalogV2Util.convertTableProperties(tableSpec)
@@ -219,8 +226,7 @@ case class AtomicReplaceTableAsSelectExec(
   override protected def run(): Seq[InternalRow] = {
     val columns = getV2Columns(query.schema, catalog.useNullableQuerySchema)
     if (catalog.tableExists(ident)) {
-      val table = catalog.loadTable(ident)
-      invalidateCache(catalog, table, ident)
+      invalidateCache(catalog, ident)
     }
     val staged = if (orCreate) {
       val tableInfo = new TableInfo.Builder()
@@ -455,9 +461,12 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
         }
       )
 
-      val operationMetrics = getOperationMetrics(query)
+      val writeSummary = getWriteSummary(query)
       logInfo(log"Data source write support ${MDC(LogKeys.BATCH_WRITE, batchWrite)} is committing.")
-      batchWrite.commit(messages, operationMetrics)
+      writeSummary match {
+        case Some(summary) => batchWrite.commit(messages, summary)
+        case None => batchWrite.commit(messages)
+      }
       logInfo(log"Data source write support ${MDC(LogKeys.BATCH_WRITE, batchWrite)} committed.")
       commitProgress = Some(StreamWriterCommitProgress(totalNumRowsAccumulator.value))
     } catch {
@@ -480,10 +489,20 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
     Nil
   }
 
-  private def getOperationMetrics(query: SparkPlan): util.Map[String, lang.Long] = {
-    collectFirst(query) { case m: MergeRowsExec => m }.map{ n =>
-      n.metrics.map { case (name, metric) => s"merge.$name" -> lang.Long.valueOf(metric.value) }
-    }.getOrElse(Map.empty[String, lang.Long]).asJava
+  private def getWriteSummary(query: SparkPlan): Option[WriteSummary] = {
+    collectFirst(query) { case m: MergeRowsExec => m }.map { n =>
+      val metrics = n.metrics
+      MergeSummaryImpl(
+        metrics.get("numTargetRowsCopied").map(_.value).getOrElse(-1L),
+        metrics.get("numTargetRowsDeleted").map(_.value).getOrElse(-1L),
+        metrics.get("numTargetRowsUpdated").map(_.value).getOrElse(-1L),
+        metrics.get("numTargetRowsInserted").map(_.value).getOrElse(-1L),
+        metrics.get("numTargetRowsMatchedUpdated").map(_.value).getOrElse(-1L),
+        metrics.get("numTargetRowsMatchedDeleted").map(_.value).getOrElse(-1L),
+        metrics.get("numTargetRowsNotMatchedBySourceUpdated").map(_.value).getOrElse(-1L),
+        metrics.get("numTargetRowsNotMatchedBySourceDeleted").map(_.value).getOrElse(-1L)
+      )
+    }
   }
 }
 
@@ -709,7 +728,8 @@ private[v2] trait V2CreateTableAsSelectBaseExec extends LeafV2CommandExec {
       writeOptions: Map[String, String],
       ident: Identifier,
       query: LogicalPlan,
-      overwrite: Boolean): Seq[InternalRow] = {
+      overwrite: Boolean,
+      refreshPhaseEnabled: Boolean = true): Seq[InternalRow] = {
     Utils.tryWithSafeFinallyAndFailureCallbacks({
       val relation = DataSourceV2Relation.create(table, Some(catalog), Some(ident))
       val writeCommand = if (overwrite) {
@@ -717,7 +737,7 @@ private[v2] trait V2CreateTableAsSelectBaseExec extends LeafV2CommandExec {
       } else {
         AppendData.byPosition(relation, query, writeOptions)
       }
-      val qe = session.sessionState.executePlan(writeCommand)
+      val qe = QueryExecution.create(session, writeCommand, refreshPhaseEnabled)
       qe.assertCommandExecuted()
       DataSourceV2Utils.commitStagedChanges(sparkContext, table, metrics)
       Nil

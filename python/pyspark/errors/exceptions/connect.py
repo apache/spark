@@ -17,7 +17,7 @@
 import grpc
 import json
 from grpc import StatusCode
-from typing import Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from pyspark.errors.exceptions.base import (
     AnalysisException as BaseAnalysisException,
@@ -95,9 +95,13 @@ def _convert_exception(
         display_server_stacktrace = display_server_stacktrace if stacktrace else False
 
     contexts = None
+    breaking_change_info = None
     if resp and resp.HasField("root_error_idx"):
         root_error = resp.errors[resp.root_error_idx]
         if hasattr(root_error, "spark_throwable"):
+            # Extract errorClass from FetchErrorDetailsResponse if not in metadata
+            if error_class is None and root_error.spark_throwable.HasField("error_class"):
+                error_class = root_error.spark_throwable.error_class
             message_parameters = dict(root_error.spark_throwable.message_parameters)
             contexts = [
                 SQLQueryContext(c)
@@ -105,6 +109,20 @@ def _convert_exception(
                 else DataFrameQueryContext(c)
                 for c in root_error.spark_throwable.query_contexts
             ]
+            # Extract breaking change info if present
+            if hasattr(
+                root_error.spark_throwable, "breaking_change_info"
+            ) and root_error.spark_throwable.HasField("breaking_change_info"):
+                bci = root_error.spark_throwable.breaking_change_info
+                breaking_change_info = {
+                    "migration_message": list(bci.migration_message),
+                    "needs_audit": bci.needs_audit if bci.HasField("needs_audit") else True,
+                }
+                if bci.HasField("mitigation_config"):
+                    breaking_change_info["mitigation_config"] = {
+                        "key": bci.mitigation_config.key,
+                        "value": bci.mitigation_config.value,
+                    }
 
     if "org.apache.spark.api.python.PythonException" in classes:
         return PythonException(
@@ -134,6 +152,7 @@ def _convert_exception(
                 display_server_stacktrace=display_server_stacktrace,
                 contexts=contexts,
                 grpc_status_code=grpc_status_code,
+                breaking_change_info=breaking_change_info,
             )
 
     # Return UnknownException if there is no matched exception class
@@ -147,6 +166,7 @@ def _convert_exception(
         display_server_stacktrace=display_server_stacktrace,
         contexts=contexts,
         grpc_status_code=grpc_status_code,
+        breaking_change_info=breaking_change_info,
     )
 
 
@@ -193,6 +213,7 @@ class SparkConnectGrpcException(SparkConnectException):
         display_server_stacktrace: bool = False,
         contexts: Optional[List[BaseQueryContext]] = None,
         grpc_status_code: grpc.StatusCode = StatusCode.UNKNOWN,
+        breaking_change_info: Optional[Dict[str, Any]] = None,
     ) -> None:
         if contexts is None:
             contexts = []
@@ -221,6 +242,7 @@ class SparkConnectGrpcException(SparkConnectException):
         self._display_stacktrace: bool = display_server_stacktrace
         self._contexts: List[BaseQueryContext] = contexts
         self._grpc_status_code = grpc_status_code
+        self._breaking_change_info: Optional[Dict[str, Any]] = breaking_change_info
         self._log_exception()
 
     def getSqlState(self) -> Optional[str]:
@@ -240,6 +262,15 @@ class SparkConnectGrpcException(SparkConnectException):
 
     def getGrpcStatusCode(self) -> grpc.StatusCode:
         return self._grpc_status_code
+
+    def getBreakingChangeInfo(self) -> Optional[Dict[str, Any]]:
+        """
+        Returns the breaking change info for an error, or None.
+
+        For Spark Connect exceptions, this returns the breaking change info
+        received from the server, rather than looking it up from local error files.
+        """
+        return self._breaking_change_info
 
     def __str__(self) -> str:
         return self.getMessage()
@@ -263,6 +294,7 @@ class UnknownException(SparkConnectGrpcException, BaseUnknownException):
         display_server_stacktrace: bool = False,
         contexts: Optional[List[BaseQueryContext]] = None,
         grpc_status_code: grpc.StatusCode = StatusCode.UNKNOWN,
+        breaking_change_info: Optional[Dict[str, Any]] = None,
     ) -> None:
         super().__init__(
             message=message,
@@ -274,6 +306,7 @@ class UnknownException(SparkConnectGrpcException, BaseUnknownException):
             display_server_stacktrace=display_server_stacktrace,
             contexts=contexts,
             grpc_status_code=grpc_status_code,
+            breaking_change_info=breaking_change_info,
         )
 
 

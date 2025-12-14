@@ -142,7 +142,7 @@ class JDBCTableCatalog extends TableCatalog
   override def loadTable(ident: Identifier): Table = {
     JdbcUtils.withConnection(options) { conn =>
       if (!tableExists(ident, conn)) {
-        throw QueryCompilationErrors.noSuchTableError(ident)
+        throw QueryCompilationErrors.noSuchTableError(name(), ident)
       }
 
       val optionsWithTableName = new JDBCOptions(

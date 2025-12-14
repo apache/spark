@@ -23,6 +23,7 @@ Example usage:
 """
 from contextlib import contextmanager
 import argparse
+import glob
 import importlib.util
 import os
 import yaml
@@ -48,7 +49,9 @@ from pyspark.pipelines.spark_connect_pipeline import (
     handle_pipeline_events,
 )
 
-PIPELINE_SPEC_FILE_NAMES = ["pipeline.yaml", "pipeline.yml"]
+from pyspark.pipelines.add_pipeline_analysis_context import add_pipeline_analysis_context
+
+PIPELINE_SPEC_FILE_NAMES = ["spark-pipeline.yaml", "spark-pipeline.yml"]
 
 
 @dataclass(frozen=True)
@@ -58,11 +61,38 @@ class LibrariesGlob:
     include: str
 
 
+def validate_patch_glob_pattern(glob_pattern: str) -> str:
+    """Validates that a glob pattern is allowed.
+
+    Only allows:
+    - File paths (paths without wildcards except for the filename)
+    - Folder paths ending with /** (recursive directory patterns)
+
+    Disallows complex glob patterns like transformations/**/*.py
+    """
+    # Check if it's a simple file path (no wildcards at all)
+    if not glob.has_magic(glob_pattern):
+        return glob_pattern
+
+    # Check if it's a folder path ending with /**
+    if glob_pattern.endswith("/**"):
+        prefix = glob_pattern[:-3]
+        if not glob.has_magic(prefix):
+            # append "/*" to match everything under the directory recursively
+            return glob_pattern + "/*"
+
+    raise PySparkException(
+        errorClass="PIPELINE_SPEC_INVALID_GLOB_PATTERN",
+        messageParameters={"glob_pattern": glob_pattern},
+    )
+
+
 @dataclass(frozen=True)
 class PipelineSpec:
     """Spec for a pipeline.
 
     :param name: The name of the pipeline.
+    :param storage: The root directory for storing metadata, such as streaming checkpoints.
     :param catalog: The default catalog to use for the pipeline.
     :param database: The default database to use for the pipeline.
     :param configuration: A dictionary of Spark configuration properties to set for the pipeline.
@@ -70,10 +100,21 @@ class PipelineSpec:
     """
 
     name: str
+    storage: str
     catalog: Optional[str]
     database: Optional[str]
     configuration: Mapping[str, str]
     libraries: Sequence[LibrariesGlob]
+
+    def __post_init__(self) -> None:
+        """Validate libraries automatically after instantiation."""
+        validated = [
+            LibrariesGlob(validate_patch_glob_pattern(lib.include)) for lib in self.libraries
+        ]
+
+        # If normalization changed anything, patch into frozen dataclass
+        if tuple(validated) != tuple(self.libraries):
+            object.__setattr__(self, "libraries", tuple(validated))
 
 
 def find_pipeline_spec(current_dir: Path) -> Path:
@@ -113,8 +154,16 @@ def load_pipeline_spec(spec_path: Path) -> PipelineSpec:
 
 
 def unpack_pipeline_spec(spec_data: Mapping[str, Any]) -> PipelineSpec:
-    ALLOWED_FIELDS = {"name", "catalog", "database", "schema", "configuration", "libraries"}
-    REQUIRED_FIELDS = ["name"]
+    ALLOWED_FIELDS = {
+        "name",
+        "storage",
+        "catalog",
+        "database",
+        "schema",
+        "configuration",
+        "libraries",
+    }
+    REQUIRED_FIELDS = ["name", "storage"]
     for key in spec_data.keys():
         if key not in ALLOWED_FIELDS:
             raise PySparkException(
@@ -130,6 +179,7 @@ def unpack_pipeline_spec(spec_data: Mapping[str, Any]) -> PipelineSpec:
 
     return PipelineSpec(
         name=spec_data["name"],
+        storage=spec_data["storage"],
         catalog=spec_data.get("catalog"),
         database=spec_data.get("database", spec_data.get("schema")),
         configuration=validate_str_dict(spec_data.get("configuration", {}), "configuration"),
@@ -168,19 +218,28 @@ def validate_str_dict(d: Mapping[str, str], field_name: str) -> Mapping[str, str
 
 
 def register_definitions(
-    spec_path: Path, registry: GraphElementRegistry, spec: PipelineSpec
+    spec_path: Path,
+    registry: GraphElementRegistry,
+    spec: PipelineSpec,
+    spark: SparkSession,
+    dataflow_graph_id: str,
 ) -> None:
     """Register the graph element definitions in the pipeline spec with the given registry.
-    - Looks for Python files matching the glob patterns in the spec and imports them.
-    - Looks for SQL files matching the blob patterns in the spec and registers thems.
+    - Import Python files matching the glob patterns in the spec.
+    - Register SQL files matching the glob patterns in the spec.
     """
-    path = spec_path.parent
+    path = spec_path.parent.resolve()
+
     with change_dir(path):
         with graph_element_registration_context(registry):
             log_with_curr_timestamp(f"Loading definitions. Root directory: '{path}'.")
             for libraries_glob in spec.libraries:
                 glob_expression = libraries_glob.include
-                matching_files = [p for p in path.glob(glob_expression) if p.is_file()]
+                matching_files = [
+                    p
+                    for p in path.glob(glob_expression)
+                    if p.is_file() and "__pycache__" not in p.parts  # ignore generated python cache
+                ]
                 log_with_curr_timestamp(
                     f"Found {len(matching_files)} files matching glob '{glob_expression}'"
                 )
@@ -193,13 +252,16 @@ def register_definitions(
                         assert (
                             module_spec.loader is not None
                         ), f"Module spec has no loader for {file}"
-                        with block_session_mutations():
-                            module_spec.loader.exec_module(module)
+                        with add_pipeline_analysis_context(
+                            spark=spark, dataflow_graph_id=dataflow_graph_id, flow_name=None
+                        ):
+                            with block_session_mutations():
+                                module_spec.loader.exec_module(module)
                     elif file.suffix == ".sql":
                         log_with_curr_timestamp(f"Registering SQL file {file}...")
                         with file.open("r") as f:
                             sql = f.read()
-                        file_path_relative_to_spec = file.relative_to(spec_path.parent)
+                        file_path_relative_to_spec = file.relative_to(path)
                         registry.register_sql(sql, file_path_relative_to_spec)
                     else:
                         raise PySparkException(
@@ -254,7 +316,9 @@ def run(
     spec = load_pipeline_spec(spec_path)
 
     log_with_curr_timestamp("Creating Spark session...")
-    spark_builder = SparkSession.builder
+    spark_builder = SparkSession.builder.config(
+        "spark.sql.connect.serverStacktrace.enabled", "false"
+    )
     for key, value in spec.configuration.items():
         spark_builder = spark_builder.config(key, value)
 
@@ -270,7 +334,7 @@ def run(
 
     log_with_curr_timestamp("Registering graph elements...")
     registry = SparkConnectGraphElementRegistry(spark, dataflow_graph_id)
-    register_definitions(spec_path, registry, spec)
+    register_definitions(spec_path, registry, spec, spark, dataflow_graph_id)
 
     log_with_curr_timestamp("Starting run...")
     result_iter = start_run(
@@ -280,6 +344,7 @@ def run(
         full_refresh_all=full_refresh_all,
         refresh=refresh,
         dry=dry,
+        storage=spec.storage,
     )
     try:
         handle_pipeline_events(result_iter)
@@ -292,8 +357,9 @@ def parse_table_list(value: str) -> List[str]:
     return [table.strip() for table in value.split(",") if table.strip()]
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Pipeline CLI")
+def main() -> None:
+    """The entry point of spark-pipelines CLI."""
+    parser = argparse.ArgumentParser(description="Pipelines CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # "run" subcommand
@@ -311,7 +377,9 @@ if __name__ == "__main__":
         default=[],
     )
     run_parser.add_argument(
-        "--full-refresh-all", action="store_true", help="Perform a full graph reset and recompute."
+        "--full-refresh-all",
+        action="store_true",
+        help="Perform a full graph reset and recompute.",
     )
     run_parser.add_argument(
         "--refresh",
@@ -331,7 +399,7 @@ if __name__ == "__main__":
     # "init" subcommand
     init_parser = subparsers.add_parser(
         "init",
-        help="Generates a simple pipeline project, including a spec file and example definitions.",
+        help="Generate a sample pipeline project, with a spec file and example transformations.",
     )
     init_parser.add_argument(
         "--name",
@@ -360,7 +428,7 @@ if __name__ == "__main__":
                 full_refresh=args.full_refresh,
                 full_refresh_all=args.full_refresh_all,
                 refresh=args.refresh,
-                dry=args.command == "dry-run",
+                dry=False,
             )
         else:
             assert args.command == "dry-run"
@@ -373,3 +441,7 @@ if __name__ == "__main__":
             )
     elif args.command == "init":
         init(args.name)
+
+
+if __name__ == "__main__":
+    main()

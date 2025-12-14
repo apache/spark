@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.connect
 
-import java.util.concurrent.ForkJoinPool
+import java.util.concurrent.Executors
 
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
@@ -146,7 +146,7 @@ class SparkSessionE2ESuite extends ConnectFunSuite with RemoteSparkSession {
     // global ExecutionContext has only 2 threads in Apache Spark CI
     // create own thread pool for four Futures used in this test
     val numThreads = 4
-    val fpool = new ForkJoinPool(numThreads)
+    val fpool = Executors.newFixedThreadPool(numThreads)
     val executionContext = ExecutionContext.fromExecutorService(fpool)
 
     val q1 = Future {
@@ -449,5 +449,31 @@ class SparkSessionE2ESuite extends ConnectFunSuite with RemoteSparkSession {
       "command",
       Map("one" -> "1", "two" -> "2"))
     assert(df.as(StringEncoder).collect().toSet == Set("one", "two"))
+  }
+
+  test("dataframes with cached local relations succeed - changing values") {
+    val rowSize = 1000
+    val rowCount = 64 * 1000
+    val suffix = "abcdef"
+    val str = scala.util.Random.alphanumeric.take(rowSize).mkString + suffix
+    val data = Seq.tabulate(rowCount)(i => (i, str))
+    for (_ <- 0 until 2) {
+      val df = spark.createDataFrame(data)
+      assert(df.count() === rowCount)
+      assert(!df.filter(df("_2").endsWith(suffix)).isEmpty)
+    }
+  }
+
+  test("dataframes with cached local relations succeed - same values") {
+    val rowSize = 1000
+    val rowCount = 64 * 1000
+    val suffix = "abcdef"
+    val str = scala.util.Random.alphanumeric.take(rowSize).mkString + suffix
+    val data = Seq.tabulate(rowCount)(_ => (0, str))
+    for (_ <- 0 until 2) {
+      val df = spark.createDataFrame(data)
+      assert(df.count() === rowCount)
+      assert(!df.filter(df("_2").endsWith(suffix)).isEmpty)
+    }
   }
 }

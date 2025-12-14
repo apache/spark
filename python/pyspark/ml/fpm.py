@@ -71,7 +71,7 @@ class _FPGrowthParams(HasPredictionCol):
     )
 
     def __init__(self, *args: Any):
-        super(_FPGrowthParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(
             minSupport=0.3, minConfidence=0.8, itemsCol="items", predictionCol="prediction"
         )
@@ -256,7 +256,7 @@ class FPGrowth(
         __init__(self, \\*, minSupport=0.3, minConfidence=0.8, itemsCol="items", \
                  predictionCol="prediction", numPartitions=None)
         """
-        super(FPGrowth, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.fpm.FPGrowth", self.uid)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -409,7 +409,7 @@ class PrefixSpan(JavaParams):
         __init__(self, \\*, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000, \
                  sequenceCol="sequence")
         """
-        super(PrefixSpan, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.fpm.PrefixSpan", self.uid)
         self._setDefault(
             minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000, sequenceCol="sequence"

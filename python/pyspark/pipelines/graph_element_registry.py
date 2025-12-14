@@ -18,7 +18,7 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from pyspark.pipelines.dataset import Dataset
+from pyspark.pipelines.output import Output
 from pyspark.pipelines.flow import Flow
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -35,7 +35,7 @@ class GraphElementRegistry(ABC):
     """
 
     @abstractmethod
-    def register_dataset(self, dataset: Dataset) -> None:
+    def register_output(self, output: Output) -> None:
         """Add the given dataset to the registry."""
 
     @abstractmethod

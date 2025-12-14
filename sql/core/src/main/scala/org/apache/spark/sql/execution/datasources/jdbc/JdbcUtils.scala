@@ -1315,7 +1315,17 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
   def withConnection[T](options: JDBCOptions)(f: Connection => T): T = {
     val dialect = JdbcDialects.get(options.url)
-    val conn = dialect.createConnectionFactory(options)(-1)
+
+    var conn : Connection = null
+    classifyException(
+      condition = "FAILED_JDBC.CONNECTION",
+      messageParameters = Map("url" -> options.getRedactUrl()),
+      dialect,
+      description = "Failed to connect",
+      isRuntime = false
+    ) {
+      conn = dialect.createConnectionFactory(options)(-1)
+    }
     try {
       f(conn)
     } finally {
