@@ -6029,12 +6029,6 @@
     ],
     "sqlState" : "428EK"
   },
-  "VIEW_WRITE_NOT_ALLOWED" : {
-    "message" : [
-      "Cannot write into view <quoted> as it's not a data source v2 relation."
-    ],
-    "sqlState" : "42809"
-  },
   "THETA_INVALID_INPUT_SKETCH_BUFFER" : {
     "message" : [
       "Invalid call to <function>; only valid Theta sketch buffers are supported as inputs (such as those produced by the `theta_sketch_agg` function)."
@@ -7409,6 +7403,12 @@
       "To tolerate the error on drop use DROP VIEW IF EXISTS."
     ],
     "sqlState" : "42P01"
+  },
+  "VIEW_WRITE_NOT_ALLOWED" : {
+    "message" : [
+      "Cannot write into view <quoted> as it's not a data source v2 relation."
+    ],
+    "sqlState" : "42809"
   },
   "WINDOW_FUNCTION_AND_FRAME_MISMATCH" : {
     "message" : [
