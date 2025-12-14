@@ -18,10 +18,9 @@
 package org.apache.spark.io
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, OutputStream}
-import java.nio.file.{Files, Paths}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
+import org.apache.spark.benchmark.Benchmark
 
 /**
  * Benchmark for LZ4 codec performance.

@@ -18,10 +18,9 @@
 package org.apache.spark.io
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectOutputStream, OutputStream}
-import java.nio.file.{Files, Paths}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.internal.config.{IO_COMPRESSION_ZSTD_BUFFERPOOL_ENABLED, IO_COMPRESSION_ZSTD_LEVEL, IO_COMPRESSION_ZSTD_WORKERS}
 
 /**
