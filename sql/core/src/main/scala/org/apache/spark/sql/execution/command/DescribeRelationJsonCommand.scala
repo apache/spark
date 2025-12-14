@@ -105,8 +105,6 @@ case class DescribeRelationJsonCommand(
         }
         describeIdentifier(identifier.toQualifiedNameParts(catalog), jsonMap)
         describeV2TableJson(table, sparkSession, jsonMap)
-
-      case _ => throw QueryCompilationErrors.describeAsJsonNotSupportedForV2TablesError()
     }
 
     // Add default collation if not yet added (addKeyValueToMap only adds unique keys).
