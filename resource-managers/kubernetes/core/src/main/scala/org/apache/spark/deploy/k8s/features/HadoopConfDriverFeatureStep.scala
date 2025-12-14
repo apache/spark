@@ -119,8 +119,8 @@ private[spark] class HadoopConfDriverFeatureStep(conf: KubernetesConf)
         (file.getName(), Files.readString(file.toPath))
       }.toMap
 
-      Seq(Seq(KubernetesClientUtils.buildConfigMap(newConfigMapName,
-        fileMap, conf.sparkConf, Map(), inNameSpace = false)))
+      Seq(KubernetesClientUtils.buildConfigMap(newConfigMapName,
+        fileMap, conf.sparkConf, Map(), inNameSpace = false))
     } else {
       Nil
     }
