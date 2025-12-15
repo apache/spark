@@ -3917,6 +3917,48 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     completeAndCheckAnswer(taskSets(8), Seq((Success, 11), (Success, 12)), Map(0 -> 11, 1 -> 12))
   }
 
+  test("SPARK-54556: abort stage if result task from old attempt with indeterminate " +
+    "result succeeded") {
+    val shuffleMapRdd1 = new MyRDD(sc, 2, Nil)
+    val shuffleDep1 = new ShuffleDependency(
+      shuffleMapRdd1,
+      new HashPartitioner(2),
+      checksumMismatchFullRetryEnabled = true)
+    val shuffleId1 = shuffleDep1.shuffleId
+
+    // Submit a job depending on shuffleDep1
+    val finalRdd1 = new MyRDD(
+      sc, 2, List(shuffleDep1), tracker = mapOutputTracker)
+    submit(finalRdd1, Array(0, 1))
+
+    // Finish stage 0.
+    completeShuffleMapStageSuccessfully(
+      0, 0, 2, Seq("hostA", "hostB"), checksumVal = 100)
+    assert(mapOutputTracker.findMissingPartitions(shuffleId1) === Some(Seq.empty))
+
+    // The first task of result stage failed with FetchFailed.
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleId1, 0L, 0, 0, "ignored"),
+      null))
+
+    // Check status for all failedStages.
+    val failedStages = scheduler.failedStages.toSeq
+    assert(failedStages.map(_.id) == Seq(0, 1))
+    scheduler.resubmitFailedStages()
+
+    // Complete the shuffle map stage with a different checksum
+    completeShuffleMapStageSuccessfully(0, 1, 2, checksumVal = 101)
+
+    // Complete the second task of 1st attempt of result stage.
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(1),
+      Success,
+      42))
+    assert(failure != null && failure.getMessage.contains(
+      "Task with indeterminate results from old attempt succeeded"))
+  }
+
   test("SPARK-27164: RDD.countApprox on empty RDDs schedules jobs which never complete") {
     val latch = new CountDownLatch(1)
     val jobListener = new SparkListener {

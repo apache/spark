@@ -2112,6 +2112,13 @@ private[spark] class DAGScheduler(
             resultStage.activeJob match {
               case Some(job) =>
                 if (!job.finished(rt.outputId)) {
+                  if (ignoreOldTaskAttempts) {
+                    val reason = "Task with indeterminate results from old attempt succeeded, " +
+                      s"aborting the stage $resultStage to ensure data correctness."
+                    abortStage(resultStage, reason, None)
+                    return
+                  }
+
                   job.finished(rt.outputId) = true
                   job.numFinished += 1
                   // If the whole job has finished, remove it
