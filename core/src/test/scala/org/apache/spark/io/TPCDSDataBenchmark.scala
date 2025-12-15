@@ -46,7 +46,7 @@ abstract class TPCDSDataBenchmark extends BenchmarkBase {
 
   var data: Array[Byte] = _
 
-  override def beforeAll(): Unit = {
+  protected def prepareData(): Unit = {
     val tpcDsDataDir = sys.env.get("SPARK_TPCDS_DATA_TEXT")
     assert(tpcDsDataDir.nonEmpty, "Can not find env var SPARK_TPCDS_DATA_TEXT")
 

@@ -35,6 +35,7 @@ import org.apache.spark.benchmark.Benchmark
 object LZ4TPCDSDataBenchmark extends TPCDSDataBenchmark {
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
+    prepareData()
     runBenchmark("Benchmark LZ4CompressionCodec") {
       compressionBenchmark()
       decompressionBenchmark()

@@ -36,6 +36,7 @@ import org.apache.spark.internal.config.{IO_COMPRESSION_ZSTD_BUFFERPOOL_ENABLED,
 object ZStandardTPCDSDataBenchmark extends TPCDSDataBenchmark {
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
+    prepareData()
     runBenchmark("Benchmark ZStandardCompressionCodec") {
       compressionBenchmark()
       decompressionBenchmark()
