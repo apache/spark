@@ -469,7 +469,6 @@ abstract class KllSketchGetQuantileBase
   protected def outputDataType: DataType
 
   // The rank argument must be foldable (compile-time constant).
-  // This enables Photon to efficiently handle array outputs with a known constant size.
   override def checkInputDataTypes(): TypeCheckResult = {
     if (!right.foldable) {
       TypeCheckResult.DataTypeMismatch(
@@ -635,7 +634,6 @@ abstract class KllSketchGetRankBase
   protected def kllSketchGetRank(memory: Memory, quantile: Any): Double
 
   // The quantile argument must be foldable (compile-time constant).
-  // This enables Photon to efficiently handle array outputs with a known constant size.
   override def checkInputDataTypes(): TypeCheckResult = {
     if (!right.foldable) {
       TypeCheckResult.DataTypeMismatch(
