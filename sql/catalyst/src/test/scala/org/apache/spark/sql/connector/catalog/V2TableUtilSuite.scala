@@ -565,7 +565,7 @@ class V2TableUtilSuite extends SparkFunSuite {
     assert(errors.head.contains("`address`.`zipCode` STRING has been added"))
   }
 
-  test("validateCapturedColumns - ALLOW_NEW_TOP_LEVEL_FIELDS prohibits nested arr additions") {
+  test("validateCapturedColumns - ALLOW_NEW_TOP_LEVEL_FIELDS fails new nested fields in array") {
     val originItem = StructType(Seq(
       StructField("itemId", LongType),
       StructField("itemName", StringType)))
