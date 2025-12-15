@@ -1570,7 +1570,7 @@ private[spark] class DAGScheduler(
             // has successfully completed, we can detect this and abort the job, as rolling back a
             // result stage is not possible.
             val stagesToRollback = collectSucceedingStages(sms)
-            abortStagesUnableToRollback(stagesToRollback)
+            filterAndAbortUnrollbackableStages(stagesToRollback)
             // stages which cannot be rolled back were aborted which leads to removing the
             // the dependant job(s) from the active jobs set
             val numActiveJobsWithStageAfterRollback =
@@ -1905,7 +1905,7 @@ private[spark] class DAGScheduler(
    */
   private[scheduler] def rollbackSucceedingStages(mapStage: ShuffleMapStage): Unit = {
     val stagesToRollback = collectSucceedingStages(mapStage).filterNot(_ == mapStage)
-    val stagesCanRollback = abortStagesUnableToRollback(stagesToRollback)
+    val stagesCanRollback = filterAndAbortUnrollbackableStages(stagesToRollback)
     // stages which cannot be rolled back were aborted which leads to removing the
     // the dependant job(s) from the active jobs set, there could be no active jobs
     // left depending on the indeterminate stage and hence no need to roll back any stages.
@@ -2314,10 +2314,10 @@ private[spark] class DAGScheduler(
               // even if the map tasks are re-tried.
               if (mapStage.isIndeterminate && !mapStage.shuffleDep.checksumMismatchFullRetryEnabled) {
                 val stagesToRollback = collectSucceedingStages(mapStage)
-                val stagesCanRollback = abortStagesUnableToRollback(stagesToRollback)
+                val stagesCanRollback = filterAndAbortUnrollbackableStages(stagesToRollback)
                 logInfo(log"The shuffle map stage ${MDC(STAGE, mapStage)} with indeterminate output " +
                   log"was failed, we will roll back and rerun below stages which include itself and all " +
-                  log"its indeterminate child stages: ${MDC(STAGES, rollingBackStages)}")
+                  log"its indeterminate child stages: ${MDC(STAGES, stagesCanRollback)}")
               }
 
               // We expect one executor failure to trigger many FetchFailures in rapid succession,
@@ -2507,7 +2507,8 @@ private[spark] class DAGScheduler(
    * @param stagesToRollback stages to roll back
    * @return Shuffle map stages which need and can be rolled back
    */
-  private def abortStagesUnableToRollback(stagesToRollback: HashSet[Stage]): HashSet[Stage] = {
+  private def filterAndAbortUnrollbackableStages(
+      stagesToRollback: HashSet[Stage]): HashSet[Stage] = {
 
     def generateErrorMessage(stage: Stage): String = {
       "A shuffle map stage with indeterminate output was failed and retried. " +
