@@ -30,7 +30,7 @@ import com.google.protobuf.{Any => ProtoAny, ByteString, Message}
 import io.grpc.{Context, Status, StatusRuntimeException}
 import io.grpc.stub.StreamObserver
 
-import org.apache.spark.{SparkClassNotFoundException, SparkEnv, SparkException, TaskContext}
+import org.apache.spark.{SparkClassNotFoundException, SparkEnv, SparkException}
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
 import org.apache.spark.connect.proto
@@ -1492,9 +1492,12 @@ class SparkConnectPlanner(
     }
 
     if (rel.hasData) {
-      val (rows, structType) =
-        ArrowConverters.fromIPCStream(rel.getData.toByteArray, TaskContext.get())
-      buildLocalRelationFromRows(rows, structType, Option(schema))
+      val (rows, structType) = ArrowConverters.fromIPCStream(rel.getData.toByteArray)
+      try {
+        buildLocalRelationFromRows(rows, structType, Option(schema))
+      } finally {
+        rows.close()
+      }
     } else {
       if (schema == null) {
         throw InvalidInputErrors.schemaRequiredForLocalRelation()
@@ -1565,28 +1568,13 @@ class SparkConnectPlanner(
     }
 
     // Load and combine all batches
-    var combinedRows: Iterator[InternalRow] = Iterator.empty
-    var structType: StructType = null
-
-    for ((dataHash, batchIndex) <- dataHashes.zipWithIndex) {
-      val dataBytes = readChunkedCachedLocalRelationBlock(dataHash)
-      val (batchRows, batchStructType) =
-        ArrowConverters.fromIPCStream(dataBytes, TaskContext.get())
-
-      // For the first batch, set the schema; for subsequent batches, verify compatibility
-      if (batchIndex == 0) {
-        structType = batchStructType
-        combinedRows = batchRows
-
-      } else {
-        if (batchStructType != structType) {
-          throw InvalidInputErrors.chunkedCachedLocalRelationChunksWithDifferentSchema()
-        }
-        combinedRows = combinedRows ++ batchRows
-      }
+    val (rows, structType) =
+      ArrowConverters.fromIPCStream(dataHashes.iterator.map(readChunkedCachedLocalRelationBlock))
+    try {
+      buildLocalRelationFromRows(rows, structType, Option(schema))
+    } finally {
+      rows.close()
     }
-
-    buildLocalRelationFromRows(combinedRows, structType, Option(schema))
   }
 
   private def toStructTypeOrWrap(dt: DataType): StructType = dt match {
