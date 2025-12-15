@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.datasketches.memory.Memory
-import org.apache.datasketches.tuple.{Intersection, Sketch, Sketches, Summary, SummaryFactory, SummarySetOperations, Union, UpdatableSketch, UpdatableSketchBuilder, UpdatableSummary}
-import org.apache.datasketches.tuple.adouble.{DoubleSummary, DoubleSummaryDeserializer, DoubleSummaryFactory, DoubleSummarySetOperations}
-import org.apache.datasketches.tuple.aninteger.{IntegerSummary, IntegerSummaryDeserializer, IntegerSummaryFactory, IntegerSummarySetOperations}
-import org.apache.datasketches.tuple.strings.{ArrayOfStringsSummary, ArrayOfStringsSummaryDeserializer, ArrayOfStringsSummaryFactory, ArrayOfStringsSummarySetOperations}
+import org.apache.datasketches.tuple.{Intersection, Sketch, Summary, SummaryFactory, SummarySetOperations, Union, UpdatableSketch, UpdatableSketchBuilder, UpdatableSummary}
+import org.apache.datasketches.tuple.adouble.{DoubleSummary, DoubleSummaryFactory, DoubleSummarySetOperations}
+import org.apache.datasketches.tuple.aninteger.{IntegerSummary, IntegerSummaryFactory, IntegerSummarySetOperations}
+import org.apache.datasketches.tuple.strings.{ArrayOfStringsSummary, ArrayOfStringsSummaryFactory, ArrayOfStringsSummarySetOperations}
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.InternalRow
@@ -67,7 +66,13 @@ case class FinalizedTupleSketch[S <: Summary](sketch: Sketch[S]) extends TupleSk
 /**
  * The TupleSketchAggDouble function utilizes a Datasketches TupleSketch instance to count a
  * probabilistic approximation of the number of unique values in a given column with associated
- * double type summary values, and outputs the binary representation of the TupleSketch.
+ * double type summary values that can be aggregated using different modes (sum, min, max,
+ * alwaysone), and outputs the binary representation of the TupleSketch.
+ *
+ * Keys are hashed internally based on their type and value - the same logical value in different
+ * types (e.g., String("123") and Int(123)) will be treated as distinct keys. However, summary
+ * value types must be consistent across all calls; mixing types can produce incorrect results or
+ * precision loss. The value type suffix in the function name (e.g., _double) ensures type safety.
  *
  * See [[https://datasketches.apache.org/docs/Tuple/TupleSketches.html]] for more information.
  *
@@ -131,9 +136,11 @@ case class TupleSketchAggDouble(
    */
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = checkBaseInputDataTypes()
-    if (defaultCheck.isFailure) return defaultCheck
-
-    checkModeParameter()
+    if (defaultCheck.isFailure) {
+      defaultCheck
+    } else {
+      checkModeParameter()
+    }
   }
 
   // Copy constructors required by ImperativeAggregate
@@ -165,9 +172,6 @@ case class TupleSketchAggDouble(
 
   /**
    * Creates a DoubleSummaryFactory with the configured aggregation mode.
-   *
-   * @return
-   *   a DoubleSummaryFactory instance configured with the aggregation mode
    */
   override protected def createSummaryFactory(): SummaryFactory[DoubleSummary] = {
     val mode = ThetaSketchUtils.getDoubleSummaryMode(modeInput)
@@ -176,9 +180,6 @@ case class TupleSketchAggDouble(
 
   /**
    * Creates DoubleSummarySetOperations for merge operations with the configured mode.
-   *
-   * @return
-   *   a DoubleSummarySetOperations instance configured with the aggregation mode
    */
   override protected def createSummarySetOperations(): SummarySetOperations[DoubleSummary] = {
     val mode = ThetaSketchUtils.getDoubleSummaryMode(modeInput)
@@ -214,9 +215,9 @@ case class TupleSketchAggDouble(
   override def deserialize(buffer: Array[Byte]): TupleSketchState[DoubleSummary] = {
     if (buffer.nonEmpty) {
       FinalizedTupleSketch(
-        Sketches.heapifySketch(Memory.wrap(buffer), new DoubleSummaryDeserializer()))
+        ThetaSketchUtils.heapifyDoubleTupleSketch(buffer, prettyName))
     } else {
-      this.createAggregationBuffer()
+      createAggregationBuffer()
     }
   }
 }
@@ -224,7 +225,13 @@ case class TupleSketchAggDouble(
 /**
  * The TupleSketchAggInteger function utilizes a Datasketches TupleSketch instance to count a
  * probabilistic approximation of the number of unique values in a given column with associated
- * integer type summary values, and outputs the binary representation of the TupleSketch.
+ * integer type summary values that can be aggregated using different modes (sum, min, max,
+ * alwaysone), and outputs the binary representation of the TupleSketch.
+ *
+ * Keys are hashed internally based on their type and value - the same logical value in different
+ * types (e.g., String("123") and Int(123)) will be treated as distinct keys. However, summary
+ * value types must be consistent across all calls; mixing types can produce incorrect results or
+ * precision loss. The value type suffix in the function name (e.g., _integer) ensures type safety.
  *
  * See [[https://datasketches.apache.org/docs/Tuple/TupleSketches.html]] for more information.
  *
@@ -288,9 +295,11 @@ case class TupleSketchAggInteger(
    */
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = checkBaseInputDataTypes()
-    if (defaultCheck.isFailure) return defaultCheck
-
-    checkModeParameter()
+    if (defaultCheck.isFailure) {
+      defaultCheck
+    } else {
+      checkModeParameter()
+    }
   }
 
   // Copy constructors required by ImperativeAggregate
@@ -322,9 +331,6 @@ case class TupleSketchAggInteger(
 
   /**
    * Creates an IntegerSummaryFactory with the configured aggregation mode.
-   *
-   * @return
-   *   an IntegerSummaryFactory instance configured with the aggregation mode
    */
   override protected def createSummaryFactory(): SummaryFactory[IntegerSummary] = {
     val mode = ThetaSketchUtils.getIntegerSummaryMode(modeInput)
@@ -333,9 +339,6 @@ case class TupleSketchAggInteger(
 
   /**
    * Creates IntegerSummarySetOperations for merge operations with the configured mode.
-   *
-   * @return
-   *   an IntegerSummarySetOperations instance configured with the aggregation mode
    */
   override protected def createSummarySetOperations(): SummarySetOperations[IntegerSummary] = {
     val mode = ThetaSketchUtils.getIntegerSummaryMode(modeInput)
@@ -370,9 +373,9 @@ case class TupleSketchAggInteger(
   override def deserialize(buffer: Array[Byte]): TupleSketchState[IntegerSummary] = {
     if (buffer.nonEmpty) {
       FinalizedTupleSketch(
-        Sketches.heapifySketch(Memory.wrap(buffer), new IntegerSummaryDeserializer()))
+        ThetaSketchUtils.heapifyIntegerTupleSketch(buffer, prettyName))
     } else {
-      this.createAggregationBuffer()
+      createAggregationBuffer()
     }
   }
 }
@@ -380,8 +383,13 @@ case class TupleSketchAggInteger(
 /**
  * The TupleSketchAggString function utilizes a Datasketches TupleSketch instance to count a
  * probabilistic approximation of the number of unique values in a given column with associated
- * string or string array type summary values, and outputs the binary representation of the
- * TupleSketch.
+ * string or string array type summary values that are collected (not aggregated with modes like
+ * numeric types), and outputs the binary representation of the TupleSketch.
+ *
+ * Keys are hashed internally based on their type and value - the same logical value in different
+ * types (e.g., String("123") and Int(123)) will be treated as distinct keys. However, summary
+ * value types must be consistent across all calls; mixing types can produce incorrect results. The
+ * value type suffix in the function name (e.g., _string) ensures type safety.
  *
  * See [[https://datasketches.apache.org/docs/Tuple/TupleSketches.html]] for more information.
  *
@@ -465,13 +473,13 @@ case class TupleSketchAggString(
 
   /** Specifies accepted summary input types (string or array of strings). */
   override protected def summaryInputType: AbstractDataType =
-    TypeCollection(StringTypeWithCollation(supportsTrimCollation = true), ArrayType(StringType))
+    TypeCollection(
+      StringTypeWithCollation(supportsTrimCollation = true),
+      ArrayType(StringType, containsNull = true)
+    )
 
   /**
    * Creates an ArrayOfStringsSummaryFactory. Aggregation mode is not supported here.
-   *
-   * @return
-   *   an ArrayOfStringsSummaryFactory instance
    */
   override protected def createSummaryFactory(): SummaryFactory[ArrayOfStringsSummary] = {
     new ArrayOfStringsSummaryFactory()
@@ -480,9 +488,6 @@ case class TupleSketchAggString(
   /**
    * Creates ArrayOfStringsSummarySetOperations for merge operations. Aggregation mode is not
    * supported here.
-   *
-   * @return
-   *   an ArrayOfStringsSummarySetOperations instance
    */
   override protected def createSummarySetOperations()
       : SummarySetOperations[ArrayOfStringsSummary] = {
@@ -523,9 +528,9 @@ case class TupleSketchAggString(
   override def deserialize(buffer: Array[Byte]): TupleSketchState[ArrayOfStringsSummary] = {
     if (buffer.nonEmpty) {
       FinalizedTupleSketch(
-        Sketches.heapifySketch(Memory.wrap(buffer), new ArrayOfStringsSummaryDeserializer()))
+        ThetaSketchUtils.heapifyStringTupleSketch(buffer, prettyName))
     } else {
-      this.createAggregationBuffer()
+      createAggregationBuffer()
     }
   }
 }
@@ -561,9 +566,11 @@ abstract class TupleSketchAggBase[U, S <: UpdatableSummary[U]]
 
   protected def checkBaseInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
-    if (defaultCheck.isFailure) return defaultCheck
-
-    checkLgNomEntriesParameter()
+    if (defaultCheck.isFailure) {
+      defaultCheck
+    } else {
+      checkLgNomEntriesParameter()
+    }
   }
 
   /**
@@ -601,7 +608,9 @@ abstract class TupleSketchAggBase[U, S <: UpdatableSummary[U]]
     val summaryValue = summary.eval(input)
 
     // Return early for null values.
-    if (keyValue == null || summaryValue == null) return updateBuffer
+    if (keyValue == null || summaryValue == null) {
+      updateBuffer
+    } else {
 
     /**
      * Normalize summary to a datasketch supported type if possible. Type checking is already done
@@ -645,7 +654,8 @@ abstract class TupleSketchAggBase[U, S <: UpdatableSummary[U]]
           messageParameters = Map("dataType" -> key.dataType.toString))
     }
 
-    updateBuffer
+      updateBuffer
+    }
   }
 
   /**
@@ -778,9 +788,11 @@ case class TupleUnionAggDouble(
    */
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = checkBaseInputDataTypes()
-    if (defaultCheck.isFailure) return defaultCheck
-
-    checkModeParameter()
+    if (defaultCheck.isFailure) {
+      defaultCheck
+    } else {
+      checkModeParameter()
+    }
   }
 
   // Copy constructors required by ImperativeAggregate
@@ -806,9 +818,6 @@ case class TupleUnionAggDouble(
 
   /**
    * Creates DoubleSummarySetOperations for merge operations.
-   *
-   * @return
-   *   a DoubleSummarySetOperations instance configured with the aggregation mode
    */
   override protected def createSummarySetOperations(): SummarySetOperations[DoubleSummary] = {
     val mode = ThetaSketchUtils.getDoubleSummaryMode(modeInput)
@@ -839,7 +848,7 @@ case class TupleUnionAggDouble(
     if (buffer.nonEmpty) {
       FinalizedTupleSketch(heapifySketch(buffer))
     } else {
-      this.createAggregationBuffer()
+      createAggregationBuffer()
     }
   }
 }
@@ -904,9 +913,11 @@ case class TupleUnionAggInteger(
    */
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = checkBaseInputDataTypes()
-    if (defaultCheck.isFailure) return defaultCheck
-
-    checkModeParameter()
+    if (defaultCheck.isFailure) {
+      defaultCheck
+    } else {
+      checkModeParameter()
+    }
   }
 
   // Copy constructors required by ImperativeAggregate
@@ -932,9 +943,6 @@ case class TupleUnionAggInteger(
 
   /**
    * Creates IntegerSummarySetOperations for merge operations.
-   *
-   * @return
-   *   an IntegerSummarySetOperations instance configured with the aggregation mode
    */
   override protected def createSummarySetOperations(): SummarySetOperations[IntegerSummary] = {
     val mode = ThetaSketchUtils.getIntegerSummaryMode(modeInput)
@@ -965,7 +973,7 @@ case class TupleUnionAggInteger(
     if (buffer.nonEmpty) {
       FinalizedTupleSketch(heapifySketch(buffer))
     } else {
-      this.createAggregationBuffer()
+      createAggregationBuffer()
     }
   }
 }
@@ -1050,9 +1058,6 @@ case class TupleUnionAggString(
 
   /**
    * Creates ArrayOfStringsSummarySetOperations for merge operations.
-   *
-   * @return
-   *   an ArrayOfStringsSummarySetOperations instance
    */
   override protected def createSummarySetOperations()
       : SummarySetOperations[ArrayOfStringsSummary] = {
@@ -1083,7 +1088,7 @@ case class TupleUnionAggString(
     if (buffer.nonEmpty) {
       FinalizedTupleSketch(heapifySketch(buffer))
     } else {
-      this.createAggregationBuffer()
+      createAggregationBuffer()
     }
   }
 }
@@ -1105,9 +1110,11 @@ abstract class TupleUnionAggBase[S <: Summary]
 
   protected def checkBaseInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
-    if (defaultCheck.isFailure) return defaultCheck
-
-    checkLgNomEntriesParameter()
+    if (defaultCheck.isFailure) {
+      defaultCheck
+    } else {
+      checkLgNomEntriesParameter()
+    }
   }
 
   /**
@@ -1140,7 +1147,9 @@ abstract class TupleUnionAggBase[S <: Summary]
     val sketchBytes = child.eval(input)
 
     // Return early for null values
-    if (sketchBytes == null) return unionBuffer
+    if (sketchBytes == null) {
+      unionBuffer
+    } else {
 
     val bytes = sketchBytes.asInstanceOf[Array[Byte]]
     val inputSketch = heapifySketch(bytes)
@@ -1150,9 +1159,10 @@ abstract class TupleUnionAggBase[S <: Summary]
       case _ => throw QueryExecutionErrors.tupleInvalidInputSketchBuffer(prettyName)
     }
 
-    // Merge it with the buffer
-    union.union(inputSketch)
-    unionBuffer
+      // Merge it with the buffer
+      union.union(inputSketch)
+      unionBuffer
+    }
   }
 
   /**
@@ -1262,9 +1272,11 @@ case class TupleIntersectionAggDouble(
    */
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
-    if (defaultCheck.isFailure) return defaultCheck
-
-    checkModeParameter()
+    if (defaultCheck.isFailure) {
+      defaultCheck
+    } else {
+      checkModeParameter()
+    }
   }
 
   // Copy constructors required by ImperativeAggregate
@@ -1289,9 +1301,6 @@ case class TupleIntersectionAggDouble(
 
   /**
    * Creates DoubleSummarySetOperations for intersection operations.
-   *
-   * @return
-   *   a DoubleSummarySetOperations instance configured with the aggregation mode
    */
   override protected def createSummarySetOperations(): SummarySetOperations[DoubleSummary] = {
     val mode = ThetaSketchUtils.getDoubleSummaryMode(modeInput)
@@ -1322,7 +1331,7 @@ case class TupleIntersectionAggDouble(
     if (buffer.nonEmpty) {
       FinalizedTupleSketch(heapifySketch(buffer))
     } else {
-      this.createAggregationBuffer()
+      createAggregationBuffer()
     }
   }
 }
@@ -1388,9 +1397,11 @@ case class TupleIntersectionAggInteger(
    */
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
-    if (defaultCheck.isFailure) return defaultCheck
-
-    checkModeParameter()
+    if (defaultCheck.isFailure) {
+      defaultCheck
+    } else {
+      checkModeParameter()
+    }
   }
 
   // Copy constructors required by ImperativeAggregate
@@ -1415,9 +1426,6 @@ case class TupleIntersectionAggInteger(
 
   /**
    * Creates IntegerSummarySetOperations for intersection operations.
-   *
-   * @return
-   *   an IntegerSummarySetOperations instance configured with the aggregation mode
    */
   override protected def createSummarySetOperations(): SummarySetOperations[IntegerSummary] = {
     val mode = ThetaSketchUtils.getIntegerSummaryMode(modeInput)
@@ -1448,7 +1456,7 @@ case class TupleIntersectionAggInteger(
     if (buffer.nonEmpty) {
       FinalizedTupleSketch(heapifySketch(buffer))
     } else {
-      this.createAggregationBuffer()
+      createAggregationBuffer()
     }
   }
 }
@@ -1525,9 +1533,6 @@ case class TupleIntersectionAggString(
 
   /**
    * Creates ArrayOfStringsSummarySetOperations for intersection operations.
-   *
-   * @return
-   *   an ArrayOfStringsSummarySetOperations instance
    */
   override protected def createSummarySetOperations()
       : SummarySetOperations[ArrayOfStringsSummary] = {
@@ -1558,7 +1563,7 @@ case class TupleIntersectionAggString(
     if (buffer.nonEmpty) {
       FinalizedTupleSketch(heapifySketch(buffer))
     } else {
-      this.createAggregationBuffer()
+      createAggregationBuffer()
     }
   }
 }
@@ -1607,7 +1612,9 @@ abstract class TupleIntersectionAggBase[S <: Summary]
     val sketchBytes = child.eval(input)
 
     // Return early for null values
-    if (sketchBytes == null) return intersectionBuffer
+    if (sketchBytes == null) {
+      intersectionBuffer
+    } else {
 
     val bytes = sketchBytes.asInstanceOf[Array[Byte]]
     val inputSketch = heapifySketch(bytes)
@@ -1617,9 +1624,10 @@ abstract class TupleIntersectionAggBase[S <: Summary]
       case _ => throw QueryExecutionErrors.tupleInvalidInputSketchBuffer(prettyName)
     }
 
-    // Merge it with the buffer
-    intersection.intersect(inputSketch)
-    intersectionBuffer
+      // Merge it with the buffer
+      intersection.intersect(inputSketch)
+      intersectionBuffer
+    }
   }
 
   /**
@@ -1689,26 +1697,26 @@ trait SketchSize extends AggregateFunction {
    */
   protected def checkLgNomEntriesParameter(): TypeCheckResult = {
     if (!lgNomEntries.foldable) {
-      return DataTypeMismatch(
+      DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
           "inputName" -> "lgNomEntries",
           "inputType" -> "int",
           "inputExpr" -> lgNomEntries.sql))
     } else if (lgNomEntries.eval() == null) {
-      return DataTypeMismatch(
+      DataTypeMismatch(
         errorSubClass = "UNEXPECTED_NULL",
         messageParameters = Map("exprName" -> "lgNomEntries"))
     } else {
       val lgNomEntriesVal = lgNomEntries.eval().asInstanceOf[Int]
       try {
         ThetaSketchUtils.checkLgNomLongs(lgNomEntriesVal, prettyName)
+        TypeCheckResult.TypeCheckSuccess
       } catch {
         case e: Exception =>
-          return TypeCheckResult.TypeCheckFailure(e.getMessage)
+          TypeCheckResult.TypeCheckFailure(e.getMessage)
       }
     }
-    TypeCheckResult.TypeCheckSuccess
   }
 
   /**
@@ -1743,24 +1751,24 @@ trait SummaryAggregateMode extends AggregateFunction {
    */
   protected def checkModeParameter(): TypeCheckResult = {
     if (!mode.foldable) {
-      return DataTypeMismatch(
+      DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters =
           Map("inputName" -> "mode", "inputType" -> "string", "inputExpr" -> mode.sql))
     } else if (mode.eval() == null) {
-      return DataTypeMismatch(
+      DataTypeMismatch(
         errorSubClass = "UNEXPECTED_NULL",
         messageParameters = Map("exprName" -> "mode"))
     } else {
       val modeStr = mode.eval().asInstanceOf[UTF8String].toString
       try {
         ThetaSketchUtils.checkMode(modeStr, prettyName)
+        TypeCheckResult.TypeCheckSuccess
       } catch {
         case e: Exception =>
-          return TypeCheckResult.TypeCheckFailure(e.getMessage)
+          TypeCheckResult.TypeCheckFailure(e.getMessage)
       }
     }
-    TypeCheckResult.TypeCheckSuccess
   }
 
   /**

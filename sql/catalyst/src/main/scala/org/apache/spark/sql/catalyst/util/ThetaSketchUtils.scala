@@ -162,7 +162,42 @@ object ThetaSketchUtils {
   }
 
   /**
-   * Deserializes a Double summary type binary tuple sketch representation into a CompactSketch.
+   * Deserializes a binary tuple sketch representation into a Sketch with the
+   * appropriate summary type.
+   *
+   * @param bytes
+   *   The binary sketch data to deserialize
+   * @param deserializer
+   *   The summary deserializer for the target summary type
+   * @param prettyName
+   *   The display name of the function/expression for error messages
+   * @tparam U
+   *   The summary type, inferred from the deserializer
+   * @return
+   *   A deserialized sketch with summary type U
+   */
+  def heapifyTupleSketch[U <: Summary](
+      bytes: Array[Byte],
+      deserializer: org.apache.datasketches.tuple.SummaryDeserializer[U],
+      prettyName: String): Sketch[U] = {
+    val memory =
+      try {
+        Memory.wrap(bytes)
+      } catch {
+        case _: NullPointerException | _: MemoryBoundsException =>
+          throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+      }
+
+    try {
+      Sketches.heapifySketch(memory, deserializer)
+    } catch {
+      case e: Exception =>
+        throw QueryExecutionErrors.tupleInvalidInputSketchBuffer(prettyName, e.getMessage)
+    }
+  }
+
+  /**
+   * Deserializes a Double summary type binary tuple sketch representation into a Sketch.
    *
    * @param bytes
    *   The binary sketch data to deserialize
@@ -172,27 +207,11 @@ object ThetaSketchUtils {
    *   A deserialized sketch
    */
   def heapifyDoubleTupleSketch(bytes: Array[Byte], prettyName: String): Sketch[DoubleSummary] = {
-    val memory =
-      try {
-        Memory.wrap(bytes)
-      } catch {
-        case _: NullPointerException | _: MemoryBoundsException =>
-          throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
-      }
-
-    val sketch =
-      try {
-        Sketches.heapifySketch(memory, new DoubleSummaryDeserializer())
-      } catch {
-        case e: Exception =>
-          throw QueryExecutionErrors.tupleInvalidInputSketchBuffer(prettyName, e.getMessage)
-      }
-
-    sketch
+    heapifyTupleSketch(bytes, new DoubleSummaryDeserializer(), prettyName)
   }
 
   /**
-   * Deserializes a Integer summary type binary tuple sketch representation into a CompactSketch.
+   * Deserializes an Integer summary type binary tuple sketch representation into a Sketch.
    *
    * @param bytes
    *   The binary sketch data to deserialize
@@ -204,27 +223,11 @@ object ThetaSketchUtils {
   def heapifyIntegerTupleSketch(
       bytes: Array[Byte],
       prettyName: String): Sketch[IntegerSummary] = {
-    val memory =
-      try {
-        Memory.wrap(bytes)
-      } catch {
-        case _: NullPointerException | _: MemoryBoundsException =>
-          throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
-      }
-
-    val sketch =
-      try {
-        Sketches.heapifySketch(memory, new IntegerSummaryDeserializer())
-      } catch {
-        case e: Exception =>
-          throw QueryExecutionErrors.tupleInvalidInputSketchBuffer(prettyName, e.getMessage)
-      }
-
-    sketch
+    heapifyTupleSketch(bytes, new IntegerSummaryDeserializer(), prettyName)
   }
 
   /**
-   * Deserializes a String summary type binary tuple sketch representation into a CompactSketch.
+   * Deserializes a String summary type binary tuple sketch representation into a Sketch.
    *
    * @param bytes
    *   The binary sketch data to deserialize
@@ -236,23 +239,7 @@ object ThetaSketchUtils {
   def heapifyStringTupleSketch(
       bytes: Array[Byte],
       prettyName: String): Sketch[ArrayOfStringsSummary] = {
-    val memory =
-      try {
-        Memory.wrap(bytes)
-      } catch {
-        case _: NullPointerException | _: MemoryBoundsException =>
-          throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
-      }
-
-    val sketch =
-      try {
-        Sketches.heapifySketch(memory, new ArrayOfStringsSummaryDeserializer())
-      } catch {
-        case e: Exception =>
-          throw QueryExecutionErrors.tupleInvalidInputSketchBuffer(prettyName, e.getMessage)
-      }
-
-    sketch
+    heapifyTupleSketch(bytes, new ArrayOfStringsSummaryDeserializer(), prettyName)
   }
 
   /**
