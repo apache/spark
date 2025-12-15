@@ -139,7 +139,7 @@ Your pipelines implemented with the Python API must import this module. It's rec
 from pyspark import pipelines as dp
 ```
 
-### Creating Materialized View
+### Creating Materialized View in Python
 
 The `@dp.materialized_view` decorator tells SDP to create a materialized view based on the results of a function that performs a batch read:
 
@@ -165,7 +165,7 @@ def basic_mv() -> DataFrame:
     return spark.table("samples.nyctaxi.trips")
 ```
 
-### Creating Temporary View
+### Creating Temporary View in Python
 
 The `@dp.temporary_view` decorator tells SDP to create a temporary view based on the results of a function that performs a batch read:
 
@@ -180,7 +180,7 @@ def basic_tv() -> DataFrame:
 
 This temporary view can be read by other queries within the pipeline, but can't be read outside the scope of the pipeline.
 
-### Creating Streaming Table
+### Creating Streaming Table in Python
 
 You can create a streaming table using the `@dp.table` decorator with a function that performs a streaming read:
 
@@ -193,7 +193,7 @@ def basic_st() -> DataFrame:
     return spark.readStream.table("samples.nyctaxi.trips")
 ```
 
-### Loading Data from Streaming Source
+### Loading Data from Streaming Sources in Python
 
 SDP supports loading data from all the formats supported by Spark Structured Streaming (`spark.readStream`).
 
@@ -214,7 +214,7 @@ def ingestion_st() -> DataFrame:
     )
 ```
 
-### Loading Data from Batch Source
+### Loading Data from Batch Sources in Python
 
 SDP supports loading data from all the formats supported by Spark SQL (`spark.read`).
 
@@ -227,7 +227,7 @@ def batch_mv() -> DataFrame:
     return spark.read.format("json").load("/datasets/retail-org/sales_orders")
 ```
 
-### Querying Tables Defined in Your Pipeline
+### Querying Tables Defined in Your Pipeline in Python
 
 You can reference other tables defined in your pipeline in the same way you'd reference tables defined outside your pipeline:
 
@@ -280,7 +280,7 @@ def daily_orders_by_state() -> DataFrame:
     )
 ```
 
-### Creating Tables in a For Loop
+### Creating Tables in For Loop in Python
 
 You can use Python `for` loops to create multiple tables programmatically:
 
