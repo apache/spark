@@ -26,13 +26,33 @@ if have_duckdb:
 
 @unittest.skipIf(not have_duckdb, "duckdb is not installed")
 class TestSparkArrowCStreamer(unittest.TestCase):
-    def test_spark_arrow_c_streamer(self):
+    def _create_arrow_c_stream(self):
         pdf = pd.DataFrame([[1, "a"], [2, "b"], [3, "c"], [4, "d"]], columns=["id", "value"])
         psdf = ps.from_pandas(pdf)
-        # Use Spark Arrow C Streamer to convert PyArrow Table to DuckDB relation
         stream = pa.RecordBatchReader.from_stream(psdf)
-        assert isinstance(stream, pa.RecordBatchReader)
+        return stream
 
+    def test_spark_arrow_c_streamer_arrow_consumer(self):
+        stream = self._create_arrow_c_stream()
+        assert isinstance(stream, pa.RecordBatchReader)
+        result = pa.Table.from_batches(stream)
+        schema = pa.schema([
+            ("__index_level_0__", pa.int64(), False),
+            ("id", pa.int64(), False),
+            ("value", pa.string(), False),
+        ])
+        expected = pa.Table.from_pandas(
+            pd.DataFrame(
+                [[0, 1, "a"], [1, 2, "b"], [2, 3, "c"], [3, 4, "d"]],
+                columns=["__index_level_0__", "id", "value"],
+            ),
+            schema=schema,
+        )
+        self.assertEqual(result, expected)
+
+    def test_spark_arrow_c_streamer_duckdb_consumer(self):
+        stream = self._create_arrow_c_stream()
+        assert isinstance(stream, pa.RecordBatchReader)
         # Verify the contents of the DuckDB relation
         result = duckdb.execute("SELECT id, value from stream").fetchall()
         expected = [(1, "a"), (2, "b"), (3, "c"), (4, "d")]
