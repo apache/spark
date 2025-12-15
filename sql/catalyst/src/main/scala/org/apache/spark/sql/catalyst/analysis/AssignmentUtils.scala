@@ -284,7 +284,7 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
         val namedStruct = toNamedStruct(structType, updatedFieldExprs)
 
         // Prevent unnecessary null struct expansion
-        fixNullExpansion(colExpr, value, structType, namedStruct, colPath, addError)
+        fixNullExpansion(colExpr, value, structType, namedStruct, colPath)
 
       case otherType =>
         addError(
@@ -345,7 +345,6 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
    * @param structType the target struct type
    * @param structExpression the result create struct expression result to wrap
    * @param colPath the column path for error reporting
-   * @param addError error reporting function
    * @return the wrapped expression with null checks
    */
   private def fixNullExpansion(
@@ -353,8 +352,7 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
       value: Expression,
       structType: StructType,
       structExpression: Expression,
-      colPath: Seq[String],
-      addError: String => Unit): Expression = {
+      colPath: Seq[String]): Expression = {
     // As StoreAssignmentPolicy.LEGACY is not allowed in DSv2, always add null check for
     // non-nullable column
     if (!key.nullable) {
