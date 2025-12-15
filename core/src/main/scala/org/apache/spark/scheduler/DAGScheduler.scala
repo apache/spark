@@ -2314,7 +2314,7 @@ private[spark] class DAGScheduler(
               // even if the map tasks are re-tried.
               if (mapStage.isIndeterminate && !mapStage.shuffleDep.checksumMismatchFullRetryEnabled) {
                 val stagesToRollback = collectSucceedingStages(mapStage)
-                val rollingBackStages = abortStagesUnableToRollback(stagesToRollback)
+                val stagesCanRollback = abortStagesUnableToRollback(stagesToRollback)
                 logInfo(log"The shuffle map stage ${MDC(STAGE, mapStage)} with indeterminate output " +
                   log"was failed, we will roll back and rerun below stages which include itself and all " +
                   log"its indeterminate child stages: ${MDC(STAGES, rollingBackStages)}")
