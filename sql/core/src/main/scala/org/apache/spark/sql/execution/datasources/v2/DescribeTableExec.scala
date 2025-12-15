@@ -23,7 +23,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, ClusterBySpec}
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.util.{quoteIdentifier, quoteIfNeeded, ResolveDefaultColumns}
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsMetadataColumns, SupportsRead, Table, TableCatalog}
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, IdentityTransform}
 import org.apache.spark.sql.connector.read.SupportsReportStatistics
@@ -94,7 +94,7 @@ case class DescribeTableExec(
       rows += emptyRow()
       rows += toCatalystRow("# Constraints", "", "")
       rows ++= table.constraints().map{ constraint =>
-        toCatalystRow(quoteIdentifier(constraint.name()), constraint.toDescription, "")
+        toCatalystRow(constraint.name(), constraint.toDescription, "")
       }
     }
   }
