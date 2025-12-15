@@ -180,8 +180,8 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
   }
 
   /**
-   * Closes the MLCache and cleans up resources. Only performs cleanup if ML directories were
-   * created during the session. Called by SessionHolder during session cleanup.
+   * Closes the MLCache and cleans up resources. Only performs cleanup if ML directories or models
+   * were created during the session. Called by SessionHolder during session cleanup.
    */
   def close(): Unit = {
     if (hasCreatedMLDirs.get() || cachedModel.size() > 0) {
