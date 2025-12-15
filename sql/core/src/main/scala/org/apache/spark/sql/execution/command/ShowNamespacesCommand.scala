@@ -91,7 +91,7 @@ object ShowNamespacesCommand {
  * Example output:
  * {{{
  * {
- *   "databases": [
+ *   "namespaces": [
  *     {"name": "default"},
  *     {"name": "test_db"}
  *   ]
@@ -112,9 +112,7 @@ case class ShowNamespacesJsonCommand(
       JObject("name" -> JString(name))
     }
 
-    val jsonOutput = JObject(
-      (if (SQLConf.get.legacyOutputSchema) "databases" else "namespaces") ->
-        JArray(databasesJson.toList))
+    val jsonOutput = JObject("namespaces" -> JArray(databasesJson.toList))
 
     Seq(Row(compact(render(jsonOutput))))
   }
@@ -126,14 +124,9 @@ case class ShowNamespacesJsonCommand(
 
 object ShowNamespacesJsonCommand {
   def output: Seq[AttributeReference] = {
-    val (columnName, comment) = if (SQLConf.get.legacyOutputSchema) {
-      ("databaseName", "JSON list of databases")
-    } else {
-      ("namespace", "JSON list of namespaces")
-    }
     Seq(
-      AttributeReference(columnName, StringType, nullable = false,
-        new MetadataBuilder().putString("comment", comment).build())()
+      AttributeReference("json_metadata", StringType, nullable = false,
+        new MetadataBuilder().putString("comment", "JSON list of namespaces").build())()
     )
   }
 }

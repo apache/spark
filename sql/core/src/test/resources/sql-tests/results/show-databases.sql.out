@@ -156,7 +156,7 @@ dev_db
 -- !query
 SHOW DATABASES AS JSON
 -- !query schema
-struct<namespace:string>
+struct<json_metadata:string>
 -- !query output
 {"namespaces":[{"name":"default"},{"name":"dev_db"},{"name":"prod_db"},{"name":"test_db1"},{"name":"test_db2"}]}
 
@@ -164,7 +164,7 @@ struct<namespace:string>
 -- !query
 SHOW SCHEMAS AS JSON
 -- !query schema
-struct<namespace:string>
+struct<json_metadata:string>
 -- !query output
 {"namespaces":[{"name":"default"},{"name":"dev_db"},{"name":"prod_db"},{"name":"test_db1"},{"name":"test_db2"}]}
 
@@ -172,7 +172,7 @@ struct<namespace:string>
 -- !query
 SHOW NAMESPACES AS JSON
 -- !query schema
-struct<namespace:string>
+struct<json_metadata:string>
 -- !query output
 {"namespaces":[{"name":"default"},{"name":"dev_db"},{"name":"prod_db"},{"name":"test_db1"},{"name":"test_db2"}]}
 
@@ -180,7 +180,7 @@ struct<namespace:string>
 -- !query
 SHOW DATABASES LIKE 'test*' AS JSON
 -- !query schema
-struct<namespace:string>
+struct<json_metadata:string>
 -- !query output
 {"namespaces":[{"name":"test_db1"},{"name":"test_db2"}]}
 
@@ -188,7 +188,7 @@ struct<namespace:string>
 -- !query
 SHOW DATABASES LIKE 'nonexistent*' AS JSON
 -- !query schema
-struct<namespace:string>
+struct<json_metadata:string>
 -- !query output
 {"namespaces":[]}
 
@@ -196,7 +196,7 @@ struct<namespace:string>
 -- !query
 SHOW DATABASES IN spark_catalog AS JSON
 -- !query schema
-struct<namespace:string>
+struct<json_metadata:string>
 -- !query output
 {"namespaces":[{"name":"default"},{"name":"dev_db"},{"name":"prod_db"},{"name":"test_db1"},{"name":"test_db2"}]}
 
@@ -204,7 +204,7 @@ struct<namespace:string>
 -- !query
 SHOW DATABASES FROM spark_catalog AS JSON
 -- !query schema
-struct<namespace:string>
+struct<json_metadata:string>
 -- !query output
 {"namespaces":[{"name":"default"},{"name":"dev_db"},{"name":"prod_db"},{"name":"test_db1"},{"name":"test_db2"}]}
 
@@ -212,7 +212,7 @@ struct<namespace:string>
 -- !query
 SHOW DATABASES LIKE 'test_db*' AS JSON
 -- !query schema
-struct<namespace:string>
+struct<json_metadata:string>
 -- !query output
 {"namespaces":[{"name":"test_db1"},{"name":"test_db2"}]}
 
@@ -220,7 +220,7 @@ struct<namespace:string>
 -- !query
 SHOW DATABASES LIKE 'prod*' AS JSON
 -- !query schema
-struct<namespace:string>
+struct<json_metadata:string>
 -- !query output
 {"namespaces":[{"name":"prod_db"}]}
 
@@ -228,7 +228,7 @@ struct<namespace:string>
 -- !query
 SHOW DATABASES LIKE 'dev*' AS JSON
 -- !query schema
-struct<namespace:string>
+struct<json_metadata:string>
 -- !query output
 {"namespaces":[{"name":"dev_db"}]}
 
@@ -236,7 +236,7 @@ struct<namespace:string>
 -- !query
 SHOW DATABASES LIKE 'TEST*' AS JSON
 -- !query schema
-struct<namespace:string>
+struct<json_metadata:string>
 -- !query output
 {"namespaces":[{"name":"test_db1"},{"name":"test_db2"}]}
 
@@ -244,7 +244,7 @@ struct<namespace:string>
 -- !query
 SHOW DATABASES LIKE 'Test*' AS JSON
 -- !query schema
-struct<namespace:string>
+struct<json_metadata:string>
 -- !query output
 {"namespaces":[{"name":"test_db1"},{"name":"test_db2"}]}
 
@@ -252,7 +252,7 @@ struct<namespace:string>
 -- !query
 SHOW DATABASES LIKE 'test_*' AS JSON
 -- !query schema
-struct<namespace:string>
+struct<json_metadata:string>
 -- !query output
 {"namespaces":[{"name":"test_db1"},{"name":"test_db2"}]}
 
@@ -260,7 +260,7 @@ struct<namespace:string>
 -- !query
 SHOW DATABASES LIKE '*_db*' AS JSON
 -- !query schema
-struct<namespace:string>
+struct<json_metadata:string>
 -- !query output
 {"namespaces":[{"name":"dev_db"},{"name":"prod_db"},{"name":"test_db1"},{"name":"test_db2"}]}
 
@@ -276,17 +276,17 @@ spark.sql.legacy.keepCommandOutputSchema	true
 -- !query
 SHOW DATABASES AS JSON
 -- !query schema
-struct<databaseName:string>
+struct<json_metadata:string>
 -- !query output
-{"databases":[{"name":"default"},{"name":"dev_db"},{"name":"prod_db"},{"name":"test_db1"},{"name":"test_db2"}]}
+{"namespaces":[{"name":"default"},{"name":"dev_db"},{"name":"prod_db"},{"name":"test_db1"},{"name":"test_db2"}]}
 
 
 -- !query
 SHOW DATABASES LIKE 'test*' AS JSON
 -- !query schema
-struct<databaseName:string>
+struct<json_metadata:string>
 -- !query output
-{"databases":[{"name":"test_db1"},{"name":"test_db2"}]}
+{"namespaces":[{"name":"test_db1"},{"name":"test_db2"}]}
 
 
 -- !query
