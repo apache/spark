@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.time.{Duration, LocalDateTime, LocalTime, Period}
+import java.util.Locale
 
 import scala.util.Random
 
