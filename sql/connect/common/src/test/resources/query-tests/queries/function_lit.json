@@ -363,15 +363,6 @@
           }, {
             "integer": 6
           }]
-        },
-        "dataType": {
-          "array": {
-            "elementType": {
-              "integer": {
-              }
-            },
-            "containsNull": true
-          }
         }
       },
       "common": {
@@ -394,10 +385,6 @@
     }, {
       "literal": {
         "null": {
-          "null": {
-          }
-        },
-        "dataType": {
           "null": {
           }
         }

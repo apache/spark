@@ -17,18 +17,15 @@
 
 package org.apache.spark.sql.connect.planner
 
-import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters}
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
-import org.apache.spark.sql.connect.common.InvalidPlanInput
-import org.apache.spark.sql.connect.common.LiteralValueProtoConverter
+import org.apache.spark.sql.connect.common.{FromProtoToScalaConverter, LiteralValueProtoConverter}
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.ToLiteralProtoOptions
-import org.apache.spark.sql.connect.planner.LiteralExpressionProtoConverter
 import org.apache.spark.sql.types._
 
-class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:ignore funsuite
+class LiteralExpressionProtoConverterSuite extends SparkFunSuite {
 
   private def toLiteralProto(v: Any): proto.Expression.Literal = {
     LiteralValueProtoConverter
@@ -49,7 +46,7 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
   test("basic proto value and catalyst value conversion") {
     val values = Array(null, true, 1.toByte, 1.toShort, 1, 1L, 1.1d, 1.1f, "spark")
     for (v <- values) {
-      assertResult(v)(LiteralValueProtoConverter.toScalaValue(toLiteralProto(v)))
+      assertResult(v)(FromProtoToScalaConverter.convertToValue(toLiteralProto(v)))
     }
   }
 
@@ -124,7 +121,6 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
       Seq(1, 2, 3),
       Some(ArrayType(IntegerType, containsNull = false)),
       ToLiteralProtoOptions(useDeprecatedDataTypeFields = true))
-    assert(!literalProto.hasDataType)
     assert(literalProto.getArray.getElementsList.size == 3)
     assert(literalProto.getArray.getElementType.hasInteger)
 
@@ -147,7 +143,6 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
       Map[String, Int]("a" -> 1, "b" -> 2),
       Some(MapType(StringType, IntegerType, valueContainsNull = false)),
       ToLiteralProtoOptions(useDeprecatedDataTypeFields = true))
-    assert(!literalProto.hasDataType)
     assert(literalProto.getMap.getKeysList.size == 2)
     assert(literalProto.getMap.getValuesList.size == 2)
     assert(literalProto.getMap.getKeyType.hasString)
@@ -172,15 +167,14 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
 
   test("backward compatibility for struct literal proto") {
     // Test the old way of defining structs with structType field and elements
+    val schema = StructType(
+      Seq(
+        StructField("a", IntegerType, nullable = true),
+        StructField("b", StringType, nullable = false)))
     val structProto = LiteralValueProtoConverter.toLiteralProtoWithOptions(
       (1, "test"),
-      Some(
-        StructType(
-          Seq(
-            StructField("a", IntegerType, nullable = true),
-            StructField("b", StringType, nullable = false)))),
+      Some(schema),
       ToLiteralProtoOptions(useDeprecatedDataTypeFields = true))
-    assert(!structProto.hasDataType)
     assert(structProto.getStruct.getElementsList.size == 2)
     val structTypeProto = structProto.getStruct.getStructType.getStruct
     assert(structTypeProto.getFieldsList.size == 2)
@@ -189,8 +183,7 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
     assert(structTypeProto.getFieldsList.get(1).getName == "b")
     assert(structTypeProto.getFieldsList.get(1).getDataType.hasString)
 
-    val result = LiteralValueProtoConverter.toScalaValue(structProto)
-    val resultType = LiteralValueProtoConverter.getProtoDataType(structProto)
+    val (resultType, result) = FromProtoToScalaConverter.convert(structProto)
 
     // Verify the result is a GenericRowWithSchema with correct values
     assert(result.isInstanceOf[GenericRowWithSchema])
@@ -198,36 +191,25 @@ class LiteralExpressionProtoConverterSuite extends AnyFunSuite { // scalastyle:i
     assert(row.length == 2)
     assert(row.get(0) == 1)
     assert(row.get(1) == "test")
-
-    // Verify the returned struct type matches the original
-    assert(resultType.getKindCase == proto.DataType.KindCase.STRUCT)
-    val structType = resultType.getStruct
-    assert(structType.getFieldsCount == 2)
-    assert(structType.getFields(0).getName == "a")
-    assert(structType.getFields(0).getDataType.hasInteger)
-    assert(structType.getFields(0).getNullable)
-    assert(structType.getFields(1).getName == "b")
-    assert(structType.getFields(1).getDataType.hasString)
-    assert(!structType.getFields(1).getNullable)
+    assert(row.schema == resultType)
+    assert(resultType == schema)
   }
 
-  test("an invalid array literal") {
+  test("an empty array literal") {
     val literalProto = proto.Expression.Literal
       .newBuilder()
       .setArray(proto.Expression.Literal.Array.newBuilder())
       .build()
-    intercept[InvalidPlanInput] {
-      LiteralValueProtoConverter.toScalaValue(literalProto)
-    }
+    val result = FromProtoToScalaConverter.convertToValue(literalProto)
+    assert(result == Seq.empty[Any])
   }
 
-  test("an invalid map literal") {
+  test("an empty map literal") {
     val literalProto = proto.Expression.Literal
       .newBuilder()
       .setMap(proto.Expression.Literal.Map.newBuilder())
       .build()
-    intercept[InvalidPlanInput] {
-      LiteralValueProtoConverter.toScalaValue(literalProto)
-    }
+    val result = FromProtoToScalaConverter.convertToValue(literalProto)
+    assert(result == Map.empty[Any, Any])
   }
 }
