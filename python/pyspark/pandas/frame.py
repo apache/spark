@@ -11142,8 +11142,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         return self._result_aggregated(column_labels, applied)
 
     def any(
-        self, axis: Optional[Axis] = 0, bool_only: Optional[bool] = None, skipna: bool = True,
-            **kwargs: Any
+        self,
+        axis: Optional[Axis] = 0,
+        bool_only: Optional[bool] = None,
+        skipna: bool = True,
+        **kwargs: Any,
     ) -> "Series":
         """
         Return whether any element is True.
