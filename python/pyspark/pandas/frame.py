@@ -11141,9 +11141,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         return self._result_aggregated(column_labels, applied)
 
-    # TODO(SPARK-46166): axis and **kwargs should be implemented.
     def any(
-        self, axis: Axis = 0, bool_only: Optional[bool] = None, skipna: bool = True
+        self, axis: Optional[Axis] = 0, bool_only: Optional[bool] = None, skipna: bool = True,
+            **kwargs: Any
     ) -> "Series":
         """
         Return whether any element is True.
@@ -11153,11 +11153,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Parameters
         ----------
-        axis : {0 or 'index'}, default 0
+        axis : {0, 'index', 1, 'columns' or None}, default 0
             Indicate which axis or axes should be reduced.
 
             * 0 / 'index' : reduce the index, return a Series whose index is the
               original column labels.
+            * 1 / 'columns' : reduce the columns, return a Series whose index is the
+              original row index.
+            * None : reduce all dimensions, return a single boolean value.
 
         bool_only : bool, default None
             Include only boolean columns. If None, will attempt to use everything,
@@ -11167,6 +11170,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             Exclude NA/null values. If the entire row/column is NA and skipna is True,
             then the result will be False, as for an empty row/column. If skipna is False,
             then NA are treated as True, because these are not equal to zero.
+
+        **kwargs: Any, default None
+            Additional keywords have no effect but might be accepted for compatibility with
+            NumPy.
 
         Returns
         -------
@@ -11207,7 +11214,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         >>> df[[]].any()
         Series([], dtype: bool)
         """
-        axis = validate_axis(axis)
+        if axis is not None:
+            axis = validate_axis(axis)
         column_labels = self._internal.column_labels
         if bool_only:
             column_labels = self._bool_column_labels(column_labels)
@@ -11256,7 +11264,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
         else:
             # axis=None case - return single boolean value
-            raise NotImplementedError('axis should be 0, 1, "index", or "columns" currently.')
+            return self.any(axis=1).any()
 
     def _bool_column_labels(self, column_labels: List[Label]) -> List[Label]:
         """
