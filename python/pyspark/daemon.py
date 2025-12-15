@@ -174,16 +174,15 @@ def manager():
             poller.register(listen_sock, select.POLLIN)
 
         while True:
-            ready_fds: set | list
             if poller is not None:
-                ready_fds = set()
+                ready_fds = []
                 # Unlike select, poll timeout is in millis.
                 for fd, event in poller.poll(1000):
                     if event & (select.POLLIN | select.POLLHUP):
                         # Data can be read (for POLLHUP peer hang up, so reads will return
                         # 0 bytes, in which case we want to break out - this is consistent
                         # with how select behaves).
-                        ready_fds.add(fd_reverse_map[fd])
+                        ready_fds.append(fd_reverse_map[fd])
                     else:
                         # Could be POLLERR or POLLNVAL (select would raise in this case).
                         raise PySparkRuntimeError(f"Polling error - event {event} on fd {fd}")

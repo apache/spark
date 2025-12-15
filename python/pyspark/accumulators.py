@@ -275,22 +275,21 @@ class UpdateRequestHandler(socketserver.StreamRequestHandler):
 
             while not self.server.server_shutdown:  # type: ignore[attr-defined]
                 # Poll every 1 second for new data -- don't block in case of shutdown.
-                r: set | list
                 if poller is not None:
-                    r = set()
+                    r = []
                     # Unlike select, poll timeout is in millis.
                     for fd, event in poller.poll(1000):
                         if event & (select.POLLIN | select.POLLHUP):
                             # Data can be read (for POLLHUP peer hang up, so reads will return
                             # 0 bytes, in which case we want to break out - this is consistent
                             # with how select behaves).
-                            r.add(fd)
+                            r.append(fd)
                         else:
                             # Could be POLLERR or POLLNVAL (select would raise in this case).
                             raise PySparkRuntimeError(f"Polling error - event {event} on fd {fd}")
                 else:
                     # If poll is not available, use select.
-                    r, _, _ = select.select([self.rfile.fileno()], [], [], 1)
+                    r = select.select([self.rfile.fileno()], [], [], 1)[0]
                 if self.rfile.fileno() in r and func():
                     break
 
