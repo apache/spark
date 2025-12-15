@@ -840,14 +840,23 @@ object DistributedLDAModel extends MLReadable[DistributedLDAModel] {
   class DistributedWriter(instance: DistributedLDAModel) extends MLWriter {
 
     override protected def saveImpl(path: String): Unit = {
-      if (ReadWriteUtils.localSavingModeState.get()) {
-        throw new UnsupportedOperationException(
-          "DistributedLDAModel does not support saving to local filesystem path."
-        )
-      }
-      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val modelPath = new Path(path, "oldModel").toString
-      instance.oldDistributedModel.save(sc, modelPath)
+      DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
+      if (ReadWriteUtils.localSavingModeState.get()) {
+        val Seq(metadataDF, globalTopicTotalsDF, verticesDF, edgesDF) =
+          instance.oldDistributedModel.toInternals
+
+        ReadWriteUtils.saveDataFrame(
+          new Path(modelPath, "old-metadata").toString, metadataDF)
+        ReadWriteUtils.saveDataFrame(
+          new Path(modelPath, "old-global-topic-totals").toString, globalTopicTotalsDF)
+        ReadWriteUtils.saveDataFrame(
+          new Path(modelPath, "old-vertices").toString, verticesDF)
+        ReadWriteUtils.saveDataFrame(
+          new Path(modelPath, "old-edges").toString, edgesDF)
+      } else {
+        instance.oldDistributedModel.save(sc, modelPath)
+      }
     }
   }
 
@@ -856,14 +865,23 @@ object DistributedLDAModel extends MLReadable[DistributedLDAModel] {
     private val className = classOf[DistributedLDAModel].getName
 
     override def load(path: String): DistributedLDAModel = {
-      if (ReadWriteUtils.localSavingModeState.get()) {
-        throw new UnsupportedOperationException(
-          "DistributedLDAModel does not support loading from local filesystem path."
-        )
-      }
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val modelPath = new Path(path, "oldModel").toString
-      val oldModel = OldDistributedLDAModel.load(sc, modelPath)
+      val oldModel = if (ReadWriteUtils.localSavingModeState.get()) {
+        val metadataDF = ReadWriteUtils.loadDataFrame(
+          new Path(modelPath, "old-metadata").toString, sparkSession)
+        val globalTopicTotalsDF = ReadWriteUtils.loadDataFrame(
+          new Path(modelPath, "old-global-topic-totals").toString, sparkSession)
+        val verticesDF = ReadWriteUtils.loadDataFrame(
+          new Path(modelPath, "old-vertices").toString, sparkSession)
+        val edgesDF = ReadWriteUtils.loadDataFrame(
+          new Path(modelPath, "old-edges").toString, sparkSession)
+
+        OldDistributedLDAModel.fromInternals(
+          Seq(metadataDF, globalTopicTotalsDF, verticesDF, edgesDF))
+      } else {
+        OldDistributedLDAModel.load(sc, modelPath)
+      }
       val model = new DistributedLDAModel(metadata.uid, oldModel.vocabSize,
         oldModel, sparkSession, None)
       LDAParams.getAndSetParams(model, metadata)
