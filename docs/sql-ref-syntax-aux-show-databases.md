@@ -87,7 +87,7 @@ SHOW SCHEMAS;
 -- Get database list in JSON format
 SHOW DATABASES AS JSON;
 +-------------------------------------------------------------------------------------+
-|namespace                                                                            |
+|json_metadata                                                                            |
 +-------------------------------------------------------------------------------------+
 |{"namespaces":[{"name":"default"},{"name":"payments_db"},{"name":"payroll_db"}]}    |
 +-------------------------------------------------------------------------------------+
@@ -95,22 +95,10 @@ SHOW DATABASES AS JSON;
 -- Get filtered databases in JSON format
 SHOW DATABASES LIKE 'pay*' AS JSON;
 +--------------------------------------------------------------------+
-|namespace                                                           |
+|json_metadata                                                           |
 +--------------------------------------------------------------------+
 |{"namespaces":[{"name":"payments_db"},{"name":"payroll_db"}]}      |
 +--------------------------------------------------------------------+
-
--- JSON output with legacy schema (if spark.sql.legacy.keepCommandOutputSchema=true)
-SET spark.sql.legacy.keepCommandOutputSchema=true;
-SHOW DATABASES AS JSON;
-+-------------------------------------------------------------------------------------+
-|databaseName                                                                         |
-+-------------------------------------------------------------------------------------+
-|{"databases":[{"name":"default"},{"name":"payments_db"},{"name":"payroll_db"}]}     |
-+-------------------------------------------------------------------------------------+
-
--- Back to default mode
-SET spark.sql.legacy.keepCommandOutputSchema=false;
 ```
 
 ### JSON Output Schema
@@ -128,20 +116,6 @@ When using `AS JSON`, the output structure depends on the `spark.sql.legacy.keep
   ]
 }
 ```
-
-**Legacy mode** (`spark.sql.legacy.keepCommandOutputSchema=true`):
-- Column name: `databaseName`
-- JSON structure:
-```json
-{
-  "databases": [
-    {"name": "database1"},
-    {"name": "database2"}
-  ]
-}
-```
-
-Both modes return a single array of database/namespace objects, each with a `name` field.
 
 ### Related Statements
 
