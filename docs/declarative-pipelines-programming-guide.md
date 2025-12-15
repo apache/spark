@@ -454,7 +454,7 @@ SELECT * FROM STREAM(customers_us_east);
 ### Python Considerations
 
 - SDP evaluates the code that defines a pipeline multiple times during planning and pipeline runs. Python functions that define datasets should include only the code required to define the table or view.
-- The function used to define a dataset must return a Spark `pyspark.sql.DataFrame`.
+- The function used to define a dataset must return a `pyspark.sql.DataFrame`.
 - Never use methods that save or write to files or tables as part of your SDP dataset code.
 - When using the `for` loop pattern to define datasets in Python, ensure that the list of values passed to the `for` loop is always additive.
 
