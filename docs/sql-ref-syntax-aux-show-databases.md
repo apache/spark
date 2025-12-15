@@ -103,10 +103,7 @@ SHOW DATABASES LIKE 'pay*' AS JSON;
 
 ### JSON Output Schema
 
-When using `AS JSON`, the output structure depends on the `spark.sql.legacy.keepCommandOutputSchema` configuration:
-
-**Default mode** (`spark.sql.legacy.keepCommandOutputSchema=false`):
-- Column name: `namespace`
+- Column name: `json_metadata`
 - JSON structure:
 ```json
 {
