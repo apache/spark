@@ -32,8 +32,8 @@ import org.apache.spark.sql.types.{ArrayType, DataType, FloatType}
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_(array(1.0, 2.0, 3.0), array(4.0, 5.0, 6.0));
-       0.9746318461970762
+      > SELECT _FUNC_(array(1.0F, 2.0F, 3.0F), array(4.0F, 5.0F, 6.0F));
+       0.97463185
   """,
   since = "4.1.0",
   group = "misc_funcs"
@@ -242,7 +242,7 @@ case class VectorCosineSimilarity(left: Expression, right: Expression)
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_(array(1.0, 2.0, 3.0), array(4.0, 5.0, 6.0));
+      > SELECT _FUNC_(array(1.0F, 2.0F, 3.0F), array(4.0F, 5.0F, 6.0F));
        32.0
   """,
   since = "4.1.0",
@@ -424,8 +424,8 @@ case class VectorInnerProduct(left: Expression, right: Expression)
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_(array(1.0, 2.0, 3.0), array(4.0, 5.0, 6.0));
-       5.196152422706632
+      > SELECT _FUNC_(array(1.0F, 2.0F, 3.0F), array(4.0F, 5.0F, 6.0F));
+       5.196152
   """,
   since = "4.1.0",
   group = "misc_funcs"
