@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.util;
 
+import org.apache.spark.sql.catalyst.util.geo.WkbReader;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.GeographyType;
 import org.apache.spark.sql.types.GeometryType;
@@ -62,8 +63,8 @@ public final class STUtils {
     return toPhysVal(Geometry.fromBytes(geographyVal.getBytes()));
   }
 
-  public static Geometry fromWKB(byte[] wkb, int srid) {
-    return new WkbReader().read(wkb, srid);
+  public static void parseWKB(byte[] wkb, int srid) {
+    new WkbReader().read(wkb, srid);
   }
 
   public static GeometryVal physicalValFromWKB(byte[] wkb, int srid) {

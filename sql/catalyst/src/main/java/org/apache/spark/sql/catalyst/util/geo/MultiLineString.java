@@ -14,31 +14,31 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.catalyst.util;
+package org.apache.spark.sql.catalyst.util.geo;
 
 import java.util.List;
 
 /**
  * Represents a MultiLineString geometry.
  */
-public class MultiLineString extends Geometry {
+class MultiLineString extends GeometryModel {
   private final List<LineString> lineStrings;
 
-  public MultiLineString(List<LineString> lineStrings, int srid) {
+  MultiLineString(List<LineString> lineStrings, int srid) {
     super(GeoTypeId.MULTI_LINESTRING, srid);
     this.lineStrings = lineStrings;
   }
 
-  public List<LineString> getLineStrings() {
+  List<LineString> getLineStrings() {
     return lineStrings;
   }
 
-  public int getNumGeometries() {
+  int getNumGeometries() {
     return lineStrings.size();
   }
 
   @Override
-  public boolean isEmpty() {
+  boolean isEmpty() {
     return lineStrings.isEmpty();
   }
 

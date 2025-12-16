@@ -14,41 +14,40 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.catalyst.util;
+package org.apache.spark.sql.catalyst.util.geo;
+
+import java.util.List;
 
 /**
- * Enum type for geometry type IDs. The values chosen match the WKB specification
- * for 2D geometries and align with the values for 3DZ, 3DM, and 4D geometries.
+ * Represents a MultiPolygon geometry.
  */
-public enum GeoTypeId {
-  ABSTRACT_GEOMETRY(-1),
-  DYNAMIC_GEOMETRY(0),
-  POINT(1),
-  LINESTRING(2),
-  POLYGON(3),
-  MULTI_POINT(4),
-  MULTI_LINESTRING(5),
-  MULTI_POLYGON(6),
-  GEOMETRY_COLLECTION(7),
-  BOX(1729);
+class MultiPolygon extends GeometryModel {
+  private final List<Polygon> polygons;
 
-  private final long value;
-
-  GeoTypeId(long value) {
-    this.value = value;
+  MultiPolygon(List<Polygon> polygons, int srid) {
+    super(GeoTypeId.MULTI_POLYGON, srid);
+    this.polygons = polygons;
   }
 
-  public long getValue() {
-    return value;
+  List<Polygon> getPolygons() {
+    return polygons;
   }
 
-  public static GeoTypeId fromValue(long value) {
-    for (GeoTypeId type : values()) {
-      if (type.value == value) {
-        return type;
-      }
+  int getNumGeometries() {
+    return polygons.size();
+  }
+
+  @Override
+  boolean isEmpty() {
+    return polygons.isEmpty();
+  }
+
+  @Override
+  public String toString() {
+    if (isEmpty()) {
+      return "MULTIPOLYGON EMPTY";
     }
-    throw new IllegalArgumentException("Invalid GeoTypeId value: " + value);
+    return "MULTIPOLYGON (" + polygons.size() + " polygons)";
   }
 }
 

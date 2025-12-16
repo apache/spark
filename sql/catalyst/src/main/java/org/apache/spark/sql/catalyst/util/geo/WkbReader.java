@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.catalyst.util;
+package org.apache.spark.sql.catalyst.util.geo;
 
 
 import java.nio.ByteBuffer;
@@ -26,31 +26,25 @@ import java.util.List;
  * Reader for parsing Well-Known Binary (WKB) format geometries.
  * This class implements the OGC Simple Features specification for WKB parsing.
  */
-class WkbReader {
+public class WkbReader {
   private static final int DEFAULT_SRID = 0;
-  private static final int EWKB_SRID_FLAG = 0x20000000;
-  private static final int EWKB_Z_FLAG = 0x80000000;
-  private static final int EWKB_M_FLAG = 0x40000000;
-  private static final int EWKB_TYPE_MASK = 0x000000FF;
 
   private ByteBuffer buffer;
-  private boolean readEWKB;
   private int validationLevel;
   private byte[] currentWkb;
 
-  WkbReader() {
-    this(false, 1);
+  public WkbReader() {
+    this(1);
   }
 
-  WkbReader(boolean readEWKB, int validationLevel) {
-    this.readEWKB = readEWKB;
+  public WkbReader(int validationLevel) {
     this.validationLevel = validationLevel;
   }
 
   /**
    * Reads a geometry from WKB bytes.
    */
-  public Geometry read(byte[] wkb) {
+  public GeometryModel read(byte[] wkb) {
     try {
       currentWkb = wkb;
       return readGeometry(DEFAULT_SRID);
@@ -64,7 +58,7 @@ class WkbReader {
   /**
    * Reads a geometry from WKB bytes with a specified SRID.
    */
-  public Geometry read(byte[] wkb, int srid) {
+  public GeometryModel read(byte[] wkb, int srid) {
     try {
       currentWkb = wkb;
       return readGeometry(srid);
@@ -114,9 +108,9 @@ class WkbReader {
    * Reads a geometry from WKB bytes with a specified SRID.
    *
    * @param defaultSrid srid to use if not specified in WKB
-   * @return Geometry object
+   * @return GeometryModel object
    */
-  private Geometry readGeometry(int defaultSrid) {
+  private GeometryModel readGeometry(int defaultSrid) {
     // We map negative SRID values to 0.
     defaultSrid = Math.max(defaultSrid, 0);
 
@@ -141,9 +135,7 @@ class WkbReader {
     buffer = ByteBuffer.wrap(currentWkb, 1, currentWkb.length - 1);
     buffer.order(byteOrder);
 
-    Geometry result = readGeometryInternal(defaultSrid, true);
-    // Set GeometryVal byte representation
-    result.setVal(STUtils.physicalValFromWKB(currentWkb, defaultSrid));
+    GeometryModel result = readGeometryInternal(defaultSrid, true);
     return result;
   }
 
@@ -151,7 +143,7 @@ class WkbReader {
    * Reads a nested geometry from the current buffer position.
    * Used by multi-geometry types to read child geometries.
    */
-  private Geometry readNestedGeometry(int defaultSrid) {
+  private GeometryModel readNestedGeometry(int defaultSrid) {
     return readGeometryInternal(defaultSrid, false);
   }
 
@@ -161,9 +153,9 @@ class WkbReader {
    * @param defaultSrid srid to use if not specified in WKB
    * @param isRootGeometry if true, assumes endianness has already been read and buffer is set up;
    *                       if false, reads endianness from current buffer position
-   * @return Geometry object
+   * @return GeometryModel object
    */
-  private Geometry readGeometryInternal(int defaultSrid, boolean isRootGeometry) {
+  private GeometryModel readGeometryInternal(int defaultSrid, boolean isRootGeometry) {
     ByteOrder savedByteOrder = null;
     long typeStartPos;
 
@@ -208,7 +200,7 @@ class WkbReader {
         currentWkb);
     }
 
-    Geometry result = readType(geoType, defaultSrid, dimensionCount, typeStartPos);
+    GeometryModel result = readType(geoType, defaultSrid, dimensionCount, typeStartPos);
 
     // Restore the saved byte order if this was a nested geometry
     if (!isRootGeometry && savedByteOrder != null) {
@@ -218,7 +210,7 @@ class WkbReader {
     return result;
   }
 
-  private Geometry readType(GeoTypeId geoType, int srid, int dimensionCount, long startPos) {
+  private GeometryModel readType(GeoTypeId geoType, int srid, int dimensionCount, long startPos) {
     switch (geoType) {
       case POINT:
         return readPoint(srid, dimensionCount);
@@ -319,7 +311,7 @@ class WkbReader {
     List<Point> points = new ArrayList<>(numPoints);
 
     for (int i = 0; i < numPoints; i++) {
-      Geometry geom = readNestedGeometry(srid);
+      GeometryModel geom = readNestedGeometry(srid);
       if (!(geom instanceof Point)) {
         throw new WkbParseException("Expected Point in MultiPoint", buffer.position(), currentWkb);
       }
@@ -334,7 +326,7 @@ class WkbReader {
     List<LineString> lineStrings = new ArrayList<>(numLineStrings);
 
     for (int i = 0; i < numLineStrings; i++) {
-      Geometry geom = readNestedGeometry(srid);
+      GeometryModel geom = readNestedGeometry(srid);
       if (!(geom instanceof LineString)) {
         throw new WkbParseException("Expected LineString in MultiLineString", buffer.position(),
           currentWkb);
@@ -350,7 +342,7 @@ class WkbReader {
     List<Polygon> polygons = new ArrayList<>(numPolygons);
 
     for (int i = 0; i < numPolygons; i++) {
-      Geometry geom = readNestedGeometry(srid);
+      GeometryModel geom = readNestedGeometry(srid);
       if (!(geom instanceof Polygon)) {
         throw new WkbParseException("Expected Polygon in MultiPolygon", buffer.position(),
           currentWkb);
@@ -363,7 +355,7 @@ class WkbReader {
 
   private GeometryCollection readGeometryCollection(int srid, int dimensionCount) {
     int numGeometries = readInt();
-    List<Geometry> geometries = new ArrayList<>(numGeometries);
+    List<GeometryModel> geometries = new ArrayList<>(numGeometries);
 
     for (int i = 0; i < numGeometries; i++) {
       geometries.add(readNestedGeometry(srid));

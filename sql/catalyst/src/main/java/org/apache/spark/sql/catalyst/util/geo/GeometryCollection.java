@@ -14,53 +14,40 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.catalyst.util;
+package org.apache.spark.sql.catalyst.util.geo;
 
 import java.util.List;
 
 /**
- * Represents a Polygon geometry.
+ * Represents a GeometryCollection geometry.
  */
-public class Polygon extends Geometry {
-  private final List<Ring> rings;
+class GeometryCollection extends GeometryModel {
+  private final List<GeometryModel> geometries;
 
-  public Polygon(List<Ring> rings, int srid) {
-    super(GeoTypeId.POLYGON, srid);
-    this.rings = rings;
+  GeometryCollection(List<GeometryModel> geometries, int srid) {
+    super(GeoTypeId.GEOMETRY_COLLECTION, srid);
+    this.geometries = geometries;
   }
 
-  public List<Ring> getRings() {
-    return rings;
+  List<GeometryModel> getGeometries() {
+    return geometries;
   }
 
-  public Ring getExteriorRing() {
-    return rings.isEmpty() ? null : rings.get(0);
+  int getNumGeometries() {
+    return geometries.size();
   }
 
-  public int getNumInteriorRings() {
-    return Math.max(0, rings.size() - 1);
-  }
-
-  public Ring getInteriorRingN(int n) {
-    return rings.get(n + 1);
-  }
-
-  public boolean isEmpty() {
-    return rings.isEmpty();
+  @Override
+  boolean isEmpty() {
+    return geometries.isEmpty();
   }
 
   @Override
   public String toString() {
     if (isEmpty()) {
-      return "POLYGON EMPTY";
+      return "GEOMETRYCOLLECTION EMPTY";
     }
-    StringBuilder sb = new StringBuilder("POLYGON (");
-    for (int i = 0; i < rings.size(); i++) {
-      if (i > 0) sb.append(", ");
-      sb.append(rings.get(i).toString());
-    }
-    sb.append(")");
-    return sb.toString();
+    return "GEOMETRYCOLLECTION (" + geometries.size() + " geometries)";
   }
 }
 

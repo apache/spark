@@ -14,40 +14,48 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.catalyst.util;
+package org.apache.spark.sql.catalyst.util.geo;
 
 import java.util.List;
 
 /**
- * Represents a MultiPolygon geometry.
+ * Represents a LineString geometry.
  */
-public class MultiPolygon extends Geometry {
-  private final List<Polygon> polygons;
+class LineString extends GeometryModel {
+  private final List<Point> points;
 
-  public MultiPolygon(List<Polygon> polygons, int srid) {
-    super(GeoTypeId.MULTI_POLYGON, srid);
-    this.polygons = polygons;
+  LineString(List<Point> points, int srid) {
+    super(GeoTypeId.LINESTRING, srid);
+    this.points = points;
+
   }
 
-  public List<Polygon> getPolygons() {
-    return polygons;
+  List<Point> getPoints() {
+    return points;
   }
 
-  public int getNumGeometries() {
-    return polygons.size();
+  int getNumPoints() {
+    return points.size();
   }
 
   @Override
-  public boolean isEmpty() {
-    return polygons.isEmpty();
+  boolean isEmpty() {
+    return points.isEmpty();
   }
 
   @Override
   public String toString() {
     if (isEmpty()) {
-      return "MULTIPOLYGON EMPTY";
+      return "LINESTRING EMPTY";
     }
-    return "MULTIPOLYGON (" + polygons.size() + " polygons)";
+    StringBuilder sb = new StringBuilder("LINESTRING (");
+    for (int i = 0; i < points.size(); i++) {
+      if (i > 0) sb.append(", ");
+      Point p = points.get(i);
+      sb.append(p.getX()).append(" ").append(p.getY());
+    }
+    sb.append(")");
+    return sb.toString();
   }
 }
 

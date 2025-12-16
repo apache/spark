@@ -14,44 +14,51 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.catalyst.util;
+package org.apache.spark.sql.catalyst.util.geo;
 
 import java.util.List;
 
 /**
- * Represents a LineString geometry.
+ * Represents a Polygon geometry.
  */
-public class LineString extends Geometry {
-  private final List<Point> points;
+class Polygon extends GeometryModel {
+  private final List<Ring> rings;
 
-  public LineString(List<Point> points, int srid) {
-    super(GeoTypeId.LINESTRING, srid);
-    this.points = points;
-
+  Polygon(List<Ring> rings, int srid) {
+    super(GeoTypeId.POLYGON, srid);
+    this.rings = rings;
   }
 
-  public List<Point> getPoints() {
-    return points;
+  List<Ring> getRings() {
+    return rings;
   }
 
-  public int getNumPoints() {
-    return points.size();
+  Ring getExteriorRing() {
+    return rings.isEmpty() ? null : rings.get(0);
   }
 
-  public boolean isEmpty() {
-    return points.isEmpty();
+  int getNumInteriorRings() {
+    return Math.max(0, rings.size() - 1);
+  }
+
+  Ring getInteriorRingN(int n) {
+    return rings.get(n + 1);
+  }
+
+  @Override
+  boolean isEmpty() {
+    return rings.isEmpty();
   }
 
   @Override
   public String toString() {
     if (isEmpty()) {
-      return "LINESTRING EMPTY";
+      return "POLYGON EMPTY";
     }
-    StringBuilder sb = new StringBuilder("LINESTRING (");
-    for (int i = 0; i < points.size(); i++) {
+    StringBuilder sb = new StringBuilder("POLYGON (");
+    for (int i = 0; i < rings.size(); i++) {
       if (i > 0) sb.append(", ");
-      Point p = points.get(i);
-      sb.append(p.getX()).append(" ").append(p.getY());
+      sb.append(rings.get(i).toString());
     }
     sb.append(")");
     return sb.toString();

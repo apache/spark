@@ -14,19 +14,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.catalyst.util;
+package org.apache.spark.sql.catalyst.util.geo;
 
 import java.util.Arrays;
 
 /**
  * Represents a point geometry with coordinates.
  */
-public class Point extends Geometry {
+class Point extends GeometryModel {
   private final double[] coordinates;
   private final boolean is_Empty;
 
 
-  public Point(double[] coordinates, int srid) {
+  Point(double[] coordinates, int srid) {
     super(GeoTypeId.POINT, srid);
     this.coordinates = coordinates;
     // Check if the point is empty (any coordinate is NaN)
@@ -40,28 +40,28 @@ public class Point extends Geometry {
     this.is_Empty = empty;
   }
 
-  public double getX() {
+  double getX() {
     return coordinates.length > 0 ? coordinates[0] : Double.NaN;
   }
 
-  public double getY() {
+  double getY() {
     return coordinates.length > 1 ? coordinates[1] : Double.NaN;
   }
 
-  public double getZ() {
+  double getZ() {
     return coordinates.length > 2 ? coordinates[2] : Double.NaN;
   }
 
-  public double getM() {
+  double getM() {
     return coordinates.length > 3 ? coordinates[3] : Double.NaN;
   }
 
-  public double[] getCoordinates() {
+  double[] getCoordinates() {
     return coordinates;
   }
 
   @Override
-  public boolean isEmpty() {
+  boolean isEmpty() {
     return is_Empty;
   }
 
