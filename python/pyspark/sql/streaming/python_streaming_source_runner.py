@@ -54,8 +54,6 @@ INITIAL_OFFSET_FUNC_ID = 884
 LATEST_OFFSET_FUNC_ID = 885
 PARTITIONS_FUNC_ID = 886
 COMMIT_FUNC_ID = 887
-LATEST_OFFSET_WITH_LIMIT_FUNC_ID = 888
-REPORT_LATEST_OFFSET_FUNC_ID = 889
 LATEST_OFFSET_WITH_REPORT_FUNC_ID = 890
 
 PREFETCHED_RECORDS_NOT_FOUND = 0
@@ -107,57 +105,34 @@ def commit_func(reader: DataSourceStreamReader, infile: IO, outfile: IO) -> None
 
 def latest_offset_with_report_func(reader: DataSourceStreamReader, infile: IO, outfile: IO) -> None:
     """
-    Handler for function ID 890: latestOffset with admission control
-    parameters.
+    Handler for function ID 890: latestOffset with admission control.
 
     This function supports both old and new reader implementations:
-    - Old readers: latestOffset() with no parameters -> no admission
-      control
-    - New readers: latestOffset(start, limit) with parameters ->
-      admission control enabled
+    - Old readers: latestOffset() with no parameters
+    - New readers: latestOffset(start) with an optional start offset
+
+    The reader may return either:
+    - A single offset dict
+    - A tuple of (capped_offset, true_latest_offset)
     """
     start_offset_str = utf8_deserializer.loads(infile)
-    # Handle empty string as None for backward compatibility
-    start_offset = json.loads(start_offset_str) if start_offset_str else None
-    limit = json.loads(utf8_deserializer.loads(infile))
+    start_offset = json.loads(start_offset_str)
 
     # Type declarations for mypy
     capped_offset: dict
     true_latest_offset: dict
 
+    # New signature: latestOffset(start)
     try:
-        # Try calling with optional parameters (new signature)
-        result = reader.latestOffset(start_offset, limit)
-
-        # Check return type to determine behavior
-        if isinstance(result, tuple):
-            # New behavior: returns (capped_offset, true_latest_offset)
-            capped_offset, true_latest_offset = result
-        else:
-            # Old behavior or no admission control: single offset
-            capped_offset = true_latest_offset = result
-
+        result = reader.latestOffset(start_offset)
     except TypeError:
-        # Old signature that doesn't accept parameters - fallback
-        try:
-            fallback_result = reader.latestOffset()
-            # Handle both return types for backward compatibility
-            if isinstance(fallback_result, tuple):
-                capped_offset, true_latest_offset = fallback_result
-            else:
-                capped_offset = true_latest_offset = fallback_result
-        except Exception as fallback_error:
-            raise IllegalArgumentException(
-                errorClass="UNSUPPORTED_OPERATION",
-                messageParameters={
-                    "operation": f"latestOffset call failed: {str(fallback_error)}"  # noqa: E501
-                },
-            )
-    except Exception as e:
-        raise IllegalArgumentException(
-            errorClass="UNSUPPORTED_OPERATION",
-            messageParameters={"operation": f"latestOffset with limit failed: {str(e)}"},
-        )
+        # Old signature: latestOffset()
+        result = reader.latestOffset()
+
+    if isinstance(result, tuple):
+        capped_offset, true_latest_offset = result
+    else:
+        capped_offset = true_latest_offset = result
 
     # Send both offsets back to JVM
     write_with_length(json.dumps(capped_offset).encode("utf-8"), outfile)

@@ -32,7 +32,6 @@ import org.apache.spark.internal.LogKeys.PYTHON_EXEC
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python.PYTHON_AUTH_SOCKET_TIMEOUT
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connector.read.streaming.{CompositeReadLimit, ReadAllAvailable, ReadLimit, ReadMaxBytes, ReadMaxFiles, ReadMaxRows, ReadMinRows}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -47,8 +46,6 @@ object PythonStreamingSourceRunner {
   // Note: 885 was deprecated (old latestOffset without admission control parameters)
   val PARTITIONS_FUNC_ID = 886
   val COMMIT_FUNC_ID = 887
-  val LATEST_OFFSET_WITH_LIMIT_FUNC_ID = 888 // New: latestOffset with ReadLimit
-  val REPORT_LATEST_OFFSET_FUNC_ID = 889 // New: report true latest offset
   val LATEST_OFFSET_WITH_REPORT_FUNC_ID = 890 // New: combined latestOffset + report
 
   // Status code for JVM to decide how to receive prefetched record batches
@@ -193,56 +190,18 @@ class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType
   }
 
   /**
-   * Invokes latestOffset(startOffset, limit) function with admission control parameters.
-   */
-  def latestOffset(startOffset: String, limit: ReadLimit): String = {
-    dataOut.writeInt(LATEST_OFFSET_WITH_LIMIT_FUNC_ID)
-    PythonWorkerUtils.writeUTF(startOffset, dataOut)
-    PythonWorkerUtils.writeUTF(serializeReadLimit(limit), dataOut)
-    dataOut.flush()
-    val len = dataIn.readInt()
-    if (len == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
-      val msg = PythonWorkerUtils.readUTF(dataIn)
-      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "latestOffset",
-        msg)
-    }
-    PythonWorkerUtils.readUTF(len, dataIn)
-  }
-
-  /**
-   * Invokes reportLatestOffset() function to get the true latest available offset.
-   */
-  def reportLatestOffset(): String = {
-    dataOut.writeInt(REPORT_LATEST_OFFSET_FUNC_ID)
-    dataOut.flush()
-    val len = dataIn.readInt()
-    if (len == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
-      val msg = PythonWorkerUtils.readUTF(dataIn)
-      throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "reportLatestOffset",
-        msg)
-    }
-    PythonWorkerUtils.readUTF(len, dataIn)
-  }
-
-  /**
-   * Invokes latestOffset with admission control and also fetches the true latest offset. This
-   * avoids race conditions by getting both offsets in a single RPC call.
+   * Invokes latestOffset(startOffset) and also fetches the true latest offset. This avoids race
+   * conditions by getting both offsets in a single RPC call.
    *
    * @param startOffset
-   *   the starting offset (may be null)
-   * @param limit
-   *   the read limit to apply
+   *   the starting offset JSON string (use "null" to represent no start offset)
    * @return
    *   tuple of (capped offset with limit applied, true latest offset)
    * @since 4.2.0
    */
-  def latestOffsetWithReport(startOffset: String, limit: ReadLimit): (String, String) = {
+  def latestOffsetWithReport(startOffset: String): (String, String) = {
     dataOut.writeInt(LATEST_OFFSET_WITH_REPORT_FUNC_ID)
-    // Handle null startOffset by writing empty string
-    PythonWorkerUtils.writeUTF(Option(startOffset).getOrElse(""), dataOut)
-    PythonWorkerUtils.writeUTF(serializeReadLimit(limit), dataOut)
+    PythonWorkerUtils.writeUTF(startOffset, dataOut)
     dataOut.flush()
 
     // Read capped offset
@@ -266,44 +225,6 @@ class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType
     val trueLatest = PythonWorkerUtils.readUTF(trueLen, dataIn)
 
     (cappedOffset, trueLatest)
-  }
-
-  /**
-   * Serializes a ReadLimit to JSON format for Python. Uses json4s for safe JSON construction.
-   *
-   * @param limit
-   *   the ReadLimit to serialize
-   * @return
-   *   JSON string representation
-   */
-  private def serializeReadLimit(limit: ReadLimit): String = {
-    import org.json4s.JsonDSL._
-    import org.json4s.jackson.JsonMethods._
-    import org.json4s.JValue
-
-    val json: JValue = limit match {
-      case r: ReadMaxRows =>
-        ("type" -> "maxRows") ~ ("maxRows" -> r.maxRows())
-      case r: ReadMaxFiles =>
-        ("type" -> "maxFiles") ~ ("maxFiles" -> r.maxFiles())
-      case r: ReadMaxBytes =>
-        ("type" -> "maxBytes") ~ ("maxBytes" -> r.maxBytes())
-      case r: ReadMinRows =>
-        ("type" -> "minRows") ~
-          ("minRows" -> r.minRows()) ~
-          ("maxTriggerDelayMs" -> r.maxTriggerDelayMs())
-      case _: ReadAllAvailable =>
-        ("type" -> "allAvailable")
-      case r: CompositeReadLimit =>
-        val nestedLimits = r.getReadLimits.toList.map { l =>
-          parse(serializeReadLimit(l))
-        }
-        ("type" -> "composite") ~ ("limits" -> nestedLimits)
-      case _ =>
-        // Fallback for unknown types
-        ("type" -> "allAvailable")
-    }
-    compact(render(json))
   }
 
   /**

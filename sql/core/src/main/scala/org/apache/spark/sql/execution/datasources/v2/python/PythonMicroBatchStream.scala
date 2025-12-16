@@ -21,7 +21,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory}
 import org.apache.spark.sql.connector.read.streaming.{AcceptsLatestSeenOffset, MicroBatchStream, Offset, ReadLimit}
 import org.apache.spark.sql.connector.read.streaming.SupportsAdmissionControl
-import org.apache.spark.sql.execution.datasources.v2.python.PythonMicroBatchStream.nextStreamId
+import org.apache.spark.sql.execution.datasources.v2.python.PythonMicroBatchStream._
 import org.apache.spark.sql.execution.python.streaming.PythonStreamingSourceRunner
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -29,29 +29,7 @@ import org.apache.spark.storage.{PythonStreamBlockId, StorageLevel}
 
 case class PythonStreamingSourceOffset(json: String) extends Offset
 
-/**
- * Micro-batch stream implementation for Python data sources with admission control support.
- *
- * This class bridges JVM Spark streaming with Python-based data sources, supporting:
- *   - Admission control via ReadLimit (maxRecordsPerBatch, maxFilesPerBatch, maxBytesPerBatch)
- *   - Offset tracking and management
- *   - Latest seen offset for prefetching optimization
- *
- * Admission control options:
- *   - `maxRecordsPerBatch`: Maximum number of rows per batch (Long, must be > 0)
- *   - `maxFilesPerBatch`: Maximum number of files per batch (Int, must be > 0)
- *   - `maxBytesPerBatch`: Maximum bytes per batch (Long, must be > 0)
- *
- * @param ds
- *   the Python data source V2 instance
- * @param shortName
- *   short name of the data source
- * @param outputSchema
- *   the output schema
- * @param options
- *   configuration options including admission control settings
- * @since 4.2.0
- */
+/** Micro-batch stream implementation for Python data sources. */
 class PythonMicroBatchStream(
     ds: PythonDataSourceV2,
     shortName: String,
@@ -82,13 +60,6 @@ class PythonMicroBatchStream(
 
   override def initialOffset(): Offset = PythonStreamingSourceOffset(runner.initialOffset())
 
-  /**
-   * Returns the default read limit based on configured options. Supports: maxRecordsPerBatch,
-   * maxFilesPerBatch, maxBytesPerBatch. Falls back to allAvailable if no valid limit is
-   * configured.
-   *
-   * @since 4.2.0
-   */
   override def getDefaultReadLimit: ReadLimit = {
     import scala.util.Try
 
@@ -106,17 +77,17 @@ class PythonMicroBatchStream(
       }
     }
 
-    if (options.containsKey("maxRecordsPerBatch")) {
-      val records = parseLong("maxRecordsPerBatch")
-      logInfo(s"Admission control: maxRecordsPerBatch = $records")
+    if (options.containsKey(MAX_RECORDS_PER_BATCH)) {
+      val records = parseLong(MAX_RECORDS_PER_BATCH)
+      logInfo(s"Admission control: $MAX_RECORDS_PER_BATCH = $records")
       ReadLimit.maxRows(records)
-    } else if (options.containsKey("maxFilesPerBatch")) {
-      val files = parseInt("maxFilesPerBatch")
-      logInfo(s"Admission control: maxFilesPerBatch = $files")
+    } else if (options.containsKey(MAX_FILES_PER_BATCH)) {
+      val files = parseInt(MAX_FILES_PER_BATCH)
+      logInfo(s"Admission control: $MAX_FILES_PER_BATCH = $files")
       ReadLimit.maxFiles(files)
-    } else if (options.containsKey("maxBytesPerBatch")) {
-      val bytes = parseLong("maxBytesPerBatch")
-      logInfo(s"Admission control: maxBytesPerBatch = $bytes")
+    } else if (options.containsKey(MAX_BYTES_PER_BATCH)) {
+      val bytes = parseLong(MAX_BYTES_PER_BATCH)
+      logInfo(s"Admission control: $MAX_BYTES_PER_BATCH = $bytes")
       ReadLimit.maxBytes(bytes)
     } else {
       logDebug("No admission control limit configured, using allAvailable")
@@ -125,38 +96,21 @@ class PythonMicroBatchStream(
   }
 
   override def latestOffset(): Offset = {
-    // Bridge to new signature with default read limit for backward compatibility
-    // Pass null as start offset to maintain backward compatibility with old behavior
     latestOffset(null, getDefaultReadLimit)
   }
 
-  /**
-   * Returns the latest offset with admission control limit applied. Also updates the true latest
-   * offset for reporting purposes.
-   *
-   * @param startOffset
-   *   the starting offset, may be null
-   * @param limit
-   *   the read limit to apply
-   * @return
-   *   the capped offset respecting the limit
-   * @since 4.2.0
-   */
   override def latestOffset(startOffset: Offset, limit: ReadLimit): Offset = {
-    val startJson = Option(startOffset).map(_.json()).orNull
-    val (cappedOffsetJson, trueLatestJson) = runner.latestOffsetWithReport(startJson, limit)
+    // Admission control is implemented on the Python side using data source options.
+    // We still validate configured options via getDefaultReadLimit(), but do not send ReadLimit
+    // to Python.
+    getDefaultReadLimit
+    val startJson = Option(startOffset).map(_.json()).getOrElse("null")
+    val (cappedOffsetJson, trueLatestJson) = runner.latestOffsetWithReport(startJson)
     val cappedOffset = PythonStreamingSourceOffset(cappedOffsetJson)
     latestAvailableOffset = Some(PythonStreamingSourceOffset(trueLatestJson))
     cappedOffset
   }
 
-  /**
-   * Reports the true latest available offset without admission control limits applied.
-   *
-   * @return
-   *   the uncapped latest offset
-   * @since 4.2.0
-   */
   override def reportLatestOffset(): Offset = {
     latestAvailableOffset.orNull
   }
@@ -218,6 +172,10 @@ class PythonMicroBatchStream(
 
 object PythonMicroBatchStream {
   private var currentId = 0
+  private[python] val MAX_RECORDS_PER_BATCH = "maxRecordsPerBatch"
+  private[python] val MAX_FILES_PER_BATCH = "maxFilesPerBatch"
+  private[python] val MAX_BYTES_PER_BATCH = "maxBytesPerBatch"
+
   def nextStreamId: Int = synchronized {
     currentId = currentId + 1
     currentId

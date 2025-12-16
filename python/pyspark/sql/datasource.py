@@ -714,28 +714,20 @@ class DataSourceStreamReader(ABC):
             messageParameters={"feature": "initialOffset"},
         )
 
-    def latestOffset(
-        self, start: Optional[dict] = None, limit: Optional[dict] = None
-    ) -> Union[dict, Tuple[dict, dict]]:
+    def latestOffset(self, start: Optional[dict] = None) -> Union[dict, Tuple[dict, dict]]:
         """
         Returns the most recent offset available.
 
         Parameters (optional - added in Spark 4.2 for admission control)
-        -------------------------------------------------------------------
+        ----------------------------------------------------------------
         start : dict, optional
             The starting offset. Enables admission control when provided.
-        limit : dict, optional
-            Admission control limit with structure:
-            - {"type": "maxRows", "maxRows": N}
-            - {"type": "maxFiles", "maxFiles": N}
-            - {"type": "maxBytes", "maxBytes": N}
-            - {"type": "allAvailable"}
 
         Returns
         -------
         dict or Tuple[dict, dict]
-            - Old behavior (no params): returns single offset dict
-            - New behavior (with params): returns (capped_offset, true_latest_offset)
+            - Old behavior: returns single offset dict
+            - New behavior (with start): returns (capped_offset, true_latest_offset)
 
         Examples
         --------
@@ -746,14 +738,17 @@ class DataSourceStreamReader(ABC):
 
         New implementation (with admission control):
 
-        >>> def latestOffset(self, start=None, limit=None):
-        ...     if start is None or limit is None:
+        Admission control is configured via the options passed to the data source, e.g.
+        ``maxRecordsPerBatch``, ``maxFilesPerBatch``, and ``maxBytesPerBatch``. The stream reader
+        can consult those options (typically stored on the data source instance) to compute a
+        capped offset.
+
+        >>> def latestOffset(self, start=None):
+        ...     if start is None:
         ...         return {"offset": self.get_latest()}
-        ...     if limit["type"] == "maxRows":
-        ...         capped = self.calc_capped(start, limit["maxRows"])
-        ...         true_latest = self.get_latest()
-        ...         return (capped, true_latest)
-        ...     return (self.get_latest(), self.get_latest())
+        ...     capped = self.calc_capped(start, self.max_records_per_batch)
+        ...     true_latest = self.get_latest()
+        ...     return (capped, true_latest)
         """
         raise PySparkNotImplementedError(
             errorClass="NOT_IMPLEMENTED",

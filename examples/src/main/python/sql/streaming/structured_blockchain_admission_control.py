@@ -34,7 +34,7 @@ demonstrating admission control.
 """
 import sys
 import time
-from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Dict, Iterator, List, Optional, Tuple, Union
 
 from pyspark.sql import SparkSession
 from pyspark.sql.datasource import (
@@ -48,8 +48,9 @@ from pyspark.sql.types import StructType
 class SimpleBlockchainReader(DataSourceStreamReader):
     """A simple streaming source that generates sequential blockchain blocks."""  # noqa: E501
 
-    def __init__(self, max_block: int = 1000) -> None:
+    def __init__(self, max_block: int = 1000, max_blocks_per_batch: int = 0) -> None:
         self.max_block = max_block
+        self.max_blocks_per_batch = max_blocks_per_batch
         self.current_block = 0
 
     def initialOffset(self) -> Dict[str, int]:
@@ -59,14 +60,13 @@ class SimpleBlockchainReader(DataSourceStreamReader):
     def latestOffset(
         self,
         start: Optional[Dict[str, int]] = None,
-        limit: Optional[Dict[str, Any]] = None,
     ) -> Union[Dict[str, int], Tuple[Dict[str, int], Dict[str, int]]]:
         """
         Return the latest offset, respecting admission control limits.
 
         This demonstrates the key admission control pattern:
-        - Without limit: process all available blocks
-        - With maxRows limit: cap the end block to respect batch size
+        - Without admission control: process all available blocks
+        - With maxRecordsPerBatch: cap the end block to respect batch size
         """
         # Determine where we are now
         if start is None:
@@ -78,14 +78,13 @@ class SimpleBlockchainReader(DataSourceStreamReader):
         latest_available = min(start_block + 20, self.max_block)
 
         # Apply admission control if configured
-        if limit and limit.get("type") == "maxRows":
-            max_blocks = limit["maxRows"]
+        if self.max_blocks_per_batch > 0:
             # Cap at the configured limit
-            end_block = min(start_block + max_blocks, latest_available)
+            end_block = min(start_block + self.max_blocks_per_batch, latest_available)
             print(
                 f"  [Admission Control] Start: {start_block}, "
                 f"Available: {latest_available}, Capped: {end_block} "
-                f"(limit: {max_blocks})"
+                f"(maxRecordsPerBatch: {self.max_blocks_per_batch})"
             )
             # Return tuple: (capped_offset, true_latest_offset)
             return ({"block": end_block}, {"block": latest_available})
@@ -134,7 +133,12 @@ class SimpleBlockchainSource(DataSource):
         return "block_number INT, timestamp LONG, block_hash STRING"
 
     def streamReader(self, schema: StructType) -> SimpleBlockchainReader:
-        return SimpleBlockchainReader(max_block=1000)
+        value = self.options.get("maxRecordsPerBatch")
+        try:
+            max_blocks_per_batch = int(value) if value is not None else 0
+        except ValueError:
+            max_blocks_per_batch = 0
+        return SimpleBlockchainReader(max_block=1000, max_blocks_per_batch=max_blocks_per_batch)
 
 
 if __name__ == "__main__":
