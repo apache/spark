@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.normalizer
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{CacheTableAsSelect, CTERelationRef, LogicalPlan, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 
 object WithCTENormalized extends Rule[LogicalPlan]{
   override def apply(plan: LogicalPlan): LogicalPlan = {
@@ -48,7 +47,7 @@ object WithCTENormalized extends Rule[LogicalPlan]{
       case ref: CTERelationRef if defIdToNewId.contains(ref.cteId) =>
         ref.copy(cteId = defIdToNewId(ref.cteId))
       case other =>
-        other.transformExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
+        other.transformAllExpressionsWithSubqueries {
           case e: SubqueryExpression => e.withNewPlan(canonicalizeCTE(e.plan, defIdToNewId))
         }
     }
