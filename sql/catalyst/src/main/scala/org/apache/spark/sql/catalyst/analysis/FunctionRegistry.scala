@@ -552,6 +552,9 @@ object FunctionRegistry {
     expression[KllSketchGetRankBigint]("kll_sketch_get_rank_bigint"),
     expression[KllSketchGetRankFloat]("kll_sketch_get_rank_float"),
     expression[KllSketchGetRankDouble]("kll_sketch_get_rank_double"),
+    expression[VectorCosineSimilarity]("vector_cosine_similarity"),
+    expression[VectorInnerProduct]("vector_inner_product"),
+    expression[VectorL2Distance]("vector_l2_distance"),
 
     // string functions
     expression[Ascii]("ascii"),
