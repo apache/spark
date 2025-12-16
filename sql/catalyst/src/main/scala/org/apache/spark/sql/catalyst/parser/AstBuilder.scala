@@ -4797,7 +4797,7 @@ class AstBuilder extends DataTypeAstBuilder
           string(visitStringLit(c.outFmt)))))
       // Expected format: SEQUENCEFILE | TEXTFILE | RCFILE | ORC | PARQUET | AVRO
       case (c: GenericFileFormatContext, null) =>
-        SerdeInfo(storedAs = Some(getIdentifierText(c.identifier)))
+        SerdeInfo(storedAs = Some(c.simpleIdentifier.getText))
       case (null, storageHandler) =>
         invalidStatement("STORED BY", ctx)
       case _ =>
@@ -4887,7 +4887,7 @@ class AstBuilder extends DataTypeAstBuilder
     (rowFormatCtx, createFileFormatCtx.fileFormat) match {
       case (_, ffTable: TableFileFormatContext) => // OK
       case (rfSerde: RowFormatSerdeContext, ffGeneric: GenericFileFormatContext) =>
-        ffGeneric.identifier.getText.toLowerCase(Locale.ROOT) match {
+        ffGeneric.simpleIdentifier.getText.toLowerCase(Locale.ROOT) match {
           case ("sequencefile" | "textfile" | "rcfile") => // OK
           case fmt =>
             operationNotAllowed(
@@ -4895,7 +4895,7 @@ class AstBuilder extends DataTypeAstBuilder
               parentCtx)
         }
       case (rfDelimited: RowFormatDelimitedContext, ffGeneric: GenericFileFormatContext) =>
-        ffGeneric.identifier.getText.toLowerCase(Locale.ROOT) match {
+        ffGeneric.simpleIdentifier.getText.toLowerCase(Locale.ROOT) match {
           case "textfile" => // OK
           case fmt => operationNotAllowed(
             s"ROW FORMAT DELIMITED is only compatible with 'textfile', not '$fmt'", parentCtx)
@@ -5837,9 +5837,9 @@ class AstBuilder extends DataTypeAstBuilder
             log"${MDC(PARTITION_SPECIFICATION, ctx.partitionSpec.getText)}")
       }
     }
-    if (ctx.identifier != null &&
-        ctx.identifier.getText.toLowerCase(Locale.ROOT) != "noscan") {
-      throw QueryParsingErrors.computeStatisticsNotExpectedError(ctx.identifier())
+    if (ctx.simpleIdentifier != null &&
+        ctx.simpleIdentifier.getText.toLowerCase(Locale.ROOT) != "noscan") {
+      throw QueryParsingErrors.computeStatisticsNotExpectedError(ctx.simpleIdentifier)
     }
 
     if (ctx.ALL() != null) {
@@ -5860,7 +5860,7 @@ class AstBuilder extends DataTypeAstBuilder
           "ANALYZE TABLE",
           allowTempView = false),
         partitionSpec,
-        noScan = ctx.identifier != null)
+        noScan = ctx.simpleIdentifier != null)
     } else {
       checkPartitionSpec()
       AnalyzeColumn(
@@ -5878,16 +5878,16 @@ class AstBuilder extends DataTypeAstBuilder
    * }}}
    */
   override def visitAnalyzeTables(ctx: AnalyzeTablesContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.identifier != null &&
-      ctx.identifier.getText.toLowerCase(Locale.ROOT) != "noscan") {
-      throw QueryParsingErrors.computeStatisticsNotExpectedError(ctx.identifier())
+    if (ctx.simpleIdentifier != null &&
+      ctx.simpleIdentifier.getText.toLowerCase(Locale.ROOT) != "noscan") {
+      throw QueryParsingErrors.computeStatisticsNotExpectedError(ctx.simpleIdentifier())
     }
     val ns = if (ctx.identifierReference() != null) {
       withIdentClause(ctx.identifierReference, UnresolvedNamespace(_))
     } else {
       CurrentNamespace
     }
-    AnalyzeTables(ns, noScan = ctx.identifier != null)
+    AnalyzeTables(ns, noScan = ctx.simpleIdentifier != null)
   }
 
   /**
