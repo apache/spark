@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.datasketches.kll.{KllDoublesSketch, KllFloatsSketch, KllLongsSketch}
 import org.apache.datasketches.memory.Memory
 
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLId, toSQLType}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -466,6 +468,20 @@ abstract class KllSketchGetQuantileBase
   /** The output data type for a single value (not array) */
   protected def outputDataType: DataType
 
+  // The rank argument must be foldable (compile-time constant).
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (!right.foldable) {
+      TypeCheckResult.DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> toSQLId("rank"),
+          "inputType" -> toSQLType(right.dataType),
+          "inputExpr" -> toSQLExpr(right)))
+    } else {
+      super.checkInputDataTypes()
+    }
+  }
+
   override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
@@ -485,7 +501,7 @@ abstract class KllSketchGetQuantileBase
     val buffer = leftInput.asInstanceOf[Array[Byte]]
     val memory = Memory.wrap(buffer)
 
-    right.eval() match {
+    rightInput match {
       case null => null
       case num: Double =>
         // Single value case
@@ -617,6 +633,20 @@ abstract class KllSketchGetRankBase
    */
   protected def kllSketchGetRank(memory: Memory, quantile: Any): Double
 
+  // The quantile argument must be foldable (compile-time constant).
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (!right.foldable) {
+      TypeCheckResult.DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> toSQLId("quantile"),
+          "inputType" -> toSQLType(right.dataType),
+          "inputExpr" -> toSQLExpr(right)))
+    } else {
+      super.checkInputDataTypes()
+    }
+  }
+
   override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[AbstractDataType] = {
     Seq(
@@ -636,7 +666,7 @@ abstract class KllSketchGetRankBase
     val buffer: Array[Byte] = leftInput.asInstanceOf[Array[Byte]]
     val memory: Memory = Memory.wrap(buffer)
 
-    right.eval() match {
+    rightInput match {
       case null => null
       case value if !value.isInstanceOf[ArrayData] =>
         // Single value case

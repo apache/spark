@@ -216,7 +216,11 @@ $(document).ready(function() {
             data: 'duration',
             render: (id, type, row) => `<span title="${row.durationMillisec}">${row.duration}</span>`
           },
-          {name: 'user', data: 'sparkUser' },
+          {
+            name: 'user',
+            data: 'sparkUser',
+            render: (name) => escapeHtml(name)
+          },
           {name: 'lastUpdated', data: 'lastUpdated' },
           {
             name: 'eventLog',

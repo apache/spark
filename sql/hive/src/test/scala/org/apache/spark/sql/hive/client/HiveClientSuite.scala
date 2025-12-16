@@ -609,6 +609,16 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
     }
   }
 
+  test("read table written by Hive") {
+    // Hive 3.0 and 3.1 don't work with JDK 11+ (HIVE-22097)
+    if (ver != hive.v3_0 && ver != hive.v3_1) {
+      withTable("test_tbl") {
+        client.runSqlHive("CREATE TABLE test_tbl AS SELECT 1")
+        assert(versionSpark.sql("SELECT * from test_tbl").collect() === Array(Row(1)))
+      }
+    }
+  }
+
   ///////////////////////////////////////////////////////////////////////////
   // Miscellaneous API
   ///////////////////////////////////////////////////////////////////////////

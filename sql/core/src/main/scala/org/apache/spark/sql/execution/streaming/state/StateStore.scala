@@ -665,11 +665,13 @@ trait StateStoreProvider {
   /**
    * Return an instance of [[StateStore]] representing state data of the given version.
    * If `stateStoreCkptId` is provided, the instance also needs to match the ID.
+   * If `loadEmpty` is true, creates an empty store at this version without loading previous data.
    * */
   def getStore(
       version: Long,
       stateStoreCkptId: Option[String] = None,
-      forceSnapshotOnCommit: Boolean = false): StateStore
+      forceSnapshotOnCommit: Boolean = false,
+      loadEmpty: Boolean = false): StateStore
 
   /**
    * Return an instance of [[ReadStateStore]] representing state data of the given version
@@ -1128,7 +1130,8 @@ object StateStore extends Logging {
    */
   class MaintenanceThreadPool(
       numThreads: Int,
-      shutdownTimeout: Long) {
+      shutdownTimeout: Long,
+      forceShutdownTimeout: Long) {
     private val threadPool = ThreadUtils.newDaemonFixedThreadPool(
       numThreads, "state-store-maintenance-thread")
 
@@ -1149,7 +1152,7 @@ object StateStore extends Logging {
         threadPool.shutdownNow() // Cancel currently executing tasks
 
         // Wait a while for tasks to respond to being cancelled
-        if (!threadPool.awaitTermination(60, TimeUnit.SECONDS)) {
+        if (!threadPool.awaitTermination(forceShutdownTimeout, TimeUnit.SECONDS)) {
           logError("MaintenanceThreadPool did not terminate")
         }
       }
@@ -1414,6 +1417,7 @@ object StateStore extends Logging {
   private def startMaintenanceIfNeeded(storeConf: StateStoreConf): Unit = {
     val numMaintenanceThreads = storeConf.numStateStoreMaintenanceThreads
     val maintenanceShutdownTimeout = storeConf.stateStoreMaintenanceShutdownTimeout
+    val maintenanceForceShutdownTimeout = storeConf.stateStoreMaintenanceForceShutdownTimeout
     loadedProviders.synchronized {
       if (SparkEnv.get != null && !isMaintenanceRunning && !storeConf.unloadOnCommit) {
         maintenanceTask = new MaintenanceTask(
@@ -1421,7 +1425,7 @@ object StateStore extends Logging {
           task = { doMaintenance(storeConf) }
         )
         maintenanceThreadPool = new MaintenanceThreadPool(numMaintenanceThreads,
-          maintenanceShutdownTimeout)
+          maintenanceShutdownTimeout, maintenanceForceShutdownTimeout)
         logInfo("State Store maintenance task started")
       }
     }

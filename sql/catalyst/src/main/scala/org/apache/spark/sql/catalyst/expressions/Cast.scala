@@ -90,12 +90,6 @@ object Cast extends QueryErrorsBase {
    *   - String <=> Binary
    */
   def canAnsiCast(from: DataType, to: DataType): Boolean = (from, to) match {
-    case (fromType, toType) if !SQLConf.get.geospatialEnabled &&
-        (isGeoSpatialType(fromType) || isGeoSpatialType(toType)) =>
-      throw new org.apache.spark.sql.AnalysisException(
-        errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",
-        messageParameters = scala.collection.immutable.Map.empty)
-
     case (fromType, toType) if fromType == toType => true
 
     case (NullType, _) => true
@@ -224,12 +218,6 @@ object Cast extends QueryErrorsBase {
    * Returns true iff we can cast `from` type to `to` type.
    */
   def canCast(from: DataType, to: DataType): Boolean = (from, to) match {
-    case (fromType, toType) if !SQLConf.get.geospatialEnabled &&
-        (isGeoSpatialType(fromType) || isGeoSpatialType(toType)) =>
-      throw new org.apache.spark.sql.AnalysisException(
-        errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",
-        messageParameters = scala.collection.immutable.Map.empty)
-
     case (fromType, toType) if fromType == toType => true
 
     case (NullType, _) => true
@@ -505,6 +493,10 @@ object Cast extends QueryErrorsBase {
             "config" -> toSQLConf(fallbackConf.get._1),
             "configVal" -> toSQLValue(fallbackConf.get._2, StringType)))
 
+      case _ if fallbackConf.isEmpty && Cast.canTryCast(from, to) =>
+        // Suggest try_cast for valid casts that fail in ANSI mode
+        withFunSuggest("try_cast")
+
       case _ =>
         DataTypeMismatch(
           errorSubClass = "CAST_WITHOUT_SUGGESTION",
@@ -588,8 +580,19 @@ case class Cast(
           Some(SQLConf.STORE_ASSIGNMENT_POLICY.key ->
             SQLConf.StoreAssignmentPolicy.LEGACY.toString))
       } else {
-        Cast.typeCheckFailureMessage(child.dataType, dataType,
-          Some(SQLConf.ANSI_ENABLED.key -> "false"))
+        // Check if there's a config workaround for this cast failure:
+        // - If canTryCast supports this cast, pass None here and let typeCheckFailureMessage
+        //   suggest try_cast (which is more user-friendly than disabling ANSI mode)
+        // - If canTryCast doesn't support it BUT the cast works in non-ANSI mode,
+        //   suggest disabling ANSI mode as a migration path
+        // - Otherwise, pass None and let typeCheckFailureMessage decide
+        val fallbackConf = if (!Cast.canTryCast(child.dataType, dataType) &&
+            Cast.canCast(child.dataType, dataType)) {
+          Some(SQLConf.ANSI_ENABLED.key -> "false")
+        } else {
+          None
+        }
+        Cast.typeCheckFailureMessage(child.dataType, dataType, fallbackConf)
       }
     case EvalMode.TRY =>
       Cast.typeCheckFailureMessage(child.dataType, dataType, None)
@@ -602,6 +605,7 @@ case class Cast(
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {
+    TypeUtils.failUnsupportedDataType(dataType, SQLConf.get)
     val canCast = evalMode match {
       case EvalMode.LEGACY => Cast.canCast(child.dataType, dataType)
       case EvalMode.ANSI => Cast.canAnsiCast(child.dataType, dataType)

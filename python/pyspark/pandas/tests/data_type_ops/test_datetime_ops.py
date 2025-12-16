@@ -248,7 +248,7 @@ class DatetimeOpsTests(
 class DatetimeNTZOpsTest(DatetimeOpsTests):
     @classmethod
     def setUpClass(cls):
-        super(DatetimeOpsTests, cls).setUpClass()
+        super().setUpClass()
         cls.spark.conf.set("spark.sql.timestampType", "timestamp_ntz")
 
 

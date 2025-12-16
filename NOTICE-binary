@@ -102,7 +102,7 @@ which has the following notices:
 
 Please visit the Netty web site for more information:
 
-  * http://netty.io/
+  * https://netty.io/
 
 Copyright 2014 The Netty Project
 
@@ -110,7 +110,7 @@ The Netty Project licenses this file to you under the Apache License,
 version 2.0 (the "License"); you may not use this file except in compliance
 with the License. You may obtain a copy of the License at:
 
-  http://www.apache.org/licenses/LICENSE-2.0
+  https://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -132,6 +132,14 @@ been derived from the works by JSR-166 EG, Doug Lea, and Jason T. Greene:
     * http://gee.cs.oswego.edu/cgi-bin/viewcvs.cgi/jsr166/
     * http://viewvc.jboss.org/cgi-bin/viewvc.cgi/jbosscache/experimental/jsr166/
 
+This product contains a modified version of Robert Harder's Public Domain
+Base64 Encoder and Decoder, which can be obtained at:
+
+  * LICENSE:
+    * license/LICENSE.base64.txt (Public Domain)
+  * HOMEPAGE:
+    * http://iharder.sourceforge.net/current/java/base64/
+
 This product contains a modified portion of 'Webbit', an event based
 WebSocket and HTTP server, which can be obtained at:
 
@@ -146,7 +154,7 @@ facade for Java, which can be obtained at:
   * LICENSE:
     * license/LICENSE.slf4j.txt (MIT License)
   * HOMEPAGE:
-    * http://www.slf4j.org/
+    * https://www.slf4j.org/
 
 This product contains a modified portion of 'Apache Harmony', an open source
 Java SE, which can be obtained at:
@@ -156,7 +164,7 @@ Java SE, which can be obtained at:
   * LICENSE:
     * license/LICENSE.harmony.txt (Apache License 2.0)
   * HOMEPAGE:
-    * http://archive.apache.org/dist/harmony/
+    * https://archive.apache.org/dist/harmony/
 
 This product contains a modified portion of 'jbzip2', a Java bzip2 compression
 and decompression library written by Matthew J. Francis. It can be obtained at:
@@ -215,6 +223,14 @@ and decompression library, which can be obtained at:
   * HOMEPAGE:
     * https://github.com/jponge/lzma-java
 
+This product optionally depends on 'zstd-jni', a zstd-jni Java compression
+and decompression library, which can be obtained at:
+
+  * LICENSE:
+    * license/LICENSE.zstd-jni.txt (BSD)
+  * HOMEPAGE:
+    * https://github.com/luben/zstd-jni
+
 This product contains a modified portion of 'jfastlz', a Java port of FastLZ compression
 and decompression library written by William Kinney. It can be obtained at:
 
@@ -238,7 +254,7 @@ equivalent functionality.  It can be obtained at:
   * LICENSE:
     * license/LICENSE.bouncycastle.txt (MIT License)
   * HOMEPAGE:
-    * http://www.bouncycastle.org/
+    * https://www.bouncycastle.org/
 
 This product optionally depends on 'Snappy', a compression library produced
 by Google Inc, which can be obtained at:
@@ -252,9 +268,9 @@ This product optionally depends on 'JBoss Marshalling', an alternative Java
 serialization API, which can be obtained at:
 
   * LICENSE:
-    * license/LICENSE.jboss-marshalling.txt (GNU LGPL 2.1)
+    * license/LICENSE.jboss-marshalling.txt (Apache License 2.0)
   * HOMEPAGE:
-    * http://www.jboss.org/jbossmarshalling
+    * https://github.com/jboss-remoting/jboss-marshalling
 
 This product optionally depends on 'Caliper', Google's micro-
 benchmarking framework, which can be obtained at:
@@ -264,13 +280,21 @@ benchmarking framework, which can be obtained at:
   * HOMEPAGE:
     * https://github.com/google/caliper
 
+This product optionally depends on 'Apache Commons Logging', a logging
+framework, which can be obtained at:
+
+  * LICENSE:
+    * license/LICENSE.commons-logging.txt (Apache License 2.0)
+  * HOMEPAGE:
+    * https://commons.apache.org/logging/
+
 This product optionally depends on 'Apache Log4J', a logging framework, which
 can be obtained at:
 
   * LICENSE:
     * license/LICENSE.log4j.txt (Apache License 2.0)
   * HOMEPAGE:
-    * http://logging.apache.org/log4j/
+    * https://logging.apache.org/log4j/
 
 This product optionally depends on 'Aalto XML', an ultra-high performance
 non-blocking XML processor, which can be obtained at:
@@ -278,7 +302,7 @@ non-blocking XML processor, which can be obtained at:
   * LICENSE:
     * license/LICENSE.aalto-xml.txt (Apache License 2.0)
   * HOMEPAGE:
-    * http://wiki.fasterxml.com/AaltoHome
+    * https://wiki.fasterxml.com/AaltoHome
 
 This product contains a modified version of 'HPACK', a Java implementation of
 the HTTP/2 HPACK algorithm written by Twitter. It can be obtained at:
@@ -287,6 +311,22 @@ the HTTP/2 HPACK algorithm written by Twitter. It can be obtained at:
     * license/LICENSE.hpack.txt (Apache License 2.0)
   * HOMEPAGE:
     * https://github.com/twitter/hpack
+
+This product contains a modified version of 'HPACK', a Java implementation of
+the HTTP/2 HPACK algorithm written by Cory Benfield. It can be obtained at:
+
+  * LICENSE:
+    * license/LICENSE.hyper-hpack.txt (MIT License)
+  * HOMEPAGE:
+    * https://github.com/python-hyper/hpack/
+
+This product contains a modified version of 'HPACK', a Java implementation of
+the HTTP/2 HPACK algorithm written by Tatsuhiro Tsujikawa. It can be obtained at:
+
+  * LICENSE:
+    * license/LICENSE.nghttp2-hpack.txt (MIT License)
+  * HOMEPAGE:
+    * https://github.com/nghttp2/nghttp2/
 
 This product contains a modified portion of 'Apache Commons Lang', a Java library
 provides utilities for the java.lang API, which can be obtained at:
@@ -304,6 +344,37 @@ This product contains the Maven wrapper scripts from 'Maven Wrapper', that provi
   * HOMEPAGE:
     * https://github.com/takari/maven-wrapper
 
+This product contains the dnsinfo.h header file, that provides a way to retrieve the system DNS configuration on MacOS.
+This private header is also used by Apple's open source
+ mDNSResponder (https://opensource.apple.com/tarballs/mDNSResponder/).
+
+ * LICENSE:
+    * license/LICENSE.dnsinfo.txt (Apple Public Source License 2.0)
+  * HOMEPAGE:
+    * https://www.opensource.apple.com/source/configd/configd-453.19/dnsinfo/dnsinfo.h
+
+This product optionally depends on 'Brotli4j', Brotli compression and
+decompression for Java., which can be obtained at:
+
+  * LICENSE:
+    * license/LICENSE.brotli4j.txt (Apache License 2.0)
+  * HOMEPAGE:
+    * https://github.com/hyperxpro/Brotli4j
+
+This product is statically linked against Quiche.
+
+ * LICENSE:
+    * license/LICENSE.quiche.txt (BSD2)
+  * HOMEPAGE:
+    * https://github.com/cloudflare/quiche
+
+
+This product is statically linked against boringssl.
+
+  * LICENSE
+    * license/LICENSE.boringssl.txt (Apache License 2.0)
+  * HOMEPAGE:
+    * https://boringssl.googlesource.com/boringssl/
 
 The binary distribution of this product bundles binaries of
 Commons Codec 1.4,
