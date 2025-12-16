@@ -60,10 +60,10 @@ object BuildCommons {
 
   val allProjects@Seq(
     core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore,
-    commonUtils, commonUtilsJava, variant, pipelines, _*
+    commonUtils, commonUtilsJava, variant, pipelines, sparkConfig, _*
   ) = Seq(
     "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
-    "tags", "sketch", "kvstore", "common-utils", "common-utils-java", "variant", "pipelines"
+    "tags", "sketch", "kvstore", "common-utils", "common-utils-java", "variant", "pipelines", "config"
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects ++ connectProjects
 
   val optionallyEnabledProjects@Seq(kubernetes, yarn,
@@ -363,6 +363,7 @@ object SparkBuild extends PomBuild {
       "-groups",
       "-skip-packages", Seq(
         "org.apache.spark.api.python",
+        "org.apache.spark.config",
         "org.apache.spark.deploy",
         "org.apache.spark.kafka010",
         "org.apache.spark.network",
@@ -405,7 +406,7 @@ object SparkBuild extends PomBuild {
     Seq(
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
       unsafe, tags, tokenProviderKafka010, sqlKafka010, pipelines, connectCommon, connect,
-      connectJdbc, connectClient, variant, connectShims, profiler, commonUtilsJava
+      connectJdbc, connectClient, variant, connectShims, profiler, commonUtilsJava, sparkConfig
     ).contains(x)
   }
 
@@ -457,6 +458,9 @@ object SparkBuild extends PomBuild {
 
   /* Protobuf settings */
   enable(SparkProtobuf.settings)(protobuf)
+
+  /* Config module protobuf settings */
+  enable(SparkConfig.settings)(sparkConfig)
 
   enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
 
@@ -643,6 +647,31 @@ object Core {
     PB.protocVersion := BuildCommons.protoVersion,
     // For some reason the resolution from the imported Maven build does not work for some
     // of these dependendencies that we need to shade later on.
+    libraryDependencies ++= {
+      Seq(
+        "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
+      )
+    },
+    (Compile / PB.targets) := Seq(
+      PB.gens.java -> (Compile / sourceManaged).value
+    )
+  ) ++ {
+    val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
+    if (sparkProtocExecPath.isDefined) {
+      Seq(
+        PB.protocExecutable := file(sparkProtocExecPath.get)
+      )
+    } else {
+      Seq.empty
+    }
+  }
+}
+
+object SparkConfig {
+  import BuildCommons.protoVersion
+  lazy val settings = Seq(
+    // Setting version for the protobuf compiler.
+    PB.protocVersion := BuildCommons.protoVersion,
     libraryDependencies ++= {
       Seq(
         "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
@@ -1505,6 +1534,7 @@ object Unidoc {
   protected def ignoreUndocumentedPackages(packages: Seq[Seq[File]]): Seq[Seq[File]] = {
     packages
       .map(_.filterNot(_.getName.contains("$")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/config")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/deploy")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/examples")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/internal")))

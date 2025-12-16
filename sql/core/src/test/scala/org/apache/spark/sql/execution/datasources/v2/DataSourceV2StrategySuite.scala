@@ -837,7 +837,7 @@ class DataSourceV2StrategySuite extends PlanTest with SharedSparkSession {
     val expr = Abs(Literal(-5), failOnError = true)
     checkV2Conversion(expr, LiteralValue(5, IntegerType))
 
-    withSQLConf(SQLConf.DATA_SOURCE_V2_EXPR_FOLDING.key -> "false") {
+    withSQLConf("spark.sql.optimizer.datasourceV2ExprFolding" -> "false") {
       // when spark.sql.optimizer.datasourceV2ExprFolding = false
       // expression will be converted to V2 expressions, but not folded
       checkV2Conversion(expr,

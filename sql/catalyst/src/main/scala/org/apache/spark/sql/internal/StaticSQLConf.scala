@@ -30,7 +30,7 @@ import org.apache.spark.util.Utils
  */
 object StaticSQLConf {
 
-  import SQLConf.buildStaticConf
+  import SQLConf.{buildConfFromConfigFile, buildStaticConf}
 
   val WAREHOUSE_PATH = buildStaticConf("spark.sql.warehouse.dir")
     .doc("The default location for managed databases and tables.")
@@ -171,11 +171,7 @@ object StaticSQLConf {
     .createOptional
 
   val UI_RETAINED_EXECUTIONS =
-    buildStaticConf("spark.sql.ui.retainedExecutions")
-      .doc("Number of executions to retain in the Spark UI.")
-      .version("1.5.0")
-      .intConf
-      .createWithDefault(1000)
+    buildConfFromConfigFile[Int]("spark.sql.ui.retainedExecutions")
 
   val SHUFFLE_EXCHANGE_MAX_THREAD_THRESHOLD =
     buildStaticConf("spark.sql.shuffleExchange.maxThreadThreshold")

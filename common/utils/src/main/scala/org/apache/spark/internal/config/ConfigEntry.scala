@@ -17,6 +17,11 @@
 
 package org.apache.spark.internal.config
 
+import org.apache.spark.SparkException
+import org.apache.spark.config.ConfigRegistry
+import org.apache.spark.config.protobuf.{ConfigEntry => ProtoConfigEntry, ValueType, Visibility}
+import org.apache.spark.util.SparkEnvUtils
+
 // ====================================================================================
 //                      The guideline for naming configurations
 // ====================================================================================
@@ -271,6 +276,55 @@ private[spark] class FallbackConfigEntry[T] (
   }
 }
 
+private[spark] class ProtoBackedConfigEntry[T](
+    protoEntry: ProtoConfigEntry,
+    valueConverter: String => T,
+    stringConverter: T => String)
+  extends ConfigEntry[T](
+    key = protoEntry.getKey,
+    prependedKey = None,
+    prependSeparator = "",
+    alternatives = Nil,
+    valueConverter = valueConverter,
+    stringConverter = stringConverter,
+    doc = protoEntry.getDoc,
+    isPublic = protoEntry.getVisibility != Visibility.INTERNAL,
+    version = protoEntry.getVersion
+  ) {
+
+  override def defaultValueString: String =
+    defaultValue.map(stringConverter).getOrElse(ConfigEntry.UNDEFINED)
+
+  override def defaultValue: Option[T] = {
+    val defaultStrOpt = if (SparkEnvUtils.isTesting && protoEntry.hasTestDefault) {
+      Some(protoEntry.getTestDefault)
+    } else if (protoEntry.hasDefaultValue) {
+      Some(protoEntry.getDefaultValue)
+    } else {
+      None
+    }
+    defaultStrOpt.map(valueConverter)
+  }
+
+  override def readFrom(reader: ConfigReader): T = {
+    readString(reader).map(valueConverter).getOrElse(defaultValue.get)
+  }
+
+  def checkValue(validator: T => Boolean, errorMsg: String): ProtoBackedConfigEntry[T] = {
+    new ProtoBackedConfigEntry[T](
+      protoEntry,
+      str => {
+        val v = valueConverter(str)
+        if (!validator(v)) {
+          throw ConfigHelpers.configRequirementError(key, str, errorMsg)
+        }
+        v
+      },
+      stringConverter
+    )
+  }
+}
+
 private[spark] object ConfigEntry {
 
   val UNDEFINED = "<undefined>"
@@ -278,11 +332,67 @@ private[spark] object ConfigEntry {
   private[spark] val knownConfigs =
     new java.util.concurrent.ConcurrentHashMap[String, ConfigEntry[_]]()
 
+  // Register all proto-backed configs at object initialization.
+  // These can be overwritten later by modules that need to add validation.
+  ConfigRegistry.allConfigs().forEach { protoEntry =>
+    createProtoBackedConfigEntry(protoEntry)
+  }
+
   def registerEntry(entry: ConfigEntry[_]): Unit = {
     val existing = knownConfigs.putIfAbsent(entry.key, entry)
-    require(existing == null, s"Config entry ${entry.key} already registered!")
+    if (existing != null) {
+      // Only allow overwriting proto-backed configs (enhancement pattern)
+      require(existing.isInstanceOf[ProtoBackedConfigEntry[_]],
+        s"Config entry ${entry.key} already registered!")
+      knownConfigs.put(entry.key, entry)
+    }
   }
 
   def findEntry(key: String): ConfigEntry[_] = knownConfigs.get(key)
 
+  def findProtoBackedEntry(key: String): ProtoBackedConfigEntry[_] = {
+    knownConfigs.get(key) match {
+      case entry: ProtoBackedConfigEntry[_] => entry
+      case _ => null
+    }
+  }
+
+  def listAllProtoBackedConfigs(): java.util.Collection[ProtoBackedConfigEntry[_]] = {
+    // Lazy filtering view - no intermediate allocation
+    new java.util.AbstractCollection[ProtoBackedConfigEntry[_]]() {
+      override def iterator(): java.util.Iterator[ProtoBackedConfigEntry[_]] = {
+        knownConfigs.values().stream()
+          .filter(_.isInstanceOf[ProtoBackedConfigEntry[_]])
+          .map(_.asInstanceOf[ProtoBackedConfigEntry[_]])
+          .iterator()
+      }
+
+      override def size(): Int = {
+        var count = 0
+        knownConfigs.values().forEach {
+          case _: ProtoBackedConfigEntry[_] => count += 1
+          case _ =>
+        }
+        count
+      }
+    }
+  }
+
+  private def createProtoBackedConfigEntry(
+      protoEntry: ProtoConfigEntry): ProtoBackedConfigEntry[_] = {
+    protoEntry.getValueType match {
+      case ValueType.BOOL =>
+        new ProtoBackedConfigEntry[Boolean](protoEntry, _.toBoolean, _.toString)
+      case ValueType.INT =>
+        new ProtoBackedConfigEntry[Int](protoEntry, _.toInt, _.toString)
+      case ValueType.LONG =>
+        new ProtoBackedConfigEntry[Long](protoEntry, _.toLong, _.toString)
+      case ValueType.DOUBLE =>
+        new ProtoBackedConfigEntry[Double](protoEntry, _.toDouble, _.toString)
+      case ValueType.STRING =>
+        new ProtoBackedConfigEntry[String](protoEntry, identity[String], identity[String])
+      case other =>
+        throw SparkException.internalError(s"Unsupported value type: $other")
+    }
+  }
 }

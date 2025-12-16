@@ -1,0 +1,57 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+
+name: "Config Definition Check"
+
+on:
+  pull_request:
+    paths:
+      - '**/*.scala'
+
+jobs:
+  config-check:
+    name: Check config definitions to enforce textproto usage
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup reviewdog
+        uses: reviewdog/action-setup@v1
+
+      - name: Run config definition check
+        env:
+          REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Check for buildConf and buildStaticConf calls in Scala files
+          # reviewdog will filter to only report issues in added/changed lines
+          find . -name "*.scala" -type f | while read file; do
+            grep -n -E '\b(buildConf|buildStaticConf)\s*\(' "$file" 2>/dev/null | while IFS=: read line_num content; do
+              echo "$file:$line_num:1: warning: New configs should be defined in textproto files instead of using buildConf/buildStaticConf. See common/config/README.md for details."
+            done
+          done | reviewdog \
+            -efm="%f:%l:%c: %m" \
+            -name="config-check" \
+            -reporter=github-pr-review \
+            -filter-mode=added \
+            -fail-level=any
