@@ -11147,7 +11147,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         bool_only: Optional[bool] = None,
         skipna: bool = True,
         **kwargs: Any,
-    ) -> "Series":
+    ) -> Union["Series", bool]:
         """
         Return whether any element is True.
 
