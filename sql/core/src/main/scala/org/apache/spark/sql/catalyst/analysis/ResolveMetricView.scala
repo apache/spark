@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.METRIC_VIEW_PLACEHOLDER
 import org.apache.spark.sql.metricview.logical.{MetricViewPlaceholder, ResolvedMetricView}
-import org.apache.spark.sql.metricview.serde.{Column => CanonicalColumn, Constants => MetricViewConstants, DimensionExpression, JsonUtils, MeasureExpression, MetricView => CanonicalMetricView}
+import org.apache.spark.sql.metricview.serde.{Column => CanonicalColumn, DimensionExpression, JsonUtils, MeasureExpression, MetricView => CanonicalMetricView}
 import org.apache.spark.sql.types.{DataType, Metadata, MetadataBuilder}
 
 /**
@@ -210,14 +210,8 @@ case class ResolveMetricView(session: SparkSession) extends Rule[LogicalPlan] {
             .resolve(Seq(attr.name), session.sessionState.conf.resolver)
             .nonEmpty
         }.map { attr =>
-          if (attr.metadata.contains(MetricViewConstants.COLUMN_TYPE_PROPERTY_KEY)) {
-            // no alias for metric view column since the measure reference needs to use the
-            // measure column in MetricViewPlaceholder, but an alias will change the exprId
-            attr
-          } else {
-            // add an alias to the source column so they are stable with DeduplicateRelation
-            Alias(attr, attr.name)()
-          }
+          // add an alias to the source column so they are stable with DeduplicateRelation
+          Alias(attr, attr.name)()
         }
         val withDimensions = node.transformDownWithPruning(
           _.containsPattern(METRIC_VIEW_PLACEHOLDER)) {
