@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst.parser
 
 import scala.collection.mutable
 
-import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
+import org.sparkproject.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
 
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.util.SparkParserUtils.withOrigin

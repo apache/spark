@@ -30,11 +30,11 @@ trait SQLKeywordUtils extends SparkFunSuite with SQLHelper {
 
   val sqlSyntaxDefs = {
     val sqlBaseParserPath =
-      getWorkspaceFilePath("sql", "api", "src", "main", "antlr4", "org",
+      getWorkspaceFilePath("sql", "parser", "src", "main", "antlr4", "org",
         "apache", "spark", "sql", "catalyst", "parser", "SqlBaseParser.g4").toFile
 
     val sqlBaseLexerPath =
-      getWorkspaceFilePath("sql", "api", "src", "main", "antlr4", "org",
+      getWorkspaceFilePath("sql", "parser", "src", "main", "antlr4", "org",
         "apache", "spark", "sql", "catalyst", "parser", "SqlBaseLexer.g4").toFile
 
     (Files.readString(sqlBaseParserPath.toPath) +

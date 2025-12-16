@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.parser
 
-import org.antlr.v4.runtime.{DefaultErrorStrategy, InputMismatchException, IntStream, NoViableAltException, Parser, ParserRuleContext, RecognitionException, Recognizer, Token}
-import org.antlr.v4.runtime.misc.ParseCancellationException
+import org.sparkproject.antlr.v4.runtime.{DefaultErrorStrategy, InputMismatchException, IntStream, NoViableAltException, Parser, ParserRuleContext, RecognitionException, Recognizer, Token}
+import org.sparkproject.antlr.v4.runtime.misc.ParseCancellationException
 
 /**
  * A [[SparkRecognitionException]] extends the [[RecognitionException]] with more information
