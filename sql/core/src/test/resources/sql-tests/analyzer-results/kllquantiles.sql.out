@@ -1295,6 +1295,118 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT kll_sketch_get_quantile_bigint(agg, CAST(col1 AS DOUBLE) / 10.0) AS non_foldable_scalar_rank
+FROM (
+    SELECT kll_sketch_agg_bigint(col1) AS agg, col1
+    FROM t_long_1_5_through_7_11
+    GROUP BY col1
+)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputExpr" : "\"(CAST(col1 AS DOUBLE) / 10.0)\"",
+    "inputName" : "`rank`",
+    "inputType" : "\"DOUBLE\"",
+    "sqlExpr" : "\"kll_sketch_get_quantile_bigint(agg, (CAST(col1 AS DOUBLE) / 10.0))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 71,
+    "fragment" : "kll_sketch_get_quantile_bigint(agg, CAST(col1 AS DOUBLE) / 10.0)"
+  } ]
+}
+
+
+-- !query
+SELECT kll_sketch_get_quantile_bigint(agg, array(0.25, CAST(col1 AS DOUBLE) / 10.0, 0.75)) AS non_foldable_array_rank
+FROM (
+    SELECT kll_sketch_agg_bigint(col1) AS agg, col1
+    FROM t_long_1_5_through_7_11
+    GROUP BY col1
+)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputExpr" : "\"array(0.25, (CAST(col1 AS DOUBLE) / 10.0), 0.75)\"",
+    "inputName" : "`rank`",
+    "inputType" : "\"ARRAY<DOUBLE>\"",
+    "sqlExpr" : "\"kll_sketch_get_quantile_bigint(agg, array(0.25, (CAST(col1 AS DOUBLE) / 10.0), 0.75))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 90,
+    "fragment" : "kll_sketch_get_quantile_bigint(agg, array(0.25, CAST(col1 AS DOUBLE) / 10.0, 0.75))"
+  } ]
+}
+
+
+-- !query
+SELECT kll_sketch_get_rank_bigint(agg, col1) AS non_foldable_scalar_quantile
+FROM (
+    SELECT kll_sketch_agg_bigint(col1) AS agg, col1
+    FROM t_long_1_5_through_7_11
+    GROUP BY col1
+)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputExpr" : "\"col1\"",
+    "inputName" : "`quantile`",
+    "inputType" : "\"BIGINT\"",
+    "sqlExpr" : "\"kll_sketch_get_rank_bigint(agg, col1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 44,
+    "fragment" : "kll_sketch_get_rank_bigint(agg, col1)"
+  } ]
+}
+
+
+-- !query
+SELECT kll_sketch_get_rank_bigint(agg, array(1L, col1, 5L)) AS non_foldable_array_quantile
+FROM (
+    SELECT kll_sketch_agg_bigint(col1) AS agg, col1
+    FROM t_long_1_5_through_7_11
+    GROUP BY col1
+)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputExpr" : "\"array(1, col1, 5)\"",
+    "inputName" : "`quantile`",
+    "inputType" : "\"ARRAY<BIGINT>\"",
+    "sqlExpr" : "\"kll_sketch_get_rank_bigint(agg, array(1, col1, 5))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 59,
+    "fragment" : "kll_sketch_get_rank_bigint(agg, array(1L, col1, 5L))"
+  } ]
+}
+
+
+-- !query
 DROP TABLE IF EXISTS t_int_1_5_through_7_11
 -- !query analysis
 DropTable true, false
