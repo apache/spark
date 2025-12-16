@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import asyncio
 import json
 import logging
 import os
@@ -154,12 +155,16 @@ class RemoteModelRef:
             self._ref_count += 1
 
     def release_ref(self) -> None:
+        should_del = False
         with self._lock:
             assert self._ref_count > 0
             self._ref_count -= 1
             if self._ref_count == 0:
-                # Delete the model if possible
-                del_remote_cache(self.ref_id)
+                should_del = True
+
+        if should_del:
+            # Delete the model if possible
+            asyncio.run(del_remote_cache(self.ref_id))
 
     def __str__(self) -> str:
         return self.ref_id
