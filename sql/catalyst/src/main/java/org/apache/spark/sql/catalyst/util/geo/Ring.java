@@ -14,40 +14,54 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.catalyst.util;
+package org.apache.spark.sql.catalyst.util.geo;
 
 import java.util.List;
 
 /**
- * Represents a MultiPoint geometry.
+ * Represents a ring (closed linestring) in a polygon.
  */
-public class MultiPoint extends Geometry {
+class Ring {
   private final List<Point> points;
 
-  MultiPoint(List<Point> points, int srid) {
-    super(GeoTypeId.MULTI_POINT, srid);
+  Ring(List<Point> points) {
     this.points = points;
   }
 
-  public List<Point> getPoints() {
+  List<Point> getPoints() {
     return points;
   }
 
-  public int getNumGeometries() {
+  int getNumPoints() {
     return points.size();
   }
 
-  @Override
-  public boolean isEmpty() {
+  boolean isEmpty() {
     return points.isEmpty();
+  }
+
+  boolean isClosed() {
+    if (points.size() < 4) {
+      return false;
+    }
+    Point first = points.get(0);
+    Point last = points.get(points.size() - 1);
+    return first.getX() == last.getX() && first.getY() == last.getY();
   }
 
   @Override
   public String toString() {
     if (isEmpty()) {
-      return "MULTIPOINT EMPTY";
+      return "()";
     }
-    return "MULTIPOINT (" + points.size() + " points)";
+    StringBuilder sb = new StringBuilder("(");
+    for (int i = 0; i < points.size(); i++) {
+      if (i > 0) sb.append(", ");
+      Point p = points.get(i);
+      sb.append(p.getX()).append(" ").append(p.getY());
+    }
+    sb.append(")");
+    return sb.toString();
   }
 }
 

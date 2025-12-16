@@ -14,16 +14,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.catalyst.util;
+package org.apache.spark.sql.catalyst.util.geo;
 
 /**
  * Exception thrown when parsing WKB data fails.
  */
-public class WkbParseException extends RuntimeException {
+class WkbParseException extends RuntimeException {
   private final long position;
   private final String wkbString;
 
-  public WkbParseException(String message, long position, byte[] wkb) {
+  WkbParseException(String message, long position, byte[] wkb) {
     super(formatMessage(message, position, wkb));
     this.position = position;
     this.wkbString = wkb != null ? bytesToHex(wkb) : "";
@@ -48,11 +48,11 @@ public class WkbParseException extends RuntimeException {
     return sb.toString();
   }
 
-  public long getPosition() {
+  long getPosition() {
     return position;
   }
 
-  public String getWkbString() {
+  String getWkbString() {
     return wkbString;
   }
 }

@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.catalyst.util;
+package org.apache.spark.sql.catalyst.util.geo;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -30,14 +30,14 @@ public class WkbWriter {
   /**
    * Writes a geometry to WKB format.
    */
-  public byte[] write(Geometry geometry) {
+  public byte[] write(GeometryModel geometry) {
     return write(geometry, ByteOrder.LITTLE_ENDIAN);
   }
 
   /**
    * Writes a geometry to WKB format with specified byte order.
    */
-  public byte[] write(Geometry geometry, ByteOrder byteOrder) {
+  public byte[] write(GeometryModel geometry, ByteOrder byteOrder) {
     // Calculate size first
     int size = calculateSize(geometry);
     ByteBuffer buffer = ByteBuffer.allocate(size);
@@ -48,7 +48,7 @@ public class WkbWriter {
     return buffer.array();
   }
 
-  private int calculateSize(Geometry geometry) {
+  private int calculateSize(GeometryModel geometry) {
     int size = 1 + 4; // Endianness + type
 
     if (geometry instanceof Point) {
@@ -86,7 +86,7 @@ public class WkbWriter {
     } else if (geometry instanceof GeometryCollection) {
       GeometryCollection gc = (GeometryCollection) geometry;
       size += 4; // Number of geometries
-      for (Geometry geom : gc.getGeometries()) {
+      for (GeometryModel geom : gc.getGeometries()) {
         size += calculateSize(geom);
       }
     }
@@ -94,7 +94,7 @@ public class WkbWriter {
     return size;
   }
 
-  private void writeGeometry(ByteBuffer buffer, Geometry geometry, ByteOrder byteOrder) {
+  private void writeGeometry(ByteBuffer buffer, GeometryModel geometry, ByteOrder byteOrder) {
     // Write endianness
     buffer.put((byte) (byteOrder == ByteOrder.LITTLE_ENDIAN ? 1 : 0));
 
@@ -173,7 +173,7 @@ public class WkbWriter {
   private void writeGeometryCollection(ByteBuffer buffer, GeometryCollection collection,
       ByteOrder byteOrder) {
     buffer.putInt(collection.getNumGeometries());
-    for (Geometry geometry : collection.getGeometries()) {
+    for (GeometryModel geometry : collection.getGeometries()) {
       writeGeometry(buffer, geometry, byteOrder);
     }
   }

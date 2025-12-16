@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.util;
+package org.apache.spark.sql.catalyst.util.geo;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -40,42 +40,48 @@ public class WkbErrorHandlingTest {
   @Test
   public void testEmptyWkb() {
     byte[] emptyWkb = new byte[0];
-    Assertions.assertThrows(WkbParseException.class, () -> Geometry.fromWkb(emptyWkb));
+    WkbReader reader = new WkbReader();
+    Assertions.assertThrows(WkbParseException.class, () -> reader.read(emptyWkb));
   }
 
   @Test
   public void testTooShortWkb() {
     // Only endianness byte
     byte[] tooShort = {0x01};
-    Assertions.assertThrows(WkbParseException.class, () -> Geometry.fromWkb(tooShort));
+    WkbReader reader = new WkbReader();
+    Assertions.assertThrows(WkbParseException.class, () -> reader.read(tooShort));
   }
 
   @Test
   public void testInvalidByteOrder() {
     // Invalid byte order value (should be 0 or 1)
     byte[] invalidByteOrder = {0x02, 0x01, 0x00, 0x00, 0x00};
-    Assertions.assertThrows(WkbParseException.class, () -> Geometry.fromWkb(invalidByteOrder));
+    WkbReader reader = new WkbReader();
+    Assertions.assertThrows(WkbParseException.class, () -> reader.read(invalidByteOrder));
   }
 
   @Test
   public void testInvalidGeometryType() {
     // Type = 99 (invalid)
     byte[] invalidType = hexToBytes("0163000000000000000000f03f0000000000000040");
-    Assertions.assertThrows(WkbParseException.class, () -> Geometry.fromWkb(invalidType));
+    WkbReader reader = new WkbReader();
+    Assertions.assertThrows(WkbParseException.class, () -> reader.read(invalidType));
   }
 
   @Test
   public void testInvalidGeometryTypeZero() {
     // Type = 0 (invalid, should be 1-7)
     byte[] invalidType = hexToBytes("0100000000000000000000f03f0000000000000040");
-    Assertions.assertThrows(WkbParseException.class, () -> Geometry.fromWkb(invalidType));
+    WkbReader reader = new WkbReader();
+    Assertions.assertThrows(WkbParseException.class, () -> reader.read(invalidType));
   }
 
   @Test
   public void testTruncatedPointCoordinates() {
     // Point WKB with truncated coordinates
     byte[] truncated = hexToBytes("0101000000000000000000f03f");  // Missing Y coordinate
-    Assertions.assertThrows(WkbParseException.class, () -> Geometry.fromWkb(truncated));
+    WkbReader reader = new WkbReader();
+    Assertions.assertThrows(WkbParseException.class, () -> reader.read(truncated));
   }
 
   @Test
@@ -86,7 +92,8 @@ public class WkbErrorHandlingTest {
         "0000000000000000" +     // X of first point
         "0000000000000000"       // Y of first point (missing second point)
     );
-    Assertions.assertThrows(WkbParseException.class, () -> Geometry.fromWkb(truncated));
+    WkbReader reader = new WkbReader();
+    Assertions.assertThrows(WkbParseException.class, () -> reader.read(truncated));
   }
 
   @Test
@@ -111,7 +118,7 @@ public class WkbErrorHandlingTest {
   public void testRingWithTooFewPoints() {
     // Try to parse a polygon with a ring that has fewer than 4 points
     // This should fail with validation level > 0
-    WkbReader reader = new WkbReader(false, 1);  // validation level = 1
+    WkbReader reader = new WkbReader(1);  // validation level = 1
 
     // Manually construct WKB for polygon with invalid ring (3 points)
     byte[] invalidPolygon = hexToBytes(
@@ -130,7 +137,7 @@ public class WkbErrorHandlingTest {
   @Test
   public void testNonClosedRing() {
     // Try to parse a polygon with a non-closed ring with validation
-    WkbReader reader = new WkbReader(false, 1);
+    WkbReader reader = new WkbReader(1);
 
     // Polygon with ring where first and last points don't match
     byte[] nonClosedRing = hexToBytes(
@@ -149,7 +156,8 @@ public class WkbErrorHandlingTest {
 
   @Test
   public void testNullByteArray() {
-    Assertions.assertThrows(WkbParseException.class, () -> Geometry.fromWkb(null),
+    WkbReader reader = new WkbReader();
+    Assertions.assertThrows(WkbParseException.class, () -> reader.read(null),
         "Should throw WKBParseException for null byte array");
   }
 
@@ -175,7 +183,8 @@ public class WkbErrorHandlingTest {
     WkbWriter writer = new WkbWriter();
     byte[] wkb = writer.write(original);
 
-    Geometry parsed = Geometry.fromWkb(wkb);
+    WkbReader reader = new WkbReader();
+    GeometryModel parsed = reader.read(wkb);
     Point parsedPoint = parsed.asPoint();
 
     Assertions.assertEquals(original.getX(), parsedPoint.getX(), 1e-10,

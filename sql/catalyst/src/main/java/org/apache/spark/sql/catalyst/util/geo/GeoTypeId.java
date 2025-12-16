@@ -14,40 +14,41 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.catalyst.util;
-
-import java.util.List;
+package org.apache.spark.sql.catalyst.util.geo;
 
 /**
- * Represents a GeometryCollection geometry.
+ * Enum type for geometry type IDs. The values chosen match the WKB specification
+ * for 2D geometries and align with the values for 3DZ, 3DM, and 4D geometries.
  */
-public class GeometryCollection extends Geometry {
-  private final List<Geometry> geometries;
+enum GeoTypeId {
+  ABSTRACT_GEOMETRY(-1),
+  DYNAMIC_GEOMETRY(0),
+  POINT(1),
+  LINESTRING(2),
+  POLYGON(3),
+  MULTI_POINT(4),
+  MULTI_LINESTRING(5),
+  MULTI_POLYGON(6),
+  GEOMETRY_COLLECTION(7),
+  BOX(1729);
 
-  public GeometryCollection(List<Geometry> geometries, int srid) {
-    super(GeoTypeId.GEOMETRY_COLLECTION, srid);
-    this.geometries = geometries;
+  private final long value;
+
+  GeoTypeId(long value) {
+    this.value = value;
   }
 
-  public List<Geometry> getGeometries() {
-    return geometries;
+  long getValue() {
+    return value;
   }
 
-  public int getNumGeometries() {
-    return geometries.size();
-  }
-
-  @Override
-  public boolean isEmpty() {
-    return geometries.isEmpty();
-  }
-
-  @Override
-  public String toString() {
-    if (isEmpty()) {
-      return "GEOMETRYCOLLECTION EMPTY";
+  static GeoTypeId fromValue(long value) {
+    for (GeoTypeId type : values()) {
+      if (type.value == value) {
+        return type;
+      }
     }
-    return "GEOMETRYCOLLECTION (" + geometries.size() + " geometries)";
+    throw new IllegalArgumentException("Invalid GeoTypeId value: " + value);
   }
 }
 
