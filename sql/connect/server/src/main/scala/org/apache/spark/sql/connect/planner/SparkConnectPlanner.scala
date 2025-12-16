@@ -42,7 +42,7 @@ import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{AnalysisException, Column, Encoders, ForeachWriter, Row}
-import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, InternalRow, QueryPlanningTracker}
+import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedOrdinal, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, UnboundRowEncoder}
@@ -1491,12 +1491,7 @@ class SparkConnectPlanner(
     }
 
     if (rel.hasData) {
-      val (rows, structType) = ArrowConverters.fromIPCStream(rel.getData.toByteArray)
-      try {
-        buildLocalRelationFromRows(rows, structType, Option(schema))
-      } finally {
-        rows.close()
-      }
+      buildLocalRelationFromRows(Iterator.single(rel.getData.toByteArray), Option(schema))
     } else {
       if (schema == null) {
         throw InvalidInputErrors.schemaRequiredForLocalRelation()
@@ -1567,13 +1562,9 @@ class SparkConnectPlanner(
     }
 
     // Load and combine all batches
-    val (rows, structType) =
-      ArrowConverters.fromIPCStream(dataHashes.iterator.map(readChunkedCachedLocalRelationBlock))
-    try {
-      buildLocalRelationFromRows(rows, structType, Option(schema))
-    } finally {
-      rows.close()
-    }
+    buildLocalRelationFromRows(
+      dataHashes.iterator.map(readChunkedCachedLocalRelationBlock),
+      Option(schema))
   }
 
   private def toStructTypeOrWrap(dt: DataType): StructType = dt match {
@@ -1582,16 +1573,17 @@ class SparkConnectPlanner(
   }
 
   private def buildLocalRelationFromRows(
-      rows: Iterator[InternalRow],
-      structType: StructType,
+      ipcStreams: Iterator[Array[Byte]],
       schemaOpt: Option[StructType]): LogicalPlan = {
-    if (structType == null) {
-      throw InvalidInputErrors.inputDataForLocalRelationNoSchema()
-    }
-
+    val (rows, structType) = ArrowConverters.fromIPCStream(ipcStreams)
     val attributes = DataTypeUtils.toAttributes(structType)
     val initialProjection = UnsafeProjection.create(attributes, attributes)
-    val data = rows.map(initialProjection)
+    val data =
+      try {
+        rows.map(initialProjection)
+      } finally {
+        rows.close()
+      }
 
     schemaOpt match {
       case None =>

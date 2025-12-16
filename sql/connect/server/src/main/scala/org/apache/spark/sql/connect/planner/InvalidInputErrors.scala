@@ -90,14 +90,8 @@ object InvalidInputErrors {
   def withColumnsRequireSingleNamePart(got: String): InvalidPlanInput =
     InvalidPlanInput(s"WithColumns require column name only contains one name part, but got $got")
 
-  def inputDataForLocalRelationNoSchema(): InvalidPlanInput =
-    InvalidPlanInput("Input data for LocalRelation does not produce a schema.")
-
   def chunkedCachedLocalRelationWithoutData(): InvalidPlanInput =
     InvalidPlanInput("ChunkedCachedLocalRelation should contain data.")
-
-  def chunkedCachedLocalRelationChunksWithDifferentSchema(): InvalidPlanInput =
-    InvalidPlanInput("ChunkedCachedLocalRelation data chunks have different schema.")
 
   def schemaRequiredForLocalRelation(): InvalidPlanInput =
     InvalidPlanInput("Schema for LocalRelation is required when the input data is not provided.")
