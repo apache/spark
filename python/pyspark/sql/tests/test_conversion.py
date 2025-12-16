@@ -17,7 +17,10 @@
 import unittest
 
 from pyspark.errors import PySparkValueError
-from pyspark.sql.conversion import ArrowTableToRowsConversion, LocalDataToArrowConversion
+from pyspark.sql.conversion import (
+    ArrowTableToRowsConversion,
+    LocalDataToArrowConversion,
+)
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -62,20 +65,23 @@ class Score:
 class ConversionTests(unittest.TestCase):
     def test_conversion(self):
         data = [
-            # Schema, Test cases (Before, After)
-            (NullType(), (None, None)),
-            (IntegerType(), (1, 1), (None, None)),
-            ((IntegerType(), {"nullable": False}), (1, 1)),
-            (StringType(), ("a", "a")),
-            (BinaryType(), (b"a", b"a")),
-            (GeographyType("ANY"), (None, None)),
-            (GeometryType("ANY"), (None, None)),
-            (ArrayType(IntegerType()), ([1, None], [1, None])),
-            (ArrayType(IntegerType(), containsNull=False), ([1, 2], [1, 2])),
-            (ArrayType(BinaryType()), ([b"a", b"b"], [b"a", b"b"])),
-            (MapType(StringType(), IntegerType()), ({"a": 1, "b": None}, {"a": 1, "b": None})),
-            (MapType(StringType(), IntegerType(), valueContainsNull=False), ({"a": 1}, {"a": 1})),
-            (MapType(StringType(), BinaryType()), ({"a": b"a"}, {"a": b"a"})),
+            # Schema, Test cases (Before, After_If_Different)
+            (NullType(), (None,)),
+            (IntegerType(), (1,), (None,)),
+            ((IntegerType(), {"nullable": False}), (1,)),
+            (StringType(), ("a",)),
+            (BinaryType(), (b"a",)),
+            (GeographyType("ANY"), (None,)),
+            (GeometryType("ANY"), (None,)),
+            (ArrayType(IntegerType()), ([1, None],)),
+            (ArrayType(IntegerType(), containsNull=False), ([1, 2],)),
+            (ArrayType(BinaryType()), ([b"a", b"b"],)),
+            (MapType(StringType(), IntegerType()), ({"a": 1, "b": None},)),
+            (
+                MapType(StringType(), IntegerType(), valueContainsNull=False),
+                ({"a": 1},),
+            ),
+            (MapType(StringType(), BinaryType()), ({"a": b"a"},)),
             (
                 StructType(
                     [
@@ -92,8 +98,8 @@ class ConversionTests(unittest.TestCase):
                     Row(i=1, i_n=None, ii=1, s="a", b=b"a"),
                 ),
             ),
-            (ExamplePointUDT(), (ExamplePoint(1.0, 1.0), ExamplePoint(1.0, 1.0))),
-            (ScoreUDT(), (Score(1), Score(1))),
+            (ExamplePointUDT(), (ExamplePoint(1.0, 1.0),)),
+            (ScoreUDT(), (Score(1),)),
         ]
 
         schema = StructType()
@@ -108,7 +114,10 @@ class ConversionTests(unittest.TestCase):
             else:
                 kwargs = {}
             for test in tests:
-                before, after = test
+                if len(test) == 1:
+                    before, after = test[0], test[0]
+                else:
+                    before, after = test
                 schema.add(f"{row_schema.simpleString()}_{index}", row_schema, **kwargs)
                 input_row.append(before)
                 expected.append(after)
