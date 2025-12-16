@@ -1576,50 +1576,44 @@ class SparkConnectPlanner(
       ipcStreams: Iterator[Array[Byte]],
       schemaOpt: Option[StructType]): LogicalPlan = {
     val (rows, structType) = ArrowConverters.fromIPCStream(ipcStreams)
-    val attributes = DataTypeUtils.toAttributes(structType)
-    val initialProjection = UnsafeProjection.create(attributes, attributes)
-    val data =
-      try {
-        rows.map(initialProjection)
-      } finally {
-        rows.close()
+    try {
+      val (attributes, projection) = schemaOpt match {
+        case None =>
+          val attributes = DataTypeUtils.toAttributes(structType)
+          val projection = UnsafeProjection.create(attributes, attributes)
+          (attributes, projection)
+        case Some(schema) =>
+          def normalize(dt: DataType): DataType = dt match {
+            case udt: UserDefinedType[_] => normalize(udt.sqlType)
+            case StructType(fields) =>
+              val newFields = fields.zipWithIndex.map {
+                case (StructField(_, dataType, nullable, metadata), i) =>
+                  StructField(s"col_$i", normalize(dataType), nullable, metadata)
+              }
+              StructType(newFields)
+            case ArrayType(elementType, containsNull) =>
+              ArrayType(normalize(elementType), containsNull)
+            case MapType(keyType, valueType, valueContainsNull) =>
+              MapType(normalize(keyType), normalize(valueType), valueContainsNull)
+            case _ => dt
+          }
+
+          val normalized = normalize(schema).asInstanceOf[StructType]
+          import org.apache.spark.util.ArrayImplicits._
+          val project = Dataset
+            .ofRows(
+              session,
+              logicalPlan = logical.LocalRelation(normalize(structType).asInstanceOf[StructType]))
+            .toDF(normalized.names.toImmutableArraySeq: _*)
+            .to(normalized)
+            .logicalPlan
+            .asInstanceOf[Project]
+          val projection = UnsafeProjection.create(project.projectList, project.child.output)
+          (DataTypeUtils.toAttributes(schema), projection)
       }
-
-    schemaOpt match {
-      case None =>
-        logical.LocalRelation(attributes, data.map(_.copy()).toArray.toImmutableArraySeq)
-      case Some(schema) =>
-        def normalize(dt: DataType): DataType = dt match {
-          case udt: UserDefinedType[_] => normalize(udt.sqlType)
-          case StructType(fields) =>
-            val newFields = fields.zipWithIndex.map {
-              case (StructField(_, dataType, nullable, metadata), i) =>
-                StructField(s"col_$i", normalize(dataType), nullable, metadata)
-            }
-            StructType(newFields)
-          case ArrayType(elementType, containsNull) =>
-            ArrayType(normalize(elementType), containsNull)
-          case MapType(keyType, valueType, valueContainsNull) =>
-            MapType(normalize(keyType), normalize(valueType), valueContainsNull)
-          case _ => dt
-        }
-
-        val normalized = normalize(schema).asInstanceOf[StructType]
-
-        import org.apache.spark.util.ArrayImplicits._
-        val project = Dataset
-          .ofRows(
-            session,
-            logicalPlan = logical.LocalRelation(normalize(structType).asInstanceOf[StructType]))
-          .toDF(normalized.names.toImmutableArraySeq: _*)
-          .to(normalized)
-          .logicalPlan
-          .asInstanceOf[Project]
-
-        val proj = UnsafeProjection.create(project.projectList, project.child.output)
-        logical.LocalRelation(
-          DataTypeUtils.toAttributes(schema),
-          data.map(proj).map(_.copy()).toSeq)
+      logical.LocalRelation(attributes, rows.map(projection).map(_.copy()).toSeq)
+    } finally {
+      rows.close()
     }
   }
 
