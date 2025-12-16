@@ -21,7 +21,6 @@ package org.apache.spark.sql.connector.write
  * Implementation of [[MergeSummary]] that provides MERGE operation summary.
  */
 private[sql] case class MergeSummaryImpl(
-    numSourceRows: Long,
     numTargetRowsCopied: Long,
     numTargetRowsDeleted: Long,
     numTargetRowsUpdated: Long,

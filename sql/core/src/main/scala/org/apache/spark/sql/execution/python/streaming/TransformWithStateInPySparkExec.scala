@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, PythonUDF}
 import org.apache.spark.sql.catalyst.plans.logical.TransformWithStateInPySpark
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.execution.{CoGroupedIterator, SparkPlan}
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.ArrowPythonRunner
 import org.apache.spark.sql.execution.python.PandasGroupUtils.{executePython, groupAndProject, resolveArgOffsets}
@@ -347,9 +347,9 @@ case class TransformWithStateInPySparkExec(
       val initData =
         groupAndProject(initStateIterator, initialStateGroupingAttrs,
           initialState.output, initDedupAttributes)
-      // group input rows and initial state rows by the same grouping key
-      val groupedData: Iterator[(InternalRow, Iterator[InternalRow], Iterator[InternalRow])] =
-        new CoGroupedIterator(data, initData, groupingAttributes)
+      // concatenate input rows and initial state rows iterators
+      val inputIter: Iterator[((InternalRow, Iterator[InternalRow]), Boolean)] =
+          initData.map { item => (item, true) } ++ data.map { item => (item, false) }
 
       val evalType = {
         if (userFacingDataType == TransformWithStateInPySpark.UserFacingDataType.PANDAS) {
@@ -374,7 +374,7 @@ case class TransformWithStateInPySparkExec(
         batchTimestampMs,
         eventTimeWatermarkForEviction
       )
-      executePython(groupedData, output, runner)
+      executePython(inputIter, output, runner)
     }
 
     CompletionIterator[InternalRow, Iterator[InternalRow]](outputIterator, {

@@ -173,6 +173,12 @@
     },
     "sqlState" : "42604"
   },
+  "ATTEMPT_ANALYSIS_IN_PIPELINE_QUERY_FUNCTION" : {
+    "message" : [
+      "Operations that trigger DataFrame analysis or execution are not allowed in pipeline query functions. Move code outside of the pipeline query function."
+    ],
+    "sqlState" : "0A000"
+  },
   "AVRO_CANNOT_WRITE_NULL_FIELD" : {
     "message" : [
       "Cannot write null value for field <name> defined as non-null Avro data type <dataType>.",
@@ -5520,6 +5526,17 @@
         "message" : [
           "<provider> is not supported"
         ]
+      },
+      "UNSUPPORTED_STATEFUL_OPERATOR" : {
+        "message" : [
+          "Unsupported stateful operator <operatorName>. Please use a checkpoint with supported stateful operators."
+        ]
+      },
+      "UNSUPPORTED_TRANSFORM_WITH_STATE_VARIABLE_TYPE" : {
+        "message" : [
+          "Unsupported transformWithState variable type <variableType> (TTL_Enabled: <ttlEnabled>, ColFamilyName: <colFamilyName>).",
+          "Please use a checkpoint with supported transform with state variable types."
+        ]
       }
     },
     "sqlState" : "55019"
@@ -7291,6 +7308,12 @@
       "The seconds precision <precision> of the TIME data type is out of the supported range [0, 6]."
     ],
     "sqlState" : "0A001"
+  },
+  "UNSUPPORTED_TIME_TYPE" : {
+    "message" : [
+      "The data type TIME is not supported."
+    ],
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_TYPED_LITERAL" : {
     "message" : [

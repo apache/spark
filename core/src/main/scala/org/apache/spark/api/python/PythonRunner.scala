@@ -69,6 +69,7 @@ private[spark] object PythonEvalType {
   val SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF = 214
   val SQL_GROUPED_MAP_ARROW_ITER_UDF = 215
   val SQL_GROUPED_MAP_PANDAS_ITER_UDF = 216
+  val SQL_GROUPED_AGG_PANDAS_ITER_UDF = 217
 
   // Arrow UDFs
   val SQL_SCALAR_ARROW_UDF = 250
@@ -107,6 +108,7 @@ private[spark] object PythonEvalType {
       "SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF"
     case SQL_GROUPED_MAP_ARROW_ITER_UDF => "SQL_GROUPED_MAP_ARROW_ITER_UDF"
     case SQL_GROUPED_MAP_PANDAS_ITER_UDF => "SQL_GROUPED_MAP_PANDAS_ITER_UDF"
+    case SQL_GROUPED_AGG_PANDAS_ITER_UDF => "SQL_GROUPED_AGG_PANDAS_ITER_UDF"
 
     // Arrow UDFs
     case SQL_SCALAR_ARROW_UDF => "SQL_SCALAR_ARROW_UDF"
@@ -211,6 +213,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
      conf.get(PYTHON_DAEMON_KILL_WORKER_ON_FLUSH_FAILURE)
   protected val hideTraceback: Boolean = false
   protected val simplifiedTraceback: Boolean = false
+
+  protected val runnerConf: Map[String, String] = Map.empty
 
   // All the Python functions should have the same exec, version and envvars.
   protected val envVars: java.util.Map[String, String] = funcs.head.funcs.head.envVars
@@ -404,6 +408,17 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     protected def writeCommand(dataOut: DataOutputStream): Unit
 
     /**
+     * Writes worker configuration to the stream connected to the Python worker.
+     */
+    protected def writeRunnerConf(dataOut: DataOutputStream): Unit = {
+      dataOut.writeInt(runnerConf.size)
+      for ((k, v) <- runnerConf) {
+        PythonWorkerUtils.writeUTF(k, dataOut)
+        PythonWorkerUtils.writeUTF(v, dataOut)
+      }
+    }
+
+    /**
      * Writes input data to the stream connected to the Python worker.
      * Returns true if any data was written to the stream, false if the input is exhausted.
      */
@@ -532,6 +547,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         PythonWorkerUtils.writeBroadcasts(broadcastVars, worker, env, dataOut)
 
         dataOut.writeInt(evalType)
+        writeRunnerConf(dataOut)
         writeCommand(dataOut)
 
         dataOut.flush()

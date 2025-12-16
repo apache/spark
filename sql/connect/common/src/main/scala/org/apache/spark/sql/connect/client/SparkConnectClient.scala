@@ -40,6 +40,7 @@ import org.apache.spark.internal.LogKeys.{ERROR, RATIO, SIZE, TIME}
 import org.apache.spark.sql.connect.RuntimeConfig
 import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.connect.common.config.ConnectCommon
+import org.apache.spark.sql.util.CloseableIterator
 import org.apache.spark.util.SparkSystemUtils
 
 /**

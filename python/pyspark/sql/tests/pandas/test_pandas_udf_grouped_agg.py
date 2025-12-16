@@ -17,7 +17,7 @@
 
 import unittest
 import logging
-from typing import cast
+from typing import cast, Iterator, Tuple
 
 from pyspark.util import PythonEvalType, is_remote_only
 from pyspark.sql import Row, functions as sf
@@ -27,7 +27,6 @@ from pyspark.sql.functions import (
     col,
     lit,
     mean,
-    sum,
     udf,
     pandas_udf,
     PandasUDFType,
@@ -246,16 +245,16 @@ class GroupedAggPandasUDFTestsMixin:
 
         # Mix group aggregate pandas UDF with sql expression
         result1 = df.groupby("id").agg(sum_udf(df.v) + 1).sort("id")
-        expected1 = df.groupby("id").agg(sum(df.v) + 1).sort("id")
+        expected1 = df.groupby("id").agg(sf.sum(df.v) + 1).sort("id")
 
         # Mix group aggregate pandas UDF with sql expression (order swapped)
         result2 = df.groupby("id").agg(sum_udf(df.v + 1)).sort("id")
 
-        expected2 = df.groupby("id").agg(sum(df.v + 1)).sort("id")
+        expected2 = df.groupby("id").agg(sf.sum(df.v + 1)).sort("id")
 
         # Wrap group aggregate pandas UDF with two sql expressions
         result3 = df.groupby("id").agg(sum_udf(df.v + 1) + 2).sort("id")
-        expected3 = df.groupby("id").agg(sum(df.v + 1) + 2).sort("id")
+        expected3 = df.groupby("id").agg(sf.sum(df.v + 1) + 2).sort("id")
 
         assert_frame_equal(expected1.toPandas(), result1.toPandas())
         assert_frame_equal(expected2.toPandas(), result2.toPandas())
@@ -272,26 +271,26 @@ class GroupedAggPandasUDFTestsMixin:
 
         # Mix group aggregate pandas UDF and python UDF
         result1 = df.groupby("id").agg(plus_one(sum_udf(df.v))).sort("id")
-        expected1 = df.groupby("id").agg(plus_one(sum(df.v))).sort("id")
+        expected1 = df.groupby("id").agg(plus_one(sf.sum(df.v))).sort("id")
 
         # Mix group aggregate pandas UDF and python UDF (order swapped)
         result2 = df.groupby("id").agg(sum_udf(plus_one(df.v))).sort("id")
-        expected2 = df.groupby("id").agg(sum(plus_one(df.v))).sort("id")
+        expected2 = df.groupby("id").agg(sf.sum(plus_one(df.v))).sort("id")
 
         # Mix group aggregate pandas UDF and scalar pandas UDF
         result3 = df.groupby("id").agg(sum_udf(plus_two(df.v))).sort("id")
-        expected3 = df.groupby("id").agg(sum(plus_two(df.v))).sort("id")
+        expected3 = df.groupby("id").agg(sf.sum(plus_two(df.v))).sort("id")
 
         # Mix group aggregate pandas UDF and scalar pandas UDF (order swapped)
         result4 = df.groupby("id").agg(plus_two(sum_udf(df.v))).sort("id")
-        expected4 = df.groupby("id").agg(plus_two(sum(df.v))).sort("id")
+        expected4 = df.groupby("id").agg(plus_two(sf.sum(df.v))).sort("id")
 
         # Wrap group aggregate pandas UDF with two python UDFs and use python UDF in groupby
         result5 = (
             df.groupby(plus_one(df.id)).agg(plus_one(sum_udf(plus_one(df.v)))).sort("plus_one(id)")
         )
         expected5 = (
-            df.groupby(plus_one(df.id)).agg(plus_one(sum(plus_one(df.v)))).sort("plus_one(id)")
+            df.groupby(plus_one(df.id)).agg(plus_one(sf.sum(plus_one(df.v)))).sort("plus_one(id)")
         )
 
         # Wrap group aggregate pandas UDF with two scala pandas UDF and user scala pandas UDF in
@@ -300,7 +299,7 @@ class GroupedAggPandasUDFTestsMixin:
             df.groupby(plus_two(df.id)).agg(plus_two(sum_udf(plus_two(df.v)))).sort("plus_two(id)")
         )
         expected6 = (
-            df.groupby(plus_two(df.id)).agg(plus_two(sum(plus_two(df.v)))).sort("plus_two(id)")
+            df.groupby(plus_two(df.id)).agg(plus_two(sf.sum(plus_two(df.v)))).sort("plus_two(id)")
         )
 
         assert_frame_equal(expected1.toPandas(), result1.toPandas())
@@ -327,7 +326,7 @@ class GroupedAggPandasUDFTestsMixin:
         )
         expected1 = (
             df.groupBy("id")
-            .agg(mean(df.v), sum(df.v), mean(df.v).alias("weighted_mean(v, w)"))
+            .agg(mean(df.v), sf.sum(df.v), mean(df.v).alias("weighted_mean(v, w)"))
             .sort("id")
             .toPandas()
         )
@@ -342,23 +341,23 @@ class GroupedAggPandasUDFTestsMixin:
 
         # groupby one expression
         result1 = df.groupby(df.v % 2).agg(sum_udf(df.v))
-        expected1 = df.groupby(df.v % 2).agg(sum(df.v))
+        expected1 = df.groupby(df.v % 2).agg(sf.sum(df.v))
 
         # empty groupby
         result2 = df.groupby().agg(sum_udf(df.v))
-        expected2 = df.groupby().agg(sum(df.v))
+        expected2 = df.groupby().agg(sf.sum(df.v))
 
         # groupby one column and one sql expression
         result3 = df.groupby(df.id, df.v % 2).agg(sum_udf(df.v)).orderBy(df.id, df.v % 2)
-        expected3 = df.groupby(df.id, df.v % 2).agg(sum(df.v)).orderBy(df.id, df.v % 2)
+        expected3 = df.groupby(df.id, df.v % 2).agg(sf.sum(df.v)).orderBy(df.id, df.v % 2)
 
         # groupby one python UDF
         result4 = df.groupby(plus_one(df.id)).agg(sum_udf(df.v)).sort("plus_one(id)")
-        expected4 = df.groupby(plus_one(df.id)).agg(sum(df.v)).sort("plus_one(id)")
+        expected4 = df.groupby(plus_one(df.id)).agg(sf.sum(df.v)).sort("plus_one(id)")
 
         # groupby one scalar pandas UDF
         result5 = df.groupby(plus_two(df.id)).agg(sum_udf(df.v)).sort("sum(v)")
-        expected5 = df.groupby(plus_two(df.id)).agg(sum(df.v)).sort("sum(v)")
+        expected5 = df.groupby(plus_two(df.id)).agg(sf.sum(df.v)).sort("sum(v)")
 
         # groupby one expression and one python UDF
         result6 = (
@@ -367,7 +366,9 @@ class GroupedAggPandasUDFTestsMixin:
             .sort(["(v % 2)", "plus_one(id)"])
         )
         expected6 = (
-            df.groupby(df.v % 2, plus_one(df.id)).agg(sum(df.v)).sort(["(v % 2)", "plus_one(id)"])
+            df.groupby(df.v % 2, plus_one(df.id))
+            .agg(sf.sum(df.v))
+            .sort(["(v % 2)", "plus_one(id)"])
         )
 
         # groupby one expression and one scalar pandas UDF
@@ -377,7 +378,7 @@ class GroupedAggPandasUDFTestsMixin:
             .sort(["sum(v)", "plus_two(id)"])
         )
         expected7 = (
-            df.groupby(df.v % 2, plus_two(df.id)).agg(sum(df.v)).sort(["sum(v)", "plus_two(id)"])
+            df.groupby(df.v % 2, plus_two(df.id)).agg(sf.sum(df.v)).sort(["sum(v)", "plus_two(id)"])
         )
 
         assert_frame_equal(expected1.toPandas(), result1.toPandas())
@@ -417,11 +418,11 @@ class GroupedAggPandasUDFTestsMixin:
             .withColumn("v2", df.v + 2)
             .groupby(df.id, df.v % 2)
             .agg(
-                sum(col("v")),
-                sum(col("v1") + 3),
-                sum(col("v2")) + 5,
-                plus_one(sum(col("v1"))),
-                sum(plus_one(col("v2"))),
+                sf.sum(col("v")),
+                sf.sum(col("v1") + 3),
+                sf.sum(col("v2")) + 5,
+                plus_one(sf.sum(col("v1"))),
+                sf.sum(plus_one(col("v2"))),
             )
             .sort(["id", "(v % 2)"])
             .toPandas()
@@ -451,11 +452,11 @@ class GroupedAggPandasUDFTestsMixin:
             .withColumn("v2", df.v + 2)
             .groupby(df.id, df.v % 2)
             .agg(
-                sum(col("v")),
-                sum(col("v1") + 3),
-                sum(col("v2")) + 5,
-                plus_two(sum(col("v1"))),
-                sum(plus_two(col("v2"))),
+                sf.sum(col("v")),
+                sf.sum(col("v1") + 3),
+                sf.sum(col("v2")) + 5,
+                plus_two(sf.sum(col("v1"))),
+                sf.sum(plus_two(col("v2"))),
             )
             .sort(["id", "(v % 2)"])
             .toPandas()
@@ -474,9 +475,9 @@ class GroupedAggPandasUDFTestsMixin:
 
         expected3 = (
             df.groupby("id")
-            .agg(sum(df.v).alias("v"))
+            .agg(sf.sum(df.v).alias("v"))
             .groupby("id")
-            .agg(sum(col("v")))
+            .agg(sf.sum(col("v")))
             .sort("id")
             .toPandas()
         )
@@ -491,7 +492,7 @@ class GroupedAggPandasUDFTestsMixin:
             sum_udf = self.pandas_agg_sum_udf
 
             result1 = df.groupby(df.id).agg(sum_udf(df.v))
-            expected1 = df.groupby(df.id).agg(sum(df.v))
+            expected1 = df.groupby(df.id).agg(sf.sum(df.v))
             assert_frame_equal(expected1.toPandas(), result1.toPandas())
 
     def test_array_type(self):
@@ -706,7 +707,7 @@ class GroupedAggPandasUDFTestsMixin:
             ):
                 with self.subTest(with_w=False, query_no=i):
                     assertDataFrameEqual(
-                        aggregated, df.groupby("id").agg((sum(df.v) + lit(100)).alias("s"))
+                        aggregated, df.groupby("id").agg((sf.sum(df.v) + lit(100)).alias("s"))
                     )
 
             # with "w"
@@ -722,7 +723,7 @@ class GroupedAggPandasUDFTestsMixin:
             ):
                 with self.subTest(with_w=True, query_no=i):
                     assertDataFrameEqual(
-                        aggregated, df.groupby("id").agg((sum(df.v) + sum(df.w)).alias("s"))
+                        aggregated, df.groupby("id").agg((sf.sum(df.v) + sf.sum(df.w)).alias("s"))
                     )
 
     def test_arrow_cast_enabled_numeric_to_decimal(self):
@@ -896,6 +897,229 @@ class GroupedAggPandasUDFTestsMixin:
                         df.groupby("id").agg(mean_udf(df.v), sum_udf(df.v)).sort("id").toPandas()
                     )
                     assert_frame_equal(expected, result)
+
+    def test_iterator_grouped_agg_basic(self):
+        """
+        Test basic functionality of iterator grouped agg pandas UDF with Iterator[pd.Series].
+        """
+        df = self.spark.createDataFrame(
+            [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v")
+        )
+
+        @pandas_udf("double")
+        def pandas_mean_iter(it: Iterator[pd.Series]) -> float:
+            sum_val = 0.0
+            cnt = 0
+            for series in it:
+                assert isinstance(series, pd.Series)
+                sum_val += series.sum()
+                cnt += len(series)
+            return sum_val / cnt if cnt > 0 else 0.0
+
+        result = df.groupby("id").agg(pandas_mean_iter(df["v"]).alias("mean")).sort("id").collect()
+
+        # Expected means:
+        # Group 1: (1.0 + 2.0) / 2 = 1.5
+        # Group 2: (3.0 + 5.0 + 10.0) / 3 = 6.0
+        expected = [Row(id=1, mean=1.5), Row(id=2, mean=6.0)]
+        self.assertEqual(result, expected)
+
+    def test_iterator_grouped_agg_multiple_columns(self):
+        """
+        Test iterator grouped agg pandas UDF with multiple columns
+        using Iterator[Tuple[pd.Series, ...]].
+        """
+        df = self.spark.createDataFrame(
+            [(1, 1.0, 1.0), (1, 2.0, 2.0), (2, 3.0, 1.0), (2, 5.0, 2.0), (2, 10.0, 3.0)],
+            ("id", "v", "w"),
+        )
+
+        @pandas_udf("double")
+        def pandas_weighted_mean_iter(it: Iterator[Tuple[pd.Series, pd.Series]]) -> float:
+            import numpy as np
+
+            weighted_sum = 0.0
+            weight = 0.0
+            for v_series, w_series in it:
+                assert isinstance(v_series, pd.Series)
+                assert isinstance(w_series, pd.Series)
+                weighted_sum += np.dot(v_series, w_series)
+                weight += w_series.sum()
+            return weighted_sum / weight if weight > 0 else 0.0
+
+        result = (
+            df.groupby("id")
+            .agg(pandas_weighted_mean_iter(df["v"], df["w"]).alias("wm"))
+            .sort("id")
+            .collect()
+        )
+
+        # Expected weighted means:
+        # Group 1: (1.0*1.0 + 2.0*2.0) / (1.0 + 2.0) = 5.0 / 3.0
+        # Group 2: (3.0*1.0 + 5.0*2.0 + 10.0*3.0) / (1.0 + 2.0 + 3.0) = 43.0 / 6.0
+        expected = [Row(id=1, wm=5.0 / 3.0), Row(id=2, wm=43.0 / 6.0)]
+        self.assertEqual(result, expected)
+
+    def test_iterator_grouped_agg_eval_type(self):
+        """
+        Test that the eval type is correctly inferred for iterator grouped agg UDFs.
+        """
+
+        @pandas_udf("double")
+        def pandas_sum_iter(it: Iterator[pd.Series]) -> float:
+            total = 0.0
+            for series in it:
+                total += series.sum()
+            return total
+
+        self.assertEqual(pandas_sum_iter.evalType, PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF)
+
+        @pandas_udf("double")
+        def pandas_sum_iter_tuple(it: Iterator[Tuple[pd.Series, pd.Series]]) -> float:
+            total = 0.0
+            for v, w in it:
+                total += v.sum()
+            return total
+
+        self.assertEqual(
+            pandas_sum_iter_tuple.evalType, PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF
+        )
+
+    def test_iterator_grouped_agg_partial_consumption(self):
+        """
+        Test that iterator grouped agg UDF can partially consume batches.
+        This ensures that batches are processed one by one without loading all data into memory.
+        """
+        # Create a dataset with multiple batches per group
+        # Use small batch size to ensure multiple batches per group
+        # Use same value (1.0) for all records to avoid batch ordering issues
+        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 2}):
+            # Group 1: 6 values (3 batches) - will process only first 2 batches (partial)
+            # Group 2: 2 values (1 batch) - will process 1 batch (all available)
+            df = self.spark.createDataFrame(
+                [(1, 1.0), (1, 1.0), (1, 1.0), (1, 1.0), (1, 1.0), (1, 1.0), (2, 1.0), (2, 1.0)],
+                ("id", "v"),
+            )
+
+            @pandas_udf("long")
+            def pandas_partial_count(it: Iterator[pd.Series]) -> int:
+                # Process first 2 batches, then stop (partial consumption)
+                total_count = 0
+                for i, series in enumerate(it):
+                    assert isinstance(series, pd.Series)
+                    if i < 2:  # Process first 2 batches
+                        total_count += len(series)
+                    else:
+                        # Stop early - partial consumption
+                        break
+                return total_count
+
+            result = df.groupby("id").agg(pandas_partial_count(df["v"]).alias("count")).sort("id")
+
+            # Verify results are correct for partial consumption
+            # With batch size = 2:
+            # Group 1 (id=1): 6 values in 3 batches -> processes only first 2 batches (partial)
+            #   Result: count=4 (only 4 out of 6 values processed)
+            # Group 2 (id=2): 2 values in 1 batch -> processes 1 batch (all available)
+            #   Result: count=2
+            actual = result.collect()
+            self.assertEqual(len(actual), 2, "Should have results for both groups")
+
+            # Verify partial consumption works
+            # Group 1: processes only 2 batches (4 values out of 6 total) - partial consumption
+            group1_result = next(row for row in actual if row["id"] == 1)
+            self.assertEqual(
+                group1_result["count"], 4, msg="Group 1 should process only 2 batches (4 values)"
+            )
+
+            # Group 2: processes 1 batch (all 2 values, 1 batch available)
+            group2_result = next(row for row in actual if row["id"] == 2)
+            self.assertEqual(
+                group2_result["count"], 2, msg="Group 2 should process 1 batch (2 values)"
+            )
+
+    def test_grouped_agg_with_struct_type_input(self):
+        """
+        Test that grouped agg UDF works with struct type input.
+        Struct types should be passed as pd.DataFrame to the UDF (similar to scalar pandas UDFs).
+        """
+        from pyspark.sql import Row
+
+        # Create a DataFrame with struct column
+        df = self.spark.createDataFrame(
+            [
+                (1, Row(name="Alice", age=25)),
+                (1, Row(name="Bob", age=30)),
+                (2, Row(name="Charlie", age=35)),
+                (2, Row(name="David", age=40)),
+            ],
+            "id int, person struct<name:string,age:int>",
+        )
+
+        # Test non-iterator grouped agg UDF with struct input
+        # Note: Currently struct types are passed as Series of dicts when df_for_struct=False.
+        # This test verifies the behavior and documents the expected interface.
+        @pandas_udf("double", PandasUDFType.GROUPED_AGG)
+        def avg_age(person: pd.Series) -> float:
+            # Currently struct types are passed as Series of dicts
+            # In the future, they should be passed as pd.DataFrame (like scalar pandas UDFs)
+            assert isinstance(person, pd.Series), f"Expected Series, got {type(person)}"
+            # Extract age values from dicts
+            ages = [p["age"] for p in person]
+            return sum(ages) / len(ages) if ages else 0.0
+
+        result = df.groupby("id").agg(avg_age(df["person"]).alias("avg_age")).sort("id")
+        actual = result.collect()
+
+        # Group 1: (25 + 30) / 2 = 27.5
+        # Group 2: (35 + 40) / 2 = 37.5
+        expected = [Row(id=1, avg_age=27.5), Row(id=2, avg_age=37.5)]
+        self.assertEqual(actual, expected)
+
+    def test_iterator_grouped_agg_with_struct_type_input(self):
+        """
+        Test that iterator grouped agg UDF works with struct type input.
+        Struct types should be passed as pd.DataFrame to the UDF (similar to scalar pandas UDFs).
+        """
+        from pyspark.sql import Row
+
+        # Create a DataFrame with struct column
+        df = self.spark.createDataFrame(
+            [
+                (1, Row(name="Alice", age=25)),
+                (1, Row(name="Bob", age=30)),
+                (2, Row(name="Charlie", age=35)),
+                (2, Row(name="David", age=40)),
+            ],
+            "id int, person struct<name:string,age:int>",
+        )
+
+        # Test iterator grouped agg UDF with struct input
+        # Note: Currently struct types are passed as Series of dicts when df_for_struct=False.
+        # This test verifies the behavior and documents the expected interface.
+        @pandas_udf("double")
+        def avg_age_iter(it: Iterator[pd.Series]) -> float:
+            total_age = 0.0
+            count = 0
+            for person_series in it:
+                # Currently struct types are passed as Series of dicts
+                # In the future, they should be passed as pd.DataFrame (like scalar pandas UDFs)
+                assert isinstance(
+                    person_series, pd.Series
+                ), f"Expected Series, got {type(person_series)}"
+                # Extract age values from dicts
+                ages = [p["age"] for p in person_series]
+                total_age += sum(ages)
+                count += len(ages)
+            return total_age / count if count > 0 else 0.0
+
+        result = df.groupby("id").agg(avg_age_iter(df["person"]).alias("avg_age")).sort("id")
+        actual = result.collect()
+
+        # Group 1: (25 + 30) / 2 = 27.5
+        # Group 2: (35 + 40) / 2 = 37.5
+        expected = [Row(id=1, avg_age=27.5), Row(id=2, avg_age=37.5)]
+        self.assertEqual(actual, expected)
 
 
 class GroupedAggPandasUDFTests(GroupedAggPandasUDFTestsMixin, ReusedSQLTestCase):

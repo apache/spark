@@ -1925,14 +1925,14 @@ class MaxResultArrowTests(unittest.TestCase):
 class EncryptionArrowTests(ArrowTests):
     @classmethod
     def conf(cls):
-        return super(EncryptionArrowTests, cls).conf().set("spark.io.encryption.enabled", "true")
+        return super().conf().set("spark.io.encryption.enabled", "true")
 
 
 class RDDBasedArrowTests(ArrowTests):
     @classmethod
     def conf(cls):
         return (
-            super(RDDBasedArrowTests, cls)
+            super()
             .conf()
             .set("spark.sql.execution.arrow.localRelationThreshold", "0")
             # to test multiple partitions

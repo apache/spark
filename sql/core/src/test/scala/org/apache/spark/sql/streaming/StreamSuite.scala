@@ -1463,7 +1463,8 @@ class TestStateStoreProvider extends StateStoreProvider {
   override def getStore(
     version: Long,
     stateStoreCkptId: Option[String] = None,
-    forceSnapshotOnCommit: Boolean = false): StateStore = null
+    forceSnapshotOnCommit: Boolean = false,
+    loadEmpty: Boolean = false): StateStore = null
 }
 
 /** A fake source that throws `ThrowingExceptionInCreateSource.exception` in `createSource` */

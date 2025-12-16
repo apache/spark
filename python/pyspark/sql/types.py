@@ -242,9 +242,7 @@ class DataTypeSingleton(type):
 
     def __call__(cls: Type[T]) -> T:
         if cls not in cls._instances:  # type: ignore[attr-defined]
-            cls._instances[cls] = super(  # type: ignore[misc, attr-defined]
-                DataTypeSingleton, cls
-            ).__call__()
+            cls._instances[cls] = super().__call__()  # type: ignore[misc, attr-defined]
         return cls._instances[cls]  # type: ignore[attr-defined]
 
 
@@ -403,7 +401,11 @@ class AnyTimeType(DatetimeType):
 
 
 class TimeType(AnyTimeType):
-    """Time (datetime.time) data type."""
+    """
+    Time (datetime.time) data type.
+
+    .. versionadded:: 4.1.0
+    """
 
     def __init__(self, precision: int = 6):
         self.precision = precision
@@ -3624,7 +3626,7 @@ class Row(tuple):
         if hasattr(self, "__fields__"):
             return item in self.__fields__
         else:
-            return super(Row, self).__contains__(item)
+            return super().__contains__(item)
 
     # let object acts like class
     def __call__(self, *args: Any) -> "Row":
@@ -3642,12 +3644,12 @@ class Row(tuple):
 
     def __getitem__(self, item: Any) -> Any:
         if isinstance(item, (int, slice)):
-            return super(Row, self).__getitem__(item)
+            return super().__getitem__(item)
         try:
             # it will be slow when it has many fields,
             # but this will not be used in normal cases
             idx = self.__fields__.index(item)
-            return super(Row, self).__getitem__(idx)
+            return super().__getitem__(idx)
         except IndexError:
             raise PySparkKeyError(errorClass="KEY_NOT_EXISTS", messageParameters={"key": str(item)})
         except ValueError:
