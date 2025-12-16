@@ -74,9 +74,8 @@ trait SparkSessionBuilderImplementationBindingSuite
 
   test("emptyDataFrame with Schema") {
     val session = SparkSession.builder().getOrCreate()
-    val schema = new StructType(Array(
-      StructField("a", IntegerType),
-      StructField("b", StringType)))
+    val schema =
+      new StructType(Array(StructField("a", IntegerType), StructField("b", StringType)))
     val df = session.emptyDataFrame(schema)
     assert(df.schema == schema)
     assert(df.isEmpty)
