@@ -27,80 +27,59 @@ import org.apache.spark.sql.streaming.processors._
 class TwsTesterSuite extends SparkFunSuite {
 
   test("TwsTester should correctly test RunningCountProcessor") {
-    val input: List[(String, String)] = List(
-      ("key1", "a"),
-      ("key2", "b"),
-      ("key1", "c"),
-      ("key2", "b"),
-      ("key1", "c"),
-      ("key1", "c"),
-      ("key3", "q")
-    )
     val tester = new TwsTester(new RunningCountProcessor[String]())
-    val ans1: List[(String, Long)] = tester.test(input)
-    assert(ans1.sorted == List(("key1", 4L), ("key2", 2L), ("key3", 1L)).sorted)
+    assert(tester.test("key1", List("a")) == List(("key1", 1L)))
+    assert(tester.test("key2", List("a", "a")) == List(("key2", 2L)))
+    assert(tester.test("key3", List("a")) == List(("key3", 1L)))
+    assert(tester.test("key1", List("a", "a", "a")) == List(("key1", 4L)))
 
     assert(tester.peekValueState[Long]("count", "key1").get == 4L)
     assert(tester.peekValueState[Long]("count", "key2").get == 2L)
     assert(tester.peekValueState[Long]("count", "key3").get == 1L)
     assert(tester.peekValueState[Long]("count", "key4").isEmpty)
-
-    val ans2 = tester.test(List(("key1", "q")))
-    assert(ans2 == List(("key1", 5L)))
-    assert(tester.peekValueState[Long]("count", "key1").get == 5L)
-    assert(tester.peekValueState[Long]("count", "key2").get == 2L)
-
-    val ans3 = tester.test(List(("key1", "a"), ("key2", "a")))
-    assert(ans3.sorted == List(("key1", 6L), ("key2", 3L)))
   }
 
   test("TwsTester should allow direct access to ValueState") {
     val processor = new RunningCountProcessor[String]()
     val tester = new TwsTester[String, String, (String, Long)](processor)
     tester.setValueState[Long]("count", "foo", 5)
-    tester.test(List(("foo", "a")))
+    tester.test("foo", List("a"))
     assert(tester.peekValueState[Long]("count", "foo").get == 6L)
   }
 
   test("TwsTester should correctly test TopKProcessor") {
     val input: List[(String, (String, Double))] = List(
       ("key2", ("c", 30.0)),
-      ("key2", ("d", 40.0)),
-      ("key1", ("b", 2.0)),
-      ("key1", ("c", 3.0)),
+      ("key2", ("d", 40.0)), 
       ("key2", ("a", 10.0)),
       ("key2", ("b", 20.0)),
-      ("key3", ("a", 100.0)),
-      ("key1", ("a", 1.0))
+      ("key3", ("a", 100.0)), 
     )
     val tester = new TwsTester(new TopKProcessor(2))
-    val ans1 = tester.test(input)
-    assert(
-      ans1.sorted == List(
-        ("key1", 2.0),
-        ("key1", 3.0),
-        ("key2", 30.0),
-        ("key2", 40.0),
-        ("key3", 100.0)
-      )
-    )
+    val ans1 = tester.test("key1", List(("b", 2.0), ("c", 3.0), ("a", 1.0)))
+    assert(ans1 == List(("key1", 3.0), ("key1", 2.0)))
+    val ans2 = tester.test("key2", List(("a", 10.0), ("b", 20.0), ("c", 30.0), ("d", 40.0)))
+    assert(ans2 == List(("key2", 40.0), ("key2", 30.0)))
+    val ans3 = tester.test("key3", List(("a", 100.0)))
+    assert(ans3 == List(("key3", 100.0)))
+
     assert(tester.peekListState[Double]("topK", "key1") == List(3.0, 2.0))
     assert(tester.peekListState[Double]("topK", "key2") == List(40.0, 30.0))
     assert(tester.peekListState[Double]("topK", "key3") == List(100.0))
     assert(tester.peekListState[Double]("topK", "key4").isEmpty)
 
-    val ans2 = tester.test(List(("key1", ("a", 10.0))))
-    assert(ans2.sorted == List(("key1", 3.0), ("key1", 10.0)))
+    val ans4 = tester.test("key1", List(("a", 10.0)))
+    assert(ans4 == List(("key1", 10.0), ("key1", 3.0)))
     assert(tester.peekListState[Double]("topK", "key1") == List(10.0, 3.0))
   }
-
+  
   test("TwsTester should allow direct access to ListState") {
     val tester = new TwsTester(new TopKProcessor(2))
     tester.setListState("topK", "a", List(6.0, 5.0))
     tester.setListState("topK", "b", List(8.0, 7.0))
-    tester.test(List(("a", ("", 10.0))))
-    tester.test(List(("b", ("", 7.5))))
-    tester.test(List(("c", ("", 1.0))))
+    tester.test("a", List(("", 10.0)))
+    tester.test("b", List(("", 7.5)))
+    tester.test("c", List(("", 1.0)))
 
     assert(tester.peekListState[Double]("topK", "a") == List(10.0, 6.0))
     assert(tester.peekListState[Double]("topK", "b") == List(8.0, 7.5))
@@ -109,27 +88,19 @@ class TwsTesterSuite extends SparkFunSuite {
   }
 
   test("TwsTester should correctly test WordFrequencyProcessor") {
-    val input: List[(String, (String, String))] = List(
-      ("user1", ("", "hello")),
-      ("user1", ("", "world")),
-      ("user1", ("", "hello")),
-      ("user2", ("", "hello")),
-      ("user2", ("", "spark")),
-      ("user1", ("", "world"))
-    )
     val tester = new TwsTester(new WordFrequencyProcessor())
-    val ans1 = tester.test(input)
-
+    val ans1 = tester.test("user1", List(("", "hello"), ("", "world"), ("", "hello"), ("", "world")))
     assert(
       ans1.sorted == List(
         ("user1", "hello", 1L),
         ("user1", "hello", 2L),
         ("user1", "world", 1L),
-        ("user1", "world", 2L),
-        ("user2", "hello", 1L),
-        ("user2", "spark", 1L)
+        ("user1", "world", 2L)
       ).sorted
     )
+
+    val ans2 = tester.test("user2", List(("", "hello"), ("", "spark")))
+    assert(ans2.sorted == List(("user2", "hello", 1L), ("user2", "spark", 1L)).sorted)
 
     // Check state using peekMapState
     assert(
@@ -142,8 +113,8 @@ class TwsTesterSuite extends SparkFunSuite {
     assert(tester.peekMapState[String, Long]("frequencies", "user3").isEmpty)
 
     // Process more data for user1
-    val ans2 = tester.test(List(("user1", ("", "hello")), ("user1", ("", "test"))))
-    assert(ans2.sorted == List(("user1", "hello", 3L), ("user1", "test", 1L)).sorted)
+    val ans3 = tester.test("user1", List(("", "hello"), ("", "test")))
+    assert(ans3.sorted == List(("user1", "hello", 3L), ("user1", "test", 1L)).sorted)
     assert(
       tester.peekMapState[String, Long]("frequencies", "user1") == Map(
         "hello" -> 3L,
@@ -161,10 +132,10 @@ class TwsTesterSuite extends SparkFunSuite {
     tester.setMapState("frequencies", "user2", Map("spark" -> 10L))
 
     // Process new words
-    tester.test(List(("user1", ("", "hello"))))
-    tester.test(List(("user1", ("", "goodbye"))))
-    tester.test(List(("user2", ("", "spark"))))
-    tester.test(List(("user3", ("", "new"))))
+    tester.test("user1", List(("", "hello")))
+    tester.test("user1", List(("", "goodbye")))
+    tester.test("user2", List(("", "spark")))
+    tester.test("user3", List(("", "new")))
 
     // Verify updated state
     assert(
@@ -187,7 +158,7 @@ class TwsTesterSuite extends SparkFunSuite {
     // state.
     def testStepFunction(key: String, inputRow: String, stateIn: Long): Long = {
       tester.setValueState[Long]("count", key, stateIn)
-      tester.test(List((key, inputRow)))
+      tester.test(key, List(inputRow))
       tester.peekValueState("count", key).get
     }
 
@@ -200,8 +171,10 @@ class TwsTesterSuite extends SparkFunSuite {
     assert(tester.peekValueState[Long]("count", "a").get == 10L)
     assert(tester.peekValueState[Long]("count", "b").get == 20L)
 
-    val ans = tester.test(List(("a", "a"), ("c", "c")))
-    assert(ans == List(("a", 11L), ("c", 1L)))
+    val ans1 = tester.test("a", List("a"))
+    val ans2 = tester.test("c", List("c"))
+    assert(ans1 == List(("a", 11L)))
+    assert(ans2 == List(("c", 1L)))
   }
 
   test("TwsTester should fail when initialState is passed but not supported") {
@@ -216,9 +189,9 @@ class TwsTesterSuite extends SparkFunSuite {
     val tester = new TwsTester(new RunningCountProcessor[String]())
 
     // Example of helper function to test how TransformWithState processes rows one-by-one, which
-    // is can be used to simulate real-time mode.
+    // can be used to simulate real-time mode.
     def testRowByRow(input: List[(String, String)]): List[(String, Long)] = {
-      input.flatMap(row => tester.test(List(row)))
+      input.flatMap { case (key, value) => tester.test(key, List(value)) }
     }
 
     val input: List[(String, String)] = List(
@@ -247,27 +220,28 @@ class TwsTesterSuite extends SparkFunSuite {
   test("TwsTester should exercise all state methods") {
     val tester = new TwsTester(new AllMethodsTestProcessor())
     val results = tester.test(
+      "k",
       List(
-        ("k", "value-exists"), // false
-        ("k", "value-set"), // set to 42
-        ("k", "value-exists"), // true
-        ("k", "value-clear"), // clear
-        ("k", "value-exists"), // false again
-        ("k", "list-exists"), // false
-        ("k", "list-append"), // append a, b
-        ("k", "list-exists"), // true
-        ("k", "list-append-array"), // append c, d
-        ("k", "list-get"), // a,b,c,d
-        ("k", "map-exists"), // false
-        ("k", "map-add"), // add x=1, y=2, z=3
-        ("k", "map-exists"), // true
-        ("k", "map-keys"), // x,y,z
-        ("k", "map-values"), // 1,2,3
-        ("k", "map-iterator"), // x=1,y=2,z=3
-        ("k", "map-remove"), // remove y
-        ("k", "map-keys"), // x,z
-        ("k", "map-clear"), // clear map
-        ("k", "map-exists") // false
+        "value-exists", // false
+        "value-set", // set to 42
+        "value-exists", // true
+        "value-clear", // clear
+        "value-exists", // false again
+        "list-exists", // false
+        "list-append", // append a, b
+        "list-exists", // true
+        "list-append-array", // append c, d
+        "list-get", // a,b,c,d
+        "map-exists", // false
+        "map-add", // add x=1, y=2, z=3
+        "map-exists", // true
+        "map-keys", // x,y,z
+        "map-values", // 1,2,3
+        "map-iterator", // x=1,y=2,z=3
+        "map-remove", // remove y
+        "map-keys", // x,z
+        "map-clear", // clear map
+        "map-exists" // false
       )
     )
 
@@ -328,7 +302,9 @@ class TwsTesterFuzzTestSuite extends StreamTest {
       SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
       SQLConf.SHUFFLE_PARTITIONS.key -> "5"
     ) {
-      val expectedResults: List[List[O]] = batches.map(batch => tester.test(batch)).toList
+      val expectedResults: List[List[O]] = batches
+        .map(batch => batch.groupBy(_._1).flatMap(p => tester.test(p._1, p._2.map(_._2))).toList)
+        .toList
       assert(batches.size == expectedResults.size)
 
       val actions: Seq[StreamAction] = (batches zip expectedResults).flatMap {

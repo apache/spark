@@ -47,6 +47,8 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
  *
  * @param processor the StatefulProcessor to test.
  * @param initialState initial state for each key as a list of (key, state) tuples.
+ * @param realTimeMode whether input rows should be processed one-by-one (separate call to 
+ *     handleInputRows) for each input row.
  * @tparam K the type of grouping key.
  * @tparam I the type of input rows.
  * @tparam O the type of output rows.
@@ -54,7 +56,8 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
  */
 class TwsTester[K, I, O](
     val processor: StatefulProcessor[K, I, O],
-    val initialState: List[(K, Any)] = List()) {
+    val initialState: List[(K, Any)] = List(),
+    val realTimeMode: Boolean = false) {
   private val handle = new InMemoryStatefulProcessorHandle()
   processor.setHandle(handle)
   processor.init(OutputMode.Append, TimeMode.None)
@@ -78,24 +81,19 @@ class TwsTester[K, I, O](
   }
 
   /**
-   * Processes input rows through the stateful processor, grouped by key.
+   * Processes input rows for a single key through the stateful processor.
    *
-   * This corresponds to processing one microbatch. {@code handleInputRows} will be called once for
-   * each key that appears in {@code input}.
-   *
-   * To simulate real-time mode, call this method repeatedly in a loop, passing a list with a single
-   * (key, input row) tuple per call.
-   *
-   * @param input list of (key, input row) tuples to process
+   * @param key the grouping key
+   * @param values input rows to process
    * @return all output rows produced by the processor
    */
-  def test(input: List[(K, I)]): List[O] = {
-    var ans: List[O] = List()
-    for ((key, v) <- input.groupBy(_._1)) {
-      ImplicitGroupingKeyTracker.setImplicitKey(key)
-      ans = ans ++ processor.handleInputRows(key, v.map(_._2).iterator, null).toList
-    }
-    ans
+  def test(key: K, values: List[I]): List[O] = {
+    ImplicitGroupingKeyTracker.setImplicitKey(key)
+    if (realTimeMode) {
+      values.flatMap(value => processor.handleInputRows(key, Iterator.single(value), null)).toList
+    } else {
+      processor.handleInputRows(key, values.iterator, null).toList
+    }    
   }
 
   /** Sets the value state for a given key. */
