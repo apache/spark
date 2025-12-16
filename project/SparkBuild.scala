@@ -1533,12 +1533,8 @@ object Unidoc {
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/classic/")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/execution")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/internal")))
-<<<<<<< HEAD
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/metricview")))
-||||||| ac5fce4e8bb
-=======
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/pipelines")))
->>>>>>> apache/master
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/scripting")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/ml")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/hive")))
