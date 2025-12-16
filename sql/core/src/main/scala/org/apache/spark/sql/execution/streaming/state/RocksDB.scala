@@ -340,7 +340,7 @@ class RocksDB(
    * Returns all column family names currently registered in RocksDB.
    * This includes column families loaded from checkpoint metadata.
    */
-  def allColumnFamilyNames: collection.Set[String] = {
+  def allColumnFamilyNames: scala.collection.immutable.Set[String] = {
     colFamilyNameToInfoMap.asScala.keySet.toSet
   }
 

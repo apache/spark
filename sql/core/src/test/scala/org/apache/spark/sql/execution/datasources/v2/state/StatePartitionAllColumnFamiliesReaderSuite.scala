@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, RocksDBStateStoreProvider, StateRepartitionUnsupportedProviderError, StateStore}
 import org.apache.spark.sql.functions.{col, count, sum, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.{ExpiredTimerInfo, ListState, MapState, OutputMode, SimpleMapValue, StatefulProcessor, TimeMode, TimerValues, Trigger, TTLConfig, ValueState}
+import org.apache.spark.sql.streaming.{InputEvent, ListState, ListStateTTLProcessor, MapInputEvent, MapState, MapStateTTLProcessor, OutputMode, RunningCountStatefulProcessorWithProcTimeTimer, SimpleMapValue, StatefulProcessor, TimeMode, TimerValues, Trigger, TTLConfig, ValueState, ValueStateTTLProcessor}
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, LongType, NullType, StringType, StructField, StructType, TimestampType}
 
@@ -278,6 +278,60 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
       dummySchema)
   }
 
+  /**
+   * Validates a state store by reading both normal and bytes DataFrames separately.
+   * Used for V1/V2 multi-store architecture where each store must be read independently,
+   * or for single-store tests reading the default column family.
+   *
+   * @param tempDir The checkpoint directory
+   * @param keySchema The key schema for the state store
+   * @param valueSchema The value schema for the state store
+   * @param storeName Optional name of the state store to validate. If None, reads default store.
+   */
+  private def validateStateStore(
+      tempDir: String,
+      keySchema: StructType,
+      valueSchema: StructType,
+      storeName: Option[String] = None): Unit = {
+    val normalDf = getNormalReadDf(tempDir, storeName)
+    val bytesDf = getBytesReadDf(tempDir, storeName)
+
+    validateBytesReadDfSchema(bytesDf)
+    compareNormalAndBytesData(
+      normalDf.collect(),
+      bytesDf.collect(),
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      valueSchema)
+  }
+
+  /**
+   * Validates a column family using a shared bytes DataFrame.
+   * Used for V3 multi-column-family architecture where all column families
+   * are read together in a single bytes DataFrame.
+   *
+   * @param tempDir The checkpoint directory
+   * @param colFamilyName The name of the column family to validate
+   * @param sharedBytesDf The shared bytes DataFrame containing all column families
+   * @param keySchema The key schema for the column family
+   * @param valueSchema The value schema for the column family
+   */
+  private def validateColumnFamily(
+      tempDir: String,
+      colFamilyName: String,
+      sharedBytesDf: DataFrame,
+      keySchema: StructType,
+      valueSchema: StructType): Unit = {
+    val normalDf = getNormalReadDf(tempDir, Option(colFamilyName))
+
+    compareNormalAndBytesData(
+      normalDf.collect(),
+      sharedBytesDf.collect(),
+      colFamilyName,
+      keySchema,
+      valueSchema)
+  }
+
   // Run all tests with both changelog checkpointing enabled and disabled
   Seq(true, false).foreach { changelogCheckpointingEnabled =>
     val testSuffix = if (changelogCheckpointingEnabled) {
@@ -311,11 +365,7 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
           StructField("min", IntegerType, nullable = false)
         ))
 
-        val normalData = getNormalReadDf(tempDir.getAbsolutePath).collect()
-        val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
-
-        validateBytesReadDfSchema(bytesDf)
-        compareNormalAndBytesData(normalData, bytesDf.collect(), "default", keySchema, valueSchema)
+        validateStateStore(tempDir.getAbsolutePath, keySchema, valueSchema)
       }
       }
     }
@@ -333,11 +383,7 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
           StructField("min", IntegerType, nullable = false)
         ))
 
-        val normalData = getNormalReadDf(tempDir.getAbsolutePath).collect()
-        val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
-
-        validateBytesReadDfSchema(bytesDf)
-        compareNormalAndBytesData(normalData, bytesDf.collect(), "default", keySchema, valueSchema)
+        validateStateStore(tempDir.getAbsolutePath, keySchema, valueSchema)
       }
       }
     }
@@ -361,11 +407,7 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
           StructField("min", IntegerType, nullable = false)
         ))
 
-        val normalData = getNormalReadDf(tempDir.getAbsolutePath).collect()
-        val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
-
-        validateBytesReadDfSchema(bytesDf)
-        compareNormalAndBytesData(normalData, bytesDf.collect(), "default", keySchema, valueSchema)
+        validateStateStore(tempDir.getAbsolutePath, keySchema, valueSchema)
       }
       }
     }
@@ -386,11 +428,7 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
           StructField("min", IntegerType, nullable = false)
         ))
 
-        val normalData = getNormalReadDf(tempDir.getAbsolutePath).collect()
-        val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
-
-        validateBytesReadDfSchema(bytesDf)
-        compareNormalAndBytesData(normalData, bytesDf.collect(), "default", keySchema, valueSchema)
+        validateStateStore(tempDir.getAbsolutePath, keySchema, valueSchema)
       }
       }
     }
@@ -407,11 +445,7 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
           StructField("__dummy__", NullType, nullable = true)
         ))
 
-        val normalData = getNormalReadDf(tempDir.getAbsolutePath).collect()
-        val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
-
-        validateBytesReadDfSchema(bytesDf)
-        compareNormalAndBytesData(normalData, bytesDf.collect(), "default", keySchema, valueSchema)
+        validateStateStore(tempDir.getAbsolutePath, keySchema, valueSchema)
       }
     }
 
@@ -426,11 +460,7 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
           StructField("__dummy__", NullType, nullable = true)
         ))
 
-        val normalData = getNormalReadDf(tempDir.getAbsolutePath).collect()
-        val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
-
-        validateBytesReadDfSchema(bytesDf)
-        compareNormalAndBytesData(normalData, bytesDf.collect(), "default", keySchema, valueSchema)
+        validateStateStore(tempDir.getAbsolutePath, keySchema, valueSchema)
       }
     }
 
@@ -445,11 +475,7 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
           StructField("expiresAtMicros", LongType, nullable = false)
         ))
 
-        val normalData = getNormalReadDf(tempDir.getAbsolutePath).collect()
-        val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
-
-        validateBytesReadDfSchema(bytesDf)
-        compareNormalAndBytesData(normalData, bytesDf.collect(), "default", keySchema, valueSchema)
+        validateStateStore(tempDir.getAbsolutePath, keySchema, valueSchema)
       }
     }
 
@@ -471,11 +497,7 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
           StructField("count", LongType, nullable = false)
         ))
 
-        val normalData = getNormalReadDf(tempDir.getAbsolutePath).collect()
-        val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
-
-        validateBytesReadDfSchema(bytesDf)
-        compareNormalAndBytesData(normalData, bytesDf.collect(), "default", keySchema, valueSchema)
+        validateStateStore(tempDir.getAbsolutePath, keySchema, valueSchema)
       }
     }
 
@@ -534,75 +556,447 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
       }
     }
 
-    def testStreamStreamJoinV2(stateVersion: Int): Unit = {
+    def getKeyToNumValuesSchemas(): (StructType, StructType) = {
+      val keySchema = StructType(Array(
+        StructField("key", IntegerType)
+      ))
+      val valueSchema = StructType(Array(
+        StructField("value", LongType)
+      ))
+      (keySchema, valueSchema)
+    }
+
+    def getKeyWithIndexToValueSchemas(
+        includeMatchedField: Boolean): (StructType, StructType) = {
+      val keySchema = StructType(Array(
+        StructField("key", IntegerType, nullable = false),
+        StructField("index", LongType)
+      ))
+
+      val baseValueFields = Array(
+        StructField("value", IntegerType, nullable = false),
+        StructField("time", TimestampType, nullable = false)
+      )
+      val valueSchema = if (includeMatchedField) {
+        StructType(baseValueFields :+ StructField("matched", BooleanType))
+      } else {
+        StructType(baseValueFields)
+      }
+
+      (keySchema, valueSchema)
+    }
+
+    def testStreamStreamJoinV1AndV2(stateVersion: Int): Unit = {
+      assert(stateVersion <= 2, s"stateVersion must be <= 2, but got $stateVersion")
       withSQLConf(
         SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> stateVersion.toString) {
         withTempDir { tempDir =>
           runStreamStreamJoinQuery(tempDir.getAbsolutePath)
 
-          Seq("right-keyToNumValues", "left-keyToNumValues").foreach(storeName => {
-            val stateReaderForRight = getNormalReadDf(
-              tempDir.getAbsolutePath, Option(storeName))
-            val stateBytesDfForRight = getBytesReadDf(
-              tempDir.getAbsolutePath, Option(storeName))
-
-            val keyToNumValuesKeySchema = StructType(Array(
-              StructField("key", IntegerType)
-            ))
-            val keyToNumValueValueSchema = StructType(Array(
-              StructField("value", LongType)
-            ))
-
-            validateBytesReadDfSchema(stateBytesDfForRight)
-            compareNormalAndBytesData(
-              stateReaderForRight.collect(),
-              stateBytesDfForRight.collect(),
-              StateStore.DEFAULT_COL_FAMILY_NAME,
+          // Validate keyToNumValues stores
+          val (keyToNumValuesKeySchema, keyToNumValueValueSchema) = getKeyToNumValuesSchemas()
+          Seq("right-keyToNumValues", "left-keyToNumValues").foreach { storeName =>
+            validateStateStore(
+              tempDir.getAbsolutePath,
               keyToNumValuesKeySchema,
-              keyToNumValueValueSchema)
-          })
+              keyToNumValueValueSchema,
+              Some(storeName))
+          }
 
-          Seq("right-keyWithIndexToValue", "left-keyWithIndexToValue").foreach(storeName => {
-            val stateReaderForRight = getNormalReadDf(
-              tempDir.getAbsolutePath, Option(storeName))
-            val stateBytesDfForRight = getBytesReadDf(
-              tempDir.getAbsolutePath, Option(storeName))
-
-            val keyToNumValuesKeySchema = StructType(Array(
-              StructField("key", IntegerType, nullable = false),
-              StructField("index", LongType)
-            ))
-            val keyToNumValueValueSchema = if (stateVersion == 2) {
-              StructType(Array(
-                StructField("value", IntegerType, nullable = false),
-                StructField("time", TimestampType, nullable = false),
-                StructField("matched", BooleanType)
-              ))
-            } else {
-              StructType(Array(
-                StructField("value", IntegerType, nullable = false),
-                StructField("time", TimestampType, nullable = false)
-              ))
-            }
-
-            validateBytesReadDfSchema(stateBytesDfForRight)
-            compareNormalAndBytesData(
-              stateReaderForRight.collect(),
-              stateBytesDfForRight.collect(),
-              StateStore.DEFAULT_COL_FAMILY_NAME,
-              keyToNumValuesKeySchema,
-              keyToNumValueValueSchema)
-          })
+          // Validate keyWithIndexToValue stores
+          val hasMatchedField = stateVersion == 2
+          val (keyWithIndexKeySchema, keyWithIndexValueSchema) =
+            getKeyWithIndexToValueSchemas(hasMatchedField)
+          Seq("right-keyWithIndexToValue", "left-keyWithIndexToValue").foreach { storeName =>
+            validateStateStore(
+              tempDir.getAbsolutePath,
+              keyWithIndexKeySchema,
+              keyWithIndexValueSchema,
+              Some(storeName))
+          }
         }
       }
     }
 
     testWithChangelogConfig("stream-stream join, state ver 1") {
-      testStreamStreamJoinV2(1)
+      testStreamStreamJoinV1AndV2(1)
     }
 
     testWithChangelogConfig("stream-stream join, state ver 2") {
-      testStreamStreamJoinV2(2)
+      testStreamStreamJoinV1AndV2(2)
+    }
+
+    testWithChangelogConfig("SPARK-54419: transformWithState with multiple column families") {
+      withTempDir { tempDir =>
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new MultiStateVarProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = tempDir.getAbsolutePath),
+          AddData(inputData, "a", "b", "a"),
+          CheckNewAnswer(("a", "2"), ("b", "1")),
+          AddData(inputData, "b", "c"),
+          CheckNewAnswer(("b", "2"), ("c", "1")),
+          StopStream
+        )
+
+        // Read all column families using internalOnlyReadAllColumnFamilies
+        val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
+        validateBytesReadDfSchema(bytesDf)
+        val allBytesData = bytesDf.collect()
+
+        val columnFamilies = allBytesData.map(_.getString(3)).distinct.sorted
+
+        // Verify countState column family exists
+        assert(columnFamilies.toSet ==
+          Set("countState", "itemsList", "$rowCounter_itemsList", "itemsMap"))
+
+        // Define schemas for each column family based on provided schema info
+        val groupByKeySchema = StructType(Array(
+          StructField("value", StringType, nullable = true)
+        ))
+        val countStateValueSchema = StructType(Array(
+          StructField("value", LongType, nullable = false)
+        ))
+        val itemsListValueSchema = StructType(Array(
+          StructField("value", StringType, nullable = true)
+        ))
+        val rowCounterValueSchema = StructType(Array(
+          StructField("count", LongType, nullable = true)
+        ))
+        val itemsMapKeySchema = StructType(Array(
+          StructField("key", groupByKeySchema),
+          StructField("user_map_key", groupByKeySchema, nullable = true)
+        ))
+        val itemsMapValueSchema = StructType(Array(
+          StructField("user_map_value", IntegerType, nullable = true)
+        ))
+
+        // Validate countState
+        readAndValidateStateVar(
+          tempDir.getAbsolutePath, allBytesData,
+          stateVarName = "countState", groupByKeySchema, countStateValueSchema)
+
+        // Validate itemsList
+        readAndValidateStateVar(
+          tempDir.getAbsolutePath, allBytesData,
+          stateVarName = "itemsList", groupByKeySchema, itemsListValueSchema,
+          extraOptions = Map(StateSourceOptions.FLATTEN_COLLECTION_TYPES -> "true"),
+          selectExprs = Seq("partition_id", "key", "list_element"))
+
+        // Validate $rowCounter_itemsList
+        readAndValidateStateVar(
+          tempDir.getAbsolutePath, allBytesData,
+          stateVarName = "$rowCounter_itemsList", groupByKeySchema, rowCounterValueSchema
+        )
+
+        // Validate itemsMap
+        readAndValidateStateVar(
+          tempDir.getAbsolutePath, allBytesData,
+          stateVarName = "itemsMap", itemsMapKeySchema, itemsMapValueSchema,
+          selectExprs = Seq("partition_id", "STRUCT(key, user_map_key) AS KEY",
+            "user_map_value AS value"))
+      }
+    }
+
+    testWithChangelogConfig("SPARK-54419: read all column families with event time timers") {
+      withTempDir { tempDir =>
+        val inputData = MemoryStream[(String, Long)]
+        val result = inputData.toDS()
+          .select(col("_1").as("key"), timestamp_seconds(col("_2")).as("eventTime"))
+          .withWatermark("eventTime", "10 seconds")
+          .as[(String, Timestamp)]
+          .groupByKey(_._1)
+          .transformWithState(
+            new EventTimeTimerProcessor(),
+            TimeMode.EventTime(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = tempDir.getAbsolutePath),
+          AddData(inputData, ("a", 1L), ("b", 2L), ("c", 3L)),
+          CheckLastBatch(("a", "1"), ("b", "1"), ("c", "1")),
+          StopStream
+        )
+
+        validateTimerColumnFamilies(tempDir.getAbsolutePath, "event")
+      }
+    }
+
+    testWithChangelogConfig("SPARK-54419: read all column families with processing time timers") {
+      withTempDir { tempDir =>
+        val clock = new StreamManualClock
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessorWithProcTimeTimer(),
+            TimeMode.ProcessingTime(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = tempDir.getAbsolutePath,
+            trigger = Trigger.ProcessingTime("1 second"),
+            triggerClock = clock),
+          AddData(inputData, "a"),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(("a", "1")),
+          StopStream
+        )
+
+        validateTimerColumnFamilies(tempDir.getAbsolutePath, "proc")
+      }
+    }
+
+    testWithChangelogConfig("SPARK-54419: transformWithState with list state and TTL") {
+      withTempDir { tempDir =>
+        val clock = new StreamManualClock
+        val inputData = MemoryStream[InputEvent]
+        val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
+        val result = inputData.toDS()
+          .groupByKey(x => x.key)
+          .transformWithState(new ListStateTTLProcessor(ttlConfig),
+            TimeMode.ProcessingTime(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = tempDir.getAbsolutePath,
+            trigger = Trigger.ProcessingTime("1 second"),
+            triggerClock = clock),
+          AddData(inputData, InputEvent("k1", "put", 1)),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(),
+          StopStream
+        )
+
+        val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
+        validateBytesReadDfSchema(bytesDf)
+
+        val allBytesData = bytesDf.collect()
+        val columnFamilies = allBytesData.map(_.getString(3)).distinct.sorted
+
+        assert(columnFamilies.toSet ==
+          Set("listState", "$ttl_listState", "$min_listState", "$count_listState"))
+
+        // Define schemas for list state with TTL column families
+        val groupByKeySchema = StructType(Array(
+          StructField("value", StringType, nullable = true)
+        ))
+        val listStateValueSchema = StructType(Array(
+          StructField("value", StructType(Array(
+            StructField("value", IntegerType, nullable = true)
+          )), nullable = false),
+          StructField("ttlExpirationMs", LongType, nullable = false)
+        ))
+
+        val listStateNormalDf = spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "listState")
+          .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, "true")
+          .load()
+          .selectExpr("partition_id", "key", "list_element")
+
+        compareNormalAndBytesData(
+          listStateNormalDf.collect(),
+          allBytesData,
+          "listState",
+          groupByKeySchema,
+          listStateValueSchema)
+        val dummyValueSchema = StructType(Array(StructField("__dummy__", NullType)))
+        val ttlIndexKeySchema = StructType(Array(
+          StructField("expirationMs", LongType, nullable = false),
+          StructField("elementKey", groupByKeySchema)
+        ))
+        val minExpiryValueSchema = StructType(Array(
+          StructField("minExpiry", LongType)
+        ))
+        val countValueSchema = StructType(Array(
+          StructField("count", LongType)
+        ))
+        val columnFamilyAndKeyValueSchema = Seq(
+          ("$ttl_listState", ttlIndexKeySchema, dummyValueSchema),
+          ("$min_listState", groupByKeySchema, minExpiryValueSchema),
+          ("$count_listState", groupByKeySchema, countValueSchema)
+        )
+        columnFamilyAndKeyValueSchema.foreach(pair => {
+          validateColumnFamily(tempDir.getAbsolutePath, pair._1, bytesDf, pair._2, pair._3)
+        })
+      }
+    }
+
+    testWithChangelogConfig("SPARK-54419: transformWithState with map state and TTL") {
+      withTempDir { tempDir =>
+        val clock = new StreamManualClock
+        val inputData = MemoryStream[MapInputEvent]
+        val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
+        val result = inputData.toDS()
+          .groupByKey(x => x.key)
+          .transformWithState(new MapStateTTLProcessor(ttlConfig),
+            TimeMode.ProcessingTime(),
+            OutputMode.Update())
+
+        testStream(result)(
+          StartStream(checkpointLocation = tempDir.getAbsolutePath,
+            trigger = Trigger.ProcessingTime("1 second"),
+            triggerClock = clock),
+          AddData(inputData, MapInputEvent("a", "key1", "put", 1)),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(),
+          StopStream
+        )
+
+        val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
+        validateBytesReadDfSchema(bytesDf)
+
+        val allBytesData = bytesDf.collect()
+        val columnFamilies = allBytesData.map(_.getString(3)).distinct.sorted
+
+        // Map state with TTL should have: mapState (main) and $ttl_mapState (TTL index)
+        assert(columnFamilies.toSet == Set("mapState", "$ttl_mapState"))
+
+        // Define schemas for map state with TTL column families
+        val groupByKeySchema = StructType(Array(
+          StructField("value", StringType, nullable = true)
+        ))
+        val userKeySchema = StructType(Array(
+          StructField("value", StringType, nullable = true)
+        ))
+        val compositeKeySchema = StructType(Array(
+          StructField("key", groupByKeySchema),
+          StructField("userKey", userKeySchema)
+        ))
+        val mapStateValueSchema = StructType(Array(
+          StructField("value", StructType(Array(
+            StructField("value", IntegerType, nullable = true)
+          )), nullable = false),
+          StructField("ttlExpirationMs", LongType, nullable = false)
+        ))
+
+        readAndValidateStateVar(
+          tempDir.getAbsolutePath, allBytesData,
+          stateVarName = "mapState", compositeKeySchema, mapStateValueSchema,
+          selectExprs = Seq("partition_id", "STRUCT(key, user_map_key) AS KEY",
+            "user_map_value AS value"))
+
+        // Validate $ttl_mapState column family
+        val dummyValueSchema = StructType(Array(StructField("__empty__", NullType)))
+        val ttlIndexKeySchema = StructType(Array(
+          StructField("expirationMs", LongType, nullable = false),
+          StructField("elementKey", compositeKeySchema)
+        ))
+
+        readAndValidateStateVar(
+          tempDir.getAbsolutePath, allBytesData,
+          stateVarName = "$ttl_mapState", ttlIndexKeySchema, dummyValueSchema)
+      }
+    }
+
+    testWithChangelogConfig("SPARK-54419: transformWithState with value state and TTL") {
+      withTempDir { tempDir =>
+        val clock = new StreamManualClock
+        val inputData = MemoryStream[InputEvent]
+        val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
+        val result = inputData.toDS()
+          .groupByKey(x => x.key)
+          .transformWithState(new ValueStateTTLProcessor(ttlConfig),
+            TimeMode.ProcessingTime(),
+            OutputMode.Update())
+
+        testStream(result)(
+          StartStream(checkpointLocation = tempDir.getAbsolutePath,
+            trigger = Trigger.ProcessingTime("1 second"),
+            triggerClock = clock),
+          AddData(inputData, InputEvent("k1", "put", 1)),
+          AddData(inputData, InputEvent("k2", "put", 2)),
+          AdvanceManualClock(1 * 1000),
+          CheckNewAnswer(),
+          StopStream
+        )
+
+        val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
+        validateBytesReadDfSchema(bytesDf)
+
+        val allBytesData = bytesDf.collect()
+        val columnFamilies = allBytesData.map(_.getString(3)).distinct.sorted
+
+        // Value state with TTL should have: valueState (main) and $ttl_valueState (TTL index)
+        assert(columnFamilies.toSet == Set("valueState", "$ttl_valueState"))
+
+        // Define schemas for value state with TTL column families
+        val groupByKeySchema = StructType(Array(
+          StructField("value", StringType, nullable = true)
+        ))
+        val valueStateValueSchema = StructType(Array(
+          StructField("value", StructType(Array(
+            StructField("value", IntegerType, nullable = true)
+          )), nullable = false),
+          StructField("ttlExpirationMs", LongType, nullable = false)
+        ))
+
+        val valueStateNormalDf = getNormalReadDf(tempDir.getAbsolutePath, Option("valueState"))
+
+        compareNormalAndBytesData(
+          valueStateNormalDf.collect(),
+          allBytesData,
+          "valueState",
+          groupByKeySchema,
+          valueStateValueSchema)
+
+        // Validate $ttl_valueState column family
+        val dummyValueSchema = StructType(Array(StructField("__empty__", NullType)))
+        val ttlIndexKeySchema = StructType(Array(
+          StructField("expirationMs", LongType, nullable = false),
+          StructField("elementKey", groupByKeySchema)
+        ))
+
+        val ttlValueStateNormalDf = getNormalReadDf(
+          tempDir.getAbsolutePath, Option("$ttl_valueState"))
+        compareNormalAndBytesData(
+          ttlValueStateNormalDf.collect(),
+          allBytesData,
+          "$ttl_valueState",
+          ttlIndexKeySchema,
+          dummyValueSchema)
+      }
+    }
+
+    testWithChangelogConfig("SPARK-54419: stream-stream joinV3") {
+      withSQLConf(
+        SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "3"
+      ) {
+        withTempDir { tempDir =>
+          runStreamStreamJoinQuery(tempDir.getAbsolutePath)
+          val stateBytesDf = getBytesReadDf(tempDir.getAbsolutePath)
+          validateBytesReadDfSchema(stateBytesDf)
+
+          // Validate keyToNumValues column families
+          val (keyToNumValuesKeySchema, keyToNumValueValueSchema) = getKeyToNumValuesSchemas()
+          Seq("right-keyToNumValues", "left-keyToNumValues").foreach { colFamilyName =>
+            validateColumnFamily(
+              tempDir.getAbsolutePath,
+              colFamilyName,
+              stateBytesDf,
+              keyToNumValuesKeySchema,
+              keyToNumValueValueSchema)
+          }
+
+          // Validate keyWithIndexToValue column families (V3 always has matched field)
+          val (keyWithIndexKeySchema, keyWithIndexValueSchema) =
+            getKeyWithIndexToValueSchemas(includeMatchedField = true)
+          Seq("right-keyWithIndexToValue", "left-keyWithIndexToValue").foreach { colFamilyName =>
+            validateColumnFamily(
+              tempDir.getAbsolutePath,
+              colFamilyName,
+              stateBytesDf,
+              keyWithIndexKeySchema,
+              keyWithIndexValueSchema)
+          }
+        }
+      }
     }
   } // End of foreach loop for changelog checkpointing dimension
 
@@ -643,284 +1037,6 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
       }
     }
   }
-
-  test("SPARK-54419: transformWithState with multiple column families") {
-    withTempDir { tempDir =>
-      val inputData = MemoryStream[String]
-      val result = inputData.toDS()
-        .groupByKey(x => x)
-        .transformWithState(new MultiStateVarProcessor(),
-          TimeMode.None(),
-          OutputMode.Update())
-
-      testStream(result, OutputMode.Update())(
-        StartStream(checkpointLocation = tempDir.getAbsolutePath),
-        AddData(inputData, "a", "b", "a"),
-        CheckNewAnswer(("a", "2"), ("b", "1")),
-        AddData(inputData, "b", "c"),
-        CheckNewAnswer(("b", "2"), ("c", "1")),
-        StopStream
-      )
-
-      // Read all column families using internalOnlyReadAllColumnFamilies
-      val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
-      validateBytesReadDfSchema(bytesDf)
-      val allBytesData = bytesDf.collect()
-
-      val columnFamilies = allBytesData.map(_.getString(3)).distinct.sorted
-
-      // Verify countState column family exists
-      assert(columnFamilies.toSet ==
-        Set("countState", "itemsList", "$rowCounter_itemsList", "itemsMap"))
-
-      // Define schemas for each column family based on provided schema info
-      val groupByKeySchema = StructType(Array(
-        StructField("value", StringType, nullable = true)
-      ))
-      val countStateValueSchema = StructType(Array(
-        StructField("value", LongType, nullable = false)
-      ))
-      val itemsListValueSchema = StructType(Array(
-        StructField("value", StringType, nullable = true)
-      ))
-      val rowCounterValueSchema = StructType(Array(
-        StructField("count", LongType, nullable = true)
-      ))
-      val itemsMapKeySchema = StructType(Array(
-        StructField("key", groupByKeySchema),
-        StructField("user_map_key", groupByKeySchema, nullable = true)
-      ))
-      val itemsMapValueSchema = StructType(Array(
-        StructField("user_map_value", IntegerType, nullable = true)
-      ))
-
-      // Validate countState
-      readAndValidateStateVar(
-        tempDir.getAbsolutePath, allBytesData,
-        stateVarName = "countState", groupByKeySchema, countStateValueSchema)
-
-      // Validate itemsList
-      readAndValidateStateVar(
-        tempDir.getAbsolutePath, allBytesData,
-        stateVarName = "itemsList", groupByKeySchema, itemsListValueSchema,
-        extraOptions = Map(StateSourceOptions.FLATTEN_COLLECTION_TYPES -> "true"),
-        selectExprs = Seq("partition_id", "key", "list_element"))
-
-      // Validate $rowCounter_itemsList - intentionally reuses countState's data
-      val countStateNormalDf = getNormalReadDf(tempDir.getAbsolutePath, Option("countState"))
-      compareNormalAndBytesData(
-        countStateNormalDf.collect(),
-        allBytesData,
-        "$rowCounter_itemsList",
-        groupByKeySchema,
-        rowCounterValueSchema)
-
-      // Validate itemsMap
-      readAndValidateStateVar(
-        tempDir.getAbsolutePath, allBytesData,
-        stateVarName = "itemsMap", itemsMapKeySchema, itemsMapValueSchema,
-        selectExprs = Seq("partition_id", "STRUCT(key, user_map_key) AS KEY",
-          "user_map_value AS value"))
-    }
-  }
-
-  test("SPARK-54419: read all column families with event time timers") {
-    withTempDir { tempDir =>
-      val inputData = MemoryStream[(String, Long)]
-      val result = inputData.toDS()
-        .select(col("_1").as("key"), timestamp_seconds(col("_2")).as("eventTime"))
-        .withWatermark("eventTime", "10 seconds")
-        .as[(String, Timestamp)]
-        .groupByKey(_._1)
-        .transformWithState(
-          new EventTimeTimerProcessor(),
-          TimeMode.EventTime(),
-          OutputMode.Update())
-
-      testStream(result, OutputMode.Update())(
-        StartStream(checkpointLocation = tempDir.getAbsolutePath),
-        AddData(inputData, ("a", 1L), ("b", 2L), ("c", 3L)),
-        CheckLastBatch(("a", "1"), ("b", "1"), ("c", "1")),
-        StopStream
-      )
-
-      validateTimerColumnFamilies(tempDir.getAbsolutePath, "event")
-    }
-  }
-
-  test("SPARK-54419: read all column families with processing time timers") {
-    withTempDir { tempDir =>
-      val clock = new StreamManualClock
-      val inputData = MemoryStream[String]
-      val result = inputData.toDS()
-        .groupByKey(x => x)
-        .transformWithState(new RunningCountStatefulProcessorWithProcTimeTimer(),
-          TimeMode.ProcessingTime(),
-          OutputMode.Update())
-
-      testStream(result, OutputMode.Update())(
-        StartStream(checkpointLocation = tempDir.getAbsolutePath,
-          trigger = Trigger.ProcessingTime("1 second"),
-          triggerClock = clock),
-        AddData(inputData, "a"),
-        AdvanceManualClock(1 * 1000),
-        CheckNewAnswer(("a", "1")),
-        StopStream
-      )
-
-      validateTimerColumnFamilies(tempDir.getAbsolutePath, "proc")
-    }
-  }
-
-  test("SPARK-54419: transformWithState with list state and TTL") {
-    withTempDir { tempDir =>
-      val clock = new StreamManualClock
-      val inputData = MemoryStream[String]
-      val result = inputData.toDS()
-        .groupByKey(x => x)
-        .transformWithState(new ListStateTTLProcessor(),
-          TimeMode.ProcessingTime(),
-          OutputMode.Update())
-
-      testStream(result, OutputMode.Update())(
-        StartStream(checkpointLocation = tempDir.getAbsolutePath,
-          trigger = Trigger.ProcessingTime("1 second"),
-          triggerClock = clock),
-        AddData(inputData, "a", "b", "a"),
-        AdvanceManualClock(1 * 1000),
-        CheckNewAnswer(("a", "2"), ("b", "1")),
-        StopStream
-      )
-
-      val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
-      validateBytesReadDfSchema(bytesDf)
-
-      val allBytesData = bytesDf.collect()
-      val columnFamilies = allBytesData.map(_.getString(3)).distinct.sorted
-
-      assert(columnFamilies.toSet ==
-        Set("listState", "$ttl_listState", "$min_listState", "$count_listState"))
-
-      // Define schemas for list state with TTL column families
-      val groupByKeySchema = StructType(Array(
-        StructField("value", StringType, nullable = true)
-      ))
-      val listStateValueSchema = StructType(Array(
-        StructField("value", StructType(Array(
-          StructField("value", StringType, nullable = true)
-        )), nullable = false),
-        StructField("ttlExpirationMs", LongType, nullable = false)
-      ))
-
-      val listStateNormalDf = spark.read
-        .format("statestore")
-        .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
-        .option(StateSourceOptions.STATE_VAR_NAME, "listState")
-        .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, "true")
-        .load()
-        .selectExpr("partition_id", "key", "list_element")
-
-      compareNormalAndBytesData(
-        listStateNormalDf.collect(),
-        allBytesData,
-        "listState",
-        groupByKeySchema,
-        listStateValueSchema)
-      val dummyValueSchema = StructType(Array(StructField("__dummy__", NullType)))
-      val ttlIndexKeySchema = StructType(Array(
-        StructField("expirationMs", LongType, nullable = false),
-        StructField("elementKey", groupByKeySchema)
-      ))
-      val minExpiryValueSchema = StructType(Array(
-        StructField("minExpiry", LongType)
-      ))
-      val countValueSchema = StructType(Array(
-        StructField("count", LongType)
-      ))
-      val columnFamilyAndKeyValueSchema = Seq(
-        ("$ttl_listState", ttlIndexKeySchema, dummyValueSchema),
-        ("$min_listState", groupByKeySchema, minExpiryValueSchema),
-        ("$count_listState", groupByKeySchema, countValueSchema)
-      )
-      columnFamilyAndKeyValueSchema.foreach(pair => {
-        val normalDf = spark.read
-          .format("statestore")
-          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
-          .option(StateSourceOptions.STATE_VAR_NAME, pair._1)
-          .load()
-          .selectExpr("partition_id", "key", "value")
-
-        compareNormalAndBytesData(
-          normalDf.collect(),
-          allBytesData,
-          pair._1,
-          pair._2,
-          pair._3)
-      }
-      )
-    }
-  }
-
-  def testStreamStreamJoinV3(): Unit = {
-    withSQLConf(
-      SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "3"
-    ) {
-      withTempDir { tempDir =>
-        val inputData = MemoryStream[(Int, Long)]
-        val query = getStreamStreamJoinQuery(inputData)
-        testStream(query)(
-          StartStream(checkpointLocation = tempDir.getAbsolutePath),
-          AddData(inputData, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
-          ProcessAllAvailable(),
-          StopStream
-        )
-        val stateBytesDf = getBytesReadDf(tempDir.getAbsolutePath)
-        validateBytesReadDfSchema(stateBytesDf)
-
-        Seq("right-keyToNumValues", "left-keyToNumValues").foreach(colFamilyName => {
-          val normalDf = getNormalReadDf(tempDir.getAbsolutePath, Option(colFamilyName))
-
-          val keyToNumValuesKeySchema = StructType(Array(
-            StructField("key", IntegerType)
-          ))
-          val keyToNumValueValueSchema = StructType(Array(
-            StructField("value", LongType)
-          ))
-
-          compareNormalAndBytesData(
-            normalDf.collect(),
-            stateBytesDf.collect(),
-            colFamilyName,
-            keyToNumValuesKeySchema,
-            keyToNumValueValueSchema)
-        })
-
-        Seq("right-keyWithIndexToValue", "left-keyWithIndexToValue").foreach(colFamilyName => {
-          val normalDf = getNormalReadDf(tempDir.getAbsolutePath, Option(colFamilyName))
-          val keyToNumValuesKeySchema = StructType(Array(
-            StructField("key", IntegerType, nullable = false),
-            StructField("index", LongType)
-          ))
-          val keyToNumValueValueSchema = StructType(Array(
-              StructField("value", IntegerType, nullable = false),
-              StructField("time", TimestampType, nullable = false),
-              StructField("matched", BooleanType)
-          ))
-
-          compareNormalAndBytesData(
-            normalDf.collect(),
-            stateBytesDf.collect(),
-            colFamilyName,
-            keyToNumValuesKeySchema,
-            keyToNumValueValueSchema)
-        })
-      }
-    }
-  }
-
-  test("SPARK-54419: stream-stream joinV3") {
-    testStreamStreamJoinV3()
-  }
 }
 
 /**
@@ -940,9 +1056,9 @@ class MultiStateVarProcessor extends StatefulProcessor[String, String, (String, 
   }
 
   override def handleInputRows(
-          key: String,
-          inputRows: Iterator[String],
-          timerValues: TimerValues): Iterator[(String, String)] = {
+      key: String,
+      inputRows: Iterator[String],
+      timerValues: TimerValues): Iterator[(String, String)] = {
     val currentCount = Option(_countState.get()).getOrElse(0L)
     var newCount = currentCount
     inputRows.foreach { item =>
@@ -952,37 +1068,6 @@ class MultiStateVarProcessor extends StatefulProcessor[String, String, (String, 
     }
     _countState.update(newCount)
     Iterator((key, newCount.toString))
-  }
-}
-
-class RunningCountStatefulProcessorWithProcTimeTimer
-  extends StatefulProcessor[String, String, (String, String)] {
-  import implicits._
-  @transient protected var _countState: ValueState[Long] = _
-
-  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
-    _countState = getHandle.getValueState[Long]("countState", TTLConfig.NONE)
-  }
-
-  override def handleInputRows(
-      key: String,
-      inputRows: Iterator[String],
-      timerValues: TimerValues): Iterator[(String, String)] = {
-    val currCount = Option(_countState.get()).getOrElse(0L)
-
-    getHandle.registerTimer(timerValues.getCurrentProcessingTimeInMs() + 5000)
-
-    val count = currCount + 1
-    _countState.update(count)
-    Iterator((key, count.toString))
-  }
-
-  override def handleExpiredTimer(
-     key: String,
-     timerValues: TimerValues,
-     expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
-    _countState.clear()
-    Iterator((key, "-1"))
   }
 }
 
@@ -1014,28 +1099,5 @@ class EventTimeTimerProcessor
     }
 
     Iterator((key, count.toString))
-  }
-}
-
-/**
- * Stateful processor with ListState and TTL for testing
- * StatePartitionAllColumnFamiliesReader with TTL-enabled list state.
- */
-class ListStateTTLProcessor extends StatefulProcessor[String, String, (String, String)] {
-  @transient private var _listState: ListState[String] = _
-
-  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
-    _listState = getHandle.getListState("listState", Encoders.STRING,
-      TTLConfig(Duration.ofMinutes(1)))
-  }
-
-  override def handleInputRows(
-      key: String,
-      inputRows: Iterator[String],
-      timerValues: TimerValues): Iterator[(String, String)] = {
-    inputRows.foreach { item =>
-      _listState.appendValue(item)
-    }
-    Iterator((key, _listState.get().size.toString))
   }
 }

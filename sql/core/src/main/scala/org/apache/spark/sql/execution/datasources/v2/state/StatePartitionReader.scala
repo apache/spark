@@ -30,7 +30,7 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{NextIterator, SerializableConfiguration}
 
 case class AllColumnFamiliesReaderInfo(
-    colFamilySchemas: List[StateStoreColFamilySchema] = List.empty,
+    colFamilySchemas: Set[StateStoreColFamilySchema] = Set.empty,
     stateVariableInfos: List[TransformWithStateVariableInfo] = List.empty)
 
 /**
@@ -150,7 +150,7 @@ abstract class StatePartitionReaderBase(
       require(stateStoreColFamilySchemaOpt.isDefined)
       val stateStoreColFamilySchema = stateStoreColFamilySchemaOpt.get
       val isInternal = partition.sourceOptions.readRegisteredTimers ||
-        StateStoreColumnFamilySchemaUtils.isInternalColFamilyTestOnly(
+        StateStoreColumnFamilySchemaUtils.isTestingInternalColFamily(
           stateStoreColFamilySchema.colFamilyName)
       require(stateStoreColFamilySchema.keyStateEncoderSpec.isDefined)
       store.createColFamilyIfAbsent(
@@ -289,7 +289,7 @@ class StatePartitionAllColumnFamiliesReader(
     val stateStoreId = StateStoreId(partition.sourceOptions.stateCheckpointLocation.toString,
       partition.sourceOptions.operatorId, partition.partition, partition.sourceOptions.storeName)
     val stateStoreProviderId = StateStoreProviderId(stateStoreId, partition.queryId)
-    val useColumnFamilies = stateStoreColFamilySchemas.length > 1
+    val useColumnFamilies = stateStoreColFamilySchemas.size > 1
     StateStoreProvider.createAndInit(
       stateStoreProviderId, keySchema, valueSchema, keyStateEncoderSpec,
       useColumnFamilies, storeConf, hadoopConf.value,
@@ -315,8 +315,8 @@ class StatePartitionAllColumnFamiliesReader(
     // (they'll be created during registration).
     // However, if the checkpoint contains CFs not in the schema, it indicates a mismatch.
     require(expectedCFs.subsetOf(actualCFs),
-      s"Checkpoint contains unexpected column families. " +
-        s"Column families in checkpoint but not in schema: ${expectedCFs.diff(actualCFs)}")
+      s"Some column families are present in the state store but missing in the metadata. " +
+        s"Column families in state store but not in metadata: ${expectedCFs.diff(actualCFs)}")
   }
 
   // Use a single store instance for both registering column families and iteration.
@@ -331,13 +331,14 @@ class StatePartitionAllColumnFamiliesReader(
     )
 
     // Register all column families from the schema
-    if (stateStoreColFamilySchemas.length > 1) {
-      checkAllColFamiliesExist(stateStoreColFamilySchemas.map(_.colFamilyName), stateStore)
+    if (stateStoreColFamilySchemas.size > 1) {
+      checkAllColFamiliesExist(stateStoreColFamilySchemas.map(_.colFamilyName).toList, stateStore)
       stateStoreColFamilySchemas.foreach { cfSchema =>
         cfSchema.colFamilyName match {
           case StateStore.DEFAULT_COL_FAMILY_NAME => // createAndInit has registered default
           case _ =>
-            val isInternal = cfSchema.colFamilyName.startsWith("$")
+            val isInternal =
+              StateStoreColumnFamilySchemaUtils.isInternalColumn(cfSchema.colFamilyName)
             val useMultipleValuesPerKey = isListType(cfSchema.colFamilyName)
             require(cfSchema.keyStateEncoderSpec.isDefined,
               s"keyStateEncoderSpec must be defined for column family ${cfSchema.colFamilyName}")

@@ -610,7 +610,7 @@ private[sql] class RocksDBStateStoreProvider
 
     override def hasCommitted: Boolean = state == COMMITTED
 
-    override def allColumnFamilyNames: collection.Set[String] = {
+    override def allColumnFamilyNames: Set[String] = {
       rocksDB.allColumnFamilyNames
     }
 

@@ -193,8 +193,12 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
 
       val stateVars = twsOperatorProperties.stateVariables
       val stateVarInfo = stateVars.filter(stateVar => stateVar.stateName == stateVarName)
+      // This check is to make sure only one stateVarInfo exists in stateVars.
+      // We skip this check when testing internal column correctness by querying through spark
+      // because internal columns (e.g., $ttl_, $min_, $count_) are not part of the user-defined
+      // state variables and therefore not registered in stateVars.
       if (stateVarInfo.size != 1 &&
-        !StateStoreColumnFamilySchemaUtils.isInternalColFamilyTestOnly(stateVarName)) {
+        !StateStoreColumnFamilySchemaUtils.isTestingInternalColFamily(stateVarName)) {
         throw StateDataSourceErrors.invalidOptionValue(STATE_VAR_NAME,
           s"State variable $stateVarName is not defined for the transformWithState operator.")
       }
@@ -260,8 +264,10 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
     StateStoreReaderInfo = {
     val storeMetadata = StateDataSource.getStateStoreMetadata(sourceOptions, hadoopConf)
     if (!sourceOptions.internalOnlyReadAllColumnFamilies) {
-      // skipping runStateVarChecks for StatePartitionAllColumnFamiliesReader because
-      // we won't specify any stateVars when querying a TWS operator
+      // Skip runStateVarChecks when reading all column families (for repartitioning) because:
+      // 1. We're not targeting a specific state variable, so stateVarName won't be specified
+      // 2. The validation logic assumes a single state variable is being queried
+      // 3. For repartitioning, we need to read all column families without these constraints
       runStateVarChecks(sourceOptions, storeMetadata)
     }
 
@@ -271,7 +277,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
     var stateSchemaProvider: Option[StateSchemaProvider] = None
     var joinColFamilyOpt: Option[String] = None
     var timeMode: String = TimeMode.None.toString
-    var stateStoreColFamilySchemas: List[StateStoreColFamilySchema] = List.empty
+    var stateStoreColFamilySchemas: Set[StateStoreColFamilySchema] = Set.empty
     var stateVariableInfos: List[TransformWithStateVariableInfo] = List.empty
 
     if (sourceOptions.joinSide == JoinSideValues.none) {
@@ -291,14 +297,19 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
           if (sourceOptions.readRegisteredTimers) {
             stateVarName = TimerStateUtils.getTimerStateVarNames(timeMode)._1
           }
+          // When reading all column families (for repartitioning), we collect all state variable
+          // infos instead of validating a specific stateVarName. This skips the normal validation
+          // logic because we're not reading a specific state variable - we're reading all of them.
           if (sourceOptions.internalOnlyReadAllColumnFamilies) {
             stateVariableInfos = operatorProperties.stateVariables
           } else {
             var stateVarInfoList = operatorProperties.stateVariables
               .filter(stateVar => stateVar.stateName == stateVarName)
             if (stateVarInfoList.isEmpty &&
-              StateStoreColumnFamilySchemaUtils.isInternalColFamilyTestOnly(stateVarName)) {
+              StateStoreColumnFamilySchemaUtils.isTestingInternalColFamily(stateVarName)) {
               // pass this dummy TWSStateVariableInfo for TWS internal column family during testing,
+              // because internalColumns are not register in operatorProperties.stateVariables,
+              // thus stateVarInfoList will be empty.
               stateVarInfoList = List(TransformWithStateVariableInfo(
                 stateVarName, StateVariableType.ValueState, false
               ))
@@ -339,8 +350,9 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
         val stateSchema = manager.readSchemaFile()
 
         if (sourceOptions.internalOnlyReadAllColumnFamilies) {
-          // Store all column family schemas for multi-CF reading
-          stateStoreColFamilySchemas = stateSchema
+          // Store all column family schemas for multi-CF reading.
+          // Convert to Set to ensure no duplicates and avoid processing same CF twice.
+          stateStoreColFamilySchemas = stateSchema.toSet
         }
         // When reading all column families for Join V3, no specific state variable is targeted,
         // so stateVarName defaults to DEFAULT_COL_FAMILY_NAME.
