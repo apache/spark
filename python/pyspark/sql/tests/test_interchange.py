@@ -36,11 +36,13 @@ class TestSparkArrowCStreamer(unittest.TestCase):
         stream = self._create_arrow_c_stream()
         assert isinstance(stream, pa.RecordBatchReader)
         result = pa.Table.from_batches(stream)
-        schema = pa.schema([
-            ("__index_level_0__", pa.int64(), False),
-            ("id", pa.int64(), False),
-            ("value", pa.string(), False),
-        ])
+        schema = pa.schema(
+            [
+                ("__index_level_0__", pa.int64(), False),
+                ("id", pa.int64(), False),
+                ("value", pa.string(), False),
+            ]
+        )
         expected = pa.Table.from_pandas(
             pd.DataFrame(
                 [[0, 1, "a"], [1, 2, "b"], [2, 3, "c"], [3, 4, "d"]],
