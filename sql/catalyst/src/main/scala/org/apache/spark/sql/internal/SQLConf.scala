@@ -6611,16 +6611,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val MERGE_INTO_NESTED_TYPE_COERCION_ENABLED =
-    buildConf("spark.sql.mergeNestedTypeCoercion.enabled")
-      .internal()
-      .doc("If enabled, allow MERGE INTO to coerce source nested types if they have less" +
-        "nested fields than the target table's nested types. This is experimental and" +
-        "the semantics may change.")
-      .version("4.1.0")
-      .booleanConf
-      .createWithDefault(false)
-
   val TIME_TYPE_ENABLED =
     buildConf("spark.sql.timeType.enabled")
       .doc("When true, the TIME data type is supported.")
@@ -7785,8 +7775,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyXMLParserEnabled: Boolean =
     getConf(SQLConf.LEGACY_XML_PARSER_ENABLED)
 
-  def coerceMergeNestedTypes: Boolean =
-    getConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED)
+  def coerceMergeNestedTypes: Boolean = false
 
   def isTimeTypeEnabled: Boolean = getConf(SQLConf.TIME_TYPE_ENABLED)
 
