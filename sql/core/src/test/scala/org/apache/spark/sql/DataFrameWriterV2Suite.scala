@@ -170,7 +170,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         spark.table("source").writeTo("temp_view").append()
       },
       condition = "VIEW_WRITE_NOT_ALLOWED",
-      parameters = Map("quoted" -> "temp_view")
+      parameters = Map("name" -> "temp_view")
     )
   }
 
@@ -181,7 +181,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         spark.table("source").writeTo("v").append()
       },
       condition = "VIEW_WRITE_NOT_ALLOWED",
-      parameters = Map("quoted" -> "`spark_catalog`.`default`.`v`")
+      parameters = Map("name" -> "`spark_catalog`.`default`.`v`")
     )
   }
 
@@ -280,7 +280,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         spark.table("source").writeTo("temp_view").overwrite(lit(true))
       },
       condition = "VIEW_WRITE_NOT_ALLOWED",
-      parameters = Map("quoted" -> "temp_view")
+      parameters = Map("name" -> "temp_view")
     )
   }
 
@@ -291,7 +291,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         spark.table("source").writeTo("v").overwrite(lit(true))
       },
       condition = "VIEW_WRITE_NOT_ALLOWED",
-      parameters = Map("quoted" -> "`spark_catalog`.`default`.`v`")
+      parameters = Map("name" -> "`spark_catalog`.`default`.`v`")
     )
   }
 
@@ -390,7 +390,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         spark.table("source").writeTo("temp_view").overwritePartitions()
       },
       condition = "VIEW_WRITE_NOT_ALLOWED",
-      parameters = Map("quoted" -> "temp_view")
+      parameters = Map("name" -> "temp_view")
     )
   }
 
@@ -401,7 +401,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         spark.table("source").writeTo("v").overwritePartitions()
       },
       condition = "VIEW_WRITE_NOT_ALLOWED",
-      parameters = Map("quoted" -> "`spark_catalog`.`default`.`v`")
+      parameters = Map("name" -> "`spark_catalog`.`default`.`v`")
     )
   }
 

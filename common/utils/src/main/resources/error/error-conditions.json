@@ -7406,7 +7406,7 @@
   },
   "VIEW_WRITE_NOT_ALLOWED" : {
     "message" : [
-      "Cannot write into view <quoted> as it's not a data source v2 relation."
+      "Cannot write into view <name>, please write into a table instead."
     ],
     "sqlState" : "42809"
   },
