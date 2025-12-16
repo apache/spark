@@ -11058,11 +11058,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Parameters
         ----------
-        axis : {0 or 'index'}, default 0
+        axis : {0, 'index', 1, or 'columns'}, default 0
             Indicate which axis or axes should be reduced.
 
             * 0 / 'index' : reduce the index, return a Series whose index is the
               original column labels.
+            * 1 / 'columns' : reduce the columns, return a Series whose index is the
+              original index.
 
         bool_only : bool, default None
             Include only boolean columns. If None, will attempt to use everything,
