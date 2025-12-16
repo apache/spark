@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.{ArrayType, DataType, FloatType}
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(vector1, vector2) - Returns the cosine similarity between two float vectors.
+    _FUNC_(array1, array2) - Returns the cosine similarity between two float vectors.
     The vectors must have the same dimension.
   """,
   examples = """
@@ -35,8 +35,8 @@ import org.apache.spark.sql.types.{ArrayType, DataType, FloatType}
       > SELECT _FUNC_(array(1.0F, 2.0F, 3.0F), array(4.0F, 5.0F, 6.0F));
        0.97463185
   """,
-  since = "4.1.0",
-  group = "misc_funcs"
+  since = "4.2.0",
+  group = "vector_funcs"
 )
 // scalastyle:on line.size.limit
 case class VectorCosineSimilarity(left: Expression, right: Expression)
@@ -237,7 +237,7 @@ case class VectorCosineSimilarity(left: Expression, right: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(vector1, vector2) - Returns the inner product (dot product) between two float vectors.
+    _FUNC_(array1, array2) - Returns the inner product (dot product) between two float vectors.
     The vectors must have the same dimension.
   """,
   examples = """
@@ -245,8 +245,8 @@ case class VectorCosineSimilarity(left: Expression, right: Expression)
       > SELECT _FUNC_(array(1.0F, 2.0F, 3.0F), array(4.0F, 5.0F, 6.0F));
        32.0
   """,
-  since = "4.1.0",
-  group = "misc_funcs"
+  since = "4.2.0",
+  group = "vector_funcs"
 )
 // scalastyle:on line.size.limit
 case class VectorInnerProduct(left: Expression, right: Expression)
@@ -419,7 +419,7 @@ case class VectorInnerProduct(left: Expression, right: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(vector1, vector2) - Returns the Euclidean (L2) distance between two float vectors.
+    _FUNC_(array1, array2) - Returns the Euclidean (L2) distance between two float vectors.
     The vectors must have the same dimension.
   """,
   examples = """
@@ -427,8 +427,8 @@ case class VectorInnerProduct(left: Expression, right: Expression)
       > SELECT _FUNC_(array(1.0F, 2.0F, 3.0F), array(4.0F, 5.0F, 6.0F));
        5.196152
   """,
-  since = "4.1.0",
-  group = "misc_funcs"
+  since = "4.2.0",
+  group = "vector_funcs"
 )
 // scalastyle:on line.size.limit
 case class VectorL2Distance(left: Expression, right: Expression)
