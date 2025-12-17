@@ -33,7 +33,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{DoubleType, IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -861,6 +861,81 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
         assert(updatedTable.properties.get(VIEW_SCHEMA_MODE) === Some("EVOLUTION"))
         assert(!updatedTable.properties.exists(_._1.startsWith(VIEW_QUERY_OUTPUT_PREFIX)))
         assert(!updatedTable.properties.exists(_._1.startsWith(VIEW_QUERY_OUTPUT_NUM_COLUMNS)))
+      }
+    }
+  }
+
+  test("Schema evolution views should preserve manually set comments") {
+    withTable("t") {
+      withView("v") {
+        // Create table with comments.
+        sql("CREATE TABLE t (c1 INT COMMENT " +
+          "'table comment 1', c2 STRING COMMENT 'table comment 2')")
+        sql("INSERT INTO t VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+
+        // Create view with schema evolution (no column list) - initially adopts table comments.
+        sql("CREATE VIEW v WITH SCHEMA EVOLUTION AS SELECT * FROM t")
+
+        // Verify initial comments from table are adopted.
+        val descInitial = sql("DESCRIBE EXTENDED v").collect()
+        val c1CommentInitial = descInitial.filter(r => r.getString(0) == "c1")
+        val c2CommentInitial = descInitial.filter(r => r.getString(0) == "c2")
+        assert(c1CommentInitial.nonEmpty && c1CommentInitial(0).getString(2) == "table comment 1",
+          "Initial c1 comment should be 'table comment 1' from table")
+        assert(c2CommentInitial.nonEmpty && c2CommentInitial(0).getString(2) == "table comment 2",
+          "Initial c2 comment should be 'table comment 2' from table")
+
+        // Simulate user manually changing view comments (via UI or ALTER COLUMN).
+        val catalog = spark.sessionState.catalog
+        val viewMeta = catalog.getTableMetadata(TableIdentifier("v"))
+        val newSchema = StructType(Seq(
+          StructField("c1", IntegerType, nullable = true).withComment("user comment 1"),
+          StructField("c2", StringType, nullable = true).withComment("user comment 2")
+        ))
+        catalog.alterTable(viewMeta.copy(schema = newSchema))
+
+        // Verify manually set comments.
+        val descManual = sql("DESCRIBE EXTENDED v").collect()
+        val c1CommentManual = descManual.filter(r => r.getString(0) == "c1")
+        val c2CommentManual = descManual.filter(r => r.getString(0) == "c2")
+        assert(c1CommentManual.nonEmpty && c1CommentManual(0).getString(2) == "user comment 1",
+          "c1 comment should be 'user comment 1'")
+        assert(c2CommentManual.nonEmpty && c2CommentManual(0).getString(2) == "user comment 2",
+          "c2 comment should be 'user comment 2'")
+
+        // SELECT from view (triggers ViewSyncSchemaToMetaStore).
+        checkAnswer(sql("SELECT * FROM v"), Seq(Row(1, "a"), Row(2, "b"), Row(3, "c")))
+
+        // Verify manually set comments are PRESERVED (not reverted to table comments).
+        val descAfterSelect = sql("DESCRIBE EXTENDED v").collect()
+        val c1CommentAfter = descAfterSelect.filter(r => r.getString(0) == "c1")
+        val c2CommentAfter = descAfterSelect.filter(r => r.getString(0) == "c2")
+        assert(c1CommentAfter.nonEmpty && c1CommentAfter(0).getString(2) == "user comment 1",
+          "c1 comment should still be 'user comment 1' after SELECT (bug: was reverted)")
+        assert(c2CommentAfter.nonEmpty && c2CommentAfter(0).getString(2) == "user comment 2",
+          "c2 comment should still be 'user comment 2' after SELECT (bug: was reverted)")
+
+        // Verify that type changes are still adopted.
+        sql("DROP TABLE t")
+        sql("CREATE TABLE t (c1 BIGINT COMMENT 'table comment changed', " +
+          "c2 DOUBLE COMMENT 'table comment changed 2')")
+        sql("INSERT INTO t VALUES (4, 5.0), (6, 7.0)")
+
+        // SELECT from view - should adopt new types but preserve view comments.
+        checkAnswer(sql("SELECT * FROM v"), Seq(Row(4, 5.0), Row(6, 7.0)))
+
+        // Verify types changed but comments preserved.
+        val descAfterTypeChange = sql("DESCRIBE EXTENDED v").collect()
+        val c1Final = descAfterTypeChange.filter(r => r.getString(0) == "c1")
+        val c2Final = descAfterTypeChange.filter(r => r.getString(0) == "c2")
+        assert(c1Final.nonEmpty && c1Final(0).getString(1) == "bigint",
+          "c1 type should be updated to bigint")
+        assert(c2Final.nonEmpty && c2Final(0).getString(1) == "double",
+          "c2 type should be updated to double")
+        assert(c1Final.nonEmpty && c1Final(0).getString(2) == "user comment 1",
+          "c1 comment should still be 'user comment 1' (preserved)")
+        assert(c2Final.nonEmpty && c2Final(0).getString(2) == "user comment 2",
+          "c2 comment should still be 'user comment 2' (preserved)")
       }
     }
   }
