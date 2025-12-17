@@ -35,11 +35,10 @@ import org.apache.spark.sql.streaming.{TimeMode}
  *  - Initial state setup via constructor parameter.
  *  - Direct state manipulation via `setValueState`, `setListState`, `setMapState`.
  *  - Direct state inspection via `peekValueState`, `peekListState`, `peekMapState`.
+ *  - Timers in ProcessingTime mode.
  *
  * '''Not Supported:'''
- *  - '''Timers''': Only TimeMode.None is supported. If the processor attempts to register or
- *    use timers (as if in TimeMode.EventTime or TimeMode.ProcessingTime), an
- *    UnsupportedOperationException or NullPointerException will be thrown.
+ *  - Timers in EventTime mode.
  *  - '''TTL''': State TTL configurations are ignored. All state persists indefinitely.
  *
  * '''Use Cases:'''
@@ -64,7 +63,7 @@ class TwsTester[K, I, O](
     val realTimeMode: Boolean = false) {
   private val handle = new InMemoryStatefulProcessorHandle(timeMode)
 
-  require(timeMode != TimeMode.EventTime, "EventTime not supported for now (TODO: implement)")
+  require(timeMode != TimeMode.EventTime, "EventTime is not supported.")
 
   processor.setHandle(handle)
   processor.init(OutputMode.Append, TimeMode.None)
@@ -140,23 +139,25 @@ class TwsTester[K, I, O](
     handle.peekMapState[MK, MV](stateName)
   }
 
+  /** Deletes state for given key. */
+  def deleteState(stateName: String, key: K): Unit = {
+    ImplicitGroupingKeyTracker.setImplicitKey(key)
+    handle.deleteState(stateName)
+  }
+
   // Logic for dealing with timers.
   private var currentProcessingTimeMs: Long = 0
-  private var currentWatermarkMs: Long = 0
 
   private def handleExpiredTimers(): List[O] = {
     if (timeMode == TimeMode.None) {
       return List()
     }
-    val currentTimeMs: Long =
-      if (timeMode == TimeMode.ProcessingTime) currentProcessingTimeMs
-      else currentWatermarkMs
     val timerValues = getTimerValues()
 
     var ans: List[O] = List()
     for (key <- handle.timers.getAllKeysWithTimers[K]()) {
       ImplicitGroupingKeyTracker.setImplicitKey(key)
-      val expiredTimers: List[Long] = handle.listTimers().filter(_ <= currentTimeMs).toList
+      val expiredTimers: List[Long] = handle.listTimers().filter(_ <= currentProcessingTimeMs).toList
       for (timerExpiryTimeMs <- expiredTimers) {
         val expiredTimerInfo = new ExpiredTimerInfoImpl(Some(timerExpiryTimeMs))
         ans = ans ++ processor.handleExpiredTimer(key, timerValues, expiredTimerInfo).toList
@@ -183,17 +184,7 @@ class TwsTester[K, I, O](
     return handleExpiredTimers()
   }
 
-  /** Advanced event time (watermark). Returns emitted rows resulting from timer expiration. */
-  def advanceEventTime(durationMs: Long): List[O] = {
-    require(timeMode == TimeMode.EventTime, "Can use advanceEventTime only when using EventTime time mode.")
-    currentWatermarkMs += durationMs
-    return handleExpiredTimers()
-  }
-
-
   private def getTimerValues(): TimerValues = {
-    new TimerValuesImpl(
-      if (timeMode != TimeMode.None) Some(currentProcessingTimeMs)  else None,
-      if (timeMode == TimeMode.EventTime) Some(currentWatermarkMs)  else None)
+    new TimerValuesImpl(if (timeMode != TimeMode.None) Some(currentProcessingTimeMs)  else None, None)
   } 
 }

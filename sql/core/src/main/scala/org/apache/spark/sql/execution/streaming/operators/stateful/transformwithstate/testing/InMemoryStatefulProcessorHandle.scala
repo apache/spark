@@ -259,4 +259,13 @@ class InMemoryStatefulProcessorHandle(val timeMode: TimeMode) extends StatefulPr
     require(states.contains(stateName), s"State $stateName has not been initialized.")
     states(stateName).asInstanceOf[InMemoryMapState[MK, MV]].iterator().toMap
   }
+
+  def deleteState(stateName: String): Unit = {
+    require(states.contains(stateName), s"State $stateName has not been initialized.")
+    states(stateName) match {
+      case s: InMemoryValueState[_] => s.clear()
+      case s: InMemoryListState[_] => s.clear()
+      case s: InMemoryMapState[_, _] => s.clear()
+    }
+  }
 }

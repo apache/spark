@@ -271,6 +271,36 @@ class TwsTesterSuite extends SparkFunSuite {
     )
   }
 
+  test("TwsTester should delete value state") {
+    val valueTester = new TwsTester(new RunningCountProcessor[String]())
+    valueTester.setValueState[Long]("count", "key1", 10L)
+    valueTester.setValueState[Long]("count", "key2", 20L)
+    assert(valueTester.peekValueState[Long]("count", "key1").get == 10L)
+    valueTester.deleteState("count", "key1")
+    assert(valueTester.peekValueState[Long]("count", "key1").isEmpty)
+    assert(valueTester.peekValueState[Long]("count", "key2").get == 20L)
+  }
+
+  test("TwsTester should delete list state") {
+    val listTester = new TwsTester(new TopKProcessor(3))
+    listTester.setListState("topK", "key1", List(1.0, 2.0, 3.0))
+    listTester.setListState("topK", "key2", List(4.0, 5.0))
+    assert(listTester.peekListState[Double]("topK", "key1") == List(1.0, 2.0, 3.0))
+    listTester.deleteState("topK", "key1")
+    assert(listTester.peekListState[Double]("topK", "key1").isEmpty)
+    assert(listTester.peekListState[Double]("topK", "key2") == List(4.0, 5.0))
+  }
+
+  test("TwsTester should delete map state") {
+    val mapTester = new TwsTester(new WordFrequencyProcessor())
+    mapTester.setMapState("frequencies", "user1", Map("hello" -> 5L, "world" -> 3L))
+    mapTester.setMapState("frequencies", "user2", Map("spark" -> 10L))
+    assert(mapTester.peekMapState[String, Long]("frequencies", "user1") == Map("hello" -> 5L, "world" -> 3L))
+    mapTester.deleteState("frequencies", "user1")
+    assert(mapTester.peekMapState[String, Long]("frequencies", "user1").isEmpty)
+    assert(mapTester.peekMapState[String, Long]("frequencies", "user2") == Map("spark" -> 10L))
+  }
+
   test("TwsTester should support ProcessingTime timers") {
     val tester = new TwsTester(
       new SessionTimeoutProcessor(),
