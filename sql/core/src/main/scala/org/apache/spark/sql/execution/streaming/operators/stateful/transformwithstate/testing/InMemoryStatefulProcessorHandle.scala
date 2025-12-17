@@ -79,31 +79,17 @@ class InMemoryListState[T](clock: Clock, ttl: TTLConfig) extends ListState[T] {
   private val keyToStateValue = mutable.Map[Any, mutable.ArrayBuffer[T]]()
   private val ttlTracker = new TtlTracker(clock, ttl)
 
-  private def existsInternal: Boolean =
-    keyToStateValue.contains(ImplicitGroupingKeyTracker.getImplicitKeyOption.get)
-
-  override def exists(): Boolean = {
+  private def getList: Option[mutable.ArrayBuffer[T]] = {
     if (ttlTracker.isKeyExpired()) {
-      return false
+      return None
     }
-    existsInternal
+    keyToStateValue.get(ImplicitGroupingKeyTracker.getImplicitKeyOption.get)
   }
 
-  private def getList: mutable.ArrayBuffer[T] = {
-    if (!existsInternal) {
-      keyToStateValue.put(
-        ImplicitGroupingKeyTracker.getImplicitKeyOption.get,
-        mutable.ArrayBuffer.empty[T]
-      )
-    }
-    keyToStateValue.get(ImplicitGroupingKeyTracker.getImplicitKeyOption.get).get
-  }
+  override def exists(): Boolean = getList.isDefined
 
   override def get(): Iterator[T] = {
-    if (ttlTracker.isKeyExpired()) {
-      return Iterator.empty
-    }
-    if (existsInternal) getList.iterator else Iterator.empty
+    getList.orElse(Some(mutable.ArrayBuffer.empty[T])).get.iterator
   }
 
   override def put(newState: Array[T]): Unit = {
@@ -116,16 +102,29 @@ class InMemoryListState[T](clock: Clock, ttl: TTLConfig) extends ListState[T] {
 
   override def appendValue(newState: T): Unit = {
     ttlTracker.onKeyUpdated()
-    getList += newState
+    if (!exists()) {
+      keyToStateValue.put(
+        ImplicitGroupingKeyTracker.getImplicitKeyOption.get,
+        mutable.ArrayBuffer.empty[T]
+      )
+    }
+    keyToStateValue(ImplicitGroupingKeyTracker.getImplicitKeyOption.get) += newState
   }
 
   override def appendList(newState: Array[T]): Unit = {
     ttlTracker.onKeyUpdated()
-    getList ++= newState
+    if (!exists()) {
+      keyToStateValue.put(
+        ImplicitGroupingKeyTracker.getImplicitKeyOption.get,
+        mutable.ArrayBuffer.empty[T]
+      )
+    }
+    keyToStateValue(ImplicitGroupingKeyTracker.getImplicitKeyOption.get) ++= newState
   }
 
-  override def clear(): Unit =
+  override def clear(): Unit = {
     keyToStateValue.remove(ImplicitGroupingKeyTracker.getImplicitKeyOption.get)
+  }
 }
 
 /** In-memory implementation of MapState. */
@@ -133,55 +132,74 @@ class InMemoryMapState[K, V](clock: Clock, ttl: TTLConfig) extends MapState[K, V
   private val keyToStateValue = mutable.Map[Any, mutable.HashMap[K, V]]()
   private val ttlTracker = new TtlTracker(clock, ttl)
 
-  private def existsInternal: Boolean =
-    keyToStateValue.contains(ImplicitGroupingKeyTracker.getImplicitKeyOption.get)
-
-  override def exists(): Boolean = {
-    if (ttlTracker.isKeyExpired()) {
-      return false
-    }
-    existsInternal
-  }
-
-  private def getMap: mutable.HashMap[K, V] = {
-    if (!existsInternal) {
-      keyToStateValue.put(
-        ImplicitGroupingKeyTracker.getImplicitKeyOption.get,
-        mutable.HashMap.empty[K, V]
-      )
-    }
-    keyToStateValue(ImplicitGroupingKeyTracker.getImplicitKeyOption.get)
-  }
-
-  private def getMapIfExists: Option[mutable.HashMap[K, V]] = {
+  private def getMap: Option[mutable.HashMap[K, V]] = {
     if (ttlTracker.isKeyExpired()) {
       return None
     }
     keyToStateValue.get(ImplicitGroupingKeyTracker.getImplicitKeyOption.get)
   }
 
-  override def getValue(key: K): V =
-    getMapIfExists.flatMap(_.get(key)).getOrElse(null.asInstanceOf[V])
+  override def exists(): Boolean = getMap.isDefined
 
-  override def containsKey(key: K): Boolean = getMapIfExists.exists(_.contains(key))
+  override def getValue(key: K): V = {
+    getMap
+      .orElse(Some(mutable.HashMap.empty[K, V]))
+      .get
+      .getOrElse(key, null.asInstanceOf[V])
+  }
+
+  override def containsKey(key: K): Boolean = {
+    getMap
+      .orElse(Some(mutable.HashMap.empty[K, V]))
+      .get
+      .contains(key)
+  }
 
   override def updateValue(key: K, value: V): Unit = {
     ttlTracker.onKeyUpdated()
-    getMap.put(key, value)
+    if (!exists()) {
+      keyToStateValue.put(
+        ImplicitGroupingKeyTracker.getImplicitKeyOption.get,
+        mutable.HashMap.empty[K, V]
+      )
+    }
+
+    keyToStateValue(ImplicitGroupingKeyTracker.getImplicitKeyOption.get) += (key -> value)
   }
 
-  override def iterator(): Iterator[(K, V)] =
-    getMapIfExists.map(_.iterator).getOrElse(Iterator.empty)
+  override def iterator(): Iterator[(K, V)] = {
+    getMap
+      .orElse(Some(mutable.HashMap.empty[K, V]))
+      .get
+      .iterator
+  }
 
-  override def keys(): Iterator[K] = getMapIfExists.map(_.keys.iterator).getOrElse(Iterator.empty)
+  override def keys(): Iterator[K] = {
+    getMap
+      .orElse(Some(mutable.HashMap.empty[K, V]))
+      .get
+      .keys
+      .iterator
+  }
 
-  override def values(): Iterator[V] =
-    getMapIfExists.map(_.values.iterator).getOrElse(Iterator.empty)
+  override def values(): Iterator[V] = {
+    getMap
+      .orElse(Some(mutable.HashMap.empty[K, V]))
+      .get
+      .values
+      .iterator
+  }
 
-  override def removeKey(key: K): Unit = getMapIfExists.foreach(_.remove(key))
+  override def removeKey(key: K): Unit = {
+    getMap
+      .orElse(Some(mutable.HashMap.empty[K, V]))
+      .get
+      .remove(key)
+  }
 
-  override def clear(): Unit =
+  override def clear(): Unit = {
     keyToStateValue.remove(ImplicitGroupingKeyTracker.getImplicitKeyOption.get)
+  }
 }
 
 /** In-memory timers. */
