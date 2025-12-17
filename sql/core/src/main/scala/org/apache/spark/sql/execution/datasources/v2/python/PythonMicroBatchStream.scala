@@ -92,14 +92,6 @@ class PythonMicroBatchStream(
       val records = parseLong(MAX_RECORDS_PER_BATCH)
       logInfo(s"Admission control: $MAX_RECORDS_PER_BATCH = $records")
       ReadLimit.maxRows(records)
-    } else if (options.containsKey(MAX_FILES_PER_BATCH)) {
-      val files = parseInt(MAX_FILES_PER_BATCH)
-      logInfo(s"Admission control: $MAX_FILES_PER_BATCH = $files")
-      ReadLimit.maxFiles(files)
-    } else if (options.containsKey(MAX_BYTES_PER_BATCH)) {
-      val bytes = parseLong(MAX_BYTES_PER_BATCH)
-      logInfo(s"Admission control: $MAX_BYTES_PER_BATCH = $bytes")
-      ReadLimit.maxBytes(bytes)
     } else {
       logDebug("No admission control limit configured, using allAvailable")
       ReadLimit.allAvailable()
