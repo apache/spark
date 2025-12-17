@@ -47,6 +47,7 @@ try:
                 # the coverage data before we let the JVM know about the exception.
                 import pyspark.util
                 handle_worker_exception = pyspark.util.handle_worker_exception
+                
                 def handle_worker_exception_wrapper(*args, **kwargs):
                     cov.save()
                     handle_worker_exception(*args, **kwargs)
