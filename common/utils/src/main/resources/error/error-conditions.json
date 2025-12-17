@@ -7482,6 +7482,12 @@
     ],
     "sqlState" : "42P01"
   },
+  "VIEW_WRITE_NOT_ALLOWED" : {
+    "message" : [
+      "Cannot write into view <name>, please write into a table instead."
+    ],
+    "sqlState" : "42809"
+  },
   "WINDOW_FUNCTION_AND_FRAME_MISMATCH" : {
     "message" : [
       "<funcName> function can only be evaluated in an ordered row-based window frame with a single offset: <windowExpr>."
@@ -7706,19 +7712,9 @@
       "Aggregate expression required for pivot, but '<sql>' did not appear in any aggregate function."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1007" : {
-    "message" : [
-      "Cannot write into temp view <quoted> as it's not a data source v2 relation."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1008" : {
     "message" : [
       "<quoted> is not a temp view of streaming logical plan, please use batch API such as `DataFrameReader.table` to read it."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1011" : {
-    "message" : [
-      "Writing into a view is not allowed. View: <identifier>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1012" : {
