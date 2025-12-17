@@ -1138,6 +1138,51 @@ class RDD(Generic[T_co]):
         ):
             rdd.partitioner = self.partitioner
         return rdd
+    
+    def intersectByKey(
+        self: "RDD[Tuple[K, V]]",
+        other: "RDD[Tuple[K, Any]]",
+        numPartitions: Optional[int] = None,
+    ) -> "RDD[Tuple[K, V]]":
+        """
+        Return each (key, value) pair in `self` that has a pair with matching
+        key in `other`.
+
+        .. versionadded:: 0.9.1
+
+        Parameters
+        ----------
+        other : :class:`RDD`
+            another :class:`RDD`
+        numPartitions : int, optional
+            the number of partitions in new :class:`RDD`
+
+        Returns
+        -------
+        :class:`RDD`
+            a :class:`RDD` with the pairs from this whose keys are in `other`
+
+        See Also
+        --------
+        :meth:`RDD.subtract`
+
+        Examples
+        --------
+        >>> rdd1 = sc.parallelize([("a", 1), ("b", 4), ("b", 5), ("a", 2)])
+        >>> rdd2 = sc.parallelize([("a", 3), ("c", None)])
+        >>> sorted(rdd1.intersectByKey(rdd2).collect())
+        [('a', 1), ('a', 2)]
+        """
+
+        def filter_func(pair: Tuple[K, Tuple[V, Any]]) -> bool:
+            key, (val1, val2) = pair
+            return val1 and val2  # type: ignore[return-value]
+
+        return (
+            self.cogroup(other, numPartitions)
+            .filter(filter_func)  # type: ignore[arg-type]
+            .flatMapValues(lambda x: x[0])
+        )
 
     def intersection(self: "RDD[T]", other: "RDD[T]") -> "RDD[T]":
         """
