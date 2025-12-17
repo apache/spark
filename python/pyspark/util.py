@@ -933,7 +933,8 @@ class _FaulthandlerHelper:
 
     def start(self) -> None:
         if self._log_path:
-            raise Exception("Fault handler is already registered. No second registration allowed")
+            # faulthandler is already enabled
+            return
         self._log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
         if self._log_path:
             self._log_path = os.path.join(self._log_path, str(os.getpid()))
@@ -984,10 +985,21 @@ class _FaulthandlerHelper:
 
         return wrapper
 
+    @contextmanager
+    def enable_faulthandler(self, start_periodic_traceback: bool = True) -> Iterator[None]:
+        try:
+            self.start()
+            if start_periodic_traceback:
+                self.start_periodic_traceback()
+            yield
+        finally:
+            self.stop()
+
 
 _faulthandler_helper = _FaulthandlerHelper()
 with_faulthandler = _faulthandler_helper.with_faulthandler
 start_faulthandler_periodic_traceback = _faulthandler_helper.start_periodic_traceback
+enable_faulthandler = _faulthandler_helper.enable_faulthandler
 
 
 if __name__ == "__main__":
