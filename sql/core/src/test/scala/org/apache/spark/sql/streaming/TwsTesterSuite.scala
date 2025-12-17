@@ -270,6 +270,37 @@ class TwsTesterSuite extends SparkFunSuite {
       )
     )
   }
+
+  test("TwsTester should support ProcessingTime timers") {
+    val tester = new TwsTester(
+      new SessionTimeoutProcessor(),
+      timeMode = TimeMode.ProcessingTime()
+    )
+
+    // Process input for key1 - should register a timer at t=10000
+    val result1 = tester.test("key1", List("hello"))
+    assert(result1 == List(("key1", "received:hello")))
+
+    // Advance time by 5 seconds - timer should NOT fire yet
+    val expired1 = tester.advanceProcessingTime(5000)
+    assert(expired1.isEmpty)
+
+    // Process input for key2 at t=5000 - should register timer at t=15000
+    val result2 = tester.test("key2", List("world"))
+    assert(result2 == List(("key2", "received:world")))
+
+    // Advance time by 6 seconds (total t=11000) - key1's timer should fire
+    val expired2 = tester.advanceProcessingTime(6000)
+    assert(expired2 == List(("key1", "session-expired")))
+
+    // Advance time by 5 seconds (total t=16000) - key2's timer should fire
+    val expired3 = tester.advanceProcessingTime(5000)
+    assert(expired3 == List(("key2", "session-expired")))
+
+    // Verify state is cleared after session expiry
+    assert(tester.peekValueState[Long]("lastSeen", "key1").isEmpty)
+    assert(tester.peekValueState[Long]("lastSeen", "key2").isEmpty)
+  }
 }
 
 /**

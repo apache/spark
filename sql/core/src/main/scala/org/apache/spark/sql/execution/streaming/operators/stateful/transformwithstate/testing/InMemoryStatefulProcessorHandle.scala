@@ -24,7 +24,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.ImplicitGroupingKeyTracker
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.QueryInfoImpl
-import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, StatefulProcessorHandle, TTLConfig, ValueState}
+import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, StatefulProcessorHandle, TimeMode, TTLConfig, ValueState}
 
 /** In-memory implementation of ValueState. */
 class InMemoryValueState[T] extends ValueState[T] {
@@ -122,13 +122,49 @@ class InMemoryMapState[K, V] extends MapState[K, V] {
     keyToStateValue.remove(ImplicitGroupingKeyTracker.getImplicitKeyOption.get)
 }
 
+/** In-memory timers. */
+class InMemoryTimers {
+  private val keyToTimers = mutable.Map[Any, mutable.TreeSet[Long]]()
+
+  def registerTimer(expiryTimestampMs: Long): Unit = {
+    val groupingKey = ImplicitGroupingKeyTracker.getImplicitKeyOption.get
+    if (!keyToTimers.contains(groupingKey)) {
+      keyToTimers.put(groupingKey, mutable.TreeSet[Long]())
+    }
+    keyToTimers(groupingKey).add(expiryTimestampMs)
+  }
+
+  def deleteTimer(expiryTimestampMs: Long): Unit = {
+    val groupingKey = ImplicitGroupingKeyTracker.getImplicitKeyOption.get
+    if (keyToTimers.contains(groupingKey)) {
+      keyToTimers(groupingKey).remove(expiryTimestampMs)
+      if (keyToTimers(groupingKey).isEmpty) {
+        keyToTimers.remove(groupingKey)
+      }
+    }
+  }
+
+  def listTimers(): Iterator[Long] = {
+    val groupingKey = ImplicitGroupingKeyTracker.getImplicitKeyOption.get
+    keyToTimers.get(groupingKey) match {
+      case Some(timers) => timers.iterator
+      case None => Iterator.empty
+    }
+  }
+
+  def getAllKeysWithTimers[K](): Iterator[K] = {
+    keyToTimers.keys.iterator.map(_.asInstanceOf[K])
+  }
+}
+
 /**
  * In-memory implementation of StatefulProcessorHandle.
  *
- * Doesn't support timers and TTL. Supports directly accessing state.
+ * Doesn't support TTL. Supports directly accessing state.
  */
-class InMemoryStatefulProcessorHandle() extends StatefulProcessorHandle {
+class InMemoryStatefulProcessorHandle(val timeMode: TimeMode) extends StatefulProcessorHandle {
   private val states = mutable.Map[String, Any]()
+  val timers = new InMemoryTimers()
 
   override def getValueState[T](
       stateName: String,
@@ -175,14 +211,20 @@ class InMemoryStatefulProcessorHandle() extends StatefulProcessorHandle {
   override def getQueryInfo(): QueryInfo =
     new QueryInfoImpl(UUID.randomUUID(), UUID.randomUUID(), 0L)
 
-  override def registerTimer(expiryTimestampMs: Long): Unit =
-    throw new UnsupportedOperationException("Timers are not supported.")
+  override def registerTimer(expiryTimestampMs: Long): Unit = {
+    require(timeMode != TimeMode.None, "Timers are not supported with TimeMode.None.")
+    timers.registerTimer(expiryTimestampMs)
+  }
 
-  override def deleteTimer(expiryTimestampMs: Long): Unit =
-    throw new UnsupportedOperationException("Timers are not supported.")
+  override def deleteTimer(expiryTimestampMs: Long): Unit = {
+    require(timeMode != TimeMode.None, "Timers are not supported with TimeMode.None.")
+    timers.deleteTimer(expiryTimestampMs)
+  }
 
-  override def listTimers(): Iterator[Long] =
-    throw new UnsupportedOperationException("Timers are not supported.")
+  override def listTimers(): Iterator[Long] = {
+    require(timeMode != TimeMode.None, "Timers are not supported with TimeMode.None.")
+    timers.listTimers()
+  }
 
   override def deleteIfExists(stateName: String): Unit = states.remove(stateName)
 

@@ -20,6 +20,8 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.ImplicitGroupingKeyTracker
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.testing.InMemoryStatefulProcessorHandle
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.{ExpiredTimerInfoImpl, TimerValuesImpl}
+import org.apache.spark.sql.streaming.{TimeMode}
 
 /**
  * Testing utility for transformWithState stateful processors.
@@ -47,6 +49,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
  *
  * @param processor the StatefulProcessor to test.
  * @param initialState initial state for each key as a list of (key, state) tuples.
+ * @param timeMode time mode (None, ProcessingTime or EventTime).
  * @param realTimeMode whether input rows should be processed one-by-one (separate call to 
  *     handleInputRows) for each input row.
  * @tparam K the type of grouping key.
@@ -57,8 +60,12 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
 class TwsTester[K, I, O](
     val processor: StatefulProcessor[K, I, O],
     val initialState: List[(K, Any)] = List(),
+    val timeMode: TimeMode = TimeMode.None,
     val realTimeMode: Boolean = false) {
-  private val handle = new InMemoryStatefulProcessorHandle()
+  private val handle = new InMemoryStatefulProcessorHandle(timeMode)
+
+  require(timeMode != TimeMode.EventTime, "EventTime not supported for now (TODO: implement)")
+
   processor.setHandle(handle)
   processor.init(OutputMode.Append, TimeMode.None)
   processor match {
@@ -89,10 +96,11 @@ class TwsTester[K, I, O](
    */
   def test(key: K, values: List[I]): List[O] = {
     ImplicitGroupingKeyTracker.setImplicitKey(key)
+    val timerValues = getTimerValues()
     if (realTimeMode) {
-      values.flatMap(value => processor.handleInputRows(key, Iterator.single(value), null)).toList
+      values.flatMap(value => processor.handleInputRows(key, Iterator.single(value), timerValues)).toList
     } else {
-      processor.handleInputRows(key, values.iterator, null).toList
+      processor.handleInputRows(key, values.iterator, timerValues).toList
     }    
   }
 
@@ -131,4 +139,61 @@ class TwsTester[K, I, O](
     ImplicitGroupingKeyTracker.setImplicitKey(key)
     handle.peekMapState[MK, MV](stateName)
   }
+
+  // Logic for dealing with timers.
+  private var currentProcessingTimeMs: Long = 0
+  private var currentWatermarkMs: Long = 0
+
+  private def handleExpiredTimers(): List[O] = {
+    if (timeMode == TimeMode.None) {
+      return List()
+    }
+    val currentTimeMs: Long =
+      if (timeMode == TimeMode.ProcessingTime) currentProcessingTimeMs
+      else currentWatermarkMs
+    val timerValues = getTimerValues()
+
+    var ans: List[O] = List()
+    for (key <- handle.timers.getAllKeysWithTimers[K]()) {
+      ImplicitGroupingKeyTracker.setImplicitKey(key)
+      val expiredTimers: List[Long] = handle.listTimers().filter(_ <= currentTimeMs).toList
+      for (timerExpiryTimeMs <- expiredTimers) {
+        val expiredTimerInfo = new ExpiredTimerInfoImpl(Some(timerExpiryTimeMs))
+        ans = ans ++ processor.handleExpiredTimer(key, timerValues, expiredTimerInfo).toList
+        handle.deleteTimer(timerExpiryTimeMs)
+      }
+    }
+    ans
+  }
+
+  /**
+   * Advances the simulated processing time and fires all expired timers.
+   *
+   * Call this after `test()` to simulate time passage and trigger any timers registered
+   * with `registerTimer()`. Timers with expiry time <= current processing time will fire,
+   * invoking `handleExpiredTimer` for each. This mirrors Spark's behavior where timers
+   * are processed after input data within a microbatch.
+   *
+   * @param durationMs the amount of time to advance in milliseconds
+   * @return output rows emitted by `handleExpiredTimer` for all fired timers
+   */
+  def advanceProcessingTime(durationMs: Long) : List[O] = {
+    require(timeMode != TimeMode.None, "Timers are not supported with TimeMode.None.")
+    currentProcessingTimeMs += durationMs
+    return handleExpiredTimers()
+  }
+
+  /** Advanced event time (watermark). Returns emitted rows resulting from timer expiration. */
+  def advanceEventTime(durationMs: Long): List[O] = {
+    require(timeMode == TimeMode.EventTime, "Can use advanceEventTime only when using EventTime time mode.")
+    currentWatermarkMs += durationMs
+    return handleExpiredTimers()
+  }
+
+
+  private def getTimerValues(): TimerValues = {
+    new TimerValuesImpl(
+      if (timeMode != TimeMode.None) Some(currentProcessingTimeMs)  else None,
+      if (timeMode == TimeMode.EventTime) Some(currentWatermarkMs)  else None)
+  } 
 }
