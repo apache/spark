@@ -109,7 +109,7 @@ class PythonMicroBatchStream(
     // We still validate configured options via getDefaultReadLimit(), but do not send ReadLimit
     // to Python.
     getDefaultReadLimit
-    val startJson = Option(startOffset).map(_.json()).getOrElse("null")
+    val startJson = if (startOffset != null) startOffset.json() else "null"
     val (cappedOffsetJson, trueLatestJson) = runner.latestOffsetWithReport(startJson)
     val cappedOffset = PythonStreamingSourceOffset(cappedOffsetJson)
     latestAvailableOffset = Some(PythonStreamingSourceOffset(trueLatestJson))
