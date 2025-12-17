@@ -23,9 +23,9 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.connect.proto.{Command, ExecutePlanResponse, Plan, StreamingQueryEventType}
 import org.apache.spark.internal.{Logging, LogKeys}
-import org.apache.spark.sql.connect.client.CloseableIterator
 import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.sql.streaming.StreamingQueryListener.{Event, QueryIdleEvent, QueryProgressEvent, QueryStartedEvent, QueryTerminatedEvent}
+import org.apache.spark.sql.util.CloseableIterator
 
 class StreamingQueryListenerBus(sparkSession: SparkSession) extends Logging {
   private val listeners = new CopyOnWriteArrayList[StreamingQueryListener]()

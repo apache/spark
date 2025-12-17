@@ -345,6 +345,8 @@ object DeserializerBuildHelper {
       createDeserializerForInstant(path)
     case LocalDateTimeEncoder =>
       createDeserializerForLocalDateTime(path)
+    case LocalTimeEncoder if !SQLConf.get.isTimeTypeEnabled =>
+      throw org.apache.spark.sql.errors.QueryCompilationErrors.unsupportedTimeTypeError()
     case LocalTimeEncoder =>
       createDeserializerForLocalTime(path)
     case UDTEncoder(udt, udtClass) =>

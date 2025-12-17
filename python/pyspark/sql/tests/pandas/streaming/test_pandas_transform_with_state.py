@@ -187,6 +187,7 @@ class TransformWithStateTestsMixin:
         self.assertEqual(q.name, "this_query")
         self.assertTrue(q.isActive)
         q.processAllAvailable()
+        q.stop()
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
@@ -255,6 +256,7 @@ class TransformWithStateTestsMixin:
         self.assertEqual(q.name, "this_query")
         self.assertTrue(q.isActive)
         q.processAllAvailable()
+        q.stop()
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
@@ -262,14 +264,13 @@ class TransformWithStateTestsMixin:
         self.assertTrue(q.lastProgress.stateOperators[0].customMetrics["numValueStateVars"] > 0)
         self.assertTrue(q.lastProgress.stateOperators[0].customMetrics["numDeletedStateVars"] > 0)
 
-        q.stop()
-
         self._prepare_test_resource2(input_path)
 
         q = base_query.start()
         self.assertEqual(q.name, "this_query")
         self.assertTrue(q.isActive)
         q.processAllAvailable()
+        q.stop()
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
         result_df = self.spark.read.parquet(output_path)
@@ -329,6 +330,7 @@ class TransformWithStateTestsMixin:
         self.assertEqual(q.name, query_name)
         self.assertTrue(q.isActive)
         q.processAllAvailable()
+        q.stop()
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
@@ -446,6 +448,7 @@ class TransformWithStateTestsMixin:
         self.assertEqual(q.name, query_name)
         self.assertTrue(q.isActive)
         q.processAllAvailable()
+        q.stop()
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
@@ -561,6 +564,7 @@ class TransformWithStateTestsMixin:
         self.assertEqual(q.name, "this_query")
         self.assertTrue(q.isActive)
         q.processAllAvailable()
+        q.stop()
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
@@ -657,6 +661,7 @@ class TransformWithStateTestsMixin:
         self.assertEqual(q.name, "chaining_ops_query")
         self.assertTrue(q.isActive)
         q.processAllAvailable()
+        q.stop()
         q.awaitTermination(10)
 
     def test_transform_with_state_chaining_ops(self):
@@ -1168,6 +1173,7 @@ class TransformWithStateTestsMixin:
         self.assertEqual(q.name, "evolution_test")
         self.assertTrue(q.isActive)
         q.processAllAvailable()
+        q.stop()
         q.awaitTermination(10)
 
     def test_schema_evolution_scenarios(self):

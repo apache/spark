@@ -29,7 +29,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ExecutePlanResponse
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.st.STExpressionUtils
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
@@ -137,12 +137,7 @@ private[execution] class SparkConnectPlanExecution(executeHolder: ExecuteHolder)
     val sessionId = executePlan.sessionHolder.sessionId
     val spark = dataframe.sparkSession
     val schema = dataframe.schema
-    val geospatialEnabled = spark.sessionState.conf.geospatialEnabled
-    if (!geospatialEnabled && schema.existsRecursively(STExpressionUtils.isGeoSpatialType)) {
-      throw new org.apache.spark.sql.AnalysisException(
-        errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",
-        messageParameters = scala.collection.immutable.Map.empty)
-    }
+    TypeUtils.failUnsupportedDataType(schema, spark.sessionState.conf)
     val maxRecordsPerBatch = spark.sessionState.conf.arrowMaxRecordsPerBatch
     val timeZoneId = spark.sessionState.conf.sessionLocalTimeZone
     val largeVarTypes = spark.sessionState.conf.arrowUseLargeVarTypes

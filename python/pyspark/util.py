@@ -65,6 +65,7 @@ if typing.TYPE_CHECKING:
         ArrowGroupedMapIterUDFType,
         ArrowCogroupedMapUDFType,
         PandasGroupedMapIterUDFType,
+        PandasGroupedAggIterUDFType,
         PandasGroupedMapUDFTransformWithStateType,
         PandasGroupedMapUDFTransformWithStateInitStateType,
         GroupedMapUDFTransformWithStateType,
@@ -653,6 +654,7 @@ class PythonEvalType:
     )
     SQL_GROUPED_MAP_ARROW_ITER_UDF: "ArrowGroupedMapIterUDFType" = 215
     SQL_GROUPED_MAP_PANDAS_ITER_UDF: "PandasGroupedMapIterUDFType" = 216
+    SQL_GROUPED_AGG_PANDAS_ITER_UDF: "PandasGroupedAggIterUDFType" = 217
 
     # Arrow UDFs
     SQL_SCALAR_ARROW_UDF: "ArrowScalarUDFType" = 250
@@ -722,7 +724,7 @@ def _local_iterator_from_socket(sock_info: "JavaArray", serializer: "Serializer"
         def __init__(self, _sock_info: "JavaArray", _serializer: "Serializer"):
             port: int
             auth_secret: str
-            jsocket_auth_server: "JavaObject"
+            self.jsocket_auth_server: "JavaObject"
             port, auth_secret, self.jsocket_auth_server = _sock_info
             self._sockfile, self._sock = _create_local_socket((port, auth_secret))
             self._serializer = _serializer

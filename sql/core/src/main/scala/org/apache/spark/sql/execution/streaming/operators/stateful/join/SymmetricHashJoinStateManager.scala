@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOpStateStoreCheckpointInfo
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper._
-import org.apache.spark.sql.execution.streaming.state.{KeyStateEncoderSpec, NoPrefixKeyStateEncoderSpec, StateSchemaBroadcast, StateStore, StateStoreCheckpointInfo, StateStoreColFamilySchema, StateStoreConf, StateStoreErrors, StateStoreId, StateStoreMetrics, StateStoreProvider, StateStoreProviderId, SupportsFineGrainedReplay}
+import org.apache.spark.sql.execution.streaming.state.{DropLastNFieldsStatePartitionKeyExtractor, KeyStateEncoderSpec, NoopStatePartitionKeyExtractor, NoPrefixKeyStateEncoderSpec, StatePartitionKeyExtractor, StateSchemaBroadcast, StateStore, StateStoreCheckpointInfo, StateStoreColFamilySchema, StateStoreConf, StateStoreErrors, StateStoreId, StateStoreMetrics, StateStoreProvider, StateStoreProviderId, SupportsFineGrainedReplay}
 import org.apache.spark.sql.types.{BooleanType, LongType, StructField, StructType}
 import org.apache.spark.util.NextIterator
 
@@ -101,14 +101,14 @@ abstract class SymmetricHashJoinStateManager(
     joinStoreGenerator: JoinStateManagerStoreGenerator) extends Logging {
   import SymmetricHashJoinStateManager._
 
-  protected val keySchema = StructType(
+  private[streaming] val keySchema = StructType(
     joinKeys.zipWithIndex.map { case (k, i) => StructField(s"field$i", k.dataType, k.nullable) })
   protected val keyAttributes = toAttributes(keySchema)
 
-  protected val keyToNumValues = new KeyToNumValuesStore(
+  private[streaming] val keyToNumValues = new KeyToNumValuesStore(
     stateFormatVersion,
     snapshotOptions.map(_.getKeyToNumValuesHandlerOpts()))
-  protected val keyWithIndexToValue = new KeyWithIndexToValueStore(
+  private[streaming] val keyWithIndexToValue = new KeyWithIndexToValueStore(
     stateFormatVersion,
     snapshotOptions.map(_.getKeyWithIndexToValueHandlerOpts()))
 
@@ -1254,19 +1254,51 @@ object SymmetricHashJoinStateManager {
     }
   }
 
-  private[join] sealed trait StateStoreType
+  private[streaming] sealed trait StateStoreType
 
-  private[join] case object KeyToNumValuesType extends StateStoreType {
+  private[streaming] case object KeyToNumValuesType extends StateStoreType {
     override def toString(): String = "keyToNumValues"
   }
 
-  private[join] case object KeyWithIndexToValueType extends StateStoreType {
+  private[streaming] case object KeyWithIndexToValueType extends StateStoreType {
     override def toString(): String = "keyWithIndexToValue"
   }
 
-  private[join] def getStateStoreName(
+  private[streaming] def getStateStoreName(
       joinSide: JoinSide, storeType: StateStoreType): String = {
     s"$joinSide-$storeType"
+  }
+
+  private[join] def getStoreType(storeName: String): StateStoreType = {
+    if (storeName == getStateStoreName(LeftSide, KeyToNumValuesType) ||
+      storeName == getStateStoreName(RightSide, KeyToNumValuesType)) {
+      KeyToNumValuesType
+    } else if (storeName == getStateStoreName(LeftSide, KeyWithIndexToValueType) ||
+      storeName == getStateStoreName(RightSide, KeyWithIndexToValueType)) {
+      KeyWithIndexToValueType
+    } else {
+      throw new IllegalArgumentException(s"Unknown join store name: $storeName")
+    }
+  }
+
+  /**
+   * Returns the partition key extractor for the given join store and column family name.
+   */
+  def createPartitionKeyExtractor(
+      storeName: String,
+      colFamilyName: String,
+      stateKeySchema: StructType,
+      stateFormatVersion: Int): StatePartitionKeyExtractor = {
+    assert(stateFormatVersion <= 3, "State format version must be less than or equal to 3")
+    val name = if (stateFormatVersion == 3) colFamilyName else storeName
+    if (getStoreType(name) == KeyWithIndexToValueType) {
+      // For KeyWithIndex, the index is added to the join (i.e. partition) key.
+      // Drop the last field (index) to get the partition key
+      new DropLastNFieldsStatePartitionKeyExtractor(stateKeySchema, numLastColsToDrop = 1)
+    } else {
+      // State key is the partition key
+      new NoopStatePartitionKeyExtractor(stateKeySchema)
+    }
   }
 
   /** Helper class for representing data (value, matched). */

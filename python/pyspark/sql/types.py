@@ -401,7 +401,11 @@ class AnyTimeType(DatetimeType):
 
 
 class TimeType(AnyTimeType):
-    """Time (datetime.time) data type."""
+    """
+    Time (datetime.time) data type.
+
+    .. versionadded:: 4.1.0
+    """
 
     def __init__(self, precision: int = 6):
         self.precision = precision

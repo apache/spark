@@ -65,7 +65,7 @@ trait StateSchemaProvider extends Serializable {
 
 // Test implementation that can be dynamically updated
 class TestStateSchemaProvider extends StateSchemaProvider {
-  private val schemas = mutable.Map.empty[StateSchemaMetadataKey, StateSchemaMetadataValue]
+  private[state] val schemas = mutable.Map.empty[StateSchemaMetadataKey, StateSchemaMetadataValue]
 
   /**
    * Captures a new schema pair (key schema and value schema) for a column family.

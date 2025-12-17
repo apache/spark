@@ -690,28 +690,36 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
              |""".stripMargin)
         assertNullCheckExists(plan4, Seq("s", "n_s", "dn_i"))
 
-        Seq(true, false).foreach { coerceNestedTypes =>
-          withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
-            coerceNestedTypes.toString) {
-            val mergeStmt =
-              s"""MERGE INTO nested_struct_table t USING nested_struct_table src
-                 |ON t.i = src.i
-                 |$clause THEN
-                 | UPDATE SET s.n_s = named_struct('dn_i', 2L)
-                 |""".stripMargin
-            if (coerceNestedTypes) {
-              val plan5 = parseAndResolve(mergeStmt)
-              // No null check for dn_i as it is explicitly set
-              assertNoNullCheckExists(plan5)
-            } else {
-              val e = intercept[AnalysisException] {
-                parseAndResolve(mergeStmt)
+        Seq(true, false).foreach { withSchemaEvolution =>
+          Seq(true, false).foreach { coerceNestedTypes =>
+            withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
+              coerceNestedTypes.toString) {
+              val schemaEvolutionString = if (withSchemaEvolution) {
+                "WITH SCHEMA EVOLUTION"
+              } else {
+                ""
               }
-              checkError(
-                exception = e,
-                condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-                parameters = Map("tableName" -> "``", "colName" -> "`s`.`n_s`.`dn_l`")
-              )
+              val mergeStmt =
+                s"""MERGE $schemaEvolutionString INTO nested_struct_table t
+                   |USING nested_struct_table src
+                   |ON t.i = src.i
+                   |$clause THEN
+                   | UPDATE SET s.n_s = named_struct('dn_i', 2L)
+                   |""".stripMargin
+              if (coerceNestedTypes && withSchemaEvolution) {
+                val plan5 = parseAndResolve(mergeStmt)
+                // No null check for dn_i as it is explicitly set
+                assertNoNullCheckExists(plan5)
+              } else {
+                val e = intercept[AnalysisException] {
+                  parseAndResolve(mergeStmt)
+                }
+                checkError(
+                  exception = e,
+                  condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+                  parameters = Map("tableName" -> "``", "colName" -> "`s`.`n_s`.`dn_l`")
+                )
+              }
             }
           }
         }
@@ -857,27 +865,35 @@ class AlignMergeAssignmentsSuite extends AlignAssignmentsSuiteBase {
              |""".stripMargin)
         assertNullCheckExists(plan4, Seq("s", "n_s", "dn_i"))
 
-        Seq(true, false).foreach { coerceNestedTypes =>
-          withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
-            coerceNestedTypes.toString) {
-            val mergeStmt =
-              s"""MERGE INTO nested_struct_table t USING nested_struct_table src
-                 |ON t.i = src.i
-                 |$clause THEN
-                 | UPDATE SET s.n_s = named_struct('dn_i', 1)
-                 |""".stripMargin
-            if (coerceNestedTypes) {
-              val plan5 = parseAndResolve(mergeStmt)
-              // No null check for dn_i as it is explicitly set
-              assertNoNullCheckExists(plan5)
-            } else {
-              val e = intercept[AnalysisException] {
-                parseAndResolve(mergeStmt)
+        Seq(true, false).foreach { withSchemaEvolution =>
+          Seq(true, false).foreach { coerceNestedTypes =>
+            withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
+              coerceNestedTypes.toString) {
+              val schemaEvolutionString = if (withSchemaEvolution) {
+                "WITH SCHEMA EVOLUTION"
+              } else {
+                ""
               }
-              checkError(
-                exception = e,
-                condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
-                parameters = Map("tableName" -> "``", "colName" -> "`s`.`n_s`.`dn_l`"))
+              val mergeStmt =
+                s"""MERGE $schemaEvolutionString INTO nested_struct_table t
+                   |USING nested_struct_table src
+                   |ON t.i = src.i
+                   |$clause THEN
+                   | UPDATE SET s.n_s = named_struct('dn_i', 1)
+                   |""".stripMargin
+              if (coerceNestedTypes && withSchemaEvolution) {
+                val plan5 = parseAndResolve(mergeStmt)
+                // No null check for dn_i as it is explicitly set
+                assertNoNullCheckExists(plan5)
+              } else {
+                val e = intercept[AnalysisException] {
+                  parseAndResolve(mergeStmt)
+                }
+                checkError(
+                  exception = e,
+                  condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+                  parameters = Map("tableName" -> "``", "colName" -> "`s`.`n_s`.`dn_l`"))
+              }
             }
           }
         }

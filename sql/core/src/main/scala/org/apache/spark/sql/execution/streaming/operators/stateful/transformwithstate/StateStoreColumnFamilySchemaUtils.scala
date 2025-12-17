@@ -62,9 +62,42 @@ object StateStoreColumnFamilySchemaUtils {
     case _ => false
   }
 
-  def getTtlColFamilyName(stateName: String): String = {
-    "$ttl_" + stateName
+  private def makeCFName(prefix: String, stateName: String): String = prefix + stateName
+
+  private def isCFPrefix(prefix: String, colFamilyName: String): Boolean =
+    colFamilyName.startsWith(prefix)
+
+  private def getStateName(prefix: String, colFamilyName: String): String = {
+    require(isCFPrefix(prefix, colFamilyName), s"Column family name must have prefix $prefix")
+    colFamilyName.substring(prefix.length)
   }
+
+  private val TTL_COL_FAMILY_PREFIX = "$ttl_"
+
+  def getTtlColFamilyName(stateName: String): String =
+    makeCFName(TTL_COL_FAMILY_PREFIX, stateName)
+  def isTtlColFamilyName(colFamilyName: String): Boolean =
+    isCFPrefix(TTL_COL_FAMILY_PREFIX, colFamilyName)
+  def getStateNameFromTtlColFamily(colFamilyName: String): String =
+    getStateName(TTL_COL_FAMILY_PREFIX, colFamilyName)
+
+  private val MIN_EXPIRY_INDEX_PREFIX = "$min_"
+
+  def getMinExpiryIndexCFName(stateName: String): String =
+    makeCFName(MIN_EXPIRY_INDEX_PREFIX, stateName)
+  def isMinExpiryIndexCFName(colFamilyName: String): Boolean =
+    isCFPrefix(MIN_EXPIRY_INDEX_PREFIX, colFamilyName)
+  def getStateNameFromMinExpiryIndexCFName(colFamilyName: String): String =
+    getStateName(MIN_EXPIRY_INDEX_PREFIX, colFamilyName)
+
+  private val COUNT_INDEX_PREFIX = "$count_"
+
+  def getCountIndexCFName(stateName: String): String =
+    makeCFName(COUNT_INDEX_PREFIX, stateName)
+  def isCountIndexCFName(colFamilyName: String): Boolean =
+    isCFPrefix(COUNT_INDEX_PREFIX, colFamilyName)
+  def getStateNameFromCountIndexCFName(colFamilyName: String): String =
+    getStateName(COUNT_INDEX_PREFIX, colFamilyName)
 
   def getValueStateSchema[T](
       stateName: String,
@@ -135,7 +168,7 @@ object StateStoreColumnFamilySchemaUtils {
 
       // Min expiry index
       val minIndexSchema = StateStoreColFamilySchema(
-        s"$$min_$stateName",
+        getMinExpiryIndexCFName(stateName),
         keySchemaId = 0,
         keyEncoder.schema,
         valueSchemaId = 0,
@@ -145,7 +178,7 @@ object StateStoreColumnFamilySchemaUtils {
 
       // Count index
       val countSchema = StateStoreColFamilySchema(
-        s"$$count_$stateName",
+        getCountIndexCFName(stateName),
         keySchemaId = 0,
         keyEncoder.schema,
         valueSchemaId = 0,
