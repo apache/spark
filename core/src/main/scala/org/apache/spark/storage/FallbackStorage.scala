@@ -172,7 +172,7 @@ private[spark] object FallbackStorage extends Logging {
   }
 
   def isReliable(conf: SparkConf): Boolean =
-    isConfigured(conf) &&
+    isProactive(conf) &&
       conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PROACTIVE_RELIABLE)
 
   def getPath(conf: SparkConf): Path =

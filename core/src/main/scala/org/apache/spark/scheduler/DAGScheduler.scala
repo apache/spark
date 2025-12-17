@@ -2962,7 +2962,7 @@ private[spark] class DAGScheduler(
         }
       }
     } else {
-      // we only get ere if fallback storage is reliable
+      // we only get here if fallback storage is reliable
       // see LocalDiskShuffleDriverComponents.supportsReliableStorage
       if (FallbackStorage.isConfigured(env.conf)) {
         hostToUnregisterOutputs match {
