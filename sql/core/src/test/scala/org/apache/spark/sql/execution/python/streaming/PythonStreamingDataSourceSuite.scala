@@ -759,9 +759,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     }
 
     val offset = PythonStreamingSourceOffset("{\"offset\": \"2\"}")
-    testMicroBatchStreamError(
-      "planPartitions",
-      "[NOT_IMPLEMENTED] partitions is not implemented") {
+    testMicroBatchStreamError("planPartitions", "[NOT_IMPLEMENTED] partitions is not implemented") {
       stream =>
         stream.planInputPartitions(offset, offset)
     }
@@ -932,7 +930,8 @@ class PythonStreamingDataSourceWriteSuite extends PythonDataSourceSuiteBase {
   // Verify that commit runner work correctly with large timeout interval.
   test(s"data source stream write, trigger interval=20 seconds") {
     assume(shouldTestPandasUDFs)
-    val dataSource = createUserDefinedPythonDataSource(dataSourceName, simpleDataStreamWriterScript)
+    val dataSource = 
+      createUserDefinedPythonDataSource(dataSourceName, simpleDataStreamWriterScript)
     spark.dataSource.registerPython(dataSourceName, dataSource)
     val inputData = MemoryStream[Int](numPartitions = 3)
     val df = inputData.toDF()
@@ -1072,8 +1071,7 @@ class PythonStreamingDataSourceWriteSuite extends PythonDataSourceSuiteBase {
     // the output directory in commit() function. If aborting a microbatch, it writes
     // batchId.txt into output directory.
 
-    val dataSource =
-      createUserDefinedPythonDataSource(dataSourceName, simpleDataStreamWriterScript)
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, simpleDataStreamWriterScript)
     spark.dataSource.registerPython(dataSourceName, dataSource)
 
     withTempDir { dir =>
