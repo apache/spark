@@ -22,6 +22,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.testing.InMemoryStatefulProcessorHandle
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.{ExpiredTimerInfoImpl, TimerValuesImpl}
 import org.apache.spark.sql.streaming.{TimeMode}
+import java.time.{Clock, Instant, ZoneId}
 
 /**
  * Testing utility for transformWithState stateful processors.
@@ -36,10 +37,11 @@ import org.apache.spark.sql.streaming.{TimeMode}
  *  - Direct state manipulation via `setValueState`, `setListState`, `setMapState`.
  *  - Direct state inspection via `peekValueState`, `peekListState`, `peekMapState`.
  *  - Timers in ProcessingTime mode.
+ *  - TTL for ValueState, ListState, and MapState (use ProcessingTime mode and
+ *    `advanceProcessingTime` to test expiry).
  *
  * '''Not Supported:'''
  *  - Timers in EventTime mode.
- *  - '''TTL''': State TTL configurations are ignored. All state persists indefinitely.
  *
  * '''Use Cases:'''
  *  - '''Primary''': Unit testing business logic in `handleInputRows` implementations.
@@ -61,7 +63,13 @@ class TwsTester[K, I, O](
     val initialState: List[(K, Any)] = List(),
     val timeMode: TimeMode = TimeMode.None,
     val realTimeMode: Boolean = false) {
-  private val handle = new InMemoryStatefulProcessorHandle(timeMode)
+  val clock: Clock = new Clock {
+    override def instant(): Instant = Instant.ofEpochMilli(currentProcessingTimeMs)
+    override def getZone: ZoneId = ZoneId.systemDefault()
+    override def withZone(zone: ZoneId): Clock = this
+  }
+      
+  private val handle = new InMemoryStatefulProcessorHandle(timeMode, clock)
 
   require(timeMode != TimeMode.EventTime, "EventTime is not supported.")
 

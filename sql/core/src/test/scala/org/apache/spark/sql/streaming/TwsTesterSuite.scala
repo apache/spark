@@ -301,6 +301,69 @@ class TwsTesterSuite extends SparkFunSuite {
     assert(mapTester.peekMapState[String, Long]("frequencies", "user2") == Map("spark" -> 10L))
   }
 
+  test("TwsTester should expire ValueState after TTL") {
+    import java.time.Duration
+    val ttl = TTLConfig(Duration.ofMillis(5000))
+    val tester = new TwsTester(
+      new RunningCountProcessor[String](ttl),
+      timeMode = TimeMode.ProcessingTime()
+    )
+
+    // Process input for key1 - state should be set
+    tester.test("key1", List("a"))
+    assert(tester.peekValueState[Long]("count", "key1").get == 1L)
+
+    // Advance time by 3 seconds - state should still exist
+    tester.advanceProcessingTime(3000)
+    assert(tester.peekValueState[Long]("count", "key1").get == 1L)
+
+    // Advance time by 3 more seconds (total 6s) - state should be expired
+    tester.advanceProcessingTime(3000)
+    assert(tester.peekValueState[Long]("count", "key1").isEmpty)
+  }
+
+  test("TwsTester should expire ListState after TTL") {
+    import java.time.Duration
+    val ttl = TTLConfig(Duration.ofMillis(5000))
+    val tester = new TwsTester(
+      new TopKProcessor(3, ttl),
+      timeMode = TimeMode.ProcessingTime()
+    )
+
+    // Process input for key1 - state should be set
+    tester.test("key1", List(("a", 1.0), ("b", 2.0), ("c", 3.0)))
+    assert(tester.peekListState[Double]("topK", "key1") == List(3.0, 2.0, 1.0))
+
+    // Advance time by 3 seconds - state should still exist
+    tester.advanceProcessingTime(3000)
+    assert(tester.peekListState[Double]("topK", "key1") == List(3.0, 2.0, 1.0))
+
+    // Advance time by 3 more seconds (total 6s) - state should be expired
+    tester.advanceProcessingTime(3000)
+    assert(tester.peekListState[Double]("topK", "key1").isEmpty)
+  }
+
+  test("TwsTester should expire MapState after TTL") {
+    import java.time.Duration
+    val ttl = TTLConfig(Duration.ofMillis(5000))
+    val tester = new TwsTester(
+      new WordFrequencyProcessor(ttl),
+      timeMode = TimeMode.ProcessingTime()
+    )
+
+    // Process input for user1 - state should be set
+    tester.test("user1", List(("", "hello"), ("", "world")))
+    assert(tester.peekMapState[String, Long]("frequencies", "user1") == Map("hello" -> 1L, "world" -> 1L))
+
+    // Advance time by 3 seconds - state should still exist
+    tester.advanceProcessingTime(3000)
+    assert(tester.peekMapState[String, Long]("frequencies", "user1") == Map("hello" -> 1L, "world" -> 1L))
+
+    // Advance time by 3 more seconds (total 6s) - state should be expired
+    tester.advanceProcessingTime(3000)
+    assert(tester.peekMapState[String, Long]("frequencies", "user1").isEmpty)
+  }
+
   test("TwsTester should support ProcessingTime timers") {
     val tester = new TwsTester(
       new SessionTimeoutProcessor(),
