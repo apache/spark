@@ -216,8 +216,9 @@ class Distributor:
                 if task_gpu_amount > 1:
                     if not (self.num_processes % task_gpu_amount == 0):
                         raise RuntimeError(
-                            f"TorchDistributor 'num_processes' value must be a multiple of "
-                            "'spark.task.resource.gpu.amount' value"
+                            f"TorchDistributor 'num_processes' value ({self.num_processes}) "
+                            "must be a multiple of 'spark.task.resource.gpu.amount' "
+                            f"({task_gpu_amount}) value."
                         )
                 return self.num_processes // task_gpu_amount
             else:
