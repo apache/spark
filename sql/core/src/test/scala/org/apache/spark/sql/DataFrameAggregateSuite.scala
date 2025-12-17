@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.time.{Duration, LocalDateTime, LocalTime, Period}
+import java.util.Locale
 
 import scala.util.Random
 
@@ -3348,7 +3349,7 @@ class DataFrameAggregateSuite extends QueryTest
     val result = sketchDf.select(kll_sketch_to_string_bigint($"sketch")).collect()(0)(0)
     assert(result != null)
     assert(result.asInstanceOf[String].length > 0)
-    assert(result.asInstanceOf[String].contains("Kll"))
+    assert(result.asInstanceOf[String].toLowerCase(Locale.ROOT).contains("kll"))
   }
 
   test("kll_sketch_get_n functions") {
@@ -3402,7 +3403,7 @@ class DataFrameAggregateSuite extends QueryTest
 
     // Test to_string
     val str = sketchDf.select(kll_sketch_to_string_float($"sketch")).collect()(0)(0)
-    assert(str.asInstanceOf[String].contains("Kll"))
+    assert(str.asInstanceOf[String].toLowerCase(Locale.ROOT).contains("kll"))
 
     // Test get_n
     val n = sketchDf.select(kll_sketch_get_n_float($"sketch")).collect()(0)(0)
@@ -3433,7 +3434,7 @@ class DataFrameAggregateSuite extends QueryTest
 
     // Test to_string
     val str = sketchDf.select(kll_sketch_to_string_double($"sketch")).collect()(0)(0)
-    assert(str.asInstanceOf[String].contains("Kll"))
+    assert(str.asInstanceOf[String].toLowerCase(Locale.ROOT).contains("kll"))
 
     // Test get_n
     val n = sketchDf.select(kll_sketch_get_n_double($"sketch")).collect()(0)(0)

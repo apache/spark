@@ -847,6 +847,7 @@ object FunctionRegistry {
     expression[TupleDifferenceThetaDouble]("tuple_difference_theta_double"),
     expression[TupleDifferenceInteger]("tuple_difference_integer"),
     expression[TupleDifferenceThetaInteger]("tuple_difference_theta_integer"),
+    expression[Measure]("measure"),
 
     // grouping sets
     expression[Grouping]("grouping"),

@@ -65,6 +65,7 @@ if typing.TYPE_CHECKING:
         ArrowGroupedMapIterUDFType,
         ArrowCogroupedMapUDFType,
         PandasGroupedMapIterUDFType,
+        PandasGroupedAggIterUDFType,
         PandasGroupedMapUDFTransformWithStateType,
         PandasGroupedMapUDFTransformWithStateInitStateType,
         GroupedMapUDFTransformWithStateType,
@@ -653,6 +654,7 @@ class PythonEvalType:
     )
     SQL_GROUPED_MAP_ARROW_ITER_UDF: "ArrowGroupedMapIterUDFType" = 215
     SQL_GROUPED_MAP_PANDAS_ITER_UDF: "PandasGroupedMapIterUDFType" = 216
+    SQL_GROUPED_AGG_PANDAS_ITER_UDF: "PandasGroupedAggIterUDFType" = 217
 
     # Arrow UDFs
     SQL_SCALAR_ARROW_UDF: "ArrowScalarUDFType" = 250

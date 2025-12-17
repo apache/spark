@@ -724,6 +724,56 @@ class SparkSqlAstBuilder extends AstBuilder {
     }
   }
 
+  override def visitCreateMetricView(ctx: CreateMetricViewContext): LogicalPlan = withOrigin(ctx) {
+    checkDuplicateClauses(ctx.commentSpec(), "COMMENT", ctx)
+    checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
+    checkDuplicateClauses(ctx.routineLanguage(), "LANGUAGE", ctx)
+    checkDuplicateClauses(ctx.METRICS(), "WITH METRICS", ctx)
+    val userSpecifiedColumns = Option(ctx.identifierCommentList).toSeq.flatMap { icl =>
+      icl.identifierComment.asScala.map { ic =>
+        ic.identifier.getText -> Option(ic.commentSpec()).map(visitCommentSpec)
+      }
+    }
+
+    if (ctx.EXISTS != null && ctx.REPLACE != null) {
+      throw QueryParsingErrors.createViewWithBothIfNotExistsAndReplaceError(ctx)
+    }
+
+    if (ctx.METRICS(0) == null) {
+      throw QueryParsingErrors.missingClausesForOperation(
+        ctx, "WITH METRICS", "METRIC VIEW CREATION")
+    }
+
+    if (ctx.routineLanguage(0) == null) {
+      throw QueryParsingErrors.missingClausesForOperation(
+        ctx, "LANGUAGE", "METRIC VIEW CREATION")
+    }
+
+    val languageCtx = ctx.routineLanguage(0)
+    if (languageCtx.SQL() != null) {
+      operationNotAllowed("Unsupported language for metric view: SQL", languageCtx)
+    }
+    val name: String = languageCtx.IDENTIFIER().getText
+    if (!name.equalsIgnoreCase("YAML")) {
+      operationNotAllowed(s"Unsupported language for metric view: $name", languageCtx)
+    }
+
+    val properties = ctx.propertyList.asScala.headOption
+      .map(visitPropertyKeyValues)
+      .getOrElse(Map.empty)
+    val codeLiteral = visitCodeLiteral(ctx.codeLiteral())
+
+    CreateMetricViewCommand(
+      withIdentClause(ctx.identifierReference(), UnresolvedIdentifier(_)),
+      userSpecifiedColumns,
+      visitCommentSpecList(ctx.commentSpec()),
+      properties,
+      codeLiteral,
+      allowExisting = ctx.EXISTS != null,
+      replace = ctx.REPLACE != null
+    )
+  }
+
   /**
    * Create a [[CreateFunctionCommand]].
    *
