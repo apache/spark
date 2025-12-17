@@ -2183,6 +2183,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val VIEW_SCHEMA_EVOLUTION_PRESERVE_USER_COMMENTS =
+    buildConf("spark.sql.view.schemaEvolution.preserveUserComments")
+      .internal()
+      .doc("When enabled, views with SCHEMA EVOLUTION mode will preserve user-set view comments " +
+        "when the underlying table schema evolves. When disabled, view comments will be " +
+        "overwritten with table comments on every schema sync.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val OUTPUT_COMMITTER_CLASS = buildConf("spark.sql.sources.outputCommitterClass")
     .version("1.4.0")
     .internal()
@@ -7466,6 +7476,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def viewSchemaBindingEnabled: Boolean = getConf(VIEW_SCHEMA_BINDING_ENABLED)
 
   def viewSchemaCompensation: Boolean = getConf(VIEW_SCHEMA_COMPENSATION)
+
+  def viewSchemaEvolutionPreserveUserComments: Boolean =
+    getConf(VIEW_SCHEMA_EVOLUTION_PRESERVE_USER_COMMENTS)
 
   def defaultCacheStorageLevel: StorageLevel =
     StorageLevel.fromString(getConf(DEFAULT_CACHE_STORAGE_LEVEL).name())

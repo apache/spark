@@ -694,8 +694,11 @@ object ViewSyncSchemaToMetaStore extends (LogicalPlan => Unit) {
           val planField = viewQueryFields(index)
           (field.dataType != planField.dataType ||
             field.nullable != planField.nullable ||
-            (viewSchemaMode == SchemaEvolution &&
-              field.name != planField.name))
+            (viewSchemaMode == SchemaEvolution && (
+              field.name != planField.name ||
+                // Only trigger redo on comment changes if preserve flag is disabled.
+                (!session.sessionState.conf.viewSchemaEvolutionPreserveUserComments &&
+                  field.getComment() != planField.getComment()))))
         }
 
         if (redo) {
@@ -706,7 +709,7 @@ object ViewSyncSchemaToMetaStore extends (LogicalPlan => Unit) {
                   viewFields.find(_.name == name).get.metadata)
             }
             StructType(newFields)
-          } else {
+          } else if (session.sessionState.conf.viewSchemaEvolutionPreserveUserComments) {
             // Adopt types/nullable/names from query, but preserve view comments.
             val newFields = viewQuery.schema.map { planField =>
               val existingField = viewFields.find(_.name == planField.name)
@@ -726,6 +729,9 @@ object ViewSyncSchemaToMetaStore extends (LogicalPlan => Unit) {
               StructField(planField.name, planField.dataType, planField.nullable, metadataToUse)
             }
             StructType(newFields)
+          } else {
+            // Legacy behavior: adopt everything from table including comments.
+            viewQuery.schema
           }
           SchemaUtils.checkColumnNameDuplication(fieldNames.toImmutableArraySeq,
             session.sessionState.conf.resolver)
