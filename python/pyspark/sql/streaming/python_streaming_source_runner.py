@@ -29,10 +29,7 @@ from pyspark.serializers import (
     SpecialLengths,
 )
 from pyspark.sql.datasource import DataSource, DataSourceStreamReader
-from pyspark.sql.datasource_internal import (
-    _SimpleStreamReaderWrapper,
-    _streamReader,
-)
+from pyspark.sql.datasource_internal import _SimpleStreamReaderWrapper, _streamReader
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 from pyspark.sql.types import (
     _parse_datatype_json_string,
@@ -146,9 +143,7 @@ def send_batch_func(
     max_arrow_batch_size: int,
     data_source: DataSource,
 ) -> None:
-    batches = list(
-        records_to_arrow_batches(rows, max_arrow_batch_size, schema, data_source)  # noqa: E501
-    )
+    batches = list(records_to_arrow_batches(rows, max_arrow_batch_size, schema, data_source))
     if len(batches) != 0:
         write_int(NON_EMPTY_PYARROW_RECORD_BATCHES, outfile)
         write_int(SpecialLengths.START_ARROW_STREAM, outfile)
@@ -163,7 +158,7 @@ def main(infile: IO, outfile: IO) -> None:
         check_python_version(infile)
         setup_spark_files(infile)
 
-        memory_limit_mb = int(os.environ.get("PYSPARK_PLANNER_MEMORY_MB", "-1"))  # noqa: E501
+        memory_limit_mb = int(os.environ.get("PYSPARK_PLANNER_MEMORY_MB", "-1"))
         setup_memory_limits(memory_limit_mb)
 
         _accumulatorRegistry.clear()
@@ -175,7 +170,7 @@ def main(infile: IO, outfile: IO) -> None:
             raise PySparkAssertionError(
                 errorClass="DATA_SOURCE_TYPE_MISMATCH",
                 messageParameters={
-                    "expected": ("a Python data source instance of type " "'DataSource'"),
+                    "expected": "a Python data source instance of type 'DataSource'",
                     "actual": f"'{type(data_source).__name__}'",
                 },
             )
@@ -229,10 +224,7 @@ def main(infile: IO, outfile: IO) -> None:
                     raise IllegalArgumentException(
                         errorClass="UNSUPPORTED_OPERATION",
                         messageParameters={
-                            "operation": (
-                                "Function call id not recognized by "  # noqa: E501
-                                "stream reader"
-                            )
+                            "operation": "Function call id not recognized by stream reader"
                         },
                     )
                 outfile.flush()
@@ -255,16 +247,11 @@ def main(infile: IO, outfile: IO) -> None:
 
 
 if __name__ == "__main__":
-    # Read information about how to connect back to the JVM from the
-    # environment.
-    conn_info = os.environ.get(
-        "PYTHON_WORKER_FACTORY_SOCK_PATH",
-        int(os.environ.get("PYTHON_WORKER_FACTORY_PORT", -1)),
-    )
+    # Read information about how to connect back to the JVM from the environment.
+    conn_info = os.environ.get("PYTHON_WORKER_FACTORY_SOCK_PATH", int(os.environ.get("PYTHON_WORKER_FACTORY_PORT", -1)))
     auth_secret = os.environ.get("PYTHON_WORKER_FACTORY_SECRET")
     (sock_file, sock) = local_connect_and_auth(conn_info, auth_secret)
-    # Prevent socket timeout error when query trigger interval is
-    # large.
+    # Prevent socket timeout error when query trigger interval is large.
     sock.settimeout(None)
     write_int(os.getpid(), sock_file)
     sock_file.flush()

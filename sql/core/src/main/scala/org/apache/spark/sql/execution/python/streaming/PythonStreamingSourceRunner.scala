@@ -100,8 +100,8 @@ class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType
     pythonWorker = Some(worker)
     pythonWorkerFactory = Some(workerFactory)
 
-    val stream =
-      new BufferedOutputStream(Channels.newOutputStream(pythonWorker.get.channel), bufferSize)
+    val stream = new BufferedOutputStream(
+      Channels.newOutputStream(pythonWorker.get.channel), bufferSize)
     dataOut = new DataOutputStream(stream)
 
     PythonWorkerUtils.writePythonVersion(pythonVer, dataOut)
@@ -142,8 +142,7 @@ class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType
     if (len == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "initialOffset",
-        msg)
+        action = "initialOffset", msg)
     }
     PythonWorkerUtils.readUTF(len, dataIn)
   }
@@ -151,9 +150,7 @@ class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType
   /**
    * Invokes partitions(start, end) function of the stream reader and receive the return value.
    */
-  def partitions(
-      start: String,
-      end: String): (Array[Array[Byte]], Option[Iterator[InternalRow]]) = {
+  def partitions(start: String, end: String): (Array[Array[Byte]], Option[Iterator[InternalRow]]) = {
     dataOut.writeInt(PARTITIONS_FUNC_ID)
     PythonWorkerUtils.writeUTF(start, dataOut)
     PythonWorkerUtils.writeUTF(end, dataOut)
@@ -164,8 +161,7 @@ class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType
     if (numPartitions == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "planPartitions",
-        msg)
+        action = "planPartitions", msg)
     }
     for (_ <- 0 until numPartitions) {
       val pickledPartition: Array[Byte] = PythonWorkerUtils.readBytes(dataIn)
@@ -179,12 +175,10 @@ class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType
       case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
         val msg = PythonWorkerUtils.readUTF(dataIn)
         throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-          action = "planPartitions",
-          msg)
+          action = "planPartitions", msg)
       case _ =>
         throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-          action = "planPartitions",
-          s"unknown status code $prefetchedRecordsStatus")
+          action = "planPartitions", s"unknown status code $prefetchedRecordsStatus")
     }
     (pickledPartitions.toArray, iter)
   }
@@ -238,8 +232,7 @@ class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType
     if (status == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "commitSource",
-        msg)
+        action = "commitSource", msg)
     }
   }
 
@@ -247,9 +240,8 @@ class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType
    * Stop the python worker process and invoke stop() on stream reader.
    */
   def stop(): Unit = {
-    logInfo(
-      log"Stopping streaming runner for module: " +
-        log"${MDC(LogKeys.MODULE_NAME, workerModule)}.")
+    logInfo(log"Stopping streaming runner for module: " +
+      log"${MDC(LogKeys.MODULE_NAME, workerModule)}.")
     try {
       pythonWorkerFactory.foreach { factory =>
         pythonWorker.foreach { worker =>
@@ -263,8 +255,8 @@ class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType
     }
   }
 
-  private val allocator =
-    ArrowUtils.rootAllocator.newChildAllocator(s"stream reader for $pythonExec", 0, Long.MaxValue)
+  private val allocator = ArrowUtils.rootAllocator.newChildAllocator(
+    s"stream reader for $pythonExec", 0, Long.MaxValue)
 
   def readArrowRecordBatches(): Iterator[InternalRow] = {
     val status = dataIn.readInt()
@@ -272,13 +264,11 @@ class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType
       case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
         val msg = PythonWorkerUtils.readUTF(dataIn)
         throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-          action = "prefetchArrowBatches",
-          msg)
+          action = "prefetchArrowBatches", msg)
       case SpecialLengths.START_ARROW_STREAM =>
       case _ =>
         throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-          action = "prefetchArrowBatches",
-          s"unknown status code $status")
+          action = "prefetchArrowBatches", s"unknown status code $status")
     }
     val reader = new ArrowStreamReader(dataIn, allocator)
     val root = reader.getVectorSchemaRoot()
