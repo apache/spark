@@ -930,8 +930,10 @@ class _FaulthandlerHelper:
         self._log_path: Optional[str] = None
         self._log_file: Optional[TextIO] = None
         self._periodic_traceback = False
+        self._reentry_depth = 0
 
     def start(self) -> None:
+        self._reentry_depth += 1
         if self._log_path:
             # faulthandler is already enabled
             return
@@ -943,6 +945,9 @@ class _FaulthandlerHelper:
             faulthandler.enable(file=self._log_file)
 
     def stop(self) -> None:
+        self._reentry_depth -= 1
+        if self._reentry_depth > 0:
+            return
         if self._log_path:
             faulthandler.disable()
             if self._log_file:
