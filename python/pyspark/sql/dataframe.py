@@ -853,7 +853,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         Notes
         -----
-        - Unlike `count()`, this method does not trigger any computation.
         - An empty DataFrame has no rows. It may have columns, but no data.
 
         Examples
