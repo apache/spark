@@ -3280,45 +3280,25 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
             df2_vals = table_from_batches(a[1], parsed_offsets[1][1])
             return f(df1_keys, df1_vals, df2_keys, df2_vals)
 
-    elif eval_type == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF:
+    elif eval_type in (
+        PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
+        PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
+    ):
         # We assume there is only one UDF here because grouped agg doesn't
         # support combining multiple UDFs.
         assert num_udfs == 1
 
         arg_offsets, f = udfs[0]
 
-        # Convert to iterator of batches: Iterator[pa.Array] for single column,
-        # or Iterator[Tuple[pa.Array, ...]] for multiple columns
-        def mapper(a):
-            if len(arg_offsets) == 1:
-                batch_iter = (batch_columns[arg_offsets[0]] for batch_columns in a)
-            else:
-                batch_iter = (tuple(batch_columns[o] for o in arg_offsets) for batch_columns in a)
-            return f(batch_iter)
-
-    elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF:
-        # We assume there is only one UDF here because grouped agg doesn't
-        # support combining multiple UDFs.
-        assert num_udfs == 1
-
-        arg_offsets, f = udfs[0]
-
-        # Convert to iterator of pandas Series:
-        # - Iterator[pd.Series] for single column
-        # - Iterator[Tuple[pd.Series, ...]] for multiple columns
+        # Convert to iterator:
+        # - Arrow: Iterator[pa.Array] or Iterator[Tuple[pa.Array, ...]]
+        # - Pandas: Iterator[pd.Series] or Iterator[Tuple[pd.Series, ...]]
         def mapper(batch_iter):
-            # batch_iter is Iterator[Tuple[pd.Series, ...]] where each tuple represents one batch
-            # Convert to Iterator[pd.Series] or Iterator[Tuple[pd.Series, ...]] based on arg_offsets
             if len(arg_offsets) == 1:
-                # Single column: Iterator[Tuple[pd.Series, ...]] -> Iterator[pd.Series]
-                series_iter = (batch_series[arg_offsets[0]] for batch_series in batch_iter)
+                result_iter = (batch[arg_offsets[0]] for batch in batch_iter)
             else:
-                # Multiple columns: Iterator[Tuple[pd.Series, ...]] ->
-                # Iterator[Tuple[pd.Series, ...]]
-                series_iter = (
-                    tuple(batch_series[o] for o in arg_offsets) for batch_series in batch_iter
-                )
-            return f(series_iter)
+                result_iter = (tuple(batch[o] for o in arg_offsets) for batch in batch_iter)
+            return f(result_iter)
 
     elif eval_type in (
         PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
