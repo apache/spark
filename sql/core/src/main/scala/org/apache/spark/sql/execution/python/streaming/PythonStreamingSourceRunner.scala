@@ -150,7 +150,8 @@ class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType
   /**
    * Invokes partitions(start, end) function of the stream reader and receive the return value.
    */
-  def partitions(start: String, end: String): (Array[Array[Byte]], Option[Iterator[InternalRow]]) = {
+  def partitions(start: String, end: String): (Array[Array[Byte]], Option[Iterator[InternalRow]]) =
+  {
     dataOut.writeInt(PARTITIONS_FUNC_ID)
     PythonWorkerUtils.writeUTF(start, dataOut)
     PythonWorkerUtils.writeUTF(end, dataOut)

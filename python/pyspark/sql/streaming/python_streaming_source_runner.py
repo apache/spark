@@ -209,12 +209,7 @@ def main(infile: IO, outfile: IO) -> None:
                     latest_offset_func(reader, outfile)
                 elif func_id == PARTITIONS_FUNC_ID:
                     partitions_func(
-                        reader,
-                        data_source,
-                        schema,
-                        max_arrow_batch_size,
-                        infile,
-                        outfile,
+                        reader, data_source, schema, max_arrow_batch_size, infile, outfile
                     )
                 elif func_id == COMMIT_FUNC_ID:
                     commit_func(reader, infile, outfile)
@@ -248,10 +243,12 @@ def main(infile: IO, outfile: IO) -> None:
 
 if __name__ == "__main__":
     # Read information about how to connect back to the JVM from the environment.
-    conn_info = os.environ.get("PYTHON_WORKER_FACTORY_SOCK_PATH", int(os.environ.get("PYTHON_WORKER_FACTORY_PORT", -1)))
+    conn_info = os.environ.get(
+        "PYTHON_WORKER_FACTORY_SOCK_PATH", int(os.environ.get("PYTHON_WORKER_FACTORY_PORT", -1))
+    )
     auth_secret = os.environ.get("PYTHON_WORKER_FACTORY_SECRET")
     (sock_file, sock) = local_connect_and_auth(conn_info, auth_secret)
-    # Prevent socket timeout error when query trigger interval is large.
+    # Prevent the socket from timeout error when query trigger interval is large.
     sock.settimeout(None)
     write_int(os.getpid(), sock_file)
     sock_file.flush()
