@@ -25,7 +25,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.IntegratedUDFTestUtils.{createUserDefinedPythonDataSource, shouldTestPandasUDFs}
 import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, PythonMicroBatchStream, PythonStreamingSourceOffset}
-import org.apache.spark.sql.execution.datasources.v2.python.PythonMicroBatchStream._
+import org.apache.spark.sql.execution.datasources.v2.python.PythonMicroBatchStream.{MAX_BYTES_PER_BATCH, MAX_FILES_PER_BATCH, MAX_RECORDS_PER_BATCH}
 import org.apache.spark.sql.execution.python.PythonDataSourceSuiteBase
 import org.apache.spark.sql.execution.streaming.ProcessingTimeTrigger
 import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, OffsetSeqLog}
@@ -33,7 +33,6 @@ import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-
 class PythonStreamingDataSourceSimpleSuite extends PythonDataSourceSuiteBase {
   val waitTimeout = 15.seconds
 
