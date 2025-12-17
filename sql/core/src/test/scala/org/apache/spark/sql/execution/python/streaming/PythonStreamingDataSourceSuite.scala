@@ -930,7 +930,7 @@ class PythonStreamingDataSourceWriteSuite extends PythonDataSourceSuiteBase {
   // Verify that commit runner work correctly with large timeout interval.
   test(s"data source stream write, trigger interval=20 seconds") {
     assume(shouldTestPandasUDFs)
-    val dataSource = 
+    val dataSource =
       createUserDefinedPythonDataSource(dataSourceName, simpleDataStreamWriterScript)
     spark.dataSource.registerPython(dataSourceName, dataSource)
     val inputData = MemoryStream[Int](numPartitions = 3)
