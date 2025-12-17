@@ -27,7 +27,7 @@ import scala.util.Random
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FSDataInputStream, LocalFileSystem, Path, PositionedReadable, Seekable}
 import org.mockito.{ArgumentMatchers => mc}
-import org.mockito.Mockito.{mock, never, times, verify, when}
+import org.mockito.Mockito.{mock, never, spy, times, verify, when}
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite, TestUtils}
@@ -72,7 +72,7 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
     val rpcEndpointRef = new FallbackStorageRpcEndpointRef(conf, hadoopConf)
     val fallbackStorage = FallbackStorage.getFallbackStorage(conf).get
-    val bmm = new BlockManagerMaster(rpcEndpointRef, null, conf, false)
+    val bmm = spy(new BlockManagerMaster(rpcEndpointRef, null, conf, false))
 
     val bm = mock(classOf[BlockManager])
     val dbm = new DiskBlockManager(conf, deleteFilesOnStop = false, isDriver = false)
@@ -102,6 +102,9 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
     fallbackStorage.copy(ShuffleBlockInfo(1, 1L), bm)
     fallbackStorage.copy(ShuffleBlockInfo(1, 2L), bm)
 
+    // they get reported to the master BlockManager
+    verify(bmm, times(4)).updateBlockInfo(mc.any(), mc.any(), mc.any(), mc.any(), mc.any())
+
     assert(fallbackStorage.exists(1, 1L))
     assert(fallbackStorage.exists(1, 1L))
     assert(fallbackStorage.exists(1, 2L))
@@ -122,8 +125,10 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
       .set(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH,
         Files.createTempDirectory("tmp").toFile.getAbsolutePath + "/")
     val asyncCopies = new ConcurrentHashMap[ShuffleBlockInfo, Future[Unit]]()
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+    val rpcEndpointRef = new FallbackStorageRpcEndpointRef(conf, hadoopConf)
     val fallbackStorage = new FallbackStorage(conf, asyncCopies)
-    val bmm = mock(classOf[BlockManagerMaster])
+    val bmm = spy(new BlockManagerMaster(rpcEndpointRef, null, conf, false))
 
     val bm = mock(classOf[BlockManager])
     val dbm = new DiskBlockManager(conf, deleteFilesOnStop = false, isDriver = false)
@@ -178,9 +183,10 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
     FallbackStorage.read(conf, ShuffleBlockId(1, 2L, 0))
 
     // decommissioning phase triggers copying the files again,
-    // now they get reported to the master BlockManager
     fallbackStorage.copy(ShuffleBlockInfo(1, 1L), bm)
     fallbackStorage.copy(ShuffleBlockInfo(1, 2L), bm)
+
+    // now they get reported to the master BlockManager
     verify(bmm, times(4)).updateBlockInfo(mc.any(), mc.any(), mc.any(), mc.any(), mc.any())
 
     // still the copied files should exist and be readable
@@ -206,8 +212,8 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
     val asyncCopies = new ConcurrentHashMap[ShuffleBlockInfo, Future[Unit]]()
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
     val rpcEndpointRef = new FallbackStorageRpcEndpointRef(conf, hadoopConf)
-    val fallbackStorage = FallbackStorage.getFallbackStorage(conf).get
-    val bmm = new BlockManagerMaster(rpcEndpointRef, null, conf, false)
+    val fallbackStorage = new FallbackStorage(conf, asyncCopies)
+    val bmm = spy(new BlockManagerMaster(rpcEndpointRef, null, conf, false))
 
     val bm = mock(classOf[BlockManager])
     val dbm = new DiskBlockManager(conf, deleteFilesOnStop = false, isDriver = false)
