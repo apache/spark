@@ -31,7 +31,9 @@ from pyspark.sql.types import StructType
 from pyspark.errors import PySparkNotImplementedError
 
 
-def _streamReader(datasource: DataSource, schema: StructType) -> "DataSourceStreamReader":
+def _streamReader(
+    datasource: DataSource, schema: StructType
+) -> "DataSourceStreamReader":
     """
     Fallback to simpleStreamReader() method when streamReader() is not implemented.
     This should be invoked whenever a DataSourceStreamReader needs to be created instead of
@@ -58,7 +60,7 @@ class PrefetchedCacheEntry:
 
 class _SimpleStreamReaderWrapper(DataSourceStreamReader):
     """
-    A private class that wraps :class:`SimpleDataSourceStreamReader` in a prefetch/cache pattern,
+    A private class that wrap :class:`SimpleDataSourceStreamReader` in prefetch and cache pattern,
     so that :class:`SimpleDataSourceStreamReader` can integrate with streaming engine like an
     ordinary :class:`DataSourceStreamReader`.
 
@@ -66,17 +68,12 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
     initialOffset() when query start for the first time or initialized to be the end offset of
     the last planned batch when query restarts.
 
-    This state is required because the simple reader API does not expose partition planning; the
-    wrapper must prefetch by calling ``read(current_offset)`` when the engine requests
-    ``latestOffset()``. Tracking ``current_offset`` ensures repeated calls do not re-read or skip
-    data, and that the wrapper can serve deterministic replay via ``readBetweenOffsets``.
-
     When streaming engine calls latestOffset(), the wrapper calls read() that starts from
-    current_offset, prefetches and caches the data, then updates the current_offset to be
+    current_offset, prefetches and cache the data, then updates the current_offset to be
     the end offset of the new data.
 
-    When streaming engine calls planInputPartitions(start, end), the wrapper gets the prefetched
-    data from cache and send it to JVM along with the input partitions.
+    When streaming engine call planInputPartitions(start, end), the wrapper get the prefetched data
+    from cache and send it to JVM along with the input partitions.
 
     When query restart, batches in write ahead offset log that has not been committed will be
     replayed by reading data between start and end offset through readBetweenOffsets(start, end).
@@ -144,9 +141,12 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
             return None  # type: ignore[return-value]
         # Chain all the data iterator between start offset and end offset
         # need to copy here to avoid exhausting the original data iterator.
-        entries = [copy.copy(entry.iterator) for entry in self.cache[start_idx : end_idx + 1]]
+        entries = [
+            copy.copy(entry.iterator) for entry in self.cache[start_idx : end_idx + 1]
+        ]
         it = chain(*entries)
         return it
 
-    def read(self, input_partition: SimpleInputPartition) -> Iterator[Tuple]:
-        return self.simple_reader.readBetweenOffsets(input_partition.start, input_partition.end)
+    def read(self, partition: InputPartition) -> Iterator[Tuple]:
+        assert isinstance(partition, SimpleInputPartition)
+        return self.simple_reader.readBetweenOffsets(partition.start, partition.end)
