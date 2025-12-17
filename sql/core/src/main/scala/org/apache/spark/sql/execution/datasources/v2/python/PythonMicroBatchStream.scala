@@ -96,6 +96,8 @@ class PythonMicroBatchStream(
   }
 
   override def latestOffset(): Offset = {
+    // Required by MicroBatchStream. Since this stream implements SupportsAdmissionControl, the
+    // engine is expected to call latestOffset(startOffset, limit), but we delegate for safety.
     latestOffset(null, getDefaultReadLimit)
   }
 
