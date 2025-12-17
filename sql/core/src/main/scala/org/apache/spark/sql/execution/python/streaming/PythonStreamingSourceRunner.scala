@@ -56,11 +56,10 @@ object PythonStreamingSourceRunner {
 }
 
 /**
- * This class is a proxy to invoke methods in Python DataSourceStreamReader from JVM. A runner
- * spawns a python worker process. In the main function, set up communication between JVM and
- * python process through socket and create a DataSourceStreamReader instance. In an infinite
- * loop, the python worker process poll information(function name and parameters) from the socket,
- * invoke the corresponding method of StreamReader and send return value to JVM.
+ * A runner spawns a python worker process. In the main function, set up communication
+ * between JVM and python process through socket and create a DataSourceStreamReader instance.
+ * In an infinite loop, the python worker process poll information(function name and parameters)
+ * from the socket, invoke the corresponding method of StreamReader and send return value to JVM.
  */
 class PythonStreamingSourceRunner(func: PythonFunction, outputSchema: StructType)
     extends Logging {
