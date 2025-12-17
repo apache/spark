@@ -2254,7 +2254,7 @@ Aggregate [tuple_sketch_agg_double(col1#x, cast(col2#x as double), 12, sum, 0, 0
 
 -- !query
 SELECT tuple_sketch_agg_integer(col1, col2, 12, 'sum')
-FROM VALUES (1, "one"), (2, "two") AS tab(col1, col2)
+FROM VALUES (1, 'invalid'), (2, 'invalid') AS tab(col1, col2)
 -- !query analysis
 Aggregate [tuple_sketch_agg_integer(col1#x, cast(col2#x as int), 12, sum, 0, 0) AS tuple_sketch_agg_integer(col1, col2, 12, sum)#x]
 +- SubqueryAlias tab

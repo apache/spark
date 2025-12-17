@@ -2228,7 +2228,7 @@ org.apache.spark.SparkNumberFormatException
 
 -- !query
 SELECT tuple_sketch_agg_integer(col1, col2, 12, 'sum')
-FROM VALUES (1, "one"), (2, "two") AS tab(col1, col2)
+FROM VALUES (1, 'invalid'), (2, 'invalid') AS tab(col1, col2)
 -- !query schema
 struct<>
 -- !query output
@@ -2238,7 +2238,7 @@ org.apache.spark.SparkNumberFormatException
   "sqlState" : "22018",
   "messageParameters" : {
     "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "expression" : "'one'",
+    "expression" : "'invalid'",
     "sourceType" : "\"STRING\"",
     "targetType" : "\"INT\""
   },

@@ -946,7 +946,7 @@ FROM VALUES (1, 'invalid'), (2, 'invalid') AS tab(col1, col2);
 
 -- Test tuple_sketch_agg_integer with wrong value type (expecting integer but got string)
 SELECT tuple_sketch_agg_integer(col1, col2, 12, 'sum')
-FROM VALUES (1, "one"), (2, "two") AS tab(col1, col2);
+FROM VALUES (1, 'invalid'), (2, 'invalid') AS tab(col1, col2);
 
 -- Test tuple_sketch_estimate_integer with wrong sketch type (integer estimate on double sketch)
 SELECT tuple_sketch_estimate_integer(tuple_sketch_agg_double(key1, val1, 12, 'sum'))
