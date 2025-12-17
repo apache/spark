@@ -1153,7 +1153,7 @@ WithCTE
 -- !query
 WITH cte AS (SELECT 1 AS id, 'test' AS COLNAME),
      cte2 AS (SELECT id, COLNAME, colname FROM cte),
-     cte3 AS (SELECT id, COLNAME, colname FROM cte)
+     cte3 AS (SELECT id, COLNAME, colname FROM cte2)
 SELECT * FROM cte2 a JOIN cte2 b ON (a.id = b.id)
 -- !query analysis
 WithCTE
@@ -1169,8 +1169,8 @@ WithCTE
 :- CTERelationDef xxxx, false
 :  +- SubqueryAlias cte3
 :     +- Project [id#x, COLNAME#x, colname#x]
-:        +- SubqueryAlias cte
-:           +- CTERelationRef xxxx, true, [id#x, COLNAME#x], false, false, 1
+:        +- SubqueryAlias cte2
+:           +- CTERelationRef xxxx, true, [id#x, COLNAME#x, colname#x], false, false, 1
 +- Project [id#x, COLNAME#x, colname#x, id#x, COLNAME#x, colname#x]
    +- Join Inner, (id#x = id#x)
       :- SubqueryAlias a

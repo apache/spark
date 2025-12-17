@@ -787,7 +787,7 @@ struct<id:int,COLNAME:string,colname:string,id:int,COLNAME:string,colname:string
 -- !query
 WITH cte AS (SELECT 1 AS id, 'test' AS COLNAME),
      cte2 AS (SELECT id, COLNAME, colname FROM cte),
-     cte3 AS (SELECT id, COLNAME, colname FROM cte)
+     cte3 AS (SELECT id, COLNAME, colname FROM cte2)
 SELECT * FROM cte2 a JOIN cte2 b ON (a.id = b.id)
 -- !query schema
 struct<id:int,COLNAME:string,colname:string,id:int,COLNAME:string,colname:string>
