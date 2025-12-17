@@ -88,8 +88,7 @@ class PythonStreamingDataSourceSimpleSuite extends PythonDataSourceSuiteBase {
          |    def simpleStreamReader(self, schema):
          |        return SimpleDataStreamReader()
          |""".stripMargin
-    val dataSource =
-      createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
     spark.dataSource.registerPython(dataSourceName, dataSource)
     assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
     withTempDir { dir =>
@@ -754,19 +753,15 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
         stream.initialOffset()
     }
 
-    testMicroBatchStreamError(
-      "latestOffset",
-      "[NOT_IMPLEMENTED] latestOffset is not implemented") {
-      stream =>
-        stream.latestOffset()
+    testMicroBatchStreamError("latestOffset", "[NOT_IMPLEMENTED] latestOffset is not implemented") { stream =>
+      stream.latestOffset()
     }
 
     val offset = PythonStreamingSourceOffset("{\"offset\": \"2\"}")
     testMicroBatchStreamError(
       "planPartitions",
-      "[NOT_IMPLEMENTED] partitions is not implemented") {
-      stream =>
-        stream.planInputPartitions(offset, offset)
+      "[NOT_IMPLEMENTED] partitions is not implemented") { stream =>
+      stream.planInputPartitions(offset, offset)
     }
   }
 
@@ -1116,11 +1111,7 @@ class PythonStreamingDataSourceWriteSuite extends PythonDataSourceSuiteBase {
         },
         condition = "STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION",
         sqlState = "42KDE",
-        parameters = Map(
-          "outputMode" -> "complete",
-          "operation" -> "no streaming aggregations"
-        )
-      )
+        parameters = Map("outputMode" -> "complete", "operation" -> "no streaming aggregations"))
 
       // Query should fail in planning with "invalid" mode.
       val error2 = intercept[IllegalArgumentException] {
