@@ -74,6 +74,7 @@ private[sql] class ConcatenatingArrowStreamReader(
 
   override def loadNextBatch(): Boolean = {
     // Keep looping until we load a non-empty batch or until we exhaust the input.
+    prepareLoadNextBatch()
     var message = nextMessage()
     while (message != null) {
       message match {

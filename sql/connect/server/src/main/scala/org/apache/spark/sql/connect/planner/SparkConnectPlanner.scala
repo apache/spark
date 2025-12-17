@@ -61,6 +61,7 @@ import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket, InvalidPlanInput, LiteralValueProtoConverter, StorageLevelProtoConverter, StreamingListenerPacket, UdfPacket}
 import org.apache.spark.sql.connect.config.Connect.CONNECT_GRPC_ARROW_MAX_BATCH_SIZE
+import org.apache.spark.sql.connect.execution.LocalRelationTable
 import org.apache.spark.sql.connect.ml.MLHandler
 import org.apache.spark.sql.connect.pipelines.PipelinesHandler
 import org.apache.spark.sql.connect.plugin.SparkConnectPluginRegistry
@@ -72,6 +73,7 @@ import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, TypedAggregate
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.command.{CreateViewCommand, ExternalCommandExecutor}
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDataSource
 import org.apache.spark.sql.execution.python.{UserDefinedPythonFunction, UserDefinedPythonTableFunction}
 import org.apache.spark.sql.execution.python.streaming.PythonForeachWriter
@@ -195,6 +197,11 @@ class SparkConnectPlanner(
           transformWithWatermark(rel.getWithWatermark)
         case proto.Relation.RelTypeCase.CACHED_LOCAL_RELATION =>
           transformCachedLocalRelation(rel.getCachedLocalRelation)
+        case proto.Relation.RelTypeCase.CHUNKED_CACHED_LOCAL_RELATION
+            if rel.getChunkedCachedLocalRelation.hasSchemaHash && rel.getCommon.hasPlanId =>
+          transformChunkedCachedLocalRelation(
+            rel.getCommon.getPlanId,
+            rel.getChunkedCachedLocalRelation)
         case proto.Relation.RelTypeCase.CHUNKED_CACHED_LOCAL_RELATION =>
           transformChunkedCachedLocalRelation(rel.getChunkedCachedLocalRelation)
         case proto.Relation.RelTypeCase.HINT => transformHint(rel.getHint)
@@ -1528,6 +1535,21 @@ class SparkConnectPlanner(
     val blockManager = session.sparkContext.env.blockManager
     val blockId = CacheId(sessionHolder.session.sessionUUID, hash)
     blockManager.getStatus(blockId).map(status => status.memSize + status.diskSize).getOrElse(0L)
+  }
+
+  private def transformChunkedCachedLocalRelation(
+      id: Long,
+      rel: proto.ChunkedCachedLocalRelation): LogicalPlan = {
+    assert(rel.hasSchemaHash)
+    val schemaBytes = readChunkedCachedLocalRelationBlock(rel.getSchemaHash)
+    // TODO we should prefer using connect protos for the datatype...
+    val schema = toStructTypeOrWrap(DataType.parseTypeWithFallback(
+      new String(schemaBytes),
+      parseDatatypeString,
+      fallbackParser = DataType.fromJson))
+    val hashes = rel.getDataHashesList.asScala.toSeq
+    val table = new LocalRelationTable(id, sessionHolder.session.sessionUUID, schema, hashes)
+    DataSourceV2Relation.create(table, None, None)
   }
 
   private def transformChunkedCachedLocalRelation(
