@@ -31,9 +31,7 @@ from pyspark.sql.types import StructType
 from pyspark.errors import PySparkNotImplementedError
 
 
-def _streamReader(
-    datasource: DataSource, schema: StructType
-) -> "DataSourceStreamReader":
+def _streamReader(datasource: DataSource, schema: StructType) -> "DataSourceStreamReader":
     """
     Fallback to simpleStreamReader() method when streamReader() is not implemented.
     This should be invoked whenever a DataSourceStreamReader needs to be created instead of
@@ -141,9 +139,7 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
             return None  # type: ignore[return-value]
         # Chain all the data iterator between start offset and end offset
         # need to copy here to avoid exhausting the original data iterator.
-        entries = [
-            copy.copy(entry.iterator) for entry in self.cache[start_idx : end_idx + 1]
-        ]
+        entries = [copy.copy(entry.iterator) for entry in self.cache[start_idx : end_idx + 1]]
         it = chain(*entries)
         return it
 
