@@ -166,6 +166,56 @@ class SessionTimeoutProcessor
   }
 }
 
+/**
+ * Processor that registers an event time timer based on watermark.
+ * Input format: (eventTimeMs: Long, value: String)
+ * Registers a timer at eventTime + 5000ms. Timer fires when watermark passes that time.
+ */
+class EventTimeSessionProcessor
+    extends StatefulProcessor[String, (Long, String), (String, String)] {
+
+  @transient private var lastEventTimeState: ValueState[Long] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    lastEventTimeState = getHandle.getValueState[Long](
+      "lastEventTime", Encoders.scalaLong, TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[(Long, String)],
+      timerValues: TimerValues
+  ): Iterator[(String, String)] = {
+    val results = scala.collection.mutable.ArrayBuffer[(String, String)]()
+    
+    inputRows.foreach { case (eventTimeMs, value) =>
+      // Clear any existing timer if we have previous state
+      if (lastEventTimeState.exists()) {
+        val oldTimerTime = lastEventTimeState.get() + 5000
+        getHandle.deleteTimer(oldTimerTime)
+      }
+
+      // Update last event time and register new timer
+      lastEventTimeState.update(eventTimeMs)
+      getHandle.registerTimer(eventTimeMs + 5000) // 5 second timeout from event time
+
+      results += ((key, s"received:$value@$eventTimeMs"))
+    }
+    
+    results.iterator
+  }
+
+  override def handleExpiredTimer(
+      key: String,
+      timerValues: TimerValues,
+      expiredTimerInfo: ExpiredTimerInfo
+  ): Iterator[(String, String)] = {
+    val watermark = timerValues.getCurrentWatermarkInMs()
+    lastEventTimeState.clear()
+    Iterator.single((key, s"session-expired@watermark=$watermark"))
+  }
+}
+
 // Input: (key, score) as (String, Double)
 // Output: (key, score) as (String, Double) for the top K snapshot each batch
 class TopKProcessor(k: Int, ttl: TTLConfig = TTLConfig.NONE)

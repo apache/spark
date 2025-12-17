@@ -16,13 +16,14 @@
  */
 package org.apache.spark.sql.streaming
 
+import java.sql.Timestamp
+import java.time.{Clock, Instant, ZoneId}
+
 import scala.reflect.ClassTag
 
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.ImplicitGroupingKeyTracker
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.testing.InMemoryStatefulProcessorHandle
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.{ExpiredTimerInfoImpl, TimerValuesImpl}
-import org.apache.spark.sql.streaming.{TimeMode}
-import java.time.{Clock, Instant, ZoneId}
 
 /**
  * Testing utility for transformWithState stateful processors.
@@ -36,12 +37,18 @@ import java.time.{Clock, Instant, ZoneId}
  *  - Initial state setup via constructor parameter.
  *  - Direct state manipulation via `setValueState`, `setListState`, `setMapState`.
  *  - Direct state inspection via `peekValueState`, `peekListState`, `peekMapState`.
- *  - Timers in ProcessingTime mode.
+ *  - Timers in ProcessingTime mode (use `advanceProcessingTime` to fire timers).
+ *  - Timers in EventTime mode (use `eventTimeExtractor` and `watermarkDelayMs` to configure;
+ *    watermark advances automatically based on event times, or use `advanceWatermark` manually).
  *  - TTL for ValueState, ListState, and MapState (use ProcessingTime mode and
  *    `advanceProcessingTime` to test expiry).
  *
- * '''Not Supported:'''
- *  - Timers in EventTime mode.
+ * '''Testing EventTime Mode:'''
+ *  To test with EventTime, provide `eventTimeExtractor` (a function extracting the event
+ *  timestamp from each input row) and `watermarkDelayMs` (the watermark delay in milliseconds).
+ *  The watermark is computed as `max(event_time_seen) - watermarkDelayMs` and is updated
+ *  automatically after each `test()` call. Timers with expiry time <= watermark will fire.
+ *  You can also manually advance the watermark using `advanceWatermark()`.
  *
  * '''Use Cases:'''
  *  - '''Primary''': Unit testing business logic in `handleInputRows` implementations.
@@ -52,8 +59,12 @@ import java.time.{Clock, Instant, ZoneId}
  * @param initialState initial state for each key as a list of (key, state) tuples.
  * @param timeMode time mode (None, ProcessingTime or EventTime).
  * @param outputMode output mode (Append, Update, or Complete).
- * @param realTimeMode whether input rows should be processed one-by-one (separate call to 
+ * @param realTimeMode whether input rows should be processed one-by-one (separate call to
  *     handleInputRows) for each input row.
+ * @param eventTimeExtractor function to extract event time from input rows. Required if and
+ *     only if timeMode is EventTime.
+ * @param watermarkDelayMs watermark delay in milliseconds. The watermark is computed as
+ *     `max(event_time) - watermarkDelayMs`. Required if and only if timeMode is EventTime.
  * @tparam K the type of grouping key.
  * @tparam I the type of input rows.
  * @tparam O the type of output rows.
@@ -64,16 +75,23 @@ class TwsTester[K, I, O](
     val initialState: List[(K, Any)] = List(),
     val timeMode: TimeMode = TimeMode.None,
     val outputMode: OutputMode = OutputMode.Append,
-    val realTimeMode: Boolean = false) {
+    val realTimeMode: Boolean = false,
+    val eventTimeExtractor: Option[I => Timestamp] = None,
+    val watermarkDelayMs: Long = 0L) {
   val clock: Clock = new Clock {
     override def instant(): Instant = Instant.ofEpochMilli(currentProcessingTimeMs)
     override def getZone: ZoneId = ZoneId.systemDefault()
     override def withZone(zone: ZoneId): Clock = this
   }
-      
+
   private val handle = new InMemoryStatefulProcessorHandle(timeMode, clock)
 
-  require(timeMode != TimeMode.EventTime, "EventTime is not supported.")
+  if (timeMode == TimeMode.EventTime) {
+    require(
+      eventTimeExtractor.isDefined,
+      "eventTimeExtractor must be provided when timeMode is EventTime."
+    )
+  }
 
   processor.setHandle(handle)
   processor.init(outputMode, timeMode)
@@ -99,18 +117,31 @@ class TwsTester[K, I, O](
   /**
    * Processes input rows for a single key through the stateful processor.
    *
+   * In EventTime mode, after processing input rows, the watermark is updated based on the
+   * maximum event time seen (using `eventTimeExtractor`) minus `watermarkDelayMs`, and any
+   * expired timers are fired.
+   *
    * @param key the grouping key
    * @param values input rows to process
-   * @return all output rows produced by the processor
+   * @return all output rows produced by the processor (including any from expired timers
+   *         in EventTime mode)
    */
   def test(key: K, values: List[I]): List[O] = {
     ImplicitGroupingKeyTracker.setImplicitKey(key)
     val timerValues = getTimerValues()
+    var result: List[O] = List()
     if (realTimeMode) {
-      values.flatMap(value => processor.handleInputRows(key, Iterator.single(value), timerValues)).toList
+      result = values
+        .flatMap(value => processor.handleInputRows(key, Iterator.single(value), timerValues))
+        .toList
     } else {
-      processor.handleInputRows(key, values.iterator, timerValues).toList
-    }    
+      result = processor.handleInputRows(key, values.iterator, timerValues).toList
+    }
+    if (timeMode == TimeMode.EventTime()) {
+      updateWatermarkFromEventTime(values)
+      result ++= handleExpiredTimers()
+    } 
+    result
   }
 
   /** Sets the value state for a given key. */
@@ -157,17 +188,25 @@ class TwsTester[K, I, O](
 
   // Logic for dealing with timers.
   private var currentProcessingTimeMs: Long = 0
+  private var currentWatermarkMs: Long = 0
 
   private def handleExpiredTimers(): List[O] = {
     if (timeMode == TimeMode.None) {
       return List()
     }
     val timerValues = getTimerValues()
+    val expiryThreshold = if (timeMode == TimeMode.ProcessingTime()) {
+      currentProcessingTimeMs
+    } else if (timeMode == TimeMode.EventTime()) {
+      currentWatermarkMs
+    } else {
+      0L
+    }
 
     var ans: List[O] = List()
     for (key <- handle.timers.getAllKeysWithTimers[K]()) {
       ImplicitGroupingKeyTracker.setImplicitKey(key)
-      val expiredTimers: List[Long] = handle.listTimers().filter(_ <= currentProcessingTimeMs).toList
+      val expiredTimers: List[Long] = handle.listTimers().filter(_ <= expiryThreshold).toList
       for (timerExpiryTimeMs <- expiredTimers) {
         val expiredTimerInfo = new ExpiredTimerInfoImpl(Some(timerExpiryTimeMs))
         ans = ans ++ processor.handleExpiredTimer(key, timerValues, expiredTimerInfo).toList
@@ -188,13 +227,46 @@ class TwsTester[K, I, O](
    * @param durationMs the amount of time to advance in milliseconds
    * @return output rows emitted by `handleExpiredTimer` for all fired timers
    */
-  def advanceProcessingTime(durationMs: Long) : List[O] = {
-    require(timeMode != TimeMode.None, "Timers are not supported with TimeMode.None.")
+  def advanceProcessingTime(durationMs: Long): List[O] = {
+    require(
+      timeMode == TimeMode.ProcessingTime(),
+      "advanceProcessingTime is only supported with TimeMode.ProcessingTime."
+    )
     currentProcessingTimeMs += durationMs
-    return handleExpiredTimers()
+    handleExpiredTimers()
+  }
+
+  /**
+   * Advances the watermark and fires all expired event-time timers.
+   *
+   * Use this in EventTime mode to manually advance the watermark beyond what the
+   * event times in the data would produce. Timers with expiry time <= new watermark will fire.
+   *
+   * @param durationMs the amount of time to advance the watermark in milliseconds
+   * @return output rows emitted by `handleExpiredTimer` for all fired timers
+   */
+  def advanceWatermark(durationMs: Long): List[O] = {
+    require(
+      timeMode == TimeMode.EventTime(),
+      "advanceWatermark is only supported with TimeMode.EventTime."
+    )
+    currentWatermarkMs += durationMs
+    handleExpiredTimers()
+  }
+
+  private def updateWatermarkFromEventTime(values: List[I]): Unit = {
+    require(timeMode == TimeMode.EventTime())
+    require(eventTimeExtractor.isDefined)
+    val extractor = eventTimeExtractor.get
+    values.foreach { value =>
+      val eventTimeMs = extractor(value).getTime
+      currentWatermarkMs = Math.max(currentWatermarkMs, eventTimeMs - watermarkDelayMs)
+    }
   }
 
   private def getTimerValues(): TimerValues = {
-    new TimerValuesImpl(if (timeMode != TimeMode.None) Some(currentProcessingTimeMs)  else None, None)
-  } 
+    val processingTimeOpt = if (timeMode != TimeMode.None) Some(currentProcessingTimeMs) else None
+    val watermarkOpt = if (timeMode == TimeMode.EventTime()) Some(currentWatermarkMs) else None
+    new TimerValuesImpl(processingTimeOpt, watermarkOpt)
+  }
 }

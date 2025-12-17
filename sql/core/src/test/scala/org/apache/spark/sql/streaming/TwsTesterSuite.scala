@@ -393,6 +393,82 @@ class TwsTesterSuite extends SparkFunSuite {
     assert(tester.peekValueState[Long]("lastSeen", "key1").isEmpty)
     assert(tester.peekValueState[Long]("lastSeen", "key2").isEmpty)
   }
+
+  test("TwsTester should support EventTime timers fired by data-driven watermark") {
+    import java.sql.Timestamp
+    
+    // Event time extractor: input is (eventTimeMs, value), extract eventTimeMs
+    val eventTimeExtractor: ((Long, String)) => Timestamp = { 
+      case (eventTimeMs, _) => new Timestamp(eventTimeMs)
+    }
+    
+    val tester = new TwsTester(
+      new EventTimeSessionProcessor(),
+      timeMode = TimeMode.EventTime(),
+      eventTimeExtractor = Some(eventTimeExtractor),
+      watermarkDelayMs = 2000 // 2 second watermark delay
+    )
+
+    // Process event at t=10000 for key1 - registers timer at t=15000
+    // Watermark becomes: 10000 - 2000 = 8000 (timer at 15000 won't fire)
+    val result1 = tester.test("key1", List((10000L, "hello")))
+    assert(result1 == List(("key1", "received:hello@10000")))
+
+    // Process event at t=12000 for key2 - registers timer at t=17000
+    // Watermark becomes: 12000 - 2000 = 10000 (still not enough for key1's timer at 15000)
+    val result2 = tester.test("key2", List((12000L, "world")))
+    assert(result2 == List(("key2", "received:world@12000")))
+
+    // Process event at t=20000 for key3 - watermark becomes 18000
+    // This should fire key1's timer at 15000 and key2's timer at 17000
+    val result3 = tester.test("key3", List((20000L, "new")))
+    assert(result3.contains(("key3", "received:new@20000")))
+    // Both key1 and key2 timers should have fired
+    assert(result3.exists(r => r._1 == "key1" && r._2.startsWith("session-expired@watermark=")))
+    assert(result3.exists(r => r._1 == "key2" && r._2.startsWith("session-expired@watermark=")))
+
+    // Verify state is cleared for key1 and key2 after timer expiry
+    assert(tester.peekValueState[Long]("lastEventTime", "key1").isEmpty)
+    assert(tester.peekValueState[Long]("lastEventTime", "key2").isEmpty)
+    // key3 should still have state (timer at 25000 hasn't fired yet)
+    assert(tester.peekValueState[Long]("lastEventTime", "key3").isDefined)
+  }
+
+  test("TwsTester should support EventTime timers fired by manual watermark advance") {
+    import java.sql.Timestamp
+    
+    val eventTimeExtractor: ((Long, String)) => Timestamp = { 
+      case (eventTimeMs, _) => new Timestamp(eventTimeMs)
+    }
+    
+    val tester = new TwsTester(
+      new EventTimeSessionProcessor(),
+      timeMode = TimeMode.EventTime(),
+      eventTimeExtractor = Some(eventTimeExtractor),
+      watermarkDelayMs = 2000
+    )
+
+    // Process event at t=10000 for key1 - registers timer at t=15000
+    // Watermark: 10000 - 2000 = 8000
+    val result1 = tester.test("key1", List((10000L, "hello")))
+    assert(result1 == List(("key1", "received:hello@10000")))
+
+    // Process event at t=11000 for key2 - registers timer at t=16000  
+    // Watermark: 11000 - 2000 = 9000
+    val result2 = tester.test("key2", List((11000L, "world")))
+    assert(result2 == List(("key2", "received:world@11000")))
+
+    // Manually advance watermark by 7000ms (from 9000 to 16000)
+    // This should fire key1's timer (15000) and key2's timer (16000)
+    val expired = tester.advanceWatermark(7000)
+    assert(expired.size == 2)
+    assert(expired.exists(r => r._1 == "key1" && r._2.startsWith("session-expired@watermark=")))
+    assert(expired.exists(r => r._1 == "key2" && r._2.startsWith("session-expired@watermark=")))
+
+    // Verify state is cleared
+    assert(tester.peekValueState[Long]("lastEventTime", "key1").isEmpty)
+    assert(tester.peekValueState[Long]("lastEventTime", "key2").isEmpty)
+  }
 }
 
 /**
