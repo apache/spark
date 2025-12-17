@@ -5420,7 +5420,7 @@ object SQLConf {
       .doc("When true, CTE references sometimes (e.g., self-joins) may incorrectly unify column" +
         "names that differ only in casing (e.g., COLNAME and colname become the same). This is" +
         "the legacy behavior. When false, column name casing is preserved correctly.")
-      .version("4.1.0")
+      .version("4.2.0")
       .booleanConf
       .createWithDefault(false)
 
