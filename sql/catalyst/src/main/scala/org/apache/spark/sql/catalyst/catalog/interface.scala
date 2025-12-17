@@ -44,6 +44,7 @@ import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUti
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, NamedReference, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -442,7 +443,8 @@ case class CatalogTable(
     tracksPartitionsInCatalog: Boolean = false,
     schemaPreservesCase: Boolean = true,
     ignoredProperties: Map[String, String] = Map.empty,
-    viewOriginalText: Option[String] = None) extends MetadataMapSupport {
+    viewOriginalText: Option[String] = None,
+    constraints: Seq[Constraint] = Seq.empty) extends MetadataMapSupport {
 
   import CatalogTable._
 
@@ -692,6 +694,13 @@ case class CatalogTable(
     if (tracksPartitionsInCatalog) map += "Partition Provider" -> JString("Catalog")
     if (partitionColumns != JNull) map += "Partition Columns" -> partitionColumns
     if (schema.nonEmpty) map += "Schema" -> JString(schema.treeString)
+
+    if (constraints.nonEmpty) {
+      val constraintStr = constraints.map { c =>
+        c.name -> c.toDescription
+      }.mkString("[", ", ", "]")
+      map += "Constraints" -> JString(constraintStr)
+    }
 
     map.filterNot(_._2 == JNull)
   }
