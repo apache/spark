@@ -88,7 +88,8 @@ class PythonStreamingDataSourceSimpleSuite extends PythonDataSourceSuiteBase {
          |    def simpleStreamReader(self, schema):
          |        return SimpleDataStreamReader()
          |""".stripMargin
-    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    val dataSource =
+      createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
     spark.dataSource.registerPython(dataSourceName, dataSource)
     assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
     withTempDir { dir =>
@@ -435,7 +436,8 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       pythonDs,
       dataSourceName,
       inputSchema,
-      CaseInsensitiveStringMap.empty())
+      CaseInsensitiveStringMap.empty()
+    )
 
     var startOffset = stream.initialOffset()
     assert(startOffset.json == "{\"offset\": {\"partition-1\": 0}}")
@@ -790,14 +792,19 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
         pythonDs,
         errorDataSourceName,
         inputSchema,
-        CaseInsensitiveStringMap.empty())
+        CaseInsensitiveStringMap.empty()
+      )
       val err = intercept[SparkException] {
         func(stream)
       }
       checkErrorMatchPVals(
         err,
         condition = "PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR",
-        parameters = Map("action" -> action, "msg" -> "(.|\\n)*"))
+        parameters = Map(
+          "action" -> action,
+          "msg" -> "(.|\\n)*"
+        )
+      )
       assert(err.getMessage.contains(msg))
       stream.stop()
     }
@@ -1066,7 +1073,8 @@ class PythonStreamingDataSourceWriteSuite extends PythonDataSourceSuiteBase {
     // the output directory in commit() function. If aborting a microbatch, it writes
     // batchId.txt into output directory.
 
-    val dataSource = createUserDefinedPythonDataSource(dataSourceName, simpleDataStreamWriterScript)
+    val dataSource =
+      createUserDefinedPythonDataSource(dataSourceName, simpleDataStreamWriterScript)
     spark.dataSource.registerPython(dataSourceName, dataSource)
 
     withTempDir { dir =>
@@ -1107,7 +1115,9 @@ class PythonStreamingDataSourceWriteSuite extends PythonDataSourceSuiteBase {
         sqlState = "42KDE",
         parameters = Map(
           "outputMode" -> "complete",
-          "operation" -> "no streaming aggregations"))
+          "operation" -> "no streaming aggregations"
+        )
+      )
 
       // Query should fail in planning with "invalid" mode.
       val error2 = intercept[IllegalArgumentException] {
