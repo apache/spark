@@ -32,6 +32,11 @@ public class LocalDiskShuffleDriverComponents implements ShuffleDriverComponents
 
   private BlockManagerMaster blockManagerMaster;
 
+  @Deprecated
+  public LocalDiskShuffleDriverComponents() {
+      this.sparkConf = null;
+  }
+
   public LocalDiskShuffleDriverComponents(SparkConf sparkConf) {
       this.sparkConf = sparkConf;
   }

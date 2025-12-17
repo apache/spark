@@ -163,8 +163,9 @@ private[spark] object FallbackStorage extends Logging {
   val FALLBACK_ASYNC_COPIES: ConcurrentMap[ShuffleBlockInfo, Future[Unit]] =
     new ConcurrentHashMap[ShuffleBlockInfo, Future[Unit]]()
 
-  def isConfigured(conf: SparkConf): Boolean =
-    conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined
+  def isConfigured(conf: SparkConf): Boolean = {
+    conf != null && conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined
+  }
 
   def isProactive(conf: SparkConf): Boolean = {
     isConfigured(conf) &&
