@@ -29,6 +29,13 @@ import org.apache.spark.sql.types.{NullType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{NextIterator, SerializableConfiguration}
 
+/**
+ * Information used specifically by StatePartitionAllColumnFamiliesReader
+ * @param colFamilySchemas a set of ColFamilySchema for all column families in an operator.
+ *                         The reader relies on this field to read data for all column family
+ * @param stateVariableInfos a list of TransformWithStateVariableInfo for state variables
+ *                           in TWS operator. The reader relies on this to check variable type
+ */
 case class AllColumnFamiliesReaderInfo(
     colFamilySchemas: Set[StateStoreColFamilySchema] = Set.empty,
     stateVariableInfos: List[TransformWithStateVariableInfo] = List.empty)
@@ -338,7 +345,7 @@ class StatePartitionAllColumnFamiliesReader(
           case StateStore.DEFAULT_COL_FAMILY_NAME => // createAndInit has registered default
           case _ =>
             val isInternal =
-              StateStoreColumnFamilySchemaUtils.isInternalColumn(cfSchema.colFamilyName)
+              StateStoreColumnFamilySchemaUtils.isInternalColFamily(cfSchema.colFamilyName)
             val useMultipleValuesPerKey = isListType(cfSchema.colFamilyName)
             require(cfSchema.keyStateEncoderSpec.isDefined,
               s"keyStateEncoderSpec must be defined for column family ${cfSchema.colFamilyName}")

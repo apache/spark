@@ -99,7 +99,7 @@ object StateStoreColumnFamilySchemaUtils {
   def getStateNameFromCountIndexCFName(colFamilyName: String): String =
     getStateName(COUNT_INDEX_PREFIX, colFamilyName)
 
-  def isInternalColumn(colFamilyName: String): Boolean = {
+  def isInternalColFamily(colFamilyName: String): Boolean = {
     colFamilyName.startsWith("$")
   }
 
@@ -111,7 +111,7 @@ object StateStoreColumnFamilySchemaUtils {
    * @return true if this is an internal column family and Utils.isTesting is true
    */
   def isTestingInternalColFamily(colFamilyName: String): Boolean = {
-    org.apache.spark.util.Utils.isTesting && isInternalColumn(colFamilyName)
+    org.apache.spark.util.Utils.isTesting && isInternalColFamily(colFamilyName)
   }
 
   def getValueStateSchema[T](
