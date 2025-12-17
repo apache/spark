@@ -51,6 +51,7 @@ import java.time.{Clock, Instant, ZoneId}
  * @param processor the StatefulProcessor to test.
  * @param initialState initial state for each key as a list of (key, state) tuples.
  * @param timeMode time mode (None, ProcessingTime or EventTime).
+ * @param outputMode output mode (Append, Update, or Complete).
  * @param realTimeMode whether input rows should be processed one-by-one (separate call to 
  *     handleInputRows) for each input row.
  * @tparam K the type of grouping key.
@@ -62,6 +63,7 @@ class TwsTester[K, I, O](
     val processor: StatefulProcessor[K, I, O],
     val initialState: List[(K, Any)] = List(),
     val timeMode: TimeMode = TimeMode.None,
+    val outputMode: OutputMode = OutputMode.Append,
     val realTimeMode: Boolean = false) {
   val clock: Clock = new Clock {
     override def instant(): Instant = Instant.ofEpochMilli(currentProcessingTimeMs)
@@ -74,7 +76,7 @@ class TwsTester[K, I, O](
   require(timeMode != TimeMode.EventTime, "EventTime is not supported.")
 
   processor.setHandle(handle)
-  processor.init(OutputMode.Append, TimeMode.None)
+  processor.init(outputMode, timeMode)
   processor match {
     case p: StatefulProcessorWithInitialState[K @unchecked, I @unchecked, O @unchecked, s] =>
       handleInitialState[s]()
@@ -90,7 +92,7 @@ class TwsTester[K, I, O](
     initialState.foreach {
       case (key, state) =>
         ImplicitGroupingKeyTracker.setImplicitKey(key)
-        p.handleInitialState(key, state.asInstanceOf[S], null)
+        p.handleInitialState(key, state.asInstanceOf[S], getTimerValues())
     }
   }
 
