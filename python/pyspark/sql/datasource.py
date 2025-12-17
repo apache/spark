@@ -739,7 +739,7 @@ class DataSourceStreamReader(ABC):
         New implementation (with admission control):
 
         Admission control is configured via the options passed to the data source, e.g.
-        ``maxRecordsPerBatch``, ``maxFilesPerBatch``, and ``maxBytesPerBatch``. The stream reader
+        ``maxRecordsPerBatch``. The stream reader
         can consult those options (typically stored on the data source instance) to compute a
         capped offset.
 

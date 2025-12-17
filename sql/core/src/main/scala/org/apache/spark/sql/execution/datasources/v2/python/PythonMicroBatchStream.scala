@@ -77,6 +77,17 @@ class PythonMicroBatchStream(
       }
     }
 
+    if (options.containsKey(MAX_FILES_PER_BATCH)) {
+      throw new IllegalArgumentException(
+        s"Option '$MAX_FILES_PER_BATCH' is not supported for Python data sources; " +
+          s"use '$MAX_RECORDS_PER_BATCH' instead.")
+    }
+    if (options.containsKey(MAX_BYTES_PER_BATCH)) {
+      throw new IllegalArgumentException(
+        s"Option '$MAX_BYTES_PER_BATCH' is not supported for Python data sources; " +
+          s"use '$MAX_RECORDS_PER_BATCH' instead.")
+    }
+
     if (options.containsKey(MAX_RECORDS_PER_BATCH)) {
       val records = parseLong(MAX_RECORDS_PER_BATCH)
       logInfo(s"Admission control: $MAX_RECORDS_PER_BATCH = $records")

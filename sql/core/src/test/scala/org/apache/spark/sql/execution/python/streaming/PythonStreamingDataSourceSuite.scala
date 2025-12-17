@@ -534,6 +534,54 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     }
   }
 
+  test("admission control: maxFilesPerBatch is not supported for Python data sources") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource
+         |$testDataStreamReaderScript
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "id INT"
+         |    def streamReader(self, schema):
+         |        return TestDataStreamReader()
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
+
+    val e = intercept[IllegalArgumentException] {
+      spark.readStream.format(dataSourceName).option("maxFilesPerBatch", "1").load()
+    }
+    assert(e.getMessage.contains("maxFilesPerBatch"))
+    assert(e.getMessage.contains("maxRecordsPerBatch"))
+  }
+
+  test("admission control: maxBytesPerBatch is not supported for Python data sources") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource
+         |$testDataStreamReaderScript
+         |
+         |class $dataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "id INT"
+         |    def streamReader(self, schema):
+         |        return TestDataStreamReader()
+         |""".stripMargin
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(dataSourceName, dataSource)
+    assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
+
+    val e = intercept[IllegalArgumentException] {
+      spark.readStream.format(dataSourceName).option("maxBytesPerBatch", "1").load()
+    }
+    assert(e.getMessage.contains("maxBytesPerBatch"))
+    assert(e.getMessage.contains("maxRecordsPerBatch"))
+  }
+
   // Verify that socket between python runner and JVM doesn't timeout with large trigger interval.
   test("Read from test data stream source, trigger interval=20 seconds") {
     assume(shouldTestPandasUDFs)

@@ -330,11 +330,9 @@ This is the same dummy streaming reader that generate 2 rows every batch impleme
 
 Spark supports admission control for streaming sources to limit the amount of data processed in each
 micro-batch. This helps control resource usage and maintain consistent processing times. Python
-streaming data sources support three types of admission control options:
+streaming data sources support one admission control option:
 
 - **maxRecordsPerBatch**: Limit the maximum number of rows per batch
-- **maxFilesPerBatch**: Limit the maximum number of files per batch
-- **maxBytesPerBatch**: Limit the maximum bytes per batch (in bytes)
 
 These options can be specified when reading from a streaming source:
 
@@ -349,33 +347,13 @@ These options can be specified when reading from a streaming source:
         .format("console") \
         .start()
 
-    # Limit to 100 files per batch
-    query = spark.readStream \
-        .format("fake") \
-        .option("maxFilesPerBatch", "100") \
-        .load() \
-        .writeStream \
-        .format("console") \
-        .start()
-
-    # Limit to 10 MB per batch
-    query = spark.readStream \
-        .format("fake") \
-        .option("maxBytesPerBatch", str(10 * 1024 * 1024)) \
-        .load() \
-        .writeStream \
-        .format("console") \
-        .start()
-
 **Note**:
 
 - Only one admission control option should be specified at a time
 - All admission control values must be positive integers. If an invalid value is provided (negative,
   zero, or non-numeric), an ``IllegalArgumentException`` will be thrown
-- These options apply to ``streamReader()`` implementations. ``simpleStreamReader()`` does not
+- This option applies to ``streamReader()`` implementations. ``simpleStreamReader()`` does not
   support admission control.
-- This behavior is consistent with Spark's built-in streaming sources (e.g., ``maxFilesPerTrigger``,
-  ``maxBytesPerTrigger`` for file sources)
 
 **Implementing Admission Control in Custom Data Sources (Advanced)**
 
