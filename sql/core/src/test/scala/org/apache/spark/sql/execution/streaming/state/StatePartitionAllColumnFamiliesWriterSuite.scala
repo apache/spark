@@ -18,22 +18,22 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io.File
 import java.sql.Timestamp
-
-import scala.collection.immutable.HashMap
+import java.time.Duration
 
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.execution.datasources.v2.state.{EventTimeTimerProcessor, ListStateTTLProcessor, MultiStateVarProcessor, RunningCountStatefulProcessorWithProcTimeTimer, StateDataSourceTestBase, StateSourceOptions}
-import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.execution.datasources.v2.state.{CompositeKeyAggregationTestUtils, DropDuplicatesTestUtils, FlatMapGroupsWithStateTestUtils, SessionWindowTestUtils, SimpleAggregationTestUtils, StateDataSourceTestBase, StateSourceOptions, StreamStreamJoinTestUtils}
+import org.apache.spark.sql.execution.datasources.v2.state.utils.{EventTimeTimerProcessor, MultiStateVarProcessor, MultiStateVarProcessorTestUtils, TimerTestUtils}
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorsUtils
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.TimerStateUtils
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryCheckpointMetadata}
 import org.apache.spark.sql.execution.streaming.utils.StreamingUtils
 import org.apache.spark.sql.functions.{col, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.{OutputMode, TimeMode, Trigger}
-import org.apache.spark.sql.streaming.util.StreamManualClock
-import org.apache.spark.sql.types.{BooleanType, IntegerType, LongType, NullType, StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.streaming.{InputEvent, ListStateTTLProcessor, MapInputEvent, MapStateTTLProcessor, OutputMode, RunningCountStatefulProcessorWithProcTimeTimer, TimeMode, Trigger, TTLConfig, ValueStateTTLProcessor}
+import org.apache.spark.sql.streaming.util.{StreamManualClock, TTLProcessorUtils}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
 /**
@@ -48,7 +48,26 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
     super.beforeAll()
     spark.conf.set(SQLConf.STATE_STORE_PROVIDER_CLASS.key,
       classOf[RocksDBStateStoreProvider].getName)
-    spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "1")
+    spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "2")
+  }
+
+  /**
+   * Helper method to create a StateSchemaProvider from column family schema map.
+   */
+  private def createStateSchemaProvider(
+      columnFamilyToSchemaMap: Map[String, StatePartitionWriterColumnFamilyInfo]
+  ): StateSchemaProvider = {
+    val testSchemaProvider = new TestStateSchemaProvider()
+    columnFamilyToSchemaMap.foreach { case (cfName, cfInfo) =>
+      testSchemaProvider.captureSchema(
+        colFamilyName = cfName,
+        keySchema = cfInfo.schema.keySchema,
+        valueSchema = cfInfo.schema.valueSchema,
+        keySchemaId = cfInfo.schema.keySchemaId,
+        valueSchemaId = cfInfo.schema.valueSchemaId
+      )
+    }
+    testSchemaProvider
   }
 
   /**
@@ -65,16 +84,16 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
   private def performRoundTripTest(
       sourceDir: String,
       targetDir: String,
-      columnFamilyToSchemaMap: HashMap[String, StatePartitionWriterColumnFamilyInfo],
+      columnFamilyToSchemaMap: Map[String, StatePartitionWriterColumnFamilyInfo],
       storeName: Option[String] = None,
       columnFamilyToSelectExprs: Map[String, Seq[String]] = Map.empty,
-      columnFamilyToStateSourceOptions: Map[String, Map[String, String]] = Map.empty): Unit = {
+      columnFamilyToStateSourceOptions: Map[String, Map[String, String]] = Map.empty,
+      operatorName: String): Unit = {
 
-    // Determine column families to validate based on storeName and map size
-    val columnFamiliesToValidate: Seq[String] = storeName match {
-      case Some(name) => Seq(name)
-      case None if columnFamilyToSchemaMap.size > 1 => columnFamilyToSchemaMap.keys.toSeq
-      case None => Seq(StateStoreId.DEFAULT_STORE_NAME)
+    val columnFamiliesToValidate: Seq[String] = if (columnFamilyToSchemaMap.size > 1) {
+      columnFamilyToSchemaMap.keys.toSeq
+    } else {
+      Seq(StateStore.DEFAULT_COL_FAMILY_NAME)
     }
 
     // Step 1: Read from source using AllColumnFamiliesReader (raw bytes)
@@ -92,22 +111,31 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
     assert(schema.fieldNames === Array(
       "partition_key", "key_bytes", "value_bytes", "column_family_name"))
 
-    // Step 2: Write raw bytes to target checkpoint location"
+    // Step 2: Write raw bytes to target checkpoint location
     val hadoopConf = spark.sessionState.newHadoopConf()
     val targetCpLocation = StreamingUtils.resolvedCheckpointLocation(
       hadoopConf, targetDir)
     val targetCheckpointMetadata = new StreamingQueryCheckpointMetadata(
       spark, targetCpLocation)
+    // increase offsetCheckpoint
     val lastBatch = targetCheckpointMetadata.commitLog.getLatestBatchId().get
     val targetOffsetSeq = targetCheckpointMetadata.offsetLog.get(lastBatch).get
     val currentBatchId = lastBatch + 1
     targetCheckpointMetadata.offsetLog.add(currentBatchId, targetOffsetSeq)
 
-    val storeConf: StateStoreConf = StateStoreConf(SQLConf.get)
+    val storeConf: StateStoreConf = StateStoreConf(spark.sessionState.conf)
     val serializableHadoopConf = new SerializableConfiguration(hadoopConf)
 
+    // Create StateSchemaProvider if needed (for Avro encoding)
+    val stateSchemaProvider = if (storeConf.stateStoreEncodingFormat == "avro") {
+      Some(createStateSchemaProvider(columnFamilyToSchemaMap))
+    } else {
+      None
+    }
+
+    val sqlConf: Map[String, String] = spark.sessionState.conf.getAllConfs
     // Define the partition processing function
-    val putPartitionFunc: Iterator[Row] => Unit = partition => {
+    val putPartitionFunc: Iterator[InternalRow] => Unit = partition => {
       val allCFWriter = new StatePartitionAllColumnFamiliesWriter(
         storeConf,
         serializableHadoopConf.value,
@@ -116,29 +144,15 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
         0,
         storeName.getOrElse(StateStoreId.DEFAULT_STORE_NAME),
         currentBatchId,
-        columnFamilyToSchemaMap
+        columnFamilyToSchemaMap,
+        operatorName,
+        stateSchemaProvider,
+        sqlConf
       )
-
-      // Use per-column-family converters when there are multiple column families
-      if (columnFamilyToSchemaMap.size > 1) {
-        // TODO: Remove the logic of getting colNameToRowConverter once allColumnFamiliesReader is
-        // returning actual partitionKeySchema instead of the entire key
-        val colNameToRowConverter = columnFamilyToSchemaMap.view.mapValues { colInfo =>
-          val cfSchema = SchemaUtil.getScanAllColumnFamiliesSchema(colInfo.schema.keySchema)
-          CatalystTypeConverters.createToCatalystConverter(cfSchema)
-        }
-        allCFWriter.write(partition.map { row =>
-          val rowConverter = colNameToRowConverter(row.getString(3))
-          rowConverter(row).asInstanceOf[InternalRow]
-        })
-      } else {
-        val rowConverter = CatalystTypeConverters.createToCatalystConverter(schema)
-        allCFWriter.write(partition.map(rowConverter(_).asInstanceOf[InternalRow]))
-      }
+      allCFWriter.write(partition)
     }
+    sourceBytesData.queryExecution.toRdd.foreachPartition(putPartitionFunc)
 
-    // Write raw bytes to target using foreachPartition
-    sourceBytesData.foreachPartition(putPartitionFunc)
 
     // Commit to commitLog
     val latestCommit = targetCheckpointMetadata.commitLog.get(lastBatch).get
@@ -152,15 +166,11 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
     // Default selectExprs for most column families
     val defaultSelectExprs = Seq("key", "value", "partition_id")
 
-    def shouldCheckColumnFamilyName: String => Boolean = name => {
-      (!name.startsWith("$")
-        || (columnFamilyToStateSourceOptions.contains(name) &&
-        columnFamilyToStateSourceOptions(name).contains(StateSourceOptions.READ_REGISTERED_TIMERS)))
-    }
-    // Validate each column family separately (skip internal column families starting with $)
     columnFamiliesToValidate
-      // TODO: How to validate that internal columns are written correctly?
-      .filter(shouldCheckColumnFamilyName)
+      // filtering out "default" for TWS operator because it doesn't contain any data
+      .filter(cfName => !(cfName == StateStore.DEFAULT_COL_FAMILY_NAME &&
+        StatefulOperatorsUtils.TRANSFORM_WITH_STATE_OP_NAMES.contains(operatorName)
+      ))
       .foreach { cfName =>
         val selectExprs = columnFamilyToSelectExprs.getOrElse(cfName, defaultSelectExprs)
         val readerOptions = columnFamilyToStateSourceOptions.getOrElse(cfName, Map.empty)
@@ -251,6 +261,7 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
       ),
       useMultipleValuePerKey)
   }
+
   /**
    * Helper method to create a single-entry column family schema map.
    * This simplifies the common case where only the default column family is used.
@@ -260,8 +271,8 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME
-  ): HashMap[String, StatePartitionWriterColumnFamilyInfo] = {
-    HashMap(colFamilyName -> createColFamilyInfo(keySchema, valueSchema,
+  ): Map[String, StatePartitionWriterColumnFamilyInfo] = {
+    Map(colFamilyName -> createColFamilyInfo(keySchema, valueSchema,
       keyStateEncoderSpec, colFamilyName))
   }
 
@@ -297,35 +308,15 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
           )
 
           // Step 2: Define schemas based on state version
-          val keySchema = StructType(Array(
-            StructField("groupKey", IntegerType, nullable = false)))
-          val valueSchema = if (stateVersion == 1) {
-            // State version 1 includes key columns in the value
-            StructType(Array(
-              StructField("groupKey", IntegerType, nullable = false),
-              StructField("count", LongType, nullable = false),
-              StructField("sum", LongType, nullable = false),
-              StructField("max", IntegerType, nullable = false),
-              StructField("min", IntegerType, nullable = false)
-            ))
-          } else {
-            // State version 2 excludes key columns from the value
-            StructType(Array(
-              StructField("count", LongType, nullable = false),
-              StructField("sum", LongType, nullable = false),
-              StructField("max", IntegerType, nullable = false),
-              StructField("min", IntegerType, nullable = false)
-            ))
-          }
-
-          // Create key state encoder spec (no prefix key for simple aggregation)
-          val keyStateEncoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
+          val metadata = SimpleAggregationTestUtils.getSchemasWithMetadata(stateVersion)
 
           // Perform round-trip test using common helper
           performRoundTripTest(
             sourceDir.getAbsolutePath,
             targetDir.getAbsolutePath,
-            createSingleColumnFamilySchemaMap(keySchema, valueSchema, keyStateEncoderSpec)
+            createSingleColumnFamilySchemaMap(
+              metadata.keySchema, metadata.valueSchema, metadata.encoderSpec),
+            operatorName = StatefulOperatorsUtils.STATE_STORE_SAVE_EXEC_OP_NAME
           )
         }
       }
@@ -358,72 +349,31 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
           )
 
           // Step 2: Define schemas based on state version for composite key
-          val keySchema = StructType(Array(
-            StructField("groupKey", IntegerType, nullable = false),
-            StructField("fruit", org.apache.spark.sql.types.StringType, nullable = true)
-          ))
-          val valueSchema = if (stateVersion == 1) {
-            // State version 1 includes key columns in the value
-            StructType(Array(
-              StructField("groupKey", IntegerType, nullable = false),
-              StructField("fruit", org.apache.spark.sql.types.StringType, nullable = true),
-              StructField("count", LongType, nullable = false),
-              StructField("sum", LongType, nullable = false),
-              StructField("max", IntegerType, nullable = false),
-              StructField("min", IntegerType, nullable = false)
-            ))
-          } else {
-            // State version 2 excludes key columns from the value
-            StructType(Array(
-              StructField("count", LongType, nullable = false),
-              StructField("sum", LongType, nullable = false),
-              StructField("max", IntegerType, nullable = false),
-              StructField("min", IntegerType, nullable = false)
-            ))
-          }
-
-          // Create key state encoder spec (no prefix key for composite key aggregation)
-          val keyStateEncoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
+          val metadata = CompositeKeyAggregationTestUtils.getSchemasWithMetadata(stateVersion)
 
           // Perform round-trip test using common helper
           performRoundTripTest(
             sourceDir.getAbsolutePath,
             targetDir.getAbsolutePath,
-            createSingleColumnFamilySchemaMap(keySchema, valueSchema, keyStateEncoderSpec)
+            createSingleColumnFamilySchemaMap(
+              metadata.keySchema, metadata.valueSchema, metadata.encoderSpec),
+            operatorName = StatefulOperatorsUtils.STATE_STORE_SAVE_EXEC_OP_NAME
           )
         }
       }
     }
   }
 
-  private val keyToNumValuesColFamilyNames = Seq("left-keyToNumValues", "right-keyToNumValues")
-  private val keyWithIndexToValueColFamilyNames = Seq(
-    "left-keyWithIndexToValue", "right-keyWithIndexToValue")
-
-  private def getJoinV3ColumnSchemaMap(): HashMap[String, StatePartitionWriterColumnFamilyInfo] = {
-    val keyToNumValuesKeySchema = StructType(Array(StructField("key", IntegerType)))
-    val keyToNumValuesValueSchema = StructType(Array(StructField("value", LongType)))
-    val keyToNumValuesEncoderSpec = NoPrefixKeyStateEncoderSpec(keyToNumValuesKeySchema)
-
-    val keyWithIndexKeySchema = StructType(Array(
-      StructField("key", IntegerType, nullable = false),
-      StructField("index", LongType)
-    ))
-    val keyWithIndexValueSchema = StructType(Array(
-      StructField("value", IntegerType, nullable = false),
-      StructField("time", TimestampType, nullable = false),
-      StructField("matched", BooleanType)
-    ))
-    val keyWithIndexEncoderSpec = NoPrefixKeyStateEncoderSpec(keyWithIndexKeySchema)
-
-    // Build column family to schema map for all 4 join stores
-    keyToNumValuesColFamilyNames.map { name =>
-      createSingleColumnFamilySchemaMap(
-        keyToNumValuesKeySchema, keyToNumValuesValueSchema, keyToNumValuesEncoderSpec, name)
-    }.reduce(_ ++ _) ++ keyWithIndexToValueColFamilyNames.map { name =>
-      createSingleColumnFamilySchemaMap(
-        keyWithIndexKeySchema, keyWithIndexValueSchema, keyWithIndexEncoderSpec, name)
-    }.reduce(_ ++ _)
+  private def getJoinV3ColumnSchemaMap(): Map[String, StatePartitionWriterColumnFamilyInfo] = {
+    val schemas = StreamStreamJoinTestUtils.getJoinV3ColumnSchemaMapWithMetadata()
+    schemas.map { case (cfName, metadata) =>
+      cfName -> createColFamilyInfo(
+        metadata.keySchema,
+        metadata.valueSchema,
+        metadata.encoderSpec,
+        cfName,
+        metadata.useMultipleValuePerKey)
+    }
   }
   /**
    * Helper method to test round-trip for stream-stream join with different versions.
@@ -446,50 +396,33 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
 
           // Step 2: Test all 4 state stores created by stream-stream join
           // Test keyToNumValues stores (both left and right)
-          keyToNumValuesColFamilyNames.foreach { storeName =>
-            val keySchema = StructType(Array(
-              StructField("key", IntegerType)
-            ))
-            val valueSchema = StructType(Array(
-              StructField("value", LongType)
-            ))
-            val keyStateEncoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
+          StreamStreamJoinTestUtils.KEY_TO_NUM_VALUES_ALL.foreach { storeName =>
+            val metadata = StreamStreamJoinTestUtils.getKeyToNumValuesSchemasWithMetadata()
 
             // Perform round-trip test using common helper
             performRoundTripTest(
               sourceDir.getAbsolutePath,
               targetDir.getAbsolutePath,
-              createSingleColumnFamilySchemaMap(keySchema, valueSchema, keyStateEncoderSpec),
-              storeName = Some(storeName)
+              createSingleColumnFamilySchemaMap(
+                metadata.keySchema, metadata.valueSchema, metadata.encoderSpec),
+              storeName = Some(storeName),
+              operatorName = StatefulOperatorsUtils.SYMMETRIC_HASH_JOIN_EXEC_OP_NAME
             )
           }
 
           // Test keyWithIndexToValue stores (both left and right)
-          keyWithIndexToValueColFamilyNames.foreach { storeName =>
-            val keySchema = StructType(Array(
-              StructField("key", IntegerType, nullable = false),
-              StructField("index", LongType)
-            ))
-            val valueSchema = if (stateVersion == 2) {
-              StructType(Array(
-                StructField("value", IntegerType, nullable = false),
-                StructField("time", TimestampType, nullable = false),
-                StructField("matched", BooleanType)
-              ))
-            } else {
-              StructType(Array(
-                StructField("value", IntegerType, nullable = false),
-                StructField("time", TimestampType, nullable = false)
-              ))
-            }
-            val keyStateEncoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
+          StreamStreamJoinTestUtils.KEY_WITH_INDEX_ALL.foreach { storeName =>
+            val metadata =
+              StreamStreamJoinTestUtils.getKeyWithIndexToValueSchemasWithMetadata(stateVersion)
 
             // Perform round-trip test using common helper
             performRoundTripTest(
               sourceDir.getAbsolutePath,
               targetDir.getAbsolutePath,
-              createSingleColumnFamilySchemaMap(keySchema, valueSchema, keyStateEncoderSpec),
-              storeName = Some(storeName)
+              createSingleColumnFamilySchemaMap(
+                metadata.keySchema, metadata.valueSchema, metadata.encoderSpec),
+              storeName = Some(storeName),
+              operatorName = StatefulOperatorsUtils.SYMMETRIC_HASH_JOIN_EXEC_OP_NAME
             )
           }
         }
@@ -497,48 +430,6 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
     }
   }
 
-  private def testStreamStreamJoinV3RoundTrip(): Unit = {
-    withSQLConf(
-      SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "3"
-    ) {
-      withTempDir { sourceDir =>
-        withTempDir { targetDir =>
-          val inputData = MemoryStream[(Int, Long)]
-          val query = getStreamStreamJoinQuery(inputData)
-
-          def runQuery(checkpointLocation: String, roundsOfData: Int): Unit = {
-            val dataActions = (1 to roundsOfData).flatMap { _ =>
-              Seq(
-                AddData(inputData, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
-                ProcessAllAvailable()
-              )
-            }
-            testStream(query)(
-              (Seq(StartStream(checkpointLocation = checkpointLocation)) ++
-                dataActions ++
-                Seq(StopStream)): _*
-            )
-          }
-
-          // varying the roundsOfData so that sourceDir and targetDir have different state
-          runQuery(sourceDir.getAbsolutePath, roundsOfData = 2)
-          runQuery(targetDir.getAbsolutePath, roundsOfData = 1)
-
-          // Perform round-trip test using common helper
-          performRoundTripTest(
-            sourceDir.getAbsolutePath,
-            targetDir.getAbsolutePath,
-            getJoinV3ColumnSchemaMap(),
-            columnFamilyToStateSourceOptions =
-              (keyToNumValuesColFamilyNames ++ keyWithIndexToValueColFamilyNames).map {
-              colName =>
-                colName -> Map(StateSourceOptions.STORE_NAME -> colName)
-            }.toMap
-          )
-        }
-      }
-    }
-  }
   /**
    * Helper method to test round-trip for flatMapGroupsWithState with different versions.
    */
@@ -567,139 +458,25 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
           )
 
           // Step 2: Define schemas for flatMapGroupsWithState
-          val keySchema = StructType(Array(
-            StructField("value", org.apache.spark.sql.types.StringType, nullable = true)
-          ))
-          val valueSchema = if (stateVersion == 1) {
-            StructType(Array(
-              StructField("numEvents", IntegerType, nullable = false),
-              StructField("startTimestampMs", LongType, nullable = false),
-              StructField("endTimestampMs", LongType, nullable = false),
-              StructField("timeoutTimestamp", IntegerType, nullable = false)
-            ))
-          } else {
-            StructType(Array(
-              StructField("groupState", org.apache.spark.sql.types.StructType(Array(
-                StructField("numEvents", IntegerType, nullable = false),
-                StructField("startTimestampMs", LongType, nullable = false),
-                StructField("endTimestampMs", LongType, nullable = false)
-              )), nullable = false),
-              StructField("timeoutTimestamp", LongType, nullable = false)
-            ))
-          }
-          val keyStateEncoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
+          val metadata = FlatMapGroupsWithStateTestUtils.getSchemasWithMetadata(stateVersion)
 
           // Perform round-trip test using common helper
           performRoundTripTest(
             sourceDir.getAbsolutePath,
             targetDir.getAbsolutePath,
-            createSingleColumnFamilySchemaMap(keySchema, valueSchema, keyStateEncoderSpec)
+            createSingleColumnFamilySchemaMap(
+              metadata.keySchema, metadata.valueSchema, metadata.encoderSpec),
+            operatorName = StatefulOperatorsUtils.FLAT_MAP_GROUPS_WITH_STATE_EXEC_OP_NAME
           )
         }
       }
     }
   }
 
-  /**
-   * Helper method to test round-trip for transformWithState with multiple column families.
-   * Uses MultiStateVarProcessor which creates ValueState, ListState, and MapState.
-   */
-  private def testTransformWithStateMultiColumnFamilies(): Unit = {
-    withTempDir { sourceDir =>
-      withTempDir { targetDir =>
-        val inputData = MemoryStream[String]
-        val query = inputData.toDS()
-          .groupByKey(x => x)
-          .transformWithState(new MultiStateVarProcessor(),
-            TimeMode.None(),
-            OutputMode.Update())
-        def runQuery(checkpointLocation: String, roundsOfData: Int): Unit = {
-          val dataActions = (1 to roundsOfData).flatMap { _ =>
-            Seq(
-              AddData(inputData, "a", "b", "a"),
-              ProcessAllAvailable()
-            )
-          }
-          testStream(query)(
-            Seq(StartStream(checkpointLocation = checkpointLocation)) ++
-              dataActions ++
-              Seq(StopStream): _*
-          )
-        }
-
-        // Step 1: Add data to source
-        runQuery(sourceDir.getAbsolutePath, 2)
-        // Step 2: Add data to target
-        runQuery(targetDir.getAbsolutePath, 1)
-
-        // Step 3: Define schemas for all column families
-        val groupByKeySchema = StructType(Array(
-          StructField("value", StringType, nullable = true)
-        ))
-        val countStateValueSchema = StructType(Array(
-          StructField("value", LongType, nullable = false)
-        ))
-        val itemsListValueSchema = StructType(Array(
-          StructField("value", StringType, nullable = true)
-        ))
-        val rowCounterValueSchema = StructType(Array(
-          StructField("count", LongType, nullable = true)
-        ))
-        val itemsMapKeySchema = StructType(Array(
-          StructField("key", StringType),
-          StructField("user_map_key", groupByKeySchema, nullable = true)
-        ))
-        val itemsMapValueSchema = StructType(Array(
-          StructField("user_map_value", IntegerType, nullable = true)
-        ))
-
-        // Build column family to schema map for all 4 state variables
-        val countStateEncoderSpec = NoPrefixKeyStateEncoderSpec(groupByKeySchema)
-        val itemsMapEncoderSpec = PrefixKeyScanStateEncoderSpec(itemsMapKeySchema, 1)
-
-        val columnFamilyToSchemaMap = HashMap(
-          "countState" -> createColFamilyInfo(
-            groupByKeySchema, countStateValueSchema, countStateEncoderSpec, "countState"),
-          "itemsList" -> createColFamilyInfo(
-            groupByKeySchema, itemsListValueSchema, countStateEncoderSpec, "itemsList", true),
-          "$rowCounter_itemsList" -> createColFamilyInfo(
-            groupByKeySchema, rowCounterValueSchema,
-            countStateEncoderSpec, "$rowCounter_itemsList"),
-          "itemsMap" -> createColFamilyInfo(
-            itemsMapKeySchema, itemsMapValueSchema, itemsMapEncoderSpec, "itemsMap")
-        )
-
-        // Define custom selectExprs for column families with non-standard schemas
-        val columnFamilyToSelectExprs = Map(
-          "itemsList" -> Seq("key", "list_element AS value", "partition_id"),
-          "itemsMap" -> Seq("STRUCT(key, user_map_key) AS key", "user_map_value AS value",
-            "partition_id")
-        )
-
-        // Define reader options for column families that need them
-        val columnFamilyToStateSourceOptions = Map(
-          "itemsList" -> Map(StateSourceOptions.FLATTEN_COLLECTION_TYPES -> "true",
-            StateSourceOptions.STATE_VAR_NAME -> "itemsList"),
-          "itemsMap" -> Map(StateSourceOptions.STATE_VAR_NAME -> "itemsMap"),
-          "countState" -> Map(StateSourceOptions.STATE_VAR_NAME -> "countState")
-        )
-
-        // Perform round-trip test using common helper
-        performRoundTripTest(
-          sourceDir.getAbsolutePath,
-          targetDir.getAbsolutePath,
-          columnFamilyToSchemaMap,
-          columnFamilyToSelectExprs = columnFamilyToSelectExprs,
-          columnFamilyToStateSourceOptions = columnFamilyToStateSourceOptions
-        )
-      }
-    }
-  }
 
   /**
-   * Helper method to build timer column family schemas and options for timerProcesser
-   * that has groupingKey of STRING type and keeps track of a "countState" of LONG type.
-   * Used by both event time and processing time timer tests
+   * Helper method to build timer column family schemas and options for
+   * RunningCountStatefulProcessorWithProcTimeTimer and EventTimeTimerProcessor
    *
    * @param timeMode Either TimeMode.EventTime() or TimeMode.ProcessingTime()
    * @return A tuple of three elements:
@@ -708,268 +485,47 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
    *         - columnFamilyToStateSourceOptions: Maps column family names to state source options
    */
   private def getTimerStateConfigsForCountState(timeMode: TimeMode): (
-      HashMap[String, StatePartitionWriterColumnFamilyInfo],
+      Map[String, StatePartitionWriterColumnFamilyInfo],
       Map[String, Seq[String]],
       Map[String, Map[String, String]]) = {
 
-    val groupByKeySchema = StructType(Array(
-      StructField("key", StringType, nullable = true)
-    ))
-    val stateValueSchema = StructType(Array(
-      StructField("value", LongType, nullable = true)
-    ))
-    val keyToTimestampKeySchema = StructType(Array(
-      StructField("key", StringType),
-      StructField("expiryTimestampMs", LongType, nullable = false)
-    ))
-    val timestampToKeyKeySchema = StructType(Array(
-      StructField("expiryTimestampMs", LongType, nullable = false),
-      StructField("key", StringType)
-    ))
-    val dummyValueSchema = StructType(Array(StructField("__dummy__", NullType)))
-
-    val encoderSpec = NoPrefixKeyStateEncoderSpec(groupByKeySchema)
-    val keyToTimestampEncoderSpec = PrefixKeyScanStateEncoderSpec(keyToTimestampKeySchema, 1)
-    val timestampToKeyEncoderSpec = RangeKeyScanStateEncoderSpec(timestampToKeyKeySchema, Seq(0))
+    val schemas = TimerTestUtils.getTimerConfigsForCountState(timeMode)
+    val columnFamilyToSchemaMap = schemas.map { case (cfName, metadata) =>
+      cfName -> createColFamilyInfo(
+        metadata.keySchema,
+        metadata.valueSchema,
+        metadata.encoderSpec,
+        cfName,
+        metadata.useMultipleValuePerKey)
+    }
 
     val (keyToTimestampCF, timestampToKeyCF) =
       TimerStateUtils.getTimerStateVarNames(timeMode.toString)
 
-    val columnFamilyToSchemaMap = HashMap(
-      "countState" -> createColFamilyInfo(
-        groupByKeySchema, stateValueSchema, encoderSpec, "countState"),
-      keyToTimestampCF -> createColFamilyInfo(
-        keyToTimestampKeySchema, dummyValueSchema, keyToTimestampEncoderSpec, keyToTimestampCF),
-      timestampToKeyCF -> createColFamilyInfo(
-        timestampToKeyKeySchema, dummyValueSchema, timestampToKeyEncoderSpec, timestampToKeyCF)
-    )
+    val columnFamilyToSelectExprs = TimerTestUtils.getTimerColumnFamilyToSelectExprs(timeMode)
 
-    val columnFamilyToSelectExprs = Map(
-      keyToTimestampCF -> Seq(
-        "STRUCT(key AS groupingKey, expiration_timestamp_ms AS key) AS key",
-        "NULL AS value", "partition_id"),
-      timestampToKeyCF -> Seq(
-        "STRUCT(expiration_timestamp_ms AS key, key AS groupingKey) AS key",
-        "NULL AS value", "partition_id")
-    )
-
-    val columnFamilyToStateSourceOptions = Map(
-      "countState" -> Map(StateSourceOptions.STATE_VAR_NAME -> "countState"),
-      keyToTimestampCF -> Map(StateSourceOptions.READ_REGISTERED_TIMERS -> "true"),
-      timestampToKeyCF -> Map(StateSourceOptions.READ_REGISTERED_TIMERS -> "true")
-    )
+    val columnFamilyToStateSourceOptions = schemas.keys.map { cfName =>
+        if (cfName == keyToTimestampCF || cfName == timestampToKeyCF) {
+          cfName -> Map(StateSourceOptions.READ_REGISTERED_TIMERS -> "true")
+        } else {
+          cfName -> Map(StateSourceOptions.STATE_VAR_NAME -> cfName)
+        }
+    }.toMap
 
     (columnFamilyToSchemaMap, columnFamilyToSelectExprs, columnFamilyToStateSourceOptions)
   }
 
-  /**
-   * Helper method to test round-trip for transformWithState with event time timers.
-   */
-  private def testEventTimeTimersRoundTrip(): Unit = {
-    withTempDir { sourceDir =>
-      withTempDir { targetDir =>
-        val inputData = MemoryStream[(String, Long)]
-        val result = inputData.toDS()
-          .select(col("_1").as("key"), timestamp_seconds(col("_2")).as("eventTime"))
-          .withWatermark("eventTime", "10 seconds")
-          .as[(String, Timestamp)]
-          .groupByKey(_._1)
-          .transformWithState(
-            new EventTimeTimerProcessor(),
-            TimeMode.EventTime(),
-            OutputMode.Update())
-
-        // Step 1: Create source checkpoint
-        testStream(result, OutputMode.Update())(
-          StartStream(checkpointLocation = sourceDir.getAbsolutePath),
-          AddData(inputData, ("a", 1L), ("b", 2L), ("c", 3L)),
-          ProcessAllAvailable(),
-          StopStream
-        )
-
-        // Step 2: Create target checkpoint with dummy data
-        testStream(result, OutputMode.Update())(
-          StartStream(checkpointLocation = targetDir.getAbsolutePath),
-          AddData(inputData, ("x", 1L)),
-          ProcessAllAvailable(),
-          StopStream
-        )
-
-        // Step 3: Build timer column family configs and perform round-trip test
-        val (columnFamilyToSchemaMap, columnFamilyToSelectExprs, columnFamilyToStateSourceOptions) =
-          getTimerStateConfigsForCountState(TimeMode.EventTime())
-
-        performRoundTripTest(
-          sourceDir.getAbsolutePath,
-          targetDir.getAbsolutePath,
-          columnFamilyToSchemaMap,
-          columnFamilyToSelectExprs = columnFamilyToSelectExprs,
-          columnFamilyToStateSourceOptions = columnFamilyToStateSourceOptions
-        )
-      }
-    }
-  }
-
-  /**
-   * Helper method to test round-trip for transformWithState with processing time timers.
-   */
-  private def testProcessingTimeTimersRoundTrip(): Unit = {
-    withTempDir { sourceDir =>
-      withTempDir { targetDir =>
-        val clock = new StreamManualClock
-        val inputData = MemoryStream[String]
-        val result = inputData.toDS()
-          .groupByKey(x => x)
-          .transformWithState(new RunningCountStatefulProcessorWithProcTimeTimer(),
-            TimeMode.ProcessingTime(),
-            OutputMode.Update())
-
-        // Step 1: Create source checkpoint
-        testStream(result, OutputMode.Update())(
-          StartStream(checkpointLocation = sourceDir.getAbsolutePath,
-            trigger = Trigger.ProcessingTime("1 second"),
-            triggerClock = clock),
-          AddData(inputData, "a"),
-          AdvanceManualClock(1 * 1000),
-          CheckNewAnswer(("a", "1")),
-          StopStream
-        )
-
-        // Step 2: Create target checkpoint with dummy data
-        val clock2 = new StreamManualClock
-        testStream(result, OutputMode.Update())(
-          StartStream(checkpointLocation = targetDir.getAbsolutePath,
-            trigger = Trigger.ProcessingTime("1 second"),
-            triggerClock = clock2),
-          AddData(inputData, "x"),
-          AdvanceManualClock(1 * 1000),
-          CheckNewAnswer(("a", "1"), ("x", "1")),
-          StopStream
-        )
-
-        // Step 3: Build timer column family configs and perform round-trip test
-        val (columnFamilyToSchemaMap, columnFamilyToSelectExprs, columnFamilyToStateSourceOptions) =
-          getTimerStateConfigsForCountState(TimeMode.ProcessingTime())
-
-        performRoundTripTest(
-          sourceDir.getAbsolutePath,
-          targetDir.getAbsolutePath,
-          columnFamilyToSchemaMap,
-          columnFamilyToSelectExprs = columnFamilyToSelectExprs,
-          columnFamilyToStateSourceOptions = columnFamilyToStateSourceOptions
-        )
-      }
-    }
-  }
-
-  /**
-   * Helper method to test round-trip for transformWithState with list state and TTL.
-   */
-  private def testListStateTTLRoundTrip(): Unit = {
-    withTempDir { sourceDir =>
-      withTempDir { targetDir =>
-        val clock = new StreamManualClock
-        val inputData = MemoryStream[String]
-        val result = inputData.toDS()
-          .groupByKey(x => x)
-          .transformWithState(new ListStateTTLProcessor(),
-            TimeMode.ProcessingTime(),
-            OutputMode.Update())
-
-        // Step 1: Create source checkpoint
-        testStream(result, OutputMode.Update())(
-          StartStream(checkpointLocation = sourceDir.getAbsolutePath,
-            trigger = Trigger.ProcessingTime("1 second"),
-            triggerClock = clock),
-          AddData(inputData, "a", "b", "a"),
-          AdvanceManualClock(1 * 1000),
-          CheckNewAnswer(("a", "2"), ("b", "1")),
-          StopStream
-        )
-
-        // Step 2: Create target checkpoint with dummy data
-        val clock2 = new StreamManualClock
-        testStream(result, OutputMode.Update())(
-          StartStream(checkpointLocation = targetDir.getAbsolutePath,
-            trigger = Trigger.ProcessingTime("1 second"),
-            triggerClock = clock2),
-          AddData(inputData, "x"),
-          AdvanceManualClock(1 * 1000),
-          CheckNewAnswer(("a", "2"), ("b", "1"), ("x", "1")),
-          StopStream
-        )
-
-        // Step 3: Define schemas for list state with TTL column families
-        val groupByKeySchema = StructType(Array(
-          StructField("value", StringType)
-        ))
-        val listStateValueSchema = StructType(Array(
-          StructField("value", StructType(Array(
-            StructField("value", StringType)
-          ))),
-          StructField("ttlExpirationMs", LongType)
-        ))
-        // TTL index key schema: (expirationMs, groupingKey)
-        val ttlIndexKeySchema = StructType(Array(
-          StructField("expirationMs", LongType, nullable = false),
-          StructField("elementKey", groupByKeySchema)
-        ))
-        // Min expiry key schema is same as groupByKeySchema
-        val minExpiryValueSchema = StructType(Array(
-          StructField("minExpiry", LongType)
-        ))
-        // Count index value schema
-        val countValueSchema = StructType(Array(
-          StructField("count", LongType)
-        ))
-        val dummyValueSchema = StructType(Array(StructField("__dummy__", NullType)))
-
-        val encoderSpec = NoPrefixKeyStateEncoderSpec(groupByKeySchema)
-        val ttlIndexEncoderSpec = RangeKeyScanStateEncoderSpec(ttlIndexKeySchema, Seq(0))
-
-        val columnFamilyToSchemaMap = HashMap(
-          "listState" -> createColFamilyInfo(
-            groupByKeySchema, listStateValueSchema, encoderSpec, "listState", true),
-          "$ttl_listState" -> createColFamilyInfo(
-            ttlIndexKeySchema, dummyValueSchema, ttlIndexEncoderSpec, "$ttl_listState"),
-          "$min_listState" -> createColFamilyInfo(
-            groupByKeySchema, minExpiryValueSchema, encoderSpec, "$min_listState"),
-          "$count_listState" -> createColFamilyInfo(
-            groupByKeySchema, countValueSchema, encoderSpec, "$count_listState")
-        )
-
-        // listState needs FLATTEN_COLLECTION_TYPES and uses list_element column
-        val columnFamilyToSelectExprs = Map(
-          "listState" -> Seq("key", "list_element AS value", "partition_id")
-        )
-
-        val columnFamilyToStateSourceOptions = Map(
-          "listState" -> Map(
-            StateSourceOptions.STATE_VAR_NAME -> "listState",
-            StateSourceOptions.FLATTEN_COLLECTION_TYPES -> "true")
-        )
-
-        performRoundTripTest(
-          sourceDir.getAbsolutePath,
-          targetDir.getAbsolutePath,
-          columnFamilyToSchemaMap,
-          columnFamilyToSelectExprs = columnFamilyToSelectExprs,
-          columnFamilyToStateSourceOptions = columnFamilyToStateSourceOptions
-        )
-      }
-    }
-  }
 
   // Run all tests with both changelog checkpointing enabled and disabled
   Seq(true, false).foreach { changelogCheckpointingEnabled =>
-    val testSuffix = if (changelogCheckpointingEnabled) {
+    val changelogCpTestSuffix = if (changelogCheckpointingEnabled) {
       "with changelog checkpointing"
     } else {
       "without changelog checkpointing"
     }
 
     def testWithChangelogConfig(testName: String)(testFun: => Unit): Unit = {
-      test(s"$testName ($testSuffix)") {
+      test(s"$testName ($changelogCpTestSuffix)") {
         withSQLConf(
           "spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled" ->
             changelogCheckpointingEnabled.toString) {
@@ -1008,19 +564,16 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
           )
 
           // Step 2: Define schemas for dropDuplicatesWithinWatermark
-          val keySchema = StructType(Array(
-            StructField("_1", org.apache.spark.sql.types.StringType, nullable = true)
-          ))
-          val valueSchema = StructType(Array(
-            StructField("expiresAtMicros", LongType, nullable = false)
-          ))
-          val keyStateEncoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
+          val metadata =
+            DropDuplicatesTestUtils.getDropDuplicatesWithinWatermarkSchemasWithMetadata()
 
           // Perform round-trip test using common helper
           performRoundTripTest(
             sourceDir.getAbsolutePath,
             targetDir.getAbsolutePath,
-            createSingleColumnFamilySchemaMap(keySchema, valueSchema, keyStateEncoderSpec)
+            createSingleColumnFamilySchemaMap(
+              metadata.keySchema, metadata.valueSchema, metadata.encoderSpec),
+            operatorName = StatefulOperatorsUtils.DEDUPLICATE_WITHIN_WATERMARK_EXEC_OP_NAME
           )
         }
       }
@@ -1042,19 +595,16 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
           )
 
           // Step 2: Define schemas for dropDuplicates with column specified
-          val keySchema = StructType(Array(
-            StructField("col1", org.apache.spark.sql.types.StringType, nullable = true)
-          ))
-          val valueSchema = StructType(Array(
-            StructField("__dummy__", NullType, nullable = true)
-          ))
-          val keyStateEncoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
+          val metadata =
+            DropDuplicatesTestUtils.getDropDuplicatesWithColumnSchemasWithMetadata()
 
           // Perform round-trip test using common helper
           performRoundTripTest(
             sourceDir.getAbsolutePath,
             targetDir.getAbsolutePath,
-            createSingleColumnFamilySchemaMap(keySchema, valueSchema, keyStateEncoderSpec)
+            createSingleColumnFamilySchemaMap(
+              metadata.keySchema, metadata.valueSchema, metadata.encoderSpec),
+            operatorName = StatefulOperatorsUtils.DEDUPLICATE_EXEC_OP_NAME
           )
         }
       }
@@ -1079,19 +629,7 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
           )
 
           // Step 2: Define schemas for session window aggregation
-          val keySchema = StructType(Array(
-            StructField("sessionId", org.apache.spark.sql.types.StringType, nullable = false),
-            StructField("sessionStartTime",
-              org.apache.spark.sql.types.TimestampType, nullable = false)
-          ))
-          val valueSchema = StructType(Array(
-            StructField("session_window", org.apache.spark.sql.types.StructType(Array(
-              StructField("start", org.apache.spark.sql.types.TimestampType),
-              StructField("end", org.apache.spark.sql.types.TimestampType)
-            )), nullable = false),
-            StructField("sessionId", org.apache.spark.sql.types.StringType, nullable = false),
-            StructField("count", LongType, nullable = false)
-          ))
+          val (keySchema, valueSchema) = SessionWindowTestUtils.getSchemas()
           // Session window aggregation uses prefix key scanning where sessionId is the prefix
           val keyStateEncoderSpec = PrefixKeyScanStateEncoderSpec(keySchema, 1)
 
@@ -1099,7 +637,8 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
           performRoundTripTest(
             sourceDir.getAbsolutePath,
             targetDir.getAbsolutePath,
-            createSingleColumnFamilySchemaMap(keySchema, valueSchema, keyStateEncoderSpec)
+            createSingleColumnFamilySchemaMap(keySchema, valueSchema, keyStateEncoderSpec),
+            operatorName = StatefulOperatorsUtils.SESSION_WINDOW_STATE_STORE_SAVE_EXEC_OP_NAME
           )
         }
       }
@@ -1121,20 +660,15 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
           )
 
           // Step 2: Define schemas for dropDuplicates (state version 2)
-          val keySchema = StructType(Array(
-            StructField("value", IntegerType, nullable = false),
-            StructField("eventTime", org.apache.spark.sql.types.TimestampType)
-          ))
-          val valueSchema = StructType(Array(
-            StructField("__dummy__", NullType)
-          ))
-          val keyStateEncoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
+          val metadata = DropDuplicatesTestUtils.getDropDuplicatesSchemasWithMetadata()
 
           // Perform round-trip test using common helper
           performRoundTripTest(
             sourceDir.getAbsolutePath,
             targetDir.getAbsolutePath,
-            createSingleColumnFamilySchemaMap(keySchema, valueSchema, keyStateEncoderSpec)
+            createSingleColumnFamilySchemaMap(
+              metadata.keySchema, metadata.valueSchema, metadata.encoderSpec),
+            operatorName = StatefulOperatorsUtils.DEDUPLICATE_EXEC_OP_NAME
           )
         }
       }
@@ -1153,23 +687,476 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
     }
 
     testWithChangelogConfig("SPARK-54411: stream-stream join state ver 3") {
-      testStreamStreamJoinV3RoundTrip()
+      withSQLConf(
+        SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "3"
+      ) {
+        withTempDir { sourceDir =>
+          withTempDir { targetDir =>
+            val inputData = MemoryStream[(Int, Long)]
+            val query = getStreamStreamJoinQuery(inputData)
+
+            def runQuery(checkpointLocation: String, roundsOfData: Int): Unit = {
+              val dataActions = (1 to roundsOfData).flatMap { _ =>
+                Seq(
+                  AddData(inputData, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
+                  ProcessAllAvailable()
+                )
+              }
+              testStream(query)(
+                (Seq(StartStream(checkpointLocation = checkpointLocation)) ++
+                  dataActions ++
+                  Seq(StopStream)): _*
+              )
+            }
+
+            runQuery(sourceDir.getAbsolutePath, roundsOfData = 2)
+            runQuery(targetDir.getAbsolutePath, roundsOfData = 1)
+
+            val allColFamilyNames = StreamStreamJoinTestUtils.KEY_TO_NUM_VALUES_ALL ++
+              StreamStreamJoinTestUtils.KEY_WITH_INDEX_ALL
+            performRoundTripTest(
+              sourceDir.getAbsolutePath,
+              targetDir.getAbsolutePath,
+              getJoinV3ColumnSchemaMap(),
+              columnFamilyToStateSourceOptions = allColFamilyNames.map {
+                colName => colName -> Map(StateSourceOptions.STORE_NAME -> colName)
+              }.toMap,
+              operatorName = StatefulOperatorsUtils.SYMMETRIC_HASH_JOIN_EXEC_OP_NAME
+            )
+          }
+        }
+      }
     }
 
-    testWithChangelogConfig("SPARK-54411: transformWithState with multiple column families") {
-      testTransformWithStateMultiColumnFamilies()
-    }
+    // Run transformWithState tests with different encoding formats
+    Seq("unsaferow", "avro").foreach { encodingFormat =>
+      def testWithChangelogAndEncodingConfig(testName: String)(testFun: => Unit): Unit = {
+        test(s"$testName ($changelogCpTestSuffix, encoding = $encodingFormat)") {
+          withSQLConf(
+            "spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled" ->
+              changelogCheckpointingEnabled.toString,
+            SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> encodingFormat) {
+            testFun
+          }
+        }
+      }
 
-    testWithChangelogConfig("SPARK-54411: transformWithState with event time timers") {
-      testEventTimeTimersRoundTrip()
-    }
+      testWithChangelogAndEncodingConfig(
+          "SPARK-54411: transformWithState with multiple column families") {
+        withTempDir { sourceDir =>
+          withTempDir { targetDir =>
+            val inputData = MemoryStream[String]
+            val query = inputData.toDS()
+              .groupByKey(x => x)
+              .transformWithState(new MultiStateVarProcessor(),
+                TimeMode.None(),
+                OutputMode.Update())
+            def runQuery(checkpointLocation: String, roundsOfData: Int): Unit = {
+              val dataActions = (1 to roundsOfData).flatMap { _ =>
+                Seq(
+                  AddData(inputData, "a", "b", "a"),
+                  ProcessAllAvailable()
+                )
+              }
+              testStream(query)(
+                Seq(StartStream(checkpointLocation = checkpointLocation)) ++
+                  dataActions ++
+                  Seq(StopStream): _*
+              )
+            }
 
-    testWithChangelogConfig("SPARK-54411: transformWithState with processing time timers") {
-      testProcessingTimeTimersRoundTrip()
-    }
+            runQuery(sourceDir.getAbsolutePath, 2)
+            runQuery(targetDir.getAbsolutePath, 1)
 
-    testWithChangelogConfig("SPARK-54411: transformWithState with list state and TTL") {
-      testListStateTTLRoundTrip()
-    }
+            val schemas = MultiStateVarProcessorTestUtils.getSchemasWithMetadata()
+            val columnFamilyToSchemaMap = schemas.map { case (cfName, metadata) =>
+              cfName -> createColFamilyInfo(
+                metadata.keySchema,
+                metadata.valueSchema,
+                metadata.encoderSpec,
+                cfName,
+                metadata.useMultipleValuePerKey)
+            }
+            val columnFamilyToSelectExprs = MultiStateVarProcessorTestUtils
+              .getColumnFamilyToSelectExprs()
+
+            val columnFamilyToStateSourceOptions = schemas.keys.map { cfName =>
+              val base = Map(
+                StateSourceOptions.STATE_VAR_NAME -> cfName
+              )
+
+              val withFlatten =
+                if (cfName == MultiStateVarProcessorTestUtils.ITEMS_LIST) {
+                  base + (StateSourceOptions.FLATTEN_COLLECTION_TYPES -> "true")
+                } else {
+                  base
+                }
+
+              cfName -> withFlatten
+            }.toMap
+
+            performRoundTripTest(
+              sourceDir.getAbsolutePath,
+              targetDir.getAbsolutePath,
+              columnFamilyToSchemaMap,
+              columnFamilyToSelectExprs = columnFamilyToSelectExprs,
+              columnFamilyToStateSourceOptions = columnFamilyToStateSourceOptions,
+              operatorName = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME
+            )
+          }
+        }
+      }
+
+      testWithChangelogAndEncodingConfig("SPARK-54411: transformWithState with eventTime timers") {
+        withTempDir { sourceDir =>
+          withTempDir { targetDir =>
+            val inputData = MemoryStream[(String, Long)]
+            val result = inputData.toDS()
+              .select(col("_1").as("key"), timestamp_seconds(col("_2")).as("eventTime"))
+              .withWatermark("eventTime", "10 seconds")
+              .as[(String, Timestamp)]
+              .groupByKey(_._1)
+              .transformWithState(
+                new EventTimeTimerProcessor(),
+                TimeMode.EventTime(),
+                OutputMode.Update())
+
+            testStream(result, OutputMode.Update())(
+              StartStream(checkpointLocation = sourceDir.getAbsolutePath),
+              AddData(inputData, ("a", 1L), ("b", 2L), ("c", 3L)),
+              ProcessAllAvailable(),
+              StopStream
+            )
+
+            testStream(result, OutputMode.Update())(
+              StartStream(checkpointLocation = targetDir.getAbsolutePath),
+              AddData(inputData, ("x", 1L)),
+              ProcessAllAvailable(),
+              StopStream
+            )
+
+            val (schemaMap, selectExprs, stateSourceOptions) =
+              getTimerStateConfigsForCountState(TimeMode.EventTime())
+
+            performRoundTripTest(
+              sourceDir.getAbsolutePath,
+              targetDir.getAbsolutePath,
+              schemaMap,
+              columnFamilyToSelectExprs = selectExprs,
+              columnFamilyToStateSourceOptions = stateSourceOptions,
+              operatorName = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME
+            )
+          }
+        }
+      }
+
+      testWithChangelogAndEncodingConfig(
+        "SPARK-54411: transformWithState with processing time timers") {
+        withTempDir { sourceDir =>
+          withTempDir { targetDir =>
+            val clock = new StreamManualClock
+            val inputData = MemoryStream[String]
+            val result = inputData.toDS()
+              .groupByKey(x => x)
+              .transformWithState(new RunningCountStatefulProcessorWithProcTimeTimer(),
+                TimeMode.ProcessingTime(),
+                OutputMode.Update())
+
+            testStream(result, OutputMode.Update())(
+              StartStream(checkpointLocation = sourceDir.getAbsolutePath,
+                trigger = Trigger.ProcessingTime("1 second"),
+                triggerClock = clock),
+              AddData(inputData, "a"),
+              AdvanceManualClock(1 * 1000),
+              CheckNewAnswer(("a", "1")),
+              StopStream
+            )
+
+            val clock2 = new StreamManualClock
+            testStream(result, OutputMode.Update())(
+              StartStream(checkpointLocation = targetDir.getAbsolutePath,
+                trigger = Trigger.ProcessingTime("1 second"),
+                triggerClock = clock2),
+              AddData(inputData, "x"),
+              AdvanceManualClock(1 * 1000),
+              CheckNewAnswer(("a", "1"), ("x", "1")),
+              StopStream
+            )
+
+            val (schemaMap, selectExprs, sourceOptions) =
+              getTimerStateConfigsForCountState(TimeMode.ProcessingTime())
+
+            performRoundTripTest(
+              sourceDir.getAbsolutePath,
+              targetDir.getAbsolutePath,
+              schemaMap,
+              columnFamilyToSelectExprs = selectExprs,
+              columnFamilyToStateSourceOptions = sourceOptions,
+              operatorName = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME
+            )
+          }
+        }
+      }
+
+      testWithChangelogAndEncodingConfig("SPARK-54411: transformWithState with list and TTL") {
+        withTempDir { sourceDir =>
+          withTempDir { targetDir =>
+            val clock = new StreamManualClock
+            val inputData = MemoryStream[InputEvent]
+            val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
+            val result = inputData.toDS()
+              .groupByKey(x => x.key)
+              .transformWithState(new ListStateTTLProcessor(ttlConfig),
+                TimeMode.ProcessingTime(),
+                OutputMode.Update())
+
+            testStream(result, OutputMode.Update())(
+              StartStream(checkpointLocation = sourceDir.getAbsolutePath,
+                trigger = Trigger.ProcessingTime("1 second"),
+                triggerClock = clock),
+              AddData(inputData, InputEvent("k1", "put", 1)),
+              AdvanceManualClock(1 * 1000),
+              CheckNewAnswer(),
+              StopStream
+            )
+
+            val clock2 = new StreamManualClock
+            testStream(result, OutputMode.Update())(
+              StartStream(checkpointLocation = targetDir.getAbsolutePath,
+                trigger = Trigger.ProcessingTime("1 second"),
+                triggerClock = clock2),
+              AddData(inputData, InputEvent("k1", "append", 1)),
+              AdvanceManualClock(1 * 1000),
+              CheckNewAnswer(),
+              StopStream
+            )
+
+            val schemas = TTLProcessorUtils.getListStateTTLSchemasWithMetadata()
+            val columnFamilyToSchemaMap = schemas.map { case (cfName, metadata) =>
+              cfName -> createColFamilyInfo(
+                metadata.keySchema,
+                metadata.valueSchema,
+                metadata.encoderSpec,
+                cfName,
+                metadata.useMultipleValuePerKey)
+            }
+
+            val columnFamilyToSelectExprs = Map(
+              TTLProcessorUtils.LIST_STATE -> TTLProcessorUtils.getTTLSelectExpressions(
+                TTLProcessorUtils.LIST_STATE
+            ))
+
+            val columnFamilyToStateSourceOptions = schemas.keys.map { cfName =>
+              val base = Map(StateSourceOptions.STATE_VAR_NAME -> cfName)
+
+              val withFlatten =
+                if (cfName == TTLProcessorUtils.LIST_STATE) {
+                  base + (StateSourceOptions.FLATTEN_COLLECTION_TYPES -> "true")
+                } else {
+                  base
+                }
+
+              cfName -> withFlatten
+            }.toMap
+
+            performRoundTripTest(
+              sourceDir.getAbsolutePath,
+              targetDir.getAbsolutePath,
+              columnFamilyToSchemaMap,
+              columnFamilyToSelectExprs = columnFamilyToSelectExprs,
+              columnFamilyToStateSourceOptions = columnFamilyToStateSourceOptions,
+              operatorName = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME
+            )
+          }
+        }
+      }
+
+      testWithChangelogAndEncodingConfig("SPARK-54411: transformWithState with map and TTL") {
+        withTempDir { sourceDir =>
+          withTempDir { targetDir =>
+            val clock = new StreamManualClock
+            val inputData = MemoryStream[MapInputEvent]
+            val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
+            val result = inputData.toDS()
+              .groupByKey(x => x.key)
+              .transformWithState(new MapStateTTLProcessor(ttlConfig),
+                TimeMode.ProcessingTime(),
+                OutputMode.Update())
+
+            testStream(result)(
+              StartStream(checkpointLocation = sourceDir.getAbsolutePath,
+                trigger = Trigger.ProcessingTime("1 second"),
+                triggerClock = clock),
+              AddData(inputData, MapInputEvent("a", "key1", "put", 1)),
+              AdvanceManualClock(1 * 1000),
+              CheckNewAnswer(),
+              StopStream
+            )
+
+            val clock2 = new StreamManualClock
+            testStream(result)(
+              StartStream(checkpointLocation = targetDir.getAbsolutePath,
+                trigger = Trigger.ProcessingTime("1 second"),
+                triggerClock = clock2),
+              AddData(inputData, MapInputEvent("x", "key1", "put", 1)),
+              AdvanceManualClock(1 * 1000),
+              CheckNewAnswer(),
+              StopStream
+            )
+
+            val schemas = TTLProcessorUtils.getMapStateTTLSchemasWithMetadata()
+            val columnFamilyToSchemaMap = schemas.map { case (cfName, metadata) =>
+              cfName -> createColFamilyInfo(
+                metadata.keySchema,
+                metadata.valueSchema,
+                metadata.encoderSpec,
+                cfName,
+                metadata.useMultipleValuePerKey)
+            }
+
+            val columnFamilyToSelectExprs = Map(
+              TTLProcessorUtils.MAP_STATE -> TTLProcessorUtils.getTTLSelectExpressions(
+                TTLProcessorUtils.MAP_STATE
+            ))
+
+            val columnFamilyToStateSourceOptions = schemas.keys.map { cfName =>
+              cfName -> Map(StateSourceOptions.STATE_VAR_NAME -> cfName)
+            }.toMap
+
+            performRoundTripTest(
+              sourceDir.getAbsolutePath,
+              targetDir.getAbsolutePath,
+              columnFamilyToSchemaMap,
+              columnFamilyToSelectExprs = columnFamilyToSelectExprs,
+              columnFamilyToStateSourceOptions = columnFamilyToStateSourceOptions,
+              operatorName = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME
+            )
+          }
+        }
+      }
+
+      testWithChangelogAndEncodingConfig("SPARK-54411: transformWithState with value and TTL") {
+        withTempDir { sourceDir =>
+          withTempDir { targetDir =>
+            val clock = new StreamManualClock
+            val inputData = MemoryStream[InputEvent]
+            val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
+            val result = inputData.toDS()
+              .groupByKey(x => x.key)
+              .transformWithState(new ValueStateTTLProcessor(ttlConfig),
+                TimeMode.ProcessingTime(),
+                OutputMode.Update())
+
+            testStream(result)(
+              StartStream(checkpointLocation = sourceDir.getAbsolutePath,
+                trigger = Trigger.ProcessingTime("1 second"),
+                triggerClock = clock),
+              AddData(inputData, InputEvent("k1", "put", 1)),
+              AddData(inputData, InputEvent("k2", "put", 2)),
+              AdvanceManualClock(1 * 1000),
+              CheckNewAnswer(),
+              StopStream
+            )
+
+            val clock2 = new StreamManualClock
+            testStream(result)(
+              StartStream(checkpointLocation = targetDir.getAbsolutePath,
+                trigger = Trigger.ProcessingTime("1 second"),
+                triggerClock = clock2),
+              AddData(inputData, InputEvent("x", "put", 1)),
+              AdvanceManualClock(1 * 1000),
+              CheckNewAnswer(),
+              StopStream
+            )
+
+            val schemas = TTLProcessorUtils.getValueStateTTLSchemasWithMetadata()
+            val columnFamilyToSchemaMap = schemas.map { case (cfName, metadata) =>
+              cfName -> createColFamilyInfo(
+                metadata.keySchema,
+                metadata.valueSchema,
+                metadata.encoderSpec,
+                cfName,
+                metadata.useMultipleValuePerKey)
+            }
+
+            val columnFamilyToStateSourceOptions = schemas.keys.map { cfName =>
+              cfName -> Map(StateSourceOptions.STATE_VAR_NAME -> cfName)
+            }.toMap
+
+            performRoundTripTest(
+              sourceDir.getAbsolutePath,
+              targetDir.getAbsolutePath,
+              columnFamilyToSchemaMap,
+              columnFamilyToStateSourceOptions = columnFamilyToStateSourceOptions,
+              operatorName = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME
+            )
+          }
+        }
+      }
+    } // End of foreach loop for encoding format (transformWithState tests only)
   } // End of foreach loop for changelog checkpointing dimension
+
+  test("SPARK-54411: Non-JoinV3 operator requires default column family in schema") {
+    withTempDir { targetDir =>
+      // Create a checkpoint with proper structure
+      val inputData = MemoryStream[String]
+      val query = inputData.toDS()
+        .groupByKey(x => x)
+        .transformWithState(new MultiStateVarProcessor(),
+          TimeMode.None(),
+          OutputMode.Update())
+      testStream(query)(
+        StartStream(checkpointLocation = targetDir.getAbsolutePath),
+        AddData(inputData, "a"),
+        ProcessAllAvailable(),
+        StopStream
+      )
+
+      val hadoopConf = spark.sessionState.newHadoopConf()
+      val targetCpLocation = StreamingUtils.resolvedCheckpointLocation(
+        hadoopConf, targetDir.getAbsolutePath)
+      val targetCheckpointMetadata = new StreamingQueryCheckpointMetadata(
+        spark, targetCpLocation)
+      val lastBatch = targetCheckpointMetadata.commitLog.getLatestBatchId().get
+      val currentBatchId = lastBatch + 1
+
+      val storeConf = StateStoreConf(spark.sessionState.conf)
+
+      // Create column family map WITHOUT default column family
+      val schemas = MultiStateVarProcessorTestUtils.getSchemasWithMetadata()
+      val columnFamilyToSchemaMap = schemas
+        .view
+        .filterKeys(_ != StateStore.DEFAULT_COL_FAMILY_NAME)
+        .map { case (cfName, metadata) =>
+          cfName -> createColFamilyInfo(
+            metadata.keySchema,
+            metadata.valueSchema,
+            metadata.encoderSpec,
+            cfName,
+            metadata.useMultipleValuePerKey)
+        }.toMap
+
+      // This SHOULD throw - non-JoinV3 requires default column family
+      val e = intercept[AssertionError] {
+        new StatePartitionAllColumnFamiliesWriter(
+          storeConf,
+          hadoopConf,
+          0, // partitionId
+          targetCpLocation,
+          0, // operatorId
+          StateStoreId.DEFAULT_STORE_NAME,
+          currentBatchId,
+          columnFamilyToSchemaMap,
+          StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME,
+          None,
+          spark.sessionState.conf.getAllConfs
+        )
+      }
+
+      // Verify error message
+      assert(e.getMessage.contains(
+        "Please provide the schema of 'default' column family in StateStoreColFamilySchema"))
+      assert(e.getMessage.contains("transformWithState"))
+    }
+  }
 }

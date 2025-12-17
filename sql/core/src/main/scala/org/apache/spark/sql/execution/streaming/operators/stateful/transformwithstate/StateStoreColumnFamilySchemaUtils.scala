@@ -264,8 +264,4 @@ object StateStoreColumnFamilySchemaUtils {
       valSchema,
       Some(RangeKeyScanStateEncoderSpec(keySchema, Seq(0))))
   }
-
-  def isInternalColFamily(name: String): Boolean = {
-    name.startsWith("$")
-  }
 }
