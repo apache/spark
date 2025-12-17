@@ -189,7 +189,7 @@ class PythonStreamingSourceRunner(
    *   the starting offset JSON string (use "null" to represent no start offset)
    * @return
    *   tuple of (capped offset with limit applied, true latest offset)
-   * @since 4.2.0
+   * @since 4.0.0
    */
   def latestOffsetWithReport(startOffset: String): (String, String) = {
     dataOut.writeInt(LATEST_OFFSET_WITH_REPORT_FUNC_ID)
