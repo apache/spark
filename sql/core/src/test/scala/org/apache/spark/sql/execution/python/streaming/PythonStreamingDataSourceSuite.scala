@@ -753,15 +753,17 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
         stream.initialOffset()
     }
 
-    testMicroBatchStreamError("latestOffset", "[NOT_IMPLEMENTED] latestOffset is not implemented") { stream =>
-      stream.latestOffset()
+    testMicroBatchStreamError("latestOffset", "[NOT_IMPLEMENTED] latestOffset is not implemented") {
+      stream =>
+        stream.latestOffset()
     }
 
     val offset = PythonStreamingSourceOffset("{\"offset\": \"2\"}")
     testMicroBatchStreamError(
       "planPartitions",
-      "[NOT_IMPLEMENTED] partitions is not implemented") { stream =>
-      stream.planInputPartitions(offset, offset)
+      "[NOT_IMPLEMENTED] partitions is not implemented") {
+      stream =>
+        stream.planInputPartitions(offset, offset)
     }
   }
 
@@ -930,8 +932,7 @@ class PythonStreamingDataSourceWriteSuite extends PythonDataSourceSuiteBase {
   // Verify that commit runner work correctly with large timeout interval.
   test(s"data source stream write, trigger interval=20 seconds") {
     assume(shouldTestPandasUDFs)
-    val dataSource =
-      createUserDefinedPythonDataSource(dataSourceName, simpleDataStreamWriterScript)
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, simpleDataStreamWriterScript)
     spark.dataSource.registerPython(dataSourceName, dataSource)
     val inputData = MemoryStream[Int](numPartitions = 3)
     val df = inputData.toDF()
@@ -1111,7 +1112,9 @@ class PythonStreamingDataSourceWriteSuite extends PythonDataSourceSuiteBase {
         },
         condition = "STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION",
         sqlState = "42KDE",
-        parameters = Map("outputMode" -> "complete", "operation" -> "no streaming aggregations"))
+        parameters = Map(
+          "outputMode" -> "complete",
+          "operation" -> "no streaming aggregations"))
 
       // Query should fail in planning with "invalid" mode.
       val error2 = intercept[IllegalArgumentException] {
