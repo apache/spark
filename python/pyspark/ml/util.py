@@ -353,7 +353,7 @@ def try_remote_call(f: FuncT) -> FuncT:
 
 
 # delete the object from the ml cache eagerly
-def del_remote_cache(ref_id: str) -> None:
+def del_remote_cache(ref_id: str):
     if ref_id is not None and "." not in ref_id:
         try:
             from pyspark.sql.connect.session import SparkSession
