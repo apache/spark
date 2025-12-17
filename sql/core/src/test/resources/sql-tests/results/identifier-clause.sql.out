@@ -2760,7 +2760,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "_LEGACY_ERROR_TEMP_0035",
   "messageParameters" : {
-    "message" : "ADD with resource type 'identifier('file')'"
+    "message" : "ADD with resource type 'identifier'"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2781,7 +2781,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "_LEGACY_ERROR_TEMP_0035",
   "messageParameters" : {
-    "message" : "LIST with resource type 'identifier('files')'"
+    "message" : "LIST with resource type 'identifier'"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2800,17 +2800,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0035",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
   "messageParameters" : {
-    "message" : "CREATE FUNCTION with resource type 'identifier('jar')'"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 94,
-    "fragment" : "CREATE FUNCTION keyword_test_func AS 'com.example.Test' USING IDENTIFIER('jar') '/path/to.jar'"
-  } ]
+    "error" : "'('",
+    "hint" : ""
+  }
 }
 
 
@@ -2829,18 +2824,12 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.ANALYZE_TABLE_UNEXPECTED_NOSCAN",
-  "sqlState" : "42000",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
   "messageParameters" : {
-    "ctx" : "IDENTIFIER('NOSCAN')"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 1,
-    "stopIndex" : 74,
-    "fragment" : "ANALYZE TABLE analyze_keyword_test COMPUTE STATISTICS IDENTIFIER('noscan')"
-  } ]
+    "error" : "'('",
+    "hint" : ""
+  }
 }
 
 
