@@ -212,7 +212,10 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
 
 
 def get_default_python_executables():
-    python_execs = [x for x in [sys.executable, "pypy3"] if which(x)]
+    if which("pypy3"):
+        python_execs = [sys.executable, "pypy3"]
+    else:
+        python_execs = [sys.executable]
 
     return python_execs
 
