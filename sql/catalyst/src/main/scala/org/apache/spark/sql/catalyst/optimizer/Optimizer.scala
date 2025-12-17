@@ -2076,16 +2076,17 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // The _new_ default algorithm works as follows:
     // Provided filters are broken up based on their &&s for separate evaluation.
     // We track which components of the projection are used in the filters.
-    // 1) All filters which do not reference anything in the projection are pushed.
-    // 2) Filters which reference _inexpensive_ items in projection are pushed along with a copy
-    //    of the what they reference.
+    //
+    // 1) The filter does not reference anything in the projection: pushed
+    // 2) Filter which reference _inexpensive_ items in projection: pushed along with a copy
+    //    of the what it references reference.
     // (Case 1 & 2 are treated as "cheap" predicates)
     // 3) When an expensive filters is present referencing different projections we
     //    check to see if we should split the projection into multiple parts.
     //  3a) If the filter references everything in the projection we can't split it any further.
     //  3b) If the filter does not reference the entire projection then we can potentially reduce
-    //     the amount of expensive projection computation but splitting the referenced parts of the
-    //     projection and
+    //     the amount of expensive projection computation but splitting the projection around the
+    //     filter.
     // Case 3 is treated as an "expensive" predicate.
     // Additional restriction:
     // SPARK-13473: We can't push the predicate down when the underlying projection output non-
@@ -2114,6 +2115,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         }
       }
       println(f"used: $usedAliasesForCondition")
+      // Split the filters into cheap and expensive while keeping track of what each filter
+      // references from the projection.
       val (cheapWithUsed, expensiveWithUsed) = usedAliasesForCondition
         .partition { case (cond, used) =>
         if (!SQLConf.get.avoidDoubleFilterEval) {
@@ -2133,29 +2136,36 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
           }
         }
       }
+      if (cheapWithUsed.isEmpty && expensiveWithUsed.isEmpty) {
+        // Short circuit, we don't have anything to push OR split
+        return f
+      }
+
       val cheap: Seq[Expression] = cheapWithUsed.map(_._1)
 
-      // Handle case 1 & 2 case 2
-      val cheapPushed: LogicalPlan = if (!cheap.isEmpty) {
-        // If the filter does not reference any expensive aliases then we
+
+      // Handle the "cheap" (case 1 & 2) filters
+      val baseChild: LogicalPlan = if (!cheap.isEmpty) {
+        // For all filter which do not reference any expensive aliases then
         // just push the filter while resolving the non-expensive aliases.
-        Filter(replaceAlias(condition, aliasMap), child = grandChild)
+        val combinedCheapFilter = cheap.reduce(And)
+        Filter(replaceAlias(combinedCheapFilter, aliasMap), child = grandChild)
       } else {
         // If we don't have any inexpensive filters to push it's "just" the grandchild.
         grandChild
       }
       // Scope down the data coming in from the grand child if we can.
       val cheapPushedWithOnlyRelevantRefs: LogicalPlan = if (
-        cheapPushed.outputSet.subsetOf(project.outputSet)) {
+        cheapPushed.outputSet.subsetOf(project.references)) {
         cheapPushed
       } else {
         // Add a projection to narrow the output to what we need
-        val refsFoundInProjection = cheapPushed.output.filter(a => project.outputSet.contains(a))
+        val refsFoundInProjection = cheapPushed.output.filter(a => project.references.contains(a))
           .distinct
         println(f"narrowing to $refsFoundInProjection")
         project.copy(projectList = refsFoundInProjection)
       }
-      // Case 3
+      // Handle any Case 3 filters
       // Do group by on usedAliases so if we have multiple filters with the same
       // expensive aliases we introduce them together.
       val grouped = expensiveWithUsed.groupBy(_._2)
@@ -2179,12 +2189,11 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // each group of filters. We'll keep track of what we added for the previous so we
         // don't double add anything.
         val (headUsed, headConds) = toSplit.head
-        val references = cheapPushedWithOnlyRelevantRefs.output ++ headUsed.map(_._2)
+        val initialReferences = (cheapPushedWithOnlyRelevantRefs.output ++ headUsed.map(_._2)).distinct
         println(f"Building first projection with $references")
         val first = Filter(headConds.reduce(And),
-          project.copy(projectList = references))
-        // We start of with using the aliases for the first filter.
-        var addedAliases = headUsed
+          project.copy(projectList = initialReferences))
+        var addedAliases = first.outputSet
         toSplit.tail.foldLeft(first) {
           case (currentFilter, (nextUsed, nextConds)) =>
             val newAttributeAliases = nextUsed.filterNot(a => addedAliases.contains(a._1))
