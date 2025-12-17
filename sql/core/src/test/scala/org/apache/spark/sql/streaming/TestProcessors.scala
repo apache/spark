@@ -216,6 +216,34 @@ class EventTimeSessionProcessor
   }
 }
 
+/**
+ * Processor that counts events in EventTime mode.
+ * Input format: (eventTimeMs: Long, value: String)
+ * Output: (key, count) for current count after processing input
+ * Used to test late event filtering - late events should not increment the count.
+ */
+class EventTimeCountProcessor
+    extends StatefulProcessor[String, (Long, String), (String, Long)] {
+
+  @transient private var countState: ValueState[Long] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    countState = getHandle.getValueState[Long]("count", Encoders.scalaLong, TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[(Long, String)],
+      timerValues: TimerValues
+  ): Iterator[(String, Long)] = {
+    val incoming = inputRows.size
+    val current = if (countState.exists()) countState.get() else 0L
+    val updated = current + incoming
+    countState.update(updated)
+    Iterator.single((key, updated))
+  }
+}
+
 // Input: (key, score) as (String, Double)
 // Output: (key, score) as (String, Double) for the top K snapshot each batch
 class TopKProcessor(k: Int, ttl: TTLConfig = TTLConfig.NONE)
