@@ -20,16 +20,15 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.datasketches.tuple.{Intersection, Sketch, Summary, SummaryFactory, SummarySetOperations, Union, UpdatableSketch, UpdatableSketchBuilder, UpdatableSummary}
 import org.apache.datasketches.tuple.adouble.{DoubleSummary, DoubleSummaryFactory, DoubleSummarySetOperations}
 import org.apache.datasketches.tuple.aninteger.{IntegerSummary, IntegerSummaryFactory, IntegerSummarySetOperations}
-import org.apache.datasketches.tuple.strings.{ArrayOfStringsSummary, ArrayOfStringsSummaryFactory, ArrayOfStringsSummarySetOperations}
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggregate
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
-import org.apache.spark.sql.catalyst.trees.{BinaryLike, QuaternaryLike, TernaryLike, UnaryLike}
+import org.apache.spark.sql.catalyst.trees.{BinaryLike, QuaternaryLike, TernaryLike}
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, ThetaSketchUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
@@ -166,9 +165,8 @@ case class TupleSketchAggDouble(
   // Overrides for TypedImperativeAggregate
   override def prettyName: String = "tuple_sketch_agg_double"
 
-  /** Specifies accepted summary input types (double and float). */
-  override protected def summaryInputType: AbstractDataType =
-    TypeCollection(DoubleType, FloatType)
+  /** Specifies accepted summary input types (double). */
+  override protected def summaryInputType: AbstractDataType = DoubleType
 
   /**
    * Creates a DoubleSummaryFactory with the configured aggregation mode.
@@ -186,23 +184,6 @@ case class TupleSketchAggDouble(
     new DoubleSummarySetOperations(mode)
   }
 
-  /**
-   * Converts Float inputs to Double, ensuring compatibility with DoubleSummary.
-   *
-   * @param input
-   *   the input value to normalize (Float or Double)
-   * @return
-   *   the normalized Double value
-   */
-  override protected def normalizeSummaryValue(input: Any): java.lang.Double = {
-    input match {
-      case d: Double => d
-      case f: Float => f.toDouble
-      case _ =>
-        val actualType = input.getClass.getSimpleName
-        throw QueryExecutionErrors.tupleInvalidSummaryValueType(prettyName, actualType)
-    }
-  }
 
   /**
    * Heapify a CompactSketch from the sketch byte array.
@@ -345,22 +326,6 @@ case class TupleSketchAggInteger(
     new IntegerSummarySetOperations(mode, mode)
   }
 
-  /**
-   * Ensures compatibility with IntegerSummary.
-   *
-   * @param input
-   *   the input value to normalize (Integer)
-   * @return
-   *   the normalized Integer value
-   */
-  override protected def normalizeSummaryValue(input: Any): Integer = {
-    input match {
-      case i: Int => i
-      case _ =>
-        val actualType = input.getClass.getSimpleName
-        throw QueryExecutionErrors.tupleInvalidSummaryValueType(prettyName, actualType)
-    }
-  }
 
   /**
    * Heapify a CompactSketch from the sketch byte array.
@@ -380,169 +345,13 @@ case class TupleSketchAggInteger(
   }
 }
 
-/**
- * The TupleSketchAggString function utilizes a Datasketches TupleSketch instance to count a
- * probabilistic approximation of the number of unique values in a given column with associated
- * string or string array type summary values that are collected (not aggregated with modes like
- * numeric types), and outputs the binary representation of the TupleSketch.
- *
- * Keys are hashed internally based on their type and value - the same logical value in different
- * types (e.g., String("123") and Int(123)) will be treated as distinct keys. However, summary
- * value types must be consistent across all calls; mixing types can produce incorrect results. The
- * value type suffix in the function name (e.g., _string) ensures type safety.
- *
- * See [[https://datasketches.apache.org/docs/Tuple/TupleSketches.html]] for more information.
- *
- * @param key
- *   key expression against which unique counting will occur
- * @param summary
- *   summary expression (string or array of strings) to be collected
- * @param lgNomEntries
- *   the log-base-2 of nomEntries decides the number of buckets for the sketch
- * @param mutableAggBufferOffset
- *   offset for mutable aggregation buffer
- * @param inputAggBufferOffset
- *   offset for input aggregation buffer
- */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = """
-    _FUNC_(key, summary, lgNomEntries) - Returns the TupleSketch compact binary representation.
-      `key` is the expression for unique value counting.
-      `summary` is the string or array of strings to be collected.
-      `lgNomEntries` is the log-base-2 of nominal entries, with nominal entries deciding
-      the number buckets or slots for the TupleSketch. Default is 12. """,
-  examples = """
-    Examples:
-      > SELECT tuple_sketch_estimate_string(_FUNC_(key, summary, 12)) FROM VALUES (1, 'a'), (1, 'b'), (2, 'c'), (2, 'd'), (3, 'e') tab(key, summary);
-       3.0
-  """,
-  group = "agg_funcs",
-  since = "4.2.0")
-// scalastyle:on line.size.limit
-case class TupleSketchAggString(
-    key: Expression,
-    summary: Expression,
-    lgNomEntries: Expression,
-    override val mutableAggBufferOffset: Int,
-    override val inputAggBufferOffset: Int)
-    extends TupleSketchAggBase[Array[String], ArrayOfStringsSummary]
-    with TernaryLike[Expression] {
-
-  // Constructors
-  def this(key: Expression, summary: Expression) = {
-    this(key, summary, Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS), 0, 0)
-  }
-
-  def this(key: Expression, summary: Expression, lgNomEntries: Expression) = {
-    this(key, summary, lgNomEntries, 0, 0)
-  }
-
-  /**
-   * Override inputTypes to specify key, summary (string or array of strings), and lgNomEntries
-   * (int) parameters.
-   */
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(keyInputTypes, summaryInputType, IntegerType)
-
-  /**
-   * Override checkInputDataTypes to validate base inputs (key, summary, lgNomEntries) only.
-   */
-  override def checkInputDataTypes(): TypeCheckResult = checkBaseInputDataTypes()
-
-  // Copy constructors required by ImperativeAggregate
-  override def withNewMutableAggBufferOffset(
-      newMutableAggBufferOffset: Int): TupleSketchAggString =
-    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
-
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): TupleSketchAggString =
-    copy(inputAggBufferOffset = newInputAggBufferOffset)
-
-  override protected def withNewChildrenInternal(
-      newFirst: Expression,
-      newSecond: Expression,
-      newThird: Expression): TupleSketchAggString =
-    copy(key = newFirst, summary = newSecond, lgNomEntries = newThird)
-
-  override def first: Expression = key
-  override def second: Expression = summary
-  override def third: Expression = lgNomEntries
-
-  // Overrides for TypedImperativeAggregate
-  override def prettyName: String = "tuple_sketch_agg_string"
-
-  /** Specifies accepted summary input types (string or array of strings). */
-  override protected def summaryInputType: AbstractDataType =
-    TypeCollection(
-      StringTypeWithCollation(supportsTrimCollation = true),
-      ArrayType(StringType, containsNull = true)
-    )
-
-  /**
-   * Creates an ArrayOfStringsSummaryFactory. Aggregation mode is not supported here.
-   */
-  override protected def createSummaryFactory(): SummaryFactory[ArrayOfStringsSummary] = {
-    new ArrayOfStringsSummaryFactory()
-  }
-
-  /**
-   * Creates ArrayOfStringsSummarySetOperations for merge operations. Aggregation mode is not
-   * supported here.
-   */
-  override protected def createSummarySetOperations()
-      : SummarySetOperations[ArrayOfStringsSummary] = {
-    new ArrayOfStringsSummarySetOperations()
-  }
-
-  /**
-   * Converts String inputs to String Arrays, ensuring compatibility with ArrayOfStringsSummary.
-   *
-   * @param input
-   *   the input value to normalize (UTF8String or ArrayData)
-   * @return
-   *   the normalized Array[String] value
-   */
-  override protected def normalizeSummaryValue(input: Any): Array[String] = {
-    input match {
-      case str: UTF8String =>
-        Array(str.toString)
-      case arr: ArrayData =>
-        (0 until arr.numElements())
-          .filter(i => !arr.isNullAt(i))
-          .map(i => arr.getUTF8String(i).toString)
-          .toArray
-      case _ =>
-        val actualType = input.getClass.getSimpleName
-        throw QueryExecutionErrors.tupleInvalidSummaryValueType(prettyName, actualType)
-    }
-  }
-
-  /**
-   * Heapify a CompactSketch from the sketch byte array.
-   *
-   * @param buffer
-   *   A serialized sketch byte array
-   * @return
-   *   A CompactSketch instance wrapped with FinalizedTupleSketch
-   */
-  override def deserialize(buffer: Array[Byte]): TupleSketchState[ArrayOfStringsSummary] = {
-    if (buffer.nonEmpty) {
-      FinalizedTupleSketch(
-        ThetaSketchUtils.heapifyStringTupleSketch(buffer, prettyName))
-    } else {
-      createAggregationBuffer()
-    }
-  }
-}
-
 abstract class TupleSketchAggBase[U, S <: UpdatableSummary[U]]
     extends TypedImperativeAggregate[TupleSketchState[S]]
     with SketchSize
-    with ExpectsInputTypes {
+    with ImplicitCastInputTypes {
 
   // Abstract methods that subclasses must implement
   protected def summaryInputType: AbstractDataType
-  protected def normalizeSummaryValue(input: Any): U
   protected def createSummaryFactory(): SummaryFactory[S]
   protected def createSummarySetOperations(): SummarySetOperations[S]
 
@@ -612,11 +421,8 @@ abstract class TupleSketchAggBase[U, S <: UpdatableSummary[U]]
       updateBuffer
     } else {
 
-    /**
-     * Normalize summary to a datasketch supported type if possible. Type checking is already done
-     * at this point.
-     */
-    val normalizedSummary = normalizeSummaryValue(summaryValue)
+    // Type checking is already done by ImplicitCastInputTypes.
+    val normalizedSummary = summaryValue.asInstanceOf[U]
 
     // Initialized buffer should be UpdatableTupleSketchBuffer, else error out.
     val sketch = updateBuffer match {
@@ -978,125 +784,10 @@ case class TupleUnionAggInteger(
   }
 }
 
-/**
- * The TupleUnionAggString function unions multiple TupleSketch binary representations with a
- * string or string array type summary to produce a single merged TupleSketch. This is useful for
- * combining pre-aggregated TupleSketch results from different partitions or data sources.
- *
- * See [[https://datasketches.apache.org/docs/Tuple/TupleSketches.html]] for more information.
- *
- * @param child
- *   child expression (binary TupleSketch representation created with a string or array of strings
- *   summary) to be unioned
- * @param lgNomEntries
- *   the log-base-2 of nomEntries decides the number of buckets for the union operation
- * @param mutableAggBufferOffset
- *   offset for mutable aggregation buffer
- * @param inputAggBufferOffset
- *   offset for input aggregation buffer
- */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = """
-    _FUNC_(child, lgNomEntries) - Returns the unioned TupleSketch compact binary representation.
-      `child` should be a binary TupleSketch representation created with a string or array of strings summary.
-      `lgNomEntries` is the log-base-2 of nominal entries for the union operation. Default is 12. """,
-  examples = """
-    Examples:
-      > SELECT tuple_sketch_estimate_string(_FUNC_(sketch)) FROM (SELECT tuple_sketch_agg_string(key, summary) as sketch FROM VALUES (1, 'a'), (2, 'b') tab(key, summary) UNION ALL SELECT tuple_sketch_agg_string(key, summary) as sketch FROM VALUES (2, 'c'), (3, 'd') tab(key, summary));
-       3.0
-  """,
-  group = "agg_funcs",
-  since = "4.2.0")
-// scalastyle:on line.size.limit
-case class TupleUnionAggString(
-    child: Expression,
-    lgNomEntries: Expression,
-    override val mutableAggBufferOffset: Int,
-    override val inputAggBufferOffset: Int)
-    extends TupleUnionAggBase[ArrayOfStringsSummary]
-    with BinaryLike[Expression] {
-
-  // Constructors
-  def this(child: Expression) = {
-    this(child, Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS), 0, 0)
-  }
-
-  def this(child: Expression, lgNomEntries: Expression) = {
-    this(child, lgNomEntries, 0, 0)
-  }
-
-  /**
-   * Override inputTypes to specify sketch binary (BinaryType) and lgNomEntries (int) parameters.
-   */
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(BinaryType, IntegerType)
-
-  /**
-   * Override checkInputDataTypes to validate base inputs (sketch binary, lgNomEntries) only.
-   */
-  override def checkInputDataTypes(): TypeCheckResult = checkBaseInputDataTypes()
-
-  // Copy constructors required by ImperativeAggregate
-  override def withNewMutableAggBufferOffset(
-      newMutableAggBufferOffset: Int): TupleUnionAggString =
-    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
-
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): TupleUnionAggString =
-    copy(inputAggBufferOffset = newInputAggBufferOffset)
-
-  override protected def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): TupleUnionAggString =
-    copy(child = newLeft, lgNomEntries = newRight)
-
-  override def left: Expression = child
-  override def right: Expression = lgNomEntries
-
-  // Overrides for TypedImperativeAggregate
-  override def prettyName: String = "tuple_union_agg_string"
-
-  /**
-   * Creates ArrayOfStringsSummarySetOperations for merge operations.
-   */
-  override protected def createSummarySetOperations()
-      : SummarySetOperations[ArrayOfStringsSummary] = {
-    new ArrayOfStringsSummarySetOperations()
-  }
-
-  /**
-   * Heapify a sketch from a byte array.
-   *
-   * @param buffer
-   *   the serialized sketch byte array
-   * @return
-   *   a Sketch[ArrayOfStringsSummary] instance
-   */
-  override protected def heapifySketch(buffer: Array[Byte]): Sketch[ArrayOfStringsSummary] = {
-    ThetaSketchUtils.heapifyStringTupleSketch(buffer, prettyName)
-  }
-
-  /**
-   * Heapify a CompactSketch from the sketch byte array.
-   *
-   * @param buffer
-   *   A serialized sketch byte array
-   * @return
-   *   A CompactSketch instance wrapped with FinalizedTupleSketch
-   */
-  override def deserialize(buffer: Array[Byte]): TupleSketchState[ArrayOfStringsSummary] = {
-    if (buffer.nonEmpty) {
-      FinalizedTupleSketch(heapifySketch(buffer))
-    } else {
-      createAggregationBuffer()
-    }
-  }
-}
-
 abstract class TupleUnionAggBase[S <: Summary]
     extends TypedImperativeAggregate[TupleSketchState[S]]
     with SketchSize
-    with ExpectsInputTypes {
+    with ImplicitCastInputTypes {
 
   // Abstract methods that subclasses must implement
   protected def createSummarySetOperations(): SummarySetOperations[S]
@@ -1461,116 +1152,9 @@ case class TupleIntersectionAggInteger(
   }
 }
 
-/**
- * The TupleIntersectionAggString function computes the intersection of multiple TupleSketch
- * binary representations with a string or string array type summary to produce a single
- * TupleSketch containing only the elements common to all input sketches. This is useful for
- * finding overlapping unique values across different datasets.
- *
- * See [[https://datasketches.apache.org/docs/Tuple/TupleSketches.html]] for more information.
- *
- * @param child
- *   child expression (binary TupleSketch representation created with a string or array of strings
- *   summary) to be intersected
- * @param mutableAggBufferOffset
- *   offset for mutable aggregation buffer
- * @param inputAggBufferOffset
- *   offset for input aggregation buffer
- */
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = """
-    _FUNC_(child) - Returns the intersected TupleSketch compact binary representation.
-      `child` should be a binary TupleSketch representation created with a string or array of strings summary. """,
-  examples = """
-    Examples:
-      > SELECT tuple_sketch_estimate_string(_FUNC_(sketch)) FROM (SELECT tuple_sketch_agg_string(key, summary) as sketch FROM VALUES (1, 'a'), (2, 'b'), (3, 'c') tab(key, summary) UNION ALL SELECT tuple_sketch_agg_string(key, summary) as sketch FROM VALUES (2, 'b'), (3, 'c'), (4, 'd') tab(key, summary));
-       2.0
-  """,
-  group = "agg_funcs",
-  since = "4.2.0")
-// scalastyle:on line.size.limit
-case class TupleIntersectionAggString(
-    child: Expression,
-    override val mutableAggBufferOffset: Int,
-    override val inputAggBufferOffset: Int)
-    extends TupleIntersectionAggBase[ArrayOfStringsSummary]
-    with UnaryLike[Expression] {
-
-  // Constructors
-  def this(child: Expression) = {
-    this(child, 0, 0)
-  }
-
-  /**
-   * Override inputTypes to specify only sketch binary (BinaryType) parameter since string
-   * variants don't support mode, and intersection does not use lgNomEntries
-   */
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(BinaryType)
-
-  /**
-   * Override checkInputDataTypes to validate only sketch binary input, skipping lgNomEntries and
-   * mode validation.
-   */
-  override def checkInputDataTypes(): TypeCheckResult =
-    super.checkInputDataTypes()
-
-  // Copy constructors required by ImperativeAggregate
-  override def withNewMutableAggBufferOffset(
-      newMutableAggBufferOffset: Int): TupleIntersectionAggString =
-    copy(mutableAggBufferOffset = newMutableAggBufferOffset)
-
-  override def withNewInputAggBufferOffset(
-      newInputAggBufferOffset: Int): TupleIntersectionAggString =
-    copy(inputAggBufferOffset = newInputAggBufferOffset)
-
-  override protected def withNewChildInternal(newChild: Expression): TupleIntersectionAggString =
-    copy(child = newChild)
-
-  // Overrides for TypedImperativeAggregate
-  override def prettyName: String = "tuple_intersection_agg_string"
-
-  /**
-   * Creates ArrayOfStringsSummarySetOperations for intersection operations.
-   */
-  override protected def createSummarySetOperations()
-      : SummarySetOperations[ArrayOfStringsSummary] = {
-    new ArrayOfStringsSummarySetOperations()
-  }
-
-  /**
-   * Heapify a sketch from a byte array.
-   *
-   * @param buffer
-   *   the serialized sketch byte array
-   * @return
-   *   a Sketch[ArrayOfStringsSummary] instance
-   */
-  override protected def heapifySketch(buffer: Array[Byte]): Sketch[ArrayOfStringsSummary] = {
-   ThetaSketchUtils.heapifyStringTupleSketch(buffer, prettyName)
-  }
-
-  /**
-   * Heapify a CompactSketch from the sketch byte array.
-   *
-   * @param buffer
-   *   A serialized sketch byte array
-   * @return
-   *   A CompactSketch instance wrapped with FinalizedTupleSketch
-   */
-  override def deserialize(buffer: Array[Byte]): TupleSketchState[ArrayOfStringsSummary] = {
-    if (buffer.nonEmpty) {
-      FinalizedTupleSketch(heapifySketch(buffer))
-    } else {
-      createAggregationBuffer()
-    }
-  }
-}
-
 abstract class TupleIntersectionAggBase[S <: Summary]
     extends TypedImperativeAggregate[TupleSketchState[S]]
-    with ExpectsInputTypes {
+    with ImplicitCastInputTypes {
 
   // Abstract methods that subclasses must implement
   protected def createSummarySetOperations(): SummarySetOperations[S]

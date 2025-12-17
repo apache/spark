@@ -75,25 +75,6 @@ VALUES
   (4, 4, 8, 8), (5, 5, 9, 9), (6, 6, 10, 10),
   (7, 7, 11, 11) AS tab(key1, val1, key2, val2);
 
--- String key with string values (for string summary type)
-DROP TABLE IF EXISTS t_string_string_a_d_through_e_h;
-CREATE TABLE t_string_string_a_d_through_e_h AS
-VALUES
-  ('a', 'val_a', 'd', 'val_d'), ('b', 'val_b', 'e', 'val_e'),
-  ('c', 'val_c', 'f', 'val_f'), ('d', 'val_d', 'g', 'val_g'),
-  ('e', 'val_e', 'h', 'val_h') AS tab(key1, val1, key2, val2);
-
--- Table with array values
-DROP TABLE IF EXISTS t_string_array_string_a_d_through_e_h;
-CREATE TABLE t_string_array_string_a_d_through_e_h AS
-VALUES
-  ('a', array('val_a', 'extra_a'), 'd', array('val_d')), 
-  ('b', array('val_b'), 'e', array('val_e', 'extra_e')),
-  ('c', array('val_c1', 'val_c2', 'val_c3'), 'f', array('val_f')), 
-  ('d', array('val_d'), 'g', array('val_g')),
-  ('e', array('val_e'), 'h', array('val_h1', 'val_h2')) 
-AS tab(key1, val1, key2, val2);
-
 DROP TABLE IF EXISTS t_string_collation;
 CREATE TABLE t_string_collation AS
 VALUES
@@ -148,14 +129,6 @@ FROM t_int_double_1_5_through_7_11;
 -- Test tuple_sketch_agg_integer with explicit lgNomEntries parameter
 SELECT tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key1, val1, 12))
 FROM t_int_int_1_5_through_7_11;
-
--- Test tuple_sketch_agg_string with string keys and string summary
-SELECT tuple_sketch_estimate_string(tuple_sketch_agg_string(key1, val1, 12))
-FROM t_string_string_a_d_through_e_h;
-
--- Test tuple_sketch_agg_string with string keys and string array summary
-SELECT tuple_sketch_estimate_string(tuple_sketch_agg_string(key1, val1, 12))
-FROM t_string_array_string_a_d_through_e_h;
 
 -- Test tuple_sketch_agg_double with all parameters including mode - sum (default)
 SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, 12, 'sum'))
@@ -540,6 +513,10 @@ FROM VALUES (1, 1.0D), (null, 2.0D), (2, 2.0D), (null, 3.0D), (3, 3.0D) tab(key,
 SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES ('test', 1.0D), (null, 2.0D), ('null', 3.0D), (null, 4.0D) tab(key, val);
 
+-- Test tuple_sketch_agg_double with StringType key and Float summary with null values (nulls should be ignored)
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
+FROM VALUES ('test', 1.0F), (null, 2.0F), ('null', 3.0F), ('null', 4.0F) tab(key, val);
+
 -- Test tuple_sketch_agg_double with LongType key yand null values (nulls should be ignored)
 SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES (100L, 1.0D), (null, 2.0D), (200L, 3.0D), (null, 4.0D), (300L, 5.0D) tab(key, val);
@@ -572,6 +549,78 @@ FROM VALUES (ARRAY(1, null), 1.0), (ARRAY(1), 2.0D), (ARRAY(2, null, 3), 3.0D), 
 SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES (ARRAY(10L, null), 1.0D), (ARRAY(10L), 2.0D), (ARRAY(20L, null, 30L), 3.0D), (ARRAY(40L), 4.0D) tab(key, val);
 
+-- Test tuple_sketch_agg_double with null summary values (nulls should be ignored)
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
+FROM VALUES (1, 1.0D), (2, null), (3, 3.0D), (4, null), (5, 5.0D) tab(key, val);
+
+-- Test tuple_sketch_agg_double with StringType key and null summary values (nulls should be ignored)
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
+FROM VALUES ('a', 1.0D), ('b', null), ('c', 3.0D), ('d', null) tab(key, val);
+
+-- Test tuple_sketch_agg_double with LongType key and null summary values (nulls should be ignored)
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
+FROM VALUES (100L, 1.0D), (200L, null), (300L, 3.0D), (400L, null), (500L, 5.0D) tab(key, val);
+
+-- Test tuple_sketch_agg_double with DoubleType key and null summary values (nulls should be ignored)
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(CAST(key AS DOUBLE), val))
+FROM VALUES (1.1, 1.0D), (2.2, null), (3.3, 3.0D), (4.4, null) tab(key, val);
+
+-- Test tuple_sketch_agg_double with FloatType key and null summary values (nulls should be ignored)
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(CAST(key AS FLOAT), val))
+FROM VALUES (1.5, 1.0D), (2.5, null), (3.5, 3.0D), (4.5, null) tab(key, val);
+
+-- Test tuple_sketch_agg_double with BinaryType key and null summary values (nulls should be ignored)
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
+FROM VALUES (X'AA', 1.0D), (X'BB', null), (X'CC', 3.0D), (X'DD', null) tab(key, val);
+
+-- Test tuple_sketch_agg_double with ArrayType(IntegerType) key and null summary values (nulls should be ignored)
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
+FROM VALUES (ARRAY(1, 2), 1.0D), (ARRAY(3, 4), null), (ARRAY(5, 6), 3.0D), (ARRAY(7, 8), null) tab(key, val);
+
+-- Test tuple_sketch_agg_double with ArrayType(LongType) key and null summary values (nulls should be ignored)
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
+FROM VALUES (ARRAY(10L, 20L), 1.0D), (ARRAY(30L, 40L), null), (ARRAY(50L, 60L), 3.0D) tab(key, val);
+
+-- Test tuple_sketch_agg_integer with null summary values (nulls should be ignored)
+SELECT tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key, val, 12))
+FROM VALUES (1, 1), (2, null), (3, 3), (4, null), (5, 5) tab(key, val);
+
+-- Test tuple_sketch_agg_double with both null keys and null summaries (all nulls should be ignored)
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
+FROM VALUES (1, 1.0D), (null, 2.0D), (3, null), (null, null), (5, 5.0D) tab(key, val);
+
+-- Test tuple_sketch_agg_double with all-null keys (should return null or empty sketch)
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
+FROM VALUES (null, 1.0D), (null, 2.0D), (null, 3.0D) tab(key, val);
+
+-- Test tuple_sketch_agg_double with all-null summaries (should return null or empty sketch)
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
+FROM VALUES (1, null), (2, null), (3, null) tab(key, val);
+
+-- Test tuple_sketch_agg_double with all-null keys and summaries (should return null or empty sketch)
+SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
+FROM VALUES (null, null), (null, null), (null, null) tab(key, val);
+
+-- Test tuple_sketch_agg_integer with all-null keys (should return null or empty sketch)
+SELECT tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key, val, 12))
+FROM VALUES (null, 1), (null, 2), (null, 3) tab(key, val);
+
+-- Test tuple_sketch_agg_integer with all-null summaries (should return null or empty sketch)
+SELECT tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key, val, 12))
+FROM VALUES (1, null), (2, null), (3, null) tab(key, val);
+
+-- Test tuple_sketch_agg_integer with all-null keys and summaries (should return null or empty sketch)
+SELECT tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key, val, 12))
+FROM VALUES (null, null), (null, null), (null, null) tab(key, val);
+
+-- Test tuple_sketch_summary_double with all-null summaries
+SELECT tuple_sketch_summary_double(tuple_sketch_agg_double(key, val, 12, 'sum'))
+FROM VALUES (1, null), (2, null), (3, null) tab(key, val);
+
+-- Test tuple_sketch_summary_integer with all-null summaries
+SELECT tuple_sketch_summary_integer(tuple_sketch_agg_integer(key, val, 12, 'sum'), 'sum')
+FROM VALUES (1, null), (2, null), (3, null) tab(key, val);
+
 -- Test tuple_sketch_agg_double with empty arrays
 SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key, val))
 FROM VALUES (ARRAY(), 1.0D), (ARRAY(1, 2), 2.0D), (ARRAY(), 3.0D), (ARRAY(3, 4), 4.0D) tab(key, val);
@@ -593,31 +642,6 @@ SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1 COLLATE UTF8_BI
 SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1 COLLATE UTF8_LCASE_RTRIM, val1)) utf8_lc_rt FROM t_string_collation;
 SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1 COLLATE UNICODE_RTRIM, val1)) unicode_rt FROM t_string_collation;
 SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1 COLLATE UNICODE_CI_RTRIM, val1)) unicode_ci_rt FROM t_string_collation;
-
--- Test tuple_sketch_agg_string with arrays containing null elements (nulls should be filtered out)
-SELECT tuple_sketch_estimate_string(tuple_sketch_agg_string(key, val))
-FROM VALUES
-  (1, ARRAY('a', null, 'b')),
-  (2, ARRAY('c')),
-  (3, ARRAY(null, 'd', null))
-AS tab(key, val);
-
--- Test tuple_sketch_agg_string with arrays where some arrays are entirely null elements
-SELECT tuple_sketch_estimate_string(tuple_sketch_agg_string(key, val))
-FROM VALUES
-  (1, ARRAY(null, null)),
-  (2, ARRAY('a', 'b')),
-  (3, ARRAY('c'))
-AS tab(key, val);
-
--- Test tuple_sketch_agg_string with mix of single strings and arrays with nulls
-SELECT tuple_sketch_estimate_string(tuple_sketch_agg_string(key, val))
-FROM VALUES
-  (1, ARRAY('a')),
-  (2, ARRAY('b', null, 'c')),
-  (3, ARRAY(null)),
-  (4, ARRAY('d', 'e'))
-AS tab(key, val);
 
 -- Comprehensive test using all TupleSketch functions in a single query
 WITH sketches AS (
@@ -820,7 +844,7 @@ SELECT tuple_sketch_agg_double(col, val, CAST(col AS INT)) AS lg_nom_entries_non
 FROM VALUES (15, 1.0D), (16, 2.0D), (17, 3.0D) tab(col, val);
 
 -- lgNomEntries parameter has wrong type (STRING instead of INT)
-SELECT tuple_sketch_agg_double(col, val, '15')
+SELECT tuple_sketch_agg_double(col, val, 'fifteen')
 FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val);
 
 -- mode parameter is not foldable (non-constant)
@@ -831,8 +855,8 @@ FROM VALUES (15, 1.0D), (16, 2.0D), (17, 3.0D) tab(col, val);
 SELECT tuple_sketch_agg_double(col, val, 12, 'invalid_type')
 FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val);
 
--- Invalid input - summary is an int when supposed to be double
-SELECT tuple_sketch_agg_double(col, 15)
+-- Invalid input - summary is a string when supposed to be double
+SELECT tuple_sketch_agg_double(col, 'fifteen')
 FROM VALUES (50, 1.0D), (60, 2.0D), (60, 3.0D) tab(col, val);
 
 -- Invalid input - double instead of int for lgNomEntries
@@ -920,9 +944,9 @@ FROM t_int_double_1_5_through_7_11;
 SELECT tuple_sketch_agg_double(col1, col2, 12, 'sum')
 FROM VALUES (1, 'invalid'), (2, 'invalid') AS tab(col1, col2);
 
--- Test tuple_sketch_agg_integer with wrong value type (expecting integer but got double)
+-- Test tuple_sketch_agg_integer with wrong value type (expecting integer but got string)
 SELECT tuple_sketch_agg_integer(col1, col2, 12, 'sum')
-FROM VALUES (1, 1.5D), (2, 2.5D) AS tab(col1, col2);
+FROM VALUES (1, "one"), (2, "two") AS tab(col1, col2);
 
 -- Test tuple_sketch_estimate_integer with wrong sketch type (integer estimate on double sketch)
 SELECT tuple_sketch_estimate_integer(tuple_sketch_agg_double(key1, val1, 12, 'sum'))
@@ -938,6 +962,4 @@ DROP TABLE IF EXISTS t_binary_double_a_b_through_e_f;
 DROP TABLE IF EXISTS t_array_int_double_1_3_through_4_6;
 DROP TABLE IF EXISTS t_array_long_double_1_3_through_4_6;
 DROP TABLE IF EXISTS t_int_int_1_5_through_7_11;
-DROP TABLE IF EXISTS t_string_string_a_d_through_e_h;
-DROP TABLE IF EXISTS t_string_array_string_a_d_through_e_h;
 DROP TABLE IF EXISTS t_string_collation;

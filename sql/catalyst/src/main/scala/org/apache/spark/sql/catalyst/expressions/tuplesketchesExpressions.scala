@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.datasketches.tuple.{AnotB, Intersection, Summary, SummarySetOperations, TupleSketchIterator, Union}
 import org.apache.datasketches.tuple.adouble.{DoubleSummary, DoubleSummaryFactory, DoubleSummarySetOperations}
 import org.apache.datasketches.tuple.aninteger.{IntegerSummary, IntegerSummaryFactory, IntegerSummarySetOperations}
-import org.apache.datasketches.tuple.strings.{ArrayOfStringsSummary, ArrayOfStringsSummaryFactory, ArrayOfStringsSummarySetOperations}
 
 import org.apache.spark.sql.catalyst.analysis.ExpressionBuilder
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
@@ -100,43 +99,6 @@ case class TupleSketchEstimateInteger(child: Expression)
   override def nullSafeEval(input: Any): Any = {
     val buffer = input.asInstanceOf[Array[Byte]]
     val sketch = ThetaSketchUtils.heapifyIntegerTupleSketch(buffer, prettyName)
-    sketch.getEstimate()
-  }
-}
-
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = """
-    _FUNC_(child) - Returns the estimated number of unique values
-    given the binary representation of a Datasketches TupleSketch. The sketch's
-    summary type be a string or array of strings. """,
-  examples = """
-    Examples:
-      > SELECT _FUNC_(tuple_sketch_agg_string(key, summary)) FROM VALUES (1, 'a'), (1, 'b'), (2, 'c') tab(key, summary);
-       2.0
-  """,
-  group = "misc_funcs",
-  since = "4.2.0")
-// scalastyle:on line.size.limit
-case class TupleSketchEstimateString(child: Expression)
-    extends UnaryExpression
-    with CodegenFallback
-    with ExpectsInputTypes {
-
-  override def nullIntolerant: Boolean = true
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
-
-  override def dataType: DataType = DoubleType
-
-  override def prettyName: String = "tuple_sketch_estimate_string"
-
-  override protected def withNewChildInternal(newChild: Expression): TupleSketchEstimateString =
-    copy(child = newChild)
-
-  override def nullSafeEval(input: Any): Any = {
-    val buffer = input.asInstanceOf[Array[Byte]]
-    val sketch = ThetaSketchUtils.heapifyStringTupleSketch(buffer, prettyName)
     sketch.getEstimate()
   }
 }
@@ -441,102 +403,6 @@ case class TupleUnionThetaInteger(
   }
 }
 
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = """
-    _FUNC_(tupleSketch1, tupleSketch2, lgNomEntries) - Merges two binary representations of Datasketches
-    TupleSketch objects with string or array of strings summary data type using a TupleSketch Union
-    object. Users can set lgNomEntries to a value between 4 and 26 (defaults to 12). """,
-  examples = """
-    Examples:
-      > SELECT tuple_sketch_estimate_string(_FUNC_(tuple_sketch_agg_string(col1, val1), tuple_sketch_agg_string(col2, val2))) FROM VALUES (1, 'a', 4, 'x'), (2, 'b', 5, 'y'), (3, 'c', 6, 'z') tab(col1, val1, col2, val2);
-       6.0
-  """,
-  group = "misc_funcs",
-  since = "4.2.0")
-// scalastyle:on line.size.limit
-case class TupleUnionString(first: Expression, second: Expression, third: Expression)
-    extends TupleUnionNoModeBase[ArrayOfStringsSummary] {
-
-  def this(first: Expression, second: Expression) = {
-    this(first, second, Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))
-  }
-
-  override def withNewChildrenInternal(
-      newFirst: Expression,
-      newSecond: Expression,
-      newThird: Expression): TupleUnionString =
-    copy(first = newFirst, second = newSecond, third = newThird)
-
-  override def prettyName: String = "tuple_union_string"
-
-  override protected def createSummarySetOperations()
-      : SummarySetOperations[ArrayOfStringsSummary] =
-    new ArrayOfStringsSummarySetOperations()
-
-  override protected def unionSketches(
-      sketch1Bytes: Array[Byte],
-      sketch2Bytes: Array[Byte],
-      union: Union[ArrayOfStringsSummary]): Unit = {
-    val tupleSketch1 = ThetaSketchUtils.heapifyStringTupleSketch(sketch1Bytes, prettyName)
-    val tupleSketch2 = ThetaSketchUtils.heapifyStringTupleSketch(sketch2Bytes, prettyName)
-
-    union.union(tupleSketch1)
-    union.union(tupleSketch2)
-  }
-}
-
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = """
-    _FUNC_(tupleSketch, thetaSketch, lgNomEntries) - Merges the binary representation of a
-    Datasketches TupleSketch with string or array of strings summary data type with the binary
-    representation of a Datasketches ThetaSketch using a TupleSketch Union object. The ThetaSketch
-    entries are assigned a default string summary value. Users can set lgNomEntries to a value between
-    4 and 26 (defaults to 12). """,
-  examples = """
-    Examples:
-      > SELECT tuple_sketch_estimate_string(_FUNC_(tuple_sketch_agg_string(col1, val1), theta_sketch_agg(col2))) FROM VALUES (1, 'a', 4), (2, 'b', 5), (3, 'c', 6) tab(col1, val1, col2);
-       6.0
-  """,
-  group = "misc_funcs",
-  since = "4.2.0")
-// scalastyle:on line.size.limit
-case class TupleUnionThetaString(first: Expression, second: Expression, third: Expression)
-    extends TupleUnionNoModeBase[ArrayOfStringsSummary] {
-
-  def this(first: Expression, second: Expression) = {
-    this(first, second, Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))
-  }
-
-  override def withNewChildrenInternal(
-      newFirst: Expression,
-      newSecond: Expression,
-      newThird: Expression): TupleUnionThetaString =
-    copy(first = newFirst, second = newSecond, third = newThird)
-
-  override def prettyName: String = "tuple_union_theta_string"
-
-  override protected def createSummarySetOperations()
-      : SummarySetOperations[ArrayOfStringsSummary] =
-    new ArrayOfStringsSummarySetOperations()
-
-  override protected def unionSketches(
-      sketch1Bytes: Array[Byte],
-      sketch2Bytes: Array[Byte],
-      union: Union[ArrayOfStringsSummary]): Unit = {
-    val tupleSketch = ThetaSketchUtils.heapifyStringTupleSketch(sketch1Bytes, prettyName)
-    val thetaSketch = ThetaSketchUtils.wrapCompactSketch(sketch2Bytes, prettyName)
-
-    // This doesn't mean anything since there are no set operations for string variants
-    val defaultSummary = new ArrayOfStringsSummaryFactory().newSummary()
-    defaultSummary.update(Array.empty[String])
-
-    union.union(tupleSketch)
-    union.union(thetaSketch, defaultSummary)
-  }
-}
-
 abstract class TupleUnionBase[S <: Summary, M]
     extends QuaternaryExpression
     with CodegenFallback
@@ -830,91 +696,6 @@ case class TupleIntersectionThetaInteger(first: Expression, second: Expression, 
   }
 }
 
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = """
-    _FUNC_(tupleSketch1, tupleSketch2) - Intersects two binary representations of Datasketches
-    TupleSketch objects with string or array of strings summary data type using a TupleSketch
-    Intersection object. """,
-  examples = """
-    Examples:
-      > SELECT tuple_sketch_estimate_string(_FUNC_(tuple_sketch_agg_string(col1, val1), tuple_sketch_agg_string(col2, val2))) FROM VALUES (1, 'a', 1, 'x'), (2, 'b', 2, 'y'), (3, 'c', 4, 'z') tab(col1, val1, col2, val2);
-       2.0
-  """,
-  group = "misc_funcs",
-  since = "4.2.0")
-// scalastyle:on line.size.limit
-case class TupleIntersectionString(left: Expression, right: Expression)
-    extends TupleIntersectionNoModeBase[ArrayOfStringsSummary] {
-
-  override def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): TupleIntersectionString =
-    copy(left = newLeft, right = newRight)
-
-  override def prettyName: String = "tuple_intersection_string"
-
-  override protected def createSummarySetOperations()
-      : SummarySetOperations[ArrayOfStringsSummary] =
-    new ArrayOfStringsSummarySetOperations()
-
-  override protected def intersectSketches(
-      sketch1Bytes: Array[Byte],
-      sketch2Bytes: Array[Byte],
-      intersection: Intersection[ArrayOfStringsSummary]): Unit = {
-    val tupleSketch1 = ThetaSketchUtils.heapifyStringTupleSketch(sketch1Bytes, prettyName)
-    val tupleSketch2 = ThetaSketchUtils.heapifyStringTupleSketch(sketch2Bytes, prettyName)
-
-    intersection.intersect(tupleSketch1)
-    intersection.intersect(tupleSketch2)
-  }
-}
-
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = """
-    _FUNC_(tupleSketch, thetaSketch) - Intersects the binary representation of a
-    Datasketches TupleSketch with string or array of strings summary data type with the binary
-    representation of a Datasketches ThetaSketch using a TupleSketch Intersection object. The
-    ThetaSketch entries are assigned a default string summary value. """,
-  examples = """
-    Examples:
-      > SELECT tuple_sketch_estimate_string(_FUNC_(tuple_sketch_agg_string(col1, val1), theta_sketch_agg(col2))) FROM VALUES (1, 'a', 1), (2, 'b', 2), (3, 'c', 4) tab(col1, val1, col2);
-       2.0
-  """,
-  group = "misc_funcs",
-  since = "4.2.0")
-// scalastyle:on line.size.limit
-case class TupleIntersectionThetaString(left: Expression, right: Expression)
-    extends TupleIntersectionNoModeBase[ArrayOfStringsSummary] {
-
-  override def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): TupleIntersectionThetaString =
-    copy(left = newLeft, right = newRight)
-
-  override def prettyName: String = "tuple_intersection_theta_string"
-
-  override protected def createSummarySetOperations()
-      : SummarySetOperations[ArrayOfStringsSummary] =
-    new ArrayOfStringsSummarySetOperations()
-
-  override protected def intersectSketches(
-      sketch1Bytes: Array[Byte],
-      sketch2Bytes: Array[Byte],
-      intersection: Intersection[ArrayOfStringsSummary]): Unit = {
-    val tupleSketch = ThetaSketchUtils.heapifyStringTupleSketch(sketch1Bytes, prettyName)
-    val thetaSketch = ThetaSketchUtils.wrapCompactSketch(sketch2Bytes, prettyName)
-
-    // This doesn't mean anything since there are no set operations for string variants
-    val defaultSummary = new ArrayOfStringsSummaryFactory().newSummary()
-    defaultSummary.update(Array.empty[String])
-
-    intersection.intersect(tupleSketch)
-    intersection.intersect(thetaSketch, defaultSummary)
-  }
-}
-
 abstract class TupleIntersectionBase[S <: Summary, M]
     extends TernaryExpression
     with CodegenFallback
@@ -1125,79 +906,6 @@ case class TupleDifferenceThetaInteger(left: Expression, right: Expression)
       sketch2Bytes: Array[Byte],
       aNotB: AnotB[IntegerSummary]): Unit = {
     val tupleSketch = ThetaSketchUtils.heapifyIntegerTupleSketch(sketch1Bytes, prettyName)
-    val thetaSketch = ThetaSketchUtils.wrapCompactSketch(sketch2Bytes, prettyName)
-
-    aNotB.setA(tupleSketch)
-    aNotB.notB(thetaSketch)
-  }
-}
-
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = """
-    _FUNC_(tupleSketch1, tupleSketch2) - Subtracts two binary representations of Datasketches
-    TupleSketch objects with string or array of strings summary data type using a TupleSketch
-    AnotB object. Returns elements in the first sketch that are not in the second sketch. """,
-  examples = """
-    Examples:
-      > SELECT tuple_sketch_estimate_string(_FUNC_(tuple_sketch_agg_string(col1, val1), tuple_sketch_agg_string(col2, val2))) FROM VALUES (5, 'e', 4, 'd'), (1, 'a', 4, 'd'), (2, 'b', 5, 'e'), (3, 'c', 1, 'a') tab(col1, val1, col2, val2);
-       2.0
-  """,
-  group = "misc_funcs",
-  since = "4.2.0")
-// scalastyle:on line.size.limit
-case class TupleDifferenceString(left: Expression, right: Expression)
-    extends TupleDifferenceBase[ArrayOfStringsSummary] {
-
-  override def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): TupleDifferenceString =
-    copy(left = newLeft, right = newRight)
-
-  override def prettyName: String = "tuple_difference_string"
-
-  override protected def differenceSketches(
-      sketch1Bytes: Array[Byte],
-      sketch2Bytes: Array[Byte],
-      aNotB: AnotB[ArrayOfStringsSummary]): Unit = {
-    val tupleSketch1 = ThetaSketchUtils.heapifyStringTupleSketch(sketch1Bytes, prettyName)
-    val tupleSketch2 = ThetaSketchUtils.heapifyStringTupleSketch(sketch2Bytes, prettyName)
-
-    aNotB.setA(tupleSketch1)
-    aNotB.notB(tupleSketch2)
-  }
-}
-
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = """
-    _FUNC_(tupleSketch, thetaSketch) - Subtracts the binary representation of a
-    Datasketches ThetaSketch from a TupleSketch with string or array of strings summary data type
-    using a TupleSketch AnotB object. Returns elements in the TupleSketch that are not in the
-    ThetaSketch. """,
-  examples = """
-    Examples:
-      > SELECT tuple_sketch_estimate_string(_FUNC_(tuple_sketch_agg_string(col1, val1), theta_sketch_agg(col2))) FROM VALUES (5, 'e', 4), (1, 'a', 4), (2, 'b', 5), (3, 'c', 1) tab(col1, val1, col2);
-       2.0
-  """,
-  group = "misc_funcs",
-  since = "4.2.0")
-// scalastyle:on line.size.limit
-case class TupleDifferenceThetaString(left: Expression, right: Expression)
-    extends TupleDifferenceBase[ArrayOfStringsSummary] {
-
-  override def withNewChildrenInternal(
-      newLeft: Expression,
-      newRight: Expression): TupleDifferenceThetaString =
-    copy(left = newLeft, right = newRight)
-
-  override def prettyName: String = "tuple_difference_theta_string"
-
-  override protected def differenceSketches(
-      sketch1Bytes: Array[Byte],
-      sketch2Bytes: Array[Byte],
-      aNotB: AnotB[ArrayOfStringsSummary]): Unit = {
-    val tupleSketch = ThetaSketchUtils.heapifyStringTupleSketch(sketch1Bytes, prettyName)
     val thetaSketch = ThetaSketchUtils.wrapCompactSketch(sketch2Bytes, prettyName)
 
     aNotB.setA(tupleSketch)

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import org.apache.datasketches.theta.UpdateSketch
 import org.apache.datasketches.tuple.UpdatableSketchBuilder
 import org.apache.datasketches.tuple.adouble.{DoubleSummary, DoubleSummaryFactory}
-import org.apache.datasketches.tuple.aninteger.IntegerSummary
+import org.apache.datasketches.tuple.aninteger.{IntegerSummary, IntegerSummaryFactory}
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -188,7 +188,6 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("heapifyIntegerTupleSketch: successfully deserializes valid tuple sketch bytes") {
-    import org.apache.datasketches.tuple.aninteger.{IntegerSummary, IntegerSummaryFactory}
     // Create a valid integer tuple sketch and get its bytes
     val summaryFactory = new IntegerSummaryFactory(IntegerSummary.Mode.Sum)
     val updateSketch =
@@ -330,7 +329,6 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("aggregateNumericSummaries: sum mode aggregates correctly for Long") {
-    import org.apache.datasketches.tuple.aninteger.{IntegerSummary, IntegerSummaryFactory}
     val summaryFactory = new IntegerSummaryFactory(IntegerSummary.Mode.Sum)
     val updateSketch =
       new UpdatableSketchBuilder[java.lang.Integer, IntegerSummary](summaryFactory)
@@ -347,5 +345,282 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
       it => it.getSummary.getValue.toLong)
 
     assert(result == 60L)
+  }
+
+  test("aggregateNumericSummaries: min mode finds minimum for Long") {
+    val summaryFactory = new IntegerSummaryFactory(IntegerSummary.Mode.Sum)
+    val updateSketch =
+      new UpdatableSketchBuilder[java.lang.Integer, IntegerSummary](summaryFactory)
+        .build()
+
+    updateSketch.update("test1", 50)
+    updateSketch.update("test2", 20)
+    updateSketch.update("test3", 80)
+
+    val compactSketch = updateSketch.compact()
+    val result = ThetaSketchUtils.aggregateNumericSummaries[IntegerSummary, Long](
+      compactSketch.iterator(),
+      "min",
+      it => it.getSummary.getValue.toLong)
+
+    assert(result == 20L)
+  }
+
+  test("aggregateNumericSummaries: max mode finds maximum for Long") {
+    val summaryFactory = new IntegerSummaryFactory(IntegerSummary.Mode.Sum)
+    val updateSketch =
+      new UpdatableSketchBuilder[java.lang.Integer, IntegerSummary](summaryFactory)
+        .build()
+
+    updateSketch.update("test1", 50)
+    updateSketch.update("test2", 20)
+    updateSketch.update("test3", 80)
+
+    val compactSketch = updateSketch.compact()
+    val result = ThetaSketchUtils.aggregateNumericSummaries[IntegerSummary, Long](
+      compactSketch.iterator(),
+      "max",
+      it => it.getSummary.getValue.toLong)
+
+    assert(result == 80L)
+  }
+
+  test("aggregateNumericSummaries: alwaysone mode counts entries for Long") {
+    val summaryFactory = new IntegerSummaryFactory(IntegerSummary.Mode.Sum)
+    val updateSketch =
+      new UpdatableSketchBuilder[java.lang.Integer, IntegerSummary](summaryFactory)
+        .build()
+
+    updateSketch.update("test1", 50)
+    updateSketch.update("test2", 20)
+    updateSketch.update("test3", 80)
+
+    val compactSketch = updateSketch.compact()
+    val result = ThetaSketchUtils.aggregateNumericSummaries[IntegerSummary, Long](
+      compactSketch.iterator(),
+      "alwaysone",
+      it => it.getSummary.getValue.toLong)
+
+    assert(result == 3L)
+  }
+
+  test("aggregateNumericSummaries: empty sketch returns zero for sum mode") {
+    val summaryFactory = new DoubleSummaryFactory(DoubleSummary.Mode.Sum)
+    val updateSketch = new UpdatableSketchBuilder[java.lang.Double, DoubleSummary](summaryFactory)
+      .build()
+
+    val compactSketch = updateSketch.compact()
+    val result = ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+      compactSketch.iterator(),
+      "sum",
+      it => it.getSummary.getValue)
+
+    assert(result == 0.0)
+  }
+
+  test("aggregateNumericSummaries: empty sketch returns zero for min mode") {
+    val summaryFactory = new DoubleSummaryFactory(DoubleSummary.Mode.Sum)
+    val updateSketch = new UpdatableSketchBuilder[java.lang.Double, DoubleSummary](summaryFactory)
+      .build()
+
+    val compactSketch = updateSketch.compact()
+    val result = ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+      compactSketch.iterator(),
+      "min",
+      it => it.getSummary.getValue)
+
+    assert(result == 0.0)
+  }
+
+  test("aggregateNumericSummaries: empty sketch returns zero for max mode") {
+    val summaryFactory = new DoubleSummaryFactory(DoubleSummary.Mode.Sum)
+    val updateSketch = new UpdatableSketchBuilder[java.lang.Double, DoubleSummary](summaryFactory)
+      .build()
+
+    val compactSketch = updateSketch.compact()
+    val result = ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+      compactSketch.iterator(),
+      "max",
+      it => it.getSummary.getValue)
+
+    assert(result == 0.0)
+  }
+
+  test("aggregateNumericSummaries: empty sketch returns zero for alwaysone mode") {
+    val summaryFactory = new DoubleSummaryFactory(DoubleSummary.Mode.Sum)
+    val updateSketch = new UpdatableSketchBuilder[java.lang.Double, DoubleSummary](summaryFactory)
+      .build()
+
+    val compactSketch = updateSketch.compact()
+    val result = ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+      compactSketch.iterator(),
+      "alwaysone",
+      it => it.getSummary.getValue)
+
+    assert(result == 0.0)
+  }
+
+  test("aggregateNumericSummaries: single entry sketch") {
+    val summaryFactory = new DoubleSummaryFactory(DoubleSummary.Mode.Sum)
+    val updateSketch = new UpdatableSketchBuilder[java.lang.Double, DoubleSummary](summaryFactory)
+      .build()
+
+    updateSketch.update("test1", 42.0)
+
+    val compactSketch = updateSketch.compact()
+
+    assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+      compactSketch.iterator(), "sum", it => it.getSummary.getValue) == 42.0)
+
+    assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+      compactSketch.iterator(), "min", it => it.getSummary.getValue) == 42.0)
+
+    assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+      compactSketch.iterator(), "max", it => it.getSummary.getValue) == 42.0)
+
+    assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+      compactSketch.iterator(), "alwaysone", it => it.getSummary.getValue) == 1.0)
+  }
+
+  test("aggregateNumericSummaries: negative values for sum mode") {
+    val summaryFactory = new DoubleSummaryFactory(DoubleSummary.Mode.Sum)
+    val updateSketch = new UpdatableSketchBuilder[java.lang.Double, DoubleSummary](summaryFactory)
+      .build()
+
+    updateSketch.update("test1", -5.0)
+    updateSketch.update("test2", -2.0)
+    updateSketch.update("test3", -8.0)
+
+    val compactSketch = updateSketch.compact()
+    val result = ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+      compactSketch.iterator(),
+      "sum",
+      it => it.getSummary.getValue)
+
+    assert(result == -15.0)
+  }
+
+  test("aggregateNumericSummaries: negative values for min mode") {
+    val summaryFactory = new DoubleSummaryFactory(DoubleSummary.Mode.Sum)
+    val updateSketch = new UpdatableSketchBuilder[java.lang.Double, DoubleSummary](summaryFactory)
+      .build()
+
+    updateSketch.update("test1", -5.0)
+    updateSketch.update("test2", -2.0)
+    updateSketch.update("test3", -8.0)
+
+    val compactSketch = updateSketch.compact()
+    val result = ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+      compactSketch.iterator(),
+      "min",
+      it => it.getSummary.getValue)
+
+    assert(result == -8.0)
+  }
+
+  test("aggregateNumericSummaries: negative values for max mode") {
+    val summaryFactory = new DoubleSummaryFactory(DoubleSummary.Mode.Sum)
+    val updateSketch = new UpdatableSketchBuilder[java.lang.Double, DoubleSummary](summaryFactory)
+      .build()
+
+    updateSketch.update("test1", -5.0)
+    updateSketch.update("test2", -2.0)
+    updateSketch.update("test3", -8.0)
+
+    val compactSketch = updateSketch.compact()
+    val result = ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+      compactSketch.iterator(),
+      "max",
+      it => it.getSummary.getValue)
+
+    assert(result == -2.0)
+  }
+
+  test("aggregateNumericSummaries: mixed positive and negative values") {
+    val summaryFactory = new DoubleSummaryFactory(DoubleSummary.Mode.Sum)
+    val updateSketch = new UpdatableSketchBuilder[java.lang.Double, DoubleSummary](summaryFactory)
+      .build()
+
+    updateSketch.update("test1", -5.0)
+    updateSketch.update("test2", 10.0)
+    updateSketch.update("test3", -3.0)
+    updateSketch.update("test4", 7.0)
+
+    val compactSketch = updateSketch.compact()
+
+    assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+      compactSketch.iterator(), "sum", it => it.getSummary.getValue) == 9.0)
+
+    assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+      compactSketch.iterator(), "min", it => it.getSummary.getValue) == -5.0)
+
+    assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+      compactSketch.iterator(), "max", it => it.getSummary.getValue) == 10.0)
+  }
+
+  test("aggregateNumericSummaries: zero values") {
+    val summaryFactory = new DoubleSummaryFactory(DoubleSummary.Mode.Sum)
+    val updateSketch = new UpdatableSketchBuilder[java.lang.Double, DoubleSummary](summaryFactory)
+      .build()
+
+    updateSketch.update("test1", 0.0)
+    updateSketch.update("test2", 0.0)
+    updateSketch.update("test3", 0.0)
+
+    val compactSketch = updateSketch.compact()
+
+    assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+      compactSketch.iterator(), "sum", it => it.getSummary.getValue) == 0.0)
+
+    assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+      compactSketch.iterator(), "min", it => it.getSummary.getValue) == 0.0)
+
+    assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+      compactSketch.iterator(), "max", it => it.getSummary.getValue) == 0.0)
+
+    assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+      compactSketch.iterator(), "alwaysone", it => it.getSummary.getValue) == 3.0)
+  }
+
+  test("aggregateNumericSummaries: special Double values - Infinity") {
+    val summaryFactory = new DoubleSummaryFactory(DoubleSummary.Mode.Sum)
+    val updateSketch = new UpdatableSketchBuilder[java.lang.Double, DoubleSummary](summaryFactory)
+      .build()
+
+    updateSketch.update("test1", Double.PositiveInfinity)
+    updateSketch.update("test2", 10.0)
+    updateSketch.update("test3", 5.0)
+
+    val compactSketch = updateSketch.compact()
+
+    assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+      compactSketch.iterator(), "sum", it => it.getSummary.getValue) == Double.PositiveInfinity)
+
+    assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+      compactSketch.iterator(), "max", it => it.getSummary.getValue) == Double.PositiveInfinity)
+
+    assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+      compactSketch.iterator(), "min", it => it.getSummary.getValue) == 5.0)
+  }
+
+  test("aggregateNumericSummaries: special Double values - NegativeInfinity") {
+    val summaryFactory = new DoubleSummaryFactory(DoubleSummary.Mode.Sum)
+    val updateSketch = new UpdatableSketchBuilder[java.lang.Double, DoubleSummary](summaryFactory)
+      .build()
+
+    updateSketch.update("test1", Double.NegativeInfinity)
+    updateSketch.update("test2", 10.0)
+    updateSketch.update("test3", 5.0)
+
+    val compactSketch = updateSketch.compact()
+
+    assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+      compactSketch.iterator(), "sum", it => it.getSummary.getValue) == Double.NegativeInfinity)
+
+    assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+      compactSketch.iterator(), "min", it => it.getSummary.getValue) == Double.NegativeInfinity)
+
+    assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+      compactSketch.iterator(), "max", it => it.getSummary.getValue) == 10.0)
   }
 }

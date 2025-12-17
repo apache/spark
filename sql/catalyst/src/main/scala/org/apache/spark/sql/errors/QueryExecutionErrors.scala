@@ -3243,14 +3243,4 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "mode" -> mode,
         "validModes" -> validModes.mkString(", ")))
   }
-
-  def tupleInvalidSummaryValueType(
-      function: String,
-      actualType: String): Throwable = {
-    new SparkRuntimeException(
-      errorClass = "TUPLE_INVALID_SKETCH_SUMMARY_VALUE_TYPE",
-      messageParameters = Map(
-        "function" -> toSQLId(function),
-        "actualType" -> actualType))
-  }
 }

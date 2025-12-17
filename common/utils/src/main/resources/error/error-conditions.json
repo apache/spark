@@ -6154,12 +6154,6 @@
     ],
     "sqlState" : "22023"
   },
-  "TUPLE_INVALID_SKETCH_SUMMARY_VALUE_TYPE" : {
-    "message" : [
-      "Invalid call to <function>: summary value type '<actualType>' is incompatible with configured function summary type"
-    ],
-    "sqlState" : "22023"
-  },
   "TUPLE_IS_EMPTY" : {
     "message" : [
       "Due to Scala's limited support of tuple, empty tuple is not supported."
