@@ -11268,7 +11268,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             # axis=None case - return single boolean value
             first_pass: "Series" = self.any(axis=1, bool_only=bool_only, skipna=skipna)
-            return first_pass.any()  # type: bool
+            result: bool = first_pass.any()
+            return result
 
     def _bool_column_labels(self, column_labels: List[Label]) -> List[Label]:
         """
