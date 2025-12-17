@@ -941,7 +941,7 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
   }
 
   test("Schema evolution comments legacy behavior with preserveUserComments=false") {
-    withSQLConf(SQLConf.VIEW_SCHEMA_EVOLUTION_PRESERVE_USER_COMMENTS.key -> "false") {
+    withSQLConf(VIEW_SCHEMA_EVOLUTION_PRESERVE_USER_COMMENTS.key -> "false") {
       withTable("t") {
         withView("v") {
           // Create table with comments.
@@ -1004,7 +1004,7 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
         catalog.alterTable(viewMeta.copy(schema = newSchema))
 
         // Test with flag ENABLED (default) - should preserve.
-        withSQLConf(SQLConf.VIEW_SCHEMA_EVOLUTION_PRESERVE_USER_COMMENTS.key -> "true") {
+        withSQLConf(VIEW_SCHEMA_EVOLUTION_PRESERVE_USER_COMMENTS.key -> "true") {
           checkAnswer(sql("SELECT * FROM v"), Seq(Row(1, "a")))
           val descEnabled = sql("DESCRIBE EXTENDED v").collect()
           val c1Enabled = descEnabled.filter(r => r.getString(0) == "c1")
@@ -1016,7 +1016,7 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
         catalog.alterTable(viewMeta.copy(schema = newSchema))
 
         // Test with flag DISABLED - should revert.
-        withSQLConf(SQLConf.VIEW_SCHEMA_EVOLUTION_PRESERVE_USER_COMMENTS.key -> "false") {
+        withSQLConf(VIEW_SCHEMA_EVOLUTION_PRESERVE_USER_COMMENTS.key -> "false") {
           checkAnswer(sql("SELECT * FROM v"), Seq(Row(1, "a")))
           val descDisabled = sql("DESCRIBE EXTENDED v").collect()
           val c1Disabled = descDisabled.filter(r => r.getString(0) == "c1")
