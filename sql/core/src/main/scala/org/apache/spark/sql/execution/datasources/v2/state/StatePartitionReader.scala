@@ -303,9 +303,9 @@ class StatePartitionAllColumnFamiliesReader(
       useMultipleValuesPerKey = false, stateSchemaProviderOpt)
   }
 
-
   private def checkAllColFamiliesExist(
-      colFamilyNames: List[String], stateStore: StateStore
+      colFamilyNames: List[String],
+      stateStore: StateStore
     ): Unit = {
     // Filter out DEFAULT column family from validation for two reasons:
     // 1. Some operators (e.g., stream-stream join v3) don't include DEFAULT in their schema
