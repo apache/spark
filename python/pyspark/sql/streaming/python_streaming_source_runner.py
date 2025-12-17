@@ -89,12 +89,12 @@ def partitions_func(
         if it is None:
             write_int(PREFETCHED_RECORDS_NOT_FOUND, outfile)
         else:
-            send_batch_func(it, outfile, schema, max_arrow_batch_size, data_source)  # noqa: E501
+            send_batch_func(it, outfile, schema, max_arrow_batch_size, data_source)
     else:
         write_int(PREFETCHED_RECORDS_NOT_FOUND, outfile)
 
 
-def commit_func(reader: DataSourceStreamReader, infile: IO, outfile: IO) -> None:  # noqa: E501
+def commit_func(reader: DataSourceStreamReader, infile: IO, outfile: IO) -> None:
     end_offset = json.loads(utf8_deserializer.loads(infile))
     reader.commit(end_offset)
     write_int(0, outfile)

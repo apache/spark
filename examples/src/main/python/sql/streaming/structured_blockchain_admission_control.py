@@ -19,7 +19,7 @@
 Demonstrates admission control in Python streaming data sources.
 
 This example implements a simple blockchain-like streaming source that generates
-sequential blocks and shows how to use admission control to limit batch sizes.  # noqa: E501
+sequential blocks and shows how to use admission control to limit batch sizes.
 
 Usage: structured_blockchain_admission_control.py [<max-blocks-per-batch>]
   <max-blocks-per-batch> Maximum number of blocks to process per microbatch
@@ -46,7 +46,7 @@ from pyspark.sql.types import StructType
 
 
 class SimpleBlockchainReader(DataSourceStreamReader):
-    """A simple streaming source that generates sequential blockchain blocks."""  # noqa: E501
+    """A simple streaming source that generates sequential blockchain blocks."""
 
     def __init__(self, max_block: int = 1000, max_blocks_per_batch: int = 0) -> None:
         self.max_block = max_block
@@ -159,7 +159,9 @@ only {max_blocks_per_batch} blocks at a time, even when more data is available.
 """
     )
     # fmt: off
-    spark = SparkSession.builder.appName("StructuredBlockchainAdmissionControl").getOrCreate()  # noqa: E501
+    spark = (
+        SparkSession.builder.appName("StructuredBlockchainAdmissionControl").getOrCreate()
+    )
     # fmt: on
 
     # Register the custom data source

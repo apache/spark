@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+
 package org.apache.spark.sql.execution.python.streaming
 
 import java.io.{BufferedInputStream, BufferedOutputStream, DataInputStream, DataOutputStream}
@@ -41,13 +42,10 @@ import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, Column
 object PythonStreamingSourceRunner {
   // When the python process for python_streaming_source_runner receives one of the
   // integers below, it will invoke the corresponding function of StreamReader instance.
-  // Function IDs for Python-JVM communication protocol
   val INITIAL_OFFSET_FUNC_ID = 884
-  // Note: 885 was deprecated (old latestOffset without admission control parameters)
   val PARTITIONS_FUNC_ID = 886
   val COMMIT_FUNC_ID = 887
-  val LATEST_OFFSET_WITH_REPORT_FUNC_ID = 890 // New: combined latestOffset + report
-
+  val LATEST_OFFSET_WITH_REPORT_FUNC_ID = 890
   // Status code for JVM to decide how to receive prefetched record batches
   // for simple stream reader.
   val PREFETCHED_RECORDS_NOT_FOUND = 0
@@ -127,9 +125,7 @@ class PythonStreamingSourceRunner(
     if (initStatus == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryCompilationErrors.pythonDataSourceError(
-        action = "plan",
-        tpe = "initialize source",
-        msg = msg)
+        action = "plan", tpe = "initialize source", msg = msg)
     }
   }
 
@@ -266,7 +262,7 @@ class PythonStreamingSourceRunner(
       case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
         val msg = PythonWorkerUtils.readUTF(dataIn)
         throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-          action = "prefetchArrowBatches", msg)
+        action = "prefetchArrowBatches", msg)
       case SpecialLengths.START_ARROW_STREAM =>
       case _ =>
         throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(

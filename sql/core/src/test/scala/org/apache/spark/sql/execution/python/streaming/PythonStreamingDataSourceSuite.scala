@@ -199,8 +199,7 @@ class PythonStreamingDataSourceSimpleSuite extends PythonDataSourceSuiteBase {
           // Remove the last entry of commit log to test replaying microbatch during restart.
           val offsetLog =
             new OffsetSeqLog(spark, new File(checkpointDir, "offsets").getCanonicalPath)
-          val commitLog =
-            new CommitLog(spark, new File(checkpointDir, "commits").getCanonicalPath)
+          val commitLog = new CommitLog(spark, new File(checkpointDir, "commits").getCanonicalPath)
           commitLog.purgeAfter(offsetLog.getLatest().get._1 - 1)
         }
 
@@ -223,7 +222,8 @@ class PythonStreamingDataSourceSimpleSuite extends PythonDataSourceSuiteBase {
       assert(rowCount == 2 * (lastBatchId + 1) || rowCount == 2 * (lastBatchId + 2))
       checkAnswer(
         spark.read.format("json").load(outputDir.getAbsolutePath),
-        (0 until rowCount.toInt).map(Row(_)))
+        (0 until rowCount.toInt).map(Row(_))
+      )
     }
   }
 
@@ -254,22 +254,28 @@ class PythonStreamingDataSourceSimpleSuite extends PythonDataSourceSuiteBase {
         pythonDs,
         errorDataSourceName,
         inputSchema,
-        CaseInsensitiveStringMap.empty())
+        CaseInsensitiveStringMap.empty()
+      )
       val err = intercept[SparkException] {
         func(stream)
       }
       checkErrorMatchPVals(
         err,
         condition = "PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR",
-        parameters = Map("action" -> action, "msg" -> "(.|\\n)*"))
+        parameters = Map(
+          "action" -> action,
+          "msg" -> "(.|\\n)*"
+        )
+      )
       assert(err.getMessage.contains(msg))
       stream.stop()
     }
 
     testMicroBatchStreamError(
       "initialOffset",
-      "[NOT_IMPLEMENTED] initialOffset is not implemented") { stream =>
-      stream.initialOffset()
+      "[NOT_IMPLEMENTED] initialOffset is not implemented") {
+      stream =>
+        stream.initialOffset()
     }
 
     // User don't need to implement latestOffset for SimpleDataSourceStreamReader.
@@ -277,8 +283,9 @@ class PythonStreamingDataSourceSimpleSuite extends PythonDataSourceSuiteBase {
     // So the not implemented method is initialOffset.
     testMicroBatchStreamError(
       "latestOffset",
-      "[NOT_IMPLEMENTED] initialOffset is not implemented") { stream =>
-      stream.latestOffset()
+      "[NOT_IMPLEMENTED] initialOffset is not implemented") {
+      stream =>
+        stream.latestOffset()
     }
   }
 
@@ -312,21 +319,25 @@ class PythonStreamingDataSourceSimpleSuite extends PythonDataSourceSuiteBase {
         pythonDs,
         errorDataSourceName,
         inputSchema,
-        CaseInsensitiveStringMap.empty())
+        CaseInsensitiveStringMap.empty()
+      )
       val err = intercept[SparkException] {
         func(stream)
       }
       checkErrorMatchPVals(
         err,
         condition = "PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR",
-        parameters = Map("action" -> action, "msg" -> "(.|\\n)*"))
+        parameters = Map(
+          "action" -> action,
+          "msg" -> "(.|\\n)*"
+        )
+      )
       assert(err.getMessage.contains(msg))
       stream.stop()
     }
 
-    testMicroBatchStreamError("latestOffset", "Exception: error reading available data") {
-      stream =>
-        stream.latestOffset()
+    testMicroBatchStreamError("latestOffset", "Exception: error reading available data") { stream =>
+      stream.latestOffset()
     }
   }
 

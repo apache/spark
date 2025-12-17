@@ -58,7 +58,7 @@ class PrefetchedCacheEntry:
 
 class _SimpleStreamReaderWrapper(DataSourceStreamReader):
     """
-    A private class that wraps :class:`SimpleDataSourceStreamReader` in a prefetch/cache pattern,
+    A private class that wrap :class:`SimpleDataSourceStreamReader` in prefetch and cache pattern,
     so that :class:`SimpleDataSourceStreamReader` can integrate with streaming engine like an
     ordinary :class:`DataSourceStreamReader`.
 
@@ -66,17 +66,12 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
     initialOffset() when query start for the first time or initialized to be the end offset of
     the last planned batch when query restarts.
 
-    This state is required because the simple reader API does not expose partition planning; the
-    wrapper must prefetch by calling ``read(current_offset)`` when the engine requests
-    ``latestOffset()``. Tracking ``current_offset`` ensures repeated calls do not re-read or skip
-    data, and that the wrapper can serve deterministic replay via ``readBetweenOffsets``.
-
     When streaming engine calls latestOffset(), the wrapper calls read() that starts from
-    current_offset, prefetches and caches the data, then updates the current_offset to be
+    current_offset, prefetches and cache the data, then updates the current_offset to be
     the end offset of the new data.
 
-    When streaming engine calls planInputPartitions(start, end), the wrapper gets the prefetched
-    data from cache and send it to JVM along with the input partitions.
+    When streaming engine call planInputPartitions(start, end), the wrapper get the prefetched data
+    from cache and send it to JVM along with the input partitions.
 
     When query restart, batches in write ahead offset log that has not been committed will be
     replayed by reading data between start and end offset through readBetweenOffsets(start, end).
@@ -93,13 +88,10 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
             self.initial_offset = self.simple_reader.initialOffset()
         return self.initial_offset
 
-    def latestOffset(self, start: Optional[dict] = None) -> dict:
-        # When the query starts for the first time, use either the provided start offset (if any)
-        # or the data source initial offset. The `start` parameter is ignored for admission control
-        # (unsupported for the simple reader), but allows the wrapper to be compatible with the
-        # DataSourceStreamReader.latestOffset(start=...) API.
+    def latestOffset(self) -> dict:
+        # when query start for the first time, use initial offset as the start offset.
         if self.current_offset is None:
-            self.current_offset = start if start is not None else self.initialOffset()
+            self.current_offset = self.initialOffset()
         (iter, end) = self.simple_reader.read(self.current_offset)
         self.cache.append(PrefetchedCacheEntry(self.current_offset, end, iter))
         self.current_offset = end
