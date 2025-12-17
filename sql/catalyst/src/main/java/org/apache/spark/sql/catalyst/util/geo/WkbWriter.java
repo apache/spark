@@ -22,10 +22,35 @@ import java.nio.ByteOrder;
 /**
  * Utility class for converting geometries to Well-Known Binary (WKB) format.
  * This class implements the OGC Simple Features specification for WKB writing.
+ * <p>
+ * This class is designed to support reuse of a single instance to write multiple
+ * geometries efficiently. This class is NOT thread-safe; each thread should create
+ * its own instance.
  */
 public class WkbWriter {
-  private static final int DEFAULT_SRID = 0;
-  private static final int EWKB_SRID_FLAG = 0x20000000;
+
+  /**
+   * Gets the WKB type code for a geometry, including dimension offset.
+   * For example: Point 2D = 1, Point Z = 1001, Point M = 2001, Point ZM = 3001
+   */
+  private static int getWkbType(GeometryModel geometry) {
+    int baseType = (int) geometry.getTypeId().getValue();
+    boolean hasZ = geometry.hasZ();
+    boolean hasM = geometry.hasM();
+
+    // Determine dimension offset based on hasZ and hasM flags
+    if (hasZ && hasM) {
+      return baseType + WkbConstants.DIM_OFFSET_ZM;
+    } else if (hasZ) {
+      return baseType + WkbConstants.DIM_OFFSET_Z;
+    } else if (hasM) {
+      return baseType + WkbConstants.DIM_OFFSET_M;
+    } else {
+      return baseType + WkbConstants.DIM_OFFSET_2D;
+    }
+  }
+
+  // ========== Public Write Methods ==========
 
   /**
    * Writes a geometry to WKB format.
@@ -36,56 +61,71 @@ public class WkbWriter {
 
   /**
    * Writes a geometry to WKB format with specified byte order.
+   * <p>
+   * This method reuses an internal buffer to reduce GC pressure when writing
+   * many geometries. The returned byte array is a copy of the internal buffer.
    */
   public byte[] write(GeometryModel geometry, ByteOrder byteOrder) {
     // Calculate size first
     int size = calculateSize(geometry);
     ByteBuffer buffer = ByteBuffer.allocate(size);
     buffer.order(byteOrder);
-
     writeGeometry(buffer, geometry, byteOrder);
-
+    // Return a copy of exactly the right size
     return buffer.array();
   }
 
+  // ========== Size Calculation ==========
+
   private int calculateSize(GeometryModel geometry) {
-    int size = 1 + 4; // Endianness + type
+    int dimCount = geometry.getDimensionCount();
+
+    // Header: endianness (1 byte) + type (4 bytes)
+    int size = WkbConstants.BYTE_SIZE + WkbConstants.INT_SIZE;
 
     if (geometry instanceof Point) {
       Point point = (Point) geometry;
-      size += point.getCoordinates().length * 8;
+      size += point.getCoordinates().length * WkbConstants.DOUBLE_SIZE;
     } else if (geometry instanceof LineString) {
       LineString lineString = (LineString) geometry;
-      size += 4; // Number of points
-      size += lineString.getNumPoints() * (1 + 4 + 2 * 8); // Assume 2D for simplicity
+      // Number of points (4 bytes) + coordinates
+      size += WkbConstants.INT_SIZE;
+      size += lineString.getNumPoints() * dimCount * WkbConstants.DOUBLE_SIZE;
     } else if (geometry instanceof Polygon) {
       Polygon polygon = (Polygon) geometry;
-      size += 4; // Number of rings
+      // Number of rings (4 bytes)
+      size += WkbConstants.INT_SIZE;
       for (Ring ring : polygon.getRings()) {
-        size += 4; // Number of points
-        size += ring.getNumPoints() * 2 * 8; // Assume 2D
+        int numPoints = ring.getNumPoints();
+        // Number of points in ring (4 bytes) + coordinates
+        size += WkbConstants.INT_SIZE;
+        size += numPoints * dimCount * WkbConstants.DOUBLE_SIZE;
       }
     } else if (geometry instanceof MultiPoint) {
       MultiPoint mp = (MultiPoint) geometry;
-      size += 4; // Number of geometries
+      // Number of geometries (4 bytes)
+      size += WkbConstants.INT_SIZE;
       for (Point p : mp.getPoints()) {
         size += calculateSize(p);
       }
     } else if (geometry instanceof MultiLineString) {
       MultiLineString mls = (MultiLineString) geometry;
-      size += 4; // Number of geometries
+      // Number of geometries (4 bytes)
+      size += WkbConstants.INT_SIZE;
       for (LineString ls : mls.getLineStrings()) {
         size += calculateSize(ls);
       }
     } else if (geometry instanceof MultiPolygon) {
       MultiPolygon mpoly = (MultiPolygon) geometry;
-      size += 4; // Number of geometries
+      // Number of geometries (4 bytes)
+      size += WkbConstants.INT_SIZE;
       for (Polygon poly : mpoly.getPolygons()) {
         size += calculateSize(poly);
       }
     } else if (geometry instanceof GeometryCollection) {
       GeometryCollection gc = (GeometryCollection) geometry;
-      size += 4; // Number of geometries
+      // Number of geometries (4 bytes)
+      size += WkbConstants.INT_SIZE;
       for (GeometryModel geom : gc.getGeometries()) {
         size += calculateSize(geom);
       }
@@ -94,12 +134,15 @@ public class WkbWriter {
     return size;
   }
 
+  // ========== Write Methods ==========
+
   private void writeGeometry(ByteBuffer buffer, GeometryModel geometry, ByteOrder byteOrder) {
     // Write endianness
-    buffer.put((byte) (byteOrder == ByteOrder.LITTLE_ENDIAN ? 1 : 0));
+    buffer.put(byteOrder == ByteOrder.LITTLE_ENDIAN
+      ? WkbConstants.LITTLE_ENDIAN : WkbConstants.BIG_ENDIAN);
 
     // Write type
-    int type = (int) geometry.getTypeId().getValue();
+    int type = getWkbType(geometry);
     buffer.putInt(type);
 
     // Write geometry-specific data
@@ -126,24 +169,31 @@ public class WkbWriter {
     }
   }
 
+  private void writeCoordinates(ByteBuffer buffer, Point point) {
+    for (double coord : point.getCoordinates()) {
+      buffer.putDouble(coord);
+    }
+  }
+
   private void writeLineString(ByteBuffer buffer, LineString lineString) {
     buffer.putInt(lineString.getNumPoints());
     for (Point point : lineString.getPoints()) {
-      for (double coord : point.getCoordinates()) {
-        buffer.putDouble(coord);
-      }
+      writeCoordinates(buffer, point);
+    }
+  }
+
+  private void writeRing(ByteBuffer buffer, Ring ring) {
+    int numPoints = ring.getNumPoints();
+    buffer.putInt(numPoints);
+    for (Point point : ring.getPoints()) {
+      writeCoordinates(buffer, point);
     }
   }
 
   private void writePolygon(ByteBuffer buffer, Polygon polygon) {
     buffer.putInt(polygon.getRings().size());
     for (Ring ring : polygon.getRings()) {
-      buffer.putInt(ring.getNumPoints());
-      for (Point point : ring.getPoints()) {
-        for (double coord : point.getCoordinates()) {
-          buffer.putDouble(coord);
-        }
-      }
+      writeRing(buffer, ring);
     }
   }
 
@@ -155,7 +205,7 @@ public class WkbWriter {
   }
 
   private void writeMultiLineString(ByteBuffer buffer, MultiLineString multiLineString,
-      ByteOrder byteOrder) {
+                                    ByteOrder byteOrder) {
     buffer.putInt(multiLineString.getNumGeometries());
     for (LineString lineString : multiLineString.getLineStrings()) {
       writeGeometry(buffer, lineString, byteOrder);
@@ -163,7 +213,7 @@ public class WkbWriter {
   }
 
   private void writeMultiPolygon(ByteBuffer buffer, MultiPolygon multiPolygon,
-      ByteOrder byteOrder) {
+                                 ByteOrder byteOrder) {
     buffer.putInt(multiPolygon.getNumGeometries());
     for (Polygon polygon : multiPolygon.getPolygons()) {
       writeGeometry(buffer, polygon, byteOrder);
@@ -171,11 +221,10 @@ public class WkbWriter {
   }
 
   private void writeGeometryCollection(ByteBuffer buffer, GeometryCollection collection,
-      ByteOrder byteOrder) {
+                                       ByteOrder byteOrder) {
     buffer.putInt(collection.getNumGeometries());
     for (GeometryModel geometry : collection.getGeometries()) {
       writeGeometry(buffer, geometry, byteOrder);
     }
   }
 }
-

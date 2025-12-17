@@ -1,0 +1,758 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.catalyst.util.geo;
+
+import org.apache.spark.sql.catalyst.util.Geometry;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+
+import java.nio.ByteOrder;
+import java.util.List;
+
+/**
+ * Test suite for WKB (Well-Known Binary) reader and writer functionality.
+ *
+ * These tests verify WKB round-trip (read/write) for various geometry types
+ * in different dimensions (2D, 3DZ, 3DM, 4D).
+ */
+public class WkbReaderWriterAdvancedTest {
+
+  /**
+   * Helper method to convert hex string to byte array
+   */
+  private byte[] hexToBytes(String hex) {
+    int len = hex.length();
+    byte[] data = new byte[len / 2];
+    for (int i = 0; i < len; i += 2) {
+      data[i / 2] = (byte) ((Character.digit(hex.charAt(i), 16) << 4)
+          + Character.digit(hex.charAt(i + 1), 16));
+    }
+    return data;
+  }
+
+  /**
+   * Helper method to convert byte array to hex string
+   */
+  private String bytesToHex(byte[] bytes) {
+    StringBuilder sb = new StringBuilder();
+    for (byte b : bytes) {
+      sb.append(String.format("%02x", b));
+    }
+    return sb.toString();
+  }
+
+  /**
+   * Test helper to verify WKB parsing from hex string in both byte orders
+   */
+  private void checkWkbParsing(String wkbHexLittle, String wkbHexBig, GeoTypeId expectedType,
+      boolean expectedEmpty) {
+    // Parse little endian
+    byte[] wkbLittle = hexToBytes(wkbHexLittle);
+    WkbReader reader = new WkbReader();
+    GeometryModel geomLittle = reader.read(wkbLittle, 0);
+
+    Assertions.assertEquals(expectedType, geomLittle.getTypeId(),
+        "Geometry type mismatch (little endian)");
+    Assertions.assertEquals(expectedEmpty, geomLittle.isEmpty(),
+        "Empty status mismatch (little endian)");
+
+    // Parse big endian
+    byte[] wkbBig = hexToBytes(wkbHexBig);
+    GeometryModel geomBig = reader.read(wkbBig, 0);
+
+    Assertions.assertEquals(expectedType, geomBig.getTypeId(),
+        "Geometry type mismatch (big endian)");
+    Assertions.assertEquals(expectedEmpty, geomBig.isEmpty(),
+        "Empty status mismatch (big endian)");
+  }
+
+  /**
+   * Test helper to verify WKB round-trip (write and read back)
+   */
+  private void checkWkbRoundTrip(String wkbHexLittle, String wkbHexBig) {
+    byte[] wkbLittle = hexToBytes(wkbHexLittle);
+    byte[] wkbBig = hexToBytes(wkbHexBig);
+
+    // Parse the WKB (little)
+    WkbReader reader = new WkbReader();
+    GeometryModel model = reader.read(wkbLittle, 0);
+    WkbWriter writer = new WkbWriter();
+    byte[] writtenLittleFromModelLittle = writer.write(model, ByteOrder.LITTLE_ENDIAN);
+    byte[] writtenBigFromModelLittle = writer.write(model, ByteOrder.BIG_ENDIAN);
+    Assertions.assertEquals(wkbHexLittle, bytesToHex(writtenLittleFromModelLittle),
+        "WKB little endian round-trip failed");
+    Assertions.assertEquals(wkbHexBig, bytesToHex(writtenBigFromModelLittle),
+        "WKB big endian round-trip failed");
+
+    // Parse the WKB (big)
+    GeometryModel geomFromBig = reader.read(wkbBig, 0);
+    byte[] writtenLittleFromModelBig = writer.write(geomFromBig, ByteOrder.LITTLE_ENDIAN);
+    byte[] writtenBigFromModelBig = writer.write(geomFromBig, ByteOrder.BIG_ENDIAN);
+    Assertions.assertEquals(wkbHexLittle, bytesToHex(writtenLittleFromModelBig),
+      "WKB little endian round-trip from big endian failed");
+    Assertions.assertEquals(wkbHexBig, bytesToHex(writtenBigFromModelBig),
+      "WKB big endian round-trip from big endian failed");
+
+    // Use Geometry.fromWkb (little)
+    Geometry geometryFromLittle = Geometry.fromWkb(wkbLittle, 0);
+    byte[] wkbLittleFromGeometryLittle = geometryFromLittle.toWkb(ByteOrder.LITTLE_ENDIAN);
+    Assertions.assertEquals(wkbHexLittle, bytesToHex(wkbLittleFromGeometryLittle),
+        "Geometry.fromWKB little endian round-trip failed");
+    byte[] wkbBigFromGeometryLittle = geometryFromLittle.toWkb(ByteOrder.BIG_ENDIAN);
+    Assertions.assertEquals(wkbHexBig, bytesToHex(wkbBigFromGeometryLittle),
+        "Geometry.fromWKB big endian round-trip failed");
+
+    // Use Geometry.fromWkb (big)
+    Geometry geometryFromBig = Geometry.fromWkb(writtenBigFromModelLittle, 0);
+    byte[] wkbLittleFromGeometryBig = geometryFromBig.toWkb(ByteOrder.LITTLE_ENDIAN);
+    Assertions.assertEquals(wkbHexLittle, bytesToHex(wkbLittleFromGeometryBig),
+        "Geometry.fromWKB little endian round-trip from big endian failed");
+    byte[] wkbBigFromGeometryBig = geometryFromBig.toWkb(ByteOrder.BIG_ENDIAN);
+    Assertions.assertEquals(wkbHexBig, bytesToHex(wkbBigFromGeometryBig),
+        "Geometry.fromWKB big endian round-trip from big endian failed");
+
+  }
+
+  // ========== Point Tests (2D) ==========
+
+  @Test
+  public void testPoint2DEmpty() {
+    String wkbLe = "0101000000000000000000f87f000000000000f87f";
+    String wkbBe = "00000000017ff80000000000007ff8000000000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.POINT, true);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  @Test
+  public void testPoint2D_1_2() {
+    String wkbLe = "0101000000000000000000f03f0000000000000040";
+    String wkbBe = "00000000013ff00000000000004000000000000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.POINT, false);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+
+    // Verify coordinates
+    byte[] wkb = hexToBytes(wkbLe);
+    WkbReader reader = new WkbReader();
+    Point point = (Point) reader.read(wkb, 0);
+    Assertions.assertEquals(1.0, point.getX(), 0.0001);
+    Assertions.assertEquals(2.0, point.getY(), 0.0001);
+  }
+
+  @Test
+  public void testPoint2D_Negative180_0() {
+    String wkbLe = "010100000000000000008066c00000000000000000";
+    String wkbBe = "0000000001c0668000000000000000000000000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.POINT, false);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+
+    byte[] wkb = hexToBytes(wkbLe);
+    WkbReader reader = new WkbReader();
+    Point point = (Point) reader.read(wkb, 0);
+    Assertions.assertEquals(-180.0, point.getX(), 0.0001);
+    Assertions.assertEquals(0.0, point.getY(), 0.0001);
+  }
+
+  @Test
+  public void testPoint2D_0_Negative90() {
+    String wkbLe = "0101000000000000000000000000000000008056c0";
+    String wkbBe = "00000000010000000000000000c056800000000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.POINT, false);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  @Test
+  public void testPoint2D_0_90() {
+    String wkbLe = "010100000000000000000000000000000000805640";
+    String wkbBe = "000000000100000000000000004056800000000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.POINT, false);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  @Test
+  public void testPoint2D_Pi_E() {
+    String wkbLe = "0101000000182d4454fb2109406957148b0abf0540";
+    String wkbBe = "0000000001400921fb54442d184005bf0a8b145769";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.POINT, false);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+
+    byte[] wkb = hexToBytes(wkbLe);
+    WkbReader reader = new WkbReader();
+    Point point = (Point) reader.read(wkb, 0);
+    Assertions.assertEquals(Math.PI, point.getX(), 0.0000001);
+    Assertions.assertEquals(Math.E, point.getY(), 0.0000001);
+  }
+
+  // ========== Point Tests (3DZ) ==========
+
+  @Test
+  public void testPoint3DZEmpty() {
+    String wkbLe = "01e9030000000000000000f87f000000000000f87f000000000000f87f";
+    String wkbBe = "00000003e97ff80000000000007ff80000000000007ff8000000000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.POINT, true);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  @Test
+  public void testPoint3DZ_1_2_3() {
+    String wkbLe = "01e9030000000000000000f03f00000000000000400000000000000840";
+    String wkbBe = "00000003e93ff000000000000040000000000000004008000000000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.POINT, false);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+
+    byte[] wkb = hexToBytes(wkbLe);
+    WkbReader reader = new WkbReader();
+    Point point = (Point) reader.read(wkb, 0);
+    double[] coords = point.getCoordinates();
+    Assertions.assertEquals(3, coords.length);
+    Assertions.assertEquals(1.0, coords[0], 0.0001);
+    Assertions.assertEquals(2.0, coords[1], 0.0001);
+    Assertions.assertEquals(3.0, coords[2], 0.0001);
+  }
+
+  // ========== Point Tests (3DM) ==========
+
+  @Test
+  public void testPoint3DMEmpty() {
+    String wkbLe = "01d1070000000000000000f87f000000000000f87f000000000000f87f";
+    String wkbBe = "00000007d17ff80000000000007ff80000000000007ff8000000000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.POINT, true);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  @Test
+  public void testPoint3DM_1_2_3() {
+    String wkbLe = "01d1070000000000000000f03f00000000000000400000000000000840";
+    String wkbBe = "00000007d13ff000000000000040000000000000004008000000000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.POINT, false);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  // ========== Point Tests (4D) ==========
+
+  @Test
+  public void testPoint4DEmpty() {
+    String wkbLe = "01b90b0000000000000000f87f000000000000f87f000000000000f87f000000000000f87f";
+    String wkbBe = "0000000bb97ff80000000000007ff80000000000007ff80000000000007ff8000000000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.POINT, true);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  @Test
+  public void testPoint4D_1_2_3_4() {
+    String wkbLe = "01b90b0000000000000000f03f000000000000004000000000000008400000000000001040";
+    String wkbBe = "0000000bb93ff0000000000000400000000000000040080000000000004010000000000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.POINT, false);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+
+    byte[] wkb = hexToBytes(wkbLe);
+    WkbReader reader = new WkbReader();
+    Point point = (Point) reader.read(wkb, 0);
+    double[] coords = point.getCoordinates();
+    Assertions.assertEquals(4, coords.length);
+    Assertions.assertEquals(1.0, coords[0], 0.0001);
+    Assertions.assertEquals(2.0, coords[1], 0.0001);
+    Assertions.assertEquals(3.0, coords[2], 0.0001);
+    Assertions.assertEquals(4.0, coords[3], 0.0001);
+  }
+
+  // ========== LineString Tests (2D) ==========
+
+  @Test
+  public void testLineString2DEmpty() {
+    String wkbLe = "010200000000000000";
+    String wkbBe = "000000000200000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.LINESTRING, true);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  @Test
+  public void testLineString2D_TwoPoints() {
+    String wkbLe = "010200000002000000000000000000f03f000000000000004000000000000008400000000000001040"; // checkstyle.off: LineLength
+    String wkbBe = "0000000002000000023ff0000000000000400000000000000040080000000000004010000000000000"; // checkstyle.off: LineLength
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.LINESTRING, false);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+
+    byte[] wkb = hexToBytes(wkbLe);
+    WkbReader reader = new WkbReader();
+    LineString lineString = (LineString) reader.read(wkb, 0);
+    Assertions.assertEquals(2, lineString.getNumPoints());
+  }
+
+  @Test
+  public void testLineString2D_FivePoints() {
+    String wkbLe = "0102000000050000000000000000000000000000000000f03f000000000000f03f00000000000000000000000000000040000000000000f0bf000000000000f0bf00000000000000c00000000000000000000000000000f03f"; // checkstyle.off: LineLength
+    String wkbBe = "00000000020000000500000000000000003ff00000000000003ff000000000000000000000000000004000000000000000bff0000000000000bff0000000000000c00000000000000000000000000000003ff0000000000000"; // checkstyle.off: LineLength
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.LINESTRING, false);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  // ========== LineString Tests (3DZ) ==========
+
+  @Test
+  public void testLineString3DZEmpty() {
+    String wkbLe = "01ea03000000000000";
+    String wkbBe = "00000003ea00000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.LINESTRING, true);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  @Test
+  public void testLineString3DZ_TwoPoints() {
+    String wkbLe = "01ea03000002000000000000000000f03f00000000000000400000000000000840000000000000104000000000000014400000000000001840"; // checkstyle.off: LineLength
+    String wkbBe = "00000003ea000000023ff000000000000040000000000000004008000000000000401000000000000040140000000000004018000000000000"; // checkstyle.off: LineLength
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.LINESTRING, false);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  // ========== LineString Tests (3DM) ==========
+
+  @Test
+  public void testLineString3DMEmpty() {
+    String wkbLe = "01d207000000000000";
+    String wkbBe = "00000007d200000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.LINESTRING, true);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  @Test
+  public void testLineString3DM_TwoPoints() {
+    String wkbLe = "01d207000002000000000000000000f03f00000000000000400000000000000840000000000000104000000000000014400000000000001840"; // checkstyle.off: LineLength
+    String wkbBe = "00000007d2000000023ff000000000000040000000000000004008000000000000401000000000000040140000000000004018000000000000"; // checkstyle.off: LineLength
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.LINESTRING, false);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  // ========== LineString Tests (4D) ==========
+
+  @Test
+  public void testLineString4DEmpty() {
+    String wkbLe = "01ba0b000000000000";
+    String wkbBe = "0000000bba00000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.LINESTRING, true);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  @Test
+  public void testLineString4D_TwoPoints() {
+    String wkbLe = "01ba0b000002000000000000000000f03f000000000000004000000000000008400000000000001040000000000000144000000000000018400000000000001c400000000000002040"; // checkstyle.off: LineLength
+    String wkbBe = "0000000bba000000023ff000000000000040000000000000004008000000000000401000000000000040140000000000004018000000000000401c0000000000004020000000000000"; // checkstyle.off: LineLength
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.LINESTRING, false);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  // ========== Polygon Tests (2D) ==========
+
+  @Test
+  public void testPolygon2DEmpty() {
+    String wkbLe = "010300000000000000";
+    String wkbBe = "000000000300000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.POLYGON, true);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  @Test
+  public void testPolygon2D_WithHole() {
+    // POLYGON((0 0,10 0,0 10,0 0),(1 1,1 2,2 1,1 1))
+    String wkbLe = "010300000002000000040000000000000000000000000000000000000000000000000024400000000000000000000000000000000000000000000024400000000000000000000000000000000004000000000000000000f03f000000000000f03f000000000000f03f00000000000000400000000000000040000000000000f03f000000000000f03f000000000000f03f"; // checkstyle.off: LineLength
+    String wkbBe = "0000000003000000020000000400000000000000000000000000000000402400000000000000000000000000000000000000000000402400000000000000000000000000000000000000000000000000043ff00000000000003ff00000000000003ff0000000000000400000000000000040000000000000003ff00000000000003ff00000000000003ff0000000000000"; // checkstyle.off: LineLength
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.POLYGON, false);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+
+    byte[] wkb = hexToBytes(wkbLe);
+    WkbReader reader = new WkbReader();
+    Polygon polygon = (Polygon) reader.read(wkb, 0);
+    Assertions.assertEquals(2, polygon.getRings().size());
+  }
+
+  // ========== Polygon Tests (3DZ) ==========
+
+  @Test
+  public void testPolygon3DZEmpty() {
+    String wkbLe = "01eb03000000000000";
+    String wkbBe = "00000003eb00000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.POLYGON, true);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  @Test
+  public void testPolygon3DZ_WithHole() {
+    // POLYGON Z ((0 0 -1,10 0 -1,0 10 -1,0 0 -1),(1 1 -1,1 2 -1,2 1 -1,1 1 -1))
+    String wkbLe = "01eb030000020000000400000000000000000000000000000000000000000000000000f0bf00000000000024400000000000000000000000000000f0bf00000000000000000000000000002440000000000000f0bf00000000000000000000000000000000000000000000f0bf04000000000000000000f03f000000000000f03f000000000000f0bf000000000000f03f0000000000000040000000000000f0bf0000000000000040000000000000f03f000000000000f0bf000000000000f03f000000000000f03f000000000000f0bf"; // checkstyle.off: LineLength
+    String wkbBe = "00000003eb000000020000000400000000000000000000000000000000bff000000000000040240000000000000000000000000000bff000000000000000000000000000004024000000000000bff000000000000000000000000000000000000000000000bff0000000000000000000043ff00000000000003ff0000000000000bff00000000000003ff00000000000004000000000000000bff000000000000040000000000000003ff0000000000000bff00000000000003ff00000000000003ff0000000000000bff0000000000000"; // checkstyle.off: LineLength
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.POLYGON, false);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  // ========== Polygon Tests (3DM) ==========
+
+  @Test
+  public void testPolygon3DMEmpty() {
+    String wkbLe = "01d307000000000000";
+    String wkbBe = "00000007d300000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.POLYGON, true);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  // ========== Polygon Tests (4D) ==========
+
+  @Test
+  public void testPolygon4DEmpty() {
+    String wkbLe = "01bb0b000000000000";
+    String wkbBe = "0000000bbb00000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.POLYGON, true);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  // ========== MultiPoint Tests (2D) ==========
+
+  @Test
+  public void testMultiPoint2DEmpty() {
+    String wkbLe = "010400000000000000";
+    String wkbBe = "000000000400000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_POINT, true);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  @Test
+  public void testMultiPoint2D_TwoEmptyPoints() {
+    String wkbLe = "0104000000020000000101000000000000000000f87f000000000000f87f0101000000000000000000f87f000000000000f87f"; // checkstyle.off: LineLength
+    String wkbBe = "00000000040000000200000000017ff80000000000007ff800000000000000000000017ff80000000000007ff8000000000000"; // checkstyle.off: LineLength
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_POINT, true);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  @Test
+  public void testMultiPoint2D_OnePoint() {
+    // MULTIPOINT((1 2))
+    String wkbLe = "0104000000010000000101000000000000000000f03f0000000000000040";
+    String wkbBe = "00000000040000000100000000013ff00000000000004000000000000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_POINT, false);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  @Test
+  public void testMultiPoint2D_TwoPoints() {
+    // MULTIPOINT((1 2),(3 4))
+    String wkbLe = "0104000000020000000101000000000000000000f03f0000000000000040010100000000000000000008400000000000001040"; // checkstyle.off: LineLength
+    String wkbBe = "00000000040000000200000000013ff00000000000004000000000000000000000000140080000000000004010000000000000"; // checkstyle.off: LineLength
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_POINT, false);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  @Test
+  public void testMultiPoint2D_MixedWithEmpty() {
+    // MULTIPOINT((1 2),EMPTY,EMPTY,(3 4))
+    String wkbLe = "0104000000040000000101000000000000000000f03f00000000000000400101000000000000000000f87f000000000000f87f0101000000000000000000f87f000000000000f87f010100000000000000000008400000000000001040"; // checkstyle.off: LineLength
+    String wkbBe = "00000000040000000400000000013ff0000000000000400000000000000000000000017ff80000000000007ff800000000000000000000017ff80000000000007ff8000000000000000000000140080000000000004010000000000000"; // checkstyle.off: LineLength
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_POINT, false);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  // ========== MultiPoint Tests (3DZ) ==========
+
+  @Test
+  public void testMultiPoint3DZEmpty() {
+    String wkbLe = "01ec03000000000000";
+    String wkbBe = "00000003ec00000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_POINT, true);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  @Test
+  public void testMultiPoint3DZ_TwoPoints() {
+    // MULTIPOINT Z ((1 2 3),(4 5 6))
+    String wkbLe = "01ec0300000200000001e9030000000000000000f03f0000000000000040000000000000084001e9030000000000000000104000000000000014400000000000001840"; // checkstyle.off: LineLength
+    String wkbBe = "00000003ec0000000200000003e93ff00000000000004000000000000000400800000000000000000003e9401000000000000040140000000000004018000000000000"; // checkstyle.off: LineLength
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_POINT, false);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  // ========== MultiPoint Tests (3DM) ==========
+
+  @Test
+  public void testMultiPoint3DMEmpty() {
+    String wkbLe = "01d407000000000000";
+    String wkbBe = "00000007d400000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_POINT, true);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  // ========== MultiPoint Tests (4D) ==========
+
+  @Test
+  public void testMultiPoint4DEmpty() {
+    String wkbLe = "01bc0b000000000000";
+    String wkbBe = "0000000bbc00000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_POINT, true);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  @Test
+  public void testMultiPoint4D_TwoPoints() {
+    // MULTIPOINT ZM ((1 2 3 4),(5 6 7 8))
+    String wkbLe = "01bc0b00000200000001b90b0000000000000000f03f00000000000000400000000000000840000000000000104001b90b0000000000000000144000000000000018400000000000001c400000000000002040"; // checkstyle.off: LineLength
+    String wkbBe = "0000000bbc000000020000000bb93ff00000000000004000000000000000400800000000000040100000000000000000000bb940140000000000004018000000000000401c0000000000004020000000000000"; // checkstyle.off: LineLength
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_POINT, false);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  // ========== MultiLineString Tests (2D) ==========
+
+  @Test
+  public void testMultiLineString2DEmpty() {
+    String wkbLe = "010500000000000000";
+    String wkbBe = "000000000500000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_LINESTRING, true);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  @Test
+  public void testMultiLineString2D_ThreeEmptyLineStrings() {
+    String wkbLe = "010500000003000000010200000000000000010200000000000000010200000000000000";
+    String wkbBe = "000000000500000003000000000200000000000000000200000000000000000200000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_LINESTRING, true);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  @Test
+  public void testMultiLineString2D_TwoLineStrings() {
+    // MULTILINESTRING((1 2,3 4),(5 6,7 8))
+    String wkbLe = "010500000002000000010200000002000000000000000000f03f000000000000004000000000000008400000000000001040010200000002000000000000000000144000000000000018400000000000001c400000000000002040"; // checkstyle.off: LineLength
+    String wkbBe = "0000000005000000020000000002000000023ff000000000000040000000000000004008000000000000401000000000000000000000020000000240140000000000004018000000000000401c0000000000004020000000000000"; // checkstyle.off: LineLength
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_LINESTRING, false);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  // ========== MultiLineString Tests (3DZ) ==========
+
+  @Test
+  public void testMultiLineString3DZEmpty() {
+    String wkbLe = "01ed03000000000000";
+    String wkbBe = "00000003ed00000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_LINESTRING, true);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  // ========== MultiLineString Tests (3DM) ==========
+
+  @Test
+  public void testMultiLineString3DMEmpty() {
+    String wkbLe = "01d507000000000000";
+    String wkbBe = "00000007d500000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_LINESTRING, true);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  // ========== MultiLineString Tests (4D) ==========
+
+  @Test
+  public void testMultiLineString4DEmpty() {
+    String wkbLe = "01bd0b000000000000";
+    String wkbBe = "0000000bbd00000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_LINESTRING, true);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  // ========== MultiPolygon Tests (2D) ==========
+
+  @Test
+  public void testMultiPolygon2DEmpty() {
+    String wkbLe = "010600000000000000";
+    String wkbBe = "000000000600000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_POLYGON, true);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  @Test
+  public void testMultiPolygon2D_WithHole() {
+    // MULTIPOLYGON(EMPTY,((0 0,10 0,0 10,0 0),(1 1,1 2,2 1,1 1)))
+    String wkbLe = "0106000000020000000103000000000000000103000000020000000400000000000000000000000000000000000000000000000024400000000000000000000000000000000000000000000024400000000000000000000000000000000004000000000000000000f03f000000000000f03f000000000000f03f00000000000000400000000000000040000000000000f03f000000000000f03f000000000000f03f"; // checkstyle.off: LineLength
+    String wkbBe = "0000000006000000020000000003000000000000000003000000020000000400000000000000000000000000000000402400000000000000000000000000000000000000000000402400000000000000000000000000000000000000000000000000043ff00000000000003ff00000000000003ff0000000000000400000000000000040000000000000003ff00000000000003ff00000000000003ff0000000000000"; // checkstyle.off: LineLength
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_POLYGON, false);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  // ========== MultiPolygon Tests (3DZ) ==========
+
+  @Test
+  public void testMultiPolygon3DZEmpty() {
+    String wkbLe = "01ee03000000000000";
+    String wkbBe = "00000003ee00000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_POLYGON, true);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  // ========== MultiPolygon Tests (3DM) ==========
+
+  @Test
+  public void testMultiPolygon3DMEmpty() {
+    String wkbLe = "01d607000000000000";
+    String wkbBe = "00000007d600000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_POLYGON, true);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  // ========== MultiPolygon Tests (4D) ==========
+
+  @Test
+  public void testMultiPolygon4DEmpty() {
+    String wkbLe = "01be0b000000000000";
+    String wkbBe = "0000000bbe00000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.MULTI_POLYGON, true);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  // ========== GeometryCollection Tests (2D) ==========
+
+  @Test
+  public void testGeometryCollection2DEmpty() {
+    String wkbLe = "010700000000000000";
+    String wkbBe = "000000000700000000";
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.GEOMETRY_COLLECTION, true);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  @Test
+  public void testGeometryCollection2D_NestedEmpty() {
+    // GEOMETRYCOLLECTION(POINT EMPTY,LINESTRING EMPTY,GEOMETRYCOLLECTION EMPTY,...)
+    String wkbLe = "0107000000050000000101000000000000000000f87f000000000000f87f0102000000000000000107000000000000000107000000020000000107000000000000000107000000000000000107000000030000000104000000000000000104000000010000000101000000000000000000f87f000000000000f87f010700000003000000010500000000000000010600000000000000010700000000000000"; // checkstyle.off: LineLength
+    String wkbBe = "00000000070000000500000000017ff80000000000007ff80000000000000000000002000000000000000007000000000000000007000000020000000007000000000000000007000000000000000007000000030000000004000000000000000004000000010000000017ff80000000000007ff8000000000000000000000700000003000000000500000000000000000600000000000000000700000000"; // checkstyle.off: LineLength
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.GEOMETRY_COLLECTION, true);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  @Test
+  public void testGeometryCollection2D_AllTypes() {
+    // GEOMETRYCOLLECTION(POINT EMPTY, LINESTRING EMPTY, POLYGON EMPTY, MULTIPOINT EMPTY,
+    //                    MULTILINESTRING EMPTY, MULTIPOLYGON EMPTY, GEOMETRYCOLLECTION(...))
+    String wkbLe = "0107000000070000000101000000000000000000f87f000000000000f87f0102000000000000000103000000000000000104000000000000000105000000000000000106000000000000000107000000060000000101000000000000000000f87f000000000000f87f010200000000000000010300000000000000010400000000000000010500000000000000010600000000000000"; // checkstyle.off: LineLength
+    String wkbBe = "00000000070000000700000000017ff80000000000007ff800000000000000000000020000000000000000030000000000000000040000000000000000500000000000000006000000000000000070000000600000000017ff80000000000007ff8000000000000000000000200000000000000000300000000000000000400000000000000000500000000000000000600000000"; // checkstyle.off: LineLength
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.GEOMETRY_COLLECTION, true);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  @Test
+  public void testGeometryCollection2D_Complex() {
+    // A complex GeometryCollection with all non-empty geometry types
+    String wkbLe = "0107000000070000000101000000000000000000f03f0000000000000040010200000002000000000000000000f03f00000000000000400000000000000840000000000000104001030000000100000004000000000000000000000000000000000000000000000000f03f00000000000000000000000000000000000000000000f03f000000000000000000000000000000000104000000020000000101000000000000000000f87f000000000000f87f0101000000000000000000f03f0000000000000040010500000002000000010200000000000000010200000002000000000000000000f03f000000000000004000000000000008400000000000001040010600000002000000010300000000000000010300000001000000040000000000000000000000000000000000000000000000f03f00000000000000000000000000000000000000000000f03f000000000000000000000000000000000107000000060000000101000000000000000000f03f0000000000000040010200000002000000000000000000f03f0000000000000040000000000000084000000000000010400103000000010000000400000000000000000000000000000000000000000000000000f03f00000000000000000000000000000000000000000000f03f000000000000000000000000000000000104000000020000000101000000000000000000f87f000000000000f87f0101000000000000000000f03f0000000000000040010500000002000000010200000000000000010200000002000000000000000000f03f00000000000000400000000000000840000000000000104001060000000200000001030000000000000001030000000100000004000000000000000000000000000000000000000000000000f03f00000000000000000000000000000000000000000000f03f00000000000000000000000000000000"; // checkstyle.off: LineLength
+    String wkbBe = "00000000070000000700000000013ff00000000000004000000000000000000000000200000002" + "3ff0000000000000400000000000000040080000000000004010000000000000000000000300000001000000040000000000000000000000000000000" + "3ff0000000000000000000000000000000000000000000" + "3ff0000000000000000000000000000000000000000000000000000040000000200000000017ff80000000000007ff800000000000000000000013ff0000000000000400000000000000000000000050000000200000000020000000000000000200000002" + "3ff0000000000000400000000000000040080000000000004010000000000000000000006000000020000000003000000000000000003000000010000000400000000000000000000000000000003ff0000000000000000000000000000000000000000000" + "3ff0000000000000000000000000000000000000000000000000000070000000600000000013ff0000000000000400000000000000000000000020000000" + "23ff0000000000000400000000000000040080000000000004010000000000000000000003000000010000000400000000000000000000000000000003ff0000000000000000000000000000000000000000000" + "3ff0000000000000000000000000000000000000000000000000000040000000200000000017ff80000000000007ff800000000000000000000013ff00000000000004000000000000000000000000500000002000000000200000000000000000200000002" + "3ff0000000000000400000000000000040080000000000004010000000000000000000006000000020000000003000000000000000003000000010000000400000000000000000000000000000003ff0000000000000000000000000000000000000000000" + "3ff000000000000000000000000000000000000000000000"; // checkstyle.off: LineLength
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.GEOMETRY_COLLECTION, false);
+    checkWkbRoundTrip(wkbLe, wkbBe);
+  }
+
+  // ========== Additional Parsing Tests ==========
+
+  @Test
+  public void testInvalidWkbTooShort() {
+    byte[] invalidWkb = {0x01};
+    WkbReader reader = new WkbReader();
+    Assertions.assertThrows(WkbParseException.class, () -> reader.read(invalidWkb, 0));
+  }
+
+  @Test
+  public void testInvalidByteOrder() {
+    byte[] invalidWkb = {0x02, 0x01, 0x00, 0x00, 0x00};
+    WkbReader reader = new WkbReader();
+    Assertions.assertThrows(WkbParseException.class, () -> reader.read(invalidWkb, 0));
+  }
+
+  @Test
+  public void testUnsupportedGeometryType() {
+    // Invalid type 99
+    byte[] invalidWkb = hexToBytes("0163000000000000000000f03f0000000000000040");
+    WkbReader reader = new WkbReader();
+    Assertions.assertThrows(WkbParseException.class, () -> reader.read(invalidWkb, 0));
+  }
+
+  // ========== Coordinate Verification Tests ==========
+
+  @Test
+  public void testLineStringCoordinates() {
+    // LINESTRING(1 2, 3 4)
+    String wkbLe = "010200000002000000000000000000f03f000000000000004000000000000008400000000000001040"; // checkstyle.off: LineLength
+    byte[] wkb = hexToBytes(wkbLe);
+    WkbReader reader = new WkbReader();
+    LineString ls = (LineString) reader.read(wkb, 0);
+
+    Assertions.assertEquals(2, ls.getNumPoints());
+    List<Point> points = ls.getPoints();
+    Assertions.assertEquals(1.0, points.get(0).getX(), 0.0001);
+    Assertions.assertEquals(2.0, points.get(0).getY(), 0.0001);
+    Assertions.assertEquals(3.0, points.get(1).getX(), 0.0001);
+    Assertions.assertEquals(4.0, points.get(1).getY(), 0.0001);
+  }
+
+  @Test
+  public void testPolygonCoordinates() {
+    // POLYGON((0 0, 10 0, 0 10, 0 0), (1 1, 1 2, 2 1, 1 1))
+    String wkbLe = "010300000002000000040000000000000000000000000000000000000000000000000024400000000000000000000000000000000000000000000024400000000000000000000000000000000004000000000000000000f03f000000000000f03f000000000000f03f00000000000000400000000000000040000000000000f03f000000000000f03f000000000000f03f"; // checkstyle.off: LineLength
+    byte[] wkb = hexToBytes(wkbLe);
+    WkbReader reader = new WkbReader();
+    Polygon poly = (Polygon) reader.read(wkb, 0);
+
+    Assertions.assertEquals(2, poly.getRings().size());
+    Ring exteriorRing = poly.getRings().get(0);
+    Assertions.assertEquals(4, exteriorRing.getNumPoints());
+    Assertions.assertEquals(0.0, exteriorRing.getPoints().get(0).getX(), 0.0001);
+    Assertions.assertEquals(0.0, exteriorRing.getPoints().get(0).getY(), 0.0001);
+    Assertions.assertEquals(10.0, exteriorRing.getPoints().get(1).getX(), 0.0001);
+    Assertions.assertEquals(0.0, exteriorRing.getPoints().get(1).getY(), 0.0001);
+  }
+
+  @Test
+  public void testMultiPointCoordinates() {
+    // MULTIPOINT((1 2),(3 4))
+    String wkbLe = "0104000000020000000101000000000000000000f03f0000000000000040010100000000000000000008400000000000001040"; // checkstyle.off: LineLength
+    byte[] wkb = hexToBytes(wkbLe);
+    WkbReader reader = new WkbReader();
+    MultiPoint mp = (MultiPoint) reader.read(wkb, 0);
+
+    Assertions.assertEquals(2, mp.getNumGeometries());
+    List<Point> points = mp.getPoints();
+    Assertions.assertEquals(1.0, points.get(0).getX(), 0.0001);
+    Assertions.assertEquals(2.0, points.get(0).getY(), 0.0001);
+    Assertions.assertEquals(3.0, points.get(1).getX(), 0.0001);
+    Assertions.assertEquals(4.0, points.get(1).getY(), 0.0001);
+  }
+
+  @Test
+  public void testGeometryCollectionStructure() {
+    // GEOMETRYCOLLECTION(POINT(1 2), LINESTRING(1 2, 3 4))
+    String wkbLe = "0107000000020000000101000000000000000000f03f0000000000000040010200000002000000000000000000f03f000000000000004000000000000008400000000000001040"; // checkstyle.off: LineLength
+    byte[] wkb = hexToBytes(wkbLe);
+    WkbReader reader = new WkbReader();
+    GeometryCollection gc = (GeometryCollection) reader.read(wkb, 0);
+
+    Assertions.assertEquals(2, gc.getNumGeometries());
+    Assertions.assertTrue(gc.getGeometries().get(0) instanceof Point);
+    Assertions.assertTrue(gc.getGeometries().get(1) instanceof LineString);
+  }
+
+  // ========== SRID Preservation Tests ==========
+
+  @Test
+  public void testSridPreservation() {
+    String wkbLe = "0101000000000000000000f03f0000000000000040";
+    byte[] wkb = hexToBytes(wkbLe);
+    WkbReader reader = new WkbReader();
+    GeometryModel geom = reader.read(wkb, 4326);
+
+    Assertions.assertEquals(4326, geom.srid());
+  }
+}
+

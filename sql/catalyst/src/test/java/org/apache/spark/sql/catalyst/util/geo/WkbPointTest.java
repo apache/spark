@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.util;
+package org.apache.spark.sql.catalyst.util.geo;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -35,14 +35,6 @@ public class WkbPointTest {
     return data;
   }
 
-  private String bytesToHex(byte[] bytes) {
-    StringBuilder sb = new StringBuilder();
-    for (byte b : bytes) {
-      sb.append(String.format("%02x", b));
-    }
-    return sb.toString();
-  }
-
   @Test
   public void testEmptyPoint() {
     String wkbHexLittle = "0101000000000000000000f87f000000000000f87f";
@@ -50,7 +42,8 @@ public class WkbPointTest {
 
     // Test little endian
     byte[] wkbBytes = hexToBytes(wkbHexLittle);
-    Geometry geom = Geometry.fromWkb(wkbBytes);
+    WkbReader reader = new WkbReader();
+    GeometryModel geom = reader.read(wkbBytes);
 
     Assertions.assertTrue(geom.isPoint(), "Should be a Point");
     Point point = geom.asPoint();
@@ -60,7 +53,7 @@ public class WkbPointTest {
 
     // Test big endian
     byte[] wkbBytesBig = hexToBytes(wkbHexBig);
-    Geometry geomBig = Geometry.fromWkb(wkbBytesBig);
+    GeometryModel geomBig = reader.read(wkbBytesBig);
 
     Assertions.assertTrue(geomBig.isPoint(), "Should be a Point");
     Point pointBig = geomBig.asPoint();
@@ -75,7 +68,8 @@ public class WkbPointTest {
 
     // Test little endian
     byte[] wkbBytes = hexToBytes(wkbHexLittle);
-    Geometry geom = Geometry.fromWkb(wkbBytes);
+    WkbReader reader = new WkbReader();
+    GeometryModel geom = reader.read(wkbBytes);
 
     Assertions.assertTrue(geom.isPoint(), "Should be a Point");
     Point point = geom.asPoint();
@@ -85,7 +79,7 @@ public class WkbPointTest {
 
     // Test big endian
     byte[] wkbBytesBig = hexToBytes(wkbHexBig);
-    Geometry geomBig = Geometry.fromWkb(wkbBytesBig);
+    GeometryModel geomBig = reader.read(wkbBytesBig);
 
     Point pointBig = geomBig.asPoint();
     Assertions.assertEquals(1.0, pointBig.getX(), 1e-10, "X coordinate (big endian)");
@@ -99,7 +93,8 @@ public class WkbPointTest {
     String wkbHexBig = "0000000001c0668000000000000000000000000000";
 
     byte[] wkbBytes = hexToBytes(wkbHexLittle);
-    Geometry geom = Geometry.fromWkb(wkbBytes);
+    WkbReader reader = new WkbReader();
+    GeometryModel geom = reader.read(wkbBytes);
 
     Point point = geom.asPoint();
     Assertions.assertEquals(-180.0, point.getX(), 1e-10, "X coordinate");
@@ -113,7 +108,8 @@ public class WkbPointTest {
     String wkbHexBig = "00000000010000000000000000c056800000000000";
 
     byte[] wkbBytes = hexToBytes(wkbHexLittle);
-    Geometry geom = Geometry.fromWkb(wkbBytes);
+    WkbReader reader = new WkbReader();
+    GeometryModel geom = reader.read(wkbBytes);
 
     Point point = geom.asPoint();
     Assertions.assertEquals(0.0, point.getX(), 1e-10, "X coordinate");
@@ -127,7 +123,8 @@ public class WkbPointTest {
     String wkbHexBig = "000000000100000000000000004056800000000000";
 
     byte[] wkbBytes = hexToBytes(wkbHexLittle);
-    Geometry geom = Geometry.fromWkb(wkbBytes);
+    WkbReader reader = new WkbReader();
+    GeometryModel geom = reader.read(wkbBytes);
 
     Point point = geom.asPoint();
     Assertions.assertEquals(0.0, point.getX(), 1e-10, "X coordinate");

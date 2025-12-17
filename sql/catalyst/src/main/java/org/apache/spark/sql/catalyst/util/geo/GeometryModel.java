@@ -63,6 +63,24 @@ public abstract class GeometryModel {
     return false;
   }
 
+  // Returns the dimension count (2 for 2D, 3 for 3DZ/3DM, 4 for 4D)
+  // Subclasses should override this method
+  int getDimensionCount() {
+    return 2; // Default to 2D
+  }
+
+  // Returns true if this geometry has Z coordinate
+  // Subclasses should override this method
+  boolean hasZ() {
+    return false;
+  }
+
+  // Returns true if this geometry has M coordinate
+  // Subclasses should override this method
+  boolean hasM() {
+    return false;
+  }
+
   /** Type checking methods for GeometryModel subclasses. */
 
   // Returns true if this geometry is a Point

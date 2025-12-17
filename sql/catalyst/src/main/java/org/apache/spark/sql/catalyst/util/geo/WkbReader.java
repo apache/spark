@@ -22,15 +22,15 @@ import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.apache.spark.sql.catalyst.util.geo.WkbConstants.DEFAULT_SRID;
+
 /**
  * Reader for parsing Well-Known Binary (WKB) format geometries.
  * This class implements the OGC Simple Features specification for WKB parsing.
  */
 public class WkbReader {
-  private static final int DEFAULT_SRID = 0;
-
   private ByteBuffer buffer;
-  private int validationLevel;
+  private final int validationLevel;
   private byte[] currentWkb;
 
   public WkbReader() {
@@ -39,6 +39,25 @@ public class WkbReader {
 
   public WkbReader(int validationLevel) {
     this.validationLevel = validationLevel;
+  }
+
+  // ========== Coordinate Validation Helpers ==========
+
+  /**
+   * Returns true if the coordinate value is valid for a non-empty point.
+   * A valid coordinate is finite (not NaN and not Infinity).
+   */
+  private static boolean isValidCoordinate(double value) {
+    return Double.isFinite(value);
+  }
+
+  /**
+   * Returns true if the coordinate value is valid for a point that may be empty.
+   * A valid coordinate is either finite or NaN (for empty points).
+   * Infinity values are not allowed.
+   */
+  private static boolean isValidCoordinateAllowEmpty(double value) {
+    return Double.isFinite(value) || Double.isNaN(value);
   }
 
   /**
@@ -78,28 +97,47 @@ public class WkbReader {
   private ByteOrder readEndianness() {
     checkNotAtEnd(buffer.position());
     byte endianValue = buffer.get();
-    if (endianValue > 1) {
-      throw new WkbParseException("Invalid byte order " + endianValue,
-        buffer.position() - 1, currentWkb);
+    if (endianValue != WkbConstants.BIG_ENDIAN && endianValue != WkbConstants.LITTLE_ENDIAN) {
+      throw new WkbParseException("Invalid byte order " + endianValue, buffer.position() - 1,
+        currentWkb);
     }
-    return endianValue == 1 ? ByteOrder.LITTLE_ENDIAN : ByteOrder.BIG_ENDIAN;
+    return endianValue == WkbConstants.LITTLE_ENDIAN ?
+      ByteOrder.LITTLE_ENDIAN : ByteOrder.BIG_ENDIAN;
   }
 
   private int readInt() {
-    if (buffer.remaining() < 4) {
+    if (buffer.remaining() < WkbConstants.INT_SIZE) {
       checkNotAtEnd(buffer.limit());
     }
     return buffer.getInt();
   }
 
-  private double readDouble() {
-    if (buffer.remaining() < 8) {
+  /**
+   * Reads a double coordinate value, allowing NaN for empty points.
+   */
+  private double readDoubleAllowEmpty() {
+    if (buffer.remaining() < WkbConstants.DOUBLE_SIZE) {
       checkNotAtEnd(buffer.limit());
     }
     double value = buffer.getDouble();
-    if (!Double.isFinite(value) && !Double.isNaN(value)) {
-      throw new WkbParseException("Invalid coordinate value found",
-        buffer.position() - 8, currentWkb);
+    if (!isValidCoordinateAllowEmpty(value)) {
+      throw new WkbParseException("Invalid coordinate value found", buffer.position() - 8,
+        currentWkb);
+    }
+    return value;
+  }
+
+  /**
+   * Reads a double coordinate value, not allowing NaN (for non-point coordinates like rings).
+   */
+  private double readDoubleNoEmpty() {
+    if (buffer.remaining() < WkbConstants.DOUBLE_SIZE) {
+      checkNotAtEnd(buffer.limit());
+    }
+    double value = buffer.getDouble();
+    if (!isValidCoordinate(value)) {
+      throw new WkbParseException("Invalid coordinate value found", buffer.position() - 8,
+        currentWkb);
     }
     return value;
   }
@@ -108,12 +146,9 @@ public class WkbReader {
    * Reads a geometry from WKB bytes with a specified SRID.
    *
    * @param defaultSrid srid to use if not specified in WKB
-   * @return GeometryModel object
+   * @return Geometry object
    */
   private GeometryModel readGeometry(int defaultSrid) {
-    // We map negative SRID values to 0.
-    defaultSrid = Math.max(defaultSrid, 0);
-
     // Check that we have at least one byte for endianness
     if (currentWkb == null || currentWkb.length < 1) {
       throw new WkbParseException("WKB data is empty or null", 0, currentWkb);
@@ -135,8 +170,7 @@ public class WkbReader {
     buffer = ByteBuffer.wrap(currentWkb, 1, currentWkb.length - 1);
     buffer.order(byteOrder);
 
-    GeometryModel result = readGeometryInternal(defaultSrid, true);
-    return result;
+    return readGeometryInternal(defaultSrid, true);
   }
 
   /**
@@ -153,7 +187,7 @@ public class WkbReader {
    * @param defaultSrid srid to use if not specified in WKB
    * @param isRootGeometry if true, assumes endianness has already been read and buffer is set up;
    *                       if false, reads endianness from current buffer position
-   * @return GeometryModel object
+   * @return Geometry object
    */
   private GeometryModel readGeometryInternal(int defaultSrid, boolean isRootGeometry) {
     ByteOrder savedByteOrder = null;
@@ -178,29 +212,46 @@ public class WkbReader {
     GeoTypeId geoType;
     int dimensionCount;
 
-    // Determine dimension from WKB type
-    if (typeAndDim >= 1 && typeAndDim <= 7) {
-      // 2D geometry
-      dimensionCount = 2;
-      geoType = GeoTypeId.fromValue(typeAndDim);
-    } else if (typeAndDim >= 1000 && typeAndDim <= 1007) {
-      // 3DZ geometry
-      dimensionCount = 3;
-      geoType = GeoTypeId.fromValue(typeAndDim - 1000);
-    } else if (typeAndDim >= 2000 && typeAndDim <= 2007) {
-      // 3DM geometry
-      dimensionCount = 3;
-      geoType = GeoTypeId.fromValue(typeAndDim - 2000);
-    } else if (typeAndDim >= 3000 && typeAndDim <= 3007) {
-      // 4D geometry
-      dimensionCount = 4;
-      geoType = GeoTypeId.fromValue(typeAndDim - 3000);
-    } else {
+    // Parse WKB format (geotype and dimension)
+    if (!WkbConstants.isValidWkbType(typeAndDim)) {
       throw new WkbParseException("Invalid or unsupported type " + typeAndDim, typeStartPos,
         currentWkb);
     }
 
-    GeometryModel result = readType(geoType, defaultSrid, dimensionCount, typeStartPos);
+    int baseType = WkbConstants.getBaseType(typeAndDim);
+    geoType = GeoTypeId.fromValue(baseType);
+    dimensionCount = WkbConstants.getDimensionCount(typeAndDim);
+    boolean hasZ = WkbConstants.hasZ(typeAndDim);
+    boolean hasM = WkbConstants.hasM(typeAndDim);
+
+    // Dispatch to appropriate reader based on geometry type
+    GeometryModel result;
+    switch (geoType) {
+      case POINT:
+        result = readPoint(defaultSrid, dimensionCount, hasZ, hasM);
+        break;
+      case LINESTRING:
+        result = readLineString(defaultSrid, dimensionCount, hasZ, hasM);
+        break;
+      case POLYGON:
+        result = readPolygon(defaultSrid, dimensionCount, hasZ, hasM);
+        break;
+      case MULTI_POINT:
+        result = readMultiPoint(defaultSrid, dimensionCount, hasZ, hasM);
+        break;
+      case MULTI_LINESTRING:
+        result = readMultiLineString(defaultSrid, dimensionCount, hasZ, hasM);
+        break;
+      case MULTI_POLYGON:
+        result = readMultiPolygon(defaultSrid, dimensionCount, hasZ, hasM);
+        break;
+      case GEOMETRY_COLLECTION:
+        result = readGeometryCollection(defaultSrid, dimensionCount, hasZ, hasM);
+        break;
+      default:
+        throw new WkbParseException("Unsupported geometry type: " + geoType, typeStartPos,
+          currentWkb);
+    }
 
     // Restore the saved byte order if this was a nested geometry
     if (!isRootGeometry && savedByteOrder != null) {
@@ -210,44 +261,29 @@ public class WkbReader {
     return result;
   }
 
-  private GeometryModel readType(GeoTypeId geoType, int srid, int dimensionCount, long startPos) {
-    switch (geoType) {
-      case POINT:
-        return readPoint(srid, dimensionCount);
-      case LINESTRING:
-        return readLineString(srid, dimensionCount);
-      case POLYGON:
-        return readPolygon(srid, dimensionCount);
-      case MULTI_POINT:
-        return readMultiPoint(srid, dimensionCount);
-      case MULTI_LINESTRING:
-        return readMultiLineString(srid, dimensionCount);
-      case MULTI_POLYGON:
-        return readMultiPolygon(srid, dimensionCount);
-      case GEOMETRY_COLLECTION:
-        return readGeometryCollection(srid, dimensionCount);
-      default:
-        throw new WkbParseException("Unsupported geometry type: " + geoType, startPos, currentWkb);
-    }
-  }
-
-  private Point readPoint(int srid, int dimensionCount) {
+  /**
+   * Reads a top-level point geometry (allows empty points with NaN coordinates).
+   */
+  private Point readPoint(int srid, int dimensionCount, boolean hasZ, boolean hasM) {
     double[] coords = new double[dimensionCount];
     for (int i = 0; i < dimensionCount; i++) {
-      coords[i] = readDouble();
+      coords[i] = readDoubleAllowEmpty();
     }
-    return new Point(coords, srid);
+    return new Point(coords, srid, hasZ, hasM);
   }
 
-  private Point readPointCoordinates(int dimensionCount) {
+  /**
+   * Reads point coordinates for non-point geometries (does not allow empty/NaN).
+   */
+  private Point readPointCoordinatesNoEmpty(int dimensionCount, boolean hasZ, boolean hasM) {
     double[] coords = new double[dimensionCount];
     for (int i = 0; i < dimensionCount; i++) {
-      coords[i] = readDouble();
+      coords[i] = readDoubleNoEmpty();
     }
-    return new Point(coords, 0); // SRID will be set by parent
+    return new Point(coords, 0, hasZ, hasM); // SRID will be set by parent
   }
 
-  private LineString readLineString(int srid, int dimensionCount) {
+  private LineString readLineString(int srid, int dimensionCount, boolean hasZ, boolean hasM) {
     long numPointsPos = buffer.position();
     int numPoints = readInt();
 
@@ -257,13 +293,13 @@ public class WkbReader {
 
     List<Point> points = new ArrayList<>(numPoints);
     for (int i = 0; i < numPoints; i++) {
-      points.add(readPointCoordinates(dimensionCount));
+      points.add(readPointCoordinatesNoEmpty(dimensionCount, hasZ, hasM));
     }
 
-    return new LineString(points, srid);
+    return new LineString(points, srid, hasZ, hasM);
   }
 
-  private Ring readRing(int dimensionCount) {
+  private Ring readRing(int dimensionCount, boolean hasZ, boolean hasM) {
     long numPointsPos = buffer.position();
     int numPoints = readInt();
 
@@ -272,56 +308,47 @@ public class WkbReader {
     }
 
     List<Point> points = new ArrayList<>(numPoints);
-    Point first = null;
-    Point last = null;
 
     for (int i = 0; i < numPoints; i++) {
-      Point p = readPointCoordinates(dimensionCount);
+      Point p = readPointCoordinatesNoEmpty(dimensionCount, hasZ, hasM);
       points.add(p);
-      if (i == 0) {
-        first = p;
-      }
-      if (i == numPoints - 1) {
-        last = p;
-      }
     }
 
-    if (validationLevel > 0 && first != null && last != null) {
-      if (first.getX() != last.getX() || first.getY() != last.getY()) {
-        throw new WkbParseException("Found non-closed ring", buffer.position(), currentWkb);
-      }
-    }
-
-    return new Ring(points);
+    return new Ring(points, hasZ, hasM);
   }
 
-  private Polygon readPolygon(int srid, int dimensionCount) {
+  private Polygon readPolygon(int srid, int dimensionCount, boolean hasZ, boolean hasM) {
     int numRings = readInt();
     List<Ring> rings = new ArrayList<>(numRings);
 
     for (int i = 0; i < numRings; i++) {
-      rings.add(readRing(dimensionCount));
+      rings.add(readRing(dimensionCount, hasZ, hasM));
     }
 
-    return new Polygon(rings, srid);
+    return new Polygon(rings, srid, hasZ, hasM);
   }
 
-  private MultiPoint readMultiPoint(int srid, int dimensionCount) {
+  private MultiPoint readMultiPoint(int srid, int dimensionCount, boolean hasZ, boolean hasM) {
     int numPoints = readInt();
     List<Point> points = new ArrayList<>(numPoints);
 
     for (int i = 0; i < numPoints; i++) {
       GeometryModel geom = readNestedGeometry(srid);
       if (!(geom instanceof Point)) {
-        throw new WkbParseException("Expected Point in MultiPoint", buffer.position(), currentWkb);
+        throw new WkbParseException("Expected Point in MultiPoint", buffer.position(),
+          currentWkb);
       }
       points.add((Point) geom);
     }
 
-    return new MultiPoint(points, srid);
+    return new MultiPoint(points, srid, hasZ, hasM);
   }
 
-  private MultiLineString readMultiLineString(int srid, int dimensionCount) {
+  private MultiLineString readMultiLineString(
+    int srid,
+    int dimensionCount,
+    boolean hasZ,
+    boolean hasM) {
     int numLineStrings = readInt();
     List<LineString> lineStrings = new ArrayList<>(numLineStrings);
 
@@ -334,10 +361,10 @@ public class WkbReader {
       lineStrings.add((LineString) geom);
     }
 
-    return new MultiLineString(lineStrings, srid);
+    return new MultiLineString(lineStrings, srid, hasZ, hasM);
   }
 
-  private MultiPolygon readMultiPolygon(int srid, int dimensionCount) {
+  private MultiPolygon readMultiPolygon(int srid, int dimensionCount, boolean hasZ, boolean hasM) {
     int numPolygons = readInt();
     List<Polygon> polygons = new ArrayList<>(numPolygons);
 
@@ -350,10 +377,11 @@ public class WkbReader {
       polygons.add((Polygon) geom);
     }
 
-    return new MultiPolygon(polygons, srid);
+    return new MultiPolygon(polygons, srid, hasZ, hasM);
   }
 
-  private GeometryCollection readGeometryCollection(int srid, int dimensionCount) {
+  private GeometryCollection readGeometryCollection(int srid, int dimensionCount,
+      boolean hasZ, boolean hasM) {
     int numGeometries = readInt();
     List<GeometryModel> geometries = new ArrayList<>(numGeometries);
 
@@ -361,7 +389,7 @@ public class WkbReader {
       geometries.add(readNestedGeometry(srid));
     }
 
-    return new GeometryCollection(geometries, srid);
+    return new GeometryCollection(geometries, srid, hasZ, hasM);
   }
 }
 
