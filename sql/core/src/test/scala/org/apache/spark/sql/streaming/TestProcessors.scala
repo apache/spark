@@ -127,8 +127,7 @@ class RunningCountProcessor[T](ttl: TTLConfig = TTLConfig.NONE)
 /**
  * Processor that registers a processing time timer on first input and emits a message on expiry.
  */
-class SessionTimeoutProcessor
-    extends StatefulProcessor[String, String, (String, String)] {
+class SessionTimeoutProcessor extends StatefulProcessor[String, String, (String, String)] {
 
   @transient private var lastSeenState: ValueState[Long] = _
 
@@ -177,8 +176,8 @@ class EventTimeSessionProcessor
   @transient private var lastEventTimeState: ValueState[Long] = _
 
   override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
-    lastEventTimeState = getHandle.getValueState[Long](
-      "lastEventTime", Encoders.scalaLong, TTLConfig.NONE)
+    lastEventTimeState =
+      getHandle.getValueState[Long]("lastEventTime", Encoders.scalaLong, TTLConfig.NONE)
   }
 
   override def handleInputRows(
@@ -187,21 +186,22 @@ class EventTimeSessionProcessor
       timerValues: TimerValues
   ): Iterator[(String, String)] = {
     val results = scala.collection.mutable.ArrayBuffer[(String, String)]()
-    
-    inputRows.foreach { case (eventTimeMs, value) =>
-      // Clear any existing timer if we have previous state
-      if (lastEventTimeState.exists()) {
-        val oldTimerTime = lastEventTimeState.get() + 5000
-        getHandle.deleteTimer(oldTimerTime)
-      }
 
-      // Update last event time and register new timer
-      lastEventTimeState.update(eventTimeMs)
-      getHandle.registerTimer(eventTimeMs + 5000) // 5 second timeout from event time
+    inputRows.foreach {
+      case (eventTimeMs, value) =>
+        // Clear any existing timer if we have previous state
+        if (lastEventTimeState.exists()) {
+          val oldTimerTime = lastEventTimeState.get() + 5000
+          getHandle.deleteTimer(oldTimerTime)
+        }
 
-      results += ((key, s"received:$value@$eventTimeMs"))
+        // Update last event time and register new timer
+        lastEventTimeState.update(eventTimeMs)
+        getHandle.registerTimer(eventTimeMs + 5000) // 5 second timeout from event time
+
+        results += ((key, s"received:$value@$eventTimeMs"))
     }
-    
+
     results.iterator
   }
 
@@ -222,8 +222,7 @@ class EventTimeSessionProcessor
  * Output: (key, count) for current count after processing input
  * Used to test late event filtering - late events should not increment the count.
  */
-class EventTimeCountProcessor
-    extends StatefulProcessor[String, (Long, String), (String, Long)] {
+class EventTimeCountProcessor extends StatefulProcessor[String, (Long, String), (String, Long)] {
 
   @transient private var countState: ValueState[Long] = _
 
@@ -314,4 +313,3 @@ class WordFrequencyProcessor(ttl: TTLConfig = TTLConfig.NONE)
     results.iterator
   }
 }
-

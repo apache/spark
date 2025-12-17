@@ -187,7 +187,7 @@ class TwsTester[K, I, O](
     handle.peekMapState[MK, MV](stateName)
   }
 
-  /** Deletes state for given key. */
+  /** Deletes state for a given key. */
   def deleteState(stateName: String, key: K): Unit = {
     ImplicitGroupingKeyTracker.setImplicitKey(key)
     handle.deleteState(stateName)

@@ -49,10 +49,10 @@ class TwsTesterSuite extends SparkFunSuite {
   test("TwsTester should correctly test TopKProcessor") {
     val input: List[(String, (String, Double))] = List(
       ("key2", ("c", 30.0)),
-      ("key2", ("d", 40.0)), 
+      ("key2", ("d", 40.0)),
       ("key2", ("a", 10.0)),
       ("key2", ("b", 20.0)),
-      ("key3", ("a", 100.0)), 
+      ("key3", ("a", 100.0))
     )
     val tester = new TwsTester(new TopKProcessor(2))
     val ans1 = tester.test("key1", List(("b", 2.0), ("c", 3.0), ("a", 1.0)))
@@ -71,7 +71,7 @@ class TwsTesterSuite extends SparkFunSuite {
     assert(ans4 == List(("key1", 10.0), ("key1", 3.0)))
     assert(tester.peekListState[Double]("topK", "key1") == List(10.0, 3.0))
   }
-  
+
   test("TwsTester should allow direct access to ListState") {
     val tester = new TwsTester(new TopKProcessor(2))
     tester.setListState("topK", "a", List(6.0, 5.0))
@@ -88,7 +88,8 @@ class TwsTesterSuite extends SparkFunSuite {
 
   test("TwsTester should correctly test WordFrequencyProcessor") {
     val tester = new TwsTester(new WordFrequencyProcessor())
-    val ans1 = tester.test("user1", List(("", "hello"), ("", "world"), ("", "hello"), ("", "world")))
+    val ans1 =
+      tester.test("user1", List(("", "hello"), ("", "world"), ("", "hello"), ("", "world")))
     assert(
       ans1.sorted == List(
         ("user1", "hello", 1L),
@@ -294,7 +295,10 @@ class TwsTesterSuite extends SparkFunSuite {
     val mapTester = new TwsTester(new WordFrequencyProcessor())
     mapTester.setMapState("frequencies", "user1", Map("hello" -> 5L, "world" -> 3L))
     mapTester.setMapState("frequencies", "user2", Map("spark" -> 10L))
-    assert(mapTester.peekMapState[String, Long]("frequencies", "user1") == Map("hello" -> 5L, "world" -> 3L))
+    assert(
+      mapTester
+        .peekMapState[String, Long]("frequencies", "user1") == Map("hello" -> 5L, "world" -> 3L)
+    )
     mapTester.deleteState("frequencies", "user1")
     assert(mapTester.peekMapState[String, Long]("frequencies", "user1").isEmpty)
     assert(mapTester.peekMapState[String, Long]("frequencies", "user2") == Map("spark" -> 10L))
@@ -352,11 +356,15 @@ class TwsTesterSuite extends SparkFunSuite {
 
     // Process input for user1 - state should be set
     tester.test("user1", List(("", "hello"), ("", "world")))
-    assert(tester.peekMapState[String, Long]("frequencies", "user1") == Map("hello" -> 1L, "world" -> 1L))
+    assert(
+      tester.peekMapState[String, Long]("frequencies", "user1") == Map("hello" -> 1L, "world" -> 1L)
+    )
 
     // Advance time by 3 seconds - state should still exist
     tester.advanceProcessingTime(3000)
-    assert(tester.peekMapState[String, Long]("frequencies", "user1") == Map("hello" -> 1L, "world" -> 1L))
+    assert(
+      tester.peekMapState[String, Long]("frequencies", "user1") == Map("hello" -> 1L, "world" -> 1L)
+    )
 
     // Advance time by 3 more seconds (total 6s) - state should be expired
     tester.advanceProcessingTime(3000)
@@ -396,12 +404,12 @@ class TwsTesterSuite extends SparkFunSuite {
 
   test("TwsTester should support EventTime timers fired by data-driven watermark") {
     import java.sql.Timestamp
-    
+
     // Event time extractor: input is (eventTimeMs, value), extract eventTimeMs
-    val eventTimeExtractor: ((Long, String)) => Timestamp = { 
+    val eventTimeExtractor: ((Long, String)) => Timestamp = {
       case (eventTimeMs, _) => new Timestamp(eventTimeMs)
     }
-    
+
     val tester = new TwsTester(
       new EventTimeSessionProcessor(),
       timeMode = TimeMode.EventTime(),
@@ -436,11 +444,11 @@ class TwsTesterSuite extends SparkFunSuite {
 
   test("TwsTester should support EventTime timers fired by manual watermark advance") {
     import java.sql.Timestamp
-    
-    val eventTimeExtractor: ((Long, String)) => Timestamp = { 
+
+    val eventTimeExtractor: ((Long, String)) => Timestamp = {
       case (eventTimeMs, _) => new Timestamp(eventTimeMs)
     }
-    
+
     val tester = new TwsTester(
       new EventTimeSessionProcessor(),
       timeMode = TimeMode.EventTime(),
@@ -453,7 +461,7 @@ class TwsTesterSuite extends SparkFunSuite {
     val result1 = tester.test("key1", List((10000L, "hello")))
     assert(result1 == List(("key1", "received:hello@10000")))
 
-    // Process event at t=11000 for key2 - registers timer at t=16000  
+    // Process event at t=11000 for key2 - registers timer at t=16000
     // Watermark: 11000 - 2000 = 9000
     val result2 = tester.test("key2", List((11000L, "world")))
     assert(result2 == List(("key2", "received:world@11000")))
@@ -497,12 +505,15 @@ class TwsTesterSuite extends SparkFunSuite {
     // - (5000L, "late2") -> event time 5000 < watermark 6000, should be FILTERED
     // - (6000L, "ontime1") -> event time 6000 >= watermark 6000, should be PROCESSED
     // - (8000L, "ontime2") -> event time 8000 >= watermark 6000, should be PROCESSED
-    val result2 = tester.test("key1", List(
-      (4000L, "late1"),
-      (5000L, "late2"),
-      (6000L, "ontime1"),
-      (8000L, "ontime2")
-    ))
+    val result2 = tester.test(
+      "key1",
+      List(
+        (4000L, "late1"),
+        (5000L, "late2"),
+        (6000L, "ontime1"),
+        (8000L, "ontime2")
+      )
+    )
     // Only 2 events should be processed (the on-time ones)
     assert(result2 == List(("key1", 5L))) // 3 + 2 = 5
     assert(tester.peekValueState[Long]("count", "key1").get == 5L)
@@ -538,11 +549,14 @@ class TwsTesterSuite extends SparkFunSuite {
     assert(tester.peekValueState[Long]("count", "key1").get == 1L)
 
     // Now send only late events - all should be filtered, count unchanged
-    val result = tester.test("key1", List(
-      (1000L, "late1"),
-      (5000L, "late2"),
-      (9999L, "late3")
-    ))
+    val result = tester.test(
+      "key1",
+      List(
+        (1000L, "late1"),
+        (5000L, "late2"),
+        (9999L, "late3")
+      )
+    )
     // No events processed - handleInputRows is called with empty iterator
     // This should still return output but count shouldn't change
     assert(result == List(("key1", 1L))) // Count still 1
