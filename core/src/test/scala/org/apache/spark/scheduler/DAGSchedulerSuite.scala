@@ -48,7 +48,7 @@ import org.apache.spark.rpc.RpcTimeoutException
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedException}
-import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerId, BlockManagerMaster}
+import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerId, BlockManagerMaster, FallbackStorage, ShuffleBlockId}
 import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, CallSite, Clock, LongAccumulator, SystemClock, ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.Utils.createArray
@@ -1092,6 +1092,41 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       HashSet(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
   }
 
+  Seq(("worker", Some("hostA")), ("executor", None)).foreach { case (label, host) =>
+    test(s"SPARK-54729: $label loss with reliable fallback storage") {
+      // This is a variant of "worker lost without shuffle service" case from shuffleFileLossTests
+      // except that spark is using a shuffle driver component which stores shuffle data reliably
+      // outside of the executor - hence loss of executor does not result in any cleanup
+
+      conf.set(config.STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH.key, "file:///tmp/")
+      conf.set(config.STORAGE_DECOMMISSION_FALLBACK_STORAGE_PROACTIVE_ENABLED.key, "true")
+      conf.set(config.STORAGE_DECOMMISSION_FALLBACK_STORAGE_PROACTIVE_RELIABLE.key, "true")
+
+      val event = ExecutorProcessLost("", host)
+      val shuffleMapRdd = new MyRDD(sc, 2, Nil)
+      val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
+      val shuffleId = shuffleDep.shuffleId
+      val reduceRdd = new MyRDD(sc, 1, List(shuffleDep), tracker = mapOutputTracker)
+      submit(reduceRdd, Array(0))
+      completeShuffleMapStageSuccessfully(0, 0, 1)
+      assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).toList ===
+        List(
+          (makeBlockManagerId("hostA"), List((ShuffleBlockId(0, 0, 0), 2, 0))),
+          (makeBlockManagerId("hostB"), List((ShuffleBlockId(0, 1, 0), 2, 1))),
+        )
+      )
+      runEvent(ExecutorLost("hostA-exec", event))
+      verify(blockManagerMaster, times(1)).removeExecutorAsync("hostA-exec")
+      verify(mapOutputTracker, times(0)).removeOutputsOnExecutor("hostA-exec")
+      assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).toList ===
+        List(
+          (FallbackStorage.FALLBACK_BLOCK_MANAGER_ID, List((ShuffleBlockId(0, 0, 0), 2, 0))),
+          (makeBlockManagerId("hostB"), List((ShuffleBlockId(0, 1, 0), 2, 1))),
+        )
+      )
+    }
+  }
+
   test("SPARK-28967 properties must be cloned before posting to listener bus for 0 partition") {
     val properties = new Properties()
     val func = (context: TaskContext, it: Iterator[(_)]) => 1
@@ -1183,7 +1218,9 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         } else {
           s"host${('A' + idx).toChar}"
         }
-        (Success, makeMapStatus(hostName, numShufflePartitions, checksumVal = checksumVal))
+        val status = makeMapStatus(
+          hostName, numShufflePartitions, mapTaskId = task.partitionId, checksumVal = checksumVal)
+        (Success, status)
     }.toSeq)
   }
 
