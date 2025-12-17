@@ -34,20 +34,21 @@ import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, Column
 import org.apache.spark.storage.CacheId
 
 /**
- * Datasource implementation that can read a Connect Chunked Datasource directly from the
- * block manager.
+ * Datasource implementation that can read a Connect Chunked Datasource directly from the block
+ * manager.
  *
- * @param id of the LocalRelation.
- * @param sessionId of the LocalRelation.
- * @param schema of the LocalRelation.
- * @param dataHashes ids of the blocks stored in the BlockManager.
+ * @param id
+ *   of the LocalRelation.
+ * @param sessionId
+ *   of the LocalRelation.
+ * @param schema
+ *   of the LocalRelation.
+ * @param dataHashes
+ *   ids of the blocks stored in the BlockManager.
  */
-class LocalRelationTable(
-    id: Long,
-    sessionId: String,
-    schema: StructType,
-    dataHashes: Seq[String])
-  extends Table with SupportsRead {
+class LocalRelationTable(id: Long, sessionId: String, schema: StructType, dataHashes: Seq[String])
+    extends Table
+    with SupportsRead {
 
   override def name(): String = s"LocalRelation[session=$sessionId, id=$id]"
 
@@ -55,9 +56,8 @@ class LocalRelationTable(
     Column.create(field.name, field.dataType, field.nullable)
   }
 
-  override def capabilities(): util.Set[TableCapability] = util.EnumSet.of(
-    TableCapability.BATCH_READ,
-    TableCapability.MICRO_BATCH_READ)
+  override def capabilities(): util.Set[TableCapability] =
+    util.EnumSet.of(TableCapability.BATCH_READ, TableCapability.MICRO_BATCH_READ)
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = new ScanBuilder {
     override def build(): Scan = new LocalRelationScan(schema, sessionId, dataHashes)
@@ -67,7 +67,8 @@ class LocalRelationTable(
 case class LocalRelationScanPartition(sessionId: String, dataHash: String) extends InputPartition
 
 class LocalRelationScan(schema: StructType, sessionId: String, dataHashes: Seq[String])
-  extends Scan with Batch {
+    extends Scan
+    with Batch {
   override def readSchema(): StructType = schema
 
   override def toBatch: Batch = this
@@ -95,7 +96,8 @@ object LocalRelationScanPartitionReaderFactory extends PartitionReaderFactory {
 }
 
 class LocalRelationPartitionReader(partition: LocalRelationScanPartition)
-  extends PartitionReader[ColumnarBatch] with Logging {
+    extends PartitionReader[ColumnarBatch]
+    with Logging {
   private var input: InputStream = _
   private var allocator: BufferAllocator = _
   private var reader: ConcatenatingArrowStreamReader = _
@@ -104,7 +106,9 @@ class LocalRelationPartitionReader(partition: LocalRelationScanPartition)
     if (reader == null) {
       val blockManager = SparkEnv.get.blockManager
       val blockId = CacheId(partition.sessionId, partition.dataHash)
-      input = blockManager.getLocalBytes(blockId).map(_.toInputStream())
+      input = blockManager
+        .getLocalBytes(blockId)
+        .map(_.toInputStream())
         .orElse(blockManager.getRemoteBytes(blockId).map(_.toInputStream(dispose = true)))
         .getOrElse(throw new SparkException(s"Cannot retrieve $blockId"))
       allocator = ArrowUtils.rootAllocator.newChildAllocator(
@@ -125,9 +129,12 @@ class LocalRelationPartitionReader(partition: LocalRelationScanPartition)
 
   override def get(): ColumnarBatch = {
     val root = reader.getVectorSchemaRoot
-    val columns = root.getFieldVectors.stream().map { vector =>
-      new ArrowColumnVector(vector)
-    }.toArray(new Array[ColumnVector](_))
+    val columns = root.getFieldVectors
+      .stream()
+      .map { vector =>
+        new ArrowColumnVector(vector)
+      }
+      .toArray(new Array[ColumnVector](_))
     val batch = new ColumnarBatch(columns)
     batch.setNumRows(root.getRowCount)
     batch

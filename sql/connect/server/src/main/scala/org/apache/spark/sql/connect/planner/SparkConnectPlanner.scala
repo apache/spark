@@ -1543,10 +1543,11 @@ class SparkConnectPlanner(
     assert(rel.hasSchemaHash)
     val schemaBytes = readChunkedCachedLocalRelationBlock(rel.getSchemaHash)
     // TODO we should prefer using connect protos for the datatype...
-    val schema = toStructTypeOrWrap(DataType.parseTypeWithFallback(
-      new String(schemaBytes),
-      parseDatatypeString,
-      fallbackParser = DataType.fromJson))
+    val schema = toStructTypeOrWrap(
+      DataType.parseTypeWithFallback(
+        new String(schemaBytes),
+        parseDatatypeString,
+        fallbackParser = DataType.fromJson))
     val hashes = rel.getDataHashesList.asScala.toSeq
     val table = new LocalRelationTable(id, sessionHolder.session.sessionUUID, schema, hashes)
     DataSourceV2Relation.create(table, None, None)
