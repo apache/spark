@@ -88,10 +88,13 @@ class _SimpleStreamReaderWrapper(DataSourceStreamReader):
             self.initial_offset = self.simple_reader.initialOffset()
         return self.initial_offset
 
-    def latestOffset(self) -> dict:
-        # when query start for the first time, use initial offset as the start offset.
+    def latestOffset(self, start: Optional[dict] = None) -> dict:
+        # When query starts for the first time, use either the provided start offset (if any) or
+        # the data source initial offset. The `start` parameter is accepted for API compatibility
+        # with DataSourceStreamReader.latestOffset(start=...), but admission control is not
+        # supported for the simple reader wrapper.
         if self.current_offset is None:
-            self.current_offset = self.initialOffset()
+            self.current_offset = start if start is not None else self.initialOffset()
         (iter, end) = self.simple_reader.read(self.current_offset)
         self.cache.append(PrefetchedCacheEntry(self.current_offset, end, iter))
         self.current_offset = end
