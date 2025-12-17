@@ -20,6 +20,7 @@ import unittest
 from pyspark.ml.tests.test_classification import ClassificationTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
+
 class ClassificationParityTests(ClassificationTestsMixin, ReusedConnectTestCase):
     pass
 
