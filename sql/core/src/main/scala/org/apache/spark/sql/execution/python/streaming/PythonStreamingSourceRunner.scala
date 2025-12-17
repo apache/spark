@@ -278,13 +278,9 @@ class PythonStreamingSourceRunner(
     val schema = ArrowUtils.fromArrowSchema(root.getSchema())
     assert(schema == outputSchema)
 
-    val vectors = root
-      .getFieldVectors()
-      .asScala
-      .map { vector =>
-        new ArrowColumnVector(vector)
-      }
-      .toArray[ColumnVector]
+    val vectors = root.getFieldVectors().asScala.map { vector =>
+      new ArrowColumnVector(vector)
+    }.toArray[ColumnVector]
     val rows = ArrayBuffer[InternalRow]()
     while (reader.loadNextBatch()) {
       val batch = new ColumnarBatch(vectors)
