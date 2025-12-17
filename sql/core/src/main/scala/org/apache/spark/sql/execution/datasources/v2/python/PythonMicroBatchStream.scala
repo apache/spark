@@ -183,9 +183,9 @@ class PythonMicroBatchStream(
 
 object PythonMicroBatchStream {
   private var currentId = 0
-  private[python] val MAX_RECORDS_PER_BATCH = "maxRecordsPerBatch"
-  private[python] val MAX_FILES_PER_BATCH = "maxFilesPerBatch"
-  private[python] val MAX_BYTES_PER_BATCH = "maxBytesPerBatch"
+  val MAX_RECORDS_PER_BATCH = "maxRecordsPerBatch"
+  val MAX_FILES_PER_BATCH = "maxFilesPerBatch"
+  val MAX_BYTES_PER_BATCH = "maxBytesPerBatch"
 
   def nextStreamId: Int = synchronized {
     currentId = currentId + 1

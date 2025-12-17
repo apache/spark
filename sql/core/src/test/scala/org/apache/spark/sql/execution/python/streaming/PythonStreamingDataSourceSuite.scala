@@ -33,6 +33,8 @@ import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
+import org.apache.spark.sql.execution.datasources.v2.python.PythonMicroBatchStream._
+
 class PythonStreamingDataSourceSimpleSuite extends PythonDataSourceSuiteBase {
   val waitTimeout = 15.seconds
 
@@ -498,7 +500,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
          |    def schema(self) -> str:
          |        return "id INT"
          |    def streamReader(self, schema):
-         |        max_rows = int(self.options.get("maxRecordsPerBatch", "0"))
+         |        max_rows = int(self.options.get("${MAX_RECORDS_PER_BATCH}", "0"))
          |        return AdmissionControlDataStreamReader(max_rows)
          |""".stripMargin
     val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
@@ -509,7 +511,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       val checkpointDir = new File(dir.getAbsolutePath, "checkpoint")
       val df = spark.readStream
         .format(dataSourceName)
-        .option("maxRecordsPerBatch", "1")
+        .option(MAX_RECORDS_PER_BATCH, "1")
         .load()
 
       val stopSignal = new CountDownLatch(1)
@@ -552,10 +554,10 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
 
     val e = intercept[IllegalArgumentException] {
-      spark.readStream.format(dataSourceName).option("maxFilesPerBatch", "1").load()
+      spark.readStream.format(dataSourceName).option(MAX_FILES_PER_BATCH, "1").load()
     }
-    assert(e.getMessage.contains("maxFilesPerBatch"))
-    assert(e.getMessage.contains("maxRecordsPerBatch"))
+    assert(e.getMessage.contains(MAX_FILES_PER_BATCH))
+    assert(e.getMessage.contains(MAX_RECORDS_PER_BATCH))
   }
 
   test("admission control: maxBytesPerBatch is not supported for Python data sources") {
@@ -576,10 +578,10 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     assert(spark.sessionState.dataSourceManager.dataSourceExists(dataSourceName))
 
     val e = intercept[IllegalArgumentException] {
-      spark.readStream.format(dataSourceName).option("maxBytesPerBatch", "1").load()
+      spark.readStream.format(dataSourceName).option(MAX_BYTES_PER_BATCH, "1").load()
     }
-    assert(e.getMessage.contains("maxBytesPerBatch"))
-    assert(e.getMessage.contains("maxRecordsPerBatch"))
+    assert(e.getMessage.contains(MAX_BYTES_PER_BATCH))
+    assert(e.getMessage.contains(MAX_RECORDS_PER_BATCH))
   }
 
   // Verify that socket between python runner and JVM doesn't timeout with large trigger interval.
