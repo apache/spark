@@ -11120,28 +11120,58 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         dtype: bool
         """
         axis = validate_axis(axis)
-        if axis != 0:
-            raise NotImplementedError('axis should be either 0 or "index" currently.')
-
         column_labels = self._internal.column_labels
         if bool_only:
             column_labels = self._bool_column_labels(column_labels)
         if len(column_labels) == 0:
             return ps.Series([], dtype=bool)
+        if axis == 0:
+            applied: List[PySparkColumn] = []
+            for label in column_labels:
+                scol = self._internal.spark_column_for(label)
 
-        applied: List[PySparkColumn] = []
-        for label in column_labels:
-            scol = self._internal.spark_column_for(label)
+                if isinstance(self._internal.spark_type_for(label), NumericType) or skipna:
+                    # np.nan takes no effect to the result; None takes no effect if `skipna`
+                    all_col = F.min(F.coalesce(scol.cast("boolean"), F.lit(True)))
+                else:
+                    # Take None as False when not `skipna`
+                    all_col = F.min(
+                        F.when(scol.isNull(), F.lit(False)).otherwise(scol.cast("boolean"))
+                    )
+                applied.append(F.when(all_col.isNull(), True).otherwise(all_col))
 
-            if isinstance(self._internal.spark_type_for(label), NumericType) or skipna:
-                # np.nan takes no effect to the result; None takes no effect if `skipna`
-                all_col = F.min(F.coalesce(scol.cast("boolean"), F.lit(True)))
-            else:
-                # Take None as False when not `skipna`
-                all_col = F.min(F.when(scol.isNull(), F.lit(False)).otherwise(scol.cast("boolean")))
-            applied.append(F.when(all_col.isNull(), True).otherwise(all_col))
+            return self._result_aggregated(column_labels, applied)
+        elif axis == 1:
+            from pyspark.pandas.series import first_series
 
-        return self._result_aggregated(column_labels, applied)
+            sdf = self._internal.spark_frame.select(
+                *self._internal_frame.index_spark_columns,
+                F.least(
+                    *[
+                        F.coalesce(
+                            self._internal.spark_column_for(label).cast("boolean"),
+                            # When skipna=True, nulls count as True and vice versa
+                            F.lit(skipna),
+                        )
+                        for label in column_labels
+                    ],
+                    F.lit(True),  # Handle one-column DataFrame case
+                ).alias(SPARK_DEFAULT_SERIES_NAME),
+            )
+            return first_series(
+                DataFrame(
+                    InternalFrame(
+                        spark_frame=sdf,
+                        index_spark_columns=self._internal.index_spark_columns,
+                        index_names=self._internal.index_names,
+                        index_fields=self._internal.index_fields,
+                        column_labels=[None],
+                    )
+                )
+            )
+        else:
+            # axis=None case - return single boolean value
+            raise NotImplementedError('axis should be 0, 1, "index", or "columns" currently.')
 
     # TODO(SPARK-46166): axis and **kwargs should be implemented.
     def any(
