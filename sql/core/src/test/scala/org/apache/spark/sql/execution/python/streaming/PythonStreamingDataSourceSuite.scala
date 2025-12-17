@@ -340,202 +340,6 @@ class PythonStreamingDataSourceSimpleSuite extends PythonDataSourceSuiteBase {
       stream.latestOffset()
     }
   }
-
-  test("admission control option accepted with SimpleDataSourceStreamReader") {
-    assume(shouldTestPandasUDFs)
-    val dataSourceScript =
-      s"""
-         |from pyspark.sql.datasource import DataSource
-         |$simpleDataStreamReaderScript
-         |
-         |class $dataSourceName(DataSource):
-         |    def schema(self) -> str:
-         |        return "id INT"
-         |    def simpleStreamReader(self, schema):
-         |        return SimpleDataStreamReader()
-         |""".stripMargin
-    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
-    spark.dataSource.registerPython(dataSourceName, dataSource)
-
-    withTempDir { dir =>
-      val path = dir.getAbsolutePath
-      val checkpointDir = new File(path, "checkpoint")
-      val df = spark.readStream
-        .format(dataSourceName)
-        .option("maxRecordsPerBatch", "1") // Admission control: limit to 1 row per batch
-        .load()
-
-      val stopSignal = new CountDownLatch(1)
-      val q = df.writeStream
-        .option("checkpointLocation", checkpointDir.getAbsolutePath)
-        .foreachBatch((df: DataFrame, batchId: Long) => {
-          if (batchId >= 5) stopSignal.countDown()
-        })
-        .start()
-
-      assert(
-        stopSignal.await(waitTimeout.toSeconds, java.util.concurrent.TimeUnit.SECONDS),
-        "Query did not process expected batches in time")
-      q.stop()
-      q.awaitTermination()
-    }
-  }
-
-  test("admission control: maxFilesPerBatch option") {
-    assume(shouldTestPandasUDFs)
-    val dataSourceScript =
-      s"""
-         |from pyspark.sql.datasource import DataSource
-         |$simpleDataStreamReaderScript
-         |
-         |class $dataSourceName(DataSource):
-         |    def schema(self) -> str:
-         |        return "id INT"
-         |    def simpleStreamReader(self, schema):
-         |        return SimpleDataStreamReader()
-         |""".stripMargin
-    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
-    spark.dataSource.registerPython(dataSourceName, dataSource)
-
-    withTempDir { dir =>
-      val path = dir.getAbsolutePath
-      val checkpointDir = new File(path, "checkpoint")
-      val df = spark.readStream
-        .format(dataSourceName)
-        .option("maxFilesPerBatch", "10") // Admission control option
-        .load()
-
-      val stopSignal = new CountDownLatch(1)
-      val q = df.writeStream
-        .option("checkpointLocation", checkpointDir.getAbsolutePath)
-        .foreachBatch((df: DataFrame, batchId: Long) => {
-          // Just verify the query runs successfully with maxFilesPerBatch option
-          if (batchId >= 3) stopSignal.countDown()
-        })
-        .start()
-
-      assert(
-        stopSignal.await(waitTimeout.toSeconds, java.util.concurrent.TimeUnit.SECONDS),
-        "Query with maxFilesPerBatch did not complete")
-      q.stop()
-      q.awaitTermination()
-    }
-  }
-
-  test("admission control: maxBytesPerBatch option") {
-    assume(shouldTestPandasUDFs)
-    val dataSourceScript =
-      s"""
-         |from pyspark.sql.datasource import DataSource
-         |$simpleDataStreamReaderScript
-         |
-         |class $dataSourceName(DataSource):
-         |    def schema(self) -> str:
-         |        return "id INT"
-         |    def simpleStreamReader(self, schema):
-         |        return SimpleDataStreamReader()
-         |""".stripMargin
-    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
-    spark.dataSource.registerPython(dataSourceName, dataSource)
-
-    withTempDir { dir =>
-      val path = dir.getAbsolutePath
-      val checkpointDir = new File(path, "checkpoint")
-      val df = spark.readStream
-        .format(dataSourceName)
-        .option("maxBytesPerBatch", "1048576") // 1MB limit
-        .load()
-
-      val stopSignal = new CountDownLatch(1)
-      val q = df.writeStream
-        .option("checkpointLocation", checkpointDir.getAbsolutePath)
-        .foreachBatch((df: DataFrame, batchId: Long) => {
-          // Just verify the query runs successfully with maxBytesPerBatch option
-          if (batchId >= 3) stopSignal.countDown()
-        })
-        .start()
-
-      assert(
-        stopSignal.await(waitTimeout.toSeconds, java.util.concurrent.TimeUnit.SECONDS),
-        "Query with maxBytesPerBatch did not complete")
-      q.stop()
-      q.awaitTermination()
-    }
-  }
-
-  private def testInvalidAdmissionControlValue(option: String, value: String): Unit = {
-    assume(shouldTestPandasUDFs)
-    val dataSourceScript =
-      s"""
-         |from pyspark.sql.datasource import DataSource
-         |$simpleDataStreamReaderScript
-         |
-         |class $dataSourceName(DataSource):
-         |    def schema(self) -> str:
-         |        return "id INT"
-         |    def simpleStreamReader(self, schema):
-         |        return SimpleDataStreamReader()
-         |""".stripMargin
-    val dataSource = createUserDefinedPythonDataSource(dataSourceName, dataSourceScript)
-    spark.dataSource.registerPython(dataSourceName, dataSource)
-
-    withTempDir { dir =>
-      val path = dir.getAbsolutePath
-      val checkpointDir = new File(path, "checkpoint")
-      val df = spark.readStream
-        .format(dataSourceName)
-        .option(option, value)
-        .load()
-
-      val e = intercept[StreamingQueryException] {
-        val q = df.writeStream
-          .option("checkpointLocation", checkpointDir.getAbsolutePath)
-          .foreachBatch((df: DataFrame, batchId: Long) => {})
-          .start()
-        try {
-          q.processAllAvailable()
-        } finally {
-          q.stop()
-        }
-      }
-      assert(
-        e.getCause.isInstanceOf[IllegalArgumentException],
-        s"Expected IllegalArgumentException but got ${e.getCause.getClass}")
-      Seq(option, value, "positive integer").foreach { s =>
-        assert(
-          e.getMessage.contains(s),
-          s"Expected error message to contain '$s' but got: ${e.getMessage}")
-      }
-    }
-  }
-
-  test("admission control: invalid maxRecordsPerBatch throws exception") {
-    testInvalidAdmissionControlValue("maxRecordsPerBatch", "invalid")
-  }
-
-  test("admission control: negative maxRecordsPerBatch throws exception") {
-    testInvalidAdmissionControlValue("maxRecordsPerBatch", "-1")
-  }
-
-  test("admission control: zero maxRecordsPerBatch throws exception") {
-    testInvalidAdmissionControlValue("maxRecordsPerBatch", "0")
-  }
-
-  test("admission control: decimal maxRecordsPerBatch throws exception") {
-    testInvalidAdmissionControlValue("maxRecordsPerBatch", "10.5")
-  }
-
-  test("admission control: invalid maxFilesPerBatch throws exception") {
-    testInvalidAdmissionControlValue("maxFilesPerBatch", "invalid")
-  }
-
-  test("admission control: negative maxFilesPerBatch throws exception") {
-    testInvalidAdmissionControlValue("maxFilesPerBatch", "-1")
-  }
-
-  test("admission control: invalid maxBytesPerBatch throws exception") {
-    testInvalidAdmissionControlValue("maxBytesPerBatch", "not-a-number")
-  }
 }
 
 class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
@@ -924,14 +728,19 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
         pythonDs,
         errorDataSourceName,
         inputSchema,
-        CaseInsensitiveStringMap.empty())
+        CaseInsensitiveStringMap.empty()
+      )
       val err = intercept[SparkException] {
         func(stream)
       }
       checkErrorMatchPVals(
         err,
         condition = "PYTHON_STREAMING_DATA_SOURCE_RUNTIME_ERROR",
-        parameters = Map("action" -> action, "msg" -> "(.|\\n)*"))
+        parameters = Map(
+          "action" -> action,
+          "msg" -> "(.|\\n)*"
+        )
+      )
       assert(err.getMessage.contains(msg))
       stream.stop()
     }
@@ -1068,15 +877,13 @@ class PythonStreamingDataSourceWriteSuite extends PythonDataSourceSuiteBase {
           inputData.toDF()
         } else {
           // Complete mode only supports stateful aggregation
-          inputData
-            .toDF()
-            .groupBy("value")
-            .count()
+          inputData.toDF()
+            .groupBy("value").count()
         }
-        def resultDf: DataFrame = spark.read
-          .format("json")
+        def resultDf: DataFrame = spark.read.format("json")
           .load(outputDir.getAbsolutePath)
-        val q = streamDF.writeStream
+        val q = streamDF
+          .writeStream
           .format(dataSourceName)
           .outputMode(mode)
           .option("checkpointLocation", checkpointDir.getAbsolutePath)
@@ -1085,16 +892,22 @@ class PythonStreamingDataSourceWriteSuite extends PythonDataSourceSuiteBase {
         inputData.addData(1, 2, 3)
         eventually(timeout(waitTimeout)) {
           if (mode == "append") {
-            checkAnswer(resultDf, Seq(Row(1), Row(2), Row(3)))
+            checkAnswer(
+              resultDf,
+              Seq(Row(1), Row(2), Row(3)))
           } else {
-            checkAnswer(resultDf.select("value", "count"), Seq(Row(1, 1), Row(2, 1), Row(3, 1)))
+            checkAnswer(
+              resultDf.select("value", "count"),
+              Seq(Row(1, 1), Row(2, 1), Row(3, 1)))
           }
         }
 
         inputData.addData(1, 4)
         eventually(timeout(waitTimeout)) {
           if (mode == "append") {
-            checkAnswer(resultDf, Seq(Row(1), Row(2), Row(3), Row(4), Row(1)))
+            checkAnswer(
+              resultDf,
+              Seq(Row(1), Row(2), Row(3), Row(4), Row(1)))
           } else {
             checkAnswer(
               resultDf.select("value", "count"),
@@ -1123,13 +936,13 @@ class PythonStreamingDataSourceWriteSuite extends PythonDataSourceSuiteBase {
       checkpointDir.mkdir()
       val outputDir = new File(path, "output")
       outputDir.mkdir()
-      val q = df.writeStream
+      val q = df
+        .writeStream
         .format(dataSourceName)
         .option("checkpointLocation", checkpointDir.getAbsolutePath)
         .trigger(ProcessingTimeTrigger(20 * 1000))
         .start(outputDir.getAbsolutePath)
-      def resultDf: DataFrame = spark.read
-        .format("json")
+      def resultDf: DataFrame = spark.read.format("json")
         .load(outputDir.getAbsolutePath)
 
       inputData.addData(1 to 3)
@@ -1206,16 +1019,14 @@ class PythonStreamingDataSourceWriteSuite extends PythonDataSourceSuiteBase {
       checkpointDir.mkdir()
       val outputDir = new File(path, "output")
       outputDir.mkdir()
-      val q = inputData
-        .toDF()
+      val q = inputData.toDF()
         .writeStream
         .format(dataSourceName)
         .outputMode("append")
         .option("checkpointLocation", checkpointDir.getAbsolutePath)
         .start(outputDir.getAbsolutePath)
 
-      def metadataDf: DataFrame = spark.read
-        .format("json")
+      def metadataDf: DataFrame = spark.read.format("json")
         .load(outputDir.getAbsolutePath)
 
       // Batch 0-2 should succeed and json commit files are written.
@@ -1255,8 +1066,7 @@ class PythonStreamingDataSourceWriteSuite extends PythonDataSourceSuiteBase {
     // the output directory in commit() function. If aborting a microbatch, it writes
     // batchId.txt into output directory.
 
-    val dataSource =
-      createUserDefinedPythonDataSource(dataSourceName, simpleDataStreamWriterScript)
+    val dataSource = createUserDefinedPythonDataSource(dataSourceName, simpleDataStreamWriterScript)
     spark.dataSource.registerPython(dataSourceName, dataSource)
 
     withTempDir { dir =>
@@ -1274,8 +1084,7 @@ class PythonStreamingDataSourceWriteSuite extends PythonDataSourceSuiteBase {
           checkpointDir.mkdir()
           val outputDir = new File(path, "output")
           outputDir.mkdir()
-          val q = inputData
-            .toDF()
+          val q = inputData.toDF()
             .writeStream
             .format(dataSourceName)
             .outputMode(mode)
@@ -1296,7 +1105,9 @@ class PythonStreamingDataSourceWriteSuite extends PythonDataSourceSuiteBase {
         },
         condition = "STREAMING_OUTPUT_MODE.UNSUPPORTED_OPERATION",
         sqlState = "42KDE",
-        parameters = Map("outputMode" -> "complete", "operation" -> "no streaming aggregations"))
+        parameters = Map(
+          "outputMode" -> "complete",
+          "operation" -> "no streaming aggregations"))
 
       // Query should fail in planning with "invalid" mode.
       val error2 = intercept[IllegalArgumentException] {
