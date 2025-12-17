@@ -21,7 +21,6 @@ import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.processors._
 
 /** Test suite for TwsTester utility class. */
 class TwsTesterSuite extends SparkFunSuite {
