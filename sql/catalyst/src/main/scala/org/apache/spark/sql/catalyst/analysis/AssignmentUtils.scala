@@ -23,13 +23,13 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.TableOutputResolver.DefaultValueFillMode.{NONE, RECURSE}
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, CreateNamedStruct, Expression, GetStructField, If, IsNull, Literal}
-import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans.logical.Assignment
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.getDefaultValueExprOrNullLit
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -182,7 +182,7 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
     } else if (exactAssignments.isEmpty && fieldAssignments.isEmpty) {
       TableOutputResolver.checkNullability(colExpr, col, conf, colPath)
     } else if (exactAssignments.nonEmpty) {
-      if (updateStar) {
+      if (updateStar && SQLConf.get.coerceMergeNestedTypes) {
         val value = exactAssignments.head.value
         col.dataType match {
           case _: StructType =>
@@ -353,11 +353,7 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
       structType: StructType,
       structExpression: Expression,
       colPath: Seq[String]): Expression = {
-    // As StoreAssignmentPolicy.LEGACY is not allowed in DSv2, always add null check for
-    // non-nullable column
-    if (!key.nullable) {
-      AssertNotNull(value)
-    } else {
+    if (key.nullable) {
       val condition = if (hasExtraTargetFields(structType, value.dataType)) {
         // extra target fields: return null iff source struct is null and target struct is null
         And(IsNull(value), IsNull(key))
@@ -367,6 +363,8 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
       }
 
       If(condition, Literal(null, structExpression.dataType), structExpression)
+    } else {
+      structExpression
     }
   }
 
