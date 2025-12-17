@@ -25,7 +25,7 @@ import java.nio.ByteOrder;
 /**
  * Test suite for WKB (Well-Known Binary) reader and writer functionality.
  */
-public class WkbReaderWriterTest {
+public class WkbReaderWriterGeometryModelTest {
 
   /**
    * Helper method to convert hex string to byte array
@@ -265,14 +265,14 @@ public class WkbReaderWriterTest {
         new Point(new double[]{1.0, 1.0}, 0),
         new Point(new double[]{2.0, 2.0}, 0)
     );
-    LineString lineString = new LineString(points, 0);
+    LineString lineString = new LineString(points, 0, false, false);
 
     Assertions.assertFalse(lineString.isEmpty(), "LineString should not be empty");
     Assertions.assertEquals(3, lineString.getNumPoints(), "Number of points mismatch");
 
     GeometryModel parsed = checkRoundTrip(lineString,
-        "01020000000300000000000000000000000000000000000000000000000000f03f000000000000f03f00000000000000400000000000000040000000000000000000000000000000", // checkstyle.off: LineLength
-        "000000000200000003000000000000000000000000000000003ff00000000000003ff000000000000040000000000000004000000000000000000000000000000000000000000000"); // checkstyle.off: LineLength
+        "01020000000300000000000000000000000000000000000000000000000000f03f000000000000f03f00000000000000400000000000000040", // checkstyle.off: LineLength
+        "000000000200000003000000000000000000000000000000003ff00000000000003ff000000000000040000000000000004000000000000000"); // checkstyle.off: LineLength
 
     Assertions.assertInstanceOf(LineString.class, parsed, "Parsed geometry should be LineString");
     LineString parsedLS = (LineString) parsed;
@@ -292,9 +292,9 @@ public class WkbReaderWriterTest {
         new Point(new double[]{0.0, 4.0}, 0),
         new Point(new double[]{0.0, 0.0}, 0)
     );
-    Ring ring = new Ring(ringPoints);
+    Ring ring = new Ring(ringPoints, false, false);
     java.util.List<Ring> rings = java.util.Arrays.asList(ring);
-    Polygon polygon = new Polygon(rings, 0);
+    Polygon polygon = new Polygon(rings, 0, false, false);
 
     Assertions.assertFalse(polygon.isEmpty(), "Polygon should not be empty");
     Assertions.assertEquals(1, polygon.getRings().size(), "Should have one ring");
@@ -319,7 +319,7 @@ public class WkbReaderWriterTest {
         new Point(new double[]{0.0, 0.0}, 0),
         new Point(new double[]{1.0, 1.0}, 0)
     );
-    MultiPoint multiPoint = new MultiPoint(points, 0);
+    MultiPoint multiPoint = new MultiPoint(points, 0, false, false);
 
     Assertions.assertFalse(multiPoint.isEmpty(), "MultiPoint should not be empty");
     Assertions.assertEquals(2, multiPoint.getNumGeometries(), "Number of points mismatch");
@@ -345,17 +345,17 @@ public class WkbReaderWriterTest {
         new Point(new double[]{0.0, 0.0}, 0),
         new Point(new double[]{1.0, 1.0}, 0)
     );
-    LineString lineString = new LineString(lsPoints, 0);
+    LineString lineString = new LineString(lsPoints, 0, false, false);
 
     java.util.List<GeometryModel> geometries = java.util.Arrays.asList(point, lineString);
-    GeometryCollection collection = new GeometryCollection(geometries, 0);
+    GeometryCollection collection = new GeometryCollection(geometries, 0, false, false);
 
     Assertions.assertFalse(collection.isEmpty(), "GeometryCollection should not be empty");
     Assertions.assertEquals(2, collection.getNumGeometries(), "Number of geometries mismatch");
 
     GeometryModel parsed = checkRoundTrip(collection,
-        "0107000000020000000101000000000000000000f03f000000000000004001020000000200000000000000000000000000000000000000000000000000f03f000000000000f03f00000000000000000000", // checkstyle.off: LineLength
-        "00000000070000000200000000013ff00000000000004000000000000000000000000200000002000000000000000000000000000000003ff00000000000003ff000000000000000000000000000000000"); // checkstyle.off: LineLength
+        "0107000000020000000101000000000000000000f03f000000000000004001020000000200000000000000000000000000000000000000000000000000f03f000000000000f03f", // checkstyle.off: LineLength
+        "00000000070000000200000000013ff00000000000004000000000000000000000000200000002000000000000000000000000000000003ff00000000000003ff0000000000000"); // checkstyle.off: LineLength
 
     Assertions.assertInstanceOf(GeometryCollection.class, parsed,
       "Parsed geometry should be GeometryCollection");

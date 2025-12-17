@@ -23,10 +23,14 @@ import java.util.List;
  */
 class Polygon extends GeometryModel {
   private final List<Ring> rings;
+  private final boolean hasZ;
+  private final boolean hasM;
 
-  Polygon(List<Ring> rings, int srid) {
+  Polygon(List<Ring> rings, int srid, boolean hasZ, boolean hasM) {
     super(GeoTypeId.POLYGON, srid);
     this.rings = rings;
+    this.hasZ = hasZ;
+    this.hasM = hasM;
   }
 
   List<Ring> getRings() {
@@ -47,7 +51,22 @@ class Polygon extends GeometryModel {
 
   @Override
   boolean isEmpty() {
-    return rings.isEmpty();
+    return rings.isEmpty() || rings.stream().allMatch(Ring::isEmpty);
+  }
+
+  @Override
+  int getDimensionCount() {
+    return 2 + (hasZ ? 1 : 0) + (hasM ? 1 : 0);
+  }
+
+  @Override
+  boolean hasZ() {
+    return hasZ;
+  }
+
+  @Override
+  boolean hasM() {
+    return hasM;
   }
 
   @Override

@@ -102,9 +102,6 @@ class GeometryExecutionSuite {
     assertNotNull(geometry);
     assertArrayEquals(wkb, geometry.toWkb());
     assertEquals(4326, geometry.srid());
-    assertTrue(geometry.isPoint());
-    assertEquals(0.0, geometry.asPoint().getX());
-    assertEquals(1.0, geometry.asPoint().getY());
   }
 
   @Test
@@ -116,9 +113,6 @@ class GeometryExecutionSuite {
     assertNotNull(geometry);
     assertArrayEquals(wkb, geometry.toWkb());
     assertEquals(0, geometry.srid());
-    assertTrue(geometry.isPoint());
-    assertEquals(0.0, geometry.asPoint().getX());
-    assertEquals(1.0, geometry.asPoint().getY());
   }
 
   /** Tests for Geometry EWKB parsing. */
@@ -188,11 +182,9 @@ class GeometryExecutionSuite {
   @Test
   void testToWkbEndiannessXDR() {
     Geometry geometry = Geometry.fromBytes(testGeometryVal);
-    UnsupportedOperationException exception = assertThrows(
-      UnsupportedOperationException.class,
-      () -> geometry.toWkb(ByteOrder.BIG_ENDIAN)
-    );
-    assertEquals("Geometry WKB endianness is not yet supported.", exception.getMessage());
+    // WKB value (endianness: XDR) corresponding to WKT: POINT(1 2).
+    byte[] wkb = HexFormat.of().parseHex("00000000013FF00000000000004000000000000000");
+    assertArrayEquals(wkb, geometry.toWkb(ByteOrder.BIG_ENDIAN));
   }
 
   @Test

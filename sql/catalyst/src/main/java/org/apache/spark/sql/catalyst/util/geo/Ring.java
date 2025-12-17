@@ -23,9 +23,13 @@ import java.util.List;
  */
 class Ring {
   private final List<Point> points;
+  private final boolean hasZ;
+  private final boolean hasM;
 
-  Ring(List<Point> points) {
+  Ring(List<Point> points, boolean hasZ, boolean hasM) {
     this.points = points;
+    this.hasZ = hasZ;
+    this.hasM = hasM;
   }
 
   List<Point> getPoints() {
@@ -38,6 +42,18 @@ class Ring {
 
   boolean isEmpty() {
     return points.isEmpty();
+  }
+
+  int getDimensionCount() {
+    return 2 + (hasZ ? 1 : 0) + (hasM ? 1 : 0);
+  }
+
+  boolean hasZ() {
+    return hasZ;
+  }
+
+  boolean hasM() {
+    return hasM;
   }
 
   boolean isClosed() {
