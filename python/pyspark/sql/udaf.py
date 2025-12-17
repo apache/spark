@@ -78,7 +78,10 @@ class Aggregator:
         Any
             The zero value for the aggregation buffer.
         """
-        raise NotImplementedError
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "Aggregator.zero()"},
+        )
 
     @staticmethod
     def reduce(buffer: Any, value: Any) -> Any:
@@ -102,7 +105,10 @@ class Aggregator:
         Any
             The updated buffer.
         """
-        raise NotImplementedError
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "Aggregator.reduce()"},
+        )
 
     @staticmethod
     def merge(buffer1: Any, buffer2: Any) -> Any:
@@ -123,7 +129,10 @@ class Aggregator:
         Any
             The merged intermediate value.
         """
-        raise NotImplementedError
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "Aggregator.merge()"},
+        )
 
     @staticmethod
     def finish(reduction: Any) -> Any:
@@ -142,7 +151,10 @@ class Aggregator:
         Any
             The final output value.
         """
-        raise NotImplementedError
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "Aggregator.finish()"},
+        )
 
 
 def _validate_aggregator_methods(aggregator: Aggregator) -> None:
