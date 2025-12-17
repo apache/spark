@@ -127,7 +127,9 @@ class PythonStreamingSourceRunner(
     if (initStatus == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryCompilationErrors.pythonDataSourceError(
-        action = "plan", tpe = "initialize source", msg = msg)
+        action = "plan",
+        tpe = "initialize source",
+        msg = msg)
     }
   }
 
@@ -203,7 +205,8 @@ class PythonStreamingSourceRunner(
     if (cappedLen == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "latestOffset", msg)
+        action = "latestOffset",
+        msg)
     }
     val cappedOffset = PythonWorkerUtils.readUTF(cappedLen, dataIn)
 
@@ -212,7 +215,8 @@ class PythonStreamingSourceRunner(
     if (trueLen == SpecialLengths.PYTHON_EXCEPTION_THROWN) {
       val msg = PythonWorkerUtils.readUTF(dataIn)
       throw QueryExecutionErrors.pythonStreamingDataSourceRuntimeError(
-        action = "latestOffset", msg)
+        action = "latestOffset",
+        msg)
     }
     val trueLatest = PythonWorkerUtils.readUTF(trueLen, dataIn)
 
