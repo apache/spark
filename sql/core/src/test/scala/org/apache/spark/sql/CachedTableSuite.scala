@@ -2655,7 +2655,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
           |SELECT * FROM cache_subquery_cte_table
           |""".stripMargin)
 
-      cteInSubquery.explain(true)
       val subqueryInMemoryTableScan = collect(cteInSubquery.queryExecution.executedPlan) {
         case i: InMemoryTableScanExec => i
       }
