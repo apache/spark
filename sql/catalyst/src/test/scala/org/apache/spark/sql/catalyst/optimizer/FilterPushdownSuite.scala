@@ -385,13 +385,17 @@ class FilterPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery)
 
     // We should see three layers of projection/filter for each expensive predicate
+    // Note: the order here could be different and still fine since we just have expensive
+    // inexpensive no cost mechanism. This ordering is deterministic though
+    // so we don't need to do anything more complex than the normal compare
+    // plans.
     val correctAnswer = testRelationWith3Strings
       .select($"a", $"e", $"h", $"i", $"e".rlike("magic") as "f")
       .where($"f")
-      .select($"a", $"f", $"h", $"i", $"h".rlike("foo") as "g")
-      .where($"g")
-      .select($"a", $"f", $"g", $"i", $"i".rlike("bar") as "j")
+      .select($"a", $"e", $"h", $"i", $"f", $"i".rlike("bar") as "j")
       .where($"j")
+      .select($"a", $"e", $"h", $"i", $"f", $"j", $"h".rlike("foo") as "g")
+      .where($"g")
       .select($"a", $"f", $"g", $"j")
       .analyze
 
