@@ -547,8 +547,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def writeIntoTempViewNotAllowedError(quoted: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1007",
-      messageParameters = Map("quoted" -> quoted))
+      errorClass = "VIEW_WRITE_NOT_ALLOWED",
+      messageParameters = Map("name" -> quoted))
   }
 
   def readNonStreamingTempViewError(quoted: String): Throwable = {
@@ -578,8 +578,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def writeIntoViewNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1011",
-      messageParameters = Map("identifier" -> identifier.toString),
+      errorClass = "VIEW_WRITE_NOT_ALLOWED",
+      messageParameters = Map("name" -> toSQLId(identifier.nameParts)),
       origin = t.origin)
   }
 
@@ -1726,7 +1726,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def userSpecifiedSchemaMismatchActualSchemaError(
       schema: StructType, actualSchema: StructType): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1133",
+      errorClass = "USER_SPECIFIED_AND_ACTUAL_SCHEMA_MISMATCH",
       messageParameters = Map(
         "schema" -> schema.toDDL,
         "actualSchema" -> actualSchema.toDDL))
@@ -2475,7 +2475,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def cannotResolveColumnNameAmongAttributesError(
       colName: String, fieldNames: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1201",
+      errorClass = "UNRESOLVED_COLUMN_AMONG_FIELD_NAMES",
       messageParameters = Map(
         "colName" -> colName,
         "fieldNames" -> fieldNames))
@@ -4491,5 +4491,11 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "tableName" -> toSQLId(tableName),
         "colType" -> "metadata",
         "errors" -> errors.mkString("- ", "\n- ", "")))
+  }
+
+  def unsupportedTimeTypeError(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_TIME_TYPE",
+      messageParameters = Map.empty)
   }
 }

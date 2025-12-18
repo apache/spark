@@ -175,7 +175,7 @@ class PandasConversionMixin:
     :class:`DataFrame` can use this class.
     """
 
-    def toPandas(self) -> "PandasDataFrameLike":
+    def _to_pandas(self, **kwargs: Any) -> "PandasDataFrameLike":
         from pyspark.sql.dataframe import DataFrame
 
         assert isinstance(self, DataFrame)
@@ -204,6 +204,11 @@ class PandasConversionMixin:
                 "spark.sql.execution.pandas.structHandlingMode",
             ]
         )
+
+        # if pandasStructHandlingMode is explicitly set, override the runtime config
+        if "pandasStructHandlingMode" in kwargs:
+            pandasStructHandlingMode = str(kwargs["pandasStructHandlingMode"])
+
         prefers_large_var_types = arrowUseLargeVarTypes == "true"
 
         if arrowPySparkEnabled == "true":
@@ -497,6 +502,7 @@ class SparkConversionMixin:
             arrowPySparkFallbackEnabled,
             arrowMaxRecordsPerBatch,
             arrowSafeTypeConversion,
+            inferPandasDictAsMap,
         ) = self._jconf.getConfs(
             [
                 "spark.sql.timestampType",
@@ -506,6 +512,7 @@ class SparkConversionMixin:
                 "spark.sql.execution.arrow.pyspark.fallback.enabled",
                 "spark.sql.execution.arrow.maxRecordsPerBatch",
                 "spark.sql.execution.pandas.convertToArrowArraySafely",
+                "spark.sql.execution.pandas.inferPandasDictAsMap",
             ]
         )
 
@@ -514,6 +521,7 @@ class SparkConversionMixin:
         timezone = sessionLocalTimeZone
         arrow_batch_size = int(arrowMaxRecordsPerBatch)
         selfcheck = arrowSafeTypeConversion == "true"
+        infer_pandas_dict_as_map = inferPandasDictAsMap == "true"
 
         if type(data).__name__ == "Table":
             # `data` is a PyArrow Table
@@ -557,6 +565,7 @@ class SparkConversionMixin:
                     prefers_large_var_types,
                     arrow_batch_size,
                     selfcheck,
+                    infer_pandas_dict_as_map,
                 )
             except Exception as e:
                 if arrowPySparkFallbackEnabled == "true":
@@ -788,6 +797,7 @@ class SparkConversionMixin:
         prefers_large_var_types: bool,
         arrow_batch_size: int,
         safecheck: bool,
+        infer_pandas_dict_as_map: bool,
     ) -> "DataFrame":
         """
         Create a DataFrame from a given pandas.DataFrame by slicing it into partitions, converting
@@ -819,10 +829,6 @@ class SparkConversionMixin:
             is_datetime64_dtype,
         )
         import pyarrow as pa
-
-        infer_pandas_dict_as_map = (
-            str(self.conf.get("spark.sql.execution.pandas.inferPandasDictAsMap")).lower() == "true"
-        )
 
         # Create the Spark schema from list of names passed in with Arrow types
         if isinstance(schema, (list, tuple)):

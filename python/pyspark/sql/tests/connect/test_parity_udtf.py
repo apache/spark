@@ -41,7 +41,7 @@ if should_test_connect:
 class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
     @classmethod
     def setUpClass(cls):
-        super(UDTFParityTests, cls).setUpClass()
+        super().setUpClass()
         cls.spark.conf.set("spark.sql.execution.pythonUDTF.arrow.enabled", "false")
 
     @classmethod
@@ -49,7 +49,7 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
         try:
             cls.spark.conf.unset("spark.sql.execution.pythonUDTF.arrow.enabled")
         finally:
-            super(UDTFParityTests, cls).tearDownClass()
+            super().tearDownClass()
 
     def test_struct_output_type_casting_row(self):
         self.check_struct_output_type_casting_row(PickleException)
@@ -94,7 +94,7 @@ class UDTFParityTests(BaseUDTFTestsMixin, ReusedConnectTestCase):
 class LegacyArrowUDTFParityTests(LegacyUDTFArrowTestsMixin, UDTFParityTests):
     @classmethod
     def setUpClass(cls):
-        super(LegacyArrowUDTFParityTests, cls).setUpClass()
+        super().setUpClass()
         cls.spark.conf.set("spark.sql.execution.pythonUDTF.arrow.enabled", "true")
         cls.spark.conf.set(
             "spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled", "true"
@@ -106,7 +106,7 @@ class LegacyArrowUDTFParityTests(LegacyUDTFArrowTestsMixin, UDTFParityTests):
             cls.spark.conf.unset("spark.sql.execution.pythonUDTF.arrow.enabled")
             cls.spark.conf.unset("spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled")
         finally:
-            super(LegacyArrowUDTFParityTests, cls).tearDownClass()
+            super().tearDownClass()
 
     def test_udtf_access_spark_session_connect(self):
         df = self.spark.range(10)
@@ -128,7 +128,7 @@ class LegacyArrowUDTFParityTests(LegacyUDTFArrowTestsMixin, UDTFParityTests):
 class ArrowUDTFParityTests(UDTFArrowTestsMixin, UDTFParityTests):
     @classmethod
     def setUpClass(cls):
-        super(ArrowUDTFParityTests, cls).setUpClass()
+        super().setUpClass()
         cls.spark.conf.set("spark.sql.execution.pythonUDTF.arrow.enabled", "true")
         cls.spark.conf.set(
             "spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled", "false"
@@ -140,7 +140,7 @@ class ArrowUDTFParityTests(UDTFArrowTestsMixin, UDTFParityTests):
             cls.spark.conf.unset("spark.sql.execution.pythonUDTF.arrow.enabled")
             cls.spark.conf.unset("spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled")
         finally:
-            super(ArrowUDTFParityTests, cls).tearDownClass()
+            super().tearDownClass()
 
     def test_udtf_access_spark_session_connect(self):
         df = self.spark.range(10)

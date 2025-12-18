@@ -27,9 +27,10 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
-import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, DefaultValue, Identifier, InMemoryTableCatalog, TableInfo}
+import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, DefaultValue, Identifier, InMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableInfo}
 import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColumnDefaultValue}
+import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableWritePrivilege
 import org.apache.spark.sql.connector.catalog.TruncatableTable
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, GeneralScalarExpression, LiteralValue, Transform}
@@ -277,6 +278,92 @@ class DataSourceV2DataFrameSuite
       }
 
       checkAnswer(spark.table(t1), df2)
+    } finally {
+      spark.listenerManager.unregister(listener)
+    }
+  }
+
+  test("RTAS adds V1 saveAsTable option when provider implements marker interface") {
+    var plan: LogicalPlan = null
+    val listener = new QueryExecutionListener {
+      override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
+        plan = qe.analyzed
+      }
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+    }
+    try {
+      spark.listenerManager.register(listener)
+      val t1 = "testcat.ns1.ns2.tbl"
+      val providerName = classOf[FakeV2ProviderWithV1SaveAsTableOverwriteWriteOption].getName
+
+      val df = Seq((1L, "a"), (2L, "b")).toDF("id", "data")
+      df.write.format(providerName).mode("overwrite").saveAsTable(t1)
+
+      sparkContext.listenerBus.waitUntilEmpty()
+      plan match {
+        case o: ReplaceTableAsSelect =>
+          assert(o.writeOptions.get(SupportsV1OverwriteWithSaveAsTable.OPTION_NAME)
+            .contains("true"))
+        case other =>
+          fail(s"Expected ReplaceTableAsSelect, got ${other.getClass.getName}: $plan")
+      }
+    } finally {
+      spark.listenerManager.unregister(listener)
+    }
+  }
+
+  test("RTAS does not add V1 option when provider does not implement marker interface") {
+    var plan: LogicalPlan = null
+    val listener = new QueryExecutionListener {
+      override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
+        plan = qe.analyzed
+      }
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+    }
+    try {
+      spark.listenerManager.register(listener)
+      val t1 = "testcat.ns1.ns2.tbl2"
+      val providerName = classOf[FakeV2Provider].getName
+
+      val df = Seq((1L, "a"), (2L, "b")).toDF("id", "data")
+      df.write.format(providerName).mode("overwrite").saveAsTable(t1)
+
+      sparkContext.listenerBus.waitUntilEmpty()
+      plan match {
+        case o: ReplaceTableAsSelect =>
+          assert(!o.writeOptions.contains(SupportsV1OverwriteWithSaveAsTable.OPTION_NAME))
+        case other =>
+          fail(s"Expected ReplaceTableAsSelect, got ${other.getClass.getName}: $plan")
+      }
+    } finally {
+      spark.listenerManager.unregister(listener)
+    }
+  }
+
+  test("RTAS does not add V1 option when addV1OverwriteWithSaveAsTableOption returns false") {
+    var plan: LogicalPlan = null
+    val listener = new QueryExecutionListener {
+      override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
+        plan = qe.analyzed
+      }
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+    }
+    try {
+      spark.listenerManager.register(listener)
+      val t1 = "testcat.ns1.ns2.tbl3"
+      val providerName =
+        classOf[FakeV2ProviderWithV1SaveAsTableOverwriteWriteOptionDisabled].getName
+
+      val df = Seq((1L, "a"), (2L, "b")).toDF("id", "data")
+      df.write.format(providerName).mode("overwrite").saveAsTable(t1)
+
+      sparkContext.listenerBus.waitUntilEmpty()
+      plan match {
+        case o: ReplaceTableAsSelect =>
+          assert(!o.writeOptions.contains(SupportsV1OverwriteWithSaveAsTable.OPTION_NAME))
+        case other =>
+          fail(s"Expected ReplaceTableAsSelect, got ${other.getClass.getName}: $plan")
+      }
     } finally {
       spark.listenerManager.unregister(listener)
     }
@@ -1167,7 +1254,7 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("SPARK-54157: cached temp view detects schema changes after analysis") {
+  test("SPARK-54157: cached temp view allows top-level column additions") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id INT, data STRING) USING foo")
@@ -1181,15 +1268,9 @@ class DataSourceV2DataFrameSuite
       // change table schema after the view has been analyzed and cached
       sql(s"ALTER TABLE $t ADD COLUMN extra INT")
 
-      // execution should fail with column mismatch even though the view is cached
-      checkError(
-        exception = intercept[AnalysisException] { spark.table("v").collect() },
-        condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
-        parameters = Map(
-          "viewName" -> "`v`",
-          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
-          "colType" -> "data",
-          "errors" -> "- `extra` INT has been added"))
+      // execution should succeed as top-level column additions are allowed
+      // the temp view captures the original columns just like SQL views
+      checkAnswer(spark.table("v"), Seq(Row(1, "a")))
     }
   }
 
@@ -1425,7 +1506,7 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("SPARK-53924: temp view on DSv2 table detects added columns") {
+  test("SPARK-53924: temp view on DSv2 table allows top-level column additions") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
@@ -1434,10 +1515,32 @@ class DataSourceV2DataFrameSuite
       spark.table(t).createOrReplaceTempView("v")
       checkAnswer(spark.table("v"), Seq.empty)
 
-      // add column to underlying table
+      // add top-level column to underlying table
       sql(s"ALTER TABLE $t ADD COLUMN age int")
 
-      // accessing temp view should detect schema change
+      // accessing temp view should succeed as top-level column additions are allowed
+      // view captures original columns
+      checkAnswer(spark.table("v"), Seq.empty)
+
+      // insert data to verify view still works correctly
+      sql(s"INSERT INTO $t VALUES (1, 'a', 25)")
+      checkAnswer(spark.table("v"), Seq(Row(1, "a")))
+    }
+  }
+
+  test("SPARK-53924: temp view on DSv2 table detects nested column additions") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, address STRUCT<street: STRING, city: STRING>) USING foo")
+
+      // create temp view using DataFrame API
+      spark.table(t).createOrReplaceTempView("v")
+      checkAnswer(spark.table("v"), Seq.empty)
+
+      // add nested column to underlying table
+      sql(s"ALTER TABLE $t ADD COLUMN address.zipCode string")
+
+      // accessing temp view should detect schema change for nested additions
       checkError(
         exception = intercept[AnalysisException] { spark.table("v").collect() },
         condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
@@ -1445,7 +1548,7 @@ class DataSourceV2DataFrameSuite
           "viewName" -> "`v`",
           "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
           "colType" -> "data",
-          "errors" -> "- `age` INT has been added"))
+          "errors" -> "- `address`.`zipCode` STRING has been added"))
     }
   }
 
@@ -1533,13 +1636,13 @@ class DataSourceV2DataFrameSuite
   test("SPARK-53924: createOrReplaceTempView works after schema change") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
-      sql(s"CREATE TABLE $t (id bigint) USING foo")
+      sql(s"CREATE TABLE $t (id bigint, data STRING, extra INT) USING foo")
 
       spark.table(t).createOrReplaceTempView("v")
       checkAnswer(spark.table("v"), Seq.empty)
 
       // alter table
-      sql(s"ALTER TABLE $t ADD COLUMN data string")
+      sql(s"ALTER TABLE $t DROP COLUMN extra")
 
       // old view fails
       intercept[AnalysisException] { spark.table("v").collect() }
@@ -1571,22 +1674,16 @@ class DataSourceV2DataFrameSuite
       }.get
       assert(options.get("fakeOption") == "testValue")
 
-      // schema changes should still be detected
+      // add top-level column to underlying table
       sql(s"ALTER TABLE $t ADD COLUMN age int")
 
-      // accessing temp view should detect schema change
-      checkError(
-        exception = intercept[AnalysisException] { spark.table("v").collect() },
-        condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
-        parameters = Map(
-          "viewName" -> "`v`",
-          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
-          "colType" -> "data",
-          "errors" -> "- `age` INT has been added"))
+      // accessing temp view should succeed as top-level column additions are allowed
+
+      checkAnswer(spark.table("v"), Seq.empty)
     }
   }
 
-  test("SPARK-53924: temp view on DSv2 table created using SQL with plan detects changes") {
+  test("SPARK-53924: temp view on DSv2 table created using SQL with plan and top-level additions") {
     val t = "testcat.ns1.ns2.tbl"
     withTable(t) {
       withSQLConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW.key -> "true") {
@@ -1600,18 +1697,15 @@ class DataSourceV2DataFrameSuite
         val Some(view) = spark.sessionState.catalog.getRawTempView("v")
         assert(view.plan.isDefined)
 
-        // add column to underlying table
+        // add top-level column to underlying table
         sql(s"ALTER TABLE $t ADD COLUMN age int")
 
-        // accessing temp view should detect schema change
-        checkError(
-          exception = intercept[AnalysisException] { spark.table("v").collect() },
-          condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
-          parameters = Map(
-            "viewName" -> "`v`",
-            "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
-            "colType" -> "data",
-            "errors" -> "- `age` INT has been added"))
+        // accessing temp view should succeed as top-level column additions are allowed
+        checkAnswer(spark.table("v"), Seq.empty)
+
+        // insert data to verify view still works correctly
+        sql(s"INSERT INTO $t VALUES (1, 'a', 25)")
+        checkAnswer(spark.table("v"), Seq(Row(1, "a")))
       }
     }
   }
@@ -1805,6 +1899,151 @@ class DataSourceV2DataFrameSuite
         filteredSourceDF.writeTo(t).createOrReplace()
       }
       assert(e.message.contains("incompatible changes to table `testcat`.`ns1`.`s`"))
+    }
+  }
+
+  test("SPARK-54424: refresh table cache on schema changes (column removed)") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, value INT, category STRING) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 10, 'A'), (2, 20, 'B'), (3, 30, 'A')")
+
+      // cache table
+      spark.table(t).cache()
+
+      // verify caching works as expected
+      assertCached(spark.table(t))
+      checkAnswer(
+        spark.table(t),
+        Seq(Row(1, 10, "A"), Row(2, 20, "B"), Row(3, 30, "A")))
+
+      // evolve table directly to mimic external changes
+      // these external changes make cached plan invalid (column is no longer there)
+      val change = TableChange.deleteColumn(Array("category"), false)
+      catalog("testcat").alterTable(ident, change)
+
+      // refresh table is supposed to trigger recaching
+      spark.sql(s"REFRESH TABLE $t")
+
+      // recaching is expected to succeed
+      assert(spark.sharedState.cacheManager.numCachedEntries == 1)
+
+      // verify cache reflects latest schema and data
+      assertCached(spark.table(t))
+      checkAnswer(spark.table(t), Seq(Row(1, 10), Row(2, 20), Row(3, 30)))
+    }
+  }
+
+  test("SPARK-54424: refresh table cache on schema changes (column added)") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, value INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 10), (2, 20), (3, 30)")
+
+      // cache table
+      spark.table(t).cache()
+
+      // verify caching works as expected
+      assertCached(spark.table(t))
+      checkAnswer(
+        spark.table(t),
+        Seq(Row(1, 10), Row(2, 20), Row(3, 30)))
+
+      // evolve table directly to mimic external changes
+      // these external changes make cached plan invalid (table state has changed)
+      val change = TableChange.addColumn(Array("category"), StringType, true)
+      catalog("testcat").alterTable(ident, change)
+
+      // refresh table is supposed to trigger recaching
+      spark.sql(s"REFRESH TABLE $t")
+
+      // recaching is expected to succeed
+      assert(spark.sharedState.cacheManager.numCachedEntries == 1)
+
+      // verify cache reflects latest schema and data
+      assertCached(spark.table(t))
+      checkAnswer(spark.table(t), Seq(Row(1, 10, null), Row(2, 20, null), Row(3, 30, null)))
+    }
+  }
+
+  test("SPARK-54424: successfully refresh cache with compatible schema changes") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, value INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 10), (2, 20), (3, 30)")
+
+      // cache query
+      val df = spark.table(t).filter("id < 100")
+      df.cache()
+
+      // verify caching works as expected
+      assertCached(spark.table(t).filter("id < 100"))
+      checkAnswer(
+        spark.table(t).filter("id < 100"),
+        Seq(Row(1, 10), Row(2, 20), Row(3, 30)))
+
+      // evolve table directly to mimic external changes
+      // adding columns should be OK
+      val change = TableChange.addColumn(Array("category"), StringType, true)
+      catalog("testcat").alterTable(ident, change)
+
+      // refresh table is supposed to trigger recaching
+      spark.sql(s"REFRESH TABLE $t")
+
+      // recaching is expected to succeed
+      assert(spark.sharedState.cacheManager.numCachedEntries == 1)
+
+      // verify derived queries still benefit from refreshed cache
+      assertCached(df.filter("id > 0"))
+      checkAnswer(df.filter("id > 0"), Seq(Row(1, 10), Row(2, 20), Row(3, 30)))
+
+      // add more data
+      sql(s"INSERT INTO $t VALUES (4, 40, '40')")
+
+      // verify derived queries still benefit from refreshed cache
+      assertCached(df.filter("id > 0"))
+      checkAnswer(df.filter("id > 0"), Seq(Row(1, 10), Row(2, 20), Row(3, 30), Row(4, 40)))
+
+      // verify latest schema is propagated (new column has NULL values for existing rows)
+      checkAnswer(
+        spark.table(t),
+        Seq(Row(1, 10, null), Row(2, 20, null), Row(3, 30, null), Row(4, 40, "40")))
+    }
+  }
+
+  test("SPARK-54424: inability to refresh cache shouldn't fail operations") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, value INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 10), (2, 20), (3, 30)")
+
+      // cache query
+      val df = spark.table(t).filter("id < 100")
+      df.cache()
+
+      // verify caching works as expected
+      assertCached(spark.table(t).filter("id < 100"))
+      checkAnswer(
+        spark.table(t).filter("id < 100"),
+        Seq(Row(1, 10), Row(2, 20), Row(3, 30)))
+
+      // evolve table directly to mimic external changes
+      // removing columns should be make cached plan invalid
+      val change = TableChange.deleteColumn(Array("value"), false)
+      catalog("testcat").alterTable(ident, change)
+
+      // refresh table is supposed to trigger recaching
+      spark.sql(s"REFRESH TABLE $t")
+
+      // recaching is expected to fail
+      assert(spark.sharedState.cacheManager.isEmpty)
+
+      // verify latest schema is propagated
+      checkAnswer(spark.table(t), Seq(Row(1), Row(2), Row(3)))
     }
   }
 

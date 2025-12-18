@@ -37,7 +37,6 @@ class ReadwriterV2ParityTests(ReadwriterV2TestsMixin, ReusedConnectTestCase):
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.sql.tests.connect.test_parity_readwriter import *  # noqa: F401
 
     try:

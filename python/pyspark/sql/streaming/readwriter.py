@@ -1568,7 +1568,6 @@ class DataStreamWriter:
         self._jwrite.foreach(jForeachWriter)
         return self
 
-    # SPARK-54478: Reenable doctest
     def foreachBatch(self, func: Callable[["DataFrame", int], None]) -> "DataStreamWriter":
         """
         Sets the output of the streaming query to be processed using the provided
@@ -1601,9 +1600,9 @@ class DataStreamWriter:
         ...     my_value = 100
         ...     batch_df.collect()
         ...
-        >>> q = df.writeStream.foreachBatch(func).start()  # doctest: +SKIP
-        >>> time.sleep(3)  # doctest: +SKIP
-        >>> q.stop()  # doctest: +SKIP
+        >>> q = df.writeStream.foreachBatch(func).start()
+        >>> time.sleep(3)
+        >>> q.stop()
         >>> # if in Spark Connect, my_value = -1, else my_value = 100
         """
         from py4j.java_gateway import java_import

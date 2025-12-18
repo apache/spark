@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+set -o pipefail
+set -e
+
+FWDIR="$(cd "`dirname $0`"; pwd)"
+
+# Function to display help message
+function usage {
+  cat <<EOF
+Usage:
+  $(basename $0) your_original_commands
+
+Requirements:
+  - debugpy must be installed (pip install debugpy)
+EOF
+  exit 0
+}
+
+# Check for help flags or no arguments
+if [ $# -eq 0 ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+  usage
+fi
+
+if ! python3 -c "import debugpy" 2>/dev/null; then
+  echo "Error: debugpy is not installed. Please install it using 'pip install debugpy'."
+  exit 1
+fi
+
+# If lib/pyspark.zip exists, issue a warning
+if [ -f "$FWDIR/lib/pyspark.zip" ]; then
+  echo "Warning: lib/pyspark.zip exists. VSCode debugger won't pick up your breakpoints in workers."
+  echo "You can remove it to avoid potential issues."
+fi
+
+# If --hook-daemon is in the arguments, set the env variable to hook the daemon process
+# Daemon is not hooked by default to avoid potential fork issues
+new_args=()
+for arg in "$@"; do
+  case "$arg" in
+    --hook-daemon)
+      export PYSPARK_DEBUGPY_HOOK_DAEMON=1
+      # skip this arg
+      ;;
+    *)
+      new_args+=("$arg")
+      ;;
+  esac
+done
+set -- "${new_args[@]}"
+
+export DEBUGPY_ADAPTER_ENDPOINTS=$VSCODE_DEBUGPY_ADAPTER_ENDPOINTS
+export PYTHONPATH="$FWDIR/conf_vscode:$PYTHONPATH"
+
+exec "$@"

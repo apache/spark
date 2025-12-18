@@ -107,6 +107,25 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     }
   }
 
+  test("SPARK-54749: OneRowRelation metrics") {
+    Seq((1L, "false"), (2L, "true")).foreach { case (nodeId, enableWholeStage) =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> enableWholeStage) {
+        val df = spark.sql("select 1 as c1")
+        val oneRowRelation = df.queryExecution.executedPlan.collect {
+          case oneRowRelation: OneRowRelationExec => oneRowRelation
+        }
+        df.collect()
+        sparkContext.listenerBus.waitUntilEmpty()
+        assert(oneRowRelation.size == 1)
+
+        val expected = Map("number of output rows" -> 1L)
+        testSparkPlanMetrics(df.toDF(), 1, Map(
+          nodeId -> (("Scan OneRowRelation", expected))))
+      }
+    }
+  }
+
+
   test("Recursive CTEs metrics") {
     withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "") {
       val df = sql(
@@ -303,6 +322,26 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
         0L -> (("ObjectHashAggregate", Map(
           "spill size" -> {
             _.toString.matches(sizeMetricPattern)
+          }))))
+      )
+    }
+  }
+
+  test("SortAggregate metrics") {
+    // Force use SortAggregateExec instead of HashAggregateExec
+    withSQLConf("spark.sql.test.forceApplySortAggregate" -> "true") {
+      // Assume the execution plan is
+      // -> SortAggregate(nodeId = 0)
+      //     -> Sort(nodeId = 1)
+      //       -> Exchange(nodeId = 2)
+      //          -> SortAggregate(...)
+      val df = testData2.groupBy($"a").count()
+
+      // Test aggTime metric for grouped aggregate
+      testSparkPlanMetricsWithPredicates(df, 1, Map(
+        0L -> (("SortAggregate", Map(
+          "time in aggregation build" -> {
+            _.toString.matches(timingMetricPattern)
           }))))
       )
     }

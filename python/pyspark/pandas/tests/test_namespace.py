@@ -683,7 +683,6 @@ class NamespaceTests(NamespaceTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.pandas.tests.test_namespace import *  # noqa: F401
 
     try:

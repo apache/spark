@@ -46,7 +46,7 @@ class XmlInferSchemaSuite
   protected val legacyParserEnabled: Boolean = false
 
   override protected def sparkConf: SparkConf = super.sparkConf
-    .set("spark.sql.xml.legacyXMLParser.enabled", legacyParserEnabled.toString)
+    .set(SQLConf.LEGACY_XML_PARSER_ENABLED, legacyParserEnabled)
 
   private val baseOptions = Map("rowTag" -> "ROW")
 

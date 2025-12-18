@@ -109,4 +109,25 @@ class GeometryConnectDataFrameSuite extends QueryTest with RemoteSparkSession {
     val expectedGeom = Geometry.fromWKB(point, 0)
     checkAnswer(df, Seq(Row(expectedGeom)))
   }
+
+  test("geospatial feature disabled") {
+    withSQLConf("spark.sql.geospatial.enabled" -> "false") {
+      val geometry = Geometry.fromWKB(point1, 0)
+      val schema = StructType(Seq(StructField("col1", GeometryType(0))))
+      // Java List[Row] + schema.
+      val javaList = java.util.Arrays.asList(Row(geometry))
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.createDataFrame(javaList, schema).collect()
+        },
+        condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED")
+      // Implicit encoder path.
+      import testImplicits._
+      checkError(
+        exception = intercept[AnalysisException] {
+          Seq(geometry).toDF("g").collect()
+        },
+        condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED")
+    }
+  }
 }

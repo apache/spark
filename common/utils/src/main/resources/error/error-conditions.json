@@ -173,6 +173,12 @@
     },
     "sqlState" : "42604"
   },
+  "ATTEMPT_ANALYSIS_IN_PIPELINE_QUERY_FUNCTION" : {
+    "message" : [
+      "Operations that trigger DataFrame analysis or execution are not allowed in pipeline query functions. Move code outside of the pipeline query function."
+    ],
+    "sqlState" : "0A000"
+  },
   "AVRO_CANNOT_WRITE_NULL_FIELD" : {
     "message" : [
       "Cannot write null value for field <name> defined as non-null Avro data type <dataType>.",
@@ -1727,6 +1733,11 @@
           "Alter the table <tableName>."
         ]
       },
+      "CONNECTION" : {
+        "message" : [
+          "Couldn't connect to the database"
+        ]
+      },
       "CREATE_INDEX" : {
         "message" : [
           "Create the index <indexName> in the <tableName> table."
@@ -2431,6 +2442,28 @@
     ],
     "sqlState" : "XX000"
   },
+  "INTERNAL_ERROR_HIVE_METASTORE_PARTITION_FILTER" : {
+    "message" : [
+      "Failed to get partition metadata by filter from Hive metastore.",
+      "To work around this issue, set '<hiveMetastorePartitionPruningFallbackOnException>' to true. Note that this may result in degraded performance as Spark will fetch all partition metadata instead of filtering at the metastore level.",
+      "To report this issue, visit: https://issues.apache.org/jira/browse/SPARK"
+    ],
+    "sqlState" : "XX000"
+  },
+  "INTERNAL_ERROR_INVALID_HIVE_COLUMN_TYPE" : {
+    "message" : [
+      "Failed to convert Hive table to Spark catalog table.",
+      "Database: <dbName>",
+      "Table: <tableName>"
+    ],
+    "sqlState" : "XX000"
+  },
+  "INTERNAL_ERROR_INVALID_PARTITION_FILTER_VALUE" : {
+    "message" : [
+      "Partition filter value cannot contain both double quotes (\") and single quotes (')."
+    ],
+    "sqlState" : "XX000"
+  },
   "INTERNAL_ERROR_MEMORY" : {
     "message" : [
       "<message>"
@@ -2478,6 +2511,14 @@
   "INTERNAL_ERROR_NETWORK" : {
     "message" : [
       "<message>"
+    ],
+    "sqlState" : "XX000"
+  },
+  "INTERNAL_ERROR_SERDE_INTERFACE_NOT_FOUND" : {
+    "message" : [
+      "The SerDe interface was removed since Hive 2.3 (HIVE-15167).",
+      "Please migrate your custom SerDes to Hive 2.3 or later.",
+      "For more details, see: https://issues.apache.org/jira/browse/HIVE-15167"
     ],
     "sqlState" : "XX000"
   },
@@ -5480,6 +5521,22 @@
         "message" : [
           "Unsupported offset sequence version <version>. Please make sure the checkpoint is from a supported Spark version (Spark 4.0+)."
         ]
+      },
+      "UNSUPPORTED_PROVIDER" : {
+        "message" : [
+          "<provider> is not supported"
+        ]
+      },
+      "UNSUPPORTED_STATEFUL_OPERATOR" : {
+        "message" : [
+          "Unsupported stateful operator <operatorName>. Please use a checkpoint with supported stateful operators."
+        ]
+      },
+      "UNSUPPORTED_TRANSFORM_WITH_STATE_VARIABLE_TYPE" : {
+        "message" : [
+          "Unsupported transformWithState variable type <variableType> (TTL_Enabled: <ttlEnabled>, ColFamilyName: <colFamilyName>).",
+          "Please use a checkpoint with supported transform with state variable types."
+        ]
       }
     },
     "sqlState" : "55019"
@@ -6282,6 +6339,12 @@
         ]
       }
     },
+    "sqlState" : "42703"
+  },
+  "UNRESOLVED_COLUMN_AMONG_FIELD_NAMES" : {
+    "message" : [
+      "Cannot resolve column name \"<colName>\" among (<fieldNames>)."
+    ],
     "sqlState" : "42703"
   },
   "UNRESOLVED_FIELD" : {
@@ -7246,6 +7309,12 @@
     ],
     "sqlState" : "0A001"
   },
+  "UNSUPPORTED_TIME_TYPE" : {
+    "message" : [
+      "The data type TIME is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_TYPED_LITERAL" : {
     "message" : [
       "Literals of the type <unsupportedType> are not supported. Supported types are <supportedTypes>."
@@ -7334,6 +7403,15 @@
     ],
     "sqlState" : "P0001"
   },
+  "USER_SPECIFIED_AND_ACTUAL_SCHEMA_MISMATCH" : {
+    "message" : [
+      "The user-specified schema doesn't match the actual schema:",
+      "user-specified: <schema>, actual: <actualSchema>. If you're using",
+      "DataFrameReader.schema API or creating a table, please do not specify the schema.",
+      "Or if you're scanning an existed table, please drop it and re-create it."
+    ],
+    "sqlState" : "42K03"
+  },
   "USER_SPECIFIED_AND_INFERRED_SCHEMA_NOT_COMPATIBLE" : {
     "message" : [
       "Table '<tableName>' has a user-specified schema that is incompatible with the schema",
@@ -7403,6 +7481,12 @@
       "To tolerate the error on drop use DROP VIEW IF EXISTS."
     ],
     "sqlState" : "42P01"
+  },
+  "VIEW_WRITE_NOT_ALLOWED" : {
+    "message" : [
+      "Cannot write into view <name>, please write into a table instead."
+    ],
+    "sqlState" : "42809"
   },
   "WINDOW_FUNCTION_AND_FRAME_MISMATCH" : {
     "message" : [
@@ -7628,19 +7712,9 @@
       "Aggregate expression required for pivot, but '<sql>' did not appear in any aggregate function."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1007" : {
-    "message" : [
-      "Cannot write into temp view <quoted> as it's not a data source v2 relation."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1008" : {
     "message" : [
       "<quoted> is not a temp view of streaming logical plan, please use batch API such as `DataFrameReader.table` to read it."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1011" : {
-    "message" : [
-      "Writing into a view is not allowed. View: <identifier>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1012" : {
@@ -7916,14 +7990,6 @@
       "A schema needs to be specified when using <className>."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1133" : {
-    "message" : [
-      "The user-specified schema doesn't match the actual schema:",
-      "user-specified: <schema>, actual: <actualSchema>. If you're using",
-      "DataFrameReader.schema API or creating a table, please do not specify the schema.",
-      "Or if you're scanning an existed table, please drop it and re-create it."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1134" : {
     "message" : [
       "Unable to infer schema for <format> at <fileCatalog>. It must be specified manually."
@@ -8148,11 +8214,6 @@
   "_LEGACY_ERROR_TEMP_1199" : {
     "message" : [
       "Invalid bound function '<bound>: there are <argsLen> arguments but <inputTypesLen> parameters returned from 'inputTypes()'."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1201" : {
-    "message" : [
-      "Cannot resolve column name \"<colName>\" among (<fieldNames>)."
     ]
   },
   "_LEGACY_ERROR_TEMP_1205" : {
@@ -9004,26 +9065,6 @@
   "_LEGACY_ERROR_TEMP_2185" : {
     "message" : [
       "Cannot create staging directory: <message>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2186" : {
-    "message" : [
-      "The SerDe interface removed since Hive 2.3(HIVE-15167). Please migrate your custom SerDes to Hive 2.3. See HIVE-15167 for more details."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2187" : {
-    "message" : [
-      "<message>, db: <dbName>, table: <tableName>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2192" : {
-    "message" : [
-      "Partition filter cannot have both `\"` and `'` characters."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2193" : {
-    "message" : [
-      "Caught Hive MetaException attempting to get partition metadata by filter from Hive. You can set the Spark configuration setting <hiveMetastorePartitionPruningFallbackOnException> to true to work around this problem, however this will result in degraded performance. Please report a bug: https://issues.apache.org/jira/browse/SPARK."
     ]
   },
   "_LEGACY_ERROR_TEMP_2194" : {

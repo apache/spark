@@ -20,9 +20,10 @@ import java.io.File
 import java.nio.file.{Files, Path, Paths}
 import java.util.UUID
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, TimeUnit}
-import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 
 import scala.collection.mutable
+import scala.util.control.NonFatal
 
 import com.google.common.cache.{CacheBuilder, RemovalNotification}
 
@@ -44,12 +45,17 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
 
   private[ml] val totalMLCacheInMemorySizeBytes: AtomicLong = new AtomicLong(0)
 
-  val offloadedModelsDir: Path = {
-    val path = Paths.get(
+  // Track if ML directories were ever created in this session
+  private[ml] val hasCreatedMLDirs: AtomicBoolean = new AtomicBoolean(false)
+
+  lazy val offloadedModelsDir: Path = {
+    val dirPath = Paths.get(
       System.getProperty("java.io.tmpdir"),
       "spark_connect_model_cache",
       sessionHolder.sessionId)
-    Files.createDirectories(path)
+    val createdPath = Files.createDirectories(dirPath)
+    hasCreatedMLDirs.set(true)
+    createdPath
   }
   private[spark] def getMemoryControlEnabled: Boolean = {
     sessionHolder.session.conf.get(
@@ -170,6 +176,21 @@ private[connect] class MLCache(sessionHolder: SessionHolder) extends Logging {
     } catch {
       case _: IllegalArgumentException =>
         throw SparkException.internalError(s"The MLCache key $refId is invalid.")
+    }
+  }
+
+  /**
+   * Closes the MLCache and cleans up resources. Only performs cleanup if ML directories or models
+   * were created during the session. Called by SessionHolder during session cleanup.
+   */
+  def close(): Unit = {
+    if (hasCreatedMLDirs.get() || cachedModel.size() > 0) {
+      try {
+        clear()
+      } catch {
+        case NonFatal(e) =>
+          logWarning(log"Failed to cleanup ML cache resources", e)
+      }
     }
   }
 

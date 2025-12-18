@@ -1233,6 +1233,7 @@ pyspark_ml_connect = Module(
         "pyspark.ml.tests.connect.test_connect_classification",
         "pyspark.ml.tests.connect.test_connect_pipeline",
         "pyspark.ml.tests.connect.test_connect_tuning",
+        "pyspark.ml.tests.connect.test_connect_model_offloading",
         "pyspark.ml.tests.connect.test_parity_als",
         "pyspark.ml.tests.connect.test_parity_fpm",
         "pyspark.ml.tests.connect.test_parity_classification",
@@ -1566,12 +1567,13 @@ pyspark_pipelines = Module(
     dependencies=[pyspark_core, pyspark_sql, pyspark_connect],
     source_file_regexes=["python/pyspark/pipelines"],
     python_test_goals=[
-        "pyspark.pipelines.tests.test_block_connect_access",
+        "pyspark.pipelines.tests.test_add_pipeline_analysis_context",
         "pyspark.pipelines.tests.test_block_session_mutations",
         "pyspark.pipelines.tests.test_cli",
         "pyspark.pipelines.tests.test_decorators",
         "pyspark.pipelines.tests.test_graph_element_registry",
         "pyspark.pipelines.tests.test_init_cli",
+        "pyspark.pipelines.tests.test_spark_connect",
     ],
 )
 
