@@ -2149,7 +2149,9 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
           // For all filter which do not reference any expensive aliases then
           // just push the filter while resolving the non-expensive aliases.
           val combinedCheapFilter = cheap.reduce(And)
-          Filter(replaceAlias(combinedCheapFilter, aliasMap), child = grandChild)
+          val resolvedCheapFilter = replaceAlias(combinedCheapFilter, aliasMap)
+          println(f"Resolved ${combinedCheapFilter} to ${resolvedCheapFilter}")
+          Filter(resolvedCheapFilter, child = grandChild)
         } else {
           // If we don't have any inexpensive filters to push it's "just" the grandchild.
           grandChild
@@ -2171,55 +2173,65 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
               true
             }
         }
-        // If we can't split anymore
-        val expensiveFiltersDone = if (toSplit.isEmpty) {
-          baseChild
+        if (toSplit.isEmpty && cheap.isEmpty) {
+          // Nothing to push or split, short circuit
+          println(f"No splits or cheap filters to push, returning original filter")
+          f
         } else {
-          // We're going to now add projections one at a time for the expensive components needed by
-          // each group of filters. We'll keep track of what we added for the previous so we
+          // If we can't split anymore
+          val expensiveFiltersDone = if (toSplit.isEmpty) {
+            baseChild
+          } else {
+            // We're going to now add projections one at a time for the expensive components for
+            // each group of filters. We'll keep track of what we added for the previous so we
           // don't double add anything.
-          val (headUsed, headConds) = toSplit.head
-          val initialReferences = (baseChild.output ++ headUsed.map(_._2)).distinct
-          println(f"Building first projection with $initialReferences")
-          val first = Filter(headConds.reduce(And),
-            project.copy(projectList = initialReferences))
-          var addedAliases = first.outputSet
-          toSplit.tail.foldLeft(first) {
-            case (currentFilter, (nextUsed, nextConds)) =>
-              val newAttributeAliases = nextUsed.filterNot(a => addedAliases.contains(a._1))
-              val newAliases = newAttributeAliases.values
-              if (newAliases.isEmpty) {
-                // We already have all the aliases needed, just add the filter
-                Filter(nextConds.reduce(And), currentFilter)
-              } else {
-                // Need to add a new projection for the new aliases
-                println(s"Adding new projection $newAliases existing aliases: $addedAliases"
-                  + s"(existing output ${currentFilter.output}")
-                val newProjection = project.copy(
-                  projectList = currentFilter.output ++ newAliases)
-                // Update our added aliases so we don't add them again.
-                addedAliases = newAttributeAliases.foldLeft(addedAliases) {
-                  case (acc, a) => acc + a._1
+            val (headUsed, headConds) = toSplit.head
+            val initialReferences = (baseChild.output ++ headUsed.map(_._2)).distinct
+            println(f"Building first projection with $initialReferences")
+            val first = Filter(headConds.reduce(And),
+              project.copy(projectList = initialReferences,
+                child = baseChild))
+            var addedAliases = first.outputSet
+            toSplit.tail.foldLeft(first) {
+              case (currentFilter, (nextUsed, nextConds)) =>
+                val newAttributeAliases = nextUsed.filterNot(a => addedAliases.contains(a._1))
+                val newAliases = newAttributeAliases.values
+                if (newAliases.isEmpty) {
+                  // We already have all the aliases needed, just add the filter
+                  Filter(nextConds.reduce(And), currentFilter)
+                } else {
+                  // Need to add a new projection for the new aliases
+                  println(s"Adding new projection $newAliases existing aliases: $addedAliases"
+                    + s"(existing output ${currentFilter.output}")
+                  val newProjection = project.copy(
+                    projectList = currentFilter.output ++ newAliases,
+                    child = currentFilter)
+                  // Update our added aliases so we don't add them again.
+                  addedAliases = newAttributeAliases.foldLeft(addedAliases) {
+                    case (acc, a) => acc + a._1
+                  }
+                  Filter(nextConds.reduce(And), newProjection)
                 }
-                Filter(nextConds.reduce(And), newProjection)
-              }
+            }
           }
-        }
-        // Insert a last projection to match the desired column ordering and
-        // evaluate any stragglers and select the already computed columns.
-        val (leftBehindAliases, computedAliases) = project.output.partition(
-          a => !expensiveFiltersDone.outputSet.contains(a.toAttribute))
-        println(f"Adding $leftBehindAliases")
-        val topProjection = project.copy(projectList = matchColumnOrdering(
-          fields, computedAliases.map(_.toAttribute) ++ leftBehindAliases),
-          child = expensiveFiltersDone)
+          // Insert a last projection to match the desired column ordering and
+          // evaluate any stragglers and select the already computed columns.
+          val (unusedAliases, computedAliases) = project.projectList.partition(
+            a => !expensiveFiltersDone.outputSet.contains(a.toAttribute))
+          println(f"Adding the unused aliases: $unusedAliases")
+          val topProjection = project.copy(projectList = matchColumnOrdering(
+            fields, computedAliases.map(_.toAttribute) ++ unusedAliases),
+            child = expensiveFiltersDone)
 
-        if (leaveAsIs.isEmpty) {
-          topProjection
-        } else {
-          // Finally add any filters which could not be pushed or split
-          val remainingConditions = leaveAsIs.values.flatten.toSeq
-          Filter(And(remainingConditions.reduce(And), condition), topProjection)
+          if (leaveAsIs.isEmpty) {
+            println(f"All done!")
+            topProjection
+          } else {
+            // Finally add any filters which could not be pushed or split
+            val remainingConditions = leaveAsIs.values.flatten.toSeq
+            println(f"Adding the final conditions we could not push: $remainingConditions")
+            Filter(And(remainingConditions.reduce(And), condition), topProjection)
+          }
         }
       }
 
