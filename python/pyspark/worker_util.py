@@ -141,7 +141,7 @@ def setup_spark_files(infile: IO) -> None:
     num_python_includes = read_int(infile)
     for _ in range(num_python_includes):
         filename = utf8_deserializer.loads(infile)
-        path_changed = path_changed or add_path(os.path.join(spark_files_dir, filename))
+        path_changed = add_path(os.path.join(spark_files_dir, filename)) or path_changed
 
     if path_changed:
         importlib.invalidate_caches()
