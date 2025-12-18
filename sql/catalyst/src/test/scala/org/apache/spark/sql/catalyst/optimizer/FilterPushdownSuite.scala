@@ -433,9 +433,9 @@ class FilterPushdownSuite extends PlanTest {
     // f is Case 3A (expensive, but can split since c and d are also in projection)
     val correctAnswer = testStringRelation
       .where($"a" > 5 && $"b" < 10)
-      .select($"a" as "c", $"b" as "d", $"e", $"e".rlike("magic") as "f")
+      .select($"a", $"b", $"e", $"e".rlike("magic") as "f")
       .where($"f")
-      .select($"f", $"c", $"d")
+      .select($"f", $"a" as "c", $"b" as "d")
       .analyze
 
     comparePlans(optimized, correctAnswer)
