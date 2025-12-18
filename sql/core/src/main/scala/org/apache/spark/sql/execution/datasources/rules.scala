@@ -39,7 +39,7 @@ import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.InsertableRelation
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
 import org.apache.spark.sql.util.PartitioningUtils.normalizePartitionSpec
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.ArrayImplicits._
@@ -714,13 +714,20 @@ object ViewSyncSchemaToMetaStore extends (LogicalPlan => Unit) {
           } else if (session.sessionState.conf.viewSchemaEvolutionPreserveUserComments) {
             // Adopt types/nullable/names from query, but preserve view comments.
             val newFields = viewQuery.schema.map { planField =>
-              val metadataToUse = viewFieldsByName.get(planField.name) match {
+              val newMetadata = viewFieldsByName.get(planField.name) match {
                 case Some(viewField) =>
-                  viewField.metadata
+                  // Use table metadata but override with view comment
+                  val builder = new MetadataBuilder().withMetadata(planField.metadata)
+                  viewField.getComment() match {
+                    case Some(comment) => builder.putString("comment", comment)
+                    case None => builder.remove("comment")
+                  }
+                  builder.build()
                 case None =>
+                  // New column, use table metadata as-is
                   planField.metadata
               }
-              StructField(planField.name, planField.dataType, planField.nullable, metadataToUse)
+              StructField(planField.name, planField.dataType, planField.nullable, newMetadata)
             }
             StructType(newFields)
           } else {
