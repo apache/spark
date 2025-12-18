@@ -526,4 +526,26 @@ object OrcUtils extends Logging {
       resultRow
     }
   }
+
+  def orcTypeDescription(dt: DataType): TypeDescription = {
+    dt match {
+      case s: StructType =>
+        val result = new TypeDescription(TypeDescription.Category.STRUCT)
+        s.fields.foreach { f =>
+          result.addField(f.name, orcTypeDescription(f.dataType))
+        }
+        result
+      case a: ArrayType =>
+        val result = new TypeDescription(TypeDescription.Category.LIST)
+        result.addChild(orcTypeDescription(a.elementType))
+        result
+      case m: MapType =>
+        val result = new TypeDescription(TypeDescription.Category.MAP)
+        result.addChild(orcTypeDescription(m.keyType))
+        result.addChild(orcTypeDescription(m.valueType))
+        result
+      case other =>
+        TypeDescription.fromString(other.catalogString)
+    }
+  }
 }
