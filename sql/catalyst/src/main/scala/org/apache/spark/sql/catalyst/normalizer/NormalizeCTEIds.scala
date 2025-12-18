@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{CacheTableAsSelect, CTERelationRef, LogicalPlan, UnionLoop, UnionLoopRef, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 
-object WithCTENormalized extends Rule[LogicalPlan]{
+object NormalizeCTEIds extends Rule[LogicalPlan]{
   override def apply(plan: LogicalPlan): LogicalPlan = {
     val curId = new java.util.concurrent.atomic.AtomicLong()
     plan transformDown {
