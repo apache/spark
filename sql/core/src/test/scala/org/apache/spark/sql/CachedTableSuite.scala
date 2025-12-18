@@ -2633,6 +2633,31 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       }
       assert(inMemoryTableScan.size == 1)
       checkAnswer(df, Row(5) :: Nil)
+
+      sql(
+        """
+          |CACHE TABLE cache_subquery_cte_table
+          |SELECT * FROM (
+          |  WITH v AS (
+          |    SELECT c1 * c2 c3 from t1
+          |  )
+          |  SELECT SUM(c3) FROM v
+          |)
+          |EXCEPT
+          |SELECT s FROM t2
+          |""".stripMargin)
+
+      val cteInSubquery = sql(
+        """
+          |SELECT * FROM cache_subquery_cte_table
+          |""".stripMargin)
+
+      cteInSubquery.explain(true)
+      val subqueryInMemoryTableScan = collect(df.queryExecution.executedPlan) {
+        case i: InMemoryTableScanExec => i
+      }
+      assert(subqueryInMemoryTableScan.size == 1)
+      checkAnswer(cteInSubquery, Row(5) :: Nil)
     }
   }
 

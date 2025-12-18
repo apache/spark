@@ -23,8 +23,8 @@ import org.apache.spark.sql.catalyst.rules.Rule
 object NormalizeCTEIds extends Rule[LogicalPlan]{
   override def apply(plan: LogicalPlan): LogicalPlan = {
     val curId = new java.util.concurrent.atomic.AtomicLong()
-    plan transformDown {
-
+    println(plan)
+    plan transformDownWithSubqueries {
       case ctas @ CacheTableAsSelect(_, plan, _, _, _, _, _) =>
         ctas.copy(plan = apply(plan))
 
