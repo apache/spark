@@ -15,13 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.command
+package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute, UnresolvedFunction}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, ExpressionWithUnresolvedIdentifier, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction, UnresolvedInlineTable, UnresolvedStar}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, LambdaFunction, Literal, UnresolvedNamedLambdaVariable}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Pivot, Unpivot}
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, OneRowRelation, Pivot, Project, SubqueryAlias, Unpivot}
+import org.apache.spark.sql.catalyst.util.EvaluateUnresolvedInlineTable
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 class IdentifierClauseParserSuite extends AnalysisTest {
@@ -123,7 +124,6 @@ class IdentifierClauseParserSuite extends AnalysisTest {
     )
   }
 
-
   test("Struct field names with IDENTIFIER() in CAST") {
     val structType = StructType(Seq(
       StructField("field1", IntegerType),
@@ -146,49 +146,93 @@ class IdentifierClauseParserSuite extends AnalysisTest {
     )
   }
 
-  test("Struct field access via CAST with IDENTIFIER()") {
-    val plan = parsePlan(
-      "SELECT CAST(named_struct('a', 10) AS STRUCT<IDENTIFIER('a'): INT>).a")
-    assert(plan != null)
-    assert(plan.toString.contains("struct<a:int>"))
-  }
-
   test("Struct field access with IDENTIFIER()") {
-    val plan = parsePlan(
-      "SELECT IDENTIFIER('data').IDENTIFIER('field1') FROM struct_field_test")
-    assert(plan != null)
-    assert(plan.toString.contains("data"))
-    assert(plan.toString.contains("field1"))
+    val plan = parsePlan("SELECT IDENTIFIER('data').IDENTIFIER('field1') FROM struct_field_test")
+    val resolvedPlan = plan.transformAllExpressions {
+      case e: ExpressionWithUnresolvedIdentifier =>
+        e.exprBuilder(Seq(e.identifierExpr.eval().toString), e.otherExprs)
+    }
+
+    comparePlans(
+      resolvedPlan,
+      table("struct_field_test").select(UnresolvedExtractValue($"data", Literal("field1")))
+    )
   }
 
   test("Struct field access with multiple IDENTIFIER() parts") {
     val plan = parsePlan("SELECT IDENTIFIER('a').IDENTIFIER('b').IDENTIFIER('c') FROM t")
-    assert(plan != null)
-    assert(plan.toString.contains("a"))
-    assert(plan.toString.contains("b"))
-    assert(plan.toString.contains("c"))
+    val resolvedPlan = plan.transformAllExpressions {
+      case e: ExpressionWithUnresolvedIdentifier =>
+        e.exprBuilder(Seq(e.identifierExpr.eval().toString), e.otherExprs)
+    }
+
+    comparePlans(
+      resolvedPlan,
+      table("t").select(
+        UnresolvedExtractValue(
+          UnresolvedExtractValue($"a", Literal("b")),
+          Literal("c")
+        )
+      )
+    )
   }
 
   test("Partition spec with IDENTIFIER() for partition column name") {
     val plan = parsePlan(
       "INSERT INTO partition_spec_test PARTITION (IDENTIFIER('c2') = 'value1') VALUES (1)")
-    assert(plan != null)
-    assert(plan.toString.contains("c2"))
-    assert(plan.toString.contains("value1"))
+      .asInstanceOf[InsertIntoStatement]
+    val values = EvaluateUnresolvedInlineTable.evaluate(
+      UnresolvedInlineTable(Seq("col1"), Seq(Seq(Literal(1)))))
+
+    comparePlans(
+      plan,
+      InsertIntoStatement(
+        plan.table,
+        Map("c2" -> Some("value1")),
+        Nil,
+        values,
+        overwrite = false,
+        ifPartitionNotExists = false
+      )
+    )
   }
 
   test("Pipe operator alias with IDENTIFIER()") {
-    val plan = parsePlan(
-      "SELECT * FROM VALUES(1, 2) AS T(c1, c2) |> AS IDENTIFIER('pipe_alias') |> SELECT c1, c2")
-    assert(plan != null)
-    assert(plan.toString.contains("pipe_alias"))
+    val values = EvaluateUnresolvedInlineTable.evaluate(
+      UnresolvedInlineTable(Seq("c1", "c2"), Seq(Seq(Literal(1), Literal(2)))))
+    comparePlans(
+      parsePlan(
+        "SELECT * FROM VALUES(1, 2) AS T(c1, c2) |> AS IDENTIFIER('pipe_alias') |> SELECT c1, c2"),
+      Project(
+        Seq($"c1", $"c2"),
+        SubqueryAlias(
+          "pipe_alias",
+          Project(
+            Seq(UnresolvedStar(None)),
+            SubqueryAlias("T", values)
+          )
+        )
+      )
+    )
   }
 
   test("Pipe operator alias with IDENTIFIER() - second variant") {
-    val plan = parsePlan(
-      "SELECT c1, c2 FROM VALUES(1, 2) AS T(c1, c2) |> AS IDENTIFIER('my_result') |> SELECT *")
-    assert(plan != null)
-    assert(plan.toString.contains("my_result"))
+    val values = EvaluateUnresolvedInlineTable.evaluate(
+      UnresolvedInlineTable(Seq("c1", "c2"), Seq(Seq(Literal(1), Literal(2)))))
+    comparePlans(
+      parsePlan(
+        "SELECT c1, c2 FROM VALUES(1, 2) AS T(c1, c2) |> AS IDENTIFIER('my_result') |> SELECT *"),
+      Project(
+        Seq(UnresolvedStar(None)),
+        SubqueryAlias(
+          "my_result",
+          Project(
+            Seq($"c1", $"c2"),
+            SubqueryAlias("T", values)
+          )
+        )
+      )
+    )
   }
 
   test("Resource type ADD is a keyword - should fail") {
