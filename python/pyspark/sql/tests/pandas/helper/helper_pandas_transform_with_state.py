@@ -20,6 +20,7 @@ import sys
 from typing import (
     Iterator,
     NamedTuple,
+    Optional,
 )
 import unittest
 from pyspark.errors import PySparkRuntimeError
