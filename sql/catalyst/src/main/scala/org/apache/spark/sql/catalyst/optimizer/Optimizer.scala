@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import scala.collection.MapView
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
@@ -2160,8 +2159,10 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // Do group by on usedAliases so if we have multiple filters with the same
         // expensive aliases we introduce them together.
         val grouped = expensiveWithUsed.groupBy(_._2)
-        val expensiveByUsed: MapView[AttributeMap[Alias], List[Expression]] = grouped.view
-          .mapValues(_.map(_._1).toList)
+        // Sort by the name of the head expensive alias so we have
+        // a consistent order for testing.
+        val expensiveByUsed = grouped.view
+          .mapValues(_.map(_._1).toList).toList.sortBy(_._1.head._2.name)
         // For each expensive alias figure out if they're in case 3A or 3B
         val (toSplit, leaveAsIs) = expensiveByUsed.partition {
           case (used, expensive) =>
@@ -2229,7 +2230,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
             topProjection
           } else {
             // Finally add any filters which could not be pushed or split
-            val remainingConditions = leaveAsIs.values.flatten.toSeq
+            val remainingConditions = leaveAsIs.map(_._2).flatten.toSeq
             println(f"Adding the final conditions we could not push: $remainingConditions")
             Filter(And(remainingConditions.reduce(And), condition), topProjection)
           }

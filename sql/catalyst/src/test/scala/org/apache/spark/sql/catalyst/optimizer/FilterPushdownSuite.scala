@@ -392,10 +392,10 @@ class FilterPushdownSuite extends PlanTest {
     val correctAnswer = testRelationWith3Strings
       .select($"a", $"e", $"h", $"i", $"e".rlike("magic") as "f")
       .where($"f")
-      .select($"a", $"e", $"h", $"i", $"f", $"i".rlike("bar") as "j")
-      .where($"j")
-      .select($"a", $"e", $"h", $"i", $"f", $"j", $"h".rlike("foo") as "g")
+      .select($"a", $"e", $"h", $"i", $"f", $"h".rlike("foo") as "g")
       .where($"g")
+      .select($"a", $"e", $"h", $"i", $"f", $"g", $"i".rlike("bar") as "j")
+      .where($"j")
       .select($"a", $"f", $"g", $"j")
       .analyze
 
