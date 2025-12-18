@@ -107,6 +107,9 @@ class SqlScriptingExecutionFrame(
 
   /**
    * Find a cursor by name in the scope hierarchy, searching from innermost to outermost.
+   *
+   * @param cursorName The cursor name to find
+   * @return The cursor definition if found
    */
   def findCursor(cursorName: String): Option[CursorDefinition] = {
     scopes.reverseIterator.foreach { scope =>
