@@ -235,7 +235,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
 
     env["PYSPARK_SUBMIT_ARGS"] = " ".join(spark_args)
 
-    timeout = int(os.environ.get("PYSPARK_TEST_TIMEOUT", 300))
+    timeout = int(os.environ.get("PYSPARK_TEST_TIMEOUT", 100))
     if timeout == 0:
         timeout = None
     else:
