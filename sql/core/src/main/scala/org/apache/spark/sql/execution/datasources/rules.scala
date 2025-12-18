@@ -701,9 +701,10 @@ object ViewSyncSchemaToMetaStore extends (LogicalPlan => Unit) {
                   field.getComment() != planField.getComment()))))
         }
 
+        lazy val viewFieldsByName = viewFields.map(f => f.name -> f).toMap
+
         if (redo) {
           val newSchema = if (viewSchemaMode == SchemaTypeEvolution) {
-            val viewFieldsByName = viewFields.map(f => f.name -> f).toMap
             val newFields = viewQuery.schema.map {
               case StructField(name, dataType, nullable, _) =>
                 StructField(name, dataType, nullable,
@@ -712,7 +713,6 @@ object ViewSyncSchemaToMetaStore extends (LogicalPlan => Unit) {
             StructType(newFields)
           } else if (session.sessionState.conf.viewSchemaEvolutionPreserveUserComments) {
             // Adopt types/nullable/names from query, but preserve view comments.
-            val viewFieldsByName = viewFields.map(f => f.name -> f).toMap
             val newFields = viewQuery.schema.map { planField =>
               val metadataToUse = viewFieldsByName.get(planField.name) match {
                 case Some(viewField) =>
