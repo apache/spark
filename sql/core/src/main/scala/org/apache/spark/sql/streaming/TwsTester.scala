@@ -79,7 +79,7 @@ class TwsTester[K, I, O](
     val timeMode: TimeMode = TimeMode.None,
     val outputMode: OutputMode = OutputMode.Append,
     val realTimeMode: Boolean = false,
-    val eventTimeExtractor: Option[I => Timestamp] = None,
+    val eventTimeExtractor: I => Timestamp = null,
     val watermarkDelayMs: Long = 0L) {
   val clock: Clock = new Clock {
     override def instant(): Instant = Instant.ofEpochMilli(currentProcessingTimeMs)
@@ -91,7 +91,7 @@ class TwsTester[K, I, O](
 
   if (timeMode == TimeMode.EventTime) {
     require(
-      eventTimeExtractor.isDefined,
+      eventTimeExtractor != null,
       "eventTimeExtractor must be provided when timeMode is EventTime."
     )
   }
@@ -263,10 +263,9 @@ class TwsTester[K, I, O](
 
   private def updateWatermarkFromEventTime(values: List[I]): Unit = {
     require(timeMode == TimeMode.EventTime())
-    require(eventTimeExtractor.isDefined)
-    val extractor = eventTimeExtractor.get
+    require(eventTimeExtractor != null)
     values.foreach { value =>
-      val eventTimeMs = extractor(value).getTime
+      val eventTimeMs = eventTimeExtractor(value).getTime
       currentWatermarkMs = Math.max(currentWatermarkMs, eventTimeMs - watermarkDelayMs)
     }
   }
@@ -282,7 +281,6 @@ class TwsTester[K, I, O](
     if (timeMode != TimeMode.EventTime()) {
       return values
     }
-    val extractor = eventTimeExtractor.get
-    values.filter(extractor(_).getTime >= currentWatermarkMs)
+    values.filter(eventTimeExtractor(_).getTime >= currentWatermarkMs)
   }
 }

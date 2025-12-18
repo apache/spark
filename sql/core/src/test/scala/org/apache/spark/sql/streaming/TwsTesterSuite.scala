@@ -413,7 +413,7 @@ class TwsTesterSuite extends SparkFunSuite {
     val tester = new TwsTester(
       new EventTimeSessionProcessor(),
       timeMode = TimeMode.EventTime(),
-      eventTimeExtractor = Some(eventTimeExtractor),
+      eventTimeExtractor = eventTimeExtractor,
       watermarkDelayMs = 2000 // 2 second watermark delay
     )
 
@@ -452,7 +452,7 @@ class TwsTesterSuite extends SparkFunSuite {
     val tester = new TwsTester(
       new EventTimeSessionProcessor(),
       timeMode = TimeMode.EventTime(),
-      eventTimeExtractor = Some(eventTimeExtractor),
+      eventTimeExtractor = eventTimeExtractor,
       watermarkDelayMs = 2000
     )
 
@@ -490,7 +490,7 @@ class TwsTesterSuite extends SparkFunSuite {
     val tester = new TwsTester(
       new EventTimeCountProcessor(),
       timeMode = TimeMode.EventTime(),
-      eventTimeExtractor = Some(eventTimeExtractor),
+      eventTimeExtractor = eventTimeExtractor,
       watermarkDelayMs = 1000 // 1 second watermark delay
     )
 
@@ -540,7 +540,7 @@ class TwsTesterSuite extends SparkFunSuite {
     val tester = new TwsTester(
       new EventTimeCountProcessor(),
       timeMode = TimeMode.EventTime(),
-      eventTimeExtractor = Some(eventTimeExtractor),
+      eventTimeExtractor = eventTimeExtractor,
       watermarkDelayMs = 0 // No delay for simplicity
     )
 
