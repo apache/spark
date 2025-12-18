@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql
 
-import org.apache.spark.SparkThrowable
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.QueryTest.sameRows
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
@@ -30,7 +30,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.ColumnarArray
 import org.apache.spark.types.variant.VariantBuilder
 import org.apache.spark.types.variant.VariantUtil._
-import org.apache.spark.unsafe.types.VariantVal
+import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
 class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -51,10 +51,10 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     check("-1")
     check("1.0E10")
     check("\"\"")
-    check("\"" + ("a" * 63) + "\"")
-    check("\"" + ("b" * 64) + "\"")
+    check("\"" + "a".repeat(63) + "\"")
+    check("\"" + "b".repeat(64) + "\"")
     // scalastyle:off nonascii
-    check("\"" + ("你好，世界" * 20) + "\"")
+    check("\"" + "你好，世界".repeat(20) + "\"")
     // scalastyle:on nonascii
     check("[]")
     check("{}")
@@ -87,10 +87,10 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     check("-1")
     check("1.0E10")
     check("\"\"")
-    check("\"" + ("a" * 63) + "\"")
-    check("\"" + ("b" * 64) + "\"")
+    check("\"" + "a".repeat(63) + "\"")
+    check("\"" + "b".repeat(64) + "\"")
     // scalastyle:off nonascii
-    check("\"" + ("你好，世界" * 20) + "\"")
+    check("\"" + "你好，世界".repeat(20) + "\"")
     // scalastyle:on nonascii
     check("[]")
     check("{}")
@@ -101,6 +101,26 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     )
     // scalastyle:on nonascii
     check("[0.0, 1.00, 1.10, 1.23]", "[0,1,1.1,1.23]")
+
+    // Validate options work.
+    checkAnswer(Seq("""{"a": NaN}""").toDF("v")
+      .selectExpr("from_json(v, 'variant', map('allowNonNumericNumbers', 'false'))"), Row(null))
+    checkAnswer(Seq("""{"a": NaN}""").toDF("v")
+      .selectExpr("from_json(v, 'variant', map('allowNonNumericNumbers', 'true'))"),
+      Row(
+        VariantExpressionEvalUtils.castToVariant(InternalRow(Double.NaN),
+          StructType.fromDDL("a double"))))
+    // String input "NaN" will remain a string instead of double.
+    checkAnswer(Seq("""{"a": "NaN"}""").toDF("v")
+      .selectExpr("from_json(v, 'variant', map('allowNonNumericNumbers', 'true'))"),
+      Row(
+        VariantExpressionEvalUtils.castToVariant(InternalRow(UTF8String.fromString("NaN")),
+          StructType.fromDDL("a string"))))
+    // to_json should put special floating point values in quotes.
+    checkAnswer(Seq("""{"a": NaN}""").toDF("v")
+      .selectExpr("to_json(from_json(v, 'variant', map('allowNonNumericNumbers', 'true')))"),
+      Row("""{"a":"NaN"}"""))
+
   }
 
   test("try_parse_json/to_json round-trip") {
@@ -117,10 +137,10 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     check("-1")
     check("1.0E10")
     check("\"\"")
-    check("\"" + ("a" * 63) + "\"")
-    check("\"" + ("b" * 64) + "\"")
+    check("\"" + "a".repeat(63) + "\"")
+    check("\"" + "b".repeat(64) + "\"")
     // scalastyle:off nonascii
-    check("\"" + ("你好，世界" * 20) + "\"")
+    check("\"" + "你好，世界".repeat(20) + "\"")
     // scalastyle:on nonascii
     check("[]")
     check("{}")
@@ -135,7 +155,7 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
     check("{1:2}", null)
     check("{\"a\":1", null)
     check("{\"a\":[a,b,c]}", null)
-    check("\"" + "a" * (16 * 1024 * 1024) + "\"", null)
+    check("\"" + "a".repeat(16 * 1024 * 1024) + "\"", null)
   }
 
   test("to_json with nested variant") {
@@ -346,6 +366,7 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
 
   test("from_json(_, 'variant') with duplicate keys") {
     val json: String = """{"a": 1, "b": 2, "c": "3", "a": 4}"""
+
     withSQLConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS.key -> "true") {
       val df = Seq(json).toDF("j")
         .selectExpr("from_json(j,'variant')")
@@ -359,16 +380,89 @@ class VariantEndToEndSuite extends QueryTest with SharedSparkSession {
       val expectedMetadata: Array[Byte] = Array(VERSION, 3, 0, 1, 2, 3, 'a', 'b', 'c')
       assert(actual === new VariantVal(expectedValue, expectedMetadata))
     }
+
     withSQLConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS.key -> "false") {
-      val df = Seq(json).toDF("j")
-        .selectExpr("from_json(j,'variant')")
+      // In default mode (PERMISSIVE), JSON with duplicate keys is still invalid, but no error will
+      // be thrown.
+      checkAnswer(Seq(json).toDF("j").selectExpr("from_json(j, 'variant')"), Row(null))
+
+      val exception = intercept[SparkException] {
+        Seq(json).toDF("j").selectExpr("from_json(j, 'variant', map('mode', 'FAILFAST'))").collect()
+      }
       checkError(
-        exception = intercept[SparkThrowable] {
-          df.collect()
-        },
+        exception = exception,
         condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
-        parameters = Map("badRecord" -> json, "failFastMode" -> "FAILFAST")
+        parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST")
       )
+      checkError(
+        exception = exception.getCause.asInstanceOf[SparkRuntimeException],
+        condition = "VARIANT_DUPLICATE_KEY",
+        parameters = Map("key" -> "a")
+      )
+    }
+  }
+
+  test("SPARK-49985: Disable support for interval types in the variant spec") {
+    // Top level intervals
+    assert(intercept[AnalysisException] {
+      sql("select interval '1' month::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    assert(intercept[AnalysisException] {
+      sql("select interval '1' day::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    // struct<interval>
+    assert(intercept[AnalysisException] {
+      sql("select named_struct('i', interval '1' month)::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    assert(intercept[AnalysisException] {
+      sql("select named_struct('i', interval '1' day)::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    // struct<struct<interval>>
+    assert(intercept[AnalysisException] {
+      sql("select struct(named_struct('i', interval '1' month))::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    assert(intercept[AnalysisException] {
+      sql("select struct(named_struct('i', interval '1' day))::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    // array<interval>
+    assert(intercept[AnalysisException] {
+      sql("select array(interval '1' month)::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    assert(intercept[AnalysisException] {
+      sql("select array(interval '1' day)::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    // map<string, interval>
+    assert(intercept[AnalysisException] {
+      sql("select map('i', interval '1' month)::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    assert(intercept[AnalysisException] {
+      sql("select map('i', interval '1' day)::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    // map<string, struct<interval>>
+    assert(intercept[AnalysisException] {
+      sql("select map('i', struct(interval '1' month))::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    assert(intercept[AnalysisException] {
+      sql("select map('i', struct(interval '1' day))::variant as v")
+    }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+    val tableName = "_v"
+    withTable(tableName) {
+      sql(s"create table $tableName (" +
+        s"i1 interval month," +
+        s"i2 interval day," +
+        s"i3 struct<i interval month>," +
+        s"i4 struct<i interval day>," +
+        s"i5 array<interval month>," +
+        s"i6 array<interval day>," +
+        s"i7 map<string, interval month>," +
+        s"i8 map<string, interval day>," +
+        s"i9 struct<i struct<i map<string, array<interval month>>>>," +
+        s"i10 struct<i struct<i map<string, array<interval day>>>>)")
+      (1 to 10).foreach { i =>
+        assert(intercept[AnalysisException] {
+          sql(s"select i$i::variant from $tableName")
+        }.getCondition == "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION")
+      }
     }
   }
 }

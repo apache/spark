@@ -25,7 +25,8 @@
 """
 
 import sys
-from typing import Any, Dict, List, NoReturn, Optional, cast
+from typing import Any, Dict, List, NoReturn, cast
+from functools import cached_property
 
 import numpy as np
 
@@ -42,14 +43,7 @@ class _ImageSchema:
     APIs of this class.
     """
 
-    def __init__(self) -> None:
-        self._imageSchema: Optional[StructType] = None
-        self._ocvTypes: Optional[Dict[str, int]] = None
-        self._columnSchema: Optional[StructType] = None
-        self._imageFields: Optional[List[str]] = None
-        self._undefinedImageType: Optional[str] = None
-
-    @property
+    @cached_property
     def imageSchema(self) -> StructType:
         """
         Returns the image schema.
@@ -64,14 +58,12 @@ class _ImageSchema:
         """
         from pyspark.core.context import SparkContext
 
-        if self._imageSchema is None:
-            ctx = SparkContext._active_spark_context
-            assert ctx is not None and ctx._jvm is not None
-            jschema = ctx._jvm.org.apache.spark.ml.image.ImageSchema.imageSchema()
-            self._imageSchema = cast(StructType, _parse_datatype_json_string(jschema.json()))
-        return self._imageSchema
+        ctx = SparkContext._active_spark_context
+        assert ctx is not None and ctx._jvm is not None
+        jschema = getattr(ctx._jvm, "org.apache.spark.ml.image.ImageSchema").imageSchema()
+        return cast(StructType, _parse_datatype_json_string(jschema.json()))
 
-    @property
+    @cached_property
     def ocvTypes(self) -> Dict[str, int]:
         """
         Returns the OpenCV type mapping supported.
@@ -85,13 +77,11 @@ class _ImageSchema:
         """
         from pyspark.core.context import SparkContext
 
-        if self._ocvTypes is None:
-            ctx = SparkContext._active_spark_context
-            assert ctx is not None and ctx._jvm is not None
-            self._ocvTypes = dict(ctx._jvm.org.apache.spark.ml.image.ImageSchema.javaOcvTypes())
-        return self._ocvTypes
+        ctx = SparkContext._active_spark_context
+        assert ctx is not None and ctx._jvm is not None
+        return dict(getattr(ctx._jvm, "org.apache.spark.ml.image.ImageSchema").javaOcvTypes())
 
-    @property
+    @cached_property
     def columnSchema(self) -> StructType:
         """
         Returns the schema for the image column.
@@ -106,14 +96,12 @@ class _ImageSchema:
         """
         from pyspark.core.context import SparkContext
 
-        if self._columnSchema is None:
-            ctx = SparkContext._active_spark_context
-            assert ctx is not None and ctx._jvm is not None
-            jschema = ctx._jvm.org.apache.spark.ml.image.ImageSchema.columnSchema()
-            self._columnSchema = cast(StructType, _parse_datatype_json_string(jschema.json()))
-        return self._columnSchema
+        ctx = SparkContext._active_spark_context
+        assert ctx is not None and ctx._jvm is not None
+        jschema = getattr(ctx._jvm, "org.apache.spark.ml.image.ImageSchema").columnSchema()
+        return cast(StructType, _parse_datatype_json_string(jschema.json()))
 
-    @property
+    @cached_property
     def imageFields(self) -> List[str]:
         """
         Returns field names of image columns.
@@ -127,13 +115,11 @@ class _ImageSchema:
         """
         from pyspark.core.context import SparkContext
 
-        if self._imageFields is None:
-            ctx = SparkContext._active_spark_context
-            assert ctx is not None and ctx._jvm is not None
-            self._imageFields = list(ctx._jvm.org.apache.spark.ml.image.ImageSchema.imageFields())
-        return self._imageFields
+        ctx = SparkContext._active_spark_context
+        assert ctx is not None and ctx._jvm is not None
+        return list(getattr(ctx._jvm, "org.apache.spark.ml.image.ImageSchema").imageFields())
 
-    @property
+    @cached_property
     def undefinedImageType(self) -> str:
         """
         Returns the name of undefined image type for the invalid image.
@@ -142,13 +128,9 @@ class _ImageSchema:
         """
         from pyspark.core.context import SparkContext
 
-        if self._undefinedImageType is None:
-            ctx = SparkContext._active_spark_context
-            assert ctx is not None and ctx._jvm is not None
-            self._undefinedImageType = (
-                ctx._jvm.org.apache.spark.ml.image.ImageSchema.undefinedImageType()
-            )
-        return self._undefinedImageType
+        ctx = SparkContext._active_spark_context
+        assert ctx is not None and ctx._jvm is not None
+        return getattr(ctx._jvm, "org.apache.spark.ml.image.ImageSchema").undefinedImageType()
 
     def toNDArray(self, image: Row) -> np.ndarray:
         """

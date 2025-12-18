@@ -283,7 +283,10 @@ class StreamingQuery:
 
         >>> sq.stop()
         """
-        return [StreamingQueryProgress.fromJObject(p) for p in self._jsq.recentProgress()]
+        return [
+            StreamingQueryProgress.fromJson(json.loads(p.json()))
+            for p in self._jsq.recentProgress()
+        ]
 
     @property
     def lastProgress(self) -> Optional[StreamingQueryProgress]:
@@ -314,7 +317,7 @@ class StreamingQuery:
         """
         lastProgress = self._jsq.lastProgress()
         if lastProgress:
-            return StreamingQueryProgress.fromJObject(lastProgress)
+            return StreamingQueryProgress.fromJson(json.loads(lastProgress.json()))
         else:
             return None
 
@@ -491,7 +494,7 @@ class StreamingQueryManager:
         """
         return [StreamingQuery(jsq) for jsq in self._jsqm.active()]
 
-    def get(self, id: str) -> Optional[StreamingQuery]:
+    def get(self, id: str) -> Optional["StreamingQuery"]:
         """
         Returns an active query from this :class:`SparkSession`.
 

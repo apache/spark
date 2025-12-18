@@ -132,6 +132,7 @@ Mathematical Functions
     radians
     rand
     randn
+    random
     rint
     round
     sec
@@ -164,6 +165,7 @@ String Functions
     char
     char_length
     character_length
+    chr
     collate
     collation
     concat_ws
@@ -177,6 +179,7 @@ String Functions
     format_string
     initcap
     instr
+    is_valid_utf8
     lcase
     left
     length
@@ -185,11 +188,13 @@ String Functions
     lower
     lpad
     ltrim
+    make_valid_utf8
     mask
     octet_length
     overlay
     position
     printf
+    quote
     randstr
     regexp_count
     regexp_extract
@@ -218,9 +223,11 @@ String Functions
     trim
     try_to_binary
     try_to_number
+    try_validate_utf8
     ucase
     unbase64
     upper
+    validate_utf8
 
 
 Bitwise Functions
@@ -246,6 +253,7 @@ Date and Timestamp Functions
     convert_timezone
     curdate
     current_date
+    current_time
     current_timestamp
     current_timezone
     date_add
@@ -272,6 +280,7 @@ Date and Timestamp Functions
     make_date
     make_dt_interval
     make_interval
+    make_time
     make_timestamp
     make_timestamp_ltz
     make_timestamp_ntz
@@ -290,14 +299,23 @@ Date and Timestamp Functions
     timestamp_micros
     timestamp_millis
     timestamp_seconds
+    time_diff
+    time_trunc
     to_date
+    to_time
     to_timestamp
     to_timestamp_ltz
     to_timestamp_ntz
     to_unix_timestamp
     to_utc_timestamp
     trunc
+    try_make_interval
+    try_make_timestamp
+    try_make_timestamp_ltz
+    try_make_timestamp_ntz
+    try_to_time
     try_to_timestamp
+    try_to_date
     unix_date
     unix_micros
     unix_millis
@@ -440,9 +458,14 @@ Aggregate Functions
     histogram_numeric
     hll_sketch_agg
     hll_union_agg
+    kll_sketch_agg_bigint
+    kll_sketch_agg_double
+    kll_sketch_agg_float
     kurtosis
     last
     last_value
+    listagg
+    listagg_distinct
     max
     max_by
     mean
@@ -468,8 +491,13 @@ Aggregate Functions
     stddev
     stddev_pop
     stddev_samp
+    string_agg
+    string_agg_distinct
     sum
     sum_distinct
+    theta_intersection_agg
+    theta_sketch_agg
+    theta_union_agg
     try_avg
     try_sum
     var_pop
@@ -583,6 +611,7 @@ URL Functions
     :toctree: api/
 
     parse_url
+    try_parse_url
     url_decode
     url_encode
     try_url_decode
@@ -605,6 +634,21 @@ Misc Functions
     current_user
     hll_sketch_estimate
     hll_union
+    kll_sketch_get_n_bigint
+    kll_sketch_get_n_double
+    kll_sketch_get_n_float
+    kll_sketch_get_quantile_bigint
+    kll_sketch_get_quantile_double
+    kll_sketch_get_quantile_float
+    kll_sketch_get_rank_bigint
+    kll_sketch_get_rank_double
+    kll_sketch_get_rank_float
+    kll_sketch_merge_bigint
+    kll_sketch_merge_double
+    kll_sketch_merge_float
+    kll_sketch_to_string_bigint
+    kll_sketch_to_string_double
+    kll_sketch_to_string_float
     input_file_block_length
     input_file_block_start
     input_file_name
@@ -614,11 +658,28 @@ Misc Functions
     reflect
     session_user
     spark_partition_id
+    theta_difference
+    theta_intersection
+    theta_sketch_estimate
+    theta_union
     try_aes_decrypt
     try_reflect
     typeof
     user
+    uuid
     version
+
+
+Geospatial ST Functions
+-----------------------
+.. autosummary::
+    :toctree: api/
+
+    st_asbinary
+    st_geogfromwkb
+    st_geomfromwkb
+    st_setsrid
+    st_srid
 
 
 UDF, UDTF and UDT
@@ -626,9 +687,33 @@ UDF, UDTF and UDT
 .. autosummary::
     :toctree: api/
 
+    arrow_udf
+    arrow_udtf
     call_udf
     pandas_udf
     udf
     udtf
     unwrap_udt
 
+
+Table-Valued Functions
+----------------------
+.. currentmodule:: pyspark.sql.tvf
+
+.. autosummary::
+    :toctree: api/
+
+    TableValuedFunction.collations
+    TableValuedFunction.explode
+    TableValuedFunction.explode_outer
+    TableValuedFunction.inline
+    TableValuedFunction.inline_outer
+    TableValuedFunction.json_tuple
+    TableValuedFunction.posexplode
+    TableValuedFunction.posexplode_outer
+    TableValuedFunction.python_worker_logs
+    TableValuedFunction.range
+    TableValuedFunction.sql_keywords
+    TableValuedFunction.stack
+    TableValuedFunction.variant_explode
+    TableValuedFunction.variant_explode_outer

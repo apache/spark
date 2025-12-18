@@ -18,27 +18,59 @@ import unittest
 
 import numpy as np
 
-from pyspark.ml.functions import predict_batch_udf
+from pyspark.loose_version import LooseVersion
+from pyspark.ml.linalg import DenseVector
+from pyspark.ml.functions import array_to_vector, vector_to_array, predict_batch_udf
 from pyspark.sql.functions import array, struct, col
 from pyspark.sql.types import ArrayType, DoubleType, IntegerType, StructType, StructField, FloatType
-from pyspark.testing.mlutils import SparkSessionTestCase
 from pyspark.testing.sqlutils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
     pyarrow_requirement_message,
+    ReusedSQLTestCase,
 )
 
 
-@unittest.skipIf(
-    not have_pandas or not have_pyarrow,
-    pandas_requirement_message or pyarrow_requirement_message,
-)
-class PredictBatchUDFTests(SparkSessionTestCase):
+class ArrayVectorConversionTestsMixin:
+    def test_array_vector_conversion(self):
+        spark = self.spark
+
+        query = """
+            SELECT * FROM VALUES
+            (1, ARRAY(1.0, 2.0, 3.0)),
+            (1, ARRAY(-1.0, -2.0, -3.0))
+            AS tab(a, b)
+            """
+
+        df = spark.sql(query)
+
+        df1 = df.select("*", array_to_vector(df.b).alias("c"))
+        self.assertEqual(df1.columns, ["a", "b", "c"])
+        self.assertEqual(df1.count(), 2)
+        self.assertEqual(
+            [r.c for r in df1.select("c").collect()],
+            [DenseVector([1.0, 2.0, 3.0]), DenseVector([-1.0, -2.0, -3.0])],
+        )
+
+        df2 = df1.select("*", vector_to_array(df1.c).alias("d"))
+        self.assertEqual(df2.columns, ["a", "b", "c", "d"])
+        self.assertEqual(df2.count(), 2)
+        self.assertEqual(
+            [r.d for r in df2.select("d").collect()],
+            [[1.0, 2.0, 3.0], [-1.0, -2.0, -3.0]],
+        )
+
+
+class ArrayVectorConversionTests(ArrayVectorConversionTestsMixin, ReusedSQLTestCase):
+    pass
+
+
+class PredictBatchUDFTestsMixin:
     def setUp(self):
         import pandas as pd
 
-        super(PredictBatchUDFTests, self).setUp()
+        super().setUp()
         self.data = np.arange(0, 1000, dtype=np.float64).reshape(-1, 4)
 
         # 4 scalar columns
@@ -193,6 +225,10 @@ class PredictBatchUDFTests(SparkSessionTestCase):
         batch_sizes = preds["preds"].to_numpy()
         self.assertTrue(all(batch_sizes <= batch_size))
 
+    # TODO(SPARK-49793): enable the test below
+    @unittest.skipIf(
+        LooseVersion(np.__version__) >= LooseVersion("2"), "Caching does not work with numpy 2"
+    )
     def test_caching(self):
         def make_predict_fn():
             # emulate loading a model, this should only be invoked once (per worker process)
@@ -260,14 +296,14 @@ class PredictBatchUDFTests(SparkSessionTestCase):
         with self.assertRaisesRegex(Exception, "Model expected 3 inputs, but received 4 columns"):
             preds = self.df.withColumn("preds", sum_cols(*columns)).toPandas()
 
-        # muliple scalar columns with one tensor_input_shape => single numpy array
+        # multiple scalar columns with one tensor_input_shape => single numpy array
         sum_cols = predict_batch_udf(
             array_sum_fn, return_type=DoubleType(), batch_size=5, input_tensor_shapes=[[4]]
         )
         preds = self.df.withColumn("preds", sum_cols(struct(*columns))).toPandas()
         self.assertTrue(np.array_equal(np.sum(self.data, axis=1), preds["preds"].to_numpy()))
 
-        # muliple scalar columns with wrong tensor_input_shape => ERROR
+        # multiple scalar columns with wrong tensor_input_shape => ERROR
         sum_cols = predict_batch_udf(
             array_sum_fn, return_type=DoubleType(), batch_size=5, input_tensor_shapes=[[3]]
         )
@@ -526,6 +562,14 @@ class PredictBatchUDFTests(SparkSessionTestCase):
 
         [value] = df.select(multi_sum_udf("t1", "t2")).first()
         self.assertEqual(value, 9.0)
+
+
+@unittest.skipIf(
+    not have_pandas or not have_pyarrow,
+    pandas_requirement_message or pyarrow_requirement_message,
+)
+class PredictBatchUDFTests(PredictBatchUDFTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":

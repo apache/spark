@@ -224,15 +224,15 @@ class FilteredScanSuite extends DataSourceTest with SharedSparkSession {
 
   sqlTest(
     "SELECT a, b, c FROM oneToTenFiltered WHERE c like 'c%'",
-    Seq(Row(3, 3 * 2, "c" * 5 + "C" * 5)))
+    Seq(Row(3, 3 * 2, "c".repeat(5) + "C".repeat(5))))
 
   sqlTest(
     "SELECT a, b, c FROM oneToTenFiltered WHERE c like '%D'",
-    Seq(Row(4, 4 * 2, "d" * 5 + "D" * 5)))
+    Seq(Row(4, 4 * 2, "d".repeat(5) + "D".repeat(5))))
 
   sqlTest(
     "SELECT a, b, c FROM oneToTenFiltered WHERE c like '%eE%'",
-    Seq(Row(5, 5 * 2, "e" * 5 + "E" * 5)))
+    Seq(Row(5, 5 * 2, "e".repeat(5) + "E".repeat(5))))
 
   testPushDown("SELECT * FROM oneToTenFiltered WHERE A = 1", 1, Set("a", "b", "c"))
   testPushDown("SELECT a FROM oneToTenFiltered WHERE A = 1", 1, Set("a"))
@@ -325,7 +325,7 @@ class FilteredScanSuite extends DataSourceTest with SharedSparkSession {
 
         val table = spark.table("oneToTenFiltered")
         val relation = table.queryExecution.analyzed.collectFirst {
-          case LogicalRelation(r, _, _, _) => r
+          case l: LogicalRelation => l.relation
         }.get
 
         assert(

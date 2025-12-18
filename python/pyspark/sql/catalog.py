@@ -27,7 +27,7 @@ from pyspark.sql.types import StructType
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import UserDefinedFunctionLike
-    from pyspark.sql.types import DataType
+    from pyspark.sql._typing import DataTypeOrString
 
 
 class CatalogMetadata(NamedTuple):
@@ -479,7 +479,6 @@ class Catalog:
         """
         if dbName is None:
             dbName = self.currentDatabase()
-        iter = self._jcatalog.listFunctions(dbName).toLocalIterator()
         if pattern is None:
             iter = self._jcatalog.listFunctions(dbName).toLocalIterator()
         else:
@@ -759,7 +758,7 @@ class Catalog:
         source: Optional[str] = None,
         schema: Optional[StructType] = None,
         **options: str,
-    ) -> DataFrame:
+    ) -> "DataFrame":
         """Creates a table based on the dataset in a data source.
 
         It returns the DataFrame associated with the external table.
@@ -791,7 +790,7 @@ class Catalog:
         schema: Optional[StructType] = None,
         description: Optional[str] = None,
         **options: str,
-    ) -> DataFrame:
+    ) -> "DataFrame":
         """Creates a table based on the dataset in a data source.
 
         .. versionadded:: 2.2.0
@@ -942,7 +941,7 @@ class Catalog:
         return self._jcatalog.dropGlobalTempView(viewName)
 
     def registerFunction(
-        self, name: str, f: Callable[..., Any], returnType: Optional["DataType"] = None
+        self, name: str, f: Callable[..., Any], returnType: Optional["DataTypeOrString"] = None
     ) -> "UserDefinedFunctionLike":
         """An alias for :func:`spark.udf.register`.
         See :meth:`pyspark.sql.UDFRegistration.register`.
@@ -1020,6 +1019,10 @@ class Catalog:
             .. versionchanged:: 3.5.0
                 Allow to specify storage level.
 
+        Notes
+        -----
+        Cached data is shared across all Spark sessions on the cluster.
+
         Examples
         --------
         >>> _ = spark.sql("DROP TABLE IF EXISTS tbl1")
@@ -1062,6 +1065,11 @@ class Catalog:
             .. versionchanged:: 3.4.0
                 Allow ``tableName`` to be qualified with catalog name.
 
+        Notes
+        -----
+        Cached data is shared across all Spark sessions on the cluster, so uncaching it
+        affects all sessions.
+
         Examples
         --------
         >>> _ = spark.sql("DROP TABLE IF EXISTS tbl1")
@@ -1091,6 +1099,11 @@ class Catalog:
         """Removes all cached tables from the in-memory cache.
 
         .. versionadded:: 2.0.0
+
+        Notes
+        -----
+        Cached data is shared across all Spark sessions on the cluster, so clearing
+        the cache affects all sessions.
 
         Examples
         --------

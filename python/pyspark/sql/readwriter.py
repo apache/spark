@@ -18,7 +18,6 @@ import sys
 from typing import cast, overload, Dict, Iterable, List, Optional, Tuple, TYPE_CHECKING, Union
 
 from pyspark.util import is_remote_only
-from pyspark.sql.column import Column
 from pyspark.sql.types import StructType
 from pyspark.sql import utils
 from pyspark.sql.utils import to_str
@@ -216,7 +215,7 @@ class DataFrameReader(OptionUtils):
         Parameters
         ----------
         **options : dict
-            The dictionary of string keys and prmitive-type values.
+            The dictionary of string keys and primitive-type values.
 
         Examples
         --------
@@ -1175,7 +1174,9 @@ class DataFrameReader(OptionUtils):
         if predicates is not None:
             gateway = self._spark._sc._gateway
             assert gateway is not None
-            jpredicates = utils.to_java_array(gateway, gateway.jvm.java.lang.String, predicates)
+            jpredicates = utils.to_java_array(
+                gateway, getattr(gateway.jvm, "java.lang.String"), predicates
+            )
             return self._df(self._jreader.jdbc(url, table, jpredicates, jprop))
         return self._df(self._jreader.jdbc(url, table, jprop))
 
@@ -2400,7 +2401,7 @@ class DataFrameWriterV2:
         self._jwriter.tableProperty(property, value)
         return self
 
-    def partitionedBy(self, col: Column, *cols: Column) -> "DataFrameWriterV2":
+    def partitionedBy(self, col: "ColumnOrName", *cols: "ColumnOrName") -> "DataFrameWriterV2":
         """
         Partition the output table created by `create`, `createOrReplace`, or `replace` using
         the given columns or transforms.
@@ -2487,7 +2488,7 @@ class DataFrameWriterV2:
         """
         self._jwriter.append()
 
-    def overwrite(self, condition: Column) -> None:
+    def overwrite(self, condition: "ColumnOrName") -> None:
         """
         Overwrite rows matching the given filter condition with the contents of the data frame in
         the output table.

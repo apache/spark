@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.util;
 
 import java.util.Arrays;
+import java.util.EnumMap;
 import java.util.Locale;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.apache.hadoop.io.compress.BZip2Codec;
@@ -53,11 +53,15 @@ public enum HadoopCompressionCodec {
     return this.compressionCodec;
   }
 
-  private static final Map<String, String> codecNameMap =
+  private static final EnumMap<HadoopCompressionCodec, String> codecNameMap =
     Arrays.stream(HadoopCompressionCodec.values()).collect(
-      Collectors.toMap(Enum::name, codec -> codec.name().toLowerCase(Locale.ROOT)));
+      Collectors.toMap(
+        codec -> codec,
+        codec -> codec.name().toLowerCase(Locale.ROOT),
+        (oldValue, newValue) -> oldValue,
+        () -> new EnumMap<>(HadoopCompressionCodec.class)));
 
   public String lowerCaseName() {
-    return codecNameMap.get(this.name());
+    return codecNameMap.get(this);
   }
 }

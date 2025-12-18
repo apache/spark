@@ -41,6 +41,12 @@ if extension_object_dtypes_available:
 class OpsTestBase:
     """The test base for arithmetic operations of different data types."""
 
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        # Some nanosecond->microsecond conversions throw loss of precision errors
+        cls.spark.conf.set("spark.sql.execution.pandas.convertToArrowArraySafely", "false")
+
     @property
     def numeric_pdf(self):
         dtypes = [np.int32, int, np.float32, float]

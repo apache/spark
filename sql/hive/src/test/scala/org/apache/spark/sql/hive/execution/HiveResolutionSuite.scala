@@ -117,7 +117,6 @@ class HiveResolutionSuite extends HiveComparisonTest {
 
   /**
    * Negative examples.  Currently only left here for documentation purposes.
-   * TODO(marmbrus): Test that catalyst fails on these queries.
    */
 
   /* SemanticException [Error 10009]: Line 1:7 Invalid table alias 'src'

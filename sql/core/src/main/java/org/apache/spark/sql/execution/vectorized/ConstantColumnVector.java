@@ -77,6 +77,11 @@ public class ConstantColumnVector extends ColumnVector {
     }
   }
 
+  public void closeIfFreeable() {
+    // no-op: `ConstantColumnVector`s reuse the data backing its value across multiple batches and
+    // are freed at the end of execution in `close`.
+  }
+
   @Override
   public void close() {
     stringData = null;

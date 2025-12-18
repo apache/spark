@@ -82,6 +82,20 @@ object Encoders {
   def DOUBLE: Encoder[java.lang.Double] = BoxedDoubleEncoder
 
   /**
+   * An encoder for nullable char type.
+   *
+   * @since 4.0.0
+   */
+  def CHAR(length: Int): Encoder[java.lang.String] = CharEncoder(length)
+
+  /**
+   * An encoder for nullable varchar type.
+   *
+   * @since 4.0.0
+   */
+  def VARCHAR(length: Int): Encoder[java.lang.String] = VarcharEncoder(length)
+
+  /**
    * An encoder for nullable string type.
    *
    * @since 1.6.0
@@ -134,11 +148,33 @@ object Encoders {
   def INSTANT: Encoder[java.time.Instant] = STRICT_INSTANT_ENCODER
 
   /**
+   * Creates an encoder that serializes instances of the `java.time.LocalTime` class to the
+   * internal representation of nullable Catalyst's TimeType.
+   *
+   * @since 4.1.0
+   */
+  def LOCALTIME: Encoder[java.time.LocalTime] = LocalTimeEncoder
+
+  /**
    * An encoder for arrays of bytes.
    *
    * @since 1.6.1
    */
   def BINARY: Encoder[Array[Byte]] = BinaryEncoder
+
+  /**
+   * An encoder for Geometry data type.
+   *
+   * @since 4.1.0
+   */
+  def GEOMETRY(dt: GeometryType): Encoder[Geometry] = GeometryEncoder(dt)
+
+  /**
+   * An encoder for Geography data type.
+   *
+   * @since 4.1.0
+   */
+  def GEOGRAPHY(dt: GeographyType): Encoder[Geography] = GeographyEncoder(dt)
 
   /**
    * Creates an encoder that serializes instances of the `java.time.Duration` class to the
@@ -346,4 +382,11 @@ object Encoders {
    */
   def scalaBoolean: Encoder[Boolean] = PrimitiveBooleanEncoder
 
+  /**
+   * An encoder for UserDefinedType.
+   * @since 4.1.0
+   */
+  def udt[T >: Null](tpe: UserDefinedType[T]): Encoder[T] = {
+    UDTEncoder(tpe)
+  }
 }

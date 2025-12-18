@@ -75,14 +75,14 @@ HAVING EXISTS (SELECT 1
                WHERE  bonus_amt < min(emp.salary))
 -- !query analysis
 Project [dept_id#x, count(1)#xL]
-+- Filter exists#x [min(salary#x)#x]
++- Filter exists#x [min(salary)#x]
    :  +- Project [1 AS 1#x]
-   :     +- Filter (bonus_amt#x < outer(min(salary#x)#x))
+   :     +- Filter (bonus_amt#x < outer(min(salary)#x))
    :        +- SubqueryAlias bonus
    :           +- View (`BONUS`, [emp_name#x, bonus_amt#x])
    :              +- Project [cast(col1#x as string) AS emp_name#x, cast(col2#x as double) AS bonus_amt#x]
    :                 +- LocalRelation [col1#x, col2#x]
-   +- Aggregate [dept_id#x], [dept_id#x, count(1) AS count(1)#xL, min(salary#x) AS min(salary#x)#x]
+   +- Aggregate [dept_id#x], [dept_id#x, count(1) AS count(1)#xL, min(salary#x) AS min(salary)#x]
       +- SubqueryAlias emp
          +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
             +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as double) AS salary#x, cast(col5#x as int) AS dept_id#x]
@@ -103,14 +103,14 @@ WHERE  EXISTS (SELECT dept_id,
 Project [dept_id#x, dept_name#x, state#x]
 +- Filter exists#x []
    :  +- Project [dept_id#x, count(1)#xL]
-   :     +- Filter exists#x [min(salary#x)#x]
+   :     +- Filter exists#x [min(salary)#x]
    :        :  +- Project [1 AS 1#x]
-   :        :     +- Filter (bonus_amt#x < outer(min(salary#x)#x))
+   :        :     +- Filter (bonus_amt#x < outer(min(salary)#x))
    :        :        +- SubqueryAlias bonus
    :        :           +- View (`BONUS`, [emp_name#x, bonus_amt#x])
    :        :              +- Project [cast(col1#x as string) AS emp_name#x, cast(col2#x as double) AS bonus_amt#x]
    :        :                 +- LocalRelation [col1#x, col2#x]
-   :        +- Aggregate [dept_id#x], [dept_id#x, count(1) AS count(1)#xL, min(salary#x) AS min(salary#x)#x]
+   :        +- Aggregate [dept_id#x], [dept_id#x, count(1) AS count(1)#xL, min(salary#x) AS min(salary)#x]
    :           +- SubqueryAlias emp
    :              +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
    :                 +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as double) AS salary#x, cast(col5#x as int) AS dept_id#x]
@@ -137,14 +137,14 @@ GROUP  BY gp.dept_id
 Aggregate [dept_id#x], [dept_id#x, max(salary#x) AS max(salary)#x]
 +- Filter exists#x []
    :  +- Project [dept_id#x, count(1)#xL]
-   :     +- Filter exists#x [min(salary#x)#x]
+   :     +- Filter exists#x [min(salary)#x]
    :        :  +- Project [1 AS 1#x]
-   :        :     +- Filter (bonus_amt#x < outer(min(salary#x)#x))
+   :        :     +- Filter (bonus_amt#x < outer(min(salary)#x))
    :        :        +- SubqueryAlias bonus
    :        :           +- View (`BONUS`, [emp_name#x, bonus_amt#x])
    :        :              +- Project [cast(col1#x as string) AS emp_name#x, cast(col2#x as double) AS bonus_amt#x]
    :        :                 +- LocalRelation [col1#x, col2#x]
-   :        +- Aggregate [dept_id#x], [dept_id#x, count(1) AS count(1)#xL, min(salary#x) AS min(salary#x)#x]
+   :        +- Aggregate [dept_id#x], [dept_id#x, count(1) AS count(1)#xL, min(salary#x) AS min(salary)#x]
    :           +- SubqueryAlias p
    :              +- SubqueryAlias emp
    :                 +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
@@ -171,14 +171,14 @@ WHERE  EXISTS (SELECT dept_id,
 Project [dept_id#x, dept_name#x, state#x]
 +- Filter exists#x []
    :  +- Project [dept_id#x, count(1)#xL]
-   :     +- Filter exists#x [min(salary#x)#x]
+   :     +- Filter exists#x [min(salary)#x]
    :        :  +- Project [1 AS 1#x]
-   :        :     +- Filter (bonus_amt#x > outer(min(salary#x)#x))
+   :        :     +- Filter (bonus_amt#x > outer(min(salary)#x))
    :        :        +- SubqueryAlias bonus
    :        :           +- View (`BONUS`, [emp_name#x, bonus_amt#x])
    :        :              +- Project [cast(col1#x as string) AS emp_name#x, cast(col2#x as double) AS bonus_amt#x]
    :        :                 +- LocalRelation [col1#x, col2#x]
-   :        +- Aggregate [dept_id#x], [dept_id#x, count(1) AS count(1)#xL, min(salary#x) AS min(salary#x)#x]
+   :        +- Aggregate [dept_id#x], [dept_id#x, count(1) AS count(1)#xL, min(salary#x) AS min(salary)#x]
    :           +- SubqueryAlias emp
    :              +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])
    :                 +- Project [cast(col1#x as int) AS id#x, cast(col2#x as string) AS emp_name#x, cast(col3#x as date) AS hiredate#x, cast(col4#x as double) AS salary#x, cast(col5#x as int) AS dept_id#x]
@@ -205,14 +205,14 @@ WHERE  EXISTS (SELECT dept_id,
 Project [dept_id#x, dept_name#x, state#x]
 +- Filter exists#x [dept_id#x]
    :  +- Project [dept_id#x, count(dept_id)#xL]
-   :     +- Filter exists#x [min(salary#x)#x && count(dept_id)#xL]
+   :     +- Filter exists#x [min(salary)#x && count(dept_id)#xL]
    :        :  +- Project [1 AS 1#x]
-   :        :     +- Filter ((bonus_amt#x > outer(min(salary#x)#x)) AND (outer(count(dept_id)#xL) > cast(1 as bigint)))
+   :        :     +- Filter ((bonus_amt#x > outer(min(salary)#x)) AND (outer(count(dept_id)#xL) > cast(1 as bigint)))
    :        :        +- SubqueryAlias bonus
    :        :           +- View (`BONUS`, [emp_name#x, bonus_amt#x])
    :        :              +- Project [cast(col1#x as string) AS emp_name#x, cast(col2#x as double) AS bonus_amt#x]
    :        :                 +- LocalRelation [col1#x, col2#x]
-   :        +- Aggregate [dept_id#x], [dept_id#x, count(dept_id#x) AS count(dept_id)#xL, min(salary#x) AS min(salary#x)#x]
+   :        +- Aggregate [dept_id#x], [dept_id#x, count(dept_id#x) AS count(dept_id)#xL, min(salary#x) AS min(salary)#x]
    :           +- Filter (outer(dept_id#x) = dept_id#x)
    :              +- SubqueryAlias emp
    :                 +- View (`EMP`, [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x])

@@ -65,7 +65,7 @@ private[spark] object ThreadUtils {
       }
     }
 
-    override def isTerminated: Boolean = synchronized {
+    override def isTerminated: Boolean = {
       lock.lock()
       try {
         serviceIsShutdown && runningTasks == 0
@@ -186,6 +186,23 @@ private[spark] object ThreadUtils {
       new ArrayBlockingQueue[Runnable](taskQueueCapacity),
       threadFactory,
       rejectedExecutionHandler)
+  }
+
+  /**
+   * Simliar to newDaemonFixedThreadPool, but with a bound workQueue, task submission will
+   * be blocked when queue is full.
+   *
+   * @param nThreads the number of threads in the pool
+   * @param workQueueSize the capacity of the queue to use for holding tasks before they are
+   *                      executed. Task submission will be blocked when queue is full.
+   * @param prefix thread names are formatted as prefix-ID, where ID is a unique, sequentially
+   *               assigned integer.
+   * @return BlockingThreadPoolExecutorService
+   */
+  def newDaemonBlockingThreadPoolExecutorService(
+      nThreads: Int, workQueueSize: Int, prefix: String): ExecutorService = {
+    val threadFactory = namedThreadFactory(prefix)
+    new BlockingThreadPoolExecutorService(nThreads, workQueueSize, threadFactory)
   }
 
   /**

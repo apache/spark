@@ -18,7 +18,6 @@
 package org.apache.spark.storage
 
 import java.util
-import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.locks.{Condition, Lock}
 
@@ -150,6 +149,14 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = false
    */
   private[this] val blockInfoWrappers = new ConcurrentHashMap[BlockId, BlockInfoWrapper]
 
+  // Cache mappings to avoid O(n) scans in remove operations.
+  private[this] val rddToBlockIds =
+    new ConcurrentHashMap[Int, ConcurrentHashMap.KeySetView[BlockId, java.lang.Boolean]]()
+  private[this] val broadcastToBlockIds =
+    new ConcurrentHashMap[Long, ConcurrentHashMap.KeySetView[BlockId, java.lang.Boolean]]()
+  private[this] val sessionToBlockIds =
+    new ConcurrentHashMap[String, ConcurrentHashMap.KeySetView[BlockId, java.lang.Boolean]]()
+
   /**
    * Record invisible rdd blocks stored in the block manager, entries will be removed when blocks
    * are marked as visible or blocks are removed by [[removeBlock()]].
@@ -238,7 +245,7 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = false
       f: BlockInfo => Boolean): Option[BlockInfo] = {
     var done = false
     var result: Option[BlockInfo] = None
-    while(!done) {
+    while (!done) {
       val wrapper = blockInfoWrappers.get(blockId)
       if (wrapper == null) {
         done = true
@@ -446,6 +453,7 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = false
         }
 
         if (previous == null) {
+          addToMapping(blockId)
           // New block lock it for writing.
           val result = lockForWriting(blockId, blocking = false)
           assert(result.isDefined)
@@ -478,7 +486,7 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = false
   def releaseAllLocksForTask(taskAttemptId: TaskAttemptId): Seq[BlockId] = {
     val blocksWithReleasedLocks = mutable.ArrayBuffer[BlockId]()
 
-    val writeLocks = Option(writeLocksByTask.remove(taskAttemptId)).getOrElse(Collections.emptySet)
+    val writeLocks = Option(writeLocksByTask.remove(taskAttemptId)).getOrElse(util.Set.of())
     writeLocks.forEach { blockId =>
       blockInfo(blockId) { (info, condition) =>
         assert(info.writerTask == taskAttemptId)
@@ -537,6 +545,23 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = false
   }
 
   /**
+   * Return all blocks belonging to the given RDD.
+   */
+  def rddBlockIds(rddId: Int): Seq[BlockId] = getBlockIdsFromMapping(rddToBlockIds, rddId)
+
+  /**
+   * Return all blocks belonging to the given broadcast.
+   */
+  def broadcastBlockIds(broadcastId: Long): Seq[BlockId] =
+    getBlockIdsFromMapping(broadcastToBlockIds, broadcastId)
+
+  /**
+   * Return cache blocks that might be related to cached local relations.
+   */
+  def sessionBlockIds(sessionUUID: String): Seq[BlockId] =
+    getBlockIdsFromMapping(sessionToBlockIds, sessionUUID)
+
+  /**
    * Removes the given block and releases the write lock on it.
    *
    * This can only be called while holding a write lock on the given block.
@@ -552,6 +577,7 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = false
       } else {
         invisibleRDDBlocks.synchronized {
           blockInfoWrappers.remove(blockId)
+          removeFromMapping(blockId)
           blockId.asRDDId.foreach(invisibleRDDBlocks.remove)
         }
         info.readerCount = 0
@@ -574,6 +600,9 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = false
       }
     }
     blockInfoWrappers.clear()
+    rddToBlockIds.clear()
+    broadcastToBlockIds.clear()
+    sessionToBlockIds.clear()
     readLocksByTask.clear()
     writeLocksByTask.clear()
     invisibleRDDBlocks.synchronized {
@@ -581,4 +610,65 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = false
     }
   }
 
+  /**
+   * Return all blocks in the cache mapping for a given key.
+   */
+  private def getBlockIdsFromMapping[K](
+      map: ConcurrentHashMap[K, ConcurrentHashMap.KeySetView[BlockId, java.lang.Boolean]],
+      key: K): Seq[BlockId] = {
+    Option(map.get(key)).map(_.asScala.toSeq).getOrElse(Seq.empty)
+  }
+
+  /**
+   * Add a block ID to the corresponding cache mapping based on its type.
+   */
+  private def addToMapping(blockId: BlockId): Unit = {
+    blockId match {
+      case rddBlockId: RDDBlockId =>
+        rddToBlockIds
+          .computeIfAbsent(rddBlockId.rddId, _ => ConcurrentHashMap.newKeySet())
+          .add(blockId)
+      case broadcastBlockId: BroadcastBlockId =>
+        broadcastToBlockIds
+          .computeIfAbsent(broadcastBlockId.broadcastId, _ => ConcurrentHashMap.newKeySet())
+          .add(blockId)
+      case cacheId: CacheId =>
+        sessionToBlockIds
+          .computeIfAbsent(cacheId.sessionUUID, _ => ConcurrentHashMap.newKeySet())
+          .add(blockId)
+      case _ => // Do nothing for other block types
+    }
+  }
+
+  /**
+   * Remove a block ID from the corresponding cache mapping based on its type.
+   */
+  private def removeFromMapping(blockId: BlockId): Unit = {
+    def doRemove[K](
+        map: ConcurrentHashMap[K, ConcurrentHashMap.KeySetView[BlockId, java.lang.Boolean]],
+        key: K,
+        block: BlockId): Unit = {
+      map.compute(key,
+        (_, set) => {
+          if (null != set) {
+            set.remove(block)
+            if (set.isEmpty) null else set
+          } else {
+            // missing
+            null
+          }
+        }
+      )
+    }
+
+    blockId match {
+      case rddBlockId: RDDBlockId =>
+        doRemove(rddToBlockIds, rddBlockId.rddId, rddBlockId)
+      case broadcastBlockId: BroadcastBlockId =>
+        doRemove(broadcastToBlockIds, broadcastBlockId.broadcastId, broadcastBlockId)
+      case cacheId: CacheId =>
+        doRemove(sessionToBlockIds, cacheId.sessionUUID, cacheId)
+      case _ => // Do nothing for other block types
+    }
+  }
 }

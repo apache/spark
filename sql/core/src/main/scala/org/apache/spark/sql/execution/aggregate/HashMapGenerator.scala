@@ -160,7 +160,8 @@ abstract class HashMapGenerator(
       case BooleanType => hashInt(s"$input ? 1 : 0")
       case ByteType | ShortType | IntegerType | DateType | _: YearMonthIntervalType =>
         hashInt(input)
-      case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType => hashLong(input)
+      case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
+        hashLong(input)
       case FloatType => hashInt(s"Float.floatToIntBits($input)")
       case DoubleType => hashLong(s"Double.doubleToLongBits($input)")
       case d: DecimalType =>
@@ -173,7 +174,8 @@ abstract class HashMapGenerator(
             ${hashBytes(bytes)}
           """
         }
-      case st: StringType if st.supportsBinaryEquality => hashBytes(s"$input.getBytes()")
+      case st: StringType if st.supportsBinaryEquality =>
+        hashBytes(s"$input.getBytes()")
       case st: StringType if !st.supportsBinaryEquality =>
         hashLong(s"CollationFactory.fetchCollation(${st.collationId})" +
           s".hashFunction.applyAsLong($input)")

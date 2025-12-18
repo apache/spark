@@ -16,6 +16,11 @@
 
 lexer grammar SqlBaseLexer;
 
+@header {
+import java.util.ArrayDeque;
+import java.util.Deque;
+}
+
 @members {
   /**
    * When true, parser should throw ParseException for unclosed bracketed comment.
@@ -71,6 +76,11 @@ lexer grammar SqlBaseLexer;
   }
 
   /**
+   * This field stores the tags which are used to detect the end of a dollar quoted string literal.
+   */
+  private final Deque<String> tags = new ArrayDeque<String>();
+
+  /**
    * When greater than zero, it's in the middle of parsing ARRAY/MAP/STRUCT type.
    */
   public int complex_type_level_counter = 0;
@@ -120,6 +130,7 @@ BANG: '!';
 //--SPARK-KEYWORD-LIST-START
 ADD: 'ADD';
 AFTER: 'AFTER';
+AGGREGATE: 'AGGREGATE';
 ALL: 'ALL';
 ALTER: 'ALTER';
 ALWAYS: 'ALWAYS';
@@ -133,6 +144,7 @@ ARRAY: 'ARRAY' {incComplexTypeLevelCounter();};
 AS: 'AS';
 ASC: 'ASC';
 AT: 'AT';
+ATOMIC: 'ATOMIC';
 AUTHORIZATION: 'AUTHORIZATION';
 BEGIN: 'BEGIN';
 BETWEEN: 'BETWEEN';
@@ -173,8 +185,10 @@ COMPACTIONS: 'COMPACTIONS';
 COMPENSATION: 'COMPENSATION';
 COMPUTE: 'COMPUTE';
 CONCATENATE: 'CONCATENATE';
+CONDITION: 'CONDITION';
 CONSTRAINT: 'CONSTRAINT';
 CONTAINS: 'CONTAINS';
+CONTINUE: 'CONTINUE';
 COST: 'COST';
 CREATE: 'CREATE';
 CROSS: 'CROSS';
@@ -202,6 +216,7 @@ DECLARE: 'DECLARE';
 DEFAULT: 'DEFAULT';
 DEFINED: 'DEFINED';
 DEFINER: 'DEFINER';
+DELAY: 'DELAY';
 DELETE: 'DELETE';
 DELIMITED: 'DELIMITED';
 DESC: 'DESC';
@@ -217,7 +232,9 @@ DO: 'DO';
 DOUBLE: 'DOUBLE';
 DROP: 'DROP';
 ELSE: 'ELSE';
+ELSEIF: 'ELSEIF';
 END: 'END';
+ENFORCED: 'ENFORCED';
 ESCAPE: 'ESCAPE';
 ESCAPED: 'ESCAPED';
 EVOLUTION: 'EVOLUTION';
@@ -225,8 +242,10 @@ EXCEPT: 'EXCEPT';
 EXCHANGE: 'EXCHANGE';
 EXCLUDE: 'EXCLUDE';
 EXISTS: 'EXISTS';
+EXIT: 'EXIT';
 EXPLAIN: 'EXPLAIN';
 EXPORT: 'EXPORT';
+EXTEND: 'EXTEND';
 EXTENDED: 'EXTENDED';
 EXTERNAL: 'EXTERNAL';
 EXTRACT: 'EXTRACT';
@@ -237,20 +256,25 @@ FILTER: 'FILTER';
 FILEFORMAT: 'FILEFORMAT';
 FIRST: 'FIRST';
 FLOAT: 'FLOAT';
+FLOW: 'FLOW';
 FOLLOWING: 'FOLLOWING';
 FOR: 'FOR';
 FOREIGN: 'FOREIGN';
 FORMAT: 'FORMAT';
 FORMATTED: 'FORMATTED';
+FOUND: 'FOUND';
 FROM: 'FROM';
 FULL: 'FULL';
 FUNCTION: 'FUNCTION';
 FUNCTIONS: 'FUNCTIONS';
 GENERATED: 'GENERATED';
+GEOGRAPHY: 'GEOGRAPHY';
+GEOMETRY: 'GEOMETRY';
 GLOBAL: 'GLOBAL';
 GRANT: 'GRANT';
 GROUP: 'GROUP';
 GROUPING: 'GROUPING';
+HANDLER: 'HANDLER';
 HAVING: 'HAVING';
 BINARY_HEX: 'X';
 HOUR: 'HOUR';
@@ -281,6 +305,8 @@ IS: 'IS';
 ITEMS: 'ITEMS';
 ITERATE: 'ITERATE';
 JOIN: 'JOIN';
+JSON: 'JSON';
+KEY: 'KEY';
 KEYS: 'KEYS';
 LANGUAGE: 'LANGUAGE';
 LAST: 'LAST';
@@ -289,6 +315,7 @@ LAZY: 'LAZY';
 LEADING: 'LEADING';
 LEAVE: 'LEAVE';
 LEFT: 'LEFT';
+LEVEL: 'LEVEL';
 LIKE: 'LIKE';
 ILIKE: 'ILIKE';
 LIMIT: 'LIMIT';
@@ -305,7 +332,11 @@ LOOP: 'LOOP';
 MACRO: 'MACRO';
 MAP: 'MAP' {incComplexTypeLevelCounter();};
 MATCHED: 'MATCHED';
+MATERIALIZED: 'MATERIALIZED';
+MAX: 'MAX';
+MEASURE: 'MEASURE';
 MERGE: 'MERGE';
+METRICS: 'METRICS';
 MICROSECOND: 'MICROSECOND';
 MICROSECONDS: 'MICROSECONDS';
 MILLISECOND: 'MILLISECOND';
@@ -328,6 +359,7 @@ NOT: 'NOT';
 NULL: 'NULL';
 NULLS: 'NULLS';
 NUMERIC: 'NUMERIC';
+NORELY: 'NORELY';
 OF: 'OF';
 OFFSET: 'OFFSET';
 ON: 'ON';
@@ -353,6 +385,8 @@ POSITION: 'POSITION';
 PRECEDING: 'PRECEDING';
 PRIMARY: 'PRIMARY';
 PRINCIPALS: 'PRINCIPALS';
+PROCEDURE: 'PROCEDURE';
+PROCEDURES: 'PROCEDURES';
 PROPERTIES: 'PROPERTIES';
 PURGE: 'PURGE';
 QUARTER: 'QUARTER';
@@ -363,9 +397,12 @@ REAL: 'REAL';
 RECORDREADER: 'RECORDREADER';
 RECORDWRITER: 'RECORDWRITER';
 RECOVER: 'RECOVER';
+RECURSION: 'RECURSION';
+RECURSIVE: 'RECURSIVE';
 REDUCE: 'REDUCE';
 REFERENCES: 'REFERENCES';
 REFRESH: 'REFRESH';
+RELY: 'RELY';
 RENAME: 'RENAME';
 REPAIR: 'REPAIR';
 REPEAT: 'REPEAT';
@@ -410,10 +447,14 @@ SORTED: 'SORTED';
 SOURCE: 'SOURCE';
 SPECIFIC: 'SPECIFIC';
 SQL: 'SQL';
+SQLEXCEPTION: 'SQLEXCEPTION';
+SQLSTATE: 'SQLSTATE';
 START: 'START';
 STATISTICS: 'STATISTICS';
 STORED: 'STORED';
 STRATIFY: 'STRATIFY';
+STREAM: 'STREAM';
+STREAMING: 'STREAMING';
 STRING: 'STRING';
 STRUCT: 'STRUCT' {incComplexTypeLevelCounter();};
 SUBSTR: 'SUBSTR';
@@ -463,6 +504,7 @@ UPDATE: 'UPDATE';
 USE: 'USE';
 USER: 'USER';
 USING: 'USING';
+VALUE: 'VALUE';
 VALUES: 'VALUES';
 VARCHAR: 'VARCHAR';
 VAR: 'VAR';
@@ -472,6 +514,7 @@ VERSION: 'VERSION';
 VIEW: 'VIEW';
 VIEWS: 'VIEWS';
 VOID: 'VOID';
+WATERMARK: 'WATERMARK';
 WEEK: 'WEEK';
 WEEKS: 'WEEKS';
 WHEN: 'WHEN';
@@ -480,6 +523,7 @@ WHILE: 'WHILE';
 WINDOW: 'WINDOW';
 WITH: 'WITH';
 WITHIN: 'WITHIN';
+WITHOUT: 'WITHOUT';
 YEAR: 'YEAR';
 YEARS: 'YEARS';
 ZONE: 'ZONE';
@@ -520,13 +564,17 @@ HENT_END: '*/';
 QUESTION: '?';
 
 STRING_LITERAL
-    : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''
+    : '\'' ( ~('\''|'\\') | ('\\' .) | ('\'' '\'') )* '\''
     | 'R\'' (~'\'')* '\''
     | 'R"'(~'"')* '"'
     ;
 
+BEGIN_DOLLAR_QUOTED_STRING
+    : DOLLAR_QUOTED_TAG {tags.push(getText());} -> pushMode(DOLLAR_QUOTED_STRING_MODE)
+    ;
+
 DOUBLEQUOTED_STRING
-    :'"' ( ~('"'|'\\') | ('\\' .) )* '"'
+    :'"' ( ~('"'|'\\') | '""' | ('\\' .) )* '"'
     ;
 
 // NOTE: If you move a numeric literal, you should modify `ParserUtils.toExprAlias()`
@@ -602,6 +650,10 @@ fragment LETTER
     : [A-Z]
     ;
 
+fragment DOLLAR_QUOTED_TAG
+    : '$' LETTER* '$'
+    ;
+
 fragment UNICODE_LETTER
     : [\p{L}]
     ;
@@ -623,4 +675,14 @@ WS
 // when splitting statements with DelimiterLexer
 UNRECOGNIZED
     : .
+    ;
+
+mode DOLLAR_QUOTED_STRING_MODE;
+DOLLAR_QUOTED_STRING_BODY
+    : ~'$'+
+    | '$' ~'$'*
+    ;
+
+END_DOLLAR_QUOTED_STRING
+    : DOLLAR_QUOTED_TAG {getText().equals(tags.peek())}? {tags.pop();} -> popMode
     ;

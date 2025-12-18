@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import java.io.{DataInputStream, DataOutputStream}
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
@@ -126,6 +128,9 @@ class VarianceThresholdSelectorModel private[ml](
   extends Model[VarianceThresholdSelectorModel] with VarianceThresholdSelectorParams
     with MLWritable {
 
+  // For ml connect only
+  private[ml] def this() = this("", Array.emptyIntArray)
+
   if (selectedFeatures.length >= 2) {
     require(selectedFeatures.sliding(2).forall(l => l(0) < l(1)),
       "Index should be strictly increasing.")
@@ -173,6 +178,18 @@ class VarianceThresholdSelectorModel private[ml](
 
 @Since("3.1.0")
 object VarianceThresholdSelectorModel extends MLReadable[VarianceThresholdSelectorModel] {
+  private[ml] case class Data(selectedFeatures: Seq[Int])
+
+  private[ml] def serializeData(data: Data, dos: DataOutputStream): Unit = {
+    import ReadWriteUtils._
+    serializeIntArray(data.selectedFeatures.toArray, dos)
+  }
+
+  private[ml] def deserializeData(dis: DataInputStream): Data = {
+    import ReadWriteUtils._
+    val selectedFeatures = deserializeIntArray(dis).toSeq
+    Data(selectedFeatures)
+  }
 
   @Since("3.1.0")
   override def read: MLReader[VarianceThresholdSelectorModel] =
@@ -184,13 +201,11 @@ object VarianceThresholdSelectorModel extends MLReadable[VarianceThresholdSelect
   private[VarianceThresholdSelectorModel] class VarianceThresholdSelectorWriter(
       instance: VarianceThresholdSelectorModel) extends MLWriter {
 
-    private case class Data(selectedFeatures: Seq[Int])
-
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sparkSession)
       val data = Data(instance.selectedFeatures.toImmutableArraySeq)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(Seq(data)).write.parquet(dataPath)
+      ReadWriteUtils.saveObject[Data](dataPath, data, sparkSession, serializeData)
     }
   }
 
@@ -203,10 +218,8 @@ object VarianceThresholdSelectorModel extends MLReadable[VarianceThresholdSelect
     override def load(path: String): VarianceThresholdSelectorModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sparkSession, className)
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath)
-        .select("selectedFeatures").head()
-      val selectedFeatures = data.getAs[Seq[Int]](0).toArray
-      val model = new VarianceThresholdSelectorModel(metadata.uid, selectedFeatures)
+      val data = ReadWriteUtils.loadObject[Data](dataPath, sparkSession, deserializeData)
+      val model = new VarianceThresholdSelectorModel(metadata.uid, data.selectedFeatures.toArray)
       metadata.getAndSetParams(model)
       model
     }

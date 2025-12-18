@@ -94,23 +94,23 @@ SELECT * FROM basic_pays;
 +-----------------+----------+------+
 |    employee_name|department|salary|
 +-----------------+----------+------+
-|      Anthony Bow|Accounting|	6627|
+|      Anthony Bow|Accounting|  6627|
 |      Barry Jones|       SCM| 10586|
-|     Diane Murphy|Accounting|	8435|
-|   Foon Yue Tseng|     Sales|	6660|
+|     Diane Murphy|Accounting|  8435|
+|   Foon Yue Tseng|     Sales|  6660|
 |    George Vanauf|     Sales| 10563|
 |    Gerard Bondur|Accounting| 11472|
-| Gerard Hernandez|       SCM|	6949|
-|    Jeff Firrelli|Accounting|	8992|
-|   Julie Firrelli|     Sales|	9181|
+| Gerard Hernandez|       SCM|  6949|
+|    Jeff Firrelli|Accounting|  8992|
+|   Julie Firrelli|     Sales|  9181|
 |       Larry Bott|       SCM| 11798|
-|  Leslie Jennings|        IT|	8113|
-|  Leslie Thompson|        IT|	5186|
+|  Leslie Jennings|        IT|  8113|
+|  Leslie Thompson|        IT|  5186|
 |      Loui Bondur|       SCM| 10449|
-|   Mary Patterson|Accounting|	9998|
+|   Mary Patterson|Accounting|  9998|
 |  Pamela Castillo|       SCM| 11303|
-|  Steve Patterson|     Sales|	9441|
-|William Patterson|Accounting|	8870|
+|  Steve Patterson|     Sales|  9441|
+|William Patterson|Accounting|  8870|
 +-----------------+----------+------+
 
 SELECT

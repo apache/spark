@@ -2596,8 +2596,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     val e3 = intercept[SparkRuntimeException] {
       intDf.select(assert_true($"a" > $"b")).collect()
     }
-    assert(e3.getMessage.matches(
-      "\\[USER_RAISED_EXCEPTION\\] '\\(a#\\d+ > b#\\d+\\)' is not true! SQLSTATE: P0001"))
+    assert(e3.getMessage.equals("[USER_RAISED_EXCEPTION] '(a > b)' is not true! SQLSTATE: P0001"))
   }
 
   test("raise_error") {
@@ -3144,5 +3143,23 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     val df = Seq(((Duration.ofDays(10)), 2)).toDF("dd", "num")
     checkAnswer(df.select($"dd" / ($"num" + 3)),
       Seq((Duration.ofDays(2))).toDF())
+  }
+
+  test("Column.transform: built-in functions") {
+    val df = Seq("  hello  ", "  world  ").toDF("text")
+
+    checkAnswer(
+      df.select($"text".transform(trim).transform(upper)),
+      Seq("HELLO", "WORLD").toDF()
+    )
+  }
+
+  test("Column.transform: lambda functions") {
+    val df = Seq(10, 20, 30).toDF("value")
+
+    checkAnswer(
+      df.select($"value".transform(_ + 5).transform(_ * 2).transform(_ - 10)),
+      Seq(20, 40, 60).toDF()
+    )
   }
 }

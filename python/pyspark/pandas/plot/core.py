@@ -24,7 +24,7 @@ from pandas.core.base import PandasObject
 from pandas.core.dtypes.inference import is_integer
 
 from pyspark.sql import functions as F, Column
-from pyspark.pandas.spark import functions as SF
+from pyspark.sql.internal import InternalFunction as SF
 from pyspark.pandas.missing import unsupported_function
 from pyspark.pandas.config import get_option
 from pyspark.pandas.utils import name_like_string
@@ -857,14 +857,12 @@ class PandasOnSparkPlotAccessor(PandasObject):
 
         Parameters
         ----------
-        **kwds : optional
-            Additional keyword arguments are documented in
+        **kwds : dict, optional
+            Extra arguments to `precision`: refer to a float that is used by
+            pandas-on-Spark to compute approximate statistics for building a
+            boxplot. The default value is 0.01. Use smaller values to get more
+            precise statistics. Additional keyword arguments are documented in
             :meth:`pyspark.pandas.Series.plot`.
-
-        precision: scalar, default = 0.01
-            This argument is used by pandas-on-Spark to compute approximate statistics
-            for building a boxplot. Use *smaller* values to get more precise
-            statistics (matplotlib-only).
 
         Returns
         -------
@@ -992,12 +990,12 @@ class PandasOnSparkPlotAccessor(PandasObject):
         .. plotly::
 
             >>> s = ps.Series([1, 2, 2.5, 3, 3.5, 4, 5])
-            >>> s.plot.kde(bw_method=0.3)  # doctest: +SKIP
+            >>> s.plot.kde(bw_method=0.3, ind=100)  # doctest: +SKIP
 
         .. plotly::
 
             >>> s = ps.Series([1, 2, 2.5, 3, 3.5, 4, 5])
-            >>> s.plot.kde(bw_method=3)  # doctest: +SKIP
+            >>> s.plot.kde(bw_method=3, ind=100)  # doctest: +SKIP
 
         The `ind` parameter determines the evaluation points for the
         plot of the estimated KDF:
@@ -1015,7 +1013,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
             ...     'x': [1, 2, 2.5, 3, 3.5, 4, 5],
             ...     'y': [4, 4, 4.5, 5, 5.5, 6, 6],
             ... })
-            >>> df.plot.kde(bw_method=0.3)  # doctest: +SKIP
+            >>> df.plot.kde(bw_method=0.3, ind=100)  # doctest: +SKIP
 
         .. plotly::
 
@@ -1023,7 +1021,7 @@ class PandasOnSparkPlotAccessor(PandasObject):
             ...     'x': [1, 2, 2.5, 3, 3.5, 4, 5],
             ...     'y': [4, 4, 4.5, 5, 5.5, 6, 6],
             ... })
-            >>> df.plot.kde(bw_method=3)  # doctest: +SKIP
+            >>> df.plot.kde(bw_method=3, ind=100)  # doctest: +SKIP
 
         .. plotly::
 

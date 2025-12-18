@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.util.GenericArrayData;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.util.VersionUtils;
+import org.apache.spark.util.random.XORShiftRandom;
 
 /**
  * A utility class for constructing expressions.
@@ -273,7 +274,7 @@ public class ExpressionImplUtils {
           return cipher.doFinal(input, 0, input.length);
         }
       }
-    } catch (GeneralSecurityException e) {
+    } catch (GeneralSecurityException | IllegalArgumentException e) {
       throw QueryExecutionErrors.aesCryptoError(e.getMessage());
     }
   }
@@ -314,5 +315,31 @@ public class ExpressionImplUtils {
       res.add(new GenericArrayData(words.toArray(new UTF8String[0])));
     }
     return new GenericArrayData(res.toArray(new GenericArrayData[0]));
+  }
+
+  public static UTF8String randStr(XORShiftRandom rng, int length) {
+    byte[] bytes = new byte[length];
+    for (int i = 0; i < bytes.length; i++) {
+      // We generate a random number between 0 and 61, inclusive. Between the 62 different choices
+      // we choose 0-9, a-z, or A-Z, where each category comprises 10 choices, 26 choices, or 26
+      // choices, respectively (10 + 26 + 26 = 62).
+      int v = Math.abs(rng.nextInt() % 62);
+      if (v < 10) {
+        bytes[i] = (byte)('0' + v);
+      } else if (v < 36) {
+        bytes[i] = (byte)('a' + (v - 10));
+      } else {
+        bytes[i] = (byte)('A' + (v - 36));
+      }
+    }
+    return UTF8String.fromBytes(bytes);
+  }
+
+  public static UTF8String quote(UTF8String str) {
+    final String qtChar = "'";
+    final String qtCharRep = "\\\\'";
+
+    String sp = str.toString().replaceAll(qtChar, qtCharRep);
+    return UTF8String.fromString(qtChar + sp + qtChar);
   }
 }

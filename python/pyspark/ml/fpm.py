@@ -20,7 +20,12 @@ from typing import Any, Dict, Optional, TYPE_CHECKING
 
 from pyspark import keyword_only, since
 from pyspark.sql import DataFrame
-from pyspark.ml.util import JavaMLWritable, JavaMLReadable
+from pyspark.ml.util import (
+    JavaMLWritable,
+    JavaMLReadable,
+    try_remote_attribute_relation,
+    invoke_helper_relation,
+)
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams
 from pyspark.ml.param.shared import HasPredictionCol, Param, TypeConverters, Params
 
@@ -66,7 +71,7 @@ class _FPGrowthParams(HasPredictionCol):
     )
 
     def __init__(self, *args: Any):
-        super(_FPGrowthParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(
             minSupport=0.3, minConfidence=0.8, itemsCol="items", predictionCol="prediction"
         )
@@ -126,6 +131,7 @@ class FPGrowthModel(JavaModel, _FPGrowthParams, JavaMLWritable, JavaMLReadable["
 
     @property
     @since("2.2.0")
+    @try_remote_attribute_relation
     def freqItemsets(self) -> DataFrame:
         """
         DataFrame with two columns:
@@ -136,6 +142,7 @@ class FPGrowthModel(JavaModel, _FPGrowthParams, JavaMLWritable, JavaMLReadable["
 
     @property
     @since("2.2.0")
+    @try_remote_attribute_relation
     def associationRules(self) -> DataFrame:
         """
         DataFrame with four columns:
@@ -249,7 +256,7 @@ class FPGrowth(
         __init__(self, \\*, minSupport=0.3, minConfidence=0.8, itemsCol="items", \
                  predictionCol="prediction", numPartitions=None)
         """
-        super(FPGrowth, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.fpm.FPGrowth", self.uid)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -402,7 +409,7 @@ class PrefixSpan(JavaParams):
         __init__(self, \\*, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000, \
                  sequenceCol="sequence")
         """
-        super(PrefixSpan, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.fpm.PrefixSpan", self.uid)
         self._setDefault(
             minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000, sequenceCol="sequence"
@@ -504,9 +511,21 @@ class PrefixSpan(JavaParams):
             - `sequence: ArrayType(ArrayType(T))` (T is the item type)
             - `freq: Long`
         """
+        from pyspark.sql.utils import is_remote
+
+        assert self._java_obj is not None
+
+        if is_remote():
+            return invoke_helper_relation(
+                "prefixSpanFindFrequentSequentialPatterns",
+                dataset,
+                self.getMinSupport(),
+                self.getMaxPatternLength(),
+                self.getMaxLocalProjDBSize(),
+                self.getSequenceCol(),
+            )
 
         self._transfer_params_to_java()
-        assert self._java_obj is not None
         jdf = self._java_obj.findFrequentSequentialPatterns(dataset._jdf)
         return DataFrame(jdf, dataset.sparkSession)
 

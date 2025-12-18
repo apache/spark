@@ -18,18 +18,20 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
-import java.time.DateTimeException
+import java.time.{DateTimeException, LocalTime}
 
 import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
 import org.apache.spark.sql.errors.QueryErrorsBase
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
 
 /**
  * Test suite for data type casting expression [[Cast]] with ANSI mode enabled.
@@ -37,6 +39,33 @@ import org.apache.spark.unsafe.types.UTF8String
 class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
 
   override def evalMode: EvalMode.Value = EvalMode.ANSI
+
+  protected def checkInvalidCastFromNumericTypeToBinaryType(): Unit = {
+    def checkNumericTypeCast(
+        testValue: Any,
+        srcType: DataType,
+        to: DataType,
+        expectedErrorClass: String,
+        extraParams: Map[String, String] = Map.empty): Unit = {
+      val expectedError = createCastMismatch(srcType, to, expectedErrorClass, extraParams)
+      assert(cast(testValue, to).checkInputDataTypes() == expectedError)
+    }
+
+    // Integer types: suggest config change
+    val configParams = Map(
+      "config" -> toSQLConf(SQLConf.ANSI_ENABLED.key),
+      "configVal" -> toSQLValue("false", StringType)
+    )
+    checkNumericTypeCast(1.toByte, ByteType, BinaryType, "CAST_WITH_CONF_SUGGESTION", configParams)
+    checkNumericTypeCast(
+      1.toShort, ShortType, BinaryType, "CAST_WITH_CONF_SUGGESTION", configParams)
+    checkNumericTypeCast(1, IntegerType, BinaryType, "CAST_WITH_CONF_SUGGESTION", configParams)
+    checkNumericTypeCast(1L, LongType, BinaryType, "CAST_WITH_CONF_SUGGESTION", configParams)
+
+    // Floating types: no suggestion
+    checkNumericTypeCast(1.0.toFloat, FloatType, BinaryType, "CAST_WITHOUT_SUGGESTION")
+    checkNumericTypeCast(1.0, DoubleType, BinaryType, "CAST_WITHOUT_SUGGESTION")
+  }
 
   private def isTryCast = evalMode == EvalMode.TRY
 
@@ -141,7 +170,7 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
 
   test("ANSI mode: disallow type conversions between Numeric types and Date type") {
     import DataTypeTestUtils.numericTypes
-    checkInvalidCastFromNumericType(DateType)
+    checkInvalidCastFromNumericTypeToDateType()
     verifyCastFailure(
       cast(Literal(0L), DateType),
       DataTypeMismatch(
@@ -167,7 +196,7 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
 
   test("ANSI mode: disallow type conversions between Numeric types and Binary type") {
     import DataTypeTestUtils.numericTypes
-    checkInvalidCastFromNumericType(BinaryType)
+    checkInvalidCastFromNumericTypeToBinaryType()
     val binaryLiteral = Literal(new Array[Byte](1.toByte), BinaryType)
     numericTypes.foreach { numericType =>
       assert(cast(binaryLiteral, numericType).checkInputDataTypes() ==
@@ -180,6 +209,81 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
         )
       )
     }
+  }
+
+  test("SPARK-49635: suggest try_cast for complex type casts") {
+    // Array[Int] to Array[Binary]: canTryCast=true (uses canCast), canAnsiCast=false
+    // Should suggest try_cast, not config
+    val arrayIntType = ArrayType(IntegerType, containsNull = false)
+    val arrayBinaryType = ArrayType(BinaryType, containsNull = false)
+    val arrayIntLiteral = Literal.create(Seq(1, 2, 3), arrayIntType)
+
+    val arrayResult = cast(arrayIntLiteral, arrayBinaryType).checkInputDataTypes()
+    evalMode match {
+      case EvalMode.ANSI =>
+        assert(arrayResult ==
+          DataTypeMismatch(
+            errorSubClass = "CAST_WITH_FUNC_SUGGESTION",
+            messageParameters = Map(
+              "srcType" -> toSQLType(arrayIntType),
+              "targetType" -> toSQLType(arrayBinaryType),
+              "functionNames" -> "`try_cast`"
+            )
+          )
+        )
+      case _ =>
+    }
+  }
+
+  test("ANSI mode: disallow variant cast to non-nullable types") {
+    // Array
+    val variantVal = new VariantVal(Array[Byte](12, 3), Array[Byte](1, 0, 0))
+    val sourceArrayType = ArrayType(VariantType, containsNull = false)
+    val targetArrayType = ArrayType(StringType, containsNull = false)
+    val variantArray = Literal.create(Seq(variantVal), sourceArrayType)
+    assert(cast(variantArray, targetArrayType).checkInputDataTypes() == DataTypeMismatch(
+      errorSubClass = "CAST_WITHOUT_SUGGESTION",
+      messageParameters = Map(
+        "srcType" -> toSQLType(sourceArrayType),
+        "targetType" -> toSQLType(targetArrayType)
+      )
+    ))
+    // make sure containsNull = true works
+    val targetArrayType2 = ArrayType(StringType, containsNull = true)
+    assert(cast(variantArray, targetArrayType2).checkInputDataTypes() ==
+      TypeCheckResult.TypeCheckSuccess)
+
+    // Struct
+    val sourceStructType = StructType(Array(StructField("v", VariantType, nullable = false)))
+    val targetStructType = StructType(Array(StructField("v", StringType, nullable = false)))
+    val variantStruct = Literal.create(Row(variantVal), sourceStructType)
+    assert(cast(variantStruct, targetStructType).checkInputDataTypes() == DataTypeMismatch(
+      errorSubClass = "CAST_WITHOUT_SUGGESTION",
+      messageParameters = Map(
+        "srcType" -> toSQLType(sourceStructType),
+        "targetType" -> toSQLType(targetStructType)
+      )
+    ))
+    // make sure nullable = true works
+    val targetStructType2 = StructType(Array(StructField("v", StringType, nullable = true)))
+    assert(cast(variantStruct, targetStructType2).checkInputDataTypes() ==
+      TypeCheckResult.TypeCheckSuccess)
+
+    // Map
+    val sourceMapType = MapType(StringType, VariantType, valueContainsNull = false)
+    val targetMapType = MapType(StringType, StringType, valueContainsNull = false)
+    val variantMap = Literal.create(Map("k" -> variantVal), sourceMapType)
+    assert(cast(variantMap, targetMapType).checkInputDataTypes() == DataTypeMismatch(
+      errorSubClass = "CAST_WITHOUT_SUGGESTION",
+      messageParameters = Map(
+        "srcType" -> toSQLType(sourceMapType),
+        "targetType" -> toSQLType(targetMapType)
+      )
+    ))
+    // make sure valueContainsNull = true works
+    val targetMapType2 = MapType(StringType, StringType, valueContainsNull = true)
+    assert(cast(variantMap, targetMapType2).checkInputDataTypes() ==
+      TypeCheckResult.TypeCheckSuccess)
   }
 
   test("ANSI mode: disallow type conversions between Datatime types and Boolean types") {
@@ -301,10 +405,6 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
   private def castErrMsg(l: Literal, to: DataType, from: DataType): String = {
     s"The value ${toSQLValue(l.eval(), from)} of the type ${toSQLType(from)} " +
     s"cannot be cast to ${toSQLType(to)} because it is malformed."
-  }
-
-  private def castErrMsg(l: Literal, to: DataType): String = {
-    castErrMsg(l, to, l.dataType)
   }
 
   test("cast from invalid string to numeric should throw NumberFormatException") {
@@ -740,5 +840,64 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
   test("SPARK-39749: cast Decimal to string") {
     val input = Literal.create(Decimal(0.000000123), DecimalType(9, 9))
     checkEvaluation(cast(input, StringType), "0.000000123")
+  }
+
+  test("cast invalid string input to time") {
+    Seq("a", "123", "00:00:00ABC", "24:00:00").foreach { invalidInput =>
+      checkExceptionInExpression[DateTimeException](
+        cast(invalidInput, TimeType()),
+        castErrMsg(invalidInput, TimeType()))
+    }
+  }
+
+  test("SPARK-52620: cast time to decimal with insufficient precision (ANSI on)") {
+    // Create a time that will overflow Decimal(2, 0): 23:59:59 = 86399 seconds.
+    val largeTime = Literal.create(LocalTime.of(23, 59, 59, 123456000), TimeType(6))
+    // Decimal(2, 0) cannot hold 86399, so it should throw an exception in ANSI mode.
+    if (!isTryCast) {
+      // In ANSI mode, a NUMERIC_VALUE_OUT_OF_RANGE exception is thrown.
+      checkError(
+        exception = intercept[SparkArithmeticException](
+          cast(largeTime, DecimalType(2, 0)).eval()
+        ),
+        condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+        parameters = Map(
+          "value" -> "86399.123456000",
+          "precision" -> "2",
+          "scale" -> "0",
+          "config" -> """"spark.sql.ansi.enabled""""
+        ),
+        queryContext = Array(ExpectedContext(fragment = "", start = -1, stop = -1))
+      )
+    } else {
+      // In TRY_CAST mode, null is returned instead of throwing an exception.
+      checkEvaluation(cast(largeTime, DecimalType(2, 0)), null)
+    }
+  }
+
+  test("SPARK-52619: cast time to integral types with overflow with ansi on") {
+    // Test overflow cases: 23:59:59 = 86399 seconds
+    val largeTime6 = Literal.create(LocalTime.of(23, 59, 59, 123456000), TimeType(6))
+    val largeTime4 = Literal.create(LocalTime.of(23, 59, 59, 678900000), TimeType(4))
+
+    // Short and Byte should overflow and throw ArithmeticException (ANSI mode)
+    // 86399 > Short.MaxValue (32767) and > Byte.MaxValue (127)
+    Seq(
+      (largeTime6, ShortType),
+      (largeTime6, ByteType),
+      (largeTime4, ShortType),
+      (largeTime4, ByteType)
+    ).foreach { case (timeValue, targetType) =>
+      checkErrorInExpression[SparkArithmeticException](
+        cast(timeValue, targetType),
+        "CAST_OVERFLOW",
+        Map(
+          "value" -> s"TIME '${timeValue.toString}'",
+          "sourceType" -> s"\"${timeValue.dataType.sql}\"",
+          "targetType" -> s"\"${targetType.sql}\"",
+          "ansiConfig" -> "\"spark.sql.ansi.enabled\""
+        )
+      )
+    }
   }
 }

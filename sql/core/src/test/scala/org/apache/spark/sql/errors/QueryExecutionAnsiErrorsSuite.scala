@@ -17,10 +17,12 @@
 package org.apache.spark.sql.errors
 
 import org.apache.spark._
+import org.apache.spark.SparkBuildInfo
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
-import org.apache.spark.sql.{QueryTest, SparkSession}
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.expressions.{CaseWhen, Cast, CheckOverflowInTableInsert, ExpressionProxy, Literal, SubExprEvaluationRuntime}
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, TestSparkSession}
@@ -48,7 +50,8 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       condition = "CAST_OVERFLOW",
       parameters = Map("value" -> "TIMESTAMP '9999-12-31 04:13:14.56789'",
         "sourceType" -> "\"TIMESTAMP\"",
-        "targetType" -> "\"INT\""),
+        "targetType" -> "\"INT\"",
+        "ansiConfig" -> ansiConf),
       sqlState = "22003")
   }
 
@@ -83,6 +86,26 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         callSitePattern = getCurrentClassCallSitePattern))
   }
 
+  test("REMAINDER_BY_ZERO: can't take modulo of an integer by zero") {
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        sql("select 6 % 0").collect()
+      },
+      condition = "REMAINDER_BY_ZERO",
+      sqlState = "22012",
+      parameters = Map("config" -> ansiConf),
+      context = ExpectedContext(fragment = "6 % 0", start = 7, stop = 11))
+
+    checkError(
+      exception = intercept[SparkArithmeticException] {
+        sql("select pmod(6, 0)").collect()
+      },
+      condition = "REMAINDER_BY_ZERO",
+      sqlState = "22012",
+      parameters = Map("config" -> ansiConf),
+      context = ExpectedContext(fragment = "pmod(6, 0)", start = 7, stop = 16))
+  }
+
   test("INTERVAL_DIVIDED_BY_ZERO: interval divided by zero") {
     checkError(
       exception = intercept[SparkArithmeticException] {
@@ -97,11 +120,13 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
   test("INVALID_FRACTION_OF_SECOND: in the function make_timestamp") {
     checkError(
       exception = intercept[SparkDateTimeException] {
-        sql("select make_timestamp(2012, 11, 30, 9, 19, 60.66666666)").collect()
+        sql("select make_timestamp(2012, 11, 30, 9, 19, 60.1)").collect()
       },
       condition = "INVALID_FRACTION_OF_SECOND",
       sqlState = "22023",
-      parameters = Map("ansiConfig" -> ansiConf))
+      parameters = Map(
+        "secAndMicros" -> "60.1"
+      ))
   }
 
   test("NUMERIC_VALUE_OUT_OF_RANGE: cast string to decimal") {
@@ -143,7 +168,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         sql("select array(1, 2, 3, 4, 5)[8]").collect()
       },
       condition = "INVALID_ARRAY_INDEX",
-      parameters = Map("indexValue" -> "8", "arraySize" -> "5", "ansiConfig" -> ansiConf),
+      parameters = Map("indexValue" -> "8", "arraySize" -> "5"),
       context = ExpectedContext(fragment = "array(1, 2, 3, 4, 5)[8]", start = 7, stop = 29))
 
     checkError(
@@ -151,7 +176,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         OneRowRelation().select(lit(Array(1, 2, 3, 4, 5))(8)).collect()
       },
       condition = "INVALID_ARRAY_INDEX",
-      parameters = Map("indexValue" -> "8", "arraySize" -> "5", "ansiConfig" -> ansiConf),
+      parameters = Map("indexValue" -> "8", "arraySize" -> "5"),
       context = ExpectedContext(
         fragment = "apply",
         callSitePattern = getCurrentClassCallSitePattern))
@@ -163,7 +188,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         sql("select element_at(array(1, 2, 3, 4, 5), 8)").collect()
       },
       condition = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
-      parameters = Map("indexValue" -> "8", "arraySize" -> "5", "ansiConfig" -> ansiConf),
+      parameters = Map("indexValue" -> "8", "arraySize" -> "5"),
       context = ExpectedContext(
         fragment = "element_at(array(1, 2, 3, 4, 5), 8)",
         start = 7,
@@ -174,7 +199,7 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         OneRowRelation().select(element_at(lit(Array(1, 2, 3, 4, 5)), 8)).collect()
       },
       condition = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
-      parameters = Map("indexValue" -> "8", "arraySize" -> "5", "ansiConfig" -> ansiConf),
+      parameters = Map("indexValue" -> "8", "arraySize" -> "5"),
       context =
         ExpectedContext(fragment = "element_at", callSitePattern = getCurrentClassCallSitePattern))
   }
@@ -211,7 +236,8 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       parameters = Map(
         "expression" -> "'111111111111xe23'",
         "sourceType" -> "\"STRING\"",
-        "targetType" -> "\"DOUBLE\""),
+        "targetType" -> "\"DOUBLE\"",
+        "ansiConfig" -> ansiConf),
       context = ExpectedContext(
         fragment = "CAST('111111111111xe23' AS DOUBLE)",
         start = 7,
@@ -225,7 +251,8 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       parameters = Map(
         "expression" -> "'111111111111xe23'",
         "sourceType" -> "\"STRING\"",
-        "targetType" -> "\"DOUBLE\""),
+        "targetType" -> "\"DOUBLE\"",
+        "ansiConfig" -> ansiConf),
       context = ExpectedContext(
         fragment = "cast",
         callSitePattern = getCurrentClassCallSitePattern))
@@ -238,9 +265,57 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       },
       condition = "CANNOT_PARSE_TIMESTAMP",
       parameters = Map(
-        "message" -> "Text 'abc' could not be parsed at index 0",
-        "ansiConfig" -> ansiConf)
+        "func" -> "`try_to_timestamp`",
+        "message" -> "Text 'abc' could not be parsed at index 0")
     )
+  }
+
+  test("INVALID_DATETIME_PATTERN with constant pattern (constant folding path)") {
+    // Test that invalid pattern letters (like 'I') are properly wrapped with error code
+    // when the pattern is a constant literal. This triggers the formatterOption lazy val
+    // during constant folding optimization phase.
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql("select to_timestamp('20231225143045', 'yyyyMMddHHMIss')").collect()
+      },
+      condition = "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
+      parameters = Map(
+        "pattern" -> "'yyyyMMddHHMIss'",
+        "docroot" -> SparkBuildInfo.spark_doc_root),
+      sqlState = "22007"
+    )
+  }
+
+  test("INVALID_DATETIME_PATTERN with non-constant pattern") {
+    withTable("patterns") {
+      sql("create table patterns(pattern string) using parquet")
+      sql("insert into patterns values ('yyyyMMddHHMIss')")
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          sql("select to_timestamp('20231225143045', pattern) from patterns").collect()
+        },
+        condition = "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
+        parameters = Map(
+          "pattern" -> "'yyyyMMddHHMIss'",
+          "docroot" -> SparkBuildInfo.spark_doc_root),
+        sqlState = "22007"
+      )
+    }
+  }
+
+  test("INVALID_DATETIME_PATTERN with various invalid pattern letters") {
+    Seq("yyyyMMddHHMIss", "yyyyMMddHHPmss", "yyyyMMddRHmmss").foreach { pattern =>
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          sql(s"select to_timestamp('20231225143045', '$pattern')").collect()
+        },
+        condition = "INVALID_DATETIME_PATTERN.WITH_SUGGESTION",
+        parameters = Map(
+          "pattern" -> s"'$pattern'",
+          "docroot" -> SparkBuildInfo.spark_doc_root),
+        sqlState = "22007"
+      )
+    }
   }
 
   test("CAST_OVERFLOW_IN_TABLE_INSERT: overflow during table insertion") {
@@ -272,7 +347,8 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
       condition = "CAST_OVERFLOW",
       parameters = Map("value" -> "1.2345678901234567E19D",
         "sourceType" -> "\"DOUBLE\"",
-        "targetType" -> ("\"TINYINT\""))
+        "targetType" -> ("\"TINYINT\""),
+        "ansiConfig" -> ansiConf)
     )
   }
 
@@ -290,7 +366,8 @@ class QueryExecutionAnsiErrorsSuite extends QueryTest
         condition = "CAST_OVERFLOW",
         parameters = Map("value" -> "-1.2345678901234567E19D",
           "sourceType" -> "\"DOUBLE\"",
-          "targetType" -> "\"TINYINT\""),
+          "targetType" -> "\"TINYINT\"",
+          "ansiConfig" -> ansiConf),
         sqlState = "22003")
     }
   }

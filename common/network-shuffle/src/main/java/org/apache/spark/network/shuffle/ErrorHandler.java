@@ -20,10 +20,9 @@ package org.apache.spark.network.shuffle;
 import java.io.FileNotFoundException;
 import java.net.ConnectException;
 
-import com.google.common.base.Throwables;
-
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.network.server.BlockPushNonFatalFailure;
+import org.apache.spark.network.util.JavaUtils;
 
 /**
  * Plugs into {@link RetryingBlockTransferor} to further control when an exception should be retried
@@ -105,12 +104,12 @@ public interface ErrorHandler {
 
     @Override
     public boolean shouldRetryError(Throwable t) {
-      return !Throwables.getStackTraceAsString(t).contains(STALE_SHUFFLE_BLOCK_FETCH);
+      return !JavaUtils.stackTraceToString(t).contains(STALE_SHUFFLE_BLOCK_FETCH);
     }
 
     @Override
     public boolean shouldLogError(Throwable t) {
-      return !Throwables.getStackTraceAsString(t).contains(STALE_SHUFFLE_BLOCK_FETCH);
+      return !JavaUtils.stackTraceToString(t).contains(STALE_SHUFFLE_BLOCK_FETCH);
     }
   }
 }

@@ -22,9 +22,11 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.{JobArtifactSet, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StructType, UserDefinedType}
+import org.apache.spark.sql.types.DataType.equalsIgnoreCompatibleCollation
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 
 /**
@@ -51,6 +53,12 @@ case class ArrowEvalPythonUDTFExec(
   private val largeVarTypes = conf.arrowUseLargeVarTypes
   private val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf)
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
+  private[this] val sessionUUID = {
+    Option(session).collect {
+      case session if session.sessionState.conf.pythonWorkerLoggingEnabled =>
+        session.sessionUUID
+    }
+  }
 
   override protected def evaluate(
       argMetas: Array[ArgumentMetadata],
@@ -60,7 +68,9 @@ case class ArrowEvalPythonUDTFExec(
 
     val batchIter = if (batchSize > 0) new BatchIterator(iter, batchSize) else Iterator(iter)
 
-    val outputTypes = resultAttrs.map(_.dataType)
+    val outputTypes = resultAttrs.map(_.dataType.transformRecursively {
+      case udt: UserDefinedType[_] => udt.sqlType
+    })
 
     val columnarBatchIter = new ArrowPythonUDTFRunner(
       udtf,
@@ -71,7 +81,8 @@ case class ArrowEvalPythonUDTFExec(
       largeVarTypes,
       pythonRunnerConf,
       pythonMetrics,
-      jobArtifactUUID).compute(batchIter, context.partitionId(), context)
+      jobArtifactUUID,
+      sessionUUID).compute(batchIter, context.partitionId(), context)
 
     columnarBatchIter.map { batch =>
       // UDTF returns a StructType column in ColumnarBatch. Flatten the columnar batch here.
@@ -81,8 +92,10 @@ case class ArrowEvalPythonUDTFExec(
 
       val actualDataTypes = (0 until flattenedBatch.numCols()).map(
         i => flattenedBatch.column(i).dataType())
-      assert(outputTypes == actualDataTypes, "Invalid schema from arrow-enabled Python UDTF: " +
-        s"expected ${outputTypes.mkString(", ")}, got ${actualDataTypes.mkString(", ")}")
+      if (!equalsIgnoreCompatibleCollation(outputTypes, actualDataTypes)) {
+        throw QueryExecutionErrors.arrowDataTypeMismatchError(
+          "Python UDTF", outputTypes, actualDataTypes)
+      }
 
       flattenedBatch.setNumRows(batch.numRows())
       flattenedBatch.rowIterator().asScala

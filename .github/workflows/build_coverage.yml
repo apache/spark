@@ -17,11 +17,12 @@
 # under the License.
 #
 
-name: "Build / Coverage (master, Scala 2.13, Hadoop 3, JDK 17)"
+name: "Build / Python Coverage (master, Python 3.11)"
 
 on:
   schedule:
     - cron: '0 10 * * *'
+  workflow_dispatch:
 
 jobs:
   run-build:
@@ -36,10 +37,15 @@ jobs:
       hadoop: hadoop3
       envs: >-
         {
+          "PYSPARK_IMAGE_TO_TEST": "python-311",
           "PYTHON_TO_TEST": "python3.11",
           "PYSPARK_CODECOV": "true"
         }
       jobs: >-
         {
-          "pyspark": "true"
+          "pyspark": "true",
+          "pyspark-pandas": "true",
+          "pyspark-install": "true"
         }
+    secrets:
+      codecov_token: ${{ secrets.CODECOV_TOKEN }}

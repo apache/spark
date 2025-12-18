@@ -43,10 +43,12 @@ case class ParquetTable(
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] =
     ParquetUtils.inferSchema(sparkSession, options.asScala.toMap, files)
 
-  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder =
+  override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
     new WriteBuilder {
-      override def build(): Write = ParquetWrite(paths, formatName, supportsDataType, info)
+      override def build(): Write =
+        ParquetWrite(paths, formatName, supportsDataType, mergedWriteInfo(info))
     }
+  }
 
   override def supportsDataType(dataType: DataType): Boolean = dataType match {
     case _: AtomicType => true

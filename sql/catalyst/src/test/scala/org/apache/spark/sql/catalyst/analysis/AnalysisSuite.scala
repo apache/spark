@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.util.TimeZone
+import java.util.{TimeZone, UUID}
 
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
@@ -78,6 +78,24 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         parameters = Map("message" ->
           "Logical plan should not have output of char/varchar type.*\n"),
         matchPVals = true)
+    }
+  }
+
+  test(s"do not fail if a leaf node has char/varchar type output and " +
+    s"${SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key} is true") {
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      val schema1 = new StructType().add("c", CharType(5))
+      val schema2 = new StructType().add("c", VarcharType(5))
+      val schema3 = new StructType().add("c", ArrayType(CharType(5)))
+      Seq(schema1, schema2, schema3).foreach { schema =>
+        val table = new InMemoryTable("t", schema, Array.empty, Map.empty[String, String].asJava)
+        DataSourceV2Relation(
+          table,
+          DataTypeUtils.toAttributes(schema),
+          None,
+          None,
+          CaseInsensitiveStringMap.empty()).analyze
+      }
     }
   }
 
@@ -777,6 +795,14 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         PosExplode($"list"), Seq("first_pos", "first_val")), Seq("second_pos", "second_val"))))
   }
 
+  test("SPARK-50497 Non-generator function with multiple aliases") {
+    assertAnalysisErrorCondition(parsePlan("SELECT 'length' (a)"),
+      "MULTI_ALIAS_WITHOUT_GENERATOR",
+      Map("expr" -> "\"length\"", "names" -> "a"),
+      Array(ExpectedContext("'length' (a)", 7, 18))
+    )
+  }
+
   test("SPARK-24151: CURRENT_DATE, CURRENT_TIMESTAMP should be case insensitive") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       val input = Project(Seq(
@@ -792,6 +818,25 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       checkAnalysis(input, expected)
     }
   }
+
+  test("CURRENT_TIME should be case insensitive") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val input = Project(Seq(
+        // The user references "current_time" or "CURRENT_TIME" in the query
+        UnresolvedAttribute("current_time"),
+        UnresolvedAttribute("CURRENT_TIME")
+      ), testRelation)
+
+      // The analyzer should resolve both to the same expression: CurrentTime()
+      val expected = Project(Seq(
+        Alias(CurrentTime(), toPrettySQL(CurrentTime()))(),
+        Alias(CurrentTime(), toPrettySQL(CurrentTime()))()
+      ), testRelation).analyze
+
+      checkAnalysis(input, expected)
+    }
+  }
+
 
   test("CTE with non-existing column alias") {
     assertAnalysisErrorCondition(parsePlan("WITH t(x) AS (SELECT 1) SELECT * FROM t WHERE y = 1"),
@@ -989,51 +1034,53 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-30886 Deprecate two-parameter TRIM/LTRIM/RTRIM") {
     Seq("trim", "ltrim", "rtrim").foreach { f =>
-      val logAppender = new LogAppender("deprecated two-parameter TRIM/LTRIM/RTRIM functions")
-      def check(count: Int): Unit = {
-        val message = "Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated."
-        assert(logAppender.loggingEvents.size == count)
-        assert(logAppender.loggingEvents.exists(
-          e => e.getLevel == Level.WARN &&
-            e.getMessage.getFormattedMessage.contains(message)))
-      }
+      withSQLConf(SQLConf.MANAGE_PARSER_CACHES.key -> "false") { // Avoid additional logging
+        val logAppender = new LogAppender("deprecated two-parameter TRIM/LTRIM/RTRIM functions")
+        def check(count: Int): Unit = {
+          val message = "Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated."
+          assert(logAppender.loggingEvents.size == count)
+          assert(logAppender.loggingEvents.exists(
+            e => e.getLevel == Level.WARN &&
+              e.getMessage.getFormattedMessage.contains(message)))
+        }
 
-      withLogAppender(logAppender) {
-        val testAnalyzer1 = new Analyzer(
-          new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin))
+        withLogAppender(logAppender) {
+          val testAnalyzer1 = new Analyzer(
+            new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin))
 
-        val plan1 = testRelation2.select(
-          UnresolvedFunction(f, $"a" :: Nil, isDistinct = false))
-        testAnalyzer1.execute(plan1)
-        // One-parameter is not deprecated.
-        assert(logAppender.loggingEvents.isEmpty)
+          val plan1 = testRelation2.select(
+            UnresolvedFunction(f, $"a" :: Nil, isDistinct = false))
+          testAnalyzer1.execute(plan1)
+          // One-parameter is not deprecated.
+          assert(logAppender.loggingEvents.isEmpty)
 
-        val plan2 = testRelation2.select(
-          UnresolvedFunction(f, $"a" :: $"b" :: Nil, isDistinct = false))
-        testAnalyzer1.execute(plan2)
-        // Deprecation warning is printed out once.
-        check(1)
+          val plan2 = testRelation2.select(
+            UnresolvedFunction(f, $"a" :: $"b" :: Nil, isDistinct = false))
+          testAnalyzer1.execute(plan2)
+          // Deprecation warning is printed out once.
+          check(1)
 
-        val plan3 = testRelation2.select(
-          UnresolvedFunction(f, $"b" :: $"a" :: Nil, isDistinct = false))
-        testAnalyzer1.execute(plan3)
-        // There is no change in the log.
-        check(1)
+          val plan3 = testRelation2.select(
+            UnresolvedFunction(f, $"b" :: $"a" :: Nil, isDistinct = false))
+          testAnalyzer1.execute(plan3)
+          // There is no change in the log.
+          check(1)
 
-        // New analyzer from new SessionState
-        val testAnalyzer2 = new Analyzer(
-          new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin))
-        val plan4 = testRelation2.select(
-          UnresolvedFunction(f, $"c" :: $"d" :: Nil, isDistinct = false))
-        testAnalyzer2.execute(plan4)
-        // Additional deprecation warning from new analyzer
-        check(2)
+          // New analyzer from new SessionState
+          val testAnalyzer2 = new Analyzer(
+            new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin))
+          val plan4 = testRelation2.select(
+            UnresolvedFunction(f, $"c" :: $"d" :: Nil, isDistinct = false))
+          testAnalyzer2.execute(plan4)
+          // Additional deprecation warning from new analyzer
+          check(2)
 
-        val plan5 = testRelation2.select(
-          UnresolvedFunction(f, $"c" :: $"d" :: Nil, isDistinct = false))
-        testAnalyzer2.execute(plan5)
-        // There is no change in the log.
-        check(2)
+          val plan5 = testRelation2.select(
+            UnresolvedFunction(f, $"c" :: $"d" :: Nil, isDistinct = false))
+          testAnalyzer2.execute(plan5)
+          // There is no change in the log.
+          check(2)
+        }
       }
     }
   }
@@ -1161,7 +1208,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
               Seq(Literal(3)),
               Project(testRelation.output, testRelation)
             )
-          )
+          ),
+          None
         )
       )
     )
@@ -1472,42 +1520,18 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertAnalysisSuccess(finalPlan)
   }
 
-  test("Execute Immediate plan transformation") {
-    try {
-    SimpleAnalyzer.catalogManager.tempVariableManager.create(
-      "res", "1", Literal(1), overrideIfExists = true)
-    SimpleAnalyzer.catalogManager.tempVariableManager.create(
-      "res2", "1", Literal(1), overrideIfExists = true)
-    val actual1 = parsePlan("EXECUTE IMMEDIATE 'SELECT 42 WHERE ? = 1' USING 2").analyze
-    val expected1 = parsePlan("SELECT 42 where 2 = 1").analyze
-    comparePlans(actual1, expected1)
-    val actual2 = parsePlan(
-      "EXECUTE IMMEDIATE 'SELECT 42 WHERE :first = 1' USING 2 as first").analyze
-    val expected2 = parsePlan("SELECT 42 where 2 = 1").analyze
-    comparePlans(actual2, expected2)
-    // Test that plan is transformed to SET operation
-    val actual3 = parsePlan(
-      "EXECUTE IMMEDIATE 'SELECT 17, 7 WHERE ? = 1' INTO res, res2 USING 2").analyze
-    val expected3 = parsePlan("SET var (res, res2) = (SELECT 17, 7 where 2 = 1)").analyze
-      comparePlans(actual3, expected3)
-    } finally {
-      SimpleAnalyzer.catalogManager.tempVariableManager.remove("res")
-      SimpleAnalyzer.catalogManager.tempVariableManager.remove("res2")
-    }
-  }
-
   test("SPARK-41271: bind named parameters to literals") {
     CTERelationDef.curId.set(0)
-    val actual1 = NameParameterizedQuery(
-      child = parsePlan("WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT :limitA"),
+    val actual1 = PreprocessedNamedQuery(
+      sql = "WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT :limitA",
       args = Map("limitA" -> Literal(10))).analyze
     CTERelationDef.curId.set(0)
     val expected1 = parsePlan("WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT 10").analyze
     comparePlans(actual1, expected1)
     // Ignore unused arguments
     CTERelationDef.curId.set(0)
-    val actual2 = NameParameterizedQuery(
-      child = parsePlan("WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < :param2"),
+    val actual2 = PreprocessedNamedQuery(
+      sql = "WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < :param2",
       args = Map("param1" -> Literal(10), "param2" -> Literal(20))).analyze
     CTERelationDef.curId.set(0)
     val expected2 = parsePlan("WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < 20").analyze
@@ -1516,16 +1540,16 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-44066: bind positional parameters to literals") {
     CTERelationDef.curId.set(0)
-    val actual1 = PosParameterizedQuery(
-      child = parsePlan("WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT ?"),
+    val actual1 = PreprocessedPositionalQuery(
+      sql = "WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT ?",
       args = Seq(Literal(10))).analyze
     CTERelationDef.curId.set(0)
     val expected1 = parsePlan("WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT 10").analyze
     comparePlans(actual1, expected1)
     // Ignore unused arguments
     CTERelationDef.curId.set(0)
-    val actual2 = PosParameterizedQuery(
-      child = parsePlan("WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < ?"),
+    val actual2 = PreprocessedPositionalQuery(
+      sql = "WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < ?",
       args = Seq(Literal(20), Literal(10))).analyze
     CTERelationDef.curId.set(0)
     val expected2 = parsePlan("WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < 20").analyze
@@ -1688,6 +1712,28 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }
   }
 
+  test("SPARK-54718: CTERelationRef.newInstance preserves attribute metadata") {
+    val baseAttr = AttributeReference("COLNAME", StringType)()
+    val attr1 = baseAttr
+    val attr2 = baseAttr.withName("colname")
+    val cteDef = CTERelationDef(testRelation.select($"a".as("COLNAME")))
+    val cteRef = CTERelationRef(cteDef.id, true, Seq(attr1, attr2), false)
+
+    val newInstance = cteRef.newInstance().asInstanceOf[CTERelationRef]
+    assert(newInstance.output(0).name == "COLNAME")
+    assert(newInstance.output(1).name == "colname")
+    assert(newInstance.output(0).exprId != attr1.exprId)
+    assert(newInstance.output(0).exprId == newInstance.output(1).exprId)
+
+    withSQLConf(SQLConf.LEGACY_CTE_DUPLICATE_ATTRIBUTE_NAMES.key -> "true") {
+      val legacyInstance = cteRef.newInstance().asInstanceOf[CTERelationRef]
+      assert(legacyInstance.output(0).name == "colname")
+      assert(legacyInstance.output(1).name == "colname")
+      assert(legacyInstance.output(0).exprId != attr1.exprId)
+      assert(legacyInstance.output(0).exprId == legacyInstance.output(1).exprId)
+    }
+  }
+
   test("SPARK-43190: ListQuery.childOutput should be consistent with child output") {
     val listQuery1 = ListQuery(testRelation2.select($"a"))
     val listQuery2 = ListQuery(testRelation2.select($"b"))
@@ -1763,7 +1809,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-46064 Basic functionality of elimination for watermark node in batch query") {
-    val dfWithEventTimeWatermark = EventTimeWatermark($"ts",
+    val dfWithEventTimeWatermark = EventTimeWatermark(UUID.randomUUID(), $"ts",
       IntervalUtils.fromIntervalString("10 seconds"), batchRelationWithTs)
 
     val analyzed = getAnalyzer.executeAndCheck(dfWithEventTimeWatermark, new QueryPlanningTracker)
@@ -1776,7 +1822,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     "EventTimeWatermark changes the isStreaming flag during resolution") {
     // UnresolvedRelation which is batch initially and will be resolved as streaming
     val dfWithTempView = UnresolvedRelation(TableIdentifier("streamingTable"))
-    val dfWithEventTimeWatermark = EventTimeWatermark($"ts",
+    val dfWithEventTimeWatermark = EventTimeWatermark(UUID.randomUUID(), $"ts",
       IntervalUtils.fromIntervalString("10 seconds"), dfWithTempView)
 
     val analyzed = getAnalyzer.executeAndCheck(dfWithEventTimeWatermark, new QueryPlanningTracker)
@@ -1831,5 +1877,76 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
     preemptedError.clear()
     assert(preemptedError.getErrorOpt().isEmpty)
+  }
+
+  test("SPARK-49782: ResolveDataFrameDropColumns rule resolves complex UnresolvedAttribute") {
+    val function = UnresolvedFunction("trim", Seq(UnresolvedAttribute("i")), isDistinct = false)
+    val addColumnF = Project(Seq(UnresolvedAttribute("i"), Alias(function, "f")()), testRelation5)
+    // Drop column "f" via ResolveDataFrameDropColumns rule.
+    val inputPlan = DataFrameDropColumns(Seq(UnresolvedAttribute("f")), addColumnF)
+    // The expected Project (root node) should only have column "i".
+    val expectedPlan = Project(Seq(UnresolvedAttribute("i")), addColumnF).analyze
+    checkAnalysis(inputPlan, expectedPlan)
+  }
+}
+
+/**
+ * Utility classes for testing parameter preprocessing during SQL parsing.
+ * These classes provide a clean API similar to NameParameterizedQuery while implementing
+ * the new text-level parameter substitution approach using SubstituteParamsParser.
+ *
+ * This approach replaces parameter markers in SQL text before parsing, rather than
+ * binding them at the logical plan level, which matches the new parameter preprocessing
+ * implementation in SparkSqlParser.
+ */
+case class PreprocessedNamedQuery(sql: String, args: Map[String, Literal]) {
+  def parsePlan: LogicalPlan = {
+    // Use text-level parameter substitution with SubstituteParamsParser
+    val substitutedSql = substituteParameters()
+    org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan(substitutedSql)
+  }
+
+  def analyze: LogicalPlan = {
+    // Parse with substituted parameters and analyze
+    parsePlan.analyze
+  }
+
+  private def substituteParameters(): String = {
+    val paramSubstitutor = new org.apache.spark.sql.catalyst.parser.SubstituteParamsParser()
+
+    // Convert Literal args to String values for substitution
+    val namedParams = args.map { case (name, literal) =>
+      name -> literal.sql
+    }
+
+    val (substituted, _, _) = paramSubstitutor.substitute(
+      sql,
+      namedParams = namedParams)
+    substituted
+  }
+}
+
+case class PreprocessedPositionalQuery(sql: String, args: Seq[Literal]) {
+  def parsePlan: LogicalPlan = {
+    // Use text-level parameter substitution with SubstituteParamsParser
+    val substitutedSql = substituteParameters()
+    org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan(substitutedSql)
+  }
+
+  def analyze: LogicalPlan = {
+    // Parse with substituted parameters and analyze
+    parsePlan.analyze
+  }
+
+  private def substituteParameters(): String = {
+    val paramSubstitutor = new org.apache.spark.sql.catalyst.parser.SubstituteParamsParser()
+
+    // Convert Literal args to String values for substitution
+    val positionalParams = args.map(_.sql).toList
+
+    val (substituted, _, _) = paramSubstitutor.substitute(
+      sql,
+      positionalParams = positionalParams)
+    substituted
   }
 }

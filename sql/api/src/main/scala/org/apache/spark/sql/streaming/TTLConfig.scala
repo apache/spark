@@ -24,7 +24,22 @@ import java.time.Duration
  * will be eventually removed from the state store. Any state update resets the ttl to current
  * processing time plus ttlDuration.
  *
+ * Passing a TTL duration of zero will disable the TTL for the state variable. Users can also use
+ * the helper method `TTLConfig.NONE` in Scala or `TTLConfig.NONE()` in Java to disable TTL for
+ * the state variable.
+ *
  * @param ttlDuration
  *   time to live duration for state stored in the state variable.
  */
 case class TTLConfig(ttlDuration: Duration)
+
+object TTLConfig {
+
+  /**
+   * Helper method to create a TTLConfig with expiry duration as Zero
+   * @return
+   *   \- TTLConfig with expiry duration as Zero
+   */
+  def NONE: TTLConfig = TTLConfig(Duration.ZERO)
+
+}

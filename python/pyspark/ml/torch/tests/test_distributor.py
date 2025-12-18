@@ -29,17 +29,12 @@ from typing import Callable, Dict, Any
 import unittest
 from unittest.mock import patch
 
-have_torch = True
-try:
-    import torch  # noqa: F401
-except ImportError:
-    have_torch = False
-
 from pyspark import SparkConf, SparkContext
 from pyspark.ml.torch.distributor import TorchDistributor, _get_gpus_owned
 from pyspark.ml.torch.torch_run_process_wrapper import clean_and_terminate, check_parent_alive
 from pyspark.sql import SparkSession
-from pyspark.testing.utils import SPARK_HOME
+from pyspark.testing.sqlutils import SPARK_HOME
+from pyspark.testing.utils import have_torch, torch_requirement_message
 
 
 @contextlib.contextmanager
@@ -74,7 +69,7 @@ def create_training_function(mnist_dir_path: str) -> Callable:
 
     class Net(nn.Module):
         def __init__(self) -> None:
-            super(Net, self).__init__()
+            super().__init__()
             self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
             self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
             self.conv2_drop = nn.Dropout2d()
@@ -311,8 +306,25 @@ class TorchDistributorBaselineUnitTestsMixin:
         )
         self.delete_env_vars(input_env_vars)
 
+    @patch.dict(
+        os.environ,
+        {
+            "CUDA_VISIBLE_DEVICES": "0,1,2,3",
+            "MASTER_ADDR": "11.22.33.44",
+            "MASTER_PORT": "6677",
+            "RANK": "1",
+        },
+    )
+    def test_multi_gpu_node_get_torchrun_args(self):
+        torchrun_args, processes_per_node = TorchDistributor._get_torchrun_args(False, 8)
+        self.assertEqual(
+            torchrun_args,
+            ["--nnodes=2", "--node_rank=1", "--rdzv_endpoint=11.22.33.44:6677", "--rdzv_id=0"],
+        )
+        self.assertEqual(processes_per_node, 4)
 
-@unittest.skipIf(not have_torch, "torch is required")
+
+@unittest.skipIf(not have_torch, torch_requirement_message)
 class TorchDistributorBaselineUnitTests(TorchDistributorBaselineUnitTestsMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -409,7 +421,9 @@ class TorchDistributorLocalUnitTestsMixin:
         self.assertEqual(output, "success" * 4096)
 
 
-@unittest.skipIf(not have_torch, "torch is required")
+# @unittest.skipIf(not have_torch, torch_requirement_message)
+# TODO(SPARK-50864): Re-enable this test after fixing the slowness
+@unittest.skip("Disabled due to slowness")
 class TorchDistributorLocalUnitTests(TorchDistributorLocalUnitTestsMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -431,7 +445,9 @@ class TorchDistributorLocalUnitTests(TorchDistributorLocalUnitTestsMixin, unitte
         cls.spark.stop()
 
 
-@unittest.skipIf(not have_torch, "torch is required")
+# @unittest.skipIf(not have_torch, torch_requirement_message)
+# TODO(SPARK-50864): Re-enable this test after fixing the slowness
+@unittest.skip("Disabled due to slowness")
 class TorchDistributorLocalUnitTestsII(TorchDistributorLocalUnitTestsMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -502,7 +518,9 @@ class TorchDistributorDistributedUnitTestsMixin:
         self.assertEqual(output, "success" * 4096)
 
 
-@unittest.skipIf(not have_torch, "torch is required")
+# @unittest.skipIf(not have_torch, torch_requirement_message)
+# TODO(SPARK-50864): Re-enable this test after fixing the slowness
+@unittest.skip("Disabled due to slowness")
 class TorchDistributorDistributedUnitTests(
     TorchDistributorDistributedUnitTestsMixin, unittest.TestCase
 ):
@@ -549,7 +567,7 @@ class TorchWrapperUnitTestsMixin:
         self.assertEqual(mock_clean_and_terminate.call_count, 0)
 
 
-@unittest.skipIf(not have_torch, "torch is required")
+@unittest.skipIf(not have_torch, torch_requirement_message)
 class TorchWrapperUnitTests(TorchWrapperUnitTestsMixin, unittest.TestCase):
     pass
 

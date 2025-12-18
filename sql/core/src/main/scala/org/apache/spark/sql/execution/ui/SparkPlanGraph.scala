@@ -106,16 +106,19 @@ object SparkPlanGraph {
           buildSparkPlanGraphNode(
             planInfo.children.head, nodeIdGenerator, nodes, edges, parent, null, exchanges)
         }
-      case "TableCacheQueryStage" =>
+      case "TableCacheQueryStage" | "ResultQueryStage" =>
         buildSparkPlanGraphNode(
           planInfo.children.head, nodeIdGenerator, nodes, edges, parent, null, exchanges)
       case "Subquery" if subgraph != null =>
         // Subquery should not be included in WholeStageCodegen
         buildSparkPlanGraphNode(planInfo, nodeIdGenerator, nodes, edges, parent, null, exchanges)
       case "Subquery" if exchanges.contains(planInfo) =>
-        // Point to the re-used subquery
         val node = exchanges(planInfo)
-        edges += SparkPlanGraphEdge(node.id, parent.id)
+        val newEdge = SparkPlanGraphEdge(node.id, parent.id)
+        if (!edges.contains(newEdge)) {
+          // Point to the re-used subquery
+          edges += newEdge
+        }
       case "ReusedSubquery" =>
         // Re-used subquery might appear before the original subquery, so skip this node and let
         // the previous `case` make sure the re-used and the original point to the same node.

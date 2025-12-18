@@ -26,19 +26,21 @@ import org.apache.spark.{SparkClassNotFoundException, SparkIllegalArgumentExcept
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression
 import org.apache.spark.connect.proto.Join.JoinType
-import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Observation, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, Column, Observation, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, Distinct, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.classic.ClassicConversions._
+import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
 import org.apache.spark.sql.connect.dsl.commands._
 import org.apache.spark.sql.connect.dsl.expressions._
 import org.apache.spark.sql.connect.dsl.plans._
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, Identifier, InMemoryTableCatalog, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.functions._
@@ -655,10 +657,18 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
   }
 
   test("Write with invalid bucketBy configuration") {
-    val cmd = localRelation.write(bucketByCols = Seq("id"), numBuckets = Some(0))
-    assertThrows[InvalidCommandInput] {
-      transform(cmd)
-    }
+    val cmd = localRelation.write(
+      tableName = Some("testtable"),
+      tableSaveMethod = Some("save_as_table"),
+      format = Some("parquet"),
+      bucketByCols = Seq("id"),
+      numBuckets = Some(0))
+    checkError(
+      exception = intercept[AnalysisException] {
+        transform(cmd)
+      },
+      condition = "INVALID_BUCKET_COUNT",
+      parameters = Map("bucketingMaxBuckets" -> "100000", "numBuckets" -> "0"))
   }
 
   test("Write to Path") {
@@ -812,7 +822,9 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         .asTableCatalog
         .loadTable(Identifier.of(Array(), "table_name"))
       assert(table.name === "testcat.table_name")
-      assert(table.schema === new StructType().add("id", LongType).add("data", StringType))
+      assert(
+        table.columns sameElements
+          Array(ColumnV2.create("id", LongType), ColumnV2.create("data", StringType)))
       assert(table.partitioning.isEmpty)
       assert(table.properties === (Map("provider" -> "foo") ++ defaultOwnership).asJava)
     }
@@ -1113,7 +1125,8 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
         Long.MaxValue,
         Long.MaxValue,
         null,
-        true)
+        true,
+        false)
       .next()
     proto.Relation
       .newBuilder()

@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkIllegalArgumentException, SparkThrowable}
+import org.apache.spark.{QueryContext, SparkIllegalArgumentException, SparkThrowable}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -594,14 +594,19 @@ object IntervalUtils extends SparkIntervalUtils {
       interval: CalendarInterval,
       targetUnit: TimeUnit,
       daysPerMonth: Int = 31): Long = {
-    val monthsDuration = Math.multiplyExact(
-      daysPerMonth * MICROS_PER_DAY,
-      interval.months)
-    val daysDuration = Math.multiplyExact(
-      MICROS_PER_DAY,
-      interval.days)
-    val result = Math.addExact(interval.microseconds, Math.addExact(daysDuration, monthsDuration))
-    targetUnit.convert(result, TimeUnit.MICROSECONDS)
+    try {
+      val monthsDuration = Math.multiplyExact(
+        daysPerMonth * MICROS_PER_DAY,
+        interval.months)
+      val daysDuration = Math.multiplyExact(
+        MICROS_PER_DAY,
+        interval.days)
+      val result = Math.addExact(interval.microseconds, Math.addExact(daysDuration, monthsDuration))
+      targetUnit.convert(result, TimeUnit.MICROSECONDS)
+    } catch {
+      case _: ArithmeticException =>
+        throw QueryExecutionErrors.withoutSuggestionIntervalArithmeticOverflowError(context = null)
+    }
   }
 
   /**
@@ -782,13 +787,28 @@ object IntervalUtils extends SparkIntervalUtils {
       days: Int,
       hours: Int,
       mins: Int,
-      secs: Decimal): Long = {
+      secs: Decimal,
+      context: QueryContext): Long = {
     assert(secs.scale == 6, "Seconds fractional must have 6 digits for microseconds")
     var micros = secs.toUnscaledLong
-    micros = Math.addExact(micros, Math.multiplyExact(days, MICROS_PER_DAY))
-    micros = Math.addExact(micros, Math.multiplyExact(hours, MICROS_PER_HOUR))
-    micros = Math.addExact(micros, Math.multiplyExact(mins, MICROS_PER_MINUTE))
-    micros
+    try {
+      micros = Math.addExact(micros, Math.multiplyExact(days, MICROS_PER_DAY))
+      micros = Math.addExact(micros, Math.multiplyExact(hours, MICROS_PER_HOUR))
+      micros = Math.addExact(micros, Math.multiplyExact(mins, MICROS_PER_MINUTE))
+      micros
+    } catch {
+      case _: ArithmeticException =>
+        throw QueryExecutionErrors.withoutSuggestionIntervalArithmeticOverflowError(context)
+    }
+  }
+
+  def makeYearMonthInterval(year: Int, month: Int, context: QueryContext): Int = {
+    try {
+      Math.toIntExact(Math.addExact(month, Math.multiplyExact(year, MONTHS_PER_YEAR)))
+    } catch {
+      case _: ArithmeticException =>
+        throw QueryExecutionErrors.withoutSuggestionIntervalArithmeticOverflowError(context)
+    }
   }
 
   def intToYearMonthInterval(v: Int, startField: Byte, endField: Byte): Int = {

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.annotation.{Evolving, Experimental}
+import org.apache.spark.annotation.Evolving
 import org.apache.spark.sql.catalyst.plans.logical.LogicalGroupState
 
 /**
@@ -196,7 +196,6 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalGroupState
  *   types (see `Encoder` for more details).
  * @since 2.2.0
  */
-@Experimental
 @Evolving
 trait GroupState[S] extends LogicalGroupState[S] {
 

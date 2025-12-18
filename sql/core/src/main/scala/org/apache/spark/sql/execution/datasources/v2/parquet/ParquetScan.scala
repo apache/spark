@@ -25,13 +25,13 @@ import org.apache.parquet.hadoop.ParquetInputFormat
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
-import org.apache.spark.sql.connector.read.PartitionReaderFactory
-import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, PartitioningAwareFileIndex}
+import org.apache.spark.sql.connector.read.{PartitionReaderFactory, VariantExtraction}
+import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, PartitioningAwareFileIndex, VariantMetadata}
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetOptions, ParquetReadSupport, ParquetWriteSupport}
 import org.apache.spark.sql.execution.datasources.v2.FileScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{BooleanType, DataType, StructField, StructType, VariantType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SerializableConfiguration
@@ -47,21 +47,90 @@ case class ParquetScan(
     options: CaseInsensitiveStringMap,
     pushedAggregate: Option[Aggregation] = None,
     partitionFilters: Seq[Expression] = Seq.empty,
-    dataFilters: Seq[Expression] = Seq.empty) extends FileScan {
+    dataFilters: Seq[Expression] = Seq.empty,
+    pushedVariantExtractions: Array[VariantExtraction] = Array.empty) extends FileScan {
   override def isSplitable(path: Path): Boolean = {
     // If aggregate is pushed down, only the file footer will be read once,
     // so file should not be split across multiple tasks.
     pushedAggregate.isEmpty
   }
 
+  // Build transformed schema if variant pushdown is active
+  private def effectiveReadDataSchema: StructType = {
+    if (pushedVariantExtractions.isEmpty) {
+      readDataSchema
+    } else {
+      rewriteVariantPushdownSchema(readDataSchema)
+    }
+  }
+
+  private def rewriteVariantPushdownSchema(schema: StructType): StructType = {
+    // Group extractions by column name and build extracted schemas
+    val variantSchemaMap: Map[Seq[String], StructType] = pushedVariantExtractions
+      .groupBy(e => e.columnName().toSeq)
+      .map { case (colName, extractions) =>
+        // Build struct schema with ordinal-named fields for each extraction
+        var fields = extractions.zipWithIndex.map { case (extraction, idx) =>
+          // Attach VariantMetadata so Parquet reader knows this is a variant extraction
+          StructField(idx.toString, extraction.expectedDataType(), nullable = true,
+            extraction.metadata())
+        }
+
+        // Avoid producing an empty struct of requested fields. This happens
+        // if the variant is not used, or only used in `IsNotNull/IsNull` expressions.
+        // The value of the placeholder field doesn't matter.
+        if (fields.size == 1 && fields.head.dataType.isInstanceOf[VariantType]) {
+          val placeholder = VariantMetadata("$.__placeholder_field__",
+            failOnError = false, timeZoneId = "UTC")
+          fields = Array(StructField("0", BooleanType,
+            metadata = placeholder.toMetadata))
+        }
+
+        colName -> StructType(fields)
+      }.toMap
+
+    rewriteType(schema, Seq.empty, variantSchemaMap).asInstanceOf[StructType]
+  }
+
+  private def rewriteType(
+      dataType: DataType,
+      path: Seq[String],
+      mapping: Map[Seq[String], StructType]): DataType = {
+    dataType match {
+      case structType: StructType if !VariantMetadata.isVariantStruct(structType) =>
+        val fields = structType.fields.map { field =>
+          mapping.get(path :+ field.name) match {
+            case Some(extractedSchema) =>
+              field.copy(dataType = extractedSchema)
+            case None =>
+              field.copy(dataType = rewriteType(field.dataType, path :+ field.name, mapping))
+          }
+        }
+        StructType(fields)
+      case otherType => otherType
+    }
+  }
+
   override def readSchema(): StructType = {
     // If aggregate is pushed down, schema has already been pruned in `ParquetScanBuilder`
     // and no need to call super.readSchema()
-    if (pushedAggregate.nonEmpty) readDataSchema else super.readSchema()
+    if (pushedAggregate.nonEmpty) {
+      effectiveReadDataSchema
+    } else {
+      // super.readSchema() combines readDataSchema + readPartitionSchema
+      // Apply variant transformation if variant pushdown is active
+      val baseSchema = super.readSchema()
+      if (pushedVariantExtractions.isEmpty) {
+        baseSchema
+      } else {
+        rewriteVariantPushdownSchema(baseSchema)
+      }
+    }
   }
 
   override def createReaderFactory(): PartitionReaderFactory = {
-    val readDataSchemaAsJson = readDataSchema.json
+    val effectiveSchema = effectiveReadDataSchema
+    val readDataSchemaAsJson = effectiveSchema.json
     hadoopConf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[ParquetReadSupport].getName)
     hadoopConf.set(
       ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
@@ -71,40 +140,39 @@ case class ParquetScan(
       readDataSchemaAsJson)
     hadoopConf.set(
       SQLConf.SESSION_LOCAL_TIMEZONE.key,
-      sparkSession.sessionState.conf.sessionLocalTimeZone)
+      conf.sessionLocalTimeZone)
     hadoopConf.setBoolean(
       SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key,
-      sparkSession.sessionState.conf.nestedSchemaPruningEnabled)
+      conf.nestedSchemaPruningEnabled)
     hadoopConf.setBoolean(
       SQLConf.CASE_SENSITIVE.key,
-      sparkSession.sessionState.conf.caseSensitiveAnalysis)
+      conf.caseSensitiveAnalysis)
 
     // Sets flags for `ParquetToSparkSchemaConverter`
     hadoopConf.setBoolean(
       SQLConf.PARQUET_BINARY_AS_STRING.key,
-      sparkSession.sessionState.conf.isParquetBinaryAsString)
+      conf.isParquetBinaryAsString)
     hadoopConf.setBoolean(
       SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
-      sparkSession.sessionState.conf.isParquetINT96AsTimestamp)
+      conf.isParquetINT96AsTimestamp)
     hadoopConf.setBoolean(
       SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key,
-      sparkSession.sessionState.conf.parquetInferTimestampNTZEnabled)
+      conf.parquetInferTimestampNTZEnabled)
     hadoopConf.setBoolean(
       SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key,
-      sparkSession.sessionState.conf.legacyParquetNanosAsLong)
+      conf.legacyParquetNanosAsLong)
 
-    val broadcastedConf = sparkSession.sparkContext.broadcast(
-      new SerializableConfiguration(hadoopConf))
-    val sqlConf = sparkSession.sessionState.conf
+    val broadcastedConf =
+      SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     ParquetPartitionReaderFactory(
-      sqlConf,
+      conf,
       broadcastedConf,
       dataSchema,
-      readDataSchema,
+      effectiveSchema,
       readPartitionSchema,
       pushedFilters,
       pushedAggregate,
-      new ParquetOptions(options.asCaseSensitiveMap.asScala.toMap, sqlConf))
+      new ParquetOptions(options.asCaseSensitiveMap.asScala.toMap, conf))
   }
 
   override def equals(obj: Any): Boolean = obj match {
@@ -114,8 +182,12 @@ case class ParquetScan(
       } else {
         pushedAggregate.isEmpty && p.pushedAggregate.isEmpty
       }
+      val pushedVariantEqual =
+        java.util.Arrays.equals(pushedVariantExtractions.asInstanceOf[Array[Object]],
+          p.pushedVariantExtractions.asInstanceOf[Array[Object]])
       super.equals(p) && dataSchema == p.dataSchema && options == p.options &&
-        equivalentFilters(pushedFilters, p.pushedFilters) && pushedDownAggEqual
+        equivalentFilters(pushedFilters, p.pushedFilters) && pushedDownAggEqual &&
+        pushedVariantEqual
     case _ => false
   }
 
@@ -129,8 +201,17 @@ case class ParquetScan(
   }
 
   override def getMetaData(): Map[String, String] = {
+    val variantExtractionStr = if (pushedVariantExtractions.nonEmpty) {
+      pushedVariantExtractions.map { extraction =>
+        val colName = extraction.columnName().mkString(".")
+        s"$colName:${extraction.metadata()}:${extraction.expectedDataType()}"
+      }.mkString("[", ", ", "]")
+    } else {
+      "[]"
+    }
     super.getMetaData() ++ Map("PushedFilters" -> seqToString(pushedFilters.toImmutableArraySeq)) ++
       Map("PushedAggregation" -> pushedAggregationsStr) ++
-      Map("PushedGroupBy" -> pushedGroupByStr)
+      Map("PushedGroupBy" -> pushedGroupByStr) ++
+      Map("PushedVariantExtractions" -> variantExtractionStr)
   }
 }

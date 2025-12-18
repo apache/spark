@@ -26,7 +26,7 @@ import scala.reflect.ClassTag
 import scala.util.matching.Regex
 
 import org.apache.spark.{SparkContext, SparkException}
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys.{FROM_TIME, SLIDE_DURATION, TO_TIME}
 import org.apache.spark.internal.io.SparkHadoopWriterUtils
 import org.apache.spark.rdd.{BlockRDD, RDD, RDDOperationScope}
@@ -467,7 +467,7 @@ abstract class DStream[T: ClassTag] (
         // Explicitly remove blocks of BlockRDD
         rdd match {
           case b: BlockRDD[_] =>
-            logInfo(log"Removing blocks of RDD ${MDC(LogKeys.RDD_ID, b)} " +
+            logInfo(log"Removing blocks of RDD ${MDC(LogKeys.RDD, b)} " +
               log"of time ${MDC(LogKeys.TIME, time)}")
             b.removeBlocks()
           case _ =>

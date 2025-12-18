@@ -25,23 +25,43 @@ import "spark/connect/common.proto";
 import "spark/connect/expressions.proto";
 import "spark/connect/relations.proto";
 import "spark/connect/types.proto";
+import "spark/connect/ml.proto";
+import "spark/connect/pipelines.proto";
 
 option java_multiple_files = true;
 option java_package = "org.apache.spark.connect.proto";
 option go_package = "internal/generated";
 
 // A [[Plan]] is the structure that carries the runtime information for the execution from the
-// client to the server. A [[Plan]] can either be of the type [[Relation]] which is a reference
-// to the underlying logical plan or it can be of the [[Command]] type that is used to execute
-// commands on the server.
+// client to the server. A [[Plan]] can be one of the following:
+// - [[Relation]]: a reference to the underlying logical plan.
+// - [[Command]]: used to execute commands on the server.
+// - [[CompressedOperation]]: a compressed representation of either a Relation or a Command.
 message Plan {
   oneof op_type {
     Relation root = 1;
     Command command = 2;
+    CompressedOperation compressed_operation = 3;
+  }
+
+  message CompressedOperation {
+    bytes data = 1;
+    OpType op_type = 2;
+    CompressionCodec compression_codec = 3;
+
+    enum OpType {
+      OP_TYPE_UNSPECIFIED = 0;
+      OP_TYPE_RELATION = 1;
+      OP_TYPE_COMMAND = 2;
+    }
   }
 }
 
-
+// Compression codec for plan compression.
+enum CompressionCodec {
+  COMPRESSION_CODEC_UNSPECIFIED = 0;
+  COMPRESSION_CODEC_ZSTD = 1;
+}
 
 // User Context is used to refer to one particular user session that is executing
 // queries in the backend.
@@ -94,6 +114,7 @@ message AnalyzePlanRequest {
     Persist persist = 14;
     Unpersist unpersist = 15;
     GetStorageLevel get_storage_level = 16;
+    JsonToDDL json_to_ddl = 18;
   }
 
   message Schema {
@@ -199,6 +220,11 @@ message AnalyzePlanRequest {
     // (Required) The logical plan to get the storage level.
     Relation relation = 1;
   }
+
+  message JsonToDDL {
+    // (Required) The JSON formatted string to be converted to DDL.
+    string json_string = 1;
+  }
 }
 
 // Response to performing analysis of the query. Contains relevant metadata to be able to
@@ -224,6 +250,7 @@ message AnalyzePlanResponse {
     Persist persist = 12;
     Unpersist unpersist = 13;
     GetStorageLevel get_storage_level = 14;
+    JsonToDDL json_to_ddl = 16;
   }
 
   message Schema {
@@ -275,6 +302,10 @@ message AnalyzePlanResponse {
     // (Required) The StorageLevel as a result of get_storage_level request.
     StorageLevel storage_level = 1;
   }
+
+  message JsonToDDL {
+    string ddl_string = 1;
+  }
 }
 
 // A request to be executed by the service.
@@ -320,6 +351,7 @@ message ExecutePlanRequest {
   message RequestOption {
     oneof request_option {
       ReattachOptions reattach_options = 1;
+      ResultChunkingOptions result_chunking_options = 2;
       // Extension type for request options
       google.protobuf.Any extension = 999;
     }
@@ -384,6 +416,19 @@ message ExecutePlanResponse {
     // Response for command that checkpoints a DataFrame.
     CheckpointCommandResult checkpoint_command_result = 19;
 
+    // ML command response
+    MlCommandResult ml_command_result = 20;
+
+    // Response containing pipeline event that is streamed back to the client during a pipeline run
+    PipelineEventResult pipeline_event_result = 21;
+
+    // Pipeline command response
+    PipelineCommandResult pipeline_command_result = 22;
+
+    // A signal from the server to the client to execute the query function for a flow, and to
+    // register its result with the server.
+    PipelineQueryFunctionExecutionSignal pipeline_query_function_execution_signal = 23;
+
     // Support arbitrary result objects.
     google.protobuf.Any extension = 999;
   }
@@ -413,6 +458,14 @@ message ExecutePlanResponse {
 
     // If set, row offset of the start of this ArrowBatch in execution results.
     optional int64 start_offset = 3;
+
+    // Index of this chunk in the batch if chunking is enabled. The index starts from 0.
+    optional int64 chunk_index = 4;
+
+    // Total number of chunks in this batch if chunking is enabled.
+    // It is missing when chunking is disabled - the batch is returned whole
+    // and client will treat this response as the batch.
+    optional int64 num_chunks_in_batch = 5;
   }
 
   message Metrics {
@@ -514,6 +567,9 @@ message ConfigRequest {
   message Set {
     // (Required) The config key-value pairs to set.
     repeated KeyValue pairs = 1;
+
+    // (Optional) Whether to ignore failures.
+    optional bool silent = 2;
   }
 
   message Get {
@@ -794,6 +850,24 @@ message ReattachOptions {
   bool reattachable = 1;
 }
 
+message ResultChunkingOptions {
+  // Although Arrow results are split into batches with a size limit according to estimation, the
+  // size of the batches is not guaranteed to be less than the limit, especially when a single row
+  // is larger than the limit, in which case the server will fail to split it further into smaller
+  // batches. As a result, the client may encounter a gRPC error stating “Received message larger
+  // than max” when a batch is too large.
+  // If allow_arrow_batch_chunking=true, the server will split large Arrow batches into smaller chunks,
+  // and the client is expected to handle the chunked Arrow batches.
+  //
+  // If false, the server will not chunk large Arrow batches.
+  bool allow_arrow_batch_chunking = 1;
+
+  // Optional preferred Arrow batch size in bytes for the server to use when sending Arrow results.
+  // The server will attempt to use this size if it is set and within the valid range
+  // ([1KB, max batch size on server]). Otherwise, the server's maximum batch size is used.
+  optional int64 preferred_arrow_chunk_size = 2;
+}
+
 message ReattachExecuteRequest {
   // (Required)
   //
@@ -913,6 +987,20 @@ message ReleaseSessionRequest {
   // can be used for language or version specific information and is only intended for
   // logging purposes and will not be interpreted by the server.
   optional string client_type = 3;
+
+  // Signals the server to allow the client to reconnect to the session after it is released.
+  //
+  // By default, the server tombstones the session upon release, preventing reconnections and
+  // fully cleaning the session state.
+  //
+  // If this flag is set to true, the server may permit the client to reconnect to the session
+  // post-release, even if the session state has been cleaned. This can result in missing state,
+  // such as Temporary Views, Temporary UDFs, or the Current Catalog, in the reconnected session.
+  //
+  // Use this option sparingly and only when the client fully understands the implications of
+  // reconnecting to a released session. The client must ensure that any queries executed do not
+  // rely on the session state prior to its release.
+  bool allow_reconnect = 4;
 }
 
 // Next ID: 3
@@ -1029,6 +1117,32 @@ message FetchErrorDetailsResponse {
     // Portable error identifier across SQL engines
     // If null, error class or SQLSTATE is not set.
     optional string sql_state = 4;
+
+    // Additional information if the error was caused by a breaking change.
+    optional BreakingChangeInfo breaking_change_info = 5;
+  }
+
+  // BreakingChangeInfo defines the schema for breaking change information.
+  message BreakingChangeInfo {
+    // A message explaining how the user can migrate their job to work
+    // with the breaking change.
+    repeated string migration_message = 1;
+
+    // A spark config flag that can be used to mitigate the breaking change.
+    optional MitigationConfig mitigation_config = 2;
+
+    // If true, the breaking change should be inspected manually.
+    // If false, the spark job should be retried by setting the mitigationConfig.
+    optional bool needs_audit = 3;
+  }
+
+  // MitigationConfig defines a spark config flag that can be used to mitigate a breaking change.
+  message MitigationConfig {
+    // The spark config key.
+    string key = 1;
+
+    // The spark config value that mitigates the breaking change.
+    string value = 2;
   }
 
   // Error defines the schema for the representing exception.
@@ -1054,6 +1168,54 @@ message FetchErrorDetailsResponse {
 message CheckpointCommandResult {
   // (Required) The logical plan checkpointed.
   CachedRemoteRelation relation = 1;
+}
+
+message CloneSessionRequest {
+  // (Required)
+  //
+  // The session_id specifies a spark session for a user id (which is specified
+  // by user_context.user_id). The session_id is set by the client to be able to
+  // collate streaming responses from different queries within the dedicated session.
+  // The id should be an UUID string of the format `00112233-4455-6677-8899-aabbccddeeff`
+  string session_id = 1;
+
+  // (Optional)
+  //
+  // Server-side generated idempotency key from the previous responses (if any). Server
+  // can use this to validate that the server side session has not changed.
+  optional string client_observed_server_side_session_id = 5;
+
+  // (Required) User context
+  //
+  // user_context.user_id and session_id both identify a unique remote spark session on the
+  // server side.
+  UserContext user_context = 2;
+
+  // Provides optional information about the client sending the request. This field
+  // can be used for language or version specific information and is only intended for
+  // logging purposes and will not be interpreted by the server.
+  optional string client_type = 3;
+
+  // (Optional)
+  // The session_id for the new cloned session. If not provided, a new UUID will be generated.
+  // The id should be an UUID string of the format `00112233-4455-6677-8899-aabbccddeeff`
+  optional string new_session_id = 4;
+}
+
+// Next ID: 5
+message CloneSessionResponse {
+  // Session id of the original session that was cloned.
+  string session_id = 1;
+
+  // Server-side generated idempotency key that the client can use to assert that the server side
+  // session (parent of the cloned session) has not changed.
+  string server_side_session_id = 2;
+
+  // Session id of the new cloned session.
+  string new_session_id = 3;
+  
+  // Server-side session ID of the new cloned session.
+  string new_server_side_session_id = 4;
 }
 
 // Main interface for the SparkConnect service.
@@ -1100,4 +1262,14 @@ service SparkConnectService {
 
   // FetchErrorDetails retrieves the matched exception with details based on a provided error id.
   rpc FetchErrorDetails(FetchErrorDetailsRequest) returns (FetchErrorDetailsResponse) {}
+
+  // Create a clone of a Spark Connect session on the server side. The server-side session
+  // is cloned with all its current state (SQL configurations, temporary views, registered
+  // functions, catalog state) copied over to a new independent session. The cloned session
+  // is isolated from the source session - any subsequent changes to either session's
+  // server-side state will not be reflected in the other.
+  //
+  // The request can optionally specify a custom session ID for the cloned session (must be
+  // a valid UUID). If not provided, a new UUID will be generated automatically.
+  rpc CloneSession(CloneSessionRequest) returns (CloneSessionResponse) {}
 }

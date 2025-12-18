@@ -106,7 +106,7 @@ class CSVExprUtilsSuite extends SparkFunSuite {
       } catch {
         case e: SparkIllegalArgumentException =>
           assert(separatorStr.isEmpty)
-          assert(e.getErrorClass === expectedErrorClass.get)
+          assert(e.getCondition === expectedErrorClass.get)
       }
     }
   }

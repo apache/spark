@@ -44,6 +44,12 @@ trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
   override def producedAttributes: AttributeSet = AttributeSet(output)
 
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
+  private[this] val sessionUUID = {
+    Option(session).collect {
+      case session if session.sessionState.conf.pythonWorkerLoggingEnabled =>
+        session.sessionUUID
+    }
+  }
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
@@ -56,13 +62,16 @@ trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
       output,
       chainedFunc,
       child.schema,
+      pythonUDF.dataType,
       conf.arrowMaxRecordsPerBatch,
       pythonEvalType,
       conf.sessionLocalTimeZone,
       conf.arrowUseLargeVarTypes,
       pythonRunnerConf,
       pythonMetrics,
-      jobArtifactUUID)
+      jobArtifactUUID,
+      sessionUUID,
+      conf.pythonUDFProfiler)
 
     val rdd = if (isBarrier) {
       val rddBarrier = child.execute().barrier()

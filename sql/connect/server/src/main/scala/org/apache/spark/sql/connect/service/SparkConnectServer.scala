@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.connect.service
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{HOST, PORT}
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
 /**
  * The Spark Connect server
@@ -28,14 +30,18 @@ object SparkConnectServer extends Logging {
   def main(args: Array[String]): Unit = {
     // Set the active Spark Session, and starts SparkEnv instance (via Spark Context)
     logInfo("Starting Spark session.")
-    val session = SparkSession.builder().getOrCreate()
+    val session = SparkSession
+      .builder()
+      .config(SQLConf.ARTIFACTS_SESSION_ISOLATION_ENABLED.key, true)
+      .config(SQLConf.ARTIFACTS_SESSION_ISOLATION_ALWAYS_APPLY_CLASSLOADER.key, true)
+      .getOrCreate()
     try {
       try {
         SparkConnectService.start(session.sparkContext)
         val isa = SparkConnectService.bindingAddress
+        val host = Utils.normalizeIpIfNeeded(isa.getAddress.getHostAddress)
         logInfo(
-          log"Spark Connect server started at: " +
-            log"${MDC(HOST, isa.getAddress.getHostAddress)}:${MDC(PORT, isa.getPort)}")
+          log"Spark Connect server started at: ${MDC(HOST, host)}:${MDC(PORT, isa.getPort)}")
       } catch {
         case e: Exception =>
           logError("Error starting Spark Connect server", e)

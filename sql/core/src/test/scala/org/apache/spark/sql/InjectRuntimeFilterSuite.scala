@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, BloomFilterMightContain, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, BloomFilterAggregate}
-import org.apache.spark.sql.catalyst.optimizer.MergeScalarSubqueries
+import org.apache.spark.sql.catalyst.optimizer.MergeSubplans
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan}
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, SubqueryExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEPropagateEmptyRelation}
@@ -207,7 +207,7 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
 
     // `MergeScalarSubqueries` can duplicate subqueries in the optimized plan and would make testing
     // complicated.
-    conf.setConfString(SQLConf.OPTIMIZER_EXCLUDED_RULES.key, MergeScalarSubqueries.ruleName)
+    conf.setConfString(SQLConf.OPTIMIZER_EXCLUDED_RULES.key, MergeSubplans.ruleName)
   }
 
   protected override def afterAll(): Unit = try {
@@ -255,7 +255,7 @@ class InjectRuntimeFilterSuite extends QueryTest with SQLTestUtils with SharedSp
       case Filter(condition, _) => condition.collect {
         case subquery: org.apache.spark.sql.catalyst.expressions.ScalarSubquery
         => subquery.plan.collect {
-          case Aggregate(_, aggregateExpressions, _) =>
+          case Aggregate(_, aggregateExpressions, _, _) =>
             aggregateExpressions.map {
               case Alias(AggregateExpression(bfAgg : BloomFilterAggregate, _, _, _, _),
               _) =>

@@ -353,7 +353,7 @@ private[hive] case class HiveUDAFFunction(
 
   private def newEvaluator(): GenericUDAFEvaluator = {
     val resolver = if (isUDAFBridgeRequired) {
-      new GenericUDAFBridge(funcWrapper.createFunction[UDAF]())
+      new SparkGenericUDAFBridge(funcWrapper.createFunction[UDAF]())
     } else {
       funcWrapper.createFunction[AbstractGenericUDAFResolver]()
     }

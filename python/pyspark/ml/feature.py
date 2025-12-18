@@ -50,9 +50,23 @@ from pyspark.ml.param.shared import (
     Param,
     Params,
 )
-from pyspark.ml.util import JavaMLReadable, JavaMLWritable
-from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaTransformer, _jvm
+from pyspark.ml.util import (
+    JavaMLReadable,
+    JavaMLWritable,
+    try_remote_attribute_relation,
+    invoke_helper_attr,
+)
+from pyspark.ml.wrapper import (
+    JavaEstimator,
+    JavaModel,
+    JavaParams,
+    JavaTransformer,
+    _jvm,
+)
 from pyspark.ml.common import inherit_doc
+from pyspark.ml.util import RemoteModelRef
+from pyspark.sql.types import ArrayType, StringType
+from pyspark.sql.utils import is_remote
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
@@ -104,6 +118,8 @@ __all__ = [
     "StopWordsRemover",
     "StringIndexer",
     "StringIndexerModel",
+    "TargetEncoder",
+    "TargetEncoderModel",
     "Tokenizer",
     "UnivariateFeatureSelector",
     "UnivariateFeatureSelectorModel",
@@ -232,7 +248,7 @@ class Binarizer(
         __init__(self, \\*, threshold=0.0, inputCol=None, outputCol=None, thresholds=None, \
                  inputCols=None, outputCols=None)
         """
-        super(Binarizer, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Binarizer", self.uid)
         self._setDefault(threshold=0.0)
         kwargs = self._input_kwargs
@@ -334,7 +350,7 @@ class _LSHParams(HasInputCol, HasOutputCol):
     )
 
     def __init__(self, *args: Any):
-        super(_LSHParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(numHashTables=1)
 
     def getNumHashTables(self) -> int:
@@ -385,6 +401,7 @@ class _LSHModel(JavaModel, _LSHParams):
         """
         return self._set(outputCol=value)
 
+    @try_remote_attribute_relation
     def approxNearestNeighbors(
         self,
         dataset: DataFrame,
@@ -422,6 +439,7 @@ class _LSHModel(JavaModel, _LSHParams):
         """
         return self._call_java("approxNearestNeighbors", dataset, key, numNearestNeighbors, distCol)
 
+    @try_remote_attribute_relation
     def approxSimilarityJoin(
         self,
         datasetA: DataFrame,
@@ -585,7 +603,7 @@ class BucketedRandomProjectionLSH(
         __init__(self, \\*, inputCol=None, outputCol=None, seed=None, numHashTables=1, \
                  bucketLength=None)
         """
-        super(BucketedRandomProjectionLSH, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.feature.BucketedRandomProjectionLSH", self.uid
         )
@@ -802,7 +820,7 @@ class Bucketizer(
         __init__(self, \\*, splits=None, inputCol=None, outputCol=None, handleInvalid="error", \
                  splitsArray=None, inputCols=None, outputCols=None)
         """
-        super(Bucketizer, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Bucketizer", self.uid)
         self._setDefault(handleInvalid="error")
         kwargs = self._input_kwargs
@@ -967,7 +985,7 @@ class _CountVectorizerParams(JavaParams, HasInputCol, HasOutputCol):
     )
 
     def __init__(self, *args: Any):
-        super(_CountVectorizerParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(minTF=1.0, minDF=1.0, maxDF=2**63 - 1, vocabSize=1 << 18, binary=False)
 
     @since("1.6.0")
@@ -1087,7 +1105,7 @@ class CountVectorizer(
         __init__(self, \\*, minTF=1.0, minDF=1.0, maxDF=2 ** 63 - 1, vocabSize=1 << 18,\
                  binary=False, inputCol=None,outputCol=None)
         """
-        super(CountVectorizer, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.CountVectorizer", self.uid)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -1202,15 +1220,30 @@ class CountVectorizerModel(
         Construct the model directly from a vocabulary list of strings,
         requires an active SparkContext.
         """
-        from pyspark.core.context import SparkContext
+        if len(vocabulary) == 0:
+            raise ValueError("Vocabulary list cannot be empty")
 
-        sc = SparkContext._active_spark_context
-        assert sc is not None and sc._gateway is not None
-        java_class = sc._gateway.jvm.java.lang.String
-        jvocab = CountVectorizerModel._new_java_array(vocabulary, java_class)
-        model = CountVectorizerModel._create_from_java_class(
-            "org.apache.spark.ml.feature.CountVectorizerModel", jvocab
-        )
+        if is_remote():
+            model = CountVectorizerModel()
+            model._java_obj = RemoteModelRef(
+                invoke_helper_attr(
+                    "countVectorizerModelFromVocabulary",
+                    model.uid,
+                    list(vocabulary),
+                )
+            )
+
+        else:
+            from pyspark.core.context import SparkContext
+
+            sc = SparkContext._active_spark_context
+            assert sc is not None and sc._gateway is not None
+            java_class = getattr(sc._gateway.jvm, "java.lang.String")
+            jvocab = CountVectorizerModel._new_java_array(vocabulary, java_class)
+            model = CountVectorizerModel._create_from_java_class(
+                "org.apache.spark.ml.feature.CountVectorizerModel", jvocab
+            )
+
         model.setInputCol(inputCol)
         if outputCol is not None:
             model.setOutputCol(outputCol)
@@ -1306,7 +1339,7 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable["DCT"], Jav
         """
         __init__(self, \\*, inverse=False, inputCol=None, outputCol=None)
         """
-        super(DCT, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.DCT", self.uid)
         self._setDefault(inverse=False)
         kwargs = self._input_kwargs
@@ -1414,7 +1447,7 @@ class ElementwiseProduct(
         """
         __init__(self, \\*, scalingVec=None, inputCol=None, outputCol=None)
         """
-        super(ElementwiseProduct, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.feature.ElementwiseProduct", self.uid
         )
@@ -1552,7 +1585,7 @@ class FeatureHasher(
         __init__(self, \\*, numFeatures=1 << 18, inputCols=None, outputCol=None, \
                  categoricalCols=None)
         """
-        super(FeatureHasher, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.FeatureHasher", self.uid)
         self._setDefault(numFeatures=1 << 18)
         kwargs = self._input_kwargs
@@ -1675,7 +1708,7 @@ class HashingTF(
         """
         __init__(self, \\*, numFeatures=1 << 18, binary=False, inputCol=None, outputCol=None)
         """
-        super(HashingTF, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.HashingTF", self.uid)
         self._setDefault(numFeatures=1 << 18, binary=False)
         kwargs = self._input_kwargs
@@ -1762,7 +1795,7 @@ class _IDFParams(HasInputCol, HasOutputCol):
         return self.getOrDefault(self.minDocFreq)
 
     def __init__(self, *args: Any):
-        super(_IDFParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(minDocFreq=0)
 
 
@@ -1826,7 +1859,7 @@ class IDF(JavaEstimator["IDFModel"], _IDFParams, JavaMLReadable["IDF"], JavaMLWr
         """
         __init__(self, \\*, minDocFreq=0, inputCol=None, outputCol=None)
         """
-        super(IDF, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.IDF", self.uid)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -1942,7 +1975,7 @@ class _ImputerParams(HasInputCol, HasInputCols, HasOutputCol, HasOutputCols, Has
     )
 
     def __init__(self, *args: Any):
-        super(_ImputerParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(strategy="mean", missingValue=float("nan"), relativeError=0.001)
 
     @since("2.2.0")
@@ -2119,7 +2152,7 @@ class Imputer(
         __init__(self, \\*, strategy="mean", missingValue=float("nan"), inputCols=None, \
                  outputCols=None, inputCol=None, outputCol=None, relativeError=0.001):
         """
-        super(Imputer, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Imputer", self.uid)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -2259,6 +2292,7 @@ class ImputerModel(JavaModel, _ImputerParams, JavaMLReadable["ImputerModel"], Ja
 
     @property
     @since("2.2.0")
+    @try_remote_attribute_relation
     def surrogateDF(self) -> DataFrame:
         """
         Returns a DataFrame containing inputCols and their corresponding surrogates,
@@ -2317,7 +2351,7 @@ class Interaction(
         """
         __init__(self, \\*, inputCols=None, outputCol=None):
         """
-        super(Interaction, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Interaction", self.uid)
         self._setDefault()
         kwargs = self._input_kwargs
@@ -2415,7 +2449,7 @@ class MaxAbsScaler(
         """
         __init__(self, \\*, inputCol=None, outputCol=None)
         """
-        super(MaxAbsScaler, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.MaxAbsScaler", self.uid)
         self._setDefault()
         kwargs = self._input_kwargs
@@ -2568,7 +2602,7 @@ class MinHashLSH(
         """
         __init__(self, \\*, inputCol=None, outputCol=None, seed=None, numHashTables=1)
         """
-        super(MinHashLSH, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.MinHashLSH", self.uid)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -2638,7 +2672,7 @@ class _MinMaxScalerParams(HasInputCol, HasOutputCol):
     )
 
     def __init__(self, *args: Any):
-        super(_MinMaxScalerParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(min=0.0, max=1.0)
 
     @since("1.6.0")
@@ -2733,7 +2767,7 @@ class MinMaxScaler(
         """
         __init__(self, \\*, min=0.0, max=1.0, inputCol=None, outputCol=None)
         """
-        super(MinMaxScaler, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.MinMaxScaler", self.uid)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -2900,7 +2934,7 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable["NGram"],
         """
         __init__(self, \\*, n=2, inputCol=None, outputCol=None)
         """
-        super(NGram, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.NGram", self.uid)
         self._setDefault(n=2)
         kwargs = self._input_kwargs
@@ -2995,7 +3029,7 @@ class Normalizer(
         """
         __init__(self, \\*, p=2.0, inputCol=None, outputCol=None)
         """
-        super(Normalizer, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Normalizer", self.uid)
         self._setDefault(p=2.0)
         kwargs = self._input_kwargs
@@ -3068,7 +3102,7 @@ class _OneHotEncoderParams(
     )
 
     def __init__(self, *args: Any):
-        super(_OneHotEncoderParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(handleInvalid="error", dropLast=True)
 
     @since("2.3.0")
@@ -3187,7 +3221,7 @@ class OneHotEncoder(
         __init__(self, \\*, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True, \
                  inputCol=None, outputCol=None)
         """
-        super(OneHotEncoder, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.OneHotEncoder", self.uid)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -3396,7 +3430,7 @@ class PolynomialExpansion(
         """
         __init__(self, \\*, degree=2, inputCol=None, outputCol=None)
         """
-        super(PolynomialExpansion, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.feature.PolynomialExpansion", self.uid
         )
@@ -3624,7 +3658,7 @@ class QuantileDiscretizer(
         __init__(self, \\*, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001, \
                  handleInvalid="error", numBucketsArray=None, inputCols=None, outputCols=None)
         """
-        super(QuantileDiscretizer, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.feature.QuantileDiscretizer", self.uid
         )
@@ -3749,6 +3783,23 @@ class QuantileDiscretizer(
         """
         Private method to convert the java_model to a Python model.
         """
+        if is_remote():
+            remote_model = JavaModel(java_model)
+            if self.isSet(self.inputCol):
+                return Bucketizer(
+                    splits=remote_model._call_java("getSplits"),
+                    inputCol=self.getInputCol(),
+                    outputCol=self.getOutputCol(),
+                    handleInvalid=self.getHandleInvalid(),
+                )
+            else:
+                return Bucketizer(
+                    splitsArray=remote_model._call_java("getSplitsArray"),
+                    inputCols=self.getInputCols(),
+                    outputCols=self.getOutputCols(),
+                    handleInvalid=self.getHandleInvalid(),
+                )
+
         if self.isSet(self.inputCol):
             return Bucketizer(
                 splits=list(java_model.getSplits()),
@@ -3799,7 +3850,7 @@ class _RobustScalerParams(HasInputCol, HasOutputCol, HasRelativeError):
     )
 
     def __init__(self, *args: Any):
-        super(_RobustScalerParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(
             lower=0.25, upper=0.75, withCentering=False, withScaling=True, relativeError=0.001
         )
@@ -3907,7 +3958,7 @@ class RobustScaler(
         __init__(self, \\*, lower=0.25, upper=0.75, withCentering=False, withScaling=True, \
                  inputCol=None, outputCol=None, relativeError=0.001)
         """
-        super(RobustScaler, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RobustScaler", self.uid)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -4119,7 +4170,7 @@ class RegexTokenizer(
         __init__(self, \\*, minTokenLength=1, gaps=True, pattern="\\s+", inputCol=None, \
                  outputCol=None, toLowercase=True)
         """
-        super(RegexTokenizer, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RegexTokenizer", self.uid)
         self._setDefault(minTokenLength=1, gaps=True, pattern="\\s+", toLowercase=True)
         kwargs = self._input_kwargs
@@ -4250,7 +4301,7 @@ class SQLTransformer(JavaTransformer, JavaMLReadable["SQLTransformer"], JavaMLWr
         """
         __init__(self, \\*, statement=None)
         """
-        super(SQLTransformer, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.SQLTransformer", self.uid)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -4298,7 +4349,7 @@ class _StandardScalerParams(HasInputCol, HasOutputCol):
     )
 
     def __init__(self, *args: Any):
-        super(_StandardScalerParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(withMean=False, withStd=True)
 
     @since("1.4.0")
@@ -4385,7 +4436,7 @@ class StandardScaler(
         """
         __init__(self, \\*, withMean=False, withStd=True, inputCol=None, outputCol=None)
         """
-        super(StandardScaler, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StandardScaler", self.uid)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -4509,7 +4560,7 @@ class _StringIndexerParams(
     )
 
     def __init__(self, *args: Any):
-        super(_StringIndexerParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(handleInvalid="error", stringOrderType="frequencyDesc")
 
     @since("2.3.0")
@@ -4648,7 +4699,7 @@ class StringIndexer(
         __init__(self, \\*, inputCol=None, outputCol=None, inputCols=None, outputCols=None, \
                  handleInvalid="error", stringOrderType="frequencyDesc")
         """
-        super(StringIndexer, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StringIndexer", self.uid)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -4793,15 +4844,27 @@ class StringIndexerModel(
         Construct the model directly from an array of label strings,
         requires an active SparkContext.
         """
-        from pyspark.core.context import SparkContext
+        if is_remote():
+            model = StringIndexerModel()
+            model._java_obj = RemoteModelRef(
+                invoke_helper_attr(
+                    "stringIndexerModelFromLabels",
+                    model.uid,
+                    (list(labels), ArrayType(StringType())),
+                )
+            )
 
-        sc = SparkContext._active_spark_context
-        assert sc is not None and sc._gateway is not None
-        java_class = sc._gateway.jvm.java.lang.String
-        jlabels = StringIndexerModel._new_java_array(labels, java_class)
-        model = StringIndexerModel._create_from_java_class(
-            "org.apache.spark.ml.feature.StringIndexerModel", jlabels
-        )
+        else:
+            from pyspark.core.context import SparkContext
+
+            sc = SparkContext._active_spark_context
+            assert sc is not None and sc._gateway is not None
+            java_class = getattr(sc._gateway.jvm, "java.lang.String")
+            jlabels = StringIndexerModel._new_java_array(labels, java_class)
+            model = StringIndexerModel._create_from_java_class(
+                "org.apache.spark.ml.feature.StringIndexerModel", jlabels
+            )
+
         model.setInputCol(inputCol)
         if outputCol is not None:
             model.setOutputCol(outputCol)
@@ -4822,15 +4885,29 @@ class StringIndexerModel(
         Construct the model directly from an array of array of label strings,
         requires an active SparkContext.
         """
-        from pyspark.core.context import SparkContext
+        if is_remote():
+            model = StringIndexerModel()
+            model._java_obj = RemoteModelRef(
+                invoke_helper_attr(
+                    "stringIndexerModelFromLabelsArray",
+                    model.uid,
+                    (
+                        [list(labels) for labels in arrayOfLabels],
+                        ArrayType(ArrayType(StringType())),
+                    ),
+                )
+            )
 
-        sc = SparkContext._active_spark_context
-        assert sc is not None and sc._gateway is not None
-        java_class = sc._gateway.jvm.java.lang.String
-        jlabels = StringIndexerModel._new_java_array(arrayOfLabels, java_class)
-        model = StringIndexerModel._create_from_java_class(
-            "org.apache.spark.ml.feature.StringIndexerModel", jlabels
-        )
+        else:
+            from pyspark.core.context import SparkContext
+
+            sc = SparkContext._active_spark_context
+            assert sc is not None and sc._gateway is not None
+            java_class = getattr(sc._gateway.jvm, "java.lang.String")
+            jlabels = StringIndexerModel._new_java_array(arrayOfLabels, java_class)
+            model = StringIndexerModel._create_from_java_class(
+                "org.apache.spark.ml.feature.StringIndexerModel", jlabels
+            )
         model.setInputCols(inputCols)
         if outputCols is not None:
             model.setOutputCols(outputCols)
@@ -4851,12 +4928,12 @@ class StringIndexerModel(
 
     @property
     @since("3.0.2")
-    def labelsArray(self) -> List[str]:
+    def labelsArray(self) -> List[List[str]]:
         """
         Array of ordered list of labels, corresponding to indices to be assigned
         for each input column.
         """
-        return self._call_java("labelsArray")
+        return [list(labels) for labels in self._call_java("labelsArray")]
 
 
 @inherit_doc
@@ -4901,7 +4978,7 @@ class IndexToString(
         """
         __init__(self, \\*, inputCol=None, outputCol=None, labels=None)
         """
-        super(IndexToString, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.IndexToString", self.uid)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -4968,7 +5045,7 @@ class StopWordsRemover(
 
     Notes
     -----
-    null values from input array are preserved unless adding null to stopWords explicitly.
+    - null values from input array are preserved unless adding null to stopWords explicitly.
 
     Examples
     --------
@@ -5063,15 +5140,17 @@ class StopWordsRemover(
         __init__(self, \\*, inputCol=None, outputCol=None, stopWords=None, caseSensitive=false, \
                  locale=None, inputCols=None, outputCols=None)
         """
-        super(StopWordsRemover, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.feature.StopWordsRemover", self.uid
         )
-        self._setDefault(
-            stopWords=StopWordsRemover.loadDefaultStopWords("english"),
-            caseSensitive=False,
-            locale=self._java_obj.getLocale(),
-        )
+        if is_remote():
+            locale = invoke_helper_attr("stopWordsRemoverGetDefaultOrUS")
+        else:
+            locale = self._java_obj.getLocale()
+
+        stopWords = StopWordsRemover.loadDefaultStopWords("english")
+        self._setDefault(stopWords=stopWords, caseSensitive=False, locale=locale)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -5196,8 +5275,303 @@ class StopWordsRemover(
         Supported languages: danish, dutch, english, finnish, french, german, hungarian,
         italian, norwegian, portuguese, russian, spanish, swedish, turkish
         """
-        stopWordsObj = _jvm().org.apache.spark.ml.feature.StopWordsRemover
-        return list(stopWordsObj.loadDefaultStopWords(language))
+        if is_remote():
+            stopWords = invoke_helper_attr("stopWordsRemoverLoadDefaultStopWords", language)
+            return list(stopWords)
+
+        else:
+            stopWordsObj = getattr(_jvm(), "org.apache.spark.ml.feature.StopWordsRemover")
+            return list(stopWordsObj.loadDefaultStopWords(language))
+
+
+class _TargetEncoderParams(
+    HasLabelCol, HasInputCol, HasInputCols, HasOutputCol, HasOutputCols, HasHandleInvalid
+):
+    """
+    Params for :py:class:`TargetEncoder` and :py:class:`TargetEncoderModel`.
+
+    .. versionadded:: 4.0.0
+    """
+
+    handleInvalid: Param[str] = Param(
+        Params._dummy(),
+        "handleInvalid",
+        "How to handle invalid data during transform(). "
+        + "Options are 'keep' (invalid data presented as an extra "
+        + "categorical feature) or error (throw an error).",
+        typeConverter=TypeConverters.toString,
+    )
+
+    targetType: Param[str] = Param(
+        Params._dummy(),
+        "targetType",
+        "whether the label is 'binary' or 'continuous'",
+        typeConverter=TypeConverters.toString,
+    )
+
+    smoothing: Param[float] = Param(
+        Params._dummy(),
+        "smoothing",
+        "value to smooth in-category averages with overall averages.",
+        typeConverter=TypeConverters.toFloat,
+    )
+
+    def __init__(self, *args: Any):
+        super().__init__(*args)
+        self._setDefault(handleInvalid="error", targetType="binary", smoothing=0.0)
+
+    @since("4.0.0")
+    def getTargetType(self) -> str:
+        """
+        Gets the value of targetType or its default value.
+        """
+        return self.getOrDefault(self.targetType)
+
+    @since("4.0.0")
+    def getSmoothing(self) -> float:
+        """
+        Gets the value of smoothing or its default value.
+        """
+        return self.getOrDefault(self.smoothing)
+
+
+@inherit_doc
+class TargetEncoder(
+    JavaEstimator["TargetEncoderModel"],
+    _TargetEncoderParams,
+    JavaMLReadable["TargetEncoder"],
+    JavaMLWritable,
+):
+    """
+    Target Encoding maps a column of categorical indices into a numerical feature derived
+    from the target.
+
+    When :py:attr:`handleInvalid` is configured to 'keep', previously unseen values of
+    a feature are mapped to the dataset overall statistics.
+
+    When :py:attr:'targetType' is configured to 'binary', categories are encoded as the
+    conditional probability of the target given that category (bin counting).
+    When :py:attr:'targetType' is configured to 'continuous', categories are encoded as
+    the average of the target given that category (mean encoding)
+
+    Parameter :py:attr:'smoothing' controls how in-category stats and overall stats are
+    weighted to build the encodings
+
+    @note When encoding multi-column by using `inputCols` and `outputCols` params,
+    input/output cols come in pairs, specified by the order in the arrays, and each pair
+    is treated independently.
+
+    .. versionadded:: 4.0.0
+    """
+
+    _input_kwargs: Dict[str, Any]
+
+    @overload
+    def __init__(
+        self,
+        *,
+        inputCols: Optional[List[str]] = ...,
+        outputCols: Optional[List[str]] = ...,
+        labelCol: str = ...,
+        handleInvalid: str = ...,
+        targetType: str = ...,
+        smoothing: float = ...,
+    ):
+        ...
+
+    @overload
+    def __init__(
+        self,
+        *,
+        labelCol: str = ...,
+        handleInvalid: str = ...,
+        targetType: str = ...,
+        smoothing: float = ...,
+        inputCol: Optional[str] = ...,
+        outputCol: Optional[str] = ...,
+    ):
+        ...
+
+    @keyword_only
+    def __init__(
+        self,
+        *,
+        inputCols: Optional[List[str]] = None,
+        outputCols: Optional[List[str]] = None,
+        labelCol: str = "label",
+        handleInvalid: str = "error",
+        targetType: str = "binary",
+        smoothing: float = 0.0,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+    ):
+        """
+        __init__(self, \\*, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True, \
+                 targetType="binary", smoothing=0.0, inputCol=None, outputCol=None)
+        """
+        super().__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.TargetEncoder", self.uid)
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @overload
+    def setParams(
+        self,
+        *,
+        inputCols: Optional[List[str]] = ...,
+        outputCols: Optional[List[str]] = ...,
+        labelCol: str = ...,
+        handleInvalid: str = ...,
+        targetType: str = ...,
+        smoothing: float = ...,
+    ) -> "TargetEncoder":
+        ...
+
+    @overload
+    def setParams(
+        self,
+        *,
+        labelCol: str = ...,
+        handleInvalid: str = ...,
+        targetType: str = ...,
+        smoothing: float = ...,
+        inputCol: Optional[str] = ...,
+        outputCol: Optional[str] = ...,
+    ) -> "TargetEncoder":
+        ...
+
+    @keyword_only
+    @since("4.0.0")
+    def setParams(
+        self,
+        *,
+        inputCols: Optional[List[str]] = None,
+        outputCols: Optional[List[str]] = None,
+        labelCol: str = "label",
+        handleInvalid: str = "error",
+        targetType: str = "binary",
+        smoothing: float = 0.0,
+        inputCol: Optional[str] = None,
+        outputCol: Optional[str] = None,
+    ) -> "TargetEncoder":
+        """
+        setParams(self, \\*, inputCols=None, outputCols=None, handleInvalid="error", \
+                  dropLast=True, inputCol=None, outputCol=None)
+        Sets params for this TargetEncoder.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    @since("4.0.0")
+    def setLabelCol(self, value: str) -> "TargetEncoder":
+        """
+        Sets the value of :py:attr:`labelCol`.
+        """
+        return self._set(labelCol=value)
+
+    @since("4.0.0")
+    def setInputCols(self, value: List[str]) -> "TargetEncoder":
+        """
+        Sets the value of :py:attr:`inputCols`.
+        """
+        return self._set(inputCols=value)
+
+    @since("4.0.0")
+    def setOutputCols(self, value: List[str]) -> "TargetEncoder":
+        """
+        Sets the value of :py:attr:`outputCols`.
+        """
+        return self._set(outputCols=value)
+
+    @since("4.0.0")
+    def setInputCol(self, value: str) -> "TargetEncoder":
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("4.0.0")
+    def setOutputCol(self, value: str) -> "TargetEncoder":
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    @since("4.0.0")
+    def setHandleInvalid(self, value: str) -> "TargetEncoder":
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
+
+    @since("4.0.0")
+    def setTargetType(self, value: str) -> "TargetEncoder":
+        """
+        Sets the value of :py:attr:`targetType`.
+        """
+        return self._set(targetType=value)
+
+    @since("4.0.0")
+    def setSmoothing(self, value: float) -> "TargetEncoder":
+        """
+        Sets the value of :py:attr:`smoothing`.
+        """
+        return self._set(smoothing=value)
+
+    def _create_model(self, java_model: "JavaObject") -> "TargetEncoderModel":
+        return TargetEncoderModel(java_model)
+
+
+class TargetEncoderModel(
+    JavaModel, _TargetEncoderParams, JavaMLReadable["TargetEncoderModel"], JavaMLWritable
+):
+    """
+    Model fitted by :py:class:`TargetEncoder`.
+
+    .. versionadded:: 4.0.0
+    """
+
+    @since("4.0.0")
+    def setInputCols(self, value: List[str]) -> "TargetEncoderModel":
+        """
+        Sets the value of :py:attr:`inputCols`.
+        """
+        return self._set(inputCols=value)
+
+    @since("4.0.0")
+    def setOutputCols(self, value: List[str]) -> "TargetEncoderModel":
+        """
+        Sets the value of :py:attr:`outputCols`.
+        """
+        return self._set(outputCols=value)
+
+    @since("4.0.0")
+    def setInputCol(self, value: str) -> "TargetEncoderModel":
+        """
+        Sets the value of :py:attr:`inputCol`.
+        """
+        return self._set(inputCol=value)
+
+    @since("4.0.0")
+    def setOutputCol(self, value: str) -> "TargetEncoderModel":
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    @since("4.0.0")
+    def setHandleInvalid(self, value: str) -> "TargetEncoderModel":
+        """
+        Sets the value of :py:attr:`handleInvalid`.
+        """
+        return self._set(handleInvalid=value)
+
+    @since("4.0.0")
+    def setSmoothing(self, value: float) -> "TargetEncoderModel":
+        """
+        Sets the value of :py:attr:`smoothing`.
+        """
+        return self._set(smoothing=value)
 
 
 @inherit_doc
@@ -5249,7 +5623,7 @@ class Tokenizer(
         """
         __init__(self, \\*, inputCol=None, outputCol=None)
         """
-        super(Tokenizer, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Tokenizer", self.uid)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -5360,7 +5734,7 @@ class VectorAssembler(
         """
         __init__(self, \\*, inputCols=None, outputCol=None, handleInvalid="error")
         """
-        super(VectorAssembler, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.VectorAssembler", self.uid)
         self._setDefault(handleInvalid="error")
         kwargs = self._input_kwargs
@@ -5429,7 +5803,7 @@ class _VectorIndexerParams(HasInputCol, HasOutputCol, HasHandleInvalid):
     )
 
     def __init__(self, *args: Any):
-        super(_VectorIndexerParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(maxCategories=20, handleInvalid="error")
 
     @since("1.4.0")
@@ -5549,7 +5923,7 @@ class VectorIndexer(
         """
         __init__(self, \\*, maxCategories=20, inputCol=None, outputCol=None, handleInvalid="error")
         """
-        super(VectorIndexer, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.VectorIndexer", self.uid)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -5643,13 +6017,26 @@ class VectorIndexerModel(
 
     @property
     @since("1.4.0")
-    def categoryMaps(self) -> Dict[int, Tuple[float, int]]:
+    def categoryMaps(self) -> Dict[int, Dict[float, int]]:
         """
         Feature value index.  Keys are categorical feature indices (column indices).
         Values are maps from original features values to 0-based category indices.
         If a feature is not in this map, it is treated as continuous.
         """
-        return self._call_java("javaCategoryMaps")
+
+        @try_remote_attribute_relation
+        def categoryMapsDF(m: VectorIndexerModel) -> DataFrame:
+            return m._call_java("categoryMapsDF")
+
+        res: Dict[int, Dict[float, int]] = {}
+        for row in categoryMapsDF(self).collect():
+            featureIndex = int(row.featureIndex)
+            originalValue = float(row.originalValue)
+            categoryIndex = int(row.categoryIndex)
+            if featureIndex not in res:
+                res[featureIndex] = {}
+            res[featureIndex][originalValue] = categoryIndex
+        return res
 
 
 @inherit_doc
@@ -5727,7 +6114,7 @@ class VectorSlicer(
         """
         __init__(self, \\*, inputCol=None, outputCol=None, indices=None, names=None)
         """
-        super(VectorSlicer, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.VectorSlicer", self.uid)
         self._setDefault(indices=[], names=[])
         kwargs = self._input_kwargs
@@ -5833,7 +6220,7 @@ class _Word2VecParams(HasStepSize, HasMaxIter, HasSeed, HasInputCol, HasOutputCo
     )
 
     def __init__(self, *args: Any):
-        super(_Word2VecParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(
             vectorSize=100,
             minCount=5,
@@ -5972,7 +6359,7 @@ class Word2Vec(
                  maxIter=1, seed=None, inputCol=None, outputCol=None, windowSize=5, \
                  maxSentenceLength=1000)
         """
-        super(Word2Vec, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Word2Vec", self.uid)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -6080,6 +6467,7 @@ class Word2VecModel(JavaModel, _Word2VecParams, JavaMLReadable["Word2VecModel"],
     """
 
     @since("1.5.0")
+    @try_remote_attribute_relation
     def getVectors(self) -> DataFrame:
         """
         Returns the vector representation of the words as a dataframe
@@ -6100,6 +6488,7 @@ class Word2VecModel(JavaModel, _Word2VecParams, JavaMLReadable["Word2VecModel"],
         return self._set(outputCol=value)
 
     @since("1.5.0")
+    @try_remote_attribute_relation
     def findSynonyms(self, word: Union[str, Vector], num: int) -> DataFrame:
         """
         Find "num" number of words closest in similarity to "word".
@@ -6119,11 +6508,10 @@ class Word2VecModel(JavaModel, _Word2VecParams, JavaMLReadable["Word2VecModel"],
         Returns an array with two fields word and similarity (which
         gives the cosine similarity).
         """
-        if not isinstance(word, str):
-            word = _convert_to_vector(word)
-        assert self._java_obj is not None
-        tuples = self._java_obj.findSynonymsArray(word, num)
-        return list(map(lambda st: (st._1(), st._2()), list(tuples)))
+        res = []
+        for row in self.findSynonyms(word, num).collect():
+            res.append((str(row.word), float(row.similarity)))
+        return res
 
 
 class _PCAParams(HasInputCol, HasOutputCol):
@@ -6204,7 +6592,7 @@ class PCA(JavaEstimator["PCAModel"], _PCAParams, JavaMLReadable["PCA"], JavaMLWr
         """
         __init__(self, \\*, k=None, inputCol=None, outputCol=None)
         """
-        super(PCA, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.PCA", self.uid)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -6329,7 +6717,7 @@ class _RFormulaParams(HasFeaturesCol, HasLabelCol, HasHandleInvalid):
     )
 
     def __init__(self, *args: Any):
-        super(_RFormulaParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(
             forceIndexLabel=False, stringIndexerOrderType="frequencyDesc", handleInvalid="error"
         )
@@ -6453,7 +6841,7 @@ class RFormula(
                  forceIndexLabel=False, stringIndexerOrderType="frequencyDesc", \
                  handleInvalid="error")
         """
-        super(RFormula, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RFormula", self.uid)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -6535,7 +6923,7 @@ class RFormulaModel(JavaModel, _RFormulaParams, JavaMLReadable["RFormulaModel"],
     """
 
     def __str__(self) -> str:
-        resolvedFormula = self._call_java("resolvedFormula")
+        resolvedFormula = self._call_java("resolvedFormulaString")
         return "RFormulaModel(%s) (uid=%s)" % (resolvedFormula, self.uid)
 
 
@@ -6592,7 +6980,7 @@ class _SelectorParams(HasFeaturesCol, HasOutputCol, HasLabelCol):
     )
 
     def __init__(self, *args: Any):
-        super(_SelectorParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(
             numTopFeatures=50,
             selectorType="numTopFeatures",
@@ -6832,7 +7220,7 @@ class ChiSqSelector(
                  labelCol="label", selectorType="numTopFeatures", percentile=0.1, fpr=0.05, \
                  fdr=0.05, fwe=0.05)
         """
-        super(ChiSqSelector, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.ChiSqSelector", self.uid)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -6943,7 +7331,7 @@ class VectorSizeHint(
         """
         __init__(self, \\*, inputCol=None, size=None, handleInvalid="error")
         """
-        super(VectorSizeHint, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.VectorSizeHint", self.uid)
         self._setDefault(handleInvalid="error")
         self.setParams(**self._input_kwargs)
@@ -7075,7 +7463,7 @@ class VarianceThresholdSelector(
         """
         __init__(self, \\*, featuresCol="features", outputCol=None, varianceThreshold=0.0)
         """
-        super(VarianceThresholdSelector, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.feature.VarianceThresholdSelector", self.uid
         )
@@ -7198,7 +7586,7 @@ class _UnivariateFeatureSelectorParams(HasFeaturesCol, HasOutputCol, HasLabelCol
     )
 
     def __init__(self, *args: Any):
-        super(_UnivariateFeatureSelectorParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(selectionMode="numTopFeatures")
 
     @since("3.1.1")
@@ -7324,7 +7712,7 @@ class UnivariateFeatureSelector(
         __init__(self, \\*, featuresCol="features", outputCol=None, \
                  labelCol="label", selectionMode="numTopFeatures")
         """
-        super(UnivariateFeatureSelector, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.feature.UnivariateFeatureSelector", self.uid
         )

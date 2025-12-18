@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.ExpressionUtils.column
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -560,7 +559,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       sqlState = "42601",
       parameters = Map(
         "error" -> "'InvalidType'",
-        "hint" -> ": extra input 'InvalidType'"
+        "hint" -> ""
       ),
       context = ExpectedContext(
         fragment = "from_json(value, 'time InvalidType')",
@@ -861,12 +860,10 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           df.select(from_json($"value", schema, Map("mode" -> "DROPMALFORMED"))).collect()
         },
-        condition = "_LEGACY_ERROR_TEMP_1099",
+        condition = "PARSE_MODE_UNSUPPORTED",
         parameters = Map(
-          "funcName" -> "from_json",
-          "mode" -> "DROPMALFORMED",
-          "permissiveMode" -> "PERMISSIVE",
-          "failFastMode" -> "FAILFAST"))
+          "funcName" -> "`from_json`",
+          "mode" -> "DROPMALFORMED"))
     }
   }
 
@@ -1396,7 +1393,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     val df = Seq(1).toDF("a")
     val schema = StructType(StructField("b", ObjectType(classOf[java.lang.Integer])) :: Nil)
     val row = InternalRow.fromSeq(Seq(Integer.valueOf(1)))
-    val structData = column(Literal.create(row, schema))
+    val structData = Column(Literal.create(row, schema))
     checkError(
       exception = intercept[AnalysisException] {
         df.select($"a").withColumn("c", to_json(structData)).collect()
@@ -1457,5 +1454,111 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     val plan = df.queryExecution.executedPlan
     assert(plan.isInstanceOf[WholeStageCodegenExec])
     checkAnswer(df, Row(null))
+  }
+
+  test("function json_tuple - field names foldable") {
+    withTempView("t") {
+      val json = """{"a":1, "b":2, "c":3}"""
+      val df = Seq((json, "a", "b", "c")).toDF("json", "c1", "c2", "c3")
+      df.createOrReplaceTempView("t")
+
+      // Json and all field names are foldable.
+      val df1 = sql(s"SELECT json_tuple('$json', 'a', 'b', 'c') from t")
+      checkAnswer(df1, Row("1", "2", "3"))
+
+      // All field names are foldable.
+      val df2 = sql("SELECT json_tuple(json, 'a', 'b', 'c') from t")
+      checkAnswer(df2, Row("1", "2", "3"))
+
+      // The field names some foldable, some non-foldable.
+      val df3 = sql("SELECT json_tuple(json, 'a', c2, 'c') from t")
+      checkAnswer(df3, Row("1", "2", "3"))
+
+      // All field names are non-foldable.
+      val df4 = sql("SELECT json_tuple(json, c1, c2, c3) from t")
+      checkAnswer(df4, Row("1", "2", "3"))
+    }
+  }
+
+  test("from_json/to_json with TIME type - all precisions") {
+    import java.time.LocalTime
+    // Test data: (precision, LocalTime, expected JSON string)
+    val testData = Seq(
+      (0, LocalTime.of(14, 30, 45), "14:30:45"),
+      (1, LocalTime.of(14, 30, 45, 100000000), "14:30:45.1"),
+      (2, LocalTime.of(14, 30, 45, 120000000), "14:30:45.12"),
+      (3, LocalTime.of(14, 30, 45, 123000000), "14:30:45.123"),
+      (4, LocalTime.of(14, 30, 45, 123400000), "14:30:45.1234"),
+      (5, LocalTime.of(14, 30, 45, 123450000), "14:30:45.12345"),
+      (6, LocalTime.of(14, 30, 45, 123456000), "14:30:45.123456")
+    )
+
+    testData.foreach { case (precision, time, timeStr) =>
+      val schema = new StructType().add("time", TimeType(precision))
+
+      // Test from_json
+      val parseResult = Seq(s"""{"time": "$timeStr"}""").toDS()
+        .select(from_json($"value", schema)).collect().head.getAs[Row](0).getAs[LocalTime](0)
+      assert(parseResult == time, s"from_json failed for precision $precision")
+
+      // Test to_json
+      val jsonResult = Seq(time).toDF("time")
+        .select(to_json(struct($"time"))).collect().head.getString(0)
+      assert(jsonResult == s"""{"time":"$timeStr"}""", s"to_json failed for precision $precision")
+
+      // Test roundtrip
+      val roundtrip = Seq(time).toDF("time")
+        .select(to_json(struct($"time")).as("json"))
+        .select(from_json($"json", schema).as("struct"))
+        .select($"struct.time").collect().head.getAs[LocalTime](0)
+      assert(roundtrip == time, s"Roundtrip failed for precision $precision")
+    }
+
+    // Test custom format
+    val schema = new StructType().add("time", TimeType(6))
+    val customTime = LocalTime.of(14, 30, 45, 123456000)
+    val customFormat = Map("timeFormat" -> "HH-mm-ss.SSSSSS")
+
+    checkAnswer(
+      Seq("""{"time": "14-30-45.123456"}""").toDS()
+        .select(from_json($"value", schema, customFormat).as("data"))
+        .select($"data.time"),
+      Row(customTime) :: Nil)
+
+    checkAnswer(
+      Seq(customTime).toDF("time").select(to_json(struct($"time"), customFormat)),
+      Row("""{"time":"14-30-45.123456"}""") :: Nil)
+  }
+
+  test("TIME type with arrays and nulls") {
+    import java.time.LocalTime
+
+    // Test array support
+    val times = Seq(LocalTime.of(9, 0, 0), LocalTime.of(17, 45, 30))
+    val schema = new StructType().add("times", ArrayType(TimeType()))
+    val jsonStr = """{"times":["09:00:00","17:45:30"]}"""
+
+    // to_json
+    checkAnswer(
+      Seq(times).toDF("times").select(to_json(struct($"times"))),
+      Row(jsonStr) :: Nil)
+
+    // from_json
+    val parsed = Seq(jsonStr).toDS()
+      .select(from_json($"value", schema).as("data"))
+      .select($"data.times").collect().head.getSeq[LocalTime](0)
+    assert(parsed == times)
+
+    // Test null handling
+    checkAnswer(
+      Seq("""{"time": null}""").toDS()
+        .select(from_json($"value", new StructType().add("time", TimeType())).as("data"))
+        .select($"data.time"),
+      Row(null) :: Nil)
+
+    // Verify schema inference treats TIME strings as STRING (like TIMESTAMP)
+    val inferredSchema = spark.sql("SELECT schema_of_json('{\"time\": \"14:30:45\"}')")
+      .collect().head.getString(0)
+    assert(inferredSchema.contains("STRING"))
   }
 }

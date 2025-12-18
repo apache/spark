@@ -23,7 +23,7 @@ import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.ml.param.{IntParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasHandleInvalid, HasInputCol}
-import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable}
+import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StringType, StructType}
@@ -98,7 +98,9 @@ class VectorSizeHint @Since("2.3.0") (@Since("2.3.0") override val uid: String)
     val localSize = getSize
     val localHandleInvalid = getHandleInvalid
 
-    val group = AttributeGroup.fromStructField(dataset.schema(localInputCol))
+    val group = AttributeGroup.fromStructField(
+      SchemaUtils.getSchemaField(dataset.schema, localInputCol)
+    )
     val newGroup = validateSchemaAndSize(dataset.schema, group)
     if (localHandleInvalid == VectorSizeHint.OPTIMISTIC_INVALID && group.size == localSize) {
       dataset.toDF()
@@ -139,7 +141,7 @@ class VectorSizeHint @Since("2.3.0") (@Since("2.3.0") override val uid: String)
     val localSize = getSize
     val localInputCol = getInputCol
 
-    val inputColType = schema(getInputCol).dataType
+    val inputColType = SchemaUtils.getSchemaFieldType(schema, getInputCol)
     require(
       inputColType.isInstanceOf[VectorUDT],
       s"Input column, $getInputCol must be of Vector type, got $inputColType"

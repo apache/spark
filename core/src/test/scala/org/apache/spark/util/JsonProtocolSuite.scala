@@ -348,6 +348,18 @@ class JsonProtocolSuite extends SparkFunSuite {
     assert(newMetrics.shuffleWriteMetrics.recordsWritten == 0)
   }
 
+  test("SPARK-43100: Push Based Shuffle metrics should be read correctly") {
+    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, 0,
+      hasHadoopInput = false, hasOutput = true, hasRecords = false)
+    val expectedTaskMetricsJson =
+      JsonProtocol.toJsonString(JsonProtocol.taskMetricsToJson(metrics, _))
+    val foundTaskMetrics = JsonProtocol.taskMetricsFromJson(parse(expectedTaskMetricsJson))
+    val foundTaskMetricsJson = JsonProtocol.toJsonString(
+      JsonProtocol.taskMetricsToJson(foundTaskMetrics, _))
+    assert(expectedTaskMetricsJson.equals(foundTaskMetricsJson),
+      s"Expected: $expectedTaskMetricsJson, Found: $foundTaskMetricsJson")
+  }
+
   test("OutputMetrics backward compatibility") {
     // OutputMetrics were added after 1.1
     val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, 0, hasHadoopInput = false, hasOutput = true)
@@ -995,6 +1007,36 @@ class JsonProtocolSuite extends SparkFunSuite {
     // stages that have completed even before the job start event is emitted.
     testEvent(jobStart, sparkEventToJsonString(jobStart))
   }
+
+  test("SPARK-52381: handle class not found") {
+    val unknownJson =
+      """{
+        |  "Event" : "com.example.UnknownEvent",
+        |  "foo" : "foo"
+        |}""".stripMargin
+    try {
+      JsonProtocol.sparkEventFromJson(unknownJson)
+      fail("Expected ClassNotFoundException for unknown event type")
+    } catch {
+      case e: ClassNotFoundException =>
+    }
+  }
+
+  test("SPARK-52381: only read classes that extend SparkListenerEvent") {
+    val unknownJson =
+      """{
+        |  "Event" : "org.apache.spark.SparkException",
+        |  "foo" : "foo"
+        |}""".stripMargin
+    try {
+      JsonProtocol.sparkEventFromJson(unknownJson)
+      fail("Expected SparkException for unknown event type")
+    } catch {
+      case e: SparkException =>
+        assert(e.getMessage.startsWith("Unknown event type"))
+    }
+  }
+
 }
 
 
@@ -1166,7 +1208,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
             assert(taskId1 === taskId2)
             assert(stageId1 === stageId2)
             assert(stageAttemptId1 === stageAttemptId2)
-            assertSeqEquals[AccumulableInfo](updates1, updates2, (a, b) => a.equals(b))
+            val filteredUpdates = updates1
+              .filterNot { acc => acc.name.exists(accumulableExcludeList.contains) }
+            assertSeqEquals[AccumulableInfo](filteredUpdates, updates2, (a, b) => a.equals(b))
           })
         assertSeqEquals[((Int, Int), ExecutorMetrics)](
           e1.executorUpdates.toSeq.sortBy(_._1),
@@ -1299,7 +1343,9 @@ private[spark] object JsonProtocolSuite extends Assertions {
         assert(r1.description === r2.description)
         assertSeqEquals(r1.stackTrace, r2.stackTrace, assertStackTraceElementEquals)
         assert(r1.fullStackTrace === r2.fullStackTrace)
-        assertSeqEquals[AccumulableInfo](r1.accumUpdates, r2.accumUpdates, (a, b) => a.equals(b))
+        val filteredUpdates = r1.accumUpdates
+          .filterNot { acc => acc.name.exists(accumulableExcludeList.contains) }
+        assertSeqEquals[AccumulableInfo](filteredUpdates, r2.accumUpdates, (a, b) => a.equals(b))
       case (TaskResultLost, TaskResultLost) =>
       case (r1: TaskKilled, r2: TaskKilled) =>
         assert(r1.reason == r2.reason)
@@ -1325,7 +1371,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       case ((key1, values1: scala.collection.Seq[(String, String)]),
         (key2, values2: scala.collection.Seq[(String, String)])) =>
         assert(key1 === key2)
-        values1.zip(values2).foreach { case (v1, v2) => assert(v1 === v2) }
+        assert(values1.toMap == values2.toMap)
     }
   }
 
@@ -1370,18 +1416,6 @@ private[spark] object JsonProtocolSuite extends Assertions {
     }
   }
 
-  private def assertOptionEquals[T](
-      opt1: Option[T],
-      opt2: Option[T],
-      assertEquals: (T, T) => Unit): Unit = {
-    if (opt1.isDefined) {
-      assert(opt2.isDefined)
-      assertEquals(opt1.get, opt2.get)
-    } else {
-      assert(opt2.isEmpty)
-    }
-  }
-
   /**
    * Use different names for methods we pass in to assertSeqEquals or assertOptionEquals
    */
@@ -1405,10 +1439,6 @@ private[spark] object JsonProtocolSuite extends Assertions {
     assert(ste1.getMethodName === ste2.getMethodName)
     assert(ste1.getLineNumber === ste2.getLineNumber)
     assert(ste1.getFileName === ste2.getFileName)
-  }
-
-  private def assertEquals(rp1: ResourceProfile, rp2: ResourceProfile): Unit = {
-    assert(rp1 === rp2)
   }
 
   /** ----------------------------------- *
@@ -2786,28 +2816,6 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "ID": 11,
       |          "Name": "$PEAK_OFF_HEAP_EXECUTION_MEMORY",
       |          "Update": 500,
-      |          "Internal": true,
-      |          "Count Failed Values": true
-      |        },
-      |        {
-      |          "ID": 12,
-      |          "Name": "$UPDATED_BLOCK_STATUSES",
-      |          "Update": [
-      |            {
-      |              "Block ID": "rdd_0_0",
-      |              "Status": {
-      |                "Storage Level": {
-      |                  "Use Disk": true,
-      |                  "Use Memory": true,
-      |                  "Use Off Heap": false,
-      |                  "Deserialized": false,
-      |                  "Replication": 2
-      |                },
-      |                "Memory Size": 0,
-      |                "Disk Size": 0
-      |              }
-      |            }
-      |          ],
       |          "Internal": true,
       |          "Count Failed Values": true
       |        },

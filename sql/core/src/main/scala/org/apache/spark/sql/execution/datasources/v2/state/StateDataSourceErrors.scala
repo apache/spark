@@ -81,6 +81,18 @@ object StateDataSourceErrors {
       sourceOptions: StateSourceOptions): StateDataSourceException = {
     new StateDataSourceNoPartitionDiscoveredInStateStore(sourceOptions)
   }
+
+  def mixedCheckpointFormatVersionsNotSupported(
+      startBatchId: Long,
+      endBatchId: Long,
+      startFormatVersion: Int,
+      endFormatVersion: Int): StateDataSourceException = {
+    new StateDataSourceMixedCheckpointFormatVersionsNotSupported(
+      startBatchId,
+      endBatchId,
+      startFormatVersion,
+      endFormatVersion)
+  }
 }
 
 abstract class StateDataSourceException(
@@ -171,4 +183,19 @@ class StateDataSourceReadOperatorMetadataFailure(
   extends StateDataSourceException(
     "STDS_FAILED_TO_READ_OPERATOR_METADATA",
     Map("checkpointLocation" -> checkpointLocation, "batchId" -> batchId.toString),
+    cause = null)
+
+class StateDataSourceMixedCheckpointFormatVersionsNotSupported(
+    startBatchId: Long,
+    endBatchId: Long,
+    startFormatVersion: Int,
+    endFormatVersion: Int)
+  extends StateDataSourceException(
+    "STDS_MIXED_CHECKPOINT_FORMAT_VERSIONS_NOT_SUPPORTED",
+    Map(
+      "startBatchId" -> startBatchId.toString,
+      "endBatchId" -> endBatchId.toString,
+      "startFormatVersion" -> startFormatVersion.toString,
+      "endFormatVersion" -> endFormatVersion.toString
+    ),
     cause = null)

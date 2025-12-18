@@ -22,7 +22,6 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.BiFunction;
-import java.util.function.ToLongFunction;
 import java.util.stream.Stream;
 
 import com.ibm.icu.text.CollationKey;
@@ -32,8 +31,11 @@ import com.ibm.icu.text.StringSearch;
 import com.ibm.icu.util.ULocale;
 import com.ibm.icu.util.VersionInfo;
 
+import org.apache.spark.QueryContext;
 import org.apache.spark.SparkException;
+import org.apache.spark.SparkRuntimeException;
 import org.apache.spark.unsafe.types.UTF8String;
+import scala.collection.immutable.Map$;
 
 /**
  * Static entry point for collation aware string functions.
@@ -108,12 +110,13 @@ public final class CollationFactory {
   public static class Collation {
     public final String collationName;
     public final String provider;
-    public final Collator collator;
+    private final Collator collator;
     public final Comparator<UTF8String> comparator;
 
     /**
      * Version of the collation. This is the version of the ICU library Collator.
-     * For non-ICU collations (e.g. UTF8 Binary) the version is set to "1.0".
+     * For UTF8 Binary the version is set to "1.0". For ICU collations and UTF8_LCASE
+     * (because it uses ICU mappings) the version is set to the version of the ICU library.
      * When using ICU Collator this version is exposed through collator.getVersion().
      * Whenever the collation is updated, the version should be updated as well or kept
      * for backwards compatibility.
@@ -121,10 +124,19 @@ public final class CollationFactory {
     public final String version;
 
     /**
-     * Collation sensitive hash function. Output for two UTF8Strings will be the same if they are
-     * equal according to the collation.
+     * Returns the sort key of the input UTF8String. Two UTF8String values are equal iff their
+     * sort keys are equal (compared as byte arrays).
+     * The sort key is defined as follows for collations without the RTRIM modifier:
+     * - UTF8_BINARY: It is the bytes of the string.
+     * - UTF8_LCASE: It is byte array we get by replacing all invalid UTF8 sequences with the
+     *   Unicode replacement character and then converting all characters of the replaced string
+     *   with their lowercase equivalents (the Greek capital and Greek small sigma both map to
+     *   the Greek final sigma).
+     * - ICU collations: It is the byte array returned by the ICU library for the collated string.
+     *   For strings with the RTRIM modifier, we right-trim the string and return the collation key
+     *   of the resulting right-trimmed string.
      */
-    public final ToLongFunction<UTF8String> hashFunction;
+    public final Function<UTF8String, byte[]> sortKeyFunction;
 
     /**
      * Potentially faster way than using comparator to compare two UTF8Strings for equality.
@@ -154,38 +166,57 @@ public final class CollationFactory {
      */
     public final boolean supportsLowercaseEquality;
 
+    /**
+     * Support for Space Trimming implies that that based on specifier (for now only right trim)
+     * leading, trailing or both spaces are removed from the input string before comparison.
+     */
+    public final boolean supportsSpaceTrimming;
+
+    /**
+     * Is Utf8 binary type as indicator if collation base type is UTF8 binary. Note currently only
+     * collations Utf8_Binary and Utf8_Binary_RTRIM are considered as Utf8 binary type.
+     */
+    public final boolean isUtf8BinaryType;
+
+    /**
+     * Is Utf8 lcase type as indicator if collation base type is UTF8 lcase. Note currently only
+     * collations Utf8_Lcase and Utf8_Lcase_RTRIM are considered as Utf8 Lcase type.
+     */
+    public final boolean isUtf8LcaseType;
+
     public Collation(
         String collationName,
         String provider,
         Collator collator,
         Comparator<UTF8String> comparator,
         String version,
-        ToLongFunction<UTF8String> hashFunction,
-        boolean supportsBinaryEquality,
-        boolean supportsBinaryOrdering,
-        boolean supportsLowercaseEquality) {
+        Function<UTF8String, byte[]> sortKeyFunction,
+        BiFunction<UTF8String, UTF8String, Boolean> equalsFunction,
+        boolean isUtf8BinaryType,
+        boolean isUtf8LcaseType,
+        boolean supportsSpaceTrimming) {
       this.collationName = collationName;
       this.provider = provider;
       this.collator = collator;
       this.comparator = comparator;
       this.version = version;
-      this.hashFunction = hashFunction;
-      this.supportsBinaryEquality = supportsBinaryEquality;
-      this.supportsBinaryOrdering = supportsBinaryOrdering;
-      this.supportsLowercaseEquality = supportsLowercaseEquality;
-
-      // De Morgan's Law to check supportsBinaryOrdering => supportsBinaryEquality
-      assert(!supportsBinaryOrdering || supportsBinaryEquality);
+      this.sortKeyFunction = sortKeyFunction;
+      this.isUtf8BinaryType = isUtf8BinaryType;
+      this.isUtf8LcaseType = isUtf8LcaseType;
+      this.equalsFunction = equalsFunction;
+      this.supportsSpaceTrimming = supportsSpaceTrimming;
+      this.supportsBinaryEquality = !supportsSpaceTrimming && isUtf8BinaryType;
+      this.supportsBinaryOrdering = !supportsSpaceTrimming && isUtf8BinaryType;
+      this.supportsLowercaseEquality = !supportsSpaceTrimming && isUtf8LcaseType;
       // No Collation can simultaneously support binary equality and lowercase equality
       assert(!supportsBinaryEquality || !supportsLowercaseEquality);
 
-      assert(SUPPORTED_PROVIDERS.contains(provider));
+      // Null is a special provider for indeterminate collation.
+      assert(SUPPORTED_PROVIDERS.contains(provider) || provider.equals(PROVIDER_NULL));
+    }
 
-      if (supportsBinaryEquality) {
-        this.equalsFunction = UTF8String::equals;
-      } else {
-        this.equalsFunction = (s1, s2) -> this.comparator.compare(s1, s2) == 0;
-      }
+    public Collator getCollator() {
+      return collator;
     }
 
     /**
@@ -266,7 +297,7 @@ public final class CollationFactory {
        * collations.
        */
       protected enum ImplementationProvider {
-        UTF8_BINARY, ICU
+        UTF8_BINARY, ICU, INDETERMINATE
       }
 
       /**
@@ -310,6 +341,8 @@ public final class CollationFactory {
 
       private static final int INDETERMINATE_COLLATION_ID = -1;
 
+      private static final Collation INDETERMINATE_COLLATION = new IndeterminateCollation();
+
       /**
        * Thread-safe cache mapping collation IDs to corresponding `Collation` instances.
        * We add entries to this cache lazily as new `Collation` instances are requested.
@@ -319,7 +352,11 @@ public final class CollationFactory {
       /**
        * Utility function to retrieve `ImplementationProvider` enum instance from collation ID.
        */
-      private static ImplementationProvider getImplementationProvider(int collationId) {
+      protected static ImplementationProvider getImplementationProvider(int collationId) {
+        if (collationId == INDETERMINATE_COLLATION_ID) {
+          return ImplementationProvider.INDETERMINATE;
+        }
+
         return ImplementationProvider.values()[SpecifierUtils.getSpecValue(collationId,
           IMPLEMENTATION_PROVIDER_OFFSET, IMPLEMENTATION_PROVIDER_MASK)];
       }
@@ -345,6 +382,23 @@ public final class CollationFactory {
       }
 
       /**
+       * Returns if leading/trailing spaces should be ignored in trim string expressions. This is
+       * needed because space trimming collation directly changes behaviour of trim functions.
+       */
+      protected static boolean ignoresSpacesInTrimFunctions(
+          int collationId,
+          boolean isLTrim,
+          boolean isRTrim) {
+        if (isRTrim && getSpaceTrimming(collationId) == SpaceTrimming.RTRIM) {
+          return true;
+        }
+
+        // In case of adding new trimming collations in the future (LTRIM and TRIM) here logic
+        // should be added.
+        return false;
+      }
+
+      /**
        * Utility function to trim spaces when collation uses space trimming.
        */
       protected static UTF8String applyTrimmingPolicy(UTF8String s, SpaceTrimming spaceTrimming) {
@@ -358,16 +412,17 @@ public final class CollationFactory {
        * Main entry point for retrieving `Collation` instance from collation ID.
        */
       private static Collation fetchCollation(int collationId) {
-        // User-defined collations and INDETERMINATE collations cannot produce a `Collation`
-        // instance.
-        assert (collationId >= 0 && getDefinitionOrigin(collationId)
-          == DefinitionOrigin.PREDEFINED);
+        // User-defined collations cannot produce a `Collation` instance.
+        assert collationId == INDETERMINATE_COLLATION_ID ||
+          getDefinitionOrigin(collationId) == DefinitionOrigin.PREDEFINED;
         if (collationId == UTF8_BINARY_COLLATION_ID) {
           // Skip cache.
           return CollationSpecUTF8.UTF8_BINARY_COLLATION;
         } else if (collationMap.containsKey(collationId)) {
           // Already in cache.
           return collationMap.get(collationId);
+        } else if (collationId == INDETERMINATE_COLLATION_ID) {
+          return INDETERMINATE_COLLATION;
         } else {
           // Build `Collation` instance and put into cache.
           CollationSpec spec;
@@ -383,18 +438,6 @@ public final class CollationFactory {
         }
       }
 
-      /**
-       * Method for constructing errors thrown on providing invalid collation name.
-       */
-      protected static SparkException collationInvalidNameException(String collationName) {
-        Map<String, String> params = new HashMap<>();
-        final int maxSuggestions = 3;
-        params.put("collationName", collationName);
-        params.put("proposals", getClosestSuggestionsOnInvalidName(collationName, maxSuggestions));
-        return new SparkException("COLLATION_INVALID_NAME",
-          SparkException.constructMessageParams(params), null);
-      }
-
       private static int collationNameToId(String collationName) throws SparkException {
         // Collation names provided by user are treated as case-insensitive.
         String collationNameUpper = collationName.toUpperCase();
@@ -402,6 +445,15 @@ public final class CollationFactory {
           return CollationSpecUTF8.collationNameToId(collationName, collationNameUpper);
         } else {
           return CollationSpecICU.collationNameToId(collationName, collationNameUpper);
+        }
+      }
+
+      protected String getPadding() {
+        if (spaceTrimming == SpaceTrimming.RTRIM) {
+          return PAD_ATTRIBUTE_RTRIM;
+        } else {
+          assert spaceTrimming == SpaceTrimming.NONE;
+          return PAD_ATTRIBUTE_EMPTY;
         }
       }
 
@@ -425,6 +477,8 @@ public final class CollationFactory {
         }
         return collationSpecUTF8;
       }
+
+      protected SpaceTrimming spaceTrimming;
     }
 
     private static class CollationSpecUTF8 extends CollationSpec {
@@ -447,9 +501,6 @@ public final class CollationFactory {
        */
       private static final int CASE_SENSITIVITY_MASK = 0b1;
 
-      private static final String UTF8_BINARY_COLLATION_NAME = "UTF8_BINARY";
-      private static final String UTF8_LCASE_COLLATION_NAME = "UTF8_LCASE";
-
       private static final int UTF8_BINARY_COLLATION_ID =
         new CollationSpecUTF8(CaseSensitivity.UNSPECIFIED, SpaceTrimming.NONE).collationId;
       private static final int UTF8_LCASE_COLLATION_ID =
@@ -460,7 +511,6 @@ public final class CollationFactory {
         new CollationSpecUTF8(CaseSensitivity.LCASE, SpaceTrimming.NONE).buildCollation();
 
       private final CaseSensitivity caseSensitivity;
-      private final SpaceTrimming spaceTrimming;
       private final int collationId;
 
       private CollationSpecUTF8(
@@ -538,27 +588,61 @@ public final class CollationFactory {
       @Override
       protected Collation buildCollation() {
         if (caseSensitivity == CaseSensitivity.UNSPECIFIED) {
+          Comparator<UTF8String> comparator;
+          Function<UTF8String, byte[]> sortKeyFunction;
+          BiFunction<UTF8String, UTF8String, Boolean> equalsFunction;
+          boolean supportsSpaceTrimming = spaceTrimming != SpaceTrimming.NONE;
+
+          if (spaceTrimming == SpaceTrimming.NONE) {
+            comparator = UTF8String::binaryCompare;
+            sortKeyFunction = s -> s.getBytes();
+            equalsFunction = UTF8String::equals;
+          } else {
+            comparator = (s1, s2) -> applyTrimmingPolicy(s1, spaceTrimming).binaryCompare(
+              applyTrimmingPolicy(s2, spaceTrimming));
+            sortKeyFunction = s -> applyTrimmingPolicy(s, spaceTrimming).getBytes();
+            equalsFunction = (s1, s2) -> applyTrimmingPolicy(s1, spaceTrimming).equals(
+              applyTrimmingPolicy(s2, spaceTrimming));
+          }
+
           return new Collation(
             normalizedCollationName(),
             PROVIDER_SPARK,
             null,
-            UTF8String::binaryCompare,
-            "1.0",
-            s -> (long) s.hashCode(),
-            /* supportsBinaryEquality = */ true,
-            /* supportsBinaryOrdering = */ true,
-            /* supportsLowercaseEquality = */ false);
+            comparator,
+            CollationSpecICU.ICU_VERSION,
+            sortKeyFunction,
+            equalsFunction,
+            /* isUtf8BinaryType = */ true,
+            /* isUtf8LcaseType = */ false,
+            spaceTrimming != SpaceTrimming.NONE);
         } else {
+          Comparator<UTF8String> comparator;
+          Function<UTF8String, byte[]> sortKeyFunction;
+
+          if (spaceTrimming == SpaceTrimming.NONE) {
+            comparator = CollationAwareUTF8String::compareLowerCase;
+            sortKeyFunction = s ->
+              CollationAwareUTF8String.lowerCaseCodePoints(s).getBytes();
+          } else {
+            comparator = (s1, s2) -> CollationAwareUTF8String.compareLowerCase(
+              applyTrimmingPolicy(s1, spaceTrimming),
+              applyTrimmingPolicy(s2, spaceTrimming));
+            sortKeyFunction = s -> CollationAwareUTF8String.lowerCaseCodePoints(
+              applyTrimmingPolicy(s, spaceTrimming)).getBytes();
+          }
+
           return new Collation(
             normalizedCollationName(),
             PROVIDER_SPARK,
             null,
-            CollationAwareUTF8String::compareLowerCase,
-            "1.0",
-            s -> (long) CollationAwareUTF8String.lowerCaseCodePoints(s).hashCode(),
-            /* supportsBinaryEquality = */ false,
-            /* supportsBinaryOrdering = */ false,
-            /* supportsLowercaseEquality = */ true);
+            comparator,
+            CollationSpecICU.ICU_VERSION,
+            sortKeyFunction,
+            (s1, s2) -> comparator.compare(s1, s2) == 0,
+            /* isUtf8BinaryType = */ false,
+            /* isUtf8LcaseType = */ true,
+            spaceTrimming != SpaceTrimming.NONE);
         }
       }
 
@@ -572,7 +656,7 @@ public final class CollationFactory {
             /* language = */ null,
             /* country = */ null,
             /* icuVersion = */ null,
-            COLLATION_PAD_ATTRIBUTE,
+            getPadding(),
             /* accentSensitivity = */ true,
             /* caseSensitivity = */ true,
             spaceTrimming.toString());
@@ -584,7 +668,7 @@ public final class CollationFactory {
             /* language = */ null,
             /* country = */ null,
             /* icuVersion = */ null,
-            COLLATION_PAD_ATTRIBUTE,
+            getPadding(),
             /* accentSensitivity = */ true,
             /* caseSensitivity = */ false,
             spaceTrimming.toString());
@@ -601,9 +685,9 @@ public final class CollationFactory {
       protected String normalizedCollationName() {
         StringBuilder builder = new StringBuilder();
         if(caseSensitivity == CaseSensitivity.UNSPECIFIED){
-          builder.append(UTF8_BINARY_COLLATION_NAME);
+          builder.append(CollationNames.UTF8_BINARY);
         } else{
-          builder.append(UTF8_LCASE_COLLATION_NAME);
+          builder.append(CollationNames.UTF8_LCASE);
         }
         if (spaceTrimming != SpaceTrimming.NONE) {
           builder.append('_');
@@ -613,11 +697,28 @@ public final class CollationFactory {
       }
 
       static List<CollationIdentifier> listCollations() {
-        CollationIdentifier UTF8_BINARY_COLLATION_IDENT =
-          new CollationIdentifier(PROVIDER_SPARK, UTF8_BINARY_COLLATION_NAME, "1.0");
-        CollationIdentifier UTF8_LCASE_COLLATION_IDENT =
-          new CollationIdentifier(PROVIDER_SPARK, UTF8_LCASE_COLLATION_NAME, "1.0");
-        return Arrays.asList(UTF8_BINARY_COLLATION_IDENT, UTF8_LCASE_COLLATION_IDENT);
+        CollationIdentifier UTF8_BINARY_COLLATION_IDENT = new CollationIdentifier(
+            PROVIDER_SPARK,
+            CollationNames.UTF8_BINARY,
+            CollationSpecICU.ICU_VERSION
+        );
+        CollationIdentifier UTF8_LCASE_COLLATION_IDENT = new CollationIdentifier(
+            PROVIDER_SPARK,
+            CollationNames.UTF8_LCASE,
+            CollationSpecICU.ICU_VERSION
+        );
+        CollationIdentifier UTF8_BINARY_RTRIM_COLLATION_IDENT = new CollationIdentifier(
+            PROVIDER_SPARK,
+            CollationNames.UTF8_BINARY + "_RTRIM",
+            CollationSpecICU.ICU_VERSION
+        );
+        CollationIdentifier UTF8_LCASE_RTRIM_COLLATION_IDENT = new CollationIdentifier(
+            PROVIDER_SPARK,
+            CollationNames.UTF8_LCASE + "_RTRIM",
+            CollationSpecICU.ICU_VERSION
+        );
+        return Arrays.asList(UTF8_BINARY_COLLATION_IDENT, UTF8_LCASE_COLLATION_IDENT,
+          UTF8_BINARY_RTRIM_COLLATION_IDENT, UTF8_LCASE_RTRIM_COLLATION_IDENT);
       }
 
       static CollationMeta loadCollationMeta(CollationIdentifier collationIdentifier) {
@@ -691,12 +792,14 @@ public final class CollationFactory {
       private static final Map<String, Integer> ICULocaleToId = new HashMap<>();
 
       /**
-       * ICU library Collator version passed to `Collation` instance.
+       * ICU library version.
        */
-      private static final String ICU_COLLATOR_VERSION = "153.120.0.0";
+      private static final String ICU_VERSION = String.format("%d.%d",
+        VersionInfo.ICU_VERSION.getMajor(),
+        VersionInfo.ICU_VERSION.getMinor());
 
       static {
-        ICULocaleMap.put("UNICODE", ULocale.ROOT);
+        ICULocaleMap.put(CollationNames.UNICODE, ULocale.ROOT);
         // ICU-implemented `ULocale`s which have corresponding `Collator` installed.
         ULocale[] locales = Collator.getAvailableULocales();
         // Build locale names in format: language["_" optional script]["_" optional country code].
@@ -744,20 +847,19 @@ public final class CollationFactory {
       }
 
       private static final int UNICODE_COLLATION_ID = new CollationSpecICU(
-        "UNICODE",
+        CollationNames.UNICODE,
         CaseSensitivity.CS,
         AccentSensitivity.AS,
         SpaceTrimming.NONE).collationId;
 
       private static final int UNICODE_CI_COLLATION_ID = new CollationSpecICU(
-        "UNICODE",
+        CollationNames.UNICODE,
         CaseSensitivity.CI,
         AccentSensitivity.AS,
         SpaceTrimming.NONE).collationId;
 
       private final CaseSensitivity caseSensitivity;
       private final AccentSensitivity accentSensitivity;
-      private final SpaceTrimming spaceTrimming;
       private final String locale;
       private final int collationId;
 
@@ -917,28 +1019,47 @@ public final class CollationFactory {
         Collator collator = Collator.getInstance(resultLocale);
         // Freeze ICU collator to ensure thread safety.
         collator.freeze();
+
+        Comparator<UTF8String> comparator;
+        Function<UTF8String, byte[]> sortKeyFunction;
+
+        if (spaceTrimming == SpaceTrimming.NONE) {
+          comparator = (s1, s2) ->
+            collator.compare(s1.toValidString(), s2.toValidString());
+          sortKeyFunction = s -> collator.getCollationKey(s.toValidString()).toByteArray();
+        } else {
+          comparator = (s1, s2) -> collator.compare(
+            applyTrimmingPolicy(s1, spaceTrimming).toValidString(),
+            applyTrimmingPolicy(s2, spaceTrimming).toValidString());
+          sortKeyFunction = s -> collator.getCollationKey(
+            applyTrimmingPolicy(s, spaceTrimming).toValidString()).toByteArray();
+        }
+
         return new Collation(
           normalizedCollationName(),
           PROVIDER_ICU,
           collator,
-          (s1, s2) -> collator.compare(s1.toValidString(), s2.toValidString()),
-          ICU_COLLATOR_VERSION,
-          s -> (long) collator.getCollationKey(s.toValidString()).hashCode(),
-          /* supportsBinaryEquality = */ false,
-          /* supportsBinaryOrdering = */ false,
-          /* supportsLowercaseEquality = */ false);
+          comparator,
+          ICU_VERSION,
+          sortKeyFunction,
+          (s1, s2) -> comparator.compare(s1, s2) == 0,
+          /* isUtf8BinaryType = */ false,
+          /* isUtf8LcaseType = */ false,
+          spaceTrimming != SpaceTrimming.NONE);
       }
 
       @Override
       protected CollationMeta buildCollationMeta() {
+        String language = ICULocaleMap.get(locale).getDisplayLanguage();
+        String country = ICULocaleMap.get(locale).getDisplayCountry();
         return new CollationMeta(
           CATALOG,
           SCHEMA,
           normalizedCollationName(),
-          ICULocaleMap.get(locale).getDisplayLanguage(),
-          ICULocaleMap.get(locale).getDisplayCountry(),
+          language.isEmpty() ? null : language,
+          country.isEmpty() ? null : country,
           VersionInfo.ICU_VERSION.toString(),
-          COLLATION_PAD_ATTRIBUTE,
+          getPadding(),
           accentSensitivity == AccentSensitivity.AS,
           caseSensitivity == CaseSensitivity.CS,
           spaceTrimming.toString());
@@ -974,10 +1095,13 @@ public final class CollationFactory {
       private static List<String> allCollationNames() {
         List<String> collationNames = new ArrayList<>();
         List<String> caseAccentSpecifiers = Arrays.asList("", "_AI", "_CI", "_CI_AI");
+        List<String> trimmingSpecifiers = Arrays.asList("", "_RTRIM");
         for (String locale : ICULocaleToId.keySet()) {
           for (String caseAccent : caseAccentSpecifiers) {
-            String collationName = locale + caseAccent;
-            collationNames.add(collationName);
+            for (String trimming : trimmingSpecifiers) {
+              String collationName = locale + caseAccent + trimming;
+              collationNames.add(collationName);
+            }
           }
         }
         return collationNames.stream().sorted().toList();
@@ -997,6 +1121,43 @@ public final class CollationFactory {
           // ignore
           return null;
         }
+      }
+    }
+
+    /**
+     * Collation that is a result of a mismatch between two different non-explicit collations.
+     */
+    private static class IndeterminateCollation extends Collation {
+
+      IndeterminateCollation() {
+        super(
+          "null",
+          "null",
+          null,
+          (s1, s2) -> {
+            throw indeterminateError();
+          },
+          null,
+          s -> {
+            throw indeterminateError();
+          },
+          (s1, s2) -> {
+            throw indeterminateError();
+          },
+          false,
+          false,
+          false
+        );
+      }
+
+      @Override
+      public Collator getCollator() {
+        throw indeterminateError();
+      }
+
+      private static SparkRuntimeException indeterminateError() {
+        return new SparkRuntimeException("INDETERMINATE_COLLATION",
+          Map$.MODULE$.empty(), null, new QueryContext[]{}, "");
       }
     }
 
@@ -1028,8 +1189,10 @@ public final class CollationFactory {
   public static final String SCHEMA = "BUILTIN";
   public static final String PROVIDER_SPARK = "spark";
   public static final String PROVIDER_ICU = "icu";
+  public static final String PROVIDER_NULL = "null";
   public static final List<String> SUPPORTED_PROVIDERS = List.of(PROVIDER_SPARK, PROVIDER_ICU);
-  public static final String COLLATION_PAD_ATTRIBUTE = "NO_PAD";
+  public static final String PAD_ATTRIBUTE_EMPTY = "NO_PAD";
+  public static final String PAD_ATTRIBUTE_RTRIM = "RTRIM";
 
   public static final int UTF8_BINARY_COLLATION_ID =
     Collation.CollationSpecUTF8.UTF8_BINARY_COLLATION_ID;
@@ -1067,7 +1230,7 @@ public final class CollationFactory {
       final String patternString,
       final int collationId) {
     CharacterIterator target = new StringCharacterIterator(targetString);
-    Collator collator = CollationFactory.fetchCollation(collationId).collator;
+    Collator collator = CollationFactory.fetchCollation(collationId).getCollator();
     return new StringSearch(patternString, target, (RuleBasedCollator) collator);
   }
 
@@ -1092,23 +1255,73 @@ public final class CollationFactory {
   }
 
   /**
-   * Returns whether the ICU collation is not Case Sensitive Accent Insensitive
-   * for the given collation id.
-   * This method is used in expressions which do not support CS_AI collations.
+   * Returns the resolved fully qualified collation name.
    */
-  public static boolean isCaseSensitiveAndAccentInsensitive(int collationId) {
-    return Collation.CollationSpecICU.fromCollationId(collationId).caseSensitivity ==
-            Collation.CollationSpecICU.CaseSensitivity.CS &&
-            Collation.CollationSpecICU.fromCollationId(collationId).accentSensitivity ==
-            Collation.CollationSpecICU.AccentSensitivity.AI;
+  public static String resolveFullyQualifiedName(String[] collationName) throws SparkException {
+    // If collation name has only one part, then we don't need to do any name resolution.
+    if (collationName.length == 1) return collationName[0];
+    else {
+      // Currently we only support builtin collation names with fixed catalog `SYSTEM` and
+      // schema `BUILTIN`.
+      if (collationName.length != 3 ||
+          !CollationFactory.CATALOG.equalsIgnoreCase(collationName[0]) ||
+          !CollationFactory.SCHEMA.equalsIgnoreCase(collationName[1])) {
+        // Throw exception with original (before case conversion) collation name.
+        throw CollationFactory.collationInvalidNameException(
+            collationName.length != 0 ? collationName[collationName.length - 1] : "");
+      }
+      return collationName[2];
+    }
   }
 
   /**
-   * Returns whether the collation uses trim collation for the given collation id.
+   * Method for constructing errors thrown on providing invalid collation name.
    */
-  public static boolean usesTrimCollation(int collationId) {
-    return Collation.CollationSpec.getSpaceTrimming(collationId) !=
-      Collation.CollationSpec.SpaceTrimming.NONE;
+  public static SparkException collationInvalidNameException(String collationName) {
+    Map<String, String> params = new HashMap<>();
+    final int maxSuggestions = 3;
+    params.put("collationName", collationName);
+    params.put("proposals", getClosestSuggestionsOnInvalidName(collationName, maxSuggestions));
+    return new SparkException("COLLATION_INVALID_NAME",
+        SparkException.constructMessageParams(params), null);
+  }
+
+
+
+  /**
+   * Returns the fully qualified collation name for the given collation ID.
+   */
+  public static String fullyQualifiedName(int collationId) {
+    if (collationId == INDETERMINATE_COLLATION_ID) {
+      return Collation.CollationSpec.INDETERMINATE_COLLATION.collationName;
+    }
+
+    Collation.CollationSpec.DefinitionOrigin definitionOrigin =
+        Collation.CollationSpec.getDefinitionOrigin(collationId);
+    // Currently only predefined collations are supported.
+    assert definitionOrigin == Collation.CollationSpec.DefinitionOrigin.PREDEFINED;
+    return String.format("%s.%s.%s", CATALOG, SCHEMA,
+      Collation.CollationSpec.fetchCollation(collationId).collationName);
+  }
+
+  public static boolean isCaseInsensitive(int collationId) {
+    if (Collation.CollationSpec.getImplementationProvider(collationId) !=
+        Collation.CollationSpec.ImplementationProvider.ICU) {
+      return false;
+    }
+
+    return Collation.CollationSpecICU.fromCollationId(collationId).caseSensitivity ==
+            Collation.CollationSpecICU.CaseSensitivity.CI;
+  }
+
+  public static boolean isAccentInsensitive(int collationId) {
+    if (Collation.CollationSpec.getImplementationProvider(collationId) !=
+        Collation.CollationSpec.ImplementationProvider.ICU) {
+      return false;
+    }
+
+    return Collation.CollationSpecICU.fromCollationId(collationId).accentSensitivity ==
+            Collation.CollationSpecICU.AccentSensitivity.AI;
   }
 
   public static void assertValidProvider(String provider) throws SparkException {
@@ -1135,17 +1348,35 @@ public final class CollationFactory {
     return Collation.CollationSpecICU.ICULocaleNames;
   }
 
+  /**
+   * Applies trimming policy depending up on trim collation type.
+   */
+  public static UTF8String applyTrimmingPolicy(UTF8String input, int collationId) {
+    return Collation.CollationSpec.applyTrimmingPolicy(input, collationId);
+  }
+
+  /**
+   * Returns if leading/trailing spaces should be ignored in trim string expressions. This is needed
+   * because space trimming collation directly changes behaviour of trim functions.
+   */
+  public static boolean ignoresSpacesInTrimFunctions(
+      int collationId,
+      boolean isLTrim,
+      boolean isRTrim) {
+    return Collation.CollationSpec.ignoresSpacesInTrimFunctions(collationId, isLTrim, isRTrim);
+  }
+
   public static UTF8String getCollationKey(UTF8String input, int collationId) {
     Collation collation = fetchCollation(collationId);
-    if (usesTrimCollation(collationId)) {
+    if (collation.supportsSpaceTrimming) {
       input = Collation.CollationSpec.applyTrimmingPolicy(input, collationId);
     }
-    if (collation.supportsBinaryEquality) {
+    if (collation.isUtf8BinaryType) {
       return input;
-    } else if (collation.supportsLowercaseEquality) {
+    } else if (collation.isUtf8LcaseType) {
       return CollationAwareUTF8String.lowerCaseCodePoints(input);
     } else {
-      CollationKey collationKey = collation.collator.getCollationKey(
+      CollationKey collationKey = collation.getCollator().getCollationKey(
         input.toValidString());
       return UTF8String.fromBytes(collationKey.toByteArray());
     }
@@ -1153,15 +1384,15 @@ public final class CollationFactory {
 
   public static byte[] getCollationKeyBytes(UTF8String input, int collationId) {
     Collation collation = fetchCollation(collationId);
-    if (usesTrimCollation(collationId)) {
+    if (collation.supportsSpaceTrimming) {
       input = Collation.CollationSpec.applyTrimmingPolicy(input, collationId);
     }
-    if (collation.supportsBinaryEquality) {
+    if (collation.isUtf8BinaryType) {
       return input.getBytes();
-    } else if (collation.supportsLowercaseEquality) {
+    } else if (collation.isUtf8LcaseType) {
       return CollationAwareUTF8String.lowerCaseCodePoints(input).getBytes();
     } else {
-      return collation.collator.getCollationKey(
+      return collation.getCollator().getCollationKey(
         input.toValidString()).toByteArray();
     }
   }
@@ -1178,19 +1409,26 @@ public final class CollationFactory {
         Collation.CollationSpecUTF8.UTF8_BINARY_COLLATION.collationName,
         Collation.CollationSpecUTF8.UTF8_LCASE_COLLATION.collationName
       };
-      validModifiers = new String[0];
+      validModifiers = new String[]{"_RTRIM"};
     } else {
       validRootNames = getICULocaleNames();
-      validModifiers = new String[]{"_CI", "_AI", "_CS", "_AS"};
+      validModifiers = new String[]{"_CI", "_AI", "_CS", "_AS", "_RTRIM"};
     }
 
     // Split modifiers and locale name.
-    final int MODIFIER_LENGTH = 3;
+    boolean foundModifier = true;
     String localeName = collationName.toUpperCase();
     List<String> modifiers = new ArrayList<>();
-    while (Arrays.stream(validModifiers).anyMatch(localeName::endsWith)) {
-      modifiers.add(localeName.substring(localeName.length() - MODIFIER_LENGTH));
-      localeName = localeName.substring(0, localeName.length() - MODIFIER_LENGTH);
+    while (foundModifier) {
+      foundModifier = false;
+      for (String modifier : validModifiers) {
+        if (localeName.endsWith(modifier)) {
+          modifiers.add(modifier);
+          localeName = localeName.substring(0, localeName.length() - modifier.length());
+          foundModifier = true;
+          break;
+        }
+      }
     }
 
     // Suggest version with unique modifiers.

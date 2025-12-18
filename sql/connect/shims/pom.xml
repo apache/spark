@@ -22,7 +22,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.13</artifactId>
-    <version>4.0.0-SNAPSHOT</version>
+    <version>4.2.0-SNAPSHOT</version>
     <relativePath>../../../pom.xml</relativePath>
   </parent>
 
@@ -33,6 +33,13 @@
   <properties>
     <sbt.project.name>connect-shims</sbt.project.name>
   </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.scala-lang</groupId>
+      <artifactId>scala-library</artifactId>
+    </dependency>
+  </dependencies>
 
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>

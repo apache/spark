@@ -30,7 +30,7 @@ from pyspark.sql.types import (
     MapType,
     Row,
 )
-from pyspark.testing.sqlutils import (
+from pyspark.testing.objects import (
     PythonOnlyUDT,
     ExamplePoint,
     PythonOnlyPoint,
@@ -141,6 +141,16 @@ class SparkConnectReadWriterTests(SparkConnectSQLTestCase):
             self.spark.createDataFrame([{"age": 100, "name": "Hyukjin Kwon"}]).write.mode(
                 "overwrite"
             ).format("parquet").save(d)
+            # Read the Parquet file as a DataFrame.
+            self.assert_eq(
+                self.connect.read.parquet(d).toPandas(), self.spark.read.parquet(d).toPandas()
+            )
+
+    def test_parquet_compression_option(self):
+        # SPARK-50537: Fix compression option being overwritten in df.write.parquet
+        with tempfile.TemporaryDirectory(prefix="test_parquet") as d:
+            self.connect.range(10).write.mode("overwrite").option("compression", "gzip").parquet(d)
+            self.assertTrue(any(file.endswith(".gz.parquet") for file in os.listdir(d)))
             # Read the Parquet file as a DataFrame.
             self.assert_eq(
                 self.connect.read.parquet(d).toPandas(), self.spark.read.parquet(d).toPandas()

@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+import unittest
 import pandas as pd
 
 from pyspark import pandas as ps
@@ -91,7 +91,6 @@ class DiffFramesDotFrameTests(DiffFramesDotFrameMixin, PandasOnSparkTestCase, SQ
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.pandas.tests.diff_frames_ops.test_dot_frame import *  # noqa: F401
 
     try:

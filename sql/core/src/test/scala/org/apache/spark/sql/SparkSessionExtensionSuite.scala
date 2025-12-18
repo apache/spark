@@ -26,16 +26,19 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{Final, Partial}
-import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, CompoundBody, ParserInterface}
-import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Limit, LocalRelation, LogicalPlan, Statistics, UnresolvedHint}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Final, Max, Partial}
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
+import org.apache.spark.sql.catalyst.plans.{PlanTest, SQLHelper}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, AggregateHint, ColumnStat, Limit, LocalRelation, LogicalPlan, Project, Sort, SortHint, Statistics, UnresolvedHint}
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.classic.ClassicConversions._
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.write.WriterCommitMessage
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, AQEShuffleReadExec, QueryStageExec, ShuffleQueryStageExec}
@@ -43,6 +46,7 @@ import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.datasources.{FileFormat, WriteFilesExec, WriteFilesExecBase, WriteFilesSpec}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, BroadcastExchangeLike, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.COLUMN_BATCH_SIZE
 import org.apache.spark.sql.internal.StaticSQLConf.SPARK_SESSION_EXTENSIONS
@@ -53,7 +57,8 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * Test cases for the [[SparkSessionExtensions]].
  */
-class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with AdaptiveSparkPlanHelper {
+class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with AdaptiveSparkPlanHelper
+  with PlanTest {
   private def create(
       builder: SparkSessionExtensionsProvider): Seq[SparkSessionExtensionsProvider] = Seq(builder)
 
@@ -73,9 +78,33 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
     }
   }
 
+  private def withTable(spark: SparkSession, tableNames: String*)(f: => Unit): Unit = {
+    try f finally {
+      tableNames.foreach { name =>
+        spark.sql(s"DROP TABLE IF EXISTS $name")
+      }
+    }
+  }
+
   test("inject analyzer rule") {
     withSession(Seq(_.injectResolutionRule(MyRule))) { session =>
       assert(session.sessionState.analyzer.extendedResolutionRules.contains(MyRule(session)))
+    }
+  }
+
+  test("inject analyzer rule - hidden column") {
+    withSession(Seq(_.injectResolutionRule(MyHiddenColumn))) { session: SparkSession =>
+      val rel = LocalRelation(
+        AttributeReference("a", IntegerType)(),
+        AttributeReference("b", IntegerType)())
+      rel.setTagValue[Long](LogicalPlan.PLAN_ID_TAG, 0L)
+
+      val u = UnresolvedAttribute("x")
+      u.setTagValue[Long](LogicalPlan.PLAN_ID_TAG, 0L)
+      val proj = Project(Seq(u), rel)
+
+      val df = Dataset.ofRows(session, proj)
+      assert(df.schema.fieldNames === Array("x"))
     }
   }
 
@@ -159,7 +188,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
   }
 
   test("inject custom hint rule") {
-    withSession(Seq(_.injectPostHocResolutionRule(MyHintRule))) { session =>
+    withSession(Seq(_.injectHintResolutionRule(MyHintRule))) { session =>
       assert(
         session.range(1).hint("CONVERT_TO_EMPTY").logicalPlan.isInstanceOf[LocalRelation],
         "plan is expected to be a local relation"
@@ -241,7 +270,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
           columnStats: ListBuffer[AttributeMap[ColumnStat]]): Unit = {
         plan match {
           case a: AdaptiveSparkPlanExec =>
-            findColumnStats(a.executedPlan, columnStats)
+            findColumnStats(stripAQEPlan(a), columnStats)
           case qs: ShuffleQueryStageExec =>
             columnStats += qs.computeStats().get.attributeStats
             findColumnStats(qs.plan, columnStats)
@@ -486,7 +515,7 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
   test("SPARK-38697: Extend SparkSessionExtensions to inject rules into AQE Optimizer") {
     def executedPlan(df: Dataset[java.lang.Long]): SparkPlan = {
       assert(df.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
-      df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+      stripAQEPlan(df.queryExecution.executedPlan)
     }
     val extensions = create { extensions =>
       extensions.injectRuntimeOptimizerRule(_ => AddLimit)
@@ -543,10 +572,70 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
       }
     }
   }
+
+  test("custom aggregate hint") {
+    // The custom hint allows us to replace the aggregate (without grouping keys) with just
+    // Literal.
+    withSession(Seq(_.injectHintResolutionRule(CustomAggregateHintResolutionRule),
+      _.injectOptimizerRule(CustomAggregateRule))) { session =>
+      val res = session.range(10).agg(max("id")).as("max_id")
+        .hint("MAX_VALUE", "id", 10)
+        .queryExecution.optimizedPlan
+      assert(res.isInstanceOf[Aggregate])
+      val expectedAlias = Alias(Literal(10L), "max(id)")()
+      compareExpressions(expectedAlias, res.asInstanceOf[Aggregate].aggregateExpressions.head)
+    }
+  }
+
+  test("custom sort hint") {
+    // The custom hint allows us to replace the sort with its input
+    withSession(Seq(_.injectHintResolutionRule(CustomSortHintResolutionRule),
+      _.injectOptimizerRule(CustomSortRule))) { session =>
+      val res = session.range(10).sort("id")
+        .hint("INPUT_SORTED")
+        .queryExecution.optimizedPlan
+      assert(res.collect {case s: Sort => s}.isEmpty)
+    }
+  }
+
+  test("early batch rule is applied on resolved IDENTIFIER") {
+    var ruleApplied = false
+
+    case class UnresolvedRelationRule(spark: SparkSession) extends Rule[LogicalPlan] {
+      override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+        case r: UnresolvedRelation =>
+          ruleApplied = true
+          r
+      }
+    }
+
+    withSession(Seq(_.injectHintResolutionRule(UnresolvedRelationRule))) { session =>
+      withTable(session, "my_table") {
+        session.sql("CREATE TABLE IF NOT EXISTS my_table (col1 INT)")
+        ruleApplied = false
+
+        session.sql("SELECT * FROM IDENTIFIER('my_' || 'table')").collect()
+        assert(ruleApplied)
+      }
+    }
+  }
 }
 
 case class MyRule(spark: SparkSession) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan
+}
+
+case class MyHiddenColumn(spark: SparkSession) extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case rel: LocalRelation if rel.output.size == 2 =>
+      // rel.output.size == 2 for idempotence
+      val newRel = rel.copy(
+        output = rel.output :+ AttributeReference("x", IntegerType)()
+      )
+      assert(rel.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(0L))
+      newRel.setTagValue(LogicalPlan.PLAN_ID_TAG, 0L)
+      newRel
+  }
 }
 
 case class MyCheckRule(spark: SparkSession) extends (LogicalPlan => Unit) {
@@ -582,8 +671,9 @@ case class MyParser(spark: SparkSession, delegate: ParserInterface) extends Pars
   override def parseQuery(sqlText: String): LogicalPlan =
     delegate.parseQuery(sqlText)
 
-  override def parseScript(sqlScriptText: String): CompoundBody =
-    delegate.parseScript(sqlScriptText)
+  override def parseRoutineParam(sqlText: String): StructType = {
+    delegate.parseRoutineParam(sqlText)
+  }
 }
 
 object MyExtensions {
@@ -873,7 +963,8 @@ class BrokenColumnarAdd(
     left: ColumnarExpression,
     right: ColumnarExpression,
     failOnError: Boolean = false)
-  extends Add(left, right, EvalMode.fromBoolean(failOnError)) with ColumnarExpression {
+  extends Add(left, right, NumericEvalContext(EvalMode.fromBoolean(failOnError)))
+    with ColumnarExpression {
 
   override def supportsColumnar: Boolean = left.supportsColumnar && right.supportsColumnar
 
@@ -1229,5 +1320,84 @@ object MyQueryPostPlannerStrategyRule extends Rule[SparkPlan] {
       case h: HashAggregateExec if h.aggregateExpressions.map(_.mode).contains(Final) =>
         SortExec(h.groupingExpressions.map(k => SortOrder.apply(k, Ascending)), false, h)
     }
+  }
+}
+
+
+// Example of an Aggregate hint that tells that 'attribute' values are no larger than 'max'.
+// We will use them to rewrite MAX(attribute) with 'max' constant.
+case class CustomAggHint(attribute: AttributeReference, max: Int) extends AggregateHint
+
+// Attaches the CustomAggHint to the aggregate node without grouping keys if the aggregate
+// function is MAX over the specified column.
+case class CustomAggregateHintResolutionRule(spark: SparkSession) extends Rule[LogicalPlan] {
+  val MY_HINT_NAME = Set("MAX_VALUE")
+
+  def isMax(expr: NamedExpression, attribute: String): Option[AttributeReference] = {
+    expr match {
+      case Alias(AggregateExpression(Max(a @ AttributeReference(name, _, _, _)), _, _, _, _), _)
+        if name.equalsIgnoreCase(attribute) =>
+        Some(a)
+      case _ => None
+    }
+  }
+
+  private def applyMaxValueHint(
+      plan: LogicalPlan,
+      attribute: String,
+      max: Int): LogicalPlan = {
+    val newPlan = plan match {
+      case a @ Aggregate(keys, aggs, _, None) if keys.isEmpty && aggs.size == 1 =>
+        isMax(aggs.head, attribute) match {
+          case Some(attr) => a.copy(hint = Some(CustomAggHint(attr, max)))
+          case None => a
+        }
+      case _ => plan
+    }
+    newPlan.mapChildren { child =>
+      applyMaxValueHint(child, attribute, max)
+    }
+  }
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+    case h: UnresolvedHint if MY_HINT_NAME.contains(h.name.toUpperCase(Locale.ROOT)) =>
+      applyMaxValueHint(h.child, "id", 10)
+  }
+}
+
+// Logical rule that replaces the MAX aggregation function (in Aggregates with CustomAggHint)
+// with just the constant from the hint.
+case class CustomAggregateRule(spark: SparkSession) extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    plan transformDown {
+      case a @ Aggregate(groupingKeys, aggregates, _, Some(CustomAggHint(_, max)))
+        if groupingKeys.isEmpty && aggregates.size == 1 =>
+        a.copy(aggregateExpressions = Seq(Alias(Cast(Literal(max), aggregates.head.dataType),
+          aggregates.head.name)()), hint = None)
+    }
+  }
+}
+
+// Example of a Sort hint that tells that the input is already sorted,
+// and the rule that removes all Sort nodes based on such hint.
+case class CustomSortHint(inputSorted: Boolean) extends SortHint
+
+// Attaches the CustomSortHint to the sort node.
+case class CustomSortHintResolutionRule(spark: SparkSession) extends Rule[LogicalPlan] {
+  val MY_HINT_NAME = Set("INPUT_SORTED")
+
+  private def applySortHint(plan: LogicalPlan): LogicalPlan = plan.transformDown {
+    case s @ Sort(_, _, _, None) => s.copy(hint = Some(CustomSortHint(true)))
+  }
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+    case h: UnresolvedHint if MY_HINT_NAME.contains(h.name.toUpperCase(Locale.ROOT)) =>
+      applySortHint(h.child)
+  }
+}
+
+case class CustomSortRule(spark: SparkSession) extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
+    case s @ Sort(_, _, _, Some(CustomSortHint(true))) => s.child
   }
 }

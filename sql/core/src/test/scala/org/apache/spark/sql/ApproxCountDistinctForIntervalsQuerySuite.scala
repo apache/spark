@@ -82,7 +82,9 @@ class ApproxCountDistinctForIntervalsQuerySuite extends QueryTest with SharedSpa
         ApproxCountDistinctForIntervals(dtAttr, CreateArray(endpoints.map(Literal(_))))
       val dtAggExpr = dtAggFunc.toAggregateExpression()
       val dtNamedExpr = Alias(dtAggExpr, dtAggExpr.toString)()
-      val result = Dataset.ofRows(spark, Aggregate(Nil, Seq(ymNamedExpr, dtNamedExpr), relation))
+      val result = classic.Dataset.ofRows(
+        spark,
+        Aggregate(Nil, Seq(ymNamedExpr, dtNamedExpr), relation))
       checkAnswer(result, Row(Array(1, 1, 1, 1, 1), Array(1, 1, 1, 1, 1)))
     }
   }

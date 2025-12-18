@@ -229,7 +229,7 @@ class DataFrameReader(OptionUtils):
     def text(
         self,
         paths: PathOrPaths,
-        wholetext: Optional[bool] = None,
+        wholetext: bool = False,
         lineSep: Optional[str] = None,
         pathGlobFilter: Optional[Union[bool, str]] = None,
         recursiveFileLookup: Optional[Union[bool, str]] = None,
@@ -751,7 +751,7 @@ class DataFrameWriter(OptionUtils):
         self.mode(mode)
         if partitionBy is not None:
             self.partitionBy(partitionBy)
-        self.option("compression", compression)
+        self._set_opts(compression=compression)
         self.format("parquet").save(path)
 
     parquet.__doc__ = PySparkDataFrameWriter.parquet.__doc__

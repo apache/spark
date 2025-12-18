@@ -22,7 +22,7 @@ import java.util.UUID
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.Encoders
-import org.apache.spark.sql.execution.streaming.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.{ImplicitGroupingKeyTracker, StatefulProcessorHandleImpl, StatefulProcessorHandleState}
 import org.apache.spark.sql.streaming.{TimeMode, TTLConfig}
 
 
@@ -31,6 +31,8 @@ import org.apache.spark.sql.streaming.{TimeMode, TTLConfig}
  * used primarily in queries based on the `transformWithState` operator.
  */
 class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
+
+  import testImplicits._
 
   private def getTimeMode(timeMode: String): TimeMode = {
     timeMode match {
@@ -48,7 +50,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
         val handle = new StatefulProcessorHandleImpl(store,
           UUID.randomUUID(), stringEncoder, getTimeMode(timeMode))
         assert(handle.getHandleState === StatefulProcessorHandleState.CREATED)
-        handle.getValueState[Long]("testState", Encoders.scalaLong)
+        handle.getValueState[Long]("testState", TTLConfig.NONE)
       }
     }
   }
@@ -74,7 +76,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
   }
 
   private def createValueStateInstance(handle: StatefulProcessorHandleImpl): Unit = {
-    handle.getValueState[Long]("testState", Encoders.scalaLong)
+    handle.getValueState[Long]("testState", TTLConfig.NONE)
   }
 
   private def registerTimer(handle: StatefulProcessorHandleImpl): Unit = {
@@ -222,11 +224,11 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
         UUID.randomUUID(), stringEncoder, TimeMode.ProcessingTime(),
         batchTimestampMs = Some(10))
 
-      val valueStateWithTTL = handle.getValueState("testState",
-        Encoders.STRING, TTLConfig(Duration.ofHours(1)))
+      val valueStateWithTTL = handle.getValueState[String]("testState",
+        TTLConfig(Duration.ofHours(1)))
 
       // create another state without TTL, this should not be captured in the handle
-      handle.getValueState("testState", Encoders.STRING)
+      handle.getValueState[String]("testState", TTLConfig.NONE)
 
       assert(handle.ttlStates.size() === 1)
       assert(handle.ttlStates.get(0) === valueStateWithTTL)
@@ -244,7 +246,7 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
         Encoders.STRING, TTLConfig(Duration.ofHours(1)))
 
       // create another state without TTL, this should not be captured in the handle
-      handle.getListState("testState", Encoders.STRING)
+      handle.getListState("testState", Encoders.STRING, TTLConfig.NONE)
 
       assert(handle.ttlStates.size() === 1)
       assert(handle.ttlStates.get(0) === listStateWithTTL)
@@ -262,7 +264,8 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
         Encoders.STRING, Encoders.STRING, TTLConfig(Duration.ofHours(1)))
 
       // create another state without TTL, this should not be captured in the handle
-      handle.getMapState("testState", Encoders.STRING, Encoders.STRING)
+      handle.getMapState("testState", Encoders.STRING, Encoders.STRING,
+        TTLConfig.NONE)
 
       assert(handle.ttlStates.size() === 1)
       assert(handle.ttlStates.get(0) === mapStateWithTTL)
@@ -275,11 +278,18 @@ class StatefulProcessorHandleSuite extends StateVariableSuiteBase {
       val handle = new StatefulProcessorHandleImpl(store,
         UUID.randomUUID(), stringEncoder, TimeMode.None())
 
-      handle.getValueState("testValueState", Encoders.STRING)
-      handle.getListState("testListState", Encoders.STRING)
-      handle.getMapState("testMapState", Encoders.STRING, Encoders.STRING)
+      handle.getValueState("testValueState", Encoders.STRING, TTLConfig.NONE)
+      handle.getListState("testListState", Encoders.STRING, TTLConfig.NONE)
+      handle.getMapState("testMapState", Encoders.STRING, Encoders.STRING,
+        TTLConfig.NONE)
 
       assert(handle.ttlStates.isEmpty)
     }
   }
 }
+
+/**
+ * Test suite that runs all StatefulProcessorHandleSuite tests with row checksum enabled.
+ */
+class StatefulProcessorHandleSuiteWithRowChecksum extends StatefulProcessorHandleSuite
+  with EnableStateStoreRowChecksum

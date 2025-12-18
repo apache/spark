@@ -18,6 +18,7 @@
 import sys
 from typing import Any, Dict, Generic, List, Optional, TypeVar, TYPE_CHECKING
 from abc import ABCMeta
+from functools import cached_property
 
 from pyspark import keyword_only, since
 from pyspark.ml import Predictor, PredictionModel
@@ -44,6 +45,7 @@ from pyspark.ml.param.shared import (
     HasLoss,
     HasVarianceCol,
 )
+from pyspark.ml.util import try_remote_attribute_relation
 from pyspark.ml.tree import (
     _DecisionTreeModel,
     _DecisionTreeParams,
@@ -70,6 +72,7 @@ from pyspark.ml.wrapper import (
 )
 from pyspark.ml.common import inherit_doc
 from pyspark.sql import DataFrame
+from pyspark.sql.utils import is_remote
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
@@ -187,7 +190,7 @@ class _LinearRegressionParams(
     )
 
     def __init__(self, *args: Any):
-        super(_LinearRegressionParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(
             maxIter=100,
             regParam=0.0,
@@ -266,7 +269,7 @@ class LinearRegression(
     True
     >>> abs(model.transform(test0).head().newPrediction - (-1.0)) < 0.001
     True
-    >>> abs(model.coefficients[0] - 1.0) < 0.001
+    >>> bool(abs(model.coefficients[0] - 1.0) < 0.001)
     True
     >>> abs(model.intercept - 0.0) < 0.001
     True
@@ -283,11 +286,11 @@ class LinearRegression(
     >>> model_path = temp_path + "/lr_model"
     >>> model.save(model_path)
     >>> model2 = LinearRegressionModel.load(model_path)
-    >>> model.coefficients[0] == model2.coefficients[0]
+    >>> bool(model.coefficients[0] == model2.coefficients[0])
     True
-    >>> model.intercept == model2.intercept
+    >>> bool(model.intercept == model2.intercept)
     True
-    >>> model.transform(test0).take(1) == model2.transform(test0).take(1)
+    >>> bool(model.transform(test0).take(1) == model2.transform(test0).take(1))
     True
     >>> model.numFeatures
     1
@@ -322,7 +325,7 @@ class LinearRegression(
                  standardization=True, solver="auto", weightCol=None, aggregationDepth=2, \
                  loss="squaredError", epsilon=1.35, maxBlockSizeInMB=0.0)
         """
-        super(LinearRegression, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.LinearRegression", self.uid
         )
@@ -476,19 +479,11 @@ class LinearRegressionModel(
         return self._call_java("scale")
 
     @property
-    @since("2.0.0")
-    def summary(self) -> "LinearRegressionTrainingSummary":
-        """
-        Gets summary (residuals, MSE, r-squared ) of model on
-        training set. An exception is thrown if
-        `trainingSummary is None`.
-        """
-        if self.hasSummary:
-            return LinearRegressionTrainingSummary(super(LinearRegressionModel, self).summary)
-        else:
-            raise RuntimeError(
-                "No training summary available for this %s" % self.__class__.__name__
-            )
+    def _summaryCls(self) -> type:
+        return LinearRegressionTrainingSummary
+
+    def _summary_dataset(self, train_dataset: DataFrame) -> DataFrame:
+        return train_dataset
 
     def evaluate(self, dataset: DataFrame) -> "LinearRegressionSummary":
         """
@@ -505,7 +500,10 @@ class LinearRegressionModel(
         if not isinstance(dataset, DataFrame):
             raise TypeError("dataset must be a DataFrame but got %s." % type(dataset))
         java_lr_summary = self._call_java("evaluate", dataset)
-        return LinearRegressionSummary(java_lr_summary)
+        s = LinearRegressionSummary(java_lr_summary)
+        if is_remote():
+            s.__source_transformer__ = self  # type: ignore[attr-defined]
+        return s
 
 
 class LinearRegressionSummary(JavaWrapper):
@@ -517,6 +515,7 @@ class LinearRegressionSummary(JavaWrapper):
 
     @property
     @since("2.0.0")
+    @try_remote_attribute_relation
     def predictions(self) -> DataFrame:
         """
         Dataframe outputted by the model's `transform` method.
@@ -651,6 +650,7 @@ class LinearRegressionSummary(JavaWrapper):
 
     @property
     @since("2.0.0")
+    @try_remote_attribute_relation
     def residuals(self) -> DataFrame:
         """
         Residuals (label - predicted value)
@@ -795,7 +795,7 @@ class _IsotonicRegressionParams(HasFeaturesCol, HasLabelCol, HasPredictionCol, H
     )
 
     def __init__(self, *args: Any):
-        super(_IsotonicRegressionParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(isotonic=True, featureIndex=0)
 
     def getIsotonic(self) -> bool:
@@ -873,7 +873,7 @@ class IsotonicRegression(
         __init__(self, \\*, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  weightCol=None, isotonic=True, featureIndex=0):
         """
-        super(IsotonicRegression, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.IsotonicRegression", self.uid
         )
@@ -1016,7 +1016,7 @@ class _DecisionTreeRegressorParams(_DecisionTreeParams, _TreeRegressorParams, Ha
     """
 
     def __init__(self, *args: Any):
-        super(_DecisionTreeRegressorParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(
             maxDepth=5,
             maxBins=32,
@@ -1136,7 +1136,7 @@ class DecisionTreeRegressor(
                  impurity="variance", seed=None, varianceCol=None, weightCol=None, \
                  leafCol="", minWeightFractionPerNode=0.0)
         """
-        super(DecisionTreeRegressor, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.DecisionTreeRegressor", self.uid
         )
@@ -1317,7 +1317,7 @@ class _RandomForestRegressorParams(_RandomForestParams, _TreeRegressorParams):
     """
 
     def __init__(self, *args: Any):
-        super(_RandomForestRegressorParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(
             maxDepth=5,
             maxBins=32,
@@ -1440,7 +1440,7 @@ class RandomForestRegressor(
                  featureSubsetStrategy="auto", leafCol=", minWeightFractionPerNode=0.0", \
                  weightCol=None, bootstrap=True)
         """
-        super(RandomForestRegressor, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.RandomForestRegressor", self.uid
         )
@@ -1598,10 +1598,17 @@ class RandomForestRegressionModel(
     .. versionadded:: 1.4.0
     """
 
-    @property
+    @cached_property
     @since("2.0.0")
     def trees(self) -> List[DecisionTreeRegressionModel]:
         """Trees in this ensemble. Warning: These have null parent Estimators."""
+        if is_remote():
+            from pyspark.ml.util import RemoteModelRef
+
+            return [
+                DecisionTreeRegressionModel(RemoteModelRef(m))
+                for m in self._call_java("trees").split(",")
+            ]
         return [DecisionTreeRegressionModel(m) for m in list(self._call_java("trees"))]
 
     @property
@@ -1642,7 +1649,7 @@ class _GBTRegressorParams(_GBTParams, _TreeRegressorParams):
     )
 
     def __init__(self, *args: Any):
-        super(_GBTRegressorParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(
             maxDepth=5,
             maxBins=32,
@@ -1787,7 +1794,7 @@ class GBTRegressor(
                  validationIndicatorCol=None, leafCol="", minWeightFractionPerNode=0.0,
                  weightCol=None)
         """
-        super(GBTRegressor, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.regression.GBTRegressor", self.uid)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -1987,10 +1994,17 @@ class GBTRegressionModel(
         """
         return self._call_java("featureImportances")
 
-    @property
+    @cached_property
     @since("2.0.0")
     def trees(self) -> List[DecisionTreeRegressionModel]:
         """Trees in this ensemble. Warning: These have null parent Estimators."""
+        if is_remote():
+            from pyspark.ml.util import RemoteModelRef
+
+            return [
+                DecisionTreeRegressionModel(RemoteModelRef(m))
+                for m in self._call_java("trees").split(",")
+            ]
         return [DecisionTreeRegressionModel(m) for m in list(self._call_java("trees"))]
 
     def evaluateEachIteration(self, dataset: DataFrame, loss: str) -> List[float]:
@@ -2044,7 +2058,7 @@ class _AFTSurvivalRegressionParams(
     )
 
     def __init__(self, *args: Any):
-        super(_AFTSurvivalRegressionParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(
             censorCol="censor",
             quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99],
@@ -2177,7 +2191,7 @@ class AFTSurvivalRegression(
                  quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99], \
                  quantilesCol=None, aggregationDepth=2, maxBlockSizeInMB=0.0)
         """
-        super(AFTSurvivalRegression, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.AFTSurvivalRegression", self.uid
         )
@@ -2408,7 +2422,7 @@ class _GeneralizedLinearRegressionParams(
     )
 
     def __init__(self, *args: Any):
-        super(_GeneralizedLinearRegressionParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(
             family="gaussian",
             maxIter=25,
@@ -2542,7 +2556,7 @@ class GeneralizedLinearRegression(
     >>> model2 = GeneralizedLinearRegressionModel.load(model_path)
     >>> model.intercept == model2.intercept
     True
-    >>> model.coefficients[0] == model2.coefficients[0]
+    >>> bool(model.coefficients[0] == model2.coefficients[0])
     True
     >>> model.transform(df).take(1) == model2.transform(df).take(1)
     True
@@ -2577,7 +2591,7 @@ class GeneralizedLinearRegression(
                  regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None, \
                  variancePower=0.0, linkPower=None, offsetCol=None, aggregationDepth=2)
         """
-        super(GeneralizedLinearRegression, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.GeneralizedLinearRegression", self.uid
         )
@@ -2749,21 +2763,11 @@ class GeneralizedLinearRegressionModel(
         return self._call_java("intercept")
 
     @property
-    @since("2.0.0")
-    def summary(self) -> "GeneralizedLinearRegressionTrainingSummary":
-        """
-        Gets summary (residuals, deviance, p-values) of model on
-        training set. An exception is thrown if
-        `trainingSummary is None`.
-        """
-        if self.hasSummary:
-            return GeneralizedLinearRegressionTrainingSummary(
-                super(GeneralizedLinearRegressionModel, self).summary
-            )
-        else:
-            raise RuntimeError(
-                "No training summary available for this %s" % self.__class__.__name__
-            )
+    def _summaryCls(self) -> type:
+        return GeneralizedLinearRegressionTrainingSummary
+
+    def _summary_dataset(self, train_dataset: DataFrame) -> DataFrame:
+        return train_dataset
 
     def evaluate(self, dataset: DataFrame) -> "GeneralizedLinearRegressionSummary":
         """
@@ -2780,7 +2784,10 @@ class GeneralizedLinearRegressionModel(
         if not isinstance(dataset, DataFrame):
             raise TypeError("dataset must be a DataFrame but got %s." % type(dataset))
         java_glr_summary = self._call_java("evaluate", dataset)
-        return GeneralizedLinearRegressionSummary(java_glr_summary)
+        s = GeneralizedLinearRegressionSummary(java_glr_summary)
+        if is_remote():
+            s.__source_transformer__ = self  # type: ignore[attr-defined]
+        return s
 
 
 class GeneralizedLinearRegressionSummary(JavaWrapper):
@@ -2792,6 +2799,7 @@ class GeneralizedLinearRegressionSummary(JavaWrapper):
 
     @property
     @since("2.0.0")
+    @try_remote_attribute_relation
     def predictions(self) -> DataFrame:
         """
         Predictions output by the model's `transform` method.
@@ -2847,6 +2855,7 @@ class GeneralizedLinearRegressionSummary(JavaWrapper):
         """
         return self._call_java("residualDegreeOfFreedomNull")
 
+    @try_remote_attribute_relation
     def residuals(self, residualsType: str = "deviance") -> DataFrame:
         """
         Get the residuals of the fitted model by type.
@@ -3014,7 +3023,7 @@ class _FactorizationMachinesParams(
     )
 
     def __init__(self, *args: Any):
-        super(_FactorizationMachinesParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(
             factorSize=8,
             fitIntercept=True,
@@ -3150,7 +3159,7 @@ class FMRegressor(
                  miniBatchFraction=1.0, initStd=0.01, maxIter=100, stepSize=1.0, \
                  tol=1e-6, solver="adamW", seed=None)
         """
-        super(FMRegressor, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.regression.FMRegressor", self.uid)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)

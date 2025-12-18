@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.13</artifactId>
-    <version>4.0.0-SNAPSHOT</version>
+    <version>4.2.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -58,6 +58,14 @@
     <dependency>
       <groupId>com.twitter</groupId>
       <artifactId>chill-java</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.esotericsoftware</groupId>
+      <artifactId>kryo-shaded</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.objenesis</groupId>
+      <artifactId>objenesis</artifactId>
     </dependency>
     <dependency>
       <groupId>com.github.jnr</groupId>
@@ -103,10 +111,6 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-common-utils_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>javax.activation</groupId>
-      <artifactId>activation</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.curator</groupId>
@@ -211,10 +215,6 @@
       <artifactId>commons-io</artifactId>
     </dependency>
     <dependency>
-      <groupId>commons-collections</groupId>
-      <artifactId>commons-collections</artifactId>
-    </dependency>
-    <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-collections4</artifactId>
     </dependency>
@@ -232,7 +232,7 @@
       <artifactId>snappy-java</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.lz4</groupId>
+      <groupId>at.yawk.lz4</groupId>
       <artifactId>lz4-java</artifactId>
     </dependency>
     <dependency>
@@ -240,8 +240,8 @@
       <artifactId>zstd-jni</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.roaringbitmap</groupId>
-      <artifactId>RoaringBitmap</artifactId>
+      <groupId>com.github.RoaringBitmap.RoaringBitmap</groupId>
+      <artifactId>roaringbitmap</artifactId>
     </dependency>
     <dependency>
       <groupId>org.scala-lang.modules</groupId>
@@ -426,7 +426,7 @@
     <dependency>
       <groupId>net.sf.py4j</groupId>
       <artifactId>py4j</artifactId>
-      <version>0.10.9.7</version>
+      <version>0.10.9.9</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -620,12 +620,6 @@
       </activation>
       <properties>
         <script.extension>.sh</script.extension>
-      </properties>
-    </profile>
-    <profile>
-      <id>jjwt</id>
-      <properties>
-        <jjwt.deps.scope>compile</jjwt.deps.scope>
       </properties>
     </profile>
     <profile>

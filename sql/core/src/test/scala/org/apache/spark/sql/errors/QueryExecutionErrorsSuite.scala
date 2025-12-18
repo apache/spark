@@ -35,17 +35,18 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoder, Kry
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NamedParameter, UnresolvedGenerator}
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Concat, CreateArray, EmptyRow, Expression, Flatten, Grouping, Literal, RowNumber, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Concat, CreateArray, EmptyRow, Expression, Flatten, Grouping, Literal, RowNumber, UnaryExpression, Years}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.objects.InitializeJavaBean
 import org.apache.spark.sql.catalyst.rules.RuleIdCollection
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions}
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.execution.streaming.FileSystemBasedCheckpointFileManager
+import org.apache.spark.sql.execution.streaming.checkpointing.FileSystemBasedCheckpointFileManager
 import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
 import org.apache.spark.sql.functions.{lit, lower, struct, sum, udf}
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy.EXCEPTION
@@ -292,7 +293,7 @@ class QueryExecutionErrorsSuite
         val e = intercept[SparkException] {
           df.write.parquet(dir.getCanonicalPath)
         }
-        assert(e.getErrorClass == "TASK_WRITE_FAILED")
+        assert(e.getCondition == "TASK_WRITE_FAILED")
 
         val format = "Parquet"
         val config = "\"" + SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key + "\""
@@ -311,7 +312,7 @@ class QueryExecutionErrorsSuite
         val ex = intercept[SparkException] {
           spark.read.schema("time timestamp_ntz").orc(file.getCanonicalPath).collect()
         }
-        assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
+        assert(ex.getCondition.startsWith("FAILED_READ_FILE"))
         checkError(
           exception = ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
           condition = "UNSUPPORTED_FEATURE.ORC_TYPE_CAST",
@@ -333,7 +334,7 @@ class QueryExecutionErrorsSuite
         val ex = intercept[SparkException] {
           spark.read.schema("time timestamp_ltz").orc(file.getCanonicalPath).collect()
         }
-        assert(ex.getErrorClass.startsWith("FAILED_READ_FILE"))
+        assert(ex.getCondition.startsWith("FAILED_READ_FILE"))
         checkError(
           exception = ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
           condition = "UNSUPPORTED_FEATURE.ORC_TYPE_CAST",
@@ -350,7 +351,7 @@ class QueryExecutionErrorsSuite
         sql("select timestampadd(YEAR, 1000000, timestamp'2022-03-09 01:02:03')").collect()
       },
       condition = "DATETIME_OVERFLOW",
-      parameters = Map("operation" -> "add 1000000 YEAR to TIMESTAMP '2022-03-09 01:02:03'"),
+      parameters = Map("operation" -> "add 1000000L YEAR to TIMESTAMP '2022-03-09 01:02:03'"),
       sqlState = "22008")
   }
 
@@ -381,7 +382,7 @@ class QueryExecutionErrorsSuite
     }
 
     val e2 = e1.getCause.asInstanceOf[SparkException]
-    assert(e2.getErrorClass == "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
+    assert(e2.getCondition == "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION")
 
     checkError(
       exception = e2.getCause.asInstanceOf[SparkRuntimeException],
@@ -655,6 +656,7 @@ class QueryExecutionErrorsSuite
       sqlState = "42704")
 
     JdbcDialects.unregisterDialect(testH2DialectUnrecognizedSQLType)
+    JdbcDialects.registerDialect(existH2Dialect)
   }
 
   test("INVALID_BUCKET_FILE: error if there exists any malformed bucket files") {
@@ -734,7 +736,8 @@ class QueryExecutionErrorsSuite
           parameters = Map(
             "value" -> sourceValue,
             "sourceType" -> s""""${sourceType.sql}"""",
-            "targetType" -> s""""$it""""),
+            "targetType" -> s""""$it"""",
+            "ansiConfig" -> s""""${SQLConf.ANSI_ENABLED.key}""""),
           sqlState = "22003")
       }
     }
@@ -920,7 +923,7 @@ class QueryExecutionErrorsSuite
     val e = intercept[StreamingQueryException] {
       query.awaitTermination()
     }
-    assert(e.getErrorClass === "STREAM_FAILED")
+    assert(e.getCondition === "STREAM_FAILED")
     assert(e.getCause.isInstanceOf[NullPointerException])
   }
 
@@ -1004,6 +1007,17 @@ class QueryExecutionErrorsSuite
       condition = "INTERNAL_ERROR",
       parameters = Map("message" -> "Cannot evaluate expression: namedparameter(foo)"),
       sqlState = "XX000")
+  }
+
+  test("PartitionTransformExpression error on eval") {
+    val expr = Years(Literal("foo"))
+    val e = intercept[SparkException] {
+      expr.eval()
+    }
+    checkError(
+      exception = e,
+      condition = "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY",
+      parameters = Map("expression" -> toSQLExpr(expr)))
   }
 
   test("INTERNAL_ERROR: Calling doGenCode on unresolved") {
@@ -1246,6 +1260,38 @@ class QueryExecutionErrorsSuite
       )
     )
   }
+
+  test("SPARK-50485: Unwrap SparkThrowable in UEE thrown by tableRelationCache") {
+    withTable("t") {
+      sql("CREATE TABLE t (a INT)")
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          sql("ALTER TABLE t SET LOCATION 'https://mister/spark'")
+        },
+        condition = "FAILED_READ_FILE.UNSUPPORTED_FILE_SYSTEM",
+        parameters = Map(
+          "path" -> "https://mister/spark",
+          "fileSystemClass" -> "org.apache.hadoop.fs.http.HttpsFileSystem",
+          "method" -> "listStatus"))
+      sql("ALTER TABLE t SET LOCATION '/mister/spark'")
+    }
+  }
+
+  test("SPARK-42841: SQL query with unsupported data types for ordering") {
+    import org.apache.spark.sql.catalyst.types.PhysicalDataType
+    import org.apache.spark.sql.types.CalendarIntervalType
+
+    // Test PhysicalDataType.ordering() with CalendarIntervalType
+    // It's hard to make a sql test that passes Argument verification but fails
+    // Order verification. So we directly test the error.
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        PhysicalDataType.ordering(CalendarIntervalType)
+      },
+      condition = "DATATYPE_CANNOT_ORDER",
+      parameters = Map("dataType" -> "PhysicalCalendarIntervalType"))
+  }
+
 }
 
 class FakeFileSystemSetPermission extends LocalFileSystem {

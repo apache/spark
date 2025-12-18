@@ -31,7 +31,7 @@ from pyspark.ml.param.shared import (
     HasWeightCol,
 )
 from pyspark.ml.common import inherit_doc
-from pyspark.ml.util import JavaMLReadable, JavaMLWritable
+from pyspark.ml.util import JavaMLReadable, JavaMLWritable, try_remote_evaluate
 from pyspark.sql.dataframe import DataFrame
 
 if TYPE_CHECKING:
@@ -128,6 +128,7 @@ class JavaEvaluator(JavaParams, Evaluator, metaclass=ABCMeta):
     implementations.
     """
 
+    @try_remote_evaluate
     def _evaluate(self, dataset: DataFrame) -> float:
         """
         Evaluates the output.
@@ -234,7 +235,7 @@ class BinaryClassificationEvaluator(
         __init__(self, \\*, rawPredictionCol="rawPrediction", labelCol="label", \
                  metricName="areaUnderROC", weightCol=None, numBins=1000)
         """
-        super(BinaryClassificationEvaluator, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.BinaryClassificationEvaluator", self.uid
         )
@@ -309,6 +310,10 @@ class BinaryClassificationEvaluator(
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
+
+    def isLargerBetter(self) -> bool:
+        """Override this function to make it run on connect"""
+        return True
 
 
 @inherit_doc
@@ -392,7 +397,7 @@ class RegressionEvaluator(
         __init__(self, \\*, predictionCol="prediction", labelCol="label", \
                  metricName="rmse", weightCol=None, throughOrigin=False)
         """
-        super(RegressionEvaluator, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.RegressionEvaluator", self.uid
         )
@@ -465,6 +470,10 @@ class RegressionEvaluator(
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
+
+    def isLargerBetter(self) -> bool:
+        """Override this function to make it run on connect"""
+        return self.getMetricName() in ["r2", "var"]
 
 
 @inherit_doc
@@ -584,7 +593,7 @@ class MulticlassClassificationEvaluator(
                  metricName="f1", weightCol=None, metricLabel=0.0, beta=1.0, \
                  probabilityCol="probability", eps=1e-15)
         """
-        super(MulticlassClassificationEvaluator, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator", self.uid
         )
@@ -699,6 +708,15 @@ class MulticlassClassificationEvaluator(
         kwargs = self._input_kwargs
         return self._set(**kwargs)
 
+    def isLargerBetter(self) -> bool:
+        """Override this function to make it run on connect"""
+        return self.getMetricName() not in [
+            "weightedFalsePositiveRate",
+            "falsePositiveRateByLabel",
+            "logLoss",
+            "hammingLoss",
+        ]
+
 
 @inherit_doc
 class MultilabelClassificationEvaluator(
@@ -772,7 +790,7 @@ class MultilabelClassificationEvaluator(
         __init__(self, \\*, predictionCol="prediction", labelCol="label", \
                  metricName="f1Measure", metricLabel=0.0)
         """
-        super(MultilabelClassificationEvaluator, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.MultilabelClassificationEvaluator", self.uid
         )
@@ -841,6 +859,10 @@ class MultilabelClassificationEvaluator(
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
+
+    def isLargerBetter(self) -> bool:
+        """Override this function to make it run on connect"""
+        return self.getMetricName() != "hammingLoss"
 
 
 @inherit_doc
@@ -925,7 +947,7 @@ class ClusteringEvaluator(
         __init__(self, \\*, predictionCol="prediction", featuresCol="features", \
                  metricName="silhouette", distanceMeasure="squaredEuclidean", weightCol=None)
         """
-        super(ClusteringEvaluator, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.ClusteringEvaluator", self.uid
         )
@@ -1001,6 +1023,10 @@ class ClusteringEvaluator(
         """
         return self._set(weightCol=value)
 
+    def isLargerBetter(self) -> bool:
+        """Override this function to make it run on connect"""
+        return True
+
 
 @inherit_doc
 class RankingEvaluator(
@@ -1069,7 +1095,7 @@ class RankingEvaluator(
         __init__(self, \\*, predictionCol="prediction", labelCol="label", \
                  metricName="meanAveragePrecision", k=10)
         """
-        super(RankingEvaluator, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.RankingEvaluator", self.uid
         )
@@ -1136,6 +1162,10 @@ class RankingEvaluator(
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
+
+    def isLargerBetter(self) -> bool:
+        """Override this function to make it run on connect"""
+        return True
 
 
 if __name__ == "__main__":

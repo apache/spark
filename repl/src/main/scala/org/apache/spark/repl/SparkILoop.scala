@@ -31,9 +31,15 @@ import scala.util.Properties.{javaVersion, javaVmName, versionString}
 /**
  *  A Spark-specific interactive shell.
  */
-class SparkILoop(in0: BufferedReader, out: PrintWriter)
-  extends ILoop(ShellConfig(new GenericRunnerSettings(_ => ())), in0, out) {
-  def this() = this(null, new PrintWriter(Console.out, true))
+class SparkILoop(config: ShellConfig, in0: BufferedReader, out: PrintWriter)
+  extends ILoop(config, in0, out) {
+  def this(in0: BufferedReader, out: PrintWriter) = this(
+    ShellConfig(new GenericRunnerSettings(_ => ())), in0, out)
+
+  def this(settings: Settings) = this(ShellConfig(settings), null,
+    new PrintWriter(Console.out, true))
+
+  def this() = this(new GenericRunnerSettings(_ => ()))
 
   val initializationCommands: Seq[String] = Seq(
     """
@@ -44,8 +50,8 @@ class SparkILoop(in0: BufferedReader, out: PrintWriter)
       }
     @transient val sc = {
       val _sc = spark.sparkContext
-      if (_sc.getConf.getBoolean("spark.ui.reverseProxy", false)) {
-        val proxyUrl = _sc.getConf.get("spark.ui.reverseProxyUrl", null)
+      if (_sc.getReadOnlyConf.getBoolean("spark.ui.reverseProxy", false)) {
+        val proxyUrl = _sc.getReadOnlyConf.get("spark.ui.reverseProxyUrl", null)
         if (proxyUrl != null) {
           println(
             s"Spark Context Web UI is available at ${proxyUrl}/proxy/${_sc.applicationId}")
@@ -66,7 +72,10 @@ class SparkILoop(in0: BufferedReader, out: PrintWriter)
     "import org.apache.spark.SparkContext._",
     "import spark.implicits._",
     "import spark.sql",
-    "import org.apache.spark.sql.functions._"
+    "import org.apache.spark.sql.functions._",
+    "import org.apache.spark.util.LogUtils.SPARK_LOG_SCHEMA",
+    "import java.net._",
+    "import java.nio.file._"
   )
 
   override protected def internalReplAutorunCode(): Seq[String] =

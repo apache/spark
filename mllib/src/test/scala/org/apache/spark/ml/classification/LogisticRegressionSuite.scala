@@ -3015,6 +3015,112 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     assert(p0 === p1)
     assert(p0 === p2)
   }
+
+  test("model size estimation: dense binary logistic regression") {
+    val rng = new Random(1)
+
+    Seq(10, 100, 1000, 10000, 100000).foreach { n =>
+      val df = Seq(
+        (Vectors.dense(Array.fill(n)(rng.nextDouble())), 0.0),
+        (Vectors.dense(Array.fill(n)(rng.nextDouble())), 1.0)
+      ).toDF("features", "label")
+
+      val lor = new LogisticRegression().setMaxIter(1)
+      val size1 = lor.estimateModelSize(df)
+      val model = lor.fit(df)
+      assert(model.coefficientMatrix.isInstanceOf[DenseMatrix])
+      val size2 = model.estimatedSize
+
+      // the model is dense, the estimation should be relatively accurate
+      //      (n, size1, size2)
+      //      (10,7030,7030) <- when the model is small, model.params matters
+      //      (100,7750,7750)
+      //      (1000,14950,14950)
+      //      (10000,86950,86950)
+      //      (100000,806950,806950)
+      val rel = (size1 - size2).toDouble / size2
+      assert(math.abs(rel) < 0.05, (n, size1, size2))
+    }
+  }
+
+  test("model size estimation: sparse binary logistic regression") {
+    val rng = new Random(1)
+
+    Seq(100, 1000, 10000, 100000).foreach { n =>
+      val df = Seq(
+        (Vectors.sparse(n, Array.range(0, 10), Array.fill(10)(rng.nextDouble())), 0.0),
+        (Vectors.sparse(n, Array.range(0, 10), Array.fill(10)(rng.nextDouble())), 1.0)
+      ).toDF("features", "label")
+
+      val lor = new LogisticRegression().setMaxIter(1).setRegParam(10.0)
+      val size1 = lor.estimateModelSize(df)
+      val model = lor.fit(df)
+      assert(model.coefficientMatrix.isInstanceOf[SparseMatrix])
+      val size2 = model.estimatedSize
+
+      // the model is sparse, the estimated size is likely larger
+      //      (n, size1, size2)
+      //      (100,7750,7102)
+      //      (1000,14950,7102)
+      //      (10000,86950,7102)
+      //      (100000,806950,7102)
+      assert(size1 > size2, (n, size1, size2))
+    }
+  }
+
+  test("model size estimation: dense multinomial logistic regression") {
+    val rng = new Random(1)
+
+    Seq(10, 100, 1000, 10000, 100000).foreach { n =>
+      val df = Seq(
+        (Vectors.dense(Array.fill(n)(rng.nextDouble())), 0.0),
+        (Vectors.dense(Array.fill(n)(rng.nextDouble())), 1.0),
+        (Vectors.dense(Array.fill(n)(rng.nextDouble())), 2.0)
+      ).toDF("features", "label")
+
+      val lor = new LogisticRegression().setMaxIter(1)
+      val size1 = lor.estimateModelSize(df)
+      val model = lor.fit(df)
+      assert(model.coefficientMatrix.isInstanceOf[DenseMatrix])
+      val size2 = model.estimatedSize
+
+      // the model is dense, the estimation should be relatively accurate
+      //      (n, size1, size2)
+      //      (10,7206,7206) <- when the model is small, model.params matters
+      //      (100,9366,9366)
+      //      (1000,30966,30966)
+      //      (10000,246966,246966)
+      //      (100000,2406966,2406966)
+      val rel = (size1 - size2).toDouble / size2
+      assert(math.abs(rel) < 0.05, (n, size1, size2))
+    }
+  }
+
+  test("model size estimation: sparse multinomial logistic regression") {
+    val rng = new Random(1)
+
+    Seq(100, 1000, 10000, 100000).foreach { n =>
+      val df = Seq(
+        (Vectors.sparse(n, Array.range(0, 10), Array.fill(10)(rng.nextDouble())), 0.0),
+        (Vectors.sparse(n, Array.range(0, 10), Array.fill(10)(rng.nextDouble())), 1.0),
+        (Vectors.sparse(n, Array.range(0, 10), Array.fill(10)(rng.nextDouble())), 2.0)
+      ).toDF("features", "label")
+
+      val lor = new LogisticRegression().setMaxIter(1).setRegParam(10.0)
+      val size1 = lor.estimateModelSize(df)
+      val model = lor.fit(df)
+      assert(model.coefficientMatrix.isInstanceOf[SparseMatrix])
+      val size2 = model.estimatedSize
+
+      // the model is sparse, the estimated size is likely larger
+      //      (n, size1, size2)
+      //      (100,9366,7366)
+      //      (1000,30966,7366)
+      //      (10000,246966,7366)
+      //      (100000,2406966,7366)
+      assert(size1 > size2, (n, size1, size2))
+    }
+  }
 }
 
 object LogisticRegressionSuite {

@@ -25,7 +25,7 @@ import org.apache.hive.service.cli.operation.GetSchemasOperation
 import org.apache.hive.service.cli.operation.MetadataOperation.DEFAULT_HIVE_CATALOG
 import org.apache.hive.service.cli.session.HiveSession
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.SparkSession
 
@@ -46,7 +46,7 @@ private[hive] class SparkGetSchemasOperation(
   with SparkOperation
   with Logging {
 
-  override def runInternal(): Unit = {
+  override def runInternal(): Unit = withClassLoader { _ =>
     // Do not change cmdStr. It's used for Hive auditing and authorization.
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName"
     val logMsg = s"Listing databases '$cmdStr'"
@@ -58,10 +58,6 @@ private[hive] class SparkGetSchemasOperation(
       log"with ${MDC(STATEMENT_ID, statementId)}")
 
     setState(OperationState.RUNNING)
-    // Always use the latest class loader provided by executionHive's state.
-    val executionHiveClassLoader = session.sharedState.jarClassLoader
-    Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
-
     if (isAuthV2Enabled) {
       authorizeMetaGets(HiveOperationType.GET_TABLES, null, cmdStr)
     }
@@ -75,11 +71,11 @@ private[hive] class SparkGetSchemasOperation(
 
     try {
       val schemaPattern = convertSchemaPattern(schemaName)
-      session.sessionState.catalog.listDatabases(schemaPattern).foreach { dbName =>
+      catalog.listDatabases(schemaPattern).foreach { dbName =>
         rowSet.addRow(Array[AnyRef](dbName, DEFAULT_HIVE_CATALOG))
       }
 
-      val globalTempViewDb = session.sessionState.catalog.globalTempDatabase
+      val globalTempViewDb = catalog.globalTempDatabase
       val databasePattern = Pattern.compile(CLIServiceUtils.patternToRegex(schemaName))
       if (schemaName == null || schemaName.isEmpty ||
           databasePattern.matcher(globalTempViewDb).matches()) {

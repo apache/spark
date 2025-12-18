@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.execution
 
+import java.util
+
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.CatalogFunction
+import org.apache.spark.sql.catalyst.catalog.CatalogTable._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.Repartition
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.withDefaultTimeZone
@@ -550,16 +553,25 @@ class GlobalTempViewTestSuite extends TempViewTestSuite with SharedSparkSession 
 }
 
 class OneTableCatalog extends InMemoryCatalog {
+  // store table in variable to preserve its ID between load requests
+  private val table = new InMemoryTable(
+    "t",
+    StructType.fromDDL("c1 INT"),
+    Array.empty,
+    Map.empty[String, String].asJava)
+
   override def loadTable(ident: Identifier): Table = {
     if (ident.namespace.isEmpty && ident.name == "t") {
-      new InMemoryTable(
-        "t",
-        StructType.fromDDL("c1 INT"),
-        Array.empty,
-        Map.empty[String, String].asJava)
+      table
     } else {
       super.loadTable(ident)
     }
+  }
+
+  override def loadTable(
+      ident: Identifier,
+      writePrivileges: util.Set[TableWritePrivilege]): Table = {
+    loadTable(ident)
   }
 }
 
@@ -789,6 +801,66 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
         withSQLConf(SESSION_LOCAL_TIMEZONE.key -> "UTC-10:00") {
           checkAnswer(sql(s"select H from $viewName"), Row(0))
         }
+      }
+    }
+  }
+
+  test("SPARK-51552: Temporary variables under identifiers are not allowed in persisted view") {
+    sql("declare table_name = 'table';")
+    sql("create table identifier(table_name) (c1 int);")
+    sql("create view v_table_1 as select * from table")
+    sql("create view identifier('v_' || table_name || '_2') as select * from table")
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("create view v_table_3 as select * from identifier(table_name)")
+      },
+      condition = "INVALID_TEMP_OBJ_REFERENCE",
+      parameters = Map(
+        "obj" -> "VIEW",
+        "objName" -> "`unknown`",
+        "tempObj" -> "VARIABLE",
+        "tempObjName" -> "`table_name`"
+      )
+    )
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          """create view identifier('v_' || table_name || '_4')
+            |as select * from identifier(table_name);
+            |""".stripMargin)
+      },
+      condition = "INVALID_TEMP_OBJ_REFERENCE",
+      parameters = Map(
+        "obj" -> "VIEW",
+        "objName" -> "`unknown`",
+        "tempObj" -> "VARIABLE",
+        "tempObjName" -> "`table_name`"
+      )
+    )
+  }
+
+  test("SPARK-52417: Simplify Table properties handling in View Schema Evolution Mode") {
+    withTable("t") {
+      withView("v") {
+        sql("CREATE TABLE t (c1 int)")
+        sql("CREATE VIEW v WITH SCHEMA EVOLUTION AS SELECT * from t")
+        sql("INSERT INTO t VALUES (1), (2), (3)")
+        checkAnswer(sql("SELECT * FROM v"), Seq(Row(1), Row(2), Row(3)))
+
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("v"))
+        assert(table.properties.get(VIEW_SCHEMA_MODE) === Some("EVOLUTION"))
+        assert(!table.properties.exists(_._1.startsWith(VIEW_QUERY_OUTPUT_PREFIX)))
+        assert(!table.properties.exists(_._1.startsWith(VIEW_QUERY_OUTPUT_NUM_COLUMNS)))
+
+        sql("DROP TABLE t")
+        sql("CREATE TABLE t (s1 string, b1 boolean)")
+        sql("INSERT INTO t VALUES ('a', true), ('b', false), ('c', true)")
+        checkAnswer(sql("SELECT * FROM v"), Seq(Row("a", true), Row("b", false), Row("c", true)))
+
+        val updatedTable = spark.sessionState.catalog.getTableMetadata(TableIdentifier("v"))
+        assert(updatedTable.properties.get(VIEW_SCHEMA_MODE) === Some("EVOLUTION"))
+        assert(!updatedTable.properties.exists(_._1.startsWith(VIEW_QUERY_OUTPUT_PREFIX)))
+        assert(!updatedTable.properties.exists(_._1.startsWith(VIEW_QUERY_OUTPUT_NUM_COLUMNS)))
       }
     }
   }

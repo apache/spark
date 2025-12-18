@@ -118,7 +118,7 @@ public class HiveAuthFactory {
         String keytab = conf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_KEYTAB);
         if (needUgiLogin(UserGroupInformation.getCurrentUser(),
           SecurityUtil.getServerPrincipal(principal, "0.0.0.0"), keytab)) {
-          saslServer = ShimLoader.getHadoopThriftAuthBridge().createServer(principal, keytab);
+          saslServer = ShimLoader.getHadoopThriftAuthBridge().createServer(keytab, principal);
         } else {
           // Using the default constructor to avoid unnecessary UGI login.
           saslServer = new HadoopThriftAuthBridge.Server();
@@ -289,7 +289,7 @@ public class HiveAuthFactory {
       return delegationTokenManager.verifyDelegationToken(delegationToken);
     } catch (IOException e) {
       String msg = "Error verifying delegation token";
-      LOG.error(msg + " {}", e, MDC.of(LogKeys.TOKEN$.MODULE$, delegationToken));
+      LOG.error(msg + " {}", e, MDC.of(LogKeys.TOKEN, delegationToken));
       throw new HiveSQLException(msg + delegationToken, "08S01", e);
     }
   }

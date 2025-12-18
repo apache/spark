@@ -22,7 +22,7 @@ import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.analysis.{caseInsensitiveResolution, caseSensitiveResolution}
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CollationFactory, StringConcat}
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
@@ -30,6 +30,7 @@ import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearM
 class DataTypeSuite extends SparkFunSuite {
 
   private val UNICODE_COLLATION_ID = CollationFactory.collationNameToId("UNICODE")
+  private val UTF8_LCASE_COLLATION_ID = CollationFactory.collationNameToId("UTF8_LCASE")
 
   test("construct an ArrayType") {
     val array = ArrayType(StringType)
@@ -278,6 +279,26 @@ class DataTypeSuite extends SparkFunSuite {
   checkDataTypeFromJson(VarcharType(10))
   checkDataTypeFromDDL(VarcharType(11))
 
+  // GEOMETRY type with default fixed SRID.
+  checkDataTypeFromJson(GeometryType(GeometryType.GEOMETRY_DEFAULT_SRID))
+  checkDataTypeFromDDL(GeometryType(GeometryType.GEOMETRY_DEFAULT_SRID))
+
+  // GEOMETRY type with non-default fixed SRID.
+  checkDataTypeFromJson(GeometryType(3857))
+  checkDataTypeFromDDL(GeometryType(3857))
+
+  // GEOMETRY type with mixed SRID.
+  checkDataTypeFromJson(GeometryType("ANY"))
+  checkDataTypeFromDDL(GeometryType("ANY"))
+
+  // GEOGRAPHY type with default fixed SRID.
+  checkDataTypeFromJson(GeographyType(GeographyType.GEOGRAPHY_DEFAULT_SRID))
+  checkDataTypeFromDDL(GeographyType(GeographyType.GEOGRAPHY_DEFAULT_SRID))
+
+  // GEOGRAPHY type with mixed SRID.
+  checkDataTypeFromJson(GeographyType("ANY"))
+  checkDataTypeFromDDL(GeographyType("ANY"))
+
   dayTimeIntervalTypes.foreach(checkDataTypeFromJson)
   yearMonthIntervalTypes.foreach(checkDataTypeFromJson)
 
@@ -339,11 +360,11 @@ class DataTypeSuite extends SparkFunSuite {
         |""".stripMargin
     val dt = DataType.fromJson(schema)
 
-    dt.simpleString equals "struct<c1:string>"
-    dt.json equals
+    assert(dt.simpleString equals "struct<c1:string>")
+    assert(dt.json equals
       """
-        |{"type":"struct","fields":[{"name":"c1","type":"string","nullable":false,"metadata":{}}]}
-        |""".stripMargin
+        |{"type":"struct","fields":[{"name":"c1","type":"string","nullable":true,"metadata":{}}]}
+        |""".stripMargin.trim)
   }
 
   def checkDefaultSize(dataType: DataType, expectedDefaultSize: Int): Unit = {
@@ -366,6 +387,8 @@ class DataTypeSuite extends SparkFunSuite {
   checkDefaultSize(TimestampType, 8)
   checkDefaultSize(TimestampNTZType, 8)
   checkDefaultSize(StringType, 20)
+  checkDefaultSize(CharType(20), 20)
+  checkDefaultSize(VarcharType(20), 20)
   checkDefaultSize(BinaryType, 100)
   checkDefaultSize(ArrayType(DoubleType, true), 8)
   checkDefaultSize(ArrayType(StringType, false), 20)
@@ -378,6 +401,8 @@ class DataTypeSuite extends SparkFunSuite {
   checkDefaultSize(VarcharType(10), 10)
   yearMonthIntervalTypes.foreach(checkDefaultSize(_, 4))
   dayTimeIntervalTypes.foreach(checkDefaultSize(_, 8))
+  checkDefaultSize(TimeType(TimeType.MIN_PRECISION), 8)
+  checkDefaultSize(TimeType(TimeType.MAX_PRECISION), 8)
 
   def checkEqualsIgnoreCompatibleNullability(
       from: DataType,
@@ -410,6 +435,14 @@ class DataTypeSuite extends SparkFunSuite {
     from = ArrayType(DoubleType, containsNull = false),
     to = ArrayType(StringType, containsNull = false),
     expected = false)
+  checkEqualsIgnoreCompatibleNullability(
+    from = ArrayType(CharType(5), containsNull = false),
+    to = ArrayType(StringType, containsNull = false),
+    expected = false)
+  checkEqualsIgnoreCompatibleNullability(
+    from = ArrayType(VarcharType(5), containsNull = false),
+    to = ArrayType(StringType, containsNull = false),
+    expected = false)
 
   checkEqualsIgnoreCompatibleNullability(
     from = MapType(StringType, DoubleType, valueContainsNull = true),
@@ -423,6 +456,14 @@ class DataTypeSuite extends SparkFunSuite {
     from = MapType(StringType, DoubleType, valueContainsNull = false),
     to = MapType(StringType, DoubleType, valueContainsNull = true),
     expected = true)
+  checkEqualsIgnoreCompatibleNullability(
+    from = MapType(CharType(5), DoubleType, valueContainsNull = false),
+    to = MapType(StringType, DoubleType, valueContainsNull = true),
+    expected = false)
+  checkEqualsIgnoreCompatibleNullability(
+    from = MapType(VarcharType(5), DoubleType, valueContainsNull = false),
+    to = MapType(StringType, DoubleType, valueContainsNull = true),
+    expected = false)
   checkEqualsIgnoreCompatibleNullability(
     from = MapType(StringType, DoubleType, valueContainsNull = true),
     to = MapType(StringType, DoubleType, valueContainsNull = false),
@@ -442,9 +483,25 @@ class DataTypeSuite extends SparkFunSuite {
     to = StructType(StructField("a", StringType, nullable = true) :: Nil),
     expected = true)
   checkEqualsIgnoreCompatibleNullability(
+    from = StructType(StructField("a", CharType(5), nullable = true) :: Nil),
+    to = StructType(StructField("a", StringType, nullable = true) :: Nil),
+    expected = false)
+  checkEqualsIgnoreCompatibleNullability(
+    from = StructType(StructField("a", VarcharType(5), nullable = true) :: Nil),
+    to = StructType(StructField("a", StringType, nullable = true) :: Nil),
+    expected = false)
+  checkEqualsIgnoreCompatibleNullability(
     from = StructType(StructField("a", StringType, nullable = false) :: Nil),
     to = StructType(StructField("a", StringType, nullable = false) :: Nil),
     expected = true)
+  checkEqualsIgnoreCompatibleNullability(
+    from = StructType(StructField("a", CharType(5), nullable = false) :: Nil),
+    to = StructType(StructField("a", StringType, nullable = false) :: Nil),
+    expected = false)
+  checkEqualsIgnoreCompatibleNullability(
+    from = StructType(StructField("a", VarcharType(5), nullable = false) :: Nil),
+    to = StructType(StructField("a", StringType, nullable = false) :: Nil),
+    expected = false)
   checkEqualsIgnoreCompatibleNullability(
     from = StructType(StructField("a", StringType, nullable = false) :: Nil),
     to = StructType(StructField("a", StringType, nullable = true) :: Nil),
@@ -483,6 +540,8 @@ class DataTypeSuite extends SparkFunSuite {
   checkCatalogString(DecimalType(10, 5))
   checkCatalogString(BinaryType)
   checkCatalogString(StringType)
+  checkCatalogString(CharType(5))
+  checkCatalogString(VarcharType(10))
   checkCatalogString(DateType)
   checkCatalogString(TimestampType)
   checkCatalogString(createStruct(4))
@@ -507,8 +566,18 @@ class DataTypeSuite extends SparkFunSuite {
   checkEqualsStructurally(BooleanType, BooleanType, true)
   checkEqualsStructurally(IntegerType, IntegerType, true)
   checkEqualsStructurally(IntegerType, LongType, false)
+  checkEqualsStructurally(CharType(5), CharType(5), true)
+  checkEqualsStructurally(CharType(5), CharType(10), false)
+  checkEqualsStructurally(CharType(5), VarcharType(5), false)
+  checkEqualsStructurally(VarcharType(5), VarcharType(5), true)
+  checkEqualsStructurally(VarcharType(5), VarcharType(10), false)
+  checkEqualsStructurally(VarcharType(5), CharType(5), false)
   checkEqualsStructurally(ArrayType(IntegerType, true), ArrayType(IntegerType, true), true)
   checkEqualsStructurally(ArrayType(IntegerType, true), ArrayType(IntegerType, false), false)
+  checkEqualsStructurally(ArrayType(CharType(5), true), ArrayType(CharType(5), true), true)
+  checkEqualsStructurally(ArrayType(CharType(5), true), ArrayType(CharType(5), false), false)
+  checkEqualsStructurally(ArrayType(VarcharType(5), true), ArrayType(VarcharType(5), true), true)
+  checkEqualsStructurally(ArrayType(VarcharType(5), true), ArrayType(VarcharType(5), false), false)
 
   checkEqualsStructurally(
     new StructType().add("f1", IntegerType),
@@ -517,6 +586,15 @@ class DataTypeSuite extends SparkFunSuite {
   checkEqualsStructurally(
     new StructType().add("f1", IntegerType),
     new StructType().add("f2", IntegerType, false),
+    false)
+
+  checkEqualsStructurally(
+    new StructType().add("f1", CharType(5)),
+    new StructType().add("f2", StringType),
+    false)
+  checkEqualsStructurally(
+    new StructType().add("f1", VarcharType(5)),
+    new StructType().add("f2", StringType),
     false)
 
   checkEqualsStructurally(
@@ -538,6 +616,14 @@ class DataTypeSuite extends SparkFunSuite {
       .add("g", new StructType().add("f1", StringType)),
     true,
     ignoreNullability = true)
+  checkEqualsStructurally(
+    new StructType().add("f1", IntegerType).add("f", new StructType().add("f2", CharType(5))),
+    new StructType().add("f2", IntegerType).add("g", new StructType().add("f1", StringType)),
+    false)
+  checkEqualsStructurally(
+    new StructType().add("f1", IntegerType).add("f", new StructType().add("f2", VarcharType(5))),
+    new StructType().add("f2", IntegerType).add("g", new StructType().add("f1", StringType)),
+    false)
 
   checkEqualsStructurally(
     ArrayType(
@@ -578,6 +664,22 @@ class DataTypeSuite extends SparkFunSuite {
       ArrayType(IntegerType, false), true),
     true,
     ignoreNullability = true)
+
+  checkEqualsStructurally(
+    ArrayType(
+      ArrayType(CharType(5), true), true),
+    ArrayType(
+      ArrayType(StringType, true), true),
+    false,
+    ignoreNullability = false)
+
+  checkEqualsStructurally(
+    ArrayType(
+      ArrayType(VarcharType(5), true), true),
+    ArrayType(
+      ArrayType(StringType, true), true),
+    false,
+    ignoreNullability = false)
 
   checkEqualsStructurally(
     MapType(
@@ -627,6 +729,22 @@ class DataTypeSuite extends SparkFunSuite {
     true,
     ignoreNullability = true)
 
+  checkEqualsStructurally(
+    MapType(
+      ArrayType(IntegerType, true), ArrayType(CharType(5), true), true),
+    MapType(
+      ArrayType(IntegerType, true), ArrayType(StringType, true), true),
+    false,
+    ignoreNullability = false)
+
+  checkEqualsStructurally(
+    MapType(
+      ArrayType(IntegerType, true), ArrayType(VarcharType(5), true), true),
+    MapType(
+      ArrayType(IntegerType, true), ArrayType(StringType, true), true),
+    false,
+    ignoreNullability = false)
+
   def checkEqualsStructurallyByName(
       from: DataType,
       to: DataType,
@@ -657,6 +775,10 @@ class DataTypeSuite extends SparkFunSuite {
   checkEqualsStructurallyByName(BooleanType, BooleanType, true)
   checkEqualsStructurallyByName(BooleanType, IntegerType, true)
   checkEqualsStructurallyByName(IntegerType, LongType, true)
+  checkEqualsStructurallyByName(StringType, CharType(5), true)
+  checkEqualsStructurallyByName(StringType, VarcharType(5), true)
+  checkEqualsStructurallyByName(CharType(5), StringType, true)
+  checkEqualsStructurallyByName(VarcharType(5), StringType, true)
 
   checkEqualsStructurallyByName(
     new StructType().add("f1", IntegerType).add("f2", IntegerType),
@@ -665,6 +787,16 @@ class DataTypeSuite extends SparkFunSuite {
 
   checkEqualsStructurallyByName(
     new StructType().add("f1", IntegerType).add("f2", IntegerType),
+    new StructType().add("f1", CharType(5)).add("f2", StringType),
+    true)
+
+  checkEqualsStructurallyByName(
+    new StructType().add("f1", IntegerType).add("f2", IntegerType),
+    new StructType().add("f2", LongType).add("f1", StringType),
+    false)
+
+  checkEqualsStructurallyByName(
+    new StructType().add("f1", IntegerType).add("f2", VarcharType(5)),
     new StructType().add("f2", LongType).add("f1", StringType),
     false)
 
@@ -675,7 +807,17 @@ class DataTypeSuite extends SparkFunSuite {
 
   checkEqualsStructurallyByName(
     new StructType().add("f1", IntegerType).add("f", new StructType().add("f2", StringType)),
+    new StructType().add("f1", LongType).add("f", new StructType().add("f2", VarcharType(5))),
+    true)
+
+  checkEqualsStructurallyByName(
+    new StructType().add("f1", IntegerType).add("f", new StructType().add("f2", StringType)),
     new StructType().add("f", new StructType().add("f2", BooleanType)).add("f1", LongType),
+    false)
+
+  checkEqualsStructurallyByName(
+    new StructType().add("f1", IntegerType).add("f", new StructType().add("f2", StringType)),
+    new StructType().add("f", new StructType().add("f2", CharType(5))).add("f1", LongType),
     false)
 
   checkEqualsStructurallyByName(
@@ -686,7 +828,19 @@ class DataTypeSuite extends SparkFunSuite {
 
   checkEqualsStructurallyByName(
     new StructType().add("f1", IntegerType).add("f2", IntegerType),
+    new StructType().add("F1", LongType).add("F2", CharType(5)),
+    true,
+    caseSensitive = false)
+
+  checkEqualsStructurallyByName(
+    new StructType().add("f1", IntegerType).add("f2", IntegerType),
     new StructType().add("F1", LongType).add("F2", StringType),
+    false,
+    caseSensitive = true)
+
+  checkEqualsStructurallyByName(
+    new StructType().add("f1", IntegerType).add("f2", IntegerType),
+    new StructType().add("F1", LongType).add("F2", VarcharType(5)),
     false,
     caseSensitive = true)
 
@@ -703,19 +857,45 @@ class DataTypeSuite extends SparkFunSuite {
 
   // Simple types.
   checkEqualsIgnoreCompatibleCollation(IntegerType, IntegerType, expected = true)
-  checkEqualsIgnoreCompatibleCollation(BooleanType, BooleanType, expected = true)
-  checkEqualsIgnoreCompatibleCollation(StringType, StringType, expected = true)
   checkEqualsIgnoreCompatibleCollation(IntegerType, BooleanType, expected = false)
-  checkEqualsIgnoreCompatibleCollation(BooleanType, IntegerType, expected = false)
-  checkEqualsIgnoreCompatibleCollation(StringType, BooleanType, expected = false)
-  checkEqualsIgnoreCompatibleCollation(BooleanType, StringType, expected = false)
-  checkEqualsIgnoreCompatibleCollation(StringType, IntegerType, expected = false)
   checkEqualsIgnoreCompatibleCollation(IntegerType, StringType, expected = false)
+  checkEqualsIgnoreCompatibleCollation(IntegerType, CharType(5), expected = false)
+  checkEqualsIgnoreCompatibleCollation(IntegerType, VarcharType(5), expected = false)
+  checkEqualsIgnoreCompatibleCollation(BooleanType, IntegerType, expected = false)
+  checkEqualsIgnoreCompatibleCollation(BooleanType, BooleanType, expected = true)
+  checkEqualsIgnoreCompatibleCollation(BooleanType, StringType, expected = false)
+  checkEqualsIgnoreCompatibleCollation(BooleanType, CharType(5), expected = false)
+  checkEqualsIgnoreCompatibleCollation(BooleanType, VarcharType(5), expected = false)
+  checkEqualsIgnoreCompatibleCollation(StringType, IntegerType, expected = false)
+  checkEqualsIgnoreCompatibleCollation(StringType, BooleanType, expected = false)
+  checkEqualsIgnoreCompatibleCollation(StringType, StringType, expected = true)
+  checkEqualsIgnoreCompatibleCollation(StringType, CharType(5), expected = false)
+  checkEqualsIgnoreCompatibleCollation(StringType, VarcharType(5), expected = false)
+  checkEqualsIgnoreCompatibleCollation(CharType(5), IntegerType, expected = false)
+  checkEqualsIgnoreCompatibleCollation(CharType(5), BooleanType, expected = false)
+  checkEqualsIgnoreCompatibleCollation(CharType(5), StringType, expected = false)
+  checkEqualsIgnoreCompatibleCollation(CharType(5), CharType(5), expected = true)
+  checkEqualsIgnoreCompatibleCollation(CharType(5), CharType(10), expected = false)
+  checkEqualsIgnoreCompatibleCollation(CharType(5), VarcharType(5), expected = false)
+  checkEqualsIgnoreCompatibleCollation(VarcharType(5), IntegerType, expected = false)
+  checkEqualsIgnoreCompatibleCollation(VarcharType(5), BooleanType, expected = false)
+  checkEqualsIgnoreCompatibleCollation(VarcharType(5), StringType, expected = false)
+  checkEqualsIgnoreCompatibleCollation(VarcharType(5), CharType(5), expected = false)
+  checkEqualsIgnoreCompatibleCollation(VarcharType(5), VarcharType(5), expected = true)
+  checkEqualsIgnoreCompatibleCollation(VarcharType(5), VarcharType(10), expected = false)
   // Collated `StringType`.
   checkEqualsIgnoreCompatibleCollation(StringType, StringType("UTF8_LCASE"),
     expected = true)
   checkEqualsIgnoreCompatibleCollation(
-    StringType("UTF8_BINARY"), StringType("UTF8_LCASE"), expected = true)
+    StringType("UTF8_LCASE"), StringType("UTF8_BINARY"), expected = true)
+  checkEqualsIgnoreCompatibleCollation(
+    StringType("UTF8_LCASE"), CharType(5), expected = false)
+  checkEqualsIgnoreCompatibleCollation(
+    CharType(5), StringType("UTF8_LCASE"), expected = false)
+  checkEqualsIgnoreCompatibleCollation(
+    StringType("UTF8_LCASE"), VarcharType(5), expected = false)
+  checkEqualsIgnoreCompatibleCollation(
+    VarcharType(5), StringType("UTF8_LCASE"), expected = false)
   // Complex types.
   checkEqualsIgnoreCompatibleCollation(
     ArrayType(StringType),
@@ -733,6 +913,26 @@ class DataTypeSuite extends SparkFunSuite {
     expected = true
   )
   checkEqualsIgnoreCompatibleCollation(
+    ArrayType(ArrayType(StringType)),
+    ArrayType(ArrayType(CharType(5))),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    ArrayType(ArrayType(StringType("UTF8_LCASE"))),
+    ArrayType(ArrayType(CharType(5))),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    ArrayType(ArrayType(StringType)),
+    ArrayType(ArrayType(VarcharType(5))),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    ArrayType(ArrayType(StringType("UTF8_LCASE"))),
+    ArrayType(ArrayType(VarcharType(5))),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
     MapType(StringType, StringType),
     MapType(StringType, StringType("UTF8_LCASE")),
     expected = true
@@ -740,6 +940,26 @@ class DataTypeSuite extends SparkFunSuite {
   checkEqualsIgnoreCompatibleCollation(
     MapType(StringType("UTF8_LCASE"), StringType),
     MapType(StringType, StringType),
+    expected = true
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    MapType(StringType("UTF8_LCASE"), StringType),
+    MapType(CharType(5), StringType),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    MapType(StringType, StringType),
+    MapType(CharType(5), StringType),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    MapType(StringType("UTF8_LCASE"), StringType),
+    MapType(VarcharType(5), StringType),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    MapType(StringType, StringType),
+    MapType(VarcharType(5), StringType),
     expected = false
   )
   checkEqualsIgnoreCompatibleCollation(
@@ -748,14 +968,54 @@ class DataTypeSuite extends SparkFunSuite {
     expected = true
   )
   checkEqualsIgnoreCompatibleCollation(
+    MapType(StringType("UTF8_LCASE"), ArrayType(StringType)),
+    MapType(StringType("UTF8_LCASE"), ArrayType(CharType(5))),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    MapType(StringType("UTF8_LCASE"), ArrayType(StringType("UTF8_LCASE"))),
+    MapType(StringType("UTF8_LCASE"), ArrayType(CharType(5))),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    MapType(StringType("UTF8_LCASE"), ArrayType(StringType)),
+    MapType(StringType("UTF8_LCASE"), ArrayType(VarcharType(5))),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    MapType(StringType("UTF8_LCASE"), ArrayType(StringType("UTF8_LCASE"))),
+    MapType(StringType("UTF8_LCASE"), ArrayType(VarcharType(5))),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
     MapType(ArrayType(StringType), IntegerType),
     MapType(ArrayType(StringType("UTF8_LCASE")), IntegerType),
-    expected = false
+    expected = true
   )
   checkEqualsIgnoreCompatibleCollation(
     MapType(ArrayType(StringType("UTF8_LCASE")), IntegerType),
     MapType(ArrayType(StringType("UTF8_LCASE")), IntegerType),
     expected = true
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    MapType(ArrayType(StringType), IntegerType),
+    MapType(ArrayType(CharType(5)), IntegerType),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    MapType(ArrayType(StringType("UTF8_LCASE")), IntegerType),
+    MapType(ArrayType(CharType(5)), IntegerType),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    MapType(ArrayType(StringType), IntegerType),
+    MapType(ArrayType(VarcharType(5)), IntegerType),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    MapType(ArrayType(StringType("UTF8_LCASE")), IntegerType),
+    MapType(ArrayType(VarcharType(5)), IntegerType),
+    expected = false
   )
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", StringType) :: Nil),
@@ -763,18 +1023,98 @@ class DataTypeSuite extends SparkFunSuite {
     expected = true
   )
   checkEqualsIgnoreCompatibleCollation(
+    StructType(StructField("a", StringType) :: Nil),
+    StructType(StructField("a", CharType(5)) :: Nil),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    StructType(StructField("a", StringType("UTF8_LCASE")) :: Nil),
+    StructType(StructField("a", CharType(5)) :: Nil),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    StructType(StructField("a", StringType) :: Nil),
+    StructType(StructField("a", VarcharType(5)) :: Nil),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    StructType(StructField("a", StringType("UTF8_LCASE")) :: Nil),
+    StructType(StructField("a", VarcharType(5)) :: Nil),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", ArrayType(StringType)) :: Nil),
     StructType(StructField("a", ArrayType(StringType("UTF8_LCASE"))) :: Nil),
     expected = true
   )
   checkEqualsIgnoreCompatibleCollation(
+    StructType(StructField("a", ArrayType(StringType)) :: Nil),
+    StructType(StructField("a", ArrayType(CharType(5))) :: Nil),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    StructType(StructField("a", ArrayType(StringType("UTF8_LCASE"))) :: Nil),
+    StructType(StructField("a", ArrayType(CharType(5))) :: Nil),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    StructType(StructField("a", ArrayType(StringType)) :: Nil),
+    StructType(StructField("a", ArrayType(VarcharType(5))) :: Nil),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    StructType(StructField("a", ArrayType(StringType("UTF8_LCASE"))) :: Nil),
+    StructType(StructField("a", ArrayType(VarcharType(5))) :: Nil),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", MapType(StringType, IntegerType)) :: Nil),
     StructType(StructField("a", MapType(StringType("UTF8_LCASE"), IntegerType)) :: Nil),
+    expected = true
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    StructType(StructField("a", MapType(StringType, IntegerType)) :: Nil),
+    StructType(StructField("a", MapType(CharType(5), IntegerType)) :: Nil),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    StructType(StructField("a", MapType(StringType("UTF8_LCASE"), IntegerType)) :: Nil),
+    StructType(StructField("a", MapType(CharType(5), IntegerType)) :: Nil),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    StructType(StructField("a", MapType(StringType, IntegerType)) :: Nil),
+    StructType(StructField("a", MapType(VarcharType(5), IntegerType)) :: Nil),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    StructType(StructField("a", MapType(StringType("UTF8_LCASE"), IntegerType)) :: Nil),
+    StructType(StructField("a", MapType(VarcharType(5), IntegerType)) :: Nil),
     expected = false
   )
   checkEqualsIgnoreCompatibleCollation(
     StructType(StructField("a", StringType) :: Nil),
     StructType(StructField("b", StringType("UTF8_LCASE")) :: Nil),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    StructType(StructField("a", StringType) :: Nil),
+    StructType(StructField("b", CharType(5)) :: Nil),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    StructType(StructField("a", StringType("UTF8_LCASE")) :: Nil),
+    StructType(StructField("b", CharType(5)) :: Nil),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    StructType(StructField("a", StringType) :: Nil),
+    StructType(StructField("b", VarcharType(5)) :: Nil),
+    expected = false
+  )
+  checkEqualsIgnoreCompatibleCollation(
+    StructType(StructField("a", StringType("UTF8_LCASE")) :: Nil),
+    StructType(StructField("b", VarcharType(5)) :: Nil),
     expected = false
   )
   // Null compatibility checks.
@@ -826,6 +1166,17 @@ class DataTypeSuite extends SparkFunSuite {
   }
 
   test("schema with collation should not change during ser/de") {
+    val standaloneString = StringType(UNICODE_COLLATION_ID)
+
+    val standaloneArray = ArrayType(StringType(UNICODE_COLLATION_ID))
+
+    val standaloneMap = MapType(StringType(UNICODE_COLLATION_ID),
+      StringType(UTF8_LCASE_COLLATION_ID))
+
+    val standaloneNested = ArrayType(MapType(
+      StringType(UNICODE_COLLATION_ID),
+      ArrayType(StringType(UTF8_LCASE_COLLATION_ID))))
+
     val simpleStruct = StructType(
       StructField("c1", StringType(UNICODE_COLLATION_ID)) :: Nil)
 
@@ -866,6 +1217,7 @@ class DataTypeSuite extends SparkFunSuite {
         mapWithKeyInNameInSchema ++ arrayInMapInNestedSchema.fields ++ nestedArrayInMap.fields)
 
     Seq(
+      standaloneString, standaloneArray, standaloneMap, standaloneNested,
       simpleStruct, caseInsensitiveNames, specialCharsInName, nestedStruct, arrayInSchema,
       mapInSchema, mapWithKeyInNameInSchema, nestedArrayInMap, arrayInMapInNestedSchema,
       schemaWithMultipleFields)
@@ -1019,7 +1371,7 @@ class DataTypeSuite extends SparkFunSuite {
     assert(DataType.parseDataType(JsonMethods.parse(arrayJson)) === ArrayType(StringType))
 
     val parsedWithCollations = DataType.parseDataType(
-        JsonMethods.parse(arrayJson), collationsMap = collationsMap)
+        JsonMethods.parse(arrayJson), fieldPath = "", collationsMap = collationsMap)
     assert(parsedWithCollations === ArrayType(StringType(unicodeCollationId)))
   }
 
@@ -1041,7 +1393,7 @@ class DataTypeSuite extends SparkFunSuite {
     assert(DataType.parseDataType(JsonMethods.parse(mapJson)) === MapType(StringType, StringType))
 
     val parsedWithCollations = DataType.parseDataType(
-      JsonMethods.parse(mapJson), collationsMap = collationsMap)
+      JsonMethods.parse(mapJson), fieldPath = "", collationsMap = collationsMap)
     assert(parsedWithCollations ===
       MapType(StringType(unicodeCollationId), StringType(unicodeCollationId)))
   }
@@ -1053,5 +1405,46 @@ class DataTypeSuite extends SparkFunSuite {
       DataTypes.createVarcharType(-1)
     }
     assert(exception.getMessage.contains("The length of varchar type cannot be negative."))
+  }
+
+  test("precisions of the TIME data type") {
+    TimeType.MIN_PRECISION to TimeType.MAX_PRECISION foreach { p =>
+      assert(TimeType(p).sql == s"TIME($p)")
+    }
+
+    Seq(
+      Int.MinValue,
+      TimeType.MIN_PRECISION - 1,
+      TimeType.MAX_PRECISION + 1,
+      Int.MaxValue).foreach { p =>
+      checkError(
+        exception = intercept[SparkException] {
+          TimeType(p)
+        },
+        condition = "UNSUPPORTED_TIME_PRECISION",
+        parameters = Map("precision" -> p.toString)
+      )
+    }
+  }
+
+  test("Parse time(n) as TimeType(n)") {
+    0 to 6 foreach { n =>
+      assert(DataType.fromJson(s"\"time($n)\"") == TimeType(n))
+      val expectedStructType = StructType(Seq(StructField("t", TimeType(n))))
+      assert(DataType.fromDDL(s"t time($n)") == expectedStructType)
+    }
+
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        DataType.fromJson("\"time(9)\"")
+      },
+      condition = "INVALID_JSON_DATA_TYPE",
+      parameters = Map("invalidType" -> "time(9)"))
+    checkError(
+      exception = intercept[ParseException] {
+        DataType.fromDDL("t time(-1)")
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'time'", "hint" -> ""))
   }
 }

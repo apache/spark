@@ -19,6 +19,7 @@ package org.apache.spark.util
 import java.io.{FileInputStream, FileOutputStream, InputStream, OutputStream}
 import java.nio.channels.{FileChannel, WritableByteChannel}
 
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.SparkErrorUtils.tryWithSafeFinally
 
 private[spark] trait SparkStreamUtils {
@@ -103,6 +104,14 @@ private[spark] trait SparkStreamUtils {
            |You can set spark.file.transferTo = false to disable this NIO feature.
          """.stripMargin)
     }
+  }
+
+  def toString(in: InputStream): String = {
+    JavaUtils.toString(in)
+  }
+
+  def readFully(in: InputStream, arr: Array[Byte], off: Int, len: Int): Unit = {
+    JavaUtils.readFully(in, arr, off, len)
   }
 }
 

@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 import scala.collection.mutable.{HashMap, HashSet}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.{config, Logging, LogKeys, MDC}
+import org.apache.spark.internal.{config, Logging, LogKeys}
 import org.apache.spark.util.Clock
 
 /**

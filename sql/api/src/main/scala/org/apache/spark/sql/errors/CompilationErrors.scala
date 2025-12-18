@@ -41,6 +41,18 @@ private[sql] trait CompilationErrors extends DataTypeErrorsBase {
       cause = Option(cause))
   }
 
+  def describeJsonNotExtendedError(tableName: String): AnalysisException = {
+    new AnalysisException(
+      errorClass = "DESCRIBE_JSON_NOT_EXTENDED",
+      messageParameters = Map("tableName" -> tableName))
+  }
+
+  def describeColJsonUnsupportedError(): AnalysisException = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.DESC_TABLE_COLUMN_JSON",
+      messageParameters = Map.empty)
+  }
+
   def cannotFindDescriptorFileError(filePath: String, cause: Throwable): AnalysisException = {
     new AnalysisException(
       errorClass = "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND",
@@ -118,6 +130,18 @@ private[sql] trait CompilationErrors extends DataTypeErrorsBase {
     new AnalysisException(
       errorClass = "SPECIFY_CLUSTER_BY_WITH_BUCKETING_IS_NOT_ALLOWED",
       messageParameters = Map.empty)
+  }
+
+  def cannotModifyValueOfStaticConfigError(key: String): Throwable = {
+    new AnalysisException(
+      errorClass = "CANNOT_MODIFY_STATIC_CONFIG",
+      messageParameters = Map("key" -> toSQLConf(key)))
+  }
+
+  def cannotModifyValueOfSparkConfigError(key: String, docroot: String): Throwable = {
+    new AnalysisException(
+      errorClass = "CANNOT_MODIFY_CONFIG",
+      messageParameters = Map("key" -> toSQLConf(key), "docroot" -> docroot))
   }
 }
 

@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.FilterEstimation
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Prune hive table partitions using partition filters on [[HiveTableRelation]]. The pruned
@@ -42,6 +43,8 @@ import org.apache.spark.sql.execution.datasources.DataSourceStrategy
  */
 private[sql] class PruneHiveTablePartitions(session: SparkSession)
   extends Rule[LogicalPlan] with CastSupport with PredicateHelper {
+
+  override def conf: SQLConf = session.sessionState.conf
 
   /**
    * Extract the partition filters from the filters on the table.

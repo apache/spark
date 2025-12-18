@@ -73,6 +73,7 @@ private[ui] class ExecutorThreadDumpPage(
     <div class="row">
       <div class="col-12">
         <p>Updated at {UIUtils.formatDate(time)}</p>
+        {threadDumpSummary(threadDump)}
         { if (flamegraphEnabled) {
             drawExecutorFlamegraph(request, threadDump) }
           else {
@@ -123,10 +124,8 @@ private[ui] class ExecutorThreadDumpPage(
     </div>
     }.getOrElse(Text("Error fetching thread dump"))
     UIUtils.headerSparkPage(request, s"Thread dump for executor $executorId", content, parent)
-    // scalastyle:on
   }
 
-  // scalastyle:off
   private def drawExecutorFlamegraph(request: HttpServletRequest, thread: Array[ThreadStackTrace]): Seq[Node] = {
     val js =
       s"""
@@ -154,5 +153,32 @@ private[ui] class ExecutorThreadDumpPage(
       </div>
     </div>
   }
-  // scalastyle:off
+
+
+  private def threadDumpSummary(threadDump: Array[ThreadStackTrace]): Seq[Node] = {
+    val totalCount = threadDump.length
+    <div>
+      <span class="thead-dump-summary collapse-table" onClick="collapseTable('thead-dump-summary', 'thread-dump-summary-table')">
+        <h4>
+          <span class="collapse-table-arrow arrow-open"></span>
+          <a>Thread Dump Summary: { totalCount }</a>
+        </h4>
+      </span>
+      <table class={UIUtils.TABLE_CLASS_STRIPED + " accordion-group" + " sortable" + " thread-dump-summary-table collapsible-table"}>
+        <thead><th>Thread State</th><th>Count</th><th>Percentage</th></thead>
+        <tbody>
+          {
+          threadDump.groupBy(_.threadState).map { case (state, threads) =>
+            <tr>
+              <td>{state}</td>
+              <td>{threads.length}</td>
+              <td>{"%.2f%%".format(threads.length * 100.0 / totalCount)}</td>
+            </tr>
+          }.toSeq
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+  // scalastyle:on
 }

@@ -26,3 +26,4 @@ VariantVal
 
     VariantVal.toPython
     VariantVal.toJson
+    VariantVal.parseJson

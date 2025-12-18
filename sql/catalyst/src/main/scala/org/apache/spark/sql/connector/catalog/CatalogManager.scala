@@ -85,9 +85,10 @@ class CatalogManager(
    * in the fallback configuration, spark.sql.sources.useV1SourceList
    */
   private[sql] def v2SessionCatalog: CatalogPlugin = {
-    conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).map { _ =>
-      catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, loadV2SessionCatalog())
-    }.getOrElse(defaultSessionCatalog)
+    conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION) match {
+      case "builtin" => defaultSessionCatalog
+      case _ => catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, loadV2SessionCatalog())
+    }
   }
 
   private var _currentNamespace: Option[Array[String]] = None

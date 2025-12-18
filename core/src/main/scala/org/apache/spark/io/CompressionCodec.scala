@@ -228,6 +228,7 @@ class ZStdCompressionCodec(conf: SparkConf) extends CompressionCodec {
   // Default compression level for zstd compression to 1 because it is
   // fastest of all with reasonably high compression ratio.
   private val level = conf.get(IO_COMPRESSION_ZSTD_LEVEL)
+  private val strategy = conf.get(IO_COMPRESSION_ZSTD_STRATEGY)
 
   private val bufferPool = if (conf.get(IO_COMPRESSION_ZSTD_BUFFERPOOL_ENABLED)) {
     RecyclingBufferPool.INSTANCE
@@ -241,6 +242,7 @@ class ZStdCompressionCodec(conf: SparkConf) extends CompressionCodec {
     // Wrap the zstd output stream in a buffered output stream, so that we can
     // avoid overhead excessive of JNI call while trying to compress small amount of data.
     val os = new ZstdOutputStreamNoFinalizer(s, bufferPool).setLevel(level).setWorkers(workers)
+    strategy.foreach(os.setStrategy)
     new BufferedOutputStream(os, bufferSize)
   }
 

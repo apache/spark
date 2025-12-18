@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import scala.collection.mutable
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
@@ -74,7 +74,7 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
   def replaceCharVarcharWithStringForCast(dt: DataType): DataType = {
     if (SQLConf.get.charVarcharAsString) {
       replaceCharVarcharWithString(dt)
-    } else if (hasCharVarchar(dt)) {
+    } else if (hasCharVarchar(dt) && !SQLConf.get.preserveCharVarcharTypeInfo) {
       logWarning(log"The Spark cast operator does not support char/varchar type and simply treats" +
         log" them as string type. Please use string type directly to avoid confusion. Otherwise," +
         log" you can set ${MDC(CONFIG, SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key)} " +
@@ -90,9 +90,18 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
    * the given attribute's metadata.
    */
   def cleanAttrMetadata(attr: AttributeReference): AttributeReference = {
-    val cleaned = new MetadataBuilder().withMetadata(attr.metadata)
-      .remove(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY).build()
-    attr.withMetadata(cleaned)
+    attr.withMetadata(cleanMetadata(attr.metadata))
+  }
+
+  /**
+   * Removes the metadata entry that contains the original type string of CharType/VarcharType from
+   * the given metadata.
+   */
+  def cleanMetadata(metadata: Metadata): Metadata = {
+    new MetadataBuilder()
+      .withMetadata(metadata)
+      .remove(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)
+      .build()
   }
 
   def getRawTypeString(metadata: Metadata): Option[String] = {
@@ -164,7 +173,11 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       case CharType(length) if charFuncName.isDefined =>
         StaticInvoke(
           classOf[CharVarcharCodegenUtils],
-          StringType,
+          if (SQLConf.get.preserveCharVarcharTypeInfo) {
+            CharType(length)
+          } else {
+            StringType
+          },
           charFuncName.get,
           expr :: Literal(length) :: Nil,
           returnNullable = false)
@@ -172,7 +185,11 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
       case VarcharType(length) if varcharFuncName.isDefined =>
         StaticInvoke(
           classOf[CharVarcharCodegenUtils],
-          StringType,
+          if (SQLConf.get.preserveCharVarcharTypeInfo) {
+            VarcharType(length)
+          } else {
+            StringType
+          },
           varcharFuncName.get,
           expr :: Literal(length) :: Nil,
           returnNullable = false)

@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisErrorAt, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.{Expression, RowOrdering}
+import org.apache.spark.sql.catalyst.expressions.st.STExpressionUtils.isGeoSpatialType
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalNumericType}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -39,6 +41,16 @@ object TypeUtils extends QueryErrorsBase {
           "functionName" -> toSQLId(caller),
           "dataType" -> toSQLType(dt)
         )
+      )
+    }
+  }
+
+  def tryThrowNotOrderableExpression(expression: Expression): Unit = {
+    if (!RowOrdering.isOrderable(expression.dataType)) {
+      expression.failAnalysis(
+        errorClass = "EXPRESSION_TYPE_IS_NOT_ORDERABLE",
+        messageParameters =
+          Map("expr" -> toSQLExpr(expression), "exprType" -> toSQLType(expression.dataType))
       )
     }
   }
@@ -125,5 +137,16 @@ object TypeUtils extends QueryErrorsBase {
       case _ => false
     }
     if (dataType.existsRecursively(isInterval)) f
+  }
+
+  def failUnsupportedDataType(dataType: DataType, conf: SQLConf): Unit = {
+    if (!conf.isTimeTypeEnabled && dataType.existsRecursively(_.isInstanceOf[TimeType])) {
+      throw QueryCompilationErrors.unsupportedTimeTypeError()
+    }
+    if (!conf.geospatialEnabled && dataType.existsRecursively(isGeoSpatialType)) {
+      throw new org.apache.spark.sql.AnalysisException(
+        errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",
+        messageParameters = scala.collection.immutable.Map.empty)
+    }
   }
 }

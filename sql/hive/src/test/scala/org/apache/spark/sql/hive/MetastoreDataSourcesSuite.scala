@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.execution.command.CreateTableCommand
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.hive.HiveExternalCatalog._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -598,7 +598,7 @@ class MetastoreDataSourcesSuite extends QueryTest
             Row(3) :: Row(4) :: Nil)
 
           table("test_parquet_ctas").queryExecution.optimizedPlan match {
-            case LogicalRelation(p: HadoopFsRelation, _, _, _) => // OK
+            case LogicalRelationWithTable(_: HadoopFsRelation, _) => // OK
             case _ =>
               fail(s"test_parquet_ctas should have be converted to ${classOf[HadoopFsRelation]}")
           }
@@ -1378,62 +1378,78 @@ class MetastoreDataSourcesSuite extends QueryTest
   }
 
   test("read table with corrupted schema") {
-    try {
-      val schema = StructType(StructField("int", IntegerType) :: Nil)
-      val hiveTableWithoutNumPartsProp = CatalogTable(
-        identifier = TableIdentifier("t", Some("default")),
-        tableType = CatalogTableType.MANAGED,
-        schema = HiveExternalCatalog.EMPTY_DATA_SCHEMA,
-        provider = Some("json"),
-        storage = CatalogStorageFormat.empty,
-        properties = Map(
-          DATASOURCE_PROVIDER -> "json",
-          DATASOURCE_SCHEMA_PART_PREFIX + 0 -> schema.json))
+    Seq(true, false).foreach { isHiveTable =>
+      try {
+        val schema = StructType(StructField("int", IntegerType) :: Nil)
+        val hiveTableWithoutNumPartsProp = CatalogTable(
+          identifier = TableIdentifier("t", Some("default")),
+          tableType = CatalogTableType.MANAGED,
+          schema = HiveExternalCatalog.EMPTY_DATA_SCHEMA,
+          provider = if (isHiveTable) None else Some("json"),
+          storage = CatalogStorageFormat.empty,
+          properties = Map(
+            DATASOURCE_SCHEMA_PART_PREFIX + 0 -> schema.json) ++ {
+            if (isHiveTable) {
+              Map.empty
+            } else {
+              Map(DATASOURCE_PROVIDER -> "json")
+            }
+          })
 
-      hiveClient.createTable(hiveTableWithoutNumPartsProp, ignoreIfExists = false)
+        hiveClient.createTable(hiveTableWithoutNumPartsProp, ignoreIfExists = false)
 
-      checkError(
-        exception = intercept[AnalysisException] {
-          sharedState.externalCatalog.getTable("default", "t")
-        },
-        condition = "INSUFFICIENT_TABLE_PROPERTY.MISSING_KEY",
-        parameters = Map("key" -> toSQLConf("spark.sql.sources.schema"))
-      )
-
-      val hiveTableWithNumPartsProp = CatalogTable(
-        identifier = TableIdentifier("t2", Some("default")),
-        tableType = CatalogTableType.MANAGED,
-        schema = HiveExternalCatalog.EMPTY_DATA_SCHEMA,
-        provider = Some("json"),
-        storage = CatalogStorageFormat.empty,
-        properties = Map(
-          DATASOURCE_PROVIDER -> "json",
-          DATASOURCE_SCHEMA_PREFIX + "numParts" -> "3",
-          DATASOURCE_SCHEMA_PART_PREFIX + 0 -> schema.json))
-
-      hiveClient.createTable(hiveTableWithNumPartsProp, ignoreIfExists = false)
-
-      checkError(
-        exception = intercept[AnalysisException] {
-          sharedState.externalCatalog.getTable("default", "t2")
-        },
-        condition = "INSUFFICIENT_TABLE_PROPERTY.MISSING_KEY_PART",
-        parameters = Map(
-          "key" -> toSQLConf("spark.sql.sources.schema.part.1"),
-          "totalAmountOfParts" -> "3")
-      )
-
-      withDebugMode {
         val tableMeta = sharedState.externalCatalog.getTable("default", "t")
         assert(tableMeta.identifier == TableIdentifier("t", Some("default")))
-        assert(tableMeta.properties(DATASOURCE_PROVIDER) == "json")
-        val tableMeta2 = sharedState.externalCatalog.getTable("default", "t2")
-        assert(tableMeta2.identifier == TableIdentifier("t2", Some("default")))
-        assert(tableMeta2.properties(DATASOURCE_PROVIDER) == "json")
+        assert(!tableMeta.properties.contains(DATASOURCE_PROVIDER))
+
+        val hiveTableWithNumPartsProp = CatalogTable(
+          identifier = TableIdentifier("t2", Some("default")),
+          tableType = CatalogTableType.MANAGED,
+          schema = HiveExternalCatalog.EMPTY_DATA_SCHEMA,
+          provider = if (isHiveTable) None else Some("json"),
+          storage = CatalogStorageFormat.empty,
+          properties = Map(
+            DATASOURCE_SCHEMA_PREFIX + "numParts" -> "3",
+            DATASOURCE_SCHEMA_PART_PREFIX + 0 -> schema.json) ++ {
+              if (isHiveTable) {
+                Map.empty
+              } else {
+                Map(DATASOURCE_PROVIDER -> "json")
+              }
+            })
+
+        hiveClient.createTable(hiveTableWithNumPartsProp, ignoreIfExists = false)
+
+        checkError(
+          exception = intercept[AnalysisException] {
+            sharedState.externalCatalog.getTable("default", "t2")
+          },
+          condition = "INSUFFICIENT_TABLE_PROPERTY.MISSING_KEY_PART",
+          parameters = Map(
+            "key" -> toSQLConf("spark.sql.sources.schema.part.1"),
+            "totalAmountOfParts" -> "3")
+        )
+
+        withDebugMode {
+          val tableMeta = sharedState.externalCatalog.getTable("default", "t")
+          assert(tableMeta.identifier == TableIdentifier("t", Some("default")))
+          if (isHiveTable) {
+            assert(!tableMeta.properties.contains(DATASOURCE_PROVIDER))
+          } else {
+            assert(tableMeta.properties(DATASOURCE_PROVIDER) == "json")
+          }
+          val tableMeta2 = sharedState.externalCatalog.getTable("default", "t2")
+          assert(tableMeta2.identifier == TableIdentifier("t2", Some("default")))
+          if (isHiveTable) {
+            assert(!tableMeta2.properties.contains(DATASOURCE_PROVIDER))
+          } else {
+            assert(tableMeta2.properties(DATASOURCE_PROVIDER) == "json")
+          }
+        }
+      } finally {
+        hiveClient.dropTable("default", "t", ignoreIfNotExists = true, purge = true)
+        hiveClient.dropTable("default", "t2", ignoreIfNotExists = true, purge = true)
       }
-    } finally {
-      hiveClient.dropTable("default", "t", ignoreIfNotExists = true, purge = true)
-      hiveClient.dropTable("default", "t2", ignoreIfNotExists = true, purge = true)
     }
   }
 

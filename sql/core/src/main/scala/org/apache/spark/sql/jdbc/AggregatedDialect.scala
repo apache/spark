@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.jdbc
 
+import java.sql.SQLException
+
 import org.apache.spark.sql.types.{DataType, MetadataBuilder}
 
 /**
@@ -53,6 +55,10 @@ private class AggregatedDialect(dialects: List[JdbcDialect])
 
   override def getSchemaQuery(table: String): String = {
     dialects.head.getSchemaQuery(table)
+  }
+
+  override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+    dialects.head.isSyntaxErrorBestEffort(exception)
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = {

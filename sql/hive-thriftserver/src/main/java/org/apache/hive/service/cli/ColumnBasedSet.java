@@ -71,7 +71,7 @@ public class ColumnBasedSet implements RowSet {
         try {
           tvalue.read(protocol);
         } catch (TException e) {
-          LOG.error("{}", e, MDC.of(LogKeys.ERROR$.MODULE$, e.getMessage()));
+          LOG.error("{}", e, MDC.of(LogKeys.ERROR, e.getMessage()));
           throw new TException("Error reading column value from the row set blob", e);
         }
         columns.add(new ColumnBuffer(tvalue));

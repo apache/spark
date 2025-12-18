@@ -8,42 +8,123 @@ select timestamp_ltz'2016-12-31 00:12:00', timestamp_ltz'2016-12-31'
 -- !query
 select to_timestamp_ltz(null), to_timestamp_ltz('2016-12-31 00:12:00'), to_timestamp_ltz('2016-12-31', 'yyyy-MM-dd')
 -- !query analysis
-Project [to_timestamp_ltz(cast(null as string), None, TimestampType, Some(America/Los_Angeles), false) AS to_timestamp_ltz(NULL)#x, to_timestamp_ltz(2016-12-31 00:12:00, None, TimestampType, Some(America/Los_Angeles), false) AS to_timestamp_ltz(2016-12-31 00:12:00)#x, to_timestamp_ltz(2016-12-31, Some(yyyy-MM-dd), TimestampType, Some(America/Los_Angeles), false) AS to_timestamp_ltz(2016-12-31, yyyy-MM-dd)#x]
+Project [to_timestamp_ltz(cast(null as string), None, TimestampType, Some(America/Los_Angeles), true) AS to_timestamp_ltz(NULL)#x, to_timestamp_ltz(2016-12-31 00:12:00, None, TimestampType, Some(America/Los_Angeles), true) AS to_timestamp_ltz(2016-12-31 00:12:00)#x, to_timestamp_ltz(2016-12-31, Some(yyyy-MM-dd), TimestampType, Some(America/Los_Angeles), true) AS to_timestamp_ltz(2016-12-31, yyyy-MM-dd)#x]
 +- OneRowRelation
 
 
 -- !query
 select to_timestamp_ltz(to_date(null)), to_timestamp_ltz(to_date('2016-12-31'))
 -- !query analysis
-Project [to_timestamp_ltz(to_date(cast(null as string), None, Some(America/Los_Angeles), false), None, TimestampType, Some(America/Los_Angeles), false) AS to_timestamp_ltz(to_date(NULL))#x, to_timestamp_ltz(to_date(2016-12-31, None, Some(America/Los_Angeles), false), None, TimestampType, Some(America/Los_Angeles), false) AS to_timestamp_ltz(to_date(2016-12-31))#x]
+Project [to_timestamp_ltz(to_date(cast(null as string), None, Some(America/Los_Angeles), true), None, TimestampType, Some(America/Los_Angeles), true) AS to_timestamp_ltz(to_date(NULL))#x, to_timestamp_ltz(to_date(2016-12-31, None, Some(America/Los_Angeles), true), None, TimestampType, Some(America/Los_Angeles), true) AS to_timestamp_ltz(to_date(2016-12-31))#x]
 +- OneRowRelation
 
 
 -- !query
 select to_timestamp_ltz(to_timestamp_ntz(null)), to_timestamp_ltz(to_timestamp_ntz('2016-12-31 00:12:00'))
 -- !query analysis
-Project [to_timestamp_ltz(to_timestamp_ntz(cast(null as string), None, TimestampNTZType, Some(America/Los_Angeles), false), None, TimestampType, Some(America/Los_Angeles), false) AS to_timestamp_ltz(to_timestamp_ntz(NULL))#x, to_timestamp_ltz(to_timestamp_ntz(2016-12-31 00:12:00, None, TimestampNTZType, Some(America/Los_Angeles), false), None, TimestampType, Some(America/Los_Angeles), false) AS to_timestamp_ltz(to_timestamp_ntz(2016-12-31 00:12:00))#x]
+Project [to_timestamp_ltz(to_timestamp_ntz(cast(null as string), None, TimestampNTZType, Some(America/Los_Angeles), true), None, TimestampType, Some(America/Los_Angeles), true) AS to_timestamp_ltz(to_timestamp_ntz(NULL))#x, to_timestamp_ltz(to_timestamp_ntz(2016-12-31 00:12:00, None, TimestampNTZType, Some(America/Los_Angeles), true), None, TimestampType, Some(America/Los_Angeles), true) AS to_timestamp_ltz(to_timestamp_ntz(2016-12-31 00:12:00))#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT make_timestamp_ltz(2021, 07, 11, 6, 30, 45.678)
 -- !query analysis
-Project [make_timestamp_ltz(2021, 7, 11, 6, 30, cast(45.678 as decimal(16,6)), None, Some(America/Los_Angeles), false, TimestampType) AS make_timestamp_ltz(2021, 7, 11, 6, 30, 45.678)#x]
+Project [make_timestamp_ltz(2021, 7, 11, 6, 30, cast(45.678 as decimal(16,6)), None, Some(America/Los_Angeles), true, TimestampType) AS make_timestamp_ltz(2021, 7, 11, 6, 30, 45.678)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT make_timestamp_ltz(2021, 07, 11, 6, 30, 45.678, 'CET')
 -- !query analysis
-Project [make_timestamp_ltz(2021, 7, 11, 6, 30, cast(45.678 as decimal(16,6)), Some(CET), Some(America/Los_Angeles), false, TimestampType) AS make_timestamp_ltz(2021, 7, 11, 6, 30, 45.678, CET)#x]
+Project [make_timestamp_ltz(2021, 7, 11, 6, 30, cast(45.678 as decimal(16,6)), Some(CET), Some(America/Los_Angeles), true, TimestampType) AS make_timestamp_ltz(2021, 7, 11, 6, 30, 45.678, CET)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT make_timestamp_ltz(2021, 07, 11, 6, 30, 60.007)
 -- !query analysis
-Project [make_timestamp_ltz(2021, 7, 11, 6, 30, cast(60.007 as decimal(16,6)), None, Some(America/Los_Angeles), false, TimestampType) AS make_timestamp_ltz(2021, 7, 11, 6, 30, 60.007)#x]
+Project [make_timestamp_ltz(2021, 7, 11, 6, 30, cast(60.007 as decimal(16,6)), None, Some(America/Los_Angeles), true, TimestampType) AS make_timestamp_ltz(2021, 7, 11, 6, 30, 60.007)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT make_timestamp_ltz(make_date(2021, 07, 11), make_time(6, 30, 45.678))
+-- !query analysis
+Project [make_timestamp(make_date(2021, 7, 11, true), Some(make_time(6, 30, cast(45.678 as decimal(16,6)))), None, Some(America/Los_Angeles)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT make_timestamp_ltz(NULL, TIME'00:00:00')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT make_timestamp_ltz(DATE'1970-01-01', NULL)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT make_timestamp_ltz(timestamp_ntz'2018-11-17 13:33:33', TIME'0:0:0')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_NTZ '2018-11-17 13:33:33'\"",
+    "inputType" : "\"TIMESTAMP_NTZ\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"DATE\"",
+    "sqlExpr" : "\"make_timestamp(TIMESTAMP_NTZ '2018-11-17 13:33:33', TIME '00:00:00')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 74,
+    "fragment" : "make_timestamp_ltz(timestamp_ntz'2018-11-17 13:33:33', TIME'0:0:0')"
+  } ]
+}
+
+
+-- !query
+SELECT make_timestamp_ltz(DATE'2025-06-20', timestamp_ntz'2018-11-17 13:33:33')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_NTZ '2018-11-17 13:33:33'\"",
+    "inputType" : "\"TIMESTAMP_NTZ\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"TIME\"",
+    "sqlExpr" : "\"make_timestamp(DATE '2025-06-20', TIMESTAMP_NTZ '2018-11-17 13:33:33')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 79,
+    "fragment" : "make_timestamp_ltz(DATE'2025-06-20', timestamp_ntz'2018-11-17 13:33:33')"
+  } ]
+}
+
+
+-- !query
+SELECT make_timestamp_ltz(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'PST')
+-- !query analysis
+Project [make_timestamp(make_date(2021, 7, 11, true), Some(make_time(6, 30, cast(45.678 as decimal(16,6)))), Some(PST), Some(America/Los_Angeles)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), PST)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT make_timestamp_ltz(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'CET')
+-- !query analysis
+Project [make_timestamp(make_date(2021, 7, 11, true), Some(make_time(6, 30, cast(45.678 as decimal(16,6)))), Some(CET), Some(America/Los_Angeles)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), CET)#x]
 +- OneRowRelation
 
 
@@ -51,3 +132,84 @@ Project [make_timestamp_ltz(2021, 7, 11, 6, 30, cast(60.007 as decimal(16,6)), N
 SELECT convert_timezone('Europe/Brussels', timestamp_ltz'2022-03-23 00:00:00 America/Los_Angeles')
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT try_make_timestamp_ltz(make_date(2021, 07, 11), make_time(6, 30, 45.678))
+-- !query analysis
+Project [make_timestamp(make_date(2021, 7, 11, true), Some(make_time(6, 30, cast(45.678 as decimal(16,6)))), None, Some(America/Los_Angeles)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_make_timestamp_ltz(NULL, TIME'00:00:00')
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT try_make_timestamp_ltz(DATE'1970-01-01', NULL)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT try_make_timestamp_ltz(timestamp_ntz'2018-11-17 13:33:33', TIME'0:0:0')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_NTZ '2018-11-17 13:33:33'\"",
+    "inputType" : "\"TIMESTAMP_NTZ\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"DATE\"",
+    "sqlExpr" : "\"make_timestamp(TIMESTAMP_NTZ '2018-11-17 13:33:33', TIME '00:00:00')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 78,
+    "fragment" : "try_make_timestamp_ltz(timestamp_ntz'2018-11-17 13:33:33', TIME'0:0:0')"
+  } ]
+}
+
+
+-- !query
+SELECT try_make_timestamp_ltz(DATE'2025-06-20', timestamp_ntz'2018-11-17 13:33:33')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_NTZ '2018-11-17 13:33:33'\"",
+    "inputType" : "\"TIMESTAMP_NTZ\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"TIME\"",
+    "sqlExpr" : "\"make_timestamp(DATE '2025-06-20', TIMESTAMP_NTZ '2018-11-17 13:33:33')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 83,
+    "fragment" : "try_make_timestamp_ltz(DATE'2025-06-20', timestamp_ntz'2018-11-17 13:33:33')"
+  } ]
+}
+
+
+-- !query
+SELECT try_make_timestamp_ltz(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'PST')
+-- !query analysis
+Project [make_timestamp(make_date(2021, 7, 11, true), Some(make_time(6, 30, cast(45.678 as decimal(16,6)))), Some(PST), Some(America/Los_Angeles)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), PST)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_make_timestamp_ltz(make_date(2021, 07, 11), make_time(6, 30, 45.678), 'CET')
+-- !query analysis
+Project [make_timestamp(make_date(2021, 7, 11, true), Some(make_time(6, 30, cast(45.678 as decimal(16,6)))), Some(CET), Some(America/Los_Angeles)) AS make_timestamp(make_date(2021, 7, 11), make_time(6, 30, 45.678), CET)#x]
++- OneRowRelation

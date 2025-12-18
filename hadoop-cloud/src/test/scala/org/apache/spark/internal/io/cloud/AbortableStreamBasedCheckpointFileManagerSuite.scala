@@ -27,8 +27,8 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.cloud.abortable.AbortableFileSystem
-import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.CheckpointFileManagerTests
+import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
 
 class AbortableStreamBasedCheckpointFileManagerSuite
   extends CheckpointFileManagerTests with Logging {

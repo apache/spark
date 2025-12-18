@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.python
 
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
-import org.apache.spark.sql.functions.{array, col, count, transform}
+import org.apache.spark.sql.functions.{array, avg, col, count, transform}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.LongType
 
@@ -86,68 +86,15 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
     checkAnswer(actual, expected)
   }
 
-  test("variant input to pandas grouped agg UDF") {
-    assume(shouldTestPandasUDFs)
-    val df = spark.range(0, 10).selectExpr(
-      """parse_json(format_string('{"%s": "test"}', id)) as v""")
-
-    val testUdf = TestGroupedAggPandasUDFStringifiedMax(name = "pandas_udf")
-    checkError(
-      exception = intercept[AnalysisException] {
-        df.agg(testUdf(df("v"))).collect()
-      },
-      condition = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
-      parameters = Map("sqlExpr" -> "\"pandas_udf(v)\"", "dataType" -> "VARIANT"))
-  }
-
-  test("complex variant input to pandas grouped agg UDF") {
-    assume(shouldTestPandasUDFs)
-    val df = spark.range(0, 10).selectExpr(
-      """array(parse_json(format_string('{"%s": "test"}', id))) as arr_v""")
-
-    val testUdf = TestGroupedAggPandasUDFStringifiedMax(name = "pandas_udf")
-    checkError(
-      exception = intercept[AnalysisException] {
-        df.agg(testUdf(df("arr_v"))).collect()
-      },
-      condition = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_INPUT_TYPE",
-      parameters = Map("sqlExpr" -> "\"pandas_udf(arr_v)\"", "dataType" -> "ARRAY<VARIANT>"))
-  }
-
-  test("variant output to pandas grouped agg UDF") {
-    assume(shouldTestPandasUDFs)
-    val df = spark.range(0, 10).toDF("id")
-
-    val testUdf = TestGroupedAggPandasUDFReturnVariant(name = "pandas_udf")
-    checkError(
-      exception = intercept[AnalysisException] {
-        df.agg(testUdf(df("id"))).collect()
-      },
-      condition = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
-      parameters = Map("sqlExpr" -> "\"pandas_udf(id)\"", "dataType" -> "VARIANT"))
-  }
-
-  test("complex variant output to pandas grouped agg UDF") {
-    assume(shouldTestPandasUDFs)
-    val df = spark.range(0, 10).toDF("id")
-
-    val testUdf = TestGroupedAggPandasUDFReturnComplexVariant(name = "pandas_udf")
-    checkError(
-      exception = intercept[AnalysisException] {
-        df.agg(testUdf(df("id"))).collect()
-      },
-      condition = "DATATYPE_MISMATCH.UNSUPPORTED_UDF_OUTPUT_TYPE",
-      parameters = Map(
-        "sqlExpr" -> "\"pandas_udf(id)\"",
-        "dataType" -> "STRUCT<a: STRUCT<v: VARIANT>>"))
-  }
-
   test("SPARK-34265: Instrument Python UDF execution using SQL Metrics") {
     assume(shouldTestPythonUDFs)
     val pythonSQLMetrics = List(
       "data sent to Python workers",
       "data returned from Python workers",
-      "number of output rows")
+      "number of output rows",
+      "time to initialize Python workers",
+      "time to start Python workers",
+      "time to run Python workers")
 
     val df = base.groupBy(pythonTestUDF(base("a") + 1))
       .agg(pythonTestUDF(pythonTestUDF(base("a") + 1)))
@@ -191,5 +138,22 @@ class PythonUDFSuite extends QueryTest with SharedSparkSession {
         newTable.as("t2"), col("t1.new_column") === col("t2.new_column"))
       checkAnswer(df, Row(0, 1, 1, 0, 1, 1))
     }
+  }
+
+  test("SPARK-53311: Nondeterministic Python UDF pull out in aggregate with grouping") {
+    assume(shouldTestPythonUDFs)
+
+    // nondeterministic UDF
+    val pythonUDF = TestPythonUDF(name = "foo", Some(LongType), deterministic = false)
+
+    // This query should work without throwing an analysis exception
+    // The UDF foo(value) appears in both grouping expressions and aggregate expressions
+    // The fix ensures that both instances are properly mapped to the same attribute
+    val df = spark.range(1)
+      .selectExpr("id", "id % 3 as value")
+      .groupBy(pythonUDF(col("value")))
+      .agg(avg("id"), pythonUDF(col("value")))
+
+    checkAnswer(df, Row(0, 0.0, 0))
   }
 }

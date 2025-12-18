@@ -17,22 +17,23 @@
 
 package org.apache.spark.sql.connect.execution
 
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import com.google.protobuf.Message
-import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.SparkSQLException
 import org.apache.spark.connect.proto
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.connect.common.ProtoUtils
-import org.apache.spark.sql.connect.planner.SparkConnectPlanner
+import org.apache.spark.sql.connect.planner.InvalidInputErrors
 import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteSessionTag, SparkConnectService}
 import org.apache.spark.sql.connect.utils.ErrorUtils
+import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.Utils
+import org.apache.spark.util.Utils.CONNECT_EXECUTE_THREAD_PREFIX
 
 /**
  * This class launches the actual execution in an execution thread. The execution pushes the
@@ -41,7 +42,8 @@ import org.apache.spark.util.Utils
 private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends Logging {
 
   /** The thread state. */
-  private val state: AtomicInteger = new AtomicInteger(ThreadState.notStarted)
+  private val state: AtomicReference[ThreadStateInfo] = new AtomicReference(
+    ThreadState.notStarted)
 
   // The newly created thread will inherit all InheritableThreadLocals used by Spark,
   // e.g. SparkContext.localProperties. If considering implementing a thread-pool,
@@ -60,6 +62,16 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
       // This assertion does not hold if it is called more than once.
       assert(currentState == ThreadState.interrupted)
     }
+  }
+
+  /**
+   * Checks if the thread is alive.
+   *
+   * @return
+   *   true if the execution thread is currently running.
+   */
+  private[connect] def isAlive(): Boolean = {
+    executionThread.isAlive()
   }
 
   /**
@@ -198,40 +210,41 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
             tag))
       }
       session.sparkContext.setJobDescription(
-        s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}")
+        s"Spark Connect - ${Utils.abbreviate(debugString, 128)}")
       session.sparkContext.setInterruptOnCancel(true)
 
       // Add debug information to the query execution so that the jobs are traceable.
       session.sparkContext.setLocalProperty(
         "callSite.short",
-        s"Spark Connect - ${StringUtils.abbreviate(debugString, 128)}")
-      session.sparkContext.setLocalProperty(
-        "callSite.long",
-        StringUtils.abbreviate(debugString, 2048))
+        s"Spark Connect - ${Utils.abbreviate(debugString, 128)}")
+      session.sparkContext.setLocalProperty("callSite.long", Utils.abbreviate(debugString, 2048))
 
       executeHolder.request.getPlan.getOpTypeCase match {
-        case proto.Plan.OpTypeCase.COMMAND => handleCommand(executeHolder.request)
-        case proto.Plan.OpTypeCase.ROOT => handlePlan(executeHolder.request)
-        case _ =>
-          throw new UnsupportedOperationException(
-            s"${executeHolder.request.getPlan.getOpTypeCase} not supported.")
+        case proto.Plan.OpTypeCase.ROOT | proto.Plan.OpTypeCase.COMMAND =>
+          val execution = new SparkConnectPlanExecution(executeHolder)
+          execution.handlePlan(executeHolder.responseObserver)
+        case other =>
+          throw InvalidInputErrors.invalidOneOfField(
+            other,
+            executeHolder.request.getPlan.getDescriptorForType)
       }
 
-      val observedMetrics: Map[String, Seq[(Option[String], Any)]] = {
+      val observedMetrics: Map[String, Seq[(Option[String], Any, Option[DataType])]] = {
         executeHolder.observations.map { case (name, observation) =>
-          val values = observation.getOrEmpty.map { case (key, value) =>
-            (Some(key), value)
-          }.toSeq
+          val values =
+            observation.getRowOrEmpty
+              .map(SparkConnectPlanExecution.toObservedMetricsValues(_))
+              .getOrElse(Seq.empty)
           name -> values
         }.toMap
       }
-      val accumulatedInPython: Map[String, Seq[(Option[String], Any)]] = {
+      val accumulatedInPython: Map[String, Seq[(Option[String], Any, Option[DataType])]] = {
         executeHolder.sessionHolder.pythonAccumulator.flatMap { accumulator =>
           accumulator.synchronized {
             val value = accumulator.value.asScala.toSeq
             if (value.nonEmpty) {
               accumulator.reset()
-              Some("__python_accumulator__" -> value.map(value => (None, value)))
+              Some("__python_accumulator__" -> value.map(value => (None, value, None)))
             } else {
               None
             }
@@ -244,7 +257,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
             .createObservedMetricsResponse(
               executeHolder.sessionHolder.sessionId,
               executeHolder.sessionHolder.serverSessionId,
-              executeHolder.request.getPlan.getRoot.getCommon.getPlanId,
+              executeHolder.allObservationAndPlanIds,
               observedMetrics ++ accumulatedInPython))
       }
 
@@ -287,27 +300,13 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
    *   True if we should delegate sending the final ResultComplete to the handler thread, i.e.
    *   don't send a ResultComplete when the ExecuteThread returns.
    */
-  private def shouldDelegateCompleteResponse(request: proto.ExecutePlanRequest): Boolean = {
+  private[connect] def shouldDelegateCompleteResponse(
+      request: proto.ExecutePlanRequest): Boolean = {
     request.getPlan.getOpTypeCase == proto.Plan.OpTypeCase.COMMAND &&
     request.getPlan.getCommand.getCommandTypeCase ==
       proto.Command.CommandTypeCase.STREAMING_QUERY_LISTENER_BUS_COMMAND &&
       request.getPlan.getCommand.getStreamingQueryListenerBusCommand.getCommandCase ==
       proto.StreamingQueryListenerBusCommand.CommandCase.ADD_LISTENER_BUS_LISTENER
-  }
-
-  private def handlePlan(request: proto.ExecutePlanRequest): Unit = {
-    val responseObserver = executeHolder.responseObserver
-
-    val execution = new SparkConnectPlanExecution(executeHolder)
-    execution.handlePlan(responseObserver)
-  }
-
-  private def handleCommand(request: proto.ExecutePlanRequest): Unit = {
-    val responseObserver = executeHolder.responseObserver
-
-    val command = request.getPlan.getCommand
-    val planner = new SparkConnectPlanner(executeHolder)
-    planner.process(command = command, responseObserver = responseObserver)
   }
 
   private def requestString(request: Message) = {
@@ -331,7 +330,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
   }
 
   private class ExecutionThread()
-      extends Thread(s"SparkConnectExecuteThread_opId=${executeHolder.operationId}") {
+      extends Thread(s"${CONNECT_EXECUTE_THREAD_PREFIX}_opId=${executeHolder.operationId}") {
     override def run(): Unit = execute()
   }
 }
@@ -349,17 +348,20 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
 private object ThreadState {
 
   /** The thread has not started: transition to interrupted or started. */
-  val notStarted: Int = 0
+  val notStarted: ThreadStateInfo = ThreadStateInfo(0)
 
   /** Execution was interrupted: terminal state. */
-  val interrupted: Int = 1
+  val interrupted: ThreadStateInfo = ThreadStateInfo(1)
 
   /** The thread has started: transition to startedInterrupted or completed. */
-  val started: Int = 2
+  val started: ThreadStateInfo = ThreadStateInfo(2)
 
-  /** The thread has started and execution was interrupted: transition to completed. */
-  val startedInterrupted: Int = 3
+  /** The thread was started and execution has been interrupted: transition to completed. */
+  val startedInterrupted: ThreadStateInfo = ThreadStateInfo(3)
 
-  /** Execution was completed: terminal state. */
-  val completed: Int = 4
+  /** Execution has been completed: terminal state. */
+  val completed: ThreadStateInfo = ThreadStateInfo(4)
 }
+
+/** Represents the state of an execution thread. */
+case class ThreadStateInfo(val transitionState: Int)

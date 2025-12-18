@@ -103,8 +103,8 @@ public class CLIService extends CompositeService implements ICLIService {
       String keyTabFile = hiveConf.getVar(ConfVars.HIVE_SERVER2_SPNEGO_KEYTAB);
       if (principal.isEmpty() || keyTabFile.isEmpty()) {
         LOG.info("SPNego httpUGI not created, spNegoPrincipal: {}, keytabFile: {}",
-          MDC.of(LogKeys.PRINCIPAL$.MODULE$, principal),
-          MDC.of(LogKeys.KEYTAB_FILE$.MODULE$, keyTabFile));
+          MDC.of(LogKeys.PRINCIPAL, principal),
+          MDC.of(LogKeys.KEYTAB_FILE, keyTabFile));
       } else {
         try {
           this.httpUGI = HiveAuthFactory.loginFromSpnegoKeytabAndReturnUGI(hiveConf);
@@ -462,7 +462,7 @@ public class CLIService extends CompositeService implements ICLIService {
       } catch (ExecutionException e) {
         // The background operation thread was aborted
         LOG.warn("{}: The background operation was aborted", e,
-          MDC.of(LogKeys.OPERATION_HANDLE$.MODULE$, opHandle));
+          MDC.of(LogKeys.OPERATION_HANDLE, opHandle));
       } catch (InterruptedException e) {
         // No op, this thread was interrupted
         // In this case, the call might return sooner than long polling timeout
@@ -556,7 +556,7 @@ public class CLIService extends CompositeService implements ICLIService {
       String owner, String renewer) throws HiveSQLException {
     String delegationToken = sessionManager.getSession(sessionHandle)
         .getDelegationToken(authFactory, owner, renewer);
-    LOG.info("{}: getDelegationToken()", MDC.of(LogKeys.SESSION_HANDLE$.MODULE$, sessionHandle));
+    LOG.info("{}: getDelegationToken()", MDC.of(LogKeys.SESSION_HANDLE, sessionHandle));
     return delegationToken;
   }
 
@@ -564,14 +564,14 @@ public class CLIService extends CompositeService implements ICLIService {
   public void cancelDelegationToken(SessionHandle sessionHandle, HiveAuthFactory authFactory,
       String tokenStr) throws HiveSQLException {
     sessionManager.getSession(sessionHandle).cancelDelegationToken(authFactory, tokenStr);
-    LOG.info("{}: cancelDelegationToken()", MDC.of(LogKeys.SESSION_HANDLE$.MODULE$, sessionHandle));
+    LOG.info("{}: cancelDelegationToken()", MDC.of(LogKeys.SESSION_HANDLE, sessionHandle));
   }
 
   @Override
   public void renewDelegationToken(SessionHandle sessionHandle, HiveAuthFactory authFactory,
       String tokenStr) throws HiveSQLException {
     sessionManager.getSession(sessionHandle).renewDelegationToken(authFactory, tokenStr);
-    LOG.info("{}: renewDelegationToken()", MDC.of(LogKeys.SESSION_HANDLE$.MODULE$, sessionHandle));
+    LOG.info("{}: renewDelegationToken()", MDC.of(LogKeys.SESSION_HANDLE, sessionHandle));
   }
 
   @Override

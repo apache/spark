@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.13</artifactId>
-    <version>4.0.0-SNAPSHOT</version>
+    <version>4.2.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -117,6 +117,24 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-connect-client-jvm_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-connect-shims_${scala.binary.version}</artifactId>
+        </exclusion>
+      </exclusions>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-connect-client-jdbc_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-connect-shims_${scala.binary.version}</artifactId>
+        </exclusion>
+      </exclusions>
       <scope>provided</scope>
     </dependency>
 
@@ -124,10 +142,24 @@
       Because we don't shade dependencies anymore, we need to restore Guava to compile scope so
       that the libraries Spark depend on have it available. We'll package the version that Spark
       uses which is not the same as Hadoop dependencies, but works.
+      As mentioned in https://github.com/google/guava/wiki/UseGuavaInYourBuild
+      Guava has one dependency that is needed for linkage at runtime:
+      com.google.guava:failureaccess:<version>
     -->
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
+      <scope>${hadoop.deps.scope}</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>*</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>failureaccess</artifactId>
       <scope>${hadoop.deps.scope}</scope>
     </dependency>
   </dependencies>
@@ -186,7 +218,7 @@
               <executable>cp</executable>
               <arguments>
                 <argument>-r</argument>
-                <argument>${basedir}/../connector/connect/client/jvm/target/connect-repl</argument>
+                <argument>${basedir}/../sql/connect/client/jvm/target/connect-repl</argument>
                 <argument>${basedir}/target/scala-${scala.binary.version}/jars/</argument>
               </arguments>
             </configuration>
@@ -200,7 +232,21 @@
             <configuration>
               <executable>cp</executable>
               <arguments>
-                <argument>${basedir}/../connector/connect/client/jvm/target/spark-connect-client-jvm_${scala.binary.version}-${project.version}.jar</argument>
+                <argument>${basedir}/../sql/connect/client/jvm/target/spark-connect-client-jvm_${scala.binary.version}-${project.version}.jar</argument>
+                <argument>${basedir}/target/scala-${scala.binary.version}/jars/connect-repl</argument>
+              </arguments>
+            </configuration>
+          </execution>
+          <execution>
+            <id>copy-connect-client-jdbc-jar</id>
+            <phase>package</phase>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <configuration>
+              <executable>cp</executable>
+              <arguments>
+                <argument>${basedir}/../sql/connect/client/jdbc/target/spark-connect-client-jdbc_${scala.binary.version}-${project.version}.jar</argument>
                 <argument>${basedir}/target/scala-${scala.binary.version}/jars/connect-repl</argument>
               </arguments>
             </configuration>
@@ -271,34 +317,6 @@
         </dependency>
       </dependencies>
     </profile>
-    <profile>
-      <id>bigtop-dist</id>
-      <!-- This profile uses the assembly plugin to create a special "dist" package for BigTop
-           that contains Spark but not the Hadoop JARs it depends on. -->
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-assembly-plugin</artifactId>
-            <version>3.1.0</version>
-            <executions>
-              <execution>
-                <id>dist</id>
-                <phase>package</phase>
-                <goals>
-                  <goal>single</goal>
-                </goals>
-                <configuration>
-                  <descriptors>
-                    <descriptor>src/main/assembly/assembly.xml</descriptor>
-                  </descriptors>
-                </configuration>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
 
     <!-- Profiles that disable inclusion of certain dependencies. -->
     <profile>
@@ -317,13 +335,7 @@
       <id>hive-provided</id>
       <properties>
         <hive.deps.scope>provided</hive.deps.scope>
-        <hive.jackson.scope>provided</hive.jackson.scope>
-      </properties>
-    </profile>
-    <profile>
-      <id>hive-jackson-provided</id>
-      <properties>
-        <hive.jackson.scope>provided</hive.jackson.scope>
+        <hive.llap.scope>provided</hive.llap.scope>
       </properties>
     </profile>
     <profile>
@@ -339,11 +351,10 @@
       </properties>
     </profile>
 
-    <!-- Pull in jjwt-impl and jjwt-jackson jars -->
     <profile>
-      <id>jjwt</id>
+      <id>jjwt-provided</id>
       <properties>
-        <jjwt.deps.scope>compile</jjwt.deps.scope>
+        <jjwt.deps.scope>provided</jjwt.deps.scope>
       </properties>
     </profile>
 

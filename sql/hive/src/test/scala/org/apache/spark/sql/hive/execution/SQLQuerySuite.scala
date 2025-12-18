@@ -19,11 +19,10 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.File
 import java.net.URI
-import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.sql.{Date, Timestamp}
 import java.util.{Locale, Set}
 
-import com.google.common.io.{Files, FileWriteMode}
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.{SparkException, TestUtils}
@@ -34,11 +33,12 @@ import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, CatalogUtils, HiveTableRelation}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLConf
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.execution.{SparkPlanInfo, TestUncaughtExceptionHandler}
 import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.command.{InsertIntoDataSourceDirCommand, LoadDataCommand}
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
@@ -99,7 +99,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       assume(TestUtils.testCommandAvailable("/bin/bash"))
       assume(TestUtils.testCommandAvailable("echo"))
       assume(TestUtils.testCommandAvailable("sed"))
-      val scriptFilePath = getTestResourcePath("test_script.sh")
+      val scriptFilePath = getTestResourcePath("test-script.sh")
       val df = Seq(("x1", "y1", "z1"), ("x2", "y2", "z2")).toDF("c1", "c2", "c3")
       df.createOrReplaceTempView("script_table")
       val query1 = sql(
@@ -258,6 +258,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
   }
 
   test("describe functions - user defined functions") {
+    assume(Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar") != null)
     withUserDefinedFunction("udtf_count" -> false) {
       sql(
         s"""
@@ -283,6 +284,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
   }
 
   test("describe functions - temporary user defined functions") {
+    assume(Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar") != null)
     withUserDefinedFunction("udtf_count_temp" -> true) {
       sql(
         s"""
@@ -401,7 +403,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     val catalogTable =
       sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
     relation match {
-      case LogicalRelation(r: HadoopFsRelation, _, _, _) =>
+      case LogicalRelationWithTable(r: HadoopFsRelation, _) =>
         if (!isDataSourceTable) {
           fail(
             s"${classOf[HiveTableRelation].getCanonicalName} is expected, but found " +
@@ -1947,10 +1949,10 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       val path = dir.toURI.toString.stripSuffix("/")
       val dirPath = dir.getAbsoluteFile
       for (i <- 1 to 3) {
-        Files.asCharSink(new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8).write(s"$i")
+        Files.writeString(new File(dirPath, s"part-r-0000$i").toPath, s"$i")
       }
       for (i <- 5 to 7) {
-        Files.asCharSink(new File(dirPath, s"part-s-0000$i"), StandardCharsets.UTF_8).write(s"$i")
+        Files.writeString(new File(dirPath, s"part-s-0000$i").toPath, s"$i")
       }
 
       withTable("load_t") {
@@ -1971,7 +1973,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       val path = dir.toURI.toString.stripSuffix("/")
       val dirPath = dir.getAbsoluteFile
       for (i <- 1 to 3) {
-        Files.asCharSink(new File(dirPath, s"part-r-0000 $i"), StandardCharsets.UTF_8).write(s"$i")
+        Files.writeString(new File(dirPath, s"part-r-0000 $i").toPath, s"$i")
       }
       withTable("load_t") {
         sql("CREATE TABLE load_t (a STRING) USING hive")
@@ -1986,7 +1988,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       val path = dir.toURI.toString.stripSuffix("/")
       val dirPath = dir.getAbsoluteFile
       for (i <- 1 to 3) {
-        Files.asCharSink(new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8).write(s"$i")
+        Files.writeString(new File(dirPath, s"part-r-0000$i").toPath, s"$i")
       }
       withTable("load_t") {
         sql("CREATE TABLE load_t (a STRING) USING hive")
@@ -2010,7 +2012,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       val path = dir.toURI.toString.stripSuffix("/")
       val dirPath = dir.getAbsoluteFile
       for (i <- 1 to 3) {
-        Files.asCharSink(new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8).write(s"$i")
+        Files.writeString(new File(dirPath, s"part-r-0000$i").toPath, s"$i")
       }
       withTable("load_t1") {
         sql("CREATE TABLE load_t1 (a STRING) USING hive")
@@ -2025,7 +2027,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       val path = dir.toURI.toString.stripSuffix("/")
       val dirPath = dir.getAbsoluteFile
       for (i <- 1 to 3) {
-        Files.asCharSink(new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8).write(s"$i")
+        Files.writeString(new File(dirPath, s"part-r-0000$i").toPath, s"$i")
       }
       withTable("load_t2") {
         sql("CREATE TABLE load_t2 (a STRING) USING hive")
@@ -2039,8 +2041,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     withTempDir { dir =>
       val path = dir.toURI.toString.stripSuffix("/")
       val dirPath = dir.getAbsoluteFile
-      Files.asCharSink(
-        new File(dirPath, "part-r-000011"), StandardCharsets.UTF_8, FileWriteMode.APPEND).write("1")
+      Files.writeString(new File(dirPath, "part-r-000011").toPath, "1")
       withTable("part_table") {
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
           sql(
@@ -2461,8 +2462,11 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       "spark.sql.hive.metastore.jars",
       "spark.sql.hive.metastore.sharedPrefixes",
       "spark.sql.hive.metastore.barrierPrefixes").foreach { key =>
-      val e = intercept[AnalysisException](sql(s"set $key=abc"))
-      assert(e.getMessage.contains("Cannot modify the value of a static config"))
+      checkError(
+        exception = intercept[AnalysisException](sql(s"set $key=abc")),
+        condition = "CANNOT_MODIFY_STATIC_CONFIG",
+        parameters = Map("key" -> toSQLConf(key))
+      )
     }
   }
 
@@ -2480,6 +2484,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
   }
 
   test("SPARK-32668: HiveGenericUDTF initialize UDTF should use StructObjectInspector method") {
+    assume(Thread.currentThread().getContextClassLoader.getResource("SPARK-21101-1.0.jar") != null)
     withUserDefinedFunction("udtf_stack1" -> true, "udtf_stack2" -> true) {
       sql(
         s"""
@@ -2535,7 +2540,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     withTempDir { dir =>
       withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
         withTable("test_precision") {
-          val df = sql(s"SELECT 'dummy' AS name, ${"1" * 20}.${"2" * 18} AS value")
+          val df = sql(s"SELECT 'dummy' AS name, ${"1".repeat(20)}.${"2".repeat(18)} AS value")
           df.write.mode("Overwrite").parquet(dir.getAbsolutePath)
           sql(
             s"""

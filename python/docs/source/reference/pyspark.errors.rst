@@ -50,15 +50,16 @@ Classes
     QueryContext
     QueryContextType
     QueryExecutionException
-    RetriesExceeded
     SessionNotSameException
     SparkRuntimeException
     SparkUpgradeException
     SparkNoSuchElementException
     StreamingQueryException
+    StreamingPythonRunnerInitializationException
     TempTableAlreadyExistsException
     UnknownException
     UnsupportedOperationException
+    PickleException
 
 
 Methods
@@ -69,6 +70,7 @@ Methods
 .. autosummary::
     :toctree: api/
 
+    PySparkException.getCondition
     PySparkException.getErrorClass
     PySparkException.getMessage
     PySparkException.getMessageParameters

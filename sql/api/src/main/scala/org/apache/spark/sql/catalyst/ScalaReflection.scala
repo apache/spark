@@ -330,7 +330,12 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, localTypeOf[java.sql.Timestamp]) => STRICT_TIMESTAMP_ENCODER
       case t if isSubtype(t, localTypeOf[java.time.Instant]) => STRICT_INSTANT_ENCODER
       case t if isSubtype(t, localTypeOf[java.time.LocalDateTime]) => LocalDateTimeEncoder
+      case t if isSubtype(t, localTypeOf[java.time.LocalTime]) => LocalTimeEncoder
       case t if isSubtype(t, localTypeOf[VariantVal]) => VariantEncoder
+      case t if isSubtype(t, localTypeOf[Geography]) =>
+        DEFAULT_GEOGRAPHY_ENCODER
+      case t if isSubtype(t, localTypeOf[Geometry]) =>
+        DEFAULT_GEOMETRY_ENCODER
       case t if isSubtype(t, localTypeOf[Row]) => UnboundRowEncoder
 
       // UDT encoders

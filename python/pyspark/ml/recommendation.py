@@ -30,7 +30,7 @@ from pyspark.ml.param.shared import (
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.common import inherit_doc
 from pyspark.ml.param import Params, TypeConverters, Param
-from pyspark.ml.util import JavaMLWritable, JavaMLReadable
+from pyspark.ml.util import JavaMLWritable, JavaMLReadable, try_remote_attribute_relation
 from pyspark.sql import DataFrame
 
 if TYPE_CHECKING:
@@ -72,7 +72,7 @@ class _ALSModelParams(HasPredictionCol, HasBlockSize):
     )
 
     def __init__(self, *args: Any):
-        super(_ALSModelParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(blockSize=4096)
 
     @since("1.4.0")
@@ -159,7 +159,7 @@ class _ALSParams(_ALSModelParams, HasMaxIter, HasRegParam, HasCheckpointInterval
     )
 
     def __init__(self, *args: Any):
-        super(_ALSParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(
             rank=10,
             maxIter=10,
@@ -395,7 +395,7 @@ class ALS(JavaEstimator["ALSModel"], _ALSParams, JavaMLWritable, JavaMLReadable[
                  intermediateStorageLevel="MEMORY_AND_DISK", \
                  finalStorageLevel="MEMORY_AND_DISK", coldStartStrategy="nan", blockSize=4096)
         """
-        super(ALS, self).__init__()
+        super().__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.recommendation.ALS", self.uid)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -617,6 +617,7 @@ class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable["ALSMo
 
     @property
     @since("1.4.0")
+    @try_remote_attribute_relation
     def userFactors(self) -> DataFrame:
         """
         a DataFrame that stores user factors in two columns: `id` and
@@ -626,6 +627,7 @@ class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable["ALSMo
 
     @property
     @since("1.4.0")
+    @try_remote_attribute_relation
     def itemFactors(self) -> DataFrame:
         """
         a DataFrame that stores item factors in two columns: `id` and
@@ -633,6 +635,7 @@ class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable["ALSMo
         """
         return self._call_java("itemFactors")
 
+    @try_remote_attribute_relation
     def recommendForAllUsers(self, numItems: int) -> DataFrame:
         """
         Returns top `numItems` items recommended for each user, for all users.
@@ -652,6 +655,7 @@ class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable["ALSMo
         """
         return self._call_java("recommendForAllUsers", numItems)
 
+    @try_remote_attribute_relation
     def recommendForAllItems(self, numUsers: int) -> DataFrame:
         """
         Returns top `numUsers` users recommended for each item, for all items.
@@ -671,6 +675,7 @@ class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable["ALSMo
         """
         return self._call_java("recommendForAllItems", numUsers)
 
+    @try_remote_attribute_relation
     def recommendForUserSubset(self, dataset: DataFrame, numItems: int) -> DataFrame:
         """
         Returns top `numItems` items recommended for each user id in the input data set. Note that
@@ -694,6 +699,7 @@ class ALSModel(JavaModel, _ALSModelParams, JavaMLWritable, JavaMLReadable["ALSMo
         """
         return self._call_java("recommendForUserSubset", dataset, numItems)
 
+    @try_remote_attribute_relation
     def recommendForItemSubset(self, dataset: DataFrame, numUsers: int) -> DataFrame:
         """
         Returns top `numUsers` users recommended for each item id in the input data set. Note that

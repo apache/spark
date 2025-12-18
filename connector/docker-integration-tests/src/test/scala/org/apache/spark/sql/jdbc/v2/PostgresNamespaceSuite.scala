@@ -21,29 +21,20 @@ import java.sql.Connection
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.jdbc.{DatabaseOnDocker, DockerJDBCIntegrationSuite}
+import org.apache.spark.sql.jdbc.{DockerJDBCIntegrationSuite, PostgresDatabaseOnDocker}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.tags.DockerTest
 
 /**
- * To run this test suite for a specific version (e.g., postgres:17.0-alpine):
+ * To run this test suite for a specific version (e.g., postgres:17.2-alpine):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:17.0-alpine
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:17.2-alpine
  *     ./build/sbt -Pdocker-integration-tests "testOnly *v2.PostgresNamespaceSuite"
  * }}}
  */
 @DockerTest
 class PostgresNamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespaceTest {
-  override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:17.0-alpine")
-    override val env = Map(
-      "POSTGRES_PASSWORD" -> "rootpass"
-    )
-    override val usesIpc = false
-    override val jdbcPort = 5432
-    override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:postgresql://$ip:$port/postgres?user=postgres&password=rootpass"
-  }
+  override val db = new PostgresDatabaseOnDocker
 
   val map = new CaseInsensitiveStringMap(
     Map("url" -> db.getJdbcUrl(dockerIp, externalPort),

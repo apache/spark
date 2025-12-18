@@ -296,7 +296,15 @@ def spark_type_to_pandas_dtype(
     elif isinstance(spark_type, (types.TimestampType, types.TimestampNTZType)):
         return np.dtype("datetime64[ns]")
     else:
-        return np.dtype(to_arrow_type(spark_type).to_pandas_dtype())
+        from pyspark.pandas.utils import default_session
+
+        prefers_large_var_types = (
+            default_session()
+            .conf.get("spark.sql.execution.arrow.useLargeVarTypes", "false")
+            .lower()
+            == "true"
+        )
+        return np.dtype(to_arrow_type(spark_type, prefers_large_var_types).to_pandas_dtype())
 
 
 def pandas_on_spark_type(tpe: Union[str, type, Dtype]) -> Tuple[Dtype, types.DataType]:
@@ -354,8 +362,9 @@ def infer_pd_series_spark_type(
     if dtype == np.dtype("object"):
         if len(pser) == 0 or pser.isnull().all():
             return types.NullType()
-        elif hasattr(pser.iloc[0], "__UDT__"):
-            return pser.iloc[0].__UDT__
+        notnull = pser[pser.notnull()]
+        if hasattr(notnull.iloc[0], "__UDT__"):
+            return notnull.iloc[0].__UDT__
         else:
             return from_arrow_type(pa.Array.from_pandas(pser).type, prefer_timestamp_ntz)
     elif isinstance(dtype, CategoricalDtype):

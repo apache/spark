@@ -21,13 +21,14 @@ import java.util.Locale
 
 import scala.collection.immutable.ListMap
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.PREDICATES
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql._
+import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters, InternalRow, QualifiedTableName, SQLConfHelper}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
 import org.apache.spark.sql.catalyst.analysis._
@@ -36,20 +37,26 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
+import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoDir, InsertIntoStatement, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{GeneratedColumn, IdentityColumn, ResolveDefaultColumns, V2ExpressionBuilder}
+import org.apache.spark.sql.catalyst.util.{GeneratedColumn, IdentityColumn, PushableExpression, ResolveDefaultColumns}
+import org.apache.spark.sql.classic.{SparkSession, Strategy}
 import org.apache.spark.sql.connector.catalog.{SupportsRead, V1Table}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, NullOrdering, SortDirection, SortOrder => V2SortOrder, SortValue}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Aggregation}
+import org.apache.spark.sql.connector.join.{JoinType => V2JoinType}
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, PushedDownOperators}
-import org.apache.spark.sql.execution.streaming.StreamingRelation
+import org.apache.spark.sql.execution.datasources.v2.{ExtractV2Table, PushedDownOperators}
+import org.apache.spark.sql.execution.streaming.runtime.StreamingRelation
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.{PartitioningUtils => CatalystPartitioningUtils}
@@ -158,7 +165,7 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
         if query.resolved && DDLUtils.isDatasourceTable(tableDesc) =>
       CreateDataSourceTableAsSelectCommand(tableDesc, mode, query, query.output.map(_.name))
 
-    case InsertIntoStatement(l @ LogicalRelation(_: InsertableRelation, _, _, _),
+    case InsertIntoStatement(l @ LogicalRelationWithTable(_: InsertableRelation, _),
         parts, _, query, overwrite, false, _) if parts.isEmpty =>
       InsertIntoDataSourceCommand(l, query, overwrite)
 
@@ -171,7 +178,7 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
       InsertIntoDataSourceDirCommand(storage, provider.get, query, overwrite)
 
     case i @ InsertIntoStatement(
-        l @ LogicalRelation(t: HadoopFsRelation, _, table, _), parts, _, query, overwrite, _, _)
+        l @ LogicalRelationWithTable(t: HadoopFsRelation, table), parts, _, query, overwrite, _, _)
         if query.resolved =>
       // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
       // the user has specified static partitions, we add a Project operator on top of the query
@@ -252,20 +259,40 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
       QualifiedTableName(table.identifier.catalog.get, table.database, table.identifier.table)
     val catalog = sparkSession.sessionState.catalog
     val dsOptions = DataSourceUtils.generateDatasourceOptions(extraOptions, table)
-    catalog.getCachedPlan(qualifiedTableName, () => {
-      val dataSource =
-        DataSource(
-          sparkSession,
-          // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
-          // inferred at runtime. We should still support it.
-          userSpecifiedSchema = if (table.schema.isEmpty) None else Some(table.schema),
-          partitionColumns = table.partitionColumnNames,
-          bucketSpec = table.bucketSpec,
-          className = table.provider.get,
-          options = dsOptions,
-          catalogTable = Some(table))
-      LogicalRelation(dataSource.resolveRelation(checkFilesExist = false), table)
-    })
+    val readFileSourceTableCacheIgnoreOptions =
+      SQLConf.get.getConf(SQLConf.READ_FILE_SOURCE_TABLE_CACHE_IGNORE_OPTIONS)
+    catalog.getCachedTable(qualifiedTableName) match {
+      case null =>
+        val dataSource =
+          DataSource(
+            sparkSession,
+            // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
+            // inferred at runtime. We should still support it.
+            userSpecifiedSchema = if (table.schema.isEmpty) None else Some(table.schema),
+            partitionColumns = table.partitionColumnNames,
+            bucketSpec = table.bucketSpec,
+            className = table.provider.get,
+            options = dsOptions,
+            catalogTable = Some(table))
+        val plan = LogicalRelation(dataSource.resolveRelation(checkFilesExist = false), table)
+        catalog.cacheTable(qualifiedTableName, plan)
+        plan
+
+      // If readFileSourceTableCacheIgnoreOptions is false AND
+      // the cached table relation's options differ from the new options:
+      // 1. Create a new HadoopFsRelation with updated options
+      // 2. Return a new LogicalRelation with the updated HadoopFsRelation
+      // This ensures the relation reflects any changes in data source options.
+      // Otherwise, leave the cached table relation as is
+      case r @ LogicalRelation(fsRelation: HadoopFsRelation, _, _, _, _)
+        if !readFileSourceTableCacheIgnoreOptions &&
+          (new CaseInsensitiveStringMap(fsRelation.options.asJava) !=
+          new CaseInsensitiveStringMap(dsOptions.asJava)) =>
+        val newFsRelation = fsRelation.copy(options = dsOptions)(sparkSession)
+        r.copy(relation = newFsRelation)
+
+      case other => other
+    }
   }
 
   private def getStreamingRelation(
@@ -292,21 +319,20 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
       i.copy(table = DDLUtils.readHiveTable(tableMeta))
 
     case append @ AppendData(
-        DataSourceV2Relation(
-          V1Table(table: CatalogTable), _, _, _, _), _, _, _, _, _) if !append.isByName =>
+        ExtractV2Table(V1Table(table: CatalogTable)), _, _, _, _, _) if !append.isByName =>
       InsertIntoStatement(UnresolvedCatalogRelation(table),
         table.partitionColumnNames.map(name => name -> None).toMap,
         Seq.empty, append.query, false, append.isByName)
 
-    case UnresolvedCatalogRelation(tableMeta, options, false)
-        if DDLUtils.isDatasourceTable(tableMeta) =>
-      readDataSourceTable(tableMeta, options)
-
-    case UnresolvedCatalogRelation(tableMeta, _, false) =>
-      DDLUtils.readHiveTable(tableMeta)
-
-    case UnresolvedCatalogRelation(tableMeta, extraOptions, true) =>
-      getStreamingRelation(tableMeta, extraOptions)
+    case unresolvedCatalogRelation: UnresolvedCatalogRelation =>
+      val result = resolveUnresolvedCatalogRelation(unresolvedCatalogRelation)
+      // We put the resolved relation into the [[AnalyzerBridgeState]] for
+      // it to be later reused by the single-pass [[Resolver]] to avoid resolving the
+      // relation metadata twice.
+      AnalysisContext.get.getSinglePassResolverBridgeState.map { bridgeState =>
+        bridgeState.catalogRelationsWithResolvedMetadata.put(unresolvedCatalogRelation, result)
+      }
+      result
 
     case s @ StreamingRelationV2(
         _, _, table, extraOptions, _, _, _, Some(UnresolvedCatalogRelation(tableMeta, _, true))) =>
@@ -320,6 +346,21 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
         v1Relation
       }
   }
+
+  def resolveUnresolvedCatalogRelation(
+      unresolvedCatalogRelation: UnresolvedCatalogRelation): LogicalPlan = {
+    unresolvedCatalogRelation match {
+      case UnresolvedCatalogRelation(tableMeta, options, false)
+          if DDLUtils.isDatasourceTable(tableMeta) =>
+        readDataSourceTable(tableMeta, options)
+
+      case UnresolvedCatalogRelation(tableMeta, _, false) =>
+        DDLUtils.readHiveTable(tableMeta)
+
+      case UnresolvedCatalogRelation(tableMeta, extraOptions, true) =>
+        getStreamingRelation(tableMeta, extraOptions)
+    }
+  }
 }
 
 
@@ -330,7 +371,7 @@ object DataSourceStrategy
   extends Strategy with Logging with CastSupport with PredicateHelper with SQLConfHelper {
 
   def apply(plan: LogicalPlan): Seq[execution.SparkPlan] = plan match {
-    case PhysicalOperation(projects, filters, l @ LogicalRelation(t: CatalystScan, _, _, _)) =>
+    case PhysicalOperation(projects, filters, l @ LogicalRelationWithTable(t: CatalystScan, _)) =>
       pruneFilterProjectRaw(
         l,
         projects,
@@ -339,29 +380,30 @@ object DataSourceStrategy
           toCatalystRDD(l, requestedColumns, t.buildScan(requestedColumns, allPredicates))) :: Nil
 
     case PhysicalOperation(projects, filters,
-                           l @ LogicalRelation(t: PrunedFilteredScan, _, _, _)) =>
+                           l @ LogicalRelationWithTable(t: PrunedFilteredScan, _)) =>
       pruneFilterProject(
         l,
         projects,
         filters,
         (a, f) => toCatalystRDD(l, a, t.buildScan(a.map(_.name).toArray, f))) :: Nil
 
-    case PhysicalOperation(projects, filters, l @ LogicalRelation(t: PrunedScan, _, _, _)) =>
+    case PhysicalOperation(projects, filters, l @ LogicalRelationWithTable(t: PrunedScan, _)) =>
       pruneFilterProject(
         l,
         projects,
         filters,
         (a, _) => toCatalystRDD(l, a, t.buildScan(a.map(_.name).toArray))) :: Nil
 
-    case l @ LogicalRelation(baseRelation: TableScan, _, _, _) =>
+    case l @ LogicalRelationWithTable(baseRelation: TableScan, _) =>
       RowDataSourceScanExec(
         l.output,
         l.output.toStructType,
         Set.empty,
         Set.empty,
-        PushedDownOperators(None, None, None, None, Seq.empty, Seq.empty),
+        PushedDownOperators(None, None, None, None, Seq.empty, Seq.empty, Seq.empty, None),
         toCatalystRDD(l, baseRelation.buildScan()),
         baseRelation,
+        l.stream,
         None) :: Nil
 
     case _ => Nil
@@ -433,9 +475,10 @@ object DataSourceStrategy
         requestedColumns.toStructType,
         pushedFilters.toSet,
         handledFilters,
-        PushedDownOperators(None, None, None, None, Seq.empty, Seq.empty),
+        PushedDownOperators(None, None, None, None, Seq.empty, Seq.empty, Seq.empty, None),
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation,
+        relation.stream,
         relation.catalogTable.map(_.identifier))
       filterCondition.map(execution.FilterExec(_, scan)).getOrElse(scan)
     } else {
@@ -456,12 +499,22 @@ object DataSourceStrategy
         requestedColumns.toStructType,
         pushedFilters.toSet,
         handledFilters,
-        PushedDownOperators(None, None, None, None, Seq.empty, Seq.empty),
+        PushedDownOperators(None, None, None, None, Seq.empty, Seq.empty, Seq.empty, None),
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation,
+        relation.stream,
         relation.catalogTable.map(_.identifier))
       execution.ProjectExec(
         projects, filterCondition.map(execution.FilterExec(_, scan)).getOrElse(scan))
+    }
+  }
+
+  def translateJoinType(joinType: JoinType): Option[V2JoinType] = {
+    joinType match {
+      case Inner => Some(V2JoinType.INNER_JOIN)
+      case LeftOuter => Some(V2JoinType.LEFT_OUTER_JOIN)
+      case RightOuter => Some(V2JoinType.RIGHT_OUTER_JOIN)
+      case _ => None
     }
   }
 
@@ -505,9 +558,11 @@ object DataSourceStrategy
       ExpressionSet(Nil)
     } else {
       val partitionSet = AttributeSet(partitionColumns)
+      val maxToStringFields = SQLConf.get.getConf(SQLConf.MAX_TO_STRING_FIELDS)
       val predicates = ExpressionSet(normalizedFilters
         .flatMap(extractPredicatesWithinOutputSet(_, partitionSet)))
-      logInfo(log"Pruning directories with: ${MDC(PREDICATES, predicates.mkString(","))}")
+      logInfo(log"Pruning directories with: ${MDC(PREDICATES,
+        predicates.simpleString(maxToStringFields))}")
       predicates
     }
   }
@@ -848,11 +903,4 @@ object PushableColumnAndNestedColumn extends PushableColumnBase {
 
 object PushableColumnWithoutNestedColumn extends PushableColumnBase {
   override val nestedPredicatePushdownEnabled = false
-}
-
-/**
- * Get the expression of DS V2 to represent catalyst expression that can be pushed down.
- */
-object PushableExpression {
-  def unapply(e: Expression): Option[V2Expression] = new V2ExpressionBuilder(e).build()
 }

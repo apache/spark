@@ -606,6 +606,9 @@ class SeriesStatMixin:
         with self.assertRaisesRegex(TypeError, r"lag should be an int; however, got"):
             psser.autocorr(1.0)
 
+        psser = ps.Series([1, 0, 0, 0])
+        self.assertTrue(bool(np.isnan(psser.autocorr())))
+
     def _test_autocorr(self, pdf):
         psdf = ps.from_pandas(pdf)
         for lag in range(-10, 10):

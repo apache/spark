@@ -18,20 +18,20 @@
 package org.apache.spark.storage
 
 import java.io.File
+import java.nio.file.{Files, Paths}
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue, Semaphore, TimeUnit}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
-import org.apache.commons.io.FileUtils
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark._
 import org.apache.spark.internal.config
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.StandaloneSchedulerBackend
-import org.apache.spark.util.{ResetSystemProperties, SystemClock, ThreadUtils}
+import org.apache.spark.util.{ResetSystemProperties, SystemClock, ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
 class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalSparkContext
@@ -360,12 +360,8 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
 
     val sparkTempDir = System.getProperty("java.io.tmpdir")
 
-    def shuffleFiles: Seq[File] = {
-      FileUtils
-        .listFiles(new File(sparkTempDir), Array("data", "index"), true)
-        .asScala
-        .toSeq
-    }
+    def shuffleFiles: Seq[File] = Utils.listFiles(new File(sparkTempDir)).asScala
+        .filter(f => Array("data", "index").exists(f.getName.endsWith)).toSeq
 
     val existingShuffleFiles = shuffleFiles
 
@@ -377,19 +373,21 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
       .set(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED, true)
     sc = new SparkContext(conf)
     TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
-    val shuffleBlockUpdates = new ArrayBuffer[BlockId]()
-    var isDecommissionedExecutorRemoved = false
+    val shuffleBlockUpdates = new ConcurrentLinkedQueue[BlockId]()
     val execToDecommission = sc.getExecutorIds().head
+    val decommissionedExecutorLocalDir = sc.parallelize(1 to 100, 10).flatMap {  _ =>
+      if (SparkEnv.get.executorId == execToDecommission) {
+        SparkEnv.get.blockManager.getLocalDiskDirs
+      } else {
+        Array.empty[String]
+      }
+    }.collect().toSet
+    assert(decommissionedExecutorLocalDir.size == 1)
     sc.addSparkListener(new SparkListener {
       override def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated): Unit = {
         if (blockUpdated.blockUpdatedInfo.blockId.isShuffle) {
-          shuffleBlockUpdates += blockUpdated.blockUpdatedInfo.blockId
+          shuffleBlockUpdates.add(blockUpdated.blockUpdatedInfo.blockId)
         }
-      }
-
-      override def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved): Unit = {
-        assert(execToDecommission === executorRemoved.executorId)
-        isDecommissionedExecutorRemoved = true
       }
     })
 
@@ -409,18 +407,22 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
       )
 
     eventually(timeout(1.minute), interval(10.milliseconds)) {
-      assert(isDecommissionedExecutorRemoved)
+      assert(Files.notExists(Paths.get(decommissionedExecutorLocalDir.head)))
       // Ensure there are shuffle data have been migrated
       assert(shuffleBlockUpdates.size >= 2)
     }
 
     val shuffleId = shuffleBlockUpdates
+      .asScala
       .find(_.isInstanceOf[ShuffleIndexBlockId])
       .map(_.asInstanceOf[ShuffleIndexBlockId].shuffleId)
       .get
 
+    eventually(timeout(1.minute), interval(10.milliseconds)) {
+      val newShuffleFiles = shuffleFiles.diff(existingShuffleFiles)
+      assert(newShuffleFiles.size >= shuffleBlockUpdates.size)
+    }
     val newShuffleFiles = shuffleFiles.diff(existingShuffleFiles)
-    assert(newShuffleFiles.size >= shuffleBlockUpdates.size)
 
     // Remove the shuffle data
     sc.shuffleDriverComponents.removeShuffle(shuffleId, true)

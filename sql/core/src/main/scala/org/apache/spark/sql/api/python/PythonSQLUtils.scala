@@ -18,27 +18,29 @@
 package org.apache.spark.sql.api.python
 
 import java.io.InputStream
-import java.net.Socket
-import java.nio.channels.Channels
+import java.nio.channels.{Channels, SocketChannel}
 
 import net.razorvine.pickle.{Pickler, Unpickler}
 
+import org.apache.spark.SparkContext
 import org.apache.spark.api.python.DechunkedInputStream
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.CLASS_LOADER
 import org.apache.spark.security.SocketAuthServer
-import org.apache.spark.sql.{internal, Column, DataFrame, Row, SparkSession}
+import org.apache.spark.sql.{internal, Column, DataFrame, Row, SparkSession, TableArg}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.classic.ClassicConversions._
+import org.apache.spark.sql.classic.ExpressionUtils.expression
 import org.apache.spark.sql.execution.{ExplainMode, QueryExecution}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.python.EvaluatePython
-import org.apache.spark.sql.internal.ExpressionUtils.{column, expression}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.storage.PythonWorkerLogBlockId
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
 private[sql] object PythonSQLUtils extends Logging {
@@ -117,7 +119,7 @@ private[sql] object PythonSQLUtils extends Logging {
   def toPyRow(row: Row): Array[Byte] = {
     assert(row.isInstanceOf[GenericRowWithSchema])
     withInternalRowPickler(_.dumps(EvaluatePython.toJava(
-      CatalystTypeConverters.convertToCatalyst(row), row.schema)))
+      CatalystTypeConverters.convertToCatalyst(row), row.schema, SQLConf.get.pysparkBinaryAsBytes)))
   }
 
   def toJVMRow(
@@ -143,8 +145,32 @@ private[sql] object PythonSQLUtils extends Logging {
     }
   }
 
-  def castTimestampNTZToLong(c: Column): Column =
-    Column.internalFn("timestamp_ntz_to_long", c)
+  def jsonToDDL(json: String): String = {
+    DataType.fromJson(json).asInstanceOf[StructType].toDDL
+  }
+
+  def ddlToJson(ddl: String): String = {
+    val dataType = try {
+      // DDL format, "fieldname datatype, fieldname datatype".
+      StructType.fromDDL(ddl)
+    } catch {
+      case e: Throwable =>
+        try {
+          // For backwards compatibility, "integer", "struct<fieldname: datatype>" and etc.
+          parseDataType(ddl)
+        } catch {
+          case _: Throwable =>
+            try {
+              // For backwards compatibility, "fieldname: datatype, fieldname: datatype" case.
+              parseDataType(s"struct<${ddl.trim}>")
+            } catch {
+              case _: Throwable =>
+                throw e
+            }
+        }
+    }
+    dataType.json
+  }
 
   def unresolvedNamedLambdaVariable(name: String): Column =
     Column(internal.UnresolvedNamedLambdaVariable.apply(name))
@@ -155,19 +181,33 @@ private[sql] object PythonSQLUtils extends Logging {
     Column(internal.LambdaFunction(function.node, arguments))
   }
 
-  def namedArgumentExpression(name: String, e: Column): Column = NamedArgumentExpression(name, e)
+  def namedArgumentExpression(name: String, e: Column): Column =
+    Column(NamedArgumentExpression(name, expression(e)))
 
-  def distributedIndex(): Column = {
-    val expr = MonotonicallyIncreasingID()
-    expr.setTagValue(FunctionRegistry.FUNC_ALIAS, "distributed_index")
-    expr
-  }
+  def namedArgumentExpression(name: String, e: TableArg): Column =
+    Column(NamedArgumentExpression(name, e.expression))
 
   @scala.annotation.varargs
   def fn(name: String, arguments: Column*): Column = Column.fn(name, arguments: _*)
 
   @scala.annotation.varargs
   def internalFn(name: String, inputs: Column*): Column = Column.internalFn(name, inputs: _*)
+
+  def cleanupPythonWorkerLogs(sessionUUID: String, sparkContext: SparkContext): Unit = {
+    if (!sparkContext.isStopped) {
+      try {
+        val blockManager = sparkContext.env.blockManager.master
+        blockManager.getMatchingBlockIds(
+            id => id.isInstanceOf[PythonWorkerLogBlockId] &&
+              id.asInstanceOf[PythonWorkerLogBlockId].sessionId == sessionUUID,
+            askStorageEndpoints = true)
+          .distinct
+          .foreach(blockManager.removeBlock)
+      } catch {
+        case _ if sparkContext.isStopped => // Ignore when SparkContext is stopped.
+      }
+    }
+  }
 }
 
 /**
@@ -177,8 +217,8 @@ private[sql] object PythonSQLUtils extends Logging {
 private[spark] class ArrowIteratorServer
   extends SocketAuthServer[Iterator[Array[Byte]]]("pyspark-arrow-batches-server") {
 
-  def handleConnection(sock: Socket): Iterator[Array[Byte]] = {
-    val in = sock.getInputStream()
+  def handleConnection(sock: SocketChannel): Iterator[Array[Byte]] = {
+    val in = Channels.newInputStream(sock)
     val dechunkedInput: InputStream = new DechunkedInputStream(in)
     // Create array to consume iterator so that we can safely close the file
     ArrowConverters.getBatchesFromStream(Channels.newChannel(dechunkedInput)).toArray.iterator

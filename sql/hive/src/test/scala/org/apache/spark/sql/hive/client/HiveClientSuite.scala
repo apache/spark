@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, NoSuchDatabaseException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal}
+import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.test.TestHiveVersion
 import org.apache.spark.sql.types.{IntegerType, StructType}
@@ -43,6 +44,8 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
   private var versionSpark: TestHiveVersion = null
 
   private val emptyDir = Utils.createTempDir().getCanonicalPath
+
+  private val ver = IsolatedClientLoader.hiveVersion(version)
 
   /**
    * Drops table `tableName` after calling `f`.
@@ -68,11 +71,13 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
   }
 
   def table(database: String, tableName: String,
+      collation: Option[String] = None,
       tableType: CatalogTableType = CatalogTableType.MANAGED): CatalogTable = {
     CatalogTable(
       identifier = TableIdentifier(tableName, Some(database)),
       tableType = tableType,
       schema = new StructType().add("key", "int"),
+      collation = collation,
       storage = CatalogStorageFormat(
         locationUri = None,
         inputFormat = Some(classOf[TextInputFormat].getName),
@@ -163,7 +168,7 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
     // test alter database location
     val tempDatabasePath2 = Utils.createTempDir().toURI
     // Hive support altering database location since HIVE-8472.
-    if (version == "3.0" || version == "3.1") {
+    if (ver.compare(hive.v3_0) >= 0) {
       client.alterDatabase(database.copy(locationUri = tempDatabasePath2))
       val uriInCatalog = client.getDatabase("temporary").locationUri
       assert("file" === uriInCatalog.getScheme)
@@ -202,6 +207,22 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
     client.createTable(table("default", tableName = "temporary"), ignoreIfExists = false)
     client.createTable(table("default", tableName = "view1", tableType = CatalogTableType.VIEW),
       ignoreIfExists = false)
+  }
+
+  test("create/alter table with collations") {
+    client.createTable(table("default", tableName = "collation_table",
+      collation = Some("UNICODE")), ignoreIfExists = false)
+
+    val readBack = client.getTable("default", "collation_table")
+    assert(!readBack.properties.contains(TableCatalog.PROP_COLLATION))
+    assert(readBack.collation === Some("UNICODE"))
+
+    client.alterTable("default", "collation_table",
+      readBack.copy(collation = Some("UNICODE_CI")))
+    val alteredTbl = client.getTable("default", "collation_table")
+    assert(alteredTbl.collation === Some("UNICODE_CI"))
+
+    client.dropTable("default", "collation_table", ignoreIfNotExists = true, purge = true)
   }
 
   test("loadTable") {
@@ -317,7 +338,7 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
   }
 
   test("listTables(database)") {
-    assert(client.listTables("default") === Seq("src", "temporary", "view1"))
+    assert((client.listTables("default") diff Seq("src", "temporary", "view1")) === Nil)
   }
 
   test("listTables(database, pattern)") {
@@ -376,7 +397,7 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
       CatalogTablePartition(Map("key1" -> "1", "key2" -> key2.toString), storageFormat)
     }
     client.createPartitions(
-      "default", "src_part", partitions, ignoreIfExists = true)
+      client.getTable("default", "src_part"), partitions, ignoreIfExists = true)
   }
 
   test("getPartitionNames(catalogTable)") {
@@ -479,10 +500,12 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
     val partitions = Seq(CatalogTablePartition(
       Map("key1" -> "101", "key2" -> "102"),
       storageFormat))
+    val table = client.getTable("default", "src_part")
+
     try {
-      client.createPartitions("default", "src_part", partitions, ignoreIfExists = false)
+      client.createPartitions(table, partitions, ignoreIfExists = false)
       val e = intercept[PartitionsAlreadyExistException] {
-        client.createPartitions("default", "src_part", partitions, ignoreIfExists = false)
+        client.createPartitions(table, partitions, ignoreIfExists = false)
       }
       checkError(e,
         condition = "PARTITIONS_ALREADY_EXIST",
@@ -558,7 +581,7 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
 
   test("sql create index and reset") {
     // HIVE-18448 Since Hive 3.0, INDEX is not supported.
-    if (version != "3.0" && version != "3.1") {
+    if (ver.compare(hive.v3_0) < 0) {
       client.runSqlHive("CREATE TABLE indexed_table (key INT)")
       client.runSqlHive("CREATE INDEX index_1 ON TABLE indexed_table(key) " +
         "as 'COMPACT' WITH DEFERRED REBUILD")
@@ -583,6 +606,16 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
           "tableType" -> "materialized view"
         )
       )
+    }
+  }
+
+  test("read table written by Hive") {
+    // Hive 3.0 and 3.1 don't work with JDK 11+ (HIVE-22097)
+    if (ver != hive.v3_0 && ver != hive.v3_1) {
+      withTable("test_tbl") {
+        client.runSqlHive("CREATE TABLE test_tbl AS SELECT 1")
+        assert(versionSpark.sql("SELECT * from test_tbl").collect() === Array(Row(1)))
+      }
     }
   }
 
@@ -793,7 +826,7 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
   test("Decimal support of Avro Hive serde") {
     val tableName = "tab1"
     // TODO: add the other logical types. For details, see the link:
-    // https://avro.apache.org/docs/1.11.3/specification/#logical-types
+    // https://avro.apache.org/docs/1.12.1/specification/#logical-types
     val avroSchema =
     """{
       |  "name": "test_record",

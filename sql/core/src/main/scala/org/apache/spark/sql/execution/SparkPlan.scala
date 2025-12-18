@@ -27,13 +27,14 @@ import org.apache.spark.{broadcast, SparkEnv, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TreeNodeTag, UnaryLike}
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.write.WriterCommitMessage
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.WriteFilesSpec
@@ -171,7 +172,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * guarantees that the outputs of these children will have same number of partitions, so that the
    * operator can safely zip partitions of these children's result RDDs. Some operators can leverage
    * this guarantee to satisfy some interesting requirement, e.g., non-broadcast joins can specify
-   * HashClusteredDistribution(a,b) for its left child, and specify HashClusteredDistribution(c,d)
+   * ClusteredDistribution(a,b) for its left child, and specify ClusteredDistribution(c,d)
    * for its right child, then it's guaranteed that left and right child are co-partitioned by
    * a,b/c,d, which means tuples of same value are in the partitions of same index, e.g.,
    * (a=1,b=2) and (c=1,d=2) are both in the second partition of left and right child.

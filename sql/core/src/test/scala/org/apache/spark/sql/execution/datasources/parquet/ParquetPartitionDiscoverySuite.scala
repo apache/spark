@@ -20,10 +20,9 @@ package org.apache.spark.sql.execution.datasources.parquet
 import java.io.File
 import java.math.BigInteger
 import java.sql.Timestamp
-import java.time.{LocalDateTime, ZoneId, ZoneOffset}
+import java.time.{LocalDateTime, LocalTime, ZoneId, ZoneOffset}
 import java.util.Locale
 
-import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.hadoop.ParquetOutputFormat
 
@@ -32,16 +31,17 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimeFormatter, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.localDateTimeToMicros
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.{PartitionPath => Partition}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.datasources.v2.{ExtractV2Table, FileTable}
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
 
 // The data where the partitioning key exists only in the directory structure.
 case class ParquetData(intField: Int, stringField: String)
@@ -60,6 +60,7 @@ abstract class ParquetPartitionDiscoverySuite
   val df = DateFormatter()
   val tf = TimestampFormatter(
     timestampPartitionPattern, timeZoneId, isParsing = true)
+  val tif = TimeFormatter(timePartitionPattern, isParsing = true)
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
@@ -73,13 +74,13 @@ abstract class ParquetPartitionDiscoverySuite
 
   test("column type inference") {
     def check(raw: String, dataType: DataType, zoneId: ZoneId = timeZoneId): Unit = {
-      assert(inferPartitionColumnValue(raw, true, zoneId, df, tf) === dataType)
+      assert(inferPartitionColumnValue(raw, true, zoneId, df, tf, tif) === dataType)
     }
 
     check("10", IntegerType)
     check("1000000000000000", LongType)
-    val decimal = Decimal("1" * 20)
-    check("1" * 20, DecimalType(decimal.precision, decimal.scale))
+    val decimal = Decimal("1".repeat(20))
+    check("1".repeat(20), DecimalType(decimal.precision, decimal.scale))
     check("1.5", DoubleType)
     check("hello", StringType)
     check("1990-02-24", DateType)
@@ -214,13 +215,14 @@ abstract class ParquetPartitionDiscoverySuite
   test("parse partition") {
     def check(path: String, expected: Option[PartitionValues]): Unit = {
       val actual = parsePartition(new Path(path), true, Set.empty[Path],
-        Map.empty, true, timeZoneId, df, tf)._1
+        Map.empty, true, timeZoneId, df, tf, tif)._1
       assert(expected === actual)
     }
 
     def checkThrows[T <: Throwable: Manifest](path: String, expected: String): Unit = {
       val message = intercept[T] {
-        parsePartition(new Path(path), true, Set.empty[Path], Map.empty, true, timeZoneId, df, tf)
+        parsePartition(new Path(path), true, Set.empty[Path], Map.empty, true, timeZoneId,
+          df, tf, tif)
       }.getMessage
 
       assert(message.contains(expected))
@@ -268,7 +270,8 @@ abstract class ParquetPartitionDiscoverySuite
       true,
       zoneId = timeZoneId,
       df,
-      tf)._1
+      tf,
+      tif)._1
 
     assert(partitionSpec1.isEmpty)
 
@@ -281,7 +284,8 @@ abstract class ParquetPartitionDiscoverySuite
       true,
       zoneId = timeZoneId,
       df,
-      tf)._1
+      tf,
+      tif)._1
 
     assert(partitionSpec2 ==
       Option(PartitionValues(
@@ -766,7 +770,7 @@ abstract class ParquetPartitionDiscoverySuite
           Row(
             Long.MaxValue,
             4.5,
-            new java.math.BigDecimal(new BigInteger("1" * 20)),
+            new java.math.BigDecimal(new BigInteger("1".repeat(20))),
             java.sql.Date.valueOf("2015-05-23"),
             ts,
             "This is a string, /[]?=:",
@@ -817,8 +821,8 @@ abstract class ParquetPartitionDiscoverySuite
         .partitionBy("b", "c", "d")
         .save(dir.getCanonicalPath)
 
-      Files.touch(new File(s"${dir.getCanonicalPath}/b=1", ".DS_Store"))
-      Files.createParentDirs(new File(s"${dir.getCanonicalPath}/b=1/c=1/.foo/bar"))
+      Utils.touch(new File(s"${dir.getCanonicalPath}/b=1", ".DS_Store"))
+      Utils.createParentDirs(new File(s"${dir.getCanonicalPath}/b=1/c=1/.foo/bar"))
 
       checkAnswer(spark.read.format("parquet").load(dir.getCanonicalPath), df)
     }
@@ -834,8 +838,8 @@ abstract class ParquetPartitionDiscoverySuite
         .partitionBy("b", "c", "d")
         .save(tablePath.getCanonicalPath)
 
-      Files.touch(new File(s"${tablePath.getCanonicalPath}/", "_SUCCESS"))
-      Files.createParentDirs(new File(s"${dir.getCanonicalPath}/b=1/c=1/.foo/bar"))
+      Utils.touch(new File(s"${tablePath.getCanonicalPath}/", "_SUCCESS"))
+      Utils.createParentDirs(new File(s"${dir.getCanonicalPath}/b=1/c=1/.foo/bar"))
 
       checkAnswer(spark.read.format("parquet").load(tablePath.getCanonicalPath), df)
     }
@@ -851,8 +855,8 @@ abstract class ParquetPartitionDiscoverySuite
         .partitionBy("b", "c", "d")
         .save(tablePath.getCanonicalPath)
 
-      Files.touch(new File(s"${tablePath.getCanonicalPath}/", "_SUCCESS"))
-      Files.createParentDirs(new File(s"${dir.getCanonicalPath}/b=1/c=1/.foo/bar"))
+      Utils.touch(new File(s"${tablePath.getCanonicalPath}/", "_SUCCESS"))
+      Utils.createParentDirs(new File(s"${dir.getCanonicalPath}/b=1/c=1/.foo/bar"))
 
       checkAnswer(spark.read.format("parquet").load(tablePath.getCanonicalPath), df)
     }
@@ -949,9 +953,9 @@ abstract class ParquetPartitionDiscoverySuite
             .partitionBy("b", "c", "d")
             .save(tablePath.getCanonicalPath)
 
-          Files.touch(new File(s"${tablePath.getCanonicalPath}/b=1", "_SUCCESS"))
-          Files.touch(new File(s"${tablePath.getCanonicalPath}/b=1/c=1", "_SUCCESS"))
-          Files.touch(new File(s"${tablePath.getCanonicalPath}/b=1/c=1/d=1", "_SUCCESS"))
+          Utils.touch(new File(s"${tablePath.getCanonicalPath}/b=1", "_SUCCESS"))
+          Utils.touch(new File(s"${tablePath.getCanonicalPath}/b=1/c=1", "_SUCCESS"))
+          Utils.touch(new File(s"${tablePath.getCanonicalPath}/b=1/c=1/d=1", "_SUCCESS"))
           checkAnswer(spark.read.format("parquet").load(tablePath.getCanonicalPath), df)
         }
       }
@@ -1057,9 +1061,9 @@ abstract class ParquetPartitionDiscoverySuite
       //
       // The summary files and the dot-file under `p0=0` should not fail partition discovery.
 
-      Files.copy(new File(p1, "_metadata"), new File(p0, "_metadata"))
-      Files.copy(new File(p1, "_common_metadata"), new File(p0, "_common_metadata"))
-      Files.touch(new File(p0, ".dummy"))
+      Utils.copyFile(new File(p1, "_metadata"), new File(p0, "_metadata"))
+      Utils.copyFile(new File(p1, "_common_metadata"), new File(p0, "_common_metadata"))
+      Utils.touch(new File(p0, ".dummy"))
 
       checkAnswer(spark.read.parquet(s"$path"), Seq(
         Row(0, 0, 0),
@@ -1093,13 +1097,13 @@ abstract class ParquetPartitionDiscoverySuite
     }
 
     withTempPath { path =>
-      val df = Seq((1, "1"), (2, "3"), (3, "2" * 30)).toDF("i", "decimal")
+      val df = Seq((1, "1"), (2, "3"), (3, "2".repeat(30))).toDF("i", "decimal")
       df.write.format("parquet").partitionBy("decimal").save(path.getAbsolutePath)
       checkAnswer(
         spark.read.load(path.getAbsolutePath),
         Row(1, BigDecimal("1")) ::
           Row(2, BigDecimal("3")) ::
-          Row(3, BigDecimal("2" * 30)) :: Nil)
+          Row(3, BigDecimal("2".repeat(30))) :: Nil)
     }
   }
 
@@ -1181,10 +1185,60 @@ abstract class ParquetPartitionDiscoverySuite
         spark.read.parquet(dir.toString)
       }
       val msg = exception.getMessage
-      assert(exception.getErrorClass === "CONFLICTING_PARTITION_COLUMN_NAMES")
+      assert(exception.getCondition === "CONFLICTING_PARTITION_COLUMN_NAMES")
       // Partitions inside the error message can be presented in any order
       assert("Partition column name list #[0-1]: col1".r.findFirstIn(msg).isDefined)
       assert("Partition column name list #[0-1]: col1, col2".r.findFirstIn(msg).isDefined)
+    }
+  }
+
+  test("Infer the TIME data type from partition values") {
+    val df = Seq(
+      (1, LocalTime.parse("00:00:00")),
+      (2, LocalTime.parse("23:00:00.9")),
+      (3, LocalTime.parse("10:11:12.001")),
+      (4, LocalTime.parse("23:59:59.999999"))
+    ).toDF("i", "time")
+
+    withTempPath { path =>
+      df.write.format("parquet").partitionBy("time").save(path.getAbsolutePath)
+      checkAnswer(spark.read.load(path.getAbsolutePath), df)
+    }
+  }
+
+  test("Invalid times should be inferred as STRING in partition inference") {
+    withTempPath { path =>
+      val data = Seq(("1", "10:61", "12:13:14:04", "T00:01:02", "test"))
+        .toDF("id", "time_min", "time_sec", "time_prefix", "data")
+
+      data.write.partitionBy("time_min", "time_sec", "time_prefix").parquet(path.getAbsolutePath)
+      val input = spark.read.parquet(path.getAbsolutePath).select("id",
+        "time_min", "time_sec", "time_prefix", "data")
+
+      assert(DataTypeUtils.sameType(data.schema, input.schema))
+      checkAnswer(input, data)
+    }
+  }
+
+  test("Resolve type conflicts between strings and time in partition column") {
+    val df = Seq(
+      (1, "00:00:00"),
+      (2, "23:59:00.001"),
+      (3, "blah")).toDF("i", "str")
+
+    withTempPath { path =>
+      df.write.format("parquet").partitionBy("str").save(path.getAbsolutePath)
+      checkAnswer(spark.read.load(path.getAbsolutePath), df)
+    }
+  }
+
+  test("Resolve type conflicts between times and timestamps in partition column") {
+    withTempPath { path =>
+      val df = Seq((1, "23:59:59"), (2, "00:01:00"), (3, "2015-01-01 00:01:00")).toDF("i", "ts")
+      df.write.format("parquet").partitionBy("ts").save(path.getAbsolutePath)
+      checkAnswer(
+        spark.read.load(path.getAbsolutePath),
+        Row(1, "23:59:59") :: Row(2, "00:01:00") :: Row(3, "2015-01-01 00:01:00") :: Nil)
     }
   }
 }
@@ -1282,8 +1336,8 @@ class ParquetV1PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
       (1 to 10).map(i => (i, i.toString)).toDF("a", "b").write.parquet(dir.getCanonicalPath)
       val queryExecution = spark.read.parquet(dir.getCanonicalPath).queryExecution
       queryExecution.analyzed.collectFirst {
-        case LogicalRelation(
-        HadoopFsRelation(location: PartitioningAwareFileIndex, _, _, _, _, _), _, _, _) =>
+        case LogicalRelationWithTable(
+          HadoopFsRelation(location: PartitioningAwareFileIndex, _, _, _, _, _), _) =>
           assert(location.partitionSpec() === PartitionSpec.emptySpec)
       }.getOrElse {
         fail(s"Expecting a matching HadoopFsRelation, but got:\n$queryExecution")
@@ -1444,7 +1498,7 @@ class ParquetV2PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
       (1 to 10).map(i => (i, i.toString)).toDF("a", "b").write.parquet(dir.getCanonicalPath)
       val queryExecution = spark.read.parquet(dir.getCanonicalPath).queryExecution
       queryExecution.analyzed.collectFirst {
-        case DataSourceV2Relation(fileTable: FileTable, _, _, _, _) =>
+        case ExtractV2Table(fileTable: FileTable) =>
           assert(fileTable.fileIndex.partitionSpec() === PartitionSpec.emptySpec)
       }.getOrElse {
         fail(s"Expecting a matching DataSourceV2Relation, but got:\n$queryExecution")

@@ -17,30 +17,53 @@
 
 package org.apache.spark.sql.connector.catalog
 
-import java.util
-
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-import org.apache.spark.sql.connector.expressions.Transform
 
 class InMemoryRowLevelOperationTableCatalog extends InMemoryTableCatalog {
   import CatalogV2Implicits._
 
-  override def createTable(
-      ident: Identifier,
-      columns: Array[Column],
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): Table = {
+  override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
     if (tables.containsKey(ident)) {
       throw new TableAlreadyExistsException(ident.asMultipartIdentifier)
     }
 
-    InMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
+    InMemoryTableCatalog.maybeSimulateFailedTableCreation(tableInfo.properties)
 
     val tableName = s"$name.${ident.quoted}"
-    val schema = CatalogV2Util.v2ColumnsToStructType(columns)
-    val table = new InMemoryRowLevelOperationTable(tableName, schema, partitions, properties)
+    val schema = CatalogV2Util.v2ColumnsToStructType(tableInfo.columns)
+    val table = new InMemoryRowLevelOperationTable(
+      tableName, schema, tableInfo.partitions, tableInfo.properties, tableInfo.constraints())
     tables.put(ident, table)
     namespaces.putIfAbsent(ident.namespace.toList, Map())
     table
+  }
+
+  override def alterTable(ident: Identifier, changes: TableChange*): Table = {
+    val table = loadTable(ident).asInstanceOf[InMemoryRowLevelOperationTable]
+    val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
+    val schema = CatalogV2Util.applySchemaChanges(
+      table.schema,
+      changes,
+      tableProvider = Some("in-memory"),
+      statementType = "ALTER TABLE")
+    val partitioning = CatalogV2Util.applyClusterByChanges(table.partitioning, schema, changes)
+    val constraints = CatalogV2Util.collectConstraintChanges(table, changes)
+
+    // fail if the last column in the schema was dropped
+    if (schema.fields.isEmpty) {
+      throw new IllegalArgumentException(s"Cannot drop all fields")
+    }
+
+    val newTable = new InMemoryRowLevelOperationTable(
+      name = table.name,
+      schema = schema,
+      partitioning = partitioning,
+      properties = properties,
+      constraints = constraints)
+    newTable.alterTableWithData(table.data, schema)
+
+    tables.put(ident, newTable)
+
+    newTable
   }
 }

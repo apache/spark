@@ -175,3 +175,17 @@ private[spark] object AnsiIntervalType extends AbstractDataType {
 
   override private[sql] def defaultConcreteType: DataType = DayTimeIntervalType()
 }
+
+/**
+ * A TIME type of any valid precision.
+ */
+private[sql] abstract class AnyTimeType extends DatetimeType
+
+private[spark] object AnyTimeType extends AbstractDataType with Serializable {
+  override private[sql] def simpleString: String = "time"
+
+  override private[sql] def acceptsType(other: DataType): Boolean =
+    other.isInstanceOf[AnyTimeType]
+
+  override private[sql] def defaultConcreteType: DataType = TimeType(TimeType.DEFAULT_PRECISION)
+}

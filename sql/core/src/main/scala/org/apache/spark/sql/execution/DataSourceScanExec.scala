@@ -19,11 +19,9 @@ package org.apache.spark.sql.execution
 
 import java.util.concurrent.TimeUnit._
 
-import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.LogKeys.{COUNT, MAX_SPLIT_BYTES, OPEN_COST_IN_BYTES}
-import org.apache.spark.internal.MDC
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
@@ -31,14 +29,15 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.{truncatedString, CaseInsensitiveMap}
+import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
-import org.apache.spark.sql.execution.datasources.v2.PushedDownOperators
+import org.apache.spark.sql.execution.datasources.v2.{PushedDownOperators, TableSampleInfo}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SessionStateHelper, SQLConf}
 import org.apache.spark.sql.sources.{BaseRelation, Filter}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -46,7 +45,7 @@ import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
-trait DataSourceScanExec extends LeafExecNode {
+trait DataSourceScanExec extends LeafExecNode with StreamSourceAwareSparkPlan {
   def relation: BaseRelation
   def tableIdentifier: Option[TableIdentifier]
 
@@ -64,7 +63,7 @@ trait DataSourceScanExec extends LeafExecNode {
   override def simpleString(maxFields: Int): String = {
     val metadataEntries = metadata.toSeq.sorted.map {
       case (key, value) =>
-        key + ": " + StringUtils.abbreviate(redact(value), maxMetadataValueLength)
+        key + ": " + Utils.abbreviate(redact(value), maxMetadataValueLength)
     }
     val metadataStr = truncatedString(metadataEntries, " ", ", ", "", maxFields)
     redact(
@@ -114,6 +113,7 @@ case class RowDataSourceScanExec(
     pushedDownOperators: PushedDownOperators,
     rdd: RDD[InternalRow],
     @transient relation: BaseRelation,
+    @transient stream: Option[SparkDataStream],
     tableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec with InputRDDCodegen {
 
@@ -157,10 +157,12 @@ case class RowDataSourceScanExec(
 
   override def inputRDD: RDD[InternalRow] = rdd
 
+  private def seqToString(seq: Seq[Any]): String = seq.mkString("[", ", ", "]")
+
+  private def pushedSampleMetadataString(s: TableSampleInfo): String =
+    s"SAMPLE (${(s.upperBound - s.lowerBound) * 100}) ${s.withReplacement} SEED(${s.seed})"
+
   override val metadata: Map[String, String] = {
-
-    def seqToString(seq: Seq[Any]): String = seq.mkString("[", ", ", "]")
-
     val markedFilters = if (filters.nonEmpty) {
       for (filter <- filters) yield {
         if (handledFilters.contains(filter)) s"*$filter" else s"$filter"
@@ -187,6 +189,15 @@ case class RowDataSourceScanExec(
       seqToString(markedFilters.toSeq)
     }
 
+    val pushedJoins = if (pushedDownOperators.joinedRelationPushedDownOperators.nonEmpty) {
+      Map("PushedJoins" ->
+        s"\n${getPushedJoinString(
+          pushedDownOperators.joinedRelationPushedDownOperators(0),
+          pushedDownOperators.joinedRelationPushedDownOperators(1))}\n")
+    } else {
+      Map()
+    }
+
     Map("ReadSchema" -> requiredSchema.catalogString,
       "PushedFilters" -> pushedFilters) ++
       pushedDownOperators.aggregation.fold(Map[String, String]()) { v =>
@@ -196,23 +207,95 @@ case class RowDataSourceScanExec(
             seqToString(v.groupByExpressions.map(_.describe()).toImmutableArraySeq))} ++
       topNOrLimitInfo ++
       offsetInfo ++
-      pushedDownOperators.sample.map(v => "PushedSample" ->
-        s"SAMPLE (${(v.upperBound - v.lowerBound) * 100}) ${v.withReplacement} SEED(${v.seed})"
-      )
+      pushedDownOperators.sample.map(v => "PushedSample" -> pushedSampleMetadataString(v)) ++
+      pushedJoins
   }
 
-  // Don't care about `rdd` and `tableIdentifier` when canonicalizing.
+  /**
+   * Build string for all the pushed down join operators. The method is recursive, so if there is
+   * join on top of 2 already joined relations, all of these will be present in string.
+   *
+   * The exmaple of resulting string is the following:
+   *
+   * PushedFilters: [id_3 = (id_4 + 1)], PushedJoins:
+   * [L]: PushedFilters: [ID_1 = (id_3 + 1)]
+   *      PushedJoins:
+   *      [L]: PushedFilters: [ID = (ID_1 + 1)]
+   *           PushedJoins:
+   *           [L]: Relation: join_pushdown_catalog.JOIN_SCHEMA.JOIN_TABLE_1
+   *                PushedFilters: [ID IS NOT NULL]
+   *           [R]: Relation: join_pushdown_catalog.JOIN_SCHEMA.JOIN_TABLE_2
+   *                PushedFilters: [ID IS NOT NULL]
+   *      [R]: Relation: join_pushdown_catalog.JOIN_SCHEMA.JOIN_TABLE_3
+   *           PushedFilters: [id IS NOT NULL]
+   * [R]: Relation: join_pushdown_catalog.JOIN_SCHEMA.JOIN_TABLE_4
+   *      PushedFilters: [id IS NOT NULL]
+   */
+  private def getPushedJoinString(
+      leftSidePushedDownOperators: PushedDownOperators,
+      rightSidePushedDownOperators: PushedDownOperators,
+      indent: Int = 0): String = {
+    val indentStr = " ".repeat(indent)
+
+    val leftSideOperators = buildOperatorParts(leftSidePushedDownOperators, indent)
+    val leftSideMetadataStr = formatMetadata(leftSideOperators, indentStr + " ".repeat(5))
+
+    val rightSideOperators = buildOperatorParts(rightSidePushedDownOperators, indent)
+    val rightSideMetadataStr = formatMetadata(rightSideOperators, indentStr + " ".repeat(5))
+
+    val leftSideString = s"$indentStr[L]: $leftSideMetadataStr"
+    val rightSideString = s"$indentStr[R]: $rightSideMetadataStr"
+    Seq(leftSideString, rightSideString).mkString("\n")
+  }
+
+  private def buildOperatorParts(operators: PushedDownOperators, indent: Int): List[String] = {
+    val parts = List.newBuilder[String]
+
+    // Add relation name for leaf nodes (nodes without further joins)
+    if (operators.joinedRelationPushedDownOperators.isEmpty) {
+      operators.relationName.foreach(name => parts += s"Relation: $name")
+    }
+
+    if (operators.pushedPredicates.nonEmpty) {
+      parts += s"PushedFilters: ${seqToString(operators.pushedPredicates.map(_.describe()))}"
+    }
+
+    operators.sample.foreach { sample =>
+      parts += s"PushedSample: ${pushedSampleMetadataString(sample)}"
+    }
+
+    // Recursively get the pushed join string for child with correct indentation.
+    if (operators.joinedRelationPushedDownOperators.nonEmpty) {
+      val nestedJoins = getPushedJoinString(
+        operators.joinedRelationPushedDownOperators(0),
+        operators.joinedRelationPushedDownOperators(1),
+        indent + 5)
+      parts += s"PushedJoins:\n$nestedJoins"
+    }
+
+    parts.result()
+  }
+
+  private def formatMetadata(parts: List[String], indentStr: String): String = {
+    val (basicParts, nestedJoinsParts) = parts.partition(!_.startsWith("PushedJoins:"))
+    (basicParts ++ nestedJoinsParts).mkString("\n" + indentStr)
+  }
+
+  // Don't care about `rdd` and `tableIdentifier`, and `stream` when canonicalizing.
   override def doCanonicalize(): SparkPlan =
     copy(
       output.map(QueryPlan.normalizeExpressions(_, output)),
       rdd = null,
-      tableIdentifier = None)
+      tableIdentifier = None,
+      stream = None)
+
+  override def getStream: Option[SparkDataStream] = stream
 }
 
 /**
  * A base trait for file scans containing file listing and metrics code.
  */
-trait FileSourceScanLike extends DataSourceScanExec {
+trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
 
   // Filters on non-partition columns.
   def dataFilters: Seq[Expression]
@@ -244,7 +327,7 @@ trait FileSourceScanLike extends DataSourceScanExec {
     relation.fileFormat.vectorTypes(
       requiredSchema = requiredSchema,
       partitionSchema = relation.partitionSchema,
-      relation.sparkSession.sessionState.conf).map { vectorTypes =>
+      getSqlConf(relation.sparkSession)).map { vectorTypes =>
         vectorTypes ++
           // for column-based file format, append metadata column's vector type classes if any
           fileConstantMetadataColumns.map { _ => classOf[ConstantColumnVector].getName }
@@ -331,7 +414,7 @@ trait FileSourceScanLike extends DataSourceScanExec {
 
   // exposed for testing
   lazy val bucketedScan: Boolean = {
-    if (relation.sparkSession.sessionState.conf.bucketingEnabled && relation.bucketSpec.isDefined
+    if (getSqlConf(relation.sparkSession).bucketingEnabled && relation.bucketSpec.isDefined
       && !disableBucketedScan) {
       val spec = relation.bucketSpec.get
       val bucketColumns = spec.bucketColumnNames.flatMap(n => toAttribute(n))
@@ -452,7 +535,7 @@ trait FileSourceScanLike extends DataSourceScanExec {
           bucketedKey -> "true",
           "SelectedBucketsCount" -> (s"$numSelectedBuckets out of ${spec.numBuckets}" +
             optionalNumCoalescedBuckets.map { b => s" (Coalesced to $b)"}.getOrElse("")))
-      } else if (!relation.sparkSession.sessionState.conf.bucketingEnabled) {
+      } else if (!getSqlConf(relation.sparkSession).bucketingEnabled) {
         metadata + (bucketedKey -> "false (disabled by configuration)")
       } else if (disableBucketedScan) {
         metadata + (bucketedKey -> "false (disabled by query planner)")
@@ -556,12 +639,14 @@ trait FileSourceScanLike extends DataSourceScanExec {
 
     override def toPartitionArray: Array[PartitionedFile] = {
       partitionDirectories.flatMap { p =>
-        p.files.map { f => PartitionedFileUtil.getPartitionedFile(f, p.values, 0, f.getLen) }
+        p.files.map { f =>
+          PartitionedFileUtil.getPartitionedFile(f, f.getPath, p.values, 0, f.getLen)
+        }
       }
     }
 
     override def calculateTotalPartitionBytes: Long = {
-      val openCostInBytes = relation.sparkSession.sessionState.conf.filesOpenCostInBytes
+      val openCostInBytes = getSqlConf(relation.sparkSession).filesOpenCostInBytes
       partitionDirectories.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
     }
 
@@ -599,6 +684,7 @@ trait FileSourceScanLike extends DataSourceScanExec {
  */
 case class FileSourceScanExec(
     @transient override val relation: HadoopFsRelation,
+    @transient stream: Option[SparkDataStream],
     override val output: Seq[Attribute],
     override val requiredSchema: StructType,
     override val partitionFilters: Seq[Expression],
@@ -612,7 +698,7 @@ case class FileSourceScanExec(
   // Note that some vals referring the file-based relation are lazy intentionally
   // so that this plan can be canonicalized on executor side too. See SPARK-23731.
   override lazy val supportsColumnar: Boolean = {
-    val conf = relation.sparkSession.sessionState.conf
+    val conf = getSqlConf(relation.sparkSession)
     // Only output columnar if there is WSCG to read it.
     val requiredWholeStageCodegenSettings =
       conf.wholeStageEnabled && !WholeStageCodegenExec.isTooManyFields(conf, schema)
@@ -639,7 +725,7 @@ case class FileSourceScanExec(
         requiredSchema = requiredSchema,
         filters = pushedDownFilters,
         options = options,
-        hadoopConf = relation.sparkSession.sessionState.newHadoopConfWithOptions(relation.options))
+        hadoopConf = getHadoopConf(relation.sparkSession, relation.options))
 
     val readRDD = if (bucketedScan) {
       createBucketedReadRDD(relation.bucketSpec.get, readFile, dynamicallySelectedPartitions)
@@ -763,7 +849,7 @@ case class FileSourceScanExec(
   private def createReadRDD(
       readFile: PartitionedFile => Iterator[InternalRow],
       selectedPartitions: ScanFileListing): RDD[InternalRow] = {
-    val openCostInBytes = relation.sparkSession.sessionState.conf.filesOpenCostInBytes
+    val openCostInBytes = getSqlConf(relation.sparkSession).filesOpenCostInBytes
     val maxSplitBytes =
       FilePartition.maxSplitBytes(relation.sparkSession, selectedPartitions)
     logInfo(log"Planning scan with bin packing, max size: ${MDC(MAX_SPLIT_BYTES, maxSplitBytes)} " +
@@ -771,7 +857,7 @@ case class FileSourceScanExec(
       log"bytes.")
 
     // Filter files with bucket pruning if possible
-    val bucketingEnabled = relation.sparkSession.sessionState.conf.bucketingEnabled
+    val bucketingEnabled = getSqlConf(relation.sparkSession).bucketingEnabled
     val shouldProcess: Path => Boolean = optionalBucketSet match {
       case Some(bucketSet) if bucketingEnabled =>
         // Do not prune the file if bucket file name is invalid
@@ -783,11 +869,14 @@ case class FileSourceScanExec(
     val splitFiles = selectedPartitions.filePartitionIterator.flatMap { partition =>
       val ListingPartition(partitionVals, _, fileStatusIterator) = partition
       fileStatusIterator.flatMap { file =>
-        if (shouldProcess(file.getPath)) {
+        // getPath() is very expensive so we only want to call it once in this block:
+        val filePath = file.getPath
+        if (shouldProcess(filePath)) {
           val isSplitable = relation.fileFormat.isSplitable(
-              relation.sparkSession, relation.options, file.getPath)
+              relation.sparkSession, relation.options, filePath)
           PartitionedFileUtil.splitFiles(
             file = file,
+            filePath = filePath,
             isSplitable = isSplitable,
             maxSplitBytes = maxSplitBytes,
             partitionValues = partitionVals
@@ -817,6 +906,9 @@ case class FileSourceScanExec(
   override def doCanonicalize(): FileSourceScanExec = {
     FileSourceScanExec(
       relation,
+      // remove stream on canonicalization; this is needed for reused shuffle to be effective in
+      // self-join
+      None,
       output.map(QueryPlan.normalizeExpressions(_, output)),
       requiredSchema,
       QueryPlan.normalizePredicates(
@@ -827,4 +919,6 @@ case class FileSourceScanExec(
       None,
       disableBucketedScan)
   }
+
+  override def getStream: Option[SparkDataStream] = stream
 }

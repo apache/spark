@@ -24,7 +24,8 @@ import unittest
 from collections import namedtuple
 
 from pyspark import SparkConf, SparkFiles, SparkContext
-from pyspark.testing.utils import ReusedPySparkTestCase, PySparkTestCase, QuietTest, SPARK_HOME
+from pyspark.testing.sqlutils import SPARK_HOME
+from pyspark.testing.utils import ReusedPySparkTestCase, PySparkTestCase, QuietTest
 
 
 class CheckpointTests(ReusedPySparkTestCase):

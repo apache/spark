@@ -22,8 +22,8 @@ import java.io.Closeable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkEnv, TaskContext}
-import org.apache.spark.internal.{Logging, MDC}
-import org.apache.spark.internal.LogKeys.{CLASS_NAME, MAX_NUM_ROWS_IN_MEMORY_BUFFER}
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{CLASS_NAME, MAX_NUM_ROWS_IN_MEMORY_BUFFER, NUM_BYTES_MAX}
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -34,17 +34,18 @@ import org.apache.spark.util.collection.unsafe.sort.{UnsafeExternalSorter, Unsaf
 
 /**
  * An append-only array for [[UnsafeRow]]s that strictly keeps content in an in-memory array
- * until [[numRowsInMemoryBufferThreshold]] is reached post which it will switch to a mode which
- * would flush to disk after [[numRowsSpillThreshold]] is met (or before if there is
- * excessive memory consumption). Setting these threshold involves following trade-offs:
+ * until [[numRowsInMemoryBufferThreshold]] or [[sizeInBytesInMemoryBufferThreshold]] is reached
+ * post which it will switch to a mode (backed by [[UnsafeExternalSorter]]) which would flush to
+ * disk after [[numRowsSpillThreshold]] or [[sizeInBytesSpillThreshold]] is met (or before if there
+ * is excessive memory consumption). Setting these threshold involves following trade-offs:
  *
- * - If [[numRowsInMemoryBufferThreshold]] is too high, the in-memory array may occupy more memory
- *   than is available, resulting in OOM.
- * - If [[numRowsSpillThreshold]] is too low, data will be spilled frequently and lead to
- *   excessive disk writes. This may lead to a performance regression compared to the normal case
- *   of using an [[ArrayBuffer]] or [[Array]].
+ * - If [[numRowsInMemoryBufferThreshold]] and [[sizeInBytesInMemoryBufferThreshold]] are too high,
+ *   the in-memory array may occupy more memory than is available, resulting in OOM.
+ * - If [[numRowsSpillThreshold]] or [[sizeInBytesSpillThreshold]] is too low, data will be spilled
+ *   frequently and lead to excessive disk writes. This may lead to a performance regression
+ *   compared to the normal case of using an [[ArrayBuffer]] or [[Array]].
  */
-private[sql] class ExternalAppendOnlyUnsafeRowArray(
+class ExternalAppendOnlyUnsafeRowArray(
     taskMemoryManager: TaskMemoryManager,
     blockManager: BlockManager,
     serializerManager: SerializerManager,
@@ -52,9 +53,15 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
     initialSize: Int,
     pageSizeBytes: Long,
     numRowsInMemoryBufferThreshold: Int,
-    numRowsSpillThreshold: Int) extends Logging {
+    sizeInBytesInMemoryBufferThreshold: Long,
+    numRowsSpillThreshold: Int,
+    sizeInBytesSpillThreshold: Long) extends Logging {
 
-  def this(numRowsInMemoryBufferThreshold: Int, numRowsSpillThreshold: Int) = {
+  def this(
+      numRowsInMemoryBufferThreshold: Int,
+      sizeInBytesInMemoryBufferThreshold: Long,
+      numRowsSpillThreshold: Int,
+      sizeInBytesSpillThreshold: Long) = {
     this(
       TaskContext.get().taskMemoryManager(),
       SparkEnv.get.blockManager,
@@ -63,7 +70,9 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
       1024,
       SparkEnv.get.memoryManager.pageSizeBytes,
       numRowsInMemoryBufferThreshold,
-      numRowsSpillThreshold)
+      sizeInBytesInMemoryBufferThreshold,
+      numRowsSpillThreshold,
+      sizeInBytesSpillThreshold)
   }
 
   private val initialSizeOfInMemoryBuffer =
@@ -74,6 +83,7 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
   } else {
     null
   }
+  private var inMemoryBufferSizeInBytes = 0L
 
   private var spillableArray: UnsafeExternalSorter = _
   private var totalSpillBytes: Long = 0
@@ -112,6 +122,7 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
       spillableArray = null
     } else if (inMemoryBuffer != null) {
       inMemoryBuffer.clear()
+      inMemoryBufferSizeInBytes = 0;
     }
     numFieldsPerRow = 0
     numRows = 0
@@ -119,12 +130,16 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
   }
 
   def add(unsafeRow: UnsafeRow): Unit = {
-    if (numRows < numRowsInMemoryBufferThreshold) {
+    // Once spills, we will switch to UnsafeExternalSorter permanently.
+    if (spillableArray == null && numRows < numRowsInMemoryBufferThreshold &&
+      inMemoryBufferSizeInBytes < sizeInBytesInMemoryBufferThreshold) {
       inMemoryBuffer += unsafeRow.copy()
+      inMemoryBufferSizeInBytes += unsafeRow.getSizeInBytes
     } else {
       if (spillableArray == null) {
         logInfo(log"Reached spill threshold of " +
           log"${MDC(MAX_NUM_ROWS_IN_MEMORY_BUFFER, numRowsInMemoryBufferThreshold)} rows, " +
+          log"or ${MDC(NUM_BYTES_MAX, sizeInBytesInMemoryBufferThreshold)} bytes, " +
           log"switching to ${MDC(CLASS_NAME, classOf[UnsafeExternalSorter].getName)}")
 
         // We will not sort the rows, so prefixComparator and recordComparator are null
@@ -138,6 +153,7 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
           initialSize,
           pageSizeBytes,
           numRowsSpillThreshold,
+          sizeInBytesSpillThreshold,
           false)
 
         // populate with existing in-memory buffered rows
@@ -151,6 +167,7 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
               false)
           )
           inMemoryBuffer.clear()
+          inMemoryBufferSizeInBytes = 0
         }
         numFieldsPerRow = unsafeRow.numFields()
       }

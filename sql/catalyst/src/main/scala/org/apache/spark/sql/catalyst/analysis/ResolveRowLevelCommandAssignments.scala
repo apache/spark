@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 
 /**
@@ -42,21 +43,28 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
     case u: UpdateTable if !u.skipSchemaResolution && u.resolved && u.rewritable && !u.aligned =>
       validateStoreAssignmentPolicy()
       val newTable = cleanAttrMetadata(u.table)
-      val newAssignments = AssignmentUtils.alignUpdateAssignments(u.table.output, u.assignments)
+      val newAssignments = AssignmentUtils.alignUpdateAssignments(u.table.output, u.assignments,
+        fromStar = false, coerceNestedTypes = false)
       u.copy(table = newTable, assignments = newAssignments)
 
     case u: UpdateTable if !u.skipSchemaResolution && u.resolved && !u.aligned =>
       resolveAssignments(u)
 
-    case m: MergeIntoTable if !m.skipSchemaResolution && m.resolved && m.rewritable && !m.aligned =>
+    case m: MergeIntoTable if !m.skipSchemaResolution && m.resolved && m.rewritable && !m.aligned &&
+      !m.needSchemaEvolution =>
       validateStoreAssignmentPolicy()
+      val coerceNestedTypes = SQLConf.get.coerceMergeNestedTypes && m.withSchemaEvolution
       m.copy(
         targetTable = cleanAttrMetadata(m.targetTable),
-        matchedActions = alignActions(m.targetTable.output, m.matchedActions),
-        notMatchedActions = alignActions(m.targetTable.output, m.notMatchedActions),
-        notMatchedBySourceActions = alignActions(m.targetTable.output, m.notMatchedBySourceActions))
+        matchedActions = alignActions(m.targetTable.output, m.matchedActions,
+          coerceNestedTypes),
+        notMatchedActions = alignActions(m.targetTable.output, m.notMatchedActions,
+          coerceNestedTypes),
+        notMatchedBySourceActions = alignActions(m.targetTable.output, m.notMatchedBySourceActions,
+          coerceNestedTypes))
 
-    case m: MergeIntoTable if !m.skipSchemaResolution && m.resolved && !m.aligned =>
+    case m: MergeIntoTable if !m.skipSchemaResolution && m.resolved && !m.aligned
+      && !m.needSchemaEvolution =>
       resolveAssignments(m)
   }
 
@@ -107,14 +115,17 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
 
   private def alignActions(
       attrs: Seq[Attribute],
-      actions: Seq[MergeAction]): Seq[MergeAction] = {
+      actions: Seq[MergeAction],
+      coerceNestedTypes: Boolean): Seq[MergeAction] = {
     actions.map {
-      case u @ UpdateAction(_, assignments) =>
-        u.copy(assignments = AssignmentUtils.alignUpdateAssignments(attrs, assignments))
+      case u @ UpdateAction(_, assignments, fromStar) =>
+        u.copy(assignments = AssignmentUtils.alignUpdateAssignments(attrs, assignments,
+          fromStar, coerceNestedTypes))
       case d: DeleteAction =>
         d
       case i @ InsertAction(_, assignments) =>
-        i.copy(assignments = AssignmentUtils.alignInsertAssignments(attrs, assignments))
+        i.copy(assignments = AssignmentUtils.alignInsertAssignments(attrs, assignments,
+          coerceNestedTypes))
       case other =>
         throw new AnalysisException(
           errorClass = "_LEGACY_ERROR_TEMP_3052",

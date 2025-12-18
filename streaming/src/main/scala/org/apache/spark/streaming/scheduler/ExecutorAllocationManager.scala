@@ -21,7 +21,7 @@ package org.apache.spark.streaming.scheduler
 import scala.util.Random
 
 import org.apache.spark.{ExecutorAllocationClient, SparkConf}
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config.DECOMMISSION_ENABLED
 import org.apache.spark.internal.config.Streaming._
 import org.apache.spark.resource.ResourceProfile

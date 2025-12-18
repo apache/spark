@@ -18,7 +18,7 @@ package org.apache.spark.deploy.k8s.features
 
 import java.io.File
 
-import io.fabric8.volcano.scheduling.v1beta1.PodGroup
+import io.fabric8.volcano.api.model.scheduling.v1beta1.PodGroup
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
@@ -54,6 +54,34 @@ class VolcanoFeatureStepSuite extends SparkFunSuite {
       getClass.getResource("/driver-podgroup-template.yml").getFile).getAbsolutePath
     val sparkConf = new SparkConf()
       .set(VolcanoFeatureStep.POD_GROUP_TEMPLATE_FILE_KEY, templatePath)
+    val kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf)
+    val step = new VolcanoFeatureStep()
+    step.init(kubernetesConf)
+    step.configurePod(SparkPod.initialPod())
+    val podGroup = step.getAdditionalPreKubernetesResources().head.asInstanceOf[PodGroup]
+    assert(podGroup.getSpec.getMinMember == 1)
+    assert(podGroup.getSpec.getMinResources.get("cpu").getAmount == "2")
+    assert(podGroup.getSpec.getMinResources.get("memory").getAmount == "2048")
+    assert(podGroup.getSpec.getMinResources.get("memory").getFormat == "Mi")
+    assert(podGroup.getSpec.getPriorityClassName == "driver-priority")
+    assert(podGroup.getSpec.getQueue == "driver-queue")
+  }
+
+  test("SPARK-54553: Support create driver podgroup by attributes") {
+    val sparkConf = new SparkConf()
+      .set(
+        VolcanoFeatureStep.POD_GROUP_TEMPLATE_JSON_KEY,
+        "{\n" +
+          "  \"spec\": {\n" +
+          "    \"minMember\": 1,\n" +
+          "    \"minResources\": {\n" +
+          "      \"cpu\": \"2\",\n" +
+          "      \"memory\": \"2048Mi\"\n" +
+          "    },\n" +
+          "    \"priorityClassName\": \"driver-priority\",\n" +
+          "    \"queue\": \"driver-queue\"\n" +
+          "  }\n" +
+          "}")
     val kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf)
     val step = new VolcanoFeatureStep()
     step.init(kubernetesConf)

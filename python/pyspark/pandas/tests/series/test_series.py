@@ -102,6 +102,29 @@ class SeriesTestsMixin:
 
         self.assertTrue(pser_a.empty)
 
+    def test_series_from_series(self):
+        psser = ps.Series([1, 2, 3, 4, 5, 6, 7], name="x")
+
+        psser_from_psser = ps.Series(psser)
+        self.assert_eq(psser_from_psser, psser)
+
+        psser = ps.Series([1, 2, 3])
+
+        # Specify new index
+        psser_from_psser = ps.Series(psser, index=[1])
+        self.assert_eq(psser_from_psser, ps.Series([2], index=[1]))
+
+        psser_from_psser = ps.Series(psser, index=[1, 2])
+        self.assert_eq(psser_from_psser, ps.Series([2, 3], index=[1, 2]))
+
+        # Specify new out-of-order index
+        psser_from_psser = ps.Series(psser, index=[1, 2, 0])
+        self.assert_eq(psser_from_psser, ps.Series([2, 3, 1], index=[1, 2, 0]))
+
+        # Specify new dtype and name
+        psser_from_psser = ps.Series(psser, name="y", dtype=float)
+        self.assert_eq(psser_from_psser, ps.Series([1, 2, 3], name="y", dtype=float))
+
     def test_all_null_series(self):
         pser_a = pd.Series([None, None, None], dtype="float64")
         pser_b = pd.Series([None, None, None], dtype="str")

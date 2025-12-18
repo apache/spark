@@ -18,7 +18,7 @@ package org.apache.spark.sql.connect
 
 import java.util.UUID
 
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connect.service.{SessionHolder, SparkConnectService}
 
 object SparkConnectTestUtils {

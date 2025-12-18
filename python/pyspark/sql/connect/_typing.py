@@ -39,7 +39,7 @@ LiteralType = PrimitiveType
 
 DecimalLiteral = decimal.Decimal
 
-DateTimeLiteral = Union[datetime.datetime, datetime.date]
+DateTimeLiteral = Union[datetime.date, datetime.time, datetime.datetime]
 
 DataTypeOrString = Union[DataType, str]
 

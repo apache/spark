@@ -20,9 +20,18 @@ import shutil
 import tempfile
 
 from pyspark.errors import AnalysisException
+from pyspark.sql import Row
 from pyspark.sql.functions import col, lit
 from pyspark.sql.readwriter import DataFrameWriterV2
-from pyspark.sql.types import StructType, StructField, StringType
+from pyspark.sql.types import (
+    StructType,
+    StructField,
+    StringType,
+    BinaryType,
+    ArrayType,
+    MapType,
+)
+from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -34,15 +43,15 @@ class ReadwriterTestsMixin:
         try:
             df.write.json(tmpPath)
             actual = self.spark.read.json(tmpPath)
-            self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+            assertDataFrameEqual(df, actual)
 
             schema = StructType([StructField("value", StringType(), True)])
             actual = self.spark.read.json(tmpPath, schema)
-            self.assertEqual(sorted(df.select("value").collect()), sorted(actual.collect()))
+            assertDataFrameEqual(df.select("value"), actual)
 
             df.write.json(tmpPath, "overwrite")
             actual = self.spark.read.json(tmpPath)
-            self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+            assertDataFrameEqual(df, actual)
 
             df.write.save(
                 format="json",
@@ -53,11 +62,11 @@ class ReadwriterTestsMixin:
             actual = self.spark.read.load(
                 format="json", path=tmpPath, noUse="this options will not be used in load."
             )
-            self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+            assertDataFrameEqual(df, actual)
 
             with self.sql_conf({"spark.sql.sources.default": "org.apache.spark.sql.json"}):
                 actual = self.spark.read.load(path=tmpPath)
-                self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+                assertDataFrameEqual(df, actual)
 
             csvpath = os.path.join(tempfile.mkdtemp(), "data")
             df.write.option("quote", None).format("csv").save(csvpath)
@@ -71,15 +80,15 @@ class ReadwriterTestsMixin:
         try:
             df.write.json(tmpPath)
             actual = self.spark.read.json(tmpPath)
-            self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+            assertDataFrameEqual(df, actual)
 
             schema = StructType([StructField("value", StringType(), True)])
             actual = self.spark.read.json(tmpPath, schema)
-            self.assertEqual(sorted(df.select("value").collect()), sorted(actual.collect()))
+            assertDataFrameEqual(df.select("value"), actual)
 
             df.write.mode("overwrite").json(tmpPath)
             actual = self.spark.read.json(tmpPath)
-            self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+            assertDataFrameEqual(df, actual)
 
             df.write.mode("overwrite").options(
                 noUse="this options will not be used in save."
@@ -89,11 +98,11 @@ class ReadwriterTestsMixin:
             actual = self.spark.read.format("json").load(
                 path=tmpPath, noUse="this options will not be used in load."
             )
-            self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+            assertDataFrameEqual(df, actual)
 
             with self.sql_conf({"spark.sql.sources.default": "org.apache.spark.sql.json"}):
                 actual = self.spark.read.load(path=tmpPath)
-                self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+                assertDataFrameEqual(df, actual)
         finally:
             shutil.rmtree(tmpPath)
 
@@ -237,6 +246,53 @@ class ReadwriterTestsMixin:
 
                 self.assertEqual(join2.columns, ["id", "value_1", "index", "value_2"])
 
+    def test_binary_type(self):
+        """Test that binary type in data sources respects binaryAsBytes config"""
+        schema = StructType(
+            [
+                StructField("id", StringType()),
+                StructField("bin", BinaryType()),
+                StructField("arr_bin", ArrayType(BinaryType())),
+                StructField("map_bin", MapType(StringType(), BinaryType())),
+            ]
+        )
+        # Create DataFrame with binary data (can use either bytes or bytearray)
+        data = [Row(id="1", bin=b"hello", arr_bin=[b"a"], map_bin={"key": b"value"})]
+        df = self.spark.createDataFrame(data, schema)
+
+        tmpPath = tempfile.mkdtemp()
+        try:
+            # Write to parquet
+            df.write.mode("overwrite").parquet(tmpPath)
+
+            for conf_value in ["true", "false"]:
+                expected_type = bytes if conf_value == "true" else bytearray
+                expected_bin = b"hello" if conf_value == "true" else bytearray(b"hello")
+                expected_arr = b"a" if conf_value == "true" else bytearray(b"a")
+                expected_map = b"value" if conf_value == "true" else bytearray(b"value")
+
+                with self.sql_conf({"spark.sql.execution.pyspark.binaryAsBytes": conf_value}):
+                    result = self.spark.read.parquet(tmpPath).collect()
+                    row = result[0]
+                    # Check binary field
+                    self.assertIsInstance(row.bin, expected_type)
+                    self.assertEqual(row.bin, expected_bin)
+                    # Check array of binary
+                    self.assertIsInstance(row.arr_bin[0], expected_type)
+                    self.assertEqual(row.arr_bin[0], expected_arr)
+                    # Check map value
+                    self.assertIsInstance(row.map_bin["key"], expected_type)
+                    self.assertEqual(row.map_bin["key"], expected_map)
+        finally:
+            shutil.rmtree(tmpPath)
+
+    # "[SPARK-51182]: DataFrameWriter should throw dataPathNotSpecifiedError when path is not
+    # specified"
+    def test_save(self):
+        writer = self.df.write
+        with self.assertRaisesRegex(Exception, "'path' is not specified."):
+            writer.save()
+
 
 class ReadwriterV2TestsMixin:
     def test_api(self):
@@ -255,6 +311,7 @@ class ReadwriterV2TestsMixin:
 
     def test_partitioning_functions(self):
         self.check_partitioning_functions(DataFrameWriterV2)
+        self.partitioning_functions_user_error()
 
     def check_partitioning_functions(self, tpe):
         import datetime
@@ -273,6 +330,35 @@ class ReadwriterV2TestsMixin:
         self.assertIsInstance(writer.partitionedBy(bucket(11, "id")), tpe)
         self.assertIsInstance(writer.partitionedBy(bucket(11, col("id"))), tpe)
         self.assertIsInstance(writer.partitionedBy(bucket(3, "id"), hours(col("ts"))), tpe)
+
+    def partitioning_functions_user_error(self):
+        import datetime
+        from pyspark.sql.functions.partitioning import years, months, days, hours, bucket
+
+        df = self.spark.createDataFrame(
+            [(1, datetime.datetime(2000, 1, 1), "foo")], ("id", "ts", "value")
+        )
+
+        with self.assertRaisesRegex(
+            Exception, "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY"
+        ):
+            df.select(years("ts")).collect()
+        with self.assertRaisesRegex(
+            Exception, "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY"
+        ):
+            df.select(months("ts")).collect()
+        with self.assertRaisesRegex(
+            Exception, "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY"
+        ):
+            df.select(days("ts")).collect()
+        with self.assertRaisesRegex(
+            Exception, "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY"
+        ):
+            df.select(hours("ts")).collect()
+        with self.assertRaisesRegex(
+            Exception, "PARTITION_TRANSFORM_EXPRESSION_NOT_IN_PARTITIONED_BY"
+        ):
+            df.select(bucket(2, "ts")).collect()
 
     def test_create(self):
         df = self.df

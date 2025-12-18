@@ -22,8 +22,9 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.execution.datasources.v2.state.{StateDataSourceUnspecifiedRequiredOption, StateSourceOptions}
-import org.apache.spark.sql.execution.streaming.{CheckpointFileManager, LongOffset, MemoryStream, OffsetSeq, OffsetSeqLog}
-import org.apache.spark.sql.execution.streaming.StreamingCheckpointConstants.DIR_NAME_OFFSETS
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, OffsetSeq, OffsetSeqLog}
+import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, MemoryStream}
+import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.DIR_NAME_OFFSETS
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, RunningCountStatefulProcessor, StreamTest, TimeMode}
@@ -62,7 +63,7 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
       assert(operatorMetadataV2.operatorPropertiesJson.nonEmpty)
       val stateStoreInfo = operatorMetadataV2.stateStoreInfo.head
       val expectedStateStoreInfo = expectedMetadataV2.stateStoreInfo.head
-      assert(stateStoreInfo.stateSchemaFilePath.nonEmpty)
+      assert(stateStoreInfo.stateSchemaFilePaths.nonEmpty)
       assert(stateStoreInfo.storeName == expectedStateStoreInfo.storeName)
       assert(stateStoreInfo.numPartitions == expectedStateStoreInfo.numPartitions)
     }
@@ -151,7 +152,8 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
       // Assign some placeholder values to the state store metadata since they are generated
       // dynamically by the operator.
       val expectedMetadata = OperatorStateMetadataV2(OperatorInfoV1(0, "transformWithStateExec"),
-        Array(StateStoreMetadataV2("default", 0, numShufflePartitions, checkpointDir.toString)),
+        Array(StateStoreMetadataV2(
+          "default", 0, numShufflePartitions, List.empty)),
         "")
       checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata, 2)
 
@@ -225,6 +227,86 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
         ))
       checkAnswer(df.select(df.metadataColumn("_numColsPrefixKey")),
         Seq(Row(0), Row(0), Row(0), Row(0)))
+    }
+  }
+
+  test(
+    "SPARK-51779 Stateful operator metadata v2 for streaming join with virtual column families") {
+    withTempDir { checkpointDir =>
+      withSQLConf(
+        SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+        SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "3"
+      ) {
+        val input1 = MemoryStream[Int]
+        val input2 = MemoryStream[Int]
+
+        val df1 = input1.toDF().select($"value" as "key", ($"value" * 2) as "leftValue")
+        val df2 = input2.toDF().select($"value" as "key", ($"value" * 3) as "rightValue")
+        val joined = df1.join(df2, "key")
+
+        testStream(joined)(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(input1, 1),
+          CheckAnswer(),
+          AddData(input2, 1, 10),
+          CheckNewAnswer((1, 2, 3)),
+          StopStream
+        )
+
+        val expectedStateStoreInfo =
+          Array(StateStoreMetadataV2("default", 0, numShufflePartitions, List.empty))
+
+        val expectedProperties =
+          StreamingJoinOperatorProperties(useVirtualColumnFamilies = true)
+
+        val expectedMetadata = OperatorStateMetadataV2(
+          OperatorInfoV1(0, "symmetricHashJoin"),
+          expectedStateStoreInfo,
+          expectedProperties.json
+        )
+        checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata, 2)
+
+        // Verify that the state store metadata is not available for invalid batches.
+        val ex = intercept[Exception] {
+          val invalidBatchId = OperatorStateMetadataUtils.getLastOffsetBatch(
+            spark,
+            checkpointDir.toString
+          ) + 1
+          checkOperatorStateMetadata(
+            checkpointDir.toString,
+            0,
+            expectedMetadata,
+            2,
+            Some(invalidBatchId)
+          )
+        }
+
+        checkError(
+          ex.asInstanceOf[SparkRuntimeException],
+          "STDS_FAILED_TO_READ_OPERATOR_METADATA",
+          Some("42K03"),
+          Map("checkpointLocation" -> ".*", "batchId" -> ".*"),
+          matchPVals = true
+        )
+
+        val ex1 = intercept[Exception] {
+          checkOperatorStateMetadata(checkpointDir.toString, 0, expectedMetadata, 2, Some(-1))
+        }
+
+        checkError(
+          ex1.asInstanceOf[SparkRuntimeException],
+          "STDS_FAILED_TO_READ_OPERATOR_METADATA",
+          Some("42K03"),
+          Map("checkpointLocation" -> ".*", "batchId" -> ".*"),
+          matchPVals = true
+        )
+
+        val df = spark.read.format("state-metadata").load(checkpointDir.toString)
+        checkAnswer(
+          df,
+          Seq(Row(0, "symmetricHashJoin", "default", 5, 0L, 1L, expectedProperties.json))
+        )
+      }
     }
   }
 
@@ -388,6 +470,79 @@ class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
           }
         )
       }
+    }
+  }
+
+  test("Restart with stateful operator but empty state directory triggers error") {
+    withTempDir { checkpointDir =>
+      val inputData = MemoryStream[Int]
+      val stream = inputData.toDF()
+
+      // Run a streaming query with stateful operator
+      testStream(stream.dropDuplicates())(
+        StartStream(checkpointLocation = checkpointDir.toString),
+        AddData(inputData, 1, 2, 3),
+        ProcessAllAvailable(),
+        StopStream)
+
+      // Delete the state directory to simulate deleted state files
+      val stateDir = new Path(checkpointDir.toString, "state")
+      val fileManager = CheckpointFileManager.create(stateDir, hadoopConf)
+      fileManager.delete(stateDir)
+
+      // Restart the query - should fail with empty state directory error
+      testStream(stream.dropDuplicates())(
+        StartStream(checkpointLocation = checkpointDir.toString),
+        AddData(inputData, 4),
+        ExpectFailure[SparkRuntimeException] { t =>
+          def formatPairString(pair: (Long, String)): String =
+            s"(OperatorId: ${pair._1} -> OperatorName: ${pair._2})"
+
+          checkError(
+            t.asInstanceOf[SparkRuntimeException],
+            "STREAMING_STATEFUL_OPERATOR_MISSING_STATE_DIRECTORY",
+            "42K03",
+            Map("OpsInCurBatchSeq" -> formatPairString(0L -> "dedupe")))
+        }
+      )
+    }
+  }
+
+  test("Restart with stateful operator added to previously stateless query triggers error") {
+    withTempDir { checkpointDir =>
+      val inputData = MemoryStream[Int]
+
+      // Run a stateless streaming query first
+      testStream(inputData.toDF().select($"value" * 2 as "doubled"))(
+        StartStream(checkpointLocation = checkpointDir.toString),
+        AddData(inputData, 1, 2, 3),
+        ProcessAllAvailable(),
+        AddData(inputData, 1, 2, 3),
+        ProcessAllAvailable(),
+        StopStream)
+
+      // Delete the state directory if it exists (it shouldn't for stateless query)
+      val stateDir = new Path(checkpointDir.toString, "state")
+      val fileManager = CheckpointFileManager.create(stateDir, hadoopConf)
+      if (fileManager.exists(stateDir)) {
+        fileManager.delete(stateDir)
+      }
+
+      // Restart with a stateful operator added - should fail
+      testStream(inputData.toDF().dropDuplicates())(
+        StartStream(checkpointLocation = checkpointDir.toString),
+        AddData(inputData, 4),
+        ExpectFailure[SparkRuntimeException] { t =>
+          def formatPairString(pair: (Long, String)): String =
+            s"(OperatorId: ${pair._1} -> OperatorName: ${pair._2})"
+
+          checkError(
+            t.asInstanceOf[SparkRuntimeException],
+            "STREAMING_STATEFUL_OPERATOR_MISSING_STATE_DIRECTORY",
+            "42K03",
+            Map("OpsInCurBatchSeq" -> formatPairString(0L -> "dedupe")))
+        }
+      )
     }
   }
 }

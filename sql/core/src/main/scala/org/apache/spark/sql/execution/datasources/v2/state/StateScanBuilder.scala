@@ -25,13 +25,18 @@ import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues
-import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
-import org.apache.spark.sql.execution.streaming.TransformWithStateVariableInfo
-import org.apache.spark.sql.execution.streaming.state.{KeyStateEncoderSpec, StateStoreColFamilySchema, StateStoreConf, StateStoreErrors}
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateVariableInfo
+import org.apache.spark.sql.execution.streaming.state.{KeyStateEncoderSpec, StateSchemaProvider, StateStoreColFamilySchema, StateStoreConf, StateStoreErrors}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
-/** An implementation of [[ScanBuilder]] for State Store data source. */
+/**
+ * An implementation of [[ScanBuilder]] for State Store data source.
+ * @param stateSchemaProviderOpt Optional provider that maintains mapping between schema IDs and
+ *                               their corresponding schemas, enabling reading of state data
+ *                               written with older schema versions
+ */
 class StateScanBuilder(
     session: SparkSession,
     schema: StructType,
@@ -39,9 +44,13 @@ class StateScanBuilder(
     stateStoreConf: StateStoreConf,
     keyStateEncoderSpec: KeyStateEncoderSpec,
     stateVariableInfoOpt: Option[TransformWithStateVariableInfo],
-    stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema]) extends ScanBuilder {
+    stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema],
+    stateSchemaProviderOpt: Option[StateSchemaProvider],
+    joinColFamilyOpt: Option[String],
+    allColumnFamiliesReaderInfo: Option[AllColumnFamiliesReaderInfo]) extends ScanBuilder {
   override def build(): Scan = new StateScan(session, schema, sourceOptions, stateStoreConf,
-    keyStateEncoderSpec, stateVariableInfoOpt, stateStoreColFamilySchemaOpt)
+    keyStateEncoderSpec, stateVariableInfoOpt, stateStoreColFamilySchemaOpt, stateSchemaProviderOpt,
+    joinColFamilyOpt, allColumnFamiliesReaderInfo)
 }
 
 /** An implementation of [[InputPartition]] for State Store data source. */
@@ -58,12 +67,16 @@ class StateScan(
     stateStoreConf: StateStoreConf,
     keyStateEncoderSpec: KeyStateEncoderSpec,
     stateVariableInfoOpt: Option[TransformWithStateVariableInfo],
-    stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema]) extends Scan
-  with Batch {
+    stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema],
+    stateSchemaProviderOpt: Option[StateSchemaProvider],
+    joinColFamilyOpt: Option[String],
+    allColumnFamiliesReaderInfo: Option[AllColumnFamiliesReaderInfo])
+  extends Scan with Batch {
 
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
-  private val hadoopConfBroadcast = session.sparkContext.broadcast(
-    new SerializableConfiguration(session.sessionState.newHadoopConf()))
+  private val hadoopConfBroadcast =
+    SerializableConfiguration.broadcast(session.sparkContext,
+      session.sessionState.newHadoopConf())
 
   override def readSchema(): StructType = schema
 
@@ -112,23 +125,28 @@ class StateScan(
   override def createReaderFactory(): PartitionReaderFactory = sourceOptions.joinSide match {
     case JoinSideValues.left =>
       val userFacingSchema = schema
+      val oldSchemaFilePaths = StateDataSource.getOldSchemaFilePaths(sourceOptions,
+        hadoopConfBroadcast.value.value)
       val stateSchema = StreamStreamJoinStateHelper.readSchema(session,
         sourceOptions.stateCheckpointLocation.toString, sourceOptions.operatorId, LeftSide,
-        excludeAuxColumns = false)
+        oldSchemaFilePaths, excludeAuxColumns = false)
       new StreamStreamJoinStatePartitionReaderFactory(stateStoreConf,
         hadoopConfBroadcast.value, userFacingSchema, stateSchema)
 
     case JoinSideValues.right =>
       val userFacingSchema = schema
+      val oldSchemaFilePaths = StateDataSource.getOldSchemaFilePaths(sourceOptions,
+        hadoopConfBroadcast.value.value)
       val stateSchema = StreamStreamJoinStateHelper.readSchema(session,
         sourceOptions.stateCheckpointLocation.toString, sourceOptions.operatorId, RightSide,
-        excludeAuxColumns = false)
+        oldSchemaFilePaths, excludeAuxColumns = false)
       new StreamStreamJoinStatePartitionReaderFactory(stateStoreConf,
         hadoopConfBroadcast.value, userFacingSchema, stateSchema)
 
     case JoinSideValues.none =>
       new StatePartitionReaderFactory(stateStoreConf, hadoopConfBroadcast.value, schema,
-        keyStateEncoderSpec, stateVariableInfoOpt, stateStoreColFamilySchemaOpt)
+        keyStateEncoderSpec, stateVariableInfoOpt, stateStoreColFamilySchemaOpt,
+        stateSchemaProviderOpt, joinColFamilyOpt, allColumnFamiliesReaderInfo)
   }
 
   override def toBatch: Batch = this

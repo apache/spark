@@ -27,8 +27,10 @@ import org.scalatest.Assertions
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.SQLExecution
+import org.apache.spark.sql.classic.ClassicConversions._
+import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
 
@@ -230,6 +232,10 @@ abstract class QueryTest extends PlanTest {
       s"level $storageLevel, but it doesn't.")
   }
 
+  def assertNotCached(query: Dataset[_]): Unit = {
+    assertCached(query, numCachedTables = 0)
+  }
+
   /**
    * Asserts that a given [[Dataset]] does not have missing inputs in all the analyzed plans.
    */
@@ -283,10 +289,10 @@ object QueryTest extends Assertions {
       df: DataFrame,
       expectedAnswer: Seq[Row],
       checkToRDD: Boolean = true): Option[String] = {
-    val isSorted = df.logicalPlan.collect { case s: logical.Sort => s }.nonEmpty
+    val isSorted = df.logicalPlan.collectFirst { case s: logical.Sort => s }.nonEmpty
     if (checkToRDD) {
       SQLExecution.withSQLConfPropagated(df.sparkSession) {
-        df.rdd.count() // Also attempt to deserialize as an RDD [SPARK-15791]
+        df.materializedRdd.count() // Also attempt to deserialize as an RDD [SPARK-15791]
       }
     }
 
@@ -345,6 +351,8 @@ object QueryTest extends Assertions {
       // Convert array to Seq for easy equality check.
       case b: Array[_] => b.toSeq
       case r: Row => prepareRow(r)
+      // SPARK-51349: "null" and null had the same precedence in sorting
+      case "null" => "__null_string__"
       case o => o
     })
   }
@@ -447,6 +455,30 @@ object QueryTest extends Assertions {
       case None =>
     }
   }
+
+  def withQueryExecutionsCaptured(spark: SparkSession)(thunk: => Unit): Seq[QueryExecution] = {
+    var capturedQueryExecutions = Seq.empty[QueryExecution]
+
+    val listener = new QueryExecutionListener {
+      override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
+        capturedQueryExecutions = capturedQueryExecutions :+ qe
+      }
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
+        capturedQueryExecutions = capturedQueryExecutions :+ qe
+      }
+    }
+
+    spark.sparkContext.listenerBus.waitUntilEmpty(15000)
+    spark.listenerManager.register(listener)
+    try {
+      thunk
+      spark.sparkContext.listenerBus.waitUntilEmpty(15000)
+    } finally {
+      spark.listenerManager.unregister(listener)
+    }
+
+    capturedQueryExecutions
+  }
 }
 
 class QueryTestSuite extends QueryTest with test.SharedSparkSession {
@@ -454,5 +486,11 @@ class QueryTestSuite extends QueryTest with test.SharedSparkSession {
     intercept[org.scalatest.exceptions.TestFailedException] {
       checkAnswer(sql("SELECT 1"), Row(2) :: Nil)
     }
+  }
+
+  test("SPARK-51349: null string and true null are distinguished") {
+    checkAnswer(sql("select case when id == 0 then struct('null') else struct(null) end s " +
+      "from range(2)"),
+      Seq(Row(Row(null)), Row(Row("null"))))
   }
 }

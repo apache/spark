@@ -21,7 +21,7 @@ import java.io._
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import java.nio.file.Files
-import java.util.{Collections, Map => JMap}
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -29,7 +29,7 @@ import com.google.common.cache.CacheBuilder
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkEnv, SparkException}
 import org.apache.spark.errors.SparkCoreErrors
-import org.apache.spark.internal.{config, Logging, LogKeys, MDC}
+import org.apache.spark.internal.{config, Logging, LogKeys}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.io.NioBufferedFileInputStream
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
@@ -58,19 +58,19 @@ private[spark] class IndexShuffleBlockResolver(
     conf: SparkConf,
     // var for testing
     var _blockManager: BlockManager,
-    val taskIdMapsForShuffle: JMap[Int, OpenHashSet[Long]])
+    val taskIdMapsForShuffle: ConcurrentMap[Int, OpenHashSet[Long]])
   extends ShuffleBlockResolver
   with Logging with MigratableResolver {
 
   def this(conf: SparkConf) = {
-    this(conf, null, Collections.emptyMap())
+    this(conf, null, new ConcurrentHashMap[Int, OpenHashSet[Long]]())
   }
 
   def this(conf: SparkConf, _blockManager: BlockManager) = {
-    this(conf, _blockManager, Collections.emptyMap())
+    this(conf, _blockManager, new ConcurrentHashMap[Int, OpenHashSet[Long]]())
   }
 
-  def this(conf: SparkConf, taskIdMapsForShuffle: JMap[Int, OpenHashSet[Long]]) = {
+  def this(conf: SparkConf, taskIdMapsForShuffle: ConcurrentHashMap[Int, OpenHashSet[Long]]) = {
     this(conf, null, taskIdMapsForShuffle)
   }
 
@@ -84,6 +84,9 @@ private[spark] class IndexShuffleBlockResolver(
 
   private val remoteShuffleMaxDisk: Option[Long] =
     conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_MAX_DISK_SIZE)
+
+  private val checksumEnabled = conf.get(config.SHUFFLE_CHECKSUM_ENABLED)
+  private lazy val algorithm = conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM)
 
   def getDataFile(shuffleId: Int, mapId: Long): File = getDataFile(shuffleId, mapId, None)
 
@@ -195,9 +198,11 @@ private[spark] class IndexShuffleBlockResolver(
       logWarning(log"Error deleting index ${MDC(PATH, file.getPath())}")
     }
 
-    file = getChecksumFile(shuffleId, mapId, conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM))
-    if (file.exists() && !file.delete()) {
-      logWarning(log"Error deleting checksum ${MDC(PATH, file.getPath())}")
+    if (checksumEnabled) {
+      file = getChecksumFile(shuffleId, mapId, algorithm)
+      if (file.exists() && !file.delete()) {
+        logWarning(log"Error deleting checksum ${MDC(PATH, file.getPath())}")
+      }
     }
   }
 
@@ -305,13 +310,13 @@ private[spark] class IndexShuffleBlockResolver(
             val mapTaskIds = taskIdMapsForShuffle.computeIfAbsent(
               shuffleId, _ => new OpenHashSet[Long](8)
             )
-            mapTaskIds.add(mapId)
+            mapTaskIds.synchronized { mapTaskIds.add(mapId) }
 
           case ShuffleDataBlockId(shuffleId, mapId, _) =>
             val mapTaskIds = taskIdMapsForShuffle.computeIfAbsent(
               shuffleId, _ => new OpenHashSet[Long](8)
             )
-            mapTaskIds.add(mapId)
+            mapTaskIds.synchronized { mapTaskIds.add(mapId) }
 
           case _ => // Unreachable
         }
@@ -396,8 +401,7 @@ private[spark] class IndexShuffleBlockResolver(
     val (checksumFileOpt, checksumTmpOpt) = if (checksumEnabled) {
       assert(lengths.length == checksums.length,
         "The size of partition lengths and checksums should be equal")
-      val checksumFile =
-        getChecksumFile(shuffleId, mapId, conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM))
+      val checksumFile = getChecksumFile(shuffleId, mapId, algorithm)
       (Some(checksumFile), Some(createTempFile(checksumFile)))
     } else {
       (None, None)

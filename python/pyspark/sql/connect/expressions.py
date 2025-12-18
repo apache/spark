@@ -39,6 +39,7 @@ import numpy as np
 
 from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.types import (
+    _create_row,
     _from_numpy_type,
     DateType,
     ArrayType,
@@ -54,9 +55,12 @@ from pyspark.sql.types import (
     DecimalType,
     StringType,
     DataType,
+    TimeType,
     TimestampType,
     TimestampNTZType,
     DayTimeIntervalType,
+    MapType,
+    StructType,
 )
 
 import pyspark.sql.connect.proto as proto
@@ -82,6 +86,7 @@ from pyspark.sql.utils import is_timestamp_ntz_preferred, enum_to_value
 if TYPE_CHECKING:
     from pyspark.sql.connect.client import SparkConnectClient
     from pyspark.sql.connect.window import WindowSpec
+    from pyspark.sql.connect.plan import LogicalPlan
 
 
 class Expression:
@@ -128,6 +133,15 @@ class Expression:
             plan.common.origin.CopyFrom(self.origin)
         return plan
 
+    @property
+    def children(self) -> Sequence["Expression"]:
+        return []
+
+    def foreach(self, f: Callable[["Expression"], None]) -> None:
+        f(self)
+        for c in self.children:
+            c.foreach(f)
+
 
 class CaseWhen(Expression):
     def __init__(
@@ -162,6 +176,16 @@ class CaseWhen(Expression):
 
         return unresolved_function.to_plan(session)
 
+    @property
+    def children(self) -> Sequence["Expression"]:
+        children = []
+        for branch in self._branches:
+            children.append(branch[0])
+            children.append(branch[1])
+        if self._else_value is not None:
+            children.append(self._else_value)
+        return children
+
     def __repr__(self) -> str:
         _cases = "".join([f" WHEN {c} THEN {v}" for c, v in self._branches])
         _else = f" ELSE {self._else_value}" if self._else_value is not None else ""
@@ -182,7 +206,7 @@ class ColumnAlias(Expression):
             exp.alias.name.append(self._alias[0])
             exp.alias.expr.CopyFrom(self._child.to_plan(session))
 
-            if self._metadata:
+            if self._metadata is not None:
                 exp.alias.metadata = json.dumps(self._metadata)
             return exp
         else:
@@ -195,6 +219,10 @@ class ColumnAlias(Expression):
             exp.alias.name.extend(self._alias)
             exp.alias.expr.CopyFrom(self._child.to_plan(session))
             return exp
+
+    @property
+    def children(self) -> Sequence["Expression"]:
+        return [self._child]
 
     def __repr__(self) -> str:
         return f"{self._child} AS {','.join(self._alias)}"
@@ -224,6 +252,7 @@ class LiteralExpression(Expression):
                 DecimalType,
                 StringType,
                 DateType,
+                TimeType,
                 TimestampType,
                 TimestampNTZType,
                 DayTimeIntervalType,
@@ -266,13 +295,17 @@ class LiteralExpression(Expression):
             elif isinstance(dataType, DecimalType):
                 assert isinstance(value, decimal.Decimal)
             elif isinstance(dataType, StringType):
-                assert isinstance(value, str)
+                assert isinstance(value, (str, np.str_))
+                value = str(value)
             elif isinstance(dataType, DateType):
                 assert isinstance(value, (datetime.date, datetime.datetime))
                 if isinstance(value, datetime.date):
                     value = DateType().toInternal(value)
                 else:
                     value = DateType().toInternal(value.date())
+            elif isinstance(dataType, TimeType):
+                assert isinstance(value, datetime.time)
+                value = TimeType().toInternal(value)
             elif isinstance(dataType, TimestampType):
                 assert isinstance(value, datetime.datetime)
                 value = TimestampType().toInternal(value)
@@ -301,7 +334,7 @@ class LiteralExpression(Expression):
             return NullType()
         elif isinstance(value, (bytes, bytearray)):
             return BinaryType()
-        elif isinstance(value, bool):
+        elif isinstance(value, (bool, np.bool_)):
             return BooleanType()
         elif isinstance(value, int):
             if JVM_INT_MIN <= value <= JVM_INT_MAX:
@@ -319,39 +352,31 @@ class LiteralExpression(Expression):
                 )
         elif isinstance(value, float):
             return DoubleType()
-        elif isinstance(value, str):
+        elif isinstance(value, (str, np.str_)):
             return StringType()
         elif isinstance(value, decimal.Decimal):
             return DecimalType()
-        elif isinstance(value, datetime.datetime) and is_timestamp_ntz_preferred():
-            return TimestampNTZType()
         elif isinstance(value, datetime.datetime):
-            return TimestampType()
+            return TimestampNTZType() if is_timestamp_ntz_preferred() else TimestampType()
         elif isinstance(value, datetime.date):
             return DateType()
+        elif isinstance(value, datetime.time):
+            return TimeType()
         elif isinstance(value, datetime.timedelta):
             return DayTimeIntervalType()
         elif isinstance(value, np.generic):
             dt = _from_numpy_type(value.dtype)
             if dt is not None:
                 return dt
-            elif isinstance(value, np.bool_):
-                return BooleanType()
         elif isinstance(value, list):
             # follow the 'infer_array_from_first_element' strategy in 'sql.types._infer_type'
             # right now, it's dedicated for pyspark.ml params like array<...>, array<array<...>>
-            if len(value) == 0:
-                raise PySparkValueError(
-                    errorClass="CANNOT_BE_EMPTY",
-                    messageParameters={"item": "value"},
-                )
-            first = value[0]
-            if first is None:
+            if len(value) == 0 or value[0] is None:
                 raise PySparkTypeError(
-                    errorClass="CANNOT_INFER_ARRAY_TYPE",
+                    errorClass="CANNOT_INFER_ARRAY_ELEMENT_TYPE",
                     messageParameters={},
                 )
-            return ArrayType(LiteralExpression._infer_type(first), True)
+            return ArrayType(LiteralExpression._infer_type(value[0]), True)
 
         raise PySparkTypeError(
             errorClass="UNSUPPORTED_DATA_TYPE",
@@ -401,6 +426,9 @@ class LiteralExpression(Expression):
         elif literal.HasField("date"):
             assert dataType is None or isinstance(dataType, DataType)
             return DateType().fromInternal(literal.date)
+        elif literal.HasField("time"):
+            assert dataType is None or isinstance(dataType, TimeType)
+            return TimeType().fromInternal(literal.time.nano)
         elif literal.HasField("timestamp"):
             assert dataType is None or isinstance(dataType, TimestampType)
             return TimestampType().fromInternal(literal.timestamp)
@@ -416,6 +444,29 @@ class LiteralExpression(Expression):
                 assert isinstance(dataType, ArrayType)
                 assert elementType == dataType.elementType
             return [LiteralExpression._to_value(v, elementType) for v in literal.array.elements]
+        elif literal.HasField("map"):
+            keyType = proto_schema_to_pyspark_data_type(literal.map.key_type)
+            valueType = proto_schema_to_pyspark_data_type(literal.map.value_type)
+            if dataType is not None:
+                assert isinstance(dataType, MapType)
+                assert keyType == dataType.keyType
+                assert valueType == dataType.valueType
+            return {
+                LiteralExpression._to_value(k, keyType): LiteralExpression._to_value(v, valueType)
+                for k, v in zip(literal.map.keys, literal.map.values)
+            }
+        elif literal.HasField("struct"):
+            struct_type = cast(
+                StructType, proto_schema_to_pyspark_data_type(literal.struct.struct_type)
+            )
+            if dataType is not None:
+                assert isinstance(dataType, StructType)
+                assert struct_type == dataType
+            values = [
+                LiteralExpression._to_value(v, f.dataType)
+                for v, f in zip(literal.struct.elements, struct_type.fields)
+            ]
+            return _create_row(struct_type.names, values)
 
         raise PySparkTypeError(
             errorClass="UNSUPPORTED_LITERAL",
@@ -453,6 +504,9 @@ class LiteralExpression(Expression):
             expr.literal.string = str(self._value)
         elif isinstance(self._dataType, DateType):
             expr.literal.date = int(self._value)
+        elif isinstance(self._dataType, TimeType):
+            expr.literal.time.precision = self._dataType.precision
+            expr.literal.time.nano = int(self._value)
         elif isinstance(self._dataType, TimestampType):
             expr.literal.timestamp = int(self._value)
         elif isinstance(self._dataType, TimestampNTZType):
@@ -481,6 +535,10 @@ class LiteralExpression(Expression):
             dt = DateType().fromInternal(self._value)
             if dt is not None and isinstance(dt, datetime.date):
                 return dt.strftime("%Y-%m-%d")
+        elif isinstance(self._dataType, TimeType):
+            t = TimeType().fromInternal(self._value)
+            if t is not None and isinstance(t, datetime.time):
+                return t.strftime("%H:%M:%S.%f")
         elif isinstance(self._dataType, TimestampType):
             ts = TimestampType().fromInternal(self._value)
             if ts is not None and isinstance(ts, datetime.datetime):
@@ -499,7 +557,7 @@ class LiteralExpression(Expression):
                 # is sightly different:
                 # java.time.Duration only applies HOURS, MINUTES, SECONDS units,
                 # while Pandas applies all supported units.
-                return pd.Timedelta(delta).isoformat()  # type: ignore[attr-defined]
+                return pd.Timedelta(delta).isoformat()
         return f"{self._value}"
 
 
@@ -509,13 +567,20 @@ class ColumnReference(Expression):
     treat it as an unresolved attribute. Attributes that have the same fully
     qualified name are identical"""
 
-    def __init__(self, unparsed_identifier: str, plan_id: Optional[int] = None) -> None:
+    def __init__(
+        self,
+        unparsed_identifier: str,
+        plan_id: Optional[int] = None,
+        is_metadata_column: bool = False,
+    ) -> None:
         super().__init__()
         assert isinstance(unparsed_identifier, str)
         self._unparsed_identifier = unparsed_identifier
 
         assert plan_id is None or isinstance(plan_id, int)
         self._plan_id = plan_id
+
+        self._is_metadata_column = is_metadata_column
 
     def name(self) -> str:
         """Returns the qualified name of the column reference."""
@@ -527,6 +592,7 @@ class ColumnReference(Expression):
         expr.unresolved_attribute.unparsed_identifier = self._unparsed_identifier
         if self._plan_id is not None:
             expr.unresolved_attribute.plan_id = self._plan_id
+        expr.unresolved_attribute.is_metadata_column = self._is_metadata_column
         return expr
 
     def __repr__(self) -> str:
@@ -631,6 +697,10 @@ class SortOrder(Expression):
 
         return sort
 
+    @property
+    def children(self) -> Sequence["Expression"]:
+        return [self._child]
+
 
 class UnresolvedFunction(Expression):
     def __init__(
@@ -657,6 +727,10 @@ class UnresolvedFunction(Expression):
             fun.unresolved_function.arguments.extend([arg.to_plan(session) for arg in self._args])
         fun.unresolved_function.is_distinct = self._is_distinct
         return fun
+
+    @property
+    def children(self) -> Sequence["Expression"]:
+        return self._args
 
     def __repr__(self) -> str:
         # Default print handling:
@@ -739,12 +813,12 @@ class CommonInlineUserDefinedFunction(Expression):
         function_name: str,
         function: Union[PythonUDF, JavaUDF],
         deterministic: bool = False,
-        arguments: Sequence[Expression] = [],
+        arguments: Optional[Sequence[Expression]] = None,
     ):
         super().__init__()
         self._function_name = function_name
         self._deterministic = deterministic
-        self._arguments = arguments
+        self._arguments: Sequence[Expression] = arguments or []
         self._function = function
 
     def to_plan(self, session: "SparkConnectClient") -> "proto.Expression":
@@ -779,6 +853,10 @@ class CommonInlineUserDefinedFunction(Expression):
         expr.java_udf.CopyFrom(cast(proto.JavaUDF, self._function.to_plan(session)))
         return expr
 
+    @property
+    def children(self) -> Sequence["Expression"]:
+        return self._arguments
+
     def __repr__(self) -> str:
         return f"{self._function_name}({', '.join([str(arg) for arg in self._arguments])})"
 
@@ -808,6 +886,10 @@ class WithField(Expression):
         expr.update_fields.value_expression.CopyFrom(self._valueExpr.to_plan(session))
         return expr
 
+    @property
+    def children(self) -> Sequence["Expression"]:
+        return [self._structExpr, self._valueExpr]
+
     def __repr__(self) -> str:
         return f"update_field({self._structExpr}, {self._fieldName}, {self._valueExpr})"
 
@@ -832,6 +914,10 @@ class DropField(Expression):
         expr.update_fields.field_name = self._fieldName
         return expr
 
+    @property
+    def children(self) -> Sequence["Expression"]:
+        return [self._structExpr]
+
     def __repr__(self) -> str:
         return f"drop_field({self._structExpr}, {self._fieldName})"
 
@@ -855,6 +941,10 @@ class UnresolvedExtractValue(Expression):
         expr.unresolved_extract_value.child.CopyFrom(self._child.to_plan(session))
         expr.unresolved_extract_value.extraction.CopyFrom(self._extraction.to_plan(session))
         return expr
+
+    @property
+    def children(self) -> Sequence["Expression"]:
+        return [self._child, self._extraction]
 
     def __repr__(self) -> str:
         return f"{self._child}['{self._extraction}']"
@@ -914,6 +1004,10 @@ class CastExpression(Expression):
                 fun.cast.eval_mode = proto.Expression.Cast.EvalMode.EVAL_MODE_TRY
 
         return fun
+
+    @property
+    def children(self) -> Sequence["Expression"]:
+        return [self._expr]
 
     def __repr__(self) -> str:
         # We cannot guarantee the string representations be exactly the same, e.g.
@@ -997,6 +1091,10 @@ class LambdaFunction(Expression):
             [arg.to_plan(session).unresolved_named_lambda_variable for arg in self._arguments]
         )
         return expr
+
+    @property
+    def children(self) -> Sequence["Expression"]:
+        return [self._function] + self._arguments
 
     def __repr__(self) -> str:
         return (
@@ -1107,6 +1205,12 @@ class WindowExpression(Expression):
 
         return expr
 
+    @property
+    def children(self) -> Sequence["Expression"]:
+        return (
+            [self._windowFunction] + self._windowSpec._partitionSpec + self._windowSpec._orderSpec
+        )
+
     def __repr__(self) -> str:
         return f"WindowExpression({str(self._windowFunction)}, ({str(self._windowSpec)}))"
 
@@ -1137,6 +1241,10 @@ class CallFunction(Expression):
             expr.call_function.arguments.extend([arg.to_plan(session) for arg in self._args])
         return expr
 
+    @property
+    def children(self) -> Sequence["Expression"]:
+        return self._args
+
     def __repr__(self) -> str:
         if len(self._args) > 0:
             return f"CallFunction('{self._name}', {', '.join([str(arg) for arg in self._args])})"
@@ -1160,5 +1268,99 @@ class NamedArgumentExpression(Expression):
         expr.named_argument_expression.value.CopyFrom(self._value.to_plan(session))
         return expr
 
+    @property
+    def children(self) -> Sequence["Expression"]:
+        return [self._value]
+
     def __repr__(self) -> str:
         return f"{self._key} => {self._value}"
+
+
+class SubqueryExpression(Expression):
+    def __init__(
+        self,
+        plan: "LogicalPlan",
+        subquery_type: str,
+        partition_spec: Optional[Sequence["Expression"]] = None,
+        order_spec: Optional[Sequence["SortOrder"]] = None,
+        with_single_partition: Optional[bool] = None,
+        in_subquery_values: Optional[Sequence["Expression"]] = None,
+    ) -> None:
+        assert isinstance(subquery_type, str)
+        assert subquery_type in ("scalar", "exists", "table_arg", "in")
+
+        super().__init__()
+        self._plan = plan
+        self._subquery_type = subquery_type
+        self._partition_spec = partition_spec or []
+        self._order_spec = order_spec or []
+        self._with_single_partition = with_single_partition
+        self._in_subquery_values = in_subquery_values or []
+
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
+        expr = self._create_proto_expression()
+        expr.subquery_expression.plan_id = self._plan._plan_id
+        if self._subquery_type == "scalar":
+            expr.subquery_expression.subquery_type = proto.SubqueryExpression.SUBQUERY_TYPE_SCALAR
+        elif self._subquery_type == "exists":
+            expr.subquery_expression.subquery_type = proto.SubqueryExpression.SUBQUERY_TYPE_EXISTS
+        elif self._subquery_type == "table_arg":
+            expr.subquery_expression.subquery_type = (
+                proto.SubqueryExpression.SUBQUERY_TYPE_TABLE_ARG
+            )
+
+            # Populate TableArgOptions
+            table_arg_options = expr.subquery_expression.table_arg_options
+            if len(self._partition_spec) > 0:
+                table_arg_options.partition_spec.extend(
+                    [p.to_plan(session) for p in self._partition_spec]
+                )
+            if len(self._order_spec) > 0:
+                table_arg_options.order_spec.extend(
+                    [o.to_plan(session).sort_order for o in self._order_spec]
+                )
+            if self._with_single_partition is not None:
+                table_arg_options.with_single_partition = self._with_single_partition
+        elif self._subquery_type == "in":
+            expr.subquery_expression.subquery_type = proto.SubqueryExpression.SUBQUERY_TYPE_IN
+            expr.subquery_expression.in_subquery_values.extend(
+                [expr.to_plan(session) for expr in self._in_subquery_values]
+            )
+
+        return expr
+
+    def __repr__(self) -> str:
+        repr_parts = [f"plan={self._plan}", f"type={self._subquery_type}"]
+
+        if self._subquery_type == "table_arg":
+            if self._partition_spec:
+                repr_parts.append(f"partition_spec={self._partition_spec}")
+            if self._order_spec:
+                repr_parts.append(f"order_spec={self._order_spec}")
+            if self._with_single_partition is not None:
+                repr_parts.append(f"with_single_partition={self._with_single_partition}")
+        elif self._subquery_type == "in":
+            repr_parts.append(f"values={self._in_subquery_values}")
+
+        return f"SubqueryExpression({', '.join(repr_parts)})"
+
+
+class DirectShufflePartitionID(Expression):
+    """
+    Expression that takes a partition ID value and passes it through directly for use in
+    shuffle partitioning. This is used with RepartitionByExpression to allow users to
+    directly specify target partition IDs.
+    """
+
+    def __init__(self, child: Expression):
+        super().__init__()
+        assert child is not None and isinstance(child, Expression)
+        self._child = child
+
+    def to_plan(self, session: "SparkConnectClient") -> proto.Expression:
+        expr = self._create_proto_expression()
+        expr.direct_shuffle_partition_id.child.CopyFrom(self._child.to_plan(session))
+        return expr
+
+    def __repr__(self) -> str:
+        return f"DirectShufflePartitionID(child={self._child})"

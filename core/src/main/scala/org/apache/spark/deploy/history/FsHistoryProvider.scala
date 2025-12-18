@@ -37,7 +37,7 @@ import org.apache.hadoop.security.AccessControlException
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
@@ -52,8 +52,9 @@ import org.apache.spark.status._
 import org.apache.spark.status.KVUtils._
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
+import org.apache.spark.util.{CallerContext, Clock, SystemClock, ThreadUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SparkStringUtils.stringToSeq
 import org.apache.spark.util.kvstore._
 
 /**
@@ -101,7 +102,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private val CLEAN_INTERVAL_S = conf.get(History.CLEANER_INTERVAL_S)
 
   // Number of threads used to replay event logs.
-  private val NUM_PROCESSING_THREADS = conf.get(History.NUM_REPLAY_THREADS)
+  private val numReplayThreads = conf.get(History.NUM_REPLAY_THREADS)
+  // Number of threads used to compact rolling event logs.
+  private val numCompactThreads = conf.get(History.NUM_COMPACT_THREADS)
 
   private val logDir = conf.get(History.HISTORY_LOG_DIR)
 
@@ -208,7 +211,20 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    */
   private val replayExecutor: ExecutorService = {
     if (!Utils.isTesting) {
-      ThreadUtils.newDaemonFixedThreadPool(NUM_PROCESSING_THREADS, "log-replay-executor")
+      ThreadUtils.newDaemonBlockingThreadPoolExecutorService(
+        numReplayThreads, 1024, "log-replay-executor")
+    } else {
+      ThreadUtils.sameThreadExecutorService()
+    }
+  }
+
+  /**
+   * Fixed size thread pool to compact log files.
+   */
+  private val compactExecutor: ExecutorService = {
+    if (!Utils.isTesting) {
+      ThreadUtils.newDaemonBlockingThreadPoolExecutorService(
+        numCompactThreads, 1024, "log-compact-executor")
     } else {
       ThreadUtils.sameThreadExecutorService()
     }
@@ -306,6 +322,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       .index("endTime").reverse())(_.toApplicationInfo()).iterator
   }
 
+  override def getListing(max: Int)(
+      predicate: ApplicationInfo => Boolean): Iterator[ApplicationInfo] = {
+    // Return the filtered listing in end time descending order.
+    KVUtils.mapToSeqWithFilter(
+      listing.view(classOf[ApplicationInfoWrapper]).index("endTime").reverse(),
+      max)(_.toApplicationInfo())(predicate).iterator
+  }
+
   override def getApplicationInfo(appId: String): Option[ApplicationInfo] = {
     try {
       Some(load(appId).toApplicationInfo())
@@ -319,17 +343,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   override def getLastUpdatedTime(): Long = lastScanTime.get()
 
-  /**
-   * Split a comma separated String, filter out any empty items, and return a Sequence of strings
-   */
-  private def stringToSeq(list: String): Seq[String] = {
-    list.split(',').map(_.trim).filter(_.nonEmpty).toImmutableArraySeq
-  }
-
   override def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI] = {
+    val logPath = RollingEventLogFilesWriter.EVENT_LOG_DIR_NAME_PREFIX +
+        EventLogFileWriter.nameForAppAndAttempt(appId, attemptId)
     val app = try {
       load(appId)
      } catch {
+      case _: NoSuchElementException if this.conf.get(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED) =>
+        loadFromFallbackLocation(appId, attemptId, logPath)
       case _: NoSuchElementException =>
         return None
     }
@@ -351,6 +372,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           createInMemoryStore(attempt)
       }
     } catch {
+      case _: FileNotFoundException if this.conf.get(EVENT_LOG_ROLLING_ON_DEMAND_LOAD_ENABLED) =>
+        if (app.attempts.head.info.appSparkVersion == "unknown") {
+          listing.synchronized {
+            listing.delete(classOf[ApplicationInfoWrapper], appId)
+          }
+        }
+        return None
       case _: FileNotFoundException =>
         return None
     }
@@ -368,6 +396,18 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
 
     Some(loadedUI)
+  }
+
+  private def loadFromFallbackLocation(appId: String, attemptId: Option[String], logPath: String)
+    : ApplicationInfoWrapper = {
+    val date = new Date(0)
+    val lastUpdate = new Date()
+    val info = ApplicationAttemptInfo(
+      attemptId, date, date, lastUpdate, 0, "spark", false, "unknown")
+    addListing(new ApplicationInfoWrapper(
+      ApplicationInfo(appId, appId, None, None, None, None, List.empty),
+      List(new AttemptInfoWrapper(info, logPath, 0, Some(1), None, None, None, None))))
+    load(appId)
   }
 
   override def getEmptyListingHtml(): Seq[Node] = {
@@ -396,6 +436,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   }
 
   override def start(): Unit = {
+    new CallerContext("HISTORY").setCurrentContext()
     initThread = initialize()
   }
 
@@ -405,7 +446,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         initThread.interrupt()
         initThread.join()
       }
-      Seq(pool, replayExecutor).foreach { executor =>
+      Seq(pool, replayExecutor, compactExecutor).foreach { executor =>
         executor.shutdown()
         if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
           executor.shutdownNow()
@@ -461,7 +502,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     var count: Int = 0
     try {
       val newLastScanTime = clock.getTimeMillis()
-      logDebug(s"Scanning $logDir with lastScanTime==$lastScanTime")
+      logInfo(log"Scanning ${MDC(HISTORY_DIR, logDir)} with " +
+        log"lastScanTime=${MDC(LAST_SCAN_TIME, lastScanTime)}")
 
       // Mark entries that are processing as not stale. Such entries do not have a chance to be
       // updated with the new 'lastProcessed' time and thus any entity that completes processing
@@ -469,7 +511,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       // and will be deleted from the UI until the next 'checkForLogs' run.
       val notStale = mutable.HashSet[String]()
       val updated = Option(fs.listStatus(new Path(logDir)))
-        .map(_.toImmutableArraySeq).getOrElse(Nil)
+        .map(_.toImmutableArraySeq).getOrElse(Seq.empty)
         .filter { entry => isAccessible(entry.getPath) }
         .filter { entry =>
           if (isProcessing(entry.getPath)) {
@@ -586,11 +628,11 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         }
 
       if (updated.nonEmpty) {
-        logDebug(s"New/updated attempts found: ${updated.size} ${updated.map(_.rootPath)}")
+        logInfo(log"New/updated attempts found: ${MDC(NUM_ATTEMPT, updated.size)}")
       }
 
       updated.foreach { entry =>
-        submitLogProcessTask(entry.rootPath) { () =>
+        submitLogProcessTask(entry.rootPath, replayExecutor) { () =>
           mergeApplicationListing(entry, newLastScanTime, true)
         }
       }
@@ -762,7 +804,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
       // triggering another task for compaction task only if it succeeds
       if (succeeded) {
-        submitLogProcessTask(rootPath) { () => compact(reader) }
+        submitLogProcessTask(rootPath, compactExecutor) { () => compact(reader) }
       }
     }
   }
@@ -1430,13 +1472,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   }
 
   /** NOTE: 'task' should ensure it executes 'endProcessing' at the end */
-  private def submitLogProcessTask(rootPath: Path)(task: Runnable): Unit = {
+  private def submitLogProcessTask(
+      rootPath: Path, pool: ExecutorService)(task: Runnable): Unit = {
     try {
       processing(rootPath)
-      replayExecutor.submit(task)
+      pool.submit(task)
     } catch {
       // let the iteration over the updated entries break, since an exception on
-      // replayExecutor.submit (..) indicates the ExecutorService is unable
+      // pool.submit (..) indicates the ExecutorService is unable
       // to take any more submissions at this time
       case e: Exception =>
         logError(s"Exception while submitting task", e)

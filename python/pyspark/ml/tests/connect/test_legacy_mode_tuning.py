@@ -25,18 +25,17 @@ import numpy as np
 from pyspark.util import is_remote_only
 from pyspark.ml.param import Param, Params
 from pyspark.ml.tuning import ParamGridBuilder
-from pyspark.sql import SparkSession
 from pyspark.sql.functions import rand
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
-
-have_sklearn = True
-sklearn_requirement_message = None
-try:
-    from sklearn.datasets import load_breast_cancer  # noqa: F401
-except ImportError:
-    have_sklearn = False
-    sklearn_requirement_message = "No sklearn found"
-
+from pyspark.testing.utils import (
+    have_sklearn,
+    sklearn_requirement_message,
+    have_torch,
+    torch_requirement_message,
+    have_torcheval,
+    torcheval_requirement_message,
+)
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 if should_test_connect:
     import pandas as pd
@@ -47,37 +46,34 @@ if should_test_connect:
     from pyspark.ml.connect.tuning import CrossValidator, CrossValidatorModel
     from pyspark.ml.connect.evaluation import BinaryClassificationEvaluator, RegressionEvaluator
 
+    class HasInducedError(Params):
+        def __init__(self):
+            super().__init__()
+            self.inducedError = Param(
+                self, "inducedError", "Uniformly-distributed error added to feature"
+            )
 
-class HasInducedError(Params):
-    def __init__(self):
-        super(HasInducedError, self).__init__()
-        self.inducedError = Param(
-            self, "inducedError", "Uniformly-distributed error added to feature"
-        )
+        def getInducedError(self):
+            return self.getOrDefault(self.inducedError)
 
-    def getInducedError(self):
-        return self.getOrDefault(self.inducedError)
+    class InducedErrorModel(Model, HasInducedError):
+        def __init__(self):
+            super().__init__()
 
+        def _transform(self, dataset):
+            return dataset.withColumn(
+                "prediction", dataset.feature + (rand(0) * self.getInducedError())
+            )
 
-class InducedErrorModel(Model, HasInducedError):
-    def __init__(self):
-        super(InducedErrorModel, self).__init__()
+    class InducedErrorEstimator(Estimator, HasInducedError):
+        def __init__(self, inducedError=1.0):
+            super().__init__()
+            self._set(inducedError=inducedError)
 
-    def _transform(self, dataset):
-        return dataset.withColumn(
-            "prediction", dataset.feature + (rand(0) * self.getInducedError())
-        )
-
-
-class InducedErrorEstimator(Estimator, HasInducedError):
-    def __init__(self, inducedError=1.0):
-        super(InducedErrorEstimator, self).__init__()
-        self._set(inducedError=inducedError)
-
-    def _fit(self, dataset):
-        model = InducedErrorModel()
-        self._copyValues(model)
-        return model
+        def _fit(self, dataset):
+            model = InducedErrorModel()
+            self._copyValues(model)
+            return model
 
 
 class CrossValidatorTestsMixin:
@@ -192,6 +188,9 @@ class CrossValidatorTestsMixin:
             )
 
     def test_crossvalidator_on_pipeline(self):
+        import torch
+        from sklearn.datasets import load_breast_cancer
+
         sk_dataset = load_breast_cancer()
 
         train_dataset = self.spark.createDataFrame(
@@ -203,7 +202,7 @@ class CrossValidatorTestsMixin:
         lorv2 = LORV2(numTrainWorkers=2, featuresCol="scaled_features")
         pipeline = Pipeline(stages=[scaler, lorv2])
 
-        grid2 = ParamGridBuilder().addGrid(lorv2.maxIter, [2, 200]).build()
+        grid2 = ParamGridBuilder().addGrid(lorv2.maxIter, [2, 5]).build()
         cv = CrossValidator(
             estimator=pipeline,
             estimatorParamMaps=grid2,
@@ -221,7 +220,7 @@ class CrossValidatorTestsMixin:
         )
         pd.testing.assert_frame_equal(transformed_result, expected_transformed_result)
 
-        assert cv_model.bestModel.stages[1].getMaxIter() == 200
+        assert cv_model.bestModel.stages[1].getMaxIter() == 5
 
         # trial of index 2 should have better metric value
         # because it sets higher `maxIter` param.
@@ -234,29 +233,38 @@ class CrossValidatorTestsMixin:
 
         # Test save / load
         with tempfile.TemporaryDirectory(prefix="test_crossvalidator_on_pipeline") as tmp_dir:
-            cv.saveToLocal(f"{tmp_dir}/cv")
-            loaded_cv = CrossValidator.loadFromLocal(f"{tmp_dir}/cv")
+            with torch.serialization.safe_globals(
+                [
+                    torch.nn.modules.container.Sequential,
+                    torch.nn.modules.linear.Linear,
+                    torch.nn.modules.activation.Softmax,
+                ]
+            ):
+                cv.saveToLocal(f"{tmp_dir}/cv")
+                loaded_cv = CrossValidator.loadFromLocal(f"{tmp_dir}/cv")
 
-            _verify_cv_saved_params(cv, loaded_cv)
+                _verify_cv_saved_params(cv, loaded_cv)
 
-            cv_model.saveToLocal(f"{tmp_dir}/cv_model")
-            loaded_cv_model = CrossValidatorModel.loadFromLocal(f"{tmp_dir}/cv_model")
+                cv_model.saveToLocal(f"{tmp_dir}/cv_model")
+                loaded_cv_model = CrossValidatorModel.loadFromLocal(f"{tmp_dir}/cv_model")
 
-            _verify_cv_saved_params(cv_model, loaded_cv_model)
+                _verify_cv_saved_params(cv_model, loaded_cv_model)
 
-            assert cv_model.uid == loaded_cv_model.uid
-            assert cv_model.bestModel.uid == loaded_cv_model.bestModel.uid
-            assert cv_model.bestModel.stages[0].uid == loaded_cv_model.bestModel.stages[0].uid
-            assert cv_model.bestModel.stages[1].uid == loaded_cv_model.bestModel.stages[1].uid
-            assert loaded_cv_model.bestModel.stages[1].getMaxIter() == 200
+                assert cv_model.uid == loaded_cv_model.uid
+                assert cv_model.bestModel.uid == loaded_cv_model.bestModel.uid
+                assert cv_model.bestModel.stages[0].uid == loaded_cv_model.bestModel.stages[0].uid
+                assert cv_model.bestModel.stages[1].uid == loaded_cv_model.bestModel.stages[1].uid
+                assert loaded_cv_model.bestModel.stages[1].getMaxIter() == 5
 
-            np.testing.assert_allclose(cv_model.avgMetrics, loaded_cv_model.avgMetrics)
-            np.testing.assert_allclose(cv_model.stdMetrics, loaded_cv_model.stdMetrics)
+                np.testing.assert_allclose(cv_model.avgMetrics, loaded_cv_model.avgMetrics)
+                np.testing.assert_allclose(cv_model.stdMetrics, loaded_cv_model.stdMetrics)
 
     @unittest.skipIf(
         sys.version_info > (3, 12), "SPARK-46078: Fails with dev torch with Python 3.12"
     )
     def test_crossvalidator_with_fold_col(self):
+        from sklearn.datasets import load_breast_cancer
+
         sk_dataset = load_breast_cancer()
 
         train_dataset = self.spark.createDataFrame(
@@ -270,7 +278,7 @@ class CrossValidatorTestsMixin:
 
         lorv2 = LORV2(numTrainWorkers=2)
 
-        grid2 = ParamGridBuilder().addGrid(lorv2.maxIter, [2, 200]).build()
+        grid2 = ParamGridBuilder().addGrid(lorv2.maxIter, [2, 5]).build()
         cv = CrossValidator(
             estimator=lorv2,
             estimatorParamMaps=grid2,
@@ -283,17 +291,21 @@ class CrossValidatorTestsMixin:
 
 
 @unittest.skipIf(
-    not should_test_connect or not have_sklearn or is_remote_only(),
+    not should_test_connect
+    or not have_sklearn
+    or not have_torch
+    or not have_torcheval
+    or is_remote_only(),
     connect_requirement_message
     or sklearn_requirement_message
+    or torch_requirement_message
+    or torcheval_requirement_message
     or "pyspark-connect cannot test classic Spark",
 )
-class CrossValidatorTests(CrossValidatorTestsMixin, unittest.TestCase):
-    def setUp(self) -> None:
-        self.spark = SparkSession.builder.master("local[2]").getOrCreate()
-
-    def tearDown(self) -> None:
-        self.spark.stop()
+class CrossValidatorTests(CrossValidatorTestsMixin, ReusedSQLTestCase):
+    @classmethod
+    def master(cls):
+        return "local[2]"
 
 
 if __name__ == "__main__":

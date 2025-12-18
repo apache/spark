@@ -137,7 +137,7 @@ class TestParams(HasMaxIter, HasInputCol, HasSeed):
 
     @keyword_only
     def __init__(self, seed=None):
-        super(TestParams, self).__init__()
+        super().__init__()
         self._setDefault(maxIter=10)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -159,7 +159,7 @@ class OtherTestParams(HasMaxIter, HasInputCol, HasSeed):
 
     @keyword_only
     def __init__(self, seed=None):
-        super(OtherTestParams, self).__init__()
+        super().__init__()
         self._setDefault(maxIter=10)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
@@ -176,7 +176,7 @@ class OtherTestParams(HasMaxIter, HasInputCol, HasSeed):
 
 class HasThrowableProperty(Params):
     def __init__(self):
-        super(HasThrowableProperty, self).__init__()
+        super().__init__()
         self.p = Param(self, "none", "empty param")
 
     @property
@@ -368,12 +368,12 @@ class ParamTests(SparkSessionTestCase):
         self.assertFalse(binarizer.isSet(binarizer.outputCol))
         self.assertEqual(result[0][0], 1.0)
 
-    def test_lr_evaluate_invaild_type(self):
+    def test_lr_evaluate_invalid_type(self):
         lr = LinearRegressionModel()
         invalid_type = ""
         self.assertRaises(TypeError, lr.evaluate, invalid_type)
 
-    def test_glr_evaluate_invaild_type(self):
+    def test_glr_evaluate_invalid_type(self):
         glr = GeneralizedLinearRegressionModel()
         invalid_type = ""
         self.assertRaises(TypeError, glr.evaluate, invalid_type)

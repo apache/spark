@@ -24,7 +24,7 @@ import java.nio.charset.StandardCharsets
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.receiver.Receiver
@@ -88,7 +88,7 @@ class SocketReceiver[T: ClassTag](
   def receive(): Unit = {
     try {
       val iterator = bytesToObjects(socket.getInputStream())
-      while(!isStopped() && iterator.hasNext) {
+      while (!isStopped() && iterator.hasNext) {
         store(iterator.next())
       }
       if (!isStopped()) {

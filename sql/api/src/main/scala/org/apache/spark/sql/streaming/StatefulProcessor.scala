@@ -19,16 +19,24 @@ package org.apache.spark.sql.streaming
 
 import java.io.Serializable
 
-import org.apache.spark.annotation.{Evolving, Experimental}
+import org.apache.spark.annotation.Evolving
+import org.apache.spark.sql.EncoderImplicits
 import org.apache.spark.sql.errors.ExecutionErrors
 
 /**
  * Represents the arbitrary stateful logic that needs to be provided by the user to perform
  * stateful manipulations on keyed streams.
+ *
+ * Users can also explicitly use `import implicits._` to access the EncoderImplicits and use the
+ * state variable APIs relying on implicit encoders.
  */
-@Experimental
 @Evolving
-private[sql] abstract class StatefulProcessor[K, I, O] extends Serializable {
+abstract class StatefulProcessor[K, I, O] extends Serializable {
+
+  // scalastyle:off
+  // Disable style checker so "implicits" object can start with lowercase i
+  object implicits extends EncoderImplicits
+  // scalastyle:on
 
   /**
    * Handle to the stateful processor that provides access to the state store and other stateful
@@ -49,6 +57,11 @@ private[sql] abstract class StatefulProcessor[K, I, O] extends Serializable {
   /**
    * Function that will allow users to interact with input data rows along with the grouping key
    * and current timer values and optionally provide output rows.
+   *
+   * Note that in microbatch mode, input rows for a given grouping key will be provided in a
+   * single function invocation. If the grouping key is not seen in the current microbatch, this
+   * function will not be invoked for that key.
+   *
    * @param key
    *   \- grouping key
    * @param inputRows
@@ -56,16 +69,34 @@ private[sql] abstract class StatefulProcessor[K, I, O] extends Serializable {
    * @param timerValues
    *   \- instance of TimerValues that provides access to current processing/event time if
    *   available
-   * @param expiredTimerInfo
-   *   \- instance of ExpiredTimerInfo that provides access to expired timer if applicable
+   *
    * @return
    *   \- Zero or more output rows
    */
-  def handleInputRows(
+  def handleInputRows(key: K, inputRows: Iterator[I], timerValues: TimerValues): Iterator[O]
+
+  /**
+   * Function that will be invoked when a timer is fired for a given key. Users can choose to
+   * evict state, register new timers and optionally provide output rows.
+   *
+   * Note that in microbatch mode, this function will be called once for each unique timer expiry
+   * for a given key. If no timer expires for a given key, this function will not be invoked for
+   * that key.
+   *
+   * @param key
+   *   \- grouping key
+   * @param timerValues
+   *   \- instance of TimerValues that provides access to current processing/event
+   * @param expiredTimerInfo
+   *   \- instance of ExpiredTimerInfo that provides access to expired timer
+   *
+   * @return
+   *   Zero or more output rows
+   */
+  def handleExpiredTimer(
       key: K,
-      inputRows: Iterator[I],
       timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo): Iterator[O]
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[O] = Iterator.empty
 
   /**
    * Function called as the last method that allows for users to perform any cleanup or teardown
@@ -103,13 +134,18 @@ private[sql] abstract class StatefulProcessor[K, I, O] extends Serializable {
  * initial state to be initialized in the first batch. This can be used for starting a new
  * streaming query with existing state from a previous streaming query.
  */
-@Experimental
 @Evolving
-private[sql] abstract class StatefulProcessorWithInitialState[K, I, O, S]
-    extends StatefulProcessor[K, I, O] {
+abstract class StatefulProcessorWithInitialState[K, I, O, S] extends StatefulProcessor[K, I, O] {
 
   /**
    * Function that will be invoked only in the first batch for users to process initial states.
+   * The provided initial state can be arbitrary dataframe with the same grouping key schema with
+   * the input rows, e.g. dataframe from data source reader of existing streaming query
+   * checkpoint.
+   *
+   * Note that in microbatch mode, this function can be called for one or more times per grouping
+   * key. If the grouping key is not seen within the initial state dataframe rows, then the
+   * function will not be invoked for that key.
    *
    * @param key
    *   \- grouping key

@@ -21,7 +21,6 @@ import java.util.UUID
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, Executors, ScheduledExecutorService, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 
-import scala.collection.mutable
 import scala.concurrent.duration.FiniteDuration
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
@@ -29,9 +28,9 @@ import scala.util.control.NonFatal
 import com.google.common.cache.CacheBuilder
 
 import org.apache.spark.{SparkEnv, SparkSQLException}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{INTERVAL, SESSION_HOLD_INFO}
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_SESSION_MANAGER_CLOSED_SESSIONS_TOMBSTONES_SIZE, CONNECT_SESSION_MANAGER_DEFAULT_SESSION_TIMEOUT, CONNECT_SESSION_MANAGER_MAINTENANCE_INTERVAL}
 import org.apache.spark.util.ThreadUtils
 
@@ -50,7 +49,7 @@ class SparkConnectSessionManager extends Logging {
       .build[SessionKey, SessionHolderInfo]()
 
   /** Executor for the periodic maintenance */
-  private var scheduledExecutor: AtomicReference[ScheduledExecutorService] =
+  private val scheduledExecutor: AtomicReference[ScheduledExecutorService] =
     new AtomicReference[ScheduledExecutorService]()
 
   private def validateSessionId(
@@ -115,6 +114,73 @@ class SparkConnectSessionManager extends Logging {
     Option(getSession(key, None))
   }
 
+  /**
+   * Clone an existing session with a new session ID. Creates a new SessionHolder with a cloned
+   * SparkSession that shares configuration and catalog state but has independent caches and
+   * runtime state.
+   */
+  private[connect] def cloneSession(
+      sourceKey: SessionKey,
+      newSessionId: String,
+      previouslyObservedSessionId: Option[String]): SessionHolder = {
+
+    // Get source session (must exist)
+    val sourceSessionHolder = getIsolatedSession(sourceKey, None)
+
+    previouslyObservedSessionId.foreach(sessionId =>
+      validateSessionId(sourceKey, sourceSessionHolder.session.sessionUUID, sessionId))
+
+    val newKey = SessionKey(sourceKey.userId, newSessionId)
+
+    // Validate new sessionId for clone operation
+    validateCloneTargetSession(newKey)
+
+    // Create cloned session
+    val clonedSessionHolder = getSession(
+      newKey,
+      Some(() => {
+        val session = sessionStore.get(newKey)
+        if (session == null) {
+          // Clone the underlying SparkSession using cloneSession() which preserves
+          // configuration, catalog, session state, temporary views, and registered functions
+          val clonedSparkSession = sourceSessionHolder.session.cloneSession()
+
+          val newHolder = SessionHolder(newKey.userId, newKey.sessionId, clonedSparkSession)
+          newHolder.initializeSession()
+          newHolder
+        } else {
+          // A session was created in the meantime.
+          session
+        }
+      }))
+
+    clonedSessionHolder
+  }
+
+  private def validateCloneTargetSession(newKey: SessionKey): Unit = {
+    // Validate that sessionId is formatted like UUID before creating session.
+    try {
+      UUID.fromString(newKey.sessionId).toString
+    } catch {
+      case _: IllegalArgumentException =>
+        throw new SparkSQLException(
+          errorClass = "INVALID_CLONE_SESSION_REQUEST.TARGET_SESSION_ID_FORMAT",
+          messageParameters = Map("targetSessionId" -> newKey.sessionId))
+    }
+    // Validate that session with that key has not been already closed.
+    if (closedSessionsCache.getIfPresent(newKey) != null) {
+      throw new SparkSQLException(
+        errorClass = "INVALID_CLONE_SESSION_REQUEST.TARGET_SESSION_ID_ALREADY_CLOSED",
+        messageParameters = Map("targetSessionId" -> newKey.sessionId))
+    }
+    // Validate that session with that key does not already exist.
+    if (sessionStore.containsKey(newKey)) {
+      throw new SparkSQLException(
+        errorClass = "INVALID_CLONE_SESSION_REQUEST.TARGET_SESSION_ID_ALREADY_EXISTS",
+        messageParameters = Map("targetSessionId" -> newKey.sessionId))
+    }
+  }
+
   private def getSession(key: SessionKey, default: Option[() => SessionHolder]): SessionHolder = {
     schedulePeriodicChecks() // Starts the maintenance thread if it hasn't started yet.
 
@@ -135,7 +201,9 @@ class SparkConnectSessionManager extends Logging {
   }
 
   // Removes session from sessionStore and returns it.
-  private def removeSessionHolder(key: SessionKey): Option[SessionHolder] = {
+  private def removeSessionHolder(
+      key: SessionKey,
+      allowReconnect: Boolean = false): Option[SessionHolder] = {
     var sessionHolder: Option[SessionHolder] = None
 
     // The session holder should remain in the session store until it is added to the closed session
@@ -145,9 +213,11 @@ class SparkConnectSessionManager extends Logging {
     sessionHolder = Option(sessionStore.get(key))
 
     sessionHolder.foreach { s =>
-      // Put into closedSessionsCache to prevent the same session from being recreated by
-      // getOrCreateIsolatedSession.
-      closedSessionsCache.put(s.key, s.getSessionHolderInfo)
+      if (!allowReconnect) {
+        // Put into closedSessionsCache to prevent the same session from being recreated by
+        // getOrCreateIsolatedSession when reconnection isn't allowed.
+        closedSessionsCache.put(s.key, s.getSessionHolderInfo)
+      }
 
       // Then, remove the session holder from the session store.
       sessionStore.remove(key)
@@ -155,17 +225,21 @@ class SparkConnectSessionManager extends Logging {
     sessionHolder
   }
 
-  // Shut downs the session after removing.
-  private def shutdownSessionHolder(sessionHolder: SessionHolder): Unit = {
+  // Shuts down the session after removing.
+  private def shutdownSessionHolder(
+      sessionHolder: SessionHolder,
+      allowReconnect: Boolean = false): Unit = {
     sessionHolder.close()
-    // Update in closedSessionsCache: above it wasn't updated with closedTime etc. yet.
-    closedSessionsCache.put(sessionHolder.key, sessionHolder.getSessionHolderInfo)
+    if (!allowReconnect) {
+      // Update in closedSessionsCache: above it wasn't updated with closedTime etc. yet.
+      closedSessionsCache.put(sessionHolder.key, sessionHolder.getSessionHolderInfo)
+    }
   }
 
-  def closeSession(key: SessionKey): Unit = {
-    val sessionHolder = removeSessionHolder(key)
+  def closeSession(key: SessionKey, allowReconnect: Boolean = false): Unit = {
+    val sessionHolder = removeSessionHolder(key, allowReconnect)
     // Rest of the cleanup: the session cannot be accessed anymore by getOrCreateIsolatedSession.
-    sessionHolder.foreach(shutdownSessionHolder(_))
+    sessionHolder.foreach(shutdownSessionHolder(_, allowReconnect))
   }
 
   private[connect] def shutdown(): Unit = {
@@ -226,9 +300,8 @@ class SparkConnectSessionManager extends Logging {
   private def periodicMaintenance(
       defaultInactiveTimeoutMs: Long,
       ignoreCustomTimeout: Boolean): Unit = {
-    logInfo("Started periodic run of SparkConnectSessionManager maintenance.")
     // Find any sessions that expired and should be removed.
-    val toRemove = new mutable.ArrayBuffer[SessionHolder]()
+    logDebug("Started periodic run of SparkConnectSessionManager maintenance.")
 
     def shouldExpire(info: SessionHolderInfo, nowMs: Long): Boolean = {
       val timeoutMs = if (info.customInactiveTimeoutMs.isDefined && !ignoreCustomTimeout) {
@@ -242,15 +315,8 @@ class SparkConnectSessionManager extends Logging {
 
     val nowMs = System.currentTimeMillis()
     sessionStore.forEach((_, sessionHolder) => {
-      if (shouldExpire(sessionHolder.getSessionHolderInfo, nowMs)) {
-        toRemove += sessionHolder
-      }
-    })
-
-    // .. and remove them.
-    toRemove.foreach { sessionHolder =>
       val info = sessionHolder.getSessionHolderInfo
-      if (shouldExpire(info, System.currentTimeMillis())) {
+      if (shouldExpire(info, nowMs)) {
         logInfo(
           log"Found session ${MDC(SESSION_HOLD_INFO, info)} that expired " +
             log"and will be closed.")
@@ -261,8 +327,9 @@ class SparkConnectSessionManager extends Logging {
           case NonFatal(ex) => logWarning("Unexpected exception closing session", ex)
         }
       }
-    }
-    logInfo("Finished periodic run of SparkConnectSessionManager maintenance.")
+    })
+
+    logDebug("Finished periodic run of SparkConnectSessionManager maintenance.")
   }
 
   private def newIsolatedSession(): SparkSession = {
@@ -297,8 +364,10 @@ class SparkConnectSessionManager extends Logging {
    * Used for testing
    */
   private[connect] def invalidateAllSessions(): Unit = {
-    periodicMaintenance(defaultInactiveTimeoutMs = 0L, ignoreCustomTimeout = true)
-    assert(sessionStore.isEmpty)
+    sessionStore.forEach((key, sessionHolder) => {
+      removeSessionHolder(key)
+      shutdownSessionHolder(sessionHolder)
+    })
     closedSessionsCache.invalidateAll()
   }
 

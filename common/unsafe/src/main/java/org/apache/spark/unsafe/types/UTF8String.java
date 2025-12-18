@@ -141,6 +141,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   private static final UTF8String COMMA_UTF8 = UTF8String.fromString(",");
   public static final UTF8String EMPTY_UTF8 = UTF8String.fromString("");
   public static final UTF8String ZERO_UTF8 = UTF8String.fromString("0");
+  public static final UTF8String SPACE_UTF8 = UTF8String.fromString(" ");
 
 
   /**
@@ -641,9 +642,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     }
 
     int j = i;
-    while (i < numBytes && c < until) {
-      i += numBytesForFirstByte(getByte(i));
-      c += 1;
+    if (until == Integer.MAX_VALUE) {
+      i = numBytes;
+    } else {
+      while (i < numBytes && c < until) {
+        i += numBytesForFirstByte(getByte(i));
+        c += 1;
+      }
     }
 
     if (i > j) {
@@ -662,9 +667,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     // refers to element i-1 in the sequence. If a start index i is less than 0, it refers
     // to the -ith element before the end of the sequence. If a start index i is 0, it
     // refers to the first element.
-    int len = numChars();
     // `len + pos` does not overflow as `len >= 0`.
-    int start = (pos > 0) ? pos -1 : ((pos < 0) ? len + pos : 0);
+    int start = (pos > 0) ? pos -1 : ((pos < 0) ? numChars() + pos : 0);
 
     int end;
     if ((long) start + length > Integer.MAX_VALUE) {
@@ -1156,9 +1160,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
     int i = 0; // position in byte
     while (i < numBytes) {
-      int len = numBytesForFirstByte(getByte(i));
+      int len = Math.min(numBytesForFirstByte(getByte(i)), numBytes);
+      int targetOffset = Math.max(result.length - i - len, 0);
       copyMemory(this.base, this.offset + i, result,
-        BYTE_ARRAY_OFFSET + result.length - i - len, len);
+        BYTE_ARRAY_OFFSET + targetOffset, len);
 
       i += len;
     }
@@ -1167,8 +1172,19 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public UTF8String repeat(int times) {
-    if (times <= 0) {
+    if (times <= 0 || numBytes == 0) {
       return EMPTY_UTF8;
+    }
+
+    if (times == 1) {
+      return this;
+    }
+
+    if (numBytes == 1) {
+      byte[] newBytes = new byte[times];
+      byte b = getByte(0);
+      Arrays.fill(newBytes, b);
+      return fromBytes(newBytes);
     }
 
     byte[] newBytes = new byte[Math.multiplyExact(numBytes, times)];
@@ -1482,6 +1498,25 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public UTF8String[] split(UTF8String pattern, int limit) {
+    // For the empty `pattern` a `split` function ignores trailing empty strings unless original
+    // string is empty.
+    if (numBytes() != 0 && pattern.numBytes() == 0) {
+      int newLimit = limit > numChars() || limit <= 0 ? numChars() : limit;
+      byte[] input = getBytes();
+      int byteIndex = 0;
+      UTF8String[] result = new UTF8String[newLimit];
+      for (int charIndex = 0; charIndex < newLimit - 1; charIndex++) {
+        int currCharNumBytes = numBytesForFirstByte(input[byteIndex]);
+        result[charIndex] = UTF8String.fromBytes(input, byteIndex, currCharNumBytes);
+        byteIndex += currCharNumBytes;
+      }
+      result[newLimit - 1] = UTF8String.fromBytes(input, byteIndex, numBytes() - byteIndex);
+      return result;
+    }
+    return split(pattern.toString(), limit);
+  }
+
+  public UTF8String[] splitLegacyTruncate(UTF8String pattern, int limit) {
     // For the empty `pattern` a `split` function ignores trailing empty strings unless original
     // string is empty.
     if (numBytes() != 0 && pattern.numBytes() == 0) {

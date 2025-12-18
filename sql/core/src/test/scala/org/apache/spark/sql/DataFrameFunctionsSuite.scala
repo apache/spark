@@ -24,7 +24,7 @@ import scala.reflect.runtime.universe.runtimeMirror
 import scala.util.Random
 
 import org.apache.spark.{QueryContextType, SPARK_DOC_ROOT, SparkException, SparkRuntimeException}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.Cast._
@@ -32,7 +32,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.ExpressionUtils.column
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -73,7 +72,9 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       "sum_distinct", // equivalent to sum(distinct foo)
       "typedLit", "typedlit", // Scala only
       "udaf", "udf", // create function statement in sql
-      "call_function" // moot in SQL as you just call the function directly
+      "call_function", // moot in SQL as you just call the function directly
+      "listagg_distinct", // equivalent to listagg(distinct foo)
+      "string_agg_distinct" // equivalent to string_agg(distinct foo)
     )
 
     val excludedSqlFunctions = Set.empty[String]
@@ -404,7 +405,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         callSitePattern = "",
         startIndex = 0,
         stopIndex = 0))
-    expr = nullifzero(Literal.create(20201231, DateType))
+    expr = nullifzero(Column(Literal.create(20201231, DateType)))
     checkError(
       intercept[AnalysisException](df.select(expr)),
       condition = "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
@@ -457,14 +458,14 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val df = Seq((0)).toDF("a")
     var expr = randstr(lit(10), lit("a"))
     checkError(
-      intercept[AnalysisException](df.select(expr)),
+      intercept[ExtendedAnalysisException](df.select(expr).collect()),
       condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"randstr(10, a)\"",
         "paramIndex" -> "second",
         "inputSql" -> "\"a\"",
         "inputType" -> "\"STRING\"",
-        "requiredType" -> "INT or SMALLINT"),
+        "requiredType" -> "(\"INT\" or \"BIGINT\")"),
       context = ExpectedContext(
         contextType = QueryContextType.DataFrame,
         fragment = "randstr",
@@ -478,8 +479,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       intercept[AnalysisException](df.select(expr)),
       condition = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
       parameters = Map(
-        "inputName" -> "length",
-        "inputType" -> "INT or SMALLINT",
+        "inputName" -> "`length`",
+        "inputType" -> "integer",
         "inputExpr" -> "\"a\"",
         "sqlExpr" -> "\"randstr(a, 10)\""),
       context = ExpectedContext(
@@ -507,16 +508,16 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     }
     // Here we exercise some error cases.
     val df = Seq((0)).toDF("a")
-    var expr = uniform(lit(10), lit("a"))
+    var expr = uniform(lit(10), lit("a"), lit(1))
     checkError(
       intercept[AnalysisException](df.select(expr)),
       condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
       parameters = Map(
-        "sqlExpr" -> "\"uniform(10, a)\"",
+        "sqlExpr" -> "\"uniform(10, a, 1)\"",
         "paramIndex" -> "second",
         "inputSql" -> "\"a\"",
         "inputType" -> "\"STRING\"",
-        "requiredType" -> "integer or floating-point"),
+        "requiredType" -> "\"NUMERIC\""),
       context = ExpectedContext(
         contextType = QueryContextType.DataFrame,
         fragment = "uniform",
@@ -525,15 +526,15 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         callSitePattern = "",
         startIndex = 0,
         stopIndex = 0))
-    expr = uniform(col("a"), lit(10))
+    expr = uniform(col("a"), lit(10), lit(1))
     checkError(
       intercept[AnalysisException](df.select(expr)),
       condition = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
       parameters = Map(
-        "inputName" -> "min",
+        "inputName" -> "`min`",
         "inputType" -> "integer or floating-point",
         "inputExpr" -> "\"a\"",
-        "sqlExpr" -> "\"uniform(a, 10)\""),
+        "sqlExpr" -> "\"uniform(a, 10, 1)\""),
       context = ExpectedContext(
         contextType = QueryContextType.DataFrame,
         fragment = "uniform",
@@ -586,7 +587,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         callSitePattern = "",
         startIndex = 0,
         stopIndex = 0))
-    expr = zeroifnull(Literal.create(20201231, DateType))
+    expr = zeroifnull(Column(Literal.create(20201231, DateType)))
     checkError(
       intercept[AnalysisException](df.select(expr)),
       condition = "DATATYPE_MISMATCH.DATA_DIFF_TYPES",
@@ -5735,7 +5736,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     import DataFrameFunctionsSuite.CodegenFallbackExpr
     for ((codegenFallback, wholeStage) <- Seq((true, false), (false, false), (false, true))) {
       val c = if (codegenFallback) {
-        column(CodegenFallbackExpr(v.expr))
+        Column(CodegenFallbackExpr(v.expr))
       } else {
         v
       }

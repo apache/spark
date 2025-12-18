@@ -21,6 +21,50 @@
 # variable is set or not. If set, it starts to run the coverage.
 try:
     import coverage
-    coverage.process_startup()
+    if (cov := coverage.Coverage.current()) is None:
+        cov = coverage.process_startup()
+    if cov:
+        import os
+
+        def patch_worker():
+            # If it's a worker forked from the daemon, we need to patch it to save
+            # the coverage data. Otherwise the worker will be killed by a signal and
+            # the coverage data will not be saved.
+            import sys
+            frame = sys._getframe(1)
+            if (
+                frame.f_code.co_name == "manager" and
+                "daemon.py" in frame.f_code.co_filename and
+                "worker" in frame.f_globals
+            ):
+
+                if cov := coverage.Coverage.current():
+                    cov.stop()
+                cov = coverage.process_startup(force=True)
+
+                # When JVM knows the worker has failed, it will kill the worker, and
+                # we won't have enough time to save the coverage data. So we need to save
+                # the coverage data before we let the JVM know about the exception.
+                import pyspark.util
+                handle_worker_exception = pyspark.util.handle_worker_exception
+
+                def handle_worker_exception_wrapper(*args, **kwargs):
+                    cov.save()
+                    handle_worker_exception(*args, **kwargs)
+                pyspark.util.handle_worker_exception = handle_worker_exception_wrapper
+
+                def save_when_exit(func):
+                    def wrapper(*args, **kwargs):
+                        try:
+                            result = func(*args, **kwargs)
+                        finally:
+                            cov.save()
+                        return result
+                    return wrapper
+
+                frame.f_globals["worker"] = save_when_exit(frame.f_globals["worker"])
+
+        os.register_at_fork(after_in_child=patch_worker)
+
 except ImportError:
     pass

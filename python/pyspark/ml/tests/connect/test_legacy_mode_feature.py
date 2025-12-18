@@ -17,16 +17,15 @@
 #
 
 import os
-import pickle
 import tempfile
 import unittest
 
 import numpy as np
 
 from pyspark.util import is_remote_only
-from pyspark.sql import SparkSession
 from pyspark.testing.connectutils import should_test_connect, connect_requirement_message
-
+from pyspark.testing.utils import have_torch, torch_requirement_message
+from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 if should_test_connect:
     from pyspark.ml.connect.feature import (
@@ -85,12 +84,6 @@ class FeatureTestsMixin:
             np.testing.assert_allclose(model.max_abs_values, loaded_model.max_abs_values)
             assert model.n_samples_seen == loaded_model.n_samples_seen
 
-            # Test loading core model as scikit-learn model
-            with open(os.path.join(model_path, "MaxAbsScalerModel.sklearn.pkl"), "rb") as f:
-                sk_model = pickle.load(f)
-                sk_result = sk_model.transform(np.stack(list(local_df1.features)))
-                np.testing.assert_allclose(sk_result, expected_result)
-
     def test_standard_scaler(self):
         df1 = self.spark.createDataFrame(
             [
@@ -141,12 +134,6 @@ class FeatureTestsMixin:
             np.testing.assert_allclose(model.scale_values, loaded_model.scale_values)
             assert model.n_samples_seen == loaded_model.n_samples_seen
 
-            # Test loading core model as scikit-learn model
-            with open(os.path.join(model_path, "StandardScalerModel.sklearn.pkl"), "rb") as f:
-                sk_model = pickle.load(f)
-                sk_result = sk_model.transform(np.stack(list(local_df1.features)))
-                np.testing.assert_allclose(sk_result, expected_result)
-
     def test_array_assembler(self):
         spark_df = self.spark.createDataFrame(
             [
@@ -196,15 +183,15 @@ class FeatureTestsMixin:
 
 
 @unittest.skipIf(
-    not should_test_connect or is_remote_only(),
-    connect_requirement_message or "pyspark-connect cannot test classic Spark",
+    not should_test_connect or not have_torch or is_remote_only(),
+    connect_requirement_message
+    or torch_requirement_message
+    or "pyspark-connect cannot test classic Spark",
 )
-class FeatureTests(FeatureTestsMixin, unittest.TestCase):
-    def setUp(self) -> None:
-        self.spark = SparkSession.builder.master("local[2]").getOrCreate()
-
-    def tearDown(self) -> None:
-        self.spark.stop()
+class FeatureTests(FeatureTestsMixin, ReusedSQLTestCase):
+    @classmethod
+    def master(cls):
+        return "local[2]"
 
 
 if __name__ == "__main__":

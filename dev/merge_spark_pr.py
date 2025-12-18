@@ -419,7 +419,7 @@ def choose_jira_assignee(issue):
                     annotations.append("Commentator")
                 print("[%d] %s (%s)" % (idx, author.displayName, ",".join(annotations)))
             raw_assignee = bold_input(
-                "Enter number of user, or userid, to assign to (blank to leave unassigned):"
+                "Enter number of user, or userid, to assign to (blank to leave unassigned): "
             )
             if raw_assignee == "":
                 return None
@@ -566,6 +566,7 @@ def get_current_ref():
 
 def initialize_jira():
     global asf_jira
+    asf_jira = None
     jira_server = {"server": JIRA_API_BASE}
 
     if not JIRA_IMPORTED:
@@ -610,7 +611,11 @@ def main():
     branch_names = sorted(branch_names, reverse=True)
     branch_iter = iter(branch_names)
 
-    pr_num = bold_input("Which pull request would you like to merge? (e.g. 34): ")
+    if len(sys.argv) == 1:
+        pr_num = bold_input("Which pull request would you like to merge? (e.g. 34): ")
+    else:
+        pr_num = sys.argv[1]
+        print("Start to merge pull request #%s" % (pr_num))
     pr = get_json("%s/pulls/%s" % (GITHUB_API_BASE, pr_num))
     pr_events = get_json("%s/issues/%s/events" % (GITHUB_API_BASE, pr_num))
 

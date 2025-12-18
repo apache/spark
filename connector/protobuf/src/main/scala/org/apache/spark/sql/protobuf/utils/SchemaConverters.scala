@@ -22,12 +22,10 @@ import com.google.protobuf.{BoolValue, BytesValue, DoubleValue, FloatValue, Int3
 import com.google.protobuf.Descriptors.{Descriptor, FieldDescriptor}
 import com.google.protobuf.WireFormat
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 
-@DeveloperApi
 object SchemaConverters extends Logging {
 
   /**
@@ -42,13 +40,13 @@ object SchemaConverters extends Logging {
    *
    * @since 3.4.0
    */
-  def toSqlType(
+  private[protobuf] def toSqlType(
       descriptor: Descriptor,
       protobufOptions: ProtobufOptions = ProtobufOptions(Map.empty)): SchemaType = {
     toSqlTypeHelper(descriptor, protobufOptions)
   }
 
-  def toSqlTypeHelper(
+  private[protobuf] def toSqlTypeHelper(
       descriptor: Descriptor,
       protobufOptions: ProtobufOptions): SchemaType = {
     val fields = descriptor.getFields.asScala.flatMap(
@@ -65,7 +63,7 @@ object SchemaConverters extends Logging {
   // exceed the maximum recursive depth specified by the recursiveFieldMaxDepth option.
   // A return of None implies the field has reached the maximum allowed recursive depth and
   // should be dropped.
-  def structFieldFor(
+  private def structFieldFor(
       fd: FieldDescriptor,
       existingRecordNames: Map[String, Int],
       protobufOptions: ProtobufOptions): Option[StructField] = {

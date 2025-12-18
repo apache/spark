@@ -14,8 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import uuid
 from pyspark.sql.connect.utils import check_dependencies
-from pyspark.sql.utils import is_timestamp_ntz_preferred
 
 check_dependencies(__name__)
 
@@ -23,12 +23,13 @@ import json
 import threading
 import os
 import warnings
-from collections.abc import Sized
+from collections.abc import Callable, Sized
 import functools
 from threading import RLock
 from typing import (
     Optional,
     Any,
+    Iterator,
     Union,
     Dict,
     List,
@@ -37,6 +38,7 @@ from typing import (
     cast,
     overload,
     Iterable,
+    Mapping,
     TYPE_CHECKING,
     ClassVar,
 )
@@ -52,6 +54,7 @@ import urllib
 
 from pyspark.sql.connect.dataframe import DataFrame
 from pyspark.sql.dataframe import DataFrame as ParentDataFrame
+from pyspark.sql.connect.logging import logger
 from pyspark.sql.connect.client import SparkConnectClient, DefaultChannelBuilder
 from pyspark.sql.connect.conf import RuntimeConf
 from pyspark.sql.connect.plan import (
@@ -59,7 +62,7 @@ from pyspark.sql.connect.plan import (
     Range,
     LocalRelation,
     LogicalPlan,
-    CachedLocalRelation,
+    ChunkedCachedLocalRelation,
     CachedRelation,
     CachedRemoteRelation,
     SubqueryAlias,
@@ -104,19 +107,14 @@ from pyspark.errors import (
 )
 
 if TYPE_CHECKING:
+    import pyspark.sql.connect.proto as pb2
     from pyspark.sql.connect._typing import OptionalPrimitiveType
     from pyspark.sql.connect.catalog import Catalog
     from pyspark.sql.connect.udf import UDFRegistration
     from pyspark.sql.connect.udtf import UDTFRegistration
+    from pyspark.sql.connect.tvf import TableValuedFunction
     from pyspark.sql.connect.shell.progress import ProgressHandler
     from pyspark.sql.connect.datasource import DataSourceRegistration
-
-try:
-    import memory_profiler  # noqa: F401
-
-    has_memory_profiler = True
-except Exception:
-    has_memory_profiler = False
 
 
 class SparkSession:
@@ -134,6 +132,7 @@ class SparkSession:
         def __init__(self) -> None:
             self._options: Dict[str, Any] = {}
             self._channel_builder: Optional[DefaultChannelBuilder] = None
+            self._hook_factories: list["Callable[[SparkSession], SparkSession.Hook]"] = []
 
         @overload
         def config(self, key: str, value: Any) -> "SparkSession.Builder":
@@ -195,6 +194,13 @@ class SparkSession:
                 self._channel_builder = channelBuilder
                 return self
 
+        def _registerHook(
+            self, hook_factory: "Callable[[SparkSession], SparkSession.Hook]"
+        ) -> "SparkSession.Builder":
+            with self._lock:
+                self._hook_factories.append(hook_factory)
+                return self
+
         def enableHiveSupport(self) -> "SparkSession.Builder":
             raise PySparkNotImplementedError(
                 errorClass="NOT_IMPLEMENTED", messageParameters={"feature": "enableHiveSupport"}
@@ -205,34 +211,26 @@ class SparkSession:
             for i in range(int(os.environ.get("PYSPARK_REMOTE_INIT_CONF_LEN", "0"))):
                 init_opts = json.loads(os.environ[f"PYSPARK_REMOTE_INIT_CONF_{i}"])
 
-            with self._lock:
-                for k, v in init_opts.items():
-                    # the options are applied after session creation,
-                    # so following options always take no effect
-                    if k not in [
-                        "spark.remote",
-                        "spark.master",
-                    ] and k.startswith("spark.sql."):
-                        # Only attempts to set Spark SQL configurations.
-                        # If the configurations are static, it might throw an exception so
-                        # simply ignore it for now.
-                        try:
-                            session.conf.set(k, v)
-                        except Exception:
-                            pass
+            # The options are applied after session creation,
+            # so options ["spark.remote", "spark.master"] always take no effect.
+            invalid_opts = ["spark.remote", "spark.master"]
 
             with self._lock:
+                opts = {}
+
+                # Only attempts to set Spark SQL configurations.
+                # If the configurations are static, it might throw an exception so
+                # simply ignore it for now.
+                for k, v in init_opts.items():
+                    if k not in invalid_opts and k.startswith("spark.sql."):
+                        opts[k] = v
+
                 for k, v in self._options.items():
-                    # the options are applied after session creation,
-                    # so following options always take no effect
-                    if k not in [
-                        "spark.remote",
-                        "spark.master",
-                    ]:
-                        try:
-                            session.conf.set(k, v)
-                        except Exception as e:
-                            warnings.warn(str(e))
+                    if k not in invalid_opts:
+                        opts[k] = v
+
+                if len(opts) > 0:
+                    session.conf._set_all(configs=opts, silent=True)
 
         def create(self) -> "SparkSession":
             has_channel_builder = self._channel_builder is not None
@@ -247,11 +245,13 @@ class SparkSession:
 
             if has_channel_builder:
                 assert self._channel_builder is not None
-                session = SparkSession(connection=self._channel_builder)
+                session = SparkSession(
+                    connection=self._channel_builder, hook_factories=self._hook_factories
+                )
             else:
                 spark_remote = to_str(self._options.get("spark.remote"))
                 assert spark_remote is not None
-                session = SparkSession(connection=spark_remote)
+                session = SparkSession(connection=spark_remote, hook_factories=self._hook_factories)
 
             SparkSession._set_default_and_active_session(session)
             self._apply_options(session)
@@ -267,6 +267,16 @@ class SparkSession:
                 self._apply_options(session)
                 return session
 
+    class Hook:
+        """A Hook can be used to inject behavior into the session."""
+
+        def on_execute_plan(self, request: "pb2.ExecutePlanRequest") -> "pb2.ExecutePlanRequest":
+            """Called before sending an ExecutePlanRequest.
+
+            The request is replaced with the one returned by this method.
+            """
+            return request
+
     _client: SparkConnectClient
 
     # SPARK-47544: Explicitly declaring this as an identifier instead of a method.
@@ -274,7 +284,12 @@ class SparkSession:
     builder: Builder = classproperty(lambda cls: cls.Builder())  # type: ignore
     builder.__doc__ = PySparkSession.builder.__doc__
 
-    def __init__(self, connection: Union[str, DefaultChannelBuilder], userId: Optional[str] = None):
+    def __init__(
+        self,
+        connection: Union[str, DefaultChannelBuilder],
+        userId: Optional[str] = None,
+        hook_factories: Optional[list["Callable[[SparkSession], Hook]"]] = None,
+    ) -> None:
         """
         Creates a new SparkSession for the Spark Connect interface.
 
@@ -289,8 +304,15 @@ class SparkSession:
             isolate their Spark Sessions. If the `user_id` is not set, will default to
             the $USER environment. Defining the user ID as part of the connection string
             takes precedence.
+        hook_factories: list[Callable[[SparkSession], Hook]], optional
+            Optional list of hook factories for hooks that should be registered for this session.
         """
-        self._client = SparkConnectClient(connection=connection, user_id=userId)
+        hook_factories = hook_factories or []
+        self._client = SparkConnectClient(
+            connection=connection,
+            user_id=userId,
+            session_hooks=[factory(self) for factory in hook_factories],
+        )
         self._session_id = self._client._session_id
 
         # Set to false to prevent client.release_session on close() (testing only)
@@ -381,6 +403,14 @@ class SparkSession:
 
     readStream.__doc__ = PySparkSession.readStream.__doc__
 
+    @property
+    def tvf(self) -> "TableValuedFunction":
+        from pyspark.sql.connect.tvf import TableValuedFunction
+
+        return TableValuedFunction(self)
+
+    tvf.__doc__ = PySparkSession.tvf.__doc__
+
     def registerProgressHandler(self, handler: "ProgressHandler") -> None:
         self._client.register_progress_handler(handler)
 
@@ -397,7 +427,10 @@ class SparkSession:
     clearProgressHandlers.__doc__ = PySparkSession.clearProgressHandlers.__doc__
 
     def _inferSchemaFromList(
-        self, data: Iterable[Any], names: Optional[List[str]] = None
+        self,
+        data: Iterable[Any],
+        names: Optional[List[str]],
+        configs: Mapping[str, Optional[str]],
     ) -> StructType:
         """
         Infer schema from list of Row, dict, or tuple.
@@ -412,12 +445,12 @@ class SparkSession:
             infer_dict_as_struct,
             infer_array_from_first_element,
             infer_map_from_first_pair,
-            prefer_timestamp_ntz,
-        ) = self._client.get_configs(
-            "spark.sql.pyspark.inferNestedDictAsStruct.enabled",
-            "spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled",
-            "spark.sql.pyspark.legacy.inferMapTypeFromFirstPair.enabled",
-            "spark.sql.timestampType",
+            prefer_timestamp,
+        ) = (
+            configs["spark.sql.pyspark.inferNestedDictAsStruct.enabled"],
+            configs["spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled"],
+            configs["spark.sql.pyspark.legacy.inferMapTypeFromFirstPair.enabled"],
+            configs["spark.sql.timestampType"],
         )
         return functools.reduce(
             _merge_type,
@@ -428,7 +461,7 @@ class SparkSession:
                     infer_dict_as_struct=(infer_dict_as_struct == "true"),
                     infer_array_from_first_element=(infer_array_from_first_element == "true"),
                     infer_map_from_first_pair=(infer_map_from_first_pair == "true"),
-                    prefer_timestamp_ntz=(prefer_timestamp_ntz == "TIMESTAMP_NTZ"),
+                    prefer_timestamp_ntz=(prefer_timestamp == "TIMESTAMP_NTZ"),
                 )
                 for row in data
             ),
@@ -498,8 +531,28 @@ class SparkSession:
                     messageParameters={},
                 )
 
+        # Get all related configs in a batch
+        configs = self._client.get_config_dict(
+            "spark.sql.timestampType",
+            "spark.sql.session.timeZone",
+            "spark.sql.session.localRelationCacheThreshold",
+            "spark.sql.session.localRelationChunkSizeRows",
+            "spark.sql.session.localRelationChunkSizeBytes",
+            "spark.sql.session.localRelationBatchOfChunksSizeBytes",
+            "spark.sql.execution.pandas.convertToArrowArraySafely",
+            "spark.sql.execution.pandas.inferPandasDictAsMap",
+            "spark.sql.pyspark.inferNestedDictAsStruct.enabled",
+            "spark.sql.pyspark.legacy.inferArrayTypeFromFirstElement.enabled",
+            "spark.sql.pyspark.legacy.inferMapTypeFromFirstPair.enabled",
+            "spark.sql.execution.arrow.useLargeVarTypes",
+        )
+        timezone = configs["spark.sql.session.timeZone"]
+        prefer_timestamp = configs["spark.sql.timestampType"]
+        prefers_large_types: bool = (
+            cast(str, configs["spark.sql.execution.arrow.useLargeVarTypes"]).lower() == "true"
+        )
+
         _table: Optional[pa.Table] = None
-        timezone: Optional[str] = None
 
         if isinstance(data, pd.DataFrame):
             # Logic was borrowed from `_create_from_pandas_with_arrow` in
@@ -508,9 +561,13 @@ class SparkSession:
             # If no schema supplied by user then get the names of columns only
             if schema is None:
                 _cols = [str(x) if not isinstance(x, str) else x for x in data.columns]
+                if len(_cols) == 0:
+                    raise PySparkValueError(
+                        errorClass="CANNOT_INFER_EMPTY_SCHEMA",
+                        messageParameters={},
+                    )
                 infer_pandas_dict_as_map = (
-                    str(self.conf.get("spark.sql.execution.pandas.inferPandasDictAsMap")).lower()
-                    == "true"
+                    configs["spark.sql.execution.pandas.inferPandasDictAsMap"] == "true"
                 )
                 if infer_pandas_dict_as_map:
                     struct = StructType()
@@ -542,7 +599,9 @@ class SparkSession:
             if isinstance(schema, StructType):
                 deduped_schema = cast(StructType, _deduplicate_field_names(schema))
                 spark_types = [field.dataType for field in deduped_schema.fields]
-                arrow_schema = to_arrow_schema(deduped_schema)
+                arrow_schema = to_arrow_schema(
+                    deduped_schema, prefers_large_types=prefers_large_types
+                )
                 arrow_types = [field.type for field in arrow_schema]
                 _cols = [str(x) if not isinstance(x, str) else x for x in schema.fieldNames()]
             elif isinstance(schema, DataType):
@@ -560,13 +619,16 @@ class SparkSession:
                     else None
                     for t in data.dtypes
                 ]
-                arrow_types = [to_arrow_type(dt) if dt is not None else None for dt in spark_types]
+                arrow_types = [
+                    to_arrow_type(dt, prefers_large_types=prefers_large_types)
+                    if dt is not None
+                    else None
+                    for dt in spark_types
+                ]
 
-            timezone, safecheck = self._client.get_configs(
-                "spark.sql.session.timeZone", "spark.sql.execution.pandas.convertToArrowArraySafely"
-            )
+            safecheck = configs["spark.sql.execution.pandas.convertToArrowArraySafely"]
 
-            ser = ArrowStreamPandasSerializer(cast(str, timezone), safecheck == "true")
+            ser = ArrowStreamPandasSerializer(cast(str, timezone), safecheck == "true", False)
 
             _table = pa.Table.from_batches(
                 [
@@ -586,10 +648,6 @@ class SparkSession:
                 ).cast(arrow_schema)
 
         elif isinstance(data, pa.Table):
-            prefer_timestamp_ntz = is_timestamp_ntz_preferred()
-
-            (timezone,) = self._client.get_configs("spark.sql.session.timeZone")
-
             # If no schema supplied by user then get the names of columns only
             if schema is None:
                 _cols = data.column_names
@@ -599,11 +657,19 @@ class SparkSession:
                 _num_cols = len(_cols)
 
             if not isinstance(schema, StructType):
-                schema = from_arrow_schema(data.schema, prefer_timestamp_ntz=prefer_timestamp_ntz)
+                schema = from_arrow_schema(
+                    data.schema, prefer_timestamp_ntz=prefer_timestamp == "TIMESTAMP_NTZ"
+                )
 
             _table = (
                 _check_arrow_table_timestamps_localize(data, schema, True, timezone)
-                .cast(to_arrow_schema(schema, error_on_duplicated_field_names_in_struct=True))
+                .cast(
+                    to_arrow_schema(
+                        schema,
+                        error_on_duplicated_field_names_in_struct=True,
+                        prefers_large_types=prefers_large_types,
+                    )
+                )
                 .rename_columns(schema.names)
             )
 
@@ -661,7 +727,7 @@ class SparkSession:
                 if not isinstance(_schema, StructType):
                     _schema = StructType().add("value", _schema)
             else:
-                _schema = self._inferSchemaFromList(_data, _cols)
+                _schema = self._inferSchemaFromList(_data, _cols, configs)
 
                 if _cols is not None and cast(int, _num_cols) < len(_cols):
                     _num_cols = len(_cols)
@@ -673,12 +739,14 @@ class SparkSession:
                         errorClass="CANNOT_DETERMINE_TYPE", messageParameters={}
                     )
 
-            from pyspark.sql.connect.conversion import LocalDataToArrowConversion
+            from pyspark.sql.conversion import (
+                LocalDataToArrowConversion,
+            )
 
             # Spark Connect will try its best to build the Arrow table with the
             # inferred schema in the client side, and then rename the columns and
             # cast the datatypes in the server side.
-            _table = LocalDataToArrowConversion.convert(_data, _schema)
+            _table = LocalDataToArrowConversion.convert(_data, _schema, prefers_large_types)
 
         # TODO: Beside the validation on number of columns, we should also check
         # whether the Arrow Schema is compatible with the user provided Schema.
@@ -696,10 +764,27 @@ class SparkSession:
         else:
             local_relation = LocalRelation(_table)
 
-        cache_threshold = self._client.get_configs("spark.sql.session.localRelationCacheThreshold")
+        # get_config_dict throws [SQL_CONF_NOT_FOUND] if the key is not found.
+        cache_threshold = int(
+            configs["spark.sql.session.localRelationCacheThreshold"]  # type: ignore[arg-type]
+        )
+        max_chunk_size_rows = int(
+            configs["spark.sql.session.localRelationChunkSizeRows"]  # type: ignore[arg-type]
+        )
+        max_chunk_size_bytes = int(
+            configs["spark.sql.session.localRelationChunkSizeBytes"]  # type: ignore[arg-type]
+        )
+        max_batch_of_chunks_size_bytes = int(
+            configs["spark.sql.session.localRelationBatchOfChunksSizeBytes"]  # type: ignore[arg-type] # noqa: E501
+        )
         plan: LogicalPlan = local_relation
-        if cache_threshold[0] is not None and int(cache_threshold[0]) <= _table.nbytes:
-            plan = CachedLocalRelation(self._cache_local_relation(local_relation))
+        if cache_threshold <= _table.nbytes:
+            plan = self._cache_local_relation(
+                local_relation,
+                max_chunk_size_rows,
+                max_chunk_size_bytes,
+                max_batch_of_chunks_size_bytes,
+            )
 
         df = DataFrame(plan, self)
         if _cols is not None and len(_cols) > 0:
@@ -776,13 +861,11 @@ class SparkSession:
 
     range.__doc__ = PySparkSession.range.__doc__
 
-    @property
+    @functools.cached_property
     def catalog(self) -> "Catalog":
         from pyspark.sql.connect.catalog import Catalog
 
-        if not hasattr(self, "_catalog"):
-            self._catalog = Catalog(self)
-        return self._catalog
+        return Catalog(self)
 
     catalog.__doc__ = PySparkSession.catalog.__doc__
 
@@ -860,12 +943,12 @@ class SparkSession:
                 try:
                     self.client.release_session()
                 except Exception as e:
-                    warnings.warn(f"session.stop(): Session could not be released. Error: ${e}")
+                    logger.warn(f"session.stop(): Session could not be released. Error: ${e}")
 
             try:
                 self.client.close()
             except Exception as e:
-                warnings.warn(f"session.stop(): Client could not be closed. Error: ${e}")
+                logger.warn(f"session.stop(): Client could not be closed. Error: ${e}")
 
             if self is SparkSession._default_session:
                 SparkSession._default_session = None
@@ -881,7 +964,7 @@ class SparkSession:
                     try:
                         PySparkSession._activeSession.stop()
                     except Exception as e:
-                        warnings.warn(
+                        logger.warn(
                             "session.stop(): Local Spark Connect Server could not be stopped. "
                             f"Error: ${e}"
                         )
@@ -974,12 +1057,68 @@ class SparkSession:
 
     addArtifact = addArtifacts
 
-    def _cache_local_relation(self, local_relation: LocalRelation) -> str:
+    def _cache_local_relation(
+        self,
+        local_relation: LocalRelation,
+        max_chunk_size_rows: int,
+        max_chunk_size_bytes: int,
+        max_batch_of_chunks_size_bytes: int,
+    ) -> ChunkedCachedLocalRelation:
         """
         Cache the local relation at the server side if it has not been cached yet.
+
+        This method serializes the input local relation into multiple data chunks and
+        a schema chunk (if the schema is available) and uploads these chunks as artifacts
+        to the server.
+
+        The method collects a batch of chunks of size up to max_batch_of_chunks_size_bytes and
+        uploads them together to the server.
+        Uploading each chunk separately would require an additional RPC call for each chunk.
+        Uploading all chunks together would require materializing all chunks in memory which
+        may cause high memory usage on the client.
+        Uploading batches of chunks is the middle-ground solution.
+
+        Should only be called on a LocalRelation with a non-empty _table.
         """
-        serialized = local_relation.serialize(self._client)
-        return self._client.cache_artifact(serialized)
+        assert local_relation._table is not None, "table cannot be None"
+        has_schema = local_relation._schema is not None
+
+        hashes = []
+        current_batch = []
+        current_batch_size = 0
+        if has_schema:
+            schema_chunk = local_relation._serialize_schema()
+            current_batch.append(schema_chunk)
+            current_batch_size += len(schema_chunk)
+
+        data_chunks: Iterator[bytes] = local_relation._serialize_table_chunks(
+            max_chunk_size_rows, min(max_chunk_size_bytes, max_batch_of_chunks_size_bytes)
+        )
+
+        for chunk in data_chunks:
+            chunk_size = len(chunk)
+
+            # Check if adding this chunk would exceed batch size
+            if (
+                len(current_batch) > 0
+                and current_batch_size + chunk_size > max_batch_of_chunks_size_bytes
+            ):
+                hashes += self._client.cache_artifacts(current_batch)
+                # start a new batch
+                current_batch = []
+                current_batch_size = 0
+
+            current_batch.append(chunk)
+            current_batch_size += chunk_size
+        hashes += self._client.cache_artifacts(current_batch)
+
+        if has_schema:
+            schema_hash = hashes[0]
+            data_hashes = hashes[1:]
+        else:
+            schema_hash = None
+            data_hashes = hashes
+        return ChunkedCachedLocalRelation(data_hashes, schema_hash)
 
     def copyFromLocalToFs(self, local_path: str, dest_path: str) -> None:
         if urllib.parse.urlparse(dest_path).scheme:
@@ -1009,6 +1148,8 @@ class SparkSession:
 
         2. Starts a regular Spark session that automatically starts a Spark Connect server
            via ``spark.plugins`` feature.
+
+        Returns the authentication token that should be used to connect to this session.
         """
         from pyspark import SparkContext, SparkConf
 
@@ -1023,11 +1164,24 @@ class SparkSession:
             # Configurations to be overwritten
             overwrite_conf = opts
             overwrite_conf["spark.master"] = master
-            overwrite_conf["spark.local.connect"] = "1"
-            os.environ["SPARK_LOCAL_CONNECT"] = "1"
+            if "spark.remote" in overwrite_conf:
+                del overwrite_conf["spark.remote"]
+            if "spark.api.mode" in overwrite_conf:
+                del overwrite_conf["spark.api.mode"]
+
+            # Check for a user provided authentication token, creating a new one if not,
+            # and make sure it's set in the environment,
+            if "SPARK_CONNECT_AUTHENTICATE_TOKEN" not in os.environ:
+                os.environ["SPARK_CONNECT_AUTHENTICATE_TOKEN"] = opts.get(
+                    "spark.connect.authenticate.token", str(uuid.uuid4())
+                )
 
             # Configurations to be set if unset.
-            default_conf = {"spark.plugins": "org.apache.spark.sql.connect.SparkConnectPlugin"}
+            default_conf = {
+                "spark.plugins": "org.apache.spark.sql.connect.SparkConnectPlugin",
+                "spark.sql.artifact.isolation.enabled": "true",
+                "spark.sql.artifact.isolation.alwaysApplyClassloader": "true",
+            }
 
             if "SPARK_TESTING" in os.environ:
                 # For testing, we use 0 to use an ephemeral port to allow parallel testing.
@@ -1036,9 +1190,9 @@ class SparkSession:
 
             origin_remote = os.environ.get("SPARK_REMOTE", None)
             try:
+                # So SparkSubmit thinks no remote is set in order to
+                # start the regular PySpark session.
                 if origin_remote is not None:
-                    # So SparkSubmit thinks no remote is set in order to
-                    # start the regular PySpark session.
                     del os.environ["SPARK_REMOTE"]
 
                 # The regular PySpark session is registered as an active session
@@ -1054,11 +1208,9 @@ class SparkSession:
                 new_opts = {k: opts[k] for k in opts if k in runtime_conf_keys}
                 opts.clear()
                 opts.update(new_opts)
-
             finally:
                 if origin_remote is not None:
                     os.environ["SPARK_REMOTE"] = origin_remote
-                del os.environ["SPARK_LOCAL_CONNECT"]
         else:
             raise PySparkRuntimeError(
                 errorClass="SESSION_OR_CONTEXT_EXISTS",
@@ -1094,6 +1246,50 @@ class SparkSession:
             return SparkSession._getActiveSessionIfMatches(old_session_id)
 
         return creator, (self._session_id,)
+
+    def _to_ddl(self, struct: StructType) -> str:
+        ddl = self._client._analyze(method="json_to_ddl", json_string=struct.json()).ddl_string
+        assert ddl is not None
+        return ddl
+
+    def _parse_ddl(self, ddl: str) -> DataType:
+        dt = self._client._analyze(method="ddl_parse", ddl_string=ddl).parsed
+        assert dt is not None
+        return dt
+
+    def cloneSession(self, new_session_id: Optional[str] = None) -> "SparkSession":
+        """
+        Create a clone of this Spark Connect session on the server side. The server-side session
+        is cloned with all its current state (SQL configurations, temporary views, registered
+        functions, catalog state) copied over to a new independent session. The returned cloned
+        session is isolated from this session - any subsequent changes to either session's
+        server-side state will not be reflected in the other.
+
+        Parameters
+        ----------
+        new_session_id : str, optional
+            Custom session ID to use for the cloned session (must be a valid UUID).
+            If not provided, a new UUID will be generated.
+
+        Returns
+        -------
+        SparkSession
+            A new SparkSession instance with the cloned session.
+
+        Notes
+        -----
+        This creates a new server-side session with the specified or generated session ID
+        while preserving the current session's configuration and state.
+
+        .. note::
+            This is a developer API.
+        """
+        cloned_client = self._client.clone(new_session_id)
+        # Create a new SparkSession with the cloned client directly
+        new_session = object.__new__(SparkSession)
+        new_session._client = cloned_client
+        new_session._session_id = cloned_client._session_id
+        return new_session
 
 
 SparkSession.__doc__ = PySparkSession.__doc__

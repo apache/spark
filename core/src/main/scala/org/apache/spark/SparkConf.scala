@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.avro.{Schema, SchemaNormalization}
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History._
@@ -34,6 +34,234 @@ import org.apache.spark.internal.config.Network._
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
+
+trait ReadOnlySparkConf {
+  /** Get a parameter; throws a NoSuchElementException if it's not set */
+  def get(key: String): String = {
+    getOption(key).getOrElse(throw new NoSuchElementException(key))
+  }
+
+  /** Get a parameter, falling back to a default if not set */
+  def get(key: String, defaultValue: String): String = {
+    getOption(key).getOrElse(defaultValue)
+  }
+
+  /**
+   * Retrieves the value of a pre-defined configuration entry.
+   *
+   * - This is an internal Spark API.
+   * - The return type if defined by the configuration entry.
+   * - This will throw an exception is the config is not optional and the value is not set.
+   */
+  private[spark] def get[T](entry: ConfigEntry[T]): T
+
+  /**
+   * Get a time parameter as seconds; throws a NoSuchElementException if it's not set. If no
+   * suffix is provided then seconds are assumed.
+   *
+   * @throws java.util.NoSuchElementException If the time parameter is not set
+   * @throws NumberFormatException            If the value cannot be interpreted as seconds
+   */
+  def getTimeAsSeconds(key: String): Long = catchIllegalValue(key) {
+    Utils.timeStringAsSeconds(get(key))
+  }
+
+  /**
+   * Get a time parameter as seconds, falling back to a default if not set. If no
+   * suffix is provided then seconds are assumed.
+   *
+   * @throws NumberFormatException If the value cannot be interpreted as seconds
+   */
+  def getTimeAsSeconds(key: String, defaultValue: String): Long = catchIllegalValue(key) {
+    Utils.timeStringAsSeconds(get(key, defaultValue))
+  }
+
+  /**
+   * Get a time parameter as milliseconds; throws a NoSuchElementException if it's not set. If no
+   * suffix is provided then milliseconds are assumed.
+   *
+   * @throws java.util.NoSuchElementException If the time parameter is not set
+   * @throws NumberFormatException            If the value cannot be interpreted as milliseconds
+   */
+  def getTimeAsMs(key: String): Long = catchIllegalValue(key) {
+    Utils.timeStringAsMs(get(key))
+  }
+
+  /**
+   * Get a time parameter as milliseconds, falling back to a default if not set. If no
+   * suffix is provided then milliseconds are assumed.
+   *
+   * @throws NumberFormatException If the value cannot be interpreted as milliseconds
+   */
+  def getTimeAsMs(key: String, defaultValue: String): Long = catchIllegalValue(key) {
+    Utils.timeStringAsMs(get(key, defaultValue))
+  }
+
+  /**
+   * Get a size parameter as bytes; throws a NoSuchElementException if it's not set. If no
+   * suffix is provided then bytes are assumed.
+   *
+   * @throws java.util.NoSuchElementException If the size parameter is not set
+   * @throws NumberFormatException            If the value cannot be interpreted as bytes
+   */
+  def getSizeAsBytes(key: String): Long = catchIllegalValue(key) {
+    Utils.byteStringAsBytes(get(key))
+  }
+
+  /**
+   * Get a size parameter as bytes, falling back to a default if not set. If no
+   * suffix is provided then bytes are assumed.
+   *
+   * @throws NumberFormatException If the value cannot be interpreted as bytes
+   */
+  def getSizeAsBytes(key: String, defaultValue: String): Long = catchIllegalValue(key) {
+    Utils.byteStringAsBytes(get(key, defaultValue))
+  }
+
+  /**
+   * Get a size parameter as bytes, falling back to a default if not set.
+   *
+   * @throws NumberFormatException If the value cannot be interpreted as bytes
+   */
+  def getSizeAsBytes(key: String, defaultValue: Long): Long = catchIllegalValue(key) {
+    Utils.byteStringAsBytes(get(key, s"${defaultValue}B"))
+  }
+
+  /**
+   * Get a size parameter as Kibibytes; throws a NoSuchElementException if it's not set. If no
+   * suffix is provided then Kibibytes are assumed.
+   *
+   * @throws java.util.NoSuchElementException If the size parameter is not set
+   * @throws NumberFormatException            If the value cannot be interpreted as Kibibytes
+   */
+  def getSizeAsKb(key: String): Long = catchIllegalValue(key) {
+    Utils.byteStringAsKb(get(key))
+  }
+
+  /**
+   * Get a size parameter as Kibibytes, falling back to a default if not set. If no
+   * suffix is provided then Kibibytes are assumed.
+   *
+   * @throws NumberFormatException If the value cannot be interpreted as Kibibytes
+   */
+  def getSizeAsKb(key: String, defaultValue: String): Long = catchIllegalValue(key) {
+    Utils.byteStringAsKb(get(key, defaultValue))
+  }
+
+  /**
+   * Get a size parameter as Mebibytes; throws a NoSuchElementException if it's not set. If no
+   * suffix is provided then Mebibytes are assumed.
+   *
+   * @throws java.util.NoSuchElementException If the size parameter is not set
+   * @throws NumberFormatException            If the value cannot be interpreted as Mebibytes
+   */
+  def getSizeAsMb(key: String): Long = catchIllegalValue(key) {
+    Utils.byteStringAsMb(get(key))
+  }
+
+  /**
+   * Get a size parameter as Mebibytes, falling back to a default if not set. If no
+   * suffix is provided then Mebibytes are assumed.
+   *
+   * @throws NumberFormatException If the value cannot be interpreted as Mebibytes
+   */
+  def getSizeAsMb(key: String, defaultValue: String): Long = catchIllegalValue(key) {
+    Utils.byteStringAsMb(get(key, defaultValue))
+  }
+
+  /**
+   * Get a size parameter as Gibibytes; throws a NoSuchElementException if it's not set. If no
+   * suffix is provided then Gibibytes are assumed.
+   *
+   * @throws java.util.NoSuchElementException If the size parameter is not set
+   * @throws NumberFormatException            If the value cannot be interpreted as Gibibytes
+   */
+  def getSizeAsGb(key: String): Long = catchIllegalValue(key) {
+    Utils.byteStringAsGb(get(key))
+  }
+
+  /**
+   * Get a size parameter as Gibibytes, falling back to a default if not set. If no
+   * suffix is provided then Gibibytes are assumed.
+   *
+   * @throws NumberFormatException If the value cannot be interpreted as Gibibytes
+   */
+  def getSizeAsGb(key: String, defaultValue: String): Long = catchIllegalValue(key) {
+    Utils.byteStringAsGb(get(key, defaultValue))
+  }
+
+  /** Get a parameter as an Option */
+  def getOption(key: String): Option[String]
+
+  /** Get all parameters as a list of pairs */
+  def getAll: Array[(String, String)]
+
+  /**
+   * Get a parameter as an integer, falling back to a default if not set
+   *
+   * @throws NumberFormatException If the value cannot be interpreted as an integer
+   */
+  def getInt(key: String, defaultValue: Int): Int = catchIllegalValue(key) {
+    getOption(key).map(_.toInt).getOrElse(defaultValue)
+  }
+
+  /**
+   * Get a parameter as a long, falling back to a default if not set
+   *
+   * @throws NumberFormatException If the value cannot be interpreted as a long
+   */
+  def getLong(key: String, defaultValue: Long): Long = catchIllegalValue(key) {
+    getOption(key).map(_.toLong).getOrElse(defaultValue)
+  }
+
+  /**
+   * Get a parameter as a double, falling back to a default if not ste
+   *
+   * @throws NumberFormatException If the value cannot be interpreted as a double
+   */
+  def getDouble(key: String, defaultValue: Double): Double = catchIllegalValue(key) {
+    getOption(key).map(_.toDouble).getOrElse(defaultValue)
+  }
+
+  /**
+   * Get a parameter as a boolean, falling back to a default if not set
+   *
+   * @throws IllegalArgumentException If the value cannot be interpreted as a boolean
+   */
+  def getBoolean(key: String, defaultValue: Boolean): Boolean = catchIllegalValue(key) {
+    getOption(key).map(_.toBoolean).getOrElse(defaultValue)
+  }
+
+  /** Does the configuration contain a given parameter? */
+  def contains(key: String): Boolean
+
+  /** Does the configuration have the typed config entry? */
+  def contains(entry: ConfigEntry[_]): Boolean = contains(entry.key)
+
+  /**
+   * Wrapper method for get() methods which require some specific value format. This catches
+   * any [[NumberFormatException]] or [[IllegalArgumentException]] and re-raises it with the
+   * incorrectly configured key in the exception message.
+   */
+  protected def catchIllegalValue[T](key: String)(getValue: => T): T = {
+    try {
+      getValue
+    } catch {
+      case e: NumberFormatException =>
+        // NumberFormatException doesn't have a constructor that takes a cause for some reason.
+        throw new NumberFormatException(s"Illegal value for config key $key: ${e.getMessage}")
+          .initCause(e)
+      case e: IllegalArgumentException =>
+        throw new IllegalArgumentException(s"Illegal value for config key $key: ${e.getMessage}", e)
+    }
+  }
+
+  /**
+   * By using this instead of System.getenv(), environment variables can be mocked
+   * in unit tests.
+   */
+  private[spark] def getenv(name: String): String = System.getenv(name)
+}
 
 /**
  * Configuration for a Spark application. Used to set various Spark parameters as key-value pairs.
@@ -53,7 +281,11 @@ import org.apache.spark.util.Utils
  * @note Once a SparkConf object is passed to Spark, it is cloned and can no longer be modified
  * by the user. Spark does not support modifying the configuration at runtime.
  */
-class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Serializable {
+class SparkConf(loadDefaults: Boolean)
+    extends ReadOnlySparkConf
+    with Cloneable
+    with Logging
+    with Serializable {
 
   import SparkConf._
 
@@ -242,16 +474,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     remove(entry.key)
   }
 
-  /** Get a parameter; throws a NoSuchElementException if it's not set */
-  def get(key: String): String = {
-    getOption(key).getOrElse(throw new NoSuchElementException(key))
-  }
-
-  /** Get a parameter, falling back to a default if not set */
-  def get(key: String, defaultValue: String): String = {
-    getOption(key).getOrElse(defaultValue)
-  }
-
   /**
    * Retrieves the value of a pre-defined configuration entry.
    *
@@ -261,128 +483,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    */
   private[spark] def get[T](entry: ConfigEntry[T]): T = {
     entry.readFrom(reader)
-  }
-
-  /**
-   * Get a time parameter as seconds; throws a NoSuchElementException if it's not set. If no
-   * suffix is provided then seconds are assumed.
-   * @throws java.util.NoSuchElementException If the time parameter is not set
-   * @throws NumberFormatException If the value cannot be interpreted as seconds
-   */
-  def getTimeAsSeconds(key: String): Long = catchIllegalValue(key) {
-    Utils.timeStringAsSeconds(get(key))
-  }
-
-  /**
-   * Get a time parameter as seconds, falling back to a default if not set. If no
-   * suffix is provided then seconds are assumed.
-   * @throws NumberFormatException If the value cannot be interpreted as seconds
-   */
-  def getTimeAsSeconds(key: String, defaultValue: String): Long = catchIllegalValue(key) {
-    Utils.timeStringAsSeconds(get(key, defaultValue))
-  }
-
-  /**
-   * Get a time parameter as milliseconds; throws a NoSuchElementException if it's not set. If no
-   * suffix is provided then milliseconds are assumed.
-   * @throws java.util.NoSuchElementException If the time parameter is not set
-   * @throws NumberFormatException If the value cannot be interpreted as milliseconds
-   */
-  def getTimeAsMs(key: String): Long = catchIllegalValue(key) {
-    Utils.timeStringAsMs(get(key))
-  }
-
-  /**
-   * Get a time parameter as milliseconds, falling back to a default if not set. If no
-   * suffix is provided then milliseconds are assumed.
-   * @throws NumberFormatException If the value cannot be interpreted as milliseconds
-   */
-  def getTimeAsMs(key: String, defaultValue: String): Long = catchIllegalValue(key) {
-    Utils.timeStringAsMs(get(key, defaultValue))
-  }
-
-  /**
-   * Get a size parameter as bytes; throws a NoSuchElementException if it's not set. If no
-   * suffix is provided then bytes are assumed.
-   * @throws java.util.NoSuchElementException If the size parameter is not set
-   * @throws NumberFormatException If the value cannot be interpreted as bytes
-   */
-  def getSizeAsBytes(key: String): Long = catchIllegalValue(key) {
-    Utils.byteStringAsBytes(get(key))
-  }
-
-  /**
-   * Get a size parameter as bytes, falling back to a default if not set. If no
-   * suffix is provided then bytes are assumed.
-   * @throws NumberFormatException If the value cannot be interpreted as bytes
-   */
-  def getSizeAsBytes(key: String, defaultValue: String): Long = catchIllegalValue(key) {
-    Utils.byteStringAsBytes(get(key, defaultValue))
-  }
-
-  /**
-   * Get a size parameter as bytes, falling back to a default if not set.
-   * @throws NumberFormatException If the value cannot be interpreted as bytes
-   */
-  def getSizeAsBytes(key: String, defaultValue: Long): Long = catchIllegalValue(key) {
-    Utils.byteStringAsBytes(get(key, s"${defaultValue}B"))
-  }
-
-  /**
-   * Get a size parameter as Kibibytes; throws a NoSuchElementException if it's not set. If no
-   * suffix is provided then Kibibytes are assumed.
-   * @throws java.util.NoSuchElementException If the size parameter is not set
-   * @throws NumberFormatException If the value cannot be interpreted as Kibibytes
-   */
-  def getSizeAsKb(key: String): Long = catchIllegalValue(key) {
-    Utils.byteStringAsKb(get(key))
-  }
-
-  /**
-   * Get a size parameter as Kibibytes, falling back to a default if not set. If no
-   * suffix is provided then Kibibytes are assumed.
-   * @throws NumberFormatException If the value cannot be interpreted as Kibibytes
-   */
-  def getSizeAsKb(key: String, defaultValue: String): Long = catchIllegalValue(key) {
-    Utils.byteStringAsKb(get(key, defaultValue))
-  }
-
-  /**
-   * Get a size parameter as Mebibytes; throws a NoSuchElementException if it's not set. If no
-   * suffix is provided then Mebibytes are assumed.
-   * @throws java.util.NoSuchElementException If the size parameter is not set
-   * @throws NumberFormatException If the value cannot be interpreted as Mebibytes
-   */
-  def getSizeAsMb(key: String): Long = catchIllegalValue(key) {
-    Utils.byteStringAsMb(get(key))
-  }
-
-  /**
-   * Get a size parameter as Mebibytes, falling back to a default if not set. If no
-   * suffix is provided then Mebibytes are assumed.
-   * @throws NumberFormatException If the value cannot be interpreted as Mebibytes
-   */
-  def getSizeAsMb(key: String, defaultValue: String): Long = catchIllegalValue(key) {
-    Utils.byteStringAsMb(get(key, defaultValue))
-  }
-
-  /**
-   * Get a size parameter as Gibibytes; throws a NoSuchElementException if it's not set. If no
-   * suffix is provided then Gibibytes are assumed.
-   * @throws java.util.NoSuchElementException If the size parameter is not set
-   * @throws NumberFormatException If the value cannot be interpreted as Gibibytes
-   */
-  def getSizeAsGb(key: String): Long = catchIllegalValue(key) {
-    Utils.byteStringAsGb(get(key))
-  }
-
-  /**
-   * Get a size parameter as Gibibytes, falling back to a default if not set. If no
-   * suffix is provided then Gibibytes are assumed.
-   * @throws NumberFormatException If the value cannot be interpreted as Gibibytes
-   */
-  def getSizeAsGb(key: String, defaultValue: String): Long = catchIllegalValue(key) {
-    Utils.byteStringAsGb(get(key, defaultValue))
   }
 
   /** Get a parameter as an Option */
@@ -409,35 +509,11 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   }
 
   /**
-   * Get a parameter as an integer, falling back to a default if not set
-   * @throws NumberFormatException If the value cannot be interpreted as an integer
+   * Get all parameters that start with `prefix` and apply f.
    */
-  def getInt(key: String, defaultValue: Int): Int = catchIllegalValue(key) {
-    getOption(key).map(_.toInt).getOrElse(defaultValue)
-  }
-
-  /**
-   * Get a parameter as a long, falling back to a default if not set
-   * @throws NumberFormatException If the value cannot be interpreted as a long
-   */
-  def getLong(key: String, defaultValue: Long): Long = catchIllegalValue(key) {
-    getOption(key).map(_.toLong).getOrElse(defaultValue)
-  }
-
-  /**
-   * Get a parameter as a double, falling back to a default if not ste
-   * @throws NumberFormatException If the value cannot be interpreted as a double
-   */
-  def getDouble(key: String, defaultValue: Double): Double = catchIllegalValue(key) {
-    getOption(key).map(_.toDouble).getOrElse(defaultValue)
-  }
-
-  /**
-   * Get a parameter as a boolean, falling back to a default if not set
-   * @throws IllegalArgumentException If the value cannot be interpreted as a boolean
-   */
-  def getBoolean(key: String, defaultValue: Boolean): Boolean = catchIllegalValue(key) {
-    getOption(key).map(_.toBoolean).getOrElse(defaultValue)
+  def getAllWithPrefix[K](prefix: String, f: String => K): Array[(K, String)] = {
+    getAll.filter { case (k, _) => k.startsWith(prefix) }
+      .map { case (k, v) => (f(k), v) }
   }
 
   /** Get all executor environment variables set on this SparkConf */
@@ -457,8 +533,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       configsWithAlternatives.get(key).toSeq.flatten.exists { alt => contains(alt.key) }
   }
 
-  private[spark] def contains(entry: ConfigEntry[_]): Boolean = contains(entry.key)
-
   /** Copy this object */
   override def clone: SparkConf = {
     val cloned = new SparkConf(false)
@@ -467,31 +541,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     }
     cloned
   }
-
-  /**
-   * By using this instead of System.getenv(), environment variables can be mocked
-   * in unit tests.
-   */
-  private[spark] def getenv(name: String): String = System.getenv(name)
-
-  /**
-   * Wrapper method for get() methods which require some specific value format. This catches
-   * any [[NumberFormatException]] or [[IllegalArgumentException]] and re-raises it with the
-   * incorrectly configured key in the exception message.
-   */
-  private def catchIllegalValue[T](key: String)(getValue: => T): T = {
-    try {
-      getValue
-    } catch {
-      case e: NumberFormatException =>
-        // NumberFormatException doesn't have a constructor that takes a cause for some reason.
-        throw new NumberFormatException(s"Illegal value for config key $key: ${e.getMessage}")
-            .initCause(e)
-      case e: IllegalArgumentException =>
-        throw new IllegalArgumentException(s"Illegal value for config key $key: ${e.getMessage}", e)
-    }
-  }
-
 
   /**
    * Checks for illegal or deprecated config settings. Throws an exception for the former. Not
@@ -521,15 +570,16 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     Seq(EXECUTOR_JAVA_OPTIONS.key, "spark.executor.defaultJavaOptions").foreach { executorOptsKey =>
       getOption(executorOptsKey).foreach { javaOpts =>
         if (javaOpts.contains("-Dspark")) {
-          val msg = s"$executorOptsKey is not allowed to set Spark options (was '$javaOpts'). " +
-            "Set them directly on a SparkConf or in a properties file " +
-            "when using ./bin/spark-submit."
-          throw new Exception(msg)
+          throw new SparkException(
+            errorClass = "INVALID_SPARK_CONFIG.INVALID_EXECUTOR_SPARK_OPTIONS",
+            messageParameters = Map("executorOptsKey" -> executorOptsKey, "javaOpts" -> javaOpts),
+            cause = null)
         }
         if (javaOpts.contains("-Xmx")) {
-          val msg = s"$executorOptsKey is not allowed to specify max heap memory settings " +
-            s"(was '$javaOpts'). Use spark.executor.memory instead."
-          throw new Exception(msg)
+          throw new SparkException(
+            errorClass = "INVALID_SPARK_CONFIG.INVALID_EXECUTOR_MEMORY_OPTIONS",
+            messageParameters = Map("executorOptsKey" -> executorOptsKey, "javaOpts" -> javaOpts),
+            cause = null)
         }
       }
     }
@@ -540,13 +590,21 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       if (value > 1 || value < 0) {
         throw new IllegalArgumentException(s"$key should be between 0 and 1 (was '$value').")
       }
+      SparkException.require(
+        value >= 0 && value <= 1,
+        errorClass = "INVALID_SPARK_CONFIG.INVALID_MEMORY_FRACTION",
+        messageParameters = Map(
+          "memoryFractionKey" -> key,
+          "memoryFractionValue" -> value.toString))
     }
 
     if (contains(SUBMIT_DEPLOY_MODE)) {
       get(SUBMIT_DEPLOY_MODE) match {
         case "cluster" | "client" =>
-        case e => throw new SparkException(s"${SUBMIT_DEPLOY_MODE.key} can only be " +
-          "\"cluster\" or \"client\".")
+        case _ => throw new SparkException(
+          errorClass = "INVALID_SPARK_CONFIG.INVALID_SPARK_SUBMIT_DEPLOY_MODE_KEY",
+          messageParameters = Map("sparkSubmitDeployModeKey" -> SUBMIT_DEPLOY_MODE.key),
+          cause = null)
       }
     }
 
@@ -566,17 +624,23 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     }
 
     val encryptionEnabled = get(NETWORK_CRYPTO_ENABLED) || get(SASL_ENCRYPTION_ENABLED)
-    require(!encryptionEnabled || get(NETWORK_AUTH_ENABLED),
-      s"${NETWORK_AUTH_ENABLED.key} must be enabled when enabling encryption.")
+    SparkException.require(
+      !encryptionEnabled || get(NETWORK_AUTH_ENABLED),
+      errorClass = "INVALID_SPARK_CONFIG.NETWORK_AUTH_MUST_BE_ENABLED",
+      messageParameters = Map("networkAuthEnabledConf" -> NETWORK_AUTH_ENABLED.key))
 
     val executorTimeoutThresholdMs = get(NETWORK_TIMEOUT) * 1000
     val executorHeartbeatIntervalMs = get(EXECUTOR_HEARTBEAT_INTERVAL)
-    val networkTimeout = NETWORK_TIMEOUT.key
     // If spark.executor.heartbeatInterval bigger than spark.network.timeout,
     // it will almost always cause ExecutorLostFailure. See SPARK-22754.
-    require(executorTimeoutThresholdMs > executorHeartbeatIntervalMs, "The value of " +
-      s"${networkTimeout}=${executorTimeoutThresholdMs}ms must be greater than the value of " +
-      s"${EXECUTOR_HEARTBEAT_INTERVAL.key}=${executorHeartbeatIntervalMs}ms.")
+    SparkException.require(
+      executorTimeoutThresholdMs > executorHeartbeatIntervalMs,
+      errorClass = "INVALID_SPARK_CONFIG.INVALID_EXECUTOR_HEARTBEAT_INTERVAL",
+      messageParameters = Map(
+        "networkTimeoutKey" -> NETWORK_TIMEOUT.key,
+        "networkTimeoutValue" -> executorTimeoutThresholdMs.toString,
+        "executorHeartbeatIntervalKey" -> EXECUTOR_HEARTBEAT_INTERVAL.key,
+        "executorHeartbeatIntervalValue" -> executorHeartbeatIntervalMs.toString))
   }
 
   /**
@@ -608,9 +672,10 @@ private[spark] object SparkConf extends Logging {
         "Please use spark.kryoserializer.buffer instead. The default value for " +
           "spark.kryoserializer.buffer.mb was previously specified as '0.064'. Fractional values " +
           "are no longer accepted. To specify the equivalent now, one may use '64k'."),
+      DeprecatedConfig("spark.shuffle.spill", "1.6", "Not used anymore."),
       DeprecatedConfig("spark.rpc", "2.0", "Not used anymore."),
       DeprecatedConfig("spark.scheduler.executorTaskBlacklistTime", "2.1.0",
-        "Please use the new excludedOnFailure options, spark.excludeOnFailure.*"),
+        "Not used anymore. Please use the new excludedOnFailure options, spark.excludeOnFailure.*"),
       DeprecatedConfig("spark.yarn.am.port", "2.0.0", "Not used anymore"),
       DeprecatedConfig("spark.executor.port", "2.0.0", "Not used anymore"),
       DeprecatedConfig("spark.rpc.numRetries", "2.2.0", "Not used anymore"),
@@ -623,33 +688,42 @@ private[spark] object SparkConf extends Logging {
       DeprecatedConfig("spark.executor.plugins", "3.0.0",
         "Feature replaced with new plugin API. See Monitoring documentation."),
       DeprecatedConfig("spark.blacklist.enabled", "3.1.0",
-        "Please use spark.excludeOnFailure.enabled"),
+        "Not used anymore. Please use spark.excludeOnFailure.enabled"),
       DeprecatedConfig("spark.blacklist.task.maxTaskAttemptsPerExecutor", "3.1.0",
-        "Please use spark.excludeOnFailure.task.maxTaskAttemptsPerExecutor"),
+        "Not used anymore. Please use spark.excludeOnFailure.task.maxTaskAttemptsPerExecutor"),
       DeprecatedConfig("spark.blacklist.task.maxTaskAttemptsPerNode", "3.1.0",
-        "Please use spark.excludeOnFailure.task.maxTaskAttemptsPerNode"),
+        "Not used anymore. Please use spark.excludeOnFailure.task.maxTaskAttemptsPerNode"),
       DeprecatedConfig("spark.blacklist.application.maxFailedTasksPerExecutor", "3.1.0",
-        "Please use spark.excludeOnFailure.application.maxFailedTasksPerExecutor"),
+        "Not used anymore. Please use " +
+          "spark.excludeOnFailure.application.maxFailedTasksPerExecutor"),
       DeprecatedConfig("spark.blacklist.stage.maxFailedTasksPerExecutor", "3.1.0",
-        "Please use spark.excludeOnFailure.stage.maxFailedTasksPerExecutor"),
+        "Not used anymore. Please use spark.excludeOnFailure.stage.maxFailedTasksPerExecutor"),
       DeprecatedConfig("spark.blacklist.application.maxFailedExecutorsPerNode", "3.1.0",
-        "Please use spark.excludeOnFailure.application.maxFailedExecutorsPerNode"),
+        "Not used anymore. Please use " +
+          "spark.excludeOnFailure.application.maxFailedExecutorsPerNode"),
       DeprecatedConfig("spark.blacklist.stage.maxFailedExecutorsPerNode", "3.1.0",
-        "Please use spark.excludeOnFailure.stage.maxFailedExecutorsPerNode"),
+        "Not used anymore. Please use spark.excludeOnFailure.stage.maxFailedExecutorsPerNode"),
       DeprecatedConfig("spark.blacklist.timeout", "3.1.0",
-        "Please use spark.excludeOnFailure.timeout"),
+        "Not used anymore. Please use spark.excludeOnFailure.timeout"),
       DeprecatedConfig("spark.blacklist.application.fetchFailure.enabled", "3.1.0",
-        "Please use spark.excludeOnFailure.application.fetchFailure.enabled"),
+        "Not used anymore. Please use spark.excludeOnFailure.application.fetchFailure.enabled"),
       DeprecatedConfig("spark.scheduler.blacklist.unschedulableTaskSetTimeout", "3.1.0",
-        "Please use spark.scheduler.excludeOnFailure.unschedulableTaskSetTimeout"),
+        "Not used anymore. Please use " +
+          "spark.scheduler.excludeOnFailure.unschedulableTaskSetTimeout"),
       DeprecatedConfig("spark.blacklist.killBlacklistedExecutors", "3.1.0",
-        "Please use spark.excludeOnFailure.killExcludedExecutors"),
+        "Not used anymore. Please use spark.excludeOnFailure.killExcludedExecutors"),
       DeprecatedConfig("spark.yarn.blacklist.executor.launch.blacklisting.enabled", "3.1.0",
-        "Please use spark.yarn.executor.launch.excludeOnFailure.enabled"),
+        "Not used anymore. Please use spark.yarn.executor.launch.excludeOnFailure.enabled"),
       DeprecatedConfig("spark.network.remoteReadNioBufferConversion", "3.5.2",
         "Please open a JIRA ticket to report it if you need to use this configuration."),
       DeprecatedConfig("spark.shuffle.unsafe.file.output.buffer", "4.0.0",
-        "Please use spark.shuffle.localDisk.file.output.buffer")
+        "Please use spark.shuffle.localDisk.file.output.buffer"),
+      DeprecatedConfig("spark.shuffle.server.chunkFetchHandlerThreadsPercent", "4.2.0",
+        "Using separate chunkFetchHandlers could be problematic according to the underlying" +
+          " netty layer"),
+      DeprecatedConfig("spark.shuffle.server.finalizeShuffleMergeThreadsPercent", "4.2.0",
+        "Using separate finalizeWorkers could be problematic according to the underlying" +
+          " netty layer")
     )
 
     Map(configs.map { cfg => (cfg.key -> cfg) } : _*)

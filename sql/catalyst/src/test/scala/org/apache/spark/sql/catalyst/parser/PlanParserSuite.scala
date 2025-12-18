@@ -20,11 +20,12 @@ package org.apache.spark.sql.catalyst.parser
 import scala.annotation.nowarn
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.catalyst.{EvaluateUnresolvedInlineTable, FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, NamedParameter, PosParameter, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, RelationTimeTravel, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedStar, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTVFAliases}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.{EvaluateUnresolvedInlineTable, IntervalUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{Decimal, DecimalType, IntegerType, LongType, StringType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -58,6 +59,7 @@ class PlanParserSuite extends AnalysisTest {
 
   private def cte(
       plan: LogicalPlan,
+      allowRecursion: Boolean,
       namedPlans: (String, (LogicalPlan, Seq[String]))*): UnresolvedWith = {
     val ctes = namedPlans.map {
       case (name, (cte, columnAliases)) =>
@@ -66,9 +68,9 @@ class PlanParserSuite extends AnalysisTest {
         } else {
           UnresolvedSubqueryColumnAliases(columnAliases, cte)
         }
-        name -> SubqueryAlias(name, subquery)
+        (name, SubqueryAlias(name, subquery), None)
     }
-    UnresolvedWith(plan, ctes)
+    UnresolvedWith(plan, ctes, allowRecursion)
   }
 
   test("single comment case one") {
@@ -237,8 +239,8 @@ class PlanParserSuite extends AnalysisTest {
     val sql1 = "EXPLAIN logical SELECT 1"
     checkError(
       exception = parseException(sql1),
-      condition = "_LEGACY_ERROR_TEMP_0039",
-      parameters = Map.empty,
+      condition = "INVALID_SQL_SYNTAX.UNSUPPORTED_SQL_STATEMENT",
+      parameters = Map("sqlText" -> "EXPLAIN logical SELECT 1"),
       context = ExpectedContext(
         fragment = sql1,
         start = 0,
@@ -247,8 +249,8 @@ class PlanParserSuite extends AnalysisTest {
     val sql2 = "EXPLAIN formatted SELECT 1"
     checkError(
       exception = parseException(sql2),
-      condition = "_LEGACY_ERROR_TEMP_0039",
-      parameters = Map.empty,
+      condition = "INVALID_SQL_SYNTAX.UNSUPPORTED_SQL_STATEMENT",
+      parameters = Map("sqlText" -> "EXPLAIN formatted SELECT 1"),
       context = ExpectedContext(
         fragment = sql2,
         start = 0,
@@ -283,20 +285,20 @@ class PlanParserSuite extends AnalysisTest {
   test("common table expressions") {
     assertEqual(
       "with cte1 as (select * from a) select * from cte1",
-      cte(table("cte1").select(star()), "cte1" -> ((table("a").select(star()), Seq.empty))))
+      cte(table("cte1").select(star()), false, "cte1" -> ((table("a").select(star()), Seq.empty))))
     assertEqual(
       "with cte1 (select 1) select * from cte1",
-      cte(table("cte1").select(star()), "cte1" -> ((OneRowRelation().select(1), Seq.empty))))
+      cte(table("cte1").select(star()), false, "cte1" -> ((OneRowRelation().select(1), Seq.empty))))
     assertEqual(
       "with cte1 (select 1), cte2 as (select * from cte1) select * from cte2",
-      cte(table("cte2").select(star()),
+      cte(table("cte2").select(star()), false,
         "cte1" -> ((OneRowRelation().select(1), Seq.empty)),
         "cte2" -> ((table("cte1").select(star()), Seq.empty))))
     val sql = "with cte1 (select 1), cte1 as (select 1 from cte1) select * from cte1"
     checkError(
       exception = parseException(sql),
-      condition = "_LEGACY_ERROR_TEMP_0038",
-      parameters = Map("duplicateNames" -> "'cte1'"),
+      condition = "DUPLICATED_CTE_NAMES",
+      parameters = Map("duplicateNames" -> "`cte1`"),
       context = ExpectedContext(
         fragment = sql,
         start = 0,
@@ -323,19 +325,9 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual(
       "from db.a select b, c where d < 1", table("db", "a").where($"d" < 1).select($"b", $"c"))
     assertEqual("from a select distinct b, c", Distinct(table("a").select($"b", $"c")))
-
-    // Weird "FROM table" queries, should be invalid anyway
-    val sql1 = "from a"
-    checkError(
-      exception = parseException(sql1),
-      condition = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "end of input", "hint" -> ""))
-
-    val sql2 = "from (from a union all from b) c select *"
-    checkError(
-      exception = parseException(sql2),
-      condition = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'union'", "hint" -> ""))
+    assertEqual("from a", table("a"))
+    assertEqual("from (from a union all from b) c select *",
+      table("a").union(table("b")).subquery("c").select(star()))
   }
 
   test("multi select query") {
@@ -372,8 +364,9 @@ class PlanParserSuite extends AnalysisTest {
     val limitWindowClauses = Seq(
       ("", (p: LogicalPlan) => p),
       (" limit 10", (p: LogicalPlan) => p.limit(10)),
-      (" window w1 as ()", (p: LogicalPlan) => WithWindowDefinition(ws, p)),
-      (" window w1 as () limit 10", (p: LogicalPlan) => WithWindowDefinition(ws, p).limit(10))
+      (" window w1 as ()", (p: LogicalPlan) => WithWindowDefinition(ws, p, forPipeSQL = false)),
+      (" window w1 as () limit 10", (p: LogicalPlan) =>
+        WithWindowDefinition(ws, p, forPipeSQL = false).limit(10))
     )
 
     val orderSortDistrClusterClauses = Seq(
@@ -524,7 +517,7 @@ class PlanParserSuite extends AnalysisTest {
          |window w1 as (partition by a, b order by c rows between 1 preceding and 1 following),
          |       w2 as w1,
          |       w3 as w1""".stripMargin,
-      WithWindowDefinition(ws1, plan))
+      WithWindowDefinition(ws1, plan, forPipeSQL = false))
   }
 
   test("lateral view") {
@@ -1414,7 +1407,7 @@ class PlanParserSuite extends AnalysisTest {
         |WITH cte1 AS (SELECT * FROM testcat.db.tab)
         |SELECT * FROM cte1
       """.stripMargin,
-      cte(table("cte1").select(star()),
+      cte(table("cte1").select(star()), false,
         "cte1" -> ((table("testcat", "db", "tab").select(star()), Seq.empty))))
 
     assertEqual(
@@ -1425,7 +1418,21 @@ class PlanParserSuite extends AnalysisTest {
   test("CTE with column alias") {
     assertEqual(
       "WITH t(x) AS (SELECT c FROM a) SELECT * FROM t",
-      cte(table("t").select(star()), "t" -> ((table("a").select($"c"), Seq("x")))))
+      cte(table("t").select(star()), false, "t" -> ((table("a").select($"c"), Seq("x")))))
+  }
+
+  test("Recursive CTE") {
+    assertEqual(
+      """WITH RECURSIVE r(level) AS (
+        |  SELECT level FROM t
+        |  UNION ALL
+        |  SELECT level + 1 FROM r WHERE level < 9
+        |)
+        |SELECT * FROM r""".stripMargin,
+      cte(table("r").select(star()), true,
+        "r" -> (
+          table("t").select($"level").union(table("r").where($"level" < 9).select($"level" + 1)),
+          Seq("level"))))
   }
 
   test("statement containing terminal semicolons") {
@@ -1901,28 +1908,50 @@ class PlanParserSuite extends AnalysisTest {
     )
   }
 
-  test("SPARK-41271: parsing of named parameters") {
+  test("SPARK-41271: parameter substitution before parsing") {
+    // Test successful parameter substitution
+    val substitutor = new org.apache.spark.sql.catalyst.parser.SubstituteParamsParser()
+
+    // Test named parameters
+    val sql1 = "SELECT :param_1"
+    val (substituted1, _, _) = substitutor.substitute(
+      sql1, Map("param_1" -> "42"))
     comparePlans(
-      parsePlan("SELECT :param_1"),
-      Project(UnresolvedAlias(NamedParameter("param_1"), None) :: Nil, OneRowRelation()))
+      parsePlan(substituted1),
+      Project(UnresolvedAlias(Literal(42), None) :: Nil, OneRowRelation()))
+
+    val sql2 = "SELECT abs(:1Abc)"
+    val (substituted2, _, _) = substitutor.substitute(
+      sql2, Map("1Abc" -> "123"))
     comparePlans(
-      parsePlan("SELECT abs(:1Abc)"),
+      parsePlan(substituted2),
       Project(UnresolvedAlias(
         UnresolvedFunction(
           "abs" :: Nil,
-          NamedParameter("1Abc") :: Nil,
+          Literal(123) :: Nil,
           isDistinct = false), None) :: Nil,
         OneRowRelation()))
+
+    val sql3 = "SELECT * FROM a LIMIT :limitA"
+    val (substituted3, _, _) = substitutor.substitute(
+      sql3, Map("limitA" -> "10"))
     comparePlans(
-      parsePlan("SELECT * FROM a LIMIT :limitA"),
-      table("a").select(star()).limit(NamedParameter("limitA")))
-    // Invalid empty name and invalid symbol in a name
+      parsePlan(substituted3),
+      table("a").select(star()).limit(Literal(10)))
+
+    // Test error cases - invalid parameter syntax should be caught by SubstituteParamsParser
     checkError(
-      exception = parseException(s"SELECT :-"),
+      exception = intercept[org.apache.spark.sql.catalyst.parser.ParseException] {
+        val (substituted, _, _) = substitutor.substitute("SELECT :-")
+        substituted
+      },
       condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'-'", "hint" -> ""))
     checkError(
-      exception = parseException(s"SELECT :"),
+      exception = intercept[org.apache.spark.sql.catalyst.parser.ParseException] {
+        val (substituted, _, _) = substitutor.substitute("SELECT :")
+        substituted
+      },
       condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "end of input", "hint" -> ""))
   }
@@ -1946,21 +1975,36 @@ class PlanParserSuite extends AnalysisTest {
     }
   }
 
-  test("SPARK-44066: parsing of positional parameters") {
+  test("SPARK-44066: positional parameter substitution before parsing") {
+    // Test successful positional parameter substitution
+    val substitutor = new org.apache.spark.sql.catalyst.parser.SubstituteParamsParser()
+
+    // Test positional parameters
+    val sql1 = "SELECT ?"
+    val (substituted1, _, _) = substitutor.substitute(
+      sql1, positionalParams = List("42"))
     comparePlans(
-      parsePlan("SELECT ?"),
-      Project(UnresolvedAlias(PosParameter(7), None) :: Nil, OneRowRelation()))
+      parsePlan(substituted1),
+      Project(UnresolvedAlias(Literal(42), None) :: Nil, OneRowRelation()))
+
+    val sql2 = "SELECT abs(?)"
+    val (substituted2, _, _) = substitutor.substitute(
+      sql2, positionalParams = List("123"))
     comparePlans(
-      parsePlan("SELECT abs(?)"),
+      parsePlan(substituted2),
       Project(UnresolvedAlias(
         UnresolvedFunction(
           "abs" :: Nil,
-          PosParameter(11) :: Nil,
+          Literal(123) :: Nil,
           isDistinct = false), None) :: Nil,
         OneRowRelation()))
+
+    val sql3 = "SELECT * FROM a LIMIT ?"
+    val (substituted3, _, _) = substitutor.substitute(
+      sql3, positionalParams = List("10"))
     comparePlans(
-      parsePlan("SELECT * FROM a LIMIT ?"),
-      table("a").select(star()).limit(PosParameter(22)))
+      parsePlan(substituted3),
+      table("a").select(star()).limit(Literal(10)))
   }
 
   test("SPARK-45189: Creating UnresolvedRelation from TableIdentifier should include the" +
@@ -1973,4 +2017,150 @@ class PlanParserSuite extends AnalysisTest {
     assert(unresolvedRelation2.options == CaseInsensitiveStringMap.empty)
     assert(unresolvedRelation2.isStreaming)
   }
+
+  test("watermark clause - table & attribute reference") {
+    assertEqual(
+      """
+        |SELECT *
+        |FROM testData
+        |WATERMARK ts DELAY OF INTERVAL 10 seconds AS tbl
+        |WHERE a > 1
+        |""".stripMargin,
+      table("testData")
+        .as("tbl")
+        .unresolvedWithWatermark(
+          UnresolvedAttribute("ts"),
+          IntervalUtils.fromIntervalString("INTERVAL 10 seconds"))
+        .where($"a" > 1)
+        .select(UnresolvedStar(None))
+    )
+  }
+
+  test("watermark clause - table & expression with alias") {
+    assertEqual(
+      """
+        |SELECT *
+        |FROM testData
+        |WATERMARK timestamp_seconds(value) AS eventTime DELAY OF INTERVAL 10 seconds AS tbl
+        |WHERE a > 1
+        |""".stripMargin,
+      table("testData")
+        .as("tbl")
+        .unresolvedWithWatermark(
+          Alias(
+            UnresolvedFunction(
+              Seq("timestamp_seconds"), Seq(UnresolvedAttribute("value")), isDistinct = false),
+            "eventTime")(),
+          IntervalUtils.fromIntervalString("INTERVAL 10 seconds"))
+        .where($"a" > 1)
+        .select(UnresolvedStar(None))
+    )
+  }
+
+  test("watermark clause - table & expression without alias") {
+    assertEqual(
+      """
+        |SELECT *
+        |FROM testData
+        |WATERMARK timestamp_seconds(value) DELAY OF INTERVAL 10 seconds AS tbl
+        |WHERE a > 1
+        |""".stripMargin,
+      table("testData")
+        .as("tbl")
+        .unresolvedWithWatermark(
+          UnresolvedAlias(
+            UnresolvedFunction(
+              Seq("timestamp_seconds"), Seq(UnresolvedAttribute("value")), isDistinct = false)),
+          IntervalUtils.fromIntervalString("INTERVAL 10 seconds"))
+        .where($"a" > 1)
+        .select(UnresolvedStar(None))
+    )
+  }
+
+  test("watermark clause - aliased query") {
+    assertEqual(
+      """
+        |SELECT *
+        |FROM
+        |(
+        |    SELECT *
+        |    FROM testData
+        |)
+        |WATERMARK ts DELAY OF INTERVAL 10 seconds AS tbl
+        |WHERE a > 1
+        |""".stripMargin,
+      table("testData")
+        .select(UnresolvedStar(None))
+        .as("tbl")
+        .unresolvedWithWatermark(
+          UnresolvedAttribute("ts"),
+          IntervalUtils.fromIntervalString("INTERVAL 10 seconds"))
+        .where($"a" > 1)
+        .select(UnresolvedStar(None))
+    )
+  }
+
+  test("watermark clause - subquery") {
+    assertEqual(
+      """
+        |SELECT key, time
+        |FROM
+        |(
+        |    SELECT key, time
+        |    FROM
+        |    testData
+        |    WATERMARK timestamp_seconds(ts) AS time DELAY OF INTERVAL 10 seconds
+        |)
+        |AS tbl
+        |WHERE key = 'a'
+        |""".stripMargin,
+      table("testData")
+        .unresolvedWithWatermark(
+          Alias(
+            UnresolvedFunction(
+              Seq("timestamp_seconds"), Seq(UnresolvedAttribute("ts")), isDistinct = false),
+            "time")(),
+          IntervalUtils.fromIntervalString("INTERVAL 10 seconds"))
+        .select($"key", $"time")
+        .as("tbl")
+        .where($"key" === "a")
+        .select($"key", $"time")
+    )
+  }
+
+  test("watermark clause - table valued function") {
+    assertEqual(
+      """
+        |SELECT *
+        |FROM
+        |mock_tvf(1, 'a')
+        |WATERMARK ts DELAY OF INTERVAL 10 seconds AS dst
+        |WHERE a > 1
+        |""".stripMargin,
+      UnresolvedTableValuedFunction("mock_tvf", Seq(Literal(1), Literal("a")))
+        .unresolvedWithWatermark(
+          UnresolvedAttribute("ts"),
+          IntervalUtils.fromIntervalString("INTERVAL 10 seconds"))
+        .as("dst")
+        .where($"a" > 1)
+        .select(UnresolvedStar(None))
+    )
+  }
+
+  test("watermark clause - inline table (not allowed)") {
+    val query = """
+        |SELECT *
+        |FROM
+        |VALUES (1, 1), (2, 2)
+        |WATERMARK ts DELAY OF INTERVAL 10 seconds AS dst
+        |WHERE a > 1
+        |""".stripMargin
+    checkError(
+      exception = parseException(query),
+      condition = "PARSE_SYNTAX_ERROR",
+      parameters = Map("error" -> "'ts'", "hint" -> ""))
+  }
+
+  private def intercept(sqlCommand: String, messages: String*): Unit =
+    interceptParseException(parsePlan)(sqlCommand, messages: _*)()
 }

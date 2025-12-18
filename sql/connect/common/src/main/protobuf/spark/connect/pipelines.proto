@@ -1,0 +1,307 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto3";
+
+package spark.connect;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
+import "spark/connect/common.proto";
+import "spark/connect/relations.proto";
+import "spark/connect/types.proto";
+
+option java_multiple_files = true;
+option java_package = "org.apache.spark.connect.proto";
+option go_package = "internal/generated";
+
+// Dispatch object for pipelines commands. See each individual command for documentation.
+message PipelineCommand {
+  oneof command_type {
+    CreateDataflowGraph create_dataflow_graph = 1;
+    DefineOutput define_output = 2;
+    DefineFlow define_flow = 3;
+    DropDataflowGraph drop_dataflow_graph = 4;
+    StartRun start_run = 5;
+    DefineSqlGraphElements define_sql_graph_elements = 6;
+    GetQueryFunctionExecutionSignalStream get_query_function_execution_signal_stream = 7;
+    DefineFlowQueryFunctionResult define_flow_query_function_result = 8;
+    // Reserved field for protocol extensions.
+    // Used to support forward-compatibility by carrying additional command types
+    // that are not yet defined in this version of the proto. During planning, the
+    // engine will resolve and dispatch the concrete command contained in this field.
+    google.protobuf.Any extension = 999;
+  }
+
+  // Request to create a new dataflow graph.
+  message CreateDataflowGraph {
+    // The default catalog.
+    optional string default_catalog = 1;
+
+    // The default database.
+    optional string default_database = 2;
+
+    // SQL configurations for all flows in this graph.
+    map<string, string> sql_conf = 5;
+  }
+
+  // Drops the graph and stops any running attached flows.
+  message DropDataflowGraph {
+    // The graph to drop.
+    optional string dataflow_graph_id = 1;
+  }
+
+  // Request to define an output: a table, a materialized view, a temporary view or a sink.
+  message DefineOutput {
+    // The graph to attach this output to.
+    optional string dataflow_graph_id = 1;
+
+    // Name of the output. Can be partially or fully qualified.
+    optional string output_name = 2;
+
+    // The type of the output.
+    optional OutputType output_type = 3;
+
+    // Optional comment for the output.
+    optional string comment = 4;
+
+    // The location in source code that this output was defined.
+    optional SourceCodeLocation source_code_location = 5;
+
+    oneof details {
+      TableDetails table_details = 6;
+      SinkDetails sink_details = 7;
+      google.protobuf.Any extension = 999;
+    }
+
+    // Metadata that's only applicable to tables and materialized views.
+    message TableDetails {
+      // Optional table properties.
+      map<string, string> table_properties = 1;
+
+      // Optional partition columns for the table.
+      repeated string partition_cols = 2;
+
+      // The output table format for the table.
+      optional string format = 3;
+
+      // Schema for the table. If unset, this will be inferred from incoming flows.
+      oneof schema {
+        spark.connect.DataType schema_data_type = 4;
+        string schema_string = 5;
+      }
+
+      // Optional cluster columns for the table.
+      repeated string clustering_columns = 6;
+    }
+
+    // Metadata that's only applicable to sinks.
+    message SinkDetails {
+      // Streaming write options
+      map<string, string> options = 1;
+
+      // Streaming write format
+      optional string format = 2;
+    }
+  }
+
+  // Request to define a flow targeting a dataset.
+  message DefineFlow {
+    // The graph to attach this flow to.
+    optional string dataflow_graph_id = 1;
+
+    // Name of the flow. For standalone flows, this must be a single-part name.
+    optional string flow_name = 2;
+
+    // Name of the dataset this flow writes to. Can be partially or fully qualified.
+    optional string target_dataset_name = 3;
+
+    // SQL configurations set when running this flow.
+    map<string, string> sql_conf = 4;
+
+    // Identifier for the client making the request. The server uses this to determine what flow
+    // evaluation request stream to dispatch evaluation requests to for this flow.
+    optional string client_id = 5;
+
+    // The location in source code that this flow was defined.
+    optional SourceCodeLocation source_code_location = 6;
+
+    oneof details {
+      WriteRelationFlowDetails relation_flow_details = 7;
+      google.protobuf.Any extension = 999;
+    }
+
+    // A flow that is that takes the contents of a relation and writes it to the target dataset.
+    message WriteRelationFlowDetails {
+      // An unresolved relation that defines the dataset's flow. Empty if the query function
+      // that defines the flow cannot be analyzed at the time of flow definition.
+      optional spark.connect.Relation relation = 1;
+    }
+
+    // If true, define the flow as a one-time flow, such as for backfill.
+    // Set to true changes the flow in two ways:
+    //   - The flow is run one time by default. If the pipeline is ran with a full refresh,
+    //     the flow will run again.
+    //   - The flow function must be a batch DataFrame, not a streaming DataFrame.
+    optional bool once = 8;
+
+    message Response {
+      // Fully qualified flow name that uniquely identify a flow in the Dataflow graph.
+      optional string flow_name = 1;
+    }
+  }
+
+  // Resolves all datasets and flows and start a pipeline update. Should be called after all
+  // graph elements are registered.
+  message StartRun {
+    // The graph to start.
+    optional string dataflow_graph_id = 1;
+
+    // List of dataset to reset and recompute.
+    repeated string full_refresh_selection = 2;
+
+    // Perform a full graph reset and recompute.
+    optional bool full_refresh_all = 3;
+
+    // List of dataset to update.
+    repeated string refresh_selection = 4;
+
+    // If true, the run will not actually execute any flows, but will only validate the graph and
+    // check for any errors. This is useful for testing and validation purposes.
+    optional bool dry = 5;
+
+    // storage location for pipeline checkpoints and metadata.
+    optional string storage = 6;
+  }
+
+  // Parses the SQL file and registers all datasets and flows.
+  message DefineSqlGraphElements {
+    // The graph to attach this dataset to.
+    optional string dataflow_graph_id = 1;
+
+    // The full path to the SQL file. Can be relative or absolute.
+    optional string sql_file_path = 2;
+
+    // The contents of the SQL file.
+    optional string sql_text = 3;
+  }
+
+  // Request to get the stream of query function execution signals for a graph. Responses should
+  // be a stream of PipelineQueryFunctionExecutionSignal messages.
+  message GetQueryFunctionExecutionSignalStream {
+    // The graph to get the query function execution signal stream for.
+    optional string dataflow_graph_id = 1;
+
+    // Identifier for the client that is requesting the stream.
+    optional string client_id = 2;
+  }
+
+  // Request from the client to update the flow function evaluation result
+  // for a previously un-analyzed flow.
+  message DefineFlowQueryFunctionResult {
+    // The fully qualified name of the flow being updated.
+    optional string flow_name = 1;
+
+    // The ID of the graph this flow belongs to.
+    optional string dataflow_graph_id = 2;
+
+    // An unresolved relation that defines the dataset's flow.
+    optional spark.connect.Relation relation = 3;
+  }
+}
+
+// Dispatch object for pipelines command results.
+message PipelineCommandResult {
+  oneof result_type {
+    CreateDataflowGraphResult create_dataflow_graph_result = 1;
+    DefineOutputResult define_output_result = 2;
+    DefineFlowResult define_flow_result = 3;
+  }
+  message CreateDataflowGraphResult {
+    // The ID of the created graph.
+    optional string dataflow_graph_id = 1;
+  }
+  message DefineOutputResult {
+    // Resolved identifier of the output
+    optional ResolvedIdentifier resolved_identifier = 1;
+  }
+  message DefineFlowResult {
+    // Resolved identifier of the flow
+    optional ResolvedIdentifier resolved_identifier = 1;
+  }
+}
+
+// The type of output.
+enum OutputType {
+  // Safe default value. Should not be used.
+  OUTPUT_TYPE_UNSPECIFIED = 0;
+  // A materialized view which is published to the catalog
+  MATERIALIZED_VIEW = 1;
+  // A table which is published to the catalog
+  TABLE = 2;
+  // A view which is not published to the catalog
+  TEMPORARY_VIEW = 3;
+  // A sink which is not published to the catalog
+  SINK = 4;
+}
+
+// A response containing an event emitted during the run of a pipeline.
+message PipelineEventResult {
+  PipelineEvent event = 1;
+}
+
+message PipelineEvent {
+  // The timestamp corresponding to when the event occurred.
+  google.protobuf.Timestamp timestamp = 1;
+  // The message that should be displayed to users.
+  optional string message = 2;
+}
+
+// Source code location information associated with a particular dataset or flow.
+message SourceCodeLocation {
+  // The file that this pipeline source code was defined in.
+  optional string file_name = 1;
+  // The specific line number that this pipeline source code is located at, if applicable.
+  optional int32 line_number = 2;
+  // The path of the top-level pipeline file determined at runtime during pipeline initialization.
+  optional string definition_path = 3;
+
+  // Reserved field for protocol extensions.
+  // Used to support forward-compatibility by carrying additional fields
+  // that are not yet defined in this version of the proto. During planning, the
+  // engine will resolve and dispatch the concrete command contained in this field.
+  repeated google.protobuf.Any extension = 999;
+}
+
+// A signal from the server to the client to execute the query function for one or more flows, and
+// to register their results with the server.
+message PipelineQueryFunctionExecutionSignal {
+  repeated string flow_names = 1;
+}
+
+// Metadata providing context about the pipeline during Spark Connect query analysis.
+message PipelineAnalysisContext {
+  // Unique identifier of the dataflow graph associated with this pipeline.
+  optional string dataflow_graph_id = 1;
+  // The path of the top-level pipeline file determined at runtime during pipeline initialization.
+  optional string definition_path = 2;
+  // The name of the Flow involved in this analysis
+  optional string flow_name = 3;
+
+  // Reserved field for protocol extensions.
+  repeated google.protobuf.Any extension = 999;
+}

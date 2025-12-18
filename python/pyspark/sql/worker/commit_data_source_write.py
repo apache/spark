@@ -20,6 +20,7 @@ from typing import IO
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkAssertionError
+from pyspark.logger.worker_io import capture_outputs
 from pyspark.serializers import (
     read_bool,
     read_int,
@@ -27,7 +28,12 @@ from pyspark.serializers import (
     SpecialLengths,
 )
 from pyspark.sql.datasource import DataSourceWriter, WriterCommitMessage
-from pyspark.util import handle_worker_exception, local_connect_and_auth
+from pyspark.util import (
+    handle_worker_exception,
+    local_connect_and_auth,
+    with_faulthandler,
+    start_faulthandler_periodic_traceback,
+)
 from pyspark.worker_util import (
     check_python_version,
     pickleSer,
@@ -38,6 +44,7 @@ from pyspark.worker_util import (
 )
 
 
+@with_faulthandler
 def main(infile: IO, outfile: IO) -> None:
     """
     Main method for committing or aborting a data source write operation.
@@ -49,6 +56,8 @@ def main(infile: IO, outfile: IO) -> None:
     """
     try:
         check_python_version(infile)
+
+        start_faulthandler_periodic_traceback()
 
         memory_limit_mb = int(os.environ.get("PYSPARK_PLANNER_MEMORY_MB", "-1"))
         setup_memory_limits(memory_limit_mb)
@@ -80,12 +89,13 @@ def main(infile: IO, outfile: IO) -> None:
         # Receive a boolean to indicate whether to invoke `abort`.
         abort = read_bool(infile)
 
-        # Commit or abort the Python data source write.
-        # Note the commit messages can be None if there are failed tasks.
-        if abort:
-            writer.abort(commit_messages)
-        else:
-            writer.commit(commit_messages)
+        with capture_outputs():
+            # Commit or abort the Python data source write.
+            # Note the commit messages can be None if there are failed tasks.
+            if abort:
+                writer.abort(commit_messages)
+            else:
+                writer.commit(commit_messages)
 
         # Send a status code back to JVM.
         write_int(0, outfile)
@@ -107,9 +117,11 @@ def main(infile: IO, outfile: IO) -> None:
 
 if __name__ == "__main__":
     # Read information about how to connect back to the JVM from the environment.
-    java_port = int(os.environ["PYTHON_WORKER_FACTORY_PORT"])
-    auth_secret = os.environ["PYTHON_WORKER_FACTORY_SECRET"]
-    (sock_file, _) = local_connect_and_auth(java_port, auth_secret)
+    conn_info = os.environ.get(
+        "PYTHON_WORKER_FACTORY_SOCK_PATH", int(os.environ.get("PYTHON_WORKER_FACTORY_PORT", -1))
+    )
+    auth_secret = os.environ.get("PYTHON_WORKER_FACTORY_SECRET")
+    (sock_file, _) = local_connect_and_auth(conn_info, auth_secret)
     write_int(os.getpid(), sock_file)
     sock_file.flush()
     main(sock_file, sock_file)

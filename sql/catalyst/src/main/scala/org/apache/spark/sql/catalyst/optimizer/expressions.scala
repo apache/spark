@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, TreeNodeTag}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -58,7 +59,20 @@ object ConstantFolding extends Rule[LogicalPlan] {
     case _ => false
   }
 
-  private def constantFolding(
+  private def tryFold(expr: Expression, isConditionalBranch: Boolean): Expression = {
+    try {
+      Literal.create(expr.freshCopyIfContainsStatefulExpression().eval(EmptyRow), expr.dataType)
+    } catch {
+      case NonFatal(_) if isConditionalBranch =>
+        // When doing constant folding inside conditional expressions, we should not fail
+        // during expression evaluation, as the branch we are evaluating may not be reached at
+        // runtime, and we shouldn't fail the query, to match the original behavior.
+        expr.setTagValue(FAILED_TO_EVALUATE, ())
+        expr
+    }
+  }
+
+  private[sql] def constantFolding(
       e: Expression,
       isConditionalBranch: Boolean = false): Expression = e match {
     case c: ConditionalExpression if !c.foldable =>
@@ -77,17 +91,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
     case e if e.getTagValue(FAILED_TO_EVALUATE).isDefined => e
 
     // Fold expressions that are foldable.
-    case e if e.foldable =>
-      try {
-        Literal.create(e.freshCopyIfContainsStatefulExpression().eval(EmptyRow), e.dataType)
-      } catch {
-        case NonFatal(_) if isConditionalBranch =>
-          // When doing constant folding inside conditional expressions, we should not fail
-          // during expression evaluation, as the branch we are evaluating may not be reached at
-          // runtime, and we shouldn't fail the query, to match the original behavior.
-          e.setTagValue(FAILED_TO_EVALUATE, ())
-          e
-      }
+    case e if e.foldable => tryFold(e, isConditionalBranch)
 
     // Don't replace ScalarSubquery if its plan is an aggregate that may suffer from a COUNT bug.
     case s @ ScalarSubquery(_, _, _, _, _, mayHaveCountBug, _)
@@ -99,7 +103,13 @@ object ConstantFolding extends Rule[LogicalPlan] {
     case s: ScalarSubquery if s.plan.maxRows.contains(0) =>
       Literal(null, s.dataType)
 
-    case other => other.mapChildren(constantFolding(_, isConditionalBranch))
+    case other =>
+      val newOther = other.mapChildren(constantFolding(_, isConditionalBranch))
+      if (newOther.foldable) {
+        tryFold(newOther, isConditionalBranch)
+      } else {
+        newOther
+      }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(AlwaysProcess.fn, ruleId) {
@@ -244,9 +254,14 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
   }
 
   private def collectGroupingExpressions(plan: LogicalPlan): ExpressionSet = plan match {
-    case Aggregate(groupingExpressions, aggregateExpressions, child) =>
+    case Aggregate(groupingExpressions, aggregateExpressions, child, _) =>
       ExpressionSet.apply(groupingExpressions)
     case _ => ExpressionSet(Seq.empty)
+  }
+
+  private def isSameInteger(expr: Expression, value: Int): Boolean = expr match {
+    case l: Literal => l.value == value
+    case _ => false
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
@@ -259,20 +274,32 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
       val groupingExpressionSet = collectGroupingExpressions(q)
       q.transformExpressionsDownWithPruning(_.containsPattern(BINARY_ARITHMETIC)) {
       case a @ Add(_, _, f) if a.deterministic && a.dataType.isInstanceOf[IntegralType] =>
-        val (foldables, others) = flattenAdd(a, groupingExpressionSet).partition(_.foldable)
-        if (foldables.size > 1) {
-          val foldableExpr = foldables.reduce((x, y) => Add(x, y, f))
-          val c = Literal.create(foldableExpr.eval(EmptyRow), a.dataType)
-          if (others.isEmpty) c else Add(others.reduce((x, y) => Add(x, y, f)), c, f)
+        val (literals, others) = flattenAdd(a, groupingExpressionSet)
+          .partition(_.isInstanceOf[Literal])
+        if (literals.nonEmpty) {
+          val literalExpr = literals.reduce((x, y) => Add(x, y, f))
+          if (others.isEmpty) {
+            literalExpr
+          } else if (isSameInteger(literalExpr, 0)) {
+            others.reduce((x, y) => Add(x, y, f))
+          } else {
+            Add(others.reduce((x, y) => Add(x, y, f)), literalExpr, f)
+          }
         } else {
           a
         }
       case m @ Multiply(_, _, f) if m.deterministic && m.dataType.isInstanceOf[IntegralType] =>
-        val (foldables, others) = flattenMultiply(m, groupingExpressionSet).partition(_.foldable)
-        if (foldables.size > 1) {
-          val foldableExpr = foldables.reduce((x, y) => Multiply(x, y, f))
-          val c = Literal.create(foldableExpr.eval(EmptyRow), m.dataType)
-          if (others.isEmpty) c else Multiply(others.reduce((x, y) => Multiply(x, y, f)), c, f)
+        val (literals, others) = flattenMultiply(m, groupingExpressionSet)
+          .partition(_.isInstanceOf[Literal])
+        if (literals.nonEmpty) {
+          val literalExpr = literals.reduce((x, y) => Multiply(x, y, f))
+          if (others.isEmpty || (isSameInteger(literalExpr, 0) && !m.nullable)) {
+            literalExpr
+          } else if (isSameInteger(literalExpr, 1)) {
+            others.reduce((x, y) => Multiply(x, y, f))
+          } else {
+            Multiply(others.reduce((x, y) => Multiply(x, y, f)), literalExpr, f)
+          }
         } else {
           m
         }
@@ -708,7 +735,7 @@ object SupportedBinaryExpr {
     case _: BinaryArithmetic => Some(expr, expr.children.head, expr.children.last)
     case _: BinaryMathExpression => Some(expr, expr.children.head, expr.children.last)
     case _: AddMonths | _: DateAdd | _: DateAddInterval | _: DateDiff | _: DateSub |
-         _: DateAddYMInterval | _: TimestampAddYMInterval | _: TimeAdd =>
+         _: DateAddYMInterval | _: TimestampAddYMInterval | _: TimestampAddInterval =>
       Some(expr, expr.children.head, expr.children.last)
     case _: FindInSet | _: RoundBase => Some(expr, expr.children.head, expr.children.last)
     case BinaryPredicate(expr) =>
@@ -725,10 +752,11 @@ object SupportedBinaryExpr {
 object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
   // if guards below protect from escapes on trailing %.
   // Cases like "something\%" are not optimized, but this does not affect correctness.
-  private val startsWith = "([^_%]+)%".r
-  private val endsWith = "%([^_%]+)".r
-  private val startsAndEndsWith = "([^_%]+)%([^_%]+)".r
-  private val contains = "%([^_%]+)%".r
+  // Consecutive wildcard characters are equivalent to a single wildcard character.
+  private val startsWith = "([^_%]+)%+".r
+  private val endsWith = "%+([^_%]+)".r
+  private val startsAndEndsWith = "([^_%]+)%+([^_%]+)".r
+  private val contains = "%+([^_%]+)%+".r
   private val equalTo = "([^_%]*)".r
 
   private def simplifyLike(
@@ -881,7 +909,7 @@ object NullPropagation extends Rule[LogicalPlan] {
 
       // Non-leaf NullIntolerant expressions will return null, if at least one of its children is
       // a null literal.
-      case e: NullIntolerant if e.children.exists(isNullLiteral) =>
+      case e if e.nullIntolerant && e.children.exists(isNullLiteral) =>
         Literal.create(null, e.dataType)
     }
   }
@@ -901,7 +929,7 @@ object NullDownPropagation extends Rule[LogicalPlan] {
   // Applying to `EqualTo` is too disruptive for [SPARK-32290] optimization, not supported for now.
   // If e has multiple children, the deterministic check is required because optimizing
   // IsNull(a > b) to Or(IsNull(a), IsNull(b)), for example, may cause skipping the evaluation of b
-  private def supportedNullIntolerant(e: NullIntolerant): Boolean = (e match {
+  private def supportedNullIntolerant(e: Expression): Boolean = (e match {
     case _: Not => true
     case _: GreaterThan | _: GreaterThanOrEqual | _: LessThan | _: LessThanOrEqual
       if e.deterministic => true
@@ -912,9 +940,9 @@ object NullDownPropagation extends Rule[LogicalPlan] {
     _.containsPattern(NULL_CHECK), ruleId) {
     case q: LogicalPlan => q.transformExpressionsDownWithPruning(
       _.containsPattern(NULL_CHECK), ruleId) {
-      case IsNull(e: NullIntolerant) if supportedNullIntolerant(e) =>
+      case IsNull(e) if e.nullIntolerant && supportedNullIntolerant(e) =>
         e.children.map(IsNull(_): Expression).reduceLeft(Or)
-      case IsNotNull(e: NullIntolerant) if supportedNullIntolerant(e) =>
+      case IsNotNull(e) if e.nullIntolerant && supportedNullIntolerant(e) =>
         e.children.map(IsNotNull(_): Expression).reduceLeft(And)
     }
   }
@@ -1074,6 +1102,8 @@ object FoldablePropagation extends Rule[LogicalPlan] {
 object SimplifyCasts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
     _.containsPattern(CAST), ruleId) {
+    case c @ Cast(e: NamedExpression, StringType, _, _)
+      if e.dataType == StringType && e.metadata.contains(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY) => c
     case Cast(e, dataType, _, _) if e.dataType == dataType => e
     case c @ Cast(Cast(e, dt1: NumericType, _, _), dt2: NumericType, _, _)
         if isWiderCast(e.dataType, dt1) && isWiderCast(dt1, dt2) =>
@@ -1112,6 +1142,48 @@ object SimplifyCaseConversionExpressions extends Rule[LogicalPlan] {
   }
 }
 
+/**
+ * Removes date and time related functions that are unnecessary.
+ */
+object SimplifyDateTimeConversions extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+      _.containsPattern(DATETIME), ruleId) {
+    case q: LogicalPlan => q.transformExpressionsUpWithPruning(
+        _.containsPattern(DATETIME), ruleId) {
+      // Remove a string to timestamp conversions followed by a timestamp to string conversions if
+      // original string is in the same format.
+      case DateFormatClass(
+          GetTimestamp(
+            e @ DateFormatClass(_, pattern, timeZoneId),
+            pattern2,
+            TimestampType,
+            _,
+            timeZoneId2,
+            _),
+          pattern3,
+          timeZoneId3)
+          if pattern.semanticEquals(pattern2) && pattern.semanticEquals(pattern3)
+            && timeZoneId == timeZoneId2 && timeZoneId == timeZoneId3 =>
+        e
+
+      // Remove a timestamp to string conversion followed by a string to timestamp conversions if
+      // original timestamp is built with the same format.
+      case GetTimestamp(
+          DateFormatClass(
+            e @ GetTimestamp(_, pattern, TimestampType, _, timeZoneId, _),
+            pattern2,
+            timeZoneId2),
+          pattern3,
+          TimestampType,
+          _,
+          timeZoneId3,
+          _)
+          if pattern.semanticEquals(pattern2) && pattern.semanticEquals(pattern3)
+            && timeZoneId == timeZoneId2 && timeZoneId == timeZoneId3 =>
+        e
+    }
+  }
+}
 
 /**
  * Combine nested [[Concat]] expressions.

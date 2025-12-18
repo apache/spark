@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.plans.logical.{DataFrameDropColumns, LogicalPlan, Project}
-import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.DF_DROP_COLUMNS
 import org.apache.spark.sql.connector.catalog.CatalogManager
 
@@ -27,17 +27,24 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
  * Note that DataFrameDropColumns allows and ignores non-existing columns.
  */
 class ResolveDataFrameDropColumns(val catalogManager: CatalogManager)
-  extends Rule[LogicalPlan] with ColumnResolutionHelper  {
+  extends SQLConfHelper with ColumnResolutionHelper  {
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
+  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(DF_DROP_COLUMNS)) {
     case d: DataFrameDropColumns if d.childrenResolved =>
       // expressions in dropList can be unresolved, e.g.
       //   df.drop(col("non-existing-column"))
-      val dropped = d.dropList.map {
+      val dropped = d.dropList.flatMap {
         case u: UnresolvedAttribute =>
-          resolveExpressionByPlanChildren(u, d.child)
-        case e => e
+          if (u.getTagValue(LogicalPlan.PLAN_ID_TAG).nonEmpty) {
+            // Plan Id comes from Spark Connect,
+            // Here we ignore the `UnresolvedAttribute` if its Plan Id can be found
+            // but column not found.
+            tryResolveColumnByPlanChildren(u, d)
+          } else {
+            Some(resolveExpressionByPlanChildren(u, d))
+          }
+        case e => Some(e)
       }
       val remaining = d.child.output.filterNot(attr => dropped.exists(_.semanticEquals(attr)))
       if (remaining.size == d.child.output.size) {

@@ -32,6 +32,7 @@ import pandas as pd
 from pandas.tseries.frequencies import to_offset
 
 from pyspark.sql import Column, functions as F
+from pyspark.sql.internal import InternalFunction as SF
 from pyspark.sql.types import (
     NumericType,
     StructField,
@@ -41,7 +42,6 @@ from pyspark.sql.types import (
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import FrameLike
 from pyspark.pandas.frame import DataFrame
-from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.internal import (
     InternalField,
     InternalFrame,

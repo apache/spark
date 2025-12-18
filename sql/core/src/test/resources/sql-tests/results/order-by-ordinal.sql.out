@@ -149,6 +149,304 @@ struct<a:int,b:int>
 
 
 -- !query
+set spark.sql.prioritizeOrdinalResolutionInSort.enabled=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.prioritizeOrdinalResolutionInSort.enabled	true
+
+
+-- !query
+SELECT a FROM data ORDER BY 2, b
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ORDER_BY_POS_OUT_OF_RANGE",
+  "sqlState" : "42805",
+  "messageParameters" : {
+    "index" : "2",
+    "size" : "1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 29,
+    "stopIndex" : 29,
+    "fragment" : "2"
+  } ]
+}
+
+
+-- !query
+SELECT a FROM data ORDER BY b, 2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ORDER_BY_POS_OUT_OF_RANGE",
+  "sqlState" : "42805",
+  "messageParameters" : {
+    "index" : "2",
+    "size" : "1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 32,
+    "stopIndex" : 32,
+    "fragment" : "2"
+  } ]
+}
+
+
+-- !query
+SELECT a FROM data ORDER BY 'b', 2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ORDER_BY_POS_OUT_OF_RANGE",
+  "sqlState" : "42805",
+  "messageParameters" : {
+    "index" : "2",
+    "size" : "1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 34,
+    "stopIndex" : 34,
+    "fragment" : "2"
+  } ]
+}
+
+
+-- !query
+SELECT a FROM data ORDER BY `b`, 2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ORDER_BY_POS_OUT_OF_RANGE",
+  "sqlState" : "42805",
+  "messageParameters" : {
+    "index" : "2",
+    "size" : "1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 34,
+    "stopIndex" : 34,
+    "fragment" : "2"
+  } ]
+}
+
+
+-- !query
+SELECT a FROM data ORDER BY a, 2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ORDER_BY_POS_OUT_OF_RANGE",
+  "sqlState" : "42805",
+  "messageParameters" : {
+    "index" : "2",
+    "size" : "1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 32,
+    "stopIndex" : 32,
+    "fragment" : "2"
+  } ]
+}
+
+
+-- !query
+SELECT a FROM data ORDER BY b, 3
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ORDER_BY_POS_OUT_OF_RANGE",
+  "sqlState" : "42805",
+  "messageParameters" : {
+    "index" : "3",
+    "size" : "1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 32,
+    "stopIndex" : 32,
+    "fragment" : "3"
+  } ]
+}
+
+
+-- !query
+SELECT a, a + 1 FROM data ORDER BY b, 3
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ORDER_BY_POS_OUT_OF_RANGE",
+  "sqlState" : "42805",
+  "messageParameters" : {
+    "index" : "3",
+    "size" : "2"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 39,
+    "stopIndex" : 39,
+    "fragment" : "3"
+  } ]
+}
+
+
+-- !query
+set spark.sql.prioritizeOrdinalResolutionInSort.enabled=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.prioritizeOrdinalResolutionInSort.enabled	false
+
+
+-- !query
+SELECT a FROM data ORDER BY 2, b
+-- !query schema
+struct<a:int>
+-- !query output
+1
+2
+3
+1
+2
+3
+
+
+-- !query
+SELECT a FROM data ORDER BY b, 2
+-- !query schema
+struct<a:int>
+-- !query output
+1
+2
+3
+1
+2
+3
+
+
+-- !query
+SELECT a FROM data ORDER BY 'b', 2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ORDER_BY_POS_OUT_OF_RANGE",
+  "sqlState" : "42805",
+  "messageParameters" : {
+    "index" : "2",
+    "size" : "1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 34,
+    "stopIndex" : 34,
+    "fragment" : "2"
+  } ]
+}
+
+
+-- !query
+SELECT a FROM data ORDER BY `b`, 2
+-- !query schema
+struct<a:int>
+-- !query output
+1
+2
+3
+1
+2
+3
+
+
+-- !query
+SELECT a FROM data ORDER BY a, 2
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ORDER_BY_POS_OUT_OF_RANGE",
+  "sqlState" : "42805",
+  "messageParameters" : {
+    "index" : "2",
+    "size" : "1"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 32,
+    "stopIndex" : 32,
+    "fragment" : "2"
+  } ]
+}
+
+
+-- !query
+SELECT a FROM data ORDER BY b, 3
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ORDER_BY_POS_OUT_OF_RANGE",
+  "sqlState" : "42805",
+  "messageParameters" : {
+    "index" : "3",
+    "size" : "2"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 32,
+    "stopIndex" : 32,
+    "fragment" : "3"
+  } ]
+}
+
+
+-- !query
+SELECT a, a + 1 FROM data ORDER BY b, 3
+-- !query schema
+struct<a:int,(a + 1):int>
+-- !query output
+1	2
+2	3
+3	4
+1	2
+2	3
+3	4
+
+
+-- !query
 set spark.sql.orderByOrdinal=false
 -- !query schema
 struct<key:string,value:string>

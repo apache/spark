@@ -33,11 +33,11 @@ class SessionStateSuite extends SparkFunSuite {
    * session as this is a singleton HiveSparkSession in HiveSessionStateSuite and it's shared
    * with all Hive test suites.
    */
-  protected var activeSession: SparkSession = _
+  protected var activeSession: classic.SparkSession = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    activeSession = SparkSession.builder()
+    activeSession = classic.SparkSession.builder()
       .master("local")
       .config("default-config", "default")
       .getOrCreate()

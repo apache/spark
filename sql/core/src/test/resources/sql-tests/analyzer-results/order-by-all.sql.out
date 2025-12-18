@@ -248,3 +248,14 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "all"
   } ]
 }
+
+
+-- !query
+SELECT all, (SELECT col2 FROM VALUES (2, 2) ORDER BY ALL) FROM VALUES (1) AS t1 (all)
+-- !query analysis
+Project [all#x, scalar-subquery#x [] AS scalarsubquery()#x]
+:  +- Sort [col2#x ASC NULLS FIRST], true
+:     +- Project [col2#x]
+:        +- LocalRelation [col1#x, col2#x]
++- SubqueryAlias t1
+   +- LocalRelation [all#x]

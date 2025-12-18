@@ -23,7 +23,6 @@ import scala.collection.mutable
 
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.LogKeys.CONFIG
-import org.apache.spark.internal.MDC
 import org.apache.spark.memory.SparkOutOfMemoryError
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -63,7 +62,7 @@ case class HashAggregateExec(
 
   require(Aggregate.supportsHashAggregate(aggregateBufferAttributes, groupingExpressions))
 
-  override lazy val allAttributes: AttributeSeq =
+  override def allAttributes: AttributeSeq =
     child.output ++ aggregateBufferAttributes ++ aggregateAttributes ++
       aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
 
@@ -682,7 +681,7 @@ case class HashAggregateExec(
          |    $unsafeRowKeys, $unsafeRowKeyHash);
          |  if ($unsafeRowBuffer == null) {
          |    // failed to allocate the first page
-         |    throw new $oomeClassName("No enough memory for aggregation");
+         |    throw new $oomeClassName("AGGREGATE_OUT_OF_MEMORY", new java.util.HashMap());
          |  }
          |}
        """.stripMargin

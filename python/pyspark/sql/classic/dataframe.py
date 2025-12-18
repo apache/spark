@@ -21,7 +21,7 @@ import sys
 import random
 import warnings
 from collections.abc import Iterable
-from functools import reduce
+from functools import reduce, cached_property
 from typing import (
     Any,
     Callable,
@@ -42,6 +42,7 @@ from pyspark import _NoValue
 from pyspark.resource import ResourceProfile
 from pyspark._globals import _NoValueType
 from pyspark.errors import (
+    AnalysisException,
     PySparkTypeError,
     PySparkValueError,
     PySparkIndexError,
@@ -73,11 +74,8 @@ from pyspark.sql.dataframe import (
 from pyspark.sql.utils import get_active_spark_context, to_java_array, to_scala_map
 from pyspark.sql.pandas.conversion import PandasConversionMixin
 from pyspark.sql.pandas.map_ops import PandasMapOpsMixin
+from pyspark.sql.table_arg import TableArg
 
-try:
-    from pyspark.sql.plot import PySparkPlotAccessor
-except ImportError:
-    PySparkPlotAccessor = None  # type: ignore
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
@@ -121,8 +119,6 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     ):
         from pyspark.sql.context import SQLContext
 
-        self._sql_ctx: Optional["SQLContext"] = None
-
         if isinstance(sql_ctx, SQLContext):
             assert not os.environ.get("SPARK_TESTING")  # Sanity check for our internal usage.
             assert isinstance(sql_ctx, SQLContext)
@@ -139,14 +135,11 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         self._sc: "SparkContext" = sql_ctx._sc
         self._jdf: "JavaObject" = jdf
         self.is_cached = False
-        # initialized lazily
-        self._schema: Optional[StructType] = None
-        self._lazy_rdd: Optional["RDD[Row]"] = None
         # Check whether _repr_html is supported or not, we use it to avoid calling _jdf twice
         # by __repr__ and _repr_html_ while eager evaluation opens.
         self._support_repr_html = False
 
-    @property
+    @cached_property
     def sql_ctx(self) -> "SQLContext":
         from pyspark.sql.context import SQLContext
 
@@ -154,24 +147,18 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             "DataFrame.sql_ctx is an internal property, and will be removed "
             "in future releases. Use DataFrame.sparkSession instead."
         )
-        if self._sql_ctx is None:
-            self._sql_ctx = SQLContext._get_or_create(self._sc)
-        return self._sql_ctx
+        return SQLContext._get_or_create(self._sc)
 
     @property
     def sparkSession(self) -> "SparkSession":
         return self._session
 
-    @property
+    @cached_property
     def rdd(self) -> "RDD[Row]":
         from pyspark.core.rdd import RDD
 
-        if self._lazy_rdd is None:
-            jrdd = self._jdf.javaToPython()
-            self._lazy_rdd = RDD(
-                jrdd, self.sparkSession._sc, BatchedSerializer(CPickleSerializer())
-            )
-        return self._lazy_rdd
+        jrdd = self._jdf.javaToPython()
+        return RDD(jrdd, self.sparkSession._sc, BatchedSerializer(CPickleSerializer()))
 
     @property
     def na(self) -> ParentDataFrameNaFunctions:
@@ -211,19 +198,17 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def writeStream(self) -> DataStreamWriter:
         return DataStreamWriter(self)
 
-    @property
+    @cached_property
     def schema(self) -> StructType:
-        if self._schema is None:
-            try:
-                self._schema = cast(
-                    StructType, _parse_datatype_json_string(self._jdf.schema().json())
-                )
-            except Exception as e:
-                raise PySparkValueError(
-                    errorClass="CANNOT_PARSE_DATATYPE",
-                    messageParameters={"error": str(e)},
-                )
-        return self._schema
+        try:
+            return cast(StructType, _parse_datatype_json_string(self._jdf.schema().json()))
+        except AnalysisException as e:
+            raise e
+        except Exception as e:
+            raise PySparkValueError(
+                errorClass="CANNOT_PARSE_DATATYPE",
+                messageParameters={"msg": str(e)},
+            )
 
     def printSchema(self, level: Optional[int] = None) -> None:
         if level:
@@ -331,15 +316,28 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             return self._jdf.showString(n, int_truncate, vertical)
 
     def __repr__(self) -> str:
-        if not self._support_repr_html and self.sparkSession._jconf.isReplEagerEvalEnabled():
-            vertical = False
-            return self._jdf.showString(
-                self.sparkSession._jconf.replEagerEvalMaxNumRows(),
-                self.sparkSession._jconf.replEagerEvalTruncate(),
-                vertical,
+        if not self._support_repr_html:
+            (
+                isReplEagerEvalEnabled,
+                replEagerEvalMaxNumRows,
+                replEagerEvalTruncate,
+            ) = self.sparkSession._jconf.getConfs(
+                [
+                    "spark.sql.repl.eagerEval.enabled",
+                    "spark.sql.repl.eagerEval.maxNumRows",
+                    "spark.sql.repl.eagerEval.truncate",
+                ]
             )
-        else:
-            return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
+
+            if isReplEagerEvalEnabled == "true":
+                vertical = False
+                return self._jdf.showString(
+                    int(replEagerEvalMaxNumRows),
+                    int(replEagerEvalTruncate),
+                    vertical,
+                )
+
+        return "DataFrame[%s]" % (", ".join("%s: %s" % c for c in self.dtypes))
 
     def _repr_html_(self) -> Optional[str]:
         """Returns a :class:`DataFrame` with html code when you enabled eager evaluation
@@ -348,10 +346,23 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         """
         if not self._support_repr_html:
             self._support_repr_html = True
-        if self.sparkSession._jconf.isReplEagerEvalEnabled():
+
+        (
+            isReplEagerEvalEnabled,
+            replEagerEvalMaxNumRows,
+            replEagerEvalTruncate,
+        ) = self.sparkSession._jconf.getConfs(
+            [
+                "spark.sql.repl.eagerEval.enabled",
+                "spark.sql.repl.eagerEval.maxNumRows",
+                "spark.sql.repl.eagerEval.truncate",
+            ]
+        )
+
+        if isReplEagerEvalEnabled == "true":
             return self._jdf.htmlString(
-                self.sparkSession._jconf.replEagerEvalMaxNumRows(),
-                self.sparkSession._jconf.replEagerEvalTruncate(),
+                int(replEagerEvalMaxNumRows),
+                int(replEagerEvalTruncate),
             )
         else:
             return None
@@ -360,8 +371,13 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         jdf = self._jdf.checkpoint(eager)
         return DataFrame(jdf, self.sparkSession)
 
-    def localCheckpoint(self, eager: bool = True) -> ParentDataFrame:
-        jdf = self._jdf.localCheckpoint(eager)
+    def localCheckpoint(
+        self, eager: bool = True, storageLevel: Optional[StorageLevel] = None
+    ) -> ParentDataFrame:
+        if storageLevel is None:
+            jdf = self._jdf.localCheckpoint(eager)
+        else:
+            jdf = self._jdf.localCheckpoint(eager, self._sc._getJavaStorageLevel(storageLevel))
         return DataFrame(jdf, self.sparkSession)
 
     def withWatermark(self, eventTime: str, delayThreshold: str) -> ParentDataFrame:
@@ -451,7 +467,8 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def collect(self) -> List[Row]:
         with SCCallSiteSync(self._sc):
             sock_info = self._jdf.collectToPython()
-        return list(_load_from_socket(sock_info, BatchedSerializer(CPickleSerializer())))
+        with _load_from_socket(sock_info, BatchedSerializer(CPickleSerializer())) as stream:
+            return list(stream)
 
     def toLocalIterator(self, prefetchPartitions: bool = False) -> Iterator[Row]:
         with SCCallSiteSync(self._sc):
@@ -472,7 +489,8 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def tail(self, num: int) -> List[Row]:
         with SCCallSiteSync(self._sc):
             sock_info = self._jdf.tailToPython(num)
-        return list(_load_from_socket(sock_info, BatchedSerializer(CPickleSerializer())))
+        with _load_from_socket(sock_info, BatchedSerializer(CPickleSerializer())) as stream:
+            return list(stream)
 
     def foreach(self, f: Callable[[Row], None]) -> None:
         self.rdd.foreach(f)
@@ -579,6 +597,30 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
                 },
             )
 
+    def repartitionById(
+        self, numPartitions: int, partitionIdCol: "ColumnOrName"
+    ) -> ParentDataFrame:
+        if not isinstance(numPartitions, (int, bool)):
+            raise PySparkTypeError(
+                errorClass="NOT_INT",
+                messageParameters={
+                    "arg_name": "numPartitions",
+                    "arg_type": type(numPartitions).__name__,
+                },
+            )
+        if numPartitions <= 0:
+            raise PySparkValueError(
+                errorClass="VALUE_NOT_POSITIVE",
+                messageParameters={
+                    "arg_name": "numPartitions",
+                    "arg_value": str(numPartitions),
+                },
+            )
+        return DataFrame(
+            self._jdf.repartitionById(numPartitions, _to_java_column(partitionIdCol)),
+            self.sparkSession,
+        )
+
     def distinct(self) -> ParentDataFrame:
         return DataFrame(self._jdf.distinct(), self.sparkSession)
 
@@ -661,6 +703,15 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def columns(self) -> List[str]:
         return [f.name for f in self.schema.fields]
 
+    def metadataColumn(self, colName: str) -> Column:
+        if not isinstance(colName, str):
+            raise PySparkTypeError(
+                errorClass="NOT_STR",
+                messageParameters={"arg_name": "colName", "arg_type": type(colName).__name__},
+            )
+        jc = self._jdf.metadataColumn(colName)
+        return Column(jc)
+
     def colRegex(self, colName: str) -> Column:
         if not isinstance(colName, str):
             raise PySparkTypeError(
@@ -709,6 +760,22 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
                 on = self._jseq([])
             assert isinstance(how, str), "how should be a string"
             jdf = self._jdf.join(other._jdf, on, how)
+        return DataFrame(jdf, self.sparkSession)
+
+    def lateralJoin(
+        self,
+        other: ParentDataFrame,
+        on: Optional[Column] = None,
+        how: Optional[str] = None,
+    ) -> ParentDataFrame:
+        if on is None and how is None:
+            jdf = self._jdf.lateralJoin(other._jdf)
+        elif on is None:
+            jdf = self._jdf.lateralJoin(other._jdf, how)
+        elif how is None:
+            jdf = self._jdf.lateralJoin(other._jdf, on._jc)
+        else:
+            jdf = self._jdf.lateralJoin(other._jdf, on._jc, how)
         return DataFrame(jdf, self.sparkSession)
 
     # TODO(SPARK-22947): Fix the DataFrame API.
@@ -1782,6 +1849,17 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         else:
             return DataFrame(self._jdf.transpose(), self.sparkSession)
 
+    def asTable(self) -> TableArg:
+        from pyspark.sql.classic.table_arg import TableArg as ClassicTableArg
+
+        return ClassicTableArg(self._jdf.asTable())
+
+    def scalar(self) -> Column:
+        return Column(self._jdf.scalar())
+
+    def exists(self) -> Column:
+        return Column(self._jdf.exists())
+
     @property
     def executionInfo(self) -> Optional["ExecutionInfo"]:
         raise PySparkValueError(
@@ -1790,7 +1868,9 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         )
 
     @property
-    def plot(self) -> PySparkPlotAccessor:
+    def plot(self) -> "PySparkPlotAccessor":  # type: ignore[name-defined] # noqa: F821
+        from pyspark.sql.plot import PySparkPlotAccessor
+
         return PySparkPlotAccessor(self)
 
 
@@ -1910,10 +1990,27 @@ def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession
     import pyspark.sql.dataframe
+    from pyspark.testing.utils import have_pandas, have_pyarrow
 
     # It inherits docstrings but doctests cannot detect them so we run
     # the parent classe's doctests here directly.
     globs = pyspark.sql.dataframe.__dict__.copy()
+
+    if not have_pandas or not have_pyarrow:
+        del pyspark.sql.dataframe.DataFrame.toPandas.__doc__
+        del pyspark.sql.dataframe.DataFrame.mapInPandas.__doc__
+        del pyspark.sql.dataframe.DataFrame.pandas_api.__doc__
+
+    if not have_pyarrow:
+        del pyspark.sql.dataframe.DataFrame.toArrow.__doc__
+        del pyspark.sql.dataframe.DataFrame.mapInArrow.__doc__
+    else:
+        import pyarrow as pa
+        from pyspark.loose_version import LooseVersion
+
+        if LooseVersion(pa.__version__) < LooseVersion("17.0.0"):
+            del pyspark.sql.dataframe.DataFrame.mapInArrow.__doc__
+
     spark = (
         SparkSession.builder.master("local[4]").appName("sql.classic.dataframe tests").getOrCreate()
     )

@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.trees
 import java.util.regex.Pattern
 
 import org.apache.spark.QueryContext
+import org.apache.spark.sql.catalyst.parser.PositionMapper
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.util.ArrayImplicits._
 
@@ -36,12 +37,32 @@ case class Origin(
     objectType: Option[String] = None,
     objectName: Option[String] = None,
     stackTrace: Option[Array[StackTraceElement]] = None,
-    pysparkErrorContext: Option[(String, String)] = None) {
+    pysparkErrorContext: Option[(String, String)] = None,
+    positionMapper: Option[PositionMapper] = None) {
 
   lazy val context: QueryContext = if (stackTrace.isDefined) {
     DataFrameQueryContext(stackTrace.get.toImmutableArraySeq, pysparkErrorContext)
   } else {
-    SQLQueryContext(line, startPosition, startIndex, stopIndex, sqlText, objectType, objectName)
+    // Apply position mapping if available
+    val (mappedStartIndex, mappedStopIndex, originalSqlText) =
+      positionMapper match {
+        case Some(mapper) =>
+          // Map substituted positions back to original SQL positions
+          val mappedStart = startIndex.map(mapper.mapToOriginal)
+          val mappedStop = stopIndex.map(mapper.mapToOriginal)
+          (mappedStart, mappedStop, Some(mapper.originalText))
+        case None =>
+          (startIndex, stopIndex, sqlText)
+      }
+
+    SQLQueryContext(
+      line,
+      startPosition,
+      mappedStartIndex,
+      mappedStopIndex,
+      originalSqlText,
+      objectType,
+      objectName)
   }
 
   def getQueryContext: Array[QueryContext] = {
@@ -101,13 +122,16 @@ object CurrentOrigin {
    * invoke other APIs) only the first `withOrigin` is captured because that is closer to the user
    * code.
    *
+   * `withOrigin` has non-trivial performance overhead, since it collects a stack trace. This
+   * feature can be disabled by setting "spark.sql.dataFrameQueryContext.enabled" to "false".
+   *
    * @param f
    *   The function that can use the origin.
    * @return
    *   The result of `f`.
    */
   private[sql] def withOrigin[T](f: => T): T = {
-    if (CurrentOrigin.get.stackTrace.isDefined) {
+    if (CurrentOrigin.get.stackTrace.isDefined || !SqlApiConf.get.dataFrameQueryContextEnabled) {
       f
     } else {
       val st = Thread.currentThread().getStackTrace
@@ -124,11 +148,13 @@ object CurrentOrigin {
     }
   }
 
-  private val sparkCodePattern = Pattern.compile("(org\\.apache\\.spark\\.sql\\." +
-    "(?:api\\.)?" +
-    "(?:functions|Column|ColumnName|SQLImplicits|Dataset|DataFrameStatFunctions|DatasetHolder)" +
-    "(?:|\\..*|\\$.*))" +
-    "|(scala\\.collection\\..*)")
+  private val sparkCodePattern = Pattern.compile(
+    "(org\\.apache\\.spark\\.sql\\." +
+      "(?:(classic|connect)\\.)?" +
+      "(?:functions|Column|ColumnName|SQLImplicits|Dataset|DataFrameStatFunctions|DatasetHolder" +
+      "|SparkSession|ColumnNodeToProtoConverter)" +
+      "(?:|\\..*|\\$.*))" +
+      "|(scala\\.collection\\..*)")
 
   private def sparkCode(ste: StackTraceElement): Boolean = {
     sparkCodePattern.matcher(ste.getClassName).matches()

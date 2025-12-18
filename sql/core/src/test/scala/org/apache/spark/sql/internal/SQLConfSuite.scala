@@ -17,16 +17,19 @@
 
 package org.apache.spark.sql.internal
 
-import java.util.{Locale, TimeZone}
+import java.util.TimeZone
 
 import org.apache.hadoop.fs.Path
 import org.apache.logging.log4j.Level
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkIllegalArgumentException, SparkNoSuchElementException}
-import org.apache.spark.sql._
+import org.apache.spark.network.util.ByteUnit
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.MIT
+import org.apache.spark.sql.classic.{SparkSession, SQLContext}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetCompressionCodec.{GZIP, LZO}
+import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
 import org.apache.spark.util.Utils
@@ -233,17 +236,24 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     // static sql configs
     checkError(
       exception = intercept[AnalysisException](sql(s"RESET ${StaticSQLConf.WAREHOUSE_PATH.key}")),
-      condition = "_LEGACY_ERROR_TEMP_1325",
-      parameters = Map("key" -> "spark.sql.warehouse.dir"))
+      condition = "CANNOT_MODIFY_STATIC_CONFIG",
+      parameters = Map("key" -> "\"spark.sql.warehouse.dir\""))
 
   }
 
   test("invalid conf value") {
-    val e = intercept[IllegalArgumentException] {
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "10") {
-      }
-    }
-    assert(e.getMessage === s"${SQLConf.CASE_SENSITIVE.key} should be boolean, but was 10")
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "10") {
+          sql(s"SET ${SQLConf.CASE_SENSITIVE.key}")
+        }
+      },
+      condition = "INVALID_CONF_VALUE.TYPE_MISMATCH",
+      parameters = Map(
+        "confName" -> SQLConf.CASE_SENSITIVE.key,
+        "confValue" -> "10",
+        "confType" -> "boolean")
+    )
   }
 
   test("Test ADVISORY_PARTITION_SIZE_IN_BYTES's method") {
@@ -262,20 +272,41 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     assert(sqlConf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES) === 1073741824)
 
     // test negative value
-    intercept[IllegalArgumentException] {
-      spark.conf.set(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key, "-1")
-    }
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        spark.conf.set(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key, "-1k")
+      },
+      condition = "INVALID_CONF_VALUE.REQUIREMENT",
+      parameters = Map(
+        "confName" -> "spark.sql.adaptive.shuffle.targetPostShuffleInputSize",
+        "confValue" -> "-1024b",
+        "confRequirement" -> "advisoryPartitionSizeInBytes must be positive")
+    )
 
     // Test overflow exception
-    intercept[IllegalArgumentException] {
-      // This value exceeds Long.MaxValue
-      spark.conf.set(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key, "90000000000g")
-    }
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        // This value exceeds Long.MaxValue
+        spark.conf.set(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key, "90000000000g")
+      },
+      condition = "INVALID_CONF_VALUE.TYPE_MISMATCH",
+      parameters = Map(
+        "confName" -> "spark.sql.adaptive.shuffle.targetPostShuffleInputSize",
+        "confValue" -> "90000000000g",
+        "confType" -> s"bytes in ${ByteUnit.BYTE}")
+    )
 
-    intercept[IllegalArgumentException] {
-      // This value less than Long.MinValue
-      spark.conf.set(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key, "-90000000000g")
-    }
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        // This value less than Long.MinValue
+        spark.conf.set(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key, "-90000000000g")
+      },
+      condition = "INVALID_CONF_VALUE.TYPE_MISMATCH",
+      parameters = Map(
+        "confName" -> "spark.sql.adaptive.shuffle.targetPostShuffleInputSize",
+        "confValue" -> "-90000000000g",
+        "confType" -> s"bytes in ${ByteUnit.BYTE}")
+    )
 
     sqlConf.clear()
   }
@@ -315,10 +346,16 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
   }
 
   test("cannot set/unset static SQL conf") {
-    val e1 = intercept[AnalysisException](sql(s"SET ${GLOBAL_TEMP_DATABASE.key}=10"))
-    assert(e1.message.contains("Cannot modify the value of a static config"))
-    val e2 = intercept[AnalysisException](spark.conf.unset(GLOBAL_TEMP_DATABASE.key))
-    assert(e2.message.contains("Cannot modify the value of a static config"))
+    checkError(
+      exception = intercept[AnalysisException](sql(s"SET ${GLOBAL_TEMP_DATABASE.key}=10")),
+      condition = "CANNOT_MODIFY_STATIC_CONFIG",
+      parameters = Map("key" -> "\"spark.sql.globalTempDatabase\"")
+    )
+    checkError(
+      exception = intercept[AnalysisException](spark.conf.unset(GLOBAL_TEMP_DATABASE.key)),
+      condition = "CANNOT_MODIFY_STATIC_CONFIG",
+      parameters = Map("key" -> "\"spark.sql.globalTempDatabase\"")
+    )
   }
 
   test("SPARK-36643: Show migration guide when attempting SparkConf") {
@@ -344,10 +381,11 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     assert(spark.sessionState.conf.parquetOutputTimestampType ==
       SQLConf.ParquetOutputTimestampType.INT96)
 
-    sqlConf.setConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE, "timestamp_micros")
+    sqlConf.setConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE,
+      ParquetOutputTimestampType.TIMESTAMP_MICROS)
     assert(spark.sessionState.conf.parquetOutputTimestampType ==
-      SQLConf.ParquetOutputTimestampType.TIMESTAMP_MICROS)
-    sqlConf.setConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE, "int96")
+      ParquetOutputTimestampType.TIMESTAMP_MICROS)
+    sqlConf.setConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE, ParquetOutputTimestampType.INT96)
     assert(spark.sessionState.conf.parquetOutputTimestampType ==
       SQLConf.ParquetOutputTimestampType.INT96)
 
@@ -486,8 +524,8 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     val sqlText = "set time zone interval 19 hours"
     checkError(
       exception = intercept[ParseException](sql(sqlText)),
-      condition = "_LEGACY_ERROR_TEMP_0044",
-      parameters = Map.empty,
+      condition = "INVALID_INTERVAL_FORMAT.TIMEZONE_INTERVAL_OUT_OF_RANGE",
+      parameters = Map("input" -> "19"),
       context = ExpectedContext(sqlText, 0, 30))
   }
 
@@ -501,35 +539,59 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
          |""".stripMargin)
   }
 
-  test("SPARK-47765: set collation") {
-    Seq("UNICODE", "UNICODE_CI", "utf8_lcase", "utf8_binary").foreach { collation =>
-      sql(s"set collation $collation")
-      assert(sqlConf.getConf(SQLConf.DEFAULT_COLLATION) === collation.toUpperCase(Locale.ROOT))
-    }
-
-    checkError(
-      exception = intercept[SparkIllegalArgumentException] {
-        sql(s"SET COLLATION unicode_c").collect()
-      },
-      condition = "INVALID_CONF_VALUE.DEFAULT_COLLATION",
-      parameters = Map(
-        "confValue" -> "UNICODE_C",
-        "confName" -> "spark.sql.session.collation.default",
-        "proposals" -> "UNICODE"
-      ))
-
-    withSQLConf(SQLConf.TRIM_COLLATION_ENABLED.key -> "false") {
-      checkError(
-        exception = intercept[AnalysisException](sql(s"SET COLLATION UNICODE_CI_RTRIM")),
-        condition = "UNSUPPORTED_FEATURE.TRIM_COLLATION"
-      )
-    }
-  }
-
   test("SPARK-43028: config not found error") {
     checkError(
       exception = intercept[SparkNoSuchElementException](spark.conf.get("some.conf")),
       condition = "SQL_CONF_NOT_FOUND",
       parameters = Map("sqlConf" -> "\"some.conf\""))
+  }
+
+  test("SPARK-51874: Add Enum support to ConfigBuilder") {
+    assert(spark.conf.get(SQLConf.LEGACY_TIME_PARSER_POLICY) === LegacyBehaviorPolicy.CORRECTED)
+
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        spark.conf.set(SQLConf.LEGACY_TIME_PARSER_POLICY.key, "invalid")
+      },
+      condition = "INVALID_CONF_VALUE.OUT_OF_RANGE_OF_OPTIONS",
+      parameters = Map(
+        "confName" -> SQLConf.LEGACY_TIME_PARSER_POLICY.key,
+        "confValue" -> "invalid",
+        "confOptions" -> LegacyBehaviorPolicy.values.mkString(", ")))
+  }
+
+  test("[SPARK-54063] STATE_STORE_FORCE_SNAPSHOT_UPLOAD_ON_LAG requires " +
+    "STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG") {
+    // This should work fine - both enabled
+    withSQLConf(
+      SQLConf.STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG.key -> "true",
+      SQLConf.STATE_STORE_FORCE_SNAPSHOT_UPLOAD_ON_LAG.key -> "true") {
+      assert(spark.sessionState.conf.stateStoreForceSnapshotUploadOnLag === true)
+    }
+
+    // This should work fine - both disabled
+    withSQLConf(
+      SQLConf.STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG.key -> "false",
+      SQLConf.STATE_STORE_FORCE_SNAPSHOT_UPLOAD_ON_LAG.key -> "false") {
+      assert(spark.sessionState.conf.stateStoreForceSnapshotUploadOnLag === false)
+    }
+
+    // This should work fine - report enabled, force disabled
+    withSQLConf(
+      SQLConf.STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG.key -> "true",
+      SQLConf.STATE_STORE_FORCE_SNAPSHOT_UPLOAD_ON_LAG.key -> "false") {
+      assert(spark.sessionState.conf.stateStoreForceSnapshotUploadOnLag === false)
+    }
+
+    // This should throw - force enabled but report disabled
+    val e = intercept[IllegalArgumentException] {
+      withSQLConf(
+        SQLConf.STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG.key -> "false",
+        SQLConf.STATE_STORE_FORCE_SNAPSHOT_UPLOAD_ON_LAG.key -> "true") {
+        spark.sessionState.conf.stateStoreForceSnapshotUploadOnLag
+      }
+    }
+    assert(e.getMessage.contains("forceSnapshotUploadOnLag"))
+    assert(e.getMessage.contains("coordinatorReportSnapshotUploadLag"))
   }
 }

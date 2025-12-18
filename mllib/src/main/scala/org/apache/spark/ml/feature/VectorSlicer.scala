@@ -99,7 +99,9 @@ final class VectorSlicer @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
   override def transform(dataset: Dataset[_]): DataFrame = {
     // Validity checks
     transformSchema(dataset.schema)
-    val inputAttr = AttributeGroup.fromStructField(dataset.schema($(inputCol)))
+    val inputAttr = AttributeGroup.fromStructField(
+      SchemaUtils.getSchemaField(dataset.schema, $(inputCol))
+    )
     if ($(indices).nonEmpty) {
       val size = inputAttr.size
       if (size >= 0) {
@@ -130,7 +132,9 @@ final class VectorSlicer @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
 
   /** Get the feature indices in order: indices, names */
   private def getSelectedFeatureIndices(schema: StructType): Array[Int] = {
-    val nameFeatures = MetadataUtils.getFeatureIndicesFromNames(schema($(inputCol)), $(names))
+    val nameFeatures = MetadataUtils.getFeatureIndicesFromNames(
+      SchemaUtils.getSchemaField(schema, $(inputCol)), $(names)
+    )
     val indFeatures = $(indices)
     val numDistinctFeatures = (nameFeatures ++ indFeatures).distinct.length
     lazy val errMsg = "VectorSlicer requires indices and names to be disjoint" +

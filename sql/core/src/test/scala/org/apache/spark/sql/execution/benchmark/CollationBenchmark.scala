@@ -19,7 +19,9 @@ package org.apache.spark.sql.execution.benchmark
 import scala.concurrent.duration._
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
+import org.apache.spark.sql.catalyst.expressions.Murmur3HashFunction
 import org.apache.spark.sql.catalyst.util.{CollationFactory, CollationSupport}
+import org.apache.spark.sql.types.StringType
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class CollationBenchmarkBase extends BenchmarkBase {
@@ -92,7 +94,7 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
         sublistStrings.foreach { _ =>
           utf8Strings.foreach { s =>
             (0 to 3).foreach { _ =>
-              collation.hashFunction.applyAsLong(s)
+              Murmur3HashFunction.hash(s, StringType(collationType), 42L, true, false).toInt
             }
           }
         }
@@ -113,13 +115,13 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       warmupTime = 10.seconds,
       output = output)
     collationTypes.foreach { collationType => {
-      val collation = CollationFactory.fetchCollation(collationType)
+      val collationId = CollationFactory.collationNameToId(collationType)
       benchmark.addCase(s"$collationType") { _ =>
         sublistStrings.foreach { s1 =>
           utf8Strings.foreach { s =>
             (0 to 3).foreach { _ =>
               CollationSupport.Contains.exec(
-                s, s1, CollationFactory.collationNameToId(collation.collationName)
+                s, s1, collationId
               )
             }
           }
@@ -141,13 +143,13 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       warmupTime = 10.seconds,
       output = output)
     collationTypes.foreach { collationType => {
-      val collation = CollationFactory.fetchCollation(collationType)
+      val collationId = CollationFactory.collationNameToId(collationType)
       benchmark.addCase(s"$collationType") { _ =>
         sublistStrings.foreach { s1 =>
           utf8Strings.foreach { s =>
             (0 to 3).foreach { _ =>
               CollationSupport.StartsWith.exec(
-                s, s1, CollationFactory.collationNameToId(collation.collationName)
+                s, s1, collationId
               )
             }
           }
@@ -169,13 +171,13 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
       warmupTime = 10.seconds,
       output = output)
     collationTypes.foreach { collationType => {
-      val collation = CollationFactory.fetchCollation(collationType)
+      val collationId = CollationFactory.collationNameToId(collationType)
       benchmark.addCase(s"$collationType") { _ =>
         sublistStrings.foreach { s1 =>
           utf8Strings.foreach { s =>
             (0 to 3).foreach { _ =>
               CollationSupport.EndsWith.exec(
-                s, s1, CollationFactory.collationNameToId(collation.collationName)
+                s, s1, collationId
               )
             }
           }
@@ -184,6 +186,48 @@ abstract class CollationBenchmarkBase extends BenchmarkBase {
     }
     }
     benchmark.run(relativeTime = true)
+  }
+
+  def benchmarkInitCap(
+      collationTypes: Seq[String],
+      utf8Strings: Seq[UTF8String]): Unit = {
+    type CollationId = Int
+    type InitCapEstimator = (UTF8String, CollationId) => Unit
+    def skipCollationTypeFilter: Any => Boolean = _ => true
+    def createBenchmark(
+        implName: String,
+        impl: InitCapEstimator,
+        collationTypeFilter: String => Boolean): Unit = {
+      val benchmark = new Benchmark(
+        s"collation unit benchmarks - initCap using impl $implName",
+        utf8Strings.size * 10,
+        warmupTime = 10.seconds,
+        output = output)
+      collationTypes.filter(collationTypeFilter).foreach { collationType => {
+        val collationId = CollationFactory.collationNameToId(collationType)
+        benchmark.addCase(collationType) { _ =>
+          utf8Strings.foreach { s =>
+            impl(s.repeat(1_000), collationId)
+          }
+        }
+      }
+      }
+      benchmark.run(relativeTime = true)
+    }
+
+    createBenchmark(
+      "execICU",
+      (s, collationId) => CollationSupport.InitCap.execICU(s, collationId),
+      collationType => CollationFactory.fetchCollation(collationType).getCollator != null)
+    createBenchmark(
+      "execBinaryICU",
+      (s, _) => CollationSupport.InitCap.execBinaryICU(s), skipCollationTypeFilter)
+    createBenchmark(
+      "execBinary",
+      (s, _) => CollationSupport.InitCap.execBinary(s), skipCollationTypeFilter)
+    createBenchmark(
+      "execLowercase",
+      (s, _) => CollationSupport.InitCap.execLowercase(s), skipCollationTypeFilter)
   }
 }
 
@@ -219,6 +263,7 @@ object CollationBenchmark extends CollationBenchmarkBase {
     benchmarkContains(collationTypes, inputs)
     benchmarkStartsWith(collationTypes, inputs)
     benchmarkEndsWith(collationTypes, inputs)
+    benchmarkInitCap(collationTypes, inputs)
   }
 }
 
@@ -248,5 +293,6 @@ object CollationNonASCIIBenchmark extends CollationBenchmarkBase {
     benchmarkContains(collationTypes, inputs)
     benchmarkStartsWith(collationTypes, inputs)
     benchmarkEndsWith(collationTypes, inputs)
+    benchmarkInitCap(collationTypes, inputs)
   }
 }

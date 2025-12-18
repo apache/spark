@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.jdbc
+package org.apache.spark.sql.jdbc.querytest
 
 import java.sql.{Connection, ResultSet, Statement}
 import java.util.Locale
@@ -24,13 +24,14 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.{QueryGeneratorHelper, QueryTest}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.jdbc.{DockerJDBCIntegrationSuite, PostgresDatabaseOnDocker}
 import org.apache.spark.tags.DockerTest
 
 /**
  * This suite is used to generate subqueries, and test Spark against Postgres.
- * To run this test suite for a specific version (e.g., postgres:17.0-alpine):
+ * To run this test suite for a specific version (e.g., postgres:17.2-alpine):
  * {{{
- *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:17.0-alpine
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:17.2-alpine
  *     ./build/sbt -Pdocker-integration-tests
  *     "docker-integration-tests/testOnly org.apache.spark.sql.jdbc.GeneratedSubquerySuite"
  * }}}
@@ -38,16 +39,7 @@ import org.apache.spark.tags.DockerTest
 @DockerTest
 class GeneratedSubquerySuite extends DockerJDBCIntegrationSuite with QueryGeneratorHelper {
 
-  override val db = new DatabaseOnDocker {
-    override val imageName = sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:17.0-alpine")
-    override val env = Map(
-      "POSTGRES_PASSWORD" -> "rootpass"
-    )
-    override val usesIpc = false
-    override val jdbcPort = 5432
-    override def getJdbcUrl(ip: String, port: Int): String =
-      s"jdbc:postgresql://$ip:$port/postgres?user=postgres&password=rootpass"
-  }
+  override val db = new PostgresDatabaseOnDocker
 
   private val FIRST_COLUMN = "a"
   private val SECOND_COLUMN = "b"

@@ -18,36 +18,22 @@ package org.apache.spark.sql.streaming
 
 import java.io.Serializable
 
-import org.apache.spark.annotation.{Evolving, Experimental}
+import org.apache.spark.annotation.Evolving
 import org.apache.spark.sql.Encoder
 
 /**
  * Represents the operation handle provided to the stateful processor used in the arbitrary state
  * API v2.
  */
-@Experimental
 @Evolving
-private[sql] trait StatefulProcessorHandle extends Serializable {
-
-  /**
-   * Function to create new or return existing single value state variable of given type. The user
-   * must ensure to call this function only within the `init()` method of the StatefulProcessor.
-   *
-   * @param stateName
-   *   \- name of the state variable
-   * @param valEncoder
-   *   \- SQL encoder for state variable
-   * @tparam T
-   *   \- type of state variable
-   * @return
-   *   \- instance of ValueState of type T that can be used to store state persistently
-   */
-  def getValueState[T](stateName: String, valEncoder: Encoder[T]): ValueState[T]
+trait StatefulProcessorHandle extends Serializable {
 
   /**
    * Function to create new or return existing single value state variable of given type with ttl.
    * State values will not be returned past ttlDuration, and will be eventually removed from the
    * state store. Any state update resets the ttl to current processing time plus ttlDuration.
+   * Users can use the helper method `TTLConfig.NONE` in Scala or `TTLConfig.NONE()` in Java for
+   * the TTLConfig parameter to disable TTL for the state variable.
    *
    * The user must ensure to call this function only within the `init()` method of the
    * StatefulProcessor.
@@ -60,6 +46,7 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
    *   \- the ttl configuration (time to live duration etc.)
    * @tparam T
    *   \- type of state variable
+   *
    * @return
    *   \- instance of ValueState of type T that can be used to store state persistently
    */
@@ -69,25 +56,35 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
       ttlConfig: TTLConfig): ValueState[T]
 
   /**
-   * Creates new or returns existing list state associated with stateName. The ListState persists
-   * values of type T.
+   * (Scala-specific) Function to create new or return existing single value state variable of
+   * given type with ttl. State values will not be returned past ttlDuration, and will be
+   * eventually removed from the state store. Any state update resets the ttl to current
+   * processing time plus ttlDuration. Users can use the helper method `TTLConfig.NONE` in Scala
+   * or `TTLConfig.NONE()` in Java for the TTLConfig parameter to disable TTL for the state
+   * variable.
+   *
+   * The user must ensure to call this function only within the `init()` method of the
+   * StatefulProcessor. Note that this API uses the implicit SQL encoder in Scala.
    *
    * @param stateName
    *   \- name of the state variable
-   * @param valEncoder
-   *   \- SQL encoder for state variable
+   * @param ttlConfig
+   *   \- the ttl configuration (time to live duration etc.)
    * @tparam T
    *   \- type of state variable
+   *
    * @return
-   *   \- instance of ListState of type T that can be used to store state persistently
+   *   \- instance of ValueState of type T that can be used to store state persistently
    */
-  def getListState[T](stateName: String, valEncoder: Encoder[T]): ListState[T]
+  def getValueState[T: Encoder](stateName: String, ttlConfig: TTLConfig): ValueState[T]
 
   /**
    * Function to create new or return existing list state variable of given type with ttl. State
    * values will not be returned past ttlDuration, and will be eventually removed from the state
    * store. Any values in listState which have expired after ttlDuration will not be returned on
-   * get() and will be eventually removed from the state.
+   * get() and will be eventually removed from the state. Users can use the helper method
+   * `TTLConfig.NONE` in Scala or `TTLConfig.NONE()` in Java for the TTLConfig parameter to
+   * disable TTL for the state variable.
    *
    * The user must ensure to call this function only within the `init()` method of the
    * StatefulProcessor.
@@ -100,6 +97,7 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
    *   \- the ttl configuration (time to live duration etc.)
    * @tparam T
    *   \- type of state variable
+   *
    * @return
    *   \- instance of ListState of type T that can be used to store state persistently
    */
@@ -109,32 +107,35 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
       ttlConfig: TTLConfig): ListState[T]
 
   /**
-   * Creates new or returns existing map state associated with stateName. The MapState persists
-   * Key-Value pairs of type [K, V].
+   * (Scala-specific) Function to create new or return existing list state variable of given type
+   * with ttl. State values will not be returned past ttlDuration, and will be eventually removed
+   * from the state store. Any values in listState which have expired after ttlDuration will not
+   * be returned on get() and will be eventually removed from the state. Users can use the helper
+   * method `TTLConfig.NONE` in Scala or `TTLConfig.NONE()` in Java for the TTLConfig parameter to
+   * disable TTL for the state variable.
+   *
+   * The user must ensure to call this function only within the `init()` method of the
+   * StatefulProcessor. Note that this API uses the implicit SQL encoder in Scala.
    *
    * @param stateName
    *   \- name of the state variable
-   * @param userKeyEnc
-   *   \- spark sql encoder for the map key
-   * @param valEncoder
-   *   \- spark sql encoder for the map value
-   * @tparam K
-   *   \- type of key for map state variable
-   * @tparam V
-   *   \- type of value for map state variable
+   * @param ttlConfig
+   *   \- the ttl configuration (time to live duration etc.)
+   * @tparam T
+   *   \- type of state variable
+   *
    * @return
-   *   \- instance of MapState of type [K,V] that can be used to store state persistently
+   *   \- instance of ListState of type T that can be used to store state persistently
    */
-  def getMapState[K, V](
-      stateName: String,
-      userKeyEnc: Encoder[K],
-      valEncoder: Encoder[V]): MapState[K, V]
+  def getListState[T: Encoder](stateName: String, ttlConfig: TTLConfig): ListState[T]
 
   /**
    * Function to create new or return existing map state variable of given type with ttl. State
    * values will not be returned past ttlDuration, and will be eventually removed from the state
    * store. Any values in mapState which have expired after ttlDuration will not returned on get()
-   * and will be eventually removed from the state.
+   * and will be eventually removed from the state. Users can use the helper method
+   * `TTLConfig.NONE` in Scala or `TTLConfig.NONE()` in Java for the TTLConfig parameter to
+   * disable TTL for the state variable.
    *
    * The user must ensure to call this function only within the `init()` method of the
    * StatefulProcessor.
@@ -151,6 +152,7 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
    *   \- type of key for map state variable
    * @tparam V
    *   \- type of value for map state variable
+   *
    * @return
    *   \- instance of MapState of type [K,V] that can be used to store state persistently
    */
@@ -160,12 +162,42 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
       valEncoder: Encoder[V],
       ttlConfig: TTLConfig): MapState[K, V]
 
-  /** Function to return queryInfo for currently running task */
+  /**
+   * (Scala-specific) Function to create new or return existing map state variable of given type
+   * with ttl. State values will not be returned past ttlDuration, and will be eventually removed
+   * from the state store. Any values in mapState which have expired after ttlDuration will not be
+   * returned on get() and will be eventually removed from the state. Users can use the helper
+   * method `TTLConfig.NONE` in Scala or `TTLConfig.NONE()` in Java for the TTLConfig parameter to
+   * disable TTL for the state variable.
+   *
+   * The user must ensure to call this function only within the `init()` method of the
+   * StatefulProcessor. Note that this API uses the implicit SQL encoder in Scala.
+   *
+   * @param stateName
+   *   \- name of the state variable
+   * @param ttlConfig
+   *   \- the ttl configuration (time to live duration etc.)
+   * @tparam K
+   *   \- type of key for map state variable
+   * @tparam V
+   *   \- type of value for map state variable
+   *
+   * @return
+   *   \- instance of MapState of type [K,V] that can be used to store state persistently
+   */
+  def getMapState[K: Encoder, V: Encoder](stateName: String, ttlConfig: TTLConfig): MapState[K, V]
+
+  /**
+   * Function to return query info for the current query
+   *
+   * @return - QueryInfo object with access to streaming query metadata
+   */
   def getQueryInfo(): QueryInfo
 
   /**
    * Function to register a processing/event time based timer for given implicit grouping key and
    * provided timestamp
+   *
    * @param expiryTimestampMs
    *   \- timer expiry timestamp in milliseconds
    */
@@ -174,6 +206,7 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
   /**
    * Function to delete a processing/event time based timer for given implicit grouping key and
    * provided timestamp
+   *
    * @param expiryTimestampMs
    *   \- timer expiry timestamp in milliseconds
    */
@@ -184,6 +217,7 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
    * listTimers() within the `handleInputRows` method of the StatefulProcessor will return all the
    * unprocessed registered timers, including the one being fired within the invocation of
    * `handleInputRows`.
+   *
    * @return
    *   \- list of all the registered timers for given implicit grouping key
    */
@@ -191,6 +225,7 @@ private[sql] trait StatefulProcessorHandle extends Serializable {
 
   /**
    * Function to delete and purge state variable if defined previously
+   *
    * @param stateName
    *   \- name of the state variable
    */

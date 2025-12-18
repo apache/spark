@@ -24,13 +24,13 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{COUNT, ELAPSED_TIME}
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.FileSourceOptions
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.execution.streaming.FileStreamSink
+import org.apache.spark.sql.execution.streaming.sinks.FileStreamSink
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.HadoopFSUtils
 
@@ -103,7 +103,8 @@ class InMemoryFileIndex(
   }
 
   override def equals(other: Any): Boolean = other match {
-    case hdfs: InMemoryFileIndex => rootPaths.toSet == hdfs.rootPaths.toSet
+    case hdfs: InMemoryFileIndex if rootPaths.size == hdfs.rootPaths.size =>
+      rootPaths.sorted == hdfs.rootPaths.sorted
     case _ => false
   }
 

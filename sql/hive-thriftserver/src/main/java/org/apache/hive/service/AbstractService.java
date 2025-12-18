@@ -88,7 +88,7 @@ public abstract class AbstractService implements Service {
     ensureCurrentState(STATE.NOTINITED);
     this.hiveConf = hiveConf;
     changeState(STATE.INITED);
-    LOG.info("Service:{} is inited.", MDC.of(LogKeys.SERVICE_NAME$.MODULE$, getName()));
+    LOG.info("Service:{} is inited.", MDC.of(LogKeys.SERVICE_NAME, getName()));
   }
 
   /**
@@ -103,7 +103,7 @@ public abstract class AbstractService implements Service {
     startTime = System.currentTimeMillis();
     ensureCurrentState(STATE.INITED);
     changeState(STATE.STARTED);
-    LOG.info("Service:{} is started.", MDC.of(LogKeys.SERVICE_NAME$.MODULE$, getName()));
+    LOG.info("Service:{} is started.", MDC.of(LogKeys.SERVICE_NAME, getName()));
   }
 
   /**
@@ -124,7 +124,7 @@ public abstract class AbstractService implements Service {
     }
     ensureCurrentState(STATE.STARTED);
     changeState(STATE.STOPPED);
-    LOG.info("Service:{} is stopped.", MDC.of(LogKeys.SERVICE_NAME$.MODULE$, getName()));
+    LOG.info("Service:{} is stopped.", MDC.of(LogKeys.SERVICE_NAME, getName()));
   }
 
   @Override

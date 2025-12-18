@@ -28,7 +28,7 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.EventFilter.FilterStatistics
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.scheduler.ReplayListenerBus
 import org.apache.spark.util.Utils

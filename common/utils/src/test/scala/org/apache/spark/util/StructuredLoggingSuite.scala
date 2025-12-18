@@ -23,13 +23,20 @@ import java.nio.file.Files
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.logging.log4j.Level
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
-import org.apache.spark.internal.{LogEntry, Logging, LogKey, LogKeys, MDC, MessageWithContext}
+import org.apache.spark.internal.{LogEntry, Logging, LogKeys, MessageWithContext}
 
 trait LoggingSuiteBase
     extends AnyFunSuite // scalastyle:ignore funsuite
+    with BeforeAndAfterAll
     with Logging {
+
+  override def afterAll(): Unit = {
+    super.afterAll()
+    Logging.disableStructuredLogging()
+  }
 
   def className: String
   def logFilePath: String
@@ -202,7 +209,7 @@ trait LoggingSuiteBase
       }
   }
 
-  private val customLog = log"${MDC(CustomLogKeys.CUSTOM_LOG_KEY, "Custom log message.")}"
+  private lazy val customLog = log"${MDC(CustomLogKeys.CUSTOM_LOG_KEY, "Custom log message.")}"
   test("Logging with custom LogKey") {
     Seq(
       (Level.ERROR, () => logError(customLog)),
@@ -264,6 +271,13 @@ trait LoggingSuiteBase
 class StructuredLoggingSuite extends LoggingSuiteBase {
   override def className: String = classOf[StructuredLoggingSuite].getSimpleName
   override def logFilePath: String = "target/structured.log"
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    Logging.enableStructuredLogging()
+  }
+
+  override def afterAll(): Unit = super.afterAll()
 
   private val jsonMapper = new ObjectMapper().registerModule(DefaultScalaModule)
   private def compactAndToRegexPattern(json: String): String = {
@@ -476,9 +490,4 @@ class StructuredLoggingSuite extends LoggingSuiteBase {
     val logOutputWithoutMDCSet = captureLogOutput(() => logInfo(msgWithMDC))
     assert(mdcPattern.r.findFirstIn(logOutputWithoutMDCSet).isEmpty)
   }
-}
-
-object CustomLogKeys {
-  // Custom `LogKey` must be `extends LogKey`
-  case object CUSTOM_LOG_KEY extends LogKey
 }

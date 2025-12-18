@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.python
 
 import java.io.DataOutputStream
+import java.util
 
 import org.apache.spark.api.python._
 import org.apache.spark.sql.catalyst.InternalRow
@@ -38,27 +39,56 @@ class ArrowPythonUDTFRunner(
     protected override val schema: StructType,
     protected override val timeZoneId: String,
     protected override val largeVarTypes: Boolean,
-    protected override val workerConf: Map[String, String],
+    protected override val runnerConf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
-    jobArtifactUUID: Option[String])
+    jobArtifactUUID: Option[String],
+    sessionUUID: Option[String])
   extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](
       Seq(ChainedPythonFunctions(Seq(udtf.func))), evalType, Array(argMetas.map(_.offset)),
-      jobArtifactUUID)
-  with BasicPythonArrowInput
+      jobArtifactUUID, pythonMetrics)
+  with BatchedPythonArrowInput
   with BasicPythonArrowOutput {
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
+    // For arrow-optimized Python UDTFs (@udtf(useArrow=True)), we need to write
+    // the schema to the worker to support UDT (user-defined type).
+    // Currently, UDT is not supported in PyArrow native UDTFs (arrow_udf)
+    if (evalType == PythonEvalType.SQL_ARROW_TABLE_UDF) {
+      PythonWorkerUtils.writeUTF(schema.json, dataOut)
+    }
+    // Write the table argument offsets for Arrow UDTFs.
+    else if (evalType == PythonEvalType.SQL_ARROW_UDTF) {
+      val tableArgOffsets = argMetas.collect {
+        case ArgumentMetadata(offset, _, isTableArg) if isTableArg => offset
+      }
+      dataOut.writeInt(tableArgOffsets.length)
+      tableArgOffsets.foreach(dataOut.writeInt(_))
+    }
     PythonUDTFRunner.writeUDTF(dataOut, udtf, argMetas)
   }
 
+  override val envVars: util.Map[String, String] = {
+    val envVars = new util.HashMap(funcs.head.funcs.head.envVars)
+    sessionUUID.foreach { uuid =>
+      envVars.put("PYSPARK_SPARK_SESSION_UUID", uuid)
+    }
+    envVars
+  }
   override val pythonExec: String =
     SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
       funcs.head.funcs.head.pythonExec)
 
   override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
+  override val idleTimeoutSeconds: Long = SQLConf.get.pythonUDFWorkerIdleTimeoutSeconds
+  override val killOnIdleTimeout: Boolean = SQLConf.get.pythonUDFWorkerKillOnIdleTimeout
+  override val tracebackDumpIntervalSeconds: Long =
+    SQLConf.get.pythonUDFWorkerTracebackDumpIntervalSeconds
+  override val killWorkerOnFlushFailure: Boolean =
+    SQLConf.get.pythonUDFDaemonKillWorkerOnFlushFailure
 
   override val errorOnDuplicatedFieldNames: Boolean = true
 
+  override val hideTraceback: Boolean = SQLConf.get.pysparkHideTraceback
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
   override val bufferSize: Int = SQLConf.get.pandasUDFBufferSize

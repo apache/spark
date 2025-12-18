@@ -87,7 +87,7 @@ Project [(cast(cast(1 as tinyint) as decimal(3,0)) / cast(1 as decimal(10,0))) A
 -- !query
 SELECT cast(1 as tinyint) / cast(1 as string) FROM t
 -- !query analysis
-Project [(cast(cast(1 as tinyint) as double) / cast(cast(cast(1 as string) as double) as double)) AS (CAST(1 AS TINYINT) / CAST(1 AS STRING))#x]
+Project [(cast(cast(cast(1 as tinyint) as bigint) as double) / cast(cast(cast(1 as string) as bigint) as double)) AS (CAST(1 AS TINYINT) / CAST(1 AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -263,7 +263,7 @@ Project [(cast(cast(1 as smallint) as decimal(5,0)) / cast(1 as decimal(10,0))) 
 -- !query
 SELECT cast(1 as smallint) / cast(1 as string) FROM t
 -- !query analysis
-Project [(cast(cast(1 as smallint) as double) / cast(cast(cast(1 as string) as double) as double)) AS (CAST(1 AS SMALLINT) / CAST(1 AS STRING))#x]
+Project [(cast(cast(cast(1 as smallint) as bigint) as double) / cast(cast(cast(1 as string) as bigint) as double)) AS (CAST(1 AS SMALLINT) / CAST(1 AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -439,7 +439,7 @@ Project [(cast(cast(1 as int) as decimal(10,0)) / cast(1 as decimal(10,0))) AS (
 -- !query
 SELECT cast(1 as int) / cast(1 as string) FROM t
 -- !query analysis
-Project [(cast(cast(1 as int) as double) / cast(cast(cast(1 as string) as double) as double)) AS (CAST(1 AS INT) / CAST(1 AS STRING))#x]
+Project [(cast(cast(cast(1 as int) as bigint) as double) / cast(cast(cast(1 as string) as bigint) as double)) AS (CAST(1 AS INT) / CAST(1 AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -615,7 +615,7 @@ Project [(cast(cast(1 as bigint) as decimal(20,0)) / cast(1 as decimal(10,0))) A
 -- !query
 SELECT cast(1 as bigint) / cast(1 as string) FROM t
 -- !query analysis
-Project [(cast(cast(1 as bigint) as double) / cast(cast(cast(1 as string) as double) as double)) AS (CAST(1 AS BIGINT) / CAST(1 AS STRING))#x]
+Project [(cast(cast(1 as bigint) as double) / cast(cast(cast(1 as string) as bigint) as double)) AS (CAST(1 AS BIGINT) / CAST(1 AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -791,7 +791,7 @@ Project [(cast(cast(1 as float) as double) / cast(cast(cast(1 as decimal(10,0)) 
 -- !query
 SELECT cast(1 as float) / cast(1 as string) FROM t
 -- !query analysis
-Project [(cast(cast(1 as float) as double) / cast(cast(cast(1 as string) as double) as double)) AS (CAST(1 AS FLOAT) / CAST(1 AS STRING))#x]
+Project [(cast(cast(1 as float) as double) / cast(cast(1 as string) as double)) AS (CAST(1 AS FLOAT) / CAST(1 AS STRING))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1242,7 +1242,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 SELECT cast(1 as string) / cast(1 as tinyint) FROM t
 -- !query analysis
-Project [(cast(cast(1 as string) as double) / cast(cast(1 as tinyint) as double)) AS (CAST(1 AS STRING) / CAST(1 AS TINYINT))#x]
+Project [(cast(cast(cast(1 as string) as bigint) as double) / cast(cast(cast(1 as tinyint) as bigint) as double)) AS (CAST(1 AS STRING) / CAST(1 AS TINYINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1253,7 +1253,7 @@ Project [(cast(cast(1 as string) as double) / cast(cast(1 as tinyint) as double)
 -- !query
 SELECT cast(1 as string) / cast(1 as smallint) FROM t
 -- !query analysis
-Project [(cast(cast(1 as string) as double) / cast(cast(1 as smallint) as double)) AS (CAST(1 AS STRING) / CAST(1 AS SMALLINT))#x]
+Project [(cast(cast(cast(1 as string) as bigint) as double) / cast(cast(cast(1 as smallint) as bigint) as double)) AS (CAST(1 AS STRING) / CAST(1 AS SMALLINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1264,7 +1264,7 @@ Project [(cast(cast(1 as string) as double) / cast(cast(1 as smallint) as double
 -- !query
 SELECT cast(1 as string) / cast(1 as int) FROM t
 -- !query analysis
-Project [(cast(cast(1 as string) as double) / cast(cast(1 as int) as double)) AS (CAST(1 AS STRING) / CAST(1 AS INT))#x]
+Project [(cast(cast(cast(1 as string) as bigint) as double) / cast(cast(cast(1 as int) as bigint) as double)) AS (CAST(1 AS STRING) / CAST(1 AS INT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1275,7 +1275,7 @@ Project [(cast(cast(1 as string) as double) / cast(cast(1 as int) as double)) AS
 -- !query
 SELECT cast(1 as string) / cast(1 as bigint) FROM t
 -- !query analysis
-Project [(cast(cast(1 as string) as double) / cast(cast(1 as bigint) as double)) AS (CAST(1 AS STRING) / CAST(1 AS BIGINT))#x]
+Project [(cast(cast(cast(1 as string) as bigint) as double) / cast(cast(1 as bigint) as double)) AS (CAST(1 AS STRING) / CAST(1 AS BIGINT))#x]
 +- SubqueryAlias t
    +- View (`t`, [1#x])
       +- Project [cast(1#x as int) AS 1#x]
@@ -1319,12 +1319,23 @@ Project [(cast(cast(1 as string) as double) / cast(cast(1 as decimal(10,0)) as d
 -- !query
 SELECT cast(1 as string) / cast(1 as string) FROM t
 -- !query analysis
-Project [(cast(cast(1 as string) as double) / cast(cast(1 as string) as double)) AS (CAST(1 AS STRING) / CAST(1 AS STRING))#x]
-+- SubqueryAlias t
-   +- View (`t`, [1#x])
-      +- Project [cast(1#x as int) AS 1#x]
-         +- Project [1 AS 1#x]
-            +- OneRowRelation
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "actualDataType" : "\"STRING\"",
+    "inputType" : "(\"DOUBLE\" or \"DECIMAL\")",
+    "sqlExpr" : "\"(CAST(1 AS STRING) / CAST(1 AS STRING))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 44,
+    "fragment" : "cast(1 as string) / cast(1 as string)"
+  } ]
+}
 
 
 -- !query
@@ -1332,11 +1343,11 @@ SELECT cast(1 as string) / cast('1' as binary) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "left" : "\"DOUBLE\"",
-    "right" : "\"BINARY\"",
+    "actualDataType" : "\"BINARY\"",
+    "inputType" : "(\"DOUBLE\" or \"DECIMAL\")",
     "sqlExpr" : "\"(CAST(1 AS STRING) / CAST(1 AS BINARY))\""
   },
   "queryContext" : [ {
@@ -1354,11 +1365,11 @@ SELECT cast(1 as string) / cast(1 as boolean) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "left" : "\"DOUBLE\"",
-    "right" : "\"BOOLEAN\"",
+    "actualDataType" : "\"BOOLEAN\"",
+    "inputType" : "(\"DOUBLE\" or \"DECIMAL\")",
     "sqlExpr" : "\"(CAST(1 AS STRING) / CAST(1 AS BOOLEAN))\""
   },
   "queryContext" : [ {
@@ -1376,11 +1387,11 @@ SELECT cast(1 as string) / cast('2017-12-11 09:30:00.0' as timestamp) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "left" : "\"DOUBLE\"",
-    "right" : "\"TIMESTAMP\"",
+    "actualDataType" : "\"TIMESTAMP\"",
+    "inputType" : "(\"DOUBLE\" or \"DECIMAL\")",
     "sqlExpr" : "\"(CAST(1 AS STRING) / CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))\""
   },
   "queryContext" : [ {
@@ -1398,11 +1409,11 @@ SELECT cast(1 as string) / cast('2017-12-11 09:30:00' as date) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "left" : "\"DOUBLE\"",
-    "right" : "\"DATE\"",
+    "actualDataType" : "\"DATE\"",
+    "inputType" : "(\"DOUBLE\" or \"DECIMAL\")",
     "sqlExpr" : "\"(CAST(1 AS STRING) / CAST(2017-12-11 09:30:00 AS DATE))\""
   },
   "queryContext" : [ {
@@ -1574,11 +1585,11 @@ SELECT cast('1' as binary) / cast(1 as string) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "left" : "\"BINARY\"",
-    "right" : "\"DOUBLE\"",
+    "actualDataType" : "\"BINARY\"",
+    "inputType" : "(\"DOUBLE\" or \"DECIMAL\")",
     "sqlExpr" : "\"(CAST(1 AS BINARY) / CAST(1 AS STRING))\""
   },
   "queryContext" : [ {
@@ -1838,11 +1849,11 @@ SELECT cast(1 as boolean) / cast(1 as string) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "left" : "\"BOOLEAN\"",
-    "right" : "\"DOUBLE\"",
+    "actualDataType" : "\"BOOLEAN\"",
+    "inputType" : "(\"DOUBLE\" or \"DECIMAL\")",
     "sqlExpr" : "\"(CAST(1 AS BOOLEAN) / CAST(1 AS STRING))\""
   },
   "queryContext" : [ {
@@ -2102,11 +2113,11 @@ SELECT cast('2017-12-11 09:30:00.0' as timestamp) / cast(1 as string) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "left" : "\"TIMESTAMP\"",
-    "right" : "\"DOUBLE\"",
+    "actualDataType" : "\"TIMESTAMP\"",
+    "inputType" : "(\"DOUBLE\" or \"DECIMAL\")",
     "sqlExpr" : "\"(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) / CAST(1 AS STRING))\""
   },
   "queryContext" : [ {
@@ -2366,11 +2377,11 @@ SELECT cast('2017-12-11 09:30:00' as date) / cast(1 as string) FROM t
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_WRONG_TYPE",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "left" : "\"DATE\"",
-    "right" : "\"DOUBLE\"",
+    "actualDataType" : "\"DATE\"",
+    "inputType" : "(\"DOUBLE\" or \"DECIMAL\")",
     "sqlExpr" : "\"(CAST(2017-12-11 09:30:00 AS DATE) / CAST(1 AS STRING))\""
   },
   "queryContext" : [ {

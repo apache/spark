@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.math.BigDecimal
 import java.sql.Timestamp
-import java.time.{Instant, LocalDate}
+import java.time.{Instant, LocalDate, LocalTime}
 import java.time.format.DateTimeFormatter
 
 import scala.collection.immutable
@@ -52,6 +52,17 @@ import org.apache.spark.sql.util.QueryExecutionListener
 private case class FunctionResult(f1: String, f2: String)
 private case class LocalDateInstantType(date: LocalDate, instant: Instant)
 private case class TimestampInstantType(t: Timestamp, instant: Instant)
+
+private case class KryoEncodedBuf(value: Long)
+private case class KryoBufAggregator() extends Aggregator[Long, KryoEncodedBuf, Long] {
+  override def zero: KryoEncodedBuf = KryoEncodedBuf(0)
+  override def reduce(b: KryoEncodedBuf, a: Long): KryoEncodedBuf = KryoEncodedBuf(b.value + a)
+  override def merge(b1: KryoEncodedBuf, b2: KryoEncodedBuf): KryoEncodedBuf =
+    KryoEncodedBuf(b1.value + b2.value)
+  override def finish(reduction: KryoEncodedBuf): Long = reduction.value
+  override def bufferEncoder: Encoder[KryoEncodedBuf] = Encoders.kryo[KryoEncodedBuf]
+  override def outputEncoder: Encoder[Long] = Encoders.scalaLong
+}
 
 class UDFSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -821,14 +832,14 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val e1 = intercept[SparkException] {
       Seq("20").toDF("col").select(udf(f1).apply(Column("col"))).collect()
     }
-    assert(e1.getErrorClass == "FAILED_EXECUTE_UDF")
+    assert(e1.getCondition == "FAILED_EXECUTE_UDF")
     assert(e1.getCause.getStackTrace.head.toString.contains(
       "UDFSuite$MalformedClassObject$MalformedNonPrimitiveFunction"))
 
     val e2 = intercept[SparkException] {
       Seq(20).toDF("col").select(udf(f2).apply(Column("col"))).collect()
     }
-    assert(e2.getErrorClass == "FAILED_EXECUTE_UDF")
+    assert(e2.getCondition == "FAILED_EXECUTE_UDF")
     assert(e2.getCause.getStackTrace.head.toString.contains(
       "UDFSuite$MalformedClassObject$MalformedPrimitiveFunction"))
   }
@@ -862,7 +873,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       .select(myUdf1(Column("col"))),
     Row(ArrayBuffer(100)))
 
-     val myUdf2 = udf((a: immutable.ArraySeq[Int]) =>
+    val myUdf2 = udf((a: immutable.ArraySeq[Int]) =>
       immutable.ArraySeq.unsafeWrapArray[Int]((a :+ 5 :+ 6).toArray))
     checkAnswer(Seq(Array(1, 2, 3))
       .toDF("col")
@@ -938,7 +949,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val e = intercept[SparkException] {
       input.select(overflowFunc($"dateTime")).collect()
     }
-    assert(e.getErrorClass == "FAILED_EXECUTE_UDF")
+    assert(e.getCondition == "FAILED_EXECUTE_UDF")
     assert(e.getCause.isInstanceOf[java.lang.ArithmeticException])
   }
 
@@ -1053,7 +1064,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val e = intercept[SparkException] {
       input.select(overflowFunc($"d")).collect()
     }
-    assert(e.getErrorClass == "FAILED_EXECUTE_UDF")
+    assert(e.getCondition == "FAILED_EXECUTE_UDF")
     assert(e.getCause.isInstanceOf[java.lang.ArithmeticException])
   }
 
@@ -1101,7 +1112,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val e = intercept[SparkException] {
       input.select(overflowFunc($"p")).collect()
     }
-    assert(e.getErrorClass == "FAILED_EXECUTE_UDF")
+    assert(e.getCondition == "FAILED_EXECUTE_UDF")
     assert(e.getCause.isInstanceOf[java.lang.ArithmeticException])
   }
 
@@ -1109,7 +1120,8 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     spark.udf.register("dummyUDF", (x: Int) => x + 1)
     val expressionInfo = spark.sessionState.catalog
       .lookupFunctionInfo(FunctionIdentifier("dummyUDF"))
-    assert(expressionInfo.getClassName.contains("org.apache.spark.sql.UDFRegistration$$Lambda"))
+    assert(expressionInfo.getClassName.contains(
+      "org.apache.spark.sql.classic.UDFRegistration$$Lambda"))
   }
 
   test("SPARK-11725: correctly handle null inputs for ScalaUDF") {
@@ -1196,6 +1208,35 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       Row(Row(null)))
   }
 
+  test("SPARK-51402: Test TimeType in UDF") {
+    // Mocks
+    val mockTimeStr = "00:00:00.000000"
+    val input = Seq(LocalTime.parse(mockTimeStr)).toDF("currentTime")
+    // Regular case
+    val plusHour = udf((l: LocalTime) => l.plusHours(1))
+    val result = input.select(plusHour($"currentTime").as("newTime"))
+    checkAnswer(result, Row(LocalTime.parse("01:00:00.000000")) :: Nil)
+    assert(result.schema === new StructType().add("newTime", TimeType()))
+    // UDF produces `null`
+    val nullFunc = udf((_: LocalTime) => null.asInstanceOf[LocalTime])
+    val nullResult = input.select(nullFunc($"currentTime").as("nullTime"))
+    checkAnswer(nullResult, Row(null) :: Nil)
+    assert(nullResult.schema === new StructType().add("nullTime", TimeType()))
+    // Input parameter of UDF is null
+    val nullInput = Seq(null.asInstanceOf[LocalTime]).toDF("nullTime")
+    val constTime = udf((_: LocalTime) =>
+      LocalTime.parse(mockTimeStr))
+    val constResult = nullInput.select(constTime($"nullTime").as("zeroHour"))
+    checkAnswer(constResult, Row(LocalTime.parse(mockTimeStr)) :: Nil)
+    assert(constResult.schema === new StructType().add("zeroHour", TimeType()))
+    // Error in the conversion of UDF result to the internal representation of time
+    val invalidFunc = udf((l: LocalTime) => "Zero".toLong)
+    val e = intercept[SparkException] {
+      input.select(invalidFunc($"currentTime")).collect()
+    }
+    assert(e.getCause.isInstanceOf[java.lang.NumberFormatException])
+  }
+
   test("char/varchar as UDF return type") {
     Seq(CharType(5), VarcharType(5)).foreach { dt =>
       val f = udf(
@@ -1205,7 +1246,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
         dt
       )
       checkError(
-        intercept[AnalysisException](spark.range(1).select(f())),
+        intercept[AnalysisException](spark.range(1).select(f()).encoder),
         condition = "UNSUPPORTED_DATA_TYPE_FOR_ENCODER",
         sqlState = "0A000",
         parameters = Map("dataType" -> s"\"${dt.sql}\"")
@@ -1218,5 +1259,12 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val df = Seq(Some(1), None).toDF("c")
       .select(f($"c").as("f"), f($"f"))
     checkAnswer(df, Seq(Row(2, 3), Row(null, null)))
+  }
+
+  test("SPARK-52819: Support using Kryo to encode BUF in Aggregator") {
+    val kryoBufUDAF = udaf(KryoBufAggregator())
+    val input = Seq(1L, 2L, 3L).toDF("value")
+    val result = input.select(kryoBufUDAF($"value").as("sum"))
+    checkAnswer(result, Row(6L) :: Nil)
   }
 }

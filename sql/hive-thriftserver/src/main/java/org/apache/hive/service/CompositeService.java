@@ -73,7 +73,7 @@ public class CompositeService extends AbstractService {
       }
       super.start();
     } catch (Throwable e) {
-      LOG.error("Error starting services {}", e, MDC.of(LogKeys.SERVICE_NAME$.MODULE$, getName()));
+      LOG.error("Error starting services {}", e, MDC.of(LogKeys.SERVICE_NAME, getName()));
       // Note that the state of the failed service is still INITED and not
       // STARTED. Even though the last service is not started completely, still
       // call stop() on all services including failed service to make sure cleanup
@@ -103,7 +103,7 @@ public class CompositeService extends AbstractService {
       try {
         service.stop();
       } catch (Throwable t) {
-        LOG.info("Error stopping {}", t, MDC.of(LogKeys.SERVICE_NAME$.MODULE$, service.getName()));
+        LOG.info("Error stopping {}", t, MDC.of(LogKeys.SERVICE_NAME, service.getName()));
       }
     }
   }
@@ -127,7 +127,7 @@ public class CompositeService extends AbstractService {
         compositeService.stop();
       } catch (Throwable t) {
         LOG.info("Error stopping {}", t,
-          MDC.of(LogKeys.SERVICE_NAME$.MODULE$, compositeService.getName()));
+          MDC.of(LogKeys.SERVICE_NAME, compositeService.getName()));
       }
     }
   }

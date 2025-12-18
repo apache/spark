@@ -26,7 +26,7 @@ import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord, KafkaC
 import org.apache.kafka.common.{KafkaException, TopicPartition}
 
 import org.apache.spark.TaskContext
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.kafka010.KafkaConfigUpdater
 

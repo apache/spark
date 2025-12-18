@@ -127,6 +127,102 @@ struct<num:int,val:string,Spark:string>
 
 
 -- !query
+SELECT * FROM posexplode(collection => array(1, 2))
+-- !query schema
+struct<pos:int,col:int>
+-- !query output
+0	1
+1	2
+
+
+-- !query
+SELECT * FROM posexplode_outer(collection => map('a', 1, 'b', 2))
+-- !query schema
+struct<pos:int,key:string,value:int>
+-- !query output
+0	a	1
+1	b	2
+
+
+-- !query
+SELECT * FROM posexplode(array(1, 2)), posexplode(array(3, 4))
+-- !query schema
+struct<pos:int,col:int,pos:int,col:int>
+-- !query output
+0	1	0	3
+0	1	1	4
+1	2	0	3
+1	2	1	4
+
+
+-- !query
+SELECT * FROM posexplode(array(1, 2)) AS t, LATERAL posexplode(array(3 * t.col, 4 * t.col))
+-- !query schema
+struct<pos:int,col:int,pos:int,col:int>
+-- !query output
+0	1	0	3
+0	1	1	4
+1	2	0	6
+1	2	1	8
+
+
+-- !query
+SELECT pos, num, val, 'Spark' FROM posexplode(map(1, 'a', 2, 'b')) AS t(pos, num, val)
+-- !query schema
+struct<pos:int,num:int,val:string,Spark:string>
+-- !query output
+0	1	a	Spark
+1	2	b	Spark
+
+
+-- !query
+SELECT * FROM inline(input => array(struct(1, 'a'), struct(2, 'b')))
+-- !query schema
+struct<col1:int,col2:string>
+-- !query output
+1	a
+2	b
+
+
+-- !query
+SELECT * FROM inline_outer(input => array(struct(1, 'a'), struct(2, 'b')))
+-- !query schema
+struct<col1:int,col2:string>
+-- !query output
+1	a
+2	b
+
+
+-- !query
+SELECT * FROM inline(array(struct(1, 'a'), struct(2, 'b'))), inline(array(struct(3, 'c'), struct(4, 'd')))
+-- !query schema
+struct<col1:int,col2:string,col1:int,col2:string>
+-- !query output
+1	a	3	c
+1	a	4	d
+2	b	3	c
+2	b	4	d
+
+
+-- !query
+SELECT * FROM inline(array(struct(1, 'a'), struct(2, 'b'))) AS t, LATERAL inline(array(struct(3 * t.col1, 4 * t.col1)))
+-- !query schema
+struct<col1:int,col2:string,col1:int,col2:int>
+-- !query output
+1	a	3	4
+2	b	6	8
+
+
+-- !query
+SELECT num, val, 'Spark' FROM inline(array(struct(1, 'a'), struct(2, 'b'))) AS t(num, val)
+-- !query schema
+struct<num:int,val:string,Spark:string>
+-- !query output
+1	a	Spark
+2	b	Spark
+
+
+-- !query
 SELECT * FROM explode(collection => explode(array(1)))
 -- !query schema
 struct<>

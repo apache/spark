@@ -21,7 +21,7 @@ import java.io.File
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.{config, Logging, MDC}
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.LogKeys.RPC_ADDRESS
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util._

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector.expressions;
 
+import java.util.Objects;
+
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.internal.connector.ExpressionWithToString;
 import org.apache.spark.sql.types.DataType;
@@ -57,4 +59,19 @@ public class Cast extends ExpressionWithToString {
 
   @Override
   public Expression[] children() { return new Expression[]{ expression() }; }
+
+  @Override
+  public boolean equals(Object other) {
+    if (this == other) return true;
+    if (other == null || getClass() != other.getClass()) return false;
+    Cast that = (Cast) other;
+    return Objects.equals(expression, that.expression) &&
+        Objects.equals(expressionDataType, that.expressionDataType) &&
+        Objects.equals(dataType, that.dataType);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(expression, expressionDataType, dataType);
+  }
 }

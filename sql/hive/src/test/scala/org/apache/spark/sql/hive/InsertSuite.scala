@@ -18,14 +18,15 @@
 package org.apache.spark.sql.hive
 
 import java.io.File
+import java.nio.file.Files
 import java.util.Locale
 
-import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
-import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
+import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{QueryTest, _}
+import org.apache.spark.sql.catalyst.expressions.Hex
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.hive.execution.HiveTempPath
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -39,7 +40,7 @@ case class TestData(key: Int, value: String)
 case class ThreeColumnTable(key: Int, value: String, key1: String)
 
 class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
-    with SQLTestUtils with PrivateMethodTester {
+    with SQLTestUtils {
   import spark.implicits._
 
   override lazy val testData = spark.sparkContext.parallelize(
@@ -823,8 +824,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       withTempDir { dir =>
         val file = new File(dir, "test.hex")
         val hex = "AABBCC"
-        val bs = org.apache.commons.codec.binary.Hex.decodeHex(hex.toCharArray)
-        Files.write(bs, file)
+        Files.write(file.toPath, Hex.unhex(hex))
         val path = file.getParent
         sql(s"create table t1 (c string) STORED AS TEXTFILE location '$path'")
         checkAnswer(

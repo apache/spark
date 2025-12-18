@@ -82,7 +82,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         case ByteType => classOf[ByteColumnAccessor].getName
         case ShortType => classOf[ShortColumnAccessor].getName
         case IntegerType | DateType | _: YearMonthIntervalType => classOf[IntColumnAccessor].getName
-        case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
+        case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
           classOf[LongColumnAccessor].getName
         case FloatType => classOf[FloatColumnAccessor].getName
         case DoubleType => classOf[DoubleColumnAccessor].getName

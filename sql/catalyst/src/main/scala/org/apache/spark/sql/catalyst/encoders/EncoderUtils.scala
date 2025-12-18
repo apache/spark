@@ -18,13 +18,38 @@ package org.apache.spark.sql.catalyst.encoders
 
 import scala.collection.Map
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, CalendarIntervalEncoder, NullEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, SparkDecimalEncoder, VariantEncoder}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.types.{PhysicalBinaryType, PhysicalIntegerType, PhysicalLongType}
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CalendarIntervalType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, MapType, ObjectType, ShortType, StringType, StructType, TimestampNTZType, TimestampType, UserDefinedType, VariantType, YearMonthIntervalType}
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String, VariantVal}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CalendarIntervalType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, GeographyType, GeometryType, IntegerType, LongType, MapType, ObjectType, ShortType, StringType, StructType, TimestampNTZType, TimestampType, TimeType, UserDefinedType, VariantType, YearMonthIntervalType}
+import org.apache.spark.unsafe.types.{CalendarInterval, GeographyVal, GeometryVal, UTF8String, VariantVal}
+
+/**
+ * :: DeveloperApi ::
+ * Extensible [[AgnosticEncoder]] providing conversion extension points over type T
+ * @tparam T over T
+ */
+@DeveloperApi
+@deprecated("This trait is intended only as a migration tool and will be removed in 4.1")
+trait AgnosticExpressionPathEncoder[T]
+  extends AgnosticEncoder[T] {
+  /**
+   * Converts from T to InternalRow
+   * @param input the starting input path
+   * @return
+   */
+  def toCatalyst(input: Expression): Expression
+
+  /**
+   * Converts from InternalRow to T
+   * @param inputPath path expression from InternalRow
+   * @return
+   */
+  def fromCatalyst(inputPath: Expression): Expression
+}
 
 /**
  * Helper class for Generating [[ExpressionEncoder]]s.
@@ -77,10 +102,13 @@ object EncoderUtils {
       case _: DecimalType => classOf[Decimal]
       case _: DayTimeIntervalType => classOf[PhysicalLongType.InternalType]
       case _: YearMonthIntervalType => classOf[PhysicalIntegerType.InternalType]
+      case _: TimeType => classOf[PhysicalLongType.InternalType]
       case _: StringType => classOf[UTF8String]
       case _: StructType => classOf[InternalRow]
       case _: ArrayType => classOf[ArrayData]
       case _: MapType => classOf[MapData]
+      case _: GeographyType => classOf[GeographyVal]
+      case _: GeometryType => classOf[GeometryVal]
       case ObjectType(cls) => cls
       case _ => typeJavaMapping.getOrElse(dt, classOf[java.lang.Object])
     }
@@ -126,6 +154,12 @@ object EncoderUtils {
     CalendarIntervalType -> classOf[CalendarInterval],
     VariantType -> classOf[VariantVal]
   )
+
+  def dataTypeForClass(c: Class[_]): DataType =
+    javaClassToPrimitiveType.get(c).getOrElse(ObjectType(c))
+
+  private val javaClassToPrimitiveType: Map[Class[_], DataType] =
+    typeJavaMapping.iterator.filter(_._2.isPrimitive).map(_.swap).toMap
 
   val typeBoxedJavaMapping: Map[DataType, Class[_]] = Map[DataType, Class[_]](
     BooleanType -> classOf[java.lang.Boolean],

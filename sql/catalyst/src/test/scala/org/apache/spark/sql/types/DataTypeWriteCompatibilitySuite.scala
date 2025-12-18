@@ -685,6 +685,11 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
     )
   }
 
+  test("Check string types: cast allowed regardless of collation") {
+    assertAllowed(StringType, StringType("UTF8_LCASE"),
+      "date time types", "Should allow writing string to collated string")
+  }
+
   // Helper functions
 
   def assertAllowed(

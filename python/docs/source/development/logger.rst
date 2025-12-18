@@ -57,7 +57,14 @@ Example log entry:
       "exception": {
         "class": "Py4JJavaError",
         "msg": "An error occurred while calling o52.showString.\n: org.apache.spark.SparkArithmeticException: [DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set \"spark.sql.ansi.enabled\" to \"false\" to bypass this error. SQLSTATE: 22012\n== DataFrame ==\n\"divide\" was called from\n/path/to/file.py:17 ...",
-        "stacktrace": ["Traceback (most recent call last):", "  File \".../spark/python/pyspark/errors/exceptions/captured.py\", line 247, in deco", "    return f(*a, **kw)", "  File \".../lib/python3.9/site-packages/py4j/protocol.py\", line 326, in get_return_value" ...]
+        "stacktrace": [
+          {
+            "class": null,
+            "method": "deco",
+            "file": ".../spark/python/pyspark/errors/exceptions/captured.py",
+            "line": "247"
+          }
+        ]
       },
     }
 

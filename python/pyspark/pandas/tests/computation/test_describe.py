@@ -26,6 +26,12 @@ from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class FrameDescribeMixin:
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        # Some nanosecond->microsecond conversions throw loss of precision errors
+        cls.spark.conf.set("spark.sql.execution.pandas.convertToArrowArraySafely", "false")
+
     @property
     def pdf(self):
         return pd.DataFrame(

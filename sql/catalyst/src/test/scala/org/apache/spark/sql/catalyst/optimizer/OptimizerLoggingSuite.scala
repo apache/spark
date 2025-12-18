@@ -18,9 +18,12 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.logging.log4j.Level
+import org.slf4j.event.{Level => Slf4jLevel}
 
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.InSet
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -99,11 +102,15 @@ class OptimizerLoggingSuite extends PlanTest {
       "infoo")
 
     levels.foreach { level =>
-      val error = intercept[IllegalArgumentException] {
-        withSQLConf(SQLConf.PLAN_CHANGE_LOG_LEVEL.key -> level) {}
-      }
-      assert(error.getMessage.contains(
-        "Invalid value for 'spark.sql.planChangeLog.level'."))
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          withSQLConf(SQLConf.PLAN_CHANGE_LOG_LEVEL.key -> level) {}
+        },
+        condition = "INVALID_CONF_VALUE.OUT_OF_RANGE_OF_OPTIONS",
+        parameters = Map(
+          "confName" -> SQLConf.PLAN_CHANGE_LOG_LEVEL.key,
+          "confValue" -> level,
+          "confOptions" -> classOf[Slf4jLevel].getEnumConstants.mkString(", ")))
     }
   }
 
@@ -151,5 +158,15 @@ class OptimizerLoggingSuite extends PlanTest {
       SQLConf.PLAN_CHANGE_LOG_LEVEL.key -> "INFO") {
       verifyLog(Level.INFO, Seq("Batch Has No Effect"))
     }
+  }
+
+  test("SPARK-50329: toString for InSet should be valid for unresolved plan") {
+    val input = LocalRelation($"a".int, $"b".string, $"c".double)
+    val inSetPredicate = InSet($"a", Set(1, 2))
+    val query = input.select($"a", $"b").where(inSetPredicate)
+    val analyzed = query.analyze
+
+    assert(query.toString.contains("'a INSET (values with unresolved data types)"))
+    assert(analyzed.toString.contains("INSET 1, 2"))
   }
 }

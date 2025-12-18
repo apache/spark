@@ -19,7 +19,6 @@ package org.apache.spark.sql.internal
 
 import java.io.File
 
-import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{AnalysisException, DataFrame}
@@ -30,14 +29,16 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.plans.logical.Range
-import org.apache.spark.sql.connector.FakeV2Provider
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, InMemoryCatalog}
+import org.apache.spark.sql.classic.Catalog
+import org.apache.spark.sql.connector.{FakeV2Provider, InMemoryTableSessionCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Identifier, InMemoryCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
 
 
 /**
@@ -268,6 +269,16 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       .collect()
       .map(t => Array(t.catalog, t.namespace.mkString("."), t.name).mkString(".")).toSet ==
       Set("testcat.my_db.my_table2"))
+  }
+
+  test("SPARK-51219: list tables with non-buildin V2 catalog") {
+    withSQLConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key ->
+      classOf[InMemoryTableSessionCatalog].getName) {
+      createTable("my_table")
+      createTempTable("my_temp_table")
+      assert(spark.catalog.listTables().collect().map(_.name).toSet ==
+        Set("my_table", "my_temp_table"))
+    }
   }
 
   test("list tables with database") {
@@ -526,10 +537,10 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       functionFields(5)) == ("nama", "cataloa", "descripta", "classa", false))
     assert(functionFields(2).asInstanceOf[Array[String]].sameElements(Array("databasa")))
     assert(columnFields == Seq("nama", "descripta", "typa", false, true, true, true))
-    val dbString = CatalogImpl.makeDataset(Seq(db), spark).showString(10)
-    val tableString = CatalogImpl.makeDataset(Seq(table), spark).showString(10)
-    val functionString = CatalogImpl.makeDataset(Seq(function), spark).showString(10)
-    val columnString = CatalogImpl.makeDataset(Seq(column), spark).showString(10)
+    val dbString = Catalog.makeDataset(Seq(db), spark).showString(10)
+    val tableString = Catalog.makeDataset(Seq(table), spark).showString(10)
+    val functionString = Catalog.makeDataset(Seq(function), spark).showString(10)
+    val columnString = Catalog.makeDataset(Seq(column), spark).showString(10)
     dbFields.foreach { f => assert(dbString.contains(f.toString)) }
     tableFields.foreach { f => assert(tableString.contains(f.toString) ||
       tableString.contains(f.asInstanceOf[Array[String]].mkString(""))) }
@@ -800,7 +811,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
     val testCatalog =
       spark.sessionState.catalogManager.catalog(catalogName).asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array(dbName), tableName))
-    assert(table.schema().equals(tableSchema))
+    assert(table.columns sameElements CatalogV2Util.structTypeToV2Columns(tableSchema))
     assert(table.properties().get("provider").equals(classOf[FakeV2Provider].getName))
     assert(table.properties().get("comment").equals(description))
   }
@@ -820,7 +831,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       val testCatalog =
         spark.sessionState.catalogManager.catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array(dbName), tableName))
-      assert(table.schema().equals(tableSchema))
+      assert(table.columns sameElements CatalogV2Util.structTypeToV2Columns(tableSchema))
       assert(table.properties().get("provider").equals(classOf[FakeV2Provider].getName))
       assert(table.properties().get("comment").equals(description))
       assert(table.properties().get("path").equals(dir.getAbsolutePath))
@@ -988,7 +999,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
       spark.catalog.cacheTable(tableName)
       assert(spark.table(tableName).collect().length == 1)
 
-      FileUtils.deleteDirectory(dir)
+      Utils.deleteRecursively(dir)
       assert(spark.table(tableName).collect().length == 1)
 
       spark.catalog.refreshTable(tableName)
@@ -1117,7 +1128,7 @@ class CatalogSuite extends SharedSparkSession with AnalysisTest with BeforeAndAf
   }
 
   test("SPARK-46145: listTables does not throw exception when the table or view is not found") {
-    val impl = spark.catalog.asInstanceOf[CatalogImpl]
+    val impl = spark.catalog.asInstanceOf[Catalog]
     for ((isTemp, dbName) <- Seq((true, ""), (false, "non_existing_db"))) {
       val row = new GenericInternalRow(
         Array(UTF8String.fromString(dbName), UTF8String.fromString("non_existing_table"), isTemp))

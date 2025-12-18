@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.python
 
 import java.io._
+import java.util
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark._
@@ -34,17 +35,36 @@ abstract class BasePythonUDFRunner(
     evalType: Int,
     argOffsets: Array[Array[Int]],
     pythonMetrics: Map[String, SQLMetric],
-    jobArtifactUUID: Option[String])
+    jobArtifactUUID: Option[String],
+    sessionUUID: Option[String])
   extends BasePythonRunner[Array[Byte], Array[Byte]](
-    funcs.map(_._1), evalType, argOffsets, jobArtifactUUID) {
+    funcs.map(_._1), evalType, argOffsets, jobArtifactUUID, pythonMetrics) {
 
+  override val envVars: util.Map[String, String] = {
+    val envVars = new util.HashMap(funcs.head._1.funcs.head.envVars)
+    sessionUUID.foreach { uuid =>
+      envVars.put("PYSPARK_SPARK_SESSION_UUID", uuid)
+    }
+    envVars
+  }
   override val pythonExec: String =
     SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
       funcs.head._1.funcs.head.pythonExec)
 
+  override val hideTraceback: Boolean = SQLConf.get.pysparkHideTraceback
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
   override val faultHandlerEnabled: Boolean = SQLConf.get.pythonUDFWorkerFaulthandlerEnabled
+  override val idleTimeoutSeconds: Long = SQLConf.get.pythonUDFWorkerIdleTimeoutSeconds
+  override val killOnIdleTimeout: Boolean = SQLConf.get.pythonUDFWorkerKillOnIdleTimeout
+  override val tracebackDumpIntervalSeconds: Long =
+    SQLConf.get.pythonUDFWorkerTracebackDumpIntervalSeconds
+  override val killWorkerOnFlushFailure: Boolean =
+    SQLConf.get.pythonUDFDaemonKillWorkerOnFlushFailure
+
+  override val bufferSize: Int = SQLConf.get.getConf(SQLConf.PYTHON_UDF_BUFFER_SIZE)
+  override val batchSizeForPythonUDF: Int =
+    SQLConf.get.getConf(SQLConf.PYTHON_UDF_MAX_RECORDS_PER_BATCH)
 
   protected def writeUDF(dataOut: DataOutputStream): Unit
 
@@ -95,6 +115,8 @@ abstract class BasePythonUDFRunner(
             case length if length >= 0 =>
               val obj = PythonWorkerUtils.readBytes(length, stream)
               pythonMetrics("pythonDataReceived") += length
+              batchesProcessed += 1
+              totalDataReceived += length
               obj
             case SpecialLengths.TIMING_DATA =>
               handleTimingData()
@@ -117,8 +139,10 @@ class PythonUDFRunner(
     argOffsets: Array[Array[Int]],
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
+    sessionUUID: Option[String],
     profiler: Option[String])
-  extends BasePythonUDFRunner(funcs, evalType, argOffsets, pythonMetrics, jobArtifactUUID) {
+  extends BasePythonUDFRunner(funcs, evalType, argOffsets, pythonMetrics,
+    jobArtifactUUID, sessionUUID) {
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
     PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets, profiler)
@@ -131,9 +155,11 @@ class PythonUDFWithNamedArgumentsRunner(
     argMetas: Array[Array[ArgumentMetadata]],
     pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
+    sessionUUID: Option[String],
     profiler: Option[String])
   extends BasePythonUDFRunner(
-    funcs, evalType, argMetas.map(_.map(_.offset)), pythonMetrics, jobArtifactUUID) {
+    funcs, evalType, argMetas.map(_.map(_.offset)), pythonMetrics,
+    jobArtifactUUID, sessionUUID) {
 
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
     PythonUDFRunner.writeUDFs(dataOut, funcs, argMetas, profiler)
@@ -184,7 +210,7 @@ object PythonUDFRunner {
     funcs.zip(argMetas).foreach { case ((chained, resultId), metas) =>
       dataOut.writeInt(metas.length)
       metas.foreach {
-        case ArgumentMetadata(offset, name) =>
+        case ArgumentMetadata(offset, name, _) =>
           dataOut.writeInt(offset)
           name match {
             case Some(name) =>

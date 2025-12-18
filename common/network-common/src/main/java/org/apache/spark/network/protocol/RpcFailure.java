@@ -20,8 +20,6 @@ package org.apache.spark.network.protocol;
 import java.util.Objects;
 
 import io.netty.buffer.ByteBuf;
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
 
 /** Response to {@link RpcRequest} for a failed RPC. */
 public final class RpcFailure extends AbstractMessage implements ResponseMessage {
@@ -68,9 +66,6 @@ public final class RpcFailure extends AbstractMessage implements ResponseMessage
 
   @Override
    public String toString() {
-    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-      .append("requestId", requestId)
-      .append("errorString", errorString)
-      .toString();
+    return "RpcFailure[requestId=" + requestId + ",errorString=" + errorString + "]";
   }
 }

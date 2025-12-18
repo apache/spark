@@ -33,10 +33,10 @@ class ReadwriterV2ParityTests(ReadwriterV2TestsMixin, ReusedConnectTestCase):
 
     def test_partitioning_functions(self):
         self.check_partitioning_functions(DataFrameWriterV2)
+        self.partitioning_functions_user_error()
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.sql.tests.connect.test_parity_readwriter import *  # noqa: F401
 
     try:

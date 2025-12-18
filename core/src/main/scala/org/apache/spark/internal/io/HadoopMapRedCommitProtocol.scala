@@ -21,7 +21,6 @@ import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapreduce.{TaskAttemptContext => NewTaskAttemptContext}
 
 import org.apache.spark.internal.LogKeys
-import org.apache.spark.internal.MDC
 
 /**
  * An [[FileCommitProtocol]] implementation backed by an underlying Hadoop OutputCommitter

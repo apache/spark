@@ -32,7 +32,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesConf
 import org.apache.spark.deploy.k8s.KubernetesUtils.addOwnerReference
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.cluster.SchedulerBackendUtils.DEFAULT_NUMBER_EXECUTORS
@@ -69,7 +69,18 @@ class ExecutorPodsAllocator(
 
   protected val podAllocationDelay = conf.get(KUBERNETES_ALLOCATION_BATCH_DELAY)
 
+  protected val podAllocationMaximum = conf.get(KUBERNETES_ALLOCATION_MAXIMUM)
+
   protected val maxPendingPods = conf.get(KUBERNETES_MAX_PENDING_PODS)
+
+  protected val maxPendingPodsPerRpid = conf.get(KUBERNETES_MAX_PENDING_PODS_PER_RPID)
+
+  // If maxPendingPodsPerRpid is set, ensure it's not greater than maxPendingPods
+  if (maxPendingPodsPerRpid != Int.MaxValue) {
+    require(maxPendingPodsPerRpid <= maxPendingPods,
+      s"Maximum pending pods per resource profile ID ($maxPendingPodsPerRpid) must be less than " +
+        s"or equal to maximum pending pods ($maxPendingPods).")
+  }
 
   protected val podCreationTimeout = math.max(
     podAllocationDelay * 5,
@@ -105,8 +116,7 @@ class ExecutorPodsAllocator(
 
   protected val dynamicAllocationEnabled = Utils.isDynamicAllocationEnabled(conf)
 
-  // visible for tests
-  val numOutstandingPods = new AtomicInteger()
+  protected val numOutstandingPods = new AtomicInteger()
 
   protected var lastSnapshot = ExecutorPodsSnapshot()
 
@@ -191,7 +201,7 @@ class ExecutorPodsAllocator(
     }
 
     if (timedOut.nonEmpty) {
-      logWarning(log"Executors with ids ${MDC(LogKeys.EXECUTOR_IDS, timedOut.mkString(","))}} " +
+      logWarning(log"Executors with ids ${MDC(LogKeys.EXECUTOR_IDS, timedOut.mkString(","))} " +
         log"were not detected in the Kubernetes cluster after " +
         log"${MDC(LogKeys.TIMEOUT, podCreationTimeout)} ms despite the fact that a previous " +
         log"allocation attempt tried to create them. The executors may have been deleted but the " +
@@ -349,7 +359,7 @@ class ExecutorPodsAllocator(
         }
       }
       if (newlyCreatedExecutorsForRpId.isEmpty && podCountForRpId < targetNum) {
-        Some(rpId, podCountForRpId, targetNum)
+        Some(rpId, podCountForRpId, targetNum, notRunningPodCountForRpId)
       } else {
         // for this resource profile we do not request more PODs
         None
@@ -363,10 +373,13 @@ class ExecutorPodsAllocator(
     if (remainingSlotFromPendingPods > 0 && podsToAllocateWithRpId.size > 0 &&
         !(snapshots.isEmpty && podAllocOnPVC && maxPVCs <= PVC_COUNTER.get())) {
       ExecutorPodsAllocator.splitSlots(podsToAllocateWithRpId, remainingSlotFromPendingPods)
-        .foreach { case ((rpId, podCountForRpId, targetNum), sharedSlotFromPendingPods) =>
+        .foreach { case ((rpId, podCountForRpId, targetNum, pendingPodCountForRpId),
+            sharedSlotFromPendingPods) =>
+        val remainingSlotsForRpId = maxPendingPodsPerRpid - pendingPodCountForRpId
         val numMissingPodsForRpId = targetNum - podCountForRpId
-        val numExecutorsToAllocate =
-          math.min(math.min(numMissingPodsForRpId, podAllocationSize), sharedSlotFromPendingPods)
+        val numExecutorsToAllocate = Seq(numMissingPodsForRpId, podAllocationSize,
+          sharedSlotFromPendingPods, remainingSlotsForRpId).min
+
         logInfo(log"Going to request ${MDC(LogKeys.COUNT, numExecutorsToAllocate)} executors from" +
           log" Kubernetes for ResourceProfile Id: ${MDC(LogKeys.RESOURCE_PROFILE_ID, rpId)}, " +
           log"target: ${MDC(LogKeys.NUM_POD_TARGET, targetNum)}, " +
@@ -427,6 +440,9 @@ class ExecutorPodsAllocator(
         return
       }
       val newExecutorId = EXECUTOR_ID_COUNTER.incrementAndGet()
+      if (newExecutorId >= podAllocationMaximum) {
+        throw new SparkException(s"Exceed the pod creation limit: $podAllocationMaximum")
+      }
       val executorConf = KubernetesConf.createExecutorConf(
         conf,
         newExecutorId.toString,

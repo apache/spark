@@ -125,8 +125,8 @@ class Broadcast(Generic[T]):
             if sc._encryption_enabled:
                 # with encryption, we ask the jvm to do the encryption for us, we send it data
                 # over a socket
-                port, auth_secret = self._python_broadcast.setupEncryptionServer()
-                (encryption_sock_file, _) = local_connect_and_auth(port, auth_secret)
+                conn_info, auth_secret = self._python_broadcast.setupEncryptionServer()
+                (encryption_sock_file, _) = local_connect_and_auth(conn_info, auth_secret)
                 broadcast_out = ChunkedStream(encryption_sock_file, 8192)
             else:
                 # no encryption, we can just write pickled data directly to the file from python
@@ -270,8 +270,8 @@ class Broadcast(Generic[T]):
             # we only need to decrypt it here when encryption is enabled and
             # if its on the driver, since executor decryption is handled already
             if self._sc is not None and self._sc._encryption_enabled:
-                port, auth_secret = self._python_broadcast.setupDecryptionServer()
-                (decrypted_sock_file, _) = local_connect_and_auth(port, auth_secret)
+                conn_info, auth_secret = self._python_broadcast.setupDecryptionServer()
+                (decrypted_sock_file, _) = local_connect_and_auth(conn_info, auth_secret)
                 self._python_broadcast.waitTillBroadcastDataSent()
                 return self.load(decrypted_sock_file)
             else:

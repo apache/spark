@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Connection, Date, Driver, ResultSetMetaData, Statement, Timestamp}
+import java.sql.{Connection, Date, Driver, ResultSetMetaData, SQLException, Statement, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util
 import java.util.ServiceLoader
@@ -25,8 +25,6 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.ArrayBuilder
 import scala.util.control.NonFatal
-
-import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.{SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.annotation.{DeveloperApi, Since}
@@ -42,6 +40,7 @@ import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
 import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.AggregateFunc
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{DriverRegistry, JDBCOptions, JdbcOptionsInWrite, JdbcUtils}
@@ -243,7 +242,9 @@ abstract class JdbcDialect extends Serializable with Logging {
    * name is a reserved keyword, or in case it contains characters that require quotes (e.g. space).
    */
   def quoteIdentifier(colName: String): String = {
-    s""""$colName""""
+    // By ANSI standard, quotes are escaped with another quotes.
+    val escapedColName = colName.replace("\"", "\"\"")
+    s""""$escapedColName""""
   }
 
   /**
@@ -341,7 +342,18 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @param connection The connection object
    * @param properties The connection properties.  This is passed through from the relation.
    */
+  @deprecated("Use beforeFetch(Connection, JDBCOptions) instead", "4.2.0")
   def beforeFetch(connection: Connection, properties: Map[String, String]): Unit = {
+  }
+
+  /**
+   * Override connection specific properties to run before a select is made.  This is in place to
+   * allow dialects that need special treatment to optimize behavior.
+   * @param connection The connection object
+   * @param options The JDBC options for the connection.
+   */
+  def beforeFetch(connection: Connection, options: JDBCOptions): Unit = {
+    beforeFetch(connection, options.parameters)
   }
 
   /**
@@ -351,7 +363,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   @Since("2.3.0")
   protected[jdbc] def escapeSql(value: String): String =
-    if (value == null) null else StringUtils.replace(value, "'", "''")
+    if (value == null) null else value.replace("'", "''")
 
   /**
    * Converts value to SQL expression.
@@ -373,10 +385,23 @@ abstract class JdbcDialect extends Serializable with Logging {
     case dateValue: Date => "'" + dateValue + "'"
     case dateValue: LocalDate => s"'${DateFormatter().format(dateValue)}'"
     case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
+    case binaryValue: Array[Byte] => binaryValue.map("%02X".format(_)).mkString("X'", "", "'")
     case _ => value
   }
 
   private[jdbc] class JDBCSQLBuilder extends V2ExpressionSQLBuilder {
+    // Some dialects do not support boolean type and this convenient util function is
+    // provided to generate SQL string without boolean values.
+    protected def inputToSQLNoBool(input: Expression): String = input match {
+      case p: Predicate if p.name() == "ALWAYS_TRUE" => "1"
+      case p: Predicate if p.name() == "ALWAYS_FALSE" => "0"
+      case p: Predicate => predicateToIntSQL(inputToSQL(p))
+      case _ => inputToSQL(input)
+    }
+
+    protected def predicateToIntSQL(input: String): String =
+      "CASE WHEN " + input + " THEN 1 ELSE 0 END"
+
     override def visitLiteral(literal: Literal[_]): String = {
       Option(literal.value()).map(v =>
         compileValue(CatalystTypeConverters.convertToScala(v, literal.dataType())).toString)
@@ -397,9 +422,9 @@ abstract class JdbcDialect extends Serializable with Logging {
       s"CAST($expr AS $databaseTypeDefinition)"
     }
 
-    override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
+    override def visitSQLFunction(funcName: String, inputs: Array[Expression]): String = {
       if (isSupportedFunction(funcName)) {
-        s"""${dialectFunctionName(funcName)}(${inputs.mkString(", ")})"""
+        super.visitSQLFunction(funcName, inputs)
       } else {
         // The framework will catch the error and give up the push-down.
         // Please see `JdbcDialect.compileExpression(expr: Expression)` for more details.
@@ -411,8 +436,12 @@ abstract class JdbcDialect extends Serializable with Logging {
       }
     }
 
+    override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
+      s"""${dialectFunctionName(funcName)}(${inputs.mkString(", ")})"""
+    }
+
     override def visitAggregateFunction(
-        funcName: String, isDistinct: Boolean, inputs: Array[String]): String = {
+        funcName: String, isDistinct: Boolean, inputs: Array[Expression]): String = {
       if (isSupportedFunction(funcName)) {
         super.visitAggregateFunction(dialectFunctionName(funcName), isDistinct, inputs)
       } else {
@@ -422,6 +451,11 @@ abstract class JdbcDialect extends Serializable with Logging {
             "class" -> this.getClass.getSimpleName,
             "funcName" -> funcName))
       }
+    }
+
+    override def visitAggregateFunction(
+        funcName: String, isDistinct: Boolean, inputs: Array[String]): String = {
+      super.visitAggregateFunction(dialectFunctionName(funcName), isDistinct, inputs)
     }
 
     override def visitInverseDistributionFunction(
@@ -556,6 +590,19 @@ abstract class JdbcDialect extends Serializable with Logging {
   def isCascadingTruncateTable(): Option[Boolean] = None
 
   /**
+   * Attempts to determine if the given SQLException is a SQL syntax error.
+   *
+   * This check is best-effort: it may not detect all syntax errors across all JDBC dialects.
+   * However, if this method returns true, the exception is guaranteed to be a syntax error.
+   *
+   * This is used to decide whether to wrap the exception in a more appropriate Spark exception.
+   *
+   * @return true if the exception is confidently identified as a syntax error; false otherwise.
+   */
+  @Since("4.1.0")
+  def isSyntaxErrorBestEffort(exception: java.sql.SQLException): Boolean = false
+
+  /**
    * Rename an existing table.
    *
    * @param oldTable The existing table.
@@ -613,7 +660,7 @@ abstract class JdbcDialect extends Serializable with Logging {
           val name = updateNull.fieldNames
           updateClause += getUpdateColumnNullabilityQuery(tableName, name(0), updateNull.nullable())
         case _ =>
-          throw QueryCompilationErrors.unsupportedTableChangeInJDBCCatalogError(change)
+          throw QueryCompilationErrors.unsupportedTableChangeInJDBCCatalogError(change, tableName)
       }
     }
     updateClause.result()
@@ -735,10 +782,13 @@ abstract class JdbcDialect extends Serializable with Logging {
     throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3182")
   }
 
+  @Since("4.1.0")
+  def isObjectNotFoundException(e: SQLException): Boolean = true
+
   /**
    * Gets a dialect exception, classifies it and wraps it by `AnalysisException`.
    * @param e The dialect specific exception.
-   * @param errorClass The error class assigned in the case of an unclassified `e`
+   * @param condition The error condition assigned in the case of an unclassified `e`
    * @param messageParameters The message parameters of `errorClass`
    * @param description The error description
    * @param isRuntime Whether the exception is a runtime exception or not.
@@ -746,7 +796,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   def classifyException(
       e: Throwable,
-      errorClass: String,
+      condition: String,
       messageParameters: Map[String, String],
       description: String,
       isRuntime: Boolean): Throwable with SparkThrowable = {
@@ -759,7 +809,7 @@ abstract class JdbcDialect extends Serializable with Logging {
    * @param e The dialect specific exception.
    * @return `AnalysisException` or its sub-class.
    */
-  @deprecated("Please override the classifyException method with an error class", "4.0.0")
+  @deprecated("Please override the classifyException method with an error condition", "4.0.0")
   def classifyException(message: String, e: Throwable): AnalysisException = {
     new AnalysisException(
       errorClass = "FAILED_JDBC.UNCLASSIFIED",
@@ -812,6 +862,13 @@ abstract class JdbcDialect extends Serializable with Logging {
   def getTableSample(sample: TableSampleInfo): String =
     throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3183")
 
+  def supportsHint: Boolean = false
+
+  /**
+   * Returns true if dialect supports JOIN operator.
+   */
+  def supportsJoin: Boolean = false
+
   /**
    * Return the DB-specific quoted and fully qualified table name
    */
@@ -846,22 +903,22 @@ abstract class JdbcDialect extends Serializable with Logging {
 /**
  * Make the `classifyException` method throw out the original exception
  */
-trait NoLegacyJDBCError extends JdbcDialect {
+private[sql] trait NoLegacyJDBCError extends JdbcDialect {
 
   override def classifyException(
       e: Throwable,
-      errorClass: String,
+      condition: String,
       messageParameters: Map[String, String],
       description: String,
       isRuntime: Boolean): Throwable with SparkThrowable = {
     if (isRuntime) {
       new SparkRuntimeException(
-        errorClass = errorClass,
+        errorClass = condition,
         messageParameters = messageParameters,
         cause = e)
     } else {
       new AnalysisException(
-        errorClass = errorClass,
+        errorClass = condition,
         messageParameters = messageParameters,
         cause = Some(e))
     }

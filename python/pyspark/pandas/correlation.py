@@ -19,7 +19,7 @@ from typing import List
 
 from pyspark.sql import DataFrame as SparkDataFrame, functions as F
 from pyspark.sql.window import Window
-from pyspark.pandas.utils import verify_temp_column_name
+from pyspark.pandas.utils import verify_temp_column_name, is_ansi_mode_enabled
 
 
 CORRELATION_VALUE_1_COLUMN = "__correlation_value_1_input__"
@@ -60,6 +60,7 @@ def compute(sdf: SparkDataFrame, groupKeys: List[str], method: str) -> SparkData
             .alias(CORRELATION_VALUE_2_COLUMN),
         ],
     )
+    spark_session = sdf.sparkSession
 
     if method in ["pearson", "spearman"]:
         # convert values to avg ranks for spearman correlation
@@ -125,16 +126,20 @@ def compute(sdf: SparkDataFrame, groupKeys: List[str], method: str) -> SparkData
                 )
             )
 
+        if is_ansi_mode_enabled(spark_session):
+            corr_expr = F.try_divide(
+                F.covar_samp(CORRELATION_VALUE_1_COLUMN, CORRELATION_VALUE_2_COLUMN),
+                F.stddev_samp(CORRELATION_VALUE_1_COLUMN)
+                * F.stddev_samp(CORRELATION_VALUE_2_COLUMN),
+            )
+        else:
+            corr_expr = F.corr(CORRELATION_VALUE_1_COLUMN, CORRELATION_VALUE_2_COLUMN)
+
         sdf = sdf.groupby(groupKeys).agg(
-            F.corr(CORRELATION_VALUE_1_COLUMN, CORRELATION_VALUE_2_COLUMN).alias(
-                CORRELATION_CORR_OUTPUT_COLUMN
+            corr_expr.alias(CORRELATION_CORR_OUTPUT_COLUMN),
+            F.count(F.when(~F.isnull(CORRELATION_VALUE_1_COLUMN), 1)).alias(
+                CORRELATION_COUNT_OUTPUT_COLUMN
             ),
-            F.count(
-                F.when(
-                    ~F.isnull(CORRELATION_VALUE_1_COLUMN),
-                    1,
-                )
-            ).alias(CORRELATION_COUNT_OUTPUT_COLUMN),
         )
 
         return sdf
@@ -219,6 +224,42 @@ def compute(sdf: SparkDataFrame, groupKeys: List[str], method: str) -> SparkData
             F.col(CORRELATION_VALUE_2_COLUMN) == F.col(CORRELATION_VALUE_Y_COLUMN)
         )
 
+        if is_ansi_mode_enabled(spark_session):
+            corr_expr = F.try_divide(
+                F.col(CORRELATION_KENDALL_P_COLUMN) - F.col(CORRELATION_KENDALL_Q_COLUMN),
+                F.sqrt(
+                    (
+                        F.col(CORRELATION_KENDALL_P_COLUMN)
+                        + F.col(CORRELATION_KENDALL_Q_COLUMN)
+                        + F.col(CORRELATION_KENDALL_T_COLUMN)
+                    )
+                    * (
+                        F.col(CORRELATION_KENDALL_P_COLUMN)
+                        + F.col(CORRELATION_KENDALL_Q_COLUMN)
+                        + F.col(CORRELATION_KENDALL_U_COLUMN)
+                    )
+                ),
+            )
+        else:
+            corr_expr = (
+                F.col(CORRELATION_KENDALL_P_COLUMN) - F.col(CORRELATION_KENDALL_Q_COLUMN)
+            ) / F.sqrt(
+                (
+                    (
+                        F.col(CORRELATION_KENDALL_P_COLUMN)
+                        + F.col(CORRELATION_KENDALL_Q_COLUMN)
+                        + (F.col(CORRELATION_KENDALL_T_COLUMN))
+                    )
+                )
+                * (
+                    (
+                        F.col(CORRELATION_KENDALL_P_COLUMN)
+                        + F.col(CORRELATION_KENDALL_Q_COLUMN)
+                        + (F.col(CORRELATION_KENDALL_U_COLUMN))
+                    )
+                )
+            )
+
         sdf = (
             sdf.groupby(groupKeys)
             .agg(
@@ -232,26 +273,7 @@ def compute(sdf: SparkDataFrame, groupKeys: List[str], method: str) -> SparkData
                     ).otherwise(F.lit(0))
                 ).alias(CORRELATION_COUNT_OUTPUT_COLUMN),
             )
-            .withColumn(
-                CORRELATION_CORR_OUTPUT_COLUMN,
-                (F.col(CORRELATION_KENDALL_P_COLUMN) - F.col(CORRELATION_KENDALL_Q_COLUMN))
-                / F.sqrt(
-                    (
-                        (
-                            F.col(CORRELATION_KENDALL_P_COLUMN)
-                            + F.col(CORRELATION_KENDALL_Q_COLUMN)
-                            + (F.col(CORRELATION_KENDALL_T_COLUMN))
-                        )
-                    )
-                    * (
-                        (
-                            F.col(CORRELATION_KENDALL_P_COLUMN)
-                            + F.col(CORRELATION_KENDALL_Q_COLUMN)
-                            + (F.col(CORRELATION_KENDALL_U_COLUMN))
-                        )
-                    )
-                ),
-            )
+            .withColumn(CORRELATION_CORR_OUTPUT_COLUMN, corr_expr)
         )
 
         sdf = sdf.select(

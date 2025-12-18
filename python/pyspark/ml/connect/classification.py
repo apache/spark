@@ -59,10 +59,12 @@ class _LogisticRegressionParams(
     Params for :py:class:`LogisticRegression` and :py:class:`LogisticRegressionModel`.
 
     .. versionadded:: 3.0.0
+
+    .. deprecated:: 4.0.0
     """
 
     def __init__(self, *args: Any):
-        super(_LogisticRegressionParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(
             maxIter=100,
             tol=1e-6,
@@ -150,6 +152,8 @@ class LogisticRegression(
 
     .. versionadded:: 3.5.0
 
+    .. deprecated:: 4.0.0
+
     Examples
     --------
     >>> from pyspark.ml.connect.classification import LogisticRegression, LogisticRegressionModel
@@ -211,7 +215,7 @@ class LogisticRegression(
             seed: int = 0,
         )
         """
-        super(LogisticRegression, self).__init__()
+        super().__init__()
         kwargs = self._input_kwargs
         self._set(**kwargs)
 
@@ -287,6 +291,8 @@ class LogisticRegressionModel(
     Model fitted by LogisticRegression.
 
     .. versionadded:: 3.5.0
+
+    .. deprecated:: 4.0.0
     """
 
     def __init__(

@@ -46,14 +46,14 @@ import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.{Executor, ExecutorMetrics, ExecutorMetricsSource}
 import org.apache.spark.input.{FixedLengthBinaryInputFormat, PortableDataStream, StreamInputFormat, WholeTextFileInputFormat}
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.internal.plugin.PluginContainer
 import org.apache.spark.io.CompressionCodec
-import org.apache.spark.launcher.JavaModuleOptions
+import org.apache.spark.launcher.{JavaModuleOptions, SparkLauncher}
 import org.apache.spark.metrics.source.JVMCPUSource
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
@@ -201,10 +201,10 @@ class SparkContext(config: SparkConf) extends Logging {
 
   // log out Spark Version in Spark driver log
   logInfo(log"Running Spark version ${MDC(LogKeys.SPARK_VERSION, SPARK_VERSION)}")
-  logInfo(log"OS info ${MDC(LogKeys.OS_NAME, System.getProperty("os.name"))}," +
-    log" ${MDC(LogKeys.OS_VERSION, System.getProperty("os.version"))}, " +
-    log"${MDC(LogKeys.OS_ARCH, System.getProperty("os.arch"))}")
-  logInfo(log"Java version ${MDC(LogKeys.JAVA_VERSION, System.getProperty("java.version"))}")
+  logInfo(log"OS info ${MDC(LogKeys.OS_NAME, Utils.osName)}," +
+    log" ${MDC(LogKeys.OS_VERSION, Utils.osVersion)}, " +
+    log"${MDC(LogKeys.OS_ARCH, Utils.osArch)}")
+  logInfo(log"Java version ${MDC(LogKeys.JAVA_VERSION, Utils.javaVersion)}")
 
   /* ------------------------------------------------------------------------------------- *
    | Private variables. These variables keep the internal state of the context, and are    |
@@ -251,6 +251,9 @@ class SparkContext(config: SparkConf) extends Logging {
    * ------------------------------------------------------------------------------------- */
 
   private[spark] def conf: SparkConf = _conf
+
+  /** Get a read-only reference to the spark conf. This is preferred version over [[getConf]]. */
+  def getReadOnlyConf: ReadOnlySparkConf = _conf
 
   /**
    * Return a copy of this SparkContext's configuration. The configuration ''cannot'' be
@@ -420,11 +423,12 @@ class SparkContext(config: SparkConf) extends Logging {
     if (!_conf.contains("spark.app.name")) {
       throw new SparkException("An application name must be set in your configuration")
     }
-    // HADOOP-19097 Set fs.s3a.connection.establish.timeout to 30s
-    // We can remove this after Apache Hadoop 3.4.1 releases
-    conf.setIfMissing("spark.hadoop.fs.s3a.connection.establish.timeout", "30000")
+    // HADOOP-19229 Vector IO on cloud storage: increase threshold for range merging
+    // We can remove this after Apache Hadoop 3.4.2 releases
+    conf.setIfMissing("spark.hadoop.fs.s3a.vectored.read.min.seek.size", "128K")
+    conf.setIfMissing("spark.hadoop.fs.s3a.vectored.read.max.merged.size", "2M")
     // This should be set as early as possible.
-    SparkContext.fillMissingMagicCommitterConfsIfNeeded(_conf)
+    SparkContext.enableMagicCommitterIfNeeded(_conf)
 
     SparkContext.supplementJavaModuleOptions(_conf)
     SparkContext.supplementJavaIPv6Options(_conf)
@@ -450,7 +454,14 @@ class SparkContext(config: SparkConf) extends Logging {
 
     // Set Spark driver host and port system properties. This explicitly sets the configuration
     // instead of relying on the default value of the config constant.
-    _conf.set(DRIVER_HOST_ADDRESS, _conf.get(DRIVER_HOST_ADDRESS))
+    if (SparkMasterRegex.isK8s(master) &&
+        _conf.getBoolean("spark.kubernetes.executor.useDriverPodIP", false)) {
+      logInfo("Use DRIVER_BIND_ADDRESS instead of DRIVER_HOST_ADDRESS as driver address " +
+        "because spark.kubernetes.executor.useDriverPodIP is true in K8s mode.")
+      _conf.set(DRIVER_HOST_ADDRESS, _conf.get(DRIVER_BIND_ADDRESS))
+    } else {
+      _conf.set(DRIVER_HOST_ADDRESS, _conf.get(DRIVER_HOST_ADDRESS))
+    }
     _conf.setIfMissing(DRIVER_PORT, 0)
 
     _conf.set(EXECUTOR_ID, SparkContext.DRIVER_IDENTIFIER)
@@ -479,7 +490,6 @@ class SparkContext(config: SparkConf) extends Logging {
     }
 
     _listenerBus = new LiveListenerBus(_conf)
-    _resourceProfileManager = new ResourceProfileManager(_conf, _listenerBus)
 
     // Initialize the app status store and listener before SparkEnv is created so that it gets
     // all events.
@@ -580,8 +590,9 @@ class SparkContext(config: SparkConf) extends Logging {
     _heartbeatReceiver = env.rpcEnv.setupEndpoint(
       HeartbeatReceiver.ENDPOINT_NAME, new HeartbeatReceiver(this))
 
-    // Initialize any plugins before the task scheduler is initialized.
+    // Initialize any plugins before initializing the task scheduler and resource profile manager.
     _plugins = PluginContainer(this, _resources.asJava)
+    _resourceProfileManager = new ResourceProfileManager(_conf, _listenerBus)
     _env.initializeShuffleManager()
     _env.initializeMemoryManager(SparkContext.numDriverCores(master, conf))
 
@@ -610,7 +621,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _heartbeater = new Heartbeater(
       () => SparkContext.this.reportHeartBeat(_executorMetricsSource),
       "driver-heartbeater",
-      conf.get(EXECUTOR_HEARTBEAT_INTERVAL))
+      conf.get(DRIVER_METRICS_POLLING_INTERVAL))
     _heartbeater.start()
 
     // start TaskScheduler after taskScheduler sets DAGScheduler reference in DAGScheduler's
@@ -637,7 +648,8 @@ class SparkContext(config: SparkConf) extends Logging {
     }
     _ui.foreach(_.setAppId(_applicationId))
     _env.blockManager.initialize(_applicationId)
-    FallbackStorage.registerBlockManagerIfNeeded(_env.blockManager.master, _conf)
+    FallbackStorage.registerBlockManagerIfNeeded(
+      _env.blockManager.master, _conf, _hadoopConfiguration)
 
     // The metrics system for Driver need to be set spark.app.id to app ID.
     // So it should start after we get app ID from the task scheduler and set spark.app.id.
@@ -718,6 +730,9 @@ class SparkContext(config: SparkConf) extends Logging {
     }
     appStatusSource.foreach(_env.metricsSystem.registerSource(_))
     _plugins.foreach(_.registerMetrics(applicationId))
+
+    new CallerContext("DRIVER", config.get(APP_CALLER_CONTEXT),
+      Some(applicationId), applicationAttemptId).setCurrentContext()
   } catch {
     case NonFatal(e) =>
       logError("Error initializing SparkContext.", e)
@@ -1878,6 +1893,7 @@ class SparkContext(config: SparkConf) extends Logging {
         if (uri.getFragment != null) uri.getFragment else source.getName)
       logInfo(
         log"Unpacking an archive ${MDC(LogKeys.PATH, path)}" +
+          log" (${MDC(LogKeys.BYTE_SIZE, source.length)} bytes)" +
           log" from ${MDC(LogKeys.SOURCE_PATH, source.getAbsolutePath)}" +
           log" to ${MDC(LogKeys.DESTINATION_PATH, dest.getAbsolutePath)}")
       Utils.deleteRecursively(dest)
@@ -2400,7 +2416,8 @@ class SparkContext(config: SparkConf) extends Logging {
     ResourceProfile.clearDefaultProfile()
     // Unset YARN mode system env variable, to allow switching between cluster types.
     SparkContext.clearActiveContext()
-    logInfo("Successfully stopped SparkContext")
+    logInfo(log"Successfully stopped SparkContext (Uptime: " +
+      log"${MDC(LogKeys.TOTAL_TIME, System.currentTimeMillis() - startTime)} ms)")
   }
 
 
@@ -2871,7 +2888,10 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Default min number of partitions for Hadoop RDDs when not given by user
    * Notice that we use math.min so the "defaultMinPartitions" cannot be higher than 2.
-   * The reasons for this are discussed in https://github.com/mesos/spark/pull/718
+   * For large files, the Hadoop InputFormat library always creates more partitions even though
+   * defaultMinPartitions is 2. For small files, it can be good to process small files quickly.
+   * However, usually when Spark joins a small table with a big one, we'll still spend most of
+   * time on the map part of the big one anyway.
    */
   def defaultMinPartitions: Int = math.min(defaultParallelism, 2)
 
@@ -2922,8 +2942,14 @@ class SparkContext(config: SparkConf) extends Logging {
     _driverLogger.foreach(_.startSync(_hadoopConfiguration))
   }
 
-  /** Post the application end event */
+  /** Post the application end event and report the final heartbeat */
   private def postApplicationEnd(exitCode: Int): Unit = {
+    try {
+      _heartbeater.doReportHeartbeat()
+    } catch {
+      case t: Throwable =>
+        logInfo("Unable to report driver heartbeat metrics when stopping spark context", t);
+    }
     listenerBus.post(SparkListenerApplicationEnd(System.currentTimeMillis, Some(exitCode)))
   }
 
@@ -3377,15 +3403,11 @@ object SparkContext extends Logging {
   }
 
   /**
-   * This is a helper function to complete the missing S3A magic committer configurations
-   * based on a single conf: `spark.hadoop.fs.s3a.bucket.<bucket>.committer.magic.enabled`
+   * Enable Magic Committer by default for all S3 buckets if hadoop-cloud module exists.
    */
-  private def fillMissingMagicCommitterConfsIfNeeded(conf: SparkConf): Unit = {
-    val magicCommitterConfs = conf
-      .getAllWithPrefix("spark.hadoop.fs.s3a.bucket.")
-      .filter(_._1.endsWith(".committer.magic.enabled"))
-      .filter(_._2.equalsIgnoreCase("true"))
-    if (magicCommitterConfs.nonEmpty) {
+  private def enableMagicCommitterIfNeeded(conf: SparkConf): Unit = {
+    if (Utils.classIsLoadable("org.apache.spark.internal.io.cloud.BindingParquetOutputCommitter") &&
+        Utils.classIsLoadable("org.apache.spark.internal.io.cloud.PathOutputCommitProtocol")) {
       // Try to enable S3 magic committer if missing
       conf.setIfMissing("spark.hadoop.fs.s3a.committer.magic.enabled", "true")
       if (conf.get("spark.hadoop.fs.s3a.committer.magic.enabled").equals("true")) {
@@ -3405,27 +3427,21 @@ object SparkContext extends Logging {
    * `spark.driver.extraJavaOptions` and `spark.executor.extraJavaOptions`.
    */
   private def supplementJavaModuleOptions(conf: SparkConf): Unit = {
-    def supplement(key: OptionalConfigEntry[String]): Unit = {
-      val v = conf.get(key) match {
-        case Some(opts) => s"${JavaModuleOptions.defaultModuleOptions()} $opts"
-        case None => JavaModuleOptions.defaultModuleOptions()
-      }
-      conf.set(key.key, v)
+    def supplement(key: String): Unit = {
+      val v = s"${JavaModuleOptions.defaultModuleOptions()} ${conf.get(key, "")}".trim()
+      conf.set(key, v)
     }
-    supplement(DRIVER_JAVA_OPTIONS)
-    supplement(EXECUTOR_JAVA_OPTIONS)
+    supplement(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS)
+    supplement(SparkLauncher.EXECUTOR_EXTRA_JAVA_OPTIONS)
   }
 
   private def supplementJavaIPv6Options(conf: SparkConf): Unit = {
-    def supplement(key: OptionalConfigEntry[String]): Unit = {
-      val v = conf.get(key) match {
-        case Some(opts) => s"-Djava.net.preferIPv6Addresses=${Utils.preferIPv6} $opts"
-        case None => s"-Djava.net.preferIPv6Addresses=${Utils.preferIPv6}"
-      }
-      conf.set(key.key, v)
+    def supplement(key: String): Unit = {
+      val v = s"-Djava.net.preferIPv6Addresses=${Utils.preferIPv6} ${conf.get(key, "")}".trim()
+      conf.set(key, v)
     }
-    supplement(DRIVER_JAVA_OPTIONS)
-    supplement(EXECUTOR_JAVA_OPTIONS)
+    supplement(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS)
+    supplement(SparkLauncher.EXECUTOR_EXTRA_JAVA_OPTIONS)
   }
 }
 
@@ -3443,6 +3459,15 @@ private object SparkMasterRegex {
   val SPARK_REGEX = """spark://(.*)""".r
   // Regular expression for connecting to kubernetes clusters
   val KUBERNETES_REGEX = """k8s://(.*)""".r
+
+  def isK8s(master: String) : Boolean = isK8s(Option(master))
+
+  def isK8s(master: Option[String]) : Boolean = {
+    master match {
+      case Some(KUBERNETES_REGEX(_)) => true
+      case _ => false
+    }
+  }
 }
 
 /**

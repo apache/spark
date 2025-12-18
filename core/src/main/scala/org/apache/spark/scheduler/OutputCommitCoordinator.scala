@@ -20,7 +20,7 @@ package org.apache.spark.scheduler
 import scala.collection.mutable
 
 import org.apache.spark._
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.util.{RpcUtils, ThreadUtils}
 
@@ -149,7 +149,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
       // The task output has been committed successfully
       case _: TaskCommitDenied =>
         logInfo(log"Task was denied committing, stage: ${MDC(LogKeys.STAGE_ID, stage)}." +
-          log"${MDC(LogKeys.STAGE_ATTEMPT, stageAttempt)}, " +
+          log"${MDC(LogKeys.STAGE_ATTEMPT_ID, stageAttempt)}, " +
           log"partition: ${MDC(LogKeys.PARTITION_ID, partition)}, " +
           log"attempt: ${MDC(LogKeys.NUM_ATTEMPT, attemptNumber)}")
       case _ =>
@@ -181,7 +181,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf, isDriver: Boolean)
     stageStates.get(stage) match {
       case Some(state) if attemptFailed(state, stageAttempt, partition, attemptNumber) =>
         logInfo(log"Commit denied for stage=${MDC(LogKeys.STAGE_ID, stage)}." +
-          log"${MDC(LogKeys.STAGE_ATTEMPT, stageAttempt)}, partition=" +
+          log"${MDC(LogKeys.STAGE_ATTEMPT_ID, stageAttempt)}, partition=" +
           log"${MDC(LogKeys.PARTITION_ID, partition)}: task attempt " +
           log"${MDC(LogKeys.NUM_ATTEMPT, attemptNumber)} already marked as failed.")
         false

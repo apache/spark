@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{MathUtils, NumberConverter, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.StringTypeWithCaseAccentSensitivity
+import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -48,6 +48,7 @@ abstract class LeafMathExpression(c: Double, name: String)
 
   override def dataType: DataType = DoubleType
   override def foldable: Boolean = true
+  override def contextIndependentFoldable: Boolean = true
   override def nullable: Boolean = false
   override def toString: String = s"$name()"
   override def prettyName: String = name
@@ -63,10 +64,12 @@ abstract class LeafMathExpression(c: Double, name: String)
  * @param name The short name of the function
  */
 abstract class UnaryMathExpression(val f: Double => Double, name: String)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
+    extends UnaryExpression with ImplicitCastInputTypes with Serializable {
+  override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType)
   override def dataType: DataType = DoubleType
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
   override def nullable: Boolean = true
   override def toString: String = s"$prettyName($child)"
   override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse(name)
@@ -85,6 +88,8 @@ abstract class UnaryMathExpression(val f: Double => Double, name: String)
 
 abstract class UnaryLogExpression(f: Double => Double, name: String)
     extends UnaryMathExpression(f, name) {
+
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   override def nullable: Boolean = true
 
@@ -117,9 +122,12 @@ abstract class UnaryLogExpression(f: Double => Double, name: String)
  * @param name The short name of the function
  */
 abstract class BinaryMathExpression(f: (Double, Double) => Double, name: String)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
+    extends BinaryExpression with ImplicitCastInputTypes with Serializable {
+  override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[DataType] = Seq(DoubleType, DoubleType)
+
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
 
   override def toString: String = s"$prettyName($left, $right)"
 
@@ -443,8 +451,8 @@ case class Conv(
     ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
   extends TernaryExpression
     with ImplicitCastInputTypes
-    with NullIntolerant
     with SupportQueryContext {
+  override def nullIntolerant: Boolean = true
 
   def this(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expression) =
     this(numExpr, fromBaseExpr, toBaseExpr, ansiEnabled = SQLConf.get.ansiEnabled)
@@ -453,7 +461,7 @@ case class Conv(
   override def second: Expression = fromBaseExpr
   override def third: Expression = toBaseExpr
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCaseAccentSensitivity, IntegerType, IntegerType)
+    Seq(StringTypeWithCollation(supportsTrimCollation = true), IntegerType, IntegerType)
   override def dataType: DataType = first.dataType
   override def nullable: Boolean = true
 
@@ -629,7 +637,8 @@ object Factorial {
   since = "1.5.0",
   group = "math_funcs")
 case class Factorial(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends UnaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[DataType] = Seq(IntegerType)
 
@@ -1002,10 +1011,13 @@ case class ToRadians(child: Expression) extends UnaryMathExpression(math.toRadia
   group = "math_funcs")
 // scalastyle:on line.size.limit
 case class Bin(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
-
+  extends UnaryExpression
+  with ImplicitCastInputTypes
+  with Serializable
+  with DefaultStringProducingExpression {
+  override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[DataType] = Seq(LongType)
-  override def dataType: DataType = SQLConf.get.defaultStringType
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   protected override def nullSafeEval(input: Any): Any =
     UTF8String.toBinaryString(input.asInstanceOf[Long])
@@ -1111,15 +1123,20 @@ object Hex {
   since = "1.5.0",
   group = "math_funcs")
 case class Hex(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends UnaryExpression
+  with ImplicitCastInputTypes
+  with DefaultStringProducingExpression {
+  override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(LongType, BinaryType, StringTypeWithCaseAccentSensitivity))
+    Seq(TypeCollection(LongType, BinaryType, StringTypeWithCollation(supportsTrimCollation = true)))
 
   override def dataType: DataType = child.dataType match {
     case st: StringType => st
-    case _ => SQLConf.get.defaultStringType
+    case _ => super.dataType
   }
+
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   protected override def nullSafeEval(num: Any): Any = child.dataType match {
     case LongType => Hex.hex(num.asInstanceOf[Long])
@@ -1154,11 +1171,14 @@ case class Hex(child: Expression)
   since = "1.5.0",
   group = "math_funcs")
 case class Unhex(child: Expression, failOnError: Boolean = false)
-  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends UnaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   def this(expr: Expression) = this(expr, false)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringTypeWithCaseAccentSensitivity)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
 
   override def nullable: Boolean = true
   override def dataType: DataType = BinaryType
@@ -1251,8 +1271,9 @@ case class Pow(left: Expression, right: Expression)
 }
 
 sealed trait BitShiftOperation
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
+  extends BinaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
+  override def contextIndependentFoldable: Boolean = children.forall(_.contextIndependentFoldable)
   def symbol: String
   def shiftInt: (Int, Int) => Int
   def shiftLong: (Long, Int) => Long
@@ -1372,8 +1393,10 @@ case class ShiftRightUnsigned(left: Expression, right: Expression) extends BitSh
     copy(left = newLeft, right = newRight)
 }
 
+// scalastyle:off nonascii
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Returns sqrt(`expr1`**2 + `expr2`**2).",
+  usage = "_FUNC_(expr1, expr2) - Returns sqrt(`expr1`\u00B2 + `expr2`\u00B2).",
+  // scalastyle:on nonascii
   examples = """
     Examples:
       > SELECT _FUNC_(3, 4);
@@ -1832,7 +1855,8 @@ case class WidthBucket(
     minValue: Expression,
     maxValue: Expression,
     numBucket: Expression)
-  extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
+  extends QuaternaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] = Seq(
     TypeCollection(DoubleType, YearMonthIntervalType, DayTimeIntervalType),

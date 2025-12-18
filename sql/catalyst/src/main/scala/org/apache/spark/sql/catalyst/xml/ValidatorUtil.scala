@@ -28,7 +28,6 @@ import org.apache.spark.SparkFiles
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.internal.MDC
 
 /**
  * Utilities for working with XSD validation.

@@ -611,11 +611,11 @@ FROM(
 SELECT (b + 1) AS result
 ORDER BY result
 -- !query schema
-struct<result:double>
+struct<result:bigint>
 -- !query output
-3.0
-6.0
-9.0
+3
+6
+9
 
 
 -- !query

@@ -22,7 +22,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
 
 /**
- * Interface used to write a [[org.apache.spark.sql.api.Dataset]] to external storage using the v2
+ * Interface used to write a [[org.apache.spark.sql.Dataset]] to external storage using the v2
  * API.
  *
  * @since 3.0.0

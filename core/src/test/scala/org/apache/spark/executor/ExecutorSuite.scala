@@ -21,8 +21,8 @@ import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.lang.Thread.UncaughtExceptionHandler
 import java.net.URL
 import java.nio.ByteBuffer
-import java.util.Properties
-import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.{HashMap, Properties}
+import java.util.concurrent.{CountDownLatch, ThreadPoolExecutor, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.immutable
@@ -55,7 +55,7 @@ import org.apache.spark.scheduler.{DirectTaskResult, FakeTask, ResultTask, Task,
 import org.apache.spark.serializer.{JavaSerializer, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{BlockManager, BlockManagerId}
-import org.apache.spark.util.{LongAccumulator, SparkUncaughtExceptionHandler, ThreadUtils, UninterruptibleThread}
+import org.apache.spark.util.{LongAccumulator, SparkUncaughtExceptionHandler, ThreadUtils, UninterruptibleThread, Utils}
 
 class ExecutorSuite extends SparkFunSuite
     with LocalSparkContext with MockitoSugar with Eventually with PrivateMethodTester {
@@ -81,6 +81,8 @@ class ExecutorSuite extends SparkFunSuite
       resources: immutable.Map[String, ResourceInformation]
         = immutable.Map.empty[String, ResourceInformation])(f: Executor => Unit): Unit = {
     var executor: Executor = null
+    val getCustomHostname = PrivateMethod[Option[String]](Symbol("customHostname"))
+    val defaultCustomHostNameValue = Utils.invokePrivate(getCustomHostname())
     try {
       executor = new Executor(executorId, executorHostname, env, userClassPath, isLocal,
         uncaughtExceptionHandler, resources)
@@ -90,6 +92,10 @@ class ExecutorSuite extends SparkFunSuite
       if (executor != null) {
         executor.stop()
       }
+      // SPARK-51633: Reset the custom hostname to its default value in finally block
+      // to avoid contaminating other tests
+      val setCustomHostname = PrivateMethod[Unit](Symbol("customHostname_$eq"))
+      Utils.invokePrivate(setCustomHostname(defaultCustomHostNameValue))
     }
   }
 
@@ -522,7 +528,13 @@ class ExecutorSuite extends SparkFunSuite
       testThrowable(new OutOfMemoryError(), depthToCheck, isFatal = true)
       testThrowable(new InterruptedException(), depthToCheck, isFatal = false)
       testThrowable(new RuntimeException("test"), depthToCheck, isFatal = false)
-      testThrowable(new SparkOutOfMemoryError("test"), depthToCheck, isFatal = false)
+      testThrowable(
+        new SparkOutOfMemoryError(
+          "_LEGACY_ERROR_USER_RAISED_EXCEPTION",
+          new HashMap[String, String]() {
+            put("errorMessage", "test")
+          }),
+        depthToCheck, isFatal = false)
     }
 
     // Verify we can handle the cycle in the exception chain
@@ -587,6 +599,54 @@ class ExecutorSuite extends SparkFunSuite
       endLatch.countDown()
       eventually(timeout(10.seconds), interval(100.millis)) {
         assert(slowLibraryDownloadThread.getState == Thread.State.TERMINATED)
+      }
+    }
+  }
+
+  test("SPARK-54087: launchTask should return task killed message when threadPool.execute fails") {
+    val conf = new SparkConf
+    val serializer = new JavaSerializer(conf)
+    val env = createMockEnv(conf, serializer)
+    val serializedTask = serializer.newInstance().serialize(new FakeTask(0, 0))
+    val taskDescription = createFakeTaskDescription(serializedTask)
+
+    val mockExecutorBackend = mock[ExecutorBackend]
+    val statusCaptor = ArgumentCaptor.forClass(classOf[ByteBuffer])
+
+    withExecutor("id", "localhost", env) { executor =>
+      // Use reflection to replace threadPool with a mock that throws an exception
+      val executorClass = classOf[Executor]
+      val threadPoolField = executorClass.getDeclaredField("threadPool")
+      threadPoolField.setAccessible(true)
+      val originalThreadPool = threadPoolField.get(executor).asInstanceOf[ThreadPoolExecutor]
+
+      // Create a mock ThreadPoolExecutor that throws an exception when execute is called
+      val mockThreadPool = mock[ThreadPoolExecutor]
+      val testException = new OutOfMemoryError("unable to create new native thread")
+      when(mockThreadPool.execute(any[Runnable])).thenThrow(testException)
+      threadPoolField.set(executor, mockThreadPool)
+
+      try {
+        // Launch the task - this should catch the exception and send statusUpdate
+        executor.launchTask(mockExecutorBackend, taskDescription)
+
+        // Verify that statusUpdate was called with FAILED state
+        verify(mockExecutorBackend).statusUpdate(
+          meq(taskDescription.taskId),
+          meq(TaskState.FAILED),
+          statusCaptor.capture()
+        )
+
+        // Verify that the exception was correctly serialized
+        val failureData = statusCaptor.getValue
+        val failReason = serializer.newInstance()
+          .deserialize[ExceptionFailure](failureData)
+        assert(failReason.exception.isDefined)
+        assert(failReason.exception.get.isInstanceOf[OutOfMemoryError])
+        assert(failReason.exception.get.getMessage === "unable to create new native thread")
+      } finally {
+        // Restore the original threadPool
+        threadPoolField.set(executor, originalThreadPool)
       }
     }
   }

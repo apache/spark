@@ -28,7 +28,7 @@ import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.Utils.addRenderLogHandler
-import org.apache.spark.internal.{Logging, MDC}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config.History
 import org.apache.spark.internal.config.UI._
@@ -224,6 +224,11 @@ class HistoryServer(
     getApplicationList()
   }
 
+  override def getApplicationInfoList(max: Int)(
+      filter: ApplicationInfo => Boolean): Iterator[ApplicationInfo] = {
+    provider.getListing(max)(filter)
+  }
+
   def getApplicationInfo(appId: String): Option[ApplicationInfo] = {
     provider.getApplicationInfo(appId)
   }
@@ -317,7 +322,7 @@ object HistoryServer extends Logging {
     ShutdownHookManager.addShutdownHook { () => server.stop() }
 
     // Wait until the end of the world... or if the HistoryServer process is manually stopped
-    while(true) { Thread.sleep(Int.MaxValue) }
+    while (true) { Thread.sleep(Int.MaxValue) }
   }
 
   /**

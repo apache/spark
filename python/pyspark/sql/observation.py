@@ -18,6 +18,8 @@ import os
 from typing import Any, Dict, Optional, TYPE_CHECKING
 
 from pyspark.errors import PySparkTypeError, PySparkValueError, PySparkAssertionError
+from pyspark.serializers import CPickleSerializer
+from pyspark.sql import Row
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.utils import is_remote
@@ -122,7 +124,7 @@ class Observation:
 
         self._jvm = df._sc._jvm
         assert self._jvm is not None
-        cls = self._jvm.org.apache.spark.sql.Observation
+        cls = getattr(self._jvm, "org.apache.spark.sql.Observation")
         self._jo = cls(self._name) if self._name is not None else cls()
         observed_df = df._jdf.observe(
             self._jo, exprs[0]._jc, _to_seq(df._sc, [c._jc for c in exprs[1:]])
@@ -144,9 +146,11 @@ class Observation:
         if self._jo is None:
             raise PySparkAssertionError(errorClass="NO_OBSERVE_BEFORE_GET", messageParameters={})
 
-        jmap = self._jo.getAsJava()
-        # return a pure Python dict, not jmap which is a py4j JavaMap
-        return {k: v for k, v in jmap.items()}
+        assert self._jvm is not None
+        utils = getattr(self._jvm, "org.apache.spark.sql.api.python.PythonSQLUtils")
+        jrow = self._jo.getRow()
+        row: Row = CPickleSerializer().loads(utils.toPyRow(jrow))
+        return row.asDict(recursive=False)
 
 
 def _test() -> None:

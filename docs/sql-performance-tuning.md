@@ -240,7 +240,7 @@ head(join(src, hint(records, "broadcast"), src$key == records$key))
 <div data-lang="SQL" markdown="1">
 ```sql
 -- We accept BROADCAST, BROADCASTJOIN and MAPJOIN for broadcast hint
-SELECT /*+ BROADCAST(r) */ * FROM records r JOIN src s ON r.key = s.key
+SELECT /*+ BROADCAST(r) */ * FROM src s JOIN records r ON s.key = r.key
 ```
 </div>
 </div>
@@ -286,7 +286,7 @@ This feature coalesces the post shuffle partitions based on the map output stati
      <td><code>spark.sql.adaptive.coalescePartitions.minPartitionSize</code></td>
      <td>1MB</td>
      <td>
-       The minimum size of shuffle partitions after coalescing. Its value can be at most 20% of <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code>. This is useful when the target size is ignored during partition coalescing, which is the default case.
+       The minimum size of shuffle partitions after coalescing. This is useful when the target size is ignored during partition coalescing, which is the default case.
      </td>
      <td>3.2.0</td>
    </tr>
@@ -441,7 +441,7 @@ The following SQL properties enable Storage Partition Join in different join que
     <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
     <tr>
       <td><code>spark.sql.sources.v2.bucketing.enabled</code></td>
-      <td>false</td>
+      <td>true</td>
       <td>
         When true, try to eliminate shuffle by using the partitioning reported by a compatible V2 data source.
       </td>

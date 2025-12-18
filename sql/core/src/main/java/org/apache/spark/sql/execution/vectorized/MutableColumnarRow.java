@@ -29,6 +29,8 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
 import org.apache.spark.sql.vectorized.ColumnarMap;
 import org.apache.spark.sql.vectorized.ColumnarRow;
 import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.unsafe.types.GeographyVal;
+import org.apache.spark.unsafe.types.GeometryVal;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.types.VariantVal;
 
@@ -76,11 +78,17 @@ public final class MutableColumnarRow extends InternalRow {
           row.update(i, getUTF8String(i).copy());
         } else if (dt instanceof BinaryType) {
           row.update(i, getBinary(i));
+        } else if (dt instanceof GeographyType) {
+          row.update(i, getGeography(i));
+        } else if (dt instanceof GeometryType) {
+          row.update(i, getGeometry(i));
         } else if (dt instanceof DecimalType t) {
           row.setDecimal(i, getDecimal(i, t.precision(), t.scale()), t.precision());
         } else if (dt instanceof DateType) {
           row.setInt(i, getInt(i));
         } else if (dt instanceof TimestampType) {
+          row.setLong(i, getLong(i));
+        } else if (dt instanceof TimestampNTZType) {
           row.setLong(i, getLong(i));
         } else if (dt instanceof StructType) {
           row.update(i, getStruct(i, ((StructType) dt).fields().length).copy());
@@ -141,6 +149,16 @@ public final class MutableColumnarRow extends InternalRow {
   }
 
   @Override
+  public GeographyVal getGeography(int ordinal) {
+    return columns[ordinal].getGeography(rowId);
+  }
+
+  @Override
+  public GeometryVal getGeometry(int ordinal) {
+    return columns[ordinal].getGeometry(rowId);
+  }
+
+  @Override
   public CalendarInterval getInterval(int ordinal) {
     return columns[ordinal].getInterval(rowId);
   }
@@ -190,6 +208,8 @@ public final class MutableColumnarRow extends InternalRow {
     } else if (dataType instanceof DateType) {
       return getInt(ordinal);
     } else if (dataType instanceof TimestampType) {
+      return getLong(ordinal);
+    } else if (dataType instanceof TimestampNTZType) {
       return getLong(ordinal);
     } else if (dataType instanceof ArrayType) {
       return getArray(ordinal);

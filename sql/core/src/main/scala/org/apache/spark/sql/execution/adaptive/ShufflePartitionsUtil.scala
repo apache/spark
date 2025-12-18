@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.adaptive
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{MapOutputStatistics, MapOutputTrackerMaster, SparkEnv}
-import org.apache.spark.internal.{Logging, LogKeys, MDC}
+import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.execution.{CoalescedPartitionSpec, PartialReducerPartitionSpec, ShufflePartitionSpec}
 
 object ShufflePartitionsUtil extends Logging {
@@ -61,7 +61,7 @@ object ShufflePartitionsUtil extends Logging {
     val targetSize = maxTargetSize.min(advisoryTargetSize).max(minPartitionSize)
 
     val shuffleIds = mapOutputStatistics.flatMap(_.map(_.shuffleId)).mkString(", ")
-    logInfo(log"For shuffle(${MDC(LogKeys.SHUFFLE_ID, shuffleIds)}, advisory target size: " +
+    logInfo(log"For shuffle(${MDC(LogKeys.SHUFFLE_IDS, shuffleIds)}, advisory target size: " +
       log"${MDC(LogKeys.ADVISORY_TARGET_SIZE, advisoryTargetSize)}, actual target size " +
       log"${MDC(LogKeys.TARGET_SIZE, targetSize)}, minimum partition size: " +
       log"${MDC(LogKeys.PARTITION_SIZE, minPartitionSize)}")

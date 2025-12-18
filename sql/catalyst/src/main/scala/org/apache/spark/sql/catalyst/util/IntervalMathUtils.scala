@@ -35,12 +35,15 @@ object IntervalMathUtils {
 
   def negateExact(a: Long): Long = withOverflow(Math.negateExact(a))
 
-  private def withOverflow[A](f: => A, hint: String = ""): A = {
+  private def withOverflow[A](f: => A, suggestedFunc: String = ""): A = {
     try {
       f
     } catch {
-      case e: ArithmeticException =>
-        throw QueryExecutionErrors.intervalArithmeticOverflowError(e.getMessage, hint, null)
+      case _: ArithmeticException if suggestedFunc.isEmpty =>
+        throw QueryExecutionErrors.withoutSuggestionIntervalArithmeticOverflowError(context = null)
+      case _: ArithmeticException =>
+        throw QueryExecutionErrors.withSuggestionIntervalArithmeticOverflowError(
+          suggestedFunc, context = null)
     }
   }
 }

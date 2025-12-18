@@ -20,6 +20,7 @@ package org.apache.spark.storage
 import java.io.{File, InputStream, IOException}
 import java.nio.ByteBuffer
 import java.nio.file.Files
+import java.util.UUID
 import java.util.concurrent.ThreadLocalRandom
 
 import scala.collection.mutable
@@ -64,8 +65,11 @@ import org.apache.spark.serializer.{DeserializationStream, JavaSerializer, KryoD
 import org.apache.spark.shuffle.{MigratableResolver, ShuffleBlockInfo, ShuffleBlockResolver, ShuffleManager}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage.BlockManagerMessages._
+import org.apache.spark.storage.LogBlockType.LogBlockType
+import org.apache.spark.storage.StorageLevel._
 import org.apache.spark.util._
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.collection.Utils.createArray
 import org.apache.spark.util.io.ChunkedByteBuffer
 
 class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTester
@@ -152,7 +156,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
   }
 
   // Save modified system properties so that we can restore them after tests.
-  val originalArch = System.getProperty("os.arch")
+  val originalArch = Utils.osArch
   val originalCompressedOops = System.getProperty(TEST_USE_COMPRESSED_OOPS_KEY)
 
   def reinitializeSizeEstimator(arch: String, useCompressedOops: String): Unit = {
@@ -472,6 +476,26 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
   test("BlockManagerId.isDriver() with DRIVER_IDENTIFIER (SPARK-27090)") {
     assert(BlockManagerId(SparkContext.DRIVER_IDENTIFIER, "XXX", 1).isDriver)
     assert(!BlockManagerId("notADriverIdentifier", "XXX", 1).isDriver)
+  }
+
+  test("SPARK-43221: Host local block fetching should use a block status with disk size") {
+    conf.set(IO_ENCRYPTION_ENABLED, true)
+    conf.set(SHUFFLE_SERVICE_FETCH_RDD_ENABLED, true)
+    val store1 = makeBlockManager(2000, "exec1")
+    val store2 = makeBlockManager(2000, "exec2")
+    val store3 = makeBlockManager(2000, "exec3")
+    val store4 = makeBlockManager(2000, "exec4")
+    val value = new Array[Byte](100)
+    val broadcastId = BroadcastBlockId(0)
+    store1.putSingle(broadcastId, value, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    store2.putSingle(broadcastId, value, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    store3.putSingle(broadcastId, value, StorageLevel.DISK_ONLY, tellMaster = true)
+    store4.getRemoteBytes(broadcastId) match {
+      case Some(block) =>
+        assert(block.size > 0, "The block size must be greater than 0 for a nonempty block!")
+      case None =>
+        assert(false, "Block not found!")
+    }
   }
 
   test("master + 1 manager interaction") {
@@ -851,8 +875,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     when(bmMaster.getLocations(mc.any[BlockId])).thenReturn(Seq(bmId1, bmId2, bmId3))
 
     val blockManager = makeBlockManager(128, "exec", bmMaster)
-    val sortLocations = PrivateMethod[Seq[BlockManagerId]](Symbol("sortLocations"))
-    val locations = blockManager invokePrivate sortLocations(bmMaster.getLocations("test"))
+    val locations = blockManager.sortLocations(bmMaster.getLocations("test"))
     assert(locations.map(_.host) === Seq(localHost, localHost, otherHost))
   }
 
@@ -874,8 +897,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     val blockManager = makeBlockManager(128, "exec", bmMaster)
     blockManager.blockManagerId =
       BlockManagerId(SparkContext.DRIVER_IDENTIFIER, localHost, 1, Some(localRack))
-    val sortLocations = PrivateMethod[Seq[BlockManagerId]](Symbol("sortLocations"))
-    val locations = blockManager invokePrivate sortLocations(bmMaster.getLocations("test"))
+    val locations = blockManager.sortLocations(bmMaster.getLocations("test"))
     assert(locations.map(_.host) === Seq(localHost, localHost, otherHost, otherHost, otherHost))
     assert(locations.flatMap(_.topologyInfo)
       === Seq(localRack, localRack, localRack, otherRack, otherRack))
@@ -919,7 +941,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       // the local disk of sameHostBm where the block is replicated to.
       // When there is no replication then block must be added via sameHostBm directly.
       val bmToPutBlock = if (storageLevel.replication > 1) otherHostBm else sameHostBm
-      val array = Array.fill(16)(Byte.MinValue to Byte.MaxValue).flatten
+      val array = createArray(16, Byte.MinValue to Byte.MaxValue).flatten
       val blockId = "list"
       bmToPutBlock.putIterator(blockId, List(array).iterator, storageLevel, tellMaster = true)
 
@@ -952,7 +974,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       val store2 = makeBlockManager(8000, "executor2", this.master,
         Some(new MockBlockTransferService(0)))
       val blockId = "list"
-      val array = Array.fill(16)(Byte.MinValue to Byte.MaxValue).flatten
+      val array = createArray(16, Byte.MinValue to Byte.MaxValue).flatten
       store2.putIterator(blockId, List(array).iterator, level, true)
       val expectedBlockData = store2.getLocalBytes(blockId)
       assert(expectedBlockData.isDefined)
@@ -2483,6 +2505,155 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
       taskId, blockId, StorageLevel.MEMORY_ONLY, classTag[Int], makeIterator)
     // Accumulator should be updated even though block already exists.
     assert(acc.value === 6)
+  }
+
+  test("SPARK-53755: LogBlock should be DISK_ONLY") {
+    val store = makeBlockManager(8000, "executor1")
+    val data = Seq("log line 1", "log line 2")
+    val logBlockId = TestLogBlockId(1234L, store.executorId)
+
+    Seq(DISK_ONLY_2, DISK_ONLY_3,
+      MEMORY_ONLY, MEMORY_ONLY_2, MEMORY_ONLY_SER,
+      MEMORY_ONLY_SER_2, MEMORY_AND_DISK, MEMORY_AND_DISK_2,
+      MEMORY_AND_DISK_SER, MEMORY_AND_DISK_SER_2, OFF_HEAP).foreach { level =>
+      val exception = intercept[SparkException] {
+        store.putIterator[String](logBlockId, data.iterator, level, tellMaster = true)
+      }
+      assert(exception.getMessage.contains("Log blocks must be stored with DISK_ONLY."))
+    }
+
+    assert(store.putIterator[String](logBlockId, data.iterator, DISK_ONLY, tellMaster = true))
+  }
+
+  test("SPARK-53755: Log block write/read") {
+    val store = makeBlockManager(8000, "executor1")
+    val logBlockWriter = store.getLogBlockWriter(LogBlockType.TEST)
+    val logBlockId = TestLogBlockId(1L, store.executorId)
+    val log1 = TestLogLine(0L, 1, "Log message 1")
+    val log2 = TestLogLine(1L, 2, "Log message 2")
+
+    logBlockWriter.writeLog(log1)
+    logBlockWriter.writeLog(log2)
+    logBlockWriter.save(logBlockId)
+
+    val status = store.getStatus(logBlockId)
+    assert(status.isDefined)
+    status.foreach { s =>
+      assert(s.storageLevel === DISK_ONLY)
+      assert(s.memSize === 0)
+      assert(s.diskSize > 0)
+    }
+
+    val data = store.get[TestLogLine](logBlockId).get.data.toSeq
+    assert(data === Seq(log1, log2))
+  }
+
+  test("SPARK-53755: rolling log block write/read") {
+    val store = makeBlockManager(8000, "executor1")
+
+    val logBlockIdGenerator = new LogBlockIdGenerator {
+      override def logBlockType: LogBlockType = LogBlockType.TEST
+
+      override protected def genUniqueBlockId(
+          lastLogTime: Long, executorId: String): LogBlockId = {
+        TestLogBlockId(lastLogTime, executorId)
+      }
+    }
+
+    val logBlockWriter = store.getRollingLogWriter(logBlockIdGenerator, 100)
+    val log1 = TestLogLine(0L, 1, "Log message 1")
+    val log2 = TestLogLine(1L, 2, "Log message 2")
+    val log3 = TestLogLine(2L, 3, "Log message 3")
+    val log4 = TestLogLine(3L, 4, "Log message 4")
+
+    // 65 bytes for each log line, 2 log lines for each block
+    logBlockWriter.writeLog(log1)
+    logBlockWriter.writeLog(log2)
+    // Flush and update bytes written, so that the next write will go to a new block.
+    logBlockWriter.flush()
+    logBlockWriter.writeLog(log3)
+    logBlockWriter.writeLog(log4)
+    logBlockWriter.close()
+
+    val logBlockId1 = TestLogBlockId(2L, store.executorId)
+    val logBlockId2 = TestLogBlockId(3L, store.executorId)
+    val logBlockIds = store
+      .getMatchingBlockIds(_.isInstanceOf[TestLogBlockId])
+      .distinct
+    assert(logBlockIds.size === 2)
+    assert(logBlockIds.contains(logBlockId1) && logBlockIds.contains(logBlockId2))
+  }
+
+  test("PythonWorkerLog block write/read") {
+    val store = makeBlockManager(8000, "executor1")
+    val logBlockWriter = store.getLogBlockWriter(LogBlockType.PYTHON_WORKER)
+    val logBlockId = PythonWorkerLogBlockId(
+      1L, store.executorId, UUID.randomUUID.toString, "1234")
+
+    assert(BlockId(logBlockId.name) == logBlockId)
+
+    val log1 = PythonWorkerLogLine(0L, 1L, "json1")
+    val log2 = PythonWorkerLogLine(1L, 2L, "json2")
+
+    logBlockWriter.writeLog(log1)
+    logBlockWriter.writeLog(log2)
+    logBlockWriter.save(logBlockId)
+
+    val status = store.getStatus(logBlockId)
+    assert(status.isDefined)
+
+    assert(store.getMatchingBlockIds(b => logBlockId.equals(b)).nonEmpty)
+
+    val data = store.get[PythonWorkerLogLine](logBlockId).get.data.toSeq
+    assert(data === Seq(log1, log2))
+  }
+
+  test("rolling python worker log block write/read") {
+    val store = makeBlockManager(8000, "executor1")
+
+    val sessionId = UUID.randomUUID.toString
+    val workerId = "1234"
+    val logBlockIdGenerator = new PythonWorkerLogBlockIdGenerator(sessionId, workerId)
+
+    val logBlockWriter = store.getRollingLogWriter(logBlockIdGenerator, 100)
+    val log1 = PythonWorkerLogLine(0L, 1L, "json 1")
+    val log2 = PythonWorkerLogLine(1L, 2L, "json 2")
+    val log3 = PythonWorkerLogLine(2L, 3L, "json 3")
+    val log4 = PythonWorkerLogLine(3L, 4L, "json 4")
+    logBlockWriter.writeLog(log1)
+    logBlockWriter.writeLog(log2)
+    logBlockWriter.flush()
+    logBlockWriter.writeLog(log3)
+    logBlockWriter.writeLog(log4)
+    logBlockWriter.close()
+
+    val logBlockId1 = PythonWorkerLogBlockId(2L, store.executorId, sessionId, workerId)
+    val logBlockId2 = PythonWorkerLogBlockId(3L, store.executorId, sessionId, workerId)
+    val logBlockIds = store.getMatchingBlockIds(_.isInstanceOf[PythonWorkerLogBlockId]).distinct
+    assert(logBlockIds.size === 2)
+    assert(logBlockIds.contains(logBlockId1) && logBlockIds.contains(logBlockId2))
+  }
+
+  test("SPARK-53446: Optimize BlockManager remove operations with cached block mappings") {
+    val store = makeBlockManager(8000, "executor1")
+    val broadcastId = 0
+    val rddId = 1
+    val sessionId = UUID.randomUUID.toString
+    val data = new Array[Byte](100)
+
+    store.putSingle(BroadcastBlockId(broadcastId), data, StorageLevel.MEMORY_ONLY)
+    assert(store.blockInfoManager.broadcastBlockIds(broadcastId).nonEmpty)
+    store.putSingle(rdd(rddId, 3), data, StorageLevel.MEMORY_ONLY)
+    assert(store.blockInfoManager.rddBlockIds(rddId).nonEmpty)
+    store.putSingle(CacheId(sessionId, "abc"), data, StorageLevel.MEMORY_ONLY)
+    assert(store.blockInfoManager.sessionBlockIds(sessionId).nonEmpty)
+
+    store.removeBroadcast(broadcastId, false)
+    assert(store.blockInfoManager.broadcastBlockIds(broadcastId).isEmpty)
+    store.removeRdd(rddId)
+    assert(store.blockInfoManager.rddBlockIds(rddId).isEmpty)
+    store.removeCache(sessionId)
+    assert(store.blockInfoManager.sessionBlockIds(sessionId).isEmpty)
   }
 
   private def createKryoSerializerWithDiskCorruptedInputStream(): KryoSerializer = {

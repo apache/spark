@@ -33,7 +33,6 @@ import scala.Tuple3;
 import scala.Tuple4;
 import scala.Tuple5;
 
-import com.google.common.base.Objects;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -63,6 +62,9 @@ public class JavaDatasetSuite implements Serializable {
     spark = new TestSparkSession();
     jsc = new JavaSparkContext(spark.sparkContext());
     spark.loadTestData();
+
+    // Initialize state store coordinator endpoint
+    spark.streams().stateStoreCoordinator();
   }
 
   @AfterEach
@@ -801,6 +803,34 @@ public class JavaDatasetSuite implements Serializable {
     Assertions.assertEquals(data, ds.collectAsList());
   }
 
+  @Test
+  public void testLocalTimeEncoder() {
+    Encoder<LocalTime> encoder = Encoders.LOCALTIME();
+    List<LocalTime> data = Arrays.asList(LocalTime.NOON, LocalTime.MIDNIGHT);
+    Dataset<LocalTime> ds = spark.createDataset(data, encoder);
+    Assertions.assertEquals(data, ds.collectAsList());
+  }
+
+  @Test
+  public void testLocalTimeFilter() {
+    Encoder<LocalTime> encoder = Encoders.LOCALTIME();
+    List<LocalTime> data = Arrays.asList(
+      LocalTime.of(9, 30, 45),
+      LocalTime.of(14, 10, 10),
+      LocalTime.of(22, 10, 10)
+    );
+    Dataset<LocalTime> ds = spark.createDataset(data, encoder);
+
+    Dataset<LocalTime> filtered = ds.filter(
+      (FilterFunction<LocalTime>) time -> time.isAfter(LocalTime.of(12, 0, 0))
+    );
+    List<LocalTime> expectedFiltered = Arrays.asList(
+      LocalTime.of(14, 10, 10),
+      LocalTime.of(22, 10, 10)
+    );
+    Assertions.assertEquals(expectedFiltered, filtered.collectAsList());
+  }
+
   public static class KryoSerializable {
     String value;
 
@@ -898,6 +928,7 @@ public class JavaDatasetSuite implements Serializable {
     private List<Long> f;
     private Map<Integer, String> g;
     private Map<List<Long>, Map<String, String>> h;
+    private List<List<Long>> i;
 
     public boolean isA() {
       return a;
@@ -963,6 +994,14 @@ public class JavaDatasetSuite implements Serializable {
       this.h = h;
     }
 
+    public List<List<Long>> getI() {
+      return i;
+    }
+
+    public void setI(List<List<Long>> i) {
+      this.i = i;
+    }
+
     @Override
     public boolean equals(Object o) {
       if (this == o) return true;
@@ -977,7 +1016,8 @@ public class JavaDatasetSuite implements Serializable {
       if (!e.equals(that.e)) return false;
       if (!f.equals(that.f)) return false;
       if (!g.equals(that.g)) return false;
-      return h.equals(that.h);
+      if (!h.equals(that.h)) return false;
+      return i.equals(that.i);
 
     }
 
@@ -991,6 +1031,7 @@ public class JavaDatasetSuite implements Serializable {
       result = 31 * result + f.hashCode();
       result = 31 * result + g.hashCode();
       result = 31 * result + h.hashCode();
+      result = 31 * result + i.hashCode();
       return result;
     }
   }
@@ -1080,6 +1121,10 @@ public class JavaDatasetSuite implements Serializable {
     Map<List<Long>, Map<String, String>> complexMap1 = new HashMap<>();
     complexMap1.put(Arrays.asList(1L, 2L), nestedMap1);
     obj1.setH(complexMap1);
+    List<Long> nestedList1 = List.of(1L, 2L, 3L);
+    List<Long> nestedList2 = List.of(4L, 5L, 6L);
+    List<List<Long>> complexList1 = List.of(nestedList1, nestedList2);
+    obj1.setI(complexList1);
 
     SimpleJavaBean obj2 = new SimpleJavaBean();
     obj2.setA(false);
@@ -1098,6 +1143,10 @@ public class JavaDatasetSuite implements Serializable {
     Map<List<Long>, Map<String, String>> complexMap2 = new HashMap<>();
     complexMap2.put(Arrays.asList(3L, 4L), nestedMap2);
     obj2.setH(complexMap2);
+    List<Long> nestedList3 = List.of(1L, 2L, 7L);
+    List<Long> nestedList4 = List.of(4L, 5L, 8L);
+    List<List<Long>> complexList2 = List.of(nestedList3, nestedList4);
+    obj2.setI(complexList2);
 
     List<SimpleJavaBean> data = Arrays.asList(obj1, obj2);
     Dataset<SimpleJavaBean> ds = spark.createDataset(data, Encoders.bean(SimpleJavaBean.class));
@@ -1118,7 +1167,8 @@ public class JavaDatasetSuite implements Serializable {
       Arrays.asList("a", "b"),
       Arrays.asList(100L, null, 200L),
       map1,
-      complexMap1});
+      complexMap1,
+      complexList1});
     Row row2 = new GenericRow(new Object[]{
       false,
       30,
@@ -1127,7 +1177,8 @@ public class JavaDatasetSuite implements Serializable {
       Arrays.asList("x", "y"),
       Arrays.asList(300L, null, 400L),
       map2,
-      complexMap2});
+      complexMap2,
+      complexList2});
     StructType schema = new StructType()
       .add("a", BooleanType, false)
       .add("b", IntegerType, false)
@@ -1136,7 +1187,8 @@ public class JavaDatasetSuite implements Serializable {
       .add("e", createArrayType(StringType))
       .add("f", createArrayType(LongType))
       .add("g", createMapType(IntegerType, StringType))
-      .add("h",createMapType(createArrayType(LongType), createMapType(StringType, StringType)));
+      .add("h", createMapType(createArrayType(LongType), createMapType(StringType, StringType)))
+      .add("i", createArrayType(createArrayType(LongType)));
     Dataset<SimpleJavaBean> ds3 = spark.createDataFrame(Arrays.asList(row1, row2), schema)
       .as(Encoders.bean(SimpleJavaBean.class));
     Assertions.assertEquals(data, ds3.collectAsList());
@@ -1181,12 +1233,12 @@ public class JavaDatasetSuite implements Serializable {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
       SmallBean smallBean = (SmallBean) o;
-      return b == smallBean.b && com.google.common.base.Objects.equal(a, smallBean.a);
+      return b == smallBean.b && Objects.equals(a, smallBean.a);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(a, b);
+      return Objects.hash(a, b);
     }
   }
 
@@ -1206,7 +1258,7 @@ public class JavaDatasetSuite implements Serializable {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
       NestedSmallBean that = (NestedSmallBean) o;
-      return Objects.equal(f, that.f);
+      return Objects.equals(f, that.f);
     }
 
     @Override
@@ -1248,13 +1300,13 @@ public class JavaDatasetSuite implements Serializable {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
       NestedSmallBeanWithNonNullField that = (NestedSmallBeanWithNonNullField) o;
-      return Objects.equal(nullable_f, that.nullable_f) &&
-        Objects.equal(nonNull_f, that.nonNull_f) && Objects.equal(childMap, that.childMap);
+      return Objects.equals(nullable_f, that.nullable_f) &&
+        Objects.equals(nonNull_f, that.nonNull_f) && Objects.equals(childMap, that.childMap);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(nullable_f, nonNull_f, childMap);
+      return Objects.hash(nullable_f, nonNull_f, childMap);
     }
   }
 
@@ -1275,7 +1327,7 @@ public class JavaDatasetSuite implements Serializable {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
       NestedSmallBean2 that = (NestedSmallBean2) o;
-      return Objects.equal(f, that.f);
+      return Objects.equals(f, that.f);
     }
 
     @Override
@@ -1817,7 +1869,7 @@ public class JavaDatasetSuite implements Serializable {
     }
 
     public int hashCode() {
-      return Objects.hashCode(enumField, regularField);
+      return Objects.hash(enumField, regularField);
     }
 
     public boolean equals(Object other) {
@@ -2074,7 +2126,7 @@ public class JavaDatasetSuite implements Serializable {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
       BeanWithSet that = (BeanWithSet) o;
-      return Objects.equal(fields, that.fields);
+      return Objects.equals(fields, that.fields);
     }
 
     @Override
@@ -2117,14 +2169,14 @@ public class JavaDatasetSuite implements Serializable {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
       SpecificListsBean that = (SpecificListsBean) o;
-      return Objects.equal(arrayList, that.arrayList) &&
-        Objects.equal(linkedList, that.linkedList) &&
-        Objects.equal(list, that.list);
+      return Objects.equals(arrayList, that.arrayList) &&
+        Objects.equals(linkedList, that.linkedList) &&
+        Objects.equals(list, that.list);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(arrayList, linkedList, list);
+      return Objects.hash(arrayList, linkedList, list);
     }
   }
 }

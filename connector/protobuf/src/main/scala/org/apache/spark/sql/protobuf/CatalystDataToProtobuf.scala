@@ -55,4 +55,35 @@ private[sql] case class CatalystDataToProtobuf(
 
   override protected def withNewChildInternal(newChild: Expression): CatalystDataToProtobuf =
     copy(child = newChild)
+
+  override def equals(that: Any): Boolean = {
+    that match {
+      case that: CatalystDataToProtobuf =>
+        this.child == that.child &&
+        this.messageName == that.messageName &&
+        (
+          (this.binaryFileDescriptorSet.isEmpty && that.binaryFileDescriptorSet.isEmpty) ||
+          (
+            this.binaryFileDescriptorSet.nonEmpty && that.binaryFileDescriptorSet.nonEmpty &&
+            this.binaryFileDescriptorSet.get.sameElements(that.binaryFileDescriptorSet.get)
+          )
+        ) &&
+        this.options == that.options
+      case _ => false
+    }
+  }
+
+  override def hashCode(): Int = {
+    val prime = 31
+    var result = 1
+    var i = 0
+    while (i < binaryFileDescriptorSet.map(_.length).getOrElse(0)) {
+      result = prime * result + binaryFileDescriptorSet.get.apply(i).hashCode
+      i += 1
+    }
+    result = prime * result + child.hashCode
+    result = prime * result + messageName.hashCode
+    result = prime * result + options.hashCode
+    result
+  }
 }

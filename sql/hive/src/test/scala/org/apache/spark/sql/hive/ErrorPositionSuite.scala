@@ -165,7 +165,7 @@ class ErrorPositionSuite extends QueryTest with TestHiveSingleton with BeforeAnd
           |
           |Actual: $actualStart, Expected: $expectedStart
           |$line
-          |${" " * actualStart}^
+          |${" ".repeat(actualStart)}^
           |0123456789 123456789 1234567890
           |          2         3
         """.stripMargin)

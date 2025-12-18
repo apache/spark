@@ -27,9 +27,7 @@ import org.scalatest.concurrent.Futures.timeout
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.streaming.StreamingQuery
-import org.apache.spark.sql.streaming.StreamingQueryManager
+import org.apache.spark.sql.classic.{SparkSession, StreamingQuery, StreamingQueryManager}
 import org.apache.spark.util.ManualClock
 
 class SparkConnectStreamingQueryCacheSuite extends SparkFunSuite with MockitoSugar {
@@ -48,6 +46,7 @@ class SparkConnectStreamingQueryCacheSuite extends SparkFunSuite with MockitoSug
 
     val queryId = UUID.randomUUID().toString
     val runId = UUID.randomUUID().toString
+    val tag = "test_tag"
     val mockSession = mock[SparkSession]
     val mockQuery = mock[StreamingQuery]
     val mockStreamingQueryManager = mock[StreamingQueryManager]
@@ -67,12 +66,15 @@ class SparkConnectStreamingQueryCacheSuite extends SparkFunSuite with MockitoSug
 
     // Register the query.
 
-    sessionMgr.registerNewStreamingQuery(sessionHolder, mockQuery, Set.empty[String], "")
+    sessionMgr.registerNewStreamingQuery(sessionHolder, mockQuery, Set(tag), "")
 
     sessionMgr.getCachedValue(queryId, runId) match {
       case Some(v) =>
         assert(v.sessionId == sessionHolder.sessionId)
         assert(v.expiresAtMs.isEmpty, "No expiry time should be set for active query")
+
+        val taggedQueries = sessionMgr.getTaggedQuery(tag, mockSession)
+        assert(taggedQueries.contains(v))
 
       case None => assert(false, "Query should be found")
     }
@@ -127,6 +129,9 @@ class SparkConnectStreamingQueryCacheSuite extends SparkFunSuite with MockitoSug
     assert(sessionMgr.getCachedValue(queryId, runId).map(_.query).contains(mockQuery))
     assert(
       sessionMgr.getCachedValue(queryId, restartedRunId).map(_.query).contains(restartedQuery))
+    eventually(timeout(1.minute)) {
+      assert(sessionMgr.taggedQueries.containsKey(tag))
+    }
 
     // Advance time by 1 minute and verify the first query is dropped from the cache.
     clock.advance(1.minute.toMillis)
@@ -144,8 +149,11 @@ class SparkConnectStreamingQueryCacheSuite extends SparkFunSuite with MockitoSug
     clock.advance(1.minute.toMillis)
     eventually(timeout(1.minute)) {
       assert(sessionMgr.getCachedValue(queryId, restartedRunId).isEmpty)
+      assert(sessionMgr.getTaggedQuery(tag, mockSession).isEmpty)
     }
-
+    eventually(timeout(1.minute)) {
+      assert(!sessionMgr.taggedQueries.containsKey(tag))
+    }
     sessionMgr.shutdown()
   }
 }

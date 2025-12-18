@@ -21,7 +21,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, Da
 
 import scala.jdk.CollectionConverters._
 
-import com.google.common.io.{ByteStreams, Closeables}
+import com.google.common.io.Closeables
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{InputSplit, JobContext, RecordReader, TaskAttemptContext}
@@ -45,8 +45,8 @@ private[spark] abstract class StreamFileInputFormat[T]
    * which is set through setMaxSplitSize
    */
   def setMinPartitions(sc: SparkContext, context: JobContext, minPartitions: Int): Unit = {
-    val defaultMaxSplitBytes = sc.getConf.get(config.FILES_MAX_PARTITION_BYTES)
-    val openCostInBytes = sc.getConf.get(config.FILES_OPEN_COST_IN_BYTES)
+    val defaultMaxSplitBytes = sc.conf.get(config.FILES_MAX_PARTITION_BYTES)
+    val openCostInBytes = sc.conf.get(config.FILES_OPEN_COST_IN_BYTES)
     val defaultParallelism = Math.max(sc.defaultParallelism, minPartitions)
     val files = listStatus(context).asScala
     val totalBytes = files.filterNot(_.isDirectory).map(_.getLen + openCostInBytes).sum
@@ -202,7 +202,7 @@ class PortableDataStream(
   def toArray(): Array[Byte] = {
     val stream = open()
     try {
-      ByteStreams.toByteArray(stream)
+      stream.readAllBytes()
     } finally {
       Closeables.close(stream, true)
     }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import java.util.concurrent.{ConcurrentHashMap, ExecutorService, Future => JFuture}
+import java.util.concurrent.{CompletableFuture, ConcurrentHashMap, ExecutorService}
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.jdk.CollectionConverters._
@@ -28,8 +28,11 @@ import org.apache.spark.SparkContext.{SPARK_JOB_DESCRIPTION, SPARK_JOB_INTERRUPT
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{SPARK_DRIVER_PREFIX, SPARK_EXECUTOR_PREFIX}
 import org.apache.spark.internal.config.Tests.IS_TESTING
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
+import org.apache.spark.sql.execution.command.DataWritingCommandExec
+import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.SQL_EVENT_TRUNCATE_LENGTH
@@ -64,6 +67,17 @@ object SQLExecution extends Logging {
       // set by calling withNewExecutionId in the action that begins execution, like
       // Dataset.collect or DataFrameWriter.insertInto.
       throw SparkException.internalError("Execution ID should be set")
+    }
+  }
+
+  private def extractShuffleIds(plan: SparkPlan): Seq[Int] = {
+    plan match {
+      case ae: AdaptiveSparkPlanExec =>
+        ae.context.shuffleIds.asScala.keys.toSeq
+      case nonAdaptivePlan =>
+        nonAdaptivePlan.collect {
+          case exec: ShuffleExchangeLike => exec.shuffleId
+        }
     }
   }
 
@@ -120,93 +134,99 @@ object SQLExecution extends Logging {
       val redactedConfigs = sparkSession.sessionState.conf.redactOptions(modifiedConfigs)
 
       withSQLConfPropagated(sparkSession) {
-        withSessionTagsApplied(sparkSession) {
-          var ex: Option[Throwable] = None
-          var isExecutedPlanAvailable = false
-          val startTime = System.nanoTime()
-          val startEvent = SparkListenerSQLExecutionStart(
-            executionId = executionId,
-            rootExecutionId = Some(rootExecutionId),
-            description = desc,
-            details = callSite.longForm,
-            physicalPlanDescription = "",
-            sparkPlanInfo = SparkPlanInfo.EMPTY,
-            time = System.currentTimeMillis(),
-            modifiedConfigs = redactedConfigs,
-            jobTags = sc.getJobTags(),
-            jobGroupId = Option(sc.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID))
-          )
-          try {
-            body match {
-              case Left(e) =>
-                sc.listenerBus.post(startEvent)
+        sparkSession.artifactManager.withResources {
+          withSessionTagsApplied(sparkSession) {
+            var ex: Option[Throwable] = None
+            var isExecutedPlanAvailable = false
+            val startTime = System.nanoTime()
+            val startEvent = SparkListenerSQLExecutionStart(
+              executionId = executionId,
+              rootExecutionId = Some(rootExecutionId),
+              description = desc,
+              details = callSite.longForm,
+              physicalPlanDescription = "",
+              sparkPlanInfo = SparkPlanInfo.EMPTY,
+              time = System.currentTimeMillis(),
+              modifiedConfigs = redactedConfigs,
+              jobTags = sc.getJobTags(),
+              jobGroupId = Option(sc.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID))
+            )
+            try {
+              body match {
+                case Left(e) =>
+                  sc.listenerBus.post(startEvent)
+                  throw e
+                case Right(f) =>
+                  val planDescriptionMode =
+                    ExplainMode.fromString(sparkSession.sessionState.conf.uiExplainMode)
+                  val planDesc = queryExecution.explainString(planDescriptionMode)
+                  val planInfo = try {
+                    SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan)
+                  } catch {
+                    case NonFatal(e) =>
+                      logDebug("Failed to generate SparkPlanInfo", e)
+                      // If the queryExecution already failed before this, we are not able to
+                      // generate the the plan info, so we use and empty graphviz node to make the
+                      // UI happy
+                      SparkPlanInfo.EMPTY
+                  }
+                  sc.listenerBus.post(
+                    startEvent.copy(physicalPlanDescription = planDesc, sparkPlanInfo = planInfo))
+                  isExecutedPlanAvailable = true
+                  f()
+              }
+            } catch {
+              case e: Throwable =>
+                ex = Some(e)
                 throw e
-              case Right(f) =>
-                val planDescriptionMode =
-                  ExplainMode.fromString(sparkSession.sessionState.conf.uiExplainMode)
-                val planDesc = queryExecution.explainString(planDescriptionMode)
-                val planInfo = try {
-                  SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan)
-                } catch {
-                  case NonFatal(e) =>
-                    logDebug("Failed to generate SparkPlanInfo", e)
-                    // If the queryExecution already failed before this, we are not able to generate
-                    // the the plan info, so we use and empty graphviz node to make the UI happy
-                    SparkPlanInfo.EMPTY
-                }
-                sc.listenerBus.post(
-                  startEvent.copy(physicalPlanDescription = planDesc, sparkPlanInfo = planInfo))
-                isExecutedPlanAvailable = true
-                f()
-            }
-          } catch {
-            case e: Throwable =>
-              ex = Some(e)
-              throw e
-          } finally {
-            val endTime = System.nanoTime()
-            val errorMessage = ex.map {
-              case e: SparkThrowable =>
-                SparkThrowableHelper.getMessage(e, ErrorMessageFormat.PRETTY)
-              case e =>
-                Utils.exceptionString(e)
-            }
-            if (queryExecution.shuffleCleanupMode != DoNotCleanup
-              && isExecutedPlanAvailable) {
-              val shuffleIds = queryExecution.executedPlan match {
-                case ae: AdaptiveSparkPlanExec =>
-                  ae.context.shuffleIds.asScala.keys
-                case _ =>
-                  Iterable.empty
+            } finally {
+              val endTime = System.nanoTime()
+              val errorMessage = ex.map {
+                case e: SparkThrowable =>
+                  SparkThrowableHelper.getMessage(e, ErrorMessageFormat.PRETTY)
+                case e =>
+                  Utils.exceptionString(e)
               }
-              shuffleIds.foreach { shuffleId =>
-                queryExecution.shuffleCleanupMode match {
-                  case RemoveShuffleFiles =>
-                    // Same as what we do in ContextCleaner.doCleanupShuffle, but do not unregister
-                    // the shuffle on MapOutputTracker, so that stage retries would be triggered.
-                    // Set blocking to Utils.isTesting to deflake unit tests.
-                    sc.shuffleDriverComponents.removeShuffle(shuffleId, Utils.isTesting)
-                  case SkipMigration =>
-                    SparkEnv.get.blockManager.migratableResolver.addShuffleToSkip(shuffleId)
-                  case _ => // this should not happen
+              if (queryExecution.shuffleCleanupMode != DoNotCleanup
+                && isExecutedPlanAvailable) {
+                val shuffleIds = queryExecution.executedPlan match {
+                  case command: V2CommandExec =>
+                    command.children.flatMap(extractShuffleIds)
+                  case dataWritingCommand: DataWritingCommandExec =>
+                    extractShuffleIds(dataWritingCommand.child)
+                  case plan =>
+                    extractShuffleIds(plan)
+                }
+                shuffleIds.foreach { shuffleId =>
+                  queryExecution.shuffleCleanupMode match {
+                    case RemoveShuffleFiles =>
+                      // Same as what we do in ContextCleaner.doCleanupShuffle, but do not
+                      // unregister the shuffle on MapOutputTracker, so that stage retries would be
+                      // triggered.
+                      // Set blocking to Utils.isTesting to deflake unit tests.
+                      sc.shuffleDriverComponents.removeShuffle(shuffleId, Utils.isTesting)
+                    case SkipMigration =>
+                      SparkEnv.get.blockManager.migratableResolver.addShuffleToSkip(shuffleId)
+                    case _ => // this should not happen
+                  }
                 }
               }
+              val event = SparkListenerSQLExecutionEnd(
+                executionId,
+                System.currentTimeMillis(),
+                // Use empty string to indicate no error, as None may mean events generated by old
+                // versions of Spark.
+                errorMessage.orElse(Some("")))
+              // Currently only `Dataset.withAction` and `DataFrameWriter.runCommand` specify the
+              // `name` parameter. The `ExecutionListenerManager` only watches SQL executions with
+              // name. We can specify the execution name in more places in the future, so that
+              // `QueryExecutionListener` can track more cases.
+              event.executionName = name
+              event.duration = endTime - startTime
+              event.qe = queryExecution
+              event.executionFailure = ex
+              sc.listenerBus.post(event)
             }
-            val event = SparkListenerSQLExecutionEnd(
-              executionId,
-              System.currentTimeMillis(),
-              // Use empty string to indicate no error, as None may mean events generated by old
-              // versions of Spark.
-              errorMessage.orElse(Some("")))
-            // Currently only `Dataset.withAction` and `DataFrameWriter.runCommand` specify the
-            // `name` parameter. The `ExecutionListenerManager` only watches SQL executions with
-            // name. We can specify the execution name in more places in the future, so that
-            // `QueryExecutionListener` can track more cases.
-            event.executionName = name
-            event.duration = endTime - startTime
-            event.qe = queryExecution
-            event.executionFailure = ex
-            sc.listenerBus.post(event)
           }
         }
       }
@@ -257,7 +277,7 @@ object SQLExecution extends Logging {
   }
 
   private[sql] def withSessionTagsApplied[T](sparkSession: SparkSession)(block: => T): T = {
-    val allTags = sparkSession.managedJobTags.values().asScala.toSet + sparkSession.sessionJobTag
+    val allTags = sparkSession.managedJobTags.get().values.toSet + sparkSession.sessionJobTag
     sparkSession.sparkContext.addJobTags(allTags)
 
     try {
@@ -297,12 +317,15 @@ object SQLExecution extends Logging {
    * SparkContext local properties are forwarded to execution thread
    */
   def withThreadLocalCaptured[T](
-      sparkSession: SparkSession, exec: ExecutorService) (body: => T): JFuture[T] = {
+      sparkSession: SparkSession, exec: ExecutorService) (body: => T): CompletableFuture[T] = {
     val activeSession = sparkSession
     val sc = sparkSession.sparkContext
     val localProps = Utils.cloneProperties(sc.getLocalProperties)
-    val artifactState = JobArtifactSet.getCurrentJobArtifactState.orNull
-    exec.submit(() => JobArtifactSet.withActiveJobArtifactState(artifactState) {
+    // `getCurrentJobArtifactState` will return a stat only in Spark Connect mode. In non-Connect
+    // mode, we default back to the resources of the current Spark session.
+    val artifactState = JobArtifactSet.getCurrentJobArtifactState.getOrElse(
+      activeSession.artifactManager.state)
+    CompletableFuture.supplyAsync(() => JobArtifactSet.withActiveJobArtifactState(artifactState) {
       val originalSession = SparkSession.getActiveSession
       val originalLocalProps = sc.getLocalProperties
       SparkSession.setActiveSession(activeSession)
@@ -319,6 +342,6 @@ object SQLExecution extends Logging {
         SparkSession.clearActiveSession()
       }
       res
-    })
+    }, exec)
   }
 }

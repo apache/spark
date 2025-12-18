@@ -25,10 +25,11 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.execution.datasources.v2.state.{StateDataSourceErrors, StateSourceOptions}
-import org.apache.spark.sql.execution.streaming.{StateVariableType, TransformWithStateVariableInfo}
-import org.apache.spark.sql.execution.streaming.StateVariableType._
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.{StateVariableType, TransformWithStateVariableInfo}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.StateVariableType._
 import org.apache.spark.sql.execution.streaming.state.{ReadStateStore, StateStoreColFamilySchema, UnsafeRowPair}
-import org.apache.spark.sql.types.{ArrayType, DataType, IntegerType, LongType, MapType, StringType, StructType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, IntegerType, LongType, MapType, StringType, StructType}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
 object SchemaUtil {
@@ -49,17 +50,25 @@ object SchemaUtil {
       valueSchema: StructType,
       transformWithStateVariableInfoOpt: Option[TransformWithStateVariableInfo],
       stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema]): StructType = {
-    if (sourceOptions.readChangeFeed) {
+    if (transformWithStateVariableInfoOpt.isDefined) {
+      require(stateStoreColFamilySchemaOpt.isDefined)
+      generateSchemaForStateVar(transformWithStateVariableInfoOpt.get,
+        stateStoreColFamilySchemaOpt.get, sourceOptions)
+    } else if (sourceOptions.readChangeFeed) {
       new StructType()
         .add("batch_id", LongType)
         .add("change_type", StringType)
         .add("key", keySchema)
         .add("value", valueSchema)
         .add("partition_id", IntegerType)
-    } else if (transformWithStateVariableInfoOpt.isDefined) {
-      require(stateStoreColFamilySchemaOpt.isDefined)
-      generateSchemaForStateVar(transformWithStateVariableInfoOpt.get,
-        stateStoreColFamilySchemaOpt.get, sourceOptions)
+    } else if (sourceOptions.internalOnlyReadAllColumnFamilies) {
+      new StructType()
+        // TODO [SPARK-54443]: change keySchema to a more specific type after we
+        // can extract partition key from keySchema
+        .add("partition_key", keySchema)
+        .add("key_bytes", BinaryType)
+        .add("value_bytes", BinaryType)
+        .add("column_family_name", StringType)
     } else {
       new StructType()
         .add("key", keySchema)
@@ -73,6 +82,26 @@ object SchemaUtil {
     row.update(0, pair._1)
     row.update(1, pair._2)
     row.update(2, partition)
+    row
+  }
+
+  /**
+   * Returns an InternalRow representing
+   * 1. partitionKey
+   * 2. key in bytes
+   * 3. value in bytes
+   * 4. column family name
+   */
+  def unifyStateRowPairAsRawBytes(
+      pair: (UnsafeRow, UnsafeRow),
+      colFamilyName: String): InternalRow = {
+    val row = new GenericInternalRow(4)
+    // todo [SPARK-54443]: change keySchema to more specific type after we
+    //  can extract partition key from keySchema
+    row.update(0, pair._1)
+    row.update(1, pair._1.getBytes)
+    row.update(2, pair._2.getBytes)
+    row.update(3, UTF8String.fromString(colFamilyName))
     row
   }
 
@@ -231,27 +260,37 @@ object SchemaUtil {
       "user_map_key" -> classOf[StructType],
       "user_map_value" -> classOf[StructType],
       "expiration_timestamp_ms" -> classOf[LongType],
-      "partition_id" -> classOf[IntegerType])
+      "partition_id" -> classOf[IntegerType],
+      "partition_key" -> classOf[StructType],
+      "key_bytes" -> classOf[BinaryType],
+      "value_bytes" -> classOf[BinaryType],
+      "column_family_name" -> classOf[StringType])
 
-    val expectedFieldNames = if (sourceOptions.readChangeFeed) {
-      Seq("batch_id", "change_type", "key", "value", "partition_id")
-    } else if (transformWithStateVariableInfoOpt.isDefined) {
+    val expectedFieldNames = if (transformWithStateVariableInfoOpt.isDefined) {
       val stateVarInfo = transformWithStateVariableInfoOpt.get
       val stateVarType = stateVarInfo.stateVariableType
 
       stateVarType match {
         case ValueState =>
-          Seq("key", "value", "partition_id")
+          if (sourceOptions.readChangeFeed) {
+            Seq("batch_id", "change_type", "key", "value", "partition_id")
+          } else {
+            Seq("key", "value", "partition_id")
+          }
 
         case ListState =>
-          if (sourceOptions.flattenCollectionTypes) {
+          if (sourceOptions.readChangeFeed) {
+            Seq("batch_id", "change_type", "key", "list_element", "partition_id")
+          } else if (sourceOptions.flattenCollectionTypes) {
             Seq("key", "list_element", "partition_id")
           } else {
             Seq("key", "list_value", "partition_id")
           }
 
         case MapState =>
-          if (sourceOptions.flattenCollectionTypes) {
+          if (sourceOptions.readChangeFeed) {
+            Seq("batch_id", "change_type", "key", "user_map_key", "user_map_value", "partition_id")
+          } else if (sourceOptions.flattenCollectionTypes) {
             Seq("key", "user_map_key", "user_map_value", "partition_id")
           } else {
             Seq("key", "map_value", "partition_id")
@@ -264,6 +303,10 @@ object SchemaUtil {
           throw StateDataSourceErrors
             .internalError(s"Unsupported state variable type $stateVarType")
       }
+    } else if (sourceOptions.readChangeFeed) {
+      Seq("batch_id", "change_type", "key", "value", "partition_id")
+    } else if (sourceOptions.internalOnlyReadAllColumnFamilies) {
+      Seq("partition_key", "key_bytes", "value_bytes", "column_family_name")
     } else {
       Seq("key", "value", "partition_id")
     }
@@ -286,13 +329,29 @@ object SchemaUtil {
 
     stateVarType match {
       case ValueState =>
-        new StructType()
-          .add("key", stateStoreColFamilySchema.keySchema)
-          .add("value", stateStoreColFamilySchema.valueSchema)
-          .add("partition_id", IntegerType)
+        if (stateSourceOptions.readChangeFeed) {
+          new StructType()
+            .add("batch_id", LongType)
+            .add("change_type", StringType)
+            .add("key", stateStoreColFamilySchema.keySchema)
+            .add("value", stateStoreColFamilySchema.valueSchema)
+            .add("partition_id", IntegerType)
+        } else {
+          new StructType()
+            .add("key", stateStoreColFamilySchema.keySchema)
+            .add("value", stateStoreColFamilySchema.valueSchema)
+            .add("partition_id", IntegerType)
+        }
 
       case ListState =>
-        if (stateSourceOptions.flattenCollectionTypes) {
+        if (stateSourceOptions.readChangeFeed) {
+          new StructType()
+            .add("batch_id", LongType)
+            .add("change_type", StringType)
+            .add("key", stateStoreColFamilySchema.keySchema)
+            .add("list_element", stateStoreColFamilySchema.valueSchema)
+            .add("partition_id", IntegerType)
+        } else if (stateSourceOptions.flattenCollectionTypes) {
           new StructType()
             .add("key", stateStoreColFamilySchema.keySchema)
             .add("list_element", stateStoreColFamilySchema.valueSchema)
@@ -313,7 +372,15 @@ object SchemaUtil {
           valueType = stateStoreColFamilySchema.valueSchema
         )
 
-        if (stateSourceOptions.flattenCollectionTypes) {
+        if (stateSourceOptions.readChangeFeed) {
+          new StructType()
+            .add("batch_id", LongType)
+            .add("change_type", StringType)
+            .add("key", groupingKeySchema)
+            .add("user_map_key", userKeySchema)
+            .add("user_map_value", stateStoreColFamilySchema.valueSchema)
+            .add("partition_id", IntegerType)
+        } else if (stateSourceOptions.flattenCollectionTypes) {
           new StructType()
             .add("key", groupingKeySchema)
             .add("user_map_key", userKeySchema)

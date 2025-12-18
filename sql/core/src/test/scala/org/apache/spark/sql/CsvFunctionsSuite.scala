@@ -352,12 +352,10 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
         exception = intercept[AnalysisException] {
           df.select(from_csv($"value", schema, Map("mode" -> "DROPMALFORMED"))).collect()
         },
-        condition = "_LEGACY_ERROR_TEMP_1099",
+        condition = "PARSE_MODE_UNSUPPORTED",
         parameters = Map(
-          "funcName" -> "from_csv",
-          "mode" -> "DROPMALFORMED",
-          "permissiveMode" -> "PERMISSIVE",
-          "failFastMode" -> "FAILFAST"))
+          "funcName" -> "`from_csv`",
+          "mode" -> "DROPMALFORMED"))
     }
   }
 
@@ -736,7 +734,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(actual, Row("-"))
   }
 
-  test("SPARK-47497: from_csv/to_csv does not support VariantType data") {
+  test("SPARK-47497: to_csv does not support VariantType data") {
     val rows = new java.util.ArrayList[Row]()
     rows.add(Row(1L, Row(2L, "Alice", new VariantVal(Array[Byte](1, 2, 3), Array[Byte](4, 5)))))
 
@@ -761,14 +759,81 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
         "sqlExpr" -> "\"to_csv(value)\""),
       context = ExpectedContext(fragment = "to_csv", getCurrentClassCallSitePattern)
     )
+  }
 
+  test("from_csv with variant") {
+    val df = Seq(
+      "100,1.1",
+      "2000-01-01,2000-01-01 01:02:03",
+      ",true",
+      "1e9,hello,extra",
+      "missing").toDF("value").coalesce(1)
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      // The `header` option doesn't affect results, just like non-variant from_csv.
+      for (header <- Seq("true", "false")) {
+        checkAnswer(
+          df.select(
+            from_csv(
+              $"value",
+              StructType.fromDDL("a variant, b variant"),
+              Map("header" -> header)
+            ).cast("string")),
+          Seq(
+            Row("{100, 1.1}"),
+            Row("""{"2000-01-01", "2000-01-01 01:02:03+00:00"}"""),
+            Row("{null, true}"),
+            Row("""{"1e9", "hello"}"""),
+            Row("""{"missing", null}""")))
+        checkAnswer(
+          df.select(
+            from_csv(
+              $"value",
+              StructType.fromDDL("v variant"),
+              Map("header" -> header, "singleVariantColumn" -> "v")
+            ).cast("string")),
+          Seq(
+            Row("""{{"_c0":100,"_c1":1.1}}"""),
+            Row("""{{"_c0":"2000-01-01","_c1":"2000-01-01 01:02:03+00:00"}}"""),
+            Row("""{{"_c0":null,"_c1":true}}"""),
+            Row("""{{"_c0":"1e9","_c1":"hello","_c2":"extra"}}"""),
+            Row("""{{"_c0":"missing"}}""")))
+        checkAnswer(
+          df.select(
+            from_csv(
+              $"value",
+              StructType.fromDDL("v variant, _corrupt_record string"),
+              Map("header" -> header, "singleVariantColumn" -> "v")
+            ).cast("string")),
+          Seq(
+            Row("""{{"_c0":100,"_c1":1.1}, null}"""),
+            Row("""{{"_c0":"2000-01-01","_c1":"2000-01-01 01:02:03+00:00"}, null}"""),
+            Row("""{{"_c0":null,"_c1":true}, null}"""),
+            Row("""{{"_c0":"1e9","_c1":"hello","_c2":"extra"}, null}"""),
+            Row("""{{"_c0":"missing"}, null}""")))
+      }
+    }
     checkError(
-      exception = intercept[SparkUnsupportedOperationException] {
-        df.select(from_csv(lit("data"), valueSchema, Map.empty[String, String])).collect()
+      exception = intercept[AnalysisException] {
+        df.select(
+          from_csv(
+          $"value",
+          StructType.fromDDL("a variant, b variant"),
+          Map("singleVariantColumn" -> "true"))).collect()
       },
-      condition = "UNSUPPORTED_DATATYPE",
-      parameters = Map("typeName" -> "\"VARIANT\"")
-    )
+      condition = "INVALID_SINGLE_VARIANT_COLUMN",
+      parameters = Map("schema" -> "\"STRUCT<a: VARIANT, b: VARIANT>\""))
+
+    // In singleVariantColumn mode, from_csv normally treats all inputs as valid. The only exception
+    // case is the input exceeds the variant size limit (16MiB).
+    val largeInput = "a".repeat(16 * 1024 * 1024)
+    checkAnswer(
+      Seq(largeInput).toDF("value").select(
+        from_csv(
+          $"value",
+          StructType.fromDDL("v variant, _corrupt_record string"),
+          Map("singleVariantColumn" -> "v")
+        ).cast("string")),
+      Seq(Row(s"""{null, $largeInput}""")))
   }
 
   test("SPARK-47497: the input of to_csv must be StructType") {
@@ -812,5 +877,62 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(actual2, Row("2,Alice," +
       "\"[{math -> 100, english -> 200, science -> -}, " +
       "{math -> 300, english -> 400, science -> 500}]\""))
+  }
+
+  test("from_csv/to_csv with TIME type - all precisions") {
+    import java.time.LocalTime
+
+    val testData = Seq(
+      (0, LocalTime.of(14, 30, 45), "14:30:45"),
+      (1, LocalTime.of(14, 30, 45, 100000000), "14:30:45.1"),
+      (2, LocalTime.of(14, 30, 45, 120000000), "14:30:45.12"),
+      (3, LocalTime.of(14, 30, 45, 123000000), "14:30:45.123"),
+      (4, LocalTime.of(14, 30, 45, 123400000), "14:30:45.1234"),
+      (5, LocalTime.of(14, 30, 45, 123450000), "14:30:45.12345"),
+      (6, LocalTime.of(14, 30, 45, 123456000), "14:30:45.123456")
+    )
+
+    testData.foreach { case (precision, time, timeStr) =>
+      val schema = new StructType().add("time", TimeType(precision))
+
+      val parseResult = Seq(timeStr).toDF("csv")
+        .select(from_csv($"csv", schema, Map.empty[String, String]))
+        .collect().head.getAs[Row](0).getAs[LocalTime](0)
+      assert(parseResult == time, s"from_csv failed for precision $precision")
+
+      val df = Seq(time).toDF("time").select($"time".cast(TimeType(precision)))
+      val csvResult = df.select(to_csv(struct($"time"))).collect().head.getString(0)
+      assert(csvResult == timeStr, s"to_csv failed for precision $precision")
+
+      val roundtrip = df
+        .select(to_csv(struct($"time")).as("csv"))
+        .select(from_csv($"csv", schema, Map.empty[String, String]).as("struct"))
+        .select($"struct.time").collect().head.getAs[LocalTime](0)
+      assert(roundtrip == time, s"Roundtrip failed for precision $precision")
+    }
+
+    val customFormat = "HH-mm-ss.SSSSSS"
+    val customTime = LocalTime.of(14, 30, 45, 123456000)
+    val customSchema = new StructType().add("time", TimeType(6))
+    val customOptions = Map("timeFormat" -> customFormat)
+
+    val customParse = Seq("14-30-45.123456").toDF("csv")
+      .select(from_csv($"csv", customSchema, customOptions))
+      .collect().head.getAs[Row](0).getAs[LocalTime](0)
+    assert(customParse == customTime, "Custom format from_csv failed")
+
+    val customDF = Seq(customTime).toDF("time").select($"time".cast(TimeType(6)))
+    val customCsv = customDF.select(to_csv(struct($"time"), customOptions.asJava))
+      .collect().head.getString(0)
+    assert(customCsv == "14-30-45.123456", "Custom format to_csv failed")
+  }
+
+  test("TIME type with nulls") {
+    val schema = new StructType().add("time", TimeType(3))
+
+    val parseNull = Seq(null.asInstanceOf[String]).toDF("csv")
+      .select(from_csv($"csv", schema, Map.empty[String, String]))
+      .collect().head
+    assert(parseNull.isNullAt(0), "Null input should parse to null")
   }
 }

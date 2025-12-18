@@ -27,7 +27,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.deploy.client.{StandaloneAppClient, StandaloneAppClientListener}
 import org.apache.spark.executor.ExecutorExitCode
-import org.apache.spark.internal.{config, Logging, LogKeys, MDC}
+import org.apache.spark.internal.{config, Logging, LogKeys}
 import org.apache.spark.internal.config.EXECUTOR_REMOVE_DELAY
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
@@ -186,6 +186,9 @@ private[spark] class StandaloneSchedulerBackend(
     val reason: ExecutorLossReason = exitStatus match {
       case Some(ExecutorExitCode.HEARTBEAT_FAILURE) =>
         ExecutorExited(ExecutorExitCode.HEARTBEAT_FAILURE, exitCausedByApp = false, message)
+      case Some(ExecutorExitCode.BLOCK_MANAGER_REREGISTRATION_FAILED) =>
+        ExecutorExited(ExecutorExitCode.BLOCK_MANAGER_REREGISTRATION_FAILED,
+          exitCausedByApp = false, message)
       case Some(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR) =>
         ExecutorExited(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR,
           exitCausedByApp = false, message)

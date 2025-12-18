@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+import uuid
 import numbers
 import os
 import signal
@@ -24,19 +24,12 @@ import sys
 import traceback
 import time
 import gc
+import faulthandler
 from errno import EINTR, EAGAIN
 from socket import AF_INET, AF_INET6, SOCK_STREAM, SOMAXCONN
 from signal import SIGHUP, SIGTERM, SIGCHLD, SIG_DFL, SIG_IGN, SIGINT
 
 from pyspark.serializers import read_int, write_int, write_with_length, UTF8Deserializer
-
-if len(sys.argv) > 1 and sys.argv[1].startswith("pyspark"):
-    import importlib
-
-    worker_module = importlib.import_module(sys.argv[1])
-    worker_main = worker_module.main
-else:
-    from pyspark.worker import main as worker_main
 
 
 def compute_real_exit_code(exit_code):
@@ -77,6 +70,19 @@ def worker(sock, authenticated):
             return 1
 
     exit_code = 0
+
+    # We don't know what could happen when we import the worker module. We have to
+    # guarantee that no thread is spawned before we fork, so we have to import the
+    # worker module after fork. For example, both pandas and pyarrow starts some
+    # threads when they are imported.
+    if len(sys.argv) > 1 and sys.argv[1].startswith("pyspark"):
+        import importlib
+
+        worker_module = importlib.import_module(sys.argv[1])
+        worker_main = worker_module.main
+    else:
+        from pyspark.worker import main as worker_main
+
     try:
         worker_main(infile, outfile)
     except SystemExit as exc:
@@ -85,7 +91,19 @@ def worker(sock, authenticated):
         try:
             outfile.flush()
         except Exception:
-            pass
+            if os.environ.get("PYTHON_DAEMON_KILL_WORKER_ON_FLUSH_FAILURE", False):
+                faulthandler_log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
+                if faulthandler_log_path:
+                    faulthandler_log_path = os.path.join(faulthandler_log_path, str(os.getpid()))
+                    with open(faulthandler_log_path, "w") as faulthandler_log_file:
+                        faulthandler.dump_traceback(file=faulthandler_log_file)
+                raise
+            else:
+                print(
+                    "PySpark daemon failed to flush the output to the worker process:\n"
+                    + traceback.format_exc(),
+                    file=sys.stderr,
+                )
     return exit_code
 
 
@@ -93,8 +111,20 @@ def manager():
     # Create a new process group to corral our children
     os.setpgid(0, 0)
 
+    is_unix_domain_sock = os.environ.get("PYTHON_UNIX_DOMAIN_ENABLED", "false").lower() == "true"
+    socket_path = None
+
     # Create a listening socket on the loopback interface
-    if os.environ.get("SPARK_PREFER_IPV6", "false").lower() == "true":
+    if is_unix_domain_sock:
+        assert "PYTHON_WORKER_FACTORY_SOCK_DIR" in os.environ
+        socket_path = os.path.join(
+            os.environ["PYTHON_WORKER_FACTORY_SOCK_DIR"], f".{uuid.uuid4()}.sock"
+        )
+        listen_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        listen_sock.bind(socket_path)
+        listen_sock.listen(max(1024, SOMAXCONN))
+        listen_port = socket_path
+    elif os.environ.get("SPARK_PREFER_IPV6", "false").lower() == "true":
         listen_sock = socket.socket(AF_INET6, SOCK_STREAM)
         listen_sock.bind(("::1", 0, 0, 0))
         listen_sock.listen(max(1024, SOMAXCONN))
@@ -108,10 +138,15 @@ def manager():
     # re-open stdin/stdout in 'wb' mode
     stdin_bin = os.fdopen(sys.stdin.fileno(), "rb", 4)
     stdout_bin = os.fdopen(sys.stdout.fileno(), "wb", 4)
-    write_int(listen_port, stdout_bin)
+    if is_unix_domain_sock:
+        write_with_length(listen_port.encode("utf-8"), stdout_bin)
+    else:
+        write_int(listen_port, stdout_bin)
     stdout_bin.flush()
 
     def shutdown(code):
+        if socket_path is not None and os.path.exists(socket_path):
+            os.remove(socket_path)
         signal.signal(SIGTERM, SIG_DFL)
         # Send SIGHUP to notify workers of shutdown
         os.kill(0, SIGHUP)
@@ -128,14 +163,26 @@ def manager():
 
     # Initialization complete
     try:
+        poller = None
+        if os.name == "posix":
+            # select.select has a known limit on the number of file descriptors
+            # it can handle. We use select.poll instead to avoid this limit.
+            poller = select.poll()
+            fd_reverse_map = {0: 0, listen_sock.fileno(): listen_sock}
+            poller.register(0, select.POLLIN)
+            poller.register(listen_sock, select.POLLIN)
+
         while True:
-            try:
-                ready_fds = select.select([0, listen_sock], [], [], 1)[0]
-            except select.error as ex:
-                if ex[0] == EINTR:
-                    continue
-                else:
-                    raise
+            if poller is not None:
+                ready_fds = [fd_reverse_map[fd] for fd, _ in poller.poll(1000)]
+            else:
+                try:
+                    ready_fds = select.select([0, listen_sock], [], [], 1)[0]
+                except select.error as ex:
+                    if ex[0] == EINTR:
+                        continue
+                    else:
+                        raise
 
             if 0 in ready_fds:
                 try:
@@ -173,6 +220,9 @@ def manager():
 
                 if pid == 0:
                     # in child process
+                    if poller is not None:
+                        poller.unregister(0)
+                        poller.unregister(listen_sock)
                     listen_sock.close()
 
                     # It should close the standard input in the child process so that
@@ -195,7 +245,10 @@ def manager():
                         write_int(os.getpid(), outfile)
                         outfile.flush()
                         outfile.close()
-                        authenticated = False
+                        authenticated = (
+                            os.environ.get("PYTHON_UNIX_DOMAIN_ENABLED", "false").lower() == "true"
+                            or False
+                        )
                         while True:
                             code = worker(sock, authenticated)
                             if code == 0:
@@ -218,6 +271,9 @@ def manager():
                     sock.close()
 
     finally:
+        if poller is not None:
+            poller.unregister(0)
+            poller.unregister(listen_sock)
         shutdown(1)
 
 

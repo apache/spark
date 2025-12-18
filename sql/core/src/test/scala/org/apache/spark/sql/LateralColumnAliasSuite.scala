@@ -23,8 +23,9 @@ import org.scalatest.Tag
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, ExpressionSet}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
 import org.apache.spark.sql.catalyst.trees.TreePattern.OUTER_REFERENCE
+import org.apache.spark.sql.catalyst.util.AUTO_GENERATED_ALIAS
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -205,7 +206,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
     withLCAOn { checkAnswer(sql(query), expectedAnswerLCAOn) }
     withLCAOff {
       assert(intercept[AnalysisException]{ sql(query) }
-        .getErrorClass == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+        .getCondition == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
     }
   }
 
@@ -216,8 +217,8 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
       errorParams: Map[String, String]): Unit = {
     val e1 = intercept[AnalysisException] { sql(q1) }
     val e2 = intercept[AnalysisException] { sql(q2) }
-    assert(e1.getErrorClass == condition)
-    assert(e2.getErrorClass == condition)
+    assert(e1.getCondition == condition)
+    assert(e2.getCondition == condition)
     errorParams.foreach { case (k, v) =>
       assert(e1.messageParameters.get(k).exists(_ == v))
       assert(e2.messageParameters.get(k).exists(_ == v))
@@ -854,7 +855,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
        |""".stripMargin
     val analyzedPlan = sql(query).queryExecution.analyzed
     analyzedPlan.collect {
-      case Aggregate(_, aggregateExpressions, _) =>
+      case Aggregate(_, aggregateExpressions, _, _) =>
         val extracted = aggregateExpressions.collect {
           case Alias(child, _) => child
           case a: Attribute => a
@@ -1187,7 +1188,7 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
           "sum_avg * 1.0 as sum_avg1, sum_avg1 + dept " +
           s"from $testTable group by dept, properties.joinYear $havingSuffix"
       ).foreach { query =>
-        assert(intercept[AnalysisException](sql(query)).getErrorClass ==
+        assert(intercept[AnalysisException](sql(query)).getCondition ==
           "UNSUPPORTED_FEATURE.LATERAL_COLUMN_ALIAS_IN_AGGREGATE_WITH_WINDOW_AND_HAVING")
       }
     }
@@ -1364,5 +1365,38 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
 
     // the states are cleared - a subsequent correct query should succeed
     sql("select 1 as a, a").queryExecution.assertAnalyzed()
+  }
+
+  test("LateralColumnAlias with Generate") {
+    checkAnswer(
+      sql("WITH cte AS (SELECT EXPLODE(ARRAY(1, 2, 3)) AS c1, c1) SELECT * FROM cte"),
+      Row(1, 1) :: Row(2, 2) :: Row(3, 3) :: Nil
+    )
+    checkAnswer(
+      sql(
+        s"""
+           |SELECT
+           |  explode(split(name , ',')) AS new_name,
+           |  new_name like 'a%'
+           |FROM $testTable
+           |""".stripMargin),
+      Row("alex", true) :: Row("amy", true) :: Row("cathy", false) ::
+        Row("david", false) :: Row("jen", false) :: Nil
+    )
+  }
+
+  test("Order in inner project lists should respect original project list order") {
+    val plan = sql("SELECT 0 AS a, 1 AS b, b AS c, a AS d").queryExecution.analyzed
+    plan match {
+      case Project(outerProjectList, Project(innerProjectList, _)) =>
+        assert(outerProjectList.map(_.name) == Seq("a", "b", "c", "d"))
+        assert(innerProjectList.map(_.name) == Seq("a", "b"))
+    }
+  }
+
+  test("SPARK-53674: Strip metadata from lateral reference of complex type column") {
+    val schema = sql("SELECT array(1,2,3) AS a, a[1]").queryExecution.analyzed.schema
+    assert(!schema("a").metadata.contains(AUTO_GENERATED_ALIAS))
+    assert(schema("lateralAliasReference(a)[1]").metadata.contains(AUTO_GENERATED_ALIAS))
   }
 }

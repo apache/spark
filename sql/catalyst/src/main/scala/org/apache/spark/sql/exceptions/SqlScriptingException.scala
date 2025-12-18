@@ -23,7 +23,7 @@ import org.apache.spark.{SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.exceptions.SqlScriptingException.errorMessageWithLineNumber
 
-class SqlScriptingException (
+private[sql] class SqlScriptingException (
     errorClass: String,
     cause: Throwable,
     val origin: Origin,
@@ -33,7 +33,7 @@ class SqlScriptingException (
     cause)
   with SparkThrowable {
 
-  override def getErrorClass: String = errorClass
+  override def getCondition: String = errorClass
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 }
 

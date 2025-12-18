@@ -678,6 +678,21 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
+  test("analyze stats for collated strings") {
+    val tableName = "collated_strings"
+    Seq[String]("sr_CI").foreach { collation =>
+      withTable(tableName) {
+        sql(s"CREATE TABLE $tableName (c STRING COLLATE $collation) USING PARQUET")
+        sql(s"INSERT INTO $tableName VALUES ('a'), ('A')")
+        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS c")
+
+        val table = getCatalogTable(tableName)
+        assert(table.stats.get.colStats("c") ==
+          CatalogColumnStat(Some(1), None, None, Some(0), Some(1), Some(1)))
+      }
+    }
+  }
+
   test("analyzes table statistics in cached catalog view") {
     def getTableStats(tableName: String): Statistics = {
       spark.table(tableName).queryExecution.optimizedPlan.stats
@@ -904,7 +919,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       size = Some(expectedSize))
 
     withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
-      val df = Dataset.ofRows(spark, statsPlan)
+      val df = classic.Dataset.ofRows(spark, statsPlan)
         // add some map-like operations which optimizer will optimize away, and make a divergence
         // for output between logical plan and optimized plan
         // logical plan

@@ -129,8 +129,8 @@ If you are using Conda, the development environment can be set as follows.
 
 .. code-block:: bash
 
-    # Python 3.9+ is required
-    conda create --name pyspark-dev-env python=3.9
+    # Python 3.10+ is required
+    conda create --name pyspark-dev-env python=3.10
     conda activate pyspark-dev-env
     pip install --upgrade -r dev/requirements.txt
 
@@ -145,7 +145,7 @@ Now, you can start developing and `running the tests <testing.rst>`_.
 pip
 ~~~
 
-With Python 3.9+, pip can be used as below to install and set up the development environment.
+With Python 3.10+, pip can be used as below to install and set up the development environment.
 
 .. code-block:: bash
 
@@ -230,7 +230,7 @@ Doctest Conventions
 In general, doctests should be grouped logically by separating a newline.
 
 For instance, the first block is for the statements for preparation, the second block is for using the function with a specific argument,
-and third block is for another argument. As a example, please refer `DataFrame.rsub <https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.rsub.html#pandas.DataFrame.rsub>`_ in pandas.
+and third block is for another argument. As an example, please refer `DataFrame.rsub <https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.rsub.html#pandas.DataFrame.rsub>`_ in pandas.
 
 These blocks should be consistently separated in PySpark doctests, and more doctests should be added if the coverage of the doctests or the number of examples to show is not enough.
 
@@ -295,14 +295,14 @@ Throw with error class and message parameters:
 Access fields
 ~~~~~~~~~~~~~
 
-To access error fields, catch exceptions that extend :class:`PySparkException`  and access to error class with :func:`PySparkException.getErrorClass`.
+To access error fields, catch exceptions that extend :class:`PySparkException` and access to error class with :func:`PySparkException.getCondition`.
 
 .. code-block:: python
 
   try:
       ...
   except PySparkException as pe:
-      if pe.getErrorClass() == "PROBLEM_BECAUSE":
+      if pe.getCondition() == "PROBLEM_BECAUSE":
           ...
 
 

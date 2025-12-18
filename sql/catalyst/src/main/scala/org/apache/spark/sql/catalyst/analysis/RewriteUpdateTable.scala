@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.util.RowDeltaUtils._
 import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
 import org.apache.spark.sql.connector.write.{RowLevelOperationTable, SupportsDelta}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.UPDATE
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -40,7 +40,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
         if u.resolved && u.rewritable && u.aligned =>
 
       EliminateSubqueryAliases(aliasedTable) match {
-        case r @ DataSourceV2Relation(tbl: SupportsRowLevelOperations, _, _, _, _) =>
+        case r @ ExtractV2Table(tbl: SupportsRowLevelOperations) =>
           val table = buildOperationTable(tbl, UPDATE, CaseInsensitiveStringMap.empty())
           val updateCond = cond.getOrElse(TrueLiteral)
           table.operation match {
@@ -77,7 +77,9 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
 
     // build a plan to replace read groups in the table
     val writeRelation = relation.copy(table = operationTable)
-    ReplaceData(writeRelation, cond, updatedAndRemainingRowsPlan, relation, Some(cond))
+    val query = addOperationColumn(WRITE_WITH_METADATA_OPERATION, updatedAndRemainingRowsPlan)
+    val projections = buildReplaceDataProjections(query, relation.output, metadataAttrs)
+    ReplaceData(writeRelation, cond, query, relation, projections, Some(cond))
   }
 
   // build a rewrite plan for sources that support replacing groups of data (e.g. files, partitions)
@@ -109,7 +111,9 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
 
     // build a plan to replace read groups in the table
     val writeRelation = relation.copy(table = operationTable)
-    ReplaceData(writeRelation, cond, updatedAndRemainingRowsPlan, relation, Some(cond))
+    val query = addOperationColumn(WRITE_WITH_METADATA_OPERATION, updatedAndRemainingRowsPlan)
+    val projections = buildReplaceDataProjections(query, relation.output, metadataAttrs)
+    ReplaceData(writeRelation, cond, query, relation, projections, Some(cond))
   }
 
   // this method assumes the assignments have been already aligned before
@@ -118,7 +122,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
       assignments: Seq[Assignment],
       cond: Expression = TrueLiteral): LogicalPlan = {
 
-    // the plan output may include immutable metadata columns at the end
+    // the plan output may include metadata columns at the end
     // that's why the number of assignments may not match the number of plan output columns
     val assignedValues = assignments.map(_.value)
     val updatedValues = plan.output.zipWithIndex.map { case (attr, index) =>
@@ -128,7 +132,12 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
         Alias(updatedValue, attr.name)()
       } else {
         assert(MetadataAttribute.isValid(attr.metadata))
-        attr
+        if (MetadataAttribute.isPreservedOnUpdate(attr)) {
+          attr
+        } else {
+          val updatedValue = If(cond, Literal(null, attr.dataType), attr)
+          Alias(updatedValue, attr.name)(explicitMetadata = Some(attr.metadata))
+        }
       }
     }
 
@@ -181,7 +190,11 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
         Alias(assignedExpr, attr.name)()
       } else {
         assert(MetadataAttribute.isValid(attr.metadata))
-        attr
+        if (MetadataAttribute.isPreservedOnUpdate(attr)) {
+          attr
+        } else {
+          Alias(Literal(null, attr.dataType), attr.name)(explicitMetadata = Some(attr.metadata))
+        }
       }
     }
 
@@ -203,7 +216,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
       MetadataAttribute.isValid(attr.metadata)
     }
     val deleteOutput = deltaDeleteOutput(rowAttrs, rowIdAttrs, metadataAttrs)
-    val insertOutput = deltaInsertOutput(assignments, metadataAttrs)
+    val insertOutput = deltaReinsertOutput(assignments, metadataAttrs)
     val outputs = Seq(deleteOutput, insertOutput)
     val operationTypeAttr = AttributeReference(OPERATION_COLUMN, IntegerType, nullable = false)()
     val attrs = operationTypeAttr +: matchedRowsPlan.output

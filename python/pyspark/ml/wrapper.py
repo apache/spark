@@ -19,7 +19,15 @@ from abc import ABCMeta, abstractmethod
 from typing import Any, Generic, Optional, List, Type, TypeVar, TYPE_CHECKING
 
 from pyspark import since
-from pyspark.sql import DataFrame
+from pyspark.ml.util import (
+    try_remote_transform_relation,
+    try_remote_call,
+    try_remote_fit,
+    try_remote_del,
+    try_remote_return_java_class,
+    try_remote_intercept,
+)
+from pyspark.sql import DataFrame, is_remote
 from pyspark.ml import Estimator, Predictor, PredictionModel, Transformer, Model
 from pyspark.ml.base import _PredictorParams
 from pyspark.ml.param import Param, Params
@@ -44,16 +52,20 @@ class JavaWrapper:
     """
 
     def __init__(self, java_obj: Optional["JavaObject"] = None):
-        super(JavaWrapper, self).__init__()
+        super().__init__()
         self._java_obj = java_obj
 
+    @try_remote_del
     def __del__(self) -> None:
-        from pyspark.core.context import SparkContext
+        try:
+            from pyspark.core.context import SparkContext
 
-        if SparkContext._active_spark_context and self._java_obj is not None:
-            SparkContext._active_spark_context._gateway.detach(  # type: ignore[union-attr]
-                self._java_obj
-            )
+            if SparkContext._active_spark_context and self._java_obj is not None:
+                SparkContext._active_spark_context._gateway.detach(  # type: ignore[union-attr]
+                    self._java_obj
+                )
+        except Exception:
+            pass
 
     @classmethod
     def _create_from_java_class(cls: Type[JW], java_class: str, *args: Any) -> JW:
@@ -63,6 +75,7 @@ class JavaWrapper:
         java_obj = JavaWrapper._new_java_obj(java_class, *args)
         return cls(java_obj)
 
+    @try_remote_call
     def _call_java(self, name: str, *args: Any) -> Any:
         from pyspark.core.context import SparkContext
 
@@ -74,6 +87,7 @@ class JavaWrapper:
         return _java2py(sc, m(*java_args))
 
     @staticmethod
+    @try_remote_return_java_class
     def _new_java_obj(java_class: str, *args: Any) -> "JavaObject":
         """
         Returns a new Java object.
@@ -341,19 +355,26 @@ class JavaParams(JavaWrapper, Params, metaclass=ABCMeta):
         """
         if extra is None:
             extra = dict()
-        that = super(JavaParams, self).copy(extra)
+        that = super().copy(extra)
         if self._java_obj is not None:
-            that._java_obj = self._java_obj.copy(self._empty_java_param_map())
-            that._transfer_params_to_java()
+            from pyspark.ml.util import RemoteModelRef
+
+            if isinstance(self._java_obj, RemoteModelRef):
+                that._java_obj = self._java_obj
+                self._java_obj.add_ref()
+            elif not isinstance(self._java_obj, str):
+                that._java_obj = self._java_obj.copy(self._empty_java_param_map())
+                that._transfer_params_to_java()
         return that
 
+    @try_remote_intercept
     def clear(self, param: Param) -> None:
         """
         Clears a param from the param map if it has been explicitly set.
         """
         assert self._java_obj is not None
 
-        super(JavaParams, self).clear(param)
+        super().clear(param)
         java_param = self._java_obj.getParam(param.name)
         self._java_obj.clear(java_param)
 
@@ -391,6 +412,7 @@ class JavaEstimator(JavaParams, Estimator[JM], metaclass=ABCMeta):
         self._transfer_params_to_java()
         return self._java_obj.fit(dataset._jdf)
 
+    @try_remote_fit
     def _fit(self, dataset: DataFrame) -> JM:
         java_model = self._fit_java(dataset)
         model = self._create_model(java_model)
@@ -405,6 +427,7 @@ class JavaTransformer(JavaParams, Transformer, metaclass=ABCMeta):
     available as _java_obj.
     """
 
+    @try_remote_transform_relation
     def _transform(self, dataset: DataFrame) -> DataFrame:
         assert self._java_obj is not None
 
@@ -434,8 +457,12 @@ class JavaModel(JavaTransformer, Model, metaclass=ABCMeta):
         these wrappers depend on pyspark.ml.util (both directly and via
         other ML classes).
         """
-        super(JavaModel, self).__init__(java_model)
-        if java_model is not None:
+        super().__init__(java_model)
+        if is_remote() and java_model is not None:
+            from pyspark.ml.util import RemoteModelRef
+
+            assert isinstance(java_model, RemoteModelRef)
+        if java_model is not None and not is_remote():
             # SPARK-10931: This is a temporary fix to allow models to own params
             # from estimators. Eventually, these params should be in models through
             # using common base classes between estimators and models.

@@ -109,13 +109,12 @@ def sql(
     args : dict or list
         A dictionary of parameter names to Python objects or a list of Python objects
         that can be converted to SQL literal expressions. See
-        `Supported Data Types`_ for supported value types in Python.
+        `Supported Data Types <https://spark.apache.org/docs/latest/sql-ref-datatypes.html>`_
+        for supported value types in Python.
         For example, dictionary keys: "rank", "name", "birthdate";
         dictionary values: 1, "Steven", datetime.date(2023, 4, 2).
         A value can be also a `Column` of a literal or collection constructor functions such
         as `map()`, `array()`, `struct()`, in that case it is taken as is.
-
-        .. _Supported Data Types: https://spark.apache.org/docs/latest/sql-ref-datatypes.html
 
         .. versionadded:: 3.4.0
 
@@ -238,7 +237,7 @@ class PandasSQLStringFormatter(string.Formatter):
         self._ref_sers: List[Tuple[Series, str]] = []
 
     def vformat(self, format_string: str, args: Sequence[Any], kwargs: Mapping[str, Any]) -> str:
-        ret = super(PandasSQLStringFormatter, self).vformat(format_string, args, kwargs)
+        ret = super().vformat(format_string, args, kwargs)
 
         for ref, n in self._ref_sers:
             if not any((ref is v for v in df._pssers.values()) for df, _ in self._temp_views):
@@ -247,7 +246,7 @@ class PandasSQLStringFormatter(string.Formatter):
         return ret
 
     def get_field(self, field_name: str, args: Sequence[Any], kwargs: Mapping[str, Any]) -> Any:
-        obj, first = super(PandasSQLStringFormatter, self).get_field(field_name, args, kwargs)
+        obj, first = super().get_field(field_name, args, kwargs)
         return self._convert_value(obj, field_name), first
 
     def _convert_value(self, val: Any, name: str) -> Optional[str]:

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import java.util.UUID
+
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -1229,9 +1231,10 @@ class FilterPushdownSuite extends PlanTest {
 
     // Verify that all conditions except the watermark touching condition are pushed down
     // by the optimizer and others are not.
-    val originalQuery = EventTimeWatermark($"b", interval, relation)
+    val nodeId = UUID.randomUUID()
+    val originalQuery = EventTimeWatermark(nodeId, $"b", interval, relation)
       .where($"a" === 5 && $"b" === new java.sql.Timestamp(0) && $"c" === 5)
-    val correctAnswer = EventTimeWatermark(
+    val correctAnswer = EventTimeWatermark(nodeId,
       $"b", interval, relation.where($"a" === 5 && $"c" === 5))
       .where($"b" === new java.sql.Timestamp(0))
 
@@ -1244,9 +1247,10 @@ class FilterPushdownSuite extends PlanTest {
 
     // Verify that all conditions except the watermark touching condition are pushed down
     // by the optimizer and others are not.
-    val originalQuery = EventTimeWatermark($"c", interval, relation)
+    val nodeId = UUID.randomUUID()
+    val originalQuery = EventTimeWatermark(nodeId, $"c", interval, relation)
       .where($"a" === 5 && $"b" === Rand(10) && $"c" === new java.sql.Timestamp(0))
-    val correctAnswer = EventTimeWatermark(
+    val correctAnswer = EventTimeWatermark(nodeId,
       $"c", interval, relation.where($"a" === 5))
       .where($"b" === Rand(10) && $"c" === new java.sql.Timestamp(0))
 
@@ -1260,9 +1264,10 @@ class FilterPushdownSuite extends PlanTest {
 
     // Verify that all conditions except the watermark touching condition are pushed down
     // by the optimizer and others are not.
-    val originalQuery = EventTimeWatermark($"c", interval, relation)
+    val nodeId = UUID.randomUUID()
+    val originalQuery = EventTimeWatermark(nodeId, $"c", interval, relation)
       .where($"a" === 5 && $"b" === 10)
-    val correctAnswer = EventTimeWatermark(
+    val correctAnswer = EventTimeWatermark(nodeId,
       $"c", interval, relation.where($"a" === 5 && $"b" === 10))
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze,
@@ -1273,9 +1278,10 @@ class FilterPushdownSuite extends PlanTest {
     val interval = new CalendarInterval(2, 2, 2000L)
     val relation = LocalRelation(Seq($"a".timestamp, attrB, attrC), Nil, isStreaming = true)
 
-    val originalQuery = EventTimeWatermark($"a", interval, relation)
+    val nodeId = UUID.randomUUID()
+    val originalQuery = EventTimeWatermark(nodeId, $"a", interval, relation)
       .where($"a" === new java.sql.Timestamp(0) && $"b" === 10)
-    val correctAnswer = EventTimeWatermark(
+    val correctAnswer = EventTimeWatermark(nodeId,
       $"a", interval, relation.where($"b" === 10)).where($"a" === new java.sql.Timestamp(0))
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze,

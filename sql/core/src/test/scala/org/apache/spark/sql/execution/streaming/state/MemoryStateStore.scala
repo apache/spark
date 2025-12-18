@@ -26,8 +26,10 @@ class MemoryStateStore extends StateStore() {
   import scala.jdk.CollectionConverters._
   private val map = new ConcurrentHashMap[UnsafeRow, UnsafeRow]
 
-  override def iterator(colFamilyName: String): Iterator[UnsafeRowPair] = {
-    map.entrySet.iterator.asScala.map { case e => new UnsafeRowPair(e.getKey, e.getValue) }
+  override def iterator(colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+    val iter =
+      map.entrySet.iterator.asScala.map { case e => new UnsafeRowPair(e.getKey, e.getValue) }
+    new StateStoreIterator(iter)
   }
 
   override def createColFamilyIfAbsent(
@@ -40,6 +42,9 @@ class MemoryStateStore extends StateStore() {
     throw StateStoreErrors.multipleColumnFamiliesNotSupported("MemoryStateStoreProvider")
   }
 
+  override def allColumnFamilyNames: Set[String] =
+    Set[String](StateStore.DEFAULT_COL_FAMILY_NAME)
+
   override def removeColFamilyIfExists(colFamilyName: String): Boolean = {
     throw StateStoreErrors.removingColumnFamiliesNotSupported("MemoryStateStoreProvider")
   }
@@ -49,11 +54,18 @@ class MemoryStateStore extends StateStore() {
   override def put(key: UnsafeRow, newValue: UnsafeRow, colFamilyName: String): Unit =
     map.put(key.copy(), newValue.copy())
 
+  override def putList(key: UnsafeRow, newValues: Array[UnsafeRow], colFamilyName: String): Unit = {
+    throw new UnsupportedOperationException("Doesn't support put multiple values put")
+  }
+
   override def remove(key: UnsafeRow, colFamilyName: String): Unit = map.remove(key)
 
   override def commit(): Long = version + 1
 
   override def abort(): Unit = {}
+
+  override def release(): Unit = {}
+
 
   override def id: StateStoreId = null
 
@@ -63,7 +75,9 @@ class MemoryStateStore extends StateStore() {
 
   override def hasCommitted: Boolean = true
 
-  override def prefixScan(prefixKey: UnsafeRow, colFamilyName: String): Iterator[UnsafeRowPair] = {
+  override def prefixScan(
+      prefixKey: UnsafeRow,
+      colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
     throw new UnsupportedOperationException("Doesn't support prefix scan!")
   }
 
@@ -71,7 +85,15 @@ class MemoryStateStore extends StateStore() {
     throw new UnsupportedOperationException("Doesn't support multiple values per key")
   }
 
+  override def mergeList(key: UnsafeRow, values: Array[UnsafeRow], colFamilyName: String): Unit = {
+    throw new UnsupportedOperationException("Doesn't support multiple values merge")
+  }
+
   override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
     throw new UnsupportedOperationException("Doesn't support multiple values per key")
+  }
+
+  override def getStateStoreCheckpointInfo(): StateStoreCheckpointInfo = {
+    StateStoreCheckpointInfo(id.partitionId, version + 1, None, None)
   }
 }

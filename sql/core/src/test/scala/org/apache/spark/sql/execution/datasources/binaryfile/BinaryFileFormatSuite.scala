@@ -23,7 +23,7 @@ import java.sql.Timestamp
 
 import scala.jdk.CollectionConverters._
 
-import com.google.common.io.{ByteStreams, Closeables}
+import com.google.common.io.Closeables
 import org.apache.hadoop.fs.{FileStatus, FileSystem, GlobFilter, Path}
 import org.mockito.Mockito.{mock, when}
 
@@ -134,7 +134,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
           val fcontent = {
             val stream = fs.open(fileStatus.getPath)
             val content = try {
-              ByteStreams.toByteArray(stream)
+              stream.readAllBytes()
             } finally {
               Closeables.close(stream, true)
             }
@@ -168,7 +168,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
             .format(BINARY_FILE)
             .save(s"$tmpDir/test_save")
         },
-        condition = "_LEGACY_ERROR_TEMP_2075",
+        condition = "UNSUPPORTED_FEATURE.WRITE_FOR_BINARY_SOURCE",
         parameters = Map.empty)
     }
   }
@@ -368,7 +368,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
           checkAnswer(readContent(), expected)
         }
       }
-      assert(caught.getErrorClass.startsWith("FAILED_READ_FILE"))
+      assert(caught.getCondition.startsWith("FAILED_READ_FILE"))
       assert(caught.getCause.getMessage.contains("exceeds the max length allowed"))
     }
   }

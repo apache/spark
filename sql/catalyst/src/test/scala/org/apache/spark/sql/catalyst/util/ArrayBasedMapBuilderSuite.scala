@@ -148,7 +148,7 @@ class ArrayBasedMapBuilderSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkRuntimeException](builder.put(unsafeRow, 3)),
       condition = "DUPLICATED_MAP_KEY",
       parameters = Map(
-        "key" -> "[0,1]",
+        "key" -> unsafeRow.toString(),
         "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\"")
     )
 
