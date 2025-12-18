@@ -16,7 +16,6 @@
 #
 from __future__ import annotations
 
-from itertools import groupby
 from typing import Any, Iterator, Optional, Union, cast
 
 import pandas as pd
@@ -220,12 +219,12 @@ class TwsTester:
     Testing utility for transformWithState stateful processors.
 
     This class enables unit testing of StatefulProcessor business logic by simulating the
-    behavior of transformWithState and transformWithStateInPandas. It processes input data
-    and returns output data equivalent to what would be produced by the processor in an
-    actual Spark streaming query.
+    behavior of transformWithState and transformWithStateInPandas. It processes input rows
+    for a single key and returns output rows equivalent to those that would be produced by
+    the processor in an actual Spark streaming query.
 
     **Supported:**
-        - Processing input data and producing output via :meth:`test` (Row mode) or
+        - Processing input rows for a single key via :meth:`test` (Row mode) or
           :meth:`testInPandas` (Pandas mode).
         - Initial state setup via constructor parameters ``initialStateRow`` or
           ``initialStatePandas``.
@@ -249,14 +248,12 @@ class TwsTester:
     ----------
     processor : :class:`StatefulProcessor`
         The StatefulProcessor to test
-    initialStateRow : list of :class:`Row`, optional
-        Initial state for each key as a list of Rows (for Row mode processors). Cannot be
-        specified together with ``initialStatePandas``.
-    initialStatePandas : :class:`pandas.DataFrame`, optional
-        Initial state for each key as a pandas DataFrame (for Pandas mode processors). Cannot
-        be specified together with ``initialStateRow``.
-    key_column_name : str, optional
-        Name of the column containing the grouping key in input data. Default is "key".
+    initialStateRow : list of tuple, optional
+        Initial state for each key as a list of (key, Row) tuples (for Row mode processors).
+        Cannot be specified together with ``initialStatePandas``.
+    initialStatePandas : list of tuple, optional
+        Initial state for each key as a list of (key, DataFrame) tuples (for Pandas mode
+        processors). Cannot be specified together with ``initialStateRow``.
 
     Examples
     --------
@@ -264,29 +261,25 @@ class TwsTester:
 
     >>> processor = RunningCountStatefulProcessorFactory().row()
     >>> tester = TwsTester(processor)
-    >>> result = tester.test([
-    ...     Row(key="key1", value="a"),
-    ...     Row(key="key1", value="b"),
-    ...     Row(key="key2", value="c")
-    ... ])
-    >>> # Result: [Row(key="key1", count=2), Row(key="key2", count=1)]
+    >>> result = tester.test("key1", [Row(value="a"), Row(value="b")])
+    >>> # Result: [Row(key="key1", count=2)]
 
     **Example 2: Testing a Pandas mode processor**
 
     >>> processor = RunningCountStatefulProcessorFactory().pandas()
     >>> tester = TwsTester(processor)
-    >>> input_df = pd.DataFrame({"key": ["key1", "key1", "key2"], "value": ["a", "b", "c"]})
-    >>> result = tester.testInPandas(input_df)
-    >>> # Result: pd.DataFrame({"key": ["key1", "key2"], "count": [2, 1]})
+    >>> input_df = pd.DataFrame({"value": ["a", "b"]})
+    >>> result = tester.testInPandas("key1", input_df)
+    >>> # Result: pd.DataFrame({"key": ["key1"], "count": [2]})
 
     **Example 3: Testing with initial state**
 
     >>> processor = RunningCountStatefulProcessorFactory().row()
     >>> tester = TwsTester(
     ...     processor,
-    ...     initialStateRow=[Row(key="key1", initial_count=10)]
+    ...     initialStateRow=[("key1", Row(initial_count=10))]
     ... )
-    >>> result = tester.test([Row(key="key1", value="a")])
+    >>> result = tester.test("key1", [Row(value="a")])
     >>> # Result: [Row(key="key1", count=11)]
 
     **Example 4: Direct state manipulation**
@@ -294,7 +287,7 @@ class TwsTester:
     >>> processor = RunningCountStatefulProcessorFactory().row()
     >>> tester = TwsTester(processor)
     >>> tester.setValueState("count", "key1", (5,))
-    >>> result = tester.test([Row(key="key1", value="a")])
+    >>> result = tester.test("key1", [Row(value="a")])
     >>> tester.peekValueState("count", "key1")
     >>> # Returns: (6,)
 
@@ -304,83 +297,78 @@ class TwsTester:
     def __init__(
         self,
         processor: StatefulProcessor,
-        initialStateRow: Optional[list[Row]] = None,
-        initialStatePandas: Optional[pd.DataFrame] = None,
-        key_column_name: str = "key",
+        initialStateRow: Optional[list[tuple[Any, Row]]] = None,
+        initialStatePandas: Optional[list[tuple[Any, pd.DataFrame]]] = None,
     ) -> None:
         self.processor = processor
-        self.key_column_name = key_column_name
         self.handle = _InMemoryStatefulProcessorHandle()
 
         self.processor.init(self.handle)
 
         if initialStateRow is not None:
             assert initialStatePandas is None, "Cannot specify both Row and Pandas initial states."
-            for row in initialStateRow:
-                key = row[self.key_column_name]
+            for key, row in initialStateRow:
                 self.handle.setGroupingKey(key)
-                self.processor.handleInitialState(key, row, TimerValues(-1, -1))
+                self.processor.handleInitialState((key,), row, TimerValues(-1, -1))
         elif initialStatePandas is not None:
-            for key, group_df in initialStatePandas.groupby(self.key_column_name, dropna=False):
+            for key, df in initialStatePandas:
                 self.handle.setGroupingKey(key)
-                for _, row_df in group_df.iterrows():
-                    single_row_df = pd.DataFrame([row_df]).reset_index(drop=True)
-                    self.processor.handleInitialState(key, single_row_df, TimerValues(-1, -1))
+                self.processor.handleInitialState((key,), df, TimerValues(-1, -1))
 
-    def test(self, input: list[Row]) -> list[Row]:
+    def test(self, key: Any, input: list[Row]) -> list[Row]:
         """
-        Processes input rows through the stateful processor, grouped by key.
+        Processes input rows for a single key through the stateful processor.
 
-        This method is used for testing **Row mode** processors (transformWithState). It
-        corresponds to processing one microbatch. ``handleInputRows`` will be called once for
-        each key that appears in the input.
+        This method is used for testing **Row mode** processors (transformWithState).
+        It makes exactly one call to ``handleInputRows`` with the provided key and input rows.
 
-        To simulate real-time mode, call this method repeatedly in a loop, passing a list with
-        a single Row per call.
+        Parameters
+        ----------
+        key : Any
+            The grouping key for the input rows.
+        input : list of :class:`Row`
+            Input rows to process for the given key.
 
-        The input is a list of :class:`Row` objects to process, which will be automatically
-        grouped by the key column specified in the constructor. Returns a list of :class:`Row`
-        objects representing all output rows produced by the processor during this batch.
+        Returns
+        -------
+        list of :class:`Row`
+            All output rows produced by the processor for this key.
         """
-        result: list[Row] = []
-        k: str = self.key_column_name
-        sorted_input = sorted(
-            input,
-            key=lambda row: (row[k] is not None, row[k] if row[k] is not None else ""),
+        self.handle.setGroupingKey(key)
+        timer_values = TimerValues(-1, -1)
+        result_iter = cast(
+            Iterator[Row],
+            self.processor.handleInputRows((key,), iter(input), timer_values),
         )
-        for key, rows in groupby(sorted_input, key=lambda row: row[self.key_column_name]):
-            self.handle.setGroupingKey(key)
-            timer_values = TimerValues(-1, -1)
-            result_iter = cast(
-                Iterator[Row],
-                self.processor.handleInputRows((key,), iter(rows), timer_values),
-            )
-            result += list(result_iter)
-        return result
-
-    def testInPandas(self, input: pd.DataFrame) -> pd.DataFrame:
+        return list(result_iter)
+        
+    def testInPandas(self, key: Any, input: pd.DataFrame) -> pd.DataFrame:
         """
-        Processes input data through the stateful processor, grouped by key.
+        Processes input data for a single key through the stateful processor.
 
         This method does the same thing as :meth:`test`, but input and output are pandas
         DataFrames. It is used for testing **Pandas mode** processors - those intended to be
         passed to ``transformWithStateInPandas`` in a real streaming query.
 
-        The input is a :class:`pandas.DataFrame` to process, which will be automatically grouped by
-        the key column specified in the constructor. Returns a :class:`pandas.DataFrame`
-        representing all output rows produced by the processor during this batch.
+        Parameters
+        ----------
+        key : Any
+            The grouping key for the input data.
+        input : :class:`pandas.DataFrame`
+            Input data to process for the given key.
+
+        Returns
+        -------
+        :class:`pandas.DataFrame`
+            All output data produced by the processor for this key.
         """
-        result_dfs: list[pd.DataFrame] = []
-        sorted_input = input.sort_values(by=self.key_column_name, na_position="first")
-        for key, group_df in sorted_input.groupby(self.key_column_name, dropna=False, sort=False):
-            self.handle.setGroupingKey(key)
-            timer_values = TimerValues(-1, -1)
-            result_iter = cast(
-                Iterator[pd.DataFrame],
-                self.processor.handleInputRows((key,), iter([group_df]), timer_values),
-            )
-            for result_df in result_iter:
-                result_dfs.append(result_df)
+        self.handle.setGroupingKey(key)
+        timer_values = TimerValues(-1, -1)
+        result_iter = cast(
+            Iterator[pd.DataFrame],
+            self.processor.handleInputRows((key,), iter([input]), timer_values),
+        )
+        result_dfs: list[pd.DataFrame] = list(result_iter)
         if result_dfs:
             return pd.concat(result_dfs, ignore_index=True)
         else:
