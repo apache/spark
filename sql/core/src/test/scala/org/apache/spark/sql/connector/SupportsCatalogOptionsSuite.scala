@@ -21,7 +21,6 @@ import java.util.Optional
 
 import scala.concurrent.duration.MICROSECONDS
 import scala.language.implicitConversions
-import scala.util.Try
 
 import org.scalatest.BeforeAndAfter
 
@@ -65,7 +64,7 @@ class SupportsCatalogOptionsSuite extends QueryTest with SharedSparkSession with
 
   override def afterEach(): Unit = {
     super.afterEach()
-    Try(catalog(SESSION_CATALOG_NAME).asInstanceOf[InMemoryTableSessionCatalog].clearTables())
+    catalog(SESSION_CATALOG_NAME).asInstanceOf[InMemoryTableSessionCatalog].clearTables()
     catalog(catalogName).listTables(Array.empty).foreach(
       catalog(catalogName).dropTable(_))
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
