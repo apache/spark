@@ -595,9 +595,7 @@ class RowProcTimeStatefulProcessor(StatefulProcessor):
         self.count_state.clear()
         self.handle.deleteTimer(expiredTimerInfo.getExpiryTimeInMs())
         yield Row(
-            id=key[0],
-            countAsString=str(-1),
-            timeValues=str(expiredTimerInfo.getExpiryTimeInMs()),
+            id=key[0], countAsString=str(-1), timeValues=str(expiredTimerInfo.getExpiryTimeInMs())
         )
 
     def handleInputRows(self, key, rows, timerValues) -> Iterator[Row]:
@@ -1080,11 +1078,7 @@ class PandasListStateLargeListProcessor(StatefulProcessor):
         updated_elements = ",".join(map(lambda x: str(x[0]), self.list_state.get()))
 
         yield pd.DataFrame(
-            {
-                "id": key,
-                "prevElements": prev_elements,
-                "updatedElements": updated_elements,
-            }
+            {"id": key, "prevElements": prev_elements, "updatedElements": updated_elements}
         )
 
 
@@ -1278,10 +1272,7 @@ class RowMapStateLargeTTLProcessor(RowMapStateProcessor):
 class PandasBasicProcessor(StatefulProcessor):
     # Schema definitions
     state_schema = StructType(
-        [
-            StructField("id", IntegerType(), True),
-            StructField("name", StringType(), True),
-        ]
+        [StructField("id", IntegerType(), True), StructField("name", StringType(), True)]
     )
 
     def init(self, handle):
@@ -1302,10 +1293,7 @@ class PandasBasicProcessor(StatefulProcessor):
 class RowBasicProcessor(StatefulProcessor):
     # Schema definitions
     state_schema = StructType(
-        [
-            StructField("id", IntegerType(), True),
-            StructField("name", StringType(), True),
-        ]
+        [StructField("id", IntegerType(), True), StructField("name", StringType(), True)]
     )
 
     def init(self, handle):
@@ -1326,10 +1314,7 @@ class RowBasicProcessor(StatefulProcessor):
 class PandasBasicProcessorNotNullable(StatefulProcessor):
     # Schema definitions
     state_schema = StructType(
-        [
-            StructField("id", IntegerType(), False),
-            StructField("name", StringType(), False),
-        ]
+        [StructField("id", IntegerType(), False), StructField("name", StringType(), False)]
     )
 
     def init(self, handle):
@@ -1350,10 +1335,7 @@ class PandasBasicProcessorNotNullable(StatefulProcessor):
 class RowBasicProcessorNotNullable(StatefulProcessor):
     # Schema definitions
     state_schema = StructType(
-        [
-            StructField("id", IntegerType(), False),
-            StructField("name", StringType(), False),
-        ]
+        [StructField("id", IntegerType(), False), StructField("name", StringType(), False)]
     )
 
     def init(self, handle):
@@ -1480,10 +1462,7 @@ class RowAddFieldsProcessor(StatefulProcessor):
 class PandasRemoveFieldsProcessor(StatefulProcessor):
     # Schema definitions
     state_schema = StructType(
-        [
-            StructField("id", IntegerType(), True),
-            StructField("name", StringType(), True),
-        ]
+        [StructField("id", IntegerType(), True), StructField("name", StringType(), True)]
     )
 
     def init(self, handle):
@@ -1506,10 +1485,7 @@ class PandasRemoveFieldsProcessor(StatefulProcessor):
 class RowRemoveFieldsProcessor(StatefulProcessor):
     # Schema definitions
     state_schema = StructType(
-        [
-            StructField("id", IntegerType(), True),
-            StructField("name", StringType(), True),
-        ]
+        [StructField("id", IntegerType(), True), StructField("name", StringType(), True)]
     )
 
     def init(self, handle):
@@ -1756,10 +1732,7 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
                     "metadata",
                     ArrayType(
                         StructType(
-                            [
-                                StructField("key", StringType()),
-                                StructField("value", StringType()),
-                            ]
+                            [StructField("key", StringType()), StructField("value", StringType())]
                         )
                     ),
                 ),
@@ -1782,9 +1755,7 @@ class PandasStatefulProcessorCompositeType(StatefulProcessor):
                 StructField("id", IntegerType(), True),
                 StructField("attributes", MapType(StringType(), ArrayType(IntegerType())), True),
                 StructField(
-                    "confs",
-                    MapType(StringType(), MapType(StringType(), IntegerType()), True),
-                    True,
+                    "confs", MapType(StringType(), MapType(StringType(), IntegerType()), True), True
                 ),
             ]
         )
@@ -1884,10 +1855,7 @@ class RowStatefulProcessorCompositeType(StatefulProcessor):
                     "metadata",
                     ArrayType(
                         StructType(
-                            [
-                                StructField("key", StringType()),
-                                StructField("value", StringType()),
-                            ]
+                            [StructField("key", StringType()), StructField("value", StringType())]
                         )
                     ),
                 ),
@@ -1910,9 +1878,7 @@ class RowStatefulProcessorCompositeType(StatefulProcessor):
                 StructField("id", IntegerType(), True),
                 StructField("attributes", MapType(StringType(), ArrayType(IntegerType())), True),
                 StructField(
-                    "confs",
-                    MapType(StringType(), MapType(StringType(), IntegerType()), True),
-                    True,
+                    "confs", MapType(StringType(), MapType(StringType(), IntegerType()), True), True
                 ),
             ]
         )
