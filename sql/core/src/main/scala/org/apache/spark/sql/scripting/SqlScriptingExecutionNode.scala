@@ -298,6 +298,12 @@ class CompoundBodyExec(
   /** Used to stop the iteration in cases when LEAVE statement is encountered. */
   private var stopIteration = false
 
+  /**
+   * Flag to prevent advancing curr after an exception was thrown and handled by a CONTINUE handler.
+   * When true, the next call to next() should return curr without advancing.
+   */
+  private[scripting] var returnCurrentWithoutAdvancing = false
+
   private lazy val treeIterator: Iterator[CompoundStatementExec] =
     new Iterator[CompoundStatementExec] {
       override def hasNext: Boolean = {
@@ -313,6 +319,17 @@ class CompoundBodyExec(
 
       @tailrec
       override def next(): CompoundStatementExec = {
+        // If we need to return current without advancing (after CONTINUE handler),
+        // do so and clear the flag
+        if (returnCurrentWithoutAdvancing) {
+          returnCurrentWithoutAdvancing = false
+          return curr match {
+            case Some(stmt) => stmt
+            case None => throw SparkException.internalError(
+              "No current statement available after CONTINUE handler.")
+          }
+        }
+
         curr match {
           case None => throw SparkException.internalError(
             "No more elements to iterate through in the current SQL compound statement.")

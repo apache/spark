@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command.v2
 
+import java.util.Locale
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{InternalRow, SqlScriptingContextManager}
 import org.apache.spark.sql.catalyst.catalog.VariableDefinition
@@ -79,7 +81,7 @@ case class FetchCursorExec(
     }
 
     // Get variable manager
-    val variableManager = SqlScriptingContextManager.get()
+    val scriptingVariableManager = SqlScriptingContextManager.get()
       .map(_.getVariableManager)
       .getOrElse(throw new AnalysisException(
         errorClass = "CURSOR_OUTSIDE_SCRIPT",
@@ -88,12 +90,21 @@ case class FetchCursorExec(
     // Assign values to variables
     targetVariables.zipWithIndex.foreach { case (varRef, idx) =>
       val value = currentRow.get(idx, varRef.dataType)
+
+      // Handle case sensitivity the same way as SetVariableExec
+      val namePartsCaseAdjusted = if (session.sessionState.conf.caseSensitiveAnalysis) {
+        varRef.originalNameParts
+      } else {
+        varRef.originalNameParts.map(_.toLowerCase(Locale.ROOT))
+      }
+
       val varDef = VariableDefinition(
         varRef.identifier,
-        "", // originalSQL not needed for assignment
+        varRef.varDef.defaultValueSQL,
         Literal(value, varRef.dataType)
       )
-      variableManager.set(varRef.identifier.namespace().toSeq :+ varRef.identifier.name(), varDef)
+
+      scriptingVariableManager.set(namePartsCaseAdjusted, varDef)
     }
 
     Nil
