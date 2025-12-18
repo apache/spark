@@ -30,7 +30,10 @@ from pyspark.sql.streaming.query import StreamingQuery
 from pyspark.sql.streaming.tws_tester import TwsTester
 from pyspark.sql.tests.pandas.helper.helper_pandas_transform_with_state import (
     AllMethodsTestProcessorFactory,
+    EventTimeCountProcessorFactory,
+    EventTimeSessionProcessorFactory,
     RunningCountStatefulProcessorFactory,
+    SessionTimeoutProcessorFactory,
     TopKProcessorFactory,
     WordFrequencyProcessorFactory,
 )
@@ -42,6 +45,7 @@ from pyspark.sql.types import (
     StructField,
     StructType,
 )
+from pyspark.errors import PySparkValueError, PySparkAssertionError
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,
@@ -444,22 +448,22 @@ class TwsTesterTests(ReusedSQLTestCase):
                 initialStatePandas=[("a", pd.DataFrame({"initial_count": [10]}))],
             )
 
-    def test_timer_registration_raises_error(self):
+    def test_timer_registration_raises_error_in_none_mode(self):
         processor = RunningCountStatefulProcessorFactory().row()
-        tester = TwsTester(processor)
-        with self.assertRaises(NotImplementedError):
+        tester = TwsTester(processor, timeMode="None")
+        with self.assertRaisesRegex(PySparkValueError, "UNSUPPORTED_OPERATION"):
             tester.handle.registerTimer(12345)
 
-    def test_delete_timer_raises_error(self):
+    def test_delete_timer_raises_error_in_none_mode(self):
         processor = RunningCountStatefulProcessorFactory().row()
-        tester = TwsTester(processor)
-        with self.assertRaises(NotImplementedError):
+        tester = TwsTester(processor, timeMode="None")
+        with self.assertRaisesRegex(PySparkValueError, "UNSUPPORTED_OPERATION"):
             tester.handle.deleteTimer(12345)
 
-    def test_list_timers_raises_error(self):
+    def test_list_timers_raises_error_in_none_mode(self):
         processor = RunningCountStatefulProcessorFactory().row()
-        tester = TwsTester(processor)
-        with self.assertRaises(NotImplementedError):
+        tester = TwsTester(processor, timeMode="None")
+        with self.assertRaisesRegex(PySparkValueError, "UNSUPPORTED_OPERATION"):
             list(tester.handle.listTimers())
 
     def test_empty_input_row(self):
@@ -807,9 +811,231 @@ class TwsTesterTests(ReusedSQLTestCase):
         processor = RunningCountStatefulProcessorFactory().row()
         tester = TwsTester(processor)
 
-        with self.assertRaises(AssertionError) as context:
+        with self.assertRaisesRegex(PySparkAssertionError, "STATE_NOT_EXISTS"):
             tester.deleteState("nonexistent_state", "key1")
-        self.assertIn("has not been initialized", str(context.exception))
+
+    # Timer tests
+
+    def test_processing_time_timers(self):
+        """Test that TwsTester supports ProcessingTime timers."""
+        processor = SessionTimeoutProcessorFactory().row()
+        tester = TwsTester(processor, timeMode="ProcessingTime")
+
+        # Process input for key1 - should register a timer at t=10000
+        result1 = tester.test("key1", [Row(value="hello")])
+        self.assertEqual(result1, [Row(key="key1", result="received:hello")])
+
+        # Advance time by 5 seconds - timer should NOT fire yet
+        expired1 = tester.advanceProcessingTime(5000)
+        self.assertEqual(expired1, [])
+
+        # Process input for key2 at t=5000 - should register timer at t=15000
+        result2 = tester.test("key2", [Row(value="world")])
+        self.assertEqual(result2, [Row(key="key2", result="received:world")])
+
+        # Advance time by 6 seconds (total t=11000) - key1's timer should fire
+        expired2 = tester.advanceProcessingTime(6000)
+        self.assertEqual(expired2, [Row(key="key1", result="session-expired")])
+
+        # Advance time by 5 seconds (total t=16000) - key2's timer should fire
+        expired3 = tester.advanceProcessingTime(5000)
+        self.assertEqual(expired3, [Row(key="key2", result="session-expired")])
+
+        # Verify state is cleared after session expiry
+        self.assertIsNone(tester.peekValueState("lastSeen", "key1"))
+        self.assertIsNone(tester.peekValueState("lastSeen", "key2"))
+
+    def test_processing_time_timers_pandas(self):
+        """Test that TwsTester supports ProcessingTime timers in Pandas mode."""
+        processor = SessionTimeoutProcessorFactory().pandas()
+        tester = TwsTester(processor, timeMode="ProcessingTime")
+
+        # Process input for key1 - should register a timer at t=10000
+        result1 = tester.testInPandas("key1", pd.DataFrame({"value": ["hello"]}))
+        expected1 = pd.DataFrame({"key": ["key1"], "result": ["received:hello"]})
+        pdt.assert_frame_equal(result1, expected1, check_like=True)
+
+        # Advance time by 5 seconds - timer should NOT fire yet
+        expired1 = tester.advanceProcessingTimeInPandas(5000)
+        self.assertEqual(len(expired1), 0)
+
+        # Advance time by 6 seconds (total t=11000) - timer should fire
+        expired2 = tester.advanceProcessingTimeInPandas(6000)
+        expected2 = pd.DataFrame({"key": ["key1"], "result": ["session-expired"]})
+        pdt.assert_frame_equal(expired2, expected2, check_like=True)
+
+    def test_event_time_timers_data_driven_watermark(self):
+        """Test that TwsTester supports EventTime timers fired by data-driven watermark."""
+        processor = EventTimeSessionProcessorFactory().row()
+
+        tester = TwsTester(
+            processor,
+            timeMode="EventTime",
+            eventTimeColumnName="event_time_ms",
+            watermarkDelayMs=2000,  # 2 second watermark delay
+        )
+
+        # Process event at t=10000 for key1 - registers timer at t=15000
+        # Watermark becomes: 10000 - 2000 = 8000 (timer at 15000 won't fire)
+        result1 = tester.test("key1", [Row(event_time_ms=10000, value="hello")])
+        self.assertEqual(result1, [Row(key="key1", result="received:hello@10000")])
+
+        # Process event at t=12000 for key2 - registers timer at t=17000
+        # Watermark becomes: 12000 - 2000 = 10000 (still not enough for key1's timer at 15000)
+        result2 = tester.test("key2", [Row(event_time_ms=12000, value="world")])
+        self.assertEqual(result2, [Row(key="key2", result="received:world@12000")])
+
+        # Process event at t=20000 for key3 - watermark becomes 18000
+        # This should fire key1's timer at 15000 and key2's timer at 17000
+        result3 = tester.test("key3", [Row(event_time_ms=20000, value="new")])
+        self.assertIn(Row(key="key3", result="received:new@20000"), result3)
+        # Both key1 and key2 timers should have fired
+        timer_results = [r for r in result3 if "session-expired" in r.result]
+        self.assertEqual(len(timer_results), 2)
+
+        # Verify state is cleared for key1 and key2 after timer expiry
+        self.assertIsNone(tester.peekValueState("lastEventTime", "key1"))
+        self.assertIsNone(tester.peekValueState("lastEventTime", "key2"))
+        # key3 should still have state (timer at 25000 hasn't fired yet)
+        self.assertIsNotNone(tester.peekValueState("lastEventTime", "key3"))
+
+    def test_event_time_timers_manual_watermark_advance(self):
+        """Test that TwsTester supports EventTime timers fired by manual watermark advance."""
+        processor = EventTimeSessionProcessorFactory().row()
+
+        tester = TwsTester(
+            processor,
+            timeMode="EventTime",
+            eventTimeColumnName="event_time_ms",
+            watermarkDelayMs=2000,
+        )
+
+        # Process event at t=10000 for key1 - registers timer at t=15000
+        # Watermark: 10000 - 2000 = 8000
+        result1 = tester.test("key1", [Row(event_time_ms=10000, value="hello")])
+        self.assertEqual(result1, [Row(key="key1", result="received:hello@10000")])
+
+        # Process event at t=11000 for key2 - registers timer at t=16000
+        # Watermark: 11000 - 2000 = 9000
+        result2 = tester.test("key2", [Row(event_time_ms=11000, value="world")])
+        self.assertEqual(result2, [Row(key="key2", result="received:world@11000")])
+
+        # Manually advance watermark by 7000ms (from 9000 to 16000)
+        # This should fire key1's timer (15000) and key2's timer (16000)
+        expired = tester.advanceWatermark(7000)
+        self.assertEqual(len(expired), 2)
+
+        # Verify state is cleared
+        self.assertIsNone(tester.peekValueState("lastEventTime", "key1"))
+        self.assertIsNone(tester.peekValueState("lastEventTime", "key2"))
+
+    def test_late_event_filtering(self):
+        """Test that TwsTester filters late events in EventTime mode."""
+        processor = EventTimeCountProcessorFactory().row()
+
+        tester = TwsTester(
+            processor,
+            timeMode="EventTime",
+            eventTimeColumnName="event_time_ms",
+            watermarkDelayMs=1000,  # 1 second watermark delay
+        )
+
+        # Initially watermark is 0, so all events should be processed
+        # Process events at t=5000, t=6000, t=7000 - watermark becomes 7000 - 1000 = 6000
+        result1 = tester.test(
+            "key1",
+            [
+                Row(event_time_ms=5000, value="a"),
+                Row(event_time_ms=6000, value="b"),
+                Row(event_time_ms=7000, value="c"),
+            ],
+        )
+        self.assertEqual(result1, [Row(key="key1", count=3)])
+        self.assertEqual(tester.peekValueState("count", "key1"), (3,))
+
+        # Now watermark is 6000. Send events with mixed event times:
+        # - (4000, "late1") -> event time 4000 < watermark 6000, should be FILTERED
+        # - (5000, "late2") -> event time 5000 < watermark 6000, should be FILTERED
+        # - (6000, "ontime1") -> event time 6000 >= watermark 6000, should be PROCESSED
+        # - (8000, "ontime2") -> event time 8000 >= watermark 6000, should be PROCESSED
+        result2 = tester.test(
+            "key1",
+            [
+                Row(event_time_ms=4000, value="late1"),
+                Row(event_time_ms=5000, value="late2"),
+                Row(event_time_ms=6000, value="ontime1"),
+                Row(event_time_ms=8000, value="ontime2"),
+            ],
+        )
+        # Only 2 events should be processed (the on-time ones)
+        self.assertEqual(result2, [Row(key="key1", count=5)])  # 3 + 2 = 5
+        self.assertEqual(tester.peekValueState("count", "key1"), (5,))
+
+    def test_all_late_events_filtered(self):
+        """Test that all late events are filtered when all are older than watermark."""
+        processor = EventTimeCountProcessorFactory().row()
+
+        tester = TwsTester(
+            processor,
+            timeMode="EventTime",
+            eventTimeColumnName="event_time_ms",
+            watermarkDelayMs=0,  # No delay for simplicity
+        )
+
+        # Process events to advance watermark to 10000
+        tester.test("key1", [Row(event_time_ms=10000, value="a")])
+        self.assertEqual(tester.peekValueState("count", "key1"), (1,))
+
+        # Now send only late events - all should be filtered, count unchanged
+        result = tester.test(
+            "key1",
+            [
+                Row(event_time_ms=1000, value="late1"),
+                Row(event_time_ms=5000, value="late2"),
+                Row(event_time_ms=9999, value="late3"),
+            ],
+        )
+        # No events processed - handleInputRows is called with empty list
+        self.assertEqual(result, [Row(key="key1", count=1)])  # Count still 1
+        self.assertEqual(tester.peekValueState("count", "key1"), (1,))
+
+    def test_timer_registration_in_none_mode_raises_error(self):
+        """Test that timer operations raise error in TimeMode.None."""
+        processor = RunningCountStatefulProcessorFactory().row()
+        tester = TwsTester(processor, timeMode="None")
+
+        with self.assertRaisesRegex(PySparkValueError, "UNSUPPORTED_OPERATION"):
+            tester.handle.registerTimer(12345)
+
+    def test_advance_processing_time_in_wrong_mode_raises_error(self):
+        """Test that advanceProcessingTime raises error in non-ProcessingTime mode."""
+        processor = RunningCountStatefulProcessorFactory().row()
+
+        # Test in None mode
+        tester_none = TwsTester(processor, timeMode="None")
+        with self.assertRaisesRegex(PySparkValueError, "UNSUPPORTED_OPERATION"):
+            tester_none.advanceProcessingTime(1000)
+
+    def test_advance_watermark_in_wrong_mode_raises_error(self):
+        """Test that advanceWatermark raises error in non-EventTime mode."""
+        processor = RunningCountStatefulProcessorFactory().row()
+
+        # Test in None mode
+        tester_none = TwsTester(processor, timeMode="None")
+        with self.assertRaisesRegex(PySparkValueError, "UNSUPPORTED_OPERATION"):
+            tester_none.advanceWatermark(1000)
+
+        # Test in ProcessingTime mode
+        tester_pt = TwsTester(processor, timeMode="ProcessingTime")
+        with self.assertRaisesRegex(PySparkValueError, "UNSUPPORTED_OPERATION"):
+            tester_pt.advanceWatermark(1000)
+
+    def test_eventtime_mode_requires_column_name(self):
+        """Test that EventTime mode requires eventTimeColumnName."""
+        processor = RunningCountStatefulProcessorFactory().row()
+
+        with self.assertRaisesRegex(PySparkValueError, "ARGUMENT_REQUIRED"):
+            TwsTester(processor, timeMode="EventTime")
 
 
 @unittest.skipIf(

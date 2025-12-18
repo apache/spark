@@ -2441,3 +2441,168 @@ class AllMethodsTestProcessor(StatefulProcessor):
             return {"key": key, "result": result}
         else:
             return Row(key=key, result=result)
+
+
+class SessionTimeoutProcessorFactory(StatefulProcessorFactory):
+    def pandas(self):
+        return SessionTimeoutProcessor(use_pandas=True)
+
+    def row(self):
+        return SessionTimeoutProcessor(use_pandas=False)
+
+
+class EventTimeSessionProcessorFactory(StatefulProcessorFactory):
+    def pandas(self):
+        return EventTimeSessionProcessor(use_pandas=True)
+
+    def row(self):
+        return EventTimeSessionProcessor(use_pandas=False)
+
+
+class EventTimeCountProcessorFactory(StatefulProcessorFactory):
+    def pandas(self):
+        return EventTimeCountProcessor(use_pandas=True)
+
+    def row(self):
+        return EventTimeCountProcessor(use_pandas=False)
+
+
+class SessionTimeoutProcessor(StatefulProcessor):
+    """
+    Processor that registers a processing time timer on first input and emits a message on expiry.
+    Uses a 10-second timeout.
+    """
+
+    def __init__(self, use_pandas: bool = False):
+        self.use_pandas = use_pandas
+
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        state_schema = StructType([StructField("lastSeen", LongType(), True)])
+        self.handle = handle
+        self.last_seen_state = handle.getValueState("lastSeen", state_schema)
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator:
+        current_time = timerValues.getCurrentProcessingTimeInMs()
+
+        # Clear any existing timer if we have previous state
+        if self.last_seen_state.exists():
+            old_timer_time = (
+                self.last_seen_state.get()[0] + 10000
+            )  # old timeout was 10s after last seen
+            self.handle.deleteTimer(old_timer_time)
+
+        # Update last seen time and register new timer
+        self.last_seen_state.update((current_time,))
+        self.handle.registerTimer(current_time + 10000)  # 10 second timeout
+
+        if self.use_pandas:
+            results = []
+            for row_df in rows:
+                for _, row in row_df.iterrows():
+                    results.append({"key": key[0], "result": f"received:{row.value}"})
+            if results:
+                yield pd.DataFrame(results)
+        else:
+            for row in rows:
+                yield Row(key=key[0], result=f"received:{row.value}")
+
+    def handleExpiredTimer(self, key, timerValues, expiredTimerInfo) -> Iterator:
+        self.last_seen_state.clear()
+        if self.use_pandas:
+            yield pd.DataFrame({"key": [key[0]], "result": ["session-expired"]})
+        else:
+            yield Row(key=key[0], result="session-expired")
+
+
+class EventTimeSessionProcessor(StatefulProcessor):
+    """
+    Processor that registers an event time timer based on watermark.
+    Input: Row(event_time_ms=..., value=...)
+    Registers a timer at eventTime + 5000ms. Timer fires when watermark passes that time.
+    """
+
+    def __init__(self, use_pandas: bool = False):
+        self.use_pandas = use_pandas
+
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        state_schema = StructType([StructField("lastEventTime", LongType(), True)])
+        self.handle = handle
+        self.last_event_time_state = handle.getValueState("lastEventTime", state_schema)
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator:
+        if self.use_pandas:
+            results = []
+            for row_df in rows:
+                for _, row in row_df.iterrows():
+                    event_time_ms = int(row.event_time_ms)
+                    value = row.value
+
+                    # Clear any existing timer if we have previous state
+                    if self.last_event_time_state.exists():
+                        old_timer_time = self.last_event_time_state.get()[0] + 5000
+                        self.handle.deleteTimer(old_timer_time)
+
+                    # Update last event time and register new timer
+                    self.last_event_time_state.update((event_time_ms,))
+                    self.handle.registerTimer(event_time_ms + 5000)  # 5 second timeout
+
+                    results.append({"key": key[0], "result": f"received:{value}@{event_time_ms}"})
+            if results:
+                yield pd.DataFrame(results)
+        else:
+            for row in rows:
+                event_time_ms = row.event_time_ms
+                value = row.value
+
+                # Clear any existing timer if we have previous state
+                if self.last_event_time_state.exists():
+                    old_timer_time = self.last_event_time_state.get()[0] + 5000
+                    self.handle.deleteTimer(old_timer_time)
+
+                # Update last event time and register new timer
+                self.last_event_time_state.update((event_time_ms,))
+                self.handle.registerTimer(event_time_ms + 5000)
+
+                yield Row(key=key[0], result=f"received:{value}@{event_time_ms}")
+
+    def handleExpiredTimer(self, key, timerValues, expiredTimerInfo) -> Iterator:
+        watermark = timerValues.getCurrentWatermarkInMs()
+        self.last_event_time_state.clear()
+        if self.use_pandas:
+            yield pd.DataFrame(
+                {"key": [key[0]], "result": [f"session-expired@watermark={watermark}"]}
+            )
+        else:
+            yield Row(key=key[0], result=f"session-expired@watermark={watermark}")
+
+
+class EventTimeCountProcessor(StatefulProcessor):
+    """
+    Processor that counts events in EventTime mode.
+    Input: Row(event_time_ms=..., value=...)
+    Output: (key, count) for current count after processing input
+    Used to test late event filtering - late events should not increment the count.
+    """
+
+    def __init__(self, use_pandas: bool = False):
+        self.use_pandas = use_pandas
+
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        state_schema = StructType([StructField("count", LongType(), True)])
+        self.count_state = handle.getValueState("count", state_schema)
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator:
+        current = self.count_state.get()[0] if self.count_state.exists() else 0
+
+        if self.use_pandas:
+            incoming = sum(len(row_df) for row_df in rows)
+        else:
+            incoming = sum(1 for _ in rows)
+
+        updated = current + incoming
+        self.count_state.update((updated,))
+
+        if self.use_pandas:
+            yield pd.DataFrame({"key": [key[0]], "count": [updated]})
+        else:
+            yield Row(key=key[0], count=updated)
