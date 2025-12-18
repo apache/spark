@@ -58,6 +58,22 @@ class PythonMicroBatchStream(
     new PythonStreamingSourceRunner(createDataSourceFunc, outputSchema)
   runner.init()
 
+  // Validate options early to fail fast
+  validateOptions()
+
+  private def validateOptions(): Unit = {
+    if (options.containsKey(MAX_FILES_PER_BATCH)) {
+      throw new IllegalArgumentException(
+        s"Option '$MAX_FILES_PER_BATCH' is not supported for Python data sources; " +
+          s"use '$MAX_RECORDS_PER_BATCH' instead.")
+    }
+    if (options.containsKey(MAX_BYTES_PER_BATCH)) {
+      throw new IllegalArgumentException(
+        s"Option '$MAX_BYTES_PER_BATCH' is not supported for Python data sources; " +
+          s"use '$MAX_RECORDS_PER_BATCH' instead.")
+    }
+  }
+
   override def initialOffset(): Offset = PythonStreamingSourceOffset(runner.initialOffset())
 
   override def getDefaultReadLimit: ReadLimit = {
@@ -68,24 +84,6 @@ class PythonMicroBatchStream(
         throw new IllegalArgumentException(
           s"Invalid value '${options.get(key)}' for option '$key', must be a positive integer")
       }
-    }
-
-    def parseInt(key: String): Int = {
-      Try(options.get(key).toInt).toOption.filter(_ > 0).getOrElse {
-        throw new IllegalArgumentException(
-          s"Invalid value '${options.get(key)}' for option '$key', must be a positive integer")
-      }
-    }
-
-    if (options.containsKey(MAX_FILES_PER_BATCH)) {
-      throw new IllegalArgumentException(
-        s"Option '$MAX_FILES_PER_BATCH' is not supported for Python data sources; " +
-          s"use '$MAX_RECORDS_PER_BATCH' instead.")
-    }
-    if (options.containsKey(MAX_BYTES_PER_BATCH)) {
-      throw new IllegalArgumentException(
-        s"Option '$MAX_BYTES_PER_BATCH' is not supported for Python data sources; " +
-          s"use '$MAX_RECORDS_PER_BATCH' instead.")
     }
 
     if (options.containsKey(MAX_RECORDS_PER_BATCH)) {
