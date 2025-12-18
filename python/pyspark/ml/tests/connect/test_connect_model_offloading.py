@@ -256,6 +256,7 @@ class ModelOffloadingTests(ReusedConnectTestCase):
         model = fp.fit(df)
 
         def check_model(m):
+            self.assertIsInstance(m, FPGrowthModel)
             self.assertEqual(fp.uid, m.uid)
             self.assertEqual(m.freqItemsets.columns, ["items", "freq"])
             self.assertEqual(m.freqItemsets.count(), 54)
