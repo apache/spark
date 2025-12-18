@@ -42,7 +42,7 @@ import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{AnalysisException, Column, Encoders, ForeachWriter, Row}
-import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, QueryPlanningTracker}
+import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedOrdinal, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, UnboundRowEncoder}
@@ -1491,7 +1491,12 @@ class SparkConnectPlanner(
     }
 
     if (rel.hasData) {
-      buildLocalRelationFromRows(Iterator.single(rel.getData.toByteArray), Option(schema))
+      val (rows, structType) = ArrowConverters.fromIPCStream(rel.getData.toByteArray)
+      try {
+        buildLocalRelationFromRows(rows, structType, Option(schema))
+      } finally {
+        rows.close()
+      }
     } else {
       if (schema == null) {
         throw InvalidInputErrors.schemaRequiredForLocalRelation()
@@ -1562,9 +1567,13 @@ class SparkConnectPlanner(
     }
 
     // Load and combine all batches
-    buildLocalRelationFromRows(
-      dataHashes.iterator.map(readChunkedCachedLocalRelationBlock),
-      Option(schema))
+    val (rows, structType) =
+      ArrowConverters.fromIPCStream(dataHashes.iterator.map(readChunkedCachedLocalRelationBlock))
+    try {
+      buildLocalRelationFromRows(rows, structType, Option(schema))
+    } finally {
+      rows.close()
+    }
   }
 
   private def toStructTypeOrWrap(dt: DataType): StructType = dt match {
@@ -1573,47 +1582,52 @@ class SparkConnectPlanner(
   }
 
   private def buildLocalRelationFromRows(
-      ipcStreams: Iterator[Array[Byte]],
+      rows: Iterator[InternalRow],
+      structType: StructType,
       schemaOpt: Option[StructType]): LogicalPlan = {
-    val (rows, structType) = ArrowConverters.fromIPCStream(ipcStreams)
-    try {
-      val (attributes, projection) = schemaOpt match {
-        case None =>
-          val attributes = DataTypeUtils.toAttributes(structType)
-          val projection = UnsafeProjection.create(attributes, attributes)
-          (attributes, projection)
-        case Some(schema) =>
-          def normalize(dt: DataType): DataType = dt match {
-            case udt: UserDefinedType[_] => normalize(udt.sqlType)
-            case StructType(fields) =>
-              val newFields = fields.zipWithIndex.map {
-                case (StructField(_, dataType, nullable, metadata), i) =>
-                  StructField(s"col_$i", normalize(dataType), nullable, metadata)
-              }
-              StructType(newFields)
-            case ArrayType(elementType, containsNull) =>
-              ArrayType(normalize(elementType), containsNull)
-            case MapType(keyType, valueType, valueContainsNull) =>
-              MapType(normalize(keyType), normalize(valueType), valueContainsNull)
-            case _ => dt
-          }
+    if (structType == null) {
+      throw InvalidInputErrors.inputDataForLocalRelationNoSchema()
+    }
 
-          val normalized = normalize(schema).asInstanceOf[StructType]
-          import org.apache.spark.util.ArrayImplicits._
-          val project = Dataset
-            .ofRows(
-              session,
-              logicalPlan = logical.LocalRelation(normalize(structType).asInstanceOf[StructType]))
-            .toDF(normalized.names.toImmutableArraySeq: _*)
-            .to(normalized)
-            .logicalPlan
-            .asInstanceOf[Project]
-          val projection = UnsafeProjection.create(project.projectList, project.child.output)
-          (DataTypeUtils.toAttributes(schema), projection)
-      }
-      logical.LocalRelation(attributes, rows.map(projection).map(_.copy()).toSeq)
-    } finally {
-      rows.close()
+    val attributes = DataTypeUtils.toAttributes(structType)
+    val initialProjection = UnsafeProjection.create(attributes, attributes)
+    val data = rows.map(initialProjection)
+
+    schemaOpt match {
+      case None =>
+        logical.LocalRelation(attributes, data.map(_.copy()).toArray.toImmutableArraySeq)
+      case Some(schema) =>
+        def normalize(dt: DataType): DataType = dt match {
+          case udt: UserDefinedType[_] => normalize(udt.sqlType)
+          case StructType(fields) =>
+            val newFields = fields.zipWithIndex.map {
+              case (StructField(_, dataType, nullable, metadata), i) =>
+                StructField(s"col_$i", normalize(dataType), nullable, metadata)
+            }
+            StructType(newFields)
+          case ArrayType(elementType, containsNull) =>
+            ArrayType(normalize(elementType), containsNull)
+          case MapType(keyType, valueType, valueContainsNull) =>
+            MapType(normalize(keyType), normalize(valueType), valueContainsNull)
+          case _ => dt
+        }
+
+        val normalized = normalize(schema).asInstanceOf[StructType]
+
+        import org.apache.spark.util.ArrayImplicits._
+        val project = Dataset
+          .ofRows(
+            session,
+            logicalPlan = logical.LocalRelation(normalize(structType).asInstanceOf[StructType]))
+          .toDF(normalized.names.toImmutableArraySeq: _*)
+          .to(normalized)
+          .logicalPlan
+          .asInstanceOf[Project]
+
+        val proj = UnsafeProjection.create(project.projectList, project.child.output)
+        logical.LocalRelation(
+          DataTypeUtils.toAttributes(schema),
+          data.map(proj).map(_.copy()).toSeq)
     }
   }
 
