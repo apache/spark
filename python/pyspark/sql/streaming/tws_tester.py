@@ -265,6 +265,11 @@ class TwsTester:
     initialStatePandas : list of tuple, optional
         Initial state for each key as a list of (key, DataFrame) tuples (for Pandas mode
         processors). Cannot be specified together with ``initialStateRow``.
+    realTimeMode : bool, optional
+        When True, input rows are processed one-by-one (separate call to handleInputRows
+        for each input row), simulating real-time streaming behavior where each row arrives
+        as a separate micro-batch. When False (default), all input rows are processed in
+        a single call to handleInputRows.
 
     Examples
     --------
@@ -310,9 +315,11 @@ class TwsTester:
         processor: StatefulProcessor,
         initialStateRow: Optional[list[tuple[Any, Row]]] = None,
         initialStatePandas: Optional[list[tuple[Any, pd.DataFrame]]] = None,
+        realTimeMode: bool = False,
     ) -> None:
         self.processor = processor
         self.handle = _InMemoryStatefulProcessorHandle()
+        self.realTimeMode = realTimeMode
 
         self.processor.init(self.handle)
 
@@ -331,7 +338,8 @@ class TwsTester:
         Processes input rows for a single key through the stateful processor.
 
         This method is used for testing **Row mode** processors (transformWithState).
-        It makes exactly one call to ``handleInputRows`` with the provided key and input rows.
+        It makes exactly one call to ``handleInputRows`` with the provided key and input rows
+        (unless realTimeMode=true).
 
         Parameters
         ----------
@@ -345,6 +353,12 @@ class TwsTester:
         list of :class:`Row`
             All output rows produced by the processor for this key.
         """
+        if self.realTimeMode:
+            return [row_out for row_in in input for row_out in self._testInternal(key, [row_in])]
+        else:
+            return self._testInternal(key, input)
+
+    def _testInternal(self, key: Any, input: list[Row]) -> list[Row]:
         self.handle.setGroupingKey(key)
         timer_values = TimerValues(-1, -1)
         result_iter = cast(
@@ -352,7 +366,7 @@ class TwsTester:
             self.processor.handleInputRows((key,), iter(input), timer_values),
         )
         return list(result_iter)
-        
+
     def testInPandas(self, key: Any, input: pd.DataFrame) -> pd.DataFrame:
         """
         Processes input data for a single key through the stateful processor.
@@ -373,17 +387,29 @@ class TwsTester:
         :class:`pandas.DataFrame`
             All output data produced by the processor for this key.
         """
+        if self.realTimeMode:
+            result_dfs: list[pd.DataFrame] = []
+            for i in range(len(input)):
+                single_row_df = input.iloc[[i]].reset_index(drop=True)
+                result_dfs += self._testInPandasInternal(key, single_row_df)
+        else:
+            result_dfs = self._testInPandasInternal(key, input)
+            
+        if result_dfs:
+            return pd.concat(result_dfs, ignore_index=True)
+        else:
+            return pd.DataFrame()
+
+
+    def _testInPandasInternal(self, key: Any, input: pd.DataFrame) ->list[pd.DataFrame]:
+        """Internal method that processes input DataFrame in a single batch."""
         self.handle.setGroupingKey(key)
         timer_values = TimerValues(-1, -1)
         result_iter = cast(
             Iterator[pd.DataFrame],
             self.processor.handleInputRows((key,), iter([input]), timer_values),
         )
-        result_dfs: list[pd.DataFrame] = list(result_iter)
-        if result_dfs:
-            return pd.concat(result_dfs, ignore_index=True)
-        else:
-            return pd.DataFrame()
+        return list(result_iter)
 
     def setValueState(self, stateName: str, key: Any, value: tuple) -> None:
         """Directly set a value state for a given key."""

@@ -62,7 +62,8 @@ class TwsTesterTests(ReusedSQLTestCase):
 
         self.assertEqual(tester.test("key1", [Row(value="a")]), [Row(key="key1", count=1)])
         self.assertEqual(
-            tester.test("key2", [Row(value="a"), Row(value="a")]), [Row(key="key2", count=2)]
+            tester.test("key2", [Row(value="a"), Row(value="a")]),
+            [Row(key="key2", count=2)],
         )
         self.assertEqual(tester.test("key3", [Row(value="a")]), [Row(key="key3", count=1)])
         self.assertEqual(
@@ -166,7 +167,13 @@ class TwsTesterTests(ReusedSQLTestCase):
         tester = TwsTester(processor)
 
         ans1 = tester.test(
-            "user1", [Row(word="hello"), Row(word="world"), Row(word="hello"), Row(word="world")]
+            "user1",
+            [
+                Row(word="hello"),
+                Row(word="world"),
+                Row(word="hello"),
+                Row(word="world"),
+            ],
         )
         self.assertEqual(
             ans1,
@@ -281,6 +288,19 @@ class TwsTesterTests(ReusedSQLTestCase):
             return tester.peekValueState("count", key)[0]
 
         self.assertEqual(step_function("key1", "a", 10), 11)
+
+    def test_real_time_mode(self):
+        processor = RunningCountStatefulProcessorFactory().row()
+        tester = TwsTester(processor, realTimeMode=True)
+        ans = tester.test("key1", [Row(value="a"), Row(value="b")])
+        self.assertEqual(ans, [Row(key="key1", count=1), Row(key="key1", count=2)])
+
+    def test_real_time_mode_pandas(self):
+        processor = RunningCountStatefulProcessorFactory().pandas()
+        tester = TwsTester(processor, realTimeMode=True)
+        ans = tester.testInPandas("key1", pd.DataFrame({"value": ["a", "a"]}))
+        expected = pd.DataFrame({"key": ["key1", "key1"], "count": [1, 2]})
+        pdt.assert_frame_equal(ans, expected, check_like=True)
 
     # Example of how TwsTester can be used to simulate real-time mode.
     def test_row_by_row(self):
@@ -1017,4 +1037,3 @@ if __name__ == "__main__":
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)
-
