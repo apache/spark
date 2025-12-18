@@ -2059,7 +2059,6 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       Seq[NamedExpression] = {
     val nameToIndex = original.map(_.name).zipWithIndex.toMap
     val response = updated.toArray
-    println(f"Matching $updated to $original")
     updated.foreach { e =>
       val idx = nameToIndex(e.name)
       response(idx) = e
@@ -2113,7 +2112,6 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
           }
         }
       }
-      println(f"used: $usedAliasesForCondition")
       // Split the filters into cheap and expensive while keeping track of what each filter
       // references from the projection.
       val (cheapWithUsed, expensiveWithUsed) = usedAliasesForCondition
@@ -2149,7 +2147,6 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
           // just push the filter while resolving the non-expensive aliases.
           val combinedCheapFilter = cheap.reduce(And)
           val resolvedCheapFilter = replaceAlias(combinedCheapFilter, aliasMap)
-          println(f"Resolved ${combinedCheapFilter} to ${resolvedCheapFilter}")
           Filter(resolvedCheapFilter, child = grandChild)
         } else {
           // If we don't have any inexpensive filters to push it's "just" the grandchild.
@@ -2177,7 +2174,6 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         }
         if (toSplit.isEmpty && cheap.isEmpty) {
           // Nothing to push or split, short circuit
-          println(f"No splits or cheap filters to push, returning original filter")
           f
         } else {
           // If we can't split anymore
@@ -2189,7 +2185,6 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
           // don't double add anything.
             val (headUsed, headConds) = toSplit.head
             val initialReferences = (baseChild.output ++ headUsed.map(_._2)).distinct
-            println(f"Building first projection with $initialReferences")
             val first = Filter(headConds.reduce(And),
               project.copy(projectList = initialReferences,
                 child = baseChild))
@@ -2203,8 +2198,6 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
                   Filter(nextConds.reduce(And), currentFilter)
                 } else {
                   // Need to add a new projection for the new aliases
-                  println(s"Adding new projection $newAliases existing aliases: $addedAliases"
-                    + s"(existing output ${currentFilter.output}")
                   val newProjection = project.copy(
                     projectList = currentFilter.output ++ newAliases,
                     child = currentFilter)
@@ -2220,18 +2213,15 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
           // evaluate any stragglers and select the already computed columns.
           val (unusedAliases, computedAliases) = project.projectList.partition(
             a => !expensiveFiltersDone.outputSet.contains(a.toAttribute))
-          println(f"Adding the unused aliases: $unusedAliases")
           val topProjection = project.copy(projectList = matchColumnOrdering(
             fields, computedAliases.map(_.toAttribute) ++ unusedAliases),
             child = expensiveFiltersDone)
 
           if (leaveAsIs.isEmpty) {
-            println(f"All done!")
             topProjection
           } else {
             // Finally add any filters which could not be pushed or split
             val remainingConditions = leaveAsIs.map(_._2).flatten.toSeq
-            println(f"Adding the final conditions we could not push: $remainingConditions")
             Filter(And(remainingConditions.reduce(And), condition), topProjection)
           }
         }
