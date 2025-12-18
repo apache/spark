@@ -161,7 +161,7 @@ public class WkbErrorHandlingTest {
         "Exception message should contain the WKB hex: " + hex);
   }
 
-  // @Test
+  @Test
   public void testNonClosedRing() {
     // Try to parse a polygon with a non-closed ring with validation
     WkbReader reader = new WkbReader(1);

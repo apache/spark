@@ -314,7 +314,31 @@ public class WkbReader {
       points.add(p);
     }
 
+    // Validate that the ring is closed (first and last points are the same)
+    if (validationLevel > 0 && numPoints > 0) {
+      Point first = points.get(0);
+      Point last = points.get(numPoints - 1);
+      if (!coordinatesEqual(first.getCoordinates(), last.getCoordinates())) {
+        throw new WkbParseException("Ring is not closed", numPointsPos, currentWkb);
+      }
+    }
+
     return new Ring(points, hasZ, hasM);
+  }
+
+  /**
+   * Compares two coordinate arrays for equality.
+   */
+  private static boolean coordinatesEqual(double[] coords1, double[] coords2) {
+    if (coords1.length != coords2.length) {
+      return false;
+    }
+    for (int i = 0; i < coords1.length; i++) {
+      if (coords1[i] != coords2[i]) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private Polygon readPolygon(int srid, int dimensionCount, boolean hasZ, boolean hasM) {
