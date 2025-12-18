@@ -181,6 +181,14 @@ private[sql] object SqlScriptingErrors {
       messageParameters = Map("condition" -> toSQLId(condition)))
   }
 
+  def cursorDeclarationNotAtStartOfCompound(origin: Origin): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "INVALID_CURSOR_DECLARATION.WRONG_PLACE_OF_DECLARATION",
+      cause = null,
+      messageParameters = Map.empty)
+  }
+
   def handlerDeclarationInWrongPlace(origin: Origin): Throwable = {
     new SqlScriptingException(
       origin = origin,

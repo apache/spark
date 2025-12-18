@@ -1923,6 +1923,47 @@ case class SetVariable(
 }
 
 /**
+ * The logical plan of the DECLARE CURSOR command.
+ */
+case class DeclareCursor(
+    cursorName: String,
+    query: LogicalPlan,
+    asensitive: Boolean = true) extends UnaryCommand {
+  override def child: LogicalPlan = query
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(query = newChild)
+}
+
+/**
+ * The logical plan of the OPEN cursor command.
+ */
+case class OpenCursor(
+    cursorName: String) extends Command {
+  override def children: Seq[LogicalPlan] = Nil
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = this
+}
+
+/**
+ * The logical plan of the FETCH cursor command.
+ */
+case class FetchCursor(
+    cursorName: String,
+    targetVariables: Seq[Expression]) extends LeafCommand {
+  override lazy val resolved: Boolean = targetVariables.forall(_.resolved)
+}
+
+/**
+ * The logical plan of the CLOSE cursor command.
+ */
+case class CloseCursor(
+    cursorName: String) extends Command {
+  override def children: Seq[LogicalPlan] = Nil
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = this
+}
+
+/**
  * The logical plan of the CALL statement.
  */
 case class Call(

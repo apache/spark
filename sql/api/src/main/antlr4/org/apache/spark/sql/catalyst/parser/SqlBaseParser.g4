@@ -71,11 +71,11 @@ options { tokenVocab = SqlBaseLexer; }
       return false;
     }
     int la = _input.LA(2); // Look ahead 2 tokens (current is PIPE, check what follows)
-    return la == SELECT || la == EXTEND || la == SET || la == DROP || 
+    return la == SELECT || la == EXTEND || la == SET || la == DROP ||
            la == AS || la == WHERE || la == PIVOT || la == UNPIVOT ||
            la == TABLESAMPLE || la == INNER || la == CROSS || la == LEFT ||
-           la == RIGHT || la == FULL || la == NATURAL || la == SEMI || 
-           la == ANTI || la == JOIN || la == UNION || la == EXCEPT || 
+           la == RIGHT || la == FULL || la == NATURAL || la == SEMI ||
+           la == ANTI || la == JOIN || la == UNION || la == EXCEPT ||
            la == SETMINUS || la == INTERSECT || la == ORDER || la == CLUSTER ||
            la == DISTRIBUTE || la == SORT || la == LIMIT || la == OFFSET ||
            la == AGGREGATE || la == WINDOW || la == LATERAL;
@@ -101,6 +101,7 @@ compoundBody
 
 compoundStatement
     : declareConditionStatement
+    | declareCursorStatement
     | statement
     | setStatementInsideSqlScript
     | beginEndCompoundBlock
@@ -113,6 +114,9 @@ compoundStatement
     | iterateStatement
     | loopStatement
     | forStatement
+    | openCursorStatement
+    | fetchCursorStatement
+    | closeCursorStatement
     ;
 
 setStatementInsideSqlScript
@@ -142,6 +146,22 @@ conditionValues
 
 declareHandlerStatement
     : DECLARE (CONTINUE | EXIT) HANDLER FOR conditionValues (beginEndCompoundBlock | statement | setStatementInsideSqlScript)
+    ;
+
+declareCursorStatement
+    : DECLARE strictIdentifier (ASENSITIVE | INSENSITIVE)? CURSOR FOR query (FOR READ ONLY)?
+    ;
+
+openCursorStatement
+    : OPEN strictIdentifier
+    ;
+
+fetchCursorStatement
+    : FETCH ((NEXT FROM) | FROM | NEXT)? strictIdentifier INTO identifierReference (COMMA identifierReference)*
+    ;
+
+closeCursorStatement
+    : CLOSE strictIdentifier
     ;
 
 whileStatement
@@ -2253,6 +2273,7 @@ nonReserved
     | CREATE
     | CUBE
     | CURRENT
+    | CURSOR
     | CURRENT_DATE
     | CURRENT_TIME
     | CURRENT_TIMESTAMP

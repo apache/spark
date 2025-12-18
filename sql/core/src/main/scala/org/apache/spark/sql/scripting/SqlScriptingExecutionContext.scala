@@ -105,6 +105,19 @@ class SqlScriptingExecutionFrame(
   // List of scopes that are currently active.
   private[scripting] val scopes: ListBuffer[SqlScriptingExecutionScope] = ListBuffer.empty
 
+  /**
+   * Find a cursor by name in the scope hierarchy, searching from innermost to outermost.
+   */
+  def findCursor(cursorName: String): Option[CursorDefinition] = {
+    scopes.reverseIterator.foreach { scope =>
+      val cursorOpt = scope.cursors.get(cursorName)
+      if (cursorOpt.isDefined) {
+        return cursorOpt
+      }
+    }
+    None
+  }
+
   override def hasNext: Boolean = executionPlan.getTreeIterator.hasNext
 
   override def next(): CompoundStatementExec = {
@@ -125,11 +138,27 @@ class SqlScriptingExecutionFrame(
 
     // Remove all scopes until the one with the given label.
     while (scopes.nonEmpty && scopes.last.label != label) {
+      // Close all open cursors in the scope being removed
+      scopes.last.cursors.values.foreach { cursor =>
+        if (cursor.isOpen) {
+          cursor.isOpen = false
+          cursor.resultData = None
+          cursor.currentPosition = -1
+        }
+      }
       scopes.remove(scopes.length - 1)
     }
 
     // Remove the scope with the given label.
     if (scopes.nonEmpty) {
+      // Close all open cursors in the scope being removed
+      scopes.last.cursors.values.foreach { cursor =>
+        if (cursor.isOpen) {
+          cursor.isOpen = false
+          cursor.resultData = None
+          cursor.currentPosition = -1
+        }
+      }
       scopes.remove(scopes.length - 1)
     }
   }
@@ -182,6 +211,7 @@ class SqlScriptingExecutionScope(
     val label: String,
     val triggerToExceptionHandlerMap: TriggerToExceptionHandlerMap) {
   val variables = new mutable.HashMap[String, VariableDefinition]
+  val cursors = new mutable.HashMap[String, CursorDefinition]
 
   /**
    * Finds the most appropriate error handler for exception based on its condition and SQL state.
@@ -244,3 +274,24 @@ class SqlScriptingExecutionScope(
     errorHandler
   }
 }
+
+/**
+ * Definition of a cursor in SQL scripting.
+ *
+ * @param name
+ *   Name of the cursor.
+ * @param query
+ *   The query that defines the cursor.
+ * @param isOpen
+ *   Whether the cursor is currently open.
+ * @param resultData
+ *   The cached result data (Array of InternalRows) when cursor is open.
+ * @param currentPosition
+ *   Current position in the result set (0-based index).
+ */
+case class CursorDefinition(
+    name: String,
+    query: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan,
+    var isOpen: Boolean = false,
+    var resultData: Option[Array[org.apache.spark.sql.catalyst.InternalRow]] = None,
+    var currentPosition: Int = -1)

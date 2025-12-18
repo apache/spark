@@ -2751,6 +2751,48 @@
     ],
     "sqlState" : "42804"
   },
+  "CURSOR_ALREADY_EXISTS" : {
+    "message" : [
+      "Cannot declare cursor <cursorName> because it already exists in the current scope."
+    ],
+    "sqlState" : "42723"
+  },
+  "CURSOR_ALREADY_OPEN" : {
+    "message" : [
+      "Cannot open cursor <cursorName> because it is already open."
+    ],
+    "sqlState" : "24502"
+  },
+  "CURSOR_FETCH_COLUMN_MISMATCH" : {
+    "message" : [
+      "Cannot fetch from cursor <cursorName>: expected <expected> variables but got <actual>."
+    ],
+    "sqlState" : "42826"
+  },
+  "CURSOR_NOT_FOUND" : {
+    "message" : [
+      "Cursor <cursorName> not found in the current scope."
+    ],
+    "sqlState" : "34000"
+  },
+  "CURSOR_NOT_OPEN" : {
+    "message" : [
+      "Cannot fetch from or close cursor <cursorName> because it is not open."
+    ],
+    "sqlState" : "24501"
+  },
+  "CURSOR_NO_MORE_ROWS" : {
+    "message" : [
+      "No more rows available to fetch from cursor <cursorName>."
+    ],
+    "sqlState" : "02000"
+  },
+  "CURSOR_OUTSIDE_SCRIPT" : {
+    "message" : [
+      "Cursor operations can only be used within SQL scripts."
+    ],
+    "sqlState" : "0A000"
+  },
   "INVALID_CURSOR" : {
     "message" : [
       "The cursor is invalid."
@@ -3111,6 +3153,19 @@
     },
     "sqlState" : "HY000"
   },
+  "INVALID_CURSOR_DECLARATION" : {
+    "message" : [
+      "Invalid cursor declaration."
+    ],
+    "subClass" : {
+      "WRONG_PLACE_OF_DECLARATION" : {
+        "message" : [
+          "Cursors must be declared after variable/condition declarations, and before handlers and other statements."
+        ]
+      }
+    },
+    "sqlState" : "42K0Q"
+  },
   "INVALID_HANDLER_DECLARATION" : {
     "message" : [
       "Invalid handler declaration."
@@ -3138,7 +3193,7 @@
       },
       "WRONG_PLACE_OF_DECLARATION" : {
         "message" : [
-          "Handlers must be declared after variable/condition declaration, and before other statements."
+          "Handlers must be declared after variable/condition/cursor declarations, and before other statements."
         ]
       }
     },

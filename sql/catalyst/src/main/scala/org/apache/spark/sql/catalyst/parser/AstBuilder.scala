@@ -367,6 +367,8 @@ class AstBuilder extends DataTypeAstBuilder
           statement match {
             case SingleStatement(createVariable: CreateVariable) =>
               compoundBodyParserContext.variable(createVariable, isScope)
+            case SingleStatement(_: DeclareCursor) =>
+              compoundBodyParserContext.cursor()
             case _ => compoundBodyParserContext.statement()
           }
           buff += statement
@@ -6561,6 +6563,76 @@ class AstBuilder extends DataTypeAstBuilder
       withIdentClause(ctx.identifierReference(), UnresolvedIdentifier(_)),
       ctx.EXISTS() != null
     )
+  }
+
+  /**
+   * Create a [[DeclareCursor]] command wrapped in SingleStatement.
+   *
+   * For example:
+   * {{{
+   *   DECLARE cursor_name CURSOR FOR SELECT * FROM table;
+   * }}}
+   */
+  override def visitDeclareCursorStatement(
+      ctx: DeclareCursorStatementContext): LogicalPlan = withOrigin(ctx) {
+    val cursorName = ctx.strictIdentifier().getText
+    val query = visitQuery(ctx.query())
+    val asensitive = ctx.ASENSITIVE() != null || ctx.INSENSITIVE() != null
+    SingleStatement(DeclareCursor(cursorName, query, asensitive))
+  }
+
+  /**
+   * Create an [[OpenCursor]] command wrapped in SingleStatement.
+   *
+   * For example:
+   * {{{
+   *   OPEN cursor_name;
+   * }}}
+   */
+  override def visitOpenCursorStatement(
+      ctx: OpenCursorStatementContext): LogicalPlan = withOrigin(ctx) {
+    val cursorName = ctx.strictIdentifier().getText
+    SingleStatement(OpenCursor(cursorName))
+  }
+
+  /**
+   * Create a [[FetchCursor]] command wrapped in SingleStatement.
+   *
+   * For example:
+   * {{{
+   *   FETCH cursor_name INTO var1, var2;
+   * }}}
+   */
+  override def visitFetchCursorStatement(
+      ctx: FetchCursorStatementContext): LogicalPlan = withOrigin(ctx) {
+    val cursorName = ctx.strictIdentifier().getText
+    val targetVariables = ctx.identifierReference().asScala.map { varIdent =>
+      val varName = if (varIdent.expression() != null) {
+        // IDENTIFIER(expression) case - not supported for variables
+        throw new ParseException(
+          errorClass = "INVALID_SQL_SYNTAX.IDENTIFIER_CLAUSE_NOT_ALLOWED",
+          messageParameters = Map.empty,
+          varIdent)
+      } else {
+        visitMultipartIdentifier(varIdent.multipartIdentifier())
+      }
+      UnresolvedAttribute(varName)
+    }.toSeq
+    SingleStatement(FetchCursor(cursorName, targetVariables))
+  }
+
+  /**
+   * Create a [[CloseCursor]] command wrapped in SingleStatement.
+   *
+   * For example:
+   * {{{
+   *   CLOSE cursor_name;
+   * }}}
+   */
+  override def visitCloseCursorStatement(
+      ctx: CloseCursorStatementContext): LogicalPlan = withOrigin(ctx) {
+    val cursorName = ctx.strictIdentifier().getText
+    SingleStatement(CloseCursor(cursorName))
   }
 
   private def visitSetVariableImpl(
