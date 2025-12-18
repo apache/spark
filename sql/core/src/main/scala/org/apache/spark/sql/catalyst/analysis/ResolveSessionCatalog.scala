@@ -128,7 +128,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case DropColumns(ResolvedV1TableIdentifier(ident), _, _) =>
       throw QueryCompilationErrors.unsupportedTableOperationError(ident, "DROP COLUMN")
 
-    // V1 tables do not support table constraints
+    // V1 and hive tables do not support constraints
     case AddConstraint(ResolvedV1TableIdentifier(ident), _) =>
       throw QueryCompilationErrors.unsupportedTableOperationError(ident, "ADD CONSTRAINT")
 
