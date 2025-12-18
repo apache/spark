@@ -254,7 +254,6 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
         self._compare_or_create_golden_file(actual_output, golden_file, test_name)
 
     def _generate_pandas_udf_type_coercion_results(self):
-
         def work(spark_type):
             result = [spark_type.simpleString()]
             for value in self.pandas_test_data:
