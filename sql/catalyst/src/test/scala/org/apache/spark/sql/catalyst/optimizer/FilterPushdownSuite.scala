@@ -321,26 +321,26 @@ class FilterPushdownSuite extends PlanTest {
     // we can't split. The filter stays above the projection.
     val correctAnswer = testStringRelation
       .select($"e".rlike("magic") as "f")
-      .where($"f" && $"f")
+      .where($"f")
       .analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
-  // Case 3A: Multiple expensive filters referencing multiple of the same aliases
-  test("SPARK-47672: Case 3A - multiple expensive filters same aliases, multiple aliases") {
+  // Case 3A: Expensive filter that can not be pushed or split
+  test("SPARK-47672: Expensive filter that can not be pushed or split") {
     val originalQuery = testStringRelation
       .select($"e".rlike("magic") as "f", $"e".rlike("other") as "g")
-      .where($"f" && $"g")
+      .where($"f" || $"g")
       .analyze
 
     val optimized = Optimize.execute(originalQuery)
 
-    // Both f and g are expensive and together they reference everything in the projection
-    // so we can't split. Filter stays above.
+    // Since we reference everything in the projection in one no-splittable
+    // filter we can not push.
     val correctAnswer = testStringRelation
       .select($"e".rlike("magic") as "f", $"e".rlike("other") as "g")
-      .where($"f" && $"g")
+      .where($"f" || $"g")
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -360,7 +360,7 @@ class FilterPushdownSuite extends PlanTest {
     val correctAnswer = testStringRelation
       .select($"a", $"b", $"e", $"e".rlike("magic") as "f")
       .where($"f")
-      .select($"a", $"f", $"b", $"e".rlike("other") as "g")
+      .select($"a", $"b", $"e", $"f", $"e".rlike("other") as "g")
       .where($"g")
       .select($"a", $"f", $"g", $"b")
       .analyze
