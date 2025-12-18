@@ -2189,7 +2189,7 @@ object SQLConf {
       .doc("When enabled, views with SCHEMA EVOLUTION mode will preserve user-set view comments " +
         "when the underlying table schema evolves. When disabled, view comments will be " +
         "overwritten with table comments on every schema sync.")
-      .version("4.0.0")
+      .version("4.2.0")
       .booleanConf
       .createWithDefault(true)
 
