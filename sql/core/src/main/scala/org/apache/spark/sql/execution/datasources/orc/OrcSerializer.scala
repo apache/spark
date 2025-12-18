@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
 
-
 /**
  * A serializer to serialize Spark rows to ORC structs.
  */
