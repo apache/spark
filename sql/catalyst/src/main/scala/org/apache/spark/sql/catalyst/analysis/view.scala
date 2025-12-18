@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, View}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.metricview.logical.ResolvedMetricView
 
 /**
  * This file defines view types and analysis rules related to views.
@@ -32,6 +33,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 object EliminateView extends Rule[LogicalPlan] with CastSupport {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case v: View => v.child
+    case rmv: ResolvedMetricView => rmv.child
   }
 }
 

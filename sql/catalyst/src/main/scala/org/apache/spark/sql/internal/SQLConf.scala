@@ -5414,6 +5414,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val LEGACY_CTE_DUPLICATE_ATTRIBUTE_NAMES =
+    buildConf("spark.sql.legacy.cteDuplicateAttributeNames")
+      .internal()
+      .doc("When true, CTE references sometimes (e.g., self-joins) may incorrectly unify column" +
+        "names that differ only in casing (e.g., COLNAME and colname become the same). This is" +
+        "the legacy behavior. When false, column name casing is preserved correctly.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_TIME_PARSER_POLICY = buildConf(SqlApiConfHelper.LEGACY_TIME_PARSER_POLICY_KEY)
     .internal()
     .doc("When LEGACY, java.text.SimpleDateFormat is used for formatting and parsing " +

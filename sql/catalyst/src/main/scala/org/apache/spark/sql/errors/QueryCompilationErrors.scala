@@ -547,8 +547,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def writeIntoTempViewNotAllowedError(quoted: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1007",
-      messageParameters = Map("quoted" -> quoted))
+      errorClass = "VIEW_WRITE_NOT_ALLOWED",
+      messageParameters = Map("name" -> quoted))
   }
 
   def readNonStreamingTempViewError(quoted: String): Throwable = {
@@ -578,8 +578,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def writeIntoViewNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1011",
-      messageParameters = Map("identifier" -> identifier.toString),
+      errorClass = "VIEW_WRITE_NOT_ALLOWED",
+      messageParameters = Map("name" -> toSQLId(identifier.nameParts)),
       origin = t.origin)
   }
 

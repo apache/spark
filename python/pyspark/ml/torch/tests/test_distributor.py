@@ -306,6 +306,23 @@ class TorchDistributorBaselineUnitTestsMixin:
         )
         self.delete_env_vars(input_env_vars)
 
+    @patch.dict(
+        os.environ,
+        {
+            "CUDA_VISIBLE_DEVICES": "0,1,2,3",
+            "MASTER_ADDR": "11.22.33.44",
+            "MASTER_PORT": "6677",
+            "RANK": "1",
+        },
+    )
+    def test_multi_gpu_node_get_torchrun_args(self):
+        torchrun_args, processes_per_node = TorchDistributor._get_torchrun_args(False, 8)
+        self.assertEqual(
+            torchrun_args,
+            ["--nnodes=2", "--node_rank=1", "--rdzv_endpoint=11.22.33.44:6677", "--rdzv_id=0"],
+        )
+        self.assertEqual(processes_per_node, 4)
+
 
 @unittest.skipIf(not have_torch, torch_requirement_message)
 class TorchDistributorBaselineUnitTests(TorchDistributorBaselineUnitTestsMixin, unittest.TestCase):
