@@ -6397,6 +6397,25 @@ class AstBuilder extends DataTypeAstBuilder
     CommentOnTable(createUnresolvedTable(ctx.identifierReference, "COMMENT ON TABLE"), comment)
   }
 
+  override def visitCommentColumn(ctx: CommentColumnContext): LogicalPlan = withOrigin(ctx) {
+    val comment = visitComment(ctx.comment)
+    val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier)
+    if (nameParts.length < 2) {
+      throw QueryParsingErrors.commentOnColumnRequiresTableNameError(ctx)
+    }
+    // The last part is the column name, everything before that is the table name
+    // This allows:
+    // - table.column (uses current catalog and database)
+    // - database.table.column (uses current catalog)
+    // - catalog.database.table.column (fully qualified)
+    val tableName = nameParts.init
+    val columnName = Seq(nameParts.last)
+    CommentOnColumn(
+      UnresolvedTable(tableName, "COMMENT ON COLUMN"),
+      UnresolvedFieldName(columnName),
+      comment)
+  }
+
   override def visitComment (ctx: CommentContext): String = {
     Option(ctx.stringLit()).map(s => string(visitStringLit(s))).getOrElse("")
   }

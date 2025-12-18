@@ -59,6 +59,28 @@ case class CommentOnTable(table: LogicalPlan, comment: String) extends AlterTabl
 }
 
 /**
+ * The logical plan that defines or changes the comment of a COLUMN for v2 catalogs.
+ *
+ * {{{
+ *   COMMENT ON COLUMN catalog.namespace.table.column IS ('text' | NULL)
+ * }}}
+ *
+ * where the `text` is the new comment written as a string literal; or `NULL` to drop the comment.
+ */
+case class CommentOnColumn(
+    table: LogicalPlan,
+    column: FieldName,
+    comment: String) extends AlterTableCommand {
+  override def changes: Seq[TableChange] = {
+    require(column.resolved, "FieldName should be resolved before it's converted to TableChange.")
+    Seq(TableChange.updateColumnComment(column.name.toArray, comment))
+  }
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(table = newChild)
+}
+
+
+/**
  * The logical plan of the ALTER TABLE ... SET LOCATION command.
  */
 case class SetTableLocation(
