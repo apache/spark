@@ -2172,7 +2172,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
             }
         }
         // If we can't split anymore
-        val expensiveSplit = if (toSplit.isEmpty) {
+        val expensiveFiltersDone = if (toSplit.isEmpty) {
           baseChild
         } else {
           // We're going to now add projections one at a time for the expensive components needed by
@@ -2206,13 +2206,13 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
           }
         }
         // Insert a last projection to match the desired column ordering and
-        // evaluate any stragglers.
-        val leftBehindAliases = project.output.filter(
-          a => !expensiveSplit.outputSet.contains(a.toAttribute))
+        // evaluate any stragglers and select the already computed columns.
+        val (leftBehindAliases, computedAliases) = project.output.partition(
+          a => !expensiveFiltersDone.outputSet.contains(a.toAttribute))
         println(f"Adding $leftBehindAliases")
         val topProjection = project.copy(projectList = matchColumnOrdering(
-          fields, expensiveSplit.output ++ leftBehindAliases),
-          child = expensiveSplit)
+          fields, computedAliases.map(_.toAttribute) ++ leftBehindAliases),
+          child = expensiveFiltersDone)
 
         if (leaveAsIs.isEmpty) {
           topProjection
