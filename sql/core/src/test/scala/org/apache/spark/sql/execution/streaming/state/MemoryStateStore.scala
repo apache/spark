@@ -42,6 +42,9 @@ class MemoryStateStore extends StateStore() {
     throw StateStoreErrors.multipleColumnFamiliesNotSupported("MemoryStateStoreProvider")
   }
 
+  override def allColumnFamilyNames: Set[String] =
+    Set[String](StateStore.DEFAULT_COL_FAMILY_NAME)
+
   override def removeColFamilyIfExists(colFamilyName: String): Boolean = {
     throw StateStoreErrors.removingColumnFamiliesNotSupported("MemoryStateStoreProvider")
   }

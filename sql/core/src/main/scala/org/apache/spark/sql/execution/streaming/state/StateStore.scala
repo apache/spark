@@ -184,6 +184,13 @@ trait ReadStateStore {
    * This method is idempotent and safe to call multiple times.
    */
   def release(): Unit
+
+  /**
+   * Returns all column family names in this state store.
+   *
+   * @return Set of all column family names
+   */
+  def allColumnFamilyNames: Set[String]
 }
 
 /**
@@ -342,6 +349,8 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
   override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
     store.valuesIterator(key, colFamilyName)
   }
+
+  override def allColumnFamilyNames: Set[String] = store.allColumnFamilyNames
 }
 
 /**

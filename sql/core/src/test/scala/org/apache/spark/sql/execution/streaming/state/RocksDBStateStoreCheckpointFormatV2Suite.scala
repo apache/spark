@@ -122,6 +122,8 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
     )
   }
 
+  override def allColumnFamilyNames: Set[String] = innerStore.allColumnFamilyNames
+
   override def put(
       key: UnsafeRow,
       value: UnsafeRow,
