@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.normalizer
 
-import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical.{CacheTableAsSelect, CTERelationRef, LogicalPlan, UnionLoop, UnionLoopRef, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 
@@ -50,10 +49,6 @@ object NormalizeCTEIds extends Rule[LogicalPlan]{
         unionLoop.copy(id = defIdToNewId(unionLoop.id))
       case unionLoopRef: UnionLoopRef if defIdToNewId.contains(unionLoopRef.loopId) =>
         unionLoopRef.copy(loopId = defIdToNewId(unionLoopRef.loopId))
-      case other =>
-        other.transformAllExpressionsWithSubqueries {
-          case e: SubqueryExpression => e.withNewPlan(canonicalizeCTE(e.plan, defIdToNewId))
-        }
     }
   }
 }
