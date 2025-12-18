@@ -1745,7 +1745,6 @@ def _test() -> None:
     spark = (
         SparkSession.builder.master("local[4]").appName("pyspark.pandas.base tests").getOrCreate()
     )
-    spark.conf.set("spark.sql.execution.pandas.structHandlingMode", "row")
     (failure_count, test_count) = doctest.testmod(
         pyspark.pandas.base,
         globs=globs,

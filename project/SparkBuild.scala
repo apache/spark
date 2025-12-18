@@ -367,6 +367,7 @@ object SparkBuild extends PomBuild {
         "org.apache.spark.kafka010",
         "org.apache.spark.network",
         "org.apache.spark.sql.avro",
+        "org.apache.spark.sql.metricview",
         "org.apache.spark.sql.pipelines",
         "org.apache.spark.sql.scripting",
         "org.apache.spark.types.variant",
@@ -1532,6 +1533,7 @@ object Unidoc {
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/classic/")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/execution")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/internal")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/metricview")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/pipelines")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/scripting")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/ml")))

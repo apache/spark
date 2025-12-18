@@ -825,6 +825,7 @@ object FunctionRegistry {
     expression[ThetaDifference]("theta_difference"),
     expression[ThetaIntersection]("theta_intersection"),
     expression[ApproxTopKEstimate]("approx_top_k_estimate"),
+    expression[Measure]("measure"),
 
     // grouping sets
     expression[Grouping]("grouping"),
