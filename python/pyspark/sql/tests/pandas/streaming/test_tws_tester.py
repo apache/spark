@@ -740,6 +740,57 @@ class TwsTesterTests(ReusedSQLTestCase):
         tester.test("key1", [Row(value="a")])
         self.assertEqual(initial_state_call_count[0], 0)
 
+    def test_delete_value_state(self):
+        """Test that deleteState correctly deletes value state for a given key."""
+        processor = RunningCountStatefulProcessorFactory().row()
+        tester = TwsTester(processor)
+
+        tester.setValueState("count", "key1", (10,))
+        tester.setValueState("count", "key2", (20,))
+        self.assertEqual(tester.peekValueState("count", "key1"), (10,))
+
+        tester.deleteState("count", "key1")
+        self.assertIsNone(tester.peekValueState("count", "key1"))
+        self.assertEqual(tester.peekValueState("count", "key2"), (20,))
+
+    def test_delete_list_state(self):
+        """Test that deleteState correctly deletes list state for a given key."""
+        processor = TopKProcessorFactory(k=3).row()
+        tester = TwsTester(processor)
+
+        tester.setListState("topK", "key1", [(1.0,), (2.0,), (3.0,)])
+        tester.setListState("topK", "key2", [(4.0,), (5.0,)])
+        self.assertEqual(tester.peekListState("topK", "key1"), [(1.0,), (2.0,), (3.0,)])
+
+        tester.deleteState("topK", "key1")
+        self.assertEqual(tester.peekListState("topK", "key1"), [])
+        self.assertEqual(tester.peekListState("topK", "key2"), [(4.0,), (5.0,)])
+
+    def test_delete_map_state(self):
+        """Test that deleteState correctly deletes map state for a given key."""
+        processor = WordFrequencyProcessorFactory().row()
+        tester = TwsTester(processor)
+
+        tester.setMapState("frequencies", "user1", {("hello",): (5,), ("world",): (3,)})
+        tester.setMapState("frequencies", "user2", {("spark",): (10,)})
+        self.assertEqual(
+            tester.peekMapState("frequencies", "user1"),
+            {("hello",): (5,), ("world",): (3,)},
+        )
+
+        tester.deleteState("frequencies", "user1")
+        self.assertEqual(tester.peekMapState("frequencies", "user1"), {})
+        self.assertEqual(tester.peekMapState("frequencies", "user2"), {("spark",): (10,)})
+
+    def test_delete_nonexistent_state_raises_error(self):
+        """Test that deleteState raises an error for non-existent state."""
+        processor = RunningCountStatefulProcessorFactory().row()
+        tester = TwsTester(processor)
+
+        with self.assertRaises(AssertionError) as context:
+            tester.deleteState("nonexistent_state", "key1")
+        self.assertIn("has not been initialized", str(context.exception))
+
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,

@@ -213,6 +213,17 @@ class _InMemoryStatefulProcessorHandle(StatefulProcessorHandle):
         if stateName in self.map_states:
             del self.map_states[stateName]
 
+    def deleteState(self, stateName: str) -> None:
+        """Clears the state for the current grouping key."""
+        if stateName in self.value_states:
+            self.value_states[stateName].clear()
+        elif stateName in self.list_states:
+            self.list_states[stateName].clear()
+        elif stateName in self.map_states:
+            self.map_states[stateName].clear()
+        else:
+            raise AssertionError(f"State {stateName} has not been initialized.")
+
 
 class TwsTester:
     """
@@ -415,3 +426,8 @@ class TwsTester:
         """
         assert stateName in self.handle.map_states, f"State {stateName} has not been initialized."
         return dict(self.handle.map_states[stateName].state.get(key, {}))
+
+    def deleteState(self, stateName: str, key: Any) -> None:
+        """Deletes state for a given key."""
+        self.handle.setGroupingKey(key)
+        self.handle.deleteState(stateName)
