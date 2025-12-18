@@ -271,30 +271,37 @@ class LargeValueStatefulProcessorFactory(StatefulProcessorFactory):
 
 
 class RunningCountStatefulProcessorFactory(StatefulProcessorFactory):
+    def __init__(self, ttl_duration_ms: Optional[int] = None):
+        self.ttl_duration_ms = ttl_duration_ms
+
     def pandas(self):
-        return RunningCountStatefulProcessor(use_pandas=True)
+        return RunningCountStatefulProcessor(use_pandas=True, ttl_duration_ms=self.ttl_duration_ms)
 
     def row(self):
-        return RunningCountStatefulProcessor(use_pandas=False)
+        return RunningCountStatefulProcessor(use_pandas=False, ttl_duration_ms=self.ttl_duration_ms)
 
 
 class TopKProcessorFactory(StatefulProcessorFactory):
-    def __init__(self, k: int = 2):
+    def __init__(self, k: int = 2, ttl_duration_ms: Optional[int] = None):
         self.k = k
+        self.ttl_duration_ms = ttl_duration_ms
 
     def pandas(self):
-        return TopKProcessor(self.k, use_pandas=True)
+        return TopKProcessor(self.k, use_pandas=True, ttl_duration_ms=self.ttl_duration_ms)
 
     def row(self):
-        return TopKProcessor(self.k, use_pandas=False)
+        return TopKProcessor(self.k, use_pandas=False, ttl_duration_ms=self.ttl_duration_ms)
 
 
 class WordFrequencyProcessorFactory(StatefulProcessorFactory):
+    def __init__(self, ttl_duration_ms: Optional[int] = None):
+        self.ttl_duration_ms = ttl_duration_ms
+
     def pandas(self):
-        return PandasWordFrequencyProcessor()
+        return PandasWordFrequencyProcessor(ttl_duration_ms=self.ttl_duration_ms)
 
     def row(self):
-        return RowWordFrequencyProcessor()
+        return RowWordFrequencyProcessor(ttl_duration_ms=self.ttl_duration_ms)
 
 
 class AllMethodsTestProcessorFactory(StatefulProcessorFactory):
@@ -2251,12 +2258,13 @@ class RowLargeValueStatefulProcessor(StatefulProcessor):
 class RunningCountStatefulProcessor(StatefulProcessor):
     state_schema = StructType([StructField("value", IntegerType(), True)])
 
-    def __init__(self, use_pandas=True):
+    def __init__(self, use_pandas=True, ttl_duration_ms: Optional[int] = None):
         self.use_pandas = use_pandas
+        self.ttl_duration_ms = ttl_duration_ms
 
     def init(self, handle) -> None:
         self.handle = handle
-        self.count = handle.getValueState("count", self.state_schema)
+        self.count = handle.getValueState("count", self.state_schema, self.ttl_duration_ms)
 
     def handleInitialState(self, key, initialState, timerValues) -> None:
         if self.use_pandas:
@@ -2280,12 +2288,13 @@ class RunningCountStatefulProcessor(StatefulProcessor):
 class TopKProcessor(StatefulProcessor):
     state_schema = StructType([StructField("score", DoubleType(), True)])
 
-    def __init__(self, k: int, use_pandas: bool = False):
+    def __init__(self, k: int, use_pandas: bool = False, ttl_duration_ms: Optional[int] = None):
         self.k = k
         self.use_pandas = use_pandas
+        self.ttl_duration_ms = ttl_duration_ms
 
     def init(self, handle: StatefulProcessorHandle) -> None:
-        self.topk = handle.getListState("topK", self.state_schema)
+        self.topk = handle.getListState("topK", self.state_schema, self.ttl_duration_ms)
 
     def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame | Row]:
         scores = [score_tuple[0] for score_tuple in self.topk.get()]
@@ -2305,8 +2314,13 @@ class TopKProcessor(StatefulProcessor):
 
 # Processor to keep track of word frequencies per each key.
 class RowWordFrequencyProcessor(StatefulProcessor):
+    def __init__(self, ttl_duration_ms: Optional[int] = None):
+        self.ttl_duration_ms = ttl_duration_ms
+
     def init(self, handle: StatefulProcessorHandle) -> None:
-        self.freq_state = handle.getMapState("frequencies", "key string", "value long")
+        self.freq_state = handle.getMapState(
+            "frequencies", "key string", "value long", self.ttl_duration_ms
+        )
 
     def handleInputRows(self, key, rows, timerValues) -> Iterator[Row]:
         for row in rows:
@@ -2321,8 +2335,13 @@ class RowWordFrequencyProcessor(StatefulProcessor):
 
 # Processor to keep track of word frequencies per each key.
 class PandasWordFrequencyProcessor(StatefulProcessor):
+    def __init__(self, ttl_duration_ms: Optional[int] = None):
+        self.ttl_duration_ms = ttl_duration_ms
+
     def init(self, handle: StatefulProcessorHandle) -> None:
-        self.freq_state = handle.getMapState("frequencies", "key string", "value long")
+        self.freq_state = handle.getMapState(
+            "frequencies", "key string", "value long", self.ttl_duration_ms
+        )
 
     def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
         results = []

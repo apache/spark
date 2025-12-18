@@ -1037,6 +1037,118 @@ class TwsTesterTests(ReusedSQLTestCase):
         with self.assertRaisesRegex(PySparkValueError, "ARGUMENT_REQUIRED"):
             TwsTester(processor, timeMode="EventTime")
 
+    # TTL tests
+
+    def test_ttl_value_state_expiry(self):
+        """Test that TwsTester expires ValueState after TTL."""
+        processor = RunningCountStatefulProcessorFactory(ttl_duration_ms=5000).row()
+        tester = TwsTester(processor, timeMode="ProcessingTime")
+
+        # Process input for key1 - state should be set
+        tester.test("key1", [Row(value="a")])
+        self.assertEqual(tester.peekValueState("count", "key1"), (1,))
+
+        # Advance time by 3 seconds - state should still exist
+        tester.advanceProcessingTime(3000)
+        self.assertEqual(tester.peekValueState("count", "key1"), (1,))
+
+        # Advance time by 3 more seconds (total 6s) - state should be expired
+        tester.advanceProcessingTime(3000)
+        self.assertIsNone(tester.peekValueState("count", "key1"))
+
+    def test_ttl_list_state_expiry(self):
+        """Test that TwsTester expires ListState after TTL."""
+        processor = TopKProcessorFactory(k=3, ttl_duration_ms=5000).row()
+        tester = TwsTester(processor, timeMode="ProcessingTime")
+
+        # Process input for key1 - state should be set
+        tester.test("key1", [Row(score=1.0), Row(score=2.0), Row(score=3.0)])
+        self.assertEqual(tester.peekListState("topK", "key1"), [(3.0,), (2.0,), (1.0,)])
+
+        # Advance time by 3 seconds - state should still exist
+        tester.advanceProcessingTime(3000)
+        self.assertEqual(tester.peekListState("topK", "key1"), [(3.0,), (2.0,), (1.0,)])
+
+        # Advance time by 3 more seconds (total 6s) - state should be expired
+        tester.advanceProcessingTime(3000)
+        self.assertEqual(tester.peekListState("topK", "key1"), [])
+
+    def test_ttl_map_state_expiry(self):
+        """Test that TwsTester expires MapState after TTL."""
+        processor = WordFrequencyProcessorFactory(ttl_duration_ms=5000).row()
+        tester = TwsTester(processor, timeMode="ProcessingTime")
+
+        # Process input for user1 - state should be set
+        tester.test("user1", [Row(word="hello"), Row(word="world")])
+        self.assertEqual(
+            tester.peekMapState("frequencies", "user1"),
+            {("hello",): (1,), ("world",): (1,)},
+        )
+
+        # Advance time by 3 seconds - state should still exist
+        tester.advanceProcessingTime(3000)
+        self.assertEqual(
+            tester.peekMapState("frequencies", "user1"),
+            {("hello",): (1,), ("world",): (1,)},
+        )
+
+        # Advance time by 3 more seconds (total 6s) - state should be expired
+        tester.advanceProcessingTime(3000)
+        self.assertEqual(tester.peekMapState("frequencies", "user1"), {})
+
+    def test_ttl_state_update_resets_expiry(self):
+        """Test that updating state resets the TTL expiry time."""
+        processor = RunningCountStatefulProcessorFactory(ttl_duration_ms=5000).row()
+        tester = TwsTester(processor, timeMode="ProcessingTime")
+
+        # Process input for key1 at t=0
+        tester.test("key1", [Row(value="a")])
+        self.assertEqual(tester.peekValueState("count", "key1"), (1,))
+
+        # Advance time by 4 seconds (t=4000) - state should still exist
+        tester.advanceProcessingTime(4000)
+        self.assertEqual(tester.peekValueState("count", "key1"), (1,))
+
+        # Process more input for key1 at t=4000 - this should reset the TTL
+        tester.test("key1", [Row(value="b")])
+        self.assertEqual(tester.peekValueState("count", "key1"), (2,))
+
+        # Advance time by 4 more seconds (t=8000) - state should still exist
+        # because TTL was reset at t=4000
+        tester.advanceProcessingTime(4000)
+        self.assertEqual(tester.peekValueState("count", "key1"), (2,))
+
+        # Advance time by 2 more seconds (t=10000) - now state should be expired
+        # (5000ms after the last update at t=4000)
+        tester.advanceProcessingTime(2000)
+        self.assertIsNone(tester.peekValueState("count", "key1"))
+
+    def test_ttl_different_keys_expire_independently(self):
+        """Test that TTL expiry is tracked per-key."""
+        processor = RunningCountStatefulProcessorFactory(ttl_duration_ms=5000).row()
+        tester = TwsTester(processor, timeMode="ProcessingTime")
+
+        # Process input for key1 at t=0
+        tester.test("key1", [Row(value="a")])
+        self.assertEqual(tester.peekValueState("count", "key1"), (1,))
+
+        # Advance time to t=3000
+        tester.advanceProcessingTime(3000)
+
+        # Process input for key2 at t=3000
+        tester.test("key2", [Row(value="b")])
+        self.assertEqual(tester.peekValueState("count", "key2"), (1,))
+
+        # Advance time by 3 seconds (t=6000) - key1 should be expired, key2 should exist
+        tester.advanceProcessingTime(3000)
+        self.assertIsNone(tester.peekValueState("count", "key1"))
+        self.assertEqual(tester.peekValueState("count", "key2"), (1,))
+
+        # Advance time by 3 more seconds (t=9000) - both should be expired
+        tester.advanceProcessingTime(3000)
+        self.assertIsNone(tester.peekValueState("count", "key1"))
+        self.assertIsNone(tester.peekValueState("count", "key2"))
+
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,

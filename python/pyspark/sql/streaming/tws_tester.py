@@ -16,7 +16,7 @@
 #
 from __future__ import annotations
 
-from typing import Any, Iterator, Optional, Union, cast
+from typing import Any, Callable, Iterator, Optional, Union, cast
 
 import pandas as pd
 
@@ -33,6 +33,27 @@ from pyspark.sql.types import Row, StructType
 from pyspark.errors import PySparkValueError, PySparkAssertionError
 
 __all__ = ["TwsTester"]
+
+
+class _TtlTracker:
+    """Helper to track expired keys based on TTL."""
+
+    def __init__(self, get_current_time_ms: Callable[[], int], ttl_duration_ms: int) -> None:
+        assert ttl_duration_ms >= 0, "TTL duration must be non-negative."
+        self._get_current_time_ms = get_current_time_ms
+        self._ttl_duration_ms = ttl_duration_ms
+        self._key_to_last_updated_time: dict[Any, int] = {}
+
+    def is_key_expired(self, key: Any) -> bool:
+        if self._ttl_duration_ms == 0:
+            return False
+        if key not in self._key_to_last_updated_time:
+            return False
+        expiration = self._key_to_last_updated_time[key] + self._ttl_duration_ms
+        return expiration <= self._get_current_time_ms()
+
+    def on_key_updated(self, key: Any) -> None:
+        self._key_to_last_updated_time[key] = self._get_current_time_ms()
 
 
 class _InMemoryTimers:
@@ -68,21 +89,32 @@ class _InMemoryValueState(ValueState):
     def __init__(
         self,
         handle: _InMemoryStatefulProcessorHandle,
+        ttl_tracker: Optional[_TtlTracker] = None,
     ) -> None:
         self.handle = handle
         self.state: dict[Any, tuple] = dict()
+        self._ttl_tracker = ttl_tracker
+
+    def _get_value(self) -> Optional[tuple]:
+        key = self.handle.grouping_key
+        if self._ttl_tracker is not None and self._ttl_tracker.is_key_expired(key):
+            return None
+        return self.state.get(key, None)
 
     def exists(self) -> bool:
-        return self.handle.grouping_key in self.state
+        return self._get_value() is not None
 
     def get(self) -> Optional[tuple]:
-        return self.state.get(self.handle.grouping_key, None)
+        return self._get_value()
 
     def update(self, newValue: tuple) -> None:
-        self.state[self.handle.grouping_key] = newValue
+        key = self.handle.grouping_key
+        if self._ttl_tracker is not None:
+            self._ttl_tracker.on_key_updated(key)
+        self.state[key] = newValue
 
     def clear(self) -> None:
-        if self.exists():
+        if self.handle.grouping_key in self.state:
             del self.state[self.handle.grouping_key]
 
 
@@ -92,31 +124,49 @@ class _InMemoryListState(ListState):
     def __init__(
         self,
         handle: _InMemoryStatefulProcessorHandle,
+        ttl_tracker: Optional[_TtlTracker] = None,
     ) -> None:
         self.handle = handle
         self.state = dict()  # type: dict[Any, list[tuple]]
+        self._ttl_tracker = ttl_tracker
+
+    def _get_list(self) -> Optional[list[tuple]]:
+        key = self.handle.grouping_key
+        if self._ttl_tracker is not None and self._ttl_tracker.is_key_expired(key):
+            return None
+        return self.state.get(key, None)
 
     def exists(self) -> bool:
-        return self.handle.grouping_key in self.state
+        return self._get_list() is not None
 
     def get(self) -> Iterator[tuple]:
-        return iter(self.state.get(self.handle.grouping_key, []))
+        result = self._get_list()
+        return iter(result if result is not None else [])
 
     def put(self, newState: list[tuple]) -> None:
-        self.state[self.handle.grouping_key] = newState
+        key = self.handle.grouping_key
+        if self._ttl_tracker is not None:
+            self._ttl_tracker.on_key_updated(key)
+        self.state[key] = newState
 
     def appendValue(self, newState: tuple) -> None:
+        key = self.handle.grouping_key
+        if self._ttl_tracker is not None:
+            self._ttl_tracker.on_key_updated(key)
         if not self.exists():
-            self.state[self.handle.grouping_key] = []
-        self.state[self.handle.grouping_key].append(newState)
+            self.state[key] = []
+        self.state[key].append(newState)
 
     def appendList(self, newState: list[tuple]) -> None:
+        key = self.handle.grouping_key
+        if self._ttl_tracker is not None:
+            self._ttl_tracker.on_key_updated(key)
         if not self.exists():
-            self.state[self.handle.grouping_key] = []
-        self.state[self.handle.grouping_key].extend(newState)
+            self.state[key] = []
+        self.state[key].extend(newState)
 
     def clear(self) -> None:
-        if self.exists():
+        if self.handle.grouping_key in self.state:
             del self.state[self.handle.grouping_key]
 
 
@@ -126,65 +176,90 @@ class _InMemoryMapState(MapState):
     def __init__(
         self,
         handle: _InMemoryStatefulProcessorHandle,
+        ttl_tracker: Optional[_TtlTracker] = None,
     ) -> None:
         self.handle = handle
         self.state = dict()  # type: dict[Any, dict[tuple, tuple]]
+        self._ttl_tracker = ttl_tracker
+
+    def _get_map(self) -> Optional[dict[tuple, tuple]]:
+        key = self.handle.grouping_key
+        if self._ttl_tracker is not None and self._ttl_tracker.is_key_expired(key):
+            return None
+        return self.state.get(key, None)
 
     def exists(self) -> bool:
-        return self.handle.grouping_key in self.state
+        return self._get_map() is not None
 
     def getValue(self, key: tuple) -> Optional[tuple]:
-        if not self.exists():
+        map_state = self._get_map()
+        if map_state is None:
             return None
-        return self.state[self.handle.grouping_key].get(key, None)
+        return map_state.get(key, None)
 
     def containsKey(self, key: tuple) -> bool:
-        if not self.exists():
+        map_state = self._get_map()
+        if map_state is None:
             return False
-        return key in self.state[self.handle.grouping_key]
+        return key in map_state
 
     def updateValue(self, key: tuple, value: tuple) -> None:
+        grouping_key = self.handle.grouping_key
+        if self._ttl_tracker is not None:
+            self._ttl_tracker.on_key_updated(grouping_key)
         if not self.exists():
-            self.state[self.handle.grouping_key] = {}
-        self.state[self.handle.grouping_key][key] = value
+            self.state[grouping_key] = {}
+        self.state[grouping_key][key] = value
 
     def iterator(self) -> Iterator[tuple[tuple, tuple]]:
-        if not self.exists():
+        map_state = self._get_map()
+        if map_state is None:
             return iter([])
-        return iter(self.state[self.handle.grouping_key].items())
+        return iter(map_state.items())
 
     def keys(self) -> Iterator[tuple]:
-        if not self.exists():
+        map_state = self._get_map()
+        if map_state is None:
             return iter([])
-        return iter(self.state[self.handle.grouping_key].keys())
+        return iter(map_state.keys())
 
     def values(self) -> Iterator[tuple]:
-        if not self.exists():
+        map_state = self._get_map()
+        if map_state is None:
             return iter([])
-        return iter(self.state[self.handle.grouping_key].values())
+        return iter(map_state.values())
 
     def removeKey(self, key: tuple) -> None:
-        if self.exists() and key in self.state[self.handle.grouping_key]:
-            del self.state[self.handle.grouping_key][key]
+        map_state = self._get_map()
+        if map_state is not None and key in map_state:
+            del map_state[key]
 
     def clear(self) -> None:
-        if self.exists():
+        if self.handle.grouping_key in self.state:
             del self.state[self.handle.grouping_key]
 
 
 class _InMemoryStatefulProcessorHandle(StatefulProcessorHandle):
     """In-memory implementation of StatefulProcessorHandle for testing."""
 
-    def __init__(self, timeMode: str = "None") -> None:
+    def __init__(
+        self, timeMode: str = "None", get_current_time_ms: Optional[Callable[[], int]] = None
+    ) -> None:
         self.grouping_key = None
         self.value_states: dict[Any, _InMemoryValueState] = dict()
         self.list_states: dict[Any, _InMemoryListState] = dict()
         self.map_states: dict[Any, _InMemoryMapState] = dict()
         self._timeMode = timeMode.lower()
         self._timers = _InMemoryTimers()
+        self._get_current_time_ms = get_current_time_ms or (lambda: 0)
 
     def setGroupingKey(self, key: Any) -> None:
         self.grouping_key = key
+
+    def _create_ttl_tracker(self, ttlDurationMs: Optional[int]) -> Optional[_TtlTracker]:
+        if ttlDurationMs is None or ttlDurationMs == 0:
+            return None
+        return _TtlTracker(self._get_current_time_ms, ttlDurationMs)
 
     def getValueState(
         self,
@@ -193,7 +268,8 @@ class _InMemoryStatefulProcessorHandle(StatefulProcessorHandle):
         ttlDurationMs: Optional[int] = None,
     ) -> ValueState:
         if stateName not in self.value_states:
-            self.value_states[stateName] = _InMemoryValueState(self)
+            ttl_tracker = self._create_ttl_tracker(ttlDurationMs)
+            self.value_states[stateName] = _InMemoryValueState(self, ttl_tracker)
         return self.value_states[stateName]
 
     def getListState(
@@ -203,7 +279,8 @@ class _InMemoryStatefulProcessorHandle(StatefulProcessorHandle):
         ttlDurationMs: Optional[int] = None,
     ) -> ListState:
         if stateName not in self.list_states:
-            self.list_states[stateName] = _InMemoryListState(self)
+            ttl_tracker = self._create_ttl_tracker(ttlDurationMs)
+            self.list_states[stateName] = _InMemoryListState(self, ttl_tracker)
         return self.list_states[stateName]
 
     def getMapState(
@@ -214,7 +291,8 @@ class _InMemoryStatefulProcessorHandle(StatefulProcessorHandle):
         ttlDurationMs: Optional[int] = None,
     ) -> MapState:
         if stateName not in self.map_states:
-            self.map_states[stateName] = _InMemoryMapState(self)
+            ttl_tracker = self._create_ttl_tracker(ttlDurationMs)
+            self.map_states[stateName] = _InMemoryMapState(self, ttl_tracker)
         return self.map_states[stateName]
 
     def registerTimer(self, expiryTimestampMs: int) -> None:
@@ -296,14 +374,8 @@ class TwsTester:
           ``advanceWatermark`` manually).
         - Late event filtering in EventTime mode (events older than the current watermark are
           dropped).
-
-    **Not Supported:**
-        - **TTL**: State TTL configurations are ignored. All state persists indefinitely.
-
-    **Use Cases:**
-        - **Primary**: Unit testing business logic in ``handleInputRows`` implementations.
-        - **Not recommended**: End-to-end testing or performance testing - use actual Spark
-          streaming queries for those scenarios.
+        - TTL for ValueState, ListState, and MapState (use ProcessingTime mode and
+          ``advanceProcessingTime`` to test expiry).
 
     Parameters
     ----------
@@ -387,12 +459,16 @@ class TwsTester:
         self._timeMode = timeMode.lower()
         self._eventTimeColumnName = eventTimeColumnName
         self._watermarkDelayMs = watermarkDelayMs
-        self.handle = _InMemoryStatefulProcessorHandle(timeMode=timeMode)
         self.realTimeMode = realTimeMode
 
         # Timer-related state
         self._currentProcessingTimeMs: int = 0
         self._currentWatermarkMs: int = 0
+
+        # Create handle with time getter for TTL support
+        self.handle = _InMemoryStatefulProcessorHandle(
+            timeMode=timeMode, get_current_time_ms=lambda: self._currentProcessingTimeMs
+        )
 
         assert self._timeMode in ["none", "eventtime", "processingtime"]
         if self._timeMode == "eventtime" and eventTimeColumnName == "":
@@ -512,10 +588,11 @@ class TwsTester:
         """
         Peek at a value state for a given key without modifying it.
 
-        Returns None if the state does not exist for the given key.
+        Returns None if the state does not exist for the given key or if it has expired due to TTL.
         """
         assert stateName in self.handle.value_states, f"State {stateName} has not been initialized."
-        return self.handle.value_states[stateName].state.get(key, None)
+        self.handle.setGroupingKey(key)
+        return self.handle.value_states[stateName].get()
 
     def setListState(self, stateName: str, key: Any, value: list[tuple]) -> None:
         """Directly set a list state for a given key."""
@@ -526,10 +603,12 @@ class TwsTester:
         """
         Peek at a list state for a given key without modifying it.
 
-        Returns an empty list if the state does not exist for the given key.
+        Returns an empty list if the state does not exist for the given key or if it has expired
+        due to TTL.
         """
         assert stateName in self.handle.list_states, f"State {stateName} has not been initialized."
-        return list(self.handle.list_states[stateName].state.get(key, []))
+        self.handle.setGroupingKey(key)
+        return list(self.handle.list_states[stateName].get())
 
     def setMapState(self, stateName: str, key: Any, value: dict) -> None:
         """Directly set a map state for a given key."""
@@ -540,10 +619,12 @@ class TwsTester:
         """
         Peek at a map state for a given key without modifying it.
 
-        Returns an empty dict if the state does not exist for the given key.
+        Returns an empty dict if the state does not exist for the given key or if it has expired
+        due to TTL.
         """
         assert stateName in self.handle.map_states, f"State {stateName} has not been initialized."
-        return dict(self.handle.map_states[stateName].state.get(key, {}))
+        self.handle.setGroupingKey(key)
+        return dict(self.handle.map_states[stateName].iterator())
 
     def deleteState(self, stateName: str, key: Any) -> None:
         """Deletes state for a given key."""
