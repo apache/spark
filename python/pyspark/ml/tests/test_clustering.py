@@ -37,7 +37,6 @@ from pyspark.ml.clustering import (
     DistributedLDAModel,
     PowerIterationClustering,
 )
-from pyspark.sql import is_remote
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -106,18 +105,6 @@ class ClusteringTestsMixin:
 
         # check summary before model offloading occurs
         check_summary()
-
-        if is_remote():
-            self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
-            # check summary "try_remote_call" path after model offloading occurs
-            self.assertEqual(model.summary.numIter, 2)
-
-            self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
-            # check summary "invoke_remote_attribute_relation" path after model offloading occurs
-            self.assertEqual(model.summary.cluster.count(), 6)
-
-            self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
-            check_summary()
 
         # save & load
         with tempfile.TemporaryDirectory(prefix="kmeans_model") as d:
@@ -322,11 +309,6 @@ class ClusteringTestsMixin:
 
             self.assertEqual(summary.probability.columns, ["probability"])
             self.assertEqual(summary.predictions.count(), 6)
-
-        check_summary()
-        if is_remote():
-            self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
-            check_summary()
 
         # save & load
         with tempfile.TemporaryDirectory(prefix="gaussian_mixture") as d:

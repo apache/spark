@@ -26,7 +26,7 @@ This is followed by the compound statement body, which consists of:
 
 - Flow control statements include loops over predicate expressions, [FOR](control-flow/for-stmt.html) loops over query results, conditional logic such as [IF](control-flow/if-stmt.html) and [CASE](control-flow/case-stmt.html), and means to break out loops such as [LEAVE](control-flow/leave-stmt.html) and [ITERATE](control-flow/iterate-stmt.html).
 - DDL statements such as `ALTER`, `CREATE`, `DROP`.
-- DML statements [INSERT](sql-ref-syntax-dml-insert-into.html).
+- DML statements [INSERT](sql-ref-syntax-dml-insert-table.html).
 - [Queries](sql-ref-syntax-qry-select.html) that return result sets to the invoker of the script.
 - [SET](sql-ref-syntax-aux-set-var.html) statements to set local variables as well as session variables.
 - The [EXECUTE IMMEDIATE](sql-ref-syntax-aux-exec-imm.html) statement.
