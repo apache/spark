@@ -30,7 +30,7 @@ from socket import AF_INET, AF_INET6, SOCK_STREAM, SOMAXCONN
 from signal import SIGHUP, SIGTERM, SIGCHLD, SIG_DFL, SIG_IGN, SIGINT
 
 from pyspark.serializers import read_int, write_int, write_with_length, UTF8Deserializer
-from pyspark.util import enable_faulthandler, start_faulthandler_periodic_traceback
+from pyspark.util import enable_faulthandler
 
 
 def compute_real_exit_code(exit_code):
