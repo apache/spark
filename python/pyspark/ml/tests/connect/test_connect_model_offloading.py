@@ -29,6 +29,12 @@ from pyspark.ml.regression import (
     LinearRegressionSummary,
     LinearRegressionTrainingSummary,
 )
+from pyspark.ml.clustering import (
+    LDA,
+    LDAModel,
+    LocalLDAModel,
+    DistributedLDAModel,
+)
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
@@ -151,6 +157,102 @@ class ModelOffloadingTests(ReusedConnectTestCase):
         self.assertTrue(isinstance(summary, LinearRegressionSummary))
         self.assertTrue(isinstance(summary, LinearRegressionTrainingSummary))
         self.assertEqual(summary.predictions.count(), 4)
+
+    def test_lda_offloading(self):
+        # force clean up the ml cache
+        self.spark.client._cleanup_ml_cache()
+
+        df = (
+            self.spark.createDataFrame(
+                [
+                    [1, Vectors.dense([0.0, 1.0])],
+                    [2, Vectors.sparse(2, {0: 1.0})],
+                ],
+                ["id", "features"],
+            )
+            .coalesce(1)
+            .sortWithinPartitions("id")
+        )
+
+        lda = LDA(k=2, optimizer="em", seed=1)
+        lda.setMaxIter(1)
+
+        self.assertEqual(lda.getK(), 2)
+        self.assertEqual(lda.getOptimizer(), "em")
+        self.assertEqual(lda.getMaxIter(), 1)
+        self.assertEqual(lda.getSeed(), 1)
+
+        model = lda.fit(df)
+
+        # model is cached!
+        # 'id: xxx, obj: class org.apache.spark.ml.regression.LinearRegressionModel, size: xxx'
+        cached = self.spark.client._get_ml_cache_info()
+        self.assertEqual(len(cached), 1, cached)
+        self.assertIn("class org.apache.spark.ml.clustering.DistributedLDAModel", cached[0])
+
+        self.assertEqual(lda.uid, model.uid)
+        self.assertIsInstance(model, LDAModel)
+        self.assertNotIsInstance(model, LocalLDAModel)
+        self.assertIsInstance(model, DistributedLDAModel)
+        self.assertTrue(model.isDistributed())
+        self.assertEqual(model.vocabSize(), 2)
+
+        output = model.transform(df)
+        expected_cols = ["id", "features", "topicDistribution"]
+        self.assertEqual(output.columns, expected_cols)
+        self.assertEqual(output.count(), 2)
+
+        # both model and local_model are is cached!
+        local_model = model.toLocal()
+        # 'id: xxx, obj: class org.apache.spark.ml.regression.LinearRegressionModel, size: xxx'
+        cached = self.spark.client._get_ml_cache_info()
+        self.assertEqual(len(cached), 2, cached)
+        self.assertTrue(
+            any("class org.apache.spark.ml.clustering.LocalLDAModel" in c for c in cached)
+        )
+        self.assertTrue(
+            any("class org.apache.spark.ml.clustering.DistributedLDAModel" in c for c in cached)
+        )
+
+        self.assertIsInstance(local_model, LDAModel)
+        self.assertIsInstance(local_model, LocalLDAModel)
+        self.assertNotIsInstance(local_model, DistributedLDAModel)
+        self.assertFalse(local_model.isDistributed())
+        self.assertEqual(local_model.vocabSize(), 2)
+
+        output = local_model.transform(df)
+        expected_cols = ["id", "features", "topicDistribution"]
+        self.assertEqual(output.columns, expected_cols)
+        self.assertEqual(output.count(), 2)
+
+        # both model and local_model are offloaded!
+        self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
+        self.spark.client._delete_ml_cache([local_model._java_obj._ref_id], evict_only=True)
+        cached = self.spark.client._get_ml_cache_info()
+        self.assertEqual(len(cached), 0, cached)
+
+        self.assertEqual(lda.uid, model.uid)
+        self.assertIsInstance(model, LDAModel)
+        self.assertNotIsInstance(model, LocalLDAModel)
+        self.assertIsInstance(model, DistributedLDAModel)
+        self.assertTrue(model.isDistributed())
+        self.assertEqual(model.vocabSize(), 2)
+
+        output = model.transform(df)
+        expected_cols = ["id", "features", "topicDistribution"]
+        self.assertEqual(output.columns, expected_cols)
+        self.assertEqual(output.count(), 2)
+
+        self.assertIsInstance(local_model, LDAModel)
+        self.assertIsInstance(local_model, LocalLDAModel)
+        self.assertNotIsInstance(local_model, DistributedLDAModel)
+        self.assertFalse(local_model.isDistributed())
+        self.assertEqual(local_model.vocabSize(), 2)
+
+        output = local_model.transform(df)
+        expected_cols = ["id", "features", "topicDistribution"]
+        self.assertEqual(output.columns, expected_cols)
+        self.assertEqual(output.count(), 2)
 
 
 if __name__ == "__main__":
