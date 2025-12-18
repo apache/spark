@@ -64,6 +64,12 @@ class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter
     }
   }
 
+  Seq(2, 3).foreach { version =>
+    test(s"StreamingJoinStateManager V${version} - getJoinedRows with nulls") {
+      testGetJoinedRowsWithNulls(version)
+    }
+  }
+
   SymmetricHashJoinStateManager.supportedVersions.foreach { version =>
     test(s"SPARK-35689: StreamingJoinStateManager V${version} - " +
         "printable key of keyWithIndexToValue") {
@@ -245,6 +251,46 @@ class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter
     }
   }
 
+  /* Test getJoinedRows with nulls to ensure proper null handling */
+  private def testGetJoinedRowsWithNulls(stateFormatVersion: Int): Unit = {
+    // Test with skipNullsForStreamStreamJoins enabled, which allows nulls in state
+    val metric = new SQLMetric("sum")
+    withJoinStateManager(inputValueAttribs, joinKeyExprs, stateFormatVersion, true,
+        Some(metric)) { manager =>
+      implicit val mgr = manager
+
+      // Append some values
+      appendAndTest(40, 100, 200, 300)
+      assertNumRows(stateFormatVersion, 3)
+
+      // Create nulls in the middle by manipulating numValues
+      updateNumValues(40, 6) // create nulls at index 3, 4, 5
+      assert(getNumValues(40) === 3) // should skip the 3 nulls
+      assert(metric.value == 3)
+
+      // Test getJoinedRows - this should skip null values and not throw NPE
+      val joinedRows = getJoinedRows(40, v => v < 250)
+      assert(joinedRows.toSet === Set(100, 200)) // should return non-null values that match
+
+      // Append more values after nulls
+      append(40, 400)
+      assert(getNumValues(40) === 4)
+
+      // Test getJoinedRows again with all values
+      val joinedRows2 = getJoinedRows(40, v => v < 500)
+      assert(joinedRows2.toSet === Set(100, 200, 300, 400)) // should get all non-null values
+
+      // Test with a predicate that matches no rows
+      val joinedRows3 = getJoinedRows(40, v => v > 1000)
+      assert(joinedRows3.isEmpty)
+
+      // Clean up
+      removeByValue(400)
+      assert(get(40) === Seq.empty)
+      assertNumRows(stateFormatVersion, 0)
+    }
+  }
+
   val watermarkMetadata = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 10).build()
   val inputValueSchema = new StructType()
     .add(StructField("time", IntegerType, metadata = watermarkMetadata))
@@ -290,6 +336,27 @@ class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter
 
   def get(key: Int)(implicit manager: SymmetricHashJoinStateManager): Seq[Int] = {
     manager.get(toJoinKeyRow(key)).map(toValueInt).toSeq.sorted
+  }
+
+  /** Get joined rows using getJoinedRows method with a value-based predicate */
+  def getJoinedRows(key: Int, valuePredicate: Int => Boolean)
+                   (implicit manager: SymmetricHashJoinStateManager): Seq[Int] = {
+    val keyRow = toJoinKeyRow(key)
+    val joinedRow = new org.apache.spark.sql.catalyst.expressions.JoinedRow()
+    val joinedRowIter = manager.getJoinedRows(
+      keyRow,
+      valueRow => joinedRow.withLeft(valueRow).withRight(valueRow),
+      jr => {
+        // JoinedRow extends InternalRow - access the first field (time) directly
+        val value = jr.getInt(0)
+        valuePredicate(value)
+      },
+      excludeRowsAlreadyMatched = false
+    )
+    joinedRowIter.map { jr =>
+      // JoinedRow extends InternalRow - access the first field (time) directly
+      jr.getInt(0)
+    }.toSeq.sorted
   }
 
   /** Remove keys (and corresponding values) where `time <= threshold` */
