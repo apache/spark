@@ -18,9 +18,7 @@ import unittest
 
 import numpy as np
 
-from pyspark.errors import PySparkException
-from pyspark.ml.linalg import Vectors, Matrices
-from pyspark.sql import DataFrame, Row
+from pyspark.ml.linalg import Vectors
 from pyspark.ml.classification import (
     LinearSVC,
     LinearSVCSummary,
