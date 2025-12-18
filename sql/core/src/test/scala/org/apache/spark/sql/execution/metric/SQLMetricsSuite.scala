@@ -114,8 +114,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
         val oneRowRelation = df.queryExecution.executedPlan.collect {
           case oneRowRelation: OneRowRelationExec => oneRowRelation
         }
-        sparkContext.listenerBus.waitUntilEmpty()
         df.collect()
+        sparkContext.listenerBus.waitUntilEmpty()
         assert(oneRowRelation.size == 1)
 
         val expected = Map("number of output rows" -> 1L)
