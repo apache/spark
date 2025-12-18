@@ -142,17 +142,11 @@ class InMemoryMapState[K, V](clock: Clock, ttl: TTLConfig) extends MapState[K, V
   override def exists(): Boolean = getMap.isDefined
 
   override def getValue(key: K): V = {
-    getMap
-      .orElse(Some(mutable.HashMap.empty[K, V]))
-      .get
-      .getOrElse(key, null.asInstanceOf[V])
+    getMap.flatMap(_.get(key)).getOrElse(null.asInstanceOf[V])
   }
 
   override def containsKey(key: K): Boolean = {
-    getMap
-      .orElse(Some(mutable.HashMap.empty[K, V]))
-      .get
-      .contains(key)
+    getMap.exists(_.contains(key))
   }
 
   override def updateValue(key: K, value: V): Unit = {
@@ -168,33 +162,19 @@ class InMemoryMapState[K, V](clock: Clock, ttl: TTLConfig) extends MapState[K, V
   }
 
   override def iterator(): Iterator[(K, V)] = {
-    getMap
-      .orElse(Some(mutable.HashMap.empty[K, V]))
-      .get
-      .iterator
+    getMap.map(_.iterator).getOrElse(Iterator.empty)
   }
 
   override def keys(): Iterator[K] = {
-    getMap
-      .orElse(Some(mutable.HashMap.empty[K, V]))
-      .get
-      .keys
-      .iterator
+    getMap.map(_.keys.iterator).getOrElse(Iterator.empty)
   }
 
   override def values(): Iterator[V] = {
-    getMap
-      .orElse(Some(mutable.HashMap.empty[K, V]))
-      .get
-      .values
-      .iterator
+    getMap.map(_.values.iterator).getOrElse(Iterator.empty)
   }
 
   override def removeKey(key: K): Unit = {
-    getMap
-      .orElse(Some(mutable.HashMap.empty[K, V]))
-      .get
-      .remove(key)
+    getMap.foreach(_.remove(key))
   }
 
   override def clear(): Unit = {
