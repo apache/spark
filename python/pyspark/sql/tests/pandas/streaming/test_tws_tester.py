@@ -25,9 +25,8 @@ import pandas.testing as pdt
 from pyspark import SparkConf
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import split
-from pyspark.sql.streaming import StatefulProcessor
+from pyspark.sql.streaming import StatefulProcessor, TwsTester
 from pyspark.sql.streaming.query import StreamingQuery
-from pyspark.sql.streaming.tws_tester import TwsTester
 from pyspark.sql.tests.pandas.helper.helper_pandas_transform_with_state import (
     AllMethodsTestProcessorFactory,
     EventTimeCountProcessorFactory,
