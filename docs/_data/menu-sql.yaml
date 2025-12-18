@@ -91,6 +91,9 @@
       url: sql-ref-operators.html
     - text: Functions
       url: sql-ref-functions.html
+      subitems:
+        - text: Sketch-Based Approximate Functions
+          url: sql-ref-sketch-aggregates.html
     - text: Identifiers
       url: sql-ref-identifier.html
     - text: IDENTIFIER clause

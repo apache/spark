@@ -162,21 +162,21 @@
     <aws.kinesis.client.version>1.15.3</aws.kinesis.client.version>
     <!-- Should be consistent with Kinesis client dependency -->
     <aws.java.sdk.version>1.12.681</aws.java.sdk.version>
-    <aws.java.sdk.v2.version>2.29.52</aws.java.sdk.v2.version>
+    <aws.java.sdk.v2.version>2.35.4</aws.java.sdk.v2.version>
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>1.0.5</aws.kinesis.producer.version>
     <!-- Do not use 3.0.0: https://github.com/GoogleCloudDataproc/hadoop-connectors/issues/1114 -->
-    <gcs-connector.version>hadoop3-2.2.28</gcs-connector.version>
+    <gcs-connector.version>hadoop3-2.2.29</gcs-connector.version>
     <analyticsaccelerator-s3.version>1.3.0</analyticsaccelerator-s3.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.14</commons.httpclient.version>
     <commons.httpcore.version>4.4.16</commons.httpcore.version>
     <commons.math3.version>3.6.1</commons.math3.version>
     <commons.collections4.version>4.5.0</commons.collections4.version>
-    <scala.version>2.13.17</scala.version>
+    <scala.version>2.13.18</scala.version>
     <scala.binary.version>2.13</scala.binary.version>
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
-    <scala-maven-plugin.version>4.9.5</scala-maven-plugin.version>
+    <scala-maven-plugin.version>4.9.7</scala-maven-plugin.version>
     <maven.scaladoc.skip>false</maven.scaladoc.skip>
     <versions-maven-plugin.version>2.18.0</versions-maven-plugin.version>
     <!-- for now, not running scalafmt as part of default verify pipeline -->
@@ -194,13 +194,13 @@
     <!-- To support Hive UDF jars built by Hive 2.0.0 ~ 2.3.9 and 3.0.0 ~ 3.1.3. -->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
-    <commons-lang3.version>3.19.0</commons-lang3.version>
+    <commons-lang3.version>3.20.0</commons-lang3.version>
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.12.1</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <guava.version>33.4.8-jre</guava.version>
     <guava.failureaccess.version>1.0.3</guava.failureaccess.version>
-    <gson.version>2.11.0</gson.version>
+    <gson.version>2.13.2</gson.version>
     <janino.version>3.1.9</janino.version>
     <jersey.version>3.0.18</jersey.version>
     <joda.version>2.14.0</joda.version>
@@ -215,9 +215,9 @@
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.10.0</commons-cli.version>
     <bouncycastle.version>1.82</bouncycastle.version>
-    <tink.version>1.16.0</tink.version>
+    <tink.version>1.19.0</tink.version>
     <datasketches.version>6.2.0</datasketches.version>
-    <netty.version>4.2.7.Final</netty.version>
+    <netty.version>4.2.9.Final</netty.version>
     <netty-tcnative.version>2.0.74.Final</netty-tcnative.version>
     <icu4j.version>78.1</icu4j.version>
     <junit.version>6.0.1</junit.version>
@@ -233,7 +233,7 @@
     ./python/packaging/client/setup.py, and ./python/packaging/connect/setup.py too.
     -->
     <arrow.version>18.3.0</arrow.version>
-    <ammonite.version>3.0.3</ammonite.version>
+    <ammonite.version>3.0.5</ammonite.version>
     <jjwt.version>0.12.6</jjwt.version>
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
@@ -879,9 +879,9 @@
         <version>${snappy.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.lz4</groupId>
+        <groupId>at.yawk.lz4</groupId>
         <artifactId>lz4-java</artifactId>
-        <version>1.8.0</version>
+        <version>1.10.1</version>
       </dependency>
       <dependency>
         <groupId>com.github.luben</groupId>
@@ -2653,6 +2653,7 @@
                       <exclude>org.jboss.netty</exclude>
                       <exclude>org.codehaus.groovy</exclude>
                       <exclude>com.amazonaws:aws-java-sdk-bundle</exclude>
+                      <exclude>org.lz4:lz4-java</exclude>
                       <exclude>*:*_2.12</exclude>
                       <exclude>*:*_2.11</exclude>
                       <exclude>*:*_2.10</exclude>

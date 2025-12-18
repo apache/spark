@@ -365,10 +365,50 @@ class ConnectErrorsTest(unittest.TestCase):
         self.assertEqual(breaking_change_info["needs_audit"], True)
         self.assertNotIn("mitigation_config", breaking_change_info)
 
+    def test_convert_exception_error_class_from_fetch_error_details(self):
+        """Test that errorClass is extracted from FetchErrorDetailsResponse
+        when not present in ErrorInfo metadata (e.g., when messageParameters exceed limit)."""
+        import pyspark.sql.connect.proto as pb2
+        from google.rpc.error_details_pb2 import ErrorInfo
+        from grpc import StatusCode
+
+        # Create mock FetchErrorDetailsResponse with errorClass
+        resp = pb2.FetchErrorDetailsResponse()
+        resp.root_error_idx = 0
+
+        error = resp.errors.add()
+        error.message = "Test error"
+        error.error_type_hierarchy.append("org.apache.spark.sql.AnalysisException")
+
+        # Add SparkThrowable with errorClass and messageParameters
+        spark_throwable = error.spark_throwable
+        spark_throwable.error_class = "TEST_ERROR_CLASS_FROM_RESPONSE"
+        spark_throwable.message_parameters["param1"] = "value1"
+        spark_throwable.message_parameters["param2"] = "value2"
+
+        # Create ErrorInfo WITHOUT errorClass in metadata
+        # (simulating the case where messageParameters exceeded maxMetadataSize)
+        info = ErrorInfo()
+        info.reason = "org.apache.spark.sql.AnalysisException"
+        info.metadata["classes"] = '["org.apache.spark.sql.AnalysisException"]'
+
+        exception = convert_exception(
+            info=info,
+            truncated_message="Test error",
+            resp=resp,
+            grpc_status_code=StatusCode.INTERNAL,
+        )
+
+        # Verify errorClass was extracted from FetchErrorDetailsResponse
+        self.assertIsInstance(exception, AnalysisException)
+        self.assertEqual(exception._errorClass, "TEST_ERROR_CLASS_FROM_RESPONSE")
+        # Verify messageParameters were also extracted from FetchErrorDetailsResponse
+        self.assertEqual(exception._messageParameters, {"param1": "value1", "param2": "value2"})
+
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.errors.tests.test_errors import *  # noqa: F401
+    from pyspark.errors.tests.test_connect_errors_conversion import *  # noqa: F401
 
     try:
         import xmlrunner

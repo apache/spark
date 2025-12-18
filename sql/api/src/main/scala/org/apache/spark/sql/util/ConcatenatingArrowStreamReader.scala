@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.connect.client.arrow
+package org.apache.spark.sql.util
 
 import java.io.{InputStream, IOException}
 import java.nio.channels.Channels
@@ -34,7 +34,7 @@ import org.apache.arrow.vector.types.pojo.Schema
  * closes its messages when it consumes them. In order to prevent that from happening in
  * non-destructive mode we clone the messages before passing them to the reading logic.
  */
-class ConcatenatingArrowStreamReader(
+private[sql] class ConcatenatingArrowStreamReader(
     allocator: BufferAllocator,
     input: Iterator[AbstractMessageIterator],
     destructive: Boolean)
@@ -128,7 +128,7 @@ class ConcatenatingArrowStreamReader(
   override def closeReadSource(): Unit = ()
 }
 
-trait AbstractMessageIterator extends Iterator[ArrowMessage] {
+private[sql] trait AbstractMessageIterator extends Iterator[ArrowMessage] {
   def schema: Schema
   def bytesRead: Long
 }
@@ -137,7 +137,7 @@ trait AbstractMessageIterator extends Iterator[ArrowMessage] {
  * Decode an Arrow IPC stream into individual messages. Please note that this iterator MUST have a
  * valid IPC stream as its input, otherwise construction will fail.
  */
-class MessageIterator(input: InputStream, allocator: BufferAllocator)
+private[sql] class MessageIterator(input: InputStream, allocator: BufferAllocator)
     extends AbstractMessageIterator {
   private[this] val in = new ReadChannel(Channels.newChannel(input))
   private[this] val reader = new MessageChannelReader(in, allocator)

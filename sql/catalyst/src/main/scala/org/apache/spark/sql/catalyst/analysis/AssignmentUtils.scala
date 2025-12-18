@@ -19,16 +19,17 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.TableOutputResolver.DefaultValueFillMode.{NONE, RECURSE}
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, CreateNamedStruct, Expression, GetStructField, If, IsNull, Literal}
-import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans.logical.Assignment
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.getDefaultValueExprOrNullLit
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -56,7 +57,6 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
    *                 (preserving existing fields).
    * @param coerceNestedTypes whether to coerce nested types to match the target type
    *                         for complex types
-   * @param missingSourcePaths paths that exist in target but not in source
    * @return aligned update assignments that match table attributes
    */
   def alignUpdateAssignments(
@@ -182,31 +182,25 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
     } else if (exactAssignments.isEmpty && fieldAssignments.isEmpty) {
       TableOutputResolver.checkNullability(colExpr, col, conf, colPath)
     } else if (exactAssignments.nonEmpty) {
-     if (updateStar) {
+      if (updateStar && SQLConf.get.coerceMergeNestedTypes) {
         val value = exactAssignments.head.value
         col.dataType match {
-          case structType: StructType =>
-            // Expand assignments to leaf fields
-            val structAssignment =
-              applyNestedFieldAssignments(col, colExpr, value, addError, colPath,
-                coerceNestedTypes)
-
-            // Wrap with null check for missing source fields
-            fixNullExpansion(col, value, structType, structAssignment,
-              colPath, addError)
+          case _: StructType =>
+            // Expand assignments to leaf fields (fixNullExpansion is applied inside)
+            applyNestedFieldAssignments(col, colExpr, value, addError, colPath,
+              coerceNestedTypes)
           case _ =>
             // For non-struct types, resolve directly
             val coerceMode = if (coerceNestedTypes) RECURSE else NONE
             TableOutputResolver.resolveUpdate("", value, col, conf, addError, colPath,
               coerceMode)
         }
-       } else {
-         val value = exactAssignments.head.value
-         val coerceMode = if (coerceNestedTypes) RECURSE else NONE
-         val resolvedValue = TableOutputResolver.resolveUpdate("", value, col, conf, addError,
-           colPath, coerceMode)
-         resolvedValue
-       }
+      } else {
+        val value = exactAssignments.head.value
+        val coerceMode = if (coerceNestedTypes) RECURSE else NONE
+        TableOutputResolver.resolveUpdate("", value, col, conf, addError,
+          colPath, coerceMode)
+      }
     } else {
       applyFieldAssignments(col, colExpr, fieldAssignments, addError, colPath, coerceNestedTypes)
     }
@@ -218,7 +212,7 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
       assignments: Seq[Assignment],
       addError: String => Unit,
       colPath: Seq[String],
-      coerceNestedTyptes: Boolean): Expression = {
+      coerceNestedTypes: Boolean): Expression = {
 
     col.dataType match {
       case structType: StructType =>
@@ -228,14 +222,14 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
         }
         val updatedFieldExprs = fieldAttrs.zip(fieldExprs).map { case (fieldAttr, fieldExpr) =>
           applyAssignments(fieldAttr, fieldExpr, assignments, addError, colPath :+ fieldAttr.name,
-            coerceNestedTyptes)
+            coerceNestedTypes)
         }
         toNamedStruct(structType, updatedFieldExprs)
 
       case otherType =>
         addError(
           "Updating nested fields is only supported for StructType but " +
-          s"'${colPath.quoted}' is of type $otherType")
+            s"'${colPath.quoted}' is of type $otherType")
         colExpr
     }
   }
@@ -246,7 +240,7 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
       value: Expression,
       addError: String => Unit,
       colPath: Seq[String],
-      coerceNestedTyptes: Boolean): Expression = {
+      coerceNestedTypes: Boolean): Expression = {
 
     col.dataType match {
       case structType: StructType =>
@@ -276,23 +270,26 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
 
           // Recurse or resolve based on field type
           fieldAttr.dataType match {
-            case nestedStructType: StructType =>
+            case _: StructType =>
               // Field is a struct, recurse
-              applyNestedFieldAssignments(fieldAttr, targetFieldExpr, sourceFieldValue,
-                addError, fieldPath, coerceNestedTyptes)
+              applyNestedFieldAssignments(fieldAttr, targetFieldExpr,
+                sourceFieldValue, addError, fieldPath, coerceNestedTypes)
             case _ =>
               // Field is not a struct, resolve with TableOutputResolver
-              val coerceMode = if (coerceNestedTyptes) RECURSE else NONE
+              val coerceMode = if (coerceNestedTypes) RECURSE else NONE
               TableOutputResolver.resolveUpdate("", sourceFieldValue, fieldAttr, conf, addError,
                 fieldPath, coerceMode)
           }
         }
-        toNamedStruct(structType, updatedFieldExprs)
+        val namedStruct = toNamedStruct(structType, updatedFieldExprs)
+
+        // Prevent unnecessary null struct expansion
+        fixNullExpansion(colExpr, value, structType, namedStruct, colPath)
 
       case otherType =>
         addError(
           "Updating nested fields is only supported for StructType but " +
-          s"'${colPath.quoted}' is of type $otherType")
+            s"'${colPath.quoted}' is of type $otherType")
         colExpr
     }
   }
@@ -304,98 +301,70 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
     CreateNamedStruct(namedStructExprs)
   }
 
-  private def getMissingSourcePaths(targetType: StructType,
-                                 sourceType: DataType,
-                                 colPath: Seq[String],
-                                 addError: String => Unit): Seq[Seq[String]] = {
-    val nestedTargetPaths = DataTypeUtils.extractLeafFieldPaths(targetType, Seq.empty)
-    val nestedSourcePaths = sourceType match {
-      case sourceStructType: StructType =>
-        DataTypeUtils.extractLeafFieldPaths(sourceStructType, Seq.empty)
-      case _ =>
-        addError(s"Value for struct type: " +
-          s"${colPath.quoted} must be a struct but was ${sourceType.simpleString}")
-        Seq()
-    }
-    nestedSourcePaths.diff(nestedTargetPaths)
-  }
-
   /**
-   * Creates a null check for a field at the given path within a struct expression.
-   * Navigates through the struct hierarchy following the path and returns an IsNull check
-   * for the final field.
-   *
-   * @param rootExpr the root expression to navigate from
-   * @param path the field path to navigate (sequence of field names)
-   * @return an IsNull expression checking if the field at the path is null
+   * Checks if target struct has extra fields compared to source struct, recursively.
    */
-  private def createNullCheckForFieldPath(
-      rootExpr: Expression,
-      path: Seq[String]): Expression = {
-    var currentExpr: Expression = rootExpr
-    path.foreach { fieldName =>
-      currentExpr.dataType match {
-        case st: StructType =>
-          st.fields.find(f => conf.resolver(f.name, fieldName)) match {
-            case Some(field) =>
-              val fieldIndex = st.fieldIndex(field.name)
-              currentExpr = GetStructField(currentExpr, fieldIndex, Some(field.name))
-            case None =>
-              // Field not found, shouldn't happen
+  private def hasExtraTargetFields(targetType: StructType, sourceType: DataType): Boolean = {
+    sourceType match {
+      case sourceStructType: StructType =>
+        targetType.fields.exists { targetField =>
+          sourceStructType.fields.find(f => conf.resolver(f.name, targetField.name)) match {
+            case Some(sourceField) =>
+              // Check nested structs recursively
+              (targetField.dataType, sourceField.dataType) match {
+                case (targetNested: StructType, sourceNested) =>
+                  hasExtraTargetFields(targetNested, sourceNested)
+                case _ => false
+              }
+            case None => true // target has extra field not in source
           }
-        case _ =>
-          // Not a struct, shouldn't happen
-      }
+        }
+      case _ =>
+        // Should be caught earlier
+        throw SparkException.internalError(
+          s"Source type must be StructType but found: $sourceType")
     }
-    IsNull(currentExpr)
   }
 
   /**
-   * As UPDATE SET * can assign struct fields individually (preserving existing fields),
-   * this will lead to null expansion, ie, a struct is created where all fields are null.
-   * Wraps a struct assignment with null checks for the source and missing source fields.
-   * Return null if all are null.
+   * As UPDATE SET * assigns struct fields individually (preserving existing fields),
+   * this will lead to indiscriminate null expansion, ie, a struct is created where all
+   * fields are null.  Wraps a struct assignment with a condition to return null
+   * if both conditions are true:
    *
-   * @param col the target column attribute
-   * @param value the source value expression
+   * - source struct is null
+   * - target struct is null OR target struct is same as source struct
+   *
+   * If the condition is not true, we preserve the original structure.
+   * This includes cases where the source was a struct of nulls,
+   * or there were any extra target fields (including null ones),
+   * both cases retain the assignment to a struct of nulls.
+   *
+   * @param key the original assignment key (target struct) expression
+   * @param value the original assignment value (source struct) expression
    * @param structType the target struct type
-   * @param structAssignment the struct assignment result to wrap
+   * @param structExpression the result create struct expression result to wrap
    * @param colPath the column path for error reporting
-   * @param addError error reporting function
    * @return the wrapped expression with null checks
    */
   private def fixNullExpansion(
-      col: Attribute,
+      key: Expression,
       value: Expression,
       structType: StructType,
-      structAssignment: Expression,
-      colPath: Seq[String],
-      addError: String => Unit): Expression = {
-    // As StoreAssignmentPolicy.LEGACY is not allowed in DSv2, always add null check for
-    // non-nullable column
-    if (!col.nullable) {
-      AssertNotNull(value)
-    } else {
-      // Check if source struct is null
-      val valueIsNull = IsNull(value)
-
-      // Check if missing source paths (paths in target but not in source) are not null
-      // These will be null for the case of UPDATE SET * and
-      val missingSourcePaths = getMissingSourcePaths(structType, value.dataType, colPath, addError)
-      val condition = if (missingSourcePaths.nonEmpty) {
-        // Check if all target attributes at missing source paths are null
-        val missingFieldNullChecks = missingSourcePaths.map { path =>
-          createNullCheckForFieldPath(col, path)
-        }
-        // Combine all null checks with AND
-        val allMissingFieldsNull = missingFieldNullChecks.reduce[Expression]((a, b) => And(a, b))
-        And(valueIsNull, allMissingFieldsNull)
+      structExpression: Expression,
+      colPath: Seq[String]): Expression = {
+    if (key.nullable) {
+      val condition = if (hasExtraTargetFields(structType, value.dataType)) {
+        // extra target fields: return null iff source struct is null and target struct is null
+        And(IsNull(value), IsNull(key))
       } else {
-        valueIsNull
+        // schemas match: return null iff source struct is null
+        IsNull(value)
       }
 
-      // Return: If (condition) THEN NULL ELSE structAssignment
-      If(condition, Literal(null, structAssignment.dataType), structAssignment)
+      If(condition, Literal(null, structExpression.dataType), structExpression)
+    } else {
+      structExpression
     }
   }
 

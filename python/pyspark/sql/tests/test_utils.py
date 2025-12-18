@@ -35,6 +35,7 @@ from pyspark.sql import Row
 import pyspark.sql.functions as F
 from pyspark.sql.functions import to_date, unix_timestamp, from_unixtime
 from pyspark.sql.types import (
+    DecimalType,
     StringType,
     ArrayType,
     LongType,
@@ -923,7 +924,7 @@ class UtilsTestsMixin:
         assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
     @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
-    def test_assert_equal_exact_pandas_on_spark_df(self):
+    def test_assert_equal_exact_pandas_on_spark_df_no_order(self):
         import pyspark.pandas as ps
 
         df1 = ps.DataFrame(data=[10, 20, 30], columns=["Numbers"])
@@ -1548,55 +1549,6 @@ class UtilsTestsMixin:
             data=[
                 (1, 3000),
                 (2, 1000),
-                (3, 10),
-            ],
-            schema=["id", "amount"],
-        )
-
-        list_of_rows = [Row(id=1, amount=300), Row(id=2, amount=100), Row(id=3, amount=10)]
-
-        rows_str1 = ""
-        rows_str2 = ""
-
-        # count different rows
-        for r1, r2 in list(zip_longest(df1, list_of_rows)):
-            rows_str1 += str(r1) + "\n"
-            rows_str2 += str(r2) + "\n"
-
-        generated_diff = _context_diff(
-            actual=rows_str1.splitlines(), expected=rows_str2.splitlines(), n=3
-        )
-
-        error_msg = "Results do not match: "
-        percent_diff = (2 / 3) * 100
-        error_msg += "( %.5f %% )" % percent_diff
-        error_msg += "\n" + "\n".join(generated_diff)
-
-        with self.assertRaises(PySparkAssertionError) as pe:
-            assertDataFrameEqual(df1, list_of_rows)
-
-        self.check_error(
-            exception=pe.exception,
-            errorClass="DIFFERENT_ROWS",
-            messageParameters={"error_msg": error_msg},
-        )
-
-        with self.assertRaises(PySparkAssertionError) as pe:
-            assertDataFrameEqual(df1, list_of_rows, checkRowOrder=True)
-
-        self.check_error(
-            exception=pe.exception,
-            errorClass="DIFFERENT_ROWS",
-            messageParameters={"error_msg": error_msg},
-        )
-
-    def test_list_row_unequal_schema(self):
-        from pyspark.sql import Row
-
-        df1 = self.spark.createDataFrame(
-            data=[
-                (1, 3000),
-                (2, 1000),
             ],
             schema=["id", "amount"],
         )
@@ -1812,8 +1764,6 @@ class UtilsTestsMixin:
     def test_assert_schema_equal_with_decimal_types(self):
         """Test assertSchemaEqual with decimal types of different precision and scale
         (SPARK-51062)."""
-        from pyspark.sql.types import StructType, StructField, DecimalType
-
         # Same precision and scale - should pass
         s1 = StructType(
             [

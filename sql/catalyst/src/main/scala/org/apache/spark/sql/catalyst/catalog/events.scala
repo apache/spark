@@ -17,6 +17,7 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import org.apache.spark.scheduler.SparkListenerEvent
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 
 /**
  * Event emitted by the external catalog when it is modified. Events are either fired before or
@@ -203,3 +204,87 @@ case class RenameFunctionEvent(
     name: String,
     newName: String)
   extends FunctionEvent
+
+/**
+ * Event fired when some partitions (of a table) are created, dropped, renamed, altered.
+ */
+trait PartitionsEvent extends TableEvent {
+  /**
+   * Specs of the partitions which are touched.
+   */
+  val partSpecs: Seq[TablePartitionSpec]
+}
+
+/**
+ * Event fired before some partitions (of a table) are created.
+ */
+case class CreatePartitionsPreEvent(
+    database: String,
+    name /* of table */: String,
+    partSpecs: Seq[TablePartitionSpec])
+  extends PartitionsEvent
+
+/**
+ * Event fired after some partitions (of a table) have been created.
+ */
+case class CreatePartitionsEvent(
+    database: String,
+    name /* of table */: String,
+    partSpecs: Seq[TablePartitionSpec])
+  extends PartitionsEvent
+
+/**
+ * Event fired before some partitions (of a table) are dropped.
+ */
+case class DropPartitionsPreEvent(
+    database: String,
+    name /* of table */ : String,
+    partSpecs: Seq[TablePartitionSpec])
+  extends PartitionsEvent
+
+/**
+ * Event fired after some partitions (of a table) have been dropped.
+ */
+case class DropPartitionsEvent(
+    database: String,
+    name /* of table */ : String,
+    partSpecs: Seq[TablePartitionSpec])
+  extends PartitionsEvent
+
+/**
+ * Event fired before some partitions (of a table) are renamed.
+ */
+case class RenamePartitionsPreEvent(
+    database: String,
+    name /* of table */ : String,
+    partSpecs: Seq[TablePartitionSpec],
+    newPartSpecs: Seq[TablePartitionSpec])
+  extends PartitionsEvent
+
+/**
+ * Event fired after some partitions (of a table) have been renamed.
+ */
+case class RenamePartitionsEvent(
+    database: String,
+    name /* of table */ : String,
+    partSpecs: Seq[TablePartitionSpec],
+    newPartSpecs: Seq[TablePartitionSpec])
+  extends PartitionsEvent
+
+/**
+ * Event fired before some partitions (of a table) are altered.
+ */
+case class AlterPartitionsPreEvent(
+    database: String,
+    name /* of table */ : String,
+    partSpecs: Seq[TablePartitionSpec])
+  extends PartitionsEvent
+
+/**
+ * Event fired after some partitions (of a table) have been altered.
+ */
+case class AlterPartitionsEvent(
+    database: String,
+    name /* of table */ : String,
+    partSpecs: Seq[TablePartitionSpec])
+  extends PartitionsEvent

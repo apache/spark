@@ -21,7 +21,6 @@ import os
 import platform
 import unittest
 from decimal import Decimal
-import numpy as np
 import pandas as pd
 
 from pyspark.sql import Row
@@ -74,10 +73,10 @@ if have_numpy:
 class UDFReturnTypeTests(ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
-        super(UDFReturnTypeTests, cls).setUpClass()
+        super().setUpClass()
 
     def setUp(self):
-        super(UDFReturnTypeTests, self).setUp()
+        super().setUp()
         self.test_data = [
             None,
             True,

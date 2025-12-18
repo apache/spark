@@ -26,7 +26,6 @@ class GeometryTypeParityTest(GeometryTypeTestMixin, ReusedConnectTestCase):
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.sql.tests.connect.test_parity_geometrytype import *  # noqa: F401
 
     try:

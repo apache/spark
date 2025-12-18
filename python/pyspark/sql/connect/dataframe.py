@@ -19,7 +19,6 @@
 from pyspark.errors.exceptions.base import (
     SessionNotSameException,
     PySparkIndexError,
-    PySparkAttributeError,
 )
 from pyspark.resource import ResourceProfile
 from pyspark.sql.connect.logging import logger
@@ -1846,8 +1845,11 @@ class DataFrame(ParentDataFrame):
         return table.cast(schema)
 
     def toPandas(self) -> "PandasDataFrameLike":
+        return self._to_pandas()
+
+    def _to_pandas(self, **kwargs: Any) -> "PandasDataFrameLike":
         query = self._plan.to_proto(self._session.client)
-        pdf, ei = self._session.client.to_pandas(query, self._plan.observations)
+        pdf, ei = self._session.client.to_pandas(query, self._plan.observations, **kwargs)
         self._execution_info = ei
         return pdf
 

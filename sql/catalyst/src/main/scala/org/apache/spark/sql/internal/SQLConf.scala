@@ -1606,7 +1606,7 @@ object SQLConf {
         "variant logical type.")
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PARQUET_IGNORE_VARIANT_ANNOTATION =
     buildConf("spark.sql.parquet.ignoreVariantAnnotation")
@@ -2561,6 +2561,15 @@ object SQLConf {
       .timeConf(TimeUnit.SECONDS)
       .createWithDefault(300L)
 
+  val STATE_STORE_MAINTENANCE_FORCE_SHUTDOWN_TIMEOUT =
+    buildConf("spark.sql.streaming.stateStore.maintenanceForceShutdownTimeout")
+      .internal()
+      .doc("Timeout in seconds to wait for tasks to respond to cancellation after " +
+        "force shutdown is initiated. This applies after the graceful shutdown timeout " +
+        "has been exceeded.")
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefault(60L)
+
   val STATE_STORE_MAINTENANCE_PROCESSING_TIMEOUT =
     buildConf("spark.sql.streaming.stateStore.maintenanceProcessingTimeout")
       .internal()
@@ -2856,6 +2865,15 @@ object SQLConf {
       .doc("The version of the approach of doing state store checkpoint")
       .version("4.0.0")
       .intConf
+      .createWithDefault(1)
+
+  val STREAMING_OFFSET_LOG_FORMAT_VERSION =
+    buildConf("spark.sql.streaming.offsetLog.formatVersion")
+      .internal()
+      .doc("The version of the offset log format. The default value is 1.")
+      .version("4.2.0")
+      .intConf
+      .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
       .createWithDefault(1)
 
   val STREAMING_MAX_NUM_STATE_SCHEMA_FILES =
@@ -3830,6 +3848,14 @@ object SQLConf {
       .version("4.1.0")
       .fallbackConf(SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED)
 
+  val THRIFTSERVER_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED =
+    buildConf("spark.sql.thriftserver.shuffleDependency.fileCleanup.enabled")
+      .doc("When enabled, shuffle files will be cleaned up at the end of Thrift server " +
+        "SQL executions.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(Utils.isTesting)
+
   val SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
     buildConf("spark.sql.sortMergeJoinExec.buffer.in.memory.threshold")
       .internal()
@@ -3917,7 +3943,7 @@ object SQLConf {
       .doc("(Deprecated since Spark 3.0, please set 'spark.sql.execution.arrow.pyspark.enabled'.)")
       .version("2.3.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val ARROW_PYSPARK_EXECUTION_ENABLED =
     buildConf("spark.sql.execution.arrow.pyspark.enabled")
@@ -4263,7 +4289,7 @@ object SQLConf {
         "can only be enabled when the given function takes at least one argument.")
       .version("3.4.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PYTHON_UDF_ARROW_CONCURRENCY_LEVEL =
     buildConf("spark.sql.execution.pythonUDF.arrow.concurrency.level")
@@ -4299,7 +4325,7 @@ object SQLConf {
       .doc("Enable Arrow optimization for Python UDTFs.")
       .version("3.5.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PYTHON_TABLE_UDF_LEGACY_PANDAS_CONVERSION_ENABLED =
     buildConf("spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled")
@@ -5396,6 +5422,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val LEGACY_CTE_DUPLICATE_ATTRIBUTE_NAMES =
+    buildConf("spark.sql.legacy.cteDuplicateAttributeNames")
+      .internal()
+      .doc("When true, CTE references sometimes (e.g., self-joins) may incorrectly unify column" +
+        "names that differ only in casing (e.g., COLNAME and colname become the same). This is" +
+        "the legacy behavior. When false, column name casing is preserved correctly.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_TIME_PARSER_POLICY = buildConf(SqlApiConfHelper.LEGACY_TIME_PARSER_POLICY_KEY)
     .internal()
     .doc("When LEGACY, java.text.SimpleDateFormat is used for formatting and parsing " +
@@ -5618,7 +5654,7 @@ object SQLConf {
         "requested fields.")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val VARIANT_WRITE_SHREDDING_ENABLED =
     buildConf("spark.sql.variant.writeShredding.enabled")
@@ -5626,7 +5662,7 @@ object SQLConf {
       .doc("When true, the Parquet writer is allowed to write shredded variant. ")
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST =
     buildConf("spark.sql.variant.forceShreddingSchemaForTest")
@@ -5659,7 +5695,7 @@ object SQLConf {
       .doc("Infer shredding schema when writing Variant columns in Parquet tables.")
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val LEGACY_CSV_ENABLE_DATE_TIME_PARSING_FALLBACK =
     buildConf("spark.sql.legacy.csv.enableDateTimeParsingFallback")
@@ -6682,7 +6718,7 @@ object SQLConf {
       .createWithDefault(false)
 
   val LEGACY_XML_PARSER_ENABLED = {
-    buildConf("spark.sql.xml.legacyXMLParser.enabled")
+    buildConf("spark.sql.legacy.useLegacyXMLParser")
       .internal()
       .doc(
         "When set to true, use the legacy XML parser for parsing XML files. " +
@@ -6704,13 +6740,21 @@ object SQLConf {
       .createWithDefault(true)
 
   val MERGE_INTO_NESTED_TYPE_COERCION_ENABLED =
-    buildConf("spark.sql.merge.nested.type.coercion.enabled")
+    buildConf("spark.sql.mergeNestedTypeCoercion.enabled")
       .internal()
       .doc("If enabled, allow MERGE INTO to coerce source nested types if they have less" +
-        "nested fields than the target table's nested types.")
+        "nested fields than the target table's nested types. This is experimental and" +
+        "the semantics may change.")
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
+
+  val TIME_TYPE_ENABLED =
+    buildConf("spark.sql.timeType.enabled")
+      .doc("When true, the TIME data type is supported.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(Utils.isTesting)
 
   /**
    * Holds information about keys that have been deprecated.
@@ -6920,6 +6964,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def stateStoreMaintenanceShutdownTimeout: Long = getConf(STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT)
 
+  def stateStoreMaintenanceForceShutdownTimeout: Long =
+    getConf(STATE_STORE_MAINTENANCE_FORCE_SHUTDOWN_TIMEOUT)
+
   def stateStoreMaintenanceProcessingTimeout: Long =
     getConf(STATE_STORE_MAINTENANCE_PROCESSING_TIMEOUT)
 
@@ -7118,6 +7165,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def stateStoreCompressionCodec: String = getConf(STATE_STORE_COMPRESSION_CODEC)
 
   def stateStoreCheckpointFormatVersion: Int = getConf(STATE_STORE_CHECKPOINT_FORMAT_VERSION)
+
+  def streamingOffsetLogFormatVersion: Int = getConf(STREAMING_OFFSET_LOG_FORMAT_VERSION)
 
   def stateStoreEncodingFormat: String = getConf(STREAMING_STATE_STORE_ENCODING_FORMAT)
 
@@ -7915,6 +7964,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def coerceMergeNestedTypes: Boolean =
     getConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED)
+
+  def isTimeTypeEnabled: Boolean = getConf(SQLConf.TIME_TYPE_ENABLED)
 
   /** ********************** SQLConf functionality methods ************ */
 

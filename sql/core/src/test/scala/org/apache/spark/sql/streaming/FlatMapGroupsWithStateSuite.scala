@@ -20,7 +20,9 @@ package org.apache.spark.sql.streaming
 import java.io.File
 import java.nio.ByteOrder
 import java.sql.Timestamp
+import java.util.UUID
 
+import org.apache.hadoop.conf.Configuration
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.api.java.function.FlatMapGroupsWithStateFunction
@@ -32,14 +34,17 @@ import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.RDDScanExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorsUtils
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatePartitionKeyExtractorFactory
 import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.{FlatMapGroupsWithStateExec, FlatMapGroupsWithStateExecHelper, FlatMapGroupsWithStateUserFuncException}
 import org.apache.spark.sql.execution.streaming.runtime._
-import org.apache.spark.sql.execution.streaming.state.{MemoryStateStore, RocksDBStateStoreProvider, StateStore}
+import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
-import org.apache.spark.sql.types.{DataType, IntegerType}
+import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType, StructType}
 import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 /** Class to check custom state types */
@@ -1212,6 +1217,142 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
             SQLConf.STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED.key -> "false") {
           func
         }
+      }
+    }
+  }
+
+  testWithAllStateVersions("Partition key extraction - FlatMapGroupsWithState without timeout") {
+    testPartitionKeyExtraction(timeoutEnabled = false)
+  }
+
+  testWithAllStateVersions("Partition key extraction - FlatMapGroupsWithState with timeout") {
+    testPartitionKeyExtraction(timeoutEnabled = true)
+  }
+
+  private def testPartitionKeyExtraction(timeoutEnabled: Boolean): Unit = {
+    withTempDir { checkpointDir =>
+      // 1 partition to make verification easier
+      val conf = Map(SQLConf.SHUFFLE_PARTITIONS.key -> "1")
+
+      val timeoutConf = if (timeoutEnabled) ProcessingTimeTimeout else NoTimeout
+
+      // Function to maintain running count
+      val stateFunc = (key: String, values: Iterator[String], state: GroupState[RunningCount]) => {
+        val count = state.getOption.map(_.count).getOrElse(0L) + values.size
+        state.update(RunningCount(count))
+        if (timeoutEnabled) {
+          state.setTimeoutDuration("3 seconds")
+        }
+        Iterator((key, count.toString))
+      }
+
+      val inputStream = MemoryStream[String]
+      val result = inputStream.toDS()
+        .groupByKey(x => x)
+        .flatMapGroupsWithState(Update, timeoutConf)(stateFunc)
+
+      val inputData = Seq("a", "b", "c")
+
+      // Run streaming query to populate state
+      // ProcessingTimeTimeout requires a manual clock and trigger to work properly
+      if (timeoutEnabled) {
+        val clock = new StreamManualClock
+        testStream(result, Update)(
+          StartStream(
+            Trigger.ProcessingTime("1 second"),
+            triggerClock = clock,
+            checkpointLocation = checkpointDir.getAbsolutePath,
+            additionalConfs = conf),
+          AddData(inputStream, inputData: _*),
+          AdvanceManualClock(1 * 1000),
+          // CheckNewAnswer waits for the batch to complete and commit state
+          CheckNewAnswer(("a", "1"), ("b", "1"), ("c", "1")),
+          StopStream
+        )
+      } else {
+        testStream(result, Update)(
+          StartStream(checkpointLocation = checkpointDir.getAbsolutePath, additionalConfs = conf),
+          AddData(inputStream, inputData: _*),
+          ProcessAllAvailable(),
+          StopStream
+        )
+      }
+
+      // Now access the state store to verify partition key extraction
+      val storeConf = new StateStoreConf(spark.sessionState.conf)
+      val storeId = StateStoreId(checkpointDir.getAbsolutePath + "/state", 0, 0)
+      val storeProviderId = StateStoreProviderId(storeId, UUID.randomUUID())
+
+      // The key schema for flatMapGroupsWithState is the grouping key (String)
+      val keySchema = new StructType().add("value", StringType)
+
+      // Value schema differs between state format versions
+      // V1: flat structure with state fields + timestamp (IntegerType)
+      // V2: nested struct for state + timestamp (LongType)
+      val stateFormatVersion = sqlConf.getConf(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION)
+      val valueSchema = stateFormatVersion match {
+        case 1 =>
+          // V1: UnsafeRow[ col1 | col2 | ... | timestamp (IntegerType) ]
+          var schema = new StructType().add("count", LongType)
+          if (timeoutEnabled) schema = schema.add("timeoutTimestamp", IntegerType)
+          schema
+        case 2 =>
+          // V2: UnsafeRow[ groupState (nested struct) | timestamp (LongType) ]
+          var schema = new StructType()
+            .add("groupState", new StructType().add("count", LongType), nullable = true)
+          if (timeoutEnabled) schema = schema.add("timeoutTimestamp", LongType)
+          schema
+        case _ =>
+          throw new IllegalArgumentException(s"Unknown state format version: $stateFormatVersion")
+      }
+
+      val keyProjection = UnsafeProjection.create(keySchema)
+      def createExpectedKeyRow(key: String) = {
+        val row = new GenericInternalRow(Array[Any](UTF8String.fromString(key)))
+        keyProjection.apply(row).copy()
+      }
+
+      val store = StateStore.getReadOnly(
+        storeProviderId,
+        keySchema,
+        valueSchema,
+        NoPrefixKeyStateEncoderSpec(keySchema),
+        version = 1,
+        stateStoreCkptId = None,
+        stateSchemaBroadcast = None,
+        useColumnFamilies = false,
+        storeConf,
+        new Configuration
+      )
+
+      try {
+        val extractor = StatePartitionKeyExtractorFactory.create(
+          StatefulOperatorsUtils.FLAT_MAP_GROUPS_WITH_STATE_EXEC_OP_NAME,
+          keySchema
+        )
+
+        // Verify partition key schema matches the key schema
+        assert(extractor.partitionKeySchema === keySchema,
+          "Partition key schema should match the grouping key schema")
+
+        // Get all state keys written by the query
+        val stateKeys = store.iterator().map(_.key.copy()).toList
+        assert(stateKeys.length === inputData.length,
+          s"Should have ${inputData.length} unique keys, found ${stateKeys.length}")
+
+        // Extract partition keys
+        val partitionKeys = stateKeys.map(extractor.partitionKey(_).copy())
+        // Verify each partition key equals its corresponding state key
+        assert(partitionKeys === stateKeys,
+          "Partition keys should match state keys")
+
+        // Expected keys
+        inputData.foreach { key =>
+          val keyRow = createExpectedKeyRow(key)
+          assert(partitionKeys.count(_ === keyRow) == 1, s"Should have 1 partition key for $key")
+        }
+      } finally {
+        store.abort()
       }
     }
   }

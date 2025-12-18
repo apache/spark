@@ -65,6 +65,7 @@ if typing.TYPE_CHECKING:
         ArrowGroupedMapIterUDFType,
         ArrowCogroupedMapUDFType,
         PandasGroupedMapIterUDFType,
+        PandasGroupedAggIterUDFType,
         PandasGroupedMapUDFTransformWithStateType,
         PandasGroupedMapUDFTransformWithStateInitStateType,
         GroupedMapUDFTransformWithStateType,
@@ -72,6 +73,7 @@ if typing.TYPE_CHECKING:
         ArrowScalarUDFType,
         ArrowScalarIterUDFType,
         ArrowGroupedAggUDFType,
+        ArrowGroupedAggIterUDFType,
         ArrowWindowAggUDFType,
     )
     from pyspark.sql._typing import (
@@ -563,9 +565,7 @@ class InheritableThread(threading.Thread):
                 thread_local.tags = self._tags  # type: ignore[has-type]
                 return target(*a, **k)
 
-            super(InheritableThread, self).__init__(
-                target=copy_local_properties, *args, **kwargs  # type: ignore[misc]
-            )
+            super().__init__(target=copy_local_properties, *args, **kwargs)  # type: ignore[misc]
         else:
             # Non Spark Connect
             from pyspark import SparkContext
@@ -584,13 +584,11 @@ class InheritableThread(threading.Thread):
                     SparkContext._active_spark_context._jsc.sc().setLocalProperties(self._props)
                     return target(*a, **k)
 
-                super(InheritableThread, self).__init__(
+                super().__init__(
                     target=copy_local_properties, *args, **kwargs  # type: ignore[misc]
                 )
             else:
-                super(InheritableThread, self).__init__(
-                    target=target, *args, **kwargs  # type: ignore[misc]
-                )
+                super().__init__(target=target, *args, **kwargs)  # type: ignore[misc]
 
     def start(self) -> None:
         from pyspark.sql import is_remote
@@ -618,7 +616,7 @@ class InheritableThread(threading.Thread):
                 if self._session is not None:
                     self._tags = self._session.getTags()
 
-        return super(InheritableThread, self).start()
+        return super().start()
 
 
 class PythonEvalType:
@@ -656,12 +654,14 @@ class PythonEvalType:
     )
     SQL_GROUPED_MAP_ARROW_ITER_UDF: "ArrowGroupedMapIterUDFType" = 215
     SQL_GROUPED_MAP_PANDAS_ITER_UDF: "PandasGroupedMapIterUDFType" = 216
+    SQL_GROUPED_AGG_PANDAS_ITER_UDF: "PandasGroupedAggIterUDFType" = 217
 
     # Arrow UDFs
     SQL_SCALAR_ARROW_UDF: "ArrowScalarUDFType" = 250
     SQL_SCALAR_ARROW_ITER_UDF: "ArrowScalarIterUDFType" = 251
     SQL_GROUPED_AGG_ARROW_UDF: "ArrowGroupedAggUDFType" = 252
     SQL_WINDOW_AGG_ARROW_UDF: "ArrowWindowAggUDFType" = 253
+    SQL_GROUPED_AGG_ARROW_ITER_UDF: "ArrowGroupedAggIterUDFType" = 254
 
     SQL_TABLE_UDF: "SQLTableUDFType" = 300
     SQL_ARROW_TABLE_UDF: "SQLArrowTableUDFType" = 301
@@ -724,7 +724,7 @@ def _local_iterator_from_socket(sock_info: "JavaArray", serializer: "Serializer"
         def __init__(self, _sock_info: "JavaArray", _serializer: "Serializer"):
             port: int
             auth_secret: str
-            jsocket_auth_server: "JavaObject"
+            self.jsocket_auth_server: "JavaObject"
             port, auth_secret, self.jsocket_auth_server = _sock_info
             self._sockfile, self._sock = _create_local_socket((port, auth_secret))
             self._serializer = _serializer
