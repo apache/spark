@@ -271,6 +271,175 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  // Case 1: Multiple filters that don't reference any projection aliases - all should be pushed
+  test("SPARK-47672: Case 1 - multiple filters not referencing projection aliases") {
+    val originalQuery = testStringRelation
+      .select($"a" as "c", $"e".rlike("magic") as "f", $"b" as "d")
+      .where($"c" > 5 && $"d" < 10)
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // Both filters on c and d should be pushed down since they just reference
+    // simple aliases (c->a, d->b) which are inexpensive
+    val correctAnswer = testStringRelation
+      .where($"a" > 5 && $"b" < 10)
+      .select($"a" as "c", $"e".rlike("magic") as "f", $"b" as "d")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  // Case 2: Multiple filters with inexpensive references - all should be pushed
+  test("SPARK-47672: Case 2 - multiple filters with inexpensive alias references") {
+    val originalQuery = testStringRelation
+      .select($"a" + $"b" as "sum", $"a" - $"b" as "diff", $"e".rlike("magic") as "f")
+      .where($"sum" > 10 && $"diff" < 5)
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // Both sum and diff are inexpensive (arithmetic), so both filters should be pushed
+    val correctAnswer = testStringRelation
+      .where($"a" + $"b" > 10 && $"a" - $"b" < 5)
+      .select($"a" + $"b" as "sum", $"a" - $"b" as "diff", $"e".rlike("magic") as "f")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  // Case 3A: Multiple expensive filters referencing the SAME aliases - can't split further
+  test("SPARK-47672: Case 3A - multiple expensive filters referencing same single alias") {
+    val originalQuery = testStringRelation
+      .select($"e".rlike("magic") as "f")
+      .where($"f" && $"f")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // Since both filters reference the same expensive alias 'f' which is all that's projected,
+    // we can't split. The filter stays above the projection.
+    val correctAnswer = testStringRelation
+      .select($"e".rlike("magic") as "f")
+      .where($"f" && $"f")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  // Case 3A: Multiple expensive filters referencing multiple of the same aliases
+  test("SPARK-47672: Case 3A - multiple expensive filters same aliases, multiple aliases") {
+    val originalQuery = testStringRelation
+      .select($"e".rlike("magic") as "f", $"e".rlike("other") as "g")
+      .where($"f" && $"g")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // Both f and g are expensive and together they reference everything in the projection
+    // so we can't split. Filter stays above.
+    val correctAnswer = testStringRelation
+      .select($"e".rlike("magic") as "f", $"e".rlike("other") as "g")
+      .where($"f" && $"g")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  // Case 3B: Multiple expensive filters referencing DIFFERENT aliases - can split
+  test("SPARK-47672: Case 3B - multiple expensive filters referencing different aliases") {
+    val originalQuery = testStringRelation
+      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("other") as "g", $"b")
+      .where($"f" && $"g")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // Each expensive filter references a different alias, and neither references
+    // the entire projection, so we can split into multiple projection layers
+    val correctAnswer = testStringRelation
+      .select($"a", $"b", $"e", $"e".rlike("magic") as "f")
+      .where($"f")
+      .select($"a", $"f", $"b", $"e".rlike("other") as "g")
+      .where($"g")
+      .select($"a", $"f", $"g", $"b")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  // Case 3B: Three expensive filters, each referencing a different alias
+  test("SPARK-47672: Case 3B - three expensive filters, different aliases each") {
+    // Add attrF for this test
+    val testRelationWith3Strings = LocalRelation($"a".int, $"e".string, $"h".string, $"i".string)
+
+    val originalQuery = testRelationWith3Strings
+      .select(
+        $"a",
+        $"e".rlike("magic") as "f",
+        $"h".rlike("foo") as "g",
+        $"i".rlike("bar") as "j")
+      .where($"f" && $"g" && $"j")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // We should see three layers of projection/filter for each expensive predicate
+    val correctAnswer = testRelationWith3Strings
+      .select($"a", $"e", $"h", $"i", $"e".rlike("magic") as "f")
+      .where($"f")
+      .select($"a", $"f", $"h", $"i", $"h".rlike("foo") as "g")
+      .where($"g")
+      .select($"a", $"f", $"g", $"i", $"i".rlike("bar") as "j")
+      .where($"j")
+      .select($"a", $"f", $"g", $"j")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  // Combined: Case 1 + Case 2 + Case 3 together
+  test("SPARK-47672: Combined - Case 1 + 2 + 3B filters together") {
+    val originalQuery = testStringRelation
+      .select($"a", $"a" + $"b" as "sum", $"e".rlike("magic") as "f", $"b")
+      .where($"a" > 5 && $"sum" > 10 && $"f")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // Case 1 (a > 5): pushed down directly
+    // Case 2 (sum > 10): pushed with alias substitution (inexpensive)
+    // Case 3B (f): expensive, split projection
+    val correctAnswer = testStringRelation
+      .where($"a" > 5 && $"a" + $"b" > 10)
+      .select($"a", $"b", $"e", $"e".rlike("magic") as "f")
+      .where($"f")
+      .select($"a", $"a" + $"b" as "sum", $"f", $"b")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  // Combined: Multiple Case 1 + Multiple Case 3A
+  test("SPARK-47672: Combined - multiple Case 1 with Case 3A") {
+    val originalQuery = testStringRelation
+      .select($"e".rlike("magic") as "f", $"a" as "c", $"b" as "d")
+      .where($"c" > 5 && $"d" < 10 && $"f")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // c > 5 and d < 10 are Case 1 (simple aliases, pushed)
+    // f is Case 3A (expensive, but can split since c and d are also in projection)
+    val correctAnswer = testStringRelation
+      .where($"a" > 5 && $"b" < 10)
+      .select($"a" as "c", $"b" as "d", $"e", $"e".rlike("magic") as "f")
+      .where($"f")
+      .select($"f", $"c", $"d")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
 
   test("nondeterministic: can always push down filter through project with deterministic field") {
     val originalQuery = testRelation
