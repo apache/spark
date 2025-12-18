@@ -542,6 +542,32 @@ class GroupedAggPandasUDFTestsMixin:
             expected = [1, 5]
             self.assertEqual(actual, expected)
 
+    def test_register_grouped_agg_iter_udf(self):
+        """Test registering a grouped aggregate iterator UDF for SQL usage."""
+
+        @pandas_udf("integer")
+        def sum_iter_udf(it: Iterator[pd.Series]) -> int:
+            total = 0
+            for series in it:
+                total += series.sum()
+            return total
+
+        self.assertEqual(sum_iter_udf.evalType, PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF)
+
+        with self.temp_func("sum_iter_udf"):
+            registered_udf = self.spark.udf.register("sum_iter_udf", sum_iter_udf)
+            self.assertEqual(
+                registered_udf.evalType, PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF
+            )
+
+            q = """
+                SELECT sum_iter_udf(v1)
+                FROM VALUES (3, 0), (2, 0), (1, 1) tbl(v1, v2) GROUP BY v2
+                """
+            actual = sorted(map(lambda r: r[0], self.spark.sql(q).collect()))
+            expected = [1, 5]
+            self.assertEqual(actual, expected)
+
     def test_grouped_with_empty_partition(self):
         data = [Row(id=1, x=2), Row(id=1, x=3), Row(id=2, x=4)]
         expected = [Row(id=1, sum=5), Row(id=2, x=4)]
