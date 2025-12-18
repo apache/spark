@@ -264,6 +264,14 @@ class _InMemoryStatefulProcessorHandle(StatefulProcessorHandle):
             )
 
 
+def _as_row_list(x: Any) -> list[Row]:
+    return cast(list[Row], x)
+
+
+def _as_df_list(x: Any) -> list[pd.DataFrame]:
+    return cast(list[pd.DataFrame], x)
+
+
 class TwsTester:
     """
     Testing utility for transformWithState stateful processors.
@@ -372,7 +380,7 @@ class TwsTester:
         initialStatePandas: Optional[list[tuple[Any, pd.DataFrame]]] = None,
         timeMode: str = "None",
         realTimeMode: bool = False,
-        eventTimeColumnName: Optional[str] = None,
+        eventTimeColumnName: str = "",
         watermarkDelayMs: int = 0,
     ) -> None:
         self.processor = processor
@@ -387,7 +395,7 @@ class TwsTester:
         self._currentWatermarkMs: int = 0
 
         assert self._timeMode in ["none", "eventtime", "processingtime"]
-        if self._timeMode == "eventtime" and eventTimeColumnName is None:
+        if self._timeMode == "eventtime" and eventTimeColumnName == "":
             raise PySparkValueError(
                 errorClass="ARGUMENT_REQUIRED",
                 messageParameters={
@@ -436,15 +444,14 @@ class TwsTester:
     def _testInternal(self, key: Any, input: list[Row]) -> list[Row]:
         self.handle.setGroupingKey(key)
         filtered_input = self._filterLateEventsRow(input)
-        result_iter = cast(
-            Iterator[Row],
-            self.processor.handleInputRows((key,), iter(filtered_input), self._getTimerValues()),
+        result_iter = self.processor.handleInputRows(
+            (key,), iter(filtered_input), self._getTimerValues()
         )
-        result: list[Row] = list(result_iter)
+        result: list[Row] = _as_row_list(list(result_iter))
 
         if self._timeMode == "eventtime":
             self._updateWatermarkFromEventTimeRow(input)
-            result.extend(self._handleExpiredTimers())
+            result.extend(_as_row_list(self._handleExpiredTimers()))
 
         return result
 
@@ -485,15 +492,14 @@ class TwsTester:
         """Internal method that processes input DataFrame in a single batch."""
         self.handle.setGroupingKey(key)
         filtered_input = self._filterLateEventsPandas(input)
-        result_iter = cast(
-            Iterator[pd.DataFrame],
-            self.processor.handleInputRows((key,), iter([filtered_input]), self._getTimerValues()),
+        result_iter = self.processor.handleInputRows(
+            (key,), iter([filtered_input]), self._getTimerValues()
         )
-        result: list[pd.DataFrame] = list(result_iter)
+        result: list[pd.DataFrame] = _as_df_list(list(result_iter))
 
         if self._timeMode == "eventtime":
             self._updateWatermarkFromEventTimePandas(input)
-            result.extend(self._handleExpiredTimers())
+            result.append(cast(pd.DataFrame, self._handleExpiredTimers()))
 
         return result
 
@@ -555,8 +561,8 @@ class TwsTester:
         else:  # EventTime
             return TimerValues(self._currentProcessingTimeMs, self._currentWatermarkMs)
 
-    def _handleExpiredTimers(self) -> list[Row] | list[pd.DataFrame]:
-        """Handle expired timers and return output rows or DataFrames."""
+    def _handleExpiredTimers(self) -> list[Row] | pd.DataFrame:
+        """Handle expired timers and return emitted rows."""
         if self._timeMode == "none":
             return []
 
@@ -580,7 +586,10 @@ class TwsTester:
                 result.extend(list(output_iter))
                 self.handle._timers.deleteTimer(key, timer_expiry_ms)
 
-        return result
+        if len(result) > 0 and isinstance(result[0], pd.DataFrame):
+            return pd.concat(_as_df_list(result), ignore_index=True)
+        else:
+            return _as_row_list(result)
 
     def _getEventTimeMs(self, row: Row) -> int:
         """Extract event time in milliseconds from a Row."""
@@ -620,24 +629,13 @@ class TwsTester:
             self._currentWatermarkMs, max_event_time - self._watermarkDelayMs
         )
 
-    def advanceProcessingTime(self, durationMs: int) -> list[Row]:
-        """
-        Advances the simulated processing time and fires all expired timers.
+    def advanceProcessingTime(self, durationMs: int) -> list[Row] | pd.DataFrame:
+        """Advances the simulated processing time and fires all expired timers.
 
         Call this after `test()` to simulate time passage and trigger any timers registered
         with `registerTimer()`. Timers with expiry time <= current processing time will fire,
         invoking `handleExpiredTimer` for each. This mirrors Spark's behavior where timers
         are processed after input data within a microbatch.
-
-        Parameters
-        ----------
-        durationMs : int
-            The amount of time to advance in milliseconds
-
-        Returns
-        -------
-        list of Row
-            Output rows emitted by `handleExpiredTimer` for all fired timers
         """
         if self._timeMode != "processingtime":
             raise PySparkValueError(
@@ -649,50 +647,8 @@ class TwsTester:
         self._currentProcessingTimeMs += durationMs
         return self._handleExpiredTimers()
 
-    def advanceProcessingTimeInPandas(self, durationMs: int) -> pd.DataFrame:
-        """
-        Advances the simulated processing time and fires all expired timers (Pandas mode).
-
-        Parameters
-        ----------
-        durationMs : int
-            The amount of time to advance in milliseconds
-
-        Returns
-        -------
-        pd.DataFrame
-            Output data emitted by `handleExpiredTimer` for all fired timers
-        """
-        if self._timeMode != "processingtime":
-            raise PySparkValueError(
-                errorClass="UNSUPPORTED_OPERATION",
-                messageParameters={
-                    "operation": "advanceProcessingTime with TimeMode other than ProcessingTime"
-                },
-            )
-        self._currentProcessingTimeMs += durationMs
-        result_dfs = self._handleExpiredTimers()
-        if result_dfs:
-            return pd.concat(result_dfs, ignore_index=True)
-        return pd.DataFrame()
-
-    def advanceWatermark(self, durationMs: int) -> list[Row]:
-        """
-        Advances the watermark and fires all expired event-time timers.
-
-        Use this in EventTime mode to manually advance the watermark beyond what the
-        event times in the data would produce. Timers with expiry time <= new watermark will fire.
-
-        Parameters
-        ----------
-        durationMs : int
-            The amount of time to advance the watermark in milliseconds
-
-        Returns
-        -------
-        list of Row
-            Output rows emitted by `handleExpiredTimer` for all fired timers
-        """
+    def advanceWatermark(self, durationMs: int) -> list[Row] | pd.DataFrame:
+        """Advances the watermark and fires all expired event-time timers."""
         if self._timeMode != "eventtime":
             raise PySparkValueError(
                 errorClass="UNSUPPORTED_OPERATION",
@@ -702,30 +658,3 @@ class TwsTester:
             )
         self._currentWatermarkMs += durationMs
         return self._handleExpiredTimers()
-
-    def advanceWatermarkInPandas(self, durationMs: int) -> pd.DataFrame:
-        """
-        Advances the watermark and fires all expired event-time timers (Pandas mode).
-
-        Parameters
-        ----------
-        durationMs : int
-            The amount of time to advance the watermark in milliseconds
-
-        Returns
-        -------
-        pd.DataFrame
-            Output data emitted by `handleExpiredTimer` for all fired timers
-        """
-        if self._timeMode != "eventtime":
-            raise PySparkValueError(
-                errorClass="UNSUPPORTED_OPERATION",
-                messageParameters={
-                    "operation": "advanceWatermark with TimeMode other than EventTime"
-                },
-            )
-        self._currentWatermarkMs += durationMs
-        result_dfs = self._handleExpiredTimers()
-        if result_dfs:
-            return pd.concat(result_dfs, ignore_index=True)
-        return pd.DataFrame()

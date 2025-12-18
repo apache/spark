@@ -856,11 +856,11 @@ class TwsTesterTests(ReusedSQLTestCase):
         pdt.assert_frame_equal(result1, expected1, check_like=True)
 
         # Advance time by 5 seconds - timer should NOT fire yet
-        expired1 = tester.advanceProcessingTimeInPandas(5000)
+        expired1 = tester.advanceProcessingTime(5000)
         self.assertEqual(len(expired1), 0)
 
         # Advance time by 6 seconds (total t=11000) - timer should fire
-        expired2 = tester.advanceProcessingTimeInPandas(6000)
+        expired2 = tester.advanceProcessingTime(6000)
         expected2 = pd.DataFrame({"key": ["key1"], "result": ["session-expired"]})
         pdt.assert_frame_equal(expired2, expected2, check_like=True)
 
