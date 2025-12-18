@@ -918,11 +918,24 @@ class AdaptiveQueryExecSuite
   }
 
   test("SPARK-47148: AQE should avoid to submit shuffle job on cancellation") {
+    // Recursively collect all exception messages from an exception chain.
+    // This traverses causes and suppressed exceptions to find nested errors.
+    def getAllExceptionMessages(e: Throwable, depth: Int = 0): List[String] = {
+      if (e == null || depth > 10) return Nil
+      val currentMsg = Option(e.getMessage).toList
+      val fromCause = getAllExceptionMessages(e.getCause, depth + 1)
+      val fromSuppressed = e.getSuppressed.toList.flatMap { s =>
+        getAllExceptionMessages(s, depth + 1)
+      }
+      currentMsg ::: fromCause ::: fromSuppressed
+    }
+
     def createJoinedDF(): DataFrame = {
-      // Use subquery expression containing `slow_udf` to delay the submission of shuffle jobs.
+      // Use subquery expression containing `slow_udf` to delay shuffle job submission.
       val df = sql("SELECT id, (SELECT slow_udf() FROM range(2)) FROM range(5)")
       val df2 = sql("SELECT id FROM range(10)").coalesce(2)
-      val df3 = sql("SELECT id, (SELECT slow_udf() FROM range(2)) FROM range(15) WHERE id > 2")
+      val df3 = sql(
+        "SELECT id, (SELECT slow_udf() FROM range(2)) FROM range(15) WHERE id > 2")
       df.join(df2, Seq("id")).join(df3, Seq("id"))
     }
 
@@ -942,14 +955,15 @@ class AdaptiveQueryExecSuite
           val error = intercept[SparkException] {
             joined.collect()
           }
-          val errMsgList = (error :: error.getCause :: error.getSuppressed.toList)
-            .filter(e => e != null && e.getMessage != null)
-            .map(_.getMessage)
 
-          assert(errMsgList.exists(_.contains("coalesce test error")),
+          // Use recursive traversal to find the error message at any depth.
+          // The "coalesce test error" may be wrapped in multiple exception layers
+          // depending on thread timing and AQE stage ordering.
+          val allErrMsgs = getAllExceptionMessages(error)
+          assert(allErrMsgs.exists(_.contains("coalesce test error")),
             s"""
                |The error message should contain 'coalesce test error', but got:
-               |${errMsgList.mkString("======\n", "\n", "\n======")}
+               |${allErrMsgs.mkString("======\n", "\n", "\n======")}
                |""".stripMargin)
           val adaptivePlan = joined.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
 
@@ -3479,14 +3493,15 @@ private object TestProblematicCoalesceStrategy extends Strategy {
       }
     }
     override def output: Seq[Attribute] = child.output
-    override protected def withNewChildInternal(newChild: SparkPlan): TestProblematicCoalesceExec =
+    override protected def withNewChildInternal(
+        newChild: SparkPlan): TestProblematicCoalesceExec =
       copy(child = newChild)
   }
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = {
     plan match {
       case org.apache.spark.sql.catalyst.plans.logical.Repartition(
-      numPartitions, false, child) =>
+          numPartitions, false, child) =>
         TestProblematicCoalesceExec(numPartitions, planLater(child)) :: Nil
       case _ => Nil
     }
