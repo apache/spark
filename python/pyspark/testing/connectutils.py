@@ -17,6 +17,9 @@
 import shutil
 import tempfile
 import os
+import sys
+import signal
+import faulthandler
 import functools
 import unittest
 import uuid
@@ -194,6 +197,8 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
         os.unlink(cls.tempdir.name)
         cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
         cls.df = cls.spark.createDataFrame(cls.testData)
+        faulthandler.enable(file=sys.__stderr__)
+        faulthandler.register(signal.SIGUSR1, file=sys.__stderr__, all_threads=True)
 
     @classmethod
     def tearDownClass(cls):

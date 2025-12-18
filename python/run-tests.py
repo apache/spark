@@ -234,6 +234,10 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
 
     env["PYSPARK_SUBMIT_ARGS"] = " ".join(spark_args)
 
+    timeout = int(os.environ.get("PYSPARK_TEST_TIMEOUT", 300))
+    if timeout == 0:
+        timeout = None
+
     output_prefix = get_valid_filename(pyspark_python + "__" + test_name + "__").lstrip("_")
     # Delete is always set to False since the cleanup will be either done by removing the
     # whole test dir, or the test output is retained.
@@ -255,6 +259,11 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
                 os.system("rm -rf " + tmp_dir)
             else:
                 shutil.rmtree(tmp_dir, ignore_errors=True)
+    except subprocess.TimeoutExpired:
+        import traceback
+
+        traceback.print_exc()
+        os._exit(1)
     except BaseException:
         LOGGER.exception("Got exception while running %s with %s", test_name, pyspark_python)
         # Here, we use os._exit() instead of sys.exit() in order to force Python to exit even if
