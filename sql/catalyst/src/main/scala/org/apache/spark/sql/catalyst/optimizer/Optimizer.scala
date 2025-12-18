@@ -2168,7 +2168,6 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
             if (used == aliasMap) {
               false
             } else {
-              // We should also check that we're not adding an alias that hides another alias.
               true
             }
         }
