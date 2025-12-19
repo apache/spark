@@ -235,11 +235,10 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
 
     env["PYSPARK_SUBMIT_ARGS"] = " ".join(spark_args)
 
-    timeout = int(os.environ.get("PYSPARK_TEST_TIMEOUT", 100))
-    if timeout == 0:
-        timeout = None
-    else:
-        env["PYSPARK_TEST_TIMEOUT"] = str(timeout)
+    timeout = os.environ.get("PYSPARK_TEST_TIMEOUT")
+    if timeout is not None:
+        env["PYSPARK_TEST_TIMEOUT"] = timeout
+        timeout = int(timeout)
 
     output_prefix = get_valid_filename(pyspark_python + "__" + test_name + "__").lstrip("_")
     # Delete is always set to False since the cleanup will be either done by removing the
@@ -265,10 +264,8 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
                 shutil.rmtree(tmp_dir, ignore_errors=True)
     except subprocess.TimeoutExpired:
         LOGGER.exception("Got TimeoutExpired while running %s with %s", test_name, pyspark_python)
-        proc.send_signal(signal.SIGUSR1)
-        time.sleep(1)
         proc.terminate()
-        outs, errs = proc.communicate()
+        proc.communicate()
     except BaseException:
         LOGGER.exception("Got exception while running %s with %s", test_name, pyspark_python)
         # Here, we use os._exit() instead of sys.exit() in order to force Python to exit even if

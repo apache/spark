@@ -566,6 +566,7 @@ jobs:
       SKIP_PACKAGING: true
       METASPACE_SIZE: 1g
       BRANCH: ${{ inputs.branch }}
+      PYSPARK_TEST_TIMEOUT: 100
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v4
