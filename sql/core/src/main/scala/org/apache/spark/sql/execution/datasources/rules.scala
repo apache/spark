@@ -677,6 +677,19 @@ case class QualifyLocationWithWarehouse(catalog: SessionCatalog) extends Rule[Lo
  * It does so by walking the resolved plan looking for View operators for persisted views.
  */
 object ViewSyncSchemaToMetaStore extends (LogicalPlan => Unit) {
+
+  /**
+   * Checks if comment changes between view and table should trigger schema sync.
+   * When preserveUserComments flag is enabled, comment differences should NOT trigger sync
+   * because we want to preserve user-set view comments.
+   */
+  private def shouldTriggerRedoOnCommentChange(
+      viewField: StructField,
+      tableField: StructField,
+      preserveUserComments: Boolean): Boolean = {
+    !preserveUserComments && viewField.getComment() != tableField.getComment()
+  }
+
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
       case View(metaData, false, viewQuery, _)
@@ -696,9 +709,10 @@ object ViewSyncSchemaToMetaStore extends (LogicalPlan => Unit) {
             field.nullable != planField.nullable ||
             (viewSchemaMode == SchemaEvolution && (
               field.name != planField.name ||
-                // Only trigger redo on comment changes if preserve flag is disabled.
-                (!session.sessionState.conf.viewSchemaEvolutionPreserveUserComments &&
-                  field.getComment() != planField.getComment()))))
+                shouldTriggerRedoOnCommentChange(
+                  field,
+                  planField,
+                  session.sessionState.conf.viewSchemaEvolutionPreserveUserComments))))
         }
 
         lazy val viewFieldsByName = viewFields.map(f => f.name -> f).toMap
