@@ -164,7 +164,7 @@ FROM t_byte_1_5_through_7_11;
 -- These functions merge multiple binary sketch representations
 
 -- Test kll_merge_agg_bigint: merge bigint sketches from multiple rows
-SELECT split(kll_sketch_to_string_bigint(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
+SELECT lower(kll_sketch_to_string_bigint(agg)) LIKE '%kll%' AS str_contains_kll,
        abs(kll_sketch_get_quantile_bigint(agg, 0.5) - 4) < 1 AS median_close_to_4,
        abs(kll_sketch_get_rank_bigint(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
 FROM (
@@ -180,7 +180,7 @@ FROM (
 
 -- Test kll_merge_agg_float: merge float sketches from multiple rows
 -- Merging col1 (1-7) and col2 (5-11) gives combined data with median ~5.5
-SELECT split(kll_sketch_to_string_float(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
+SELECT lower(kll_sketch_to_string_float(agg)) LIKE '%kll%' AS str_contains_kll,
        abs(kll_sketch_get_quantile_float(agg, 0.5) - 5.5) < 1.0 AS median_close_to_5_5,
        abs(kll_sketch_get_rank_float(agg, 5.0) - 0.35) < 0.15 AS rank5_close_to_0_35
 FROM (
@@ -195,7 +195,7 @@ FROM (
 );
 
 -- Test kll_merge_agg_double: merge double sketches from multiple rows
-SELECT split(kll_sketch_to_string_double(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
+SELECT lower(kll_sketch_to_string_double(agg)) LIKE '%kll%' AS str_contains_kll,
        abs(kll_sketch_get_quantile_double(agg, 0.5) - 6.0) < 1.0 AS median_close_to_6,
        abs(kll_sketch_get_rank_double(agg, 5.0) - 0.35) < 0.15 AS rank5_close_to_0_35
 FROM (

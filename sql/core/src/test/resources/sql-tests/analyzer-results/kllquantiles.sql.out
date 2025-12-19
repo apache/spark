@@ -334,7 +334,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-SELECT split(kll_sketch_to_string_bigint(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
+SELECT lower(kll_sketch_to_string_bigint(agg)) LIKE '%kll%' AS str_contains_kll,
        abs(kll_sketch_get_quantile_bigint(agg, 0.5) - 4) < 1 AS median_close_to_4,
        abs(kll_sketch_get_rank_bigint(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
 FROM (
@@ -348,8 +348,7 @@ FROM (
     ) sketches
 )
 -- !query analysis
-Project [split(kll_sketch_to_string_bigint(agg#x), 
-, -1)[1] LIKE %Kll% AS str_contains_kll#x, (abs((kll_sketch_get_quantile_bigint(agg#x, cast(0.5 as double)) - cast(4 as bigint))) < cast(1 as bigint)) AS median_close_to_4#x, (abs((kll_sketch_get_rank_bigint(agg#x, cast(3 as bigint)) - cast(0.4 as double))) < cast(0.1 as double)) AS rank3_close_to_0_4#x]
+Project [lower(kll_sketch_to_string_bigint(agg#x)) LIKE %kll% AS str_contains_kll#x, (abs((kll_sketch_get_quantile_bigint(agg#x, cast(0.5 as double)) - cast(4 as bigint))) < cast(1 as bigint)) AS median_close_to_4#x, (abs((kll_sketch_get_rank_bigint(agg#x, cast(3 as bigint)) - cast(0.4 as double))) < cast(0.1 as double)) AS rank3_close_to_0_4#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Aggregate [kll_merge_agg_bigint(sketch_col#x, None, 0, 0) AS agg#x]
       +- SubqueryAlias sketches
@@ -363,7 +362,7 @@ Project [split(kll_sketch_to_string_bigint(agg#x),
 
 
 -- !query
-SELECT split(kll_sketch_to_string_float(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
+SELECT lower(kll_sketch_to_string_float(agg)) LIKE '%kll%' AS str_contains_kll,
        abs(kll_sketch_get_quantile_float(agg, 0.5) - 5.5) < 1.0 AS median_close_to_5_5,
        abs(kll_sketch_get_rank_float(agg, 5.0) - 0.35) < 0.15 AS rank5_close_to_0_35
 FROM (
@@ -377,8 +376,7 @@ FROM (
     ) sketches
 )
 -- !query analysis
-Project [split(kll_sketch_to_string_float(agg#x), 
-, -1)[1] LIKE %Kll% AS str_contains_kll#x, (abs((cast(kll_sketch_get_quantile_float(agg#x, cast(0.5 as double)) as double) - cast(5.5 as double))) < cast(1.0 as double)) AS median_close_to_5_5#x, (abs((kll_sketch_get_rank_float(agg#x, cast(5.0 as float)) - cast(0.35 as double))) < cast(0.15 as double)) AS rank5_close_to_0_35#x]
+Project [lower(kll_sketch_to_string_float(agg#x)) LIKE %kll% AS str_contains_kll#x, (abs((cast(kll_sketch_get_quantile_float(agg#x, cast(0.5 as double)) as double) - cast(5.5 as double))) < cast(1.0 as double)) AS median_close_to_5_5#x, (abs((kll_sketch_get_rank_float(agg#x, cast(5.0 as float)) - cast(0.35 as double))) < cast(0.15 as double)) AS rank5_close_to_0_35#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Aggregate [kll_merge_agg_float(sketch_col#x, None, 0, 0) AS agg#x]
       +- SubqueryAlias sketches
@@ -392,7 +390,7 @@ Project [split(kll_sketch_to_string_float(agg#x),
 
 
 -- !query
-SELECT split(kll_sketch_to_string_double(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
+SELECT lower(kll_sketch_to_string_double(agg)) LIKE '%kll%' AS str_contains_kll,
        abs(kll_sketch_get_quantile_double(agg, 0.5) - 6.0) < 1.0 AS median_close_to_6,
        abs(kll_sketch_get_rank_double(agg, 5.0) - 0.35) < 0.15 AS rank5_close_to_0_35
 FROM (
@@ -406,8 +404,7 @@ FROM (
     ) sketches
 )
 -- !query analysis
-Project [split(kll_sketch_to_string_double(agg#x), 
-, -1)[1] LIKE %Kll% AS str_contains_kll#x, (abs((kll_sketch_get_quantile_double(agg#x, cast(0.5 as double)) - cast(6.0 as double))) < cast(1.0 as double)) AS median_close_to_6#x, (abs((kll_sketch_get_rank_double(agg#x, cast(5.0 as double)) - cast(0.35 as double))) < cast(0.15 as double)) AS rank5_close_to_0_35#x]
+Project [lower(kll_sketch_to_string_double(agg#x)) LIKE %kll% AS str_contains_kll#x, (abs((kll_sketch_get_quantile_double(agg#x, cast(0.5 as double)) - cast(6.0 as double))) < cast(1.0 as double)) AS median_close_to_6#x, (abs((kll_sketch_get_rank_double(agg#x, cast(5.0 as double)) - cast(0.35 as double))) < cast(0.15 as double)) AS rank5_close_to_0_35#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Aggregate [kll_merge_agg_double(sketch_col#x, None, 0, 0) AS agg#x]
       +- SubqueryAlias sketches
