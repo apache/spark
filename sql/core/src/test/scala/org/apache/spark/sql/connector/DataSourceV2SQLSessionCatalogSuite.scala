@@ -80,7 +80,7 @@ class DataSourceV2SQLSessionCatalogSuite
     }
   }
 
-  test("DelegatingCatalogExtension supports both V1 and V2 functions") {
+  test("SPARK-54760: DelegatingCatalogExtension supports both V1 and V2 functions") {
     sessionCatalog.createFunction(Identifier.of(Array("ns"), "strlen"), StrLen(StrLenDefault))
     checkAnswer(
       sql("SELECT char_length('Hello') as v1, ns.strlen('Spark') as v2"),

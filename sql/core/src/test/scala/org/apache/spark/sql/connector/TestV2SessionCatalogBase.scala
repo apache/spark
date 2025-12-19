@@ -23,7 +23,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, DelegatingCatalogExtension, Identifier, Table, TableCatalog}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
@@ -35,8 +34,7 @@ import org.apache.spark.sql.types.StructType
  * for testing DDL as well as write operations (through df.write.saveAsTable, df.write.insertInto
  * and SQL), also supports v2 function operations.
  */
-private[connector] trait TestV2SessionCatalogBase[T <: Table] extends DelegatingCatalogExtension
-  with Logging {
+private[connector] trait TestV2SessionCatalogBase[T <: Table] extends DelegatingCatalogExtension {
 
   protected val tables: java.util.Map[Identifier, T] = new ConcurrentHashMap[Identifier, T]()
   protected val functions: java.util.Map[Identifier, UnboundFunction] =
