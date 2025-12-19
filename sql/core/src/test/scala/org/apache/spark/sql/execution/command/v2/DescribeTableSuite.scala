@@ -242,10 +242,10 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
         // Skipped showing NORELY since it is the default value.
         var expectedConstraintsDdl = Array(
           "# Constraints,,",
-          "pk_table_pk,PRIMARY KEY (id) NOT ENFORCED,",
-          "fk_a,FOREIGN KEY (a) REFERENCES fk_table (id) NOT ENFORCED RELY,",
-          "uk_b,UNIQUE (b) NOT ENFORCED,",
-          "uk_a_c,UNIQUE (a, c) NOT ENFORCED,",
+          "pk_table_pk,PRIMARY KEY (`id`) NOT ENFORCED,",
+          "fk_a,FOREIGN KEY (`a`) REFERENCES fk_table (`id`) NOT ENFORCED RELY,",
+          "uk_b,UNIQUE (`b`) NOT ENFORCED,",
+          "uk_a_c,UNIQUE (`a`, `c`) NOT ENFORCED,",
           "c1,CHECK (c IS NOT NULL) ENFORCED,",
           "c2,CHECK (id > 0) ENFORCED,"
         )
