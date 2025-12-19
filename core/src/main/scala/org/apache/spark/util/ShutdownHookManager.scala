@@ -60,7 +60,7 @@ private[spark] object ShutdownHookManager extends Logging {
 
   // Add a shutdown hook to delete the temp dirs when the JVM exits
   logDebug("Adding shutdown hook") // force eager creation of logger
-  addShutdownHook(TEMP_DIR_SHUTDOWN_PRIORITY) { () =>
+  addShutdownHook(TEMP_DIR_SHUTDOWN_PRIORITY, "TmpDirCleaner") { () =>
     logDebug("Shutdown hook called")
     // we need to materialize the paths to delete because deleteRecursively removes items from
     // shutdownDeletePaths as we are traversing through it.
@@ -145,7 +145,11 @@ private[spark] object ShutdownHookManager extends Logging {
    * @return A handle that can be used to unregister the shutdown hook.
    */
   def addShutdownHook(hook: () => Unit): AnyRef = {
-    addShutdownHook(DEFAULT_SHUTDOWN_PRIORITY)(hook)
+    addShutdownHook(DEFAULT_SHUTDOWN_PRIORITY, hook.getClass.getSimpleName)(hook)
+  }
+
+  def addShutdownHook(name: String)(hook: () => Unit): AnyRef = {
+    addShutdownHook(DEFAULT_SHUTDOWN_PRIORITY, name)(hook)
   }
 
   /**
@@ -156,7 +160,11 @@ private[spark] object ShutdownHookManager extends Logging {
    * @return A handle that can be used to unregister the shutdown hook.
    */
   def addShutdownHook(priority: Int)(hook: () => Unit): AnyRef = {
-    shutdownHooks.add(priority, hook)
+    shutdownHooks.add(priority, hook.getClass.getSimpleName, hook)
+  }
+
+  def addShutdownHook(priority: Int, name: String)(hook: () => Unit): AnyRef = {
+    shutdownHooks.add(priority, name, hook)
   }
 
   /**
@@ -171,8 +179,7 @@ private[spark] object ShutdownHookManager extends Logging {
 
 }
 
-private [util] class SparkShutdownHookManager {
-
+private [util] class SparkShutdownHookManager extends Logging {
   private val hooks = new PriorityQueue[SparkShutdownHook]()
   @volatile private var shuttingDown = false
 
@@ -206,12 +213,12 @@ private [util] class SparkShutdownHookManager {
     }
   }
 
-  def add(priority: Int, hook: () => Unit): AnyRef = {
+  def add(priority: Int, name: String, hook: () => Unit): AnyRef = {
     hooks.synchronized {
       if (shuttingDown) {
         throw new IllegalStateException("Shutdown hooks cannot be modified during shutdown.")
       }
-      val hookRef = new SparkShutdownHook(priority, hook)
+      val hookRef = new SparkShutdownHook(priority, name, hook)
       hooks.add(hookRef)
       hookRef
     }
@@ -223,11 +230,16 @@ private [util] class SparkShutdownHookManager {
 
 }
 
-private class SparkShutdownHook(private val priority: Int, hook: () => Unit)
-  extends Comparable[SparkShutdownHook] {
+private class SparkShutdownHook(
+    private val priority: Int,
+    private val name: String,
+    hook: () => Unit)
+  extends Comparable[SparkShutdownHook] with Logging {
 
   override def compareTo(other: SparkShutdownHook): Int = other.priority.compareTo(priority)
 
-  def run(): Unit = hook()
-
+  def run(): Unit = {
+    hook()
+    logInfo(s"$name finished.")
+  }
 }

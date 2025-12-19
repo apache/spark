@@ -91,9 +91,9 @@ private[spark] class Executor(
   logInfo(log"Java version ${MDC(JAVA_VERSION, Utils.javaVersion)}")
 
   private val executorShutdown = new AtomicBoolean(false)
-  val stopHookReference = ShutdownHookManager.addShutdownHook(
+  val stopHookReference = ShutdownHookManager.addShutdownHook("ExecutorShutdownHook") {
     () => stop()
-  )
+  }
 
   private val EMPTY_BYTE_BUFFER = ByteBuffer.wrap(new Array[Byte](0))
 

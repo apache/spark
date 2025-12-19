@@ -136,7 +136,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     SessionState.setCurrentSessionState(sessionState)
 
     // Clean up after we exit
-    ShutdownHookManager.addShutdownHook { () =>
+    ShutdownHookManager.addShutdownHook("SparkSQLEnvShutdownHook") { () =>
       closeHiveSessionStateIfStarted(sessionState)
       SparkSQLEnv.stop(exitCode)
     }
@@ -225,7 +225,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     }
 
     // add shutdown hook to flush the history to history file
-    ShutdownHookManager.addShutdownHook { () =>
+    ShutdownHookManager.addShutdownHook("SparkSQLCLIReaderShutdownHook") { () =>
       reader.getHistory match {
         case h: FileHistory =>
           try {
