@@ -40,7 +40,8 @@ trait TableConstraintSuiteBase extends DDLCommandTestUtils {
     "FOREIGN KEY (id) REFERENCES t2(id)"
   )
 
-  gridTest("create table with constraint: should fail")(constraintTypes) { constraint =>
+  gridTest("SPARK-54761: create table with constraint - should fail")(constraintTypes)
+  { constraint =>
     withNamespaceAndTable("ns", "table_1") { t =>
       val createTableSql = s"CREATE TABLE $t (id INT, CONSTRAINT c1 $constraint) $defaultUsing"
       val error = intercept[AnalysisException] {
@@ -57,7 +58,7 @@ trait TableConstraintSuiteBase extends DDLCommandTestUtils {
     }
   }
 
-  gridTest("alter table add constraint: should fail")(constraintTypes) { constraint =>
+  gridTest("SPARK-54761: alter table add constraint - should fail")(constraintTypes) { constraint =>
     withNamespaceAndTable("ns", "table_1") { t =>
       sql(s"CREATE TABLE $t (id INT) $defaultUsing")
       val alterTableSql = s"ALTER TABLE $t ADD CONSTRAINT c1 $constraint"
@@ -75,7 +76,7 @@ trait TableConstraintSuiteBase extends DDLCommandTestUtils {
     }
   }
 
-  test("alter table drop constraint: should fail") {
+  test("SPARK-54761: alter table drop constraint - should fail") {
     withNamespaceAndTable("ns", "table_1") { t =>
       sql(s"CREATE TABLE $t (id INT) $defaultUsing")
       val error = intercept[AnalysisException] {
@@ -87,6 +88,26 @@ trait TableConstraintSuiteBase extends DDLCommandTestUtils {
         parameters = Map(
           "tableName" -> s"`$catalog`.`ns`.`table_1`",
           "operation" -> "DROP CONSTRAINT"
+        )
+      )
+    }
+  }
+
+  // REPLACE TABLE is not supported for V1 tables, so the error should be about
+  // REPLACE TABLE, not about CONSTRAINT
+  gridTest("SPARK-54761: replace table with constraint - should fail")(constraintTypes)
+  { constraint =>
+    withNamespaceAndTable("ns", "table_1") { t =>
+      val replaceTableSql = s"REPLACE TABLE $t (id INT, CONSTRAINT c1 $constraint) $defaultUsing"
+      val error = intercept[AnalysisException] {
+        sql(replaceTableSql)
+      }
+      checkError(
+        exception = error,
+        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        parameters = Map(
+          "tableName" -> s"`$catalog`.`ns`.`table_1`",
+          "operation" -> "REPLACE TABLE"
         )
       )
     }
