@@ -797,7 +797,7 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
     }
   }
 
-  test("DataSourceStreamReader schema mismatch") {
+  test("SPARK-54768: DataSourceStreamReader schema mismatch") {
     assume(shouldTestPandasUDFs)
     val dataSourceScript =
       s"""
