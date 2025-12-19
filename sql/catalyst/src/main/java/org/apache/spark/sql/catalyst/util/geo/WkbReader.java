@@ -174,11 +174,61 @@ public class WkbReader {
   }
 
   /**
-   * Reads a nested geometry from the current buffer position.
-   * Used by multi-geometry types to read child geometries.
+   * Reads a nested geometry and validates that its dimensions match the parent's dimensions.
+   * The check happens immediately after reading the type, before reading coordinate data.
    */
-  private GeometryModel readNestedGeometry(int defaultSrid) {
-    return readGeometryInternal(defaultSrid, false);
+  private GeometryModel readNestedGeometryWithDimensionCheck(
+      int defaultSrid,
+      boolean expectedHasZ,
+      boolean expectedHasM) {
+    return readNestedGeometryInternal(defaultSrid, true, expectedHasZ, expectedHasM);
+  }
+
+  /**
+   * Internal method to read a nested geometry with optional dimension validation.
+   */
+  private GeometryModel readNestedGeometryInternal(
+      int defaultSrid,
+      boolean validateDimensions,
+      boolean expectedHasZ,
+      boolean expectedHasM) {
+    // Read endianness from the current buffer position
+    ByteOrder byteOrder = readEndianness();
+
+    // Save the current byte order and temporarily set to the nested geometry's byte order
+    ByteOrder savedByteOrder = buffer.order();
+    buffer.order(byteOrder);
+    long typeStartPos = buffer.position();
+
+    // Read type and dimension
+    int typeAndDim = readInt();
+
+    // Parse WKB format (geotype and dimension)
+    if (!WkbConstants.isValidWkbType(typeAndDim)) {
+      throw new WkbParseException("Invalid or unsupported type " + typeAndDim, typeStartPos,
+        currentWkb);
+    }
+
+    int baseType = WkbConstants.getBaseType(typeAndDim);
+    GeoTypeId geoType = GeoTypeId.fromValue(baseType);
+    int dimensionCount = WkbConstants.getDimensionCount(typeAndDim);
+    boolean hasZ = WkbConstants.hasZ(typeAndDim);
+    boolean hasM = WkbConstants.hasM(typeAndDim);
+
+    // Validate dimensions match parent if required
+    if (validateDimensions && (hasZ != expectedHasZ || hasM != expectedHasM)) {
+      throw new WkbParseException(
+          "Invalid or unsupported type " + typeAndDim, typeStartPos, currentWkb);
+    }
+
+    // Dispatch to appropriate reader based on geometry type
+    GeometryModel result = readGeometryData(geoType, defaultSrid, dimensionCount, hasZ, hasM,
+        typeStartPos);
+
+    // Restore the saved byte order
+    buffer.order(savedByteOrder);
+
+    return result;
   }
 
   /**
@@ -225,33 +275,8 @@ public class WkbReader {
     boolean hasM = WkbConstants.hasM(typeAndDim);
 
     // Dispatch to appropriate reader based on geometry type
-    GeometryModel result;
-    switch (geoType) {
-      case POINT:
-        result = readPoint(defaultSrid, dimensionCount, hasZ, hasM);
-        break;
-      case LINESTRING:
-        result = readLineString(defaultSrid, dimensionCount, hasZ, hasM);
-        break;
-      case POLYGON:
-        result = readPolygon(defaultSrid, dimensionCount, hasZ, hasM);
-        break;
-      case MULTI_POINT:
-        result = readMultiPoint(defaultSrid, dimensionCount, hasZ, hasM);
-        break;
-      case MULTI_LINESTRING:
-        result = readMultiLineString(defaultSrid, dimensionCount, hasZ, hasM);
-        break;
-      case MULTI_POLYGON:
-        result = readMultiPolygon(defaultSrid, dimensionCount, hasZ, hasM);
-        break;
-      case GEOMETRY_COLLECTION:
-        result = readGeometryCollection(defaultSrid, dimensionCount, hasZ, hasM);
-        break;
-      default:
-        throw new WkbParseException("Unsupported geometry type: " + geoType, typeStartPos,
-          currentWkb);
-    }
+    GeometryModel result = readGeometryData(geoType, defaultSrid, dimensionCount, hasZ, hasM,
+        typeStartPos);
 
     // Restore the saved byte order if this was a nested geometry
     if (!isRootGeometry && savedByteOrder != null) {
@@ -259,6 +284,37 @@ public class WkbReader {
     }
 
     return result;
+  }
+
+  /**
+   * Reads geometry data based on the geometry type.
+   */
+  private GeometryModel readGeometryData(
+      GeoTypeId geoType,
+      int defaultSrid,
+      int dimensionCount,
+      boolean hasZ,
+      boolean hasM,
+      long typeStartPos) {
+    switch (geoType) {
+      case POINT:
+        return readPoint(defaultSrid, dimensionCount, hasZ, hasM);
+      case LINESTRING:
+        return readLineString(defaultSrid, dimensionCount, hasZ, hasM);
+      case POLYGON:
+        return readPolygon(defaultSrid, dimensionCount, hasZ, hasM);
+      case MULTI_POINT:
+        return readMultiPoint(defaultSrid, dimensionCount, hasZ, hasM);
+      case MULTI_LINESTRING:
+        return readMultiLineString(defaultSrid, dimensionCount, hasZ, hasM);
+      case MULTI_POLYGON:
+        return readMultiPolygon(defaultSrid, dimensionCount, hasZ, hasM);
+      case GEOMETRY_COLLECTION:
+        return readGeometryCollection(defaultSrid, dimensionCount, hasZ, hasM);
+      default:
+        throw new WkbParseException("Unsupported geometry type: " + geoType, typeStartPos,
+          currentWkb);
+    }
   }
 
   /**
@@ -357,7 +413,7 @@ public class WkbReader {
     List<Point> points = new ArrayList<>(numPoints);
 
     for (int i = 0; i < numPoints; i++) {
-      GeometryModel geom = readNestedGeometry(srid);
+      GeometryModel geom = readNestedGeometryWithDimensionCheck(srid, hasZ, hasM);
       if (!(geom instanceof Point)) {
         throw new WkbParseException("Expected Point in MultiPoint", buffer.position(),
           currentWkb);
@@ -377,7 +433,7 @@ public class WkbReader {
     List<LineString> lineStrings = new ArrayList<>(numLineStrings);
 
     for (int i = 0; i < numLineStrings; i++) {
-      GeometryModel geom = readNestedGeometry(srid);
+      GeometryModel geom = readNestedGeometryWithDimensionCheck(srid, hasZ, hasM);
       if (!(geom instanceof LineString)) {
         throw new WkbParseException("Expected LineString in MultiLineString", buffer.position(),
           currentWkb);
@@ -393,7 +449,7 @@ public class WkbReader {
     List<Polygon> polygons = new ArrayList<>(numPolygons);
 
     for (int i = 0; i < numPolygons; i++) {
-      GeometryModel geom = readNestedGeometry(srid);
+      GeometryModel geom = readNestedGeometryWithDimensionCheck(srid, hasZ, hasM);
       if (!(geom instanceof Polygon)) {
         throw new WkbParseException("Expected Polygon in MultiPolygon", buffer.position(),
           currentWkb);
@@ -410,7 +466,7 @@ public class WkbReader {
     List<GeometryModel> geometries = new ArrayList<>(numGeometries);
 
     for (int i = 0; i < numGeometries; i++) {
-      geometries.add(readNestedGeometry(srid));
+      geometries.add(readNestedGeometryWithDimensionCheck(srid, hasZ, hasM));
     }
 
     return new GeometryCollection(geometries, srid, hasZ, hasM);

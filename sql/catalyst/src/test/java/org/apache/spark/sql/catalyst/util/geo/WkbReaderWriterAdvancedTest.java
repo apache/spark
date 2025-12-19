@@ -439,13 +439,13 @@ public class WkbReaderWriterAdvancedTest {
     checkWkbRoundTrip(wkbLe, wkbBe);
   }
 
-  // @Test
+  @Test
   public void testLineString4D_OnePoint() {
     // WKT: LINESTRING ZM (1 2 3 4)
-    String wkbLe = "01ba0b000001000000000000000000f03f000000000000004000000000000008400000000000001040";
-    String wkbBe = "0000000bba000000013ff0000000000000400000000000000040080000000000004010000000000000";
-    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.LINESTRING, false);
-    checkWkbRoundTrip(wkbLe, wkbBe);
+    String wkbLe = "01ba0b000001000000000000000000f03f000000000000004000000000000008400000000000001040"; // checkstyle.off: LineLength
+    String wkbBe = "0000000bba000000013ff0000000000000400000000000000040080000000000004010000000000000"; // checkstyle.off: LineLength
+    checkWkbParsing(wkbLe, wkbBe, GeoTypeId.LINESTRING, false, true);
+    // Invalid with too few points in linestring
   }
 
   @Test
