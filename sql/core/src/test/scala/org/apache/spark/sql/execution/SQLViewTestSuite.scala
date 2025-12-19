@@ -984,6 +984,44 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
     }
   }
 
+  test("Comments are preserved when table comment changes with preserveUserComments=true") {
+    withTable("t") {
+      withView("v") {
+        // Create table with initial comment.
+        sql("CREATE TABLE t (c1 INT COMMENT 'original table comment')")
+        sql("INSERT INTO t VALUES (1), (2)")
+
+        // Create view with schema evolution - inherits table comment.
+        sql("CREATE VIEW v WITH SCHEMA EVOLUTION AS SELECT * FROM t")
+
+        // Verify view has inherited the table comment.
+        val descInitial = sql("DESCRIBE EXTENDED v").collect()
+        val c1Initial = descInitial.filter(r => r.getString(0) == "c1")
+        assert(c1Initial.nonEmpty && c1Initial(0).getString(2) == "original table comment",
+          "View should inherit table comment")
+
+        // Change the table comment.
+        sql("ALTER TABLE t CHANGE COLUMN c1 c1 INT COMMENT 'new table comment'")
+
+        // Verify table comment changed.
+        val descTable = sql("DESCRIBE EXTENDED t").collect()
+        val c1Table = descTable.filter(r => r.getString(0) == "c1")
+        assert(c1Table.nonEmpty && c1Table(0).getString(2) == "new table comment",
+          "Table comment should be updated")
+
+        // SELECT from view (triggers ViewSyncSchemaToMetaStore).
+        checkAnswer(sql("SELECT * FROM v"), Seq(Row(1), Row(2)))
+
+        // Verify view still has the original inherited comment (frozen).
+        val descAfterSelect = sql("DESCRIBE EXTENDED v").collect()
+        val c1AfterSelect = descAfterSelect.filter(r => r.getString(0) == "c1")
+        assert(c1AfterSelect.nonEmpty &&
+          c1AfterSelect(0).getString(2) == "original table comment",
+          "View should preserve inherited comment even when table comment changes")
+      }
+    }
+  }
+
   def getShowCreateDDL(view: String, serde: Boolean = false): String = {
     val result = if (serde) {
       sql(s"SHOW CREATE TABLE $view AS SERDE")
