@@ -20,14 +20,15 @@ package org.apache.spark.sql.catalyst.normalizer
 import org.apache.spark.sql.catalyst.plans.logical.{CacheTableAsSelect, CTERelationRef, LogicalPlan, UnionLoop, UnionLoopRef, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 
-object NormalizeCTEIds extends Rule[LogicalPlan]{
+object NormalizeCTEIds extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    val curId = new java.util.concurrent.atomic.AtomicLong()
+
     plan transformDownWithSubqueries {
       case ctas @ CacheTableAsSelect(_, plan, _, _, _, _, _) =>
         ctas.copy(plan = apply(plan))
 
       case withCTE @ WithCTE(plan, cteDefs) =>
+        val curId = new java.util.concurrent.atomic.AtomicLong()
         val defIdToNewId = withCTE.cteDefs.map(_.id).map((_, curId.getAndIncrement())).toMap
         val normalizedPlan = canonicalizeCTE(plan, defIdToNewId)
         val newCteDefs = cteDefs.map { cteDef =>
