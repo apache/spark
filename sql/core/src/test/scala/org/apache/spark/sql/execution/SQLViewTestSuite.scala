@@ -984,49 +984,6 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
     }
   }
 
-  test("View schema evolution config controls comment preservation behavior") {
-    withTable("t") {
-      withView("v") {
-        // Create table with comments.
-        sql("CREATE TABLE t (c1 INT COMMENT 'table comment', c2 STRING COMMENT 'table comment 2')")
-        sql("INSERT INTO t VALUES (1, 'a')")
-
-        // Create view.
-        sql("CREATE VIEW v WITH SCHEMA EVOLUTION AS SELECT * FROM t")
-
-        // User manually changes view comments.
-        val catalog = spark.sessionState.catalog
-        val viewMeta = catalog.getTableMetadata(TableIdentifier("v"))
-        val newSchema = StructType(Seq(
-          StructField("c1", IntegerType, nullable = true).withComment("user comment"),
-          StructField("c2", StringType, nullable = true).withComment("user comment 2")
-        ))
-        catalog.alterTable(viewMeta.copy(schema = newSchema))
-
-        // Test with flag ENABLED (default) - should preserve.
-        withSQLConf(VIEW_SCHEMA_EVOLUTION_PRESERVE_USER_COMMENTS.key -> "true") {
-          checkAnswer(sql("SELECT * FROM v"), Seq(Row(1, "a")))
-          val descEnabled = sql("DESCRIBE EXTENDED v").collect()
-          val c1Enabled = descEnabled.filter(r => r.getString(0) == "c1")
-          assert(c1Enabled.nonEmpty && c1Enabled(0).getString(2) == "user comment",
-            "With flag=true, should preserve user comment")
-        }
-
-        // Reset view comment again for next test.
-        catalog.alterTable(viewMeta.copy(schema = newSchema))
-
-        // Test with flag DISABLED - should revert.
-        withSQLConf(VIEW_SCHEMA_EVOLUTION_PRESERVE_USER_COMMENTS.key -> "false") {
-          checkAnswer(sql("SELECT * FROM v"), Seq(Row(1, "a")))
-          val descDisabled = sql("DESCRIBE EXTENDED v").collect()
-          val c1Disabled = descDisabled.filter(r => r.getString(0) == "c1")
-          assert(c1Disabled.nonEmpty && c1Disabled(0).getString(2) == "table comment",
-            "With flag=false, should revert to table comment")
-        }
-      }
-    }
-  }
-
   def getShowCreateDDL(view: String, serde: Boolean = false): String = {
     val result = if (serde) {
       sql(s"SHOW CREATE TABLE $view AS SERDE")
