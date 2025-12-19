@@ -218,8 +218,6 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
             self.fail(f"Golden file created for {test_name}. Please review and re-run the test.")
 
     def _generate_udf_return_type_coercion_results(self, use_arrow):
-        results = []
-
         def work(spark_type):
             result = [spark_type.simpleString()]
             for value in self.test_data:
