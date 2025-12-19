@@ -1928,9 +1928,18 @@ case class SetVariable(
  * because we need to re-analyze it each time the cursor is opened to see fresh
  * data.
  */
+/**
+ * The logical plan of the DECLARE CURSOR statement.
+ *
+ * @param cursorName Name of the cursor
+ * @param query The parsed logical plan of the cursor query
+ * @param queryText The original SQL text of the query (preserves parameter markers)
+ * @param asensitive Whether the cursor is ASENSITIVE or INSENSITIVE
+ */
 case class DeclareCursor(
     cursorName: String,
     query: LogicalPlan,
+    queryText: String,
     asensitive: Boolean = true) extends UnaryCommand {
   override def child: LogicalPlan = query
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
@@ -1942,9 +1951,15 @@ case class DeclareCursor(
 
 /**
  * The logical plan of the OPEN cursor command.
+ *
+ * @param cursorName Name of the cursor to open
+ * @param args Parameter expressions from USING clause
+ * @param paramNames Names for each parameter (empty string for positional parameters)
  */
 case class OpenCursor(
-    cursorName: String) extends Command {
+    cursorName: String,
+    args: Seq[Expression] = Seq.empty,
+    paramNames: Seq[String] = Seq.empty) extends Command {
   override def children: Seq[LogicalPlan] = Nil
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = this

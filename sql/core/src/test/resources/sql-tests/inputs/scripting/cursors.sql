@@ -217,3 +217,118 @@ END;
 
 -- Cleanup
 DROP TABLE cursor_sensitivity_test;
+
+
+-- Test 4: Basic parameterized cursor with positional parameters
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE min_id INT DEFAULT 2;
+  DECLARE max_id INT DEFAULT 4;
+  DECLARE fetched_id INT;
+  DECLARE fetched_value STRING;
+  DECLARE nomorerows BOOLEAN DEFAULT false;
+  DECLARE result STRING DEFAULT '';
+  DECLARE cur CURSOR FOR SELECT id, value FROM VALUES(1, 'a'), (2, 'b'), (3, 'c'), (4, 'd'), (5, 'e') AS t(id, value) WHERE id >= ? AND id <= ?;
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET nomorerows = true;
+
+  OPEN cur USING min_id, max_id;
+
+  REPEAT
+    FETCH cur INTO fetched_id, fetched_value;
+    IF NOT nomorerows THEN
+      SET result = result || fetched_value;
+    END IF;
+  UNTIL nomorerows END REPEAT;
+
+  CLOSE cur;
+  VALUES (result);
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 5: Parameterized cursor with named parameters
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE search_value STRING DEFAULT 'c';
+  DECLARE fetched_id INT;
+  DECLARE fetched_value STRING;
+  DECLARE nomorerows BOOLEAN DEFAULT false;
+  DECLARE id_sum INT DEFAULT 0;
+  DECLARE cur CURSOR FOR SELECT id, value FROM VALUES(1, 'a'), (2, 'b'), (3, 'c'), (4, 'c'), (5, 'e') AS t(id, value) WHERE value = :search_val;
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET nomorerows = true;
+
+  OPEN cur USING search_value AS search_val;
+
+  REPEAT
+    FETCH cur INTO fetched_id, fetched_value;
+    IF NOT nomorerows THEN
+      SET id_sum = id_sum + fetched_id;
+    END IF;
+  UNTIL nomorerows END REPEAT;
+
+  CLOSE cur;
+  VALUES (id_sum);
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 6: Parameterized cursor - reopen with different parameters
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE fetched_id INT;
+  DECLARE nomorerows BOOLEAN DEFAULT false;
+  DECLARE count1 INT DEFAULT 0;
+  DECLARE count2 INT DEFAULT 0;
+  DECLARE cur CURSOR FOR SELECT id FROM VALUES(1), (2), (3), (4), (5) AS t(id) WHERE id >= ? AND id <= ?;
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET nomorerows = true;
+
+  -- First open with parameters 2, 3 (should get 2 rows)
+  OPEN cur USING 2, 3;
+  REPEAT
+    FETCH cur INTO fetched_id;
+    IF NOT nomorerows THEN
+      SET count1 = count1 + 1;
+    END IF;
+  UNTIL nomorerows END REPEAT;
+  CLOSE cur;
+
+  -- Reopen with different parameters 1, 5 (should get 5 rows)
+  SET nomorerows = false;
+  OPEN cur USING 1, 5;
+  REPEAT
+    FETCH cur INTO fetched_id;
+    IF NOT nomorerows THEN
+      SET count2 = count2 + 1;
+    END IF;
+  UNTIL nomorerows END REPEAT;
+  CLOSE cur;
+
+  VALUES (count1, count2);
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 7: Parameterized cursor with expressions
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE base INT DEFAULT 10;
+  DECLARE fetched_id INT;
+  DECLARE nomorerows BOOLEAN DEFAULT false;
+  DECLARE sum INT DEFAULT 0;
+  DECLARE cur CURSOR FOR SELECT id FROM VALUES(5), (10), (15), (20), (25) AS t(id) WHERE id > ?;
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET nomorerows = true;
+
+  -- Use expression as parameter
+  OPEN cur USING base + 5;
+
+  REPEAT
+    FETCH cur INTO fetched_id;
+    IF NOT nomorerows THEN
+      SET sum = sum + fetched_id;
+    END IF;
+  UNTIL nomorerows END REPEAT;
+
+  CLOSE cur;
+  VALUES (sum); -- Should be 20 + 25 = 45
+END;
+--QUERY-DELIMITER-END

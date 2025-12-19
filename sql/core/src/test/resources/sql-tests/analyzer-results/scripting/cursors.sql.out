@@ -213,38 +213,38 @@ BEGIN
   DECLARE row_count_first_open INT DEFAULT 0;
   DECLARE row_count_second_open INT DEFAULT 0;
   DECLARE nomorerows BOOLEAN DEFAULT false;
-  
+
   DECLARE cur CURSOR FOR SELECT id, value FROM cursor_sensitivity_test ORDER BY id;
-  
+
   DECLARE CONTINUE HANDLER FOR NOT FOUND SET nomorerows = true;
-  
+
   INSERT INTO cursor_sensitivity_test VALUES (3, 'row3'), (4, 'row4');
-  
+
   OPEN cur;
-  
+
   INSERT INTO cursor_sensitivity_test VALUES (5, 'row5'), (6, 'row6');
-  
+
   REPEAT
     FETCH cur INTO fetched_id, fetched_value;
     IF NOT nomorerows THEN
       SET row_count_first_open = row_count_first_open + 1;
     END IF;
   UNTIL nomorerows END REPEAT;
-  
+
   CLOSE cur;
-  
+
   SET nomorerows = false;
   OPEN cur;
-  
+
   REPEAT
     FETCH cur INTO fetched_id, fetched_value;
     IF NOT nomorerows THEN
       SET row_count_second_open = row_count_second_open + 1;
     END IF;
   UNTIL nomorerows END REPEAT;
-  
+
   VALUES (row_count_first_open, row_count_second_open);
-  
+
   CLOSE cur;
 END
 -- !query analysis
@@ -256,3 +256,115 @@ DROP TABLE cursor_sensitivity_test
 -- !query analysis
 DropTable false, false
 +- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.cursor_sensitivity_test
+
+
+-- !query
+BEGIN
+  DECLARE min_id INT DEFAULT 2;
+  DECLARE max_id INT DEFAULT 4;
+  DECLARE fetched_id INT;
+  DECLARE fetched_value STRING;
+  DECLARE nomorerows BOOLEAN DEFAULT false;
+  DECLARE result STRING DEFAULT '';
+  DECLARE cur CURSOR FOR SELECT id, value FROM VALUES(1, 'a'), (2, 'b'), (3, 'c'), (4, 'd'), (5, 'e') AS t(id, value) WHERE id >= ? AND id <= ?;
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET nomorerows = true;
+
+  OPEN cur USING min_id, max_id;
+
+  REPEAT
+    FETCH cur INTO fetched_id, fetched_value;
+    IF NOT nomorerows THEN
+      SET result = result || fetched_value;
+    END IF;
+  UNTIL nomorerows END REPEAT;
+
+  CLOSE cur;
+  VALUES (result);
+END
+-- !query analysis
+LocalRelation [col1#x]
+
+
+-- !query
+BEGIN
+  DECLARE search_value STRING DEFAULT 'c';
+  DECLARE fetched_id INT;
+  DECLARE fetched_value STRING;
+  DECLARE nomorerows BOOLEAN DEFAULT false;
+  DECLARE id_sum INT DEFAULT 0;
+  DECLARE cur CURSOR FOR SELECT id, value FROM VALUES(1, 'a'), (2, 'b'), (3, 'c'), (4, 'c'), (5, 'e') AS t(id, value) WHERE value = :search_val;
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET nomorerows = true;
+
+  OPEN cur USING search_value AS search_val;
+
+  REPEAT
+    FETCH cur INTO fetched_id, fetched_value;
+    IF NOT nomorerows THEN
+      SET id_sum = id_sum + fetched_id;
+    END IF;
+  UNTIL nomorerows END REPEAT;
+
+  CLOSE cur;
+  VALUES (id_sum);
+END
+-- !query analysis
+LocalRelation [col1#x]
+
+
+-- !query
+BEGIN
+  DECLARE fetched_id INT;
+  DECLARE nomorerows BOOLEAN DEFAULT false;
+  DECLARE count1 INT DEFAULT 0;
+  DECLARE count2 INT DEFAULT 0;
+  DECLARE cur CURSOR FOR SELECT id FROM VALUES(1), (2), (3), (4), (5) AS t(id) WHERE id >= ? AND id <= ?;
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET nomorerows = true;
+
+  OPEN cur USING 2, 3;
+  REPEAT
+    FETCH cur INTO fetched_id;
+    IF NOT nomorerows THEN
+      SET count1 = count1 + 1;
+    END IF;
+  UNTIL nomorerows END REPEAT;
+  CLOSE cur;
+
+  SET nomorerows = false;
+  OPEN cur USING 1, 5;
+  REPEAT
+    FETCH cur INTO fetched_id;
+    IF NOT nomorerows THEN
+      SET count2 = count2 + 1;
+    END IF;
+  UNTIL nomorerows END REPEAT;
+  CLOSE cur;
+
+  VALUES (count1, count2);
+END
+-- !query analysis
+LocalRelation [col1#x, col2#x]
+
+
+-- !query
+BEGIN
+  DECLARE base INT DEFAULT 10;
+  DECLARE fetched_id INT;
+  DECLARE nomorerows BOOLEAN DEFAULT false;
+  DECLARE sum INT DEFAULT 0;
+  DECLARE cur CURSOR FOR SELECT id FROM VALUES(5), (10), (15), (20), (25) AS t(id) WHERE id > ?;
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET nomorerows = true;
+
+  OPEN cur USING base + 5;
+
+  REPEAT
+    FETCH cur INTO fetched_id;
+    IF NOT nomorerows THEN
+      SET sum = sum + fetched_id;
+    END IF;
+  UNTIL nomorerows END REPEAT;
+
+  CLOSE cur;
+  VALUES (sum); -- Should be 20 + 25 = 45
+END
+-- !query analysis
+LocalRelation [col1#x]

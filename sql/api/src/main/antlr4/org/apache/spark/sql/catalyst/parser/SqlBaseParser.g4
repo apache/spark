@@ -153,7 +153,7 @@ declareCursorStatement
     ;
 
 openCursorStatement
-    : OPEN strictIdentifier
+    : OPEN strictIdentifier (USING (LEFT_PAREN params=namedExpressionSeq RIGHT_PAREN | params=namedExpressionSeq))?
     ;
 
 fetchCursorStatement

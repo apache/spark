@@ -284,7 +284,9 @@ class SqlScriptingExecutionScope(
  * @param name
  *   Name of the cursor.
  * @param query
- *   The query that defines the cursor.
+ *   The query that defines the cursor (LogicalPlan).
+ * @param queryText
+ *   The original SQL text of the query (preserves parameter markers).
  * @param isOpen
  *   Whether the cursor is currently open.
  * @param resultData
@@ -295,6 +297,7 @@ class SqlScriptingExecutionScope(
 case class CursorDefinition(
     name: String,
     query: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan,
+    queryText: String,
     var isOpen: Boolean = false,
     var resultData: Option[Array[org.apache.spark.sql.catalyst.InternalRow]] = None,
     var currentPosition: Int = -1)

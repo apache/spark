@@ -30,6 +30,7 @@ import org.apache.spark.sql.scripting.CursorDefinition
 case class DeclareCursorExec(
     cursorName: String,
     query: LogicalPlan,
+    queryText: String,
     asensitive: Boolean) extends LeafV2CommandExec {
 
   override protected def run(): Seq[InternalRow] = {
@@ -49,10 +50,14 @@ case class DeclareCursorExec(
         messageParameters = Map("cursorName" -> cursorName))
     }
 
-    // Create cursor definition
+    // Create cursor definition - parse the query from SQL text
+    // This ensures parameter markers are preserved and not resolved during script analysis
+    val parsedQuery = session.sessionState.sqlParser.parsePlan(queryText)
+
     val cursorDef = CursorDefinition(
       name = cursorName,
-      query = query,
+      query = parsedQuery,
+      queryText = queryText,
       isOpen = false,
       resultData = None,
       currentPosition = -1
