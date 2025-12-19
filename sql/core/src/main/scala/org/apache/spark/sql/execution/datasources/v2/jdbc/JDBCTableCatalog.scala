@@ -120,7 +120,7 @@ class JDBCTableCatalog extends TableCatalog
           "tableName" -> toSQLId(ident)),
         dialect,
         description = s"Failed to drop table: $ident",
-        isRuntime = false) {
+        isRuntime = true) {
         try {
           JdbcUtils.dropTable(conn, getTableName(ident), options)
           true
