@@ -112,10 +112,34 @@ class SqlScriptingExecutionFrame(
    * @return The cursor definition if found
    */
   def findCursor(cursorName: String): Option[CursorDefinition] = {
+    findCursorByNameParts(Seq(cursorName))
+  }
+
+  /**
+   * Find a cursor by name parts (label and name) in the scope hierarchy.
+   * Supports both unqualified (Seq(name)) and qualified (Seq(label, name)) cursor references.
+   *
+   * @param nameParts The cursor name parts (either Seq(name) or Seq(label, name))
+   * @return The cursor definition if found
+   */
+  def findCursorByNameParts(nameParts: Seq[String]): Option[CursorDefinition] = {
+    def isScopeOfCursor(
+        nameParts: Seq[String],
+        scope: SqlScriptingExecutionScope
+    ): Boolean = nameParts match {
+      case Seq(name) => scope.cursors.contains(name)
+      // Qualified case.
+      case Seq(label, _) => scope.label == label
+      case _ =>
+        throw SparkException.internalError("Expected 1 or 2 nameParts for cursor lookup.")
+    }
+
     scopes.reverseIterator.foreach { scope =>
-      val cursorOpt = scope.cursors.get(cursorName)
-      if (cursorOpt.isDefined) {
-        return cursorOpt
+      if (isScopeOfCursor(nameParts, scope)) {
+        val cursorOpt = scope.cursors.get(nameParts.last)
+        if (cursorOpt.isDefined) {
+          return cursorOpt
+        }
       }
     }
     None

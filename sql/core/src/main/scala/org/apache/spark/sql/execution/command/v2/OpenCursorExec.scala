@@ -43,11 +43,21 @@ case class OpenCursorExec(
     val scriptingContext = scriptingContextManager.getContext
       .asInstanceOf[org.apache.spark.sql.scripting.SqlScriptingExecutionContext]
 
+    // Parse cursor name to handle qualification (e.g., "label.cursor_name" or just "cursor_name")
+    val cursorNameParts = cursorName.split("\\.").toSeq.map { part =>
+      if (session.sessionState.conf.caseSensitiveAnalysis) {
+        part
+      } else {
+        part.toLowerCase(java.util.Locale.ROOT)
+      }
+    }
+
     // Find cursor in scope hierarchy
-    val cursorDef = scriptingContext.currentFrame.findCursor(cursorName).getOrElse(
-      throw new AnalysisException(
-        errorClass = "CURSOR_NOT_FOUND",
-        messageParameters = Map("cursorName" -> cursorName)))
+    val cursorDef = scriptingContext.currentFrame.findCursorByNameParts(cursorNameParts)
+      .getOrElse(
+        throw new AnalysisException(
+          errorClass = "CURSOR_NOT_FOUND",
+          messageParameters = Map("cursorName" -> cursorName)))
 
     // Check if cursor is already open
     if (cursorDef.isOpen) {

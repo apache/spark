@@ -6599,7 +6599,7 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitOpenCursorStatement(
       ctx: OpenCursorStatementContext): LogicalPlan = withOrigin(ctx) {
-    val cursorName = ctx.strictIdentifier().getText
+    val cursorName = ctx.multipartIdentifier().parts.asScala.map(_.getText).mkString(".")
 
     // Parse optional USING clause parameters
     // Extract both expressions and their names (if aliased)
@@ -6629,7 +6629,7 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitFetchCursorStatement(
       ctx: FetchCursorStatementContext): LogicalPlan = withOrigin(ctx) {
-    val cursorName = ctx.strictIdentifier().getText
+    val cursorName = ctx.multipartIdentifier().parts.asScala.map(_.getText).mkString(".")
     val targetVariables = ctx.identifierReference().asScala.map { varIdent =>
       val varName = if (varIdent.expression() != null) {
         // IDENTIFIER(expression) case - not supported for variables
@@ -6655,7 +6655,7 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitCloseCursorStatement(
       ctx: CloseCursorStatementContext): LogicalPlan = withOrigin(ctx) {
-    val cursorName = ctx.strictIdentifier().getText
+    val cursorName = ctx.multipartIdentifier().parts.asScala.map(_.getText).mkString(".")
     SingleStatement(CloseCursor(cursorName))
   }
 

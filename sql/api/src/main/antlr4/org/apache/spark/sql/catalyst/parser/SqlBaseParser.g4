@@ -153,15 +153,15 @@ declareCursorStatement
     ;
 
 openCursorStatement
-    : OPEN strictIdentifier (USING (LEFT_PAREN params=namedExpressionSeq RIGHT_PAREN | params=namedExpressionSeq))?
+    : OPEN multipartIdentifier (USING (LEFT_PAREN params=namedExpressionSeq RIGHT_PAREN | params=namedExpressionSeq))?
     ;
 
 fetchCursorStatement
-    : FETCH ((NEXT FROM) | FROM | NEXT)? strictIdentifier INTO identifierReference (COMMA identifierReference)*
+    : FETCH ((NEXT FROM) | FROM | NEXT)? multipartIdentifier INTO identifierReference (COMMA identifierReference)*
     ;
 
 closeCursorStatement
-    : CLOSE strictIdentifier
+    : CLOSE multipartIdentifier
     ;
 
 whileStatement

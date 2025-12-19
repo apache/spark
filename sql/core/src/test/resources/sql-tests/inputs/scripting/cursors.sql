@@ -332,3 +332,77 @@ BEGIN
   VALUES (sum); -- Should be 20 + 25 = 45
 END;
 --QUERY-DELIMITER-END
+
+
+-- Test 8: Label-qualified cursor - basic case
+-- EXPECTED: Success - cursor qualified with label
+--QUERY-DELIMITER-START
+BEGIN
+  outer: BEGIN
+    DECLARE x INT;
+    DECLARE c1 CURSOR FOR SELECT 42 AS val;
+    OPEN outer.c1;
+    FETCH outer.c1 INTO x;
+    VALUES (x); -- Should return 42
+    CLOSE outer.c1;
+  END;
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 9: Label-qualified cursor - nested scopes
+-- EXPECTED: Success - inner and outer cursors with same name, qualified access
+--QUERY-DELIMITER-START
+BEGIN
+  outer_lbl: BEGIN
+    DECLARE x, y INT;
+    DECLARE cur CURSOR FOR SELECT 1 AS val;
+
+    inner_lbl: BEGIN
+      DECLARE cur CURSOR FOR SELECT 2 AS val;
+
+      -- Open both cursors
+      OPEN outer_lbl.cur;  -- Opens outer cursor
+      OPEN inner_lbl.cur;  -- Opens inner cursor
+
+      -- Fetch from inner cursor (unqualified reference in inner scope)
+      FETCH cur INTO x;
+
+      -- Fetch from outer cursor (qualified reference)
+      FETCH outer_lbl.cur INTO y;
+
+      CLOSE inner_lbl.cur;
+    END;
+
+    CLOSE outer_lbl.cur;
+
+    -- Return both values: x should be 2 (from inner), y should be 1 (from outer)
+    VALUES (x, y);
+  END;
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 10: Label-qualified cursor with parameterized query
+-- EXPECTED: Success - qualified cursor with parameters
+--QUERY-DELIMITER-START
+BEGIN
+  lbl: BEGIN
+    DECLARE min_val INT DEFAULT 3;
+    DECLARE max_val INT DEFAULT 4;
+    DECLARE fetched_id INT;
+    DECLARE result STRING DEFAULT '';
+    DECLARE cur CURSOR FOR SELECT id FROM VALUES(1), (2), (3), (4), (5) AS t(id) WHERE id >= ? AND id <= ?;
+
+    OPEN lbl.cur USING min_val, max_val;
+
+    FETCH lbl.cur INTO fetched_id;
+    SET result = result || CAST(fetched_id AS STRING);
+    FETCH lbl.cur INTO fetched_id;
+    SET result = result || CAST(fetched_id AS STRING);
+
+    CLOSE lbl.cur;
+    VALUES (result); -- Should be '34'
+  END;
+END;
+--QUERY-DELIMITER-END
