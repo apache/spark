@@ -182,7 +182,7 @@ class HadoopMapReduceCommitProtocol(
       val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
       fs.deleteOnExit(stagingDir)
     } catch {
-      case e: Throwable =>
+      case e: IOException =>
         logWarning(log"Exception while setting clean logic ${MDC(JOB_ID, jobContext.getJobID)}", e)
     }
   }
@@ -236,6 +236,7 @@ class HadoopMapReduceCommitProtocol(
       }
 
       fs.delete(stagingDir, true)
+      fs.cancelDeleteOnExit(stagingDir)
     }
   }
 
