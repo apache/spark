@@ -430,6 +430,8 @@ private[spark] object JettyUtils extends Logging {
       headerValue: String,
       clientRequest: HttpServletRequest,
       targetUri: URI): String = {
+    // As of Jetty 12, the value returned from getPathInfo doesn't contain the servlet context
+    // root, which complies with the Servlet specification.
     val id = clientRequest.getPathInfo.substring(1).takeWhile(_ != '/')
     val urlToId = s"${clientRequest.getScheme}://${clientRequest.getHeader("host")}/proxy/$id"
     if (new URI(headerValue).getScheme != null) {
