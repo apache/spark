@@ -313,7 +313,6 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.sql.tests.connect.streaming.test_parity_listener import *  # noqa: F401
 
     try:

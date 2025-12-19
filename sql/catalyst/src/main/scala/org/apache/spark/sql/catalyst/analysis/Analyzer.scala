@@ -80,7 +80,8 @@ object SimpleAnalyzer extends Analyzer(
       FunctionRegistry.builtin,
       TableFunctionRegistry.builtin) {
       override def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean): Unit = {}
-    })) {
+    }),
+  RelationCache.empty) {
   override def resolver: Resolver = caseSensitiveResolution
 }
 
@@ -285,11 +286,14 @@ object Analyzer {
  * Provides a logical query plan analyzer, which translates [[UnresolvedAttribute]]s and
  * [[UnresolvedRelation]]s into fully typed objects using information in a [[SessionCatalog]].
  */
-class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor[LogicalPlan]
+class Analyzer(
+    override val catalogManager: CatalogManager,
+    private[sql] val sharedRelationCache: RelationCache = RelationCache.empty)
+  extends RuleExecutor[LogicalPlan]
   with CheckAnalysis with AliasHelper with SQLConfHelper with ColumnResolutionHelper {
 
   private val v1SessionCatalog: SessionCatalog = catalogManager.v1SessionCatalog
-  private val relationResolution = new RelationResolution(catalogManager)
+  private val relationResolution = new RelationResolution(catalogManager, sharedRelationCache)
   private val functionResolution = new FunctionResolution(catalogManager, relationResolution)
 
   override protected def validatePlanChanges(
@@ -315,7 +319,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         AnalysisContext.reset()
         try {
           AnalysisHelper.markInAnalyzer {
-            HybridAnalyzer.fromLegacyAnalyzer(legacyAnalyzer = this).apply(plan, tracker)
+            HybridAnalyzer.fromLegacyAnalyzer(legacyAnalyzer = this, tracker = tracker).apply(plan)
           }
         } finally {
           AnalysisContext.reset()
@@ -323,7 +327,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       } else {
         AnalysisContext.withNewAnalysisContext {
           AnalysisHelper.markInAnalyzer {
-            HybridAnalyzer.fromLegacyAnalyzer(legacyAnalyzer = this).apply(plan, tracker)
+            HybridAnalyzer.fromLegacyAnalyzer(legacyAnalyzer = this, tracker = tracker).apply(plan)
           }
         }
       }
@@ -893,100 +897,16 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         }
         // Check all aggregate expressions.
         aggregates.foreach(checkValidAggregateExpression)
-        // Check all pivot values are literal and match pivot column data type.
-        val evalPivotValues = pivotValues.map { value =>
-          val foldable = trimAliases(value).foldable
-          if (!foldable) {
-            throw QueryCompilationErrors.nonLiteralPivotValError(value)
-          }
-          if (!Cast.canCast(value.dataType, pivotColumn.dataType)) {
-            throw QueryCompilationErrors.pivotValDataTypeMismatchError(value, pivotColumn)
-          }
-          Cast(value, pivotColumn.dataType, Some(conf.sessionLocalTimeZone)).eval(EmptyRow)
-        }
-        // Group-by expressions coming from SQL are implicit and need to be deduced.
-        val groupByExprs = groupByExprsOpt.getOrElse {
-          val pivotColAndAggRefs = pivotColumn.references ++ AttributeSet(aggregates)
-          child.output.filterNot(pivotColAndAggRefs.contains)
-        }
-        val singleAgg = aggregates.size == 1
-        def outputName(value: Expression, aggregate: Expression): String = {
-          val stringValue = value match {
-            case n: NamedExpression => n.name
-            case _ =>
-              val utf8Value =
-                Cast(value, StringType, Some(conf.sessionLocalTimeZone)).eval(EmptyRow)
-              Option(utf8Value).map(_.toString).getOrElse("null")
-          }
-          if (singleAgg) {
-            stringValue
-          } else {
-            val suffix = aggregate match {
-              case n: NamedExpression => n.name
-              case _ => toPrettySQL(aggregate)
-            }
-            stringValue + "_" + suffix
-          }
-        }
-        if (aggregates.forall(a => PivotFirst.supportsDataType(a.dataType))) {
-          // Since evaluating |pivotValues| if statements for each input row can get slow this is an
-          // alternate plan that instead uses two steps of aggregation.
-          val namedAggExps: Seq[NamedExpression] = aggregates.map(a => Alias(a, a.sql)())
-          val namedPivotCol = pivotColumn match {
-            case n: NamedExpression => n
-            case _ => Alias(pivotColumn, "__pivot_col")()
-          }
-          val bigGroup = groupByExprs :+ namedPivotCol
-          val firstAgg = Aggregate(bigGroup, bigGroup ++ namedAggExps, child)
-          val pivotAggs = namedAggExps.map { a =>
-            Alias(PivotFirst(namedPivotCol.toAttribute, a.toAttribute, evalPivotValues)
-              .toAggregateExpression()
-            , "__pivot_" + a.sql)()
-          }
-          val groupByExprsAttr = groupByExprs.map(_.toAttribute)
-          val secondAgg = Aggregate(groupByExprsAttr, groupByExprsAttr ++ pivotAggs, firstAgg)
-          val pivotAggAttribute = pivotAggs.map(_.toAttribute)
-          val pivotOutputs = pivotValues.zipWithIndex.flatMap { case (value, i) =>
-            aggregates.zip(pivotAggAttribute).map { case (aggregate, pivotAtt) =>
-              Alias(ExtractValue(pivotAtt, Literal(i), resolver), outputName(value, aggregate))()
-            }
-          }
-          Project(groupByExprsAttr ++ pivotOutputs, secondAgg)
-        } else {
-          val pivotAggregates: Seq[NamedExpression] = pivotValues.flatMap { value =>
-            def ifExpr(e: Expression) = {
-              If(
-                EqualNullSafe(
-                  pivotColumn,
-                  Cast(value, pivotColumn.dataType, Some(conf.sessionLocalTimeZone))),
-                e, Literal(null))
-            }
-            aggregates.map { aggregate =>
-              val filteredAggregate = aggregate.transformDown {
-                // Assumption is the aggregate function ignores nulls. This is true for all current
-                // AggregateFunction's with the exception of First and Last in their default mode
-                // (which we handle) and possibly some Hive UDAF's.
-                case First(expr, _) =>
-                  First(ifExpr(expr), true)
-                case Last(expr, _) =>
-                  Last(ifExpr(expr), true)
-                case a: ApproximatePercentile =>
-                  // ApproximatePercentile takes two literals for accuracy and percentage which
-                  // should not be wrapped by if-else.
-                  a.withNewChildren(ifExpr(a.first) :: a.second :: a.third :: Nil)
-                case a: AggregateFunction =>
-                  a.withNewChildren(a.children.map(ifExpr))
-              }.transform {
-                // We are duplicating aggregates that are now computing a different value for each
-                // pivot value.
-                // TODO: Don't construct the physical container until after analysis.
-                case ae: AggregateExpression => ae.copy(resultId = NamedExpression.newExprId)
-              }
-              Alias(filteredAggregate, outputName(value, aggregate))()
-            }
-          }
-          Aggregate(groupByExprs, groupByExprs ++ pivotAggregates, child)
-        }
+        PivotTransformer(
+          child = child,
+          pivotValues = pivotValues,
+          pivotColumn = pivotColumn,
+          groupByExpressionsOpt = groupByExprsOpt,
+          aggregates = aggregates,
+          childOutput = child.output,
+          newAlias = (child, name) =>
+            Alias(child, name.get)()
+        )
     }
 
     // Support any aggregate expression that can appear in an Aggregate plan except Pandas UDF.
@@ -1203,6 +1123,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         val relation = table match {
           case u: UnresolvedRelation if !u.isStreaming =>
             resolveRelation(u).getOrElse(u)
+          case r: V2TableReference =>
+            relationResolution.resolveReference(r)
           case other => other
         }
 
@@ -1709,14 +1631,15 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 val resolvedDeleteCondition = deleteCondition.map(
                   resolveExpressionByPlanChildren(_, m))
                 DeleteAction(resolvedDeleteCondition)
-              case UpdateAction(updateCondition, assignments) =>
+              case UpdateAction(updateCondition, assignments, fromStar) =>
                 val resolvedUpdateCondition = updateCondition.map(
                   resolveExpressionByPlanChildren(_, m))
                 UpdateAction(
                   resolvedUpdateCondition,
                   // The update value can access columns from both target and source tables.
                   resolveAssignments(assignments, m, MergeResolvePolicy.BOTH,
-                    throws = throws))
+                    throws = throws),
+                  fromStar)
               case UpdateStarAction(updateCondition) =>
                 // Expand star to top level source columns.  If source has less columns than target,
                 // assignments will be added by ResolveRowLevelCommandAssignments later.
@@ -1729,16 +1652,16 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                     Assignment(key, sourceAttr)
                   }
                 } else {
-                  sourceTable.output.flatMap { sourceAttr =>
-                    findAttrInTarget(sourceAttr.name).map(
-                      targetAttr => Assignment(targetAttr, sourceAttr))
+                  targetTable.output.map { attr =>
+                    Assignment(attr, UnresolvedAttribute(Seq(attr.name)))
                   }
                 }
                 UpdateAction(
                   updateCondition.map(resolveExpressionByPlanChildren(_, m)),
                   // For UPDATE *, the value must be from source table.
                   resolveAssignments(assignments, m, MergeResolvePolicy.SOURCE,
-                    throws = throws))
+                    throws = throws),
+                  fromStar = true)
               case o => o
             }
             val newNotMatchedActions = m.notMatchedActions.map {
@@ -1767,9 +1690,8 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                     Assignment(key, sourceAttr)
                   }
                 } else {
-                  sourceTable.output.flatMap { sourceAttr =>
-                    findAttrInTarget(sourceAttr.name).map(
-                      targetAttr => Assignment(targetAttr, sourceAttr))
+                  targetTable.output.map { attr =>
+                    Assignment(attr, UnresolvedAttribute(Seq(attr.name)))
                   }
                 }
                 InsertAction(
@@ -1783,14 +1705,15 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                 val resolvedDeleteCondition = deleteCondition.map(
                   resolveExpressionByPlanOutput(_, targetTable))
                 DeleteAction(resolvedDeleteCondition)
-              case UpdateAction(updateCondition, assignments) =>
+              case UpdateAction(updateCondition, assignments, fromStar) =>
                 val resolvedUpdateCondition = updateCondition.map(
                   resolveExpressionByPlanOutput(_, targetTable))
                 UpdateAction(
                   resolvedUpdateCondition,
                   // The update value can access columns from the target table only.
                   resolveAssignments(assignments, m, MergeResolvePolicy.TARGET,
-                    throws = throws))
+                    throws = throws),
+                  fromStar)
               case o => o
             }
 
@@ -3141,6 +3064,13 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
       })
     }
 
+    private def hasUnresolvedGeneratorOrFunction(exprs: Seq[Expression]): Boolean = {
+      exprs.exists(_.exists {
+        case _: UnresolvedFunction | _: UnresolvedGenerator => true
+        case _ => false
+      })
+    }
+
     private def trimAlias(expr: NamedExpression): Expression = expr match {
       case UnresolvedAlias(child, _) => child
       case Alias(child, _) => child
@@ -3232,15 +3162,21 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
         p
 
       // The star will be expanded differently if we insert `Generate` under `Project` too early.
-      case p @ Project(projectList, child) if !projectList.exists(_.exists(_.isInstanceOf[Star])) =>
+      // We also wait for all functions and generators to be resolved to ensure left-to-right
+      // generator ordering.
+      case p @ Project(projectList, child)
+          if !projectList.exists(_.exists(_.isInstanceOf[Star])) &&
+             !hasUnresolvedGeneratorOrFunction(projectList) =>
+        var hasSeenGenerator = false
         val (resolvedGenerator, newProjectList) = projectList
           .map(trimNonTopLevelAliases)
           .foldLeft((None: Option[Generate], Nil: Seq[NamedExpression])) { (res, e) =>
             e match {
               // If there are more than one generator, we only rewrite the first one and wait for
               // the next analyzer iteration to rewrite the next one.
-              case AliasedGenerator(generator, names, outer) if res._1.isEmpty &&
+              case AliasedGenerator(generator, names, outer) if !hasSeenGenerator &&
                   generator.childrenResolved =>
+                hasSeenGenerator = true
                 val g = Generate(
                   generator,
                   unrequiredChildIndex = Nil,
@@ -3250,6 +3186,7 @@ class Analyzer(override val catalogManager: CatalogManager) extends RuleExecutor
                   child)
                 (Some(g), res._2 ++ g.nullableOutput)
               case other =>
+                hasSeenGenerator |= hasGenerator(other)
                 (res._1, res._2 :+ other)
             }
           }

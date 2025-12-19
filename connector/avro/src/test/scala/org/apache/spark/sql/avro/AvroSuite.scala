@@ -3192,21 +3192,6 @@ abstract class AvroSuite
     }
   }
 
-  test("SPARK-51590: unsupported the TIME data types in Avro") {
-    withTempDir { dir =>
-      val tempDir = new File(dir, "files").getCanonicalPath
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql("select time'12:01:02' as t")
-            .write.format("avro").mode("overwrite").save(tempDir)
-        },
-        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-        parameters = Map(
-          "columnName" -> "`t`",
-          "columnType" -> s"\"${TimeType().sql}\"",
-          "format" -> "Avro"))
-    }
-  }
 }
 
 class AvroV1Suite extends AvroSuite {
@@ -3405,6 +3390,96 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
           checkAnswer(df, Row("a", 1, 2))
         }
       }
+    }
+  }
+
+  test("TIME type read/write with Avro format") {
+    withTempPath { dir =>
+      // Test boundary values and NULL handling
+      val df = spark.sql("""
+        SELECT
+          TIME'00:00:00.123456' as midnight,
+          TIME'12:34:56.789012' as noon,
+          TIME'23:59:59.999999' as max_time,
+          CAST(NULL AS TIME) as null_time
+      """)
+
+      df.write.format("avro").save(dir.toString)
+      val readDf = spark.read.format("avro").load(dir.toString)
+
+      checkAnswer(readDf, df)
+
+      // Verify schema - all should be default TimeType(6)
+      readDf.schema.fields.foreach { field =>
+        assert(field.dataType == TimeType(), s"Field ${field.name} should be TimeType")
+      }
+
+      // Verify boundary values
+      val row = readDf.collect()(0)
+      assert(row.getAs[java.time.LocalTime]("midnight") ==
+        java.time.LocalTime.of(0, 0, 0, 123456000))
+      assert(row.getAs[java.time.LocalTime]("noon") ==
+        java.time.LocalTime.of(12, 34, 56, 789012000))
+      assert(row.getAs[java.time.LocalTime]("max_time") ==
+        java.time.LocalTime.of(23, 59, 59, 999999000))
+      assert(row.get(3) == null, "NULL time should be preserved")
+    }
+  }
+
+  test("TIME type in nested structures in Avro") {
+    withTempPath { dir =>
+      // Test TIME type in arrays and structs with different precisions
+      val df = spark.sql("""
+        SELECT
+          named_struct('start', CAST(TIME'09:00:00.123' AS TIME(3)),
+                       'end', CAST(TIME'17:30:45.654321' AS TIME(6))) as schedule,
+          array(TIME'08:15:30.111222', TIME'12:45:15.333444', TIME'16:20:50.555666') as checkpoints
+      """)
+
+      df.write.format("avro").save(dir.toString)
+      val readDf = spark.read.format("avro").load(dir.toString)
+
+      checkAnswer(readDf, df)
+    }
+  }
+
+  test("TIME type precision metadata is preserved in Avro") {
+    withTempPath { dir =>
+      // Test all TIME precisions (0-6) with multiple columns
+      val df = spark.sql("""
+        SELECT
+          id,
+          CAST(TIME '12:34:56' AS TIME(0)) as time_p0,
+          CAST(TIME '12:34:56.1' AS TIME(1)) as time_p1,
+          CAST(TIME '12:34:56.12' AS TIME(2)) as time_p2,
+          CAST(TIME '12:34:56.123' AS TIME(3)) as time_p3,
+          CAST(TIME '12:34:56.1234' AS TIME(4)) as time_p4,
+          CAST(TIME '12:34:56.12345' AS TIME(5)) as time_p5,
+          CAST(TIME '12:34:56.123456' AS TIME(6)) as time_p6,
+          description
+        FROM VALUES
+          (1, 'Morning'),
+          (2, 'Evening')
+        AS t(id, description)
+      """)
+
+      // Verify original schema has all precisions
+      (0 to 6).foreach { p =>
+        assert(df.schema(s"time_p$p").dataType == TimeType(p))
+      }
+
+      // Write to Avro and read back
+      df.write.format("avro").save(dir.toString)
+      val readDf = spark.read.format("avro").load(dir.toString)
+
+      // Verify ALL precisions are preserved after round-trip
+      (0 to 6).foreach { p =>
+        assert(readDf.schema(s"time_p$p").dataType == TimeType(p),
+          s"Precision $p should be preserved")
+      }
+
+      // Verify data integrity
+      checkAnswer(readDf, df)
     }
   }
 }

@@ -19,14 +19,14 @@ package org.apache.spark.sql.connector.catalog
 
 import java.util.Locale
 
-import scala.collection.mutable
-
 import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, MetadataColumnHelper}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.types.DataType
 import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.sql.util.SchemaValidationMode
+import org.apache.spark.sql.util.SchemaValidationMode.PROHIBIT_CHANGES
 import org.apache.spark.util.ArrayImplicits._
 
 private[sql] object V2TableUtil extends SQLConfHelper {
@@ -40,10 +40,14 @@ private[sql] object V2TableUtil extends SQLConfHelper {
    *
    * @param table the current table metadata
    * @param relation the relation with captured columns
+   * @param mode validation mode that defines what changes are acceptable
    * @return validation errors, or empty sequence if valid
    */
-  def validateCapturedColumns(table: Table, relation: DataSourceV2Relation): Seq[String] = {
-    validateCapturedColumns(table, relation.table.columns.toImmutableArraySeq)
+  def validateCapturedColumns(
+      table: Table,
+      relation: DataSourceV2Relation,
+      mode: SchemaValidationMode): Seq[String] = {
+    validateCapturedColumns(table, relation.table.columns.toImmutableArraySeq, mode)
   }
 
   /**
@@ -56,33 +60,16 @@ private[sql] object V2TableUtil extends SQLConfHelper {
    *
    * @param table the current table metadata
    * @param originCols the originally captured columns
+   * @param mode validation mode that defines what changes are acceptable
    * @return validation errors, or empty sequence if valid
    */
-  def validateCapturedColumns(table: Table, originCols: Seq[Column]): Seq[String] = {
-    val errors = mutable.ArrayBuffer[String]()
-    val colsByNormalizedName = indexColumns(table.columns.toImmutableArraySeq)
-    val originColsByNormalizedName = indexColumns(originCols)
-
-    originColsByNormalizedName.foreach { case (normalizedName, originCol) =>
-      colsByNormalizedName.get(normalizedName) match {
-        case Some(col) =>
-          if (originCol.dataType != col.dataType || originCol.nullable != col.nullable) {
-            val oldType = formatType(originCol.dataType, originCol.nullable)
-            val newType = formatType(col.dataType, col.nullable)
-            errors += s"`${originCol.name}` type has changed from $oldType to $newType"
-          }
-        case None =>
-          errors += s"${formatColumn(originCol)} has been removed"
-      }
-    }
-
-    colsByNormalizedName.foreach { case (normalizedName, col) =>
-      if (!originColsByNormalizedName.contains(normalizedName)) {
-        errors += s"${formatColumn(col)} has been added"
-      }
-    }
-
-    errors.toSeq
+  def validateCapturedColumns(
+      table: Table,
+      originCols: Seq[Column],
+      mode: SchemaValidationMode = PROHIBIT_CHANGES): Seq[String] = {
+    val originSchema = CatalogV2Util.v2ColumnsToStructType(originCols)
+    val schema = CatalogV2Util.v2ColumnsToStructType(table.columns)
+    SchemaUtils.validateSchemaCompatibility(originSchema, schema, resolver, mode)
   }
 
   /**
@@ -90,22 +77,25 @@ private[sql] object V2TableUtil extends SQLConfHelper {
    *
    * @param table the current table metadata
    * @param relation the relation with captured metadata columns
+   * @param mode validation mode that defines what changes are acceptable
    * @return validation errors, or empty sequence if valid
    */
-  def validateCapturedMetadataColumns(table: Table, relation: DataSourceV2Relation): Seq[String] = {
-    validateCapturedMetadataColumns(table, extractMetadataColumns(relation))
+  def validateCapturedMetadataColumns(
+      table: Table,
+      relation: DataSourceV2Relation,
+      mode: SchemaValidationMode): Seq[String] = {
+    validateCapturedMetadataColumns(table, extractMetadataColumns(relation), mode)
   }
 
-  // extracts original column info for all metadata attributes in relation
+  /**
+   * Extracts original column info for all metadata attributes in the relation.
+   *
+   * @param relation the relation with captured metadata columns
+   * @return metadata columns captured by the relation
+   */
   def extractMetadataColumns(relation: DataSourceV2Relation): Seq[MetadataColumn] = {
-    val metaAttrs = relation.output.filter(_.isMetadataCol)
-    if (metaAttrs.nonEmpty) {
-      val metaCols = metadataColumns(relation.table)
-      val normalizedMetaAttrNames = metaAttrs.map(attr => normalize(attr.name)).toSet
-      metaCols.filter(col => normalizedMetaAttrNames.contains(normalize(col.name)))
-    } else {
-      Seq.empty
-    }
+    val metaAttrNames = relation.output.filter(_.isMetadataCol).map(_.name)
+    filter(metaAttrNames, metadataColumns(relation.table))
   }
 
   /**
@@ -117,56 +107,23 @@ private[sql] object V2TableUtil extends SQLConfHelper {
    *
    * @param table the current table metadata
    * @param originMetaCols the originally captured metadata columns
+   * @param mode validation mode that defines what changes are acceptable
    * @return validation errors, or empty sequence if valid
    */
   def validateCapturedMetadataColumns(
       table: Table,
-      originMetaCols: Seq[MetadataColumn]): Seq[String] = {
-    val errors = mutable.ArrayBuffer[String]()
-    val metaCols = metadataColumns(table)
-    val metaColsByNormalizedName = indexMetadataColumns(metaCols)
-
-    originMetaCols.foreach { originMetaCol =>
-      val normalizedName = normalize(originMetaCol.name)
-      metaColsByNormalizedName.get(normalizedName) match {
-        case Some(metaCol) =>
-          if (originMetaCol.dataType != metaCol.dataType ||
-              originMetaCol.isNullable != metaCol.isNullable) {
-            val oldType = formatType(originMetaCol.dataType, originMetaCol.isNullable)
-            val newType = formatType(metaCol.dataType, metaCol.isNullable)
-            errors += s"`${originMetaCol.name}` type has changed from $oldType to $newType"
-          }
-        case None =>
-          errors += s"${formatMetadataColumn(originMetaCol)} has been removed"
-      }
-    }
-
-    errors.toSeq
+      originMetaCols: Seq[MetadataColumn],
+      mode: SchemaValidationMode = PROHIBIT_CHANGES): Seq[String] = {
+    val originMetaColNames = originMetaCols.map(_.name)
+    val originMetaSchema = CatalogV2Util.toStructType(originMetaCols)
+    val metaCols = filter(originMetaColNames, metadataColumns(table))
+    val metaSchema = CatalogV2Util.toStructType(metaCols)
+    SchemaUtils.validateSchemaCompatibility(originMetaSchema, metaSchema, resolver, mode)
   }
 
-  private def formatColumn(col: Column): String = {
-    s"`${col.name}` ${formatType(col.dataType, col.nullable)}"
-  }
-
-  private def formatMetadataColumn(col: MetadataColumn): String = {
-    s"`${col.name}` ${formatType(col.dataType, col.isNullable)}"
-  }
-
-  private def formatType(dataType: DataType, nullable: Boolean): String = {
-    if (nullable) dataType.sql else s"${dataType.sql} NOT NULL"
-  }
-
-  private def indexColumns(cols: Seq[Column]): Map[String, Column] = {
-    index(cols)(_.name)
-  }
-
-  private def indexMetadataColumns(cols: Seq[MetadataColumn]): Map[String, MetadataColumn] = {
-    index(cols)(_.name)
-  }
-
-  private def index[C](cols: Seq[C])(extractName: C => String): Map[String, C] = {
-    SchemaUtils.checkColumnNameDuplication(cols.map(extractName), conf.caseSensitiveAnalysis)
-    cols.map(col => normalize(extractName(col)) -> col).toMap
+  private def filter(colNames: Seq[String], cols: Seq[MetadataColumn]): Seq[MetadataColumn] = {
+    val normalizedColNames = colNames.map(normalize).toSet
+    cols.filter(col => normalizedColNames.contains(normalize(col.name)))
   }
 
   private def metadataColumns(table: Table): Seq[MetadataColumn] = table match {
@@ -177,4 +134,6 @@ private[sql] object V2TableUtil extends SQLConfHelper {
   private def normalize(name: String): String = {
     if (conf.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
   }
+
+  private def resolver: Resolver = conf.resolver
 }

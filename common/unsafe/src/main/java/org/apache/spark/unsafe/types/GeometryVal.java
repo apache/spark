@@ -17,9 +17,12 @@
 
 package org.apache.spark.unsafe.types;
 
+import org.apache.spark.annotation.Unstable;
+
 import java.io.Serializable;
 
 // This class represents the physical type for the GEOMETRY data type.
+@Unstable
 public final class GeometryVal implements Comparable<GeometryVal>, Serializable {
 
   // The GEOMETRY type is implemented as a byte array. We provide `getBytes` and `fromBytes`

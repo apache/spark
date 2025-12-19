@@ -701,6 +701,12 @@ object FunctionRegistry {
     expression[MakeDate]("make_date"),
     expression[MakeTime]("make_time"),
     expression[TimeTrunc]("time_trunc"),
+    expression[TimeFromSeconds]("time_from_seconds"),
+    expression[TimeFromMillis]("time_from_millis"),
+    expression[TimeFromMicros]("time_from_micros"),
+    expression[TimeToSeconds]("time_to_seconds"),
+    expression[TimeToMillis]("time_to_millis"),
+    expression[TimeToMicros]("time_to_micros"),
     expressionBuilder("make_timestamp", MakeTimestampExpressionBuilder),
     expressionBuilder("try_make_timestamp", TryMakeTimestampExpressionBuilder),
     expression[MonthName]("monthname"),
@@ -819,6 +825,7 @@ object FunctionRegistry {
     expression[ThetaDifference]("theta_difference"),
     expression[ThetaIntersection]("theta_intersection"),
     expression[ApproxTopKEstimate]("approx_top_k_estimate"),
+    expression[Measure]("measure"),
 
     // grouping sets
     expression[Grouping]("grouping"),

@@ -18,6 +18,7 @@
 import datetime
 import unittest
 import logging
+import os
 
 from collections import OrderedDict
 from decimal import Decimal
@@ -211,7 +212,8 @@ class ApplyInPandasTestsMixin:
                     "eval_type": "SQL_BATCHED_UDF, SQL_ARROW_BATCHED_UDF, "
                     "SQL_SCALAR_PANDAS_UDF, SQL_SCALAR_ARROW_UDF, "
                     "SQL_SCALAR_PANDAS_ITER_UDF, SQL_SCALAR_ARROW_ITER_UDF, "
-                    "SQL_GROUPED_AGG_PANDAS_UDF or SQL_GROUPED_AGG_ARROW_UDF"
+                    "SQL_GROUPED_AGG_PANDAS_UDF, SQL_GROUPED_AGG_ARROW_UDF, "
+                    "SQL_GROUPED_AGG_PANDAS_ITER_UDF or SQL_GROUPED_AGG_ARROW_ITER_UDF"
                 },
             )
 
@@ -277,28 +279,20 @@ class ApplyInPandasTestsMixin:
         ):
             self._test_apply_in_pandas(lambda key, pdf: key)
 
-    @staticmethod
-    def stats_with_column_names(key, pdf):
-        # order of column can be different to applyInPandas schema when column names are given
-        return pd.DataFrame([(pdf.v.mean(),) + key], columns=["mean", "id"])
-
-    @staticmethod
-    def stats_with_no_column_names(key, pdf):
-        # columns must be in order of applyInPandas schema when no columns given
-        return pd.DataFrame([key + (pdf.v.mean(),)])
-
     def test_apply_in_pandas_returning_column_names(self):
-        self._test_apply_in_pandas(ApplyInPandasTestsMixin.stats_with_column_names)
+        self._test_apply_in_pandas(
+            lambda key, pdf: pd.DataFrame([(pdf.v.mean(),) + key], columns=["mean", "id"])
+        )
 
     def test_apply_in_pandas_returning_no_column_names(self):
-        self._test_apply_in_pandas(ApplyInPandasTestsMixin.stats_with_no_column_names)
+        self._test_apply_in_pandas(lambda key, pdf: pd.DataFrame([key + (pdf.v.mean(),)]))
 
     def test_apply_in_pandas_returning_column_names_sometimes(self):
         def stats(key, pdf):
             if key[0] % 2:
-                return ApplyInPandasTestsMixin.stats_with_column_names(key, pdf)
+                return pd.DataFrame([(pdf.v.mean(),) + key], columns=["mean", "id"])
             else:
-                return ApplyInPandasTestsMixin.stats_with_no_column_names(key, pdf)
+                return pd.DataFrame([key + (pdf.v.mean(),)])
 
         self._test_apply_in_pandas(stats)
 
@@ -332,9 +326,15 @@ class ApplyInPandasTestsMixin:
                 lambda key, pdf: pd.DataFrame([key + (pdf.v.mean(), pdf.v.std())])
             )
 
+    @unittest.skipIf(
+        os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1", "SPARK-54482: To be reenabled"
+    )
     def test_apply_in_pandas_returning_empty_dataframe(self):
         self._test_apply_in_pandas_returning_empty_dataframe(pd.DataFrame())
 
+    @unittest.skipIf(
+        os.environ.get("SPARK_SKIP_CONNECT_COMPAT_TESTS") == "1", "SPARK-54482: To be reenabled"
+    )
     def test_apply_in_pandas_returning_incompatible_type(self):
         with self.quiet():
             self.check_apply_in_pandas_returning_incompatible_type()
@@ -870,7 +870,7 @@ class ApplyInPandasTestsMixin:
 
         def stats(key, pdf):
             if key[0] % 2 == 0:
-                return ApplyInPandasTestsMixin.stats_with_no_column_names(key, pdf)
+                return pd.DataFrame([key + (pdf.v.mean(),)])
             return empty_df
 
         result = (
@@ -1092,7 +1092,7 @@ class ApplyInPandasTestsMixin:
             .sort("key")
         ).collect()
 
-        for maxRecords, maxBytes in [(1000, 4096), (0, 4096), (1000, 4096)]:
+        for maxRecords, maxBytes in [(1000, 2**31 - 1), (0, 4096), (1000, 4096)]:
             with self.subTest(maxRecords=maxRecords, maxBytes=maxBytes):
                 with self.sql_conf(
                     {
@@ -1138,7 +1138,7 @@ class ApplyInPandasTestsMixin:
             df.groupby("key").agg(sf.min("v").alias("min"), sf.max("v").alias("max")).sort("key")
         ).collect()
 
-        for maxRecords, maxBytes in [(1000, 4096), (0, 4096), (1000, 4096)]:
+        for maxRecords, maxBytes in [(1000, 2**31 - 1), (0, 4096), (1000, 4096)]:
             with self.subTest(maxRecords=maxRecords, maxBytes=maxBytes):
                 with self.sql_conf(
                     {

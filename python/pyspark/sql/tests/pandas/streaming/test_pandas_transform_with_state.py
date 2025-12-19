@@ -187,6 +187,7 @@ class TransformWithStateTestsMixin:
         self.assertEqual(q.name, "this_query")
         self.assertTrue(q.isActive)
         q.processAllAvailable()
+        q.stop()
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
@@ -255,6 +256,7 @@ class TransformWithStateTestsMixin:
         self.assertEqual(q.name, "this_query")
         self.assertTrue(q.isActive)
         q.processAllAvailable()
+        q.stop()
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
@@ -262,14 +264,13 @@ class TransformWithStateTestsMixin:
         self.assertTrue(q.lastProgress.stateOperators[0].customMetrics["numValueStateVars"] > 0)
         self.assertTrue(q.lastProgress.stateOperators[0].customMetrics["numDeletedStateVars"] > 0)
 
-        q.stop()
-
         self._prepare_test_resource2(input_path)
 
         q = base_query.start()
         self.assertEqual(q.name, "this_query")
         self.assertTrue(q.isActive)
         q.processAllAvailable()
+        q.stop()
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
         result_df = self.spark.read.parquet(output_path)
@@ -329,6 +330,7 @@ class TransformWithStateTestsMixin:
         self.assertEqual(q.name, query_name)
         self.assertTrue(q.isActive)
         q.processAllAvailable()
+        q.stop()
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
@@ -446,6 +448,7 @@ class TransformWithStateTestsMixin:
         self.assertEqual(q.name, query_name)
         self.assertTrue(q.isActive)
         q.processAllAvailable()
+        q.stop()
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
@@ -561,6 +564,7 @@ class TransformWithStateTestsMixin:
         self.assertEqual(q.name, "this_query")
         self.assertTrue(q.isActive)
         q.processAllAvailable()
+        q.stop()
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
@@ -657,6 +661,7 @@ class TransformWithStateTestsMixin:
         self.assertEqual(q.name, "chaining_ops_query")
         self.assertTrue(q.isActive)
         q.processAllAvailable()
+        q.stop()
         q.awaitTermination(10)
 
     def test_transform_with_state_chaining_ops(self):
@@ -1168,6 +1173,7 @@ class TransformWithStateTestsMixin:
         self.assertEqual(q.name, "evolution_test")
         self.assertTrue(q.isActive)
         q.processAllAvailable()
+        q.stop()
         q.awaitTermination(10)
 
     def test_schema_evolution_scenarios(self):
@@ -1460,6 +1466,96 @@ class TransformWithStateTestsMixin:
             # Set it to a very large number so that every row would be in the same pandas df
             {"spark.sql.execution.arrow.maxBytesPerBatch": "100000"}
         ):
+            self._test_transform_with_state_basic(
+                ChunkCountProcessorFactory(),
+                make_check_results(result_with_large_limit),
+                output_schema=StructType(
+                    [
+                        StructField("id", StringType(), True),
+                        StructField("chunkCount", IntegerType(), True),
+                    ]
+                ),
+            )
+
+            self._test_transform_with_state_basic(
+                ChunkCountProcessorWithInitialStateFactory(),
+                make_check_results(result_with_large_limit),
+                initial_state=initial_state,
+                output_schema=StructType(
+                    [
+                        StructField("id", StringType(), True),
+                        StructField("chunkCount", IntegerType(), True),
+                    ]
+                ),
+            )
+
+    def test_transform_with_state_with_records_limit(self):
+        if not self.use_pandas():
+            return
+
+        def make_check_results(expected_per_batch):
+            def check_results(batch_df, batch_id):
+                batch_df.collect()
+                if batch_id == 0:
+                    assert set(batch_df.sort("id").collect()) == expected_per_batch[0]
+                else:
+                    assert set(batch_df.sort("id").collect()) == expected_per_batch[1]
+
+            return check_results
+
+        result_with_small_limit = [
+            {
+                Row(id="0", chunkCount=2),
+                Row(id="1", chunkCount=2),
+            },
+            {
+                Row(id="0", chunkCount=3),
+                Row(id="1", chunkCount=2),
+            },
+        ]
+
+        result_with_large_limit = [
+            {
+                Row(id="0", chunkCount=1),
+                Row(id="1", chunkCount=1),
+            },
+            {
+                Row(id="0", chunkCount=1),
+                Row(id="1", chunkCount=1),
+            },
+        ]
+
+        data = [("0", 789), ("3", 987)]
+        initial_state = self.spark.createDataFrame(data, "id string, initVal int").groupBy("id")
+
+        with self.sql_conf(
+            # Set it to a very small number so that every row would be a separate pandas df
+            {"spark.sql.execution.arrow.maxRecordsPerBatch": "1"}
+        ):
+            self._test_transform_with_state_basic(
+                ChunkCountProcessorFactory(),
+                make_check_results(result_with_small_limit),
+                output_schema=StructType(
+                    [
+                        StructField("id", StringType(), True),
+                        StructField("chunkCount", IntegerType(), True),
+                    ]
+                ),
+            )
+
+            self._test_transform_with_state_basic(
+                ChunkCountProcessorWithInitialStateFactory(),
+                make_check_results(result_with_small_limit),
+                initial_state=initial_state,
+                output_schema=StructType(
+                    [
+                        StructField("id", StringType(), True),
+                        StructField("chunkCount", IntegerType(), True),
+                    ]
+                ),
+            )
+
+        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": "-1"}):
             self._test_transform_with_state_basic(
                 ChunkCountProcessorFactory(),
                 make_check_results(result_with_large_limit),

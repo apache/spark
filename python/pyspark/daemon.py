@@ -31,14 +31,6 @@ from signal import SIGHUP, SIGTERM, SIGCHLD, SIG_DFL, SIG_IGN, SIGINT
 
 from pyspark.serializers import read_int, write_int, write_with_length, UTF8Deserializer
 
-if len(sys.argv) > 1 and sys.argv[1].startswith("pyspark"):
-    import importlib
-
-    worker_module = importlib.import_module(sys.argv[1])
-    worker_main = worker_module.main
-else:
-    from pyspark.worker import main as worker_main
-
 
 def compute_real_exit_code(exit_code):
     # SystemExit's code can be integer or string, but os._exit only accepts integers
@@ -78,6 +70,19 @@ def worker(sock, authenticated):
             return 1
 
     exit_code = 0
+
+    # We don't know what could happen when we import the worker module. We have to
+    # guarantee that no thread is spawned before we fork, so we have to import the
+    # worker module after fork. For example, both pandas and pyarrow starts some
+    # threads when they are imported.
+    if len(sys.argv) > 1 and sys.argv[1].startswith("pyspark"):
+        import importlib
+
+        worker_module = importlib.import_module(sys.argv[1])
+        worker_main = worker_module.main
+    else:
+        from pyspark.worker import main as worker_main
+
     try:
         worker_main(infile, outfile)
     except SystemExit as exc:
@@ -158,14 +163,26 @@ def manager():
 
     # Initialization complete
     try:
+        poller = None
+        if os.name == "posix":
+            # select.select has a known limit on the number of file descriptors
+            # it can handle. We use select.poll instead to avoid this limit.
+            poller = select.poll()
+            fd_reverse_map = {0: 0, listen_sock.fileno(): listen_sock}
+            poller.register(0, select.POLLIN)
+            poller.register(listen_sock, select.POLLIN)
+
         while True:
-            try:
-                ready_fds = select.select([0, listen_sock], [], [], 1)[0]
-            except select.error as ex:
-                if ex[0] == EINTR:
-                    continue
-                else:
-                    raise
+            if poller is not None:
+                ready_fds = [fd_reverse_map[fd] for fd, _ in poller.poll(1000)]
+            else:
+                try:
+                    ready_fds = select.select([0, listen_sock], [], [], 1)[0]
+                except select.error as ex:
+                    if ex[0] == EINTR:
+                        continue
+                    else:
+                        raise
 
             if 0 in ready_fds:
                 try:
@@ -203,6 +220,9 @@ def manager():
 
                 if pid == 0:
                     # in child process
+                    if poller is not None:
+                        poller.unregister(0)
+                        poller.unregister(listen_sock)
                     listen_sock.close()
 
                     # It should close the standard input in the child process so that
@@ -251,6 +271,9 @@ def manager():
                     sock.close()
 
     finally:
+        if poller is not None:
+            poller.unregister(0)
+            poller.unregister(listen_sock)
         shutdown(1)
 
 

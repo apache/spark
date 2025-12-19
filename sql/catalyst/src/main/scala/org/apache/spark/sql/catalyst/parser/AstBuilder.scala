@@ -300,12 +300,21 @@ class AstBuilder extends DataTypeAstBuilder
         parsingCtx)
     } else {
       // If there is no compound body, then there must be a statement or set statement.
+      // Single-statement handler bodies need a label for the CompoundBody, just like
+      // BEGIN-END blocks do (see visitBeginEndCompoundBlockImpl). Generate a random UUID
+      // label since no explicit label is defined.
+      val labelText = parsingCtx.labelContext.enterLabeledScope(
+        beginLabelCtx = None,
+        endLabelCtx = None
+      )
       val statement = Option(ctx.statement().asInstanceOf[ParserRuleContext])
         .orElse(Option(ctx.setStatementInsideSqlScript().asInstanceOf[ParserRuleContext]))
         .map { s =>
           SingleStatement(parsedPlan = visit(s).asInstanceOf[LogicalPlan])
         }
-      CompoundBody(Seq(statement.get), None, isScope = false)
+      val compoundBody = CompoundBody(Seq(statement.get), Some(labelText), isScope = false)
+      parsingCtx.labelContext.exitLabeledScope(None)
+      compoundBody
     }
 
     ExceptionHandler(exceptionHandlerTriggers, body, handlerType)
@@ -1226,7 +1235,7 @@ class AstBuilder extends DataTypeAstBuilder
       if (pVal.DEFAULT != null) {
         throw QueryParsingErrors.defaultColumnReferencesNotAllowedInPartitionSpec(ctx)
       }
-      val name = pVal.identifier.getText
+      val name = getIdentifierText(pVal.identifier)
       val value = Option(pVal.constant).map(v => {
         visitStringConstant(v, legacyNullAsString, keepPartitionSpecAsString)
       })
@@ -1949,11 +1958,11 @@ class AstBuilder extends DataTypeAstBuilder
       .flatMap(_.namedExpression.asScala)
       .map(typedVisit[Expression])
     val pivotColumn = if (ctx.pivotColumn.identifiers.size == 1) {
-      UnresolvedAttribute.quoted(ctx.pivotColumn.errorCapturingIdentifier.getText)
+      UnresolvedAttribute.quoted(getIdentifierText(ctx.pivotColumn.errorCapturingIdentifier))
     } else {
       CreateStruct(
         ctx.pivotColumn.identifiers.asScala.map(
-          identifier => UnresolvedAttribute.quoted(identifier.getText)).toSeq)
+          identifier => UnresolvedAttribute.quoted(getIdentifierText(identifier))).toSeq)
     }
     val pivotValues = ctx.pivotValues.asScala.map(visitPivotValue)
     Pivot(None, pivotColumn, pivotValues.toSeq, aggregates, query)
@@ -1965,7 +1974,7 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitPivotValue(ctx: PivotValueContext): Expression = withOrigin(ctx) {
     val e = expression(ctx.expression)
     if (ctx.errorCapturingIdentifier != null) {
-      Alias(e, ctx.errorCapturingIdentifier.getText)()
+      Alias(e, getIdentifierText(ctx.errorCapturingIdentifier))()
     } else {
       e
     }
@@ -2030,7 +2039,7 @@ class AstBuilder extends DataTypeAstBuilder
 
     // alias unpivot result
     if (ctx.errorCapturingIdentifier() != null) {
-      val alias = ctx.errorCapturingIdentifier().getText
+      val alias = getIdentifierText(ctx.errorCapturingIdentifier())
       SubqueryAlias(alias, filtered)
     } else {
       filtered
@@ -2532,7 +2541,7 @@ class AstBuilder extends DataTypeAstBuilder
    */
   private def mayApplyAliasPlan(tableAlias: TableAliasContext, plan: LogicalPlan): LogicalPlan = {
     if (tableAlias.strictIdentifier != null) {
-      val alias = tableAlias.strictIdentifier.getText
+      val alias = getIdentifierText(tableAlias.strictIdentifier)
       if (tableAlias.identifierList != null) {
         val columnNames = visitIdentifierList(tableAlias.identifierList)
         SubqueryAlias(alias, UnresolvedSubqueryColumnAliases(columnNames, plan))
@@ -3220,7 +3229,7 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitLambda(ctx: LambdaContext): Expression = withOrigin(ctx) {
     val arguments = ctx.identifier().asScala.map { name =>
-      UnresolvedNamedLambdaVariable(UnresolvedAttribute.quoted(name.getText).nameParts)
+      UnresolvedNamedLambdaVariable(UnresolvedAttribute.quoted(getIdentifierText(name)).nameParts)
     }
     val function = expression(ctx.expression).transformUp {
       case a: UnresolvedAttribute => UnresolvedNamedLambdaVariable(a.nameParts)
@@ -3699,6 +3708,16 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitStringLiteral(ctx: StringLiteralContext): Literal = withOrigin(ctx) {
     Literal.create(createString(ctx), StringType)
+  }
+
+  /**
+   * Create a String from a dollar-quoted string literal (e.g., $$text$$).
+   * This is used for code literals in features like metric views where the content
+   * may contain special characters that would be difficult to escape in regular strings.
+   */
+  override def visitCodeLiteral(ctx: CodeLiteralContext): String = {
+    assert(ctx != null)
+    dollarQuotedString(ctx.DOLLAR_QUOTED_STRING_BODY())
   }
 
   /**
@@ -4252,7 +4271,7 @@ class AstBuilder extends DataTypeAstBuilder
     if (!SQLConf.get.objectLevelCollationsEnabled) {
       throw QueryCompilationErrors.objectLevelCollationsNotEnabledError()
     }
-    val collationName = ctx.identifier.getText
+    val collationName = getIdentifierText(ctx.identifier)
     CollationFactory.fetchCollation(collationName).collationName
   }
 
@@ -4491,7 +4510,7 @@ class AstBuilder extends DataTypeAstBuilder
     def getFieldReference(
         ctx: ApplyTransformContext,
         arg: V2Expression): FieldReference = {
-      lazy val name: String = ctx.identifier.getText
+      lazy val name: String = getIdentifierText(ctx.identifier)
       arg match {
         case ref: FieldReference =>
           ref
@@ -4503,7 +4522,7 @@ class AstBuilder extends DataTypeAstBuilder
     def getSingleFieldReference(
         ctx: ApplyTransformContext,
         arguments: Seq[V2Expression]): FieldReference = {
-      lazy val name: String = ctx.identifier.getText
+      lazy val name: String = getIdentifierText(ctx.identifier)
       if (arguments.size > 1) {
         throw QueryParsingErrors.wrongNumberArgumentsForTransformError(name, arguments.size, ctx)
       } else if (arguments.isEmpty) {
@@ -4788,7 +4807,7 @@ class AstBuilder extends DataTypeAstBuilder
           string(visitStringLit(c.outFmt)))))
       // Expected format: SEQUENCEFILE | TEXTFILE | RCFILE | ORC | PARQUET | AVRO
       case (c: GenericFileFormatContext, null) =>
-        SerdeInfo(storedAs = Some(c.identifier.getText))
+        SerdeInfo(storedAs = Some(c.simpleIdentifier.getText))
       case (null, storageHandler) =>
         invalidStatement("STORED BY", ctx)
       case _ =>
@@ -4878,7 +4897,7 @@ class AstBuilder extends DataTypeAstBuilder
     (rowFormatCtx, createFileFormatCtx.fileFormat) match {
       case (_, ffTable: TableFileFormatContext) => // OK
       case (rfSerde: RowFormatSerdeContext, ffGeneric: GenericFileFormatContext) =>
-        ffGeneric.identifier.getText.toLowerCase(Locale.ROOT) match {
+        ffGeneric.simpleIdentifier.getText.toLowerCase(Locale.ROOT) match {
           case ("sequencefile" | "textfile" | "rcfile") => // OK
           case fmt =>
             operationNotAllowed(
@@ -4886,7 +4905,7 @@ class AstBuilder extends DataTypeAstBuilder
               parentCtx)
         }
       case (rfDelimited: RowFormatDelimitedContext, ffGeneric: GenericFileFormatContext) =>
-        ffGeneric.identifier.getText.toLowerCase(Locale.ROOT) match {
+        ffGeneric.simpleIdentifier.getText.toLowerCase(Locale.ROOT) match {
           case "textfile" => // OK
           case fmt => operationNotAllowed(
             s"ROW FORMAT DELIMITED is only compatible with 'textfile', not '$fmt'", parentCtx)
@@ -5828,9 +5847,9 @@ class AstBuilder extends DataTypeAstBuilder
             log"${MDC(PARTITION_SPECIFICATION, ctx.partitionSpec.getText)}")
       }
     }
-    if (ctx.identifier != null &&
-        ctx.identifier.getText.toLowerCase(Locale.ROOT) != "noscan") {
-      throw QueryParsingErrors.computeStatisticsNotExpectedError(ctx.identifier())
+    if (ctx.simpleIdentifier != null &&
+        ctx.simpleIdentifier.getText.toLowerCase(Locale.ROOT) != "noscan") {
+      throw QueryParsingErrors.computeStatisticsNotExpectedError(ctx.simpleIdentifier)
     }
 
     if (ctx.ALL() != null) {
@@ -5851,7 +5870,7 @@ class AstBuilder extends DataTypeAstBuilder
           "ANALYZE TABLE",
           allowTempView = false),
         partitionSpec,
-        noScan = ctx.identifier != null)
+        noScan = ctx.simpleIdentifier != null)
     } else {
       checkPartitionSpec()
       AnalyzeColumn(
@@ -5869,16 +5888,16 @@ class AstBuilder extends DataTypeAstBuilder
    * }}}
    */
   override def visitAnalyzeTables(ctx: AnalyzeTablesContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.identifier != null &&
-      ctx.identifier.getText.toLowerCase(Locale.ROOT) != "noscan") {
-      throw QueryParsingErrors.computeStatisticsNotExpectedError(ctx.identifier())
+    if (ctx.simpleIdentifier != null &&
+      ctx.simpleIdentifier.getText.toLowerCase(Locale.ROOT) != "noscan") {
+      throw QueryParsingErrors.computeStatisticsNotExpectedError(ctx.simpleIdentifier())
     }
     val ns = if (ctx.identifierReference() != null) {
       withIdentClause(ctx.identifierReference, UnresolvedNamespace(_))
     } else {
       CurrentNamespace
     }
-    AnalyzeTables(ns, noScan = ctx.identifier != null)
+    AnalyzeTables(ns, noScan = ctx.simpleIdentifier != null)
   }
 
   /**
@@ -6424,7 +6443,7 @@ class AstBuilder extends DataTypeAstBuilder
    * }}}
    */
   override def visitDropIndex(ctx: DropIndexContext): LogicalPlan = withOrigin(ctx) {
-    val indexName = ctx.identifier.getText
+    val indexName = getIdentifierText(ctx.identifier)
     DropIndex(
       createUnresolvedTable(ctx.identifierReference, "DROP INDEX"),
       indexName,
@@ -6646,7 +6665,7 @@ class AstBuilder extends DataTypeAstBuilder
           target = None, excepts = ids.map(s => Seq(s)), replacements = None))
       Project(projectList, left)
     }.getOrElse(Option(ctx.AS).map { _ =>
-      SubqueryAlias(ctx.errorCapturingIdentifier().getText, left)
+      SubqueryAlias(getIdentifierText(ctx.errorCapturingIdentifier()), left)
     }.getOrElse(Option(ctx.whereClause).map { c =>
       if (ctx.windowClause() != null) {
         throw QueryParsingErrors.windowClauseInPipeOperatorWhereClauseNotAllowedError(ctx)

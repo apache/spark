@@ -232,7 +232,7 @@
       <artifactId>snappy-java</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.lz4</groupId>
+      <groupId>at.yawk.lz4</groupId>
       <artifactId>lz4-java</artifactId>
     </dependency>
     <dependency>

@@ -21,6 +21,8 @@ pandas instances during the type conversion.
 """
 import datetime
 import itertools
+import functools
+from decimal import Decimal
 from typing import Any, Callable, Iterable, List, Optional, Union, TYPE_CHECKING
 
 from pyspark.errors import PySparkTypeError, UnsupportedOperationException, PySparkValueError
@@ -855,6 +857,7 @@ def _to_corrected_pandas_type(dt: DataType) -> Optional[Any]:
         return None
 
 
+@functools.lru_cache(maxsize=64)
 def _create_converter_to_pandas(
     data_type: DataType,
     nullable: bool = True,
@@ -1216,12 +1219,14 @@ def _create_converter_to_pandas(
         return lambda pser: pser
 
 
+@functools.lru_cache(maxsize=64)
 def _create_converter_from_pandas(
     data_type: DataType,
     *,
     timezone: Optional[str] = None,
     error_on_duplicated_field_names: bool = True,
     ignore_unexpected_complex_type_values: bool = False,
+    int_to_decimal_coercion_enabled: bool = False,
 ) -> Callable[["pd.Series"], "pd.Series"]:
     """
     Create a converter of pandas Series to create Spark DataFrame with Arrow optimization.
@@ -1260,6 +1265,29 @@ def _create_converter_from_pandas(
             return _check_series_convert_timestamps_internal(pser, timezone)
 
         return correct_timestamp
+
+    elif isinstance(data_type, DecimalType):
+        if int_to_decimal_coercion_enabled:
+            # For decimal with low precision, e.g. pa.decimal128(1)
+            # pa.Array.from_pandas(pd.Series([1,2,3])).cast(pa.decimal128(1)) fails with
+            # ArrowInvalid: Precision is not great enough for the result.
+            # It should be at least 19.
+            # Here change it to
+            # pa.Array.from_pandas(pd.Series([1,2,3]).apply(
+            #     lambda x: Decimal(x))).cast(pa.decimal128(1))
+
+            def convert_int_to_decimal(pser: pd.Series) -> pd.Series:
+                if pd.api.types.is_integer_dtype(pser):  # type: ignore[attr-defined]
+                    return pser.apply(  # type: ignore[return-value]
+                        lambda x: Decimal(x) if pd.notna(x) else None
+                    )
+                else:
+                    return pser
+
+            return convert_int_to_decimal
+
+        else:
+            return lambda pser: pser
 
     def _converter(dt: DataType) -> Optional[Callable[[Any], Any]]:
         if isinstance(dt, ArrayType):

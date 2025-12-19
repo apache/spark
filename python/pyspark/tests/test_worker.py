@@ -227,7 +227,7 @@ class WorkerMemoryTest(unittest.TestCase):
 class WorkerSegfaultTest(ReusedPySparkTestCase):
     @classmethod
     def conf(cls):
-        _conf = super(WorkerSegfaultTest, cls).conf()
+        _conf = super().conf()
         _conf.set("spark.python.worker.faulthandler.enabled", "true")
         return _conf
 
@@ -252,7 +252,7 @@ class WorkerSegfaultTest(ReusedPySparkTestCase):
 class WorkerSegfaultNonDaemonTest(WorkerSegfaultTest):
     @classmethod
     def conf(cls):
-        _conf = super(WorkerSegfaultNonDaemonTest, cls).conf()
+        _conf = super().conf()
         _conf.set("spark.python.use.daemon", "false")
         return _conf
 

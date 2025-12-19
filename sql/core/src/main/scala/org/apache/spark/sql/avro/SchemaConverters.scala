@@ -131,6 +131,16 @@ object SchemaConverters extends Logging {
         case _: TimestampMillis | _: TimestampMicros => SchemaType(TimestampType, nullable = false)
         case _: LocalTimestampMillis | _: LocalTimestampMicros =>
           SchemaType(TimestampNTZType, nullable = false)
+        case _: LogicalTypes.TimeMicros =>
+          // Falls back to default precision for backward compatibility with
+          // Avro files written by external tools.
+          val catalystTypeAttrValue = avroSchema.getProp(CATALYST_TYPE_PROP_NAME)
+          val timeType = if (catalystTypeAttrValue == null) {
+            TimeType(TimeType.MICROS_PRECISION)
+          } else {
+            CatalystSqlParser.parseDataType(catalystTypeAttrValue).asInstanceOf[TimeType]
+          }
+          SchemaType(timeType, nullable = false)
         case _ =>
           val catalystTypeAttrValue = avroSchema.getProp(CATALYST_TYPE_PROP_NAME)
           val catalystType = if (catalystTypeAttrValue == null) {
@@ -324,6 +334,10 @@ object SchemaConverters extends Logging {
         LogicalTypes.timestampMicros().addToSchema(builder.longType())
       case TimestampNTZType =>
         LogicalTypes.localTimestampMicros().addToSchema(builder.longType())
+      case t: TimeType =>
+        val timeSchema = LogicalTypes.timeMicros().addToSchema(builder.longType())
+        timeSchema.addProp(CATALYST_TYPE_PROP_NAME, t.typeName)
+        timeSchema
 
       case FloatType => builder.floatType()
       case DoubleType => builder.doubleType()

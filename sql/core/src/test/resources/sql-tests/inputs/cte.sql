@@ -286,6 +286,17 @@ SELECT * FROM (
   WITH cte1 AS (SELECT * FROM t4) SELECT cte1.col1 FROM cte1 JOIN t4 USING (col1)
 );
 
+-- Column reference with different casing should preserve alias casing in self-join
+WITH cte AS (SELECT 1 AS id, 'test' AS COLNAME),
+     cte2 AS (SELECT id, COLNAME, colname FROM cte)
+SELECT * FROM cte2 a JOIN cte2 b ON (a.id = b.id);
+
+-- Same test with an unused CTE, used to return all columns in lower case
+WITH cte AS (SELECT 1 AS id, 'test' AS COLNAME),
+     cte2 AS (SELECT id, COLNAME, colname FROM cte),
+     cte3 AS (SELECT id, COLNAME, colname FROM cte2)
+SELECT * FROM cte2 a JOIN cte2 b ON (a.id = b.id);
+
 -- Clean up
 DROP VIEW IF EXISTS t;
 DROP VIEW IF EXISTS t2;
