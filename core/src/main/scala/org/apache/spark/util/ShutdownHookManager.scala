@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.FileSystem
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.{Logging, LogKeys}
-import org.apache.spark.internal.LogKeys.PATH
+import org.apache.spark.internal.LogKeys.{ELAPSED_TIME, HOOK_NAME, HOOK_PRIORITY, PATH}
 import org.apache.spark.internal.config.SPARK_SHUTDOWN_TIMEOUT_MS
 
 
@@ -60,7 +60,7 @@ private[spark] object ShutdownHookManager extends Logging {
 
   // Add a shutdown hook to delete the temp dirs when the JVM exits
   logDebug("Adding shutdown hook") // force eager creation of logger
-  addShutdownHook(TEMP_DIR_SHUTDOWN_PRIORITY) { () =>
+  addShutdownHook(TEMP_DIR_SHUTDOWN_PRIORITY, "TmpDirCleaner") { () =>
     logDebug("Shutdown hook called")
     // we need to materialize the paths to delete because deleteRecursively removes items from
     // shutdownDeletePaths as we are traversing through it.
@@ -141,22 +141,25 @@ private[spark] object ShutdownHookManager extends Logging {
   /**
    * Adds a shutdown hook with default priority.
    *
+   * @param name A descriptive name for the hook.
    * @param hook The code to run during shutdown.
    * @return A handle that can be used to unregister the shutdown hook.
    */
-  def addShutdownHook(hook: () => Unit): AnyRef = {
-    addShutdownHook(DEFAULT_SHUTDOWN_PRIORITY)(hook)
+  def addShutdownHook(name: String)(hook: () => Unit): AnyRef = {
+    addShutdownHook(DEFAULT_SHUTDOWN_PRIORITY, name)(hook)
   }
 
   /**
    * Adds a shutdown hook with the given priority. Hooks with higher priority values run
    * first.
    *
+   * @param priority The priority of the hook.
+   * @param name A descriptive name for the hook.
    * @param hook The code to run during shutdown.
    * @return A handle that can be used to unregister the shutdown hook.
    */
-  def addShutdownHook(priority: Int)(hook: () => Unit): AnyRef = {
-    shutdownHooks.add(priority, hook)
+  def addShutdownHook(priority: Int, name: String)(hook: () => Unit): AnyRef = {
+    shutdownHooks.add(priority, name, hook)
   }
 
   /**
@@ -171,8 +174,7 @@ private[spark] object ShutdownHookManager extends Logging {
 
 }
 
-private [util] class SparkShutdownHookManager {
-
+private [util] class SparkShutdownHookManager extends Logging {
   private val hooks = new PriorityQueue[SparkShutdownHook]()
   @volatile private var shuttingDown = false
 
@@ -206,12 +208,12 @@ private [util] class SparkShutdownHookManager {
     }
   }
 
-  def add(priority: Int, hook: () => Unit): AnyRef = {
+  def add(priority: Int, name: String, hook: () => Unit): AnyRef = {
     hooks.synchronized {
       if (shuttingDown) {
         throw new IllegalStateException("Shutdown hooks cannot be modified during shutdown.")
       }
-      val hookRef = new SparkShutdownHook(priority, hook)
+      val hookRef = new SparkShutdownHook(priority, name, hook)
       hooks.add(hookRef)
       hookRef
     }
@@ -223,11 +225,29 @@ private [util] class SparkShutdownHookManager {
 
 }
 
-private class SparkShutdownHook(private val priority: Int, hook: () => Unit)
-  extends Comparable[SparkShutdownHook] {
+private class SparkShutdownHook(
+    private val priority: Int,
+    private val name: String,
+    hook: () => Unit,
+    clock: Clock = new SystemClock())
+  extends Comparable[SparkShutdownHook] with Logging {
 
   override def compareTo(other: SparkShutdownHook): Int = other.priority.compareTo(priority)
 
-  def run(): Unit = hook()
-
+  def run(): Unit = {
+    val startTime = clock.getTimeMillis()
+    try {
+      hook()
+      logDebug(log"Shutdown hook completed: ${MDC(HOOK_NAME, name)} " +
+        log"(priority=${MDC(HOOK_PRIORITY, priority)}, " +
+        log"time=${MDC(ELAPSED_TIME, clock.getTimeMillis() - startTime)}ms)")
+    } catch {
+      case e: Throwable =>
+        logError(log"Shutdown hook failed: ${MDC(HOOK_NAME, name)} " +
+          log"(priority=${MDC(HOOK_PRIORITY, priority)}, " +
+          log"time=${MDC(ELAPSED_TIME, clock.getTimeMillis() - startTime)}ms)", e)
+        throw e
+    }
+  }
 }
+x

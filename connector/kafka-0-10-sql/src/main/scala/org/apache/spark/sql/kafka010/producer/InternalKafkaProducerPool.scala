@@ -155,7 +155,7 @@ private[kafka010] object InternalKafkaProducerPool extends Logging {
   private type CacheKey = Seq[(String, Object)]
   private type Producer = KafkaProducer[Array[Byte], Array[Byte]]
 
-  ShutdownHookManager.addShutdownHook { () =>
+  ShutdownHookManager.addShutdownHook("KafkaProducerPoolShutdownHook") { () =>
     try {
       pool.shutdown()
     } catch {

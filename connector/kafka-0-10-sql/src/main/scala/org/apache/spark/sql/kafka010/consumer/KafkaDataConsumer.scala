@@ -817,7 +817,7 @@ private[kafka010] object KafkaDataConsumer extends Logging {
   private val consumerPool = new InternalKafkaConsumerPool(sparkConf)
   private val fetchedDataPool = new FetchedDataPool(sparkConf)
 
-  ShutdownHookManager.addShutdownHook { () =>
+  ShutdownHookManager.addShutdownHook("KafkaDataConsumerShutdownHook") { () =>
     try {
       fetchedDataPool.shutdown()
       consumerPool.close()

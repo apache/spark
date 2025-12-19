@@ -180,7 +180,7 @@ object ExternalShuffleService extends Logging {
     server.start()
 
     logDebug("Adding shutdown hook") // force eager creation of logger
-    ShutdownHookManager.addShutdownHook { () =>
+    ShutdownHookManager.addShutdownHook("ExternalShuffleServiceShutdownHook") { () =>
       logInfo("Shutting down shuffle service.")
       server.stop()
       barrier.countDown()

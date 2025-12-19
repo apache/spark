@@ -281,7 +281,7 @@ class KafkaTestUtils(
     // Set up a KafkaTestUtils leak detector so that we can see where the leak KafkaTestUtils is
     // created.
     val exception = new SparkException("It was created at: ")
-    leakDetector = ShutdownHookManager.addShutdownHook { () =>
+    leakDetector = ShutdownHookManager.addShutdownHook("KafkaTestUtilsLeakDetector") { () =>
       logError("Found a leak KafkaTestUtils.", exception)
     }
 
