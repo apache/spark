@@ -804,7 +804,6 @@ class PythonStreamingDataSourceSuite extends PythonDataSourceSuiteBase {
       stream.commit(offset)
     }
   }
-
 }
 
 class PythonStreamingDataSourceWriteSuite extends PythonDataSourceSuiteBase {
