@@ -1277,7 +1277,7 @@ def _create_converter_from_pandas(
             #     lambda x: Decimal(x))).cast(pa.decimal128(1))
 
             def convert_int_to_decimal(pser: pd.Series) -> pd.Series:
-                if pser.dtype.kind in ["i", "u"]:
+                if pd.api.types.is_integer_dtype(pser):  # type: ignore[attr-defined]
                     return pser.apply(  # type: ignore[return-value]
                         lambda x: Decimal(x) if pd.notna(x) else None
                     )

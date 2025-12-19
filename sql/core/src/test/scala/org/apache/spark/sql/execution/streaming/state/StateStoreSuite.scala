@@ -95,7 +95,8 @@ class SignalingStateStoreProvider extends StateStoreProvider with Logging {
   override def getStore(
       version: Long,
       uniqueId: Option[String],
-      forceSnapshotOnCommit: Boolean = false): StateStore = null
+      forceSnapshotOnCommit: Boolean = false,
+      loadEmpty: Boolean = false): StateStore = null
 
   /**
    * Simulates a maintenance operation that blocks until a signal is received.
@@ -175,7 +176,8 @@ class FakeStateStoreProviderTracksCloseThread extends StateStoreProvider {
   override def getStore(
       version: Long,
       uniqueId: Option[String],
-      forceSnapshotOnCommit: Boolean = false): StateStore = null
+      forceSnapshotOnCommit: Boolean = false,
+      loadEmpty: Boolean = false): StateStore = null
 
   override def doMaintenance(): Unit = {}
 }
@@ -247,7 +249,8 @@ class FakeStateStoreProviderWithMaintenanceError extends StateStoreProvider {
   override def getStore(
     version: Long,
     uniqueId: Option[String],
-    forceSnapshotOnCommit: Boolean = false): StateStore = null
+    forceSnapshotOnCommit: Boolean = false,
+    loadEmpty: Boolean = false): StateStore = null
 
   override def doMaintenance(): Unit = {
     Thread.currentThread.setUncaughtExceptionHandler(exceptionHandler)
@@ -1438,6 +1441,26 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       "HDFSBackedStateStoreProvider does not support checkpointFormatVersion > 1"))
   }
 
+  test("SPARK-54420: HDFSBackedStateStoreProvider does not support loading empty store") {
+    val provider = new HDFSBackedStateStoreProvider()
+    val hadoopConf = new Configuration()
+    hadoopConf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
+    provider.init(
+      StateStoreId(newDir(), Random.nextInt(), 0),
+      keySchema,
+      valueSchema,
+      NoPrefixKeyStateEncoderSpec(keySchema),
+      useColumnFamilies = false,
+      new StateStoreConf(),
+      hadoopConf)
+
+    val e = intercept[StateStoreUnsupportedOperationException] {
+      provider.getStore(0, loadEmpty = true)
+    }
+    assert(e.getMessage.contains(
+      "Internal Error: HDFSBackedStateStoreProvider doesn't support loadEmpty"))
+  }
+
   test("Auto snapshot repair") {
     withSQLConf(
       SQLConf.STREAMING_CHECKPOINT_FILE_CHECKSUM_ENABLED.key -> false.toString,
@@ -1722,6 +1745,9 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       put(store, "b", 0, 2)
       put(store, "aa", 0, 3)
       remove(store, _._1.startsWith("a"))
+      if (colFamiliesEnabled) {
+        assert(store.allColumnFamilyNames == Set(StateStore.DEFAULT_COL_FAMILY_NAME))
+      }
       assert(store.commit() === 1)
 
       assert(store.hasCommitted)

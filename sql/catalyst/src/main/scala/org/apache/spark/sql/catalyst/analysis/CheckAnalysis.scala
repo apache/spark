@@ -712,6 +712,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             }
 
             create.tableSchema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
+            TypeUtils.failUnsupportedDataType(create.tableSchema, SQLConf.get)
             SchemaUtils.checkIndeterminateCollationInSchema(create.tableSchema)
 
           case write: V2WriteCommand if write.resolved =>

@@ -24,6 +24,58 @@ testpaths = [
   "pyspark/ml/typing",
 ]
 
+[tool.ruff]
+exclude = [
+    "*/target/*",
+    "**/*.ipynb",
+    "docs/.local_ruby_bundle/",
+    "*python/pyspark/cloudpickle/*.py",
+    "*python/pyspark/ml/deepspeed/tests/*.py",
+    "*python/docs/build/*",
+    "*python/docs/source/conf.py",
+    "*python/.eggs/*",
+    "dist/*",
+    ".git/*",
+    "*python/pyspark/sql/pandas/functions.pyi",
+    "*python/pyspark/sql/column.pyi",
+    "*python/pyspark/worker.pyi",
+    "*python/pyspark/java_gateway.pyi",
+    "*python/pyspark/sql/connect/proto/*",
+    "*python/pyspark/sql/streaming/proto/*",
+    "*venv*/*",
+]
+
+[tool.ruff.lint]
+ignore = [
+    "E203", # Skip as black formatter adds a whitespace around ':'.
+    "E402", # Module top level import is disabled for optional import check, etc.
+    # TODO
+    "E721", # Use isinstance for type comparison, too many for now.
+    "E741", # Ambiguous variables like l, I or O.
+]
+
+[tool.ruff.lint.per-file-ignores]
+    # E501 is ignored as shared.py is auto-generated.
+    "python/pyspark/ml/param/shared.py" = ["E501"]
+    # E501 is ignored as we should keep the json string format in error_classes.py.
+    "python/pyspark/errors/error_classes.py" = ["E501"]
+    # Examples contain some unused variables.
+    "examples/src/main/python/sql/datasource.py" = ["F841"]
+    # Exclude * imports in test files
+    "python/pyspark/errors/tests/*.py" = ["F403"]
+    "python/pyspark/logger/tests/*.py" = ["F403"]
+    "python/pyspark/logger/tests/connect/*.py" = ["F403"]
+    "python/pyspark/ml/tests/*.py" = ["F403"]
+    "python/pyspark/mllib/tests/*.py" = ["F403"]
+    "python/pyspark/pandas/tests/*.py" = ["F401", "F403"]
+    "python/pyspark/pandas/tests/connect/*.py" = ["F401", "F403"]
+    "python/pyspark/resource/tests/*.py" = ["F403"]
+    "python/pyspark/sql/tests/*.py" = ["F403"]
+    "python/pyspark/streaming/tests/*.py" = ["F403"]
+    "python/pyspark/tests/*.py" = ["F403"]
+    "python/pyspark/testing/*.py" = ["F401"]
+    "python/pyspark/testing/tests/*.py" = ["F403"]
+
 [tool.black]
 # When changing the version, we have to update
 # GitHub workflow version and dev/reformat-python

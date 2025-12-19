@@ -7309,6 +7309,12 @@
     ],
     "sqlState" : "0A001"
   },
+  "UNSUPPORTED_TIME_TYPE" : {
+    "message" : [
+      "The data type TIME is not supported."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_TYPED_LITERAL" : {
     "message" : [
       "Literals of the type <unsupportedType> are not supported. Supported types are <supportedTypes>."
@@ -7475,6 +7481,12 @@
       "To tolerate the error on drop use DROP VIEW IF EXISTS."
     ],
     "sqlState" : "42P01"
+  },
+  "VIEW_WRITE_NOT_ALLOWED" : {
+    "message" : [
+      "Cannot write into view <name>, please write into a table instead."
+    ],
+    "sqlState" : "42809"
   },
   "WINDOW_FUNCTION_AND_FRAME_MISMATCH" : {
     "message" : [
@@ -7700,19 +7712,9 @@
       "Aggregate expression required for pivot, but '<sql>' did not appear in any aggregate function."
     ]
   },
-  "_LEGACY_ERROR_TEMP_1007" : {
-    "message" : [
-      "Cannot write into temp view <quoted> as it's not a data source v2 relation."
-    ]
-  },
   "_LEGACY_ERROR_TEMP_1008" : {
     "message" : [
       "<quoted> is not a temp view of streaming logical plan, please use batch API such as `DataFrameReader.table` to read it."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1011" : {
-    "message" : [
-      "Writing into a view is not allowed. View: <identifier>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1012" : {

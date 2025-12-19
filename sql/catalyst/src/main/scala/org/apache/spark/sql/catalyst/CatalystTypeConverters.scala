@@ -61,6 +61,7 @@ object CatalystTypeConverters {
   }
 
   private def getConverterForType(dataType: DataType): CatalystTypeConverter[Any, Any, Any] = {
+    TypeUtils.failUnsupportedDataType(dataType, SQLConf.get)
     val converter = dataType match {
       case udt: UserDefinedType[_] => UDTConverter(udt)
       case arrayType: ArrayType => ArrayConverter(arrayType.elementType)
@@ -69,10 +70,6 @@ object CatalystTypeConverters {
       case CharType(length) => new CharConverter(length)
       case VarcharType(length) => new VarcharConverter(length)
       case _: StringType => StringConverter
-      case _ @ (_: GeographyType | _: GeometryType) if !SQLConf.get.geospatialEnabled =>
-        throw new org.apache.spark.sql.AnalysisException(
-          errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",
-          messageParameters = scala.collection.immutable.Map.empty)
       case g: GeographyType =>
         new GeographyConverter(g)
       case g: GeometryType =>

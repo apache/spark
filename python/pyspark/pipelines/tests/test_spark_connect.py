@@ -21,22 +21,24 @@ Tests that run Pipelines against a Spark Connect server.
 
 import unittest
 
-from pyspark.errors.exceptions.connect import AnalysisException
-from pyspark.pipelines.graph_element_registry import graph_element_registration_context
-from pyspark.pipelines.spark_connect_graph_element_registry import (
-    SparkConnectGraphElementRegistry,
-)
-from pyspark.pipelines.spark_connect_pipeline import (
-    create_dataflow_graph,
-    start_run,
-    handle_pipeline_events,
-)
 from pyspark import pipelines as dp
 from pyspark.testing.connectutils import (
     ReusedConnectTestCase,
     should_test_connect,
     connect_requirement_message,
 )
+
+if should_test_connect:
+    from pyspark.errors.exceptions.connect import AnalysisException
+    from pyspark.pipelines.graph_element_registry import graph_element_registration_context
+    from pyspark.pipelines.spark_connect_graph_element_registry import (
+        SparkConnectGraphElementRegistry,
+    )
+    from pyspark.pipelines.spark_connect_pipeline import (
+        create_dataflow_graph,
+        start_run,
+        handle_pipeline_events,
+    )
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
