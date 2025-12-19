@@ -1914,6 +1914,7 @@ object SQLConf {
   val DATA_SOURCE_V2_JOIN_PUSHDOWN =
     buildConf("spark.sql.optimizer.datasourceV2JoinPushdown")
       .internal()
+      .version("4.1.0")
       .doc("When this config is set to true, join is tried to be pushed down" +
         "for DSv2 data sources in V2ScanRelationPushdown optimization rule.")
       .booleanConf
@@ -1922,6 +1923,7 @@ object SQLConf {
   val DATA_SOURCE_V2_EXPR_FOLDING =
     buildConf("spark.sql.optimizer.datasourceV2ExprFolding")
       .internal()
+      .version("4.1.0")
       .doc("When this config is set to true, do safe constant folding for the " +
         "expressions before translation and pushdown.")
       .booleanConf
@@ -3581,7 +3583,7 @@ object SQLConf {
       .doc("When true, if a microbatch is retried, if a file already exists but its checksum " +
         "file does not exist, the file checksum will not be created. This is useful for " +
         "compatibility with files created before file checksums were enabled.")
-      .version("4.2.0")
+      .version("4.1.0")
       .booleanConf
       .createWithDefault(true)
 
