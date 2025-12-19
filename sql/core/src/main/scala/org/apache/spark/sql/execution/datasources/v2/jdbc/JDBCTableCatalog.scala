@@ -117,7 +117,8 @@ class JDBCTableCatalog extends TableCatalog
         JdbcUtils.dropTable(conn, getTableName(ident), options)
         true
       } catch {
-        case _: SQLException => false
+        case e: SQLException if dialect.isObjectNotFoundException(e) =>
+          false
       }
     }
   }
