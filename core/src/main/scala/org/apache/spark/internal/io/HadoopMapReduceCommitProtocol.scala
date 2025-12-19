@@ -179,8 +179,10 @@ class HadoopMapReduceCommitProtocol(
     committer = setupCommitter(taskAttemptContext)
     committer.setupJob(jobContext)
     try {
-      val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
-      fs.deleteOnExit(stagingDir)
+      if (dynamicPartitionOverwrite) {
+        val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
+        fs.deleteOnExit(stagingDir)
+      }
     } catch {
       case e: IOException =>
         logWarning(log"Exception while setting clean logic ${MDC(JOB_ID, jobContext.getJobID)}", e)
@@ -258,6 +260,7 @@ class HadoopMapReduceCommitProtocol(
       if (hasValidPath) {
         val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
         fs.delete(stagingDir, true)
+        fs.cancelDeleteOnExit(stagingDir)
       }
     } catch {
       case e: IOException =>
