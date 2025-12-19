@@ -233,13 +233,23 @@ private [util] class SparkShutdownHookManager extends Logging {
 private class SparkShutdownHook(
     private val priority: Int,
     private val name: String,
-    hook: () => Unit)
+    hook: () => Unit,
+    clock: Clock = new SystemClock())
   extends Comparable[SparkShutdownHook] with Logging {
 
   override def compareTo(other: SparkShutdownHook): Int = other.priority.compareTo(priority)
 
   def run(): Unit = {
-    hook()
-    logInfo(s"$name finished.")
+    val startTime = clock.getTimeMillis()
+    try {
+      hook()
+      logInfo(s"Shutdown hook completed: $name (priority=$priority, " +
+        s"time=${clock.getTimeMillis() - startTime}ms)")
+    } catch {
+      case e: Throwable =>
+        logError(s"Shutdown hook failed: $name (priority=$priority, " +
+          s"time=${clock.getTimeMillis() - startTime}ms)", e)
+        throw e
+    }
   }
 }
