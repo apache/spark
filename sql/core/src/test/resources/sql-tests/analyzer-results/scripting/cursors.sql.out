@@ -156,6 +156,23 @@ org.apache.spark.sql.AnalysisException
 
 -- !query
 BEGIN
+  DECLARE step, x INT DEFAULT 0;
+  REPEAT
+    BEGIN
+      DECLARE c1 CURSOR FOR SELECT step AS val;
+      OPEN c1;
+      FETCH c1 INTO x;
+      SET step = step + 1;
+    END;
+  UNTIL step = 10 END REPEAT;
+  VALUES(step);
+END
+-- !query analysis
+LocalRelation [col1#x]
+
+
+-- !query
+BEGIN
   DECLARE x INT;
   DECLARE c1 CURSOR FOR SELECT 1 AS val;
   OPEN c1;
@@ -173,3 +190,69 @@ BEGIN
 END
 -- !query analysis
 LocalRelation [col1#x]
+
+
+-- !query
+CREATE TABLE cursor_sensitivity_test (id INT, value STRING) USING parquet
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`cursor_sensitivity_test`, false
+
+
+-- !query
+INSERT INTO cursor_sensitivity_test VALUES (1, 'row1'), (2, 'row2')
+-- !query analysis
+InsertIntoHadoopFsRelationCommand file:[not included in comparison]/{warehouse_dir}/cursor_sensitivity_test, false, Parquet, [path=file:[not included in comparison]/{warehouse_dir}/cursor_sensitivity_test], Append, `spark_catalog`.`default`.`cursor_sensitivity_test`, org.apache.spark.sql.execution.datasources.InMemoryFileIndex(file:[not included in comparison]/{warehouse_dir}/cursor_sensitivity_test), [id, value]
++- Project [col1#x AS id#x, col2#x AS value#x]
+   +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+BEGIN
+  DECLARE fetched_id INT;
+  DECLARE fetched_value STRING;
+  DECLARE row_count_first_open INT DEFAULT 0;
+  DECLARE row_count_second_open INT DEFAULT 0;
+  DECLARE nomorerows BOOLEAN DEFAULT false;
+  
+  DECLARE cur CURSOR FOR SELECT id, value FROM cursor_sensitivity_test ORDER BY id;
+  
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET nomorerows = true;
+  
+  INSERT INTO cursor_sensitivity_test VALUES (3, 'row3'), (4, 'row4');
+  
+  OPEN cur;
+  
+  INSERT INTO cursor_sensitivity_test VALUES (5, 'row5'), (6, 'row6');
+  
+  REPEAT
+    FETCH cur INTO fetched_id, fetched_value;
+    IF NOT nomorerows THEN
+      SET row_count_first_open = row_count_first_open + 1;
+    END IF;
+  UNTIL nomorerows END REPEAT;
+  
+  CLOSE cur;
+  
+  SET nomorerows = false;
+  OPEN cur;
+  
+  REPEAT
+    FETCH cur INTO fetched_id, fetched_value;
+    IF NOT nomorerows THEN
+      SET row_count_second_open = row_count_second_open + 1;
+    END IF;
+  UNTIL nomorerows END REPEAT;
+  
+  VALUES (row_count_first_open, row_count_second_open);
+  
+  CLOSE cur;
+END
+-- !query analysis
+LocalRelation [col1#x, col2#x]
+
+
+-- !query
+DROP TABLE cursor_sensitivity_test
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.cursor_sensitivity_test

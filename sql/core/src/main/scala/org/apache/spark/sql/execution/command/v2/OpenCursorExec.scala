@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.command.v2
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{InternalRow, SqlScriptingContextManager}
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.execution.datasources.v2.LeafV2CommandExec
 
 /**
@@ -51,8 +50,11 @@ case class OpenCursorExec(cursorName: String) extends LeafV2CommandExec {
     }
 
     // Execute the query and collect results
-    val df = Dataset.ofRows(session, cursorDef.query)
-    val resultData = df.queryExecution.executedPlan.executeCollect()
+    // Note: Even though the query plan may be analyzed/cached, executePlan should
+    // re-execute it against the current state of tables. For INSENSITIVE cursors,
+    // this captures a snapshot at OPEN time, not DECLARE time.
+    val queryExecution = session.sessionState.executePlan(cursorDef.query)
+    val resultData = queryExecution.executedPlan.executeCollect()
 
     // Update cursor state
     cursorDef.isOpen = true

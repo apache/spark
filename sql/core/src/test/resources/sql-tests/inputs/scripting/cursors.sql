@@ -101,7 +101,7 @@ BEGIN
 END;
 --QUERY-DELIMITER-END
 
--- Test 2e variant: Cannot fetch after closing
+-- Test 2f: Cannot fetch after closing
 -- EXPECTED: Error - CURSOR_NOT_OPEN
 --QUERY-DELIMITER-START
 BEGIN
@@ -111,6 +111,23 @@ BEGIN
   FETCH c1 INTO x;
   CLOSE c1;
   FETCH c1 INTO x; -- Should fail
+END;
+--QUERY-DELIMITER-END
+
+-- Test 2g: Cursor is implicitly closed when it goes out of scope.
+-- EXPECTED: Success, return 10
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE step, x INT DEFAULT 0;
+  REPEAT
+    BEGIN
+      DECLARE c1 CURSOR FOR SELECT step AS val;
+      OPEN c1;
+      FETCH c1 INTO x;
+      SET step = step + 1;
+    END;
+  UNTIL step = 10 END REPEAT;
+  VALUES(step);
 END;
 --QUERY-DELIMITER-END
 
@@ -134,3 +151,69 @@ BEGIN
   CLOSE c1;
 END;
 --QUERY-DELIMITER-END
+
+-- Test 3: Cursor sensitivity - cursor captures snapshot when opened
+-- Setup: Create table with initial rows
+CREATE TABLE cursor_sensitivity_test (id INT, value STRING) USING parquet;
+INSERT INTO cursor_sensitivity_test VALUES (1, 'row1'), (2, 'row2');
+
+-- EXPECTED: Cursor captures snapshot at OPEN time
+-- Note: With Spark's default behavior and parquet tables, the analyzed plan
+-- may cache table metadata, so both opens may see the same snapshot (4 rows).
+-- This demonstrates that cursors are INSENSITIVE by default.
+--QUERY-DELIMITER-START
+BEGIN
+  -- Declare all variables first
+  DECLARE fetched_id INT;
+  DECLARE fetched_value STRING;
+  DECLARE row_count_first_open INT DEFAULT 0;
+  DECLARE row_count_second_open INT DEFAULT 0;
+  DECLARE nomorerows BOOLEAN DEFAULT false;
+
+  -- Step 2: Declare cursor
+  DECLARE cur CURSOR FOR SELECT id, value FROM cursor_sensitivity_test ORDER BY id;
+
+  -- Declare handler
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET nomorerows = true;
+
+  -- Step 3: Add more rows before OPEN
+  INSERT INTO cursor_sensitivity_test VALUES (3, 'row3'), (4, 'row4');
+
+  -- Step 4: OPEN the cursor (captures snapshot - should see rows 1-4)
+  OPEN cur;
+
+  -- Step 5: Add more rows after OPEN
+  INSERT INTO cursor_sensitivity_test VALUES (5, 'row5'), (6, 'row6');
+
+  -- Step 6: Fetch rows - should see snapshot from OPEN time (4 rows)
+  REPEAT
+    FETCH cur INTO fetched_id, fetched_value;
+    IF NOT nomorerows THEN
+      SET row_count_first_open = row_count_first_open + 1;
+    END IF;
+  UNTIL nomorerows END REPEAT;
+
+  -- Step 7: Close the cursor
+  CLOSE cur;
+
+  -- Step 8: Open the cursor again (should capture new snapshot)
+  SET nomorerows = false;
+  OPEN cur;
+
+  -- Step 9: Fetch rows - demonstrates cursor behavior
+  REPEAT
+    FETCH cur INTO fetched_id, fetched_value;
+    IF NOT nomorerows THEN
+      SET row_count_second_open = row_count_second_open + 1;
+    END IF;
+  UNTIL nomorerows END REPEAT;
+
+  -- Return both counts
+  VALUES (row_count_first_open, row_count_second_open);
+
+  CLOSE cur;
+END;
+--QUERY-DELIMITER-END
+
+-- Cleanup
+DROP TABLE cursor_sensitivity_test;

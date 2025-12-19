@@ -1924,6 +1924,9 @@ case class SetVariable(
 
 /**
  * The logical plan of the DECLARE CURSOR command.
+ * Note: The query child should not be fully analyzed/optimized at declaration time
+ * because we need to re-analyze it each time the cursor is opened to see fresh
+ * data.
  */
 case class DeclareCursor(
     cursorName: String,
@@ -1932,6 +1935,9 @@ case class DeclareCursor(
   override def child: LogicalPlan = query
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(query = newChild)
+
+  // Mark that the child query should not be eagerly analyzed
+  override lazy val resolved: Boolean = cursorName.nonEmpty
 }
 
 /**
