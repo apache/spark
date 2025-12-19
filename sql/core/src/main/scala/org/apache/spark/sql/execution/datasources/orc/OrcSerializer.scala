@@ -163,7 +163,7 @@ class OrcSerializer(dataSchema: StructType) {
       val fieldConverters = st.map(_.dataType).zip(orcType.getChildren.asScala).map {
         case (dt, orcType) =>
           newConverter(dt, orcType)
-      }
+      }.toArray
       val numFields = st.length
       val struct = getter.getStruct(ordinal, numFields)
       var i = 0
