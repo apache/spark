@@ -11146,7 +11146,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         axis: Optional[Axis] = 0,
         bool_only: Optional[bool] = None,
         skipna: bool = True,
-        **kwargs: Any,
     ) -> Union["Series", bool]:
         """
         Return whether any element is True.
@@ -11173,10 +11172,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             Exclude NA/null values. If the entire row/column is NA and skipna is True,
             then the result will be False, as for an empty row/column. If skipna is False,
             then NA are treated as True, because these are not equal to zero.
-
-        **kwargs: Any, default None
-            Additional keywords have no effect but might be accepted for compatibility with
-            NumPy.
 
         Returns
         -------
