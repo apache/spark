@@ -67,7 +67,8 @@ class ExternalShuffleServiceMetricsSuite extends SparkFunSuite {
         "shuffle-server.usedDirectMemory",
         "shuffle-server.usedHeapMemory",
         "finalizeShuffleMergeLatencyMillis",
-        "fetchMergedBlocksMetaLatencyMillis").sorted
+        "fetchMergedBlocksMetaLatencyMillis",
+        "failedChunks").sorted
     )
   }
 }
