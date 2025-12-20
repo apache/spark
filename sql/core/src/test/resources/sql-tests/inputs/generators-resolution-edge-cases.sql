@@ -7,7 +7,7 @@ SELECT 1 + explode(array(1, 2, 3));
 -- multiple generators should work
 SELECT explode(array(0, 1, 2)), explode(array(10, 20));
 
--- multiple generators' order is not fixed and depends on rule ordering
+-- multiple generators are processed in left-to-right order regardless of internal rule ordering
 SELECT explode(array(sin(0), 1, 2)), explode(array(10, 20));
 
 -- multiple generators in aggregate should fail
