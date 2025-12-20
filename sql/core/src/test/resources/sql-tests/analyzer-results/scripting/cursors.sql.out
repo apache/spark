@@ -724,3 +724,123 @@ BEGIN
 END
 -- !query analysis
 LocalRelation [col1#x]
+
+
+-- !query
+SET VAR session_x = 0;
+SET VAR session_y = '';
+BEGIN
+  DECLARE cur CURSOR FOR SELECT 42 AS num, 'hello' AS text;
+  OPEN cur;
+  FETCH cur INTO session_x, session_y;
+  CLOSE cur;
+END;
+SELECT session_x, session_y;  -- Should return 42, 'hello'
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_SET_SYNTAX",
+  "sqlState" : "42000",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 209,
+    "fragment" : "SET VAR session_x = 0;\nSET VAR session_y = '';\nBEGIN\n  DECLARE cur CURSOR FOR SELECT 42 AS num, 'hello' AS text;\n  OPEN cur;\n  FETCH cur INTO session_x, session_y;\n  CLOSE cur;\nEND;\nSELECT session_x, session_y"
+  } ]
+}
+
+
+-- !query
+SET VAR session_var = 0;
+BEGIN
+  DECLARE local_var STRING;
+  DECLARE cur CURSOR FOR SELECT 100 AS a, 'world' AS b;
+  OPEN cur;
+  FETCH cur INTO session_var, local_var;
+  CLOSE cur;
+  VALUES (session_var, local_var);  -- Should return 100, 'world'
+END
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_SET_SYNTAX",
+  "sqlState" : "42000",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 250,
+    "fragment" : "SET VAR session_var = 0;\nBEGIN\n  DECLARE local_var STRING;\n  DECLARE cur CURSOR FOR SELECT 100 AS a, 'world' AS b;\n  OPEN cur;\n  FETCH cur INTO session_var, local_var;\n  CLOSE cur;\n  VALUES (session_var, local_var);  -- Should return 100, 'world'\nEND"
+  } ]
+}
+
+
+-- !query
+SET VAR session_int = 0;
+SET VAR session_str = '';
+BEGIN
+  DECLARE cur CURSOR FOR SELECT 99.9 AS double_val, 42 AS int_val;
+  OPEN cur;
+  FETCH cur INTO session_int, session_str;  -- double->int cast, int->string cast
+  CLOSE cur;
+END;
+SELECT session_int, session_str;  -- Should return 99, '42' (with ANSI rounding)
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_SET_SYNTAX",
+  "sqlState" : "42000",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 267,
+    "fragment" : "SET VAR session_int = 0;\nSET VAR session_str = '';\nBEGIN\n  DECLARE cur CURSOR FOR SELECT 99.9 AS double_val, 42 AS int_val;\n  OPEN cur;\n  FETCH cur INTO session_int, session_str;  -- double->int cast, int->string cast\n  CLOSE cur;\nEND;\nSELECT session_int, session_str"
+  } ]
+}
+
+
+-- !query
+SET VAR session_dup = 0;
+BEGIN
+  DECLARE cur CURSOR FOR SELECT 1, 2;
+  OPEN cur;
+  FETCH cur INTO session_dup, session_dup;  -- Should fail - duplicate session variable
+END
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_SET_SYNTAX",
+  "sqlState" : "42000",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 172,
+    "fragment" : "SET VAR session_dup = 0;\nBEGIN\n  DECLARE cur CURSOR FOR SELECT 1, 2;\n  OPEN cur;\n  FETCH cur INTO session_dup, session_dup;  -- Should fail - duplicate session variable\nEND"
+  } ]
+}
+
+
+-- !query
+SET VAR dup_var = 0;
+BEGIN
+  DECLARE dup_var INT;
+  DECLARE cur CURSOR FOR SELECT 1, 2;
+  OPEN cur;
+  FETCH cur INTO dup_var, dup_var;  -- Should fail - duplicate variable name
+END
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_SET_SYNTAX",
+  "sqlState" : "42000",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 1,
+    "stopIndex" : 180,
+    "fragment" : "SET VAR dup_var = 0;\nBEGIN\n  DECLARE dup_var INT;\n  DECLARE cur CURSOR FOR SELECT 1, 2;\n  OPEN cur;\n  FETCH cur INTO dup_var, dup_var;  -- Should fail - duplicate variable name\nEND"
+  } ]
+}

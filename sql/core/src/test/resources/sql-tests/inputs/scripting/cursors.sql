@@ -623,3 +623,73 @@ BEGIN
   VALUES (complex_record); -- Should return struct(100, 'test', 99.5)
 END;
 --QUERY-DELIMITER-END
+
+
+-- Test 27: FETCH INTO with session variables
+-- EXPECTED: Success - session variables work with FETCH INTO
+--QUERY-DELIMITER-START
+SET VAR session_x = 0;
+SET VAR session_y = '';
+BEGIN
+  DECLARE cur CURSOR FOR SELECT 42 AS num, 'hello' AS text;
+  OPEN cur;
+  FETCH cur INTO session_x, session_y;
+  CLOSE cur;
+END;
+SELECT session_x, session_y;  -- Should return 42, 'hello'
+--QUERY-DELIMITER-END
+
+
+-- Test 28: FETCH INTO mixing local and session variables
+-- EXPECTED: Success - can mix local and session variables in FETCH INTO
+--QUERY-DELIMITER-START
+SET VAR session_var = 0;
+BEGIN
+  DECLARE local_var STRING;
+  DECLARE cur CURSOR FOR SELECT 100 AS a, 'world' AS b;
+  OPEN cur;
+  FETCH cur INTO session_var, local_var;
+  CLOSE cur;
+  VALUES (session_var, local_var);  -- Should return 100, 'world'
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 29: FETCH INTO session variables with type casting
+-- EXPECTED: Success - ANSI store assignment rules apply to session variables
+--QUERY-DELIMITER-START
+SET VAR session_int = 0;
+SET VAR session_str = '';
+BEGIN
+  DECLARE cur CURSOR FOR SELECT 99.9 AS double_val, 42 AS int_val;
+  OPEN cur;
+  FETCH cur INTO session_int, session_str;  -- double->int cast, int->string cast
+  CLOSE cur;
+END;
+SELECT session_int, session_str;  -- Should return 99, '42' (with ANSI rounding)
+--QUERY-DELIMITER-END
+
+
+-- Test 30: FETCH INTO mixing local and session with duplicate session variable
+-- EXPECTED: Error - DUPLICATE_ASSIGNMENTS (applies to session variables too)
+--QUERY-DELIMITER-START
+SET VAR session_dup = 0;
+BEGIN
+  DECLARE cur CURSOR FOR SELECT 1, 2;
+  OPEN cur;
+  FETCH cur INTO session_dup, session_dup;  -- Should fail - duplicate session variable
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 31: FETCH INTO mixing with duplicate across local and session
+-- EXPECTED: Error - DUPLICATE_ASSIGNMENTS (same variable name in local and session scope)
+--QUERY-DELIMITER-START
+SET VAR dup_var = 0;
+BEGIN
+  DECLARE dup_var INT;
+  DECLARE cur CURSOR FOR SELECT 1, 2;
+  OPEN cur;
+  FETCH cur INTO dup_var, dup_var;  -- Should fail - duplicate variable name
+END;
+--QUERY-DELIMITER-END
