@@ -43,14 +43,8 @@ case class OpenCursorExec(
     val scriptingContext = scriptingContextManager.getContext
       .asInstanceOf[org.apache.spark.sql.scripting.SqlScriptingExecutionContext]
 
-    // Parse cursor name to handle qualification (e.g., "label.cursor_name" or just "cursor_name")
-    val cursorNameParts = cursorName.split("\\.").toSeq.map { part =>
-      if (session.sessionState.conf.caseSensitiveAnalysis) {
-        part
-      } else {
-        part.toLowerCase(java.util.Locale.ROOT)
-      }
-    }
+    // Parse and normalize cursor name for case sensitivity
+    val cursorNameParts = parseCursorName(cursorName)
 
     // Find cursor in scope hierarchy
     val cursorDef = scriptingContext.currentFrame.findCursorByNameParts(cursorNameParts)
@@ -59,7 +53,7 @@ case class OpenCursorExec(
           errorClass = "CURSOR_NOT_FOUND",
           messageParameters = Map("cursorName" -> cursorName)))
 
-    // Check if cursor is already open
+    // Validate cursor is not already open
     if (cursorDef.isOpen) {
       throw new AnalysisException(
         errorClass = "CURSOR_ALREADY_OPEN",
@@ -67,18 +61,16 @@ case class OpenCursorExec(
     }
 
     // Execute the query and collect results
-    // If parameters are provided (args.nonEmpty), re-parse the query text with parameters
-    // Otherwise, use the analyzed LogicalPlan as-is
     val resultData = if (args.nonEmpty) {
-      // Parameterized cursor - re-parse query text with parameters
+      // Parameterized cursor: re-parse query text with bound parameters
       executeParameterizedQuery(cursorDef.queryText, args)
     } else {
-      // Non-parameterized cursor - use analyzed plan
+      // Non-parameterized cursor: execute the analyzed plan directly
       val queryExecution = session.sessionState.executePlan(cursorDef.query)
       queryExecution.executedPlan.executeCollect()
     }
 
-    // Update cursor state
+    // Update cursor state to open
     cursorDef.isOpen = true
     cursorDef.resultData = Some(resultData)
     cursorDef.currentPosition = -1
@@ -87,27 +79,45 @@ case class OpenCursorExec(
   }
 
   /**
-   * Execute a parameterized query by re-parsing the SQL text with parameters.
-   * Uses the same mechanism as EXECUTE IMMEDIATE.
+   * Parses and normalizes cursor name parts based on case sensitivity configuration.
+   */
+  private def parseCursorName(cursorName: String): Seq[String] = {
+    cursorName.split("\\.").toSeq.map { part =>
+      if (session.sessionState.conf.caseSensitiveAnalysis) {
+        part
+      } else {
+        part.toLowerCase(java.util.Locale.ROOT)
+      }
+    }
+  }
+
+  /**
+   * Executes a parameterized query by re-parsing the SQL text with bound parameters.
+   * This uses the same parameter binding mechanism as EXECUTE IMMEDIATE.
+   *
+   * @param queryText The SQL query text with parameter markers (? or :name)
+   * @param args Parameter expressions to bind
+   * @return Array of result rows
    */
   private def executeParameterizedQuery(
       queryText: String,
       args: Seq[Expression]): Array[InternalRow] = {
-    // Build unified parameters exactly like EXECUTE IMMEDIATE does
     val (paramValues, paramNames) = buildUnifiedParameters(args)
 
-    // Call session.sql with parameters, just like EXECUTE IMMEDIATE
-    // Cast to ClassicSparkSession to access the parameterized sql method
+    // Use session.sql() with parameters (same as EXECUTE IMMEDIATE)
     val df = session.asInstanceOf[org.apache.spark.sql.classic.SparkSession]
       .sql(queryText, paramValues, paramNames)
 
-    // Collect and return the results
     df.queryExecution.executedPlan.executeCollect()
   }
 
   /**
-   * Builds parameter arrays for the sql() API, exactly like EXECUTE IMMEDIATE.
-   * Uses the pre-extracted parameter names to avoid issues with alias resolution.
+   * Builds parameter arrays for the session.sql() API.
+   * This mirrors the logic in EXECUTE IMMEDIATE and uses pre-extracted parameter names
+   * to avoid issues with alias resolution during analysis.
+   *
+   * @param args Parameter expressions from the USING clause
+   * @return Tuple of (parameter values, parameter names)
    */
   private def buildUnifiedParameters(args: Seq[Expression]): (Array[Any], Array[String]) = {
     val values = scala.collection.mutable.ListBuffer[Any]()
@@ -116,7 +126,6 @@ case class OpenCursorExec(
     args.zipWithIndex.foreach { case (expr, idx) =>
       val paramValue = evaluateParameterExpression(expr)
       values += paramValue
-      // Use the pre-extracted parameter name
       val paramName = if (idx < paramNames.length) paramNames(idx) else ""
       names += paramName
     }
@@ -125,25 +134,27 @@ case class OpenCursorExec(
   }
 
   /**
-   * Evaluates a parameter expression to a Literal.
-   * Returns a Literal to preserve type information, just like EXECUTE IMMEDIATE.
+   * Evaluates a parameter expression and returns it as a Literal to preserve type information.
+   * This mirrors the behavior of EXECUTE IMMEDIATE.
+   *
+   * @param expr The expression to evaluate
+   * @return Evaluated expression as a Literal (or the original value for session.sql())
    */
   private def evaluateParameterExpression(expr: Expression): Any = {
     import org.apache.spark.sql.catalyst.InternalRow
     import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
     import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 
-    // For foldable expressions, evaluate and wrap in Literal
     if (expr.foldable) {
+      // For foldable expressions, evaluate directly
       Literal.create(expr.eval(InternalRow.empty), expr.dataType)
     } else {
-      // Create a projection to evaluate the expression
+      // For non-foldable expressions, use a projection to evaluate
       val namedExpr = Alias(expr, "param")()
       val project = Project(Seq(namedExpr), LocalRelation())
       val queryExecution = session.sessionState.executePlan(project)
       val row = queryExecution.executedPlan.executeCollect().head
       val value = row.get(0, expr.dataType)
-      // Return as Literal to preserve type information
       Literal.create(value, expr.dataType)
     }
   }

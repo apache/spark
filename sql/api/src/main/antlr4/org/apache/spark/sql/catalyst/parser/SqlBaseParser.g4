@@ -1866,6 +1866,7 @@ ansiNonReserved
     | ARCHIVE
     | ARRAY
     | ASC
+    | ASENSITIVE
     | AT
     | ATOMIC
     | BEGIN
@@ -1888,6 +1889,7 @@ ansiNonReserved
     | CHAR
     | CHARACTER
     | CLEAR
+    | CLOSE
     | CLUSTER
     | CLUSTERED
     | CODEGEN
@@ -1904,6 +1906,7 @@ ansiNonReserved
     | CONTAINS
     | CONTINUE
     | COST
+    | CURSOR
     | CUBE
     | CURRENT
     | DATA
@@ -1985,6 +1988,7 @@ ansiNonReserved
     | INPUT
     | INPUTFORMAT
     | INSERT
+    | INSENSITIVE
     | INT
     | INTEGER
     | INTERVAL
@@ -2033,12 +2037,14 @@ ansiNonReserved
     | NAMESPACES
     | NANOSECOND
     | NANOSECONDS
+    | NEXT
     | NO
     | NONE
     | NORELY
     | NULLS
     | NUMERIC
     | OF
+    | OPEN
     | OPTION
     | OPTIONS
     | OUT
@@ -2062,6 +2068,7 @@ ansiNonReserved
     | QUARTER
     | QUERY
     | RANGE
+    | READ
     | READS
     | REAL
     | RECORDREADER
@@ -2222,6 +2229,7 @@ nonReserved
     | ARRAY
     | AS
     | ASC
+    | ASENSITIVE
     | AT
     | ATOMIC
     | AUTHORIZATION
@@ -2250,6 +2258,7 @@ nonReserved
     | CHARACTER
     | CHECK
     | CLEAR
+    | CLOSE
     | CLUSTER
     | CLUSTERED
     | CODEGEN
@@ -2372,6 +2381,7 @@ nonReserved
     | INPUT
     | INPUTFORMAT
     | INSERT
+    | INSENSITIVE
     | INT
     | INTEGER
     | INTERVAL
@@ -2424,6 +2434,7 @@ nonReserved
     | NAMESPACES
     | NANOSECOND
     | NANOSECONDS
+    | NEXT
     | NO
     | NONE
     | NORELY
@@ -2434,6 +2445,7 @@ nonReserved
     | OF
     | OFFSET
     | ONLY
+    | OPEN
     | OPTION
     | OPTIONS
     | OR
@@ -2462,6 +2474,7 @@ nonReserved
     | QUARTER
     | QUERY
     | RANGE
+    | READ
     | READS
     | REAL
     | RECORDREADER

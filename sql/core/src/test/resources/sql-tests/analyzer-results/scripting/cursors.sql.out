@@ -556,3 +556,171 @@ org.apache.spark.sql.AnalysisException
     "numTarget" : "4"
   }
 }
+
+
+-- !query
+BEGIN
+  DECLARE x INT;
+  DECLARE cur INSENSITIVE CURSOR FOR SELECT 42 AS val;
+  OPEN cur;
+  FETCH cur INTO x;
+  CLOSE cur;
+  VALUES (x); -- Should return 42
+END
+-- !query analysis
+LocalRelation [col1#x]
+
+
+-- !query
+BEGIN
+  DECLARE y INT;
+  DECLARE cur ASENSITIVE CURSOR FOR SELECT 99 AS val;
+  OPEN cur;
+  FETCH cur INTO y;
+  CLOSE cur;
+  VALUES (y); -- Should return 99
+END
+-- !query analysis
+LocalRelation [col1#x]
+
+
+-- !query
+BEGIN
+  DECLARE z INT;
+  DECLARE cur CURSOR FOR SELECT 77 AS val FOR READ ONLY;
+  OPEN cur;
+  FETCH cur INTO z;
+  CLOSE cur;
+  VALUES (z); -- Should return 77
+END
+-- !query analysis
+LocalRelation [col1#x]
+
+
+-- !query
+BEGIN
+  DECLARE w INT;
+  DECLARE cur INSENSITIVE CURSOR FOR SELECT 123 AS val FOR READ ONLY;
+  OPEN cur;
+  FETCH cur INTO w;
+  CLOSE cur;
+  VALUES (w); -- Should return 123
+END
+-- !query analysis
+LocalRelation [col1#x]
+
+
+-- !query
+BEGIN
+  DECLARE a INT;
+  DECLARE cur CURSOR FOR SELECT 55 AS val;
+  OPEN cur;
+  FETCH NEXT cur INTO a;
+  CLOSE cur;
+  VALUES (a); -- Should return 55
+END
+-- !query analysis
+LocalRelation [col1#x]
+
+
+-- !query
+BEGIN
+  DECLARE b INT;
+  DECLARE cur CURSOR FOR SELECT 66 AS val;
+  OPEN cur;
+  FETCH FROM cur INTO b;
+  CLOSE cur;
+  VALUES (b); -- Should return 66
+END
+-- !query analysis
+LocalRelation [col1#x]
+
+
+-- !query
+BEGIN
+  DECLARE c INT;
+  DECLARE cur CURSOR FOR SELECT 88 AS val;
+  OPEN cur;
+  FETCH NEXT FROM cur INTO c;
+  CLOSE cur;
+  VALUES (c); -- Should return 88
+END
+-- !query analysis
+LocalRelation [col1#x]
+
+
+-- !query
+BEGIN
+  DECLARE person_record STRUCT<name STRING, age INT>;
+  DECLARE cur CURSOR FOR SELECT 'Alice' AS name, 30 AS age;
+  OPEN cur;
+  FETCH cur INTO person_record;
+  CLOSE cur;
+  VALUES (person_record.name, person_record.age); -- Should return 'Alice', 30
+END
+-- !query analysis
+LocalRelation [col1#x, col2#x]
+
+
+-- !query
+BEGIN
+  DECLARE record_var STRUCT<id INT, value STRING>;
+  DECLARE cur CURSOR FOR SELECT 42.7 AS id, 100 AS value;
+  OPEN cur;
+  FETCH cur INTO record_var;
+  CLOSE cur;
+  VALUES (record_var.id, record_var.value); -- Should return 42, '100' (with casting)
+END
+-- !query analysis
+LocalRelation [col1#x, col2#x]
+
+
+-- !query
+BEGIN
+  DECLARE record_var STRUCT<a INT, b INT>;
+  DECLARE cur CURSOR FOR SELECT 1, 2, 3;
+  OPEN cur;
+  FETCH cur INTO record_var;  -- Should fail - 2 struct fields but 3 cursor columns
+END
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ASSIGNMENT_ARITY_MISMATCH",
+  "sqlState" : "42802",
+  "messageParameters" : {
+    "numExpr" : "3",
+    "numTarget" : "2"
+  }
+}
+
+
+-- !query
+BEGIN
+  DECLARE x INT;
+  DECLARE cur CURSOR FOR SELECT 1, 2;
+  OPEN cur;
+  FETCH cur INTO x;  -- Should fail - single non-struct variable but 2 columns
+END
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ASSIGNMENT_ARITY_MISMATCH",
+  "sqlState" : "42802",
+  "messageParameters" : {
+    "numExpr" : "2",
+    "numTarget" : "1"
+  }
+}
+
+
+-- !query
+BEGIN
+  DECLARE complex_record STRUCT<id BIGINT, name STRING, value DOUBLE>;
+  DECLARE cur CURSOR FOR SELECT 100 AS id, 'test' AS name, 99.5 AS value;
+  OPEN cur;
+  FETCH cur INTO complex_record;
+  CLOSE cur;
+  VALUES (complex_record); -- Should return struct(100, 'test', 99.5)
+END
+-- !query analysis
+LocalRelation [col1#x]

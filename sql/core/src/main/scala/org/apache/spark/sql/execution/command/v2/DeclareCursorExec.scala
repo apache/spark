@@ -26,6 +26,13 @@ import org.apache.spark.sql.scripting.CursorDefinition
 
 /**
  * Physical plan node for declaring cursors.
+ * Creates a cursor definition in the current scope and parses its query from SQL text.
+ * The query is parsed at declaration time but not analyzed to preserve parameter markers.
+ *
+ * @param cursorName Name of the cursor
+ * @param query Placeholder LogicalPlan (not used at execution)
+ * @param queryText Original SQL text of the cursor query (used for execution)
+ * @param asensitive Whether the cursor is ASENSITIVE (currently all cursors are INSENSITIVE)
  */
 case class DeclareCursorExec(
     cursorName: String,
@@ -43,17 +50,18 @@ case class DeclareCursorExec(
       .asInstanceOf[org.apache.spark.sql.scripting.SqlScriptingExecutionContext]
     val currentScope = scriptingContext.currentScope
 
-    // Check if cursor already exists in current scope
+    // Validate cursor doesn't already exist in current scope
     if (currentScope.cursors.contains(cursorName)) {
       throw new AnalysisException(
         errorClass = "CURSOR_ALREADY_EXISTS",
         messageParameters = Map("cursorName" -> cursorName))
     }
 
-    // Create cursor definition - parse the query from SQL text
-    // This ensures parameter markers are preserved and not resolved during script analysis
+    // Parse the query from SQL text to create a LogicalPlan
+    // This ensures parameter markers are preserved and not prematurely resolved
     val parsedQuery = session.sessionState.sqlParser.parsePlan(queryText)
 
+    // Create cursor definition with parsed query and original SQL text
     val cursorDef = CursorDefinition(
       name = cursorName,
       query = parsedQuery,

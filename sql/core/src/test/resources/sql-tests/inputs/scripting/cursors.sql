@@ -459,3 +459,167 @@ BEGIN
   FETCH cur INTO x, y, z, w;  -- Should fail - 4 targets but 2 columns
 END;
 --QUERY-DELIMITER-END
+
+
+-- Test 15: DECLARE CURSOR with INSENSITIVE keyword
+-- EXPECTED: Success - INSENSITIVE is a valid optional keyword
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE x INT;
+  DECLARE cur INSENSITIVE CURSOR FOR SELECT 42 AS val;
+  OPEN cur;
+  FETCH cur INTO x;
+  CLOSE cur;
+  VALUES (x); -- Should return 42
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 16: DECLARE CURSOR with ASENSITIVE keyword
+-- EXPECTED: Success - ASENSITIVE is a valid optional keyword
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE y INT;
+  DECLARE cur ASENSITIVE CURSOR FOR SELECT 99 AS val;
+  OPEN cur;
+  FETCH cur INTO y;
+  CLOSE cur;
+  VALUES (y); -- Should return 99
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 17: DECLARE CURSOR with FOR READ ONLY clause
+-- EXPECTED: Success - FOR READ ONLY is a valid optional clause
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE z INT;
+  DECLARE cur CURSOR FOR SELECT 77 AS val FOR READ ONLY;
+  OPEN cur;
+  FETCH cur INTO z;
+  CLOSE cur;
+  VALUES (z); -- Should return 77
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 18: DECLARE CURSOR with all optional keywords
+-- EXPECTED: Success - Combination of INSENSITIVE and FOR READ ONLY
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE w INT;
+  DECLARE cur INSENSITIVE CURSOR FOR SELECT 123 AS val FOR READ ONLY;
+  OPEN cur;
+  FETCH cur INTO w;
+  CLOSE cur;
+  VALUES (w); -- Should return 123
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 19: FETCH with NEXT keyword
+-- EXPECTED: Success - NEXT is a valid optional keyword
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE a INT;
+  DECLARE cur CURSOR FOR SELECT 55 AS val;
+  OPEN cur;
+  FETCH NEXT cur INTO a;
+  CLOSE cur;
+  VALUES (a); -- Should return 55
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 20: FETCH with FROM keyword
+-- EXPECTED: Success - FROM is a valid optional keyword
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE b INT;
+  DECLARE cur CURSOR FOR SELECT 66 AS val;
+  OPEN cur;
+  FETCH FROM cur INTO b;
+  CLOSE cur;
+  VALUES (b); -- Should return 66
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 21: FETCH with NEXT FROM keywords
+-- EXPECTED: Success - NEXT FROM is a valid optional keyword combination
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE c INT;
+  DECLARE cur CURSOR FOR SELECT 88 AS val;
+  OPEN cur;
+  FETCH NEXT FROM cur INTO c;
+  CLOSE cur;
+  VALUES (c); -- Should return 88
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 22: FETCH INTO single STRUCT variable - basic case
+-- EXPECTED: Success - SQL Standard allows multi-column fetch into single struct
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE person_record STRUCT<name STRING, age INT>;
+  DECLARE cur CURSOR FOR SELECT 'Alice' AS name, 30 AS age;
+  OPEN cur;
+  FETCH cur INTO person_record;
+  CLOSE cur;
+  VALUES (person_record.name, person_record.age); -- Should return 'Alice', 30
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 23: FETCH INTO STRUCT with type casting
+-- EXPECTED: Success - ANSI casting should apply to struct fields
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE record_var STRUCT<id INT, value STRING>;
+  DECLARE cur CURSOR FOR SELECT 42.7 AS id, 100 AS value;
+  OPEN cur;
+  FETCH cur INTO record_var;
+  CLOSE cur;
+  VALUES (record_var.id, record_var.value); -- Should return 42, '100' (with casting)
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 24: FETCH INTO STRUCT - field count mismatch
+-- EXPECTED: Error - ASSIGNMENT_ARITY_MISMATCH
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE record_var STRUCT<a INT, b INT>;
+  DECLARE cur CURSOR FOR SELECT 1, 2, 3;
+  OPEN cur;
+  FETCH cur INTO record_var;  -- Should fail - 2 struct fields but 3 cursor columns
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 25: FETCH INTO non-STRUCT single variable with multiple columns
+-- EXPECTED: Error - ASSIGNMENT_ARITY_MISMATCH (not a struct, so arity must match)
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE x INT;
+  DECLARE cur CURSOR FOR SELECT 1, 2;
+  OPEN cur;
+  FETCH cur INTO x;  -- Should fail - single non-struct variable but 2 columns
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 26: FETCH INTO STRUCT with complex types
+-- EXPECTED: Success - Struct with mixed types
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE complex_record STRUCT<id BIGINT, name STRING, value DOUBLE>;
+  DECLARE cur CURSOR FOR SELECT 100 AS id, 'test' AS name, 99.5 AS value;
+  OPEN cur;
+  FETCH cur INTO complex_record;
+  CLOSE cur;
+  VALUES (complex_record); -- Should return struct(100, 'test', 99.5)
+END;
+--QUERY-DELIMITER-END

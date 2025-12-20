@@ -24,6 +24,7 @@ import org.apache.spark.sql.execution.datasources.v2.LeafV2CommandExec
 
 /**
  * Physical plan node for closing cursors.
+ * Releases cursor resources and resets its state to closed.
  */
 case class CloseCursorExec(cursorName: String) extends LeafV2CommandExec {
 
@@ -36,14 +37,8 @@ case class CloseCursorExec(cursorName: String) extends LeafV2CommandExec {
     val scriptingContext = scriptingContextManager.getContext
       .asInstanceOf[org.apache.spark.sql.scripting.SqlScriptingExecutionContext]
 
-    // Parse cursor name to handle qualification (e.g., "label.cursor_name" or just "cursor_name")
-    val cursorNameParts = cursorName.split("\\.").toSeq.map { part =>
-      if (session.sessionState.conf.caseSensitiveAnalysis) {
-        part
-      } else {
-        part.toLowerCase(java.util.Locale.ROOT)
-      }
-    }
+    // Parse and normalize cursor name for case sensitivity
+    val cursorNameParts = parseCursorName(cursorName)
 
     // Find cursor in scope hierarchy
     val cursorDef = scriptingContext.currentFrame.findCursorByNameParts(cursorNameParts)
@@ -52,19 +47,32 @@ case class CloseCursorExec(cursorName: String) extends LeafV2CommandExec {
           errorClass = "CURSOR_NOT_FOUND",
           messageParameters = Map("cursorName" -> cursorName)))
 
-    // Check if cursor is open
+    // Validate cursor is currently open
     if (!cursorDef.isOpen) {
       throw new AnalysisException(
         errorClass = "CURSOR_NOT_OPEN",
         messageParameters = Map("cursorName" -> cursorName))
     }
 
-    // Close the cursor
+    // Close the cursor and release resources
     cursorDef.isOpen = false
     cursorDef.resultData = None
     cursorDef.currentPosition = -1
 
     Nil
+  }
+
+  /**
+   * Parses and normalizes cursor name parts based on case sensitivity configuration.
+   */
+  private def parseCursorName(cursorName: String): Seq[String] = {
+    cursorName.split("\\.").toSeq.map { part =>
+      if (session.sessionState.conf.caseSensitiveAnalysis) {
+        part
+      } else {
+        part.toLowerCase(java.util.Locale.ROOT)
+      }
+    }
   }
 
   override def output: Seq[Attribute] = Nil

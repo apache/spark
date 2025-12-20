@@ -424,6 +424,7 @@ Below is a list of all the keywords in Spark SQL.
 |ARRAY|non-reserved|non-reserved|reserved|
 |AS|reserved|non-reserved|reserved|
 |ASC|non-reserved|non-reserved|non-reserved|
+|ASENSITIVE|non-reserved|non-reserved|non-reserved|
 |AT|non-reserved|non-reserved|reserved|
 |ATOMIC|non-reserved|non-reserved|non-reserved|
 |AUTHORIZATION|reserved|non-reserved|reserved|
@@ -451,6 +452,7 @@ Below is a list of all the keywords in Spark SQL.
 |CHARACTER|non-reserved|non-reserved|reserved|
 |CHECK|reserved|non-reserved|reserved|
 |CLEAR|non-reserved|non-reserved|non-reserved|
+|CLOSE|non-reserved|non-reserved|non-reserved|
 |CLUSTER|non-reserved|non-reserved|non-reserved|
 |CLUSTERED|non-reserved|non-reserved|non-reserved|
 |CODEGEN|non-reserved|non-reserved|non-reserved|
@@ -479,6 +481,7 @@ Below is a list of all the keywords in Spark SQL.
 |CURRENT_TIME|reserved|non-reserved|reserved|
 |CURRENT_TIMESTAMP|reserved|non-reserved|reserved|
 |CURRENT_USER|reserved|non-reserved|reserved|
+|CURSOR|non-reserved|non-reserved|non-reserved|
 |DATA|non-reserved|non-reserved|non-reserved|
 |DATE|non-reserved|non-reserved|reserved|
 |DATABASE|non-reserved|non-reserved|non-reserved|
@@ -576,6 +579,7 @@ Below is a list of all the keywords in Spark SQL.
 |INPUT|non-reserved|non-reserved|non-reserved|
 |INPUTFORMAT|non-reserved|non-reserved|non-reserved|
 |INSERT|non-reserved|non-reserved|reserved|
+|INSENSITIVE|non-reserved|non-reserved|non-reserved|
 |INT|non-reserved|non-reserved|reserved|
 |INTEGER|non-reserved|non-reserved|reserved|
 |INTERSECT|reserved|strict-non-reserved|reserved|
@@ -633,6 +637,7 @@ Below is a list of all the keywords in Spark SQL.
 |NANOSECOND|non-reserved|non-reserved|non-reserved|
 |NANOSECONDS|non-reserved|non-reserved|non-reserved|
 |NATURAL|reserved|strict-non-reserved|reserved|
+|NEXT|non-reserved|non-reserved|non-reserved|
 |NO|non-reserved|non-reserved|reserved|
 |NONE|non-reserved|non-reserved|reserved|
 |NORELY|non-reserved|non-reserved|not a keyword|
@@ -644,6 +649,7 @@ Below is a list of all the keywords in Spark SQL.
 |OFFSET|reserved|non-reserved|reserved|
 |ON|reserved|strict-non-reserved|reserved|
 |ONLY|reserved|non-reserved|reserved|
+|OPEN|non-reserved|non-reserved|non-reserved|
 |OPTION|non-reserved|non-reserved|non-reserved|
 |OPTIONS|non-reserved|non-reserved|non-reserved|
 |OR|reserved|non-reserved|reserved|
@@ -672,6 +678,7 @@ Below is a list of all the keywords in Spark SQL.
 |QUARTER|non-reserved|non-reserved|non-reserved|
 |QUERY|non-reserved|non-reserved|non-reserved|
 |RANGE|non-reserved|non-reserved|reserved|
+|READ|non-reserved|non-reserved|non-reserved|
 |READS|non-reserved|non-reserved|non-reserved|
 |REAL|non-reserved|non-reserved|reserved|
 |RECORDREADER|non-reserved|non-reserved|non-reserved|
