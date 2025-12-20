@@ -1037,6 +1037,42 @@
     },
     "sqlState" : "21S01"
   },
+  "CURSOR_ALREADY_EXISTS" : {
+    "message" : [
+      "Cannot declare cursor <cursorName> because it already exists in the current scope."
+    ],
+    "sqlState" : "42723"
+  },
+  "CURSOR_ALREADY_OPEN" : {
+    "message" : [
+      "Cannot open cursor <cursorName> because it is already open."
+    ],
+    "sqlState" : "24502"
+  },
+  "CURSOR_NOT_FOUND" : {
+    "message" : [
+      "Cursor <cursorName> not found in the current scope."
+    ],
+    "sqlState" : "42883"
+  },
+  "CURSOR_NOT_OPEN" : {
+    "message" : [
+      "Cannot fetch from or close cursor <cursorName> because it is not open."
+    ],
+    "sqlState" : "24501"
+  },
+  "CURSOR_NO_MORE_ROWS" : {
+    "message" : [
+      "No more rows available to fetch from cursor <cursorName>."
+    ],
+    "sqlState" : "02000"
+  },
+  "CURSOR_OUTSIDE_SCRIPT" : {
+    "message" : [
+      "Cursor operations can only be used within SQL scripts."
+    ],
+    "sqlState" : "0A000"
+  },
   "CYCLIC_FUNCTION_REFERENCE" : {
     "message" : [
       "Cyclic function reference detected: <path>."
@@ -2750,42 +2786,6 @@
       "The column <columnName> for corrupt records must have the nullable STRING type, but got <actualType>."
     ],
     "sqlState" : "42804"
-  },
-  "CURSOR_ALREADY_EXISTS" : {
-    "message" : [
-      "Cannot declare cursor <cursorName> because it already exists in the current scope."
-    ],
-    "sqlState" : "42723"
-  },
-  "CURSOR_ALREADY_OPEN" : {
-    "message" : [
-      "Cannot open cursor <cursorName> because it is already open."
-    ],
-    "sqlState" : "24502"
-  },
-  "CURSOR_NOT_FOUND" : {
-    "message" : [
-      "Cursor <cursorName> not found in the current scope."
-    ],
-    "sqlState" : "42883"
-  },
-  "CURSOR_NOT_OPEN" : {
-    "message" : [
-      "Cannot fetch from or close cursor <cursorName> because it is not open."
-    ],
-    "sqlState" : "24501"
-  },
-  "CURSOR_NO_MORE_ROWS" : {
-    "message" : [
-      "No more rows available to fetch from cursor <cursorName>."
-    ],
-    "sqlState" : "02000"
-  },
-  "CURSOR_OUTSIDE_SCRIPT" : {
-    "message" : [
-      "Cursor operations can only be used within SQL scripts."
-    ],
-    "sqlState" : "0A000"
   },
   "INVALID_CURSOR" : {
     "message" : [

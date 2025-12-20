@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -63,7 +63,7 @@ By default, `spark.sql.storeAssignmentPolicy` is `ANSI` and Spark SQL complies w
 </tr>
 </table>
 
-The following subsections present behaviour changes in arithmetic operations, type conversions, and SQL parsing when the ANSI mode enabled. For type conversions in Spark SQL, there are three kinds of them and this article will introduce them one by one: cast, store assignment and type coercion. 
+The following subsections present behaviour changes in arithmetic operations, type conversions, and SQL parsing when the ANSI mode enabled. For type conversions in Spark SQL, there are three kinds of them and this article will introduce them one by one: cast, store assignment and type coercion.
 
 ### Arithmetic Operations
 
@@ -129,7 +129,7 @@ In the table above, all the `CAST`s with new syntax are marked as red <span styl
 * CAST(Numeric AS Numeric): raise an overflow exception if the value is out of the target data type's range.
 * CAST(String AS (Numeric/Date/Timestamp/Timestamp_NTZ/Interval/Boolean)): raise a runtime exception if the value can't be parsed as the target data type.
 * CAST(Timestamp AS Numeric): raise an overflow exception if the number of seconds since epoch is out of the target data type's range.
-* CAST(Numeric AS Timestamp): raise an overflow exception if numeric value times 1000000(microseconds per second) is out of the range of Long type. 
+* CAST(Numeric AS Timestamp): raise an overflow exception if numeric value times 1000000(microseconds per second) is out of the range of Long type.
 * CAST(Array AS Array): raise an exception if there is any on the conversion of the elements.
 * CAST(Map AS Map): raise an exception if there is any on the conversion of the keys and the values.
 * CAST(Struct AS Struct): raise an exception if there is any on the conversion of the struct fields.
@@ -290,9 +290,9 @@ Note, arithmetic operations have special rules to calculate the least common typ
 | e1 % e2    | min(p1 - s1, p2 - s2) + max(s1, s2)      | max(s1, s2)         |
 
 The truncation rule is also different for arithmetic operations: they retain at least 6 digits in the fractional part, which means we can only reduce `scale` to 6. Overflow may happen in this case.
-  
+
 ```sql
--- The coalesce function accepts any set of argument types as long as they share a least common type. 
+-- The coalesce function accepts any set of argument types as long as they share a least common type.
 -- The result type is the least common type of the arguments.
 > SET spark.sql.ansi.enabled=true;
 > SELECT typeof(coalesce(1Y, 1L, NULL));
@@ -637,7 +637,7 @@ Below is a list of all the keywords in Spark SQL.
 |NANOSECOND|non-reserved|non-reserved|non-reserved|
 |NANOSECONDS|non-reserved|non-reserved|non-reserved|
 |NATURAL|reserved|strict-non-reserved|reserved|
-|NEXT|non-reserved|non-reserved|non-reserved|
+|NEXT|non-reserved|non-reserved|reserved|
 |NO|non-reserved|non-reserved|reserved|
 |NONE|non-reserved|non-reserved|reserved|
 |NORELY|non-reserved|non-reserved|not a keyword|
@@ -649,7 +649,7 @@ Below is a list of all the keywords in Spark SQL.
 |OFFSET|reserved|non-reserved|reserved|
 |ON|reserved|strict-non-reserved|reserved|
 |ONLY|reserved|non-reserved|reserved|
-|OPEN|non-reserved|non-reserved|non-reserved|
+|OPEN|non-reserved|non-reserved|reserved|
 |OPTION|non-reserved|non-reserved|non-reserved|
 |OPTIONS|non-reserved|non-reserved|non-reserved|
 |OR|reserved|non-reserved|reserved|
@@ -678,7 +678,7 @@ Below is a list of all the keywords in Spark SQL.
 |QUARTER|non-reserved|non-reserved|non-reserved|
 |QUERY|non-reserved|non-reserved|non-reserved|
 |RANGE|non-reserved|non-reserved|reserved|
-|READ|non-reserved|non-reserved|non-reserved|
+|READ|non-reserved|non-reserved|reserved|
 |READS|non-reserved|non-reserved|non-reserved|
 |REAL|non-reserved|non-reserved|reserved|
 |RECORDREADER|non-reserved|non-reserved|non-reserved|

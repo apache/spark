@@ -320,14 +320,31 @@ class CompoundBodyExec(
       @tailrec
       override def next(): CompoundStatementExec = {
         // If we need to return current without advancing (after CONTINUE handler),
-        // do so and clear the flag
+        // do so, advance curr, and clear the flag
         if (returnCurrentWithoutAdvancing) {
           returnCurrentWithoutAdvancing = false
-          return curr match {
+          val statementToReturn = curr match {
             case Some(stmt) => stmt
             case None => throw SparkException.internalError(
               "No current statement available after CONTINUE handler.")
           }
+          // Advance curr to the next statement
+          curr match {
+            case Some(_: LeafStatementExec) =>
+              curr = if (localIterator.hasNext) Some(localIterator.next()) else None
+            case Some(body: NonLeafStatementExec) =>
+              if (body.getTreeIterator.hasNext) {
+                // Don't advance, the body itself will handle iteration
+              } else {
+                body match {
+                  case compoundBodyExec: CompoundBodyExec => compoundBodyExec.exitScope()
+                  case _ => // pass
+                }
+                curr = if (localIterator.hasNext) Some(localIterator.next()) else None
+              }
+            case _ => // pass
+          }
+          return statementToReturn
         }
 
         curr match {
