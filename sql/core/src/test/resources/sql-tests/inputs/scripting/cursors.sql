@@ -736,3 +736,41 @@ BEGIN
   FETCH cur INTO y;
 END;
 --QUERY-DELIMITER-END
+
+
+-- Test 34: Unhandled CURSOR_NO_MORE_ROWS continues execution (SQL Standard completion condition)
+-- EXPECTED: Success - SQLSTATE '02xxx' is a completion condition (no data), continues without handler
+-- Note: This is distinct from warnings (SQLSTATE '01xxx') which Spark doesn't currently raise
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE x INT DEFAULT 0;
+  DECLARE result STRING DEFAULT '';
+  DECLARE cur CURSOR FOR SELECT 42 AS val;
+
+  -- No NOT FOUND handler declared
+  OPEN cur;
+  FETCH cur INTO x;  -- OK: gets value 42
+  SET result = result || CAST(x AS STRING);
+
+  -- This FETCH will hit CURSOR_NO_MORE_ROWS (SQLSTATE 02000)
+  -- As a completion condition (warning), it should CONTINUE execution without throwing
+  FETCH cur INTO x;  -- Continues execution (no handler needed for completion conditions)
+
+  SET result = result || '-after-fetch';
+  CLOSE cur;
+
+  VALUES (result);  -- Should return '42-after-fetch', proving execution continued
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 35: Verify unhandled exception conditions still throw (not completion conditions)
+-- EXPECTED: Error - DIVIDE_BY_ZERO is an exception condition, should throw without handler
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE x INT;
+  -- No handler declared
+  SET x = 1 / 0;  -- Should throw DIVIDE_BY_ZERO (SQLSTATE 22012), not continue
+  VALUES ('This should not be reached');
+END;
+--QUERY-DELIMITER-END

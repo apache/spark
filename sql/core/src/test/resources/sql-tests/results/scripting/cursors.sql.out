@@ -934,15 +934,15 @@ BEGIN
   outer: BEGIN
     DECLARE x INT;
     DECLARE cur CURSOR FOR SELECT 42 AS val;
-    
+
     inner: BEGIN
       OPEN cur;  -- Open in inner scope
       FETCH cur INTO x;
     END;
-    
+
     FETCH cur INTO x;  -- This should succeed
     VALUES (x);  -- Should return 42
-    
+
   END;
 END
 -- !query schema
@@ -962,13 +962,13 @@ org.apache.spark.sql.catalyst.parser.ParseException
 -- !query
 BEGIN
   DECLARE y INT;
-  
+
   scope1: BEGIN
     DECLARE cur CURSOR FOR SELECT 99 AS val;
     OPEN cur;
     FETCH cur INTO y;
   END;  -- cursor is implicitly closed here (exiting DECLARE scope)
-  
+
   FETCH cur INTO y;
 END
 -- !query schema
@@ -981,4 +981,53 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "cursorName" : "cur"
   }
+}
+
+
+-- !query
+BEGIN
+  DECLARE x INT DEFAULT 0;
+  DECLARE result STRING DEFAULT '';
+  DECLARE cur CURSOR FOR SELECT 42 AS val;
+  
+  OPEN cur;
+  FETCH cur INTO x;  -- OK: gets value 42
+  SET result = result || CAST(x AS STRING);
+  
+  FETCH cur INTO x;  -- Continues execution (no handler needed for completion conditions)
+  
+  SET result = result || '-after-fetch';
+  CLOSE cur;
+  
+  VALUES (result);  -- Should return '42-after-fetch', proving execution continued
+END
+-- !query schema
+struct<col1:string>
+-- !query output
+42-after-fetch
+
+
+-- !query
+BEGIN
+  DECLARE x INT;
+  SET x = 1 / 0;  -- Should throw DIVIDE_BY_ZERO (SQLSTATE 22012), not continue
+  VALUES ('This should not be reached');
+END
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
+  "messageParameters" : {
+    "config" : "\"spark.sql.ansi.enabled\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 34,
+    "stopIndex" : 38,
+    "fragment" : "1 / 0"
+  } ]
 }
