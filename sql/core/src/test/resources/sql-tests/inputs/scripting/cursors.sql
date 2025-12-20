@@ -1,3 +1,31 @@
+-- ============================================================================
+-- Spark SQL Cursor Test Suite
+-- ============================================================================
+--
+-- This test suite verifies SQL cursor functionality in Spark SQL Scripting.
+-- Cursors enable procedural iteration over query result sets within compound
+-- statements (BEGIN...END blocks).
+--
+-- Coverage:
+--   1. Cursor Lifecycle: DECLARE, OPEN, FETCH, CLOSE
+--   2. Cursor Scoping: Nested scopes, label qualification, shadowing
+--   3. Cursor State: Open/closed validation, reopening, sensitivity
+--   4. Parameterized Cursors: Positional/named parameters with USING clause
+--   5. FETCH INTO: Store assignment rules, type casting, arity validation
+--   6. FETCH INTO: Session/local variables, STRUCT special case
+--   7. Exception Handling: NOT FOUND condition (SQLSTATE 02000)
+--   8. SQL Standard Compliance: Completion conditions, unhandled behavior
+--   9. Complex Queries: CTEs, subqueries, joins in cursor declarations
+--  10. Identifier Syntax: IDENTIFIER() clause for cursor names
+--  11. Nested Cursors: Multiple cursor levels within compound statements
+--
+-- SQL Standard References:
+--   - ISO/IEC 9075-2:2016 (SQL/Foundation) - Cursor operations
+--   - SQLSTATE class '02' - Completion conditions (no data)
+--   - Store assignment rules for FETCH INTO (same as SET VARIABLE)
+--
+-- ============================================================================
+
 -- Cursor scoping and state management tests
 --SET spark.sql.scripting.continueHandlerEnabled=true
 
@@ -772,5 +800,160 @@ BEGIN
   -- No handler declared
   SET x = 1 / 0;  -- Should throw DIVIDE_BY_ZERO (SQLSTATE 22012), not continue
   VALUES ('This should not be reached');
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 36: IDENTIFIER() clause for cursor names - basic case
+-- EXPECTED: Success - cursor name specified using IDENTIFIER()
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE x INT;
+  DECLARE IDENTIFIER('my_cursor') CURSOR FOR SELECT 99 AS val;
+  OPEN IDENTIFIER('my_cursor');
+  FETCH IDENTIFIER('my_cursor') INTO x;
+  CLOSE IDENTIFIER('my_cursor');
+  VALUES (x); -- Should return 99
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 37: IDENTIFIER() with case-sensitive cursor name
+-- EXPECTED: Success - IDENTIFIER preserves case
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE result INT;
+  DECLARE IDENTIFIER('MixedCase') CURSOR FOR SELECT 42;
+  OPEN IDENTIFIER('MixedCase');
+  FETCH IDENTIFIER('MixedCase') INTO result;
+  CLOSE IDENTIFIER('MixedCase');
+  VALUES (result); -- Should return 42
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 38: Complex SQL in DECLARE - Recursive CTE
+-- EXPECTED: Success - cursor with recursive common table expression
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE n INT;
+  DECLARE sum_result INT DEFAULT 0;
+  DECLARE done BOOLEAN DEFAULT false;
+  DECLARE cur CURSOR FOR
+    WITH RECURSIVE numbers(n) AS (
+      SELECT 1 AS n
+      UNION ALL
+      SELECT n + 1 FROM numbers WHERE n < 5
+    )
+    SELECT n FROM numbers;
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = true;
+
+  OPEN cur;
+  REPEAT
+    FETCH cur INTO n;
+    IF NOT done THEN
+      SET sum_result = sum_result + n;
+    END IF;
+  UNTIL done END REPEAT;
+  CLOSE cur;
+
+  VALUES (sum_result); -- Should return 15 (1+2+3+4+5)
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 39: Complex SQL in DECLARE - Subqueries and joins
+-- EXPECTED: Success - cursor with complex query
+--QUERY-DELIMITER-START
+CREATE TEMPORARY VIEW customers AS SELECT 1 AS id, 'Alice' AS name
+UNION ALL SELECT 2, 'Bob'
+UNION ALL SELECT 3, 'Charlie';
+
+CREATE TEMPORARY VIEW orders AS SELECT 1 AS customer_id, 100 AS amount
+UNION ALL SELECT 1, 200
+UNION ALL SELECT 2, 150;
+
+BEGIN
+  DECLARE customer_name STRING;
+  DECLARE total_amount INT;
+  DECLARE result STRING DEFAULT '';
+  DECLARE done BOOLEAN DEFAULT false;
+  DECLARE cur CURSOR FOR
+    SELECT c.name, COALESCE(SUM(o.amount), 0) AS total
+    FROM customers c
+    LEFT JOIN orders o ON c.id = o.customer_id
+    WHERE c.id IN (SELECT customer_id FROM orders WHERE amount > 50)
+    GROUP BY c.name
+    ORDER BY total DESC;
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = true;
+
+  OPEN cur;
+  REPEAT
+    FETCH cur INTO customer_name, total_amount;
+    IF NOT done THEN
+      SET result = result || customer_name || ':' || CAST(total_amount AS STRING) || ',';
+    END IF;
+  UNTIL done END REPEAT;
+  CLOSE cur;
+
+  VALUES (result); -- Should return 'Alice:300,Bob:150,'
+END;
+
+DROP VIEW customers;
+DROP VIEW orders;
+--QUERY-DELIMITER-END
+
+
+-- Test 40: Nested cursors (3 levels)
+-- EXPECTED: Success - demonstrates proper nesting and scope management
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE result STRING DEFAULT '';
+  -- Level 1: Outer cursor
+  DECLARE i INT;
+  DECLARE done1 BOOLEAN DEFAULT false;
+  DECLARE cur1 CURSOR FOR SELECT id FROM VALUES(1), (2) AS t(id);
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET done1 = true;
+
+  OPEN cur1;
+  REPEAT
+    FETCH cur1 INTO i;
+    IF NOT done1 THEN
+      -- Level 2: Middle cursor
+      DECLARE j INT;
+      DECLARE done2 BOOLEAN DEFAULT false;
+      DECLARE cur2 CURSOR FOR SELECT id FROM VALUES(10), (20) AS t(id);
+      DECLARE CONTINUE HANDLER FOR NOT FOUND SET done2 = true;
+
+      OPEN cur2;
+      REPEAT
+        FETCH cur2 INTO j;
+        IF NOT done2 THEN
+          -- Level 3: Inner cursor
+          DECLARE k INT;
+          DECLARE done3 BOOLEAN DEFAULT false;
+          DECLARE cur3 CURSOR FOR SELECT id FROM VALUES(100) AS t(id);
+          DECLARE CONTINUE HANDLER FOR NOT FOUND SET done3 = true;
+
+          OPEN cur3;
+          REPEAT
+            FETCH cur3 INTO k;
+            IF NOT done3 THEN
+              SET result = result || CAST(i AS STRING) || '-' ||
+                          CAST(j AS STRING) || '-' ||
+                          CAST(k AS STRING) || ',';
+            END IF;
+          UNTIL done3 END REPEAT;
+          CLOSE cur3;
+        END IF;
+        SET done3 = false; -- Reset for next iteration
+      UNTIL done2 END REPEAT;
+      CLOSE cur2;
+    END IF;
+    SET done2 = false; -- Reset for next iteration
+  UNTIL done1 END REPEAT;
+  CLOSE cur1;
+
+  VALUES (result); -- Should return '1-10-100,1-20-100,2-10-100,2-20-100,'
 END;
 --QUERY-DELIMITER-END

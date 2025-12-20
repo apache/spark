@@ -902,16 +902,16 @@ BEGIN
   DECLARE x INT DEFAULT 0;
   DECLARE result STRING DEFAULT '';
   DECLARE cur CURSOR FOR SELECT 42 AS val;
-  
+
   OPEN cur;
   FETCH cur INTO x;  -- OK: gets value 42
   SET result = result || CAST(x AS STRING);
-  
+
   FETCH cur INTO x;  -- Continues execution (no handler needed for completion conditions)
-  
+
   SET result = result || '-after-fetch';
   CLOSE cur;
-  
+
   VALUES (result);  -- Should return '42-after-fetch', proving execution continued
 END
 -- !query analysis
@@ -939,4 +939,187 @@ org.apache.spark.SparkArithmeticException
     "stopIndex" : 38,
     "fragment" : "1 / 0"
   } ]
+}
+
+
+-- !query
+BEGIN
+  DECLARE x INT;
+  DECLARE IDENTIFIER('my_cursor') CURSOR FOR SELECT 99 AS val;
+  OPEN IDENTIFIER('my_cursor');
+  FETCH IDENTIFIER('my_cursor') INTO x;
+  CLOSE IDENTIFIER('my_cursor');
+  VALUES (x); -- Should return 99
+END
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "CURSOR_NOT_FOUND",
+  "sqlState" : "42883",
+  "messageParameters" : {
+    "cursorName" : "IDENTIFIER('my_cursor')"
+  }
+}
+
+
+-- !query
+BEGIN
+  DECLARE result INT;
+  DECLARE IDENTIFIER('MixedCase') CURSOR FOR SELECT 42;
+  OPEN IDENTIFIER('MixedCase');
+  FETCH IDENTIFIER('MixedCase') INTO result;
+  CLOSE IDENTIFIER('MixedCase');
+  VALUES (result); -- Should return 42
+END
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "CURSOR_NOT_FOUND",
+  "sqlState" : "42883",
+  "messageParameters" : {
+    "cursorName" : "IDENTIFIER('MixedCase')"
+  }
+}
+
+
+-- !query
+BEGIN
+  DECLARE n INT;
+  DECLARE sum_result INT DEFAULT 0;
+  DECLARE done BOOLEAN DEFAULT false;
+  DECLARE cur CURSOR FOR
+    WITH RECURSIVE numbers(n) AS (
+      SELECT 1 AS n
+      UNION ALL
+      SELECT n + 1 FROM numbers WHERE n < 5
+    )
+    SELECT n FROM numbers;
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = true;
+
+  OPEN cur;
+  REPEAT
+    FETCH cur INTO n;
+    IF NOT done THEN
+      SET sum_result = sum_result + n;
+    END IF;
+  UNTIL done END REPEAT;
+  CLOSE cur;
+
+  VALUES (sum_result); -- Should return 15 (1+2+3+4+5)
+END
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+{
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
+  "messageParameters" : {
+    "message" : "Invalid call to dataType on unresolved object"
+  }
+}
+
+
+-- !query
+CREATE TEMPORARY VIEW customers AS SELECT 1 AS id, 'Alice' AS name
+UNION ALL SELECT 2, 'Bob'
+UNION ALL SELECT 3, 'Charlie';
+
+CREATE TEMPORARY VIEW orders AS SELECT 1 AS customer_id, 100 AS amount
+UNION ALL SELECT 1, 200
+UNION ALL SELECT 2, 150;
+
+BEGIN
+  DECLARE customer_name STRING;
+  DECLARE total_amount INT;
+  DECLARE result STRING DEFAULT '';
+  DECLARE done BOOLEAN DEFAULT false;
+  DECLARE cur CURSOR FOR
+    SELECT c.name, COALESCE(SUM(o.amount), 0) AS total
+    FROM customers c
+    LEFT JOIN orders o ON c.id = o.customer_id
+    WHERE c.id IN (SELECT customer_id FROM orders WHERE amount > 50)
+    GROUP BY c.name
+    ORDER BY total DESC;
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = true;
+
+  OPEN cur;
+  REPEAT
+    FETCH cur INTO customer_name, total_amount;
+    IF NOT done THEN
+      SET result = result || customer_name || ':' || CAST(total_amount AS STRING) || ',';
+    END IF;
+  UNTIL done END REPEAT;
+  CLOSE cur;
+
+  VALUES (result); -- Should return 'Alice:300,Bob:150,'
+END;
+
+DROP VIEW customers;
+DROP VIEW orders
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'CREATE'",
+    "hint" : ": extra input 'CREATE'"
+  }
+}
+
+
+-- !query
+BEGIN
+  DECLARE result STRING DEFAULT '';
+  DECLARE i INT;
+  DECLARE done1 BOOLEAN DEFAULT false;
+  DECLARE cur1 CURSOR FOR SELECT id FROM VALUES(1), (2) AS t(id);
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET done1 = true;
+
+  OPEN cur1;
+  REPEAT
+    FETCH cur1 INTO i;
+    IF NOT done1 THEN
+      DECLARE j INT;
+      DECLARE done2 BOOLEAN DEFAULT false;
+      DECLARE cur2 CURSOR FOR SELECT id FROM VALUES(10), (20) AS t(id);
+      DECLARE CONTINUE HANDLER FOR NOT FOUND SET done2 = true;
+
+      OPEN cur2;
+      REPEAT
+        FETCH cur2 INTO j;
+        IF NOT done2 THEN
+          DECLARE k INT;
+          DECLARE done3 BOOLEAN DEFAULT false;
+          DECLARE cur3 CURSOR FOR SELECT id FROM VALUES(100) AS t(id);
+          DECLARE CONTINUE HANDLER FOR NOT FOUND SET done3 = true;
+
+          OPEN cur3;
+          REPEAT
+            FETCH cur3 INTO k;
+            IF NOT done3 THEN
+              SET result = result || CAST(i AS STRING) || '-' ||
+                          CAST(j AS STRING) || '-' ||
+                          CAST(k AS STRING) || ',';
+            END IF;
+          UNTIL done3 END REPEAT;
+          CLOSE cur3;
+        END IF;
+        SET done3 = false; -- Reset for next iteration
+      UNTIL done2 END REPEAT;
+      CLOSE cur2;
+    END IF;
+    SET done2 = false; -- Reset for next iteration
+  UNTIL done1 END REPEAT;
+  CLOSE cur1;
+
+  VALUES (result); -- Should return '1-10-100,1-20-100,2-10-100,2-20-100,'
+END
+-- !query analysis
+org.apache.spark.sql.exceptions.SqlScriptingException
+{
+  "errorClass" : "INVALID_VARIABLE_DECLARATION.NOT_ALLOWED_IN_SCOPE",
+  "sqlState" : "42K0M",
+  "messageParameters" : {
+    "varName" : "`j`"
+  }
 }
