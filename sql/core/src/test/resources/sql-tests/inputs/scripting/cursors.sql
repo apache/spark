@@ -693,3 +693,46 @@ BEGIN
   FETCH cur INTO dup_var, dup_var;  -- Should fail - duplicate variable name
 END;
 --QUERY-DELIMITER-END
+
+
+-- Test 32: Cursor implicitly closed when exiting DECLARE scope (not OPEN scope)
+-- EXPECTED: Success - cursor declared in outer scope, opened in inner scope,
+--           implicitly closed when exiting outer scope (where it was declared)
+--QUERY-DELIMITER-START
+BEGIN
+  outer: BEGIN
+    DECLARE x INT;
+    DECLARE cur CURSOR FOR SELECT 42 AS val;
+
+    inner: BEGIN
+      OPEN cur;  -- Open in inner scope
+      FETCH cur INTO x;
+      -- Cursor remains open when exiting inner scope
+    END;
+
+    -- Cursor should still be open here (we're still in outer scope where it was declared)
+    FETCH cur INTO x;  -- This should succeed
+    VALUES (x);  -- Should return 42
+
+    -- Cursor will be implicitly closed when exiting outer scope
+  END;
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 33: Verify cursor closed when exiting DECLARE scope, not OPEN scope
+-- EXPECTED: Error - cursor not open after exiting the scope where it was declared
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE y INT;
+
+  scope1: BEGIN
+    DECLARE cur CURSOR FOR SELECT 99 AS val;
+    OPEN cur;
+    FETCH cur INTO y;
+  END;  -- cursor is implicitly closed here (exiting DECLARE scope)
+
+  -- This should fail because cursor no longer exists (declared in scope1)
+  FETCH cur INTO y;
+END;
+--QUERY-DELIMITER-END

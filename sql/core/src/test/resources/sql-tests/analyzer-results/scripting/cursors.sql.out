@@ -844,3 +844,54 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "fragment" : "SET VAR dup_var = 0;\nBEGIN\n  DECLARE dup_var INT;\n  DECLARE cur CURSOR FOR SELECT 1, 2;\n  OPEN cur;\n  FETCH cur INTO dup_var, dup_var;  -- Should fail - duplicate variable name\nEND"
   } ]
 }
+
+
+-- !query
+BEGIN
+  outer: BEGIN
+    DECLARE x INT;
+    DECLARE cur CURSOR FOR SELECT 42 AS val;
+    
+    inner: BEGIN
+      OPEN cur;  -- Open in inner scope
+      FETCH cur INTO x;
+    END;
+    
+    FETCH cur INTO x;  -- This should succeed
+    VALUES (x);  -- Should return 42
+    
+  END;
+END
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'inner'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+BEGIN
+  DECLARE y INT;
+  
+  scope1: BEGIN
+    DECLARE cur CURSOR FOR SELECT 99 AS val;
+    OPEN cur;
+    FETCH cur INTO y;
+  END;  -- cursor is implicitly closed here (exiting DECLARE scope)
+  
+  FETCH cur INTO y;
+END
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "CURSOR_NOT_FOUND",
+  "sqlState" : "42883",
+  "messageParameters" : {
+    "cursorName" : "cur"
+  }
+}
