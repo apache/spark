@@ -139,15 +139,15 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       }
 
       // Try to drop the base table while view exists - H2 should prevent this
-      val e = intercept[SparkRuntimeException] {
-        sql("DROP TABLE h2.test.base_table")
-      }
-
       // Verify the exception is properly classified with FAILED_JDBC.DROP_TABLE
-      assert(e.getErrorClass == "FAILED_JDBC.DROP_TABLE")
-      assert(e.getMessage.contains("Failed JDBC"))
-      assert(e.getMessage.contains("Drop the table"))
-      assert(e.getMessage.contains("base_table"))
+      checkErrorMatchPVals(
+        exception = intercept[SparkRuntimeException] {
+          sql("DROP TABLE h2.test.base_table")
+        },
+        condition = "FAILED_JDBC.DROP_TABLE",
+        parameters = Map(
+          "url" -> "jdbc:.*",
+          "tableName" -> "`test`.`base_table`"))
     } finally {
       withConnection { conn =>
         conn.prepareStatement("""DROP VIEW IF EXISTS "test"."dependent_view"""").executeUpdate()
