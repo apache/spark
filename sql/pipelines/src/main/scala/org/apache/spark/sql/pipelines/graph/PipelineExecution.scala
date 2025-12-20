@@ -109,7 +109,7 @@ class PipelineExecution(context: PipelineUpdateContext) {
     )
   }
 
-  private def resolveGraph(): DataflowGraph = {
+  def resolveGraph(): DataflowGraph = {
     try {
       context.unresolvedGraph.resolve(Some(graphAnalysisContext)).validate()
     } catch {

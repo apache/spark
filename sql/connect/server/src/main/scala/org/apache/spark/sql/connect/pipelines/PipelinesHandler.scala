@@ -378,7 +378,7 @@ private[connect] object PipelinesHandler extends Logging {
       }
 
     val relationFlowDetails = flow.getRelationFlowDetails
-    val flowFunction = if (relationFlowDetails.hasRelation()) {
+    val flowFunction = if (relationFlowDetails.hasRelation) {
       FlowAnalysis.createFlowFunctionFromLogicalPlan(
         transformRelationFunc(relationFlowDetails.getRelation))
     } else {
@@ -662,10 +662,12 @@ private[connect] object PipelinesHandler extends Logging {
           session
         )
       case None =>
-        throw new IllegalStateException(
-          s"Pipeline analysis context specifies flow '${pipelineAnalysisContext.getFlowName}' " +
-            s"but no active pipeline execution found for graph '$graphId'"
-        )
+        throw new AnalysisException("ATTEMPT_ANALYSIS_IN_PIPELINE_QUERY_FUNCTION", Map())
+        // TODO
+//        throw new IllegalStateException(
+//          s"Pipeline analysis context specifies flow '${pipelineAnalysisContext.getFlowName}' " +
+//            s"but no active pipeline execution found for graph '$graphId'"
+//        )
     }
   }
 }

@@ -17,7 +17,7 @@
 from pathlib import Path
 from pyspark.errors.exceptions.base import PySparkValueError
 
-from pyspark.errors import PySparkTypeError
+from pyspark.errors import PySparkException, PySparkTypeError
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
 from pyspark.pipelines.output import (
@@ -119,12 +119,18 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
         self._query_funcs_by_flow_name[flow.name] = flow.func
         try:
             df = self._execute_query_function(flow.name, flow.func)
-        except Exception as e:
-            raise PySparkValueError(
-                f"Error executing query function for flow {flow.name}: {e}"
-            )
+        except PySparkException as e:
+            print("pizza: exception while executing query function")
+            if e.getCondition() == "ATTEMPT_ANALYSIS_IN_PIPELINE_QUERY_FUNCTION":
+                print("pizza: exception is an analysis exception")
+                df = None
+            else:
+                raise e
 
-        relation = cast(ConnectDataFrame, df)._plan.plan(self._client)
+        if df is not None:
+            relation = cast(ConnectDataFrame, df)._plan.plan(self._client)
+        else:
+            relation = None
 
         relation_flow_details = pb2.PipelineCommand.DefineFlow.WriteRelationFlowDetails(
             relation=relation,
@@ -167,9 +173,8 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
         )
         command = pb2.Command()
         command.pipeline_command.get_query_function_execution_signal_stream.CopyFrom(inner_command)
-        self._client.execute_command_as_iterator(command)
 
-        result_iter = self._client.execute_command_as_iterator(inner_command)
+        result_iter = self._client.execute_command_as_iterator(command)
         for result in result_iter:
             if "pipeline_query_function_execution_signal" not in result.keys():
                 raise PySparkValueError(
@@ -178,6 +183,7 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
 
             signal = result["pipeline_query_function_execution_signal"]
             flow_names = signal.flow_names
+            print("pizza: received signal with flow names: ", flow_names)
             for flow_name in flow_names:
                 func = self._query_funcs_by_flow_name[flow_name]
                 df = self._execute_query_function(flow_name, func)
