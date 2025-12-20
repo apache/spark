@@ -57,18 +57,19 @@ class StatePartitionAllColumnFamiliesWriter(
     colFamilyToWriterInfoMap: Map[String, StatePartitionWriterColumnFamilyInfo],
     operatorName: String,
     schemaProviderOpt: Option[StateSchemaProvider],
-    sqlConf: Map[String, String]) {
+    sqlConf: SQLConf) {
 
   private def isJoinV3Operator(
-      operatorName: String, sqlConf: Map[String, String]): Boolean = {
+      operatorName: String, sqlConf: SQLConf): Boolean = {
     operatorName == StatefulOperatorsUtils.SYMMETRIC_HASH_JOIN_EXEC_OP_NAME &&
-      sqlConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key) == "3"
+      sqlConf.getConf(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION) == 3
   }
 
   private val defaultSchema = {
     colFamilyToWriterInfoMap.get(StateStore.DEFAULT_COL_FAMILY_NAME) match {
       case Some(info) => info.schema
       case None =>
+        // joinV3 operator doesn't have default column family schema
         assert(isJoinV3Operator(operatorName, sqlConf),
           s"Please provide the schema of 'default' column family in StateStoreColFamilySchema" +
             s"for operator $operatorName")
@@ -173,14 +174,11 @@ class StatePartitionAllColumnFamiliesWriter(
     val valueRow = new UnsafeRow(columnFamilyToValueSchemaLenMap(colFamilyName))
     valueRow.pointTo(valueBytes, valueBytes.length)
 
-    if (colFamilyToWriterInfoMap(colFamilyName).useMultipleValuesPerKey) {
-      // if a column family useMultipleValuesPerKey (e.g. ListType), we will
-      // write with 1 put followed by merge
-      if (stateStore.keyExists(keyRow, colFamilyName)) {
-        stateStore.merge(keyRow, valueRow, colFamilyName)
-      } else {
-        stateStore.put(keyRow, valueRow, colFamilyName)
-      }
+    // if a column family useMultipleValuesPerKey (e.g. ListType), we will
+    // write with 1 put followed by merge
+    if (colFamilyToWriterInfoMap(colFamilyName).useMultipleValuesPerKey &&
+        stateStore.keyExists(keyRow, colFamilyName)) {
+      stateStore.merge(keyRow, valueRow, colFamilyName)
     } else {
       stateStore.put(keyRow, valueRow, colFamilyName)
     }

@@ -24,7 +24,6 @@ import org.apache.spark.TaskContext
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.v2.state.{CompositeKeyAggregationTestUtils, DropDuplicatesTestUtils, FlatMapGroupsWithStateTestUtils, SessionWindowTestUtils, SimpleAggregationTestUtils, StateDataSourceTestBase, StateSourceOptions, StreamStreamJoinTestUtils}
-import org.apache.spark.sql.execution.datasources.v2.state.utils.{EventTimeTimerProcessor, MultiStateVarProcessor, MultiStateVarProcessorTestUtils, TimerTestUtils}
 import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorsUtils
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.TimerStateUtils
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryCheckpointMetadata}
@@ -33,6 +32,7 @@ import org.apache.spark.sql.functions.{col, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{InputEvent, ListStateTTLProcessor, MapInputEvent, MapStateTTLProcessor, OutputMode, RunningCountStatefulProcessorWithProcTimeTimer, TimeMode, Trigger, TTLConfig, ValueStateTTLProcessor}
 import org.apache.spark.sql.streaming.util.{StreamManualClock, TTLProcessorUtils}
+import org.apache.spark.sql.streaming.util.{EventTimeTimerProcessor, MultiStateVarProcessor, MultiStateVarProcessorTestUtils, TimerTestUtils}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
@@ -132,10 +132,12 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
     } else {
       None
     }
-
-    val sqlConf: Map[String, String] = spark.sessionState.conf.getAllConfs
-    // Define the partition processing function
+    val baseConfs: Map[String, String] = spark.sessionState.conf.getAllConfs
     val putPartitionFunc: Iterator[InternalRow] => Unit = partition => {
+      val newConf = new SQLConf
+      baseConfs.foreach { case (k, v) =>
+        newConf.setConfString(k, v)
+      }
       val allCFWriter = new StatePartitionAllColumnFamiliesWriter(
         storeConf,
         serializableHadoopConf.value,
@@ -147,12 +149,11 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
         columnFamilyToSchemaMap,
         operatorName,
         stateSchemaProvider,
-        sqlConf
+        newConf
       )
       allCFWriter.write(partition)
     }
     sourceBytesData.queryExecution.toRdd.foreachPartition(putPartitionFunc)
-
 
     // Commit to commitLog
     val latestCommit = targetCheckpointMetadata.commitLog.get(lastBatch).get
@@ -1149,7 +1150,7 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
           columnFamilyToSchemaMap,
           StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME,
           None,
-          spark.sessionState.conf.getAllConfs
+          new SQLConf
         )
       }
 
