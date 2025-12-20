@@ -18,6 +18,8 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.expressions.VariableReference
 import org.apache.spark.sql.catalyst.plans.logical.{FetchCursor, LogicalPlan, SingleStatement}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
@@ -30,6 +32,21 @@ import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableErro
 class ResolveFetchCursor(val catalogManager: CatalogManager) extends Rule[LogicalPlan]
   with ColumnResolutionHelper {
   private val variableResolution = new VariableResolution(catalogManager.tempVariableManager)
+
+  /**
+   * Checks for duplicate variable names and throws an exception if found.
+   * Names are normalized when the variables are created.
+   * No need for case insensitive comparison here.
+   */
+  private def checkForDuplicateVariables(variables: Seq[VariableReference]): Unit = {
+    val dups = variables.groupBy(_.identifier).filter(kv => kv._2.length > 1)
+    if (dups.nonEmpty) {
+      throw new AnalysisException(
+        errorClass = "DUPLICATE_ASSIGNMENTS",
+        messageParameters = Map("nameList" ->
+          dups.keys.map(key => toSQLId(key.name())).mkString(", ")))
+    }
+  }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(COMMAND), ruleId) {
@@ -51,6 +68,13 @@ class ResolveFetchCursor(val catalogManager: CatalogManager) extends Rule[Logica
 
       s.copy(parsedPlan = fetchCursor.copy(targetVariables = resolvedVars))
 
+    // Check for duplicates after resolution
+    case s @ SingleStatement(fetchCursor: FetchCursor)
+        if fetchCursor.targetVariables.forall(_.resolved) =>
+      val targetVariables = fetchCursor.targetVariables.map(_.asInstanceOf[VariableReference])
+      checkForDuplicateVariables(targetVariables)
+      s
+
     // Also resolve unwrapped FetchCursor (when extracted from SingleStatement for execution)
     case fetchCursor: FetchCursor if !fetchCursor.targetVariables.forall(_.resolved) =>
       val resolvedVars = fetchCursor.targetVariables.map {
@@ -67,5 +91,11 @@ class ResolveFetchCursor(val catalogManager: CatalogManager) extends Rule[Logica
       }
 
       fetchCursor.copy(targetVariables = resolvedVars)
+
+    // Check for duplicates after resolution
+    case fetchCursor: FetchCursor if fetchCursor.targetVariables.forall(_.resolved) =>
+      val targetVariables = fetchCursor.targetVariables.map(_.asInstanceOf[VariableReference])
+      checkForDuplicateVariables(targetVariables)
+      fetchCursor
   }
 }

@@ -2763,17 +2763,11 @@
     ],
     "sqlState" : "24502"
   },
-  "CURSOR_FETCH_COLUMN_MISMATCH" : {
-    "message" : [
-      "Cannot fetch from cursor <cursorName>: expected <expected> variables but got <actual>."
-    ],
-    "sqlState" : "42826"
-  },
   "CURSOR_NOT_FOUND" : {
     "message" : [
       "Cursor <cursorName> not found in the current scope."
     ],
-    "sqlState" : "34000"
+    "sqlState" : "42883"
   },
   "CURSOR_NOT_OPEN" : {
     "message" : [
@@ -2820,6 +2814,12 @@
       }
     },
     "sqlState" : "HY109"
+  },
+  "INVALID_CURSOR_DECLARATION" : {
+    "message" : [
+      "Cursors must be declared after variable/condition declarations, and before handlers and other statements."
+    ],
+    "sqlState" : "42601"
   },
   "INVALID_DATETIME_PATTERN" : {
     "message" : [
@@ -3152,19 +3152,6 @@
       }
     },
     "sqlState" : "HY000"
-  },
-  "INVALID_CURSOR_DECLARATION" : {
-    "message" : [
-      "Invalid cursor declaration."
-    ],
-    "subClass" : {
-      "WRONG_PLACE_OF_DECLARATION" : {
-        "message" : [
-          "Cursors must be declared after variable/condition declarations, and before handlers and other statements."
-        ]
-      }
-    },
-    "sqlState" : "42K0Q"
   },
   "INVALID_HANDLER_DECLARATION" : {
     "message" : [

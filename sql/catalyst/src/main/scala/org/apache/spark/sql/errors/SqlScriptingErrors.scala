@@ -184,7 +184,7 @@ private[sql] object SqlScriptingErrors {
   def cursorDeclarationNotAtStartOfCompound(origin: Origin): Throwable = {
     new SqlScriptingException(
       origin = origin,
-      errorClass = "INVALID_CURSOR_DECLARATION.WRONG_PLACE_OF_DECLARATION",
+      errorClass = "INVALID_CURSOR_DECLARATION",
       cause = null,
       messageParameters = Map.empty)
   }

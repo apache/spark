@@ -406,3 +406,56 @@ BEGIN
   END;
 END;
 --QUERY-DELIMITER-END
+
+
+-- Test 11: FETCH INTO with duplicate variable names
+-- EXPECTED: Error - DUPLICATE_ASSIGNMENTS
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE x, y INT;
+  DECLARE cur CURSOR FOR SELECT 1 AS a, 2 AS b;
+  OPEN cur;
+  FETCH cur INTO x, x;  -- Should fail - duplicate variable
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 12: FETCH INTO with type casting (store assignment)
+-- EXPECTED: Success - values should be cast according to ANSI store assignment rules
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE int_var INT;
+  DECLARE str_var STRING;
+  DECLARE cur CURSOR FOR SELECT 100.7 AS double_val, 42 AS int_val;
+
+  OPEN cur;
+  FETCH cur INTO int_var, str_var;  -- double->int cast, int->string cast
+  CLOSE cur;
+
+  VALUES (int_var, str_var);  -- Should be (100, '42') with ANSI rounding
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 13: FETCH INTO with arity mismatch - too few variables
+-- EXPECTED: Error - ASSIGNMENT_ARITY_MISMATCH
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE x INT;
+  DECLARE cur CURSOR FOR SELECT 1, 2, 3;
+  OPEN cur;
+  FETCH cur INTO x;  -- Should fail - 1 target but 3 columns
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 14: FETCH INTO with arity mismatch - too many variables
+-- EXPECTED: Error - ASSIGNMENT_ARITY_MISMATCH
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE x, y, z, w INT;
+  DECLARE cur CURSOR FOR SELECT 1, 2;
+  OPEN cur;
+  FETCH cur INTO x, y, z, w;  -- Should fail - 4 targets but 2 columns
+END;
+--QUERY-DELIMITER-END

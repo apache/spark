@@ -83,11 +83,10 @@ case class FetchCursorExec(
     // Check if number of variables matches number of columns
     if (targetVariables.length != currentRow.numFields) {
       throw new AnalysisException(
-        errorClass = "CURSOR_FETCH_COLUMN_MISMATCH",
+        errorClass = "ASSIGNMENT_ARITY_MISMATCH",
         messageParameters = Map(
-          "cursorName" -> cursorName,
-          "expected" -> currentRow.numFields.toString,
-          "actual" -> targetVariables.length.toString))
+          "numTarget" -> targetVariables.length.toString,
+          "numExpr" -> currentRow.numFields.toString))
     }
 
     // Get variable manager
@@ -97,9 +96,25 @@ case class FetchCursorExec(
         errorClass = "CURSOR_OUTSIDE_SCRIPT",
         messageParameters = Map("cursorName" -> cursorName)))
 
-    // Assign values to variables
+    // Assign values to variables with proper ANSI store assignment casting
     targetVariables.zipWithIndex.foreach { case (varRef, idx) =>
-      val value = currentRow.get(idx, varRef.dataType)
+      // Get the actual value from the cursor result
+      val sourceValue = currentRow.get(idx, cursorDef.query.output(idx).dataType)
+
+      // Apply ANSI store assignment cast if types don't match
+      val castedValue = if (cursorDef.query.output(idx).dataType == varRef.dataType) {
+        sourceValue
+      } else {
+        // Use ANSI casting like SET VAR does
+        val cast = org.apache.spark.sql.catalyst.expressions.Cast(
+          org.apache.spark.sql.catalyst.expressions.Literal(
+            sourceValue,
+            cursorDef.query.output(idx).dataType),
+          varRef.dataType,
+          Option(session.sessionState.conf.sessionLocalTimeZone),
+          ansiEnabled = true)
+        cast.eval(org.apache.spark.sql.catalyst.InternalRow.empty)
+      }
 
       // Handle case sensitivity the same way as SetVariableExec
       val namePartsCaseAdjusted = if (session.sessionState.conf.caseSensitiveAnalysis) {
@@ -111,7 +126,7 @@ case class FetchCursorExec(
       val varDef = VariableDefinition(
         varRef.identifier,
         varRef.varDef.defaultValueSQL,
-        Literal(value, varRef.dataType)
+        Literal(castedValue, varRef.dataType)
       )
 
       scriptingVariableManager.set(namePartsCaseAdjusted, varDef)

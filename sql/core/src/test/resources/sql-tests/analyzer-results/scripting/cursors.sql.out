@@ -168,7 +168,14 @@ BEGIN
   VALUES(step);
 END
 -- !query analysis
-LocalRelation [col1#x]
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+{
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
+  "messageParameters" : {
+    "message" : "Invalid call to dataType on unresolved object"
+  }
+}
 
 
 -- !query
@@ -248,7 +255,14 @@ BEGIN
   CLOSE cur;
 END
 -- !query analysis
-LocalRelation [col1#x, col2#x]
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+{
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
+  "messageParameters" : {
+    "message" : "Invalid call to dataType on unresolved object"
+  }
+}
 
 
 -- !query
@@ -282,7 +296,14 @@ BEGIN
   VALUES (result);
 END
 -- !query analysis
-LocalRelation [col1#x]
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+{
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
+  "messageParameters" : {
+    "message" : "Invalid call to dataType on unresolved object"
+  }
+}
 
 
 -- !query
@@ -308,7 +329,14 @@ BEGIN
   VALUES (id_sum);
 END
 -- !query analysis
-LocalRelation [col1#x]
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+{
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
+  "messageParameters" : {
+    "message" : "Invalid call to dataType on unresolved object"
+  }
+}
 
 
 -- !query
@@ -342,7 +370,14 @@ BEGIN
   VALUES (count1, count2);
 END
 -- !query analysis
-LocalRelation [col1#x, col2#x]
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+{
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
+  "messageParameters" : {
+    "message" : "Invalid call to dataType on unresolved object"
+  }
+}
 
 
 -- !query
@@ -367,7 +402,14 @@ BEGIN
   VALUES (sum); -- Should be 20 + 25 = 45
 END
 -- !query analysis
-LocalRelation [col1#x]
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+{
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
+  "messageParameters" : {
+    "message" : "Invalid call to dataType on unresolved object"
+  }
+}
 
 
 -- !query
@@ -390,22 +432,22 @@ BEGIN
   outer_lbl: BEGIN
     DECLARE x, y INT;
     DECLARE cur CURSOR FOR SELECT 1 AS val;
-    
+
     inner_lbl: BEGIN
       DECLARE cur CURSOR FOR SELECT 2 AS val;
-      
+
       OPEN outer_lbl.cur;  -- Opens outer cursor
       OPEN inner_lbl.cur;  -- Opens inner cursor
-      
+
       FETCH cur INTO x;
-      
+
       FETCH outer_lbl.cur INTO y;
-      
+
       CLOSE inner_lbl.cur;
     END;
-    
+
     CLOSE outer_lbl.cur;
-    
+
     VALUES (x, y);
   END;
 END
@@ -423,7 +465,7 @@ BEGIN
     DECLARE cur CURSOR FOR SELECT id FROM VALUES(1), (2), (3), (4), (5) AS t(id) WHERE id >= ? AND id <= ?;
 
     OPEN lbl.cur USING min_val, max_val;
-    
+
     FETCH lbl.cur INTO fetched_id;
     SET result = result || CAST(fetched_id AS STRING);
     FETCH lbl.cur INTO fetched_id;
@@ -434,4 +476,83 @@ BEGIN
   END;
 END
 -- !query analysis
-LocalRelation [col1#x]
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+{
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
+  "messageParameters" : {
+    "message" : "Invalid call to dataType on unresolved object"
+  }
+}
+
+
+-- !query
+BEGIN
+  DECLARE x, y INT;
+  DECLARE cur CURSOR FOR SELECT 1 AS a, 2 AS b;
+  OPEN cur;
+  FETCH cur INTO x, x;  -- Should fail - duplicate variable
+END
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DUPLICATE_ASSIGNMENTS",
+  "sqlState" : "42701",
+  "messageParameters" : {
+    "nameList" : "`x`"
+  }
+}
+
+
+-- !query
+BEGIN
+  DECLARE int_var INT;
+  DECLARE str_var STRING;
+  DECLARE cur CURSOR FOR SELECT 100.7 AS double_val, 42 AS int_val;
+
+  OPEN cur;
+  FETCH cur INTO int_var, str_var;  -- double->int cast, int->string cast
+  CLOSE cur;
+
+  VALUES (int_var, str_var);  -- Should be (100, '42') with ANSI rounding
+END
+-- !query analysis
+LocalRelation [col1#x, col2#x]
+
+
+-- !query
+BEGIN
+  DECLARE x INT;
+  DECLARE cur CURSOR FOR SELECT 1, 2, 3;
+  OPEN cur;
+  FETCH cur INTO x;  -- Should fail - 1 target but 3 columns
+END
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ASSIGNMENT_ARITY_MISMATCH",
+  "sqlState" : "42802",
+  "messageParameters" : {
+    "numExpr" : "3",
+    "numTarget" : "1"
+  }
+}
+
+
+-- !query
+BEGIN
+  DECLARE x, y, z, w INT;
+  DECLARE cur CURSOR FOR SELECT 1, 2;
+  OPEN cur;
+  FETCH cur INTO x, y, z, w;  -- Should fail - 4 targets but 2 columns
+END
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ASSIGNMENT_ARITY_MISMATCH",
+  "sqlState" : "42802",
+  "messageParameters" : {
+    "numExpr" : "2",
+    "numTarget" : "4"
+  }
+}
