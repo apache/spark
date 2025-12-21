@@ -46,7 +46,7 @@ class TestListenerSpark(StreamingQueryListener):
         df = self.spark.createDataFrame(data=[(e,)])
         df.write.mode("append").saveAsTable("listener_terminated_events")
 
-    def onQueryTriggerStart(self, event) -> None:
+    def onQueryExecutionStart(self, event) -> None:
         pass
 
 
@@ -86,7 +86,7 @@ class TestListenerLocalV2(StreamingQueryListener):
     def onQueryTerminated(self, event):
         self.terminated.append(event)
 
-    def onQueryTriggerStart(self, event) -> None:
+    def onQueryExecutionStart(self, event) -> None:
         pass
 
 

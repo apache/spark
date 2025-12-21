@@ -25,7 +25,7 @@ import org.apache.spark.connect.proto.{Command, ExecutePlanResponse, Plan, Strea
 import org.apache.spark.internal.{Logging, LogKeys, MDC}
 import org.apache.spark.sql.connect.client.CloseableIterator
 import org.apache.spark.sql.streaming.StreamingQueryListener
-import org.apache.spark.sql.streaming.StreamingQueryListener.{Event, QueryIdleEvent, QueryProgressEvent, QueryStartedEvent, QueryTerminatedEvent, QueryTriggerStartEvent}
+import org.apache.spark.sql.streaming.StreamingQueryListener.{Event, QueryIdleEvent, QueryProgressEvent, QueryStartedEvent, QueryTerminatedEvent, QueryExecutionStartEvent}
 
 class StreamingQueryListenerBus(sparkSession: SparkSession) extends Logging {
   private val listeners = new CopyOnWriteArrayList[StreamingQueryListener]()
@@ -114,8 +114,8 @@ class StreamingQueryListenerBus(sparkSession: SparkSession) extends Logging {
               postToAll(QueryIdleEvent.fromJson(event.getEventJson))
             case StreamingQueryEventType.QUERY_TERMINATED_EVENT =>
               postToAll(QueryTerminatedEvent.fromJson(event.getEventJson))
-            case StreamingQueryEventType.QUERY_TRIGGER_START_EVENT =>
-              postToAll(QueryTriggerStartEvent.fromJson(event.getEventJson))
+            case StreamingQueryEventType.QUERY_EXECUTION_START_EVENT =>
+              postToAll(QueryExecutionStartEvent.fromJson(event.getEventJson))
             case _ =>
               logWarning(log"Unknown StreamingQueryListener event: ${MDC(LogKeys.EVENT, event)}")
           }
@@ -146,8 +146,8 @@ class StreamingQueryListenerBus(sparkSession: SparkSession) extends Logging {
             listener.onQueryIdle(t)
           case t: QueryTerminatedEvent =>
             listener.onQueryTerminated(t)
-          case t: QueryTriggerStartEvent =>
-            listener.onQueryTriggerStart(t)
+          case t: QueryExecutionStartEvent =>
+            listener.onQueryExecutionStart(t)
           case _ =>
             logWarning(log"Unknown StreamingQueryListener event: ${MDC(LogKeys.EVENT, event)}")
         }

@@ -142,9 +142,9 @@ class StreamingQueryListenerBus(sparkListenerBus: Option[LiveListenerBus])
         if (shouldReport(queryTerminated.runId)) {
           listener.onQueryTerminated(queryTerminated)
         }
-      case queryTriggerStart: QueryTriggerStartEvent =>
-        if (shouldReport(queryTriggerStart.runId)) {
-          listener.onQueryTriggerStart(queryTriggerStart)
+      case queryExecutionStart: QueryExecutionStartEvent =>
+        if (shouldReport(queryExecutionStart.runId)) {
+          listener.onQueryExecutionStart(queryExecutionStart)
         }
       case _ =>
     }

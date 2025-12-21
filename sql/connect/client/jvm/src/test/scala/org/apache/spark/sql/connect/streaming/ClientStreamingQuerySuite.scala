@@ -34,7 +34,7 @@ import org.apache.spark.sql.connect.SparkSession
 import org.apache.spark.sql.connect.test.{IntegrationTestUtils, QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.functions.{col, lit, udf, window}
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamingQueryListener, Trigger}
-import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryProgressEvent, QueryStartedEvent, QueryTerminatedEvent, QueryTriggerStartEvent}
+import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryProgressEvent, QueryStartedEvent, QueryTerminatedEvent, QueryExecutionStartEvent}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.SparkFileUtils
 
@@ -732,7 +732,7 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
   }
 
   /**
-   * V3: The interface after the method `onQueryTriggerStart` is added. It is Spark 4.2+.
+   * V3: The interface after the method `onQueryExecutionStart` is added. It is Spark 4.2+.
    */
   class EventCollectorV3 extends EventCollector {
     override protected def tablePostfix: String = "_v3"
@@ -746,7 +746,7 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
     override def onQueryTerminated(event: QueryTerminatedEvent): Unit =
       handleOnQueryTerminated(event)
 
-    override def onQueryTriggerStart(event: QueryTriggerStartEvent): Unit = {}
+    override def onQueryExecutionStart(event: QueryExecutionStartEvent): Unit = {}
   }
 
 

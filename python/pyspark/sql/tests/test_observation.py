@@ -137,7 +137,7 @@ class DataFrameObservationTestsMixin:
             def onQueryTerminated(self, event):
                 pass
 
-            def onQueryTriggerStart(self, event):
+            def onQueryExecutionStart(self, event):
                 pass
 
         self.spark.streams.addListener(TestListener())

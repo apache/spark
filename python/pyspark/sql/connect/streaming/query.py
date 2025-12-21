@@ -33,7 +33,7 @@ from pyspark.sql.streaming.listener import (
     QueryProgressEvent,
     QueryIdleEvent,
     QueryTerminatedEvent,
-    QueryTriggerStartEvent,
+    QueryExecutionStartEvent,
     StreamingQueryProgress,
 )
 from pyspark.sql.streaming.query import (
@@ -394,15 +394,15 @@ class StreamingQueryListenerBus:
     @staticmethod
     def deserialize(
         event: pb2.StreamingQueryListenerEvent,
-    ) -> Union["QueryProgressEvent", "QueryIdleEvent", "QueryTerminatedEvent", "QueryTriggerStartEvent"]:
+    ) -> Union["QueryProgressEvent", "QueryIdleEvent", "QueryTerminatedEvent", "QueryExecutionStartEvent"]:
         if event.event_type == proto.StreamingQueryEventType.QUERY_PROGRESS_EVENT:
             return QueryProgressEvent.fromJson(json.loads(event.event_json))
         elif event.event_type == proto.StreamingQueryEventType.QUERY_TERMINATED_EVENT:
             return QueryTerminatedEvent.fromJson(json.loads(event.event_json))
         elif event.event_type == proto.StreamingQueryEventType.QUERY_IDLE_EVENT:
             return QueryIdleEvent.fromJson(json.loads(event.event_json))
-        elif event.event_type == proto.StreamingQueryEventType.QUERY_TRIGGER_START_EVENT:
-            return QueryTriggerStartEvent.fromJson(json.loads(event.event_json))
+        elif event.event_type == proto.StreamingQueryEventType.QUERY_EXECUTION_START_EVENT:
+            return QueryExecutionStartEvent.fromJson(json.loads(event.event_json))
         else:
             raise PySparkValueError(
                 errorClass="UNKNOWN_VALUE_FOR",
@@ -412,7 +412,7 @@ class StreamingQueryListenerBus:
     def post_to_all(
         self,
         event: Union[
-            "QueryStartedEvent", "QueryProgressEvent", "QueryIdleEvent", "QueryTerminatedEvent", "QueryTriggerStartEvent"
+            "QueryStartedEvent", "QueryProgressEvent", "QueryIdleEvent", "QueryTerminatedEvent", "QueryExecutionStartEvent"
         ],
     ) -> None:
         """
@@ -430,8 +430,8 @@ class StreamingQueryListenerBus:
                         listener.onQueryIdle(event)
                     elif isinstance(event, QueryTerminatedEvent):
                         listener.onQueryTerminated(event)
-                    elif isinstance(event, QueryTriggerStartEvent):
-                        listener.onQueryTriggerStart(event)
+                    elif isinstance(event, QueryExecutionStartEvent):
+                        listener.onQueryExecutionStart(event)
                     else:
                         warnings.warn(f"Unknown StreamingQueryListener event: {event}")
                 except Exception as e:

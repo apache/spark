@@ -656,7 +656,7 @@ class StreamingQueryManager:
         ...     def onQueryTerminated(self, event):
         ...         pass
         ...
-        ...     def onQueryTriggerStart(self, event):
+        ...     def onQueryExecutionStart(self, event):
         ...         pass
         ...
         >>> test_listener = TestListener()
@@ -708,7 +708,7 @@ class StreamingQueryManager:
         ...     def onQueryTerminated(self, event):
         ...         pass
         ...
-        ...     def onQueryTriggerStart(self, event):
+        ...     def onQueryExecutionStart(self, event):
         ...         pass
         ...
         >>> test_listener = TestListener()

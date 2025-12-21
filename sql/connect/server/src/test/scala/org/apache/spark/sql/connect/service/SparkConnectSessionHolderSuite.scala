@@ -138,7 +138,7 @@ class SparkConnectSessionHolderSuite extends SharedSparkSession {
         |    def onQueryTerminated(e):
         |        pass
         |
-        |    def onQueryTriggerStart(e):
+        |    def onQueryExecutionStart(e):
         |        pass
         |
         |listener = MyListener()
