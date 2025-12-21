@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
@@ -85,6 +85,27 @@ class SQLFunctionSuite extends QueryTest with SharedSparkSession {
           |""".stripMargin)
       checkAnswer(sql("SELECT bar()"), Row(8))
       checkAnswer(sql("SELECT bar(1)"), Row(2))
+    }
+  }
+
+  test("SQL UDF in higher-order function should fail with clear error message") {
+    withUserDefinedFunction("test_lower_udf" -> false) {
+      sql(
+        """
+          |CREATE FUNCTION test_lower_udf(s STRING)
+          |RETURNS STRING
+          |RETURN lower(s)
+          |""".stripMargin)
+      val exception = intercept[AnalysisException] {
+        sql("SELECT transform(array('A', 'B', 'C'), x -> test_lower_udf(x))").collect()
+      }
+      assert(exception.getCondition == "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_SQL_UDF",
+        s"Expected UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_SQL_UDF " +
+        s"but got ${exception.getCondition}: ${exception.getMessage}")
+      assert(exception.getMessage.contains("test_lower_udf"),
+        s"Error message should contain function name: ${exception.getMessage}")
+      assert(exception.getMessage.contains("lambda x"),
+        s"Error message should contain 'lambda x': ${exception.getMessage}")
     }
   }
 }
