@@ -165,27 +165,13 @@ class SqlScriptingExecutionFrame(
 
     // Remove all scopes until the one with the given label.
     while (scopes.nonEmpty && scopes.last.label != label) {
-      // Close all open cursors in the scope being removed
-      scopes.last.cursors.values.foreach { cursor =>
-        if (cursor.isOpen) {
-          cursor.isOpen = false
-          cursor.resultData = None
-          cursor.currentPosition = -1
-        }
-      }
+      scopes.last.cleanup()
       scopes.remove(scopes.length - 1)
     }
 
     // Remove the scope with the given label.
     if (scopes.nonEmpty) {
-      // Close all open cursors in the scope being removed
-      scopes.last.cursors.values.foreach { cursor =>
-        if (cursor.isOpen) {
-          cursor.isOpen = false
-          cursor.resultData = None
-          cursor.currentPosition = -1
-        }
-      }
+      scopes.last.cleanup()
       scopes.remove(scopes.length - 1)
     }
   }
@@ -239,6 +225,18 @@ class SqlScriptingExecutionScope(
     val triggerToExceptionHandlerMap: TriggerToExceptionHandlerMap) {
   val variables = new mutable.HashMap[String, VariableDefinition]
   val cursors = new mutable.HashMap[String, CursorDefinition]
+
+  /**
+   * Cleanup resources when this scope is being removed.
+   * Closes all open cursors and releases their result data.
+   */
+  def cleanup(): Unit = {
+    cursors.values.foreach { cursor =>
+      if (cursor.isOpen) {
+        cursor.close()
+      }
+    }
+  }
 
   /**
    * Finds the most appropriate error handler for exception based on its condition and SQL state.
@@ -320,8 +318,19 @@ class SqlScriptingExecutionScope(
  */
 case class CursorDefinition(
     name: String,
-    query: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan,
+    var query: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan,
     queryText: String,
     var isOpen: Boolean = false,
     var resultData: Option[Array[org.apache.spark.sql.catalyst.InternalRow]] = None,
-    var currentPosition: Int = -1)
+    var currentPosition: Int = -1) {
+
+  /**
+   * Closes the cursor and releases its resources.
+   * Sets isOpen to false, releases result data, and resets position.
+   */
+  def close(): Unit = {
+    isOpen = false
+    resultData = None
+    currentPosition = -1
+  }
+}

@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.command.v2
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{InternalRow, SqlScriptingContextManager}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.datasources.v2.LeafV2CommandExec
 
 /**
@@ -63,7 +64,10 @@ case class OpenCursorExec(
     // Execute the query and collect results
     val resultData = if (args.nonEmpty) {
       // Parameterized cursor: re-parse query text with bound parameters
-      executeParameterizedQuery(cursorDef.queryText, args)
+      val (data, analyzedPlan) = executeParameterizedQuery(cursorDef.queryText, args)
+      // Update the cursor's query with the analyzed plan so FETCH can access the schema
+      cursorDef.query = analyzedPlan
+      data
     } else {
       // Non-parameterized cursor: execute the analyzed plan directly
       val queryExecution = session.sessionState.executePlan(cursorDef.query)
@@ -97,18 +101,18 @@ case class OpenCursorExec(
    *
    * @param queryText The SQL query text with parameter markers (? or :name)
    * @param args Parameter expressions to bind
-   * @return Array of result rows
+   * @return Tuple of (result rows, analyzed logical plan)
    */
   private def executeParameterizedQuery(
       queryText: String,
-      args: Seq[Expression]): Array[InternalRow] = {
+      args: Seq[Expression]): (Array[InternalRow], LogicalPlan) = {
     val (paramValues, paramNames) = buildUnifiedParameters(args)
 
     // Use session.sql() with parameters (same as EXECUTE IMMEDIATE)
     val df = session.asInstanceOf[org.apache.spark.sql.classic.SparkSession]
       .sql(queryText, paramValues, paramNames)
 
-    df.queryExecution.executedPlan.executeCollect()
+    (df.queryExecution.executedPlan.executeCollect(), df.queryExecution.analyzed)
   }
 
   /**
@@ -134,28 +138,34 @@ case class OpenCursorExec(
   }
 
   /**
-   * Evaluates a parameter expression and returns it as a Literal to preserve type information.
-   * This mirrors the behavior of EXECUTE IMMEDIATE.
+   * Evaluates a parameter expression and returns its value as a Literal.
+   * This matches the behavior of EXECUTE IMMEDIATE to preserve type information.
    *
    * @param expr The expression to evaluate
-   * @return Evaluated expression as a Literal (or the original value for session.sql())
+   * @return Literal with evaluated value and type
    */
   private def evaluateParameterExpression(expr: Expression): Any = {
     import org.apache.spark.sql.catalyst.InternalRow
-    import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
+    import org.apache.spark.sql.catalyst.expressions.{Alias, Literal, VariableReference}
     import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 
-    if (expr.foldable) {
-      // For foldable expressions, evaluate directly
-      Literal.create(expr.eval(InternalRow.empty), expr.dataType)
-    } else {
-      // For non-foldable expressions, use a projection to evaluate
-      val namedExpr = Alias(expr, "param")()
-      val project = Project(Seq(namedExpr), LocalRelation())
-      val queryExecution = session.sessionState.executePlan(project)
-      val row = queryExecution.executedPlan.executeCollect().head
-      val value = row.get(0, expr.dataType)
-      Literal.create(value, expr.dataType)
+    expr match {
+      case varRef: VariableReference =>
+        // Variable references: evaluate to their values and wrap in Literal
+        // to preserve type information
+        Literal.create(varRef.eval(InternalRow.empty), varRef.dataType)
+      case foldable if foldable.foldable =>
+        // For foldable expressions, return Literal to preserve type information.
+        // This ensures DATE '2023-12-25' remains a DateType literal, not just an Int.
+        Literal.create(foldable.eval(InternalRow.empty), foldable.dataType)
+      case other =>
+        // For non-foldable expressions, use a projection to evaluate
+        val namedExpr = Alias(other, "param")()
+        val project = Project(Seq(namedExpr), LocalRelation())
+        val queryExecution = session.sessionState.executePlan(project)
+        val row = queryExecution.executedPlan.executeCollect().head
+        val value = row.get(0, other.dataType)
+        Literal.create(value, other.dataType)
     }
   }
 

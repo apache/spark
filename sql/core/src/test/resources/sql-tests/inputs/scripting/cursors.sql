@@ -957,3 +957,213 @@ BEGIN
   VALUES (result); -- Should return '1-10-100,1-20-100,2-10-100,2-20-100,'
 END;
 --QUERY-DELIMITER-END
+
+
+-- ============================================================================
+-- Parameter Marker Tests - Edge Cases and Error Conditions
+-- ============================================================================
+
+-- Test 41: USING clause with MORE expressions than needed (allowed - extras ignored)
+-- EXPECTED: Success - extra parameters are allowed and ignored
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT ? + 10 AS val;
+
+  OPEN cur USING 5, 99, 100;  -- Only first parameter (5) is used, others ignored
+  FETCH cur INTO result;
+  CLOSE cur;
+
+  VALUES (result);  -- Should return 15 (5 + 10)
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 42: USING clause with TOO FEW expressions for positional parameters
+-- EXPECTED: Error - UNBOUND_SQL_PARAMETER
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT ? + ? AS val;
+
+  OPEN cur USING 10;  -- Only 1 parameter provided, but 2 needed
+  FETCH cur INTO result;
+  CLOSE cur;
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 43: USING clause missing a named parameter
+-- EXPECTED: Error - UNBOUND_SQL_PARAMETER
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT :x + :y AS val;
+
+  OPEN cur USING (x AS x);  -- Missing parameter 'y'
+  FETCH cur INTO result;
+  CLOSE cur;
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 44: USING clause with named parameters but wrong name
+-- EXPECTED: Error - UNBOUND_SQL_PARAMETER
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT :alpha + :beta AS val;
+
+  OPEN cur USING (5 AS alpha, 10 AS gamma);  -- 'gamma' provided but 'beta' expected
+  FETCH cur INTO result;
+  CLOSE cur;
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 45: DECLARE mixes named and unnamed parameter markers
+-- EXPECTED: Error - UNRECOGNIZED_SQL_TYPE (due to invalid parameter marker syntax)
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT ? + :named AS val;  -- Mixed positional and named
+
+  OPEN cur USING 10, (20 AS named);
+  FETCH cur INTO result;
+  CLOSE cur;
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 46: Local variable with same name as named parameter (implicit alias)
+-- EXPECTED: Success - variable name becomes the parameter name implicitly
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE x INT DEFAULT 100;
+  DECLARE y INT DEFAULT 200;
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT :x + :y AS val;
+
+  -- Variable names match parameter names, so no explicit alias needed
+  OPEN cur USING (x AS x, y AS y);
+  FETCH cur INTO result;
+  CLOSE cur;
+
+  VALUES (result);  -- Should return 300 (100 + 200)
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 47: Named parameters with expressions (not just variable references)
+-- EXPECTED: Success - expressions can be used with explicit aliases
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE base INT DEFAULT 10;
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT :a * :b AS val;
+
+  OPEN cur USING (base * 2 AS a, base + 5 AS b);  -- Expressions with aliases
+  FETCH cur INTO result;
+  CLOSE cur;
+
+  VALUES (result);  -- Should return 300 (20 * 15)
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 48: Positional parameters with complex expressions
+-- EXPECTED: Success - expressions work for positional parameters
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE x INT DEFAULT 5;
+  DECLARE y INT DEFAULT 3;
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT ? * ? + ? AS val;
+
+  OPEN cur USING x * 2, y + 1, 10;  -- (5*2) * (3+1) + 10 = 10 * 4 + 10 = 50
+  FETCH cur INTO result;
+  CLOSE cur;
+
+  VALUES (result);  -- Should return 50
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 49: Reopen cursor with different parameter values (positional)
+-- EXPECTED: Success - cursor can be reopened with different positional parameters
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE result1 INT;
+  DECLARE result2 INT;
+  DECLARE cur CURSOR FOR SELECT ? * 10 AS val;
+
+  -- First open with parameter 5
+  OPEN cur USING 5;
+  FETCH cur INTO result1;
+  CLOSE cur;
+
+  -- Reopen with parameter 8
+  OPEN cur USING 8;
+  FETCH cur INTO result2;
+  CLOSE cur;
+
+  VALUES (result1, result2);  -- Should return (50, 80)
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 50: Reopen cursor with different parameter values (named)
+-- EXPECTED: Success - cursor can be reopened with different named parameters
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE result1 INT;
+  DECLARE result2 INT;
+  DECLARE cur CURSOR FOR SELECT :factor * 10 AS val;
+
+  -- First open with factor = 3
+  OPEN cur USING (3 AS factor);
+  FETCH cur INTO result1;
+  CLOSE cur;
+
+  -- Reopen with factor = 7
+  OPEN cur USING (7 AS factor);
+  FETCH cur INTO result2;
+  CLOSE cur;
+
+  VALUES (result1, result2);  -- Should return (30, 70)
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 51: ALL_PARAMETERS_MUST_BE_NAMED - Mix of named and positional in USING
+-- EXPECTED: Error - ALL_PARAMETERS_MUST_BE_NAMED
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT :x + :y AS val;
+
+  -- USING clause mixes positional (10) and named (y AS y)
+  OPEN cur USING 10, (20 AS y);
+  FETCH cur INTO result;
+  CLOSE cur;
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 52: Verify variable name inference for parameters (without explicit AS)
+-- EXPECTED: Success - variable names inferred from identifiers in USING clause
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE multiplier INT DEFAULT 4;
+  DECLARE addend INT DEFAULT 6;
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT :multiplier * 10 + :addend AS val;
+
+  -- Variable names match parameter names, implicit binding
+  OPEN cur USING (multiplier AS multiplier, addend AS addend);
+  FETCH cur INTO result;
+  CLOSE cur;
+
+  VALUES (result);  -- Should return 46 (4 * 10 + 6)
+END;
+--QUERY-DELIMITER-END

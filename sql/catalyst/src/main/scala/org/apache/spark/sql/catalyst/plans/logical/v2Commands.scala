@@ -1968,6 +1968,8 @@ case class OpenCursor(
   override def children: Seq[LogicalPlan] = Nil
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = this
+
+  override lazy val resolved: Boolean = args.forall(_.resolved)
 }
 
 /**

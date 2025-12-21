@@ -55,9 +55,7 @@ case class CloseCursorExec(cursorName: String) extends LeafV2CommandExec {
     }
 
     // Close the cursor and release resources
-    cursorDef.isOpen = false
-    cursorDef.resultData = None
-    cursorDef.currentPosition = -1
+    cursorDef.close()
 
     Nil
   }
