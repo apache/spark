@@ -47,13 +47,16 @@ import org.apache.spark.util.{Clock, Utils}
  * such as get the most recent progress of the query.
  */
 class ProgressReporter(
-    private val sparkSession: SparkSession,
-    private val triggerClock: Clock,
-    val logicalPlan: () => LogicalPlan)
+                        private val sparkSession: SparkSession,
+                        private val triggerClock: Clock,
+                        val logicalPlan: () => LogicalPlan)
   extends Logging {
 
   // The timestamp we report an event that has not executed anything
   var lastNoExecutionProgressEventTime = Long.MinValue
+
+  // The timestamp we last reported a QueryTriggerStart event
+  private var lastQueryTriggerStartEventTime = Long.MinValue
 
   /** Holds the most recent query progress updates.  Accesses must lock on the queue itself. */
   private val progressBuffer = new mutable.Queue[StreamingQueryProgress]()
@@ -102,10 +105,10 @@ class ProgressReporter(
   }
 
   def updateIdleness(
-      id: UUID,
-      runId: UUID,
-      currentTriggerStartTimestamp: Long,
-      newProgress: StreamingQueryProgress): Unit = {
+                      id: UUID,
+                      runId: UUID,
+                      currentTriggerStartTimestamp: Long,
+                      newProgress: StreamingQueryProgress): Unit = {
     val now = triggerClock.getTimeMillis()
     if (now - noDataProgressEventInterval >= lastNoExecutionProgressEventTime) {
       addNewProgress(newProgress)
@@ -120,18 +123,23 @@ class ProgressReporter(
   }
 
   def updateQueryTriggerStart(
-     id: UUID,
-     runId: UUID,
-     name: String,
-     currentTriggerStartTimestamp: Long): Unit = {
-   if (queryTriggerStartEventEnabled) {
-     val now = triggerClock.getTimeMillis()
-     if (now - lastNoExecutionProgressEventTime >= queryTriggerStartEventMinInterval) {
-       postEvent(
-         new QueryTriggerStartEvent(id, runId, name, formatTimestamp(currentTriggerStartTimestamp)))
-       lastNoExecutionProgressEventTime = now
-     }
-   }
+      id: UUID,
+      runId: UUID,
+      name: String,
+      currentTriggerStartTimestamp: Long): Unit = {
+    if (queryTriggerStartEventEnabled) {
+      val now = triggerClock.getTimeMillis()
+      if (now - lastQueryTriggerStartEventTime >= queryTriggerStartEventMinInterval) {
+        postEvent(
+          new QueryTriggerStartEvent(
+            id,
+            runId,
+            name,
+            formatTimestamp(currentTriggerStartTimestamp))
+        )
+        lastQueryTriggerStartEventTime = now
+      }
+    }
   }
 
   private def postEvent(event: StreamingQueryListener.Event): Unit = {
@@ -236,6 +244,10 @@ abstract class ProgressContext(
     currentTriggerEndOffsets = null
     currentTriggerLatestOffsets = null
     currentDurationsMs.clear()
+  }
+
+  /** Report that a trigger has started and will process data. */
+  def reportTriggerStart(): Unit = {
     progressReporter.updateQueryTriggerStart(id, runId, name, currentTriggerStartTimestamp)
   }
 
