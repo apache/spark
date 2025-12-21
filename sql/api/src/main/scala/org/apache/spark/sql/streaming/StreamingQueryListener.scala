@@ -81,7 +81,7 @@ abstract class StreamingQueryListener extends Serializable {
    * Called when a query's microbatch trigger is started.
    * @since 4.2.0
    */
-  def onQueryTriggerStart(event: QueryTriggerStartEvent): Unit = {}
+  def onQueryExecutionStart(event: QueryExecutionStartEvent): Unit = {}
 }
 
 /**
@@ -313,7 +313,7 @@ object StreamingQueryListener extends Serializable {
    *  The timestamp start of a query trigger
    */
   @Evolving
-  class QueryTriggerStartEvent private[sql] (
+  class QueryExecutionStartEvent private[sql] (
       val id: UUID,
       val runId: UUID,
       val name: String,

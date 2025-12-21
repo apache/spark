@@ -377,7 +377,7 @@ class MicroBatchExecution(
 
         // Report that a trigger will process data (after confirming work to do)
         if (execCtx.isCurrentBatchConstructed) {
-          execCtx.reportTriggerStart()
+          execCtx.reportExecutionStart()
         }
 
         // Record the trigger offset range for progress reporting *before* processing the batch
