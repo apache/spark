@@ -140,7 +140,9 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           }
           matched(ordinal)
 
-        case u @ UnresolvedAttribute(nameParts) =>
+        case u @ UnresolvedAttribute(nameParts)
+          if u.getTagValue(LogicalPlan.PLAN_ID_TAG).isEmpty =>
+          // UnresolvedAttribute with PLAN_ID_TAG should be resolved in resolveDataFrameColumn
           val result = withPosition(u) {
             resolveColumnByName(nameParts)
               .orElse(LiteralFunctionResolution.resolve(nameParts))
@@ -495,8 +497,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
   //    1. extract the attached plan id from UnresolvedAttribute;
   //    2. top-down traverse the query plan to find the plan node that matches the plan id;
   //    3. if can not find the matching node, fails with 'CANNOT_RESOLVE_DATAFRAME_COLUMN';
-  //    4, if the matching node is found, but can not resolve the column, also fails with
-  //       'CANNOT_RESOLVE_DATAFRAME_COLUMN';
+  //    4, if the matching node is found, but can not resolve the column, return the original one;
   //    5, resolve the expression against the target node, the resolved attribute will be
   //       filtered by the output attributes of nodes in the path (from matching to root node);
   //    6. if more than one resolved attributes are found in the above recursive process,
@@ -571,10 +572,9 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       } else {
         None
       }
-      if (resolved.isEmpty) {
-        // The targe plan node is found, but the column cannot be resolved.
-        throw QueryCompilationErrors.cannotResolveDataFrameColumn(u)
-      }
+      // The targe plan node is found, but might still fail to resolve.
+      // In this case, return None to delay the failure, so it is possible to be
+      // resolved in the next iteration.
       (resolved.map(r => (r, currentDepth)), true)
     } else {
       val children = p match {

@@ -16,12 +16,12 @@
 #
 
 import array
+import concurrent.futures
 import datetime
 import os
 import platform
 import unittest
 from decimal import Decimal
-import numpy as np
 import pandas as pd
 
 from pyspark.sql import Row
@@ -74,10 +74,10 @@ if have_numpy:
 class UDFReturnTypeTests(ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
-        super(UDFReturnTypeTests, cls).setUpClass()
+        super().setUpClass()
 
     def setUp(self):
-        super(UDFReturnTypeTests, self).setUp()
+        super().setUp()
         self.test_data = [
             None,
             True,
@@ -218,9 +218,7 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
             self.fail(f"Golden file created for {test_name}. Please review and re-run the test.")
 
     def _generate_udf_return_type_coercion_results(self, use_arrow):
-        results = []
-
-        for spark_type in self.test_types:
+        def work(spark_type):
             result = [spark_type.simpleString()]
             for value in self.test_data:
                 try:
@@ -234,9 +232,10 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
                 except Exception:
                     result_value = "X"
                 result.append(result_value)
-            results.append(result)
+            return result
 
-        return results
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            return list(executor.map(work, self.test_types))
 
     def test_pandas_udf_return_type_coercion(self):
         golden_file = os.path.join(
@@ -253,9 +252,7 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
         self._compare_or_create_golden_file(actual_output, golden_file, test_name)
 
     def _generate_pandas_udf_type_coercion_results(self):
-        results = []
-
-        for spark_type in self.test_types:
+        def work(spark_type):
             result = [spark_type.simpleString()]
             for value in self.pandas_test_data:
                 try:
@@ -277,9 +274,10 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
                 except Exception:
                     ret_str = "X"
                 result.append(ret_str)
-            results.append(result)
+            return result
 
-        return results
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            return list(executor.map(work, self.test_types))
 
 
 if __name__ == "__main__":

@@ -852,7 +852,6 @@ class DataFrame:
 
         Notes
         -----
-        - Unlike `count()`, this method does not trigger any computation.
         - An empty DataFrame has no rows. It may have columns, but no data.
 
         Examples
@@ -1515,6 +1514,8 @@ class DataFrame:
         -----
         The default storage level has changed to `MEMORY_AND_DISK_DESER` to match Scala in 3.0.
 
+        Cached data is shared across all Spark sessions on the cluster.
+
         Returns
         -------
         :class:`DataFrame`
@@ -1550,6 +1551,8 @@ class DataFrame:
         Notes
         -----
         The default storage level has changed to `MEMORY_AND_DISK_DESER` to match Scala in 3.0.
+
+        Cached data is shared across all Spark sessions on the cluster.
 
         Parameters
         ----------
@@ -1620,6 +1623,9 @@ class DataFrame:
         Notes
         -----
         `blocking` default has changed to ``False`` to match Scala in 2.0.
+
+        Cached data is shared across all Spark sessions on the cluster, so unpersisting it
+        affects all sessions.
 
         Parameters
         ----------
@@ -6693,6 +6699,64 @@ class DataFrame:
         -------
         :class:`table_arg.TableArg`
             A `TableArg` object representing a table argument.
+
+        Examples
+        --------
+        >>> from pyspark.sql.functions import udtf
+        >>>
+        >>> # Create a simple UDTF that processes table data
+        >>> @udtf(returnType="id: int, doubled: int")
+        ... class DoubleUDTF:
+        ...     def eval(self, row):
+        ...         yield row["id"], row["id"] * 2
+        ...
+        >>> # Create a DataFrame
+        >>> df = spark.createDataFrame([(1,), (2,), (3,)], ["id"])
+        >>>
+        >>> # Use asTable() to pass the DataFrame as a table argument to the UDTF
+        >>> result = DoubleUDTF(df.asTable())
+        >>> result.show()
+        +---+-------+
+        | id|doubled|
+        +---+-------+
+        |  1|      2|
+        |  2|      4|
+        |  3|      6|
+        +---+-------+
+        >>>
+        >>> # Use partitionBy and orderBy to control data partitioning and ordering
+        >>> df2 = spark.createDataFrame(
+        ...     [(1, "a"), (1, "b"), (2, "c"), (2, "d")], ["key", "value"]
+        ... )
+        >>>
+        >>> @udtf(returnType="key: int, value: string")
+        ... class ProcessUDTF:
+        ...     def eval(self, row):
+        ...         yield row["key"], row["value"]
+        ...
+        >>> # Partition by 'key' and order by 'value' within each partition
+        >>> result2 = ProcessUDTF(df2.asTable().partitionBy("key").orderBy("value"))
+        >>> result2.show()
+        +---+-----+
+        |key|value|
+        +---+-----+
+        |  1|    a|
+        |  1|    b|
+        |  2|    c|
+        |  2|    d|
+        +---+-----+
+        >>>
+        >>> # Use withSinglePartition to process all data in a single partition
+        >>> result3 = ProcessUDTF(df2.asTable().withSinglePartition().orderBy("value"))
+        >>> result3.show()
+        +---+-----+
+        |key|value|
+        +---+-----+
+        |  1|    a|
+        |  1|    b|
+        |  2|    c|
+        |  2|    d|
+        +---+-----+
         """
         ...
 

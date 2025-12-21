@@ -463,6 +463,37 @@ class UISuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-54563: Jetty sanitizes newlines in X-Frame-Options header") {
+    val valueWithNewlines = "example.com\nmalicious\nheader"
+    val (conf, securityMgr, sslOptions) = sslDisabledConf()
+    // Set the config value directly to bypass validation, simulating what could happen
+    // if someone bypasses the config validation (e.g., through direct property setting)
+    conf.set("spark.ui.allowFramingFrom", valueWithNewlines)
+
+    val serverInfo = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions, conf)
+    try {
+      val (_, ctx) = newContext("/test")
+      serverInfo.addHandler(ctx, securityMgr)
+
+      val url = new URI(s"http://$localhost:${serverInfo.boundPort}/test/root").toURL
+      TestUtils.withHttpConnection(url) { conn =>
+        val xFrameOptions = conn.getHeaderField("X-Frame-Options")
+        // Jetty should sanitize newlines by replacing them with spaces
+        assert(xFrameOptions !== null, "X-Frame-Options header should be present")
+        assert(!xFrameOptions.contains("\n"),
+          "X-Frame-Options header should not contain newlines")
+        assert(!xFrameOptions.contains("\r"),
+          "X-Frame-Options header should not contain carriage returns")
+        // The header value should have newlines replaced with spaces
+        val expectedValue = "ALLOW-FROM " + valueWithNewlines.replaceAll("[\r\n]+", " ")
+        assert(xFrameOptions === expectedValue,
+          s"X-Frame-Options header should have newlines replaced with spaces")
+      }
+    } finally {
+      stopServer(serverInfo)
+    }
+  }
+
   /**
    * Create a new context handler for the given path, with a single servlet that responds to
    * requests in `$path/root`.

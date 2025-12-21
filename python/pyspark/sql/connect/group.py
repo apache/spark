@@ -55,7 +55,6 @@ if TYPE_CHECKING:
         PandasGroupedMapFunctionWithState,
     )
     from pyspark.sql.connect.dataframe import DataFrame
-    from pyspark.sql.types import StructType
 
 
 class GroupedData:

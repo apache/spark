@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, 
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.streaming.StreamingQueryException
+import org.apache.spark.sql.util.{CloseableIterator, WrappedCloseableIterator}
 import org.apache.spark.util.ArrayImplicits._
 
 /**

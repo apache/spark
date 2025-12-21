@@ -61,7 +61,6 @@ from pyspark.testing.sqlutils import (
 from pyspark.errors import ArithmeticException, PySparkTypeError, UnsupportedOperationException
 from pyspark.loose_version import LooseVersion
 from pyspark.util import is_remote_only
-from pyspark.loose_version import LooseVersion
 
 if have_pandas:
     import pandas as pd
@@ -1009,11 +1008,6 @@ class ArrowTestsMixin:
                             expected[r][e] == result[r][e], f"{expected[r][e]} == {result[r][e]}"
                         )
 
-    def test_createDataFrame_pandas_with_struct_type(self):
-        for arrow_enabled in [True, False]:
-            with self.subTest(arrow_enabled=arrow_enabled):
-                self.check_createDataFrame_pandas_with_struct_type(arrow_enabled)
-
     def test_createDataFrame_arrow_with_struct_type_nulls(self):
         t = pa.table(
             {
@@ -1931,14 +1925,14 @@ class MaxResultArrowTests(unittest.TestCase):
 class EncryptionArrowTests(ArrowTests):
     @classmethod
     def conf(cls):
-        return super(EncryptionArrowTests, cls).conf().set("spark.io.encryption.enabled", "true")
+        return super().conf().set("spark.io.encryption.enabled", "true")
 
 
 class RDDBasedArrowTests(ArrowTests):
     @classmethod
     def conf(cls):
         return (
-            super(RDDBasedArrowTests, cls)
+            super()
             .conf()
             .set("spark.sql.execution.arrow.localRelationThreshold", "0")
             # to test multiple partitions

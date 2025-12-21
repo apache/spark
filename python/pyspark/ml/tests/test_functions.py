@@ -70,7 +70,7 @@ class PredictBatchUDFTestsMixin:
     def setUp(self):
         import pandas as pd
 
-        super(PredictBatchUDFTestsMixin, self).setUp()
+        super().setUp()
         self.data = np.arange(0, 1000, dtype=np.float64).reshape(-1, 4)
 
         # 4 scalar columns

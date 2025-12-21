@@ -26,18 +26,19 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Final, Max, Partial}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.{PlanTest, SQLHelper}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, AggregateHint, ColumnStat, Limit, LocalRelation, LogicalPlan, Sort, SortHint, Statistics, UnresolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, AggregateHint, ColumnStat, Limit, LocalRelation, LogicalPlan, Project, Sort, SortHint, Statistics, UnresolvedHint}
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.classic.ClassicConversions._
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.write.WriterCommitMessage
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, AQEShuffleReadExec, QueryStageExec, ShuffleQueryStageExec}
@@ -88,6 +89,22 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
   test("inject analyzer rule") {
     withSession(Seq(_.injectResolutionRule(MyRule))) { session =>
       assert(session.sessionState.analyzer.extendedResolutionRules.contains(MyRule(session)))
+    }
+  }
+
+  test("inject analyzer rule - hidden column") {
+    withSession(Seq(_.injectResolutionRule(MyHiddenColumn))) { session: SparkSession =>
+      val rel = LocalRelation(
+        AttributeReference("a", IntegerType)(),
+        AttributeReference("b", IntegerType)())
+      rel.setTagValue[Long](LogicalPlan.PLAN_ID_TAG, 0L)
+
+      val u = UnresolvedAttribute("x")
+      u.setTagValue[Long](LogicalPlan.PLAN_ID_TAG, 0L)
+      val proj = Project(Seq(u), rel)
+
+      val df = Dataset.ofRows(session, proj)
+      assert(df.schema.fieldNames === Array("x"))
     }
   }
 
@@ -606,6 +623,19 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
 
 case class MyRule(spark: SparkSession) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan
+}
+
+case class MyHiddenColumn(spark: SparkSession) extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case rel: LocalRelation if rel.output.size == 2 =>
+      // rel.output.size == 2 for idempotence
+      val newRel = rel.copy(
+        output = rel.output :+ AttributeReference("x", IntegerType)()
+      )
+      assert(rel.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(0L))
+      newRel.setTagValue(LogicalPlan.PLAN_ID_TAG, 0L)
+      newRel
+  }
 }
 
 case class MyCheckRule(spark: SparkSession) extends (LogicalPlan => Unit) {

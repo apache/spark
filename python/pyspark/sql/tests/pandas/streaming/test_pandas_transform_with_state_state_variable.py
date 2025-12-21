@@ -177,6 +177,7 @@ class TransformWithStateStateVariableTestsMixin:
         self.assertEqual(q.name, "this_query")
         self.assertTrue(q.isActive)
         q.processAllAvailable()
+        q.stop()
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
@@ -291,6 +292,7 @@ class TransformWithStateStateVariableTestsMixin:
         self.assertEqual(q.name, "this_query")
         self.assertTrue(q.isActive)
         q.processAllAvailable()
+        q.stop()
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
@@ -514,6 +516,7 @@ class TransformWithStateStateVariableTestsMixin:
         self.assertEqual(q.name, "this_query")
         self.assertTrue(q.isActive)
         q.processAllAvailable()
+        q.stop()
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 

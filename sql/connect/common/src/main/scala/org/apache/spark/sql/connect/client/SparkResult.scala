@@ -35,10 +35,10 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
-import org.apache.spark.sql.connect.client.arrow.{AbstractMessageIterator, ArrowDeserializingIterator, ConcatenatingArrowStreamReader, MessageIterator}
+import org.apache.spark.sql.connect.client.arrow.ArrowDeserializingIterator
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, LiteralValueProtoConverter}
 import org.apache.spark.sql.types.{DataType, StructType}
-import org.apache.spark.sql.util.ArrowUtils
+import org.apache.spark.sql.util.{AbstractMessageIterator, ArrowUtils, CloseableIterator, ConcatenatingArrowStreamReader, MessageIterator}
 
 private[sql] class SparkResult[T](
     responses: CloseableIterator[proto.ExecutePlanResponse],

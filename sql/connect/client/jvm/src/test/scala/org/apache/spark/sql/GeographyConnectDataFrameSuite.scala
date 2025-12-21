@@ -103,4 +103,25 @@ class GeographyConnectDataFrameSuite extends QueryTest with RemoteSparkSession {
     val expectedGeog = Geography.fromWKB(point, 4326)
     checkAnswer(df, Seq(Row(expectedGeog)))
   }
+
+  test("geospatial feature disabled") {
+    withSQLConf("spark.sql.geospatial.enabled" -> "false") {
+      val geography = Geography.fromWKB(point1, 4326)
+      val schema = StructType(Seq(StructField("col1", GeographyType(4326))))
+      // Java List[Row] + schema.
+      val javaList = java.util.Arrays.asList(Row(geography))
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.createDataFrame(javaList, schema).collect()
+        },
+        condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED")
+      // Implicit encoder path.
+      import testImplicits._
+      checkError(
+        exception = intercept[AnalysisException] {
+          Seq(geography).toDF("g").collect()
+        },
+        condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED")
+    }
+  }
 }

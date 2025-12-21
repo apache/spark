@@ -3062,56 +3062,6 @@ def floor(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
 
 
 @_try_remote_functions
-def log(col: "ColumnOrName") -> Column:
-    """
-    Computes the natural logarithm of the given value.
-
-    .. versionadded:: 1.4.0
-
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
-
-    Parameters
-    ----------
-    col : :class:`~pyspark.sql.Column` or column name
-        column to calculate natural logarithm for.
-
-    Returns
-    -------
-    :class:`~pyspark.sql.Column`
-        natural logarithm of the given value.
-
-    Examples
-    --------
-    Example 1: Compute the natural logarithm of E
-
-    >>> from pyspark.sql import functions as sf
-    >>> spark.range(1).select(sf.log(sf.e())).show()
-    +-------+
-    |ln(E())|
-    +-------+
-    |    1.0|
-    +-------+
-
-    Example 2: Compute the natural logarithm of invalid values
-
-    >>> from pyspark.sql import functions as sf
-    >>> spark.sql(
-    ...     "SELECT * FROM VALUES (-1), (0), (FLOAT('NAN')), (NULL) AS TAB(value)"
-    ... ).select("*", sf.log("value")).show()
-    +-----+---------+
-    |value|ln(value)|
-    +-----+---------+
-    | -1.0|     NULL|
-    |  0.0|     NULL|
-    |  NaN|      NaN|
-    | NULL|     NULL|
-    +-----+---------+
-    """
-    return _invoke_function_over_columns("log", col)
-
-
-@_try_remote_functions
 def log10(col: "ColumnOrName") -> Column:
     """
     Computes the logarithm of the given value in Base 10.
@@ -8342,7 +8292,7 @@ def when(condition: Column, value: Any) -> Column:
     return _invoke_function("when", condition._jc, v)
 
 
-@overload  # type: ignore[no-redef]
+@overload
 def log(arg1: "ColumnOrName") -> Column:
     ...
 
