@@ -588,6 +588,228 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   }
 
   /** Collects events from the StreamingQueryListener for testing */
+  testQuietly("QueryTriggerStart event fires only when batch will execute") {
+    val clock = new StreamManualClock
+    val inputData = new MemoryStream[Int](0, sqlContext)
+    val df = inputData.toDS().as[Long].map { 10 / _ }
+    val listener = new EventCollectorV3
+
+    withSQLConf(SQLConf.STREAMING_QUERY_TRIGGER_START_EVENT_ENABLED.key -> "true") {
+      try {
+        spark.streams.addListener(listener)
+
+        testStream(df, OutputMode.Append)(
+
+          // Start query
+          StartStream(Trigger.ProcessingTime(100), triggerClock = clock),
+          AssertOnQuery { query =>
+            assert(listener.startEvent !== null)
+            true
+          },
+
+          // Add data and trigger - should fire QueryTriggerStart
+          AddData(inputData, 1, 2),
+          AdvanceManualClock(100),
+          AssertOnQuery { _ =>
+            eventually(Timeout(streamingTimeout)) {
+              assert(
+                listener.triggerStartedEvent !== null,
+                "QueryTriggerStart should fire when batch will execute"
+              )
+              assert(listener.triggerStartedEvent.id === listener.startEvent.id)
+              assert(listener.triggerStartedEvent.runId === listener.startEvent.runId)
+              assert(listener.triggerStartedEvent.name === listener.startEvent.name)
+            }
+            true
+          },
+
+          StopStream
+        )
+      } finally {
+        spark.streams.removeListener(listener)
+      }
+    }
+  }
+
+  testQuietly("QueryTriggerStart event disabled by default") {
+    val clock = new StreamManualClock
+    val inputData = new MemoryStream[Int](0, sqlContext)
+    val df = inputData.toDS().as[Long].map { _ + 1 }
+    val listener = new EventCollectorV3
+
+    try {
+      spark.streams.addListener(listener)
+
+      testStream(df, OutputMode.Append)(
+
+        // Start query with default config (disabled)
+        StartStream(Trigger.ProcessingTime(100), triggerClock = clock),
+        AssertOnQuery { query =>
+          assert(listener.startEvent !== null)
+          true
+        },
+
+        // Add data and trigger
+        AddData(inputData, 1, 2),
+        AdvanceManualClock(100),
+        CheckAnswer(2, 3),
+
+        // No QueryTriggerStart events should fire (disabled by default)
+        AssertOnQuery { _ =>
+          assert(
+            listener.triggerStartEvents.isEmpty, "QueryTriggerStart should not fire when disabled"
+          )
+          true
+        },
+
+        StopStream
+      )
+    } finally {
+      spark.streams.removeListener(listener)
+    }
+  }
+
+  testQuietly("QueryTriggerStart event respects throttling interval") {
+    val clock = new StreamManualClock
+    val inputData = new MemoryStream[Int](0, sqlContext)
+    val df = inputData.toDS().as[Long].map { _ + 1 }
+    val listener = new EventCollectorV3
+
+    // Set min interval to 500ms for faster testing
+    withSQLConf(
+      SQLConf.STREAMING_QUERY_TRIGGER_START_EVENT_ENABLED.key -> "true",
+      SQLConf.STREAMING_QUERY_TRIGGER_START_EVENT_MIN_INTERVAL.key -> "500"
+    ) {
+      try {
+        spark.streams.addListener(listener)
+
+        testStream(df, OutputMode.Append)(
+
+          StartStream(Trigger.ProcessingTime(100), triggerClock = clock),
+          AssertOnQuery { _ => true },
+
+          // First trigger with data - should fire
+          AddData(inputData, 1),
+          AdvanceManualClock(100),
+          CheckAnswer(2),
+          AssertOnQuery { _ =>
+            eventually(Timeout(streamingTimeout)) {
+              assert(listener.triggerStartEvents.length === 1, "First trigger start should fire")
+            }
+            true
+          },
+
+          // Second trigger immediately after (within 500ms) - should be throttled
+          AddData(inputData, 2),
+          AdvanceManualClock(100),
+          CheckAnswer(2, 3),
+          AssertOnQuery { _ =>
+            assert(
+              listener.triggerStartEvents.length === 1,
+              "Second trigger start within throttle window should not fire"
+            )
+            true
+          },
+
+          // Third trigger after throttle window (700ms total) - should fire
+          AddData(inputData, 3),
+          AdvanceManualClock(600),
+          CheckAnswer(2, 3, 4),
+          AssertOnQuery { _ =>
+            eventually(Timeout(streamingTimeout)) {
+              assert(
+                listener.triggerStartEvents.length === 2,
+                "Third trigger start after throttle window should fire"
+              )
+            }
+            true
+          },
+
+          StopStream
+        )
+      } finally {
+        spark.streams.removeListener(listener)
+      }
+    }
+  }
+
+  testQuietly("QueryTriggerStart event fires before QueryProgress") {
+    val clock = new StreamManualClock
+    val inputData = new MemoryStream[Int](0, sqlContext)
+    val df = inputData.toDS().as[Long].map { _ + 1 }
+    val listener = new EventCollectorV3
+
+    withSQLConf(SQLConf.STREAMING_QUERY_TRIGGER_START_EVENT_ENABLED.key -> "true") {
+      try {
+        spark.streams.addListener(listener)
+
+        testStream(df, OutputMode.Append)(
+
+          StartStream(Trigger.ProcessingTime(100), triggerClock = clock),
+          AssertOnQuery { _ => true },
+
+          AddData(inputData, 1, 2),
+          AdvanceManualClock(100),
+          CheckAnswer(2, 3),
+
+          AssertOnQuery { _ =>
+            eventually(Timeout(streamingTimeout)) {
+              // Verify trigger start event fires before progress
+              assert(listener.triggerStartEvents.nonEmpty, "TriggerStart event should fire")
+              assert(listener.progressEvents.nonEmpty, "Progress event should fire")
+              // TriggerStart should have fired before/alongside progress
+              assert(listener.triggerStartedEvent !== null)
+            }
+            true
+          },
+
+          StopStream
+        )
+      } finally {
+        spark.streams.removeListener(listener)
+      }
+    }
+  }
+
+  testQuietly("QueryTriggerStart event contains correct timestamp") {
+    val clock = new StreamManualClock
+    val inputData = new MemoryStream[Int](0, sqlContext)
+    val df = inputData.toDS().as[Long].map { _ + 1 }
+    val listener = new EventCollectorV3
+
+    withSQLConf(SQLConf.STREAMING_QUERY_TRIGGER_START_EVENT_ENABLED.key -> "true") {
+      try {
+        spark.streams.addListener(listener)
+
+        testStream(df, OutputMode.Append)(
+
+          StartStream(Trigger.ProcessingTime(100), triggerClock = clock),
+          AssertOnQuery { _ => true },
+
+          AddData(inputData, 1),
+          AdvanceManualClock(100),
+          CheckAnswer(2),
+
+          AssertOnQuery { _ =>
+            eventually(Timeout(streamingTimeout)) {
+              val event = listener.triggerStartedEvent
+              assert(event !== null)
+              // Verify timestamp is in ISO8601 format and not empty
+              assert(event.timestamp.nonEmpty)
+              // Verify it's a valid ISO8601 timestamp (contains 'T' and numbers)
+              assert(event.timestamp.contains("T") || event.timestamp.contains(" "))
+            }
+            true
+          },
+
+          StopStream
+        )
+      } finally {
+        spark.streams.removeListener(listener)
+      }
+    }
+  }
+
   abstract class EventCollector extends StreamingQueryListener {
     // to catch errors in the async listener events
     @volatile private var asyncTestWaiter = new Waiter
@@ -598,6 +820,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     @volatile var triggerStartedEvent: QueryTriggerStartEvent = null
 
     private val _progressEvents = new mutable.Queue[StreamingQueryProgress]
+    private val _triggerStartEvents = new mutable.Queue[QueryTriggerStartEvent]
 
     def progressEvents: Seq[StreamingQueryProgress] = _progressEvents.synchronized {
       _progressEvents.filter(_.numInputRows > 0).toSeq
@@ -607,11 +830,17 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       _progressEvents.clone().toSeq
     }
 
+    def triggerStartEvents: Seq[QueryTriggerStartEvent] = _triggerStartEvents.synchronized {
+      _triggerStartEvents.clone().toSeq
+    }
+
     def reset(): Unit = {
       startEvent = null
       idleEvent = null
       terminationEvent = null
+      triggerStartedEvent = null
       _progressEvents.clear()
+      _triggerStartEvents.clear()
       asyncTestWaiter = new Waiter
     }
 
@@ -653,6 +882,9 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       asyncTestWaiter {
         assert(startEvent != null, "onQueryTriggerStart called before onQueryStarted")
         triggerStartedEvent = queryTriggerStart
+        _triggerStartEvents.synchronized {
+          _triggerStartEvents += queryTriggerStart
+        }
       }
     }
   }
