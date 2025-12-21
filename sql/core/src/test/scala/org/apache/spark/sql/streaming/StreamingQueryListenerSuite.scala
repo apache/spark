@@ -330,7 +330,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           numIdleEvent += 1
         }
         override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {}
-        override def onQueryTriggerStart(event: QueryTriggerStartEvent): Unit = {
+        override def onQueryExecutionStart(event: QueryExecutionStartEvent): Unit = {
           numTriggerStartedEvent += 1
         }
       }
@@ -548,7 +548,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           numIdleEvent += 1
         }
         override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {}
-        override def onQueryTriggerStart(event: QueryTriggerStartEvent): Unit = {
+        override def onQueryExecutionStart(event: QueryExecutionStartEvent): Unit = {
           numTriggerStartedEvent += 1
         }
       }
@@ -630,13 +630,13 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   }
 
   /** Collects events from the StreamingQueryListener for testing */
-  testQuietly("QueryTriggerStart event fires only when batch will execute") {
+  testQuietly("QueryExecutionStart event fires only when batch will execute") {
     val clock = new StreamManualClock
     val inputData = new MemoryStream[Int](0, sqlContext)
     val df = inputData.toDS().as[Long].map { 10 / _ }
     val listener = new EventCollectorV3
 
-    withSQLConf(SQLConf.STREAMING_QUERY_TRIGGER_START_EVENT_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.STREAMING_QUERY_EXECUTION_START_EVENT_ENABLED.key -> "true") {
       try {
         spark.streams.addListener(listener)
 
@@ -649,14 +649,14 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
             true
           },
 
-          // Add data and trigger - should fire QueryTriggerStart
+          // Add data and trigger - should fire QueryExecutionStart
           AddData(inputData, 1, 2),
           AdvanceManualClock(100),
           AssertOnQuery { _ =>
             eventually(Timeout(streamingTimeout)) {
               assert(
                 listener.triggerStartedEvent !== null,
-                "QueryTriggerStart should fire when batch will execute"
+                "QueryExecutionStart should fire when batch will execute"
               )
               assert(listener.triggerStartedEvent.id === listener.startEvent.id)
               assert(listener.triggerStartedEvent.runId === listener.startEvent.runId)
@@ -673,7 +673,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  testQuietly("QueryTriggerStart event disabled by default") {
+  testQuietly("QueryExecutionStart event disabled by default") {
     val clock = new StreamManualClock
     val inputData = new MemoryStream[Int](0, sqlContext)
     val df = inputData.toDS().as[Long].map { _ + 1 }
@@ -696,10 +696,10 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         AdvanceManualClock(100),
         CheckAnswer(2, 3),
 
-        // No QueryTriggerStart events should fire (disabled by default)
+        // No QueryExecutionStart events should fire (disabled by default)
         AssertOnQuery { _ =>
           assert(
-            listener.triggerStartEvents.isEmpty, "QueryTriggerStart should not fire when disabled"
+            listener.triggerStartEvents.isEmpty, "QueryExecutionStart should not fire when disabled"
           )
           true
         },
@@ -711,7 +711,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  testQuietly("QueryTriggerStart event respects throttling interval") {
+  testQuietly("QueryExecutionStart event respects throttling interval") {
     val clock = new StreamManualClock
     val inputData = new MemoryStream[Int](0, sqlContext)
     val df = inputData.toDS().as[Long].map { _ + 1 }
@@ -719,8 +719,8 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
     // Set min interval to 500ms for faster testing
     withSQLConf(
-      SQLConf.STREAMING_QUERY_TRIGGER_START_EVENT_ENABLED.key -> "true",
-      SQLConf.STREAMING_QUERY_TRIGGER_START_EVENT_MIN_INTERVAL.key -> "500"
+      SQLConf.STREAMING_QUERY_EXECUTION_START_EVENT_ENABLED.key -> "true",
+      SQLConf.STREAMING_QUERY_EXECUTION_START_EVENT_MIN_INTERVAL.key -> "500"
     ) {
       try {
         spark.streams.addListener(listener)
@@ -775,13 +775,13 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  testQuietly("QueryTriggerStart event fires before QueryProgress") {
+  testQuietly("QueryExecutionStart event fires before QueryProgress") {
     val clock = new StreamManualClock
     val inputData = new MemoryStream[Int](0, sqlContext)
     val df = inputData.toDS().as[Long].map { _ + 1 }
     val listener = new EventCollectorV3
 
-    withSQLConf(SQLConf.STREAMING_QUERY_TRIGGER_START_EVENT_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.STREAMING_QUERY_EXECUTION_START_EVENT_ENABLED.key -> "true") {
       try {
         spark.streams.addListener(listener)
 
@@ -813,13 +813,13 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  testQuietly("QueryTriggerStart event contains correct timestamp") {
+  testQuietly("QueryExecutionStart event contains correct timestamp") {
     val clock = new StreamManualClock
     val inputData = new MemoryStream[Int](0, sqlContext)
     val df = inputData.toDS().as[Long].map { _ + 1 }
     val listener = new EventCollectorV3
 
-    withSQLConf(SQLConf.STREAMING_QUERY_TRIGGER_START_EVENT_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.STREAMING_QUERY_EXECUTION_START_EVENT_ENABLED.key -> "true") {
       try {
         spark.streams.addListener(listener)
 
@@ -859,10 +859,10 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     @volatile var startEvent: QueryStartedEvent = null
     @volatile var terminationEvent: QueryTerminatedEvent = null
     @volatile var idleEvent: QueryIdleEvent = null
-    @volatile var triggerStartedEvent: QueryTriggerStartEvent = null
+    @volatile var triggerStartedEvent: QueryExecutionStartEvent = null
 
     private val _progressEvents = new mutable.Queue[StreamingQueryProgress]
-    private val _triggerStartEvents = new mutable.Queue[QueryTriggerStartEvent]
+    private val _triggerStartEvents = new mutable.Queue[QueryExecutionStartEvent]
 
     def progressEvents: Seq[StreamingQueryProgress] = _progressEvents.synchronized {
       _progressEvents.filter(_.numInputRows > 0).toSeq
@@ -872,7 +872,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       _progressEvents.clone().toSeq
     }
 
-    def triggerStartEvents: Seq[QueryTriggerStartEvent] = _triggerStartEvents.synchronized {
+    def triggerStartEvents: Seq[QueryExecutionStartEvent] = _triggerStartEvents.synchronized {
       _triggerStartEvents.clone().toSeq
     }
 
@@ -920,12 +920,12 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       asyncTestWaiter.dismiss()
     }
 
-    protected def handleOnQueryTriggerStart(queryTriggerStart: QueryTriggerStartEvent): Unit = {
+    protected def handleOnQueryExecutionStart(queryExecutionStart: QueryExecutionStartEvent): Unit = {
       asyncTestWaiter {
-        assert(startEvent != null, "onQueryTriggerStart called before onQueryStarted")
-        triggerStartedEvent = queryTriggerStart
+        assert(startEvent != null, "onQueryExecutionStart called before onQueryStarted")
+        triggerStartedEvent = queryExecutionStart
         _triggerStartEvents.synchronized {
-          _triggerStartEvents += queryTriggerStart
+          _triggerStartEvents += queryExecutionStart
         }
       }
     }
@@ -951,7 +951,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
     override def onQueryProgress(event: QueryProgressEvent): Unit = handleOnQueryProgress(event)
 
-    override def onQueryIdle(event: QueryIdleEvent): Unit =  handleOnQueryIdle(event)
+    override def onQueryIdle(event: QueryIdleEvent): Unit = handleOnQueryIdle(event)
 
     override def onQueryTerminated(event: QueryTerminatedEvent): Unit =
       handleOnQueryTerminated(event)
@@ -962,12 +962,12 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
     override def onQueryProgress(event: QueryProgressEvent): Unit = handleOnQueryProgress(event)
 
-    override def onQueryIdle(event: QueryIdleEvent): Unit =  handleOnQueryIdle(event)
+    override def onQueryIdle(event: QueryIdleEvent): Unit = handleOnQueryIdle(event)
 
     override def onQueryTerminated(event: QueryTerminatedEvent): Unit =
       handleOnQueryTerminated(event)
 
-    override def onQueryTriggerStart(event: QueryTriggerStartEvent): Unit =
-      handleOnQueryTriggerStart(event)
+    override def onQueryExecutionStart(event: QueryExecutionStartEvent): Unit =
+      handleOnQueryExecutionStart(event)
   }
 }

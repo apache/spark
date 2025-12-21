@@ -285,7 +285,7 @@ class ContinuousExecution(
             } else if (isActive) {
               execCtx.batchId = epochEndpoint.askSync[Long](IncrementAndGetEpoch)
               logInfo(log"New epoch ${MDC(BATCH_ID, execCtx.batchId)} is starting.")
-              execCtx.reportTriggerStart()
+              execCtx.reportExecutionStart()
               true
             } else {
               false

@@ -116,7 +116,7 @@ private[sql] class StreamingQueryStatusListener(
     queryToProgress.remove(event.runId)
   }
 
-  override def onQueryTriggerStart(event: StreamingQueryListener.QueryTriggerStartEvent): Unit = {}
+  override def onQueryExecutionStart(event: StreamingQueryListener.QueryExecutionStartEvent): Unit = {}
 }
 
 

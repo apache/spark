@@ -70,7 +70,7 @@ class TestListener(sparkConf: SparkConf) extends StreamingQueryListener {
     TestListener.queryTerminatedEvent = event
   }
 
-  override def onQueryTriggerStart(event: QueryTriggerStartEvent): Unit = {}
+  override def onQueryExecutionStart(event: QueryExecutionStartEvent): Unit = {}
 }
 
 
@@ -88,5 +88,5 @@ class TestSQLConfStreamingQueryListener extends StreamingQueryListener {
 
   override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {}
 
-  override def onQueryTriggerStart(event: QueryTriggerStartEvent): Unit = {}
+  override def onQueryExecutionStart(event: QueryExecutionStartEvent): Unit = {}
 }

@@ -461,7 +461,7 @@ enum StreamingQueryEventType {
   QUERY_PROGRESS_EVENT = 1;
   QUERY_TERMINATED_EVENT = 2;
   QUERY_IDLE_EVENT = 3;
-  QUERY_TRIGGER_START_EVENT = 4;
+  QUERY_EXECUTION_START_EVENT = 4;
 }
 
 // The protocol for the returned events in the long-running response channel.

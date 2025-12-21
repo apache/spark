@@ -83,7 +83,7 @@ abstract class StreamingQueryListener extends Serializable {
    * Called when a query's microbatch trigger is started.
    * @since 4.2.0
    */
-  def onQueryTriggerStart(event: QueryTriggerStartEvent): Unit = {}
+  def onQueryExecutionStart(event: QueryExecutionStartEvent): Unit = {}
 }
 
 /**
@@ -100,7 +100,7 @@ private[spark] trait PythonStreamingQueryListener {
 
   def onQueryTerminated(event: QueryTerminatedEvent): Unit
 
-  def onQueryTriggerStart(event: QueryTriggerStartEvent): Unit
+  def onQueryExecutionStart(event: QueryExecutionStartEvent): Unit
 }
 
 private[spark] class PythonStreamingQueryListenerWrapper(listener: PythonStreamingQueryListener)
@@ -115,8 +115,8 @@ private[spark] class PythonStreamingQueryListenerWrapper(listener: PythonStreami
 
   def onQueryTerminated(event: QueryTerminatedEvent): Unit = listener.onQueryTerminated(event)
 
-  override def onQueryTriggerStart(event: QueryTriggerStartEvent): Unit =
-    listener.onQueryTriggerStart(event)
+  override def onQueryExecutionStart(event: QueryExecutionStartEvent): Unit =
+    listener.onQueryExecutionStart(event)
 }
 
 /**
@@ -332,7 +332,7 @@ object StreamingQueryListener extends Serializable {
    *  The timestamp start of a query trigger
    */
   @Evolving
-  class QueryTriggerStartEvent private[sql] (
+  class QueryExecutionStartEvent private[sql] (
       val id: UUID,
       val runId: UUID,
       val name: String,
@@ -349,10 +349,10 @@ object StreamingQueryListener extends Serializable {
     }
   }
 
-  private[spark] object QueryTriggerStartEvent {
-    private[spark] def fromJson(json: String): QueryTriggerStartEvent = {
+  private[spark] object QueryExecutionStartEvent {
+    private[spark] def fromJson(json: String): QueryExecutionStartEvent = {
       val parser = EventParser(json)
-      new QueryTriggerStartEvent(
+      new QueryExecutionStartEvent(
         parser.getUUID("id"),
         parser.getUUID("runId"),
         parser.getString("name"),

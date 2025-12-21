@@ -6756,7 +6756,7 @@ object SQLConf {
       .booleanConf
       .createWithDefault(Utils.isTesting)
 
-  val STREAMING_QUERY_TRIGGER_START_EVENT_ENABLED =
+  val STREAMING_QUERY_EXECUTION_START_EVENT_ENABLED =
     buildConf("spark.sql.streaming.query.trigger.start.event.enabled")
       .internal()
       .doc("When set to true, spark will emit events for when streaming queries micro-batches " +
@@ -6765,10 +6765,10 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val STREAMING_QUERY_TRIGGER_START_EVENT_MIN_INTERVAL =
+  val STREAMING_QUERY_EXECUTION_START_EVENT_MIN_INTERVAL =
     buildConf("spark.sql.streaming.query.trigger.start.event.minInterval")
       .internal()
-      .doc("The minimum interval in milliseconds between QueryTriggerStart events emissions for " +
+      .doc("The minimum interval in milliseconds between QueryExecutionStart events emissions for " +
         "streaming queries. This is to avoid flooding the event queue with events for " +
         "high-frequency queries.")
       .version("4.2.0")
@@ -7710,11 +7710,11 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def disabledV2StreamingMicroBatchReaders: String =
     getConf(DISABLED_V2_STREAMING_MICROBATCH_READERS)
 
-  def streamingQueryTriggerStartEventEnabled: Boolean =
-    getConf(STREAMING_QUERY_TRIGGER_START_EVENT_ENABLED)
+  def streamingQueryExecutionStartEventEnabled: Boolean =
+    getConf(STREAMING_QUERY_EXECUTION_START_EVENT_ENABLED)
 
-  def streamingQueryTriggerStartEventMinInterval: Long =
-    getConf(STREAMING_QUERY_TRIGGER_START_EVENT_MIN_INTERVAL)
+  def streamingQueryExecutionStartEventMinInterval: Long =
+    getConf(STREAMING_QUERY_EXECUTION_START_EVENT_MIN_INTERVAL)
 
   def fastFailFileFormatOutput: Boolean = getConf(FASTFAIL_ON_FILEFORMAT_OUTPUT)
 

@@ -37,5 +37,5 @@ class DummyStreamingQueryListener extends StreamingQueryListener {
   override def onQueryProgress(event: StreamingQueryListener.QueryProgressEvent): Unit = {}
   override def onQueryIdle(event: StreamingQueryListener.QueryIdleEvent): Unit = {}
   override def onQueryTerminated(event: StreamingQueryListener.QueryTerminatedEvent): Unit = {}
-  override def onQueryTriggerStart(event: StreamingQueryListener.QueryTriggerStartEvent): Unit = {}
+  override def onQueryExecutionStart(event: StreamingQueryListener.QueryExecutionStartEvent): Unit = {}
 }
