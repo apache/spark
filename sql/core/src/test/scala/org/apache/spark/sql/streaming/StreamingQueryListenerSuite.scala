@@ -962,6 +962,8 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
     override def onQueryProgress(event: QueryProgressEvent): Unit = handleOnQueryProgress(event)
 
+    override def onQueryExecutionStart(event: QueryExecutionStartEvent): Unit = handleOnQueryExecutionStart(event)
+
     override def onQueryIdle(event: QueryIdleEvent): Unit = handleOnQueryIdle(event)
 
     override def onQueryTerminated(event: QueryTerminatedEvent): Unit =

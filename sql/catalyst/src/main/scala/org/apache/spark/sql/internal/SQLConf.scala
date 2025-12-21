@@ -6757,6 +6757,7 @@ object SQLConf {
       .createWithDefault(Utils.isTesting)
 
   val STREAMING_QUERY_EXECUTION_START_EVENT_ENABLED =
+  val STREAMING_QUERY_EXECUTION_START_EVENT_ENABLED =
     buildConf("spark.sql.streaming.query.trigger.start.event.enabled")
       .internal()
       .doc("When set to true, spark will emit events for when streaming queries micro-batches " +
