@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.ResolvedNamespace
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UsesCachedData}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.types.{ArrayType, StringType}
 
@@ -39,7 +39,7 @@ case class ShowProceduresCommand(
       AttributeReference("namespace", ArrayType(StringType, containsNull = false))(),
       AttributeReference("schema", StringType)(),
       AttributeReference("procedure_name", StringType, nullable = false)()
-    )) extends UnaryRunnableCommand {
+    )) extends UnaryRunnableCommand with UsesCachedData {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     child match {
