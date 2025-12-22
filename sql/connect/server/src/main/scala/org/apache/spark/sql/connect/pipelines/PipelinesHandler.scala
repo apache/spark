@@ -568,7 +568,7 @@ private[connect] object PipelinesHandler extends Logging {
         val graphAnalysisContext = execution.graphAnalysisContext
 
         try {
-          while (execution.executionStarted) {
+          while (execution.resolvedGraph.isEmpty) {
             val signal = proto.PipelineQueryFunctionExecutionSignal.newBuilder()
 
             while (!graphAnalysisContext.flowClientSignalQueue.isEmpty) {
