@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.catalyst.normalizer
 
-import java.util.HashMap
 import java.util.concurrent.atomic.AtomicLong
+
+import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.plans.logical.{CacheTableAsSelect, CTERelationRef, LogicalPlan, UnionLoop, UnionLoopRef, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -26,41 +27,43 @@ import org.apache.spark.sql.catalyst.rules.Rule
 object NormalizeCTEIds extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     val curId = new java.util.concurrent.atomic.AtomicLong()
-    val cteIdToNewId = new HashMap[Long, Long]()
+    val cteIdToNewId = mutable.Map.empty[Long, Long]
     applyInternal(plan, curId, cteIdToNewId)
   }
 
   private def applyInternal(
       plan: LogicalPlan,
       curId: AtomicLong,
-      cteIdToNewId: HashMap[Long, Long]): LogicalPlan = {
+      cteIdToNewId: mutable.Map[Long, Long]): LogicalPlan = {
     plan transformDownWithSubqueries {
       case ctas @ CacheTableAsSelect(_, plan, _, _, _, _, _) =>
         ctas.copy(plan = applyInternal(plan, curId, cteIdToNewId))
 
       case withCTE @ WithCTE(plan, cteDefs) =>
         val newCteDefs = cteDefs.map { cteDef =>
-          if (!cteIdToNewId.containsKey(cteDef.id)) {
-            cteIdToNewId.put(cteDef.id, curId.getAndIncrement())
+          if (!cteIdToNewId.contains(cteDef.id)) {
+            cteIdToNewId(cteDef.id) = curId.getAndIncrement()
           }
           val normalizedCteDef = canonicalizeCTE(cteDef.child, cteIdToNewId)
-          cteDef.copy(child = normalizedCteDef, id = cteIdToNewId.get(cteDef.id))
+          cteDef.copy(child = normalizedCteDef, id = cteIdToNewId(cteDef.id))
         }
         val normalizedPlan = canonicalizeCTE(plan, cteIdToNewId)
         withCTE.copy(plan = normalizedPlan, cteDefs = newCteDefs)
     }
   }
 
-  private def canonicalizeCTE(plan: LogicalPlan, defIdToNewId: HashMap[Long, Long]): LogicalPlan = {
+  private def canonicalizeCTE(
+      plan: LogicalPlan,
+      defIdToNewId: mutable.Map[Long, Long]): LogicalPlan = {
     plan.transformDownWithSubqueries {
       // For nested WithCTE, if defIndex didn't contain the cteId,
       // means it's not current WithCTE's ref.
-      case ref: CTERelationRef if defIdToNewId.containsKey(ref.cteId) =>
-        ref.copy(cteId = defIdToNewId.get(ref.cteId))
-      case unionLoop: UnionLoop if defIdToNewId.containsKey(unionLoop.id) =>
-        unionLoop.copy(id = defIdToNewId.get(unionLoop.id))
-      case unionLoopRef: UnionLoopRef if defIdToNewId.containsKey(unionLoopRef.loopId) =>
-        unionLoopRef.copy(loopId = defIdToNewId.get(unionLoopRef.loopId))
+      case ref: CTERelationRef if defIdToNewId.contains(ref.cteId) =>
+        ref.copy(cteId = defIdToNewId(ref.cteId))
+      case unionLoop: UnionLoop if defIdToNewId.contains(unionLoop.id) =>
+        unionLoop.copy(id = defIdToNewId(unionLoop.id))
+      case unionLoopRef: UnionLoopRef if defIdToNewId.contains(unionLoopRef.loopId) =>
+        unionLoopRef.copy(loopId = defIdToNewId(unionLoopRef.loopId))
     }
   }
 }
