@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.normalizer
 
 import java.util.HashMap
+import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.sql.catalyst.plans.logical.{CacheTableAsSelect, CTERelationRef, LogicalPlan, UnionLoop, UnionLoopRef, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -26,31 +27,26 @@ object NormalizeCTEIds extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     val curId = new java.util.concurrent.atomic.AtomicLong()
     val defIdToNewId = new HashMap[Long, Long]()
+    applyInternal(plan, curId, defIdToNewId)
+  }
 
-    plan transformDownWithSubqueries   {
-      case withCTE: WithCTE =>
-        withCTE.cteDefs.foreach { cteDef =>
+  private def applyInternal(
+      plan: LogicalPlan,
+      curId: AtomicLong,
+      defIdToNewId: HashMap[Long, Long]): LogicalPlan = {
+    plan transformDownWithSubqueries {
+      case ctas @ CacheTableAsSelect(_, plan, _, _, _, _, _) =>
+        ctas.copy(plan = applyInternal(plan, curId, defIdToNewId))
+
+      case withCTE @ WithCTE(plan, cteDefs) =>
+        val newCteDefs = cteDefs.map { cteDef =>
           if (!defIdToNewId.containsKey(cteDef.id)) {
             defIdToNewId.put(cteDef.id, curId.getAndIncrement())
           }
-        }
-        withCTE
-    }
-
-    applyInternal(plan, defIdToNewId)
-  }
-
-  private def applyInternal(plan: LogicalPlan, defIdToNewId: HashMap[Long, Long]): LogicalPlan = {
-    plan transformDownWithSubqueries {
-      case ctas @ CacheTableAsSelect(_, plan, _, _, _, _, _) =>
-        ctas.copy(plan = applyInternal(plan, defIdToNewId))
-
-      case withCTE @ WithCTE(plan, cteDefs) =>
-        val normalizedPlan = canonicalizeCTE(plan, defIdToNewId)
-        val newCteDefs = cteDefs.map { cteDef =>
           val normalizedCteDef = canonicalizeCTE(cteDef.child, defIdToNewId)
           cteDef.copy(child = normalizedCteDef, id = defIdToNewId.get(cteDef.id))
         }
+        val normalizedPlan = canonicalizeCTE(plan, defIdToNewId)
         withCTE.copy(plan = normalizedPlan, cteDefs = newCteDefs)
     }
   }
