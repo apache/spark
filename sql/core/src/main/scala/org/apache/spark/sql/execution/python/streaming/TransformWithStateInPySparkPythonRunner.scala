@@ -52,7 +52,7 @@ class TransformWithStateInPySparkPythonRunner(
     _schema: StructType,
     processorHandle: StatefulProcessorHandleImpl,
     _timeZoneId: String,
-    initialWorkerConf: Map[String, String],
+    initialRunnerConf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     groupingKeySchema: StructType,
@@ -60,7 +60,7 @@ class TransformWithStateInPySparkPythonRunner(
     eventTimeWatermarkForEviction: Option[Long])
   extends TransformWithStateInPySparkPythonBaseRunner[InType](
     funcs, evalType, argOffsets, _schema, processorHandle, _timeZoneId,
-    initialWorkerConf, pythonMetrics, jobArtifactUUID, groupingKeySchema,
+    initialRunnerConf, pythonMetrics, jobArtifactUUID, groupingKeySchema,
     batchTimestampMs, eventTimeWatermarkForEviction)
   with PythonArrowInput[InType] {
 
@@ -75,7 +75,12 @@ class TransformWithStateInPySparkPythonRunner(
       dataOut: DataOutputStream,
       inputIterator: Iterator[InType]): Boolean = {
     if (pandasWriter == null) {
-      pandasWriter = new BaseStreamingArrowWriter(root, writer, arrowMaxRecordsPerBatch)
+      pandasWriter = new BaseStreamingArrowWriter(
+        root,
+        writer,
+        arrowMaxRecordsPerBatch,
+        arrowMaxBytesPerBatch
+      )
     }
 
     // If we don't have data left for the current group, move to the next group.
@@ -121,7 +126,7 @@ class TransformWithStateInPySparkPythonInitialStateRunner(
     initStateSchema: StructType,
     processorHandle: StatefulProcessorHandleImpl,
     _timeZoneId: String,
-    initialWorkerConf: Map[String, String],
+    initialRunnerConf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     groupingKeySchema: StructType,
@@ -129,7 +134,7 @@ class TransformWithStateInPySparkPythonInitialStateRunner(
     eventTimeWatermarkForEviction: Option[Long])
   extends TransformWithStateInPySparkPythonBaseRunner[GroupedInType](
     funcs, evalType, argOffsets, dataSchema, processorHandle, _timeZoneId,
-    initialWorkerConf, pythonMetrics, jobArtifactUUID, groupingKeySchema,
+    initialRunnerConf, pythonMetrics, jobArtifactUUID, groupingKeySchema,
     batchTimestampMs, eventTimeWatermarkForEviction)
   with PythonArrowInput[GroupedInType] {
 
@@ -139,39 +144,70 @@ class TransformWithStateInPySparkPythonInitialStateRunner(
 
   private var pandasWriter: BaseStreamingArrowWriter = _
 
+  private var currentDataIterator: Iterator[InternalRow] = _
+  private var isCurrentIterFromInitState: Option[Boolean] = None
+
   override protected def writeNextBatchToArrowStream(
       root: VectorSchemaRoot,
       writer: ArrowStreamWriter,
       dataOut: DataOutputStream,
       inputIterator: Iterator[GroupedInType]): Boolean = {
     if (pandasWriter == null) {
-      pandasWriter = new BaseStreamingArrowWriter(root, writer, arrowMaxRecordsPerBatch)
+      pandasWriter = new BaseStreamingArrowWriter(
+        root,
+        writer,
+        arrowMaxRecordsPerBatch,
+        arrowMaxBytesPerBatch
+      )
     }
 
-    if (inputIterator.hasNext) {
-      val startData = dataOut.size()
-      // a new grouping key with data & init state iter
-      val next = inputIterator.next()
-      val dataIter = next._2
-      val initIter = next._3
 
-      while (dataIter.hasNext || initIter.hasNext) {
-        val dataRow =
-          if (dataIter.hasNext) dataIter.next()
-          else InternalRow.empty
-        val initRow =
-          if (initIter.hasNext) initIter.next()
-          else InternalRow.empty
-        pandasWriter.writeRow(InternalRow(dataRow, initRow))
+    // If we don't have data left for the current group, move to the next group.
+    if (currentDataIterator == null && inputIterator.hasNext) {
+      val ((_, data), isInitState) = inputIterator.next()
+      currentDataIterator = data
+      val isPrevIterFromInitState = isCurrentIterFromInitState
+      isCurrentIterFromInitState = Some(isInitState)
+      if (isPrevIterFromInitState.isDefined &&
+        isPrevIterFromInitState.get != isInitState &&
+        pandasWriter.getTotalNumRowsForBatch > 0) {
+        // So we won't have batches with mixed data and init state.
+        pandasWriter.finalizeCurrentArrowBatch()
+        return true
       }
-      pandasWriter.finalizeCurrentArrowBatch()
-      val deltaData = dataOut.size() - startData
-      pythonMetrics("pythonDataSent") += deltaData
+    }
+
+    val startData = dataOut.size()
+
+    val hasInput = if (currentDataIterator != null) {
+      var isCurrentBatchFull = false
+      val isCurrentIterFromInitStateVal = isCurrentIterFromInitState.get
+      // Stop writing when the current arrowBatch is finalized/full. If we have rows left
+      while (currentDataIterator.hasNext && !isCurrentBatchFull) {
+        val dataRow = currentDataIterator.next()
+        isCurrentBatchFull = if (isCurrentIterFromInitStateVal) {
+          pandasWriter.writeRow(InternalRow(null, dataRow))
+        } else {
+          pandasWriter.writeRow(InternalRow(dataRow, null))
+        }
+      }
+
+      if (!currentDataIterator.hasNext) {
+        currentDataIterator = null
+      }
+
       true
     } else {
+      if (pandasWriter.getTotalNumRowsForBatch > 0) {
+        pandasWriter.finalizeCurrentArrowBatch()
+      }
       super[PythonArrowInput].close()
       false
     }
+
+    val deltaData = dataOut.size() - startData
+    pythonMetrics("pythonDataSent") += deltaData
+    hasInput
   }
 }
 
@@ -185,7 +221,7 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
     _schema: StructType,
     processorHandle: StatefulProcessorHandleImpl,
     _timeZoneId: String,
-    initialWorkerConf: Map[String, String],
+    initialRunnerConf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     groupingKeySchema: StructType,
@@ -200,9 +236,11 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
 
   protected val sqlConf = SQLConf.get
   protected val arrowMaxRecordsPerBatch = sqlConf.arrowMaxRecordsPerBatch
+  protected val arrowMaxBytesPerBatch = sqlConf.arrowMaxBytesPerBatch
 
-  override protected val workerConf: Map[String, String] = initialWorkerConf +
-    (SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> arrowMaxRecordsPerBatch.toString)
+  override protected val runnerConf: Map[String, String] = initialRunnerConf +
+    (SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> arrowMaxRecordsPerBatch.toString) +
+    (SQLConf.ARROW_EXECUTION_MAX_BYTES_PER_BATCH.key -> arrowMaxBytesPerBatch.toString)
 
   // Use lazy val to initialize the fields before these are accessed in [[PythonArrowInput]]'s
   // constructor.
@@ -213,7 +251,7 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
 
   override protected def handleMetadataBeforeExec(stream: DataOutputStream): Unit = {
     super.handleMetadataBeforeExec(stream)
-    // Also write the port/path number for state server
+    // Write the port/path number for state server
     if (isUnixDomainSock) {
       stream.writeInt(-1)
       PythonWorkerUtils.writeUTF(stateServerSocketPath, stream)
@@ -380,5 +418,7 @@ trait TransformWithStateInPySparkPythonRunnerUtils extends Logging {
 
 object TransformWithStateInPySparkPythonRunner {
   type InType = (InternalRow, Iterator[InternalRow])
-  type GroupedInType = (InternalRow, Iterator[InternalRow], Iterator[InternalRow])
+
+  // ((key, rows), isInitState)
+  type GroupedInType = ((InternalRow, Iterator[InternalRow]), Boolean)
 }

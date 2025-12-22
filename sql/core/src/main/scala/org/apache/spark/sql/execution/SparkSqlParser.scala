@@ -22,17 +22,21 @@ import java.util.{Locale, TimeZone}
 
 import scala.jdk.CollectionConverters._
 
-import org.antlr.v4.runtime.{ParserRuleContext, Token}
+import org.antlr.v4.runtime.ParserRuleContext
 import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, GlobalTempView, LocalTempView, PersistedView, PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution, UnresolvedAttribute, UnresolvedFunctionName, UnresolvedIdentifier, UnresolvedNamespace}
+import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, GlobalTempView, LocalTempView,
+  PersistedView, PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution,
+  UnresolvedAttribute, UnresolvedFunctionName, UnresolvedIdentifier, UnresolvedNamespace}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
+import org.apache.spark.sql.catalyst.parser.SqlBaseParser
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
 import org.apache.spark.sql.execution.command._
@@ -50,8 +54,114 @@ class SparkSqlParser extends AbstractSqlParser {
 
   private val substitutor = new VariableSubstitution()
 
+  /**
+   * Parse SQL with explicit parameter context, avoiding thread-local usage.
+   * This is the preferred method for parsing SQL with parameters.
+   *
+   * @param command The SQL text to parse
+   * @param parameterContext The parameter context containing parameter values
+   * @param toResult Function to convert the parser result
+   * @return The parsed result
+   */
+  def parseWithParameters[T](
+      command: String,
+      parameterContext: ParameterContext)
+      (toResult: SqlBaseParser => T): T = {
+    parseInternal(command, Some(parameterContext))(toResult)
+  }
+
+  /**
+   * Parse SQL plan with explicit parameter context, avoiding thread-local usage.
+   * This is the preferred method for parsing SQL plans with parameters.
+   *
+   * @param sqlText The SQL text to parse
+   * @param parameterContext The parameter context containing parameter values
+   * @return The parsed logical plan
+   */
+  override def parsePlanWithParameters(
+      sqlText: String,
+      parameterContext: ParameterContext): LogicalPlan = {
+    parseWithParameters(sqlText, parameterContext) { parser =>
+      val ctx = parser.compoundOrSingleStatement()
+      withErrorHandling(ctx, Some(sqlText)) {
+        astBuilder.visitCompoundOrSingleStatement(ctx) match {
+          case compoundBody: CompoundPlanStatement => compoundBody
+          case plan: LogicalPlan => plan
+          case _ =>
+            val position = Origin(None, None)
+            throw QueryParsingErrors.sqlStatementUnsupportedError(sqlText, position)
+        }
+      }
+    }
+  }
+
   protected override def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
-    super.parse(substitutor.substitute(command))(toResult)
+    parseInternal(command, None)(toResult)
+  }
+
+  /**
+   * Internal parse method that handles both parameter substitution and regular parsing.
+   *
+   * @param command The SQL text to parse
+   * @param parameterContext Optional parameter context for parameter substitution
+   * @param toResult Function to convert the parser result
+   * @return The parsed result
+   */
+  private def parseInternal[T](
+      command: String,
+      parameterContext: Option[ParameterContext])
+      (toResult: SqlBaseParser => T): T = {
+
+    // Step 1: Apply variable substitution to expand any variable references.
+    val variableSubstituted = substitutor.substitute(command)
+
+    // Step 2: Apply parameter substitution if a parameter context is provided.
+    val (paramSubstituted, positionMapper, hasParameters) = parameterContext match {
+      case Some(context) =>
+        // Check if the context actually contains parameters
+        val contextHasParams = context match {
+          case NamedParameterContext(params) => params.nonEmpty
+          case PositionalParameterContext(params) => params.nonEmpty
+          case HybridParameterContext(args, _) => args.nonEmpty
+        }
+        if (SQLConf.get.legacyParameterSubstitutionConstantsOnly) {
+          // Legacy mode: Parameters are detected but substitution is deferred to analysis phase.
+          // Only set hasParameters if the context actually contains parameters.
+          (variableSubstituted, PositionMapper.identity(variableSubstituted), contextHasParams)
+        } else {
+          // Modern mode: Perform parameter substitution during parsing.
+          val (substituted, mapper) =
+            ParameterHandler.substituteParameters(variableSubstituted, context)
+          // Only set hasParameters if the context actually contains parameters.
+          (substituted, mapper, contextHasParams)
+        }
+      case None =>
+        // No parameter context provided; skip parameter substitution.
+        (variableSubstituted, PositionMapper.identity(variableSubstituted), false)
+    }
+
+    // Step 3: Set up the origin with SQL text and position mapper to enable
+    // parameter-aware error reporting.
+    val currentOrigin = CurrentOrigin.get
+    val originToUse = if (hasParameters) {
+      // Set up origin with the substituted SQL text and position mapper for
+      // proper error reporting.
+      currentOrigin.copy(
+        sqlText = Some(paramSubstituted),
+        startIndex = Some(0),
+        stopIndex = Some(paramSubstituted.length - 1),
+        positionMapper = Some(positionMapper)
+      )
+    } else {
+      // No substitution occurred; use the existing origin unchanged.
+      currentOrigin
+    }
+
+    // Parse with the origin containing position mapper.
+    // CurrentOrigin.withOrigin automatically restores the previous origin.
+    CurrentOrigin.withOrigin(originToUse) {
+      super.parse(paramSubstituted)(toResult)
+    }
   }
 }
 
@@ -77,7 +187,7 @@ class SparkSqlAstBuilder extends AstBuilder {
         (ident, _) => builder(ident))
     } else if (ctx.errorCapturingIdentifier() != null) {
       // resolve immediately
-      builder.apply(Seq(ctx.errorCapturingIdentifier().getText))
+      builder.apply(Seq(getIdentifierText(ctx.errorCapturingIdentifier())))
     } else if (ctx.stringLit() != null) {
       // resolve immediately
       builder.apply(Seq(string(visitStringLit(ctx.stringLit()))))
@@ -457,7 +567,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    *  - '/path/to/fileOrJar'
    */
   override def visitManageResource(ctx: ManageResourceContext): LogicalPlan = withOrigin(ctx) {
-    val rawArg = remainder(ctx.identifier).trim
+    val rawArg = remainder(ctx.simpleIdentifier).trim
     val maybePaths = strLiteralDef.findAllIn(rawArg).toSeq.map {
       case p if p.startsWith("\"") || p.startsWith("'") => unescapeSQLString(p)
       case p => p
@@ -465,14 +575,14 @@ class SparkSqlAstBuilder extends AstBuilder {
 
     ctx.op.getType match {
       case SqlBaseParser.ADD =>
-        ctx.identifier.getText.toLowerCase(Locale.ROOT) match {
+        ctx.simpleIdentifier.getText.toLowerCase(Locale.ROOT) match {
           case "files" | "file" => AddFilesCommand(maybePaths)
           case "jars" | "jar" => AddJarsCommand(maybePaths)
           case "archives" | "archive" => AddArchivesCommand(maybePaths)
           case other => operationNotAllowed(s"ADD with resource type '$other'", ctx)
         }
       case SqlBaseParser.LIST =>
-        ctx.identifier.getText.toLowerCase(Locale.ROOT) match {
+        ctx.simpleIdentifier.getText.toLowerCase(Locale.ROOT) match {
           case "files" | "file" =>
             if (maybePaths.length > 0) {
               ListFilesCommand(maybePaths)
@@ -527,7 +637,8 @@ class SparkSqlAstBuilder extends AstBuilder {
 
     val userSpecifiedColumns = Option(ctx.identifierCommentList).toSeq.flatMap { icl =>
       icl.identifierComment.asScala.map { ic =>
-        ic.identifier.getText -> Option(ic.commentSpec()).map(visitCommentSpec)
+        // Use getIdentifierText to handle both regular identifiers and IDENTIFIER('literal')
+        getIdentifierText(ic.identifier) -> Option(ic.commentSpec()).map(visitCommentSpec)
       }
     }
 
@@ -613,6 +724,56 @@ class SparkSqlAstBuilder extends AstBuilder {
     }
   }
 
+  override def visitCreateMetricView(ctx: CreateMetricViewContext): LogicalPlan = withOrigin(ctx) {
+    checkDuplicateClauses(ctx.commentSpec(), "COMMENT", ctx)
+    checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
+    checkDuplicateClauses(ctx.routineLanguage(), "LANGUAGE", ctx)
+    checkDuplicateClauses(ctx.METRICS(), "WITH METRICS", ctx)
+    val userSpecifiedColumns = Option(ctx.identifierCommentList).toSeq.flatMap { icl =>
+      icl.identifierComment.asScala.map { ic =>
+        ic.identifier.getText -> Option(ic.commentSpec()).map(visitCommentSpec)
+      }
+    }
+
+    if (ctx.EXISTS != null && ctx.REPLACE != null) {
+      throw QueryParsingErrors.createViewWithBothIfNotExistsAndReplaceError(ctx)
+    }
+
+    if (ctx.METRICS(0) == null) {
+      throw QueryParsingErrors.missingClausesForOperation(
+        ctx, "WITH METRICS", "METRIC VIEW CREATION")
+    }
+
+    if (ctx.routineLanguage(0) == null) {
+      throw QueryParsingErrors.missingClausesForOperation(
+        ctx, "LANGUAGE", "METRIC VIEW CREATION")
+    }
+
+    val languageCtx = ctx.routineLanguage(0)
+    if (languageCtx.SQL() != null) {
+      operationNotAllowed("Unsupported language for metric view: SQL", languageCtx)
+    }
+    val name: String = languageCtx.IDENTIFIER().getText
+    if (!name.equalsIgnoreCase("YAML")) {
+      operationNotAllowed(s"Unsupported language for metric view: $name", languageCtx)
+    }
+
+    val properties = ctx.propertyList.asScala.headOption
+      .map(visitPropertyKeyValues)
+      .getOrElse(Map.empty)
+    val codeLiteral = visitCodeLiteral(ctx.codeLiteral())
+
+    CreateMetricViewCommand(
+      withIdentClause(ctx.identifierReference(), UnresolvedIdentifier(_)),
+      userSpecifiedColumns,
+      visitCommentSpecList(ctx.commentSpec()),
+      properties,
+      codeLiteral,
+      allowExisting = ctx.EXISTS != null,
+      replace = ctx.REPLACE != null
+    )
+  }
+
   /**
    * Create a [[CreateFunctionCommand]].
    *
@@ -624,7 +785,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitCreateFunction(ctx: CreateFunctionContext): LogicalPlan = withOrigin(ctx) {
     val resources = ctx.resource.asScala.map { resource =>
-      val resourceType = resource.identifier.getText.toLowerCase(Locale.ROOT)
+      val resourceType = resource.simpleIdentifier.getText.toLowerCase(Locale.ROOT)
       resourceType match {
         case "jar" | "file" | "archive" =>
           FunctionResource(FunctionResourceType.fromString(resourceType),
@@ -982,9 +1143,9 @@ class SparkSqlAstBuilder extends AstBuilder {
   override protected def withScriptIOSchema(
       ctx: ParserRuleContext,
       inRowFormat: RowFormatContext,
-      recordWriter: Token,
+      recordWriter: StringLitContext,
       outRowFormat: RowFormatContext,
-      recordReader: Token,
+      recordReader: StringLitContext,
       schemaLess: Boolean): ScriptInputOutputSchema = {
     if (recordWriter != null || recordReader != null) {
       // TODO: what does this message mean?
@@ -1197,7 +1358,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       } else {
         DescribeColumn(
           relation,
-          UnresolvedAttribute(ctx.describeColName.nameParts.asScala.map(_.getText).toSeq),
+          UnresolvedAttribute(ctx.describeColName.nameParts.asScala.map(getIdentifierText).toSeq),
           isExtended)
       }
     } else {
@@ -1274,7 +1435,7 @@ class SparkSqlAstBuilder extends AstBuilder {
 
     if (colConstraints.nonEmpty) {
       throw operationNotAllowed("Pipeline datasets do not currently support column constraints. " +
-        "Please remove and CHECK, UNIQUE, PK, and FK constraints specified on the pipeline " +
+        "Please remove any CHECK, UNIQUE, PK, and FK constraints specified on the pipeline " +
         "dataset.", ctx)
     }
 

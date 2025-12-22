@@ -21,7 +21,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock
 
 import scala.collection.mutable.HashMap
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, SparkMasterRegex}
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.LogKeys
@@ -49,7 +49,7 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
   private val dynamicEnabled = Utils.isDynamicAllocationEnabled(sparkConf)
   private val master = sparkConf.getOption("spark.master")
   private val isYarn = master.isDefined && master.get.equals("yarn")
-  private val isK8s = master.isDefined && master.get.startsWith("k8s://")
+  private val isK8s = SparkMasterRegex.isK8s(master)
   private val isStandaloneOrLocalCluster = master.isDefined && (
       master.get.startsWith("spark://") || master.get.startsWith("local-cluster")
     )

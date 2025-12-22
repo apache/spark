@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.command.{DataWritingCommandExec, ExecutedC
 import org.apache.spark.sql.execution.datasources.V1WriteCommand
 import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
 import org.apache.spark.sql.execution.exchange.Exchange
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperator
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -55,6 +56,18 @@ case class InsertAdaptiveSparkPlan(
     case c: DataWritingCommandExec
         if !c.cmd.isInstanceOf[V1WriteCommand] || !conf.plannedWriteEnabled =>
       c.copy(child = apply(c.child))
+    // SPARK-53941: if AQE for stateless streaming is disabled specifically, we disable it here.
+    case _ if !conf.adaptiveExecutionEnabledInStatelessStreaming &&
+      plan.logicalLink.exists(_.isStreaming) => plan
+    // SPARK-53941: Do not apply AQE for stateful streaming workloads. From recent change of shuffle
+    // origin for shuffle being added from stateful operator, we anticipate stateful operator to
+    // work with AQE. But we want to make the adoption of AQE be gradual, to have a risk under
+    // control. Note that we will disable the value of AQE config explicitly in streaming engine,
+    // but also introduce this pattern here for defensive programming.
+    case _ if plan.exists {
+      case _: StatefulOperator => true
+      case _ => false
+    } => plan
     case _ if shouldApplyAQE(plan, isSubquery) =>
       if (supportAdaptive(plan)) {
         try {
@@ -98,25 +111,20 @@ case class InsertAdaptiveSparkPlan(
     conf.getConf(SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY) || isSubquery || {
       plan.exists {
         case _: Exchange => true
-        case p if !p.requiredChildDistribution.forall(_ == UnspecifiedDistribution) => true
+        case p if p.requiredChildDistribution.exists(_ != UnspecifiedDistribution) => true
         // AQE framework has a different way to update the query plan in the UI: it updates the plan
         // at the end of execution, while non-AQE updates the plan before execution. If the cached
         // plan is already AQEed, the current plan must be AQEed as well so that the UI can get plan
         // update correctly.
         case i: InMemoryTableScanExec
             if i.relation.cachedPlan.isInstanceOf[AdaptiveSparkPlanExec] => true
-        case p => p.expressions.exists(_.exists {
-          case _: SubqueryExpression => true
-          case _ => false
-        })
+        case p => p.expressions.exists(_.exists(_.isInstanceOf[SubqueryExpression]))
       }
     }
   }
 
   private def supportAdaptive(plan: SparkPlan): Boolean = {
-    sanityCheck(plan) &&
-      !plan.logicalLink.exists(_.isStreaming) &&
-    plan.children.forall(supportAdaptive)
+    sanityCheck(plan) && plan.children.forall(supportAdaptive)
   }
 
   private def sanityCheck(plan: SparkPlan): Boolean =

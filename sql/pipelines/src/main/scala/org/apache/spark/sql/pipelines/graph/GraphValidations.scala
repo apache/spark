@@ -331,10 +331,12 @@ trait GraphValidations extends Logging {
               throw new AnalysisException(
                 errorClass = "INVALID_TEMP_OBJ_REFERENCE",
                 messageParameters = Map(
-                  "persistedViewName" -> persistedView.identifier.toString,
-                  "temporaryViewName" -> tempView.identifier.toString
+                  "objName" -> persistedView.identifier.toString,
+                  "obj" -> "view",
+                  "tempObjName" -> tempView.identifier.toString,
+                  "tempObj" -> "temporary view"
                 ),
-                cause = null
+                cause = None
               )
             case _ =>
           }

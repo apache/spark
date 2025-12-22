@@ -44,6 +44,7 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, FileDat
 import org.apache.spark.sql.execution.datasources.v2.python.PythonDataSourceV2
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, StreamingQuery, Trigger}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -299,6 +300,14 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends streaming.D
       recoverFromCheckpoint: Boolean = true,
       catalogAndIdent: Option[(TableCatalog, Identifier)] = None,
       catalogTable: Option[CatalogTable] = None): StreamingQuery = {
+    if (trigger.isInstanceOf[RealTimeTrigger]) {
+      RealTimeModeAllowlist.checkAllowedSink(
+        sink,
+        ds.sparkSession.sessionState.conf.getConf(
+          SQLConf.STREAMING_REAL_TIME_MODE_ALLOWLIST_CHECK)
+      )
+    }
+
     val useTempCheckpointLocation = DataStreamWriter.SOURCES_ALLOW_ONE_TIME_QUERY.contains(source)
 
     ds.sparkSession.sessionState.streamingQueryManager.startQuery(

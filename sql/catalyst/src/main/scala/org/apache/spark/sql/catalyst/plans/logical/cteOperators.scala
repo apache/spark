@@ -186,6 +186,8 @@ object CTERelationDef {
  * @param statsOpt             The optional statistics inferred from the corresponding CTE
  *                             definition.
  * @param recursive            If this is a recursive reference.
+ * @param isUnlimitedRecursion If the node is a (non-recursive) reference to a recursive CTE that
+ *                             should be executed without a limit to the number of rows it returns.
  */
 case class CTERelationRef(
     cteId: Long,
@@ -201,6 +203,11 @@ case class CTERelationRef(
 
   override lazy val resolved: Boolean = _resolved
 
+  override def stringArgs: Iterator[Any] = {
+    // We omit the false value of isUnlimitedRecursion in golden files.
+    if (isUnlimitedRecursion) super.stringArgs else super.stringArgs.toArray.init.iterator
+  }
+
   override def newInstance(): LogicalPlan = {
     // CTERelationRef inherits the output attributes from a query, which may contain duplicated
     // attributes, for queries like `SELECT a, a FROM t`. It's important to keep the duplicated
@@ -210,7 +217,11 @@ case class CTERelationRef(
     // attributes `a` have the same id, but `Project('a, CTERelationRef(a#2, a#3))` can't be
     // resolved.
     val oldAttrToNewAttr = AttributeMap(output.zip(output.map(_.newInstance())))
-    copy(output = output.map(attr => oldAttrToNewAttr(attr)))
+    if (conf.getConf(SQLConf.LEGACY_CTE_DUPLICATE_ATTRIBUTE_NAMES)) {
+      copy(output = output.map(attr => oldAttrToNewAttr(attr)))
+    } else {
+      copy(output = output.map(attr => attr.withExprId(oldAttrToNewAttr(attr).exprId)))
+    }
   }
 
   def withNewStats(statsOpt: Option[Statistics]): CTERelationRef = copy(statsOpt = statsOpt)

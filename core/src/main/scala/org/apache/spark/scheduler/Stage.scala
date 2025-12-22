@@ -72,6 +72,26 @@ private[scheduler] abstract class Stage(
   private var nextAttemptId: Int = 0
   private[scheduler] def getNextAttemptId: Int = nextAttemptId
 
+  /**
+   * Whether checksum mismatches have been detected across different attempt of the stage, where
+   * checksum mismatches typically indicates that different stage attempts have produced different
+   * data.
+   */
+  private[scheduler] var isChecksumMismatched: Boolean = false
+
+  /**
+   * The maximum of task attempt id where checksum mismatches are detected.
+   */
+  private[scheduler] var maxChecksumMismatchedId: Int = nextAttemptId
+
+  /**
+   * The max attempt id we should ignore results for this stage, indicating there are ancestor
+   * stages having been detected with checksum mismatches. This stage is probably also
+   * indeterminate, so we need to avoid completing the stage and the job with incorrect result
+   * by ignoring the task output from previous attempts which might consume inconsistent data
+   */
+  private[scheduler] var maxAttemptIdToIgnore: Option[Int] = None
+
   val name: String = callSite.shortForm
   val details: String = callSite.longForm
 
@@ -94,6 +114,14 @@ private[scheduler] abstract class Stage(
 
   private[scheduler] def clearFailures() : Unit = {
     failedAttemptIds.clear()
+  }
+
+  /** Mark the latest attempt as rollback */
+  private[scheduler] def markAsRollingBack(): Unit = {
+    // Only if the stage has been submitted
+    if (getNextAttemptId > 0) {
+      maxAttemptIdToIgnore = Some(latestInfo.attemptNumber())
+    }
   }
 
   /** Creates a new attempt for this stage by creating a new StageInfo with a new attempt ID. */
@@ -130,5 +158,15 @@ private[scheduler] abstract class Stage(
 
   def isIndeterminate: Boolean = {
     rdd.outputDeterministicLevel == DeterministicLevel.INDETERMINATE
+  }
+
+  // Returns true if any parents of this stage are indeterminate.
+  def isParentIndeterminate: Boolean = {
+    parents.exists(_.isStageIndeterminate)
+  }
+
+  // Returns true if the stage itself is indeterminate.
+  def isStageIndeterminate: Boolean = {
+    !rdd.isReliablyCheckpointed && isChecksumMismatched
   }
 }

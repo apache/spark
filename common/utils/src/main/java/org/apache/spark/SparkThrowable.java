@@ -70,5 +70,27 @@ public interface SparkThrowable {
     return new HashMap<>();
   }
 
+  /**
+   * Returns the default message template for this error.
+   *
+   * The template is a machine-readable string with placeholders
+   * to be filled by {@code getMessageParameters()}.
+   *
+   * This is the default template known to Spark, but clients are
+   * free to generate their own messages (e.g., translations,
+   * alternate formats) using the provided error metadata.
+   *
+   * @return the default message template for this error, or null if unavailable
+   */
+  default String getDefaultMessageTemplate() {
+    try {
+      String cond = this.getCondition();
+      if (cond == null) return null;
+      return SparkThrowableHelper.getMessageTemplate(cond);
+    } catch (Throwable t) {
+      return null; // Unknown error condition
+    }
+  }
+
   default QueryContext[] getQueryContext() { return new QueryContext[0]; }
 }

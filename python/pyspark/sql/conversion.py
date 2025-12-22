@@ -28,6 +28,10 @@ from pyspark.sql.types import (
     BinaryType,
     DataType,
     DecimalType,
+    GeographyType,
+    Geography,
+    GeometryType,
+    Geometry,
     MapType,
     NullType,
     Row,
@@ -80,6 +84,7 @@ class LocalDataToArrowConversion:
             return True
         elif isinstance(dataType, DecimalType):
             # Convert Decimal('NaN') to None
+            # Rescale Decimal values
             return True
         elif isinstance(dataType, StringType):
             # Coercion to StringType is allowed
@@ -87,6 +92,10 @@ class LocalDataToArrowConversion:
         elif isinstance(dataType, UserDefinedType):
             return True
         elif isinstance(dataType, VariantType):
+            return True
+        elif isinstance(dataType, GeometryType):
+            return True
+        elif isinstance(dataType, GeographyType):
             return True
         else:
             return False
@@ -104,7 +113,7 @@ class LocalDataToArrowConversion:
         dataType: DataType,
         nullable: bool = True,
         *,
-        none_on_identity: bool = True,
+        none_on_identity: bool = False,
         int_to_decimal_coercion_enabled: bool = False,
     ) -> Optional[Callable]:
         pass
@@ -306,6 +315,8 @@ class LocalDataToArrowConversion:
             return convert_timestamp_ntz
 
         elif isinstance(dataType, DecimalType):
+            exp = decimal.Decimal(f"1E-{dataType.scale}")
+            ctx = decimal.Context(prec=dataType.precision, rounding=decimal.ROUND_HALF_EVEN)
 
             def convert_decimal(value: Any) -> Any:
                 if value is None:
@@ -321,7 +332,8 @@ class LocalDataToArrowConversion:
                         if not nullable:
                             raise PySparkValueError(f"input for {dataType} must not be None")
                         return None
-                    return value
+
+                    return value.quantize(exp, context=ctx)
 
             return convert_decimal
 
@@ -388,6 +400,34 @@ class LocalDataToArrowConversion:
 
             return convert_variant
 
+        elif isinstance(dataType, GeographyType):
+
+            def convert_geography(value: Any) -> Any:
+                if value is None:
+                    if not nullable:
+                        raise PySparkValueError(f"input for {dataType} must not be None")
+                    return None
+                elif isinstance(value, Geography):
+                    return dataType.toInternal(value)
+                else:
+                    raise PySparkValueError(errorClass="MALFORMED_GEOGRAPHY")
+
+            return convert_geography
+
+        elif isinstance(dataType, GeometryType):
+
+            def convert_geometry(value: Any) -> Any:
+                if value is None:
+                    if not nullable:
+                        raise PySparkValueError(f"input for {dataType} must not be None")
+                    return None
+                elif isinstance(value, Geometry):
+                    return dataType.toInternal(value)
+                else:
+                    raise PySparkValueError(errorClass="MALFORMED_GEOMETRY")
+
+            return convert_geometry
+
         elif not nullable:
 
             def convert_other(value: Any) -> Any:
@@ -396,11 +436,8 @@ class LocalDataToArrowConversion:
                 return value
 
             return convert_other
-        else:
-            if none_on_identity:
-                return None
-            else:
-                return lambda value: value
+        else:  # pragma: no cover
+            assert False, f"Need converter for {dataType} but failed to find one."
 
     @staticmethod
     def convert(data: Sequence[Any], schema: StructType, use_large_var_types: bool) -> "pa.Table":
@@ -507,6 +544,10 @@ class ArrowTableToRowsConversion:
             return True
         elif isinstance(dataType, VariantType):
             return True
+        elif isinstance(dataType, GeographyType):
+            return True
+        elif isinstance(dataType, GeometryType):
+            return True
         else:
             return False
 
@@ -518,13 +559,13 @@ class ArrowTableToRowsConversion:
     @overload
     @staticmethod
     def _create_converter(
-        dataType: DataType, *, none_on_identity: bool = True
+        dataType: DataType, *, none_on_identity: bool = True, binary_as_bytes: bool = True
     ) -> Optional[Callable]:
         pass
 
     @staticmethod
     def _create_converter(
-        dataType: DataType, *, none_on_identity: bool = False
+        dataType: DataType, *, none_on_identity: bool = False, binary_as_bytes: bool = True
     ) -> Optional[Callable]:
         assert dataType is not None and isinstance(dataType, DataType)
 
@@ -542,7 +583,9 @@ class ArrowTableToRowsConversion:
             dedup_field_names = _dedup_names(field_names)
 
             field_convs = [
-                ArrowTableToRowsConversion._create_converter(f.dataType, none_on_identity=True)
+                ArrowTableToRowsConversion._create_converter(
+                    f.dataType, none_on_identity=True, binary_as_bytes=binary_as_bytes
+                )
                 for f in dataType.fields
             ]
 
@@ -564,35 +607,28 @@ class ArrowTableToRowsConversion:
 
         elif isinstance(dataType, ArrayType):
             element_conv = ArrowTableToRowsConversion._create_converter(
-                dataType.elementType, none_on_identity=True
+                dataType.elementType, none_on_identity=True, binary_as_bytes=binary_as_bytes
             )
 
-            if element_conv is None:
+            assert (
+                element_conv is not None
+            ), f"_need_converter() returned True for ArrayType of {dataType.elementType}"
 
-                def convert_array(value: Any) -> Any:
-                    if value is None:
-                        return None
-                    else:
-                        assert isinstance(value, list)
-                        return value
-
-            else:
-
-                def convert_array(value: Any) -> Any:
-                    if value is None:
-                        return None
-                    else:
-                        assert isinstance(value, list)
-                        return [element_conv(v) for v in value]
+            def convert_array(value: Any) -> Any:
+                if value is None:
+                    return None
+                else:
+                    assert isinstance(value, list)
+                    return [element_conv(v) for v in value]
 
             return convert_array
 
         elif isinstance(dataType, MapType):
             key_conv = ArrowTableToRowsConversion._create_converter(
-                dataType.keyType, none_on_identity=True
+                dataType.keyType, none_on_identity=True, binary_as_bytes=binary_as_bytes
             )
             value_conv = ArrowTableToRowsConversion._create_converter(
-                dataType.valueType, none_on_identity=True
+                dataType.valueType, none_on_identity=True, binary_as_bytes=binary_as_bytes
             )
 
             if key_conv is None:
@@ -646,7 +682,7 @@ class ArrowTableToRowsConversion:
                     return None
                 else:
                     assert isinstance(value, bytes)
-                    return bytearray(value)
+                    return value if binary_as_bytes else bytearray(value)
 
             return convert_binary
 
@@ -676,7 +712,7 @@ class ArrowTableToRowsConversion:
             udt: UserDefinedType = dataType
 
             conv = ArrowTableToRowsConversion._create_converter(
-                udt.sqlType(), none_on_identity=True
+                udt.sqlType(), none_on_identity=True, binary_as_bytes=binary_as_bytes
             )
 
             if conv is None:
@@ -713,29 +749,67 @@ class ArrowTableToRowsConversion:
 
             return convert_variant
 
-        else:
-            if none_on_identity:
-                return None
-            else:
-                return lambda value: value
+        elif isinstance(dataType, GeographyType):
+
+            def convert_geography(value: Any) -> Any:
+                if value is None:
+                    return None
+                elif (
+                    isinstance(value, dict)
+                    and all(key in value for key in ["wkb", "srid"])
+                    and isinstance(value["wkb"], bytes)
+                    and isinstance(value["srid"], int)
+                ):
+                    return Geography.fromWKB(value["wkb"], value["srid"])
+                else:
+                    raise PySparkValueError(errorClass="MALFORMED_GEOGRAPHY")
+
+            return convert_geography
+
+        elif isinstance(dataType, GeometryType):
+
+            def convert_geometry(value: Any) -> Any:
+                if value is None:
+                    return None
+                elif (
+                    isinstance(value, dict)
+                    and all(key in value for key in ["wkb", "srid"])
+                    and isinstance(value["wkb"], bytes)
+                    and isinstance(value["srid"], int)
+                ):
+                    return Geometry.fromWKB(value["wkb"], value["srid"])
+                else:
+                    raise PySparkValueError(errorClass="MALFORMED_GEOMETRY")
+
+            return convert_geometry
+
+        else:  # pragma: no cover
+            assert False, f"Need converter for {dataType} but failed to find one."
 
     @overload
     @staticmethod
-    def convert(  # type: ignore[overload-overlap]
-        table: "pa.Table", schema: StructType
-    ) -> List[Row]:
+    def convert(table: "pa.Table", schema: StructType) -> List[Row]:
+        pass
+
+    @overload
+    @staticmethod
+    def convert(table: "pa.Table", schema: StructType, *, binary_as_bytes: bool) -> List[Row]:
         pass
 
     @overload
     @staticmethod
     def convert(
-        table: "pa.Table", schema: StructType, *, return_as_tuples: bool = True
-    ) -> List[tuple]:
+        table: "pa.Table", schema: StructType, *, return_as_tuples: bool
+    ) -> List[Row | tuple]:
         pass
 
     @staticmethod  # type: ignore[misc]
     def convert(
-        table: "pa.Table", schema: StructType, *, return_as_tuples: bool = False
+        table: "pa.Table",
+        schema: StructType,
+        *,
+        return_as_tuples: bool = False,
+        binary_as_bytes: bool = True,
     ) -> List[Union[Row, tuple]]:
         require_minimum_pyarrow_version()
         import pyarrow as pa
@@ -748,7 +822,9 @@ class ArrowTableToRowsConversion:
 
         if len(fields) > 0:
             field_converters = [
-                ArrowTableToRowsConversion._create_converter(f.dataType, none_on_identity=True)
+                ArrowTableToRowsConversion._create_converter(
+                    f.dataType, none_on_identity=True, binary_as_bytes=binary_as_bytes
+                )
                 for f in schema.fields
             ]
 

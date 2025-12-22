@@ -203,7 +203,7 @@ class ArtifactTests(ReusedConnectTestCase, ArtifactTestsMixin):
 
     @classmethod
     def setUpClass(cls):
-        super(ArtifactTests, cls).setUpClass()
+        super().setUpClass()
         cls.artifact_manager: ArtifactManager = cls.spark._client._artifact_manager
         cls.base_resource_dir = os.path.join(SPARK_HOME, "data")
         cls.artifact_file_path = os.path.join(

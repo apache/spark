@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.Duration
 
 import org.apache.spark.api.python.PythonUtils
-import org.apache.spark.sql.connect.SparkConnectServerTest
+import org.apache.spark.sql.connect.{PythonTestDepsChecker, SparkConnectServerTest}
 import org.apache.spark.sql.pipelines.utils.{APITest, PipelineReference, PipelineSourceFile, PipelineTest, TestPipelineConfiguration, TestPipelineSpec}
 
 case class PipelineReferenceImpl(executionProcess: Process) extends PipelineReference
@@ -55,8 +55,13 @@ class EndToEndAPISuite extends PipelineTest with APITest with SparkConnectServer
     // Create each source file in the temporary directory
     sources.foreach { file =>
       val filePath = Paths.get(file.name)
-      val fileName = filePath.getFileName.toString
-      val tempFilePath = projectDir.resolve(fileName)
+      val tempFilePath = projectDir.resolve(filePath)
+
+      // Create any necessary parent directories
+      val parentDir = tempFilePath.getParent
+      if (parentDir != null) {
+        Files.createDirectories(parentDir)
+      }
 
       // Create the file with the specified contents
       Files.write(tempFilePath, file.contents.getBytes("UTF-8"))
@@ -106,6 +111,8 @@ class EndToEndAPISuite extends PipelineTest with APITest with SparkConnectServer
   }
 
   override def awaitPipelineTermination(pipeline: PipelineReference, duration: Duration): Unit = {
+    assume(PythonTestDepsChecker.isConnectDepsAvailable)
+    assume(PythonTestDepsChecker.isYamlAvailable)
     pipeline match {
       case ref: PipelineReferenceImpl =>
         val process = ref.executionProcess
@@ -155,6 +162,7 @@ class EndToEndAPISuite extends PipelineTest with APITest with SparkConnectServer
       |name: test-pipeline
       |${spec.catalog.map(catalog => s"""catalog: "$catalog"""").getOrElse("")}
       |${spec.database.map(database => s"""database: "$database"""").getOrElse("")}
+      |storage: "file://${projectDir.resolve("storage").toAbsolutePath}"
       |configuration:
       |  "spark.remote": "sc://localhost:$serverPort"
       |libraries:

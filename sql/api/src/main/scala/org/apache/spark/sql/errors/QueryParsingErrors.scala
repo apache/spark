@@ -461,7 +461,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def computeStatisticsNotExpectedError(ctx: IdentifierContext): Throwable = {
+  def computeStatisticsNotExpectedError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.ANALYZE_TABLE_UNEXPECTED_NOSCAN",
       messageParameters = Map("ctx" -> toSQLStmt(ctx.getText)),
@@ -477,7 +477,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def showFunctionsUnsupportedError(identifier: String, ctx: IdentifierContext): Throwable = {
+  def showFunctionsUnsupportedError(identifier: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.SHOW_FUNCTIONS_INVALID_SCOPE",
       messageParameters = Map("scope" -> toSQLId(identifier)),
@@ -618,7 +618,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def createViewWithBothIfNotExistsAndReplaceError(ctx: CreateViewContext): Throwable = {
+  def createViewWithBothIfNotExistsAndReplaceError(ctx: ParserRuleContext): Throwable = {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0052", ctx)
   }
 
@@ -774,6 +774,15 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def missingClausesForOperation(
+      ctx: ParserRuleContext,
+      clauses: String,
+      operation: String): Throwable =
+    new ParseException(
+      errorClass = "MISSING_CLAUSES_FOR_OPERATION",
+      messageParameters = Map("clauses" -> clauses, "operation" -> operation),
+      ctx)
+
   def invalidDatetimeUnitError(
       ctx: ParserRuleContext,
       functionName: String,
@@ -819,5 +828,21 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       errorClass = "MULTIPLE_PRIMARY_KEYS",
       messageParameters = Map("columns" -> columns),
       ctx)
+  }
+
+  /**
+   * Throws an internal error for unexpected parameter markers found during AST building. This
+   * should be unreachable in normal operation due to grammar-level blocking.
+   *
+   * @param ctx
+   *   The parser context containing the parameter marker
+   * @throws ParseException
+   *   Always throws this exception
+   */
+  def unexpectedUseOfParameterMarker(ctx: ParserRuleContext): Nothing = {
+    throw new ParseException(
+      errorClass = "UNEXPECTED_USE_OF_PARAMETER_MARKER",
+      messageParameters = Map("parameterMarker" -> ctx.getText),
+      ctx = ctx)
   }
 }

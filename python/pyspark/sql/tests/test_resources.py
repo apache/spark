@@ -90,7 +90,7 @@ class ResourceProfileTests(ResourceProfileTestsMixin, ReusedPySparkTestCase):
 
     @classmethod
     def tearDownClass(cls):
-        super(ResourceProfileTests, cls).tearDownClass()
+        super().tearDownClass()
         cls.spark.stop()
 
 

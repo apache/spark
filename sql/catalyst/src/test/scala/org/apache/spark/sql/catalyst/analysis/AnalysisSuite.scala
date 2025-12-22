@@ -1522,16 +1522,16 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-41271: bind named parameters to literals") {
     CTERelationDef.curId.set(0)
-    val actual1 = NameParameterizedQuery(
-      child = parsePlan("WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT :limitA"),
+    val actual1 = PreprocessedNamedQuery(
+      sql = "WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT :limitA",
       args = Map("limitA" -> Literal(10))).analyze
     CTERelationDef.curId.set(0)
     val expected1 = parsePlan("WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT 10").analyze
     comparePlans(actual1, expected1)
     // Ignore unused arguments
     CTERelationDef.curId.set(0)
-    val actual2 = NameParameterizedQuery(
-      child = parsePlan("WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < :param2"),
+    val actual2 = PreprocessedNamedQuery(
+      sql = "WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < :param2",
       args = Map("param1" -> Literal(10), "param2" -> Literal(20))).analyze
     CTERelationDef.curId.set(0)
     val expected2 = parsePlan("WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < 20").analyze
@@ -1540,16 +1540,16 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("SPARK-44066: bind positional parameters to literals") {
     CTERelationDef.curId.set(0)
-    val actual1 = PosParameterizedQuery(
-      child = parsePlan("WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT ?"),
+    val actual1 = PreprocessedPositionalQuery(
+      sql = "WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT ?",
       args = Seq(Literal(10))).analyze
     CTERelationDef.curId.set(0)
     val expected1 = parsePlan("WITH a AS (SELECT 1 c) SELECT * FROM a LIMIT 10").analyze
     comparePlans(actual1, expected1)
     // Ignore unused arguments
     CTERelationDef.curId.set(0)
-    val actual2 = PosParameterizedQuery(
-      child = parsePlan("WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < ?"),
+    val actual2 = PreprocessedPositionalQuery(
+      sql = "WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < ?",
       args = Seq(Literal(20), Literal(10))).analyze
     CTERelationDef.curId.set(0)
     val expected2 = parsePlan("WITH a AS (SELECT 1 c) SELECT c FROM a WHERE c < 20").analyze
@@ -1712,6 +1712,28 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }
   }
 
+  test("SPARK-54718: CTERelationRef.newInstance preserves attribute metadata") {
+    val baseAttr = AttributeReference("COLNAME", StringType)()
+    val attr1 = baseAttr
+    val attr2 = baseAttr.withName("colname")
+    val cteDef = CTERelationDef(testRelation.select($"a".as("COLNAME")))
+    val cteRef = CTERelationRef(cteDef.id, true, Seq(attr1, attr2), false)
+
+    val newInstance = cteRef.newInstance().asInstanceOf[CTERelationRef]
+    assert(newInstance.output(0).name == "COLNAME")
+    assert(newInstance.output(1).name == "colname")
+    assert(newInstance.output(0).exprId != attr1.exprId)
+    assert(newInstance.output(0).exprId == newInstance.output(1).exprId)
+
+    withSQLConf(SQLConf.LEGACY_CTE_DUPLICATE_ATTRIBUTE_NAMES.key -> "true") {
+      val legacyInstance = cteRef.newInstance().asInstanceOf[CTERelationRef]
+      assert(legacyInstance.output(0).name == "colname")
+      assert(legacyInstance.output(1).name == "colname")
+      assert(legacyInstance.output(0).exprId != attr1.exprId)
+      assert(legacyInstance.output(0).exprId == legacyInstance.output(1).exprId)
+    }
+  }
+
   test("SPARK-43190: ListQuery.childOutput should be consistent with child output") {
     val listQuery1 = ListQuery(testRelation2.select($"a"))
     val listQuery2 = ListQuery(testRelation2.select($"b"))
@@ -1865,5 +1887,66 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     // The expected Project (root node) should only have column "i".
     val expectedPlan = Project(Seq(UnresolvedAttribute("i")), addColumnF).analyze
     checkAnalysis(inputPlan, expectedPlan)
+  }
+}
+
+/**
+ * Utility classes for testing parameter preprocessing during SQL parsing.
+ * These classes provide a clean API similar to NameParameterizedQuery while implementing
+ * the new text-level parameter substitution approach using SubstituteParamsParser.
+ *
+ * This approach replaces parameter markers in SQL text before parsing, rather than
+ * binding them at the logical plan level, which matches the new parameter preprocessing
+ * implementation in SparkSqlParser.
+ */
+case class PreprocessedNamedQuery(sql: String, args: Map[String, Literal]) {
+  def parsePlan: LogicalPlan = {
+    // Use text-level parameter substitution with SubstituteParamsParser
+    val substitutedSql = substituteParameters()
+    org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan(substitutedSql)
+  }
+
+  def analyze: LogicalPlan = {
+    // Parse with substituted parameters and analyze
+    parsePlan.analyze
+  }
+
+  private def substituteParameters(): String = {
+    val paramSubstitutor = new org.apache.spark.sql.catalyst.parser.SubstituteParamsParser()
+
+    // Convert Literal args to String values for substitution
+    val namedParams = args.map { case (name, literal) =>
+      name -> literal.sql
+    }
+
+    val (substituted, _, _) = paramSubstitutor.substitute(
+      sql,
+      namedParams = namedParams)
+    substituted
+  }
+}
+
+case class PreprocessedPositionalQuery(sql: String, args: Seq[Literal]) {
+  def parsePlan: LogicalPlan = {
+    // Use text-level parameter substitution with SubstituteParamsParser
+    val substitutedSql = substituteParameters()
+    org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan(substitutedSql)
+  }
+
+  def analyze: LogicalPlan = {
+    // Parse with substituted parameters and analyze
+    parsePlan.analyze
+  }
+
+  private def substituteParameters(): String = {
+    val paramSubstitutor = new org.apache.spark.sql.catalyst.parser.SubstituteParamsParser()
+
+    // Convert Literal args to String values for substitution
+    val positionalParams = args.map(_.sql).toList
+
+    val (substituted, _, _) = paramSubstitutor.substitute(
+      sql,
+      positionalParams = positionalParams)
+    substituted
   }
 }

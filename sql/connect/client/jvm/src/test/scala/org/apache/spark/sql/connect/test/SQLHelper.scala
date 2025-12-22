@@ -21,9 +21,9 @@ import java.util.UUID
 
 import org.scalatest.Assertions.fail
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.connect.{DataFrame, SparkSession, SQLImplicits}
+import org.apache.spark.sql.errors.CompilationErrors
 import org.apache.spark.util.{SparkErrorUtils, SparkFileUtils}
 
 trait SQLHelper {
@@ -59,11 +59,8 @@ trait SQLHelper {
       if (spark.conf.isModifiable(k)) {
         spark.conf.set(k, v)
       } else {
-        throw new AnalysisException(
-          errorClass = "_LEGACY_ERROR_TEMP_3050",
-          messageParameters = Map("k" -> k))
+        throw CompilationErrors.cannotModifyValueOfStaticConfigError(k)
       }
-
     }
     try f
     finally {
@@ -144,5 +141,17 @@ trait SQLHelper {
     SparkErrorUtils.tryWithSafeFinally(f)(viewNames.foreach { name =>
       spark.sql(s"DROP VIEW IF EXISTS $name")
     })
+  }
+
+  /**
+   * Drops database `dbName` after calling `f`.
+   */
+  protected def withDatabase(dbNames: String*)(f: => Unit): Unit = {
+    SparkErrorUtils.tryWithSafeFinally(f) {
+      dbNames.foreach { name =>
+        spark.sql(s"DROP DATABASE IF EXISTS $name CASCADE")
+      }
+      spark.sql(s"USE default")
+    }
   }
 }

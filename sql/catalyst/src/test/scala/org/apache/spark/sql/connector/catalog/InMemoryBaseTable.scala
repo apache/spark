@@ -28,11 +28,12 @@ import scala.collection.mutable.ListBuffer
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow, MetadataStructFieldWithLogicalName}
+import org.apache.spark.sql.catalyst.expressions.{Cast, EvalMode, GenericInternalRow, JoinedRow, Literal, MetadataStructFieldWithLogicalName}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, GenericArrayData, MapData, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions._
+import org.apache.spark.sql.connector.expressions.{Literal => V2Literal}
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomSumMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram, HistogramBin}
@@ -65,7 +66,7 @@ abstract class InMemoryBaseTable(
   extends Table with SupportsRead with SupportsWrite with SupportsMetadataColumns {
 
   // Tracks the current version number of the table.
-  protected var currentTableVersion: Int = 0
+  protected var tableVersion: Int = 0
 
   // Stores the table version validated during the last `ALTER TABLE ... ADD CONSTRAINT` operation.
   private var validatedTableVersion: String = null
@@ -74,14 +75,14 @@ abstract class InMemoryBaseTable(
 
   override def columns(): Array[Column] = tableColumns
 
-  override def currentVersion(): String = currentTableVersion.toString
+  override def version(): String = tableVersion.toString
 
-  def setCurrentVersion(version: String): Unit = {
-    currentTableVersion = version.toInt
+  def setVersion(version: String): Unit = {
+    tableVersion = version.toInt
   }
 
-  def increaseCurrentVersion(): Unit = {
-    currentTableVersion += 1
+  def increaseVersion(): Unit = {
+    tableVersion += 1
   }
 
   def validatedVersion(): String = {
@@ -146,7 +147,7 @@ abstract class InMemoryBaseTable(
     case _: BucketTransform =>
     case _: SortedBucketTransform =>
     case _: ClusterByTransform =>
-    case NamedTransform("truncate", Seq(_: NamedReference, _: Literal[_])) =>
+    case NamedTransform("truncate", Seq(_: NamedReference, _: V2Literal[_])) =>
     case t if !allowUnsupportedTransforms =>
       throw new IllegalArgumentException(s"Transform $t is not a supported transform")
   }
@@ -244,7 +245,7 @@ abstract class InMemoryBaseTable(
         var dataTypeHashCode = 0
         valueTypePairs.foreach(dataTypeHashCode += _._2.hashCode())
         ((valueHashCode + 31 * dataTypeHashCode) & Integer.MAX_VALUE) % numBuckets
-      case NamedTransform("truncate", Seq(ref: NamedReference, length: Literal[_])) =>
+      case NamedTransform("truncate", Seq(ref: NamedReference, length: V2Literal[_])) =>
         extractor(ref.fieldNames, cleanedSchema, row) match {
           case (str: UTF8String, StringType) =>
             str.substring(0, length.value.asInstanceOf[Int])
@@ -654,8 +655,6 @@ abstract class InMemoryBaseTable(
 
   protected abstract class TestBatchWrite extends BatchWrite {
 
-    var commitProperties: mutable.Map[String, String] = mutable.Map.empty[String, String]
-
     override def createBatchWriterFactory(info: PhysicalWriteInfo): DataWriterFactory = {
       new BufferedRowsWriterFactory(CatalogV2Util.v2ColumnsToStructType(columns()))
     }
@@ -667,8 +666,7 @@ abstract class InMemoryBaseTable(
 
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       withData(messages.map(_.asInstanceOf[BufferedRows]))
-      commits += Commit(Instant.now().toEpochMilli, commitProperties.toMap)
-      commitProperties.clear()
+      commits += Commit(Instant.now().toEpochMilli)
     }
   }
 
@@ -677,8 +675,7 @@ abstract class InMemoryBaseTable(
       val newData = messages.map(_.asInstanceOf[BufferedRows])
       dataMap --= newData.flatMap(_.rows.map(getKey))
       withData(newData)
-      commits += Commit(Instant.now().toEpochMilli, commitProperties.toMap)
-      commitProperties.clear()
+      commits += Commit(Instant.now().toEpochMilli)
     }
   }
 
@@ -686,8 +683,7 @@ abstract class InMemoryBaseTable(
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       dataMap.clear()
       withData(messages.map(_.asInstanceOf[BufferedRows]))
-      commits += Commit(Instant.now().toEpochMilli, commitProperties.toMap)
-      commitProperties.clear()
+      commits += Commit(Instant.now().toEpochMilli)
     }
   }
 
@@ -728,6 +724,10 @@ abstract class InMemoryBaseTable(
         withData(messages.map(_.asInstanceOf[BufferedRows]))
       }
     }
+  }
+
+  def copy(): Table = {
+    throw new UnsupportedOperationException(s"copy is not supported for ${getClass.getName}")
   }
 }
 
@@ -910,7 +910,7 @@ private class BufferedRowsReader(
       arrayData: ArrayData,
       readType: DataType,
       writeType: DataType): ArrayData = {
-    val elements = arrayData.toArray[Any](readType)
+    val elements = arrayData.toArray[Any](writeType)
     val convertedElements = extractCollection(elements, readType, writeType)
     new GenericArrayData(convertedElements)
   }
@@ -921,8 +921,8 @@ private class BufferedRowsReader(
       readValueType: DataType,
       writeKeyType: DataType,
       writeValueType: DataType): MapData = {
-    val keys = mapData.keyArray().toArray[Any](readKeyType)
-    val values = mapData.valueArray().toArray[Any](readValueType)
+    val keys = mapData.keyArray().toArray[Any](writeKeyType)
+    val values = mapData.valueArray().toArray[Any](writeValueType)
 
     val convertedKeys = extractCollection(keys, readKeyType, writeKeyType)
     val convertedValues = extractCollection(values, readValueType, writeValueType)
@@ -962,9 +962,20 @@ private class BufferedRowsReader(
               wKeyType, wValueType)
           }
         }
+      case (readType: AtomicType, writeType: AtomicType) if readType != writeType =>
+        elements.map { elem =>
+          if (elem == null) {
+            null
+          } else {
+            castElement(elem, readType, writeType)
+          }
+        }
       case (_, _) => elements
     }
   }
+
+  private def castElement(elem: Any, toType: DataType, fromType: DataType): Any =
+    Cast(Literal(elem, fromType), toType, None, EvalMode.TRY).eval(null)
 }
 
 private class BufferedRowsWriterFactory(schema: StructType)
@@ -1033,7 +1044,7 @@ class InMemoryCustomDriverTaskMetric(value: Long) extends CustomTaskMetric {
   override def value(): Long = value
 }
 
-case class Commit(id: Long, properties: Map[String, String])
+case class Commit(id: Long, writeSummary: Option[WriteSummary] = None)
 
 sealed trait Operation
 case object Write extends Operation

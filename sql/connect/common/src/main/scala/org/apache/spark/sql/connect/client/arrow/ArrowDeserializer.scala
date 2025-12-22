@@ -37,9 +37,9 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
-import org.apache.spark.sql.connect.client.CloseableIterator
 import org.apache.spark.sql.errors.{CompilationErrors, ExecutionErrors}
 import org.apache.spark.sql.types.Decimal
+import org.apache.spark.sql.util.{CloseableIterator, ConcatenatingArrowStreamReader, MessageIterator}
 import org.apache.spark.unsafe.types.VariantVal
 
 /**
@@ -340,6 +340,14 @@ object ArrowDeserializers {
             new GenericRowWithSchema(values, r.schema)
           }
         }
+
+      case (_: GeometryEncoder, StructVectors(struct, vectors)) =>
+        val gdser = new GeometryArrowSerDe
+        gdser.createDeserializer(struct, vectors, timeZoneId)
+
+      case (_: GeographyEncoder, StructVectors(struct, vectors)) =>
+        val gdser = new GeographyArrowSerDe
+        gdser.createDeserializer(struct, vectors, timeZoneId)
 
       case (VariantEncoder, StructVectors(struct, vectors)) =>
         assert(vectors.exists(_.getName == "value"))

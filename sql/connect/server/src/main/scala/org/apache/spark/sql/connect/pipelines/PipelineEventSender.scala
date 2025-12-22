@@ -158,18 +158,6 @@ class PipelineEventSender(
   }
 
   private def constructProtoEvent(event: PipelineEvent): proto.PipelineEvent = {
-    val message = if (event.error.nonEmpty) {
-      // Returns the message associated with a Throwable and all its causes
-      def getExceptionMessages(throwable: Throwable): Seq[String] = {
-        throwable.getMessage +:
-          Option(throwable.getCause).map(getExceptionMessages).getOrElse(Nil)
-      }
-      val errorMessages = getExceptionMessages(event.error.get)
-      s"""${event.message}
-         |Error: ${errorMessages.mkString("\n")}""".stripMargin
-    } else {
-      event.message
-    }
     val protoEventBuilder = proto.PipelineEvent
       .newBuilder()
       .setTimestamp(
@@ -182,7 +170,7 @@ class PipelineEventSender(
           .setSeconds(event.timestamp.getTime / 1000)
           .setNanos(event.timestamp.getNanos)
           .build())
-      .setMessage(message)
+      .setMessage(event.messageWithError)
     protoEventBuilder.build()
   }
 }

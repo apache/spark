@@ -87,8 +87,15 @@ if TYPE_CHECKING:
 
 
 def _to_col(col: "ColumnOrName") -> Column:
-    assert isinstance(col, (Column, str))
-    return col if isinstance(col, Column) else column(col)
+    if isinstance(col, Column):
+        return col
+    elif isinstance(col, str):
+        return column(col)
+    else:
+        raise PySparkTypeError(
+            errorClass="NOT_COLUMN_OR_STR",
+            messageParameters={"arg_name": "col", "arg_type": type(col).__name__},
+        )
 
 
 def _sort_col(col: "ColumnOrName") -> Column:
@@ -3643,6 +3650,13 @@ def timestamp_seconds(col: "ColumnOrName") -> Column:
 timestamp_seconds.__doc__ = pysparkfuncs.timestamp_seconds.__doc__
 
 
+def time_diff(unit: "ColumnOrName", start: "ColumnOrName", end: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("time_diff", unit, start, end)
+
+
+time_diff.__doc__ = pysparkfuncs.time_diff.__doc__
+
+
 def time_trunc(unit: "ColumnOrName", time: "ColumnOrName") -> Column:
     return _invoke_function_over_columns("time_trunc", unit, time)
 
@@ -3931,6 +3945,49 @@ def make_time(hour: "ColumnOrName", minute: "ColumnOrName", second: "ColumnOrNam
 make_time.__doc__ = pysparkfuncs.make_time.__doc__
 
 
+def time_from_seconds(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("time_from_seconds", col)
+
+
+time_from_seconds.__doc__ = pysparkfuncs.time_from_seconds.__doc__
+
+
+def time_from_millis(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("time_from_millis", col)
+
+
+time_from_millis.__doc__ = pysparkfuncs.time_from_millis.__doc__
+
+
+def time_from_micros(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("time_from_micros", col)
+
+
+time_from_micros.__doc__ = pysparkfuncs.time_from_micros.__doc__
+
+
+def time_to_seconds(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("time_to_seconds", col)
+
+
+time_to_seconds.__doc__ = pysparkfuncs.time_to_seconds.__doc__
+
+
+def time_to_millis(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("time_to_millis", col)
+
+
+time_to_millis.__doc__ = pysparkfuncs.time_to_millis.__doc__
+
+
+def time_to_micros(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("time_to_micros", col)
+
+
+time_to_micros.__doc__ = pysparkfuncs.time_to_micros.__doc__
+
+
+@overload
 def make_timestamp(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -3938,21 +3995,96 @@ def make_timestamp(
     hours: "ColumnOrName",
     mins: "ColumnOrName",
     secs: "ColumnOrName",
-    timezone: Optional["ColumnOrName"] = None,
 ) -> Column:
-    if timezone is not None:
-        return _invoke_function_over_columns(
-            "make_timestamp", years, months, days, hours, mins, secs, timezone
-        )
+    ...
+
+
+@overload
+def make_timestamp(
+    years: "ColumnOrName",
+    months: "ColumnOrName",
+    days: "ColumnOrName",
+    hours: "ColumnOrName",
+    mins: "ColumnOrName",
+    secs: "ColumnOrName",
+    timezone: "ColumnOrName",
+) -> Column:
+    ...
+
+
+@overload
+def make_timestamp(*, date: "ColumnOrName", time: "ColumnOrName") -> Column:
+    ...
+
+
+@overload
+def make_timestamp(
+    *, date: "ColumnOrName", time: "ColumnOrName", timezone: "ColumnOrName"
+) -> Column:
+    ...
+
+
+def make_timestamp(
+    years: Optional["ColumnOrName"] = None,
+    months: Optional["ColumnOrName"] = None,
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
+    timezone: Optional["ColumnOrName"] = None,
+    date: Optional["ColumnOrName"] = None,
+    time: Optional["ColumnOrName"] = None,
+) -> Column:
+    if years is not None:
+        if any(arg is not None for arg in [date, time]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        if timezone is not None:
+            return _invoke_function_over_columns(
+                "make_timestamp",
+                cast("ColumnOrName", years),
+                cast("ColumnOrName", months),
+                cast("ColumnOrName", days),
+                cast("ColumnOrName", hours),
+                cast("ColumnOrName", mins),
+                cast("ColumnOrName", secs),
+                cast("ColumnOrName", timezone),
+            )
+        else:
+            return _invoke_function_over_columns(
+                "make_timestamp",
+                cast("ColumnOrName", years),
+                cast("ColumnOrName", months),
+                cast("ColumnOrName", days),
+                cast("ColumnOrName", hours),
+                cast("ColumnOrName", mins),
+                cast("ColumnOrName", secs),
+            )
     else:
-        return _invoke_function_over_columns(
-            "make_timestamp", years, months, days, hours, mins, secs
-        )
+        if any(arg is not None for arg in [years, months, days, hours, mins, secs]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        if timezone is not None:
+            return _invoke_function_over_columns(
+                "make_timestamp",
+                cast("ColumnOrName", date),
+                cast("ColumnOrName", time),
+                cast("ColumnOrName", timezone),
+            )
+        else:
+            return _invoke_function_over_columns(
+                "make_timestamp", cast("ColumnOrName", date), cast("ColumnOrName", time)
+            )
 
 
 make_timestamp.__doc__ = pysparkfuncs.make_timestamp.__doc__
 
 
+@overload
 def try_make_timestamp(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -3960,16 +4092,90 @@ def try_make_timestamp(
     hours: "ColumnOrName",
     mins: "ColumnOrName",
     secs: "ColumnOrName",
-    timezone: Optional["ColumnOrName"] = None,
 ) -> Column:
-    if timezone is not None:
-        return _invoke_function_over_columns(
-            "try_make_timestamp", years, months, days, hours, mins, secs, timezone
-        )
+    ...
+
+
+@overload
+def try_make_timestamp(
+    years: "ColumnOrName",
+    months: "ColumnOrName",
+    days: "ColumnOrName",
+    hours: "ColumnOrName",
+    mins: "ColumnOrName",
+    secs: "ColumnOrName",
+    timezone: "ColumnOrName",
+) -> Column:
+    ...
+
+
+@overload
+def try_make_timestamp(*, date: "ColumnOrName", time: "ColumnOrName") -> Column:
+    ...
+
+
+@overload
+def try_make_timestamp(
+    *, date: "ColumnOrName", time: "ColumnOrName", timezone: "ColumnOrName"
+) -> Column:
+    ...
+
+
+def try_make_timestamp(
+    years: Optional["ColumnOrName"] = None,
+    months: Optional["ColumnOrName"] = None,
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
+    timezone: Optional["ColumnOrName"] = None,
+    date: Optional["ColumnOrName"] = None,
+    time: Optional["ColumnOrName"] = None,
+) -> Column:
+    if years is not None:
+        if any(arg is not None for arg in [date, time]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        if timezone is not None:
+            return _invoke_function_over_columns(
+                "try_make_timestamp",
+                cast("ColumnOrName", years),
+                cast("ColumnOrName", months),
+                cast("ColumnOrName", days),
+                cast("ColumnOrName", hours),
+                cast("ColumnOrName", mins),
+                cast("ColumnOrName", secs),
+                cast("ColumnOrName", timezone),
+            )
+        else:
+            return _invoke_function_over_columns(
+                "try_make_timestamp",
+                cast("ColumnOrName", years),
+                cast("ColumnOrName", months),
+                cast("ColumnOrName", days),
+                cast("ColumnOrName", hours),
+                cast("ColumnOrName", mins),
+                cast("ColumnOrName", secs),
+            )
     else:
-        return _invoke_function_over_columns(
-            "try_make_timestamp", years, months, days, hours, mins, secs
-        )
+        if any(arg is not None for arg in [years, months, days, hours, mins, secs]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        if timezone is not None:
+            return _invoke_function_over_columns(
+                "try_make_timestamp",
+                cast("ColumnOrName", date),
+                cast("ColumnOrName", time),
+                cast("ColumnOrName", timezone),
+            )
+        else:
+            return _invoke_function_over_columns(
+                "try_make_timestamp", cast("ColumnOrName", date), cast("ColumnOrName", time)
+            )
 
 
 try_make_timestamp.__doc__ = pysparkfuncs.try_make_timestamp.__doc__
@@ -4019,6 +4225,7 @@ def try_make_timestamp_ltz(
 try_make_timestamp_ltz.__doc__ = pysparkfuncs.try_make_timestamp_ltz.__doc__
 
 
+@overload
 def make_timestamp_ntz(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -4027,14 +4234,58 @@ def make_timestamp_ntz(
     mins: "ColumnOrName",
     secs: "ColumnOrName",
 ) -> Column:
-    return _invoke_function_over_columns(
-        "make_timestamp_ntz", years, months, days, hours, mins, secs
-    )
+    ...
+
+
+@overload
+def make_timestamp_ntz(
+    *,
+    date: "ColumnOrName",
+    time: "ColumnOrName",
+) -> Column:
+    ...
+
+
+def make_timestamp_ntz(
+    years: Optional["ColumnOrName"] = None,
+    months: Optional["ColumnOrName"] = None,
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
+    date: Optional["ColumnOrName"] = None,
+    time: Optional["ColumnOrName"] = None,
+) -> Column:
+    if years is not None:
+        if any(arg is not None for arg in [date, time]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        return _invoke_function_over_columns(
+            "make_timestamp_ntz",
+            cast("ColumnOrName", years),
+            cast("ColumnOrName", months),
+            cast("ColumnOrName", days),
+            cast("ColumnOrName", hours),
+            cast("ColumnOrName", mins),
+            cast("ColumnOrName", secs),
+        )
+    else:
+        if any(arg is not None for arg in [years, months, days, hours, mins, secs]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        return _invoke_function_over_columns(
+            "make_timestamp_ntz", cast("ColumnOrName", date), cast("ColumnOrName", time)
+        )
 
 
 make_timestamp_ntz.__doc__ = pysparkfuncs.make_timestamp_ntz.__doc__
 
 
+@overload
 def try_make_timestamp_ntz(
     years: "ColumnOrName",
     months: "ColumnOrName",
@@ -4043,9 +4294,52 @@ def try_make_timestamp_ntz(
     mins: "ColumnOrName",
     secs: "ColumnOrName",
 ) -> Column:
-    return _invoke_function_over_columns(
-        "try_make_timestamp_ntz", years, months, days, hours, mins, secs
-    )
+    ...
+
+
+@overload
+def try_make_timestamp_ntz(
+    *,
+    date: "ColumnOrName",
+    time: "ColumnOrName",
+) -> Column:
+    ...
+
+
+def try_make_timestamp_ntz(
+    years: Optional["ColumnOrName"] = None,
+    months: Optional["ColumnOrName"] = None,
+    days: Optional["ColumnOrName"] = None,
+    hours: Optional["ColumnOrName"] = None,
+    mins: Optional["ColumnOrName"] = None,
+    secs: Optional["ColumnOrName"] = None,
+    date: Optional["ColumnOrName"] = None,
+    time: Optional["ColumnOrName"] = None,
+) -> Column:
+    if years is not None:
+        if any(arg is not None for arg in [date, time]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        return _invoke_function_over_columns(
+            "try_make_timestamp_ntz",
+            cast("ColumnOrName", years),
+            cast("ColumnOrName", months),
+            cast("ColumnOrName", days),
+            cast("ColumnOrName", hours),
+            cast("ColumnOrName", mins),
+            cast("ColumnOrName", secs),
+        )
+    else:
+        if any(arg is not None for arg in [years, months, days, hours, mins, secs]):
+            raise PySparkValueError(
+                errorClass="CANNOT_SET_TOGETHER",
+                messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
+            )
+        return _invoke_function_over_columns(
+            "try_make_timestamp_ntz", cast("ColumnOrName", date), cast("ColumnOrName", time)
+        )
 
 
 try_make_timestamp_ntz.__doc__ = pysparkfuncs.try_make_timestamp_ntz.__doc__
@@ -4107,8 +4401,11 @@ def session_user() -> Column:
 session_user.__doc__ = pysparkfuncs.session_user.__doc__
 
 
-def uuid() -> Column:
-    return _invoke_function("uuid", lit(py_random.randint(0, sys.maxsize)))
+def uuid(seed: Optional[Union[Column, int]] = None) -> Column:
+    if seed is None:
+        return _invoke_function("uuid", lit(py_random.randint(0, sys.maxsize)))
+    else:
+        return _invoke_function("uuid", lit(seed))
 
 
 def assert_true(col: "ColumnOrName", errMsg: Optional[Union[Column, str]] = None) -> Column:
@@ -4234,6 +4531,243 @@ def hll_union(
 
 
 hll_union.__doc__ = pysparkfuncs.hll_union.__doc__
+
+
+def theta_sketch_agg(
+    col: "ColumnOrName",
+    lgNomEntries: Optional[Union[int, Column]] = None,
+) -> Column:
+    fn = "theta_sketch_agg"
+    if lgNomEntries is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(lgNomEntries))
+
+
+theta_sketch_agg.__doc__ = pysparkfuncs.theta_sketch_agg.__doc__
+
+
+def theta_union_agg(
+    col: "ColumnOrName",
+    lgNomEntries: Optional[Union[int, Column]] = None,
+) -> Column:
+    fn = "theta_union_agg"
+    if lgNomEntries is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(lgNomEntries))
+
+
+theta_union_agg.__doc__ = pysparkfuncs.theta_union_agg.__doc__
+
+
+def theta_intersection_agg(
+    col: "ColumnOrName",
+) -> Column:
+    fn = "theta_intersection_agg"
+    return _invoke_function_over_columns(fn, col)
+
+
+theta_intersection_agg.__doc__ = pysparkfuncs.theta_intersection_agg.__doc__
+
+
+def kll_sketch_agg_bigint(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+) -> Column:
+    fn = "kll_sketch_agg_bigint"
+    if k is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(k))
+
+
+kll_sketch_agg_bigint.__doc__ = pysparkfuncs.kll_sketch_agg_bigint.__doc__
+
+
+def kll_sketch_agg_float(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+) -> Column:
+    fn = "kll_sketch_agg_float"
+    if k is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(k))
+
+
+kll_sketch_agg_float.__doc__ = pysparkfuncs.kll_sketch_agg_float.__doc__
+
+
+def kll_sketch_agg_double(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+) -> Column:
+    fn = "kll_sketch_agg_double"
+    if k is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(k))
+
+
+kll_sketch_agg_double.__doc__ = pysparkfuncs.kll_sketch_agg_double.__doc__
+
+
+def kll_sketch_to_string_bigint(col: "ColumnOrName") -> Column:
+    fn = "kll_sketch_to_string_bigint"
+    return _invoke_function_over_columns(fn, col)
+
+
+kll_sketch_to_string_bigint.__doc__ = pysparkfuncs.kll_sketch_to_string_bigint.__doc__
+
+
+def kll_sketch_to_string_float(col: "ColumnOrName") -> Column:
+    fn = "kll_sketch_to_string_float"
+    return _invoke_function_over_columns(fn, col)
+
+
+kll_sketch_to_string_float.__doc__ = pysparkfuncs.kll_sketch_to_string_float.__doc__
+
+
+def kll_sketch_to_string_double(col: "ColumnOrName") -> Column:
+    fn = "kll_sketch_to_string_double"
+    return _invoke_function_over_columns(fn, col)
+
+
+kll_sketch_to_string_double.__doc__ = pysparkfuncs.kll_sketch_to_string_double.__doc__
+
+
+def kll_sketch_get_n_bigint(col: "ColumnOrName") -> Column:
+    fn = "kll_sketch_get_n_bigint"
+    return _invoke_function_over_columns(fn, col)
+
+
+kll_sketch_get_n_bigint.__doc__ = pysparkfuncs.kll_sketch_get_n_bigint.__doc__
+
+
+def kll_sketch_get_n_float(col: "ColumnOrName") -> Column:
+    fn = "kll_sketch_get_n_float"
+    return _invoke_function_over_columns(fn, col)
+
+
+kll_sketch_get_n_float.__doc__ = pysparkfuncs.kll_sketch_get_n_float.__doc__
+
+
+def kll_sketch_get_n_double(col: "ColumnOrName") -> Column:
+    fn = "kll_sketch_get_n_double"
+    return _invoke_function_over_columns(fn, col)
+
+
+kll_sketch_get_n_double.__doc__ = pysparkfuncs.kll_sketch_get_n_double.__doc__
+
+
+def kll_sketch_merge_bigint(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    fn = "kll_sketch_merge_bigint"
+    return _invoke_function_over_columns(fn, left, right)
+
+
+kll_sketch_merge_bigint.__doc__ = pysparkfuncs.kll_sketch_merge_bigint.__doc__
+
+
+def kll_sketch_merge_float(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    fn = "kll_sketch_merge_float"
+    return _invoke_function_over_columns(fn, left, right)
+
+
+kll_sketch_merge_float.__doc__ = pysparkfuncs.kll_sketch_merge_float.__doc__
+
+
+def kll_sketch_merge_double(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    fn = "kll_sketch_merge_double"
+    return _invoke_function_over_columns(fn, left, right)
+
+
+kll_sketch_merge_double.__doc__ = pysparkfuncs.kll_sketch_merge_double.__doc__
+
+
+def kll_sketch_get_quantile_bigint(sketch: "ColumnOrName", rank: "ColumnOrName") -> Column:
+    fn = "kll_sketch_get_quantile_bigint"
+    return _invoke_function_over_columns(fn, sketch, rank)
+
+
+kll_sketch_get_quantile_bigint.__doc__ = pysparkfuncs.kll_sketch_get_quantile_bigint.__doc__
+
+
+def kll_sketch_get_quantile_float(sketch: "ColumnOrName", rank: "ColumnOrName") -> Column:
+    fn = "kll_sketch_get_quantile_float"
+    return _invoke_function_over_columns(fn, sketch, rank)
+
+
+kll_sketch_get_quantile_float.__doc__ = pysparkfuncs.kll_sketch_get_quantile_float.__doc__
+
+
+def kll_sketch_get_quantile_double(sketch: "ColumnOrName", rank: "ColumnOrName") -> Column:
+    fn = "kll_sketch_get_quantile_double"
+    return _invoke_function_over_columns(fn, sketch, rank)
+
+
+kll_sketch_get_quantile_double.__doc__ = pysparkfuncs.kll_sketch_get_quantile_double.__doc__
+
+
+def kll_sketch_get_rank_bigint(sketch: "ColumnOrName", quantile: "ColumnOrName") -> Column:
+    fn = "kll_sketch_get_rank_bigint"
+    return _invoke_function_over_columns(fn, sketch, quantile)
+
+
+kll_sketch_get_rank_bigint.__doc__ = pysparkfuncs.kll_sketch_get_rank_bigint.__doc__
+
+
+def kll_sketch_get_rank_float(sketch: "ColumnOrName", quantile: "ColumnOrName") -> Column:
+    fn = "kll_sketch_get_rank_float"
+    return _invoke_function_over_columns(fn, sketch, quantile)
+
+
+kll_sketch_get_rank_float.__doc__ = pysparkfuncs.kll_sketch_get_rank_float.__doc__
+
+
+def kll_sketch_get_rank_double(sketch: "ColumnOrName", quantile: "ColumnOrName") -> Column:
+    fn = "kll_sketch_get_rank_double"
+    return _invoke_function_over_columns(fn, sketch, quantile)
+
+
+kll_sketch_get_rank_double.__doc__ = pysparkfuncs.kll_sketch_get_rank_double.__doc__
+
+
+def theta_sketch_estimate(col: "ColumnOrName") -> Column:
+    fn = "theta_sketch_estimate"
+    return _invoke_function_over_columns(fn, col)
+
+
+theta_sketch_estimate.__doc__ = pysparkfuncs.theta_sketch_estimate.__doc__
+
+
+def theta_union(
+    col1: "ColumnOrName", col2: "ColumnOrName", lgNomEntries: Optional[Union[int, Column]] = None
+) -> Column:
+    fn = "theta_union"
+    if lgNomEntries is None:
+        return _invoke_function_over_columns(fn, col1, col2)
+    else:
+        return _invoke_function_over_columns(fn, col1, col2, lit(lgNomEntries))
+
+
+theta_union.__doc__ = pysparkfuncs.theta_union.__doc__
+
+
+def theta_intersection(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    fn = "theta_intersection"
+    return _invoke_function_over_columns(fn, col1, col2)
+
+
+theta_intersection.__doc__ = pysparkfuncs.theta_intersection.__doc__
+
+
+def theta_difference(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
+    fn = "theta_difference"
+    return _invoke_function_over_columns(fn, col1, col2)
+
+
+theta_difference.__doc__ = pysparkfuncs.theta_difference.__doc__
 
 
 # Predicates Function
@@ -4446,6 +4980,53 @@ def bitmap_or_agg(col: "ColumnOrName") -> Column:
 bitmap_or_agg.__doc__ = pysparkfuncs.bitmap_or_agg.__doc__
 
 
+def bitmap_and_agg(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("bitmap_and_agg", col)
+
+
+bitmap_and_agg.__doc__ = pysparkfuncs.bitmap_and_agg.__doc__
+
+
+# Geospatial ST Functions
+
+
+def st_asbinary(geo: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("st_asbinary", geo)
+
+
+st_asbinary.__doc__ = pysparkfuncs.st_asbinary.__doc__
+
+
+def st_geogfromwkb(wkb: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("st_geogfromwkb", wkb)
+
+
+st_geogfromwkb.__doc__ = pysparkfuncs.st_geogfromwkb.__doc__
+
+
+def st_geomfromwkb(wkb: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("st_geomfromwkb", wkb)
+
+
+st_geomfromwkb.__doc__ = pysparkfuncs.st_geomfromwkb.__doc__
+
+
+def st_setsrid(geo: "ColumnOrName", srid: Union["ColumnOrName", int]) -> Column:
+    srid = _enum_to_value(srid)
+    srid = lit(srid) if isinstance(srid, int) else srid
+    return _invoke_function_over_columns("st_setsrid", geo, srid)
+
+
+st_setsrid.__doc__ = pysparkfuncs.st_setsrid.__doc__
+
+
+def st_srid(geo: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("st_srid", geo)
+
+
+st_srid.__doc__ = pysparkfuncs.st_srid.__doc__
+
+
 # Call Functions
 
 
@@ -4530,8 +5111,13 @@ def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession as PySparkSession
     import pyspark.sql.connect.functions.builtin
+    from pyspark.testing.utils import have_pandas, have_pyarrow
 
     globs = pyspark.sql.connect.functions.builtin.__dict__.copy()
+
+    if not have_pandas or not have_pyarrow:
+        del pyspark.sql.connect.functions.builtin.udf.__doc__
+        del pyspark.sql.connect.functions.builtin.arrow_udtf.__doc__
 
     globs["spark"] = (
         PySparkSession.builder.appName("sql.connect.functions tests")

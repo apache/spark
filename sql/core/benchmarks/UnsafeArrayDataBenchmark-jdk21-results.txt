@@ -6,28 +6,28 @@ OpenJDK 64-Bit Server VM 21.0.8+9-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Read UnsafeArrayData:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Int                                                  80             80           0       2094.8           0.5       1.0X
-Double                                              159            159           0       1056.0           0.9       0.5X
+Int                                                  80             81           0       2086.5           0.5       1.0X
+Double                                              159            159           0       1054.5           0.9       0.5X
 
 OpenJDK 64-Bit Server VM 21.0.8+9-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Write UnsafeArrayData:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Int                                                  14             16           3       1545.3           0.6       1.0X
-Double                                               29             33           3        721.4           1.4       0.5X
+Int                                                  12             14           3       1732.4           0.6       1.0X
+Double                                               28             34           4        736.5           1.4       0.4X
 
 OpenJDK 64-Bit Server VM 21.0.8+9-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Get primitive array from UnsafeArrayData:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Int                                                  20             22           1       3202.8           0.3       1.0X
-Double                                               41             45           2       1522.6           0.7       0.5X
+Int                                                  20             22           1       3196.7           0.3       1.0X
+Double                                               40             43           1       1582.4           0.6       0.5X
 
 OpenJDK 64-Bit Server VM 21.0.8+9-LTS on Linux 6.11.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Create UnsafeArrayData from primitive array:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ---------------------------------------------------------------------------------------------------------------------------
-Int                                                     21             24           1       2937.5           0.3       1.0X
-Double                                                  45             47           2       1411.0           0.7       0.5X
+Int                                                     20             22           1       3127.9           0.3       1.0X
+Double                                                  45             47           1       1405.9           0.7       0.4X
 
 

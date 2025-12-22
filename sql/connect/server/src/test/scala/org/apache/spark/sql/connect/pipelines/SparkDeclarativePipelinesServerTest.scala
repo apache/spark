@@ -24,9 +24,9 @@ import org.apache.spark.connect.proto.{PipelineCommand, PipelineEvent}
 import org.apache.spark.sql.connect.{SparkConnectServerTest, SparkConnectTestUtils}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.service.{SessionHolder, SessionKey, SparkConnectService}
-import org.apache.spark.sql.pipelines.utils.PipelineTest
+import org.apache.spark.sql.pipelines.utils.{PipelineTest, StorageRootMixin}
 
-class SparkDeclarativePipelinesServerTest extends SparkConnectServerTest {
+class SparkDeclarativePipelinesServerTest extends SparkConnectServerTest with StorageRootMixin {
 
   override def afterEach(): Unit = {
     SparkConnectService.sessionManager
@@ -94,14 +94,14 @@ class SparkDeclarativePipelinesServerTest extends SparkConnectServerTest {
     }
   }
 
-  def registerPipelineDatasets(testPipelineDefinition: TestPipelineDefinition)(implicit
+  def registerPipelineOutputs(testPipelineDefinition: TestPipelineDefinition)(implicit
       stub: sc.SparkConnectServiceGrpc.SparkConnectServiceBlockingStub): Unit = {
     (testPipelineDefinition.viewDefs ++ testPipelineDefinition.tableDefs).foreach { tv =>
       sendPlan(
         buildPlanFromPipelineCommand(
           sc.PipelineCommand
             .newBuilder()
-            .setDefineDataset(tv)
+            .setDefineOutput(tv)
             .build()))
     }
 
@@ -138,7 +138,11 @@ class SparkDeclarativePipelinesServerTest extends SparkConnectServerTest {
 
   def startPipelineAndWaitForCompletion(graphId: String): ArrayBuffer[PipelineEvent] = {
     val defaultStartRunCommand =
-      PipelineCommand.StartRun.newBuilder().setDataflowGraphId(graphId).build()
+      PipelineCommand.StartRun
+        .newBuilder()
+        .setDataflowGraphId(graphId)
+        .setStorage(storageRoot)
+        .build()
     startPipelineAndWaitForCompletion(defaultStartRunCommand)
   }
 

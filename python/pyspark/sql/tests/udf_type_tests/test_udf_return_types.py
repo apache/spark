@@ -16,11 +16,12 @@
 #
 
 import array
+import concurrent.futures
 import datetime
 import os
+import platform
 import unittest
 from decimal import Decimal
-import numpy as np
 import pandas as pd
 
 from pyspark.sql import Row
@@ -43,17 +44,40 @@ from pyspark.sql.types import (
     StructType,
     TimestampType,
 )
+from pyspark.loose_version import LooseVersion
+from pyspark.testing.utils import (
+    have_pyarrow,
+    have_pandas,
+    have_numpy,
+    pyarrow_requirement_message,
+    pandas_requirement_message,
+    numpy_requirement_message,
+)
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from .type_table_utils import generate_table_diff, format_type_table
 
+if have_numpy:
+    import numpy as np
 
+
+@unittest.skipIf(
+    not have_pandas
+    or not have_pyarrow
+    or not have_numpy
+    or LooseVersion(np.__version__) < LooseVersion("2.0.0")
+    or platform.system() == "Darwin",
+    pandas_requirement_message
+    or pyarrow_requirement_message
+    or numpy_requirement_message
+    or "float128 not supported on macos",
+)
 class UDFReturnTypeTests(ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
-        super(UDFReturnTypeTests, cls).setUpClass()
+        super().setUpClass()
 
     def setUp(self):
-        super(UDFReturnTypeTests, self).setUp()
+        super().setUp()
         self.test_data = [
             None,
             True,
@@ -194,9 +218,7 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
             self.fail(f"Golden file created for {test_name}. Please review and re-run the test.")
 
     def _generate_udf_return_type_coercion_results(self, use_arrow):
-        results = []
-
-        for spark_type in self.test_types:
+        def work(spark_type):
             result = [spark_type.simpleString()]
             for value in self.test_data:
                 try:
@@ -210,9 +232,10 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
                 except Exception:
                     result_value = "X"
                 result.append(result_value)
-            results.append(result)
+            return result
 
-        return results
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            return list(executor.map(work, self.test_types))
 
     def test_pandas_udf_return_type_coercion(self):
         golden_file = os.path.join(
@@ -229,9 +252,7 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
         self._compare_or_create_golden_file(actual_output, golden_file, test_name)
 
     def _generate_pandas_udf_type_coercion_results(self):
-        results = []
-
-        for spark_type in self.test_types:
+        def work(spark_type):
             result = [spark_type.simpleString()]
             for value in self.pandas_test_data:
                 try:
@@ -253,9 +274,10 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
                 except Exception:
                     ret_str = "X"
                 result.append(ret_str)
-            results.append(result)
+            return result
 
-        return results
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            return list(executor.map(work, self.test_types))
 
 
 if __name__ == "__main__":
