@@ -394,7 +394,9 @@ class StreamingQueryListenerBus:
     @staticmethod
     def deserialize(
         event: pb2.StreamingQueryListenerEvent,
-    ) -> Union["QueryProgressEvent", "QueryIdleEvent", "QueryTerminatedEvent", "QueryExecutionStartEvent"]:
+    ) -> Union[
+        "QueryProgressEvent", "QueryIdleEvent", "QueryTerminatedEvent", "QueryExecutionStartEvent"
+    ]:
         if event.event_type == proto.StreamingQueryEventType.QUERY_PROGRESS_EVENT:
             return QueryProgressEvent.fromJson(json.loads(event.event_json))
         elif event.event_type == proto.StreamingQueryEventType.QUERY_TERMINATED_EVENT:
@@ -412,7 +414,11 @@ class StreamingQueryListenerBus:
     def post_to_all(
         self,
         event: Union[
-            "QueryStartedEvent", "QueryProgressEvent", "QueryIdleEvent", "QueryTerminatedEvent", "QueryExecutionStartEvent"
+            "QueryStartedEvent",
+            "QueryProgressEvent",
+            "QueryIdleEvent",
+            "QueryTerminatedEvent",
+            "QueryExecutionStartEvent",
         ],
     ) -> None:
         """

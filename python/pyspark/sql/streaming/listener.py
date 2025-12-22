@@ -433,6 +433,7 @@ class QueryTerminatedEvent:
         """
         return self._errorClassOnException
 
+
 class QueryExecutionStartEvent:
     """
     Event representing the start of a query trigger.
@@ -443,6 +444,7 @@ class QueryExecutionStartEvent:
     -----
     This API is evolving.
     """
+
     def __init__(
         self,
         id: uuid.UUID,
@@ -470,7 +472,7 @@ class QueryExecutionStartEvent:
             id=uuid.UUID(j["id"]),
             runId=uuid.UUID(j["runId"]),
             name=j["name"],
-            timestamp=j["timestamp"]
+            timestamp=j["timestamp"],
         )
 
     @property
@@ -502,7 +504,6 @@ class QueryExecutionStartEvent:
         The timestamp of when the trigger started.
         """
         return self._timestamp
-
 
 
 class StreamingQueryProgress(dict):
