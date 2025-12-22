@@ -17,15 +17,16 @@
 
 package org.apache.spark.sql.hive.test
 
-import org.scalatest.BeforeAndAfterAll
-
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkTestSuite}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.client.HiveClient
+import org.apache.spark.sql.test.SparkSessionProvider
 
 
-trait TestHiveSingleton extends SparkFunSuite with BeforeAndAfterAll {
+trait TestHiveSingleton extends SparkFunSuite with TestHiveSingletonBase
+
+trait TestHiveSingletonBase extends SparkTestSuite with SparkSessionProvider {
   override protected val enableAutoThreadAudit = false
   protected val spark: SparkSession = TestHive.sparkSession
   protected val hiveContext: TestHiveContext = TestHive

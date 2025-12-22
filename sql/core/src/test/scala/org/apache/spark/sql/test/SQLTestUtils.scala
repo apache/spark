@@ -29,7 +29,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 import org.scalactic.source.Position
-import org.scalatest.{BeforeAndAfterAll, Suite, Tag}
+import org.scalatest.Tag
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.SparkFunSuite
@@ -37,7 +37,6 @@ import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog.DEFAULT_DATABASE
-import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
@@ -61,7 +60,7 @@ import org.apache.spark.util.Utils
  * Subclasses should *not* create `SparkSession`s in the test suite constructor, which is
  * prone to leaving multiple overlapping [[org.apache.spark.SparkContext]]s in the same JVM.
  */
-private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with PlanTest {
+private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase {
   // Whether to materialize all test data before the first test is run
   private var loadTestDataBeforeTests = false
 
@@ -224,9 +223,8 @@ private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with
  */
 private[sql] trait SQLTestUtilsBase
   extends Eventually
-  with BeforeAndAfterAll
   with SQLTestData
-  with PlanTestBase { self: Suite =>
+  with PlanTestBase {
 
   protected def sparkContext = spark.sparkContext
 
@@ -244,8 +242,8 @@ private[sql] trait SQLTestUtilsBase
     extends SQLImplicits
       with ClassicConversions
       with ColumnConversions {
-    override protected def session: SparkSession = self.spark
-    override protected def converter: ColumnNodeToExpressionConverter = self.spark.converter
+    override protected def session: SparkSession = spark
+    override protected def converter: ColumnNodeToExpressionConverter = spark.converter
   }
 
   protected override def withSQLConf[T](pairs: (String, String)*)(f: => T): T = {

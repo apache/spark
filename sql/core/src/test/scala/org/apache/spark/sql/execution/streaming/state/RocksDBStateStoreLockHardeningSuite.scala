@@ -29,8 +29,8 @@ import org.scalatest.{BeforeAndAfter, PrivateMethodTester, Tag}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkException, SparkFunSuite, SparkRuntimeException, TaskContext}
-import org.apache.spark.sql.catalyst.plans.PlanTestBase
+import org.apache.spark.{SparkException, SparkRuntimeException, TaskContext}
+import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.execution.streaming.state.StateStoreTestsHelper._
 import org.apache.spark.sql.internal.SQLConf
@@ -43,8 +43,7 @@ import org.apache.spark.util.ThreadUtils.awaitResult
  * Comprehensive test cases for RocksDB State Store lock hardening implementation.
  * These tests verify the state machine behavior and prevent problematic concurrent executions.
  */
-class RocksDBStateStoreLockHardeningSuite extends SparkFunSuite
-    with PlanTestBase
+class RocksDBStateStoreLockHardeningSuite extends PlanTest
     with AlsoTestWithRocksDBFeatures
     with PrivateMethodTester
     with SharedSparkSession
