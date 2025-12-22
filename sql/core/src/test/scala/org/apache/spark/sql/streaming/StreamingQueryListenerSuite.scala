@@ -624,7 +624,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   /** Collects events from the StreamingQueryListener for testing */
   testQuietly("QueryExecutionStart event fires only when batch will execute") {
     val clock = new StreamManualClock
-    val inputData = new MemoryStream[Int](0, sqlContext)
+    val inputData = new MemoryStream[Int](0, spark)
     val df = inputData.toDS().as[Long].map { 10 / _ }
     val listener = new EventCollectorV3
 
@@ -663,7 +663,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
   testQuietly("QueryExecutionStart event disabled by default") {
     val clock = new StreamManualClock
-    val inputData = new MemoryStream[Int](0, sqlContext)
+    val inputData = new MemoryStream[Int](0, spark)
     val df = inputData.toDS().as[Long].map { _ + 1 }
     val listener = new EventCollectorV3
 
@@ -698,7 +698,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
   testQuietly("QueryExecutionStart event respects throttling interval") {
     val clock = new StreamManualClock
-    val inputData = new MemoryStream[Int](0, sqlContext)
+    val inputData = new MemoryStream[Int](0, spark)
     val df = inputData.toDS().as[Long].map { _ + 1 }
     val listener = new EventCollectorV3
 
@@ -756,7 +756,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
   testQuietly("QueryExecutionStart event fires before QueryProgress") {
     val clock = new StreamManualClock
-    val inputData = new MemoryStream[Int](0, sqlContext)
+    val inputData = new MemoryStream[Int](0, spark)
     val df = inputData.toDS().as[Long].map { _ + 1 }
     val listener = new EventCollectorV3
 
@@ -789,7 +789,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
   testQuietly("QueryExecutionStart event contains correct timestamp") {
     val clock = new StreamManualClock
-    val inputData = new MemoryStream[Int](0, sqlContext)
+    val inputData = new MemoryStream[Int](0, spark)
     val df = inputData.toDS().as[Long].map { _ + 1 }
     val listener = new EventCollectorV3
 
@@ -932,9 +932,6 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     override def onQueryStarted(event: QueryStartedEvent): Unit = handleOnQueryStarted(event)
 
     override def onQueryProgress(event: QueryProgressEvent): Unit = handleOnQueryProgress(event)
-
-    override def onQueryExecutionStart(event: QueryExecutionStartEvent): Unit =
-      handleOnQueryExecutionStart(event)
 
     override def onQueryIdle(event: QueryIdleEvent): Unit = handleOnQueryIdle(event)
 
