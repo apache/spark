@@ -313,7 +313,7 @@ private[sql] object ArrowConverters extends Logging {
       new ConcatenatingArrowStreamReader(allocator, messages, destructive = true)
     }
 
-    val schema: StructType = try {
+    lazy val schema: StructType = try {
       ArrowUtils.fromArrowSchema(reader.getVectorSchemaRoot.getSchema)
     } catch {
       case NonFatal(e) =>
@@ -337,6 +337,8 @@ private[sql] object ArrowConverters extends Logging {
     // Public accessors for metrics
     def batchesLoaded: Int = _batchesLoaded
     def totalRowsProcessed: Long = _totalRowsProcessed
+    def allocatedMemory: Long = allocator.getAllocatedMemory
+    def peakMemoryAllocation: Long = allocator.getPeakMemoryAllocation
 
     override def hasNext: Boolean = {
       while (!rowIterator.hasNext) {

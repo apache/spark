@@ -243,40 +243,43 @@ object SQLConf {
 
   val PREFER_COLUMN_OVER_LCA_IN_ARRAY_INDEX =
     buildConf("spark.sql.analyzer.preferColumnOverLcaInArrayIndex")
-    .internal()
-    .doc(
-      "When true, prefer the column from the underlying relation over the lateral column alias " +
-      "reference with the same name (see SPARK-53734)."
-    )
-    .booleanConf
-    .createWithDefault(true)
+      .internal()
+      .version("4.1.0")
+      .doc(
+        "When true, prefer the column from the underlying relation over the lateral column alias " +
+        "reference with the same name (see SPARK-53734).")
+      .booleanConf
+      .createWithDefault(true)
 
   val DONT_DEDUPLICATE_EXPRESSION_IF_EXPR_ID_IN_OUTPUT =
     buildConf("spark.sql.analyzer.dontDeduplicateExpressionIfExprIdInOutput")
-    .internal()
-    .doc(
-      "DeduplicateRelations shouldn't remap expressions to new ExprIds if old ExprId still " +
-      "exists in output.")
-    .booleanConf
-    .createWithDefault(true)
+      .internal()
+      .version("4.1.0")
+      .doc(
+        "DeduplicateRelations shouldn't remap expressions to new ExprIds if old ExprId still " +
+        "exists in output.")
+      .booleanConf
+      .createWithDefault(true)
 
   val UNION_IS_RESOLVED_WHEN_DUPLICATES_PER_CHILD_RESOLVED =
     buildConf("spark.sql.analyzer.unionIsResolvedWhenDuplicatesPerChildResolved")
-    .internal()
-    .doc(
-      "When true, union should only be resolved once there are no duplicate attributes in " +
-      "each branch.")
-    .booleanConf
-    .createWithDefault(true)
+      .internal()
+      .version("4.1.0")
+      .doc(
+        "When true, union should only be resolved once there are no duplicate attributes in " +
+        "each branch.")
+      .booleanConf
+      .createWithDefault(true)
 
   val ONLY_NECESSARY_AND_UNIQUE_METADATA_COLUMNS =
     buildConf("spark.sql.analyzer.uniqueNecessaryMetadataColumns")
-    .internal()
-    .doc(
-      "When this conf is enabled, AddMetadataColumns rule should only add necessary metadata " +
-      "columns and only if those columns are not already present in the project list.")
-    .booleanConf
-    .createWithDefault(true)
+      .internal()
+      .version("4.1.0")
+      .doc(
+        "When this conf is enabled, AddMetadataColumns rule should only add necessary metadata " +
+        "columns and only if those columns are not already present in the project list.")
+      .booleanConf
+      .createWithDefault(true)
 
   val BLOCK_CREATE_TEMP_TABLE_USING_PROVIDER =
     buildConf("spark.sql.legacy.blockCreateTempTableUsingProvider")
@@ -324,7 +327,7 @@ object SQLConf {
         "(AliasResolution.resolve, FunctionResolution.resolveFunction, etc)." +
         "This feature is currently under development."
       )
-      .version("4.0.0")
+      .version("4.1.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -1057,7 +1060,7 @@ object SQLConf {
           "An object with an explicitly set collation will not inherit the collation from the " +
           "schema."
       )
-      .version("4.0.0")
+      .version("4.1.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -1911,6 +1914,7 @@ object SQLConf {
   val DATA_SOURCE_V2_JOIN_PUSHDOWN =
     buildConf("spark.sql.optimizer.datasourceV2JoinPushdown")
       .internal()
+      .version("4.1.0")
       .doc("When this config is set to true, join is tried to be pushed down" +
         "for DSv2 data sources in V2ScanRelationPushdown optimization rule.")
       .booleanConf
@@ -1919,6 +1923,7 @@ object SQLConf {
   val DATA_SOURCE_V2_EXPR_FOLDING =
     buildConf("spark.sql.optimizer.datasourceV2ExprFolding")
       .internal()
+      .version("4.1.0")
       .doc("When this config is set to true, do safe constant folding for the " +
         "expressions before translation and pushdown.")
       .booleanConf
@@ -2182,6 +2187,16 @@ object SQLConf {
     .version("4.0.0")
     .booleanConf
     .createWithDefault(true)
+
+  val VIEW_SCHEMA_EVOLUTION_PRESERVE_USER_COMMENTS =
+    buildConf("spark.sql.view.schemaEvolution.preserveUserComments")
+      .internal()
+      .doc("When enabled, views with SCHEMA EVOLUTION mode will preserve user-set view comments " +
+        "when the underlying table schema evolves. When disabled, view comments will be " +
+        "overwritten with table comments on every schema sync.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val OUTPUT_COMMITTER_CLASS = buildConf("spark.sql.sources.outputCommitterClass")
     .version("1.4.0")
@@ -2549,6 +2564,7 @@ object SQLConf {
   val STATE_STORE_MAINTENANCE_SHUTDOWN_TIMEOUT =
     buildConf("spark.sql.streaming.stateStore.maintenanceShutdownTimeout")
       .internal()
+      .version("4.1.0")
       .doc("Timeout in seconds for maintenance pool operations to complete on shutdown")
       .timeConf(TimeUnit.SECONDS)
       .createWithDefault(300L)
@@ -2565,6 +2581,7 @@ object SQLConf {
   val STATE_STORE_MAINTENANCE_PROCESSING_TIMEOUT =
     buildConf("spark.sql.streaming.stateStore.maintenanceProcessingTimeout")
       .internal()
+      .version("4.1.0")
       .doc("Timeout in seconds to wait for maintenance to process this partition.")
       .timeConf(TimeUnit.SECONDS)
       .createWithDefault(30L)
@@ -2757,6 +2774,7 @@ object SQLConf {
         "Note: For structured streaming, this configuration cannot be changed between query " +
         "restarts from the same checkpoint location.")
       .internal()
+      .version("4.1.0")
       .intConf
       .checkValue(_ > 0,
         "The value of spark.sql.streaming.internal.stateStore.partitions must be a positive " +
@@ -3575,7 +3593,7 @@ object SQLConf {
       .doc("When true, if a microbatch is retried, if a file already exists but its checksum " +
         "file does not exist, the file checksum will not be created. This is useful for " +
         "compatibility with files created before file checksums were enabled.")
-      .version("4.2.0")
+      .version("4.1.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -7476,6 +7494,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def viewSchemaBindingEnabled: Boolean = getConf(VIEW_SCHEMA_BINDING_ENABLED)
 
   def viewSchemaCompensation: Boolean = getConf(VIEW_SCHEMA_COMPENSATION)
+
+  def viewSchemaEvolutionPreserveUserComments: Boolean =
+    getConf(VIEW_SCHEMA_EVOLUTION_PRESERVE_USER_COMMENTS)
 
   def defaultCacheStorageLevel: StorageLevel =
     StorageLevel.fromString(getConf(DEFAULT_CACHE_STORAGE_LEVEL).name())
