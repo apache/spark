@@ -2105,6 +2105,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       val splitCondition = splitConjunctivePredicates(condition)
       // Find the different aliases each component of the filter uses.
       val usedAliasesForCondition = splitCondition.map { cond =>
+        // If the legacy double evaluation behavior is enabled we just say
+        // every filter is "free."
         if (!SQLConf.get.avoidDoubleFilterEval) {
           (cond, AttributeMap.empty[Alias])
         } else {
@@ -2189,6 +2191,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
             // each group of filters. We'll keep track of what we added for the previous filter(s)
             // so we don't double add anything.
             val (headUsed, headConds) = toSplit.head
+            // Initial references are everything from the base child since the later projection may
+            // need it and the aliases introduced in our first expensive filter.
             val initialReferences = (baseChild.output ++ headUsed.map(_._2)).distinct
             // Our base filter.
             val first = Filter(headConds.reduce(And),
