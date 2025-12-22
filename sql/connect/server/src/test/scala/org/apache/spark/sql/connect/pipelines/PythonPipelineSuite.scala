@@ -118,7 +118,7 @@ class PythonPipelineSuite
     val pythonCode =
       s"""
          |from pyspark import pipelines as dp
-         |from pyspark.pipelines.tests.python_pipeline_suite_helpers import setup
+         |from pyspark.pipelines.tests.python_pipeline_suite_helpers import *
          |from pyspark.pipelines.add_pipeline_analysis_context import (
          |    add_pipeline_analysis_context
          |)
@@ -135,7 +135,7 @@ class PythonPipelineSuite
          |
          |$indentedPythonText
          |
-         |registry.register_signalled_query_functions()
+         |run_and_handle_signals(spark, registry, "$storageRoot")
          |""".stripMargin
 
     // Create a custom execution context for the Future
@@ -159,18 +159,28 @@ class PythonPipelineSuite
         throw new RuntimeException("Graph registration context not found"))
     }
 
-    val unresolvedGraph = graphRegistrationContext.toDataflowGraph
-    val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph, storageRoot)
+//    val unresolvedGraph = graphRegistrationContext.toDataflowGraph
+//    val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph, storageRoot)
 
     // Get the actual graph ID from the registry for this context
     val dataflowGraphs = sessionHolder.dataflowGraphRegistry.getDataflowGraphs
     val graphId = dataflowGraphs.find(_._2 == graphRegistrationContext).map(_._1)
       .getOrElse(throw new RuntimeException("Could not find graph ID for context"))
-    sessionHolder.cachePipelineExecution(graphId, updateContext)
 
-    val graph = updateContext.pipelineExecution.resolveGraph()
+    val pipelineExecution = Eventually.eventually(
+        Futures.timeout(Span(10, Seconds)), Futures.interval(Span(100, Millis))) {
+      sessionHolder.getPipelineExecution(graphId).getOrElse(
+        throw new RuntimeException("Pipeline execution not found"))
+    }
+//    sessionHolder.cachePipelineExecution(graphId, updateContext)
 
-    graph
+//    val graph = updateContext.pipelineExecution.resolveGraph()
+
+    Eventually.eventually(
+      Futures.timeout(Span(10, Seconds)), Futures.interval(Span(100, Millis))) {
+      pipelineExecution.pipelineExecution.resolvedGraph.getOrElse(
+        throw new RuntimeException("Resolved graph not found"))
+    }
   }
 
   def graphIdentifier(name: String): TableIdentifier = {

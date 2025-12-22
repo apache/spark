@@ -326,6 +326,7 @@ private[connect] object PipelinesHandler extends Logging {
       flow: proto.PipelineCommand.DefineFlow,
       transformRelationFunc: Relation => LogicalPlan,
       sessionHolder: SessionHolder): TableIdentifier = {
+    logInfo("pizza defining flow")
     if (flow.hasOnce) {
       throw new AnalysisException(
         "DEFINE_FLOW_ONCE_OPTION_NOT_SUPPORTED",

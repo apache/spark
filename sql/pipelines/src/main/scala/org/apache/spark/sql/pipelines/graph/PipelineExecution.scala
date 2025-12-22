@@ -35,7 +35,9 @@ import org.apache.spark.sql.pipelines.logging.{
 class PipelineExecution(context: PipelineUpdateContext) {
 
   /** [Visible for testing] */
-  private[pipelines] var graphExecution: Option[TriggeredGraphExecution] = None
+  @volatile private[pipelines] var graphExecution: Option[TriggeredGraphExecution] = None
+  /** [Visible for testing] */
+  @volatile var resolvedGraph: Option[DataflowGraph] = None
   val graphAnalysisContext = new GraphAnalysisContext()
 
   def executionStarted: Boolean = synchronized { graphExecution.nonEmpty }
@@ -46,12 +48,12 @@ class PipelineExecution(context: PipelineUpdateContext) {
    */
   def startPipeline(): Unit = synchronized {
     // Initialize the graph.
-    val resolvedGraph = resolveGraph()
+    resolvedGraph = Some(resolveGraph())
     if (context.fullRefreshTables.nonEmpty) {
-      State.reset(resolvedGraph, context)
+      State.reset(resolvedGraph.get, context)
     }
 
-    val initializedGraph = DatasetManager.materializeDatasets(resolvedGraph, context)
+    val initializedGraph = DatasetManager.materializeDatasets(resolvedGraph.get, context)
 
     // Execute the graph.
     graphExecution = Some(
@@ -87,7 +89,7 @@ class PipelineExecution(context: PipelineUpdateContext) {
 
   /** Validates that the pipeline graph can be successfully resolved and validates it. */
   def dryRunPipeline(): Unit = synchronized {
-    resolveGraph()
+    resolvedGraph = Some(resolveGraph())
     context.eventCallback(
       constructTerminationEvent(RunCompletion())
     )

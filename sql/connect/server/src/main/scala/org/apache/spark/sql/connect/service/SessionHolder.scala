@@ -493,6 +493,7 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private[connect] def cachePipelineExecution(
       graphId: String,
       pipelineUpdateContext: PipelineUpdateContext): Unit = {
+    print("pizza: caching pipeline execution")
     pipelineExecutions.compute(
       graphId,
       (_, existing) => {
