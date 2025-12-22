@@ -17,37 +17,54 @@
 
 package org.apache.spark.sql.catalyst.normalizer
 
+import java.util.HashMap
+
 import org.apache.spark.sql.catalyst.plans.logical.{CacheTableAsSelect, CTERelationRef, LogicalPlan, UnionLoop, UnionLoopRef, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 
 object NormalizeCTEIds extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     val curId = new java.util.concurrent.atomic.AtomicLong()
+    val defIdToNewId = new HashMap[Long, Long]()
+
+    plan transformDownWithSubqueries   {
+      case withCTE: WithCTE =>
+        withCTE.cteDefs.foreach { cteDef =>
+          if (!defIdToNewId.containsKey(cteDef.id)) {
+            defIdToNewId.put(cteDef.id, curId.getAndIncrement())
+          }
+        }
+        withCTE
+    }
+
+    applyInternal(plan, defIdToNewId)
+  }
+
+  private def applyInternal(plan: LogicalPlan, defIdToNewId: HashMap[Long, Long]): LogicalPlan = {
     plan transformDownWithSubqueries {
       case ctas @ CacheTableAsSelect(_, plan, _, _, _, _, _) =>
-        ctas.copy(plan = apply(plan))
+        ctas.copy(plan = applyInternal(plan, defIdToNewId))
 
       case withCTE @ WithCTE(plan, cteDefs) =>
-        val defIdToNewId = withCTE.cteDefs.map(_.id).map((_, curId.getAndIncrement())).toMap
         val normalizedPlan = canonicalizeCTE(plan, defIdToNewId)
         val newCteDefs = cteDefs.map { cteDef =>
           val normalizedCteDef = canonicalizeCTE(cteDef.child, defIdToNewId)
-          cteDef.copy(child = normalizedCteDef, id = defIdToNewId(cteDef.id))
+          cteDef.copy(child = normalizedCteDef, id = defIdToNewId.get(cteDef.id))
         }
         withCTE.copy(plan = normalizedPlan, cteDefs = newCteDefs)
     }
   }
 
-  def canonicalizeCTE(plan: LogicalPlan, defIdToNewId: Map[Long, Long]): LogicalPlan = {
+  private def canonicalizeCTE(plan: LogicalPlan, defIdToNewId: HashMap[Long, Long]): LogicalPlan = {
     plan.transformDownWithSubqueries {
       // For nested WithCTE, if defIndex didn't contain the cteId,
       // means it's not current WithCTE's ref.
-      case ref: CTERelationRef if defIdToNewId.contains(ref.cteId) =>
-        ref.copy(cteId = defIdToNewId(ref.cteId))
-      case unionLoop: UnionLoop if defIdToNewId.contains(unionLoop.id) =>
-        unionLoop.copy(id = defIdToNewId(unionLoop.id))
-      case unionLoopRef: UnionLoopRef if defIdToNewId.contains(unionLoopRef.loopId) =>
-        unionLoopRef.copy(loopId = defIdToNewId(unionLoopRef.loopId))
+      case ref: CTERelationRef if defIdToNewId.containsKey(ref.cteId) =>
+        ref.copy(cteId = defIdToNewId.get(ref.cteId))
+      case unionLoop: UnionLoop if defIdToNewId.containsKey(unionLoop.id) =>
+        unionLoop.copy(id = defIdToNewId.get(unionLoop.id))
+      case unionLoopRef: UnionLoopRef if defIdToNewId.containsKey(unionLoopRef.loopId) =>
+        unionLoopRef.copy(loopId = defIdToNewId.get(unionLoopRef.loopId))
     }
   }
 }
