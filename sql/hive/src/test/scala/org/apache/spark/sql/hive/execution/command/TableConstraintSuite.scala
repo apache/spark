@@ -15,21 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.examples.streaming
+package org.apache.spark.sql.hive.execution.command
 
-import scala.jdk.CollectionConverters._
+import org.apache.spark.sql.execution.command.v1
 
-import software.amazon.awssdk.regions.servicemetadata.KinesisServiceMetadata
+/**
+ * The class contains tests for table constraints to check V1 Hive external table catalog.
+ */
+class TableConstraintSuite extends v1.TableConstraintSuiteBase with CommandSuiteBase
 
-private[streaming] object KinesisExampleUtils {
-  def getRegionNameByEndpoint(endpoint: String): String = {
-    val uri = new java.net.URI(endpoint)
-    val kinesisServiceMetadata = new KinesisServiceMetadata()
-    kinesisServiceMetadata.regions
-      .asScala
-      .find(r => kinesisServiceMetadata.endpointFor(r).toString.equals(uri.getHost))
-      .map(_.id)
-      .getOrElse(
-        throw new IllegalArgumentException(s"Could not resolve region for endpoint: $endpoint"))
-  }
-}
