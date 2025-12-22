@@ -31,26 +31,25 @@ import org.apache.spark.util.ListenerBus
  * Spark listener bus, so that it can receive [[StreamingQueryListener.Event]]s and dispatch them
  * to StreamingQueryListeners.
  *
- * Note 1: Each bus and its registered listeners are associated with a single SparkSession and
- * StreamingQueryManager. So this bus will dispatch events to registered listeners for only those
- * queries that were started in the associated SparkSession.
+ * Note 1: Each bus and its registered listeners are associated with a single SparkSession
+ * and StreamingQueryManager. So this bus will dispatch events to registered listeners for only
+ * those queries that were started in the associated SparkSession.
  *
  * Note 2: To rebuild Structured Streaming UI in SHS, this bus will be registered into
  * [[org.apache.spark.scheduler.ReplayListenerBus]]. We check `sparkListenerBus` defined or not to
- * determine how to process [[StreamingQueryListener.Event]]. If false, it means this bus is used
- * to replay all streaming query event from eventLog.
+ * determine how to process [[StreamingQueryListener.Event]]. If false, it means this bus is used to
+ * replay all streaming query event from eventLog.
  */
 class StreamingQueryListenerBus(sparkListenerBus: Option[LiveListenerBus])
-    extends SparkListener
-    with ListenerBus[StreamingQueryListener, StreamingQueryListener.Event] {
+  extends SparkListener with ListenerBus[StreamingQueryListener, StreamingQueryListener.Event] {
 
   import StreamingQueryListener._
 
   sparkListenerBus.foreach(_.addToQueue(this, StreamingQueryListenerBus.STREAM_EVENT_QUERY))
 
   /**
-   * RunIds of active queries whose events are supposed to be forwarded by this ListenerBus to
-   * registered `StreamingQueryListeners`.
+   * RunIds of active queries whose events are supposed to be forwarded by this ListenerBus
+   * to registered `StreamingQueryListeners`.
    *
    * Note 1: We need to track runIds instead of ids because the runId is unique for every started
    * query, even it its a restart. So even if a query is restarted, this bus will identify them
@@ -58,16 +57,16 @@ class StreamingQueryListenerBus(sparkListenerBus: Option[LiveListenerBus])
    *
    * Note 2: This list needs to be maintained separately from the
    * `StreamingQueryManager.activeQueries` because a terminated query is cleared from
-   * `StreamingQueryManager.activeQueries` as soon as it is stopped, but the this ListenerBus must
-   * clear a query only after the termination event of that query has been posted.
+   * `StreamingQueryManager.activeQueries` as soon as it is stopped, but the this ListenerBus
+   * must clear a query only after the termination event of that query has been posted.
    */
   private val activeQueryRunIds = new mutable.HashSet[UUID]
 
   /**
-   * Post a StreamingQueryListener event to the added StreamingQueryListeners. Note that only the
-   * QueryStarted event is posted to the listener synchronously. Other events are dispatched to
-   * Spark listener bus. This method is guaranteed to be called by queries in the same
-   * SparkSession as this listener.
+   * Post a StreamingQueryListener event to the added StreamingQueryListeners.
+   * Note that only the QueryStarted event is posted to the listener synchronously. Other events
+   * are dispatched to Spark listener bus. This method is guaranteed to be called by queries in
+   * the same SparkSession as this listener.
    */
   def post(event: StreamingQueryListener.Event): Unit = {
     event match {
@@ -82,8 +81,8 @@ class StreamingQueryListenerBus(sparkListenerBus: Option[LiveListenerBus])
   }
 
   /**
-   * Override the parent `postToAll` to remove the query id from `activeQueryRunIds` after all the
-   * listeners process `QueryTerminatedEvent`. (SPARK-19594)
+   * Override the parent `postToAll` to remove the query id from `activeQueryRunIds` after all
+   * the listeners process `QueryTerminatedEvent`. (SPARK-19594)
    */
   override def postToAll(event: Event): Unit = {
     super.postToAll(event)
@@ -105,7 +104,7 @@ class StreamingQueryListenerBus(sparkListenerBus: Option[LiveListenerBus])
         // When loaded by Spark History Server, we should process all event coming from replay
         // listener bus.
         if (sparkListenerBus.isEmpty || !LiveListenerBus.withinListenerThread.value ||
-          !e.isInstanceOf[QueryStartedEvent]) {
+            !e.isInstanceOf[QueryStartedEvent])  {
           postToAll(e)
         }
       case _ =>
@@ -123,7 +122,7 @@ class StreamingQueryListenerBus(sparkListenerBus: Option[LiveListenerBus])
       // When loaded by Spark History Server, we should process all event coming from replay
       // listener bus.
       sparkListenerBus.isEmpty ||
-      activeQueryRunIds.synchronized { activeQueryRunIds.contains(runId) }
+        activeQueryRunIds.synchronized { activeQueryRunIds.contains(runId) }
     }
 
     event match {
