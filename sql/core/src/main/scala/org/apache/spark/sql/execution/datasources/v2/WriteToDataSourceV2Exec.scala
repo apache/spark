@@ -31,14 +31,15 @@ import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{DELETE_OPERATION, INSER
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog, TableInfo, TableWritePrivilege}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.CustomMetric
-import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, MergeSummaryImpl, PhysicalWriteInfoImpl, RowLevelOperationTable, Write, WriterCommitMessage, WriteSummary}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, MergeSummaryImpl, PhysicalWriteInfoImpl, Write, WriterCommitMessage, WriteSummary}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SortExec, SparkPlan, SQLExecution, UnaryExecNode}
+import org.apache.spark.sql.execution.{FilterExec, ProjectExec, QueryExecution, SortExec, SparkPlan, SQLExecution, UnaryExecNode}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.BaseJoinExec
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.SchemaValidationMode.PROHIBIT_CHANGES
 import org.apache.spark.util.{LongAccumulator, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -169,6 +170,14 @@ case class ReplaceTableAsSelectExec(
     // 1. Creating the new table fails,
     // 2. Writing to the new table fails,
     // 3. The table returned by catalog.createTable doesn't support writing.
+    //
+    // RTAS must refresh and pin versions in query to read from original table versions instead of
+    // newly created empty table that is meant to serve as target for append/overwrite
+    val refreshedQuery = V2TableRefreshUtil.refresh(
+      session,
+      query,
+      versionedOnly = true,
+      schemaValidationMode = PROHIBIT_CHANGES)
     if (catalog.tableExists(ident)) {
       invalidateCache(catalog, ident)
       catalog.dropTable(ident)
@@ -176,13 +185,15 @@ case class ReplaceTableAsSelectExec(
       throw QueryCompilationErrors.cannotReplaceMissingTableError(ident)
     }
     val tableInfo = new TableInfo.Builder()
-      .withColumns(getV2Columns(query.schema, catalog.useNullableQuerySchema))
+      .withColumns(getV2Columns(refreshedQuery.schema, catalog.useNullableQuerySchema))
       .withPartitions(partitioning.toArray)
       .withProperties(properties.asJava)
       .build()
     val table = Option(catalog.createTable(ident, tableInfo))
       .getOrElse(catalog.loadTable(ident, Set(TableWritePrivilege.INSERT).asJava))
-    writeToTable(catalog, table, writeOptions, ident, query, overwrite = true)
+    writeToTable(
+      catalog, table, writeOptions, ident, refreshedQuery,
+      overwrite = true, refreshPhaseEnabled = false)
   }
 }
 
@@ -746,7 +757,8 @@ private[v2] trait V2CreateTableAsSelectBaseExec extends LeafV2CommandExec {
       writeOptions: Map[String, String],
       ident: Identifier,
       query: LogicalPlan,
-      overwrite: Boolean): Seq[InternalRow] = {
+      overwrite: Boolean,
+      refreshPhaseEnabled: Boolean = true): Seq[InternalRow] = {
     Utils.tryWithSafeFinallyAndFailureCallbacks({
       val relation = DataSourceV2Relation.create(table, Some(catalog), Some(ident))
       val writeCommand = if (overwrite) {
@@ -754,7 +766,7 @@ private[v2] trait V2CreateTableAsSelectBaseExec extends LeafV2CommandExec {
       } else {
         AppendData.byPosition(relation, query, writeOptions)
       }
-      val qe = session.sessionState.executePlan(writeCommand)
+      val qe = QueryExecution.create(session, writeCommand, refreshPhaseEnabled))
       qe.assertCommandExecuted()
       DataSourceV2Utils.commitStagedChanges(sparkContext, table, metrics)
       Nil
