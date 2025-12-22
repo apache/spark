@@ -89,7 +89,13 @@ class PipelineExecution(context: PipelineUpdateContext) {
 
   /** Validates that the pipeline graph can be successfully resolved and validates it. */
   def dryRunPipeline(): Unit = synchronized {
+    // scalastyle:off println
+    println("INSTRUMENTATION: dryRunPipeline() starting")
+    // scalastyle:on println
     resolvedGraph = Some(resolveGraph())
+    // scalastyle:off println
+    println("INSTRUMENTATION: dryRunPipeline() - resolveGraph completed")
+    // scalastyle:on println
     context.eventCallback(
       constructTerminationEvent(RunCompletion())
     )
@@ -112,8 +118,15 @@ class PipelineExecution(context: PipelineUpdateContext) {
   }
 
   def resolveGraph(): DataflowGraph = {
+    // scalastyle:off println
+    println("INSTRUMENTATION: resolveGraph() starting")
+    // scalastyle:on println
     try {
-      context.unresolvedGraph.resolve(Some(graphAnalysisContext)).validate()
+      val resolved = context.unresolvedGraph.resolve(Some(graphAnalysisContext)).validate()
+      // scalastyle:off println
+      println("INSTRUMENTATION: resolveGraph() completed successfully")
+      // scalastyle:on println
+      resolved
     } catch {
       case e: UnresolvedPipelineException =>
         handleInvalidPipeline(e)

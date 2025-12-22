@@ -35,7 +35,7 @@ import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.execution.command.{ShowCatalogsCommand, ShowNamespacesCommand}
 import org.apache.spark.sql.pipelines.Language.Python
 import org.apache.spark.sql.pipelines.common.RunState.{CANCELED, FAILED}
-import org.apache.spark.sql.pipelines.graph.{AllTables, FlowAnalysis, GraphIdentifierManager, GraphRegistrationContext, IdentifierHelper, NoTables, PipelineUpdateContextImpl, QueryContext, QueryFunctionSuccess, QueryOrigin, QueryOriginType, Sink, SinkImpl, SomeTables, SqlGraphRegistrationContext, Table, TableFilter, TemporaryView, UnresolvedFlow}
+import org.apache.spark.sql.pipelines.graph.{AllTables, FlowAnalysis, GraphIdentifierManager, GraphRegistrationContext, IdentifierHelper, NoTables, PipelineUpdateContext, PipelineUpdateContextImpl, QueryContext, QueryFunctionSuccess, QueryOrigin, QueryOriginType, Sink, SinkImpl, SomeTables, SqlGraphRegistrationContext, Table, TableFilter, TemporaryView, UnresolvedFlow}
 import org.apache.spark.sql.pipelines.logging.{PipelineEvent, RunProgress}
 import org.apache.spark.sql.types.StructType
 
@@ -451,11 +451,19 @@ private[connect] object PipelinesHandler extends Logging {
         cmd.getStorage)
       sessionHolder.cachePipelineExecution(dataflowGraphId, pipelineUpdateContext)
 
+      // scalastyle:off println
+      println(s"INSTRUMENTATION: Starting pipeline execution, dry=${cmd.getDry}")
+      // scalastyle:on println
+
       if (cmd.getDry) {
         pipelineUpdateContext.pipelineExecution.dryRunPipeline()
       } else {
         pipelineUpdateContext.pipelineExecution.runPipeline()
       }
+
+      // scalastyle:off println
+      println(s"INSTRUMENTATION: Pipeline execution completed")
+      // scalastyle:on println
 
       // Rethrow any exceptions that caused the pipeline run to fail so that the exception is
       // propagated back to the SC client / CLI.
@@ -562,46 +570,88 @@ private[connect] object PipelinesHandler extends Logging {
     logInfo(s"Starting query function execution signal stream for " +
       s"graph $dataflowGraphId, client $clientId")
 
-    sessionHolder.getPipelineExecution(dataflowGraphId) match {
-      case Some(pipelineExecution) =>
-        val execution = pipelineExecution.pipelineExecution
-        val graphAnalysisContext = execution.graphAnalysisContext
+    var streamCompleted = false
+    try {
+      var pipelineExecution: Option[PipelineUpdateContext] = None
+      var waitAttempts = 0
+      val maxWaitAttempts = 100
 
-        try {
-          while (execution.resolvedGraph.isEmpty) {
-            val signal = proto.PipelineQueryFunctionExecutionSignal.newBuilder()
+      while (pipelineExecution.isEmpty && waitAttempts < maxWaitAttempts) {
+        pipelineExecution = sessionHolder.getPipelineExecution(dataflowGraphId)
+        if (pipelineExecution.isEmpty) {
+          Thread.sleep(100)
+          waitAttempts += 1
+        }
+      }
 
-            while (!graphAnalysisContext.flowClientSignalQueue.isEmpty) {
-              val flowId = graphAnalysisContext.flowClientSignalQueue.remove()
-              signal.addFlowNames(flowId.unquotedString)
-            }
+      if (pipelineExecution.isEmpty) {
+        val error = new IllegalStateException(
+          s"No active pipeline execution found for graph $dataflowGraphId " +
+          s"after ${maxWaitAttempts * 100}ms")
+        responseObserver.onError(error)
+        streamCompleted = true
+        return
+      }
 
-            if (signal.getFlowNamesCount > 0) {
-              logInfo(s"Sending execution signal for ${signal.getFlowNamesCount} flows")
+      val execution = pipelineExecution.get.pipelineExecution
+      val graphAnalysisContext = execution.graphAnalysisContext
+      var signalAttempts = 0
+      val maxSignalAttempts = 600
 
-              val response = ExecutePlanResponse.newBuilder()
-                .setPipelineQueryFunctionExecutionSignal(signal.build())
-                .build()
+      // scalastyle:off println
+      println(s"INSTRUMENTATION: Starting signal loop")
+      // scalastyle:on println
 
-              responseObserver.onNext(response)
-            }
+      while (execution.resolvedGraph.isEmpty && signalAttempts < maxSignalAttempts) {
+        val signal = proto.PipelineQueryFunctionExecutionSignal.newBuilder()
 
-            Thread.sleep(100)
-          }
-        } catch {
-          case e: Exception =>
-            logError(
-              s"Error in query function execution signal stream for graph $dataflowGraphId", e)
-            responseObserver.onError(e)
-        } finally {
-          responseObserver.onCompleted()
+        while (!graphAnalysisContext.flowClientSignalQueue.isEmpty) {
+          val flowId = graphAnalysisContext.flowClientSignalQueue.remove()
+          signal.addFlowNames(flowId.unquotedString)
         }
 
-      case None =>
-        val error = new IllegalStateException(
-          s"No active pipeline execution found for graph $dataflowGraphId")
-        logError(error.getMessage)
-        responseObserver.onError(error)
+        if (signal.getFlowNamesCount > 0) {
+          // scalastyle:off println
+          println(s"INSTRUMENTATION: Sending signal for ${signal.getFlowNamesCount} flows")
+          // scalastyle:on println
+          logInfo(s"Sending execution signal for ${signal.getFlowNamesCount} flows")
+
+          val response = ExecutePlanResponse.newBuilder()
+            .setPipelineQueryFunctionExecutionSignal(signal.build())
+            .build()
+
+          responseObserver.onNext(response)
+          // scalastyle:off println
+          println(s"INSTRUMENTATION: Signal sent successfully")
+          // scalastyle:on println
+        } else {
+          // scalastyle:off println
+          println(s"INSTRUMENTATION: No signals, attempt $signalAttempts")
+          // scalastyle:on println
+        }
+
+        Thread.sleep(100)
+        signalAttempts += 1
+      }
+
+      // scalastyle:off println
+      println(s"INSTRUMENTATION: Exited signal loop, attempts=$signalAttempts")
+      // scalastyle:on println
+
+      responseObserver.onCompleted()
+      streamCompleted = true
+    } catch {
+      case e: Exception =>
+        logError(
+          s"Error in query function execution signal stream for graph $dataflowGraphId", e)
+        if (!streamCompleted) {
+          responseObserver.onError(e)
+          streamCompleted = true
+        }
+    } finally {
+      if (!streamCompleted) {
+        responseObserver.onCompleted()
+      }
     }
   }
 
@@ -635,6 +685,9 @@ private[connect] object PipelinesHandler extends Logging {
       case Some(pipelineUpdateContext) =>
         // TODO: what if we haven't yet started analysis?
         val graphAnalysisContext = pipelineUpdateContext.pipelineExecution.graphAnalysisContext
+        // scalastyle:off println
+        println(s"INSTRUMENTATION: markFlowPlanRegistered called for flow $flowIdentifier")
+        // scalastyle:on println
         graphAnalysisContext.markFlowPlanRegistered(flowIdentifier)
       case None =>
     }

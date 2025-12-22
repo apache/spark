@@ -332,6 +332,11 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     // It is not called under SparkConnectSessionManager.sessionsLock, but it's guaranteed to be
     // called only once, since removing the session from SparkConnectSessionManager.sessionStore is
     // synchronized and guaranteed to happen only once.
+    // scalastyle:off println
+    println(s"INSTRUMENTATION: SessionHolder.close() called for session $sessionId")
+    println(s"INSTRUMENTATION: Called from: ${Thread.currentThread().getStackTrace.take(10).
+      mkString("\n")}")
+    // scalastyle:on println
     if (closedTimeMs.isDefined) {
       throw new IllegalStateException(s"Session $key is already closed.")
     }

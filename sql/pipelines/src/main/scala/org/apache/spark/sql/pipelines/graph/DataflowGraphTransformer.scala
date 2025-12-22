@@ -122,13 +122,24 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
       transformer: (GraphElement, Seq[GraphElement]) => Seq[GraphElement],
       context: GraphAnalysisContext,
       disableParallelism: Boolean = false): DataflowGraphTransformer = {
+    // scalastyle:off println
+    println("INSTRUMENTATION: transformDownNodes starting")
+    // scalastyle:on println
     val executor = if (disableParallelism) selfExecutor else fixedPoolExecutor
     val batchSize = if (disableParallelism) 1 else parallelism
 
     var futures = ArrayBuffer[Future[Unit]]()
     context.toBeResolvedFlows.addAll(flows.asJava)
 
-    while (futures.nonEmpty || context.toBeResolvedFlows.peekFirst() != null) {
+    while (
+      futures.nonEmpty ||
+        context.toBeResolvedFlows.peekFirst() != null ||
+        !context.failedUnregisteredFlows.isEmpty) {
+      // scalastyle:off println
+      println("INSTRUMENTATION: transformDownNodes iteration")
+      println(s"INSTRUMENTATION: toBeResolvedFlows.size = ${context.toBeResolvedFlows.size}")
+      println(s"INSTRUMENTATION: failedUnregistered.size = ${context.failedUnregisteredFlows.size}")
+      // scalastyle:on println
       val (done, notDone) = futures.partition(_.isDone)
       // Explicitly call future.get() to propagate exceptions one by one if any
       try {
@@ -155,6 +166,10 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
         )
       }
     }
+
+    // scalastyle:off println
+    println("INSTRUMENTATION: transformDownNodes - exited main while loop")
+    // scalastyle:on println
 
     // Mutate the fail analysis entities
     // A table is failed to analyze if:
@@ -197,6 +212,9 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
     tableMap = computeTableMap()
     viewMap = computeViewMap()
     sinkMap = computeSinkMap()
+    // scalastyle:off println
+    println("pizza: completed transformDownNodes")
+    // scalastyle: on
     this
   }
 
@@ -211,7 +229,11 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
       } catch {
         case e: TransformNodeRetryableException =>
           e.datasetIdentifier match {
-            case None => context.failedUnregisteredFlows.put(e.failedNode.identifier, e.failedNode)
+            case None =>
+              // scalastyle:off println
+              println(s"INSTRUMENTATION: Adding flow ${e.failedNode.identifier} to unregistered")
+              // scalastyle:on println
+              context.failedUnregisteredFlows.put(e.failedNode.identifier, e.failedNode)
             case Some(datasetIdentifier) =>
               context.registerFailedDependentFlow(datasetIdentifier, e.failedNode)
               // Between the time the flow started and finished resolving, perhaps the
@@ -228,6 +250,9 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
                       (_, toRetryFlows) => {
                         toRetryFlows.foreach { f =>
                           if (context.failedUnregisteredFlows.containsKey(f.identifier)) {
+                            // scalastyle:off println
+                            println(s"INSTRUMENTATION: Adding signal for ${f.identifier}")
+                            // scalastyle:on println
                             context.flowClientSignalQueue.add(f.identifier)
                           } else {
                             context.toBeResolvedFlows.addFirst(f)
@@ -304,6 +329,9 @@ class DataflowGraphTransformer(graph: DataflowGraph) extends AutoCloseable {
                 (_, toRetryFlows) => {
                   toRetryFlows.foreach { f =>
                     if (context.failedUnregisteredFlows.containsKey(f.identifier)) {
+                      // scalastyle:off println
+                      println(s"INSTRUMENTATION: Adding signal for ${f.identifier} (location 2)")
+                      // scalastyle:on println
                       context.flowClientSignalQueue.add(f.identifier)
                     } else {
                       context.toBeResolvedFlows.addFirst(f)

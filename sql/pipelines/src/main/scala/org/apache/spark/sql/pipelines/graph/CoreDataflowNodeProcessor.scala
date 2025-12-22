@@ -40,6 +40,9 @@ class CoreDataflowNodeProcessor(rawGraph: DataflowGraph, context: GraphAnalysisC
       context.resolvedInputsByIdentifier
     )
     context.resolvedFlowsQueue.add(resolvedFlow)
+    // scalastyle:off println
+    println(s"INSTRUMENTATION: Adding resolved flow ${flow.identifier} to resolvedFlowsMap")
+    // scalastyle:on println
     context.resolvedFlowsMap.put(flow.identifier, resolvedFlow)
     resolvedFlow
   }
