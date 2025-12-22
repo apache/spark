@@ -2076,16 +2076,20 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // We track which components of the projection are used in the filters.
     //
     // 1) The filter does not reference anything in the projection: pushed
-    // 2) Filter which reference _inexpensive_ items in projection: pushed along with a copy
-    //    of the what it references reference.
+    // 2) Filter which reference _inexpensive_ items in projection: pushed and reference resolved
+    //    resulting in double evaluation, but only of inexpensive items -- worth it to filter
+    //    records sooner.
     // (Case 1 & 2 are treated as "cheap" predicates)
-    // 3) When an expensive filters is present referencing different projections we
-    //    check to see if we should split the projection into multiple parts.
+    // 3) When an a filter references expensive to compute references we
+    //    check to see if we should split the projection into multiple parts w/ the filter
+    //    in between. This allows us to avoid double evaluating expensive references.
     //  3a) If the filter references everything in the projection we can't split it any further.
+    //      so we leave the filter and projection as is.
     //  3b) If the filter does not reference the entire projection then we can potentially reduce
-    //     the amount of expensive projection computation but splitting the projection around the
-    //     filter.
+    //     the amount of computation but splitting the projection around the filter.
     // Case 3 is treated as an "expensive" predicate.
+    // Note that a given filter may contain parts from all cases. We handle each part separately
+    // according to the logic above.
     // Additional restriction:
     // SPARK-13473: We can't push the predicate down when the underlying projection output non-
     // deterministic field(s).  Non-deterministic expressions are essentially stateful. This
@@ -2097,8 +2101,9 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       if fields.forall(_.deterministic) && canPushThroughCondition(grandChild, condition) =>
       // All of the aliases in the projection
       val aliasMap = getAliasMap(project)
-      // Projection aliases that are not used in the filter, so we don't need to push
+      // Break up the filter into its respective components by &&s.
       val splitCondition = splitConjunctivePredicates(condition)
+      // Find the different aliases each component of the filter uses.
       val usedAliasesForCondition = splitCondition.map { cond =>
         if (!SQLConf.get.avoidDoubleFilterEval) {
           (cond, AttributeMap.empty[Alias])
@@ -2112,8 +2117,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
           }
         }
       }
-      // Split the filters into cheap and expensive while keeping track of what each filter
-      // references from the projection.
+      // Split the filter's components into cheap and expensive while keeping track of
+      // what each references from the projection.
       val (cheapWithUsed, expensiveWithUsed) = usedAliasesForCondition
         .partition { case (cond, used) =>
         if (!SQLConf.get.avoidDoubleFilterEval) {
@@ -2137,10 +2142,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // Short circuit, we don't have anything to push OR split
         f
       } else {
-
+        // Handle all of the cheap filters (part 1 & 2).
         val cheap: Seq[Expression] = cheapWithUsed.map(_._1)
-
-
         // Make a base instance which has all of the cheap filters pushed down.
         val baseChild: LogicalPlan = if (!cheap.isEmpty) {
           // For all filter which do not reference any expensive aliases then
@@ -2153,11 +2156,12 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
           grandChild
         }
         // Handle any Case 3 filters
-        // Do group by on usedAliases so if we have multiple filters with the same
-        // expensive aliases we introduce them together.
+        // We group the expensive components by the aliases used, since if they use the same
+        // aliases we can introduce them together.
         val grouped = expensiveWithUsed.groupBy(_._2)
         // Sort by the name of the head expensive alias so we have
-        // a consistent order for testing.
+        // a consistent order for testing. It's possible we could do something
+        // smarter here if we build a better cost based heuristic.
         val expensiveByUsed = grouped.view
           .mapValues(_.map(_._1).toList).toList.sortBy(_._1.head._2.name)
         // For each expensive alias figure out if they're in case 3A or 3B
@@ -2172,22 +2176,28 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
             }
         }
         if (toSplit.isEmpty && cheap.isEmpty) {
-          // Nothing to push or split, short circuit
+          // Nothing to push or split, short circuit (all filters are case 3B).
           f
         } else {
-          // If we can't split anymore
           val expensiveFiltersDone = if (toSplit.isEmpty) {
+            // If we can't split anymore (no 3A), but we did have cheap filters
+            // pushed we still need to add the expensive filters back on top.
             baseChild
           } else {
+            // We have at least one filter that we can split the projection around.
             // We're going to now add projections one at a time for the expensive components for
-            // each group of filters. We'll keep track of what we added for the previous so we
-          // don't double add anything.
+            // each group of filters. We'll keep track of what we added for the previous filter(s)
+            // so we don't double add anything.
             val (headUsed, headConds) = toSplit.head
             val initialReferences = (baseChild.output ++ headUsed.map(_._2)).distinct
+            // Our base filter.
             val first = Filter(headConds.reduce(And),
               project.copy(projectList = initialReferences,
                 child = baseChild))
+            // addedAliases keeps track of the aliases we've already added to support
+            // previous filters.
             var addedAliases = first.outputSet
+            // For the remaining filters add projections and filters as needed.
             toSplit.tail.foldLeft(first) {
               case (currentFilter, (nextUsed, nextConds)) =>
                 val newAttributeAliases = nextUsed.filterNot(a => addedAliases.contains(a._1))

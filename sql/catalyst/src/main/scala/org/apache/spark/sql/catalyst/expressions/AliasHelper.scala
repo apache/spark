@@ -67,7 +67,7 @@ trait AliasHelper {
 
   /**
    * Replace all attributes, that reference an alias, with the aliased expression.
-   * Includes the aliases replaced
+   * Tracks which aliases were replaced and returns them.
    */
   protected def replaceAliasWhileTracking(
       expr: Expression,
