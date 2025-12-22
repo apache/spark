@@ -47,6 +47,34 @@ class FunctionResolution(
 
   private val trimWarningEnabled = new AtomicBoolean(true)
 
+  /**
+   * Check if a function name is qualified as a builtin function.
+   * Valid forms: builtin.func or system.builtin.func
+   */
+  private def maybeBuiltinFunctionName(nameParts: Seq[String]): Boolean = {
+    nameParts.length match {
+      case 2 => nameParts.head.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
+      case 3 =>
+        nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+        nameParts(1).equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
+      case _ => false
+    }
+  }
+
+  /**
+   * Check if a function name is qualified as a session temporary function.
+   * Valid forms: session.func or system.session.func
+   */
+  private def maybeTempFunctionName(nameParts: Seq[String]): Boolean = {
+    nameParts.length match {
+      case 2 => nameParts.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
+      case 3 =>
+        nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+        nameParts(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
+      case _ => false
+    }
+  }
+
   def resolveFunction(u: UnresolvedFunction): Expression = {
     withPosition(u) {
       resolveBuiltinOrTempFunction(u.nameParts, u.arguments, u).getOrElse {
@@ -74,6 +102,10 @@ class FunctionResolution(
       u: Option[UnresolvedFunction]): Option[ExpressionInfo] = {
     if (name.size == 1 && u.exists(_.isInternal)) {
       FunctionRegistry.internal.lookupFunction(FunctionIdentifier(name.head))
+    } else if (maybeBuiltinFunctionName(name)) {
+      v1SessionCatalog.lookupBuiltinFunctionInfo(name.last)
+    } else if (maybeTempFunctionName(name)) {
+      v1SessionCatalog.lookupTempFunctionInfo(name.last)
     } else if (name.size == 1) {
       v1SessionCatalog.lookupBuiltinOrTempFunction(name.head)
     } else {
@@ -94,8 +126,18 @@ class FunctionResolution(
       arguments: Seq[Expression],
       u: UnresolvedFunction): Option[Expression] = {
     val expression = if (name.size == 1 && u.isInternal) {
+      // Internal functions
       Option(FunctionRegistry.internal.lookupFunction(FunctionIdentifier(name.head), arguments))
+    } else if (maybeBuiltinFunctionName(name)) {
+      // Explicitly qualified as builtin - lookup in builtin registry only
+      val funcName = name.last
+      v1SessionCatalog.lookupBuiltinFunction(funcName, arguments)
+    } else if (maybeTempFunctionName(name)) {
+      // Explicitly qualified as temp - lookup in temp registry only
+      val funcName = name.last
+      v1SessionCatalog.lookupTempFunction(funcName, arguments)
     } else if (name.size == 1) {
+      // Unqualified name - check temp first (shadowing), then builtin
       v1SessionCatalog.resolveBuiltinOrTempFunction(name.head, arguments)
     } else {
       None

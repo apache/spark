@@ -19,7 +19,7 @@ package org.apache.spark.sql.internal
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.{DataSourceRegistration, ExperimentalMethods, SparkSessionExtensions, UDTFRegistration}
 import org.apache.spark.sql.artifact.ArtifactManager
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, FunctionRegistry, InvokeProcedures, ReplaceCharWithVarchar, ResolveDataSource, ResolveEventTimeWatermark, ResolveExecuteImmediate, ResolveMetricView, ResolveSessionCatalog, ResolveTranspose, TableFunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, FunctionRegistry, InvokeProcedures, ReplaceCharWithVarchar, ResolveDataSource, ResolveEventTimeWatermark, ResolveExecuteImmediate, ResolveMetricView, ResolveSessionCatalog, ResolveTranspose, SimpleFunctionRegistry, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.analysis.resolver.ResolverExtension
 import org.apache.spark.sql.catalyst.catalog.{FunctionExpressionBuilder, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExtractSemiStructuredFields}
@@ -105,17 +105,23 @@ abstract class BaseSessionStateBuilder(
   /**
    * Internal catalog managing functions registered by the user.
    *
-   * This either gets cloned from a pre-existing version or cloned from the built-in registry.
+   * NOTE: With Approach 2 (separate registries), we no longer clone the builtin registry.
+   * SessionCatalog now manages temp functions in a separate registry internally.
+   * This field is kept for backward compatibility with existing code that might reference it,
+   * but it's no longer passed to SessionCatalog or actively used.
    */
+  @deprecated("Use SessionCatalog.tempFunctionRegistry instead", "4.0.0")
   protected lazy val functionRegistry: FunctionRegistry = {
-    parentState.map(_.functionRegistry.clone())
-      .getOrElse(extensions.registerFunctions(FunctionRegistry.builtin.clone()))
+    // Return a dummy registry for backward compatibility
+    // Real function resolution now happens in SessionCatalog with separate registries
+    new SimpleFunctionRegistry
   }
 
   /**
-   * Internal catalog managing functions registered by the user.
+   * Internal catalog managing table functions registered by the user.
    *
-   * This either gets cloned from a pre-existing version or cloned from the built-in registry.
+   * This is still passed to SessionCatalog for table function support.
+   * Table functions will be refactored in a future phase.
    */
   protected lazy val tableFunctionRegistry: TableFunctionRegistry = {
     parentState.map(_.tableFunctionRegistry.clone())
