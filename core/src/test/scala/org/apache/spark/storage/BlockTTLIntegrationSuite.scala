@@ -81,7 +81,7 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
   }
 
   test("Test that shuffle blocks are tracked properly and removed after TTL") {
-    val ttl = 250L
+    val ttl = 50L
     val conf = new SparkConf()
       .setAppName("test-blockmanager-ttls-shuffle-only")
       .setMaster("local-cluster[2, 1, 1024]")
@@ -105,15 +105,17 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
     // Check that the shuffle blocks are registered with the map output TTL
     eventually { assert(!mapOutputTracker.shuffleAccessTime.isEmpty) }
     // It should be expired!
-    val t = System.currentTimeMillis()
-    eventually { assert(
+    eventually {
+      val t = System.currentTimeMillis()
+      assert(
       mapOutputTracker.shuffleAccessTime.isEmpty,
-      s"We should have no blocks since we are now at time ${t} with ttl of ${ttl}") }
+      s"We should have no blocks since we are now at time ${t} with ttl of ${ttl}")
+    }
   }
 
 
   test(s"Test that all blocks are tracked properly and removed after TTL") {
-    val ttl = 250L
+    val ttl = 50L
     val conf = new SparkConf()
       .setAppName("test-blockmanager-ttls-enabled")
       .setMaster("local-cluster[2, 1, 1024]")
@@ -133,8 +135,8 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
     eventually { assert(!managerMasterEndpoint.rddAccessTime.isEmpty) }
     eventually { assert(!mapOutputTracker.shuffleAccessTime.isEmpty) }
     // Both should be expired!
-    val t = System.currentTimeMillis()
     eventually {
+      val t = System.currentTimeMillis()
       assert(mapOutputTracker.shuffleAccessTime.isEmpty,
         s"We should have no blocks since we are now at time ${t} with ttl of ${ttl}")
       assert(managerMasterEndpoint.rddAccessTime.isEmpty,
