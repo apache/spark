@@ -33,8 +33,8 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, DeltaWrite, DeltaWriter, MergeSummaryImpl, PhysicalWriteInfoImpl, RowLevelOperationTable, Write, WriterCommitMessage, WriteSummary}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.{FilterExec, ProjectExec, QueryExecution, SortExec, SparkPlan, SQLExecution, UnaryExecNode}
-import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.{FilterExec, InputAdapter, ProjectExec, QueryExecution, SortExec, SparkPlan, SQLExecution, UnaryExecNode, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEShuffleReadExec, QueryStageExec}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.BaseJoinExec
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric, SQLMetrics}
@@ -517,21 +517,37 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
     }
 
     def findSource(node: SparkPlan): Long = {
+      // System.out.println("\n\n *** node: " + node)
       node match {
+        case WholeStageCodegenExec(child) => findSource(child)
+        case InputAdapter(child) => findSource(child)
         case ProjectExec(_, child) => findSource(child)
         case FilterExec(_, child) => findSource(child)
         case SortExec(_, _, child, _) => findSource(child)
         case ShuffleExchangeExec(_, child, _, _) => findSource(child)
+        case AQEShuffleReadExec(child, _) => findSource(child)
+        case qs: QueryStageExec => findSource(qs.plan)
         case n if n.metrics.contains("numOutputRows") =>
           n.metrics.get("numOutputRows").map(_.value).getOrElse(-1L)
         case _ => -1L
       }
     }
 
-    (for {
-      join <- collectFirst(mergeRowsExec.child) { case j: BaseJoinExec => j }
-      sourceSide = if (hasTargetTable(join.left)) join.right else join.left
-    } yield findSource(sourceSide)).getOrElse(-1L)
+    val joinOpt = collectFirst(mergeRowsExec.child) { case j: BaseJoinExec => j }
+
+    joinOpt match {
+      case Some(join) =>
+        // Join-based merge: find source side of the join
+        val sourceSide = if (hasTargetTable(join.left)) join.right else join.left
+        findSource(sourceSide)
+      case None =>
+        // Group-based merge: no join, find source if no target table is present
+        if (hasTargetTable(mergeRowsExec.child)) {
+          -1L
+        } else {
+          findSource(mergeRowsExec.child)
+        }
+    }
   }
 }
 
