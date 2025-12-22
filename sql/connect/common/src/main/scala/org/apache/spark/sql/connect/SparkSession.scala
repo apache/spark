@@ -117,11 +117,16 @@ class SparkSession private[sql] (
   private def createDataset[T](encoder: AgnosticEncoder[T], data: Iterator[T]): Dataset[T] = {
     newDataset(encoder) { builder =>
       if (data.nonEmpty) {
-        val threshold = conf.get(SqlApiConf.LOCAL_RELATION_CACHE_THRESHOLD_KEY).toInt
-        val maxChunkSizeRows = conf.get(SqlApiConf.LOCAL_RELATION_CHUNK_SIZE_ROWS_KEY).toInt
-        val maxChunkSizeBytes = conf.get(SqlApiConf.LOCAL_RELATION_CHUNK_SIZE_BYTES_KEY).toInt
+        val confs = conf.getMap(
+          SqlApiConf.LOCAL_RELATION_CACHE_THRESHOLD_KEY,
+          SqlApiConf.LOCAL_RELATION_CHUNK_SIZE_ROWS_KEY,
+          SqlApiConf.LOCAL_RELATION_CHUNK_SIZE_BYTES_KEY,
+          SqlApiConf.LOCAL_RELATION_BATCH_OF_CHUNKS_SIZE_BYTES_KEY)
+        val threshold = confs(SqlApiConf.LOCAL_RELATION_CACHE_THRESHOLD_KEY).toInt
+        val maxChunkSizeRows = confs(SqlApiConf.LOCAL_RELATION_CHUNK_SIZE_ROWS_KEY).toInt
+        val maxChunkSizeBytes = confs(SqlApiConf.LOCAL_RELATION_CHUNK_SIZE_BYTES_KEY).toInt
         val maxBatchOfChunksSize =
-          conf.get(SqlApiConf.LOCAL_RELATION_BATCH_OF_CHUNKS_SIZE_BYTES_KEY).toLong
+          confs(SqlApiConf.LOCAL_RELATION_BATCH_OF_CHUNKS_SIZE_BYTES_KEY).toLong
 
         // Serialize with chunking support
         val it = ArrowSerializer.serialize(
