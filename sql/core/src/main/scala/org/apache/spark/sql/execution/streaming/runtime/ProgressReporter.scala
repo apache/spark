@@ -43,7 +43,7 @@ import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadataB
 import org.apache.spark.sql.execution.streaming.operators.stateful.{EventTimeWatermarkExec, StateStoreWriter}
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.streaming._
-import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryProgressEvent, QueryExecutionStartEvent}
+import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryExecutionStartEvent, QueryProgressEvent}
 import org.apache.spark.util.{Clock, Utils}
 
 /**
