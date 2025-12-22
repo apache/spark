@@ -53,6 +53,9 @@ on:
       codecov_token:
         description: The upload token of codecov.
         required: false
+concurrency:
+  group: build-test-${{ github.workflow }}-${{ github.repository == 'apache/spark' && github.run_id || github.ref }}
+  cancel-in-progress: true
 jobs:
   precondition:
     name: Check changes
@@ -1349,7 +1352,7 @@ jobs:
       - name: Start Minikube
         uses: medyagh/setup-minikube@v0.0.20
         with:
-          kubernetes-version: "1.34.0"
+          kubernetes-version: "1.35.0"
           # Github Action limit cpu:2, memory: 6947MB, limit to 2U6G for better resource statistic
           cpus: 2
           memory: 6144m

@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+import json
 import unittest
 
 import numpy as np
@@ -82,10 +84,14 @@ class ModelOffloadingTests(ReusedConnectTestCase):
             self.assertEqual(summary.labels, [0.0, 1.0])
 
         # model is cached!
-        # 'id: xxx, obj: class org.apache.spark.ml.classification.LinearSVCModel, size: xxx'
+        # '{"id":"xxx","class":"org.apache.spark.ml.classification.LinearSVCModel","size":xxx}'
         cached = self.spark.client._get_ml_cache_info()
         self.assertEqual(len(cached), 1, cached)
-        self.assertIn("class org.apache.spark.ml.classification.LinearSVCModel", cached[0])
+        self.assertEqual(
+            json.loads(cached[0])["class"],
+            "org.apache.spark.ml.classification.LinearSVCModel",
+            cached,
+        )
 
         check_model(model)
 
@@ -137,10 +143,14 @@ class ModelOffloadingTests(ReusedConnectTestCase):
             self.assertEqual(summary.predictions.count(), 4)
 
         # model is cached!
-        # 'id: xxx, obj: class org.apache.spark.ml.regression.LinearRegressionModel, size: xxx'
+        # '{"id":"xxx","class":"org.apache.spark.ml.regression.LinearRegressionModel","size":xxx}'
         cached = self.spark.client._get_ml_cache_info()
         self.assertEqual(len(cached), 1, cached)
-        self.assertIn("class org.apache.spark.ml.regression.LinearRegressionModel", cached[0])
+        self.assertEqual(
+            json.loads(cached[0])["class"],
+            "org.apache.spark.ml.regression.LinearRegressionModel",
+            cached,
+        )
 
         check_model(model)
 
@@ -191,24 +201,30 @@ class ModelOffloadingTests(ReusedConnectTestCase):
             self.assertEqual(output.count(), 2)
 
         # model is cached!
-        # 'id: xxx, obj: class org.apache.spark.ml.regression.LinearRegressionModel, size: xxx'
+        # '{"id":"xxx","class":"org.apache.spark.ml.clustering.DistributedLDAModel","size":xxx}'
         cached = self.spark.client._get_ml_cache_info()
         self.assertEqual(len(cached), 1, cached)
-        self.assertIn("class org.apache.spark.ml.clustering.DistributedLDAModel", cached[0])
+        self.assertEqual(
+            json.loads(cached[0])["class"],
+            "org.apache.spark.ml.clustering.DistributedLDAModel",
+            cached,
+        )
 
         check_model(model)
 
         # both model and local_model are is cached!
         local_model = model.toLocal()
-        # 'id: xxx, obj: class org.apache.spark.ml.clustering.LocalLDAModel, size: xxx'
-        # 'id: xxx, obj: class org.apache.spark.ml.clustering.DistributedLDAModel, size: xxx'
+        # '{"id":"xxx","class":"org.apache.spark.ml.clustering.LocalLDAModel","size":xxx}'
+        # '{"id":"xxx","class":"org.apache.spark.ml.clustering.DistributedLDAModel","size":xxx}'
         cached = self.spark.client._get_ml_cache_info()
         self.assertEqual(len(cached), 2, cached)
-        self.assertTrue(
-            any("class org.apache.spark.ml.clustering.LocalLDAModel" in c for c in cached)
-        )
-        self.assertTrue(
-            any("class org.apache.spark.ml.clustering.DistributedLDAModel" in c for c in cached)
+        self.assertEqual(
+            sorted([json.loads(c)["class"] for c in cached]),
+            [
+                "org.apache.spark.ml.clustering.DistributedLDAModel",
+                "org.apache.spark.ml.clustering.LocalLDAModel",
+            ],
+            cached,
         )
 
         def check_local_model(m):
@@ -272,10 +288,14 @@ class ModelOffloadingTests(ReusedConnectTestCase):
             self.assertEqual(output.count(), 6)
 
         # model is cached!
-        # 'id: xxx, obj: class org.apache.spark.ml.fpm.FPGrowthModel, size: xxx'
+        # '{"id":"xxx","class":"org.apache.spark.ml.fpm.FPGrowthModel","size":xxx}'
         cached = self.spark.client._get_ml_cache_info()
         self.assertEqual(len(cached), 1, cached)
-        self.assertIn("class org.apache.spark.ml.fpm.FPGrowthModel", cached[0])
+        self.assertEqual(
+            json.loads(cached[0])["class"],
+            "org.apache.spark.ml.fpm.FPGrowthModel",
+            cached,
+        )
 
         check_model(model)
 

@@ -38,8 +38,8 @@ Project [col#x, col#x]
 SELECT explode(array(sin(0), 1, 2)), explode(array(10, 20))
 -- !query analysis
 Project [col#x, col#x]
-+- Generate explode(array(SIN(cast(0 as double)), cast(1 as double), cast(2 as double))), false, [col#x]
-   +- Generate explode(array(10, 20)), false, [col#x]
++- Generate explode(array(10, 20)), false, [col#x]
+   +- Generate explode(array(SIN(cast(0 as double)), cast(1 as double), cast(2 as double))), false, [col#x]
       +- OneRowRelation
 
 

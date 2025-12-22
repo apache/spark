@@ -158,6 +158,11 @@ class FrameAnyAllMixin:
             psdf.any(axis="columns", bool_only=False), pdf.any(axis="columns", bool_only=False)
         )
 
+        # Test axis=None
+        self.assert_eq(psdf.any(axis=None), pdf.any(axis=None))
+        self.assert_eq(psdf.any(axis=None, bool_only=True), pdf.any(axis=None, bool_only=True))
+        self.assert_eq(psdf.any(axis=None, bool_only=False), pdf.any(axis=None, bool_only=False))
+
         columns.names = ["X", "Y"]
         pdf.columns = columns
         psdf.columns = columns
@@ -170,6 +175,11 @@ class FrameAnyAllMixin:
         self.assert_eq(psdf.any(axis=1), pdf.any(axis=1))
         self.assert_eq(psdf.any(axis=1, bool_only=True), pdf.any(axis=1, bool_only=True))
         self.assert_eq(psdf.any(axis=1, bool_only=False), pdf.any(axis=1, bool_only=False))
+
+        # Test axis=None
+        self.assert_eq(psdf.any(axis=None), pdf.any(axis=None))
+        self.assert_eq(psdf.any(axis=None, bool_only=True), pdf.any(axis=None, bool_only=True))
+        self.assert_eq(psdf.any(axis=None, bool_only=False), pdf.any(axis=None, bool_only=False))
 
         # Test skipna parameter
         pdf = pd.DataFrame(
