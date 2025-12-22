@@ -235,6 +235,7 @@ object AnalysisContext {
 object Analyzer {
   // List of configurations that should be passed on when resolving views and SQL UDF.
   private val RETAINED_ANALYSIS_FLAGS = Seq(
+    "spark.sql.view.schemaEvolution.preserveUserComments",
     // retainedHiveConfigs
     // TODO: remove these Hive-related configs after the `RelationConversions` is moved to
     // optimization phase.
