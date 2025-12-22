@@ -34,13 +34,7 @@ import org.apache.spark.sql.connect.SparkSession
 import org.apache.spark.sql.connect.test.{IntegrationTestUtils, QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.functions.{col, lit, udf, window}
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamingQueryListener, Trigger}
-import org.apache.spark.sql.streaming.StreamingQueryListener.{
-  QueryExecutionStartEvent,
-  QueryIdleEvent,
-  QueryProgressEvent,
-  QueryStartedEvent,
-  QueryTerminatedEvent
-}
+import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryExecutionStartEvent, QueryIdleEvent, QueryProgressEvent, QueryStartedEvent, QueryTerminatedEvent}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.SparkFileUtils
 
