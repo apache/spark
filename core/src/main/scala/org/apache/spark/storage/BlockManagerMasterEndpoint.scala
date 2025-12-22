@@ -310,6 +310,8 @@ class BlockManagerMasterEndpoint(
                 }.toList
                 toBeRemoved.map { rddId =>
                   try {
+                    // Always remove the RDD from our tracking list first incase an error occurs.
+                    rddAccessTime.remove(rddId)
                     removeRdd(rddId)
                   } catch {
                     case NonFatal(e) =>

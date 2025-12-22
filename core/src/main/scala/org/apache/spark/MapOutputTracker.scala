@@ -804,6 +804,11 @@ private[spark] class MapOutputTrackerMaster(
                 }.toList
                 toBeRemoved.map { shuffleId =>
                   try {
+                    // Remove the shuffle access time regardless of
+                    // if we cleanup the shuffle successfully or not
+                    // since we could have a shuffle that's already
+                    // been cleaned up elsewhere.
+                    shuffleAccessTime.remove(shuffleId)
                     unregisterAllMapAndMergeOutput(shuffleId)
                   } catch {
                     case NonFatal(e) =>
@@ -954,6 +959,7 @@ private[spark] class MapOutputTrackerMaster(
     shuffleStatus.removeOutputsByFilter(x => true)
     shuffleStatus.removeMergeResultsByFilter(x => true)
     shuffleStatus.removeShuffleMergerLocations()
+    shuffleAccessTime.remove(shuffleId)
     incrementEpoch()
   }
 
