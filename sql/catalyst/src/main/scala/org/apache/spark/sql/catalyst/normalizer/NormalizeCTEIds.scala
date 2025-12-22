@@ -26,27 +26,27 @@ import org.apache.spark.sql.catalyst.rules.Rule
 object NormalizeCTEIds extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     val curId = new java.util.concurrent.atomic.AtomicLong()
-    val defIdToNewId = new HashMap[Long, Long]()
-    applyInternal(plan, curId, defIdToNewId)
+    val cteIdToNewId = new HashMap[Long, Long]()
+    applyInternal(plan, curId, cteIdToNewId)
   }
 
   private def applyInternal(
       plan: LogicalPlan,
       curId: AtomicLong,
-      defIdToNewId: HashMap[Long, Long]): LogicalPlan = {
+      cteIdToNewId: HashMap[Long, Long]): LogicalPlan = {
     plan transformDownWithSubqueries {
       case ctas @ CacheTableAsSelect(_, plan, _, _, _, _, _) =>
-        ctas.copy(plan = applyInternal(plan, curId, defIdToNewId))
+        ctas.copy(plan = applyInternal(plan, curId, cteIdToNewId))
 
       case withCTE @ WithCTE(plan, cteDefs) =>
         val newCteDefs = cteDefs.map { cteDef =>
-          if (!defIdToNewId.containsKey(cteDef.id)) {
-            defIdToNewId.put(cteDef.id, curId.getAndIncrement())
+          if (!cteIdToNewId.containsKey(cteDef.id)) {
+            cteIdToNewId.put(cteDef.id, curId.getAndIncrement())
           }
-          val normalizedCteDef = canonicalizeCTE(cteDef.child, defIdToNewId)
-          cteDef.copy(child = normalizedCteDef, id = defIdToNewId.get(cteDef.id))
+          val normalizedCteDef = canonicalizeCTE(cteDef.child, cteIdToNewId)
+          cteDef.copy(child = normalizedCteDef, id = cteIdToNewId.get(cteDef.id))
         }
-        val normalizedPlan = canonicalizeCTE(plan, defIdToNewId)
+        val normalizedPlan = canonicalizeCTE(plan, cteIdToNewId)
         withCTE.copy(plan = normalizedPlan, cteDefs = newCteDefs)
     }
   }
