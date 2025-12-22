@@ -517,7 +517,6 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
     }
 
     def findSource(node: SparkPlan): Long = {
-      // System.out.println("\n\n *** node: " + node)
       node match {
         case WholeStageCodegenExec(child) => findSource(child)
         case InputAdapter(child) => findSource(child)
@@ -537,11 +536,12 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
 
     joinOpt match {
       case Some(join) =>
-        // Join-based merge: find source side of the join
+        // Merge with join, find source side of the join
         val sourceSide = if (hasTargetTable(join.left)) join.right else join.left
         findSource(sourceSide)
       case None =>
-        // Group-based merge: no join, find source if no target table is present
+        // Group-based merge, no join.
+        // Return -1 if we can't identify source data, e.g. empty source.
         if (hasTargetTable(mergeRowsExec.child)) {
           -1L
         } else {
