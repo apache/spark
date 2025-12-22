@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, GlobalTempView, 
 import org.apache.spark.sql.catalyst.analysis.V2TableReference
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, TemporaryViewRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpression, VariableReference}
-import org.apache.spark.sql.catalyst.plans.logical.{AnalysisOnlyCommand, CreateTempView, CTEInChildren, CTERelationDef, LogicalPlan, Project, View, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{AnalysisOnlyCommand, CreateTempView, CTEInChildren, CTERelationDef, LogicalPlan, Project, UsesCachedData, View, WithCTE}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
@@ -358,7 +358,8 @@ case class AlterViewSchemaBindingCommand(name: TableIdentifier, viewSchemaMode: 
 case class ShowViewsCommand(
     databaseName: String,
     tableIdentifierPattern: Option[String],
-    override val output: Seq[Attribute]) extends LeafRunnableCommand {
+    override val output: Seq[Attribute])
+  extends LeafRunnableCommand with UsesCachedData {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog

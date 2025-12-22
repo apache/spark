@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.{ResolvedPersistentView, ResolvedT
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UsesCachedData}
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -52,7 +52,7 @@ case class DescribeRelationJsonCommand(
         StringType,
         nullable = false,
         new MetadataBuilder().putString("comment", "JSON metadata of the table").build())()
-    )) extends UnaryRunnableCommand {
+    )) extends UnaryRunnableCommand with UsesCachedData {
   private lazy val timestampFormatter =
     TimestampFormatter("yyyy-MM-dd'T'HH:mm:ss'Z'", ZoneOffset.UTC, isParsing = false)
 

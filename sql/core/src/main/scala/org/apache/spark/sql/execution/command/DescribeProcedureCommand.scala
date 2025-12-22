@@ -23,8 +23,16 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.ResolvedProcedure
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+<<<<<<< HEAD
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.procedures.{ProcedureParameter, SimpleProcedure, UnboundProcedure}
+=======
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UsesCachedData}
+import org.apache.spark.sql.connector.catalog.{Identifier, ProcedureCatalog}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+import org.apache.spark.sql.connector.catalog.procedures.UnboundProcedure
+import org.apache.spark.sql.errors.QueryCompilationErrors
+>>>>>>> 9043fc8a5ac ([SPARK-54812][SQL] Make executable commands not execute on resultDf.cache())
 import org.apache.spark.sql.types.StringType
 
 /**

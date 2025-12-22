@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
-import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan, ResolvedHint, View}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, IgnoreCachedData, LogicalPlan, ResolvedHint, UsesCachedData, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
@@ -135,9 +135,14 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       normalizedPlan: LogicalPlan,
       tableName: Option[String],
       storageLevel: StorageLevel): Unit = {
+    // Most commands should not be cached. Preserve existing behavior for
+    // some read-only commands for backward compatibility.
+    val commandIgnoringCache = unnormalizedPlan.isInstanceOf[Command] &&
+      !unnormalizedPlan.isInstanceOf[UsesCachedData]
+
     if (storageLevel == StorageLevel.NONE) {
       // Do nothing for StorageLevel.NONE since it will not actually cache any data.
-    } else if (unnormalizedPlan.isInstanceOf[IgnoreCachedData]) {
+    } else if (unnormalizedPlan.isInstanceOf[IgnoreCachedData] || commandIgnoringCache) {
       logWarning(
         log"Asked to cache a plan that is inapplicable for caching: " +
         log"${MDC(LOGICAL_PLAN, unnormalizedPlan)}"
@@ -496,6 +501,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   private[sql] def useCachedData(plan: LogicalPlan): LogicalPlan = {
     val newPlan = plan transformDown {
       case command: IgnoreCachedData => command
+      case command: Command if !command.isInstanceOf[UsesCachedData] => command
 
       case currentFragment =>
         lookupCachedDataInternal(currentFragment).map { cached =>

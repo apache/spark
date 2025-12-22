@@ -21,6 +21,7 @@ import java.io.File
 
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.plans.logical.UsesCachedData
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.Utils
 
@@ -59,7 +60,8 @@ case class AddArchivesCommand(paths: Seq[String]) extends LeafRunnableCommand {
  * Returns a list of file paths that are added to resources.
  * If file paths are provided, return the ones that are added to resources.
  */
-case class ListFilesCommand(files: Seq[String] = Seq.empty[String]) extends LeafRunnableCommand {
+case class ListFilesCommand(files: Seq[String] = Seq.empty[String])
+  extends LeafRunnableCommand with UsesCachedData {
   override val output: Seq[Attribute] = {
     AttributeReference("Results", StringType, nullable = false)() :: Nil
   }
@@ -85,7 +87,8 @@ case class ListFilesCommand(files: Seq[String] = Seq.empty[String]) extends Leaf
  * Returns a list of jar files that are added to resources.
  * If jar files are provided, return the ones that are added to resources.
  */
-case class ListJarsCommand(jars: Seq[String] = Seq.empty[String]) extends LeafRunnableCommand {
+case class ListJarsCommand(jars: Seq[String] = Seq.empty[String])
+  extends LeafRunnableCommand with UsesCachedData {
   override val output: Seq[Attribute] = {
     AttributeReference("Results", StringType, nullable = false)() :: Nil
   }
@@ -107,7 +110,7 @@ case class ListJarsCommand(jars: Seq[String] = Seq.empty[String]) extends LeafRu
  * If archive paths are provided, return the ones that are added to resources.
  */
 case class ListArchivesCommand(archives: Seq[String] = Seq.empty[String])
-  extends LeafRunnableCommand {
+  extends LeafRunnableCommand with UsesCachedData {
   override val output: Seq[Attribute] = {
     AttributeReference("Results", StringType, nullable = false)() :: Nil
   }

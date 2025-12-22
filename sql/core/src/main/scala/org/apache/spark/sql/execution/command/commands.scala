@@ -25,7 +25,7 @@ import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{Command, ExecutableDuringAnalysis, LogicalPlan, SupervisingCommand}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, ExecutableDuringAnalysis, LogicalPlan, SupervisingCommand, UsesCachedData}
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.connector.ExternalCommandRunner
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -160,7 +160,7 @@ case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
 case class ExplainCommand(
     logicalPlan: LogicalPlan,
     mode: ExplainMode)
-  extends RunnableCommand with SupervisingCommand {
+  extends RunnableCommand with SupervisingCommand with UsesCachedData {
 
   override val output: Seq[Attribute] =
     Seq(AttributeReference("plan", StringType, nullable = true)())
