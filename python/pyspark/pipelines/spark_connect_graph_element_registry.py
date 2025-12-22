@@ -52,6 +52,10 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
         self._client_id = str(uuid.uuid4())
         self._query_funcs_by_flow_name: dict[str, QueryFunction] = {}
 
+    @property
+    def dataflow_graph_id(self) -> str:
+        return self._dataflow_graph_id
+
     def register_output(self, output: Output) -> None:
         table_details = None
         sink_details = None

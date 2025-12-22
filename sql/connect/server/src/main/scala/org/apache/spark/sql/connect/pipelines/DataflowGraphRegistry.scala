@@ -46,28 +46,23 @@ class DataflowGraphRegistry {
     graphId
   }
 
-  /** Retrieves the graph for a given id. */
-  def getDataflowGraph(graphId: String): Option[GraphRegistrationContext] = {
-    Option(dataflowGraphs.get(graphId))
+  /** Returns a Map of dataflow graph IDs to their corresponding GraphRegistrationContext. */
+  def getDataflowGraphs: Map[String, GraphRegistrationContext] = {
+    dataflowGraphs.asScala.toMap
   }
 
   /** Retrieves the graph for a given id, and throws if the id could not be found. */
   def getDataflowGraphOrThrow(dataflowGraphId: String): GraphRegistrationContext =
-    getDataflowGraph(dataflowGraphId).getOrElse {
+    getDataflowGraphs.getOrElse(dataflowGraphId, {
       throw new SparkException(
         errorClass = "DATAFLOW_GRAPH_NOT_FOUND",
         messageParameters = Map("graphId" -> dataflowGraphId),
         cause = null)
-    }
+    })
 
   /** Removes the graph with a given id from the registry. */
   def dropDataflowGraph(graphId: String): Unit = {
     dataflowGraphs.remove(graphId)
-  }
-
-  /** Returns all graphs in the registry. */
-  def getAllDataflowGraphs: Seq[GraphRegistrationContext] = {
-    dataflowGraphs.values().asScala.toSeq
   }
 
   /** Removes all graphs from the registry. */

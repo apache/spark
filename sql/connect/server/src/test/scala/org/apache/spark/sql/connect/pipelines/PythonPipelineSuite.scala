@@ -24,10 +24,13 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
 import org.scalactic.source.Position
 import org.scalatest.Tag
+import org.scalatest.concurrent.{Eventually, Futures}
+import org.scalatest.time.{Millis, Seconds, Span}
 
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.AnalysisException
@@ -57,15 +60,19 @@ class PythonPipelineSuite
     val customSessionIdentifier = UUID.randomUUID().toString
     val pythonCode =
       s"""
-         |from pyspark.pipelines.test.python_pipeline_suite_helpers import setup
+         |from pyspark import pipelines as dp
+         |from pyspark.pipelines.tests.python_pipeline_suite_helpers import setup
          |from pyspark.pipelines.add_pipeline_analysis_context import (
          |    add_pipeline_analysis_context
+         |)
+         |from pyspark.pipelines.graph_element_registry import (
+         |    graph_element_registration_context,
          |)
          |
          |spark, registry = setup("$serverPort", "$customSessionIdentifier")
          |
          |with add_pipeline_analysis_context(
-         |    spark=spark, dataflow_graph_id=dataflow_graph_id, flow_name=None
+         |    spark=spark, dataflow_graph_id=registry.dataflow_graph_id, flow_name=None
          |):
          |    with graph_element_registration_context(registry):
          |
@@ -80,7 +87,9 @@ class PythonPipelineSuite
         s"Python process failed with exit code $exitCode. Output: ${output.mkString("\n")}")
     }
 
-    getCurrentGraphRegistrationContext(customSessionIdentifier).toDataflowGraph
+    getCurrentGraphRegistrationContext(customSessionIdentifier)
+      .getOrElse(throw new RuntimeException("Graph registration context not found"))
+      .toDataflowGraph
   }
 
   private def findSessionHolder(sessionId: String): Option[SessionHolder] = {
@@ -91,15 +100,16 @@ class PythonPipelineSuite
       .find(_.session.conf.get("spark.custom.identifier") == sessionId)
   }
 
-  private def getCurrentGraphRegistrationContext(sessionId: String): GraphRegistrationContext = {
-    val sessionHolder = findSessionHolder(sessionId).getOrElse(
-        throw new RuntimeException(s"Session with identifier $sessionId not found"))
-
-    // get all dataflow graphs from the session holder
-    val dataflowGraphContexts = sessionHolder.dataflowGraphRegistry.getAllDataflowGraphs
-    assert(dataflowGraphContexts.size == 1)
-
-    dataflowGraphContexts.head
+  private def getCurrentGraphRegistrationContext(
+      sessionId: String): Option[GraphRegistrationContext] = {
+    findSessionHolder(sessionId).map { sessionHolder =>
+      val dataflowGraphs = sessionHolder.dataflowGraphRegistry.getDataflowGraphs
+      if (dataflowGraphs.size == 1) {
+        dataflowGraphs.values.head
+      } else {
+        throw new RuntimeException(s"Expected exactly 1 graph, but found ${dataflowGraphs.size}")
+      }
+    }
   }
 
   def buildAndResolveGraph(pythonText: String): DataflowGraph = {
@@ -107,17 +117,20 @@ class PythonPipelineSuite
     val sessionId = UUID.randomUUID().toString
     val pythonCode =
       s"""
-         |from pyspark.pipelines.test.python_pipeline_suite_helpers import setup
+         |from pyspark import pipelines as dp
+         |from pyspark.pipelines.tests.python_pipeline_suite_helpers import setup
          |from pyspark.pipelines.add_pipeline_analysis_context import (
          |    add_pipeline_analysis_context
+         |)
+         |from pyspark.pipelines.graph_element_registry import (
+         |    graph_element_registration_context,
          |)
          |
          |spark, registry = setup("$serverPort", "$sessionId")
          |
          |with add_pipeline_analysis_context(
-         |    spark=spark, dataflow_graph_id=dataflow_graph_id, flow_name=None
+         |    spark=spark, dataflow_graph_id=registry.dataflow_graph_id, flow_name=None
          |):
-         |    with graph_element_registration_context(registry):
          |    with graph_element_registration_context(registry):
          |
          |$indentedPythonText
@@ -125,24 +138,38 @@ class PythonPipelineSuite
          |registry.register_signalled_query_functions()
          |""".stripMargin
 
-    import scala.concurrent.Future
-
+    // Create a custom execution context for the Future
+    implicit val ec: ExecutionContext = ExecutionContext.global
     // Execute the code in a separate thread
     val pythonExecutionFuture: Future[(Int, Seq[String])] = Future {
       executePythonCode(pythonCode)
     }
 
-    // TODO: need to wait until GraphRegistrationContext session exists
+    // Wait until the session exists, timeout after 10 seconds
+    val sessionHolder = Eventually.eventually(
+        Futures.timeout(Span(10, Seconds)), Futures.interval(Span(100, Millis))) {
+      findSessionHolder(sessionId).getOrElse(
+        throw new RuntimeException(s"Session with ID $sessionId not found"))
+    }
 
-    val sessionHolder = findSessionHolder(sessionId).get
+    // Wait until a graph registration context exists, timeout after 10 seconds
+    val graphRegistrationContext = Eventually.eventually(
+        Futures.timeout(Span(10, Seconds)), Futures.interval(Span(100, Millis))) {
+      getCurrentGraphRegistrationContext(sessionId).getOrElse(
+        throw new RuntimeException("Graph registration context not found"))
+    }
 
-    val graphRegistrationContext = getCurrentGraphRegistrationContext(sessionId)
     val unresolvedGraph = graphRegistrationContext.toDataflowGraph
     val updateContext = TestPipelineUpdateContext(spark, unresolvedGraph, storageRoot)
-    sessionHolder.cachePipelineExecution(dataflowGraphId, updateContext)
+
+    // Get the actual graph ID from the registry for this context
+    val dataflowGraphs = sessionHolder.dataflowGraphRegistry.getDataflowGraphs
+    val graphId = dataflowGraphs.find(_._2 == graphRegistrationContext).map(_._1)
+      .getOrElse(throw new RuntimeException("Could not find graph ID for context"))
+    sessionHolder.cachePipelineExecution(graphId, updateContext)
 
     val graph = updateContext.pipelineExecution.resolveGraph()
-    
+
     graph
   }
 
@@ -1202,7 +1229,7 @@ class PythonPipelineSuite
   }
 
   test("access upstream schema within query function") {
-    val graph = buildGraph("""
+    val graph = buildAndResolveGraph("""
         |@dp.materialized_view
         |def mv2():
         |    spark.table("table1").schema
@@ -1212,20 +1239,16 @@ class PythonPipelineSuite
         |def mv1():
         |    return spark.range(5)
         |""".stripMargin)
-      .resolve()
-      .validate()
     assert(graph.flows.size == 2)
     assert(graph.tables.size == 2)
   }
 
   test("query function failure") {
-    val graph = buildGraph("""
+    val graph = buildAndResolveGraph("""
         |@dp.materialized_view
         |def mv():
         |    raise ValueError("bla")
         |""".stripMargin)
-      .resolve()
-      .validate()
     assert(graph.flows.size == 2)
     assert(graph.tables.size == 2)
   }

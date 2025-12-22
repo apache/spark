@@ -321,7 +321,7 @@ class SparkDeclarativePipelinesServerSuite
             .build()))
 
       // Verify the graph exists in the default session
-      assert(getDefaultSessionHolder.dataflowGraphRegistry.getAllDataflowGraphs.size == 1)
+      assert(getDefaultSessionHolder.dataflowGraphRegistry.getDataflowGraphs.size == 1)
     }
 
     // Create a second session with different user/session ID
@@ -374,8 +374,8 @@ class SparkDeclarativePipelinesServerSuite
         .getIsolatedSession(SessionKey(newSessionUserId, newSessionId), None)
 
       val defaultSessionGraphs =
-        getDefaultSessionHolder.dataflowGraphRegistry.getAllDataflowGraphs
-      val newSessionGraphs = newSessionHolder.dataflowGraphRegistry.getAllDataflowGraphs
+        getDefaultSessionHolder.dataflowGraphRegistry.getDataflowGraphs.values
+      val newSessionGraphs = newSessionHolder.dataflowGraphRegistry.getDataflowGraphs.values
 
       assert(defaultSessionGraphs.size == 1)
       assert(newSessionGraphs.size == 1)
@@ -441,7 +441,7 @@ class SparkDeclarativePipelinesServerSuite
         .getIsolatedSessionIfPresent(SessionKey(testUserId, testSessionId))
         .get
 
-      val graphsBefore = sessionHolder.dataflowGraphRegistry.getAllDataflowGraphs
+      val graphsBefore = sessionHolder.dataflowGraphRegistry.getDataflowGraphs.values
       assert(graphsBefore.size == 1)
 
       // Close the session
@@ -453,7 +453,7 @@ class SparkDeclarativePipelinesServerSuite
 
       assert(sessionAfterClose.isEmpty, "Session should be cleaned up after close")
       // Verify the graph is removed
-      val graphsAfter = sessionHolder.dataflowGraphRegistry.getAllDataflowGraphs
+      val graphsAfter = sessionHolder.dataflowGraphRegistry.getDataflowGraphs.values
       assert(graphsAfter.isEmpty, "Graph should be removed after session close")
     }
   }
@@ -518,7 +518,7 @@ class SparkDeclarativePipelinesServerSuite
 
       // Verify the graph exists
       val sessionHolder = getDefaultSessionHolder
-      val graphsBefore = sessionHolder.dataflowGraphRegistry.getAllDataflowGraphs
+      val graphsBefore = sessionHolder.dataflowGraphRegistry.getDataflowGraphs.values
       assert(graphsBefore.size == 1)
 
       // Drop the graph
@@ -532,7 +532,7 @@ class SparkDeclarativePipelinesServerSuite
             .build()))
 
       // Verify the graph is removed
-      val graphsAfter = sessionHolder.dataflowGraphRegistry.getAllDataflowGraphs
+      val graphsAfter = sessionHolder.dataflowGraphRegistry.getDataflowGraphs.values
       assert(graphsAfter.isEmpty, "Graph should be removed after drop")
     }
   }
