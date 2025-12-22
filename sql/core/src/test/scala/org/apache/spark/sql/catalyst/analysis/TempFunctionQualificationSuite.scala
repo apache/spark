@@ -96,4 +96,3 @@ class TempFunctionQualificationSuite extends QueryTest with SharedSparkSession {
     sql("DROP TEMPORARY FUNCTION system.session.my_func9")  // Drop with qualification
   }
 }
-

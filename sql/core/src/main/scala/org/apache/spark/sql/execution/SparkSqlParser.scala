@@ -185,7 +185,8 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   private def extractTempFunctionName(
       functionIdentifier: Seq[String],
-      ctx: ParserRuleContext): String = {
+      ctx: ParserRuleContext,
+      forDrop: Boolean = false): String = {
     functionIdentifier.length match {
       case 1 =>
         // Simple unqualified name
@@ -196,7 +197,12 @@ class SparkSqlAstBuilder extends AstBuilder {
           functionIdentifier.last
         } else {
           // Otherwise it's a database qualification which is not allowed
-          throw QueryParsingErrors.specifyingDBInCreateTempFuncError(functionIdentifier.head, ctx)
+          if (forDrop) {
+            throw QueryParsingErrors.invalidNameForDropTempFunc(functionIdentifier, ctx)
+          } else {
+            throw QueryParsingErrors.specifyingDBInCreateTempFuncError(
+              functionIdentifier.head, ctx)
+          }
         }
       case 3 =>
         // Check if it's system.session.funcName
@@ -204,10 +210,18 @@ class SparkSqlAstBuilder extends AstBuilder {
             functionIdentifier(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
           functionIdentifier.last
         } else {
-          throw QueryParsingErrors.unsupportedFunctionNameError(functionIdentifier, ctx)
+          if (forDrop) {
+            throw QueryParsingErrors.invalidNameForDropTempFunc(functionIdentifier, ctx)
+          } else {
+            throw QueryParsingErrors.unsupportedFunctionNameError(functionIdentifier, ctx)
+          }
         }
       case _ =>
-        throw QueryParsingErrors.unsupportedFunctionNameError(functionIdentifier, ctx)
+        if (forDrop) {
+          throw QueryParsingErrors.invalidNameForDropTempFunc(functionIdentifier, ctx)
+        } else {
+          throw QueryParsingErrors.unsupportedFunctionNameError(functionIdentifier, ctx)
+        }
     }
   }
 
@@ -1060,7 +1074,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       val isTemp = ctx.TEMPORARY != null
       if (isTemp) {
         // Extract the actual function name, handling session qualification
-        val funcName = extractTempFunctionName(functionName, ctx)
+        val funcName = extractTempFunctionName(functionName, ctx, forDrop = true)
         DropFunctionCommand(
           identifier = FunctionIdentifier(funcName),
           ifExists = ctx.EXISTS != null,
