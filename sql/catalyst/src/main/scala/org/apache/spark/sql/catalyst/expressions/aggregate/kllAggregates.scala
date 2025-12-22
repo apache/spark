@@ -478,8 +478,8 @@ case class KllSketchAggDouble(
   """,
   examples = """
     Examples:
-      > SELECT LENGTH(kll_sketch_to_string_bigint(_FUNC_(sketch_col))) > 0 FROM (SELECT kll_sketch_agg_bigint(col) as sketch_col FROM VALUES (1), (2), (3) tab(col)) t;
-       true
+      > SELECT kll_sketch_get_n_bigint(_FUNC_(sketch)) FROM (SELECT kll_sketch_agg_bigint(col) as sketch FROM VALUES (1), (2), (3) tab(col) UNION ALL SELECT kll_sketch_agg_bigint(col) as sketch FROM VALUES (4), (5), (6) tab(col)) t;
+       6
   """,
   group = "agg_funcs",
   since = "4.1.0")
@@ -614,8 +614,8 @@ case class KllMergeAggBigint(
   """,
   examples = """
     Examples:
-      > SELECT LENGTH(kll_sketch_to_string_float(_FUNC_(sketch_col))) > 0 FROM (SELECT kll_sketch_agg_float(col) as sketch_col FROM VALUES (CAST(1.0 AS FLOAT)), (CAST(2.0 AS FLOAT)), (CAST(3.0 AS FLOAT)) tab(col)) t;
-       true
+      > SELECT kll_sketch_get_n_float(_FUNC_(sketch)) FROM (SELECT kll_sketch_agg_float(col) as sketch FROM VALUES (CAST(1.0 AS FLOAT)), (CAST(2.0 AS FLOAT)), (CAST(3.0 AS FLOAT)) tab(col) UNION ALL SELECT kll_sketch_agg_float(col) as sketch FROM VALUES (CAST(4.0 AS FLOAT)), (CAST(5.0 AS FLOAT)), (CAST(6.0 AS FLOAT)) tab(col)) t;
+       6
   """,
   group = "agg_funcs",
   since = "4.1.0")
@@ -750,8 +750,8 @@ case class KllMergeAggFloat(
   """,
   examples = """
     Examples:
-      > SELECT LENGTH(kll_sketch_to_string_double(_FUNC_(sketch_col))) > 0 FROM (SELECT kll_sketch_agg_double(col) as sketch_col FROM VALUES (CAST(1.0 AS DOUBLE)), (CAST(2.0 AS DOUBLE)), (CAST(3.0 AS DOUBLE)) tab(col)) t;
-       true
+      > SELECT kll_sketch_get_n_double(_FUNC_(sketch)) FROM (SELECT kll_sketch_agg_double(col) as sketch FROM VALUES (CAST(1.0 AS DOUBLE)), (CAST(2.0 AS DOUBLE)), (CAST(3.0 AS DOUBLE)) tab(col) UNION ALL SELECT kll_sketch_agg_double(col) as sketch FROM VALUES (CAST(4.0 AS DOUBLE)), (CAST(5.0 AS DOUBLE)), (CAST(6.0 AS DOUBLE)) tab(col)) t;
+       6
   """,
   group = "agg_funcs",
   since = "4.1.0")
