@@ -751,7 +751,6 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
     override def onQueryExecutionStart(event: QueryExecutionStartEvent): Unit = {}
   }
 
-
   class MyListener extends StreamingQueryListener {
     var start: Seq[String] = Seq.empty
     var progress: Seq[String] = Seq.empty

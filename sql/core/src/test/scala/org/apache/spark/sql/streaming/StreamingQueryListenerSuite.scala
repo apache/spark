@@ -50,8 +50,10 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     spark.streams.active.foreach(_.stop())
     assert(spark.streams.active.isEmpty)
     // Skip check default `StreamingQueryStatusListener` which is for streaming UI.
-    assert(spark.streams.listListeners()
-      .forall(_.isInstanceOf[StreamingQueryStatusListener]))
+    assert(
+      spark.streams
+        .listListeners()
+        .forall(_.isInstanceOf[StreamingQueryStatusListener]))
     // Make sure we don't leak any events to the next test
     spark.sparkContext.listenerBus.waitUntilEmpty()
   }
@@ -67,17 +69,19 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     val df = inputData.toDS().as[Long].map { 10 / _ }
 
     case class AssertStreamExecThreadToWaitForClock()
-      extends AssertOnQuery(q => {
-        eventually(Timeout(streamingTimeout)) {
-          if (q.exception.isEmpty) {
-            assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
-          }
-        }
-        if (q.exception.isDefined) {
-          throw q.exception.get
-        }
-        true
-      }, "")
+        extends AssertOnQuery(
+          q => {
+            eventually(Timeout(streamingTimeout)) {
+              if (q.exception.isEmpty) {
+                assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
+              }
+            }
+            if (q.exception.isDefined) {
+              throw q.exception.get
+            }
+            true
+          },
+          "")
 
     try {
       // No events until started
@@ -87,7 +91,6 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       assert(listener.terminationEvent === null)
 
       testStream(df, OutputMode.Append)(
-
         // Start event generated when query started
         StartStream(Trigger.ProcessingTime(100), triggerClock = clock),
         AssertOnQuery { query =>
@@ -109,7 +112,9 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           assert(listener.progressEvents.nonEmpty)
           // SPARK-18868: We can't use query.lastProgress, because in progressEvents, we filter
           // out non-zero input rows, but the lastProgress may be a zero input row trigger
-          val lastNonZeroProgress = query.recentProgress.filter(_.numInputRows > 0).lastOption
+          val lastNonZeroProgress = query.recentProgress
+            .filter(_.numInputRows > 0)
+            .lastOption
             .getOrElse(fail("No progress updates received in StreamingQuery!"))
           assert(listener.progressEvents.last.json === lastNonZeroProgress.json)
           assert(listener.terminationEvent === null)
@@ -146,12 +151,12 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
             assert(!listener.terminationEvent.exception.get.contains("StreamingQueryException"))
             assert(
               listener.terminationEvent.exception.get.contains("java.lang.ArithmeticException"))
-            assert(listener.terminationEvent.exception.get.contains("StreamingQueryListenerSuite"))
+            assert(
+              listener.terminationEvent.exception.get.contains("StreamingQueryListenerSuite"))
           }
           listener.checkAsyncErrors()
           true
-        }
-      )
+        })
     } finally {
       spark.streams.removeListener(listener)
     }
@@ -171,14 +176,15 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
             listeners.foreach(listener => assert(listener.terminationEvent.id === query.id))
             listeners.foreach(listener => assert(listener.terminationEvent.runId === query.runId))
             listeners.foreach(listener => assert(listener.terminationEvent.exception === None))
-            listeners.foreach(listener => assert(listener.terminationEvent.errorClassOnException
-              === None))
+            listeners.foreach(listener =>
+              assert(
+                listener.terminationEvent.errorClassOnException
+                  === None))
           }
           listeners.foreach(listener => listener.checkAsyncErrors())
           listeners.foreach(listener => listener.reset())
           true
-        }
-      )
+        })
     } finally {
       listeners.foreach(spark.streams.removeListener)
     }
@@ -198,14 +204,15 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
             listeners.foreach(listener => assert(listener.terminationEvent.id === query.id))
             listeners.foreach(listener => assert(listener.terminationEvent.runId === query.runId))
             listeners.foreach(listener => assert(listener.terminationEvent.exception === None))
-            listeners.foreach(listener => assert(listener.terminationEvent.errorClassOnException
-              === None))
+            listeners.foreach(listener =>
+              assert(
+                listener.terminationEvent.errorClassOnException
+                  === None))
           }
           listeners.foreach(listener => listener.checkAsyncErrors())
           listeners.foreach(listener => listener.reset())
           true
-        }
-      )
+        })
     } finally {
       listeners.foreach(spark.streams.removeListener)
     }
@@ -214,10 +221,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
   test("adding and removing listener") {
     def isListenerActive(listener: EventCollector): Boolean = {
       listener.reset()
-      testStream(MemoryStream[Int].toDS())(
-        StartStream(),
-        StopStream
-      )
+      testStream(MemoryStream[Int].toDS())(StartStream(), StopStream)
       listener.startEvent != null
     }
 
@@ -249,8 +253,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           StartStream(),
           Assert(listener.startEvent !== null, "onQueryStarted not called before query returned"),
           StopStream,
-          Assert { listener.checkAsyncErrors() }
-        )
+          Assert { listener.checkAsyncErrors() })
       }
     }
   }
@@ -272,18 +275,14 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         UUID.randomUUID,
         "name",
         "2016-12-05T20:54:20.827Z",
-        Set()
-      )
-    )
+        Set()))
     testSerialization(
       new QueryStartedEvent(
         UUID.randomUUID,
         UUID.randomUUID,
         null,
         "2016-12-05T20:54:20.827Z",
-        Set("tag1", "tag2")
-      )
-    )
+        Set("tag1", "tag2")))
   }
 
   test("QueryProgressEvent serialization") {
@@ -291,7 +290,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       import scala.jdk.CollectionConverters._
       val json = JsonProtocol.sparkEventToJsonString(event)
       val newEvent = JsonProtocol.sparkEventFromJson(json).asInstanceOf[QueryProgressEvent]
-      assert(newEvent.progress.json === event.progress.json)  // json as a proxy for equality
+      assert(newEvent.progress.json === event.progress.json) // json as a proxy for equality
       assert(newEvent.progress.durationMs.asScala === event.progress.durationMs.asScala)
       assert(newEvent.progress.eventTime.asScala === event.progress.eventTime.asScala)
     }
@@ -311,8 +310,11 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
     val exception = SparkException.internalError("testpurpose")
     testSerialization(
-      new QueryTerminatedEvent(UUID.randomUUID, UUID.randomUUID,
-        Some(exception.getMessage), Some(exception.getCondition)))
+      new QueryTerminatedEvent(
+        UUID.randomUUID,
+        UUID.randomUUID,
+        Some(exception.getMessage),
+        Some(exception.getCondition)))
   }
 
   test("only one progress event per interval when no data") {
@@ -380,10 +382,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       session.sparkContext.addJobTag(jobTag1)
       session.sparkContext.addJobTag(jobTag2)
       val mem = MemoryStream[Int](implicitly[Encoder[Int]], session)
-      testStream(mem.toDS())(
-        AddData(mem, 1, 2, 3),
-        CheckAnswer(1, 2, 3)
-      )
+      testStream(mem.toDS())(AddData(mem, 1, 2, 3), CheckAnswer(1, 2, 3))
       session.sparkContext.listenerBus.waitUntilEmpty()
       session.sparkContext.clearJobTags()
     }
@@ -405,10 +404,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       collector1.reset()
       collector2.reset()
       val mem = MemoryStream[Int](implicitly[Encoder[Int]], session)
-      testStream(mem.toDS())(
-        AddData(mem, 1, 2, 3),
-        CheckAnswer(1, 2, 3)
-      )
+      testStream(mem.toDS())(AddData(mem, 1, 2, 3), CheckAnswer(1, 2, 3))
       session.sparkContext.listenerBus.waitUntilEmpty()
     }
 
@@ -473,7 +469,8 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     import org.apache.spark.sql.functions._
     val clock = new StreamManualClock
     val inputData = new MemoryStream[Int](0, spark)
-    val df = inputData.toDF()
+    val df = inputData
+      .toDF()
       .observe(
         name = "my_event",
         min($"value").as("min_val"),
@@ -481,9 +478,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         sum($"value").as("sum_val"),
         count(when($"value" % 2 === 0, 1)).as("num_even"),
         percentile_approx($"value", lit(0.5), lit(100)).as("percentile_approx_val"))
-      .observe(
-        name = "other_event",
-        avg($"value").cast("int").as("avg_val"))
+      .observe(name = "other_event", avg($"value").cast("int").as("avg_val"))
     val listener = new EventCollectorV2
     def checkMetrics(f: java.util.Map[String, Row] => Unit): StreamAction = {
       AssertOnQuery { _ =>
@@ -527,8 +522,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
             true
           }
         },
-        StopStream
-      )
+        StopStream)
     } finally {
       spark.streams.removeListener(listener)
     }
@@ -583,8 +577,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           AdvanceManualClock(90),
           checkIdleEvent(0),
           AdvanceManualClock(20),
-          checkIdleEvent(1)
-        )
+          checkIdleEvent(1))
       } finally {
         spark.streams.removeListener(listener)
       }
@@ -616,9 +609,8 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  private def withListenerAdded(
-      listener: StreamingQueryListener,
-      session: SparkSession = spark)(body: => Unit): Unit = {
+  private def withListenerAdded(listener: StreamingQueryListener, session: SparkSession = spark)(
+      body: => Unit): Unit = {
     try {
       failAfter(streamingTimeout) {
         session.streams.addListener(listener)
@@ -641,7 +633,6 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         spark.streams.addListener(listener)
 
         testStream(df, OutputMode.Append)(
-
           // Start query
           StartStream(Trigger.ProcessingTime(100), triggerClock = clock),
           AssertOnQuery { query =>
@@ -656,17 +647,14 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
             eventually(Timeout(streamingTimeout)) {
               assert(
                 listener.triggerStartedEvent !== null,
-                "QueryExecutionStart should fire when batch will execute"
-              )
+                "QueryExecutionStart should fire when batch will execute")
               assert(listener.triggerStartedEvent.id === listener.startEvent.id)
               assert(listener.triggerStartedEvent.runId === listener.startEvent.runId)
               assert(listener.triggerStartedEvent.name === listener.startEvent.name)
             }
             true
           },
-
-          StopStream
-        )
+          StopStream)
       } finally {
         spark.streams.removeListener(listener)
       }
@@ -683,7 +671,6 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       spark.streams.addListener(listener)
 
       testStream(df, OutputMode.Append)(
-
         // Start query with default config (disabled)
         StartStream(Trigger.ProcessingTime(100), triggerClock = clock),
         AssertOnQuery { query =>
@@ -699,13 +686,11 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         // No QueryExecutionStart events should fire (disabled by default)
         AssertOnQuery { _ =>
           assert(
-            listener.triggerStartEvents.isEmpty, "QueryExecutionStart should not fire when disabled"
-          )
+            listener.triggerStartEvents.isEmpty,
+            "QueryExecutionStart should not fire when disabled")
           true
         },
-
-        StopStream
-      )
+        StopStream)
     } finally {
       spark.streams.removeListener(listener)
     }
@@ -720,13 +705,11 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     // Set min interval to 500ms for faster testing
     withSQLConf(
       SQLConf.STREAMING_QUERY_EXECUTION_START_EVENT_ENABLED.key -> "true",
-      SQLConf.STREAMING_QUERY_EXECUTION_START_EVENT_MIN_INTERVAL.key -> "500"
-    ) {
+      SQLConf.STREAMING_QUERY_EXECUTION_START_EVENT_MIN_INTERVAL.key -> "500") {
       try {
         spark.streams.addListener(listener)
 
         testStream(df, OutputMode.Append)(
-
           StartStream(Trigger.ProcessingTime(100), triggerClock = clock),
           AssertOnQuery { _ => true },
 
@@ -748,8 +731,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
           AssertOnQuery { _ =>
             assert(
               listener.triggerStartEvents.length === 1,
-              "Second trigger start within throttle window should not fire"
-            )
+              "Second trigger start within throttle window should not fire")
             true
           },
 
@@ -761,14 +743,11 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
             eventually(Timeout(streamingTimeout)) {
               assert(
                 listener.triggerStartEvents.length === 2,
-                "Third trigger start after throttle window should fire"
-              )
+                "Third trigger start after throttle window should fire")
             }
             true
           },
-
-          StopStream
-        )
+          StopStream)
       } finally {
         spark.streams.removeListener(listener)
       }
@@ -786,14 +765,11 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         spark.streams.addListener(listener)
 
         testStream(df, OutputMode.Append)(
-
           StartStream(Trigger.ProcessingTime(100), triggerClock = clock),
           AssertOnQuery { _ => true },
-
           AddData(inputData, 1, 2),
           AdvanceManualClock(100),
           CheckAnswer(2, 3),
-
           AssertOnQuery { _ =>
             eventually(Timeout(streamingTimeout)) {
               // Verify trigger start event fires before progress
@@ -804,9 +780,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
             }
             true
           },
-
-          StopStream
-        )
+          StopStream)
       } finally {
         spark.streams.removeListener(listener)
       }
@@ -824,14 +798,11 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         spark.streams.addListener(listener)
 
         testStream(df, OutputMode.Append)(
-
           StartStream(Trigger.ProcessingTime(100), triggerClock = clock),
           AssertOnQuery { _ => true },
-
           AddData(inputData, 1),
           AdvanceManualClock(100),
           CheckAnswer(2),
-
           AssertOnQuery { _ =>
             eventually(Timeout(streamingTimeout)) {
               val event = listener.triggerStartedEvent
@@ -843,9 +814,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
             }
             true
           },
-
-          StopStream
-        )
+          StopStream)
       } finally {
         spark.streams.removeListener(listener)
       }
@@ -920,7 +889,8 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       asyncTestWaiter.dismiss()
     }
 
-    protected def handleOnQueryExecutionStart(queryExecutionStart: QueryExecutionStartEvent): Unit = {
+    protected def handleOnQueryExecutionStart(
+        queryExecutionStart: QueryExecutionStartEvent): Unit = {
       asyncTestWaiter {
         assert(startEvent != null, "onQueryExecutionStart called before onQueryStarted")
         triggerStartedEvent = queryExecutionStart
@@ -940,7 +910,8 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
     override def onQueryProgress(event: QueryProgressEvent): Unit = handleOnQueryProgress(event)
 
-    override def onQueryTerminated(event: QueryTerminatedEvent): Unit = handleOnQueryTerminated(event)
+    override def onQueryTerminated(event: QueryTerminatedEvent): Unit = handleOnQueryTerminated(
+      event)
   }
 
   /**
@@ -962,7 +933,8 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
     override def onQueryProgress(event: QueryProgressEvent): Unit = handleOnQueryProgress(event)
 
-    override def onQueryExecutionStart(event: QueryExecutionStartEvent): Unit = handleOnQueryExecutionStart(event)
+    override def onQueryExecutionStart(event: QueryExecutionStartEvent): Unit =
+      handleOnQueryExecutionStart(event)
 
     override def onQueryIdle(event: QueryIdleEvent): Unit = handleOnQueryIdle(event)
 

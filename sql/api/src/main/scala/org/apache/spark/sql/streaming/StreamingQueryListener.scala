@@ -323,13 +323,13 @@ object StreamingQueryListener extends Serializable {
    * Event representing that the trigger of a query has started.
    *
    * @param id
-   *  A unique query id that persists across restarts. See `StreamingQuery.id()`.
+   *   A unique query id that persists across restarts. See `StreamingQuery.id()`.
    * @param runId
-   *  A query id that is unique for every start/restart. See `StreamingQuery.runId()`.
+   *   A query id that is unique for every start/restart. See `StreamingQuery.runId()`.
    * @param name
-   *  User-specified name of the query, null if not specified.
+   *   User-specified name of the query, null if not specified.
    * @param timestamp
-   *  The timestamp start of a query trigger
+   *   The timestamp start of a query trigger
    */
   @Evolving
   class QueryExecutionStartEvent private[sql] (
