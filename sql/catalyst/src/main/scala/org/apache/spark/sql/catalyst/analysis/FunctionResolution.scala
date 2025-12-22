@@ -125,6 +125,13 @@ class FunctionResolution(
       name: Seq[String],
       arguments: Seq[Expression],
       u: UnresolvedFunction): Option[Expression] = {
+
+    // First check if this function exists as a table function (wrong type for this context)
+    val funcNameForCheck = if (name.size == 1) name.head else name.last
+    if (v1SessionCatalog.lookupBuiltinOrTempTableFunction(funcNameForCheck).isDefined) {
+      throw QueryCompilationErrors.notAScalarFunctionError(name.mkString("."), u)
+    }
+
     val expression = if (name.size == 1 && u.isInternal) {
       // Internal functions
       Option(FunctionRegistry.internal.lookupFunction(FunctionIdentifier(name.head), arguments))
@@ -150,7 +157,12 @@ class FunctionResolution(
   def resolveBuiltinOrTempTableFunction(
       name: Seq[String],
       arguments: Seq[Expression]): Option[LogicalPlan] = {
+
     if (name.length == 1) {
+      // First check if this function exists as a scalar function (wrong type for this context)
+      if (v1SessionCatalog.lookupBuiltinOrTempFunction(name.head).isDefined) {
+        throw QueryCompilationErrors.notATableFunctionError(name.mkString("."))
+      }
       v1SessionCatalog.resolveBuiltinOrTempTableFunction(name.head, arguments)
     } else {
       None

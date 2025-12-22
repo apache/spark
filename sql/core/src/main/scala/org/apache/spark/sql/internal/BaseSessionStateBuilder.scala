@@ -19,7 +19,7 @@ package org.apache.spark.sql.internal
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.{DataSourceRegistration, ExperimentalMethods, SparkSessionExtensions, UDTFRegistration}
 import org.apache.spark.sql.artifact.ArtifactManager
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, FunctionRegistry, InvokeProcedures, ReplaceCharWithVarchar, ResolveDataSource, ResolveEventTimeWatermark, ResolveExecuteImmediate, ResolveMetricView, ResolveSessionCatalog, ResolveTranspose, SimpleFunctionRegistry, TableFunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, FunctionRegistry, InvokeProcedures, ReplaceCharWithVarchar, ResolveDataSource, ResolveEventTimeWatermark, ResolveExecuteImmediate, ResolveMetricView, ResolveSessionCatalog, ResolveTranspose, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.analysis.resolver.ResolverExtension
 import org.apache.spark.sql.catalyst.catalog.{FunctionExpressionBuilder, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExtractSemiStructuredFields}
@@ -110,11 +110,17 @@ abstract class BaseSessionStateBuilder(
    * This field is kept for backward compatibility with existing code that might reference it,
    * but it's no longer passed to SessionCatalog or actively used.
    */
+  /**
+   * Internal catalog managing functions registered by the user.
+   *
+   * NOTE: With Approach 2 (separate registries), we no longer create a cloned registry.
+   * SessionCatalog manages temp functions internally in a separate registry.
+   * We pass FunctionRegistry.builtin here so SessionCatalog can detect non-legacy mode.
+   */
   @deprecated("Use SessionCatalog.tempFunctionRegistry instead", "4.0.0")
   protected lazy val functionRegistry: FunctionRegistry = {
-    // Return a dummy registry for backward compatibility
-    // Real function resolution now happens in SessionCatalog with separate registries
-    new SimpleFunctionRegistry
+    // Pass the builtin registry so SessionCatalog knows to use two-registry mode
+    FunctionRegistry.builtin
   }
 
   /**

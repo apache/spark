@@ -936,6 +936,21 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       origin = context)
   }
 
+  def notAScalarFunctionError(
+      functionName: String,
+      u: TreeNode[_]): Throwable = {
+    new AnalysisException(
+      errorClass = "NOT_A_SCALAR_FUNCTION",
+      messageParameters = Map("functionName" -> toSQLId(functionName)),
+      origin = u.origin)
+  }
+
+  def notATableFunctionError(functionName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "NOT_A_TABLE_FUNCTION",
+      messageParameters = Map("functionName" -> toSQLId(functionName)))
+  }
+
   def wrongNumArgsError(
       name: String,
       validParametersCount: Seq[Any],
