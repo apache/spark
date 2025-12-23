@@ -2135,103 +2135,98 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
           }
         }
       }
-      if (cheapWithUsed.isEmpty && expensiveWithUsed.isEmpty) {
-        // Short circuit, we don't have anything to push OR split
+      // Handle all of the cheap filters (part 1 & 2).
+      val cheap: Seq[Expression] = cheapWithUsed.map(_._1)
+      // Make a base instance which has all of the cheap filters pushed down.
+      val baseChild: LogicalPlan = if (!cheap.isEmpty) {
+        // For all filter which do not reference any expensive aliases then
+        // just push the filter while resolving the non-expensive aliases.
+        val combinedCheapFilter = cheap.reduce(And)
+        val resolvedCheapFilter = replaceAlias(combinedCheapFilter, aliasMap)
+        Filter(resolvedCheapFilter, child = grandChild)
+      } else {
+        // If we don't have any inexpensive filters to push it's "just" the grandchild.
+        grandChild
+      }
+      // Handle any Case 3 filters
+      // We group the expensive components by the aliases used, since if they use the same
+      // aliases we can introduce them together.
+      val grouped = expensiveWithUsed.groupBy(_._2)
+      // Sort by the name of the head expensive alias so we have
+      // a consistent order for testing. It's possible we could do something
+      // smarter here if we build a better cost based heuristic.
+      val expensiveByUsed = grouped.view
+        .mapValues(_.map(_._1).toList).toList.sortBy(_._1.head._2.name)
+      // For each expensive alias figure out if they're in case 3A or 3B
+      val (toSplit, leaveAsIs) = expensiveByUsed.partition {
+        case (used, expensive) =>
+          // We can't split these filters from this projection since they
+          // have a 1:1 mapping with all of the aliases.
+          if (used == aliasMap) {
+            false
+          } else {
+            true
+          }
+      }
+      if (toSplit.isEmpty && cheap.isEmpty) {
+        // Nothing to push or split, short circuit (all filters are case 3B).
         f
       } else {
-        // Handle all of the cheap filters (part 1 & 2).
-        val cheap: Seq[Expression] = cheapWithUsed.map(_._1)
-        // Make a base instance which has all of the cheap filters pushed down.
-        val baseChild: LogicalPlan = if (!cheap.isEmpty) {
-          // For all filter which do not reference any expensive aliases then
-          // just push the filter while resolving the non-expensive aliases.
-          val combinedCheapFilter = cheap.reduce(And)
-          val resolvedCheapFilter = replaceAlias(combinedCheapFilter, aliasMap)
-          Filter(resolvedCheapFilter, child = grandChild)
+        val expensiveFiltersDone = if (toSplit.isEmpty) {
+          // If we can't split anymore (no 3A), but we did have cheap filters
+          // pushed we still need to add the expensive filters back on top.
+          baseChild
         } else {
-          // If we don't have any inexpensive filters to push it's "just" the grandchild.
-          grandChild
-        }
-        // Handle any Case 3 filters
-        // We group the expensive components by the aliases used, since if they use the same
-        // aliases we can introduce them together.
-        val grouped = expensiveWithUsed.groupBy(_._2)
-        // Sort by the name of the head expensive alias so we have
-        // a consistent order for testing. It's possible we could do something
-        // smarter here if we build a better cost based heuristic.
-        val expensiveByUsed = grouped.view
-          .mapValues(_.map(_._1).toList).toList.sortBy(_._1.head._2.name)
-        // For each expensive alias figure out if they're in case 3A or 3B
-        val (toSplit, leaveAsIs) = expensiveByUsed.partition {
-          case (used, expensive) =>
-            // We can't split these filters from this projection since they
-            // have a 1:1 mapping with all of the aliases.
-            if (used == aliasMap) {
-              false
-            } else {
-              true
-            }
-        }
-        if (toSplit.isEmpty && cheap.isEmpty) {
-          // Nothing to push or split, short circuit (all filters are case 3B).
-          f
-        } else {
-          val expensiveFiltersDone = if (toSplit.isEmpty) {
-            // If we can't split anymore (no 3A), but we did have cheap filters
-            // pushed we still need to add the expensive filters back on top.
-            baseChild
-          } else {
-            // We have at least one filter that we can split the projection around.
-            // We're going to now add projections one at a time for the expensive components for
-            // each group of filters. We'll keep track of what we added for the previous filter(s)
-            // so we don't double add anything.
-            val (headUsed, headConds) = toSplit.head
-            // Initial references are everything from the base child since the later projection may
-            // need it and the aliases introduced in our first expensive filter.
-            val initialReferences = (baseChild.output ++ headUsed.map(_._2)).distinct
-            // Our base filter.
-            val first = Filter(headConds.reduce(And),
-              project.copy(projectList = initialReferences,
-                child = baseChild))
-            // addedAliases keeps track of the aliases we've already added to support
-            // previous filters.
-            var addedAliases = first.outputSet
-            // For the remaining filters add projections and filters as needed.
-            toSplit.tail.foldLeft(first) {
-              case (currentFilter, (nextUsed, nextConds)) =>
-                val newAttributeAliases = nextUsed.filterNot(a => addedAliases.contains(a._1))
-                val newAliases = newAttributeAliases.values
-                if (newAliases.isEmpty) {
-                  // We already have all the aliases needed, just add the filter
-                  Filter(nextConds.reduce(And), currentFilter)
-                } else {
-                  // Need to add a new projection for the new aliases
-                  val newProjection = project.copy(
-                    projectList = currentFilter.output ++ newAliases,
-                    child = currentFilter)
-                  // Update our added aliases so we don't add them again.
-                  addedAliases = newAttributeAliases.foldLeft(addedAliases) {
-                    case (acc, a) => acc + a._1
-                  }
-                  Filter(nextConds.reduce(And), newProjection)
+          // We have at least one filter that we can split the projection around.
+          // We're going to now add projections one at a time for the expensive components for
+          // each group of filters. We'll keep track of what we added for the previous filter(s)
+          // so we don't double add anything.
+          val (headUsed, headConds) = toSplit.head
+          // Initial references are everything from the base child since the later projection may
+          // need it and the aliases introduced in our first expensive filter.
+          val initialReferences = (baseChild.output ++ headUsed.map(_._2)).distinct
+          // Our base filter.
+          val first = Filter(headConds.reduce(And),
+            project.copy(projectList = initialReferences,
+              child = baseChild))
+          // addedAliases keeps track of the aliases we've already added to support
+          // previous filters.
+          var addedAliases = first.outputSet
+          // For the remaining filters add projections and filters as needed.
+          toSplit.tail.foldLeft(first) {
+            case (currentFilter, (nextUsed, nextConds)) =>
+              val newAttributeAliases = nextUsed.filterNot(a => addedAliases.contains(a._1))
+              val newAliases = newAttributeAliases.values
+              if (newAliases.isEmpty) {
+                // We already have all the aliases needed, just add the filter
+                Filter(nextConds.reduce(And), currentFilter)
+              } else {
+                // Need to add a new projection for the new aliases
+                val newProjection = project.copy(
+                  projectList = currentFilter.output ++ newAliases,
+                  child = currentFilter)
+                // Update our added aliases so we don't add them again.
+                addedAliases = newAttributeAliases.foldLeft(addedAliases) {
+                  case (acc, a) => acc + a._1
                 }
-            }
+                Filter(nextConds.reduce(And), newProjection)
+              }
           }
-          // Insert a last projection to match the desired column ordering and
-          // evaluate any stragglers and select the already computed columns.
-          val (unusedAliases, computedAliases) = project.projectList.partition(
-            a => !expensiveFiltersDone.outputSet.contains(a.toAttribute))
-          val topProjection = project.copy(projectList = matchColumnOrdering(
-            fields, computedAliases.map(_.toAttribute) ++ unusedAliases),
-            child = expensiveFiltersDone)
+        }
+        // Insert a last projection to match the desired column ordering and
+        // evaluate any stragglers and select the already computed columns.
+        val (unusedAliases, computedAliases) = project.projectList.partition(
+          a => !expensiveFiltersDone.outputSet.contains(a.toAttribute))
+        val topProjection = project.copy(projectList = matchColumnOrdering(
+          fields, computedAliases.map(_.toAttribute) ++ unusedAliases),
+          child = expensiveFiltersDone)
 
-          if (leaveAsIs.isEmpty) {
-            topProjection
-          } else {
-            // Finally add any filters which could not be pushed or split
-            val remainingConditions = leaveAsIs.map(_._2).flatten.toSeq
-            Filter(And(remainingConditions.reduce(And), condition), topProjection)
-          }
+        if (leaveAsIs.isEmpty) {
+          topProjection
+        } else {
+          // Finally add any filters which could not be pushed or split
+          val remainingConditions = leaveAsIs.map(_._2).flatten.toSeq
+          Filter(And(remainingConditions.reduce(And), condition), topProjection)
         }
       }
 
