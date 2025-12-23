@@ -11281,15 +11281,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         from pyspark.pandas.series import first_series
 
-        cols = []
         result_scol_name = "value"
-        for label, applied_col in zip(column_labels, scols):
-            cols.append(
-                F.struct(
-                    *[F.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i)) for i, col in enumerate(label)],
-                    *[applied_col.alias(result_scol_name)],
-                )
+        cols = [
+            F.struct(
+                *[F.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i)) for i, col in enumerate(label)],
+                *[applied_col.alias(result_scol_name)],
             )
+            for label, applied_col in zip(column_labels, scols)
+        ]
         # Statements under this comment implement spark frame transformations as below:
         # From:
         # +-------------------------------------------------------------------------------------+
@@ -11434,12 +11433,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         3  4.0
         """
         if numeric_only:
-            numeric_col_names = []
-            for label in self._internal.column_labels:
-                psser = self._psser_for(label)
-                if isinstance(psser.spark.data_type, (NumericType, BooleanType)):
-                    numeric_col_names.append(psser.name)
-
+            numeric_col_names = [
+                self._psser_for(label).name
+                for label in self._internal.column_labels
+                if isinstance(self._psser_for(label).spark.data_type, (NumericType, BooleanType))
+            ]
         psdf = self[numeric_col_names] if numeric_only else self
         return psdf._apply_series_op(
             lambda psser: psser._rank(method=method, ascending=ascending), should_resolve=True
@@ -12530,9 +12528,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     cols_dict[column].append(scol_for(sdf, column)[i].alias(column))
 
             internal_index_column = SPARK_DEFAULT_INDEX_NAME
-            cols = []
-            for i, col in enumerate(zip(*cols_dict.values())):
-                cols.append(F.struct(F.lit(qq[i]).alias(internal_index_column), *col))
+            cols = [
+                F.struct(F.lit(qq[i]).alias(internal_index_column), *col)
+                for i, col in enumerate(zip(*cols_dict.values()))
+            ]
             sdf = sdf.select(F.array(*cols).alias("arrays"))
 
             # And then, explode it and manually set the index.
