@@ -27,7 +27,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate;
  * This interface enables push-down of UPDATE operations to the data source, similar to how
  * {@link SupportsDeleteV2} enables push-down of DELETE operations.
  *
- * @since 3.4.0
+ * @since 4.1.0
  */
 @Evolving
 public interface SupportsUpdateV2 extends Table {
