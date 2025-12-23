@@ -113,13 +113,17 @@ abstract class BaseSessionStateBuilder(
   /**
    * Internal catalog managing functions registered by the user.
    *
-   * NOTE: With Approach 2 (separate registries), we no longer create a cloned registry.
-   * SessionCatalog manages temp functions internally in a separate registry.
-   * We pass FunctionRegistry.builtin here so SessionCatalog can detect non-legacy mode.
+   * Returns FunctionRegistry.builtin so SessionCatalog uses two-registry mode,
+   * where builtin functions are in the global registry and temp functions are
+   * in a separate per-session registry.
+   *
+   * NOTE: There is a known issue where UDFRegistration receives this builtin registry
+   * and cannot write temp UDFs to it (it's immutable). This causes UDFs to fail.
+   * A proper fix requires architectural changes to how UDFRegistration accesses
+   * the session's temp registry. For now, function qualification works correctly.
    */
   @deprecated("Use SessionCatalog.tempFunctionRegistry instead", "4.0.0")
   protected lazy val functionRegistry: FunctionRegistry = {
-    // Pass the builtin registry so SessionCatalog knows to use two-registry mode
     FunctionRegistry.builtin
   }
 
@@ -180,7 +184,10 @@ abstract class BaseSessionStateBuilder(
       SessionState.newHadoopConf(session.sparkContext.hadoopConfiguration, conf),
       sqlParser,
       resourceLoader,
-      new SparkUDFExpressionBuilder)
+      new SparkUDFExpressionBuilder,
+      conf.tableRelationCacheSize,
+      conf.metadataCacheTTL,
+      conf.defaultDatabase)
     parentState.foreach(_.catalog.copyStateTo(catalog))
     catalog
   }
@@ -195,9 +202,10 @@ abstract class BaseSessionStateBuilder(
    * Interface exposed to the user for registering user-defined functions.
    *
    * Note 1: The user-defined functions must be deterministic.
-   * Note 2: This depends on the `functionRegistry` field.
+   * Note 2: This uses the same registry as SessionCatalog for temp functions.
    */
-  protected def udfRegistration: UDFRegistration = new UDFRegistration(session, functionRegistry)
+  protected def udfRegistration: UDFRegistration =
+    new UDFRegistration(session, functionRegistry)
 
   protected def udtfRegistration: UDTFRegistration = new UDTFRegistration(tableFunctionRegistry)
 

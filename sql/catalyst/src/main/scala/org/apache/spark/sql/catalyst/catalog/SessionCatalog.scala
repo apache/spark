@@ -89,7 +89,8 @@ class SessionCatalog(
   }
 
   // Separate registry for temporary functions only (starts empty)
-  private val tempFunctionRegistry: FunctionRegistry =
+  // Made package-private for access by UDFRegistration
+  private[sql] val tempFunctionRegistry: FunctionRegistry =
     if (isLegacyMode) functionRegistry else new SimpleFunctionRegistry
 
   // References to immutable builtin registries (shared, not cloned)
