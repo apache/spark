@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.sql.{DataFrame, SaveMode}
+import org.apache.spark.sql.{DataFrame, Row, SaveMode}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable, Table, TableCatalog}
 
 class DataSourceV2SQLSessionCatalogSuite
@@ -78,5 +78,12 @@ class DataSourceV2SQLSessionCatalogSuite
       // partition columns should be put at the end.
       assert(getTableMetadata("default.t").columns().map(_.name()) === Seq("c2", "c1"))
     }
+  }
+
+  test("SPARK-54760: DelegatingCatalogExtension supports both V1 and V2 functions") {
+    sessionCatalog.createFunction(Identifier.of(Array("ns"), "strlen"), StrLen(StrLenDefault))
+    checkAnswer(
+      sql("SELECT char_length('Hello') as v1, ns.strlen('Spark') as v2"),
+      Row(5, 5))
   }
 }
