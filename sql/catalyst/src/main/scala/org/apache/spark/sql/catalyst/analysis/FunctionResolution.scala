@@ -26,17 +26,16 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{
   CatalogManager,
-  CatalogV2Util,
-  FunctionCatalog,
-  Identifier,
   LookupCatalog
 }
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.functions.{
   AggregateFunction => V2AggregateFunction,
-  ScalarFunction
+  ScalarFunction,
+  UnboundFunction
 }
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
+import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types._
 
 class FunctionResolution(
@@ -52,10 +51,14 @@ class FunctionResolution(
       resolveBuiltinOrTempFunction(u.nameParts, u.arguments, u).getOrElse {
         val CatalogAndIdentifier(catalog, ident) =
           relationResolution.expandIdentifier(u.nameParts)
-        if (CatalogV2Util.isSessionCatalog(catalog)) {
-          resolveV1Function(ident.asFunctionIdentifier, u.arguments, u)
-        } else {
-          resolveV2Function(catalog.asFunctionCatalog, ident, u.arguments, u)
+        catalog.asFunctionCatalog.loadFunction(ident) match {
+          case V1Function(_) =>
+            // this triggers the second time v1 function resolution but should be cheap
+            // (no RPC to external catalog), since the metadata has been already cached
+            // in FunctionRegistry during the above `catalog.loadFunction` call.
+            resolveV1Function(ident.asFunctionIdentifier, u.arguments, u)
+          case unboundV2Func =>
+            resolveV2Function(unboundV2Func, u.arguments, u)
         }
       }
     }
@@ -272,11 +275,9 @@ class FunctionResolution(
   }
 
   private def resolveV2Function(
-      catalog: FunctionCatalog,
-      ident: Identifier,
+      unbound: UnboundFunction,
       arguments: Seq[Expression],
       u: UnresolvedFunction): Expression = {
-    val unbound = catalog.loadFunction(ident)
     val inputType = StructType(arguments.zipWithIndex.map {
       case (exp, pos) => StructField(s"_$pos", exp.dataType, exp.nullable)
     })
