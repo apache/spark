@@ -141,7 +141,7 @@
     <kafka.version>3.9.1</kafka.version>
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
-    <parquet.version>1.16.0</parquet.version>
+    <parquet.version>1.17.0</parquet.version>
     <orc.version>2.2.1</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
     <jetty.version>11.0.26</jetty.version>
@@ -359,6 +359,17 @@
       -->
       <name>GCS Maven Central mirror</name>
       <url>https://maven-central.storage-download.googleapis.com/maven2/</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <id>parquet-release-candidate</id>
+      <name>Parquet Release Candidate</name>
+      <url>https://repository.apache.org/content/repositories/orgapacheparquet-1077</url>
       <releases>
         <enabled>true</enabled>
       </releases>
