@@ -2075,7 +2075,8 @@ class SessionCatalog(
    */
   def isRegisteredFunction(name: FunctionIdentifier): Boolean = {
     tempFunctionRegistry.functionExists(name) ||
-      tableFunctionRegistry.functionExists(name)
+      tableFunctionRegistry.functionExists(name) ||
+      legacyFunctionRegistry.functionExists(name)
   }
 
   /**
