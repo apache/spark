@@ -53,6 +53,9 @@ class FunctionResolution(
           relationResolution.expandIdentifier(u.nameParts)
         catalog.asFunctionCatalog.loadFunction(ident) match {
           case V1Function(_) =>
+            // this triggers the second time v1 function resolution but should be cheap
+            // (no RPC to external catalog), since the metadata has been already cached
+            // in FunctionRegistry during the above `catalog.loadFunction` call.
             resolveV1Function(ident.asFunctionIdentifier, u.arguments, u)
           case unboundV2Func =>
             resolveV2Function(unboundV2Func, u.arguments, u)
