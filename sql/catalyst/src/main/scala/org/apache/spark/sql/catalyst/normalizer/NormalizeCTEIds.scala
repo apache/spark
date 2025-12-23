@@ -41,9 +41,7 @@ object NormalizeCTEIds extends Rule[LogicalPlan] {
 
       case withCTE @ WithCTE(plan, cteDefs) =>
         val newCteDefs = cteDefs.map { cteDef =>
-          if (!cteIdToNewId.contains(cteDef.id)) {
-            cteIdToNewId(cteDef.id) = curId.getAndIncrement()
-          }
+          cteIdToNewId.getOrElseUpdate(cteDef.id, curId.getAndIncrement())
           val normalizedCteDef = canonicalizeCTE(cteDef.child, cteIdToNewId)
           cteDef.copy(child = normalizedCteDef, id = cteIdToNewId(cteDef.id))
         }
