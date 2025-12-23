@@ -2111,12 +2111,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
           (cond, AttributeMap.empty[Alias])
         } else {
           val (replaced, usedAliases) = replaceAliasWhileTracking(cond, aliasMap)
-          // Didn't swap anything? empty list :)
-          if (cond == replaced) {
-            (cond, AttributeMap.empty[Alias])
-          } else {
-            (cond, usedAliases)
-          }
+          (cond, usedAliases)
         }
       }
       // Split the filter's components into cheap and expensive while keeping track of
