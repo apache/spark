@@ -115,6 +115,10 @@ trait ReadStateStore {
       key: UnsafeRow,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow
 
+  def multiGet(keys: Array[UnsafeRow], colFamilyName: String): Iterator[UnsafeRow] = {
+    keys.iterator.map(key => get(key, colFamilyName))
+  }
+
   /**
    * Check if a key exists in the store, with 100% guarantee of a correct result.
    *
@@ -248,6 +252,22 @@ trait StateStore extends ReadStateStore {
   def remove(
       key: UnsafeRow,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit
+
+  /**
+   * Delete all keys in the range [beginKey, endKey).
+   * Uses RocksDB's native deleteRange for efficient bulk deletion.
+   *
+   * @note This operation is NOT recorded in the changelog.
+   * @param beginKey      The start key of the range (inclusive)
+   * @param endKey        The end key of the range (exclusive)
+   * @param colFamilyName The column family name
+   */
+  def deleteRange(
+      beginKey: UnsafeRow,
+      endKey: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    throw new UnsupportedOperationException("deleteRange is not supported by this StateStore")
+  }
 
   /**
    * Merges the provided value with existing values of a non-null key. If a existing

@@ -1023,6 +1023,35 @@ class RocksDB(
   }
 
   /**
+   * Get the values for multiple keys in a single batch operation.
+   * Uses RocksDB's native multiGet for efficient batch lookups.
+   *
+   * @param keys   Array of keys to look up
+   * @param cfName The column family name
+   * @return Array of values corresponding to the keys (null for keys that don't exist)
+   */
+  def multiGet(
+      keys: Array[Array[Byte]],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Array[Array[Byte]] = {
+    updateMemoryUsageIfNeeded()
+    // Prepare keys
+    val finalKeys =
+      if (useColumnFamilies) {
+        keys.map(encodeStateRowWithPrefix(_, cfName))
+      } else {
+        keys
+      }
+
+    val keysList = java.util.Arrays.asList(finalKeys: _*)
+
+    // Call RocksDB multiGet
+    val valuesList = db.multiGet(readOptions, keysList)
+
+    // Convert to Array[Array[Byte]] in one line
+    valuesList.toArray(new Array[Array[Byte]](valuesList.size()))
+  }
+
+  /**
    * This method should gives a 100% guarantee of a correct result, whether the key exists or
    * not.
    *
@@ -1043,15 +1072,15 @@ class RocksDB(
   }
 
   /**
-   * Get the values for a given key if present, that were merged (via merge).
+   * Get multiple values for a given key that were stored via merge operation.
    * This returns the values as an iterator of index range, to allow inline access
    * of each value bytes without copying, for better performance.
    * Note: This method is currently only supported when row checksum is enabled.
    * */
-  def multiGet(
+  def getMergedValues(
       key: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[ArrayIndexRange[Byte]] = {
-    assert(conf.rowChecksumEnabled, "multiGet is only allowed when row checksum is enabled")
+    assert(conf.rowChecksumEnabled, "getMergedValues is only allowed when row checksum is enabled")
     updateMemoryUsageIfNeeded()
 
     val (finalKey, value) = getValue(key, cfName)
@@ -1355,6 +1384,35 @@ class RocksDB(
         writer.delete(keyWithChecksum)
       case None => // During changelog replay, there is no changelog writer.
     }
+  }
+
+  /**
+   * Delete all keys in the range [beginKey, endKey).
+   * Uses RocksDB's native deleteRange for efficient bulk deletion.
+   *
+   * @param beginKey The start key of the range (inclusive)
+   * @param endKey   The end key of the range (exclusive)
+   * @param cfName   The column family name
+   */
+  def deleteRange(
+      beginKey: Array[Byte],
+      endKey: Array[Byte],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    updateMemoryUsageIfNeeded()
+
+    val beginKeyWithPrefix = if (useColumnFamilies) {
+      encodeStateRowWithPrefix(beginKey, cfName)
+    } else {
+      beginKey
+    }
+
+    val endKeyWithPrefix = if (useColumnFamilies) {
+      encodeStateRowWithPrefix(endKey, cfName)
+    } else {
+      endKey
+    }
+
+    db.deleteRange(writeOptions, beginKeyWithPrefix, endKeyWithPrefix)
   }
 
   /**
