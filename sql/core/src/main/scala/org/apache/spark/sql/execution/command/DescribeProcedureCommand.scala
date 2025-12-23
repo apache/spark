@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import scala.collection.mutable.ArrayBuffer
+import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{Row, SparkSession}
@@ -42,8 +43,8 @@ case class DescribeProcedureCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     child match {
-      case ResolvedProcedure(catalog, ident, procedure) =>
-        describeV2Procedure(procedure.asInstanceOf[UnboundProcedure])
+      case ResolvedProcedure(catalog, ident, procedure: UnboundProcedure) =>
+        describeV2Procedure(procedure)
       case _ =>
         throw SparkException.internalError(s"Invalid procedure identifier: ${child.getClass}")
     }
@@ -55,10 +56,6 @@ case class DescribeProcedureCommand(
     append(buffer, "Procedure:", procedure.name())
     append(buffer, "Description:", procedure.description())
 
-    // UnboundProcedure requires binding to retrieve parameters. We try to bind with an empty
-    // argument list to get the parameters. If the procedure requires arguments, binding might
-    // fail. In that case, we suppress the exception and just show the procedure metadata
-    // without parameters.
     try {
       val bound = procedure.bind(new StructType())
       val params = bound.parameters()
@@ -70,8 +67,13 @@ case class DescribeProcedureCommand(
         append(buffer, "Parameters:", "()")
       }
     } catch {
-      case _: Exception =>
+      case NonFatal(e) =>
         // Ignore if binding fails
+        // UnboundProcedure requires binding to retrieve parameters. We try to bind with an empty
+        // argument list to get the parameters. If the procedure requires arguments, binding might
+        // fail. In that case, we suppress the exception and just show the procedure metadata
+        // without parameters, because we cannot know which overload to describe without arguments.
+        logWarning(s"Failed to bind procedure ${procedure.name()} for description", e)
     }
 
     val keys = tabulate(buffer.map(_._1).toSeq)
@@ -83,20 +85,26 @@ case class DescribeProcedureCommand(
   // which differs from the StructType used by internal stored procedures (handled by
   // formatParameters).
   private def formatProcedureParameters(params: Array[ProcedureParameter]): Seq[String] = {
-    val modes = tabulate(params.map(_.mode().toString).toSeq)
-    val names = tabulate(params.map(_.name()).toSeq)
-    val dataTypes = tabulate(params.map(_.dataType().sql).toSeq)
-    val comments = params.map { p =>
-      if (p.comment() != null) s" '${p.comment()}'" else ""
-    }
-    val defaults = params.map { p =>
+    val paramsStrings = params.map { p =>
+      val mode = p.mode().toString
+      val name = p.name()
+      val dataType = p.dataType().sql
+      val comment = if (p.comment() != null) s" '${p.comment()}'" else ""
       val defaultVal = if (p.defaultValue() != null) p.defaultValue().getSql else null
-      if (defaultVal != null) s" DEFAULT $defaultVal" else ""
+      val default = if (defaultVal != null) s" DEFAULT $defaultVal" else ""
+      (mode, name, dataType, default, comment)
     }
-    modes zip names zip dataTypes zip defaults zip comments map {
-      case ((((mode, name), dataType), default), comment) =>
-        s"$mode $name $dataType$default$comment"
-    }
+
+    val modeLen = paramsStrings.map(_._1.length).max
+    val nameLen = paramsStrings.map(_._2.length).max
+    val dataTypeLen = paramsStrings.map(_._3.length).max
+
+    paramsStrings.map { case (mode, name, dataType, default, comment) =>
+      val paddedMode = mode.padTo(modeLen, " ").mkString
+      val paddedName = name.padTo(nameLen, " ").mkString
+      val paddedDataType = dataType.padTo(dataTypeLen, " ").mkString
+      s"$paddedMode $paddedName $paddedDataType$default$comment"
+    }.toSeq
   }
 
   private def append(buffer: ArrayBuffer[(String, String)], key: String, value: String): Unit = {

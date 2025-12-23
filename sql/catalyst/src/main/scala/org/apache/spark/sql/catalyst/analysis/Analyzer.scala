@@ -2285,10 +2285,7 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(UNRESOLVED_PROCEDURE), ruleId) {
       case UnresolvedProcedure(CatalogAndIdentifier(catalog, ident)) =>
-        if (!catalog.isInstanceOf[ProcedureCatalog]) {
-          throw QueryCompilationErrors.missingCatalogProceduresAbilityError(catalog)
-        }
-        val procedureCatalog = catalog.asInstanceOf[ProcedureCatalog]
+        val procedureCatalog = catalog.asProcedureCatalog
         val procedure = load(procedureCatalog, ident)
         ResolvedProcedure(procedureCatalog, ident, procedure)
     }

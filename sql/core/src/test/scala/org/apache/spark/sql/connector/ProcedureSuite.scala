@@ -579,6 +579,46 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
     }
   }
 
+  test("SPARK-51780: DESC PROCEDURE with binding failure") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "bind_fail"), UnboundBindFailProcedure)
+    checkAnswer(
+      sql("DESC PROCEDURE cat.ns.bind_fail"),
+      Row("Procedure:   bind_fail") ::
+      Row("Description: bind fail procedure") :: Nil)
+  }
+
+  test("SPARK-51780: DESC PROCEDURE with zero parameters") {
+    catalog.createProcedure(
+      Identifier.of(Array("ns"), "zero_params"), UnboundZeroParameterProcedure)
+    checkAnswer(
+      sql("DESC PROCEDURE cat.ns.zero_params"),
+      Row("Procedure:   zero_params") ::
+      Row("Description: zero parameter procedure") ::
+      Row("Parameters:  ()") :: Nil)
+  }
+
+  object UnboundBindFailProcedure extends UnboundProcedure {
+    override def name: String = "bind_fail"
+    override def description: String = "bind fail procedure"
+    override def bind(inputType: StructType): BoundProcedure = {
+      throw new UnsupportedOperationException("Cannot bind")
+    }
+  }
+
+  object UnboundZeroParameterProcedure extends UnboundProcedure {
+    override def name: String = "zero_params"
+    override def description: String = "zero parameter procedure"
+    override def bind(inputType: StructType): BoundProcedure = ZeroParameterProcedure
+  }
+
+  object ZeroParameterProcedure extends BoundProcedure {
+    override def name: String = "zero_params"
+    override def description: String = "zero parameter procedure"
+    override def isDeterministic: Boolean = true
+    override def parameters: Array[ProcedureParameter] = Array.empty
+    override def call(input: InternalRow): java.util.Iterator[Scan] = Collections.emptyIterator
+  }
+
   object UnboundVoidProcedure extends UnboundProcedure {
     override def name: String = "void"
     override def description: String = "void procedure"
