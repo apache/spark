@@ -124,7 +124,25 @@ abstract class BaseSessionStateBuilder(
    */
   @deprecated("Use SessionCatalog.tempFunctionRegistry instead", "4.0.0")
   protected lazy val functionRegistry: FunctionRegistry = {
-    FunctionRegistry.builtin
+    // Clone the builtin registry so each session gets its own copy
+    // This allows temp functions to shadow builtins without affecting other sessions
+    val cloned = FunctionRegistry.builtin.clone()
+
+    // If we have a parent state, copy over any temp functions from parent
+    parentState.foreach { parent =>
+      parent.functionRegistry.listFunction().foreach { funcIdent =>
+        // Only copy if it's not a builtin (i.e., it's a temp function)
+        if (!FunctionRegistry.builtin.functionExists(funcIdent)) {
+          parent.functionRegistry.lookupFunctionBuilder(funcIdent).foreach { builder =>
+            parent.functionRegistry.lookupFunction(funcIdent).foreach { info =>
+              cloned.registerFunction(funcIdent, info, builder)
+            }
+          }
+        }
+      }
+    }
+
+    cloned
   }
 
   /**
