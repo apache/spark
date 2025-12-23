@@ -509,6 +509,20 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
     }
   }
 
+  private object SourceAncestor {
+    def unapply(p: SparkPlan): Option[SparkPlan] = p match {
+      case w: WholeStageCodegenExec => Some(w.child)
+      case i: InputAdapter => Some(i.child)
+      case p: ProjectExec => Some(p.child)
+      case f: FilterExec => Some(f.child)
+      case s: SortExec => Some(s.child)
+      case e: ShuffleExchangeExec => Some(e.child)
+      case a: AQEShuffleReadExec => Some(a.child)
+      case q: QueryStageExec => Some(q.plan)
+      case _ => None
+    }
+  }
+
   private def getNumSourceRows(mergeRowsExec: MergeRowsExec): Long = {
     def hasTargetTable(plan: SparkPlan): Boolean = {
       collectFirst(plan) {
@@ -516,20 +530,13 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode with AdaptiveSpa
       }.isDefined
     }
 
-    def findSource(node: SparkPlan): Long = {
-      node match {
-        case WholeStageCodegenExec(child) => findSource(child)
-        case InputAdapter(child) => findSource(child)
-        case ProjectExec(_, child) => findSource(child)
-        case FilterExec(_, child) => findSource(child)
-        case SortExec(_, _, child, _) => findSource(child)
-        case ShuffleExchangeExec(_, child, _, _) => findSource(child)
-        case AQEShuffleReadExec(child, _) => findSource(child)
-        case qs: QueryStageExec => findSource(qs.plan)
-        case n if n.metrics.contains("numOutputRows") =>
-          n.metrics.get("numOutputRows").map(_.value).getOrElse(-1L)
-        case _ => -1L
-      }
+    def findSource(plan: SparkPlan): Long = plan match {
+      case SourceAncestor(child) =>
+        findSource(child)
+      case n if n.metrics.contains("numOutputRows") =>
+        n.metrics("numOutputRows").value
+      case _ =>
+        -1L
     }
 
     val joinOpt = collectFirst(mergeRowsExec.child) { case j: BaseJoinExec => j }
