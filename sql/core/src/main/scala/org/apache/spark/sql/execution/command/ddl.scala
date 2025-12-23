@@ -179,7 +179,7 @@ case class DescribeDatabaseCommand(
     databaseName: String,
     extended: Boolean,
     override val output: Seq[Attribute])
-  extends LeafRunnableCommand with UsesCachedData {
+  extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val dbMetadata: CatalogDatabase =

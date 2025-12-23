@@ -2734,8 +2734,6 @@ class CachedTableSuite extends QueryTest
       // add column c3
       sql(s"ALTER TABLE $t ADD COLUMN c3 double")
 
-      // This will execute DescribeTableExec eagerly, but that has a reference
-      // to Table, so it will keep the old describe metadata.
       describeDf.cache()
 
       // Verify describe shows schema at the initialization of describeDf
@@ -2753,64 +2751,33 @@ class CachedTableSuite extends QueryTest
     }
   }
 
-  test("SPARK-54812: DESCRIBE COLUMN v1 will reflect new schema on cache") {
-    val t = "describe_col_v1_test"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (c1 int, c2 string) USING parquet")
+  test("SPARK-54812: SHOW TABLES cached result should continue to reflect state at cache time" +
+    "for legacy reasons.") {
+    val t1 = "show_tables_test_t1"
+    val t2 = "show_tables_test_t2"
+    withTable(t1, t2) {
+      // Create initial table
+      sql(s"CREATE TABLE $t1 (c1 int) USING parquet")
 
-      // Describe a specific column and cache the result
-      val describeColDf = sql(s"DESCRIBE TABLE $t c1")
+      // Run SHOW TABLES and save to a DataFrame
+      val showTablesDf = sql("SHOW TABLES")
 
-      // Alter the column to add a comment
-      sql(s"ALTER TABLE $t ALTER COLUMN c1 COMMENT 'this is column c1'")
+      // Add another table after creating the DataFrame
+      sql(s"CREATE TABLE $t2 (c1 int) USING parquet")
 
-      describeColDf.cache()
+      // Cache the DataFrame - this should reflect the latest state
+      showTablesDf.cache()
 
-      // Verify initial describe shows original column info (no comment)
-      val originalInfo = describeColDf.collect().map(r => (r.getString(0), r.getString(1))).toMap
-      assert(originalInfo.contains("col_name"))
-      assert(originalInfo("col_name") == "c1")
-      assert(originalInfo.contains("data_type"))
-      assert(originalInfo("data_type") == "int")
-      assert(originalInfo("comment") == "NULL" || originalInfo("comment") == null ||
-        !originalInfo.get("comment").exists(_ == "this is column c1"),
-        "Cached DESCRIBE COLUMN should not reflect the new comment")
+      // Verify cached result reflects the latest state (includes t2)
+      val cachedTables = showTablesDf.select("tableName").collect().map(_.getString(0)).toSet
+      assert(cachedTables.contains(t1))
+      assert(cachedTables.contains(t2))
 
-      // A fresh DESCRIBE COLUMN call should show the updated info (with comment)
-      val freshDescribeColDf = sql(s"DESCRIBE TABLE $t c1")
-      val freshInfo = freshDescribeColDf.collect().map(r => (r.getString(0), r.getString(1))).toMap
-      assert(freshInfo("col_name") == "c1")
-      assert(freshInfo("comment") == "this is column c1",
-        "Fresh DESCRIBE COLUMN should reflect the new comment")
-    }
-  }
-
-  test("SPARK-54812: DESCRIBE TABLE v1 will reflect new schema on cache") {
-    val t = "describe_table_v1_test"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (c1 int, c2 string) USING parquet")
-
-      // Create describe DataFrame but don't cache yet
-      val describeDf = sql(s"DESCRIBE TABLE $t")
-
-      // add column c3
-      sql(s"ALTER TABLE $t ADD COLUMN c3 double")
-
-      // This will execute DescribeTableCommand eagerly
-      describeDf.cache()
-
-      // Verify describe shows schema at the initialization of describeDf
-      val cachedColumns = describeDf.select("col_name").collect().map(_.getString(0)).toSet
-      assert(cachedColumns.contains("c1"))
-      assert(cachedColumns.contains("c2"))
-      assert(!cachedColumns.contains("c3"))
-
-      // A fresh DESCRIBE TABLE call should show the latest schema (with c3)
-      val freshDescribeDf = sql(s"DESCRIBE TABLE $t")
-      val freshColumns = freshDescribeDf.select("col_name").collect().map(_.getString(0)).toSet
-      assert(freshColumns.contains("c1"))
-      assert(freshColumns.contains("c2"))
-      assert(freshColumns.contains("c3"))
+      // A fresh SHOW TABLES call should also show both tables
+      val freshShowTablesDf = sql("SHOW TABLES")
+      val freshTables = freshShowTablesDf.select("tableName").collect().map(_.getString(0)).toSet
+      assert(freshTables.contains(t1))
+      assert(freshTables.contains(t2))
     }
   }
 

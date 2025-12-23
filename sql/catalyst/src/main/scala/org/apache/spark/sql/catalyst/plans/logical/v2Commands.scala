@@ -731,8 +731,7 @@ case class DropNamespace(
 case class DescribeNamespace(
     namespace: LogicalPlan,
     extended: Boolean,
-    override val output: Seq[Attribute] = DescribeNamespace.getOutputAttrs)
-  extends UnaryCommand with UsesCachedData {
+    override val output: Seq[Attribute] = DescribeNamespace.getOutputAttrs) extends UnaryCommand {
   override def child: LogicalPlan = namespace
   override protected def withNewChildInternal(newChild: LogicalPlan): DescribeNamespace =
     copy(namespace = newChild)
@@ -776,8 +775,7 @@ case class DescribeRelation(
     relation: LogicalPlan,
     partitionSpec: TablePartitionSpec,
     isExtended: Boolean,
-    override val output: Seq[Attribute] = DescribeRelation.getOutputAttrs)
-  extends UnaryCommand with UsesCachedData {
+    override val output: Seq[Attribute] = DescribeRelation.getOutputAttrs) extends UnaryCommand {
   override def child: LogicalPlan = relation
   override protected def withNewChildInternal(newChild: LogicalPlan): DescribeRelation =
     copy(relation = newChild)
@@ -794,8 +792,7 @@ case class DescribeColumn(
     relation: LogicalPlan,
     column: Expression,
     isExtended: Boolean,
-    override val output: Seq[Attribute] = DescribeColumn.getOutputAttrs)
-  extends UnaryCommand with UsesCachedData {
+    override val output: Seq[Attribute] = DescribeColumn.getOutputAttrs) extends UnaryCommand {
   override def child: LogicalPlan = relation
   override protected def withNewChildInternal(newChild: LogicalPlan): DescribeColumn =
     copy(relation = newChild)
@@ -1356,8 +1353,7 @@ case class RefreshFunction(child: LogicalPlan) extends UnaryCommand {
 /**
  * The logical plan of the DESCRIBE FUNCTION command.
  */
-case class DescribeFunction(child: LogicalPlan, isExtended: Boolean)
-  extends UnaryCommand with UsesCachedData {
+case class DescribeFunction(child: LogicalPlan, isExtended: Boolean) extends UnaryCommand {
   override protected def withNewChildInternal(newChild: LogicalPlan): DescribeFunction =
     copy(child = newChild)
 }

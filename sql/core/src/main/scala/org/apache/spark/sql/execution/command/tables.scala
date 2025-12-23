@@ -604,7 +604,7 @@ case class DescribeTableCommand(
     partitionSpec: TablePartitionSpec,
     isExtended: Boolean,
     override val output: Seq[Attribute])
-  extends DescribeCommandBase with UsesCachedData {
+  extends DescribeCommandBase {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val result = new ArrayBuffer[Row]
@@ -745,7 +745,7 @@ case class DescribeTableCommand(
  * 7. Common table expressions (CTEs)
  */
 case class DescribeQueryCommand(queryText: String, plan: LogicalPlan)
-  extends DescribeCommandBase with SupervisingCommand with CTEInChildren with UsesCachedData {
+  extends DescribeCommandBase with SupervisingCommand with CTEInChildren {
 
   override val output = DescribeCommandSchema.describeTableAttributes()
 
@@ -780,7 +780,7 @@ case class DescribeColumnCommand(
     colNameParts: Seq[String],
     isExtended: Boolean,
     override val output: Seq[Attribute])
-  extends LeafRunnableCommand with UsesCachedData {
+  extends LeafRunnableCommand {
 
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
