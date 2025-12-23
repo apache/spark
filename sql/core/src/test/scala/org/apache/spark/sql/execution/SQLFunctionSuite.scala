@@ -104,8 +104,6 @@ class SQLFunctionSuite extends QueryTest with SharedSparkSession {
         s"but got ${exception.getCondition}: ${exception.getMessage}")
       assert(exception.getMessage.contains("test_lower_udf"),
         s"Error message should contain function name: ${exception.getMessage}")
-      assert(exception.getMessage.contains("lambda x"),
-        s"Error message should contain 'lambda x': ${exception.getMessage}")
     }
   }
 }

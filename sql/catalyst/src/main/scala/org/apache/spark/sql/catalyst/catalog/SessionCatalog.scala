@@ -1644,15 +1644,10 @@ class SessionCatalog(
         }.isDefined
       }
       if (hasLambdaVar) {
-        val formattedInputs = input.map {
-          case v: NamedLambdaVariable => "lambda " + v.name
-          case v: UnresolvedNamedLambdaVariable => "lambda " + v.name
-          case e => e.sql
-        }.mkString(", ")
         throw new AnalysisException(
           errorClass = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_SQL_UDF",
           messageParameters = Map(
-            "funcName" -> ("\"" + function.name.unquotedString + "(" + formattedInputs + ")\"")))
+            "funcName" -> function.name.unquotedString))
       }
       val args = rearrangeArguments(function.inputParam, input, function.name.toString)
       val returnType = function.getScalarFuncReturnType
@@ -1742,15 +1737,10 @@ class SessionCatalog(
         }.isDefined
       }
       if (hasLambdaVar) {
-        val formattedInputs = input.map {
-          case v: NamedLambdaVariable => "lambda " + v.name
-          case v: UnresolvedNamedLambdaVariable => "lambda " + v.name
-          case e => e.sql
-        }.mkString(", ")
         throw new AnalysisException(
           errorClass = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_SQL_UDF",
           messageParameters = Map(
-            "funcName" -> ("\"" + function.name.unquotedString + "(" + formattedInputs + ")\"")))
+            "funcName" -> function.name.unquotedString))
       }
 
       val inputs = inputParam.map { param =>
