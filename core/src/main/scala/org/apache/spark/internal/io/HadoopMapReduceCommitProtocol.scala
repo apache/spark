@@ -181,6 +181,10 @@ class HadoopMapReduceCommitProtocol(
     try {
       if (dynamicPartitionOverwrite) {
         val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
+        // Register staging directory for deletion on JVM exit as a safety net.
+        // If the driver process exits unexpectedly (e.g., killed, OOM) during the commit process,
+        // the staging directory will be automatically cleaned up when the JVM shuts down.
+        // This prevents leaving orphaned temporary files in the file system.
         fs.deleteOnExit(stagingDir)
       }
     } catch {
@@ -238,6 +242,9 @@ class HadoopMapReduceCommitProtocol(
       }
 
       fs.delete(stagingDir, true)
+      // Cancel the delete-on-exit registration since we've already manually
+      // deleted the staging directory and delete() operation won't automatic
+      // cancle the delete-on-exit registration.
       fs.cancelDeleteOnExit(stagingDir)
     }
   }
@@ -260,6 +267,9 @@ class HadoopMapReduceCommitProtocol(
       if (hasValidPath) {
         val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
         fs.delete(stagingDir, true)
+        // Cancel the delete-on-exit registration since we've already manually
+        // deleted the staging directory and delete() operation won't automatic
+        // cancle the delete-on-exit registration.
         fs.cancelDeleteOnExit(stagingDir)
       }
     } catch {
