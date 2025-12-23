@@ -35,13 +35,15 @@ class FunctionNamespaceResolutionSuite extends SharedSparkSession {
   }
 
   test("table function in scalar context should give specific error") {
-    // Check that explode exists as a table function
-    assert(spark.sessionState.catalog.lookupBuiltinOrTempTableFunction("explode").isDefined,
-      "explode should exist as a builtin table function")
+    // Check that range exists as a table function (but NOT as a scalar function)
+    assert(spark.sessionState.catalog.lookupBuiltinOrTempTableFunction("range").isDefined,
+      "range should exist as a builtin table function")
+    assert(spark.sessionState.catalog.lookupBuiltinOrTempFunction("range").isEmpty,
+      "range should NOT exist as a scalar function")
 
     // Now try to use it in scalar context - should get NOT_A_SCALAR_FUNCTION error
     val ex = intercept[org.apache.spark.sql.AnalysisException] {
-      sql("SELECT explode(array(1, 2, 3))")
+      sql("SELECT range(1, 10)")
     }
     assert(ex.getCondition == "NOT_A_SCALAR_FUNCTION",
       s"Expected NOT_A_SCALAR_FUNCTION but got ${ex.getCondition}: ${ex.getMessage}")

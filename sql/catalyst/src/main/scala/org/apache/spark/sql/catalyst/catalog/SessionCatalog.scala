@@ -99,7 +99,7 @@ class SessionCatalog(
 
   // Keep the passed-in functionRegistry for backward compatibility with existing tests
   // TODO: This can be removed once all tests are updated to not pass function registries
-  private val legacyFunctionRegistry: FunctionRegistry = functionRegistry
+  private val persistentFunctionRegistry: FunctionRegistry = functionRegistry
 
   // For testing only.
   def this(
@@ -1571,12 +1571,12 @@ class SessionCatalog(
     val funcName = qualifiedIdent.funcName
     requireDbExists(db)
     if (functionExists(qualifiedIdent)) {
-      if (legacyFunctionRegistry.functionExists(qualifiedIdent)) {
+      if (persistentFunctionRegistry.functionExists(qualifiedIdent)) {
         // If we have loaded this function into the FunctionRegistry,
         // also drop it from there.
         // For a permanent function, because we loaded it to the FunctionRegistry
         // when it's first used, we also need to drop it from the FunctionRegistry.
-        legacyFunctionRegistry.dropFunction(qualifiedIdent)
+        persistentFunctionRegistry.dropFunction(qualifiedIdent)
       } else if (tableFunctionRegistry.functionExists(qualifiedIdent)) {
         tableFunctionRegistry.dropFunction(qualifiedIdent)
       }
@@ -1596,12 +1596,12 @@ class SessionCatalog(
     requireDbExists(db)
     val newFuncDefinition = funcDefinition.copy(identifier = qualifiedIdent)
     if (functionExists(qualifiedIdent)) {
-      if (legacyFunctionRegistry.functionExists(qualifiedIdent)) {
+      if (persistentFunctionRegistry.functionExists(qualifiedIdent)) {
         // If we have loaded this function into the FunctionRegistry,
         // also drop it from there.
         // For a permanent function, because we loaded it to the FunctionRegistry
         // when it's first used, we also need to drop it from the FunctionRegistry.
-        legacyFunctionRegistry.dropFunction(qualifiedIdent)
+        persistentFunctionRegistry.dropFunction(qualifiedIdent)
       }
       externalCatalog.alterFunction(db, newFuncDefinition)
     } else {
@@ -1928,7 +1928,7 @@ class SessionCatalog(
     val registry = if (funcDefinition.identifier.database.isEmpty) {
       tempFunctionRegistry
     } else {
-      legacyFunctionRegistry
+      persistentFunctionRegistry
     }
     registerFunction(funcDefinition, overrideIfExists, registry, builder)
   }
@@ -1972,7 +1972,7 @@ class SessionCatalog(
     val registry = if (function.name.database.isEmpty) {
       tempFunctionRegistry
     } else {
-      legacyFunctionRegistry
+      persistentFunctionRegistry
     }
     registerUserDefinedFunction[Expression](
       function,
@@ -2047,7 +2047,9 @@ class SessionCatalog(
    * or [[TableFunctionRegistry]]. Return true if function exists.
    */
   def unregisterFunction(name: FunctionIdentifier): Boolean = {
-    tempFunctionRegistry.dropFunction(name) || tableFunctionRegistry.dropFunction(name)
+    tempFunctionRegistry.dropFunction(name) ||
+      tableFunctionRegistry.dropFunction(name) ||
+      persistentFunctionRegistry.dropFunction(name)
   }
 
   /**
@@ -2076,7 +2078,7 @@ class SessionCatalog(
   def isRegisteredFunction(name: FunctionIdentifier): Boolean = {
     tempFunctionRegistry.functionExists(name) ||
       tableFunctionRegistry.functionExists(name) ||
-      legacyFunctionRegistry.functionExists(name)
+      persistentFunctionRegistry.functionExists(name)
   }
 
   /**
@@ -2109,7 +2111,10 @@ class SessionCatalog(
     synchronized {
       val funcIdent = FunctionIdentifier(name)
       if (tempFunctionRegistry.functionExists(funcIdent)) {
-        Some(tempFunctionRegistry.lookupFunction(funcIdent, arguments))
+        lookupTempFuncWithViewContext(
+          name,
+          _ => false, // Temp functions are never builtin
+          ident => Some(tempFunctionRegistry.lookupFunction(ident, arguments)))
       } else {
         None
       }
@@ -2185,8 +2190,18 @@ class SessionCatalog(
    */
   def resolveBuiltinOrTempTableFunction(
       name: String, arguments: Seq[Expression]): Option[LogicalPlan] = {
-    resolveBuiltinOrTempFunctionInternal(
-      name, arguments, TableFunctionRegistry.builtin.functionExists, tableFunctionRegistry)
+    val funcIdent = FunctionIdentifier(name)
+    // Check temp table function first (shadowing), then builtin
+    if (tableFunctionRegistry.functionExists(funcIdent)) {
+      lookupTempFuncWithViewContext(
+        name,
+        TableFunctionRegistry.builtin.functionExists,
+        ident => Option(tableFunctionRegistry.lookupFunction(ident, arguments)))
+    } else if (TableFunctionRegistry.builtin.functionExists(funcIdent)) {
+      Option(TableFunctionRegistry.builtin.lookupFunction(funcIdent, arguments))
+    } else {
+      None
+    }
   }
 
   private def resolveBuiltinOrTempFunctionInternal[T](
@@ -2241,7 +2256,7 @@ class SessionCatalog(
     val qualifiedIdent = qualifyIdentifier(name)
     val db = qualifiedIdent.database.get
     val funcName = qualifiedIdent.funcName
-    legacyFunctionRegistry.lookupFunction(qualifiedIdent)
+    persistentFunctionRegistry.lookupFunction(qualifiedIdent)
       .orElse(tableFunctionRegistry.lookupFunction(qualifiedIdent))
       .getOrElse {
         requireDbExists(db)

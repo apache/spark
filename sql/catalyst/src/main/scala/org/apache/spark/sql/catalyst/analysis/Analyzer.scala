@@ -2077,8 +2077,17 @@ class Analyzer(
 
       plan.resolveExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
         case f @ UnresolvedFunction(nameParts, _, _, _, _, _, _) =>
-          if (functionResolution.lookupBuiltinOrTempFunction(nameParts, Some(f)).isDefined) {
+          val existsAsScalar =
+            functionResolution.lookupBuiltinOrTempFunction(nameParts, Some(f)).isDefined
+          val existsAsTable =
+            functionResolution.lookupBuiltinOrTempTableFunction(nameParts).isDefined
+
+          if (existsAsScalar) {
+            // Function exists in scalar registry, can be used here
             f
+          } else if (existsAsTable) {
+            // Function exists ONLY as table function (not as scalar) - throw specific error
+            throw QueryCompilationErrors.notAScalarFunctionError(nameParts.mkString("."), f)
           } else {
             val CatalogAndIdentifier(catalog, ident) =
               relationResolution.expandIdentifier(nameParts)

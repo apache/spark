@@ -140,7 +140,7 @@ case class DropFunctionCommand(
     val catalog = sparkSession.sessionState.catalog
     if (isTemp) {
       assert(identifier.database.isEmpty)
-      if (FunctionRegistry.builtin.functionExists(identifier)) {
+      if (catalog.isBuiltinFunction(identifier)) {
         throw QueryCompilationErrors.cannotDropBuiltinFuncError(identifier.funcName)
       }
       catalog.dropTempFunction(identifier.funcName, ifExists)

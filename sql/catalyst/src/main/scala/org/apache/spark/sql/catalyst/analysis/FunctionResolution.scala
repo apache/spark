@@ -126,12 +126,6 @@ class FunctionResolution(
       arguments: Seq[Expression],
       u: UnresolvedFunction): Option[Expression] = {
 
-    // First check if this function exists as a table function (wrong type for this context)
-    val funcNameForCheck = if (name.size == 1) name.head else name.last
-    if (v1SessionCatalog.lookupBuiltinOrTempTableFunction(funcNameForCheck).isDefined) {
-      throw QueryCompilationErrors.notAScalarFunctionError(name.mkString("."), u)
-    }
-
     val expression = if (name.size == 1 && u.isInternal) {
       // Internal functions
       Option(FunctionRegistry.internal.lookupFunction(FunctionIdentifier(name.head), arguments))
@@ -149,6 +143,15 @@ class FunctionResolution(
     } else {
       None
     }
+
+    // Only check if it's a table function if we didn't find it as a scalar function
+    if (expression.isEmpty) {
+      val funcNameForCheck = if (name.size == 1) name.head else name.last
+      if (v1SessionCatalog.lookupBuiltinOrTempTableFunction(funcNameForCheck).isDefined) {
+        throw QueryCompilationErrors.notAScalarFunctionError(name.mkString("."), u)
+      }
+    }
+
     expression.map { func =>
       validateFunction(func, arguments.length, u)
     }
@@ -158,15 +161,20 @@ class FunctionResolution(
       name: Seq[String],
       arguments: Seq[Expression]): Option[LogicalPlan] = {
 
-    if (name.length == 1) {
-      // First check if this function exists as a scalar function (wrong type for this context)
-      if (v1SessionCatalog.lookupBuiltinOrTempFunction(name.head).isDefined) {
-        throw QueryCompilationErrors.notATableFunctionError(name.mkString("."))
-      }
+    val tableFunctionResult = if (name.length == 1) {
       v1SessionCatalog.resolveBuiltinOrTempTableFunction(name.head, arguments)
     } else {
       None
     }
+
+    // Only check if it's a scalar function if we didn't find it as a table function
+    if (tableFunctionResult.isEmpty && name.length == 1) {
+      if (v1SessionCatalog.lookupBuiltinOrTempFunction(name.head).isDefined) {
+        throw QueryCompilationErrors.notATableFunctionError(name.mkString("."))
+      }
+    }
+
+    tableFunctionResult
   }
 
   private def resolveV1Function(
