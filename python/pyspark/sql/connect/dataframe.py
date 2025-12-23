@@ -475,7 +475,7 @@ class DataFrame(ParentDataFrame):
         res._cached_schema = self._cached_schema
         return res
 
-    def optimizePartitions(self, targetMB: Optional[int] = 128) -> "DataFrame":
+    def optimizePartitions(self, targetMB: Optional[int] = None) -> "DataFrame":
         raise NotImplementedError("optimizePartitions is not yet implemented for Spark Connect")
 
     def dropDuplicates(self, subset: Optional[List[str]] = None) -> ParentDataFrame:

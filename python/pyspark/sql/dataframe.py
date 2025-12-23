@@ -1955,7 +1955,7 @@ class DataFrame:
         ...
 
     @dispatch_df_method
-    def optimizePartitions(self, targetMB: Optional[int] = 128) -> "DataFrame":
+    def optimizePartitions(self, targetMB: Optional[int] = None) -> "DataFrame":
         """
         (Titan Contribution)
         Proactively optimizes the partition count of this DataFrame based on its estimated size.
