@@ -2172,11 +2172,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // Nothing to push or split, short circuit (all filters are case 3B).
         f
       } else {
-        val expensiveFiltersDone = if (toSplit.isEmpty) {
-          // If we can't split anymore (no 3A), but we did have cheap filters
-          // pushed we still need to add the expensive filters back on top.
-          baseChild
-        } else {
+        val expensiveFiltersDone = if (!toSplit.isEmpty) {
           // We have at least one filter that we can split the projection around.
           // We're going to now add projections one at a time for the expensive components for
           // each group of filters. We'll keep track of what we added for the previous filter(s)
@@ -2212,6 +2208,10 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
                 Filter(nextConds.reduce(And), newProjection)
               }
           }
+        } else {
+          // No filters to split, use the baseChild to put our non-splittable filters on
+          // , if any, and the final projection to match the original schema.
+          baseChild
         }
         // Insert a last projection to match the desired column ordering and
         // evaluate any stragglers and select the already computed columns.
