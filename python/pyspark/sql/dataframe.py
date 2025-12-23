@@ -1949,6 +1949,46 @@ class DataFrame:
         ...
 
     @dispatch_df_method
+    def optimizePartitions(self, targetMB: Optional[int] = 128) -> "DataFrame":
+        """
+        (Titan Contribution)
+        Proactively optimizes the partition count of this DataFrame based on its estimated size.
+
+        Best Practice: Use on Ingest
+        This method is best used immediately after reading a dataset to ensure the initial
+        parallelism matches the data size. This prevents "Small File" issues (too many partitions)
+        or "Giant Partition" issues (too few partitions) before heavy transformations begin.
+
+        .. versionadded:: 4.2.0
+
+        Parameters
+        ----------
+        targetMB : int, optional
+            The target partition size in Megabytes. Defaults to 128MB.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Repartitioned DataFrame.
+
+        Notes
+        -----
+        This method uses Round Robin partitioning (random shuffle) to balance sizes.
+        If used immediately before writing to a partitioned table, it may degrade performance
+        by breaking data locality.
+
+        Examples
+        --------
+        >>> df = spark.range(1000000)
+        >>> df.rdd.getNumPartitions()  # e.g., 8
+        8
+        >>> df_opt = df.optimizePartitions(64)
+        >>> df_opt.rdd.getNumPartitions()  # e.g., 1 (depending on data size)
+        1
+        """
+        ...
+
+    @dispatch_df_method
     def distinct(self) -> "DataFrame":
         """Returns a new :class:`DataFrame` containing the distinct rows in this :class:`DataFrame`.
 

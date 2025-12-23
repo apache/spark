@@ -498,6 +498,45 @@ class DataFrameTestsMixin:
                 self.assertGreaterEqual(output.count("REBALANCE_PARTITIONS_BY_NONE"), 1)
                 self.assertGreaterEqual(output.count("REBALANCE_PARTITIONS_BY_COL"), 3)
 
+    def test_optimize_partitions(self):
+        """
+        Titan Contribution: Verifies the optimizePartitions API.
+        Tests downscaling behavior, data integrity, and input validation.
+        """
+        # Setup: Create a small DataFrame with an intentionally inefficient number of partitions
+        # range(10000) is very small data (~80KB), but we force 50 partitions.
+        initial_partitions = 50
+        df = self.spark.range(10000).repartition(initial_partitions)
+
+        # Verify initial state
+        self.assertEqual(df.rdd.getNumPartitions(), initial_partitions)
+
+        # 1. Test Default Execution (Downscaling)
+        # Since data is small and default target is 128MB, this should coalesce to 1 partition.
+        result_default = df.optimizePartitions()
+
+        # Assertions
+        self.assertEqual(result_default.rdd.getNumPartitions(), 1,
+                         "Expected tiny dataset to coalesce to 1 partition")
+        self.assertEqual(result_default.count(), 10000,
+                         "Data count mismatch after optimization")
+
+        # 2. Test Explicit Parameter
+        # Even with a 1MB target, 80KB of data should still fit in 1 partition.
+        result_custom = df.optimizePartitions(targetMB=1)
+        self.assertEqual(result_custom.rdd.getNumPartitions(), 1)
+
+        # 3. Test Invalid Input (Validation)
+        # We expect a ValueError because we added explicit validation in python/pyspark/sql/classic/dataframe.py
+
+        # Case A: Negative Number
+        with self.assertRaisesRegex(ValueError, "targetMB must be positive"):
+            df.optimizePartitions(targetMB=-1)
+
+        # Case B: Zero
+        with self.assertRaisesRegex(ValueError, "targetMB must be positive"):
+            df.optimizePartitions(targetMB=0)
+
     # add tests for SPARK-23647 (test more types for hint)
     def test_extended_hint_types(self):
         df = self.spark.range(10e10).toDF("id")

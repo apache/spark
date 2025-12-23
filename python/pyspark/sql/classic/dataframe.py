@@ -621,6 +621,16 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
             self.sparkSession,
         )
 
+    def optimizePartitions(self, targetMB: Optional[int] = None) -> "DataFrame":
+        """
+        Optimizes the partition count based on dataset size.
+        """
+        target_size = targetMB if targetMB is not None else 128
+        if target_size <= 0:
+            raise ValueError(f"targetMB must be positive. Got {target_size}")
+        jdf = self._jdf.optimizePartitions(int(target_size))
+        return DataFrame(jdf, self.sparkSession)
+
     def distinct(self) -> ParentDataFrame:
         return DataFrame(self._jdf.distinct(), self.sparkSession)
 

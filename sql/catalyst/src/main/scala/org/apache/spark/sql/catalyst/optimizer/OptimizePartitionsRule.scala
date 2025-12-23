@@ -29,10 +29,11 @@ object OptimizePartitionsRule extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transform {
     case OptimizePartitionsCommand(child, targetMB, currentPartitions) =>
 
+      require(targetMB > 0, s"targetMB must be positive. Got $targetMB")
       val targetBytes = targetMB.toLong * 1024L * 1024L
 
       // Get the estimated size from Catalyst Statistics
-      val sizeInBytes = child.stats.sizeInBytes
+      val sizeInBytes: BigInt = child.stats.sizeInBytes
 
       // Calculate Optimal Partition Count (N)
       val count = math.ceil(sizeInBytes.toDouble / targetBytes).toInt
