@@ -81,7 +81,7 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
   }
 
   test("Test that shuffle blocks are tracked properly and removed after TTL") {
-    val ttl = 50L
+    val ttl = 100L
     val conf = new SparkConf()
       .setAppName("test-blockmanager-ttls-shuffle-only")
       .setMaster("local-cluster[2, 1, 1024]")
@@ -115,7 +115,7 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
 
 
   test(s"Test that all blocks are tracked properly and removed after TTL") {
-    val ttl = 50L
+    val ttl = 100L
     val conf = new SparkConf()
       .setAppName("test-blockmanager-ttls-enabled")
       .setMaster("local-cluster[2, 1, 1024]")
