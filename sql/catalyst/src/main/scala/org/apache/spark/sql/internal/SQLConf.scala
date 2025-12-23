@@ -1066,16 +1066,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  lazy val TRIM_COLLATION_ENABLED =
-    buildConf("spark.sql.collation.trim.enabled")
-      .internal()
-      .doc("When enabled allows the use of trim collations which trim trailing whitespaces from" +
-        " strings."
-      )
-      .version("4.0.0")
-      .booleanConf
-      .createWithDefault(true)
-
   lazy val COLLATION_AWARE_HASHING_ENABLED =
     buildConf("spark.sql.legacy.collationAwareHashFunctions")
       .internal()
@@ -7151,8 +7141,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def objectLevelCollationsEnabled: Boolean = getConf(OBJECT_LEVEL_COLLATIONS_ENABLED)
 
   def schemaLevelCollationsEnabled: Boolean = getConf(SCHEMA_LEVEL_COLLATIONS_ENABLED)
-
-  def trimCollationEnabled: Boolean = getConf(TRIM_COLLATION_ENABLED)
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 
