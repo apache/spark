@@ -367,6 +367,8 @@ object SparkBuild extends PomBuild {
         "org.apache.spark.kafka010",
         "org.apache.spark.network",
         "org.apache.spark.sql.avro",
+        "org.apache.spark.sql.metricview",
+        "org.apache.spark.sql.pipelines",
         "org.apache.spark.sql.scripting",
         "org.apache.spark.types.variant",
         "org.apache.spark.ui.flamegraph",
@@ -1212,6 +1214,7 @@ object ExcludedDependencies {
     libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") },
     excludeDependencies ++= Seq(
       ExclusionRule(organization = "ch.qos.logback"),
+      ExclusionRule("org.lz4", "lz4-java"),
       ExclusionRule("org.slf4j", "slf4j-simple"),
       ExclusionRule("javax.servlet", "javax.servlet-api"))
   )
@@ -1531,6 +1534,8 @@ object Unidoc {
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/classic/")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/execution")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/internal")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/metricview")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/pipelines")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/scripting")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/ml")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/hive")))

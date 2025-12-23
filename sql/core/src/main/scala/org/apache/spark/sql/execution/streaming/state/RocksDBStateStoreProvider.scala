@@ -610,6 +610,10 @@ private[sql] class RocksDBStateStoreProvider
 
     override def hasCommitted: Boolean = state == COMMITTED
 
+    override def allColumnFamilyNames: Set[String] = {
+      rocksDB.allColumnFamilyNames
+    }
+
     override def toString: String = {
       s"RocksDBStateStore[stateStoreId=$stateStoreId_, version=$version]"
     }
@@ -726,6 +730,7 @@ private[sql] class RocksDBStateStoreProvider
    * @param readOnly Whether to open the store in read-only mode
    * @param existingStore Optional existing store to reuse instead of creating a new one
    * @param forceSnapshotOnCommit Whether to force a snapshot upload on commit
+   * @param loadEmpty If true, creates an empty store at this version without loading previous data
    * @return The loaded state store
    */
   private def loadStateStore(
@@ -733,7 +738,8 @@ private[sql] class RocksDBStateStoreProvider
       uniqueId: Option[String] = None,
       readOnly: Boolean,
       existingStore: Option[RocksDBStateStore] = None,
-      forceSnapshotOnCommit: Boolean = false): StateStore = {
+      forceSnapshotOnCommit: Boolean = false,
+      loadEmpty: Boolean = false): StateStore = {
     var acquiredStamp: Option[Long] = None
     var storeLoaded = false
     try {
@@ -765,7 +771,8 @@ private[sql] class RocksDBStateStoreProvider
       rocksDB.load(
         version,
         stateStoreCkptId = if (storeConf.enableStateStoreCheckpointIds) uniqueId else None,
-        readOnly = readOnly)
+        readOnly = readOnly,
+        loadEmpty = loadEmpty)
 
       // Create or reuse store instance
       val store = existingStore match {
@@ -806,12 +813,14 @@ private[sql] class RocksDBStateStoreProvider
   override def getStore(
       version: Long,
       uniqueId: Option[String] = None,
-      forceSnapshotOnCommit: Boolean = false): StateStore = {
+      forceSnapshotOnCommit: Boolean = false,
+      loadEmpty: Boolean = false): StateStore = {
     loadStateStore(
       version,
       uniqueId,
       readOnly = false,
-      forceSnapshotOnCommit = forceSnapshotOnCommit
+      forceSnapshotOnCommit = forceSnapshotOnCommit,
+      loadEmpty = loadEmpty
     )
   }
 

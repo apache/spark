@@ -367,7 +367,8 @@ class PandasUDFTypeHintsWithFutureAnnotationsTests(ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.pandas.test_pandas_udf_typehints_with_future_annotations import *  # noqa: #F401
+    # E501: line too long
+    from pyspark.sql.tests.pandas.test_pandas_udf_typehints_with_future_annotations import *  # noqa: F401, E501
 
     try:
         import xmlrunner

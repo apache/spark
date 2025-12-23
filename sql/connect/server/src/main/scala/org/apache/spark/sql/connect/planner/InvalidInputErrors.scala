@@ -96,9 +96,6 @@ object InvalidInputErrors {
   def chunkedCachedLocalRelationWithoutData(): InvalidPlanInput =
     InvalidPlanInput("ChunkedCachedLocalRelation should contain data.")
 
-  def chunkedCachedLocalRelationChunksWithDifferentSchema(): InvalidPlanInput =
-    InvalidPlanInput("ChunkedCachedLocalRelation data chunks have different schema.")
-
   def schemaRequiredForLocalRelation(): InvalidPlanInput =
     InvalidPlanInput("Schema for LocalRelation is required when the input data is not provided.")
 

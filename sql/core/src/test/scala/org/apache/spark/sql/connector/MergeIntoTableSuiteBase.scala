@@ -3240,9 +3240,8 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
               checkAnswer(
                 sql(s"SELECT * FROM $tableNameAsString"),
                 Seq(
-                  Row(1, Row(10, Row(null, Map("c" -> "d"), false)), "sales"),
+                  Row(1, Row(10, Row(Seq(1, 2), Map("c" -> "d"), false)), "sales"),
                   Row(2, Row(20, Row(null, Map("e" -> "f"), true)), "engineering")))
-
             } else {
               val exception = intercept[org.apache.spark.sql.AnalysisException] {
                 sql(mergeStmt)
@@ -4776,6 +4775,292 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     sql(s"DROP TABLE IF EXISTS $tableNameAsString")
   }
 
+  test("merge with struct of nulls") {
+    withTempView("source") {
+      createAndInitTable(
+        s"""pk INT NOT NULL,
+           |s STRUCT<c1: INT, c2: STRING>,
+           |dep STRING""".stripMargin,
+        """{ "pk": 0, "s": { "c1": 1, "c2": "a" }, "dep": "sales" }
+          |{ "pk": 1, "s": { "c1": 2, "c2": "b" }, "dep": "hr" }"""
+          .stripMargin)
+
+      // Source table matches target table schema
+      val sourceTableSchema = StructType(Seq(
+        StructField("pk", IntegerType),
+        StructField("s", StructType(Seq(
+          StructField("c1", IntegerType),
+          StructField("c2", StringType)
+        ))),
+        StructField("dep", StringType)
+      ))
+
+      // Source has a struct with null field values (not a null struct)
+      val data = Seq(
+        Row(1, Row(null, null), "engineering"),
+        Row(2, Row(null, null), "finance")
+      )
+      spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+        .createOrReplaceTempView("source")
+
+      sql(
+        s"""MERGE INTO $tableNameAsString t USING source
+           |ON t.pk = source.pk
+           |WHEN MATCHED THEN
+           | UPDATE SET *
+           |WHEN NOT MATCHED THEN
+           | INSERT *
+           |""".stripMargin)
+      // Struct of null values should be preserved, not converted to null struct
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(0, Row(1, "a"), "sales"),
+          Row(1, Row(null, null), "engineering"),
+          Row(2, Row(null, null), "finance")))
+    }
+    sql(s"DROP TABLE IF EXISTS $tableNameAsString")
+  }
+
+  test("merge with null struct into struct of nulls") {
+    withTempView("source") {
+      createAndInitTable(
+        s"""pk INT NOT NULL,
+           |s STRUCT<c1: INT, c2: STRING>,
+           |dep STRING""".stripMargin,
+        """{ "pk": 0, "s": { "c1": 1, "c2": "a" }, "dep": "sales" }
+          |{ "pk": 1, "s": { "c1": null, "c2": null }, "dep": "hr" }"""
+          .stripMargin)
+
+      // Source table matches target table schema
+      val sourceTableSchema = StructType(Seq(
+        StructField("pk", IntegerType),
+        StructField("s", StructType(Seq(
+          StructField("c1", IntegerType),
+          StructField("c2", StringType)
+        ))),
+        StructField("dep", StringType)
+      ))
+
+      // Source has a null struct (not a struct of nulls)
+      val data = Seq(
+        Row(1, null, "engineering")
+      )
+      spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+        .createOrReplaceTempView("source")
+
+      sql(
+        s"""MERGE INTO $tableNameAsString t USING source
+           |ON t.pk = source.pk
+           |WHEN MATCHED THEN
+           | UPDATE SET *
+           |WHEN NOT MATCHED THEN
+           | INSERT *
+           |""".stripMargin)
+      // Null struct should override struct of nulls
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(0, Row(1, "a"), "sales"),
+          Row(1, null, "engineering")))
+    }
+    sql(s"DROP TABLE IF EXISTS $tableNameAsString")
+  }
+
+  test("merge with null struct into struct of nulls with extra target field") {
+    Seq(true, false).foreach { withSchemaEvolution =>
+      Seq(true, false).foreach { coerceNestedTypes =>
+        withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
+          coerceNestedTypes.toString) {
+          withTempView("source") {
+            // Target has struct with 3 fields, row 1 has all nulls including extra field c3
+            createAndInitTable(
+              s"""pk INT NOT NULL,
+                 |s STRUCT<c1: INT, c2: STRING, c3: INT>,
+                 |dep STRING""".stripMargin,
+              """{ "pk": 0, "s": { "c1": 1, "c2": "a", "c3": 10 }, "dep": "sales" }
+                |{ "pk": 1, "s": { "c1": null, "c2": null, "c3": null }, "dep": "hr" }"""
+                .stripMargin)
+
+            // Source table has struct with 2 fields (missing c3)
+            val sourceTableSchema = StructType(Seq(
+              StructField("pk", IntegerType),
+              StructField("s", StructType(Seq(
+                StructField("c1", IntegerType),
+                StructField("c2", StringType)
+                // missing field c3
+              ))),
+              StructField("dep", StringType)
+            ))
+
+            // Source has a null struct (not a struct of nulls)
+            val data = Seq(
+              Row(1, null, "engineering")
+            )
+            spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+              .createOrReplaceTempView("source")
+
+            val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+            val mergeStmt =
+              s"""MERGE $schemaEvolutionClause INTO $tableNameAsString t USING source
+                 |ON t.pk = source.pk
+                 |WHEN MATCHED THEN
+                 | UPDATE SET *
+                 |WHEN NOT MATCHED THEN
+                 | INSERT *
+                 |""".stripMargin
+
+            if (coerceNestedTypes && withSchemaEvolution) {
+              sql(mergeStmt)
+              // Because target has extra field c3, we preserve struct of nulls
+              checkAnswer(
+                sql(s"SELECT * FROM $tableNameAsString"),
+                Seq(
+                  Row(0, Row(1, "a", 10), "sales"),
+                  Row(1, Row(null, null, null), "engineering")))
+            } else {
+              val exception = intercept[org.apache.spark.sql.AnalysisException] {
+                sql(mergeStmt)
+              }
+              assert(exception.errorClass.get ==
+                "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
+            }
+          }
+        }
+        sql(s"DROP TABLE IF EXISTS $tableNameAsString")
+      }
+    }
+  }
+
+  test("merge with struct of nulls with missing source field") {
+    Seq(true, false).foreach { withSchemaEvolution =>
+      Seq(true, false).foreach { coerceNestedTypes =>
+        withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
+          coerceNestedTypes.toString) {
+          withTempView("source") {
+            // Target has struct with 3 fields
+            createAndInitTable(
+              s"""pk INT NOT NULL,
+                 |s STRUCT<c1: INT, c2: STRING, c3: INT>,
+                 |dep STRING""".stripMargin,
+              """{ "pk": 0, "s": { "c1": 1, "c2": "a", "c3": 10 }, "dep": "sales" }
+                |{ "pk": 1, "s": { "c1": 2, "c2": "b", "c3": 20 }, "dep": "hr" }"""
+                .stripMargin)
+
+            // Source table has struct with 2 fields (missing field c3)
+            val sourceTableSchema = StructType(Seq(
+              StructField("pk", IntegerType),
+              StructField("s", StructType(Seq(
+                StructField("c1", IntegerType),
+                StructField("c2", StringType)
+                // missing field c3
+              ))),
+              StructField("dep", StringType)
+            ))
+
+            // Source has a struct with two null field values (not a null struct)
+            val data = Seq(
+              Row(1, Row(null, null), "engineering")
+            )
+            spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+              .createOrReplaceTempView("source")
+
+            val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+            val mergeStmt =
+              s"""MERGE $schemaEvolutionClause INTO $tableNameAsString t USING source
+                 |ON t.pk = source.pk
+                 |WHEN MATCHED THEN
+                 | UPDATE SET *
+                 |WHEN NOT MATCHED THEN
+                 | INSERT *
+                 |""".stripMargin
+
+            if (coerceNestedTypes && withSchemaEvolution) {
+              sql(mergeStmt)
+              // Struct of null values should be preserved, not converted to null struct
+              checkAnswer(
+                sql(s"SELECT * FROM $tableNameAsString"),
+                Seq(
+                  Row(0, Row(1, "a", 10), "sales"),
+                  Row(1, Row(null, null, 20), "engineering")))
+            } else {
+              val exception = intercept[org.apache.spark.sql.AnalysisException] {
+                sql(mergeStmt)
+              }
+              assert(exception.errorClass.get ==
+                "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
+            }
+          }
+        }
+        sql(s"DROP TABLE IF EXISTS $tableNameAsString")
+      }
+    }
+  }
+
+  test("merge with struct of nulls with missing source field and null target field") {
+    Seq(true, false).foreach { withSchemaEvolution =>
+      Seq(true, false).foreach { coerceNestedTypes =>
+        withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
+          coerceNestedTypes.toString) {
+          withTempView("source") {
+            // Target has struct with 3 fields, but row 1 has null for the extra field c3
+            createAndInitTable(
+              s"""pk INT NOT NULL,
+                 |s STRUCT<c1: INT, c2: STRING, c3: INT>,
+                 |dep STRING""".stripMargin,
+              """{ "pk": 0, "s": { "c1": 1, "c2": "a", "c3": 10 }, "dep": "sales" }
+                |{ "pk": 1, "s": { "c1": 2, "c2": "b", "c3": null }, "dep": "hr" }"""
+                .stripMargin)
+
+            // Source table has struct with 2 fields (missing field c3)
+            val sourceTableSchema = StructType(Seq(
+              StructField("pk", IntegerType),
+              StructField("s", StructType(Seq(
+                StructField("c1", IntegerType),
+                StructField("c2", StringType)
+                // missing field c3
+              ))),
+              StructField("dep", StringType)
+            ))
+
+            // Source has a struct with two null field values (not a null struct)
+            val data = Seq(
+              Row(1, Row(null, null), "engineering")
+            )
+            spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+              .createOrReplaceTempView("source")
+
+            val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+            val mergeStmt =
+              s"""MERGE $schemaEvolutionClause INTO $tableNameAsString t USING source
+                 |ON t.pk = source.pk
+                 |WHEN MATCHED THEN
+                 | UPDATE SET *
+                 |WHEN NOT MATCHED THEN
+                 | INSERT *
+                 |""".stripMargin
+
+            if (coerceNestedTypes && withSchemaEvolution) {
+              sql(mergeStmt)
+              // Struct of null values should be preserved, not converted to null struct
+              checkAnswer(
+                sql(s"SELECT * FROM $tableNameAsString"),
+                Seq(
+                  Row(0, Row(1, "a", 10), "sales"),
+                  Row(1, Row(null, null, null), "engineering")))
+            } else {
+              val exception = intercept[org.apache.spark.sql.AnalysisException] {
+                sql(mergeStmt)
+              }
+              assert(exception.errorClass.get ==
+                "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
+            }
+          }
+        }
+        sql(s"DROP TABLE IF EXISTS $tableNameAsString")
+      }
+    }
+  }
 
   test("merge with null struct - update field") {
     withTempView("source") {
@@ -4821,6 +5106,61 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
     sql(s"DROP TABLE IF EXISTS $tableNameAsString")
   }
+
+  test("merge with null nested struct in doubly nested struct") {
+    Seq(true, false).foreach { withSchemaEvolution =>
+
+      withTempView("source") {
+        // Target has doubly nested struct with 2 fields in innermost struct
+        createAndInitTable(
+          s"""pk INT NOT NULL,
+             |s STRUCT<c1: INT, c2: STRUCT<a: INT, b: STRING>>,
+             |dep STRING""".stripMargin,
+          """{ "pk": 0, "s": { "c1": 1, "c2": { "a": 10, "b": "foo" } }, "dep": "sales" }
+            |{ "pk": 1, "s": { "c1": 2, "c2": { "a": 20, "b": "bar" } }, "dep": "hr" }"""
+            .stripMargin)
+
+        val sourceTableSchema = StructType(Seq(
+          StructField("pk", IntegerType),
+          StructField("s", StructType(Seq(
+            StructField("c1", IntegerType),
+            StructField("c2", StructType(Seq(
+              StructField("a", IntegerType),
+              StructField("b", StringType)
+            )))
+          ))),
+          StructField("dep", StringType)
+        ))
+
+        // Source has a row where the nested struct (c2) is null
+        val data = Seq(
+          Row(1, Row(3, null), "engineering")
+        )
+        spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+          .createOrReplaceTempView("source")
+
+        val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+        val mergeStmt =
+          s"""MERGE $schemaEvolutionClause INTO $tableNameAsString t USING source
+             |ON t.pk = source.pk
+             |WHEN MATCHED THEN
+             | UPDATE SET *
+             |WHEN NOT MATCHED THEN
+             | INSERT *
+             |""".stripMargin
+
+        sql(mergeStmt)
+        // Null nested struct should be preserved
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString"),
+          Seq(
+            Row(0, Row(1, Row(10, "foo")), "sales"),
+            Row(1, Row(3, null), "engineering")))
+      }
+      sql(s"DROP TABLE IF EXISTS $tableNameAsString")
+    }
+  }
+
 
   test("merge with null struct into non-nullable struct column") {
     withTempView("source") {
@@ -4917,8 +5257,432 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
                 sql(s"SELECT * FROM $tableNameAsString"),
                 Seq(
                   Row(0, Row(1, Row(10, "x")), "sales"),
-                  Row(1, null, "engineering"),
+                  Row(1, Row(null, Row(null, "y")), "engineering"),
                   Row(2, null, "finance")))
+            } else {
+              val exception = intercept[org.apache.spark.sql.AnalysisException] {
+                sql(mergeStmt)
+              }
+              assert(exception.errorClass.get ==
+                "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
+            }
+          }
+        }
+        sql(s"DROP TABLE IF EXISTS $tableNameAsString")
+      }
+    }
+  }
+
+  test("merge with null source struct with extra target source field being null") {
+    Seq(true, false).foreach { withSchemaEvolution =>
+      Seq(true, false).foreach { coerceNestedTypes =>
+        withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
+          coerceNestedTypes.toString) {
+          withTempView("source") {
+            // Target table has nested struct, row 1 has null for field 'b' (missing in source)
+            createAndInitTable(
+              s"""pk INT NOT NULL,
+                 |s STRUCT<c1: INT, c2: STRUCT<a: INT, b: STRING>>,
+                 |dep STRING""".stripMargin,
+              """{ "pk": 0, "s": { "c1": 1, "c2": { "a": 10, "b": "x" } }, "dep": "sales" }
+                |{ "pk": 1, "s": { "c1": 2, "c2": { "a": 20, "b": null } }, "dep": "hr" }"""
+                .stripMargin)
+
+            // Source table has struct with missing nested field 'b'
+            val sourceTableSchema = StructType(Seq(
+              StructField("pk", IntegerType),
+              StructField("s", StructType(Seq(
+                StructField("c1", IntegerType),
+                StructField("c2", StructType(Seq(
+                  StructField("a", IntegerType)
+                  // missing field 'b'
+                )))
+              ))),
+              StructField("dep", StringType)
+            ))
+
+            val data = Seq(
+              Row(1, null, "engineering")
+            )
+            spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+              .createOrReplaceTempView("source")
+
+            val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+            val mergeStmt =
+              s"""MERGE $schemaEvolutionClause INTO $tableNameAsString t USING source
+                 |ON t.pk = source.pk
+                 |WHEN MATCHED THEN
+                 | UPDATE SET *
+                 |WHEN NOT MATCHED THEN
+                 | INSERT *
+                 |""".stripMargin
+
+            if (coerceNestedTypes && withSchemaEvolution) {
+              sql(mergeStmt)
+              // It's not immediately obvious, but because the target had extra fields
+              // we preserve them despite them being null (and thus retain the struct of nulls)
+              checkAnswer(
+                sql(s"SELECT * FROM $tableNameAsString"),
+                Seq(
+                  Row(0, Row(1, Row(10, "x")), "sales"),
+                  Row(1, Row(null, Row(null, null)), "engineering")))
+            } else {
+              val exception = intercept[org.apache.spark.sql.AnalysisException] {
+                sql(mergeStmt)
+              }
+              assert(exception.errorClass.get ==
+                "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
+            }
+          }
+        }
+        sql(s"DROP TABLE IF EXISTS $tableNameAsString")
+      }
+    }
+  }
+
+  test("merge with null source struct with extra target field in doubly nested struct") {
+    Seq(true, false).foreach { withSchemaEvolution =>
+      Seq(true, false).foreach { coerceNestedTypes =>
+        withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
+          coerceNestedTypes.toString) {
+          withTempView("source") {
+            // Target has struct nested in struct, with extra field 'y' in innermost struct
+            val targetTableSchema = StructType(Seq(
+              StructField("c1", IntegerType),
+              StructField("c2", StructType(Seq(
+                StructField("a", IntegerType),
+                StructField("b", StructType(Seq(
+                  StructField("x", IntegerType),
+                  StructField("y", StringType)
+                )))
+              )))
+            ))
+
+            val columns = Array(
+              Column.create("pk", IntegerType, false),
+              Column.create("s", targetTableSchema),
+              Column.create("dep", StringType))
+            createTable(columns)
+
+            val targetData = Seq(
+              Row(0, Row(1, Row(10, Row(100, "foo"))), "sales"),
+              Row(1, Row(2, Row(20, Row(200, null))), "hr")
+            )
+            val targetDataSchema = StructType(Seq(
+              StructField("pk", IntegerType),
+              StructField("s", targetTableSchema),
+              StructField("dep", StringType)
+            ))
+            spark.createDataFrame(spark.sparkContext.parallelize(targetData), targetDataSchema)
+              .writeTo(tableNameAsString).append()
+
+            // Source has struct with missing field 'y' in innermost struct
+            val sourceTableSchema = StructType(Seq(
+              StructField("pk", IntegerType),
+              StructField("s", StructType(Seq(
+                StructField("c1", IntegerType),
+                StructField("c2", StructType(Seq(
+                  StructField("a", IntegerType),
+                  StructField("b", StructType(Seq(
+                    StructField("x", IntegerType)
+                    // missing field 'y'
+                  )))
+                )))
+              ))),
+              StructField("dep", StringType)
+            ))
+
+            val data = Seq(
+              Row(1, null, "engineering")
+            )
+            spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+              .createOrReplaceTempView("source")
+
+            val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+            val mergeStmt =
+              s"""MERGE $schemaEvolutionClause INTO $tableNameAsString t USING source
+                 |ON t.pk = source.pk
+                 |WHEN MATCHED THEN
+                 | UPDATE SET *
+                 |WHEN NOT MATCHED THEN
+                 | INSERT *
+                 |""".stripMargin
+
+            if (coerceNestedTypes && withSchemaEvolution) {
+              sql(mergeStmt)
+              // Because the target had extra field 'y' which is null,
+              // we preserve it and retain the struct of nulls
+              checkAnswer(
+                sql(s"SELECT * FROM $tableNameAsString"),
+                Seq(
+                  Row(0, Row(1, Row(10, Row(100, "foo"))), "sales"),
+                  Row(1, Row(null, Row(null, Row(null, null))), "engineering")))
+            } else {
+              val exception = intercept[org.apache.spark.sql.AnalysisException] {
+                sql(mergeStmt)
+              }
+              assert(exception.errorClass.get ==
+                "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
+            }
+          }
+        }
+        sql(s"DROP TABLE IF EXISTS $tableNameAsString")
+      }
+    }
+  }
+
+  test("merge with null source and target nested struct with extra target field") {
+    Seq(true, false).foreach { withSchemaEvolution =>
+      Seq(true, false).foreach { coerceNestedTypes =>
+        withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
+          coerceNestedTypes.toString) {
+          withTempView("source") {
+            // Target has struct nested in struct, with extra field 'y' in innermost struct
+            val targetTableSchema = StructType(Seq(
+              StructField("c1", IntegerType),
+              StructField("c2", StructType(Seq(
+                StructField("a", IntegerType),
+                StructField("b", StructType(Seq(
+                  StructField("x", IntegerType),
+                  StructField("y", StringType)
+                )))
+              )))
+            ))
+
+            val columns = Array(
+              Column.create("pk", IntegerType, false),
+              Column.create("s", targetTableSchema),
+              Column.create("dep", StringType))
+            createTable(columns)
+
+            // Target data has null for innermost struct 'b' which has the extra field 'y'
+            val targetData = Seq(
+              Row(0, Row(1, Row(10, Row(100, "foo"))), "sales"),
+              Row(1, Row(2, Row(20, null)), "hr")
+            )
+            val targetDataSchema = StructType(Seq(
+              StructField("pk", IntegerType),
+              StructField("s", targetTableSchema),
+              StructField("dep", StringType)
+            ))
+            spark.createDataFrame(spark.sparkContext.parallelize(targetData), targetDataSchema)
+              .writeTo(tableNameAsString).append()
+
+            // Source has struct with missing field 'y' in innermost struct
+            val sourceTableSchema = StructType(Seq(
+              StructField("pk", IntegerType),
+              StructField("s", StructType(Seq(
+                StructField("c1", IntegerType),
+                StructField("c2", StructType(Seq(
+                  StructField("a", IntegerType),
+                  StructField("b", StructType(Seq(
+                    StructField("x", IntegerType)
+                    // missing field 'y'
+                  )))
+                )))
+              ))),
+              StructField("dep", StringType)
+            ))
+
+            // Source data also has null for innermost struct 'b'
+            val data = Seq(
+              Row(1, Row(3, Row(30, null)), "engineering")
+            )
+            spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+              .createOrReplaceTempView("source")
+
+            val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+            val mergeStmt =
+              s"""MERGE $schemaEvolutionClause INTO $tableNameAsString t USING source
+                 |ON t.pk = source.pk
+                 |WHEN MATCHED THEN
+                 | UPDATE SET *
+                 |WHEN NOT MATCHED THEN
+                 | INSERT *
+                 |""".stripMargin
+
+            if (coerceNestedTypes && withSchemaEvolution) {
+              sql(mergeStmt)
+              // Both source and target have null for 'b', which should remain null
+              checkAnswer(
+                sql(s"SELECT * FROM $tableNameAsString"),
+                Seq(
+                  Row(0, Row(1, Row(10, Row(100, "foo"))), "sales"),
+                  Row(1, Row(3, Row(30, null)), "engineering")))
+            } else {
+              val exception = intercept[org.apache.spark.sql.AnalysisException] {
+                sql(mergeStmt)
+              }
+              assert(exception.errorClass.get ==
+                "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
+            }
+          }
+        }
+        sql(s"DROP TABLE IF EXISTS $tableNameAsString")
+      }
+    }
+  }
+
+  test("merge with null source struct with extra target field in struct inside array") {
+    Seq(true, false).foreach { withSchemaEvolution =>
+      Seq(true, false).foreach { coerceNestedTypes =>
+        withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
+          coerceNestedTypes.toString) {
+          withTempView("source") {
+            // Target has struct with array of structs, with extra field 'y' in array element struct
+            val arrayElementSchema = StructType(Seq(
+              StructField("x", IntegerType),
+              StructField("y", StringType)
+            ))
+            val targetTableSchema = StructType(Seq(
+              StructField("c1", IntegerType),
+              StructField("arr", ArrayType(arrayElementSchema))
+            ))
+
+            val columns = Array(
+              Column.create("pk", IntegerType, false),
+              Column.create("s", targetTableSchema),
+              Column.create("dep", StringType))
+            createTable(columns)
+
+            val targetData = Seq(
+              Row(0, Row(1, Seq(Row(100, "foo"), Row(101, "bar"))), "sales"),
+              Row(1, Row(2, Seq(Row(200, null), Row(201, null))), "hr")
+            )
+            val targetDataSchema = StructType(Seq(
+              StructField("pk", IntegerType),
+              StructField("s", targetTableSchema),
+              StructField("dep", StringType)
+            ))
+            spark.createDataFrame(spark.sparkContext.parallelize(targetData), targetDataSchema)
+              .writeTo(tableNameAsString).append()
+
+            // Source has struct with missing field 'y' in array element struct
+            val sourceArrayElementSchema = StructType(Seq(
+              StructField("x", IntegerType)
+              // missing field 'y'
+            ))
+            val sourceTableSchema = StructType(Seq(
+              StructField("pk", IntegerType),
+              StructField("s", StructType(Seq(
+                StructField("c1", IntegerType),
+                StructField("arr", ArrayType(sourceArrayElementSchema))
+              ))),
+              StructField("dep", StringType)
+            ))
+
+            val data = Seq(
+              Row(1, null, "engineering")
+            )
+            spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+              .createOrReplaceTempView("source")
+
+            val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+            val mergeStmt =
+              s"""MERGE $schemaEvolutionClause INTO $tableNameAsString t USING source
+                 |ON t.pk = source.pk
+                 |WHEN MATCHED THEN
+                 | UPDATE SET *
+                 |WHEN NOT MATCHED THEN
+                 | INSERT *
+                 |""".stripMargin
+
+            if (coerceNestedTypes && withSchemaEvolution) {
+              sql(mergeStmt)
+              // Because the target had extra field 'y' which is within an array,
+              // it cannot be referenced and so we do not preserve it and allow source null
+              // to override it.
+              checkAnswer(
+                sql(s"SELECT * FROM $tableNameAsString"),
+                Seq(
+                  Row(0, Row(1, Seq(Row(100, "foo"), Row(101, "bar"))), "sales"),
+                  Row(1, null, "engineering")))
+            } else {
+              val exception = intercept[org.apache.spark.sql.AnalysisException] {
+                sql(mergeStmt)
+              }
+              assert(exception.errorClass.get ==
+                "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA")
+            }
+          }
+        }
+        sql(s"DROP TABLE IF EXISTS $tableNameAsString")
+      }
+    }
+  }
+
+  test("merge with null source struct with extra null target field in struct containing array") {
+    Seq(true, false).foreach { withSchemaEvolution =>
+      Seq(true, false).foreach { coerceNestedTypes =>
+        withSQLConf(SQLConf.MERGE_INTO_NESTED_TYPE_COERCION_ENABLED.key ->
+          coerceNestedTypes.toString) {
+          withTempView("source") {
+            val arrayElementSchema = StructType(Seq(
+              StructField("x", IntegerType)
+            ))
+            val targetTableSchema = StructType(Seq(
+              StructField("c1", IntegerType),
+              StructField("arr", ArrayType(arrayElementSchema)),
+              StructField("c2", StringType) // extra field at nested struct level
+            ))
+
+            val columns = Array(
+              Column.create("pk", IntegerType, false),
+              Column.create("s", targetTableSchema),
+              Column.create("dep", StringType))
+            createTable(columns)
+
+            val targetData = Seq(
+              Row(0, Row(1, Seq(Row(100), Row(101)), "foo"), "sales"),
+              Row(1, Row(2, Seq(Row(200), Row(201)), null), "hr") // c2 is null
+            )
+            val targetDataSchema = StructType(Seq(
+              StructField("pk", IntegerType),
+              StructField("s", targetTableSchema),
+              StructField("dep", StringType)
+            ))
+            spark.createDataFrame(spark.sparkContext.parallelize(targetData), targetDataSchema)
+              .writeTo(tableNameAsString).append()
+
+            // Source has struct missing field 'c2'
+            val sourceArrayElementSchema = StructType(Seq(
+              StructField("x", IntegerType)
+            ))
+            val sourceTableSchema = StructType(Seq(
+              StructField("pk", IntegerType),
+              StructField("s", StructType(Seq(
+                StructField("c1", IntegerType),
+                StructField("arr", ArrayType(sourceArrayElementSchema))
+                // missing field 'c2'
+              ))),
+              StructField("dep", StringType)
+            ))
+
+            val data = Seq(
+              Row(1, null, "engineering")
+            )
+            spark.createDataFrame(spark.sparkContext.parallelize(data), sourceTableSchema)
+              .createOrReplaceTempView("source")
+
+            val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION" else ""
+            val mergeStmt =
+              s"""MERGE $schemaEvolutionClause INTO $tableNameAsString t USING source
+                 |ON t.pk = source.pk
+                 |WHEN MATCHED THEN
+                 | UPDATE SET *
+                 |WHEN NOT MATCHED THEN
+                 | INSERT *
+                 |""".stripMargin
+
+            if (coerceNestedTypes && withSchemaEvolution) {
+              sql(mergeStmt)
+              // Because the target had extra field 'c2' which is null,
+              // we preserve it and retain the struct of nulls
+              checkAnswer(
+                sql(s"SELECT * FROM $tableNameAsString"),
+                Seq(
+                  Row(0, Row(1, Seq(Row(100), Row(101)), "foo"), "sales"),
+                  Row(1, Row(null, null, null), "engineering")))
             } else {
               val exception = intercept[org.apache.spark.sql.AnalysisException] {
                 sql(mergeStmt)
@@ -4987,7 +5751,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
                   sql(s"SELECT * FROM $tableNameAsString"),
                   Seq(
                     Row(0, Row(1, Row(10, "x", null)), "sales"),
-                    Row(1, null, "engineering"),
+                    Row(1, Row(null, Row(null, "y", null)), "engineering"),
                     Row(2, null, "finance")))
               } else {
                 val exception = intercept[org.apache.spark.sql.AnalysisException] {
@@ -5129,7 +5893,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
                 sql(s"SELECT * FROM $tableNameAsString"),
                 Seq(
                   Row(0, Row(1, Row(10, "x")), "sales"),
-                  Row(1, null, "engineering"),
+                  Row(1, Row(null, Row(null, "y")), "engineering"),
                   Row(2, null, "finance")))
             } else {
               val exception = intercept[org.apache.spark.sql.AnalysisException] {
@@ -5143,7 +5907,6 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
       }
     }
   }
-
 
   test("merge with source missing struct column with default value") {
     withTempView("source") {
@@ -5258,8 +6021,8 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
               checkAnswer(
                 sql(s"SELECT * FROM $tableNameAsString"),
                 Seq(
-                  Row(1, Row(10, Row(20, null)), "sales"),
-                  Row(2, Row(20, Row(30, null)), "engineering")))
+                  Row(1, Row(10, Row(20, true)), "sales"),
+                  Row(2, Row(20, Row(30, false)), "engineering")))
             } else {
               val exception = intercept[org.apache.spark.sql.AnalysisException] {
                 sql(mergeStmt)
@@ -5918,7 +6681,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
               checkAnswer(
                 sql(s"SELECT * FROM $tableNameAsString"),
                 Seq(
-                  Row(1, Row(10, Row(null, Map("c" -> "d"), false)), "sales"),
+                  Row(1, Row(10, Row(Seq(1, 2), Map("c" -> "d"), false)), "sales"),
                   Row(2, Row(20, Row(null, Map("e" -> "f"), true)), "engineering")))
             } else {
               val exception = intercept[org.apache.spark.sql.AnalysisException] {
@@ -6267,7 +7030,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
                 sql(s"SELECT * FROM $tableNameAsString"),
                 Seq(
                   Row(0, Row(1, Row(10, "x")), "sales"),
-                  Row(1, null, "engineering"),
+                  Row(1, Row(null, Row(null, "y")), "engineering"),
                   Row(2, null, "finance")))
             } else {
               val exception = intercept[org.apache.spark.sql.AnalysisException] {
@@ -6371,7 +7134,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
                   sql(s"SELECT * FROM $tableNameAsString"),
                   Seq(
                     Row(0, Row(1, Row(10, "x", null)), "sales"),
-                    Row(1, null, "engineering"),
+                    Row(1, Row(null, Row(null, "y", null)), "engineering"),
                     Row(2, null, "finance")))
               } else {
                 val exception = intercept[org.apache.spark.sql.AnalysisException] {

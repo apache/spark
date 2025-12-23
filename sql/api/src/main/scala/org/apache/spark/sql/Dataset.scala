@@ -3047,6 +3047,8 @@ abstract class Dataset[T] extends Serializable {
   /**
    * Persist this Dataset with the default storage level (`MEMORY_AND_DISK`).
    *
+   * @note
+   *   Cached data is shared across all Spark sessions on the cluster.
    * @group basic
    * @since 1.6.0
    */
@@ -3055,6 +3057,8 @@ abstract class Dataset[T] extends Serializable {
   /**
    * Persist this Dataset with the default storage level (`MEMORY_AND_DISK`).
    *
+   * @note
+   *   Cached data is shared across all Spark sessions on the cluster.
    * @group basic
    * @since 1.6.0
    */
@@ -3066,6 +3070,8 @@ abstract class Dataset[T] extends Serializable {
    * @param newLevel
    *   One of: `MEMORY_ONLY`, `MEMORY_AND_DISK`, `MEMORY_ONLY_SER`, `MEMORY_AND_DISK_SER`,
    *   `DISK_ONLY`, `MEMORY_ONLY_2`, `MEMORY_AND_DISK_2`, etc.
+   * @note
+   *   Cached data is shared across all Spark sessions on the cluster.
    * @group basic
    * @since 1.6.0
    */
@@ -3085,6 +3091,9 @@ abstract class Dataset[T] extends Serializable {
    *
    * @param blocking
    *   Whether to block until all blocks are deleted.
+   * @note
+   *   Cached data is shared across all Spark sessions on the cluster, so unpersisting it affects
+   *   all sessions.
    * @group basic
    * @since 1.6.0
    */
@@ -3094,6 +3103,9 @@ abstract class Dataset[T] extends Serializable {
    * Mark the Dataset as non-persistent, and remove all blocks for it from memory and disk. This
    * will not un-persist any cached data that is built upon this Dataset.
    *
+   * @note
+   *   Cached data is shared across all Spark sessions on the cluster, so unpersisting it affects
+   *   all sessions.
    * @group basic
    * @since 1.6.0
    */

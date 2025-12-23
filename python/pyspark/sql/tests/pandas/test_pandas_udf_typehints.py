@@ -187,6 +187,47 @@ class PandasUDFTypeHintsTests(ReusedSQLTestCase):
             PandasUDFType.GROUPED_AGG,
         )
 
+    def test_type_annotation_group_agg_iter(self):
+        # Iterator[pd.Series] -> Any
+        def func(iter: Iterator[pd.Series]) -> float:
+            pass
+
+        self.assertEqual(
+            infer_eval_type(signature(func), get_type_hints(func)), PandasUDFType.GROUPED_AGG_ITER
+        )
+
+        # Iterator[Tuple[pd.Series, pd.Series]] -> Any
+        def func(iter: Iterator[Tuple[pd.Series, pd.Series]]) -> int:
+            pass
+
+        self.assertEqual(
+            infer_eval_type(signature(func), get_type_hints(func)), PandasUDFType.GROUPED_AGG_ITER
+        )
+
+        # Iterator[Tuple[pd.Series, ...]] -> Any
+        def func(iter: Iterator[Tuple[pd.Series, ...]]) -> str:
+            pass
+
+        self.assertEqual(
+            infer_eval_type(signature(func), get_type_hints(func)), PandasUDFType.GROUPED_AGG_ITER
+        )
+
+        # Union[pd.Series, pd.Series] equals to pd.Series
+        def func(iter: Iterator[Union[pd.Series, pd.Series]]) -> float:
+            pass
+
+        self.assertEqual(
+            infer_eval_type(signature(func), get_type_hints(func)), PandasUDFType.GROUPED_AGG_ITER
+        )
+
+        # Iterator[tuple[pd.Series, pd.Series]] -> Any
+        def func(iter: Iterator[tuple[pd.Series, pd.Series]]) -> float:
+            pass
+
+        self.assertEqual(
+            infer_eval_type(signature(func), get_type_hints(func)), PandasUDFType.GROUPED_AGG_ITER
+        )
+
     def test_type_annotation_group_map(self):
         # pd.DataFrame -> pd.DataFrame
         def func(col: pd.DataFrame) -> pd.DataFrame:
@@ -344,6 +385,55 @@ class PandasUDFTypeHintsTests(ReusedSQLTestCase):
         expected = df.groupby("id").agg(mean(df.v).alias("weighted_mean(v, 1.0)")).sort("id")
         assert_frame_equal(expected.toPandas(), actual.toPandas())
 
+    def test_group_agg_iter_udf_type_hint(self):
+        df = self.spark.createDataFrame(
+            [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v")
+        )
+
+        def pandas_mean_iter(it: Iterator[pd.Series]) -> float:
+            sum_val = 0.0
+            cnt = 0
+            for series in it:
+                sum_val += series.sum()
+                cnt += len(series)
+            return sum_val / cnt if cnt > 0 else 0.0
+
+        pandas_mean_iter = pandas_udf("double")(pandas_mean_iter)
+
+        actual = df.groupby("id").agg(pandas_mean_iter(df["v"]).alias("mean")).sort("id")
+        expected = df.groupby("id").agg(mean(df["v"]).alias("mean")).sort("id")
+        assert_frame_equal(expected.toPandas(), actual.toPandas())
+
+        # Test with Tuple for multiple columns
+        df2 = self.spark.createDataFrame(
+            [(1, 1.0, 1.0), (1, 2.0, 2.0), (2, 3.0, 1.0), (2, 5.0, 2.0), (2, 10.0, 3.0)],
+            ("id", "v", "w"),
+        )
+
+        def pandas_weighted_mean_iter(it: Iterator[Tuple[pd.Series, pd.Series]]) -> float:
+            import numpy as np
+
+            weighted_sum = 0.0
+            weight = 0.0
+            for v_series, w_series in it:
+                weighted_sum += np.dot(v_series, w_series)
+                weight += w_series.sum()
+            return weighted_sum / weight if weight > 0 else 0.0
+
+        pandas_weighted_mean_iter = pandas_udf("double")(pandas_weighted_mean_iter)
+
+        actual2 = (
+            df2.groupby("id")
+            .agg(pandas_weighted_mean_iter(df2["v"], df2["w"]).alias("wm"))
+            .sort("id")
+        )
+        # Expected weighted means:
+        # Group 1: (1.0*1.0 + 2.0*2.0) / (1.0 + 2.0) = 5.0 / 3.0
+        # Group 2: (3.0*1.0 + 5.0*2.0 + 10.0*3.0) / (1.0 + 2.0 + 3.0) = 43.0 / 6.0
+        expected = [Row(id=1, wm=5.0 / 3.0), Row(id=2, wm=43.0 / 6.0)]
+        actual_results = actual2.collect()
+        self.assertEqual(actual_results, expected)
+
     def test_ignore_type_hint_in_group_apply_in_pandas(self):
         df = self.spark.range(10)
 
@@ -444,7 +534,7 @@ class PandasUDFTypeHintsTests(ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.pandas.test_pandas_udf_typehints import *  # noqa: #F401
+    from pyspark.sql.tests.pandas.test_pandas_udf_typehints import *  # noqa: F401
 
     try:
         import xmlrunner
