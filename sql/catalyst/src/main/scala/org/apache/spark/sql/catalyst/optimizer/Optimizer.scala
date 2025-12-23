@@ -2130,7 +2130,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
           // Didn't use anything? We're good
           if (used.isEmpty) {
             true
-          } else if (used.iterator.map(_._2.child.expensive).forall(_ == false)) {
+          } else if (!used.exists(_._2.child.expensive)) {
             // If it's cheap we can push it because it might eliminate more data quickly and
             // it may also be something which could be evaluated at the storage layer.
             // We may wish to improve this heuristic in the future.
