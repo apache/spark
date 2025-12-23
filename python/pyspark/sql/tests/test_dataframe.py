@@ -404,10 +404,12 @@ class DataFrameTestsMixin:
         self.assertEqual(df.drop("city.name").columns, ["id", "first.name", "state"])
         self.assertEqual(df.drop("first.name", "city.name").columns, ["id", "state"])
         self.assertEqual(
-            df.drop("first.name", "city.name", "unknown.unknown").columns, ["id", "state"]
+            df.drop("first.name", "city.name", "unknown.unknown").columns,
+            ["id", "state"],
         )
         self.assertEqual(
-            df.drop("unknown.unknown").columns, ["id", "first.name", "city.name", "state"]
+            df.drop("unknown.unknown").columns,
+            ["id", "first.name", "city.name", "state"],
         )
 
     def test_with_column_with_existing_name(self):
@@ -442,7 +444,8 @@ class DataFrameTestsMixin:
             .collect()
         )
         self.assertEqual(
-            [(r.key_alias, r.value_alias) for r in kvs], [(i, str(i)) for i in range(100)]
+            [(r.key_alias, r.value_alias) for r in kvs],
+            [(i, str(i)) for i in range(100)],
         )
 
         # Type check
@@ -512,10 +515,12 @@ class DataFrameTestsMixin:
         result_default = df.optimizePartitions()
 
         # Assertions
-        self.assertEqual(result_default.rdd.getNumPartitions(), 1,
-                         "Expected tiny dataset to coalesce to 1 partition")
-        self.assertEqual(result_default.count(), 10000,
-                         "Data count mismatch after optimization")
+        self.assertEqual(
+            result_default.rdd.getNumPartitions(),
+            1,
+            "Expected tiny dataset to coalesce to 1 partition",
+        )
+        self.assertEqual(result_default.count(), 10000, "Data count mismatch after optimization")
 
         # 2. Test Explicit Parameter
         # Even with a 1MB target, 80KB of data should still fit in 1 partition.
@@ -987,7 +992,10 @@ class DataFrameTestsMixin:
 
     def test_to(self):
         schema = StructType(
-            [StructField("i", StringType(), True), StructField("j", IntegerType(), True)]
+            [
+                StructField("i", StringType(), True),
+                StructField("j", IntegerType(), True),
+            ]
         )
         df = self.spark.createDataFrame([("a", 1)], schema)
 
@@ -1009,13 +1017,17 @@ class DataFrameTestsMixin:
         # incompatible field nullability
         schema4 = StructType([StructField("j", LongType(), False)])
         self.assertRaisesRegex(
-            AnalysisException, "NULLABLE_COLUMN_OR_FIELD", lambda: df.to(schema4).count()
+            AnalysisException,
+            "NULLABLE_COLUMN_OR_FIELD",
+            lambda: df.to(schema4).count(),
         )
 
         # field cannot upcast
         schema5 = StructType([StructField("i", LongType())])
         self.assertRaisesRegex(
-            AnalysisException, "INVALID_COLUMN_OR_FIELD_DATA_TYPE", lambda: df.to(schema5).count()
+            AnalysisException,
+            "INVALID_COLUMN_OR_FIELD_DATA_TYPE",
+            lambda: df.to(schema5).count(),
         )
 
     def test_colregex(self):
@@ -1098,7 +1110,10 @@ class DataFrameTestsMixin:
         # default index column
         transposed_df = df.transpose()
         expected_schema = StructType(
-            [StructField("key", StringType(), False), StructField("x", StringType(), True)]
+            [
+                StructField("key", StringType(), False),
+                StructField("x", StringType(), True),
+            ]
         )
         expected_data = [Row(key="b", x="y"), Row(key="c", x="z")]
         expected_df = self.spark.createDataFrame(expected_data, schema=expected_schema)
@@ -1107,7 +1122,10 @@ class DataFrameTestsMixin:
         # specified index column
         transposed_df = df.transpose("c")
         expected_schema = StructType(
-            [StructField("key", StringType(), False), StructField("z", StringType(), True)]
+            [
+                StructField("key", StringType(), False),
+                StructField("z", StringType(), True),
+            ]
         )
         expected_data = [Row(key="a", z="x"), Row(key="b", z="y")]
         expected_df = self.spark.createDataFrame(expected_data, schema=expected_schema)
@@ -1120,7 +1138,10 @@ class DataFrameTestsMixin:
             self.check_error(
                 exception=pe.exception,
                 errorClass="TRANSPOSE_EXCEED_ROW_LIMIT",
-                messageParameters={"maxValues": "0", "config": "spark.sql.transposeMaxValues"},
+                messageParameters={
+                    "maxValues": "0",
+                    "config": "spark.sql.transposeMaxValues",
+                },
             )
 
         # enforce ascending order based on index column values for transposed columns

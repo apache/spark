@@ -476,7 +476,10 @@ class DataFrame(ParentDataFrame):
         return res
 
     def optimizePartitions(self, targetMB: Optional[int] = None) -> "DataFrame":
-        raise NotImplementedError("optimizePartitions is not yet implemented for Spark Connect")
+        raise PySparkNotImplementedError(
+            error_class="NOT_IMPLEMENTED",
+            message_parameters={"feature": "optimizePartitions for Spark Connect"},
+        )
 
     def dropDuplicates(self, subset: Optional[List[str]] = None) -> ParentDataFrame:
         if subset is not None and not isinstance(subset, (list, tuple)):
