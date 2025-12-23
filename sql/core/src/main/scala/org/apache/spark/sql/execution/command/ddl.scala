@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, Resolve
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UsesCachedData}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
@@ -179,7 +179,7 @@ case class DescribeDatabaseCommand(
     databaseName: String,
     extended: Boolean,
     override val output: Seq[Attribute])
-  extends LeafRunnableCommand with UsesCachedData {
+  extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val dbMetadata: CatalogDatabase =

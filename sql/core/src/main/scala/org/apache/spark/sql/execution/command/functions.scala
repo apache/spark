@@ -95,7 +95,7 @@ case class CreateFunctionCommand(
 case class DescribeFunctionCommand(
     info: ExpressionInfo,
     isExtended: Boolean)
-  extends LeafRunnableCommand with UsesCachedData {
+  extends LeafRunnableCommand {
 
   override val output: Seq[Attribute] = {
     val schema = StructType(Array(StructField("function_desc", StringType, nullable = false)))

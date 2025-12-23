@@ -23,7 +23,7 @@ import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.ResolvedIdentifier
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UsesCachedData}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{Identifier, ProcedureCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.procedures.UnboundProcedure
@@ -41,7 +41,7 @@ case class DescribeProcedureCommand(
     child: LogicalPlan,
     override val output: Seq[Attribute] = Seq(
       AttributeReference("procedure_desc", StringType, nullable = false)()
-    )) extends UnaryRunnableCommand with UsesCachedData {
+    )) extends UnaryRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     child match {
