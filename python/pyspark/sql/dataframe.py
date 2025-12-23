@@ -1985,8 +1985,8 @@ class DataFrame:
 
         Examples
         --------
-        >>> df = spark.range(1000000)
-        >>> df.rdd.getNumPartitions()  # e.g., 8
+        >>> df = spark.range(1000000).repartition(8)
+        >>> df.rdd.getNumPartitions()
         8
         >>> df_opt = df.optimizePartitions(64)
         >>> df_opt.rdd.getNumPartitions()  # e.g., 1 (depending on data size)

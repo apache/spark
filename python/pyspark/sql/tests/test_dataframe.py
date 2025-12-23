@@ -499,10 +499,6 @@ class DataFrameTestsMixin:
                 self.assertGreaterEqual(output.count("REBALANCE_PARTITIONS_BY_COL"), 3)
 
     def test_optimize_partitions(self):
-        """
-        Titan Contribution: Verifies the optimizePartitions API.
-        Tests downscaling behavior, data integrity, and input validation.
-        """
         # Setup: Create a small DataFrame with an intentionally inefficient number of partitions
         # range(10000) is very small data (~80KB), but we force 50 partitions.
         initial_partitions = 50
