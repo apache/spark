@@ -2910,3 +2910,4 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 @ExtendedSQLTest
 class RocksDBStateStoreSuiteWithRowChecksum extends RocksDBStateStoreSuite
   with EnableStateStoreRowChecksum
+
