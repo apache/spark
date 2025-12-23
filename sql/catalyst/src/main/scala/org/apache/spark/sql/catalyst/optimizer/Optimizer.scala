@@ -2172,7 +2172,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // Nothing to push or split, short circuit (all filters are case 3B).
         f
       } else {
-        val expensiveFiltersDone = if (!toSplit.isEmpty) {
+        val splittableFiltersDone = if (!toSplit.isEmpty) {
           // We have at least one filter that we can split the projection around.
           // We're going to now add projections one at a time for the expensive components for
           // each group of filters. We'll keep track of what we added for the previous filter(s)
@@ -2216,10 +2216,10 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // Insert a last projection to match the desired column ordering and
         // evaluate any stragglers and select the already computed columns.
         val (unusedAliases, computedAliases) = project.projectList.partition(
-          a => !expensiveFiltersDone.outputSet.contains(a.toAttribute))
+          a => !splittableFiltersDone.outputSet.contains(a.toAttribute))
         val topProjection = project.copy(projectList = matchColumnOrdering(
           fields, computedAliases.map(_.toAttribute) ++ unusedAliases),
-          child = expensiveFiltersDone)
+          child = splittableFiltersDone)
 
         if (leaveAsIs.isEmpty) {
           topProjection
