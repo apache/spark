@@ -1045,7 +1045,7 @@ class RocksDB(
     val keysList = java.util.Arrays.asList(finalKeys: _*)
 
     // Call RocksDB multiGet
-    val valuesList = db.multiGet(readOptions, keysList)
+    val valuesList = db.multiGetAsList(readOptions, keysList)
 
     // Convert to Array[Array[Byte]] in one line
     valuesList.toArray(new Array[Array[Byte]](valuesList.size()))
