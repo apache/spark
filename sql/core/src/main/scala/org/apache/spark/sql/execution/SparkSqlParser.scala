@@ -196,13 +196,11 @@ class SparkSqlAstBuilder extends AstBuilder {
         if (functionIdentifier.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
           functionIdentifier.last
         } else {
-          // Otherwise it's a database qualification which is not allowed
-          if (forDrop) {
-            throw QueryParsingErrors.invalidNameForDropTempFunc(functionIdentifier, ctx)
-          } else {
-            throw QueryParsingErrors.specifyingDBInCreateTempFuncError(
-              functionIdentifier.head, ctx)
-          }
+          // Otherwise it's an invalid qualifier (e.g., database name)
+          val funcName = functionIdentifier.last
+          val qualifier = functionIdentifier.head
+          throw QueryCompilationErrors.invalidTempObjQualifierError(
+            "FUNCTION", funcName, qualifier)
         }
       case 3 =>
         // Check if it's system.session.funcName
@@ -210,18 +208,18 @@ class SparkSqlAstBuilder extends AstBuilder {
             functionIdentifier(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
           functionIdentifier.last
         } else {
-          if (forDrop) {
-            throw QueryParsingErrors.invalidNameForDropTempFunc(functionIdentifier, ctx)
-          } else {
-            throw QueryParsingErrors.unsupportedFunctionNameError(functionIdentifier, ctx)
-          }
+          // Invalid three-part qualifier
+          val funcName = functionIdentifier.last
+          val qualifier = functionIdentifier.init.mkString(".")
+          throw QueryCompilationErrors.invalidTempObjQualifierError(
+            "FUNCTION", funcName, qualifier)
         }
       case _ =>
-        if (forDrop) {
-          throw QueryParsingErrors.invalidNameForDropTempFunc(functionIdentifier, ctx)
-        } else {
-          throw QueryParsingErrors.unsupportedFunctionNameError(functionIdentifier, ctx)
-        }
+        // More than 3 parts - invalid
+        val funcName = functionIdentifier.last
+        val qualifier = functionIdentifier.init.mkString(".")
+        throw QueryCompilationErrors.invalidTempObjQualifierError(
+          "FUNCTION", funcName, qualifier)
     }
   }
 

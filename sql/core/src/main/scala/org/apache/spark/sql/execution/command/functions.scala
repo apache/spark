@@ -140,7 +140,9 @@ case class DropFunctionCommand(
     val catalog = sparkSession.sessionState.catalog
     if (isTemp) {
       assert(identifier.database.isEmpty)
-      if (catalog.isBuiltinFunction(identifier)) {
+      // Check if temp function exists first - if it does, allow dropping it even if a builtin
+      // with the same name exists (shadowing case)
+      if (!catalog.isTemporaryFunction(identifier) && catalog.isBuiltinFunction(identifier)) {
         throw QueryCompilationErrors.cannotDropBuiltinFuncError(identifier.funcName)
       }
       catalog.dropTempFunction(identifier.funcName, ifExists)

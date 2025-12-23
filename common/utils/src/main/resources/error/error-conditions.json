@@ -4034,6 +4034,12 @@
     },
     "sqlState" : "42823"
   },
+  "INVALID_TEMP_OBJ_QUALIFIER" : {
+    "message" : [
+      "Temporary <objectType> <objectName> cannot be qualified with <qualifier>. Temporary objects can only be qualified with SESSION or SYSTEM.SESSION."
+    ],
+    "sqlState" : "42602"
+  },
   "INVALID_TEMP_OBJ_REFERENCE" : {
     "message" : [
       "Cannot create the persistent object <objName> of the type <obj> because it references to the temporary object <tempObjName> of the type <tempObj>. Please make the temporary object <tempObjName> persistent, or make the persistent object <objName> temporary."

@@ -105,51 +105,17 @@ abstract class BaseSessionStateBuilder(
   /**
    * Internal catalog managing functions registered by the user.
    *
-   * NOTE: With Approach 2 (separate registries), we no longer clone the builtin registry.
-   * SessionCatalog now manages temp functions in a separate registry internally.
-   * This field is kept for backward compatibility with existing code that might reference it,
-   * but it's no longer passed to SessionCatalog or actively used.
+   * This either gets cloned from a pre-existing version or cloned from the built-in registry.
    */
-  /**
-   * Internal catalog managing functions registered by the user.
-   *
-   * Returns FunctionRegistry.builtin so SessionCatalog uses two-registry mode,
-   * where builtin functions are in the global registry and temp functions are
-   * in a separate per-session registry.
-   *
-   * NOTE: There is a known issue where UDFRegistration receives this builtin registry
-   * and cannot write temp UDFs to it (it's immutable). This causes UDFs to fail.
-   * A proper fix requires architectural changes to how UDFRegistration accesses
-   * the session's temp registry. For now, function qualification works correctly.
-   */
-  @deprecated("Use SessionCatalog.tempFunctionRegistry instead", "4.0.0")
   protected lazy val functionRegistry: FunctionRegistry = {
-    // Clone the builtin registry so each session gets its own copy
-    // This allows temp functions to shadow builtins without affecting other sessions
-    val cloned = FunctionRegistry.builtin.clone()
-
-    // If we have a parent state, copy over any temp functions from parent
-    parentState.foreach { parent =>
-      parent.functionRegistry.listFunction().foreach { funcIdent =>
-        // Only copy if it's not a builtin (i.e., it's a temp function)
-        if (!FunctionRegistry.builtin.functionExists(funcIdent)) {
-          parent.functionRegistry.lookupFunctionBuilder(funcIdent).foreach { builder =>
-            parent.functionRegistry.lookupFunction(funcIdent).foreach { info =>
-              cloned.registerFunction(funcIdent, info, builder)
-            }
-          }
-        }
-      }
-    }
-
-    cloned
+    parentState.map(_.functionRegistry.clone())
+      .getOrElse(extensions.registerFunctions(FunctionRegistry.builtin.clone()))
   }
 
   /**
-   * Internal catalog managing table functions registered by the user.
+   * Internal catalog managing functions registered by the user.
    *
-   * This is still passed to SessionCatalog for table function support.
-   * Table functions will be refactored in a future phase.
+   * This either gets cloned from a pre-existing version or cloned from the built-in registry.
    */
   protected lazy val tableFunctionRegistry: TableFunctionRegistry = {
     parentState.map(_.tableFunctionRegistry.clone())
@@ -202,10 +168,7 @@ abstract class BaseSessionStateBuilder(
       SessionState.newHadoopConf(session.sparkContext.hadoopConfiguration, conf),
       sqlParser,
       resourceLoader,
-      new SparkUDFExpressionBuilder,
-      conf.tableRelationCacheSize,
-      conf.metadataCacheTTL,
-      conf.defaultDatabase)
+      new SparkUDFExpressionBuilder)
     parentState.foreach(_.catalog.copyStateTo(catalog))
     catalog
   }
@@ -220,10 +183,9 @@ abstract class BaseSessionStateBuilder(
    * Interface exposed to the user for registering user-defined functions.
    *
    * Note 1: The user-defined functions must be deterministic.
-   * Note 2: This uses the same registry as SessionCatalog for temp functions.
+   * Note 2: This depends on the `functionRegistry` field.
    */
-  protected def udfRegistration: UDFRegistration =
-    new UDFRegistration(session, functionRegistry)
+  protected def udfRegistration: UDFRegistration = new UDFRegistration(session, functionRegistry)
 
   protected def udtfRegistration: UDTFRegistration = new UDTFRegistration(tableFunctionRegistry)
 

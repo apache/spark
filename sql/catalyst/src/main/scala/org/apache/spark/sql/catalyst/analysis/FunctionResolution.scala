@@ -103,10 +103,13 @@ class FunctionResolution(
     if (name.size == 1 && u.exists(_.isInternal)) {
       FunctionRegistry.internal.lookupFunction(FunctionIdentifier(name.head))
     } else if (maybeBuiltinFunctionName(name)) {
-      v1SessionCatalog.lookupBuiltinFunctionInfo(name.last)
+      // Explicitly qualified as builtin - lookup only builtin
+      v1SessionCatalog.lookupBuiltinFunction(name.last)
     } else if (maybeTempFunctionName(name)) {
-      v1SessionCatalog.lookupTempFunctionInfo(name.last)
+      // Explicitly qualified as temp - lookup only temp
+      v1SessionCatalog.lookupTempFunction(name.last)
     } else if (name.size == 1) {
+      // Unqualified - check temp first (shadowing), then builtin
       v1SessionCatalog.lookupBuiltinOrTempFunction(name.head)
     } else {
       None
@@ -125,20 +128,15 @@ class FunctionResolution(
       name: Seq[String],
       arguments: Seq[Expression],
       u: UnresolvedFunction): Option[Expression] = {
-
     val expression = if (name.size == 1 && u.isInternal) {
-      // Internal functions
       Option(FunctionRegistry.internal.lookupFunction(FunctionIdentifier(name.head), arguments))
     } else if (maybeBuiltinFunctionName(name)) {
-      // Explicitly qualified as builtin - lookup in builtin registry only
-      val funcName = name.last
-      v1SessionCatalog.lookupBuiltinFunction(funcName, arguments)
+      // Explicitly qualified as builtin - resolve only builtin
+      v1SessionCatalog.resolveBuiltinFunction(name.last, arguments)
     } else if (maybeTempFunctionName(name)) {
-      // Explicitly qualified as temp - lookup in temp registry only
-      val funcName = name.last
-      v1SessionCatalog.lookupTempFunction(funcName, arguments)
+      // Explicitly qualified as temp - resolve only temp
+      v1SessionCatalog.resolveTempFunction(name.last, arguments)
     } else if (name.size == 1) {
-      // Unqualified name - check temp first (shadowing), then builtin
       v1SessionCatalog.resolveBuiltinOrTempFunction(name.head, arguments)
     } else {
       None
@@ -160,7 +158,6 @@ class FunctionResolution(
   def resolveBuiltinOrTempTableFunction(
       name: Seq[String],
       arguments: Seq[Expression]): Option[LogicalPlan] = {
-
     val tableFunctionResult = if (name.length == 1) {
       v1SessionCatalog.resolveBuiltinOrTempTableFunction(name.head, arguments)
     } else {

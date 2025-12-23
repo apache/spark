@@ -3043,6 +3043,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("functionName" -> functionName))
   }
 
+  def invalidTempObjQualifierError(
+      objectType: String,
+      objectName: String,
+      qualifier: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_TEMP_OBJ_QUALIFIER",
+      messageParameters = Map(
+        "objectType" -> objectType,
+        "objectName" -> toSQLId(objectName),
+        "qualifier" -> toSQLId(qualifier)))
+  }
+
   def cannotRefreshBuiltInFuncError(functionName: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1256",
