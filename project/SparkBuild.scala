@@ -1293,6 +1293,7 @@ object SqlApi {
 object SQL {
   import BuildCommons.protoVersion
   lazy val settings = Seq(
+    (Test / javaOptions) += "-Xmx6g",
     // Setting version for the protobuf compiler. This has to be propagated to every sub-project
     // even if the project is not using it.
     PB.protocVersion := BuildCommons.protoVersion,
