@@ -2162,7 +2162,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         case (used, expensive) =>
           // We can't split these filters from this projection since they
           // have a 1:1 mapping with all of the aliases.
-          if (used == aliasMap) {
+          if (used.size == aliasMap.size) {
             false
           } else {
             true
