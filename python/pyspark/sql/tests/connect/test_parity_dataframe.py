@@ -34,6 +34,10 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_query_execution_unsupported_in_classic(self):
         pass
 
+    @unittest.skip("optimizePartitions is not implemented in Spark Connect")
+    def test_optimize_partitions(self):
+        super().test_optimize_partitions()
+
 
 if __name__ == "__main__":
     import unittest
