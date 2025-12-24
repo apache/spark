@@ -2369,6 +2369,7 @@ def _test() -> None:
     if not is_remote_only():
         del pyspark.sql.dataframe.DataFrame.toJSON.__doc__
         del pyspark.sql.dataframe.DataFrame.rdd.__doc__
+        del pyspark.sql.dataframe.DataFrame.optimizePartitions.__doc__
 
     if not have_pandas or not have_pyarrow:
         del pyspark.sql.dataframe.DataFrame.toPandas.__doc__
