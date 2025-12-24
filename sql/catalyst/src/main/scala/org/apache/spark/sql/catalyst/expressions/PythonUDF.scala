@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.SparkException.internalError
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction}
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
@@ -75,18 +78,196 @@ object PythonUDF {
 }
 
 
-trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression { self: Expression =>
+trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression
+    with Logging { self: Expression =>
   def name: String
   def func: PythonFunction
   def evalType: Int
   def udfDeterministic: Boolean
   def resultId: ExprId
+  def safeSrc: Option[String] = None
+  def safeAst: Option[Any] = None
+  def pureCatalystExpression: Option[Expression] = None
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
   override def toString: String = s"$name(${children.mkString(", ")})#${resultId.id}$typeSuffix"
 
   override def nullable: Boolean = true
+
+  /**
+   * If the Python side has provided us with an alternative Catalyst expression
+   * return it. Otherwise try and convert the provided AST to a native Catalyst expression if
+   * possible. If neither are possible return None.
+   */
+  def toCatalyst(): Option[Expression] = {
+    pureCatalystExpression match {
+      case None =>
+        safeAst match {
+          case None => None
+          case Some(ast) =>
+            if (ast.isInstanceOf[java.util.List[_]]) {
+              val happyAst = recursiveConvertListToScala(ast.asInstanceOf[java.util.List[Any]])
+              convertAst(List(happyAst))
+            } else {
+              None
+            }
+        }
+      case Some(expr) => Some(expr)
+    }
+  }
+
+  def convertAst(ast: List[Any]): Option[Expression] = {
+    val lambdaAstOpt = getLambdaFromAst(ast)
+    lambdaAstOpt match {
+      case None => None
+      case Some(lambdaAst) =>
+        val params = getParameterList(lambdaAst)
+        val bodyAst = getLambdaBody(lambdaAst)
+        logWarning(s"Got parameters ${params} and lambda body ${bodyAst} from ${ast}!")
+        convertFunction(params, bodyAst)
+    }
+  }
+
+  def convertFunction(params: List[String], body: List[_]): Option[Expression] = {
+    // For now all we handle is binary operators
+    val operation = body.headOption
+    operation match {
+      case Some("Name") => // Variable name
+        val nameBody = body(1).asInstanceOf[List[_]]
+        val varNameAst = nameBody(0)
+        val varName = varNameAst.asInstanceOf[List[_]](1).asInstanceOf[String]
+        val paramIndex = params.indexOf(varName)
+        if (paramIndex == -1) {
+          throw new Exception(s"Variable referenced not in param list.")
+        } else {
+          Some(children(paramIndex))
+        }
+      case Some("Constant") =>
+        val constantBody = body(1).asInstanceOf[List[_]]
+        val constantValueAst = constantBody(0)
+        val constValue = constantValueAst.asInstanceOf[List[_]](1)
+        logWarning(f"Extracting constant ${constValue} of java type ${constValue.getClass}")
+        Some(Literal(constValue))
+      case Some("BinOp") =>
+        val binopBody = body(1).asInstanceOf[List[_]]
+        val leftAst = getChildFromAstWithNodeName("left", binopBody).getOrElse(
+          throw new Exception("Binary operation with no left side"))
+        val rightAst = getChildFromAstWithNodeName("right", binopBody).getOrElse(
+          throw new Exception("Binary operation with no right side"))
+        val opName = getChildFromAstWithNodeName("op", binopBody).getOrElse(
+          throw new Exception("No operation?"))(0).asInstanceOf[String]
+        val leftExpr = convertFunction(params, leftAst).getOrElse(
+          throw new Exception("Could not convert left side"))
+        val rightExpr = convertFunction(params, rightAst).getOrElse(
+          throw new Exception("Could not convert right side"))
+        opName match {
+          case "Add" =>
+            Some(Add(leftExpr, rightExpr))
+          case _ =>
+            throw new Exception(s"Unsupported binary operation ${opName}")
+        }
+      case Some(x) =>
+        throw new Exception(s"Unsupported operaation $x")
+      case _ =>
+        throw new Exception("No operation idk")
+    }
+  }
+
+  def recursiveConvertListToScala(ast: java.util.List[Any]): List[Any] = {
+    ast.asScala.map {
+      case inner_list: java.util.List[_] =>
+        recursiveConvertListToScala(inner_list.asInstanceOf[java.util.List[Any]])
+      case other => other
+    }.toList
+  }
+
+  private def getChildFromAstWithNodeName(node_name: String, ast: List[_]): Option[List[_]] = {
+    logWarning(s"Looking for ${node_name} in ${ast}")
+    if (ast(0).isInstanceOf[String]) {
+      if (ast(0) == node_name) {
+        Some(ast(1).asInstanceOf[List[_]])
+      } else {
+        None
+      }
+    } else {
+      val direct_child_with_name = ast.find { elem =>
+        logWarning(s"Considering ${elem}")
+        if (!elem.isInstanceOf[List[_]]) {
+          logWarning(s"Unexpectedly not a list")
+          false
+        } else {
+          val head = elem.asInstanceOf[List[_]].head
+          if (head != node_name) {
+            logWarning(s"Did not match on head ${head} to ${node_name}?")
+            false
+          } else {
+            true
+          }
+        }
+      }
+      direct_child_with_name.map(_.asInstanceOf[List[_]](1).asInstanceOf[List[_]])
+    }
+  }
+
+  private def getChildAfterMatchInOrder(
+    node_names: List[String],
+    ast: List[_]): Option[List[_]] = {
+    node_names match {
+      case Nil => Some(ast)
+      case head :: tail =>
+        getChildFromAstWithNodeName(head, ast) match {
+          case Some(child_ast) =>
+            getChildAfterMatchInOrder(tail, child_ast)
+          case None =>
+            None
+        }
+    }
+  }
+
+  /**
+   * Get the top level list of parameter names from the AST.
+   * There could be multiple of these nested, but we only care about the top level one.
+   */
+  private def getParameterList(lambdaAst: List[_]): List[String] = {
+    val arguments_ast = getChildAfterMatchInOrder(
+      List("args", "arguments", "args"),
+      lambdaAst).getOrElse(throw new Exception("No arguments!"))
+    logWarning(s"Extracting names from $arguments_ast")
+    arguments_ast.map { arg_nested_tuple =>
+      // todo: named params check.
+      // ['arg', [['arg', "'x'"]]]
+      val argument_tuple = arg_nested_tuple.asInstanceOf[List[_]](1)
+      val argument_first = argument_tuple.asInstanceOf[List[_]](0)
+      val argument_name = argument_first.asInstanceOf[List[_]](1)
+      argument_name.asInstanceOf[String]
+    }.toList
+  }
+
+  private def getLambdaFromAst(ast: List[_]): Option[List[_]] = {
+    // The general Tree that is "ok" for us to start with is
+    // "Module" -> "Body" -> "Assign", we can ignore what we are being assigned to for now
+    // then grab the value side of the assignment and it could be either lambda OR
+    // Call -> Func -> Args -> Lambda
+    val assigned = getChildAfterMatchInOrder(
+      List("Module", "body", "Assign", "value"),
+      ast).getOrElse(throw new Exception("No Assignment?"))
+    val body_direct = getChildAfterMatchInOrder(
+      List("Lambda"),
+      assigned)
+    body_direct match {
+      case Some(body) => body_direct
+      case None => getChildAfterMatchInOrder(
+        List("Call", "func", "args", "Lambda"),
+        assigned)
+    }
+  }
+
+  private def getLambdaBody(lambdaAst: List[_]): List[_] = {
+    getChildFromAstWithNodeName("body", lambdaAst).getOrElse(
+      throw new Exception("Could not find the body of the lambda")
+    )
+  }
 }
 
 /**
@@ -100,8 +281,11 @@ case class PythonUDF(
     children: Seq[Expression],
     evalType: Int,
     udfDeterministic: Boolean,
+    override val safeSrc: Option[String] = None,
+    override val safeAst: Option[Any] = None,
+    override val pureCatalystExpression: Option[Expression] = None,
     resultId: ExprId = NamedExpression.newExprId)
-  extends Expression with PythonFuncExpression with Unevaluable {
+  extends Expression with PythonFuncExpression with Unevaluable with Logging {
 
   lazy val resultAttribute: Attribute = AttributeReference(toPrettySQL(this), dataType, nullable)(
     exprId = resultId)
@@ -143,6 +327,9 @@ case class PythonUDAF(
     children: Seq[Expression],
     udfDeterministic: Boolean,
     evalType: Int = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+    override val safeSrc: Option[String] = None,
+    override val safeAst: Option[Any] = None,
+    override val pureCatalystExpression: Option[Expression] = None,
     resultId: ExprId = NamedExpression.newExprId)
   extends UnevaluableAggregateFunc with PythonFuncExpression {
 

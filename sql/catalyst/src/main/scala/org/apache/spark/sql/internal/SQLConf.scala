@@ -1076,6 +1076,12 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val TRANSPILE_PY_UDFS = buildConf("spark.sql.optimizer.transpilePyUDFS")
+    .doc("Attempt to transpile Python UDFS")
+    .version("4.3.0")
+    .booleanConf
+    .createWithDefault(true)
+
   lazy val COLLATION_AWARE_HASHING_ENABLED =
     buildConf("spark.sql.legacy.collationAwareHashFunctions")
       .internal()

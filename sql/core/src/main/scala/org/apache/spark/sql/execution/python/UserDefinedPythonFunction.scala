@@ -24,6 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import net.razorvine.pickle.Pickler
 
 import org.apache.spark.api.python.{PythonEvalType, PythonFunction, PythonWorkerUtils, SpecialLengths}
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Column, TableArg}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Descending, Expression, FunctionTableSubqueryArgumentExpression, NamedArgumentExpression, NullsFirst, NullsLast, PythonUDAF, PythonUDF, PythonUDTF, PythonUDTFAnalyzeResult, PythonUDTFSelectedExpression, SortOrder, UnresolvedPolymorphicPythonUDTF, UnresolvedTableArgPlanId}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
@@ -43,7 +44,12 @@ case class UserDefinedPythonFunction(
     func: PythonFunction,
     dataType: DataType,
     pythonEvalType: Int,
-    udfDeterministic: Boolean) {
+    udfDeterministic: Boolean,
+    // default values null for now until we get SparkConnect side implemented.
+    src: String = null,
+    ast: Any = null,
+    pureCatalystExpression: Expression = null
+) extends Logging {
 
   def builder(e: Seq[Expression]): Expression = {
     if (pythonEvalType == PythonEvalType.SQL_BATCHED_UDF
@@ -64,13 +70,35 @@ case class UserDefinedPythonFunction(
       throw QueryCompilationErrors.namedArgumentsNotSupported(name)
     }
 
+    // Py4J gives us nulls lets make them into options
+    val safeSrc = src match {
+      case null | "" =>
+        logDebug("No Python src provided for UDF")
+        None
+      case s =>
+        logDebug(s"Using python src for UDF: $s")
+        Some(s)
+    }
+
+    val safeAst = ast match {
+      case null => None
+      case a => Some(a)
+    }
+
+    val safePureCatalystExpression = pureCatalystExpression match {
+      case null => None
+      case a => Some(a)
+    }
+
     if (pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
       || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF
       || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF
       || pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF) {
-      PythonUDAF(name, func, dataType, e, udfDeterministic, pythonEvalType)
+      PythonUDAF(name, func, dataType, e, udfDeterministic, pythonEvalType, safeSrc, safeAst,
+        safePureCatalystExpression)
     } else {
-      PythonUDF(name, func, dataType, e, pythonEvalType, udfDeterministic)
+      PythonUDF(name, func, dataType, e, pythonEvalType, udfDeterministic, safeSrc, safeAst,
+        safePureCatalystExpression)
     }
   }
 

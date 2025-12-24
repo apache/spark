@@ -17,6 +17,7 @@
 """
 User-defined function related classes and functions
 """
+import ast
 import functools
 import inspect
 import sys
@@ -69,6 +70,40 @@ def _wrap_function(
     )
 
 
+def _dump_to_tree(node):
+    """
+    Return a formatted dump of the tree in node. This is based on
+    Lib/ast.py from the standard library, but modified to return
+    basic types for sending over to the JVM side.
+    """
+
+    def _format(node, level=0):
+        if isinstance(node, ast.AST):
+            cls = type(node)
+            args = []
+            args_buffer = []
+            allsimple = True
+            for name in node._fields:
+                try:
+                    value = getattr(node, name)
+                except AttributeError:
+                    continue
+                if value is None and getattr(cls, name, ...) is None:
+                    continue
+                value, simple = _format(value, level)
+                args.append((name, value))
+            return (node.__class__.__name__, args), False
+        elif isinstance(node, list):
+            if not node:
+                return [], True
+            return (list(_format(x, level)[0] for x in node)), False
+        return node, True
+
+    if not isinstance(node, ast.AST):
+        raise TypeError("expected AST, got %r" % node.__class__.__name__)
+    return _format(node)[0]
+
+
 def _create_udf(
     f: Callable[..., Any],
     returnType: "DataTypeOrString",
@@ -78,6 +113,7 @@ def _create_udf(
 ) -> "UserDefinedFunctionLike":
     """Create a regular(non-Arrow-optimized) Python UDF."""
     # Set the name of the UserDefinedFunction object to be the name of function f
+    # Possible todo: heuristic for if we even bother.
     udf_obj = UserDefinedFunction(
         f, returnType=returnType, name=name, evalType=evalType, deterministic=deterministic
     )
@@ -165,12 +201,6 @@ class UserDefinedFunction:
         evalType: int = PythonEvalType.SQL_BATCHED_UDF,
         deterministic: bool = True,
     ):
-        if not callable(func):
-            raise PySparkTypeError(
-                errorClass="NOT_CALLABLE",
-                messageParameters={"arg_name": "func", "arg_type": type(func).__name__},
-            )
-
         if not isinstance(returnType, (DataType, str)):
             raise PySparkTypeError(
                 errorClass="NOT_DATATYPE_OR_STR",
@@ -196,7 +226,108 @@ class UserDefinedFunction:
         )
         self.evalType = evalType
         self.deterministic = deterministic
+        # Make sure the function is callable first.
+        if not callable(func):
+            raise PySparkTypeError(
+                errorClass="NOT_CALLABLE",
+                messageParameters={"arg_name": "func", "arg_type": type(func).__name__},
+            )
 
+        # Extract Python UDF details if transpilation is enabled.
+        ast_info = None
+        ast_dumped = None
+        src = None
+        transpiled = None
+        from pyspark.sql import SparkSession
+
+        session = SparkSession._instantiatedSession
+        transpile_enabled = (
+            False
+            if session is None
+            else session.conf.get("spark.sql.optimizer.transpilePyUDFS") == "true"
+        )
+        if transpile_enabled:
+            try:
+                # Note: consider maybe dill? (see the JYTHON PR)
+                # inspect getsource does not work for functions defined in vanilla
+                # repl, but does for those in files or in ipython.
+                # It also fails when we give it an instance of a callable class.
+                try:
+                    src = inspect.getsource(func)
+                except Exception:
+                    src = inspect.getsource(func.__call__)
+                ast_info = ast.parse(src)
+                transpiled = _transpile(src, ast_info)
+                ast_dumped = _dump_to_tree(ast_info)
+            except Exception as e:
+                warnings.warn(f"Error building AST for UDF: {e} -- will not transpile")
+        self.src = src
+        self.ast_dumped = ast_dumped
+        self.transpiled = transpiled
+
+    # Transpiling tools
+    @staticmethod
+    def _transpile(src: str, ast_info: ast.AST) -> Optional[Column]:
+        # Short circuit on nothing to transpile.
+        if src == "" or ast_info is None:
+            return None
+        lambda_ast = _get_lambda_from_ast(ast_info)
+        if lambda_ast is None:
+            return None
+        lambda_body = lambda_ast.body
+        params = _get_parameter_list(lambda_ast)
+        return _convert_function(params, lambda_body)
+
+    def _convert_function(params: List[str], body: ast.AST) -> Optional[Column]:
+        match body:
+            case ast.BinOp(left=left, op=op, right=right):
+                match op:
+                    case ast.Add():
+                        left_col = _convert_function(params, left)
+                        if left_col is None:
+                            return
+                        right_col = _convert_function(params, right)
+                        if right_col is None:
+                            return
+                        return left_col.add(right_col)
+                    case _:
+                        return
+            case ast.Constant(value=value):
+                return Column._literal(value)
+            case ast.Name(id=name, ctx=ast.Load()):
+                # Note: the Python UDF parameter name might not match the column
+                # And at this point we don't know who are children are going to be.
+                if name in params:
+                    param_index = params.index(name)
+                    # TODO: Add a special node here that indicates we want child number param_index
+                    return ParamIndexNode(param_index)
+            case _:
+                return
+                
+        
+
+    @staticmethod
+    def _get_parameter_list(lambdaAst: ast.Lambda) -> List[str]:
+        params = []
+        for arg in lambdaAst.args.args:
+            params.append(arg.arg)
+        return params
+
+    @staticmethod
+    def _get_lambda_from_ast(ast: ast.AST) -> Optional[ast.Lambda]:
+        module = ast.Module
+        module_body = module.body
+        assigned = module_body.Assign.value
+        if isinstance(assigned, ast.Lambda):
+            return assigned
+        else:
+            return assigned.Call.func.args.Lambda
+
+    @staticmethod
+    def _convert_function(params: List[str], body: ast.AST) -> Optional[Column]
+        
+
+    # Everything else
     @staticmethod
     def _check_return_type(returnType: DataType, evalType: int) -> None:
         if evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF:
@@ -413,7 +544,13 @@ class UserDefinedFunction:
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         assert sc._jvm is not None
         judf = getattr(sc._jvm, "org.apache.spark.sql.execution.python.UserDefinedPythonFunction")(
-            self._name, wrapped_func, jdt, self.evalType, self.deterministic
+            self._name,
+            wrapped_func,
+            jdt,
+            self.evalType,
+            self.deterministic,
+            self.src,
+            self.ast_dumped,
         )
         return judf
 

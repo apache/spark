@@ -155,6 +155,8 @@ case class UserDefinedPythonDataSource(dataSourceCls: PythonFunction) {
       dataType = outputSchema,
       children = toAttributes(inputSchema),
       evalType = pythonEvalType,
+      safeSrc = None,
+      safeAst = None,
       udfDeterministic = false)
 
     val conf = SQLConf.get

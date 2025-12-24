@@ -100,6 +100,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
   def defaultBatches: Seq[Batch] = {
     val operatorOptimizationRuleSet =
       Seq(
+        // UDF Transpilation
+        ConvertToCatalyst,
         // Operator push down
         PushProjectionThroughUnion,
         PushProjectionThroughLimitAndOffset,
@@ -968,6 +970,48 @@ object LimitPushDown extends Rule[LogicalPlan] {
       LocalLimit(le, udf.copy(child = maybePushLocalLimit(le, udf.child)))
     case LocalLimit(le, p @ Project(_, udf: ArrowEvalPython)) =>
       LocalLimit(le, p.copy(child = udf.copy(child = maybePushLocalLimit(le, udf.child))))
+  }
+}
+
+/**
+ * Attempt to convert UDFS to Catalyst expressions.
+ */
+object ConvertToCatalyst extends Rule[LogicalPlan] {
+  val UDFTypeCoercesExpressionTypes = new resolver.UDFTypeCoercesExpressionTypes()
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    // Short circuit if we are not transpiling or there is no Python UDFs in the plan.
+    if (!conf.getConf(SQLConf.TRANSPILE_PY_UDFS) ||
+      !plan.containsPattern(PYTHON_UDF)) {
+      return plan
+    }
+    plan.mapExpressions(applyExpr(_, false))
+  }
+
+  def applyExpr(expression: Expression, parent_is_udf: Boolean = false): Expression = {
+    expression match {
+      case s: PythonUDF =>
+        // We should avoid converting a UDF node where that could break pipelining.
+        // For example: (UDF -> UDF -> UDF) is often cheaper than UDF -> Catalyst -> UDF.
+        // But if we can convert the first or the last in a chain we should.
+        if (!parent_is_udf ||
+          !s.children.forall { x => x.isInstanceOf[PythonUDF] &&
+            x.asInstanceOf[PythonUDF].toCatalyst() == None }) {
+          s.toCatalyst() match {
+            case None =>
+              s.mapChildren(applyExpr(_, parent_is_udf = true))
+            case Some(catalystExpr) =>
+              // Upgrade the types here since Python duct-typing means that
+              // in Python the types get automatically upgraded (e.g. 4 -> 4L or 4.0 automatically).
+              val catalystExprUpgraded = UDFTypeCoercesExpressionTypes.runCoercionTransformations(
+                catalystExpr, false)
+              catalystExprUpgraded.mapChildren(applyExpr(_, parent_is_udf = false))
+          }
+        } else {
+          s.mapChildren(applyExpr(_, parent_is_udf = true))
+        }
+      case _ =>
+        expression.mapChildren(applyExpr(_, parent_is_udf = false))
+    }
   }
 }
 
