@@ -1917,18 +1917,21 @@ class SessionCatalog(
       overrideIfExists: Boolean,
       functionBuilder: Option[FunctionBuilder] = None): Unit = {
     val builder = functionBuilder.getOrElse(makeFunctionBuilder(funcDefinition))
-    registerFunction(funcDefinition, overrideIfExists, functionRegistry, builder)
+    // Use composite keys for temporary functions, but not for persistent functions
+    val useComposite = funcDefinition.identifier.database.isEmpty
+    registerFunction(funcDefinition, overrideIfExists, functionRegistry, builder, useComposite)
   }
 
   private def registerFunction[T](
       funcDefinition: CatalogFunction,
       overrideIfExists: Boolean,
       registry: FunctionRegistryBase[T],
-      functionBuilder: FunctionRegistryBase[T]#FunctionBuilder): Unit = {
+      functionBuilder: FunctionRegistryBase[T]#FunctionBuilder,
+      useCompositeKey: Boolean): Unit = {
     val func = funcDefinition.identifier
 
-    // If it's a temporary function (no database), use the temp identifier
-    val identToRegister = if (func.database.isEmpty) {
+    // If it's a temporary function and we're using composite keys, store with "session" database
+    val identToRegister = if (func.database.isEmpty && useCompositeKey) {
       tempFunctionIdentifier(func.funcName)
     } else {
       func
@@ -2083,7 +2086,7 @@ class SessionCatalog(
       functionRegistry.functionExists(tempIdent) ||
         tableFunctionRegistry.functionExists(tempIdent)
     } else {
-      false
+      isTempFunctionIdentifier(name)
     }
   }
 
@@ -2370,7 +2373,8 @@ class SessionCatalog(
           func,
           overrideIfExists = false,
           registry = functionRegistry,
-          functionBuilder = makeFunctionBuilder(func)
+          functionBuilder = makeFunctionBuilder(func),
+          useCompositeKey = false  // Persistent functions don't use composite keys
         ),
       registerUserDefinedFunc = function => {
         val builder = makeUserDefinedScalarFuncBuilder(function)
@@ -2489,7 +2493,8 @@ class SessionCatalog(
    */
   private def listBuiltinAndTempFunctions(pattern: String): Seq[FunctionIdentifier] = {
     val functions = (functionRegistry.listFunction() ++ tableFunctionRegistry.listFunction())
-      .filter(_.database.isEmpty)
+      .filter(f => f.database.isEmpty || isTempFunctionIdentifier(f))
+      .map(f => if (isTempFunctionIdentifier(f)) FunctionIdentifier(f.funcName) else f)
     StringUtils.filterPattern(functions.map(_.unquotedString), pattern).map { f =>
       // In functionRegistry, function names are stored as an unquoted format.
       Try(parser.parseFunctionIdentifier(f)) match {

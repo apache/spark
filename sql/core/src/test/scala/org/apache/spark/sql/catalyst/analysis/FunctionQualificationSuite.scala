@@ -93,6 +93,7 @@ class FunctionQualificationSuite extends SharedSparkSession {
   }
 
   test("multiple qualified functions in single query") {
+    sql("DROP TEMPORARY FUNCTION IF EXISTS my_add")
     sql("CREATE TEMPORARY FUNCTION my_add(x INT) RETURNS INT RETURN x + 10")
     val result = sql(
       """SELECT
