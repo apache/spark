@@ -78,8 +78,10 @@ trait FunctionRegistryBase[T] {
   /* Create or replace a temporary function. */
   final def createOrReplaceTempFunction(
       name: String, builder: FunctionBuilder, source: String): Unit = {
+    // Temporary functions are qualified with "session" database to enable coexistence
+    // with builtin functions of the same name
     registerFunction(
-      FunctionIdentifier(name),
+      FunctionIdentifier(name, Some("session")),
       builder,
       source)
   }

@@ -365,14 +365,28 @@ class SparkSessionExtensions {
 
   private[sql] def registerFunctions(functionRegistry: FunctionRegistry) = {
     for ((name, expressionInfo, function) <- injectedFunctions) {
-      functionRegistry.registerFunction(name, expressionInfo, function)
+      // Extension functions are session-scoped temporaries, so qualify them with "session"
+      // to enable coexistence with builtin functions of the same name
+      val sessionQualifiedName = if (name.database.isEmpty) {
+        FunctionIdentifier(name.funcName, Some("session"))
+      } else {
+        name
+      }
+      functionRegistry.registerFunction(sessionQualifiedName, expressionInfo, function)
     }
     functionRegistry
   }
 
   private[sql] def registerTableFunctions(tableFunctionRegistry: TableFunctionRegistry) = {
     for ((name, expressionInfo, function) <- injectedTableFunctions) {
-      tableFunctionRegistry.registerFunction(name, expressionInfo, function)
+      // Extension table functions are session-scoped temporaries, so qualify them with "session"
+      // to enable coexistence with builtin functions of the same name
+      val sessionQualifiedName = if (name.database.isEmpty) {
+        FunctionIdentifier(name.funcName, Some("session"))
+      } else {
+        name
+      }
+      tableFunctionRegistry.registerFunction(sessionQualifiedName, expressionInfo, function)
     }
     tableFunctionRegistry
   }

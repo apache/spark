@@ -2099,10 +2099,18 @@ class SessionCatalog(
     if (name.database.isEmpty) {
       val tempIdent = tempFunctionIdentifier(name.funcName)
       val builtinIdent = FunctionIdentifier(format(name.funcName))
-      functionRegistry.functionExists(tempIdent) ||
-        functionRegistry.functionExists(builtinIdent) ||
-        tableFunctionRegistry.functionExists(tempIdent) ||
-        tableFunctionRegistry.functionExists(builtinIdent)
+
+      // Check if temp function exists
+      val hasTemp = functionRegistry.functionExists(tempIdent) ||
+                     tableFunctionRegistry.functionExists(tempIdent)
+
+      // Check if builtin exists - but ONLY if it's actually a builtin, not a cached persistent
+      val hasBuiltin = (FunctionRegistry.functionSet.contains(builtinIdent) ||
+                        TableFunctionRegistry.functionSet.contains(builtinIdent)) &&
+                       (functionRegistry.functionExists(builtinIdent) ||
+                        tableFunctionRegistry.functionExists(builtinIdent))
+
+      hasTemp || hasBuiltin
     } else {
       functionRegistry.functionExists(name) || tableFunctionRegistry.functionExists(name)
     }
