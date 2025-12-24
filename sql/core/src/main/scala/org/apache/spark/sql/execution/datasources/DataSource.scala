@@ -531,8 +531,7 @@ case class DataSource(
         disallowWritingIntervals(
           outputColumns.toStructType.asNullable, format.toString, forbidAnsiIntervals = false)
         val cmd = planForWritingFileFormat(format, mode, data)
-        val qe = sessionState(sparkSession).executePlan(cmd)
-        qe.assertCommandExecuted()
+        QueryExecution.runCommand(sparkSession, cmd, "file source write")
         // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring
         copy(userSpecifiedSchema = Some(outputColumns.toStructType.asNullable)).resolveRelation()
       case _ => throw SparkException.internalError(
