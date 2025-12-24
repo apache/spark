@@ -952,32 +952,7 @@ class Analyzer(
       // TypeCoercionBase.UnpivotCoercion determines valueType
       // and casts values once values are set and resolved
       case Unpivot(Some(ids), Some(values), aliases, variableColumnName, valueColumnNames, child) =>
-
-        def toString(values: Seq[NamedExpression]): String =
-          values.map(v => v.name).mkString("_")
-
-        // construct unpivot expressions for Expand
-        val exprs: Seq[Seq[Expression]] =
-          values.zip(aliases.getOrElse(values.map(_ => None))).map {
-            case (vals, Some(alias)) => (ids :+ Literal(alias)) ++ vals
-            case (Seq(value), None) => (ids :+ Literal(value.name)) :+ value
-            // there are more than one value in vals
-            case (vals, None) => (ids :+ Literal(toString(vals))) ++ vals
-          }
-
-        // construct output attributes
-        val variableAttr = AttributeReference(variableColumnName, StringType, nullable = false)()
-        val valueAttrs = valueColumnNames.zipWithIndex.map {
-          case (valueColumnName, idx) =>
-            AttributeReference(
-              valueColumnName,
-              values.head(idx).dataType,
-              values.map(_(idx)).exists(_.nullable))()
-        }
-        val output = (ids.map(_.toAttribute) :+ variableAttr) ++ valueAttrs
-
-        // expand the unpivot expressions
-        Expand(exprs, output, child)
+        UnpivotTransformer(ids, values, aliases, variableColumnName, valueColumnNames, child)
     }
   }
 
