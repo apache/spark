@@ -3065,13 +3065,6 @@ class Analyzer(
       })
     }
 
-    private def hasUnresolvedGeneratorOrFunction(exprs: Seq[Expression]): Boolean = {
-      exprs.exists(_.exists {
-        case _: UnresolvedFunction | _: UnresolvedGenerator => true
-        case _ => false
-      })
-    }
-
     private def trimAlias(expr: NamedExpression): Expression = expr match {
       case UnresolvedAlias(child, _) => child
       case Alias(child, _) => child
@@ -3163,21 +3156,15 @@ class Analyzer(
         p
 
       // The star will be expanded differently if we insert `Generate` under `Project` too early.
-      // We also wait for all functions and generators to be resolved to ensure left-to-right
-      // generator ordering.
-      case p @ Project(projectList, child)
-          if !projectList.exists(_.exists(_.isInstanceOf[Star])) &&
-             !hasUnresolvedGeneratorOrFunction(projectList) =>
-        var hasSeenGenerator = false
+      case p @ Project(projectList, child) if !projectList.exists(_.exists(_.isInstanceOf[Star])) =>
         val (resolvedGenerator, newProjectList) = projectList
           .map(trimNonTopLevelAliases)
           .foldLeft((None: Option[Generate], Nil: Seq[NamedExpression])) { (res, e) =>
             e match {
               // If there are more than one generator, we only rewrite the first one and wait for
               // the next analyzer iteration to rewrite the next one.
-              case AliasedGenerator(generator, names, outer) if !hasSeenGenerator &&
+              case AliasedGenerator(generator, names, outer) if res._1.isEmpty &&
                   generator.childrenResolved =>
-                hasSeenGenerator = true
                 val g = Generate(
                   generator,
                   unrequiredChildIndex = Nil,
@@ -3187,7 +3174,6 @@ class Analyzer(
                   child)
                 (Some(g), res._2 ++ g.nullableOutput)
               case other =>
-                hasSeenGenerator |= hasGenerator(other)
                 (res._1, res._2 :+ other)
             }
           }
