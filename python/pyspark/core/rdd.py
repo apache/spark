@@ -1138,7 +1138,7 @@ class RDD(Generic[T_co]):
         ):
             rdd.partitioner = self.partitioner
         return rdd
-    
+
     def intersectByKey(
         self: "RDD[Tuple[K, V]]",
         other: "RDD[Tuple[K, Any]]",
