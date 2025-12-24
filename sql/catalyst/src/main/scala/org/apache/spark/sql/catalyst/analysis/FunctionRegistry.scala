@@ -78,12 +78,16 @@ trait FunctionRegistryBase[T] {
   /* Create or replace a temporary function. */
   final def createOrReplaceTempFunction(
       name: String, builder: FunctionBuilder, source: String): Unit = {
-    // Temporary functions are qualified with "session" database to enable coexistence
-    // with builtin functions of the same name
-    registerFunction(
-      FunctionIdentifier(name, Some("session")),
-      builder,
-      source)
+    // Internal functions (source="internal") are NOT qualified with "session" database
+    // because they use a separate internal registry and are resolved differently
+    val identifier = if (source == "internal") {
+      FunctionIdentifier(name)
+    } else {
+      // Regular temporary functions are qualified with "session" database
+      // to enable coexistence with builtin functions of the same name
+      FunctionIdentifier(name, Some("session"))
+    }
+    registerFunction(identifier, builder, source)
   }
 
   @throws[AnalysisException]("If function does not exist")
