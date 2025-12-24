@@ -587,6 +587,21 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(timestampAddInterval(ts5, 0, 1, 0, LA) === ts6)
   }
 
+  test("timestamp add interval overflow with error message") {
+    // Test that overflow exception includes timestamp and interval information
+    // Using a timestamp close to Long.MaxValue microseconds to cause overflow
+    val nearMaxMicros = Long.MaxValue - MICROS_PER_DAY
+
+    val exception = intercept[ArithmeticException] {
+      timestampAddInterval(nearMaxMicros, 0, 2, 0, UTC)
+    }
+
+    // Verify the complete error message includes timestamp and interval information
+    val errorMsg = exception.getMessage
+    assert(errorMsg.contains("long overflow") && errorMsg.contains("Input timestamp:"),
+      s"Expected error message with 'long overflow' and 'Input timestamp:', got: $errorMsg")
+  }
+
   test("monthsBetween") {
     val date1 = date(1997, 2, 28, 10, 30, 0)
     var date2 = date(1996, 10, 30)
