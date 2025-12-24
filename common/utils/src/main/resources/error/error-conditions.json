@@ -1768,6 +1768,11 @@
           "Drop the namespace <namespace>."
         ]
       },
+      "DROP_TABLE" : {
+        "message" : [
+          "Drop the table <tableName>."
+        ]
+      },
       "GET_TABLES" : {
         "message" : [
           "Get tables from the namespace: <namespace>."
