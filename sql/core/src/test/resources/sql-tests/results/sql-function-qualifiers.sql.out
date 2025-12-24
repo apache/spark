@@ -18,102 +18,41 @@ Test 1: Builtin function qualification
 -- !query
 SELECT abs(-5) AS unqualified
 -- !query schema
-struct<>
+struct<unqualified:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_ROUTINE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "routineName" : "`abs`",
-    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 14,
-    "fragment" : "abs(-5)"
-  } ]
-}
+5
 
 
 -- !query
 SELECT builtin.abs(-5) AS schema_qualified
 -- !query schema
-struct<>
+struct<schema_qualified:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_ROUTINE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "routineName" : "`builtin`.`abs`",
-    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 22,
-    "fragment" : "builtin.abs(-5)"
-  } ]
-}
+5
 
 
 -- !query
 SELECT system.builtin.abs(-5) AS fully_qualified
 -- !query schema
-struct<>
+struct<fully_qualified:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
-  "sqlState" : "42K05",
-  "messageParameters" : {
-    "namespace" : "`system`.`builtin`",
-    "sessionCatalog" : "spark_catalog"
-  }
-}
+5
 
 
 -- !query
 SELECT BUILTIN.ABS(-5) AS uppercase
 -- !query schema
-struct<>
+struct<uppercase:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_ROUTINE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "routineName" : "`BUILTIN`.`ABS`",
-    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 22,
-    "fragment" : "BUILTIN.ABS(-5)"
-  } ]
-}
+5
 
 
 -- !query
 SELECT System.Builtin.Abs(-5) AS mixed_case
 -- !query schema
-struct<>
+struct<mixed_case:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
-  "sqlState" : "42K05",
-  "messageParameters" : {
-    "namespace" : "`System`.`Builtin`",
-    "sessionCatalog" : "spark_catalog"
-  }
-}
+5
 
 
 -- !query
@@ -191,24 +130,9 @@ Test 3: Temporary function shadows builtin
 -- !query
 SELECT abs(-10) AS builtin_before
 -- !query schema
-struct<>
+struct<builtin_before:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_ROUTINE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "routineName" : "`abs`",
-    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 15,
-    "fragment" : "abs(-10)"
-  } ]
-}
+10
 
 
 -- !query
@@ -230,40 +154,17 @@ struct<unqualified_shadowed:int>
 -- !query
 SELECT builtin.abs(-10) AS builtin_still_works
 -- !query schema
-struct<>
+struct<builtin_still_works:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_ROUTINE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "routineName" : "`builtin`.`abs`",
-    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 23,
-    "fragment" : "builtin.abs(-10)"
-  } ]
-}
+10
 
 
 -- !query
 SELECT system.builtin.abs(-10) AS builtin_fully_qualified
 -- !query schema
-struct<>
+struct<builtin_fully_qualified:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
-  "sqlState" : "42K05",
-  "messageParameters" : {
-    "namespace" : "`system`.`builtin`",
-    "sessionCatalog" : "spark_catalog"
-  }
-}
+10
 
 
 -- !query
@@ -277,24 +178,9 @@ struct<>
 -- !query
 SELECT abs(-10) AS builtin_after
 -- !query schema
-struct<>
+struct<builtin_after:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_ROUTINE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "routineName" : "`abs`",
-    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 15,
-    "fragment" : "abs(-10)"
-  } ]
-}
+10
 
 
 -- !query
@@ -312,24 +198,9 @@ SELECT
   builtin.length('test') AS length_result,
   builtin.round(3.14159, 2) AS round_result
 -- !query schema
-struct<>
+struct<abs_result:int,upper_result:string,length_result:int,round_result:decimal(4,2)>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_ROUTINE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "routineName" : "`builtin`.`abs`",
-    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 10,
-    "stopIndex" : 24,
-    "fragment" : "builtin.abs(-5)"
-  } ]
-}
+5	HELLO	4	3.14
 
 
 -- !query
@@ -345,14 +216,7 @@ CREATE TEMPORARY FUNCTION my_custom(s STRING) RETURNS STRING RETURN CONCAT('CUST
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
-{
-  "errorClass" : "ROUTINE_NOT_FOUND",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "routineName" : "`default`.`CONCAT`"
-  }
-}
+
 
 
 -- !query
@@ -361,24 +225,9 @@ SELECT
   builtin.abs(-20) AS builtin_func,
   session.my_custom('test') AS temp_qualified
 -- !query schema
-struct<>
+struct<temp_func:string,builtin_func:int,temp_qualified:string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_ROUTINE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "routineName" : "`my_custom`",
-    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 10,
-    "stopIndex" : 26,
-    "fragment" : "my_custom('test')"
-  } ]
-}
+CUSTOM: test	20	CUSTOM: test
 
 
 -- !query
@@ -386,14 +235,7 @@ DROP TEMPORARY FUNCTION my_custom
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.NoSuchTempFunctionException
-{
-  "errorClass" : "ROUTINE_NOT_FOUND",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "routineName" : "`my_custom`"
-  }
-}
+
 
 
 -- !query

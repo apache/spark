@@ -322,7 +322,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
         stop = 141))
   }
 
-  test("INVALID_SQL_SYNTAX.MULTI_PART_NAME: Create temporary function with multi-part name") {
+  test("INVALID_TEMP_OBJ_QUALIFIER: Create temporary function with invalid multi-part name") {
     val sqlText =
       """CREATE TEMPORARY FUNCTION ns.db.func as
         |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
@@ -330,19 +330,16 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
 
     checkError(
       exception = parseException(sqlText),
-      condition = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
-      sqlState = "42000",
+      condition = "INVALID_TEMP_OBJ_QUALIFIER",
+      sqlState = "42602",
       parameters = Map(
-        "statement" -> "CREATE TEMPORARY FUNCTION",
-        "name" -> "`ns`.`db`.`func`"),
-      context = ExpectedContext(
-        fragment = sqlText,
-        start = 0,
-        stop = 132))
+        "objectType" -> "FUNCTION",
+        "objectName" -> "`func`",
+        "qualifier" -> "`ns`.`db`"))
   }
 
-  test("INVALID_SQL_SYNTAX.CREATE_TEMP_FUNC_WITH_DATABASE: " +
-    "Specifying database while creating temporary function") {
+  test("INVALID_TEMP_OBJ_QUALIFIER: " +
+    "Specifying invalid database while creating temporary function") {
     val sqlText =
       """CREATE TEMPORARY FUNCTION db.func as
         |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
@@ -350,28 +347,24 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
 
     checkError(
       exception = parseException(sqlText),
-      condition = "INVALID_SQL_SYNTAX.CREATE_TEMP_FUNC_WITH_DATABASE",
-      sqlState = "42000",
-      parameters = Map("database" -> "`db`"),
-      context = ExpectedContext(
-        fragment = sqlText,
-        start = 0,
-        stop = 129))
+      condition = "INVALID_TEMP_OBJ_QUALIFIER",
+      sqlState = "42602",
+      parameters = Map(
+        "objectType" -> "FUNCTION",
+        "objectName" -> "`func`",
+        "qualifier" -> "`db`"))
   }
 
-  test("INVALID_SQL_SYNTAX.MULTI_PART_NAME: Drop temporary function requires a single part name") {
+  test("INVALID_TEMP_OBJ_QUALIFIER: Drop temporary function with invalid qualification") {
     val sqlText = "DROP TEMPORARY FUNCTION db.func"
     checkError(
       exception = parseException(sqlText),
-      condition = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
-      sqlState = "42000",
+      condition = "INVALID_TEMP_OBJ_QUALIFIER",
+      sqlState = "42602",
       parameters = Map(
-        "statement" -> "DROP TEMPORARY FUNCTION",
-        "name" -> "`db`.`func`"),
-      context = ExpectedContext(
-        fragment = sqlText,
-        start = 0,
-        stop = 30))
+        "objectType" -> "FUNCTION",
+        "objectName" -> "`func`",
+        "qualifier" -> "`db`"))
   }
 
   test("DUPLICATE_KEY: Found duplicate partition keys") {

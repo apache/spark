@@ -2214,7 +2214,8 @@ class SessionCatalog(
     val tempIdentifier = tempFunctionIdentifier(name)
     synchronized(lookupTempFuncWithViewContext(
       name,
-      _ => functionRegistry.functionExists(tempIdentifier),
+      // Return false if temp exists (not builtin)
+      ident => !functionRegistry.functionExists(tempIdentifier),
       _ => functionRegistry.lookupFunction(tempIdentifier)))
   }
 
@@ -2239,7 +2240,8 @@ class SessionCatalog(
       if (functionRegistry.functionExists(tempIdentifier)) {
         lookupTempFuncWithViewContext(
           name,
-          _ => functionRegistry.functionExists(tempIdentifier),
+          // Return false if temp exists (not builtin)
+          ident => !functionRegistry.functionExists(tempIdentifier),
           _ => Option(functionRegistry.lookupFunction(tempIdentifier, arguments)))
       } else {
         None
