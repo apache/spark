@@ -628,8 +628,8 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         target_size = targetMB if targetMB is not None else 128
         if target_size <= 0:
             raise PySparkValueError(
-                error_class="VALUE_NOT_POSITIVE",
-                message_parameters={"arg_name": "targetMB", "arg_value": str(target_size)},
+                errorClass="VALUE_NOT_POSITIVE",
+                messageParameters={"arg_name": "targetMB", "arg_value": str(target_size)},
             )
         jdf = self._jdf.optimizePartitions(int(target_size))
         return DataFrame(jdf, self.sparkSession)

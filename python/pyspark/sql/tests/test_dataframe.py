@@ -531,11 +531,15 @@ class DataFrameTestsMixin:
         # We expect a ValueError because we added explicit validation in python/pyspark/sql/classic/dataframe.py
 
         # Case A: Negative Number
-        with self.assertRaisesRegex(ValueError, "targetMB must be positive"):
+        with self.assertRaisesRegex(
+            PySparkValueError, "Value for `targetMB` must be positive, got '-1'"
+        ):
             df.optimizePartitions(targetMB=-1)
 
         # Case B: Zero
-        with self.assertRaisesRegex(ValueError, "targetMB must be positive"):
+        with self.assertRaisesRegex(
+            PySparkValueError, "Value for `targetMB` must be positive, got '0'"
+        ):
             df.optimizePartitions(targetMB=0)
 
     # add tests for SPARK-23647 (test more types for hint)
