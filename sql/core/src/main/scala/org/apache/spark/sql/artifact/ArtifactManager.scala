@@ -384,8 +384,7 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
     artifactPath)
   // Ensure that no reference to `this` is captured/help by the cleanup lambda
   private def getCleanable: Cleaner.Cleanable = cleaner.register(
-    this,
-    () => ArtifactManager.cleanUpGlobalResources(cleanUpStateForGlobalResources)
+    this, new StateCleanupRunner(cleanUpStateForGlobalResources)
   )
   private var cleanable = getCleanable
 
@@ -488,6 +487,12 @@ object ArtifactManager extends Logging {
         }(finallyBlock = { blockManager.releaseLock(fromId); blockData.dispose() })
       case None =>
         throw SparkException.internalError(s"Block $fromId not found in the block manager.")
+    }
+  }
+
+  private class StateCleanupRunner(cleanupState: ArtifactStateForCleanup) extends Runnable {
+    override def run(): Unit = {
+      ArtifactManager.cleanUpGlobalResources(cleanupState)
     }
   }
 
