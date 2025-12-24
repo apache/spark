@@ -355,6 +355,10 @@ public class TaskMemoryManager {
     return memoryManager.pageSizeBytes();
   }
 
+  public MemoryBlock allocatePage(long size, MemoryConsumer consumer) {
+    return allocatePage(size, consumer, false);
+  }
+
   /**
    * Allocate a block of memory that will be tracked in the MemoryManager's page table; this is
    * intended for allocating large blocks of Tungsten memory that will be shared between operators.
@@ -364,7 +368,10 @@ public class TaskMemoryManager {
    *
    * @throws TooLargePageException
    */
-  public MemoryBlock allocatePage(long size, MemoryConsumer consumer) {
+  public MemoryBlock allocatePage(
+      long size,
+      MemoryConsumer consumer,
+      boolean isRetry) {
     assert(consumer != null);
     assert(consumer.getMode() == tungstenMemoryMode);
     if (size > MAXIMUM_PAGE_SIZE_BYTES) {
@@ -390,8 +397,13 @@ public class TaskMemoryManager {
     try {
       page = memoryManager.tungstenMemoryAllocator().allocate(acquired);
     } catch (OutOfMemoryError e) {
-      logger.warn("Failed to allocate a page ({} bytes), try again.", e,
-        MDC.of(LogKeys.PAGE_SIZE, acquired));
+      if (!isRetry) {
+        logger.warn("Failed to allocate a page ({} bytes), try again.", e,
+            MDC.of(LogKeys.PAGE_SIZE, acquired));
+      } else {
+        logger.warn("Failed to allocate a page ({} bytes), try again.",
+            MDC.of(LogKeys.PAGE_SIZE, acquired));
+      }
       // there is no enough memory actually, it means the actual free memory is smaller than
       // MemoryManager thought, we should keep the acquired memory.
       synchronized (this) {
@@ -399,7 +411,7 @@ public class TaskMemoryManager {
         allocatedPages.clear(pageNumber);
       }
       // this could trigger spilling to free some pages.
-      return allocatePage(size, consumer);
+      return allocatePage(size, consumer, true);
     }
     page.pageNumber = pageNumber;
     pageTable[pageNumber] = page;
