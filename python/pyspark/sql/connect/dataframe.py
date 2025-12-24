@@ -477,8 +477,8 @@ class DataFrame(ParentDataFrame):
 
     def optimizePartitions(self, targetMB: Optional[int] = None) -> "DataFrame":
         raise PySparkNotImplementedError(
-            error_class="NOT_IMPLEMENTED",
-            message_parameters={"feature": "optimizePartitions for Spark Connect"},
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "optimizePartitions for Spark Connect"},
         )
 
     def dropDuplicates(self, subset: Optional[List[str]] = None) -> ParentDataFrame:
