@@ -507,7 +507,6 @@ class DataFrameTestsMixin:
         initial_partitions = 50
         df = self.spark.range(10000).repartition(initial_partitions)
 
-        # Verify initial state
         self.assertEqual(df.rdd.getNumPartitions(), initial_partitions)
 
         # 1. Test Default Execution (Downscaling)
@@ -522,21 +521,15 @@ class DataFrameTestsMixin:
         )
         self.assertEqual(result_default.count(), 10000, "Data count mismatch after optimization")
 
-        # 2. Test Explicit Parameter
-        # Even with a 1MB target, 80KB of data should still fit in 1 partition.
         result_custom = df.optimizePartitions(targetMB=1)
         self.assertEqual(result_custom.rdd.getNumPartitions(), 1)
 
-        # 3. Test Invalid Input (Validation)
-        # We expect a ValueError because we added explicit validation in python/pyspark/sql/classic/dataframe.py
-
-        # Case A: Negative Number
+        # We expect optimizePartitions to throw PySparkValueError when targetMB is <= 0
         with self.assertRaisesRegex(
             PySparkValueError, "Value for `targetMB` must be positive, got '-1'"
         ):
             df.optimizePartitions(targetMB=-1)
 
-        # Case B: Zero
         with self.assertRaisesRegex(
             PySparkValueError, "Value for `targetMB` must be positive, got '0'"
         ):
