@@ -695,10 +695,10 @@ object KllSketchUtils {
   private def getSketchN(
       input: Any,
       prettyName: String,
-      deserialize: Memory => Long): Long = {
+      extractN: Memory => Long): Long = {
     try {
       val bytes = input.asInstanceOf[Array[Byte]]
-      deserialize(Memory.wrap(bytes))
+      extractN(Memory.wrap(bytes))
     } catch {
       case e: Exception =>
         throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
