@@ -53,7 +53,6 @@ import org.apache.spark.sql.scripting.SqlScriptingExecution
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.util.{LazyTry, Utils}
 import org.apache.spark.util.ArrayImplicits._
-import org.apache.spark.sql.execution.QueryExecution.{runCommand => refreshPhaseEnabledmode}
 
 /**
  * The primary workflow for executing relational queries using Spark.  Designed to allow easy
