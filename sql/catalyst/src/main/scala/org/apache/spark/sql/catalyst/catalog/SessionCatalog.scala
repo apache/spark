@@ -2169,24 +2169,21 @@ class SessionCatalog(
    * @param result The result to wrap with view context handling
    * @return The result if visible in current context, None otherwise
    */
-  private def handleViewContext[T](name: String, result: Option[T]): Option[T] = {
-    if (result.isEmpty) {
-      return None
-    }
+  private def handleViewContext[T](name: String, result: Option[T]): Option[T] =
+    result.filter { _ =>
+      val isResolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty
+      val referredTempFunctionNames = AnalysisContext.get.referredTempFunctionNames
 
-    val isResolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty
-    val referredTempFunctionNames = AnalysisContext.get.referredTempFunctionNames
-
-    if (isResolvingView) {
-      // When resolving a view, only return a temp function if it's referred by this view.
-      if (referredTempFunctionNames.contains(name)) result else None
-    } else {
-      // We are not resolving a view and the function is a temp one, add it to
-      // AnalysisContext so if a view is being created, it can be checked.
-      AnalysisContext.get.referredTempFunctionNames.add(name)
-      result
+      if (isResolvingView) {
+        // When resolving a view, only return a temp function if it's referred by this view.
+        referredTempFunctionNames.contains(name)
+      } else {
+        // We are not resolving a view and the function is a temp one, add it to
+        // AnalysisContext so if a view is being created, it can be checked.
+        AnalysisContext.get.referredTempFunctionNames.add(name)
+        true
+      }
     }
-  }
 
   /**
    * Generic helper for looking up functions with temp/builtin shadowing and view context.
@@ -2297,41 +2294,44 @@ class SessionCatalog(
    * Look up a built-in or temp scalar function by name and resolves it to an Expression if such
    * a function exists.
    */
-  def resolveBuiltinOrTempFunction(name: String, arguments: Seq[Expression]): Option[Expression] = {
-    // Check temp function first (shadowing)
-    val tempIdentifier = tempFunctionIdentifier(name)
-    val tempResult = resolveBuiltinOrTempFunctionInternal(
-      name, arguments, FunctionRegistry.builtin.functionExists, functionRegistry,
-      useTempIdentifier = true)
-
-    tempResult.orElse {
-      // Check builtin function
-      val builtinIdentifier = FunctionIdentifier(format(name))
-      resolveBuiltinOrTempFunctionInternal(
-        name, arguments, FunctionRegistry.builtin.functionExists, functionRegistry,
-        useTempIdentifier = false)
-    }
-  }
+  def resolveBuiltinOrTempFunction(name: String, arguments: Seq[Expression]): Option[Expression] =
+    resolveFunctionWithFallback(
+      name, arguments, FunctionRegistry.builtin.functionExists, functionRegistry)
 
   /**
    * Look up a built-in or temp table function by name and resolves it to a LogicalPlan if such
    * a function exists.
    */
   def resolveBuiltinOrTempTableFunction(
-      name: String, arguments: Seq[Expression]): Option[LogicalPlan] = {
-    // Check temp table function first (shadowing)
-    val tempIdentifier = tempFunctionIdentifier(name)
-    val tempResult = resolveBuiltinOrTempFunctionInternal(
-      name, arguments, TableFunctionRegistry.builtin.functionExists,
-      tableFunctionRegistry, useTempIdentifier = true)
+      name: String,
+      arguments: Seq[Expression]): Option[LogicalPlan] =
+    resolveFunctionWithFallback(
+      name, arguments, TableFunctionRegistry.builtin.functionExists, tableFunctionRegistry)
 
-    tempResult.orElse {
-      // Check builtin table function
-      val builtinIdentifier = FunctionIdentifier(format(name))
-      resolveBuiltinOrTempFunctionInternal(
-        name, arguments, TableFunctionRegistry.builtin.functionExists,
-        tableFunctionRegistry, useTempIdentifier = false)
-    }
+  /**
+   * Helper to resolve functions with fallback from temporary to builtin.
+   * Tries temporary function first (shadowing), then falls back to builtin if not found.
+   *
+   * @param name The function name (unqualified)
+   * @param arguments The arguments to pass to the function
+   * @param isBuiltin Predicate to check if a function is builtin
+   * @param registry The registry to search (FunctionRegistry or TableFunctionRegistry)
+   * @tparam T The return type (Expression or LogicalPlan)
+   * @return Resolved function if found, None otherwise
+   */
+  private def resolveFunctionWithFallback[T](
+      name: String,
+      arguments: Seq[Expression],
+      isBuiltin: FunctionIdentifier => Boolean,
+      registry: FunctionRegistryBase[T]): Option[T] = {
+    // Try temporary function first (shadowing)
+    resolveBuiltinOrTempFunctionInternal(
+      name, arguments, isBuiltin, registry, lookupAsTemporary = true)
+      .orElse {
+        // Fall back to builtin function
+        resolveBuiltinOrTempFunctionInternal(
+          name, arguments, isBuiltin, registry, lookupAsTemporary = false)
+      }
   }
 
   private def resolveBuiltinOrTempFunctionInternal[T](
@@ -2339,8 +2339,8 @@ class SessionCatalog(
       arguments: Seq[Expression],
       isBuiltin: FunctionIdentifier => Boolean,
       registry: FunctionRegistryBase[T],
-      useTempIdentifier: Boolean): Option[T] = synchronized {
-    val funcIdent = if (useTempIdentifier) tempFunctionIdentifier(name)
+      lookupAsTemporary: Boolean): Option[T] = synchronized {
+    val funcIdent = if (lookupAsTemporary) tempFunctionIdentifier(name)
                     else FunctionIdentifier(format(name))
     if (!registry.functionExists(funcIdent)) {
       None
