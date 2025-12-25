@@ -1942,15 +1942,11 @@ class SessionCatalog(
       FunctionIdentifier(func.funcName)
     }
 
-    logWarning(
-      s"[DEBUG register] func=$func, useComposite=$useCompositeKey, ident=$identToRegister")
-
     if (registry.functionExists(identToRegister) && !overrideIfExists) {
       throw QueryCompilationErrors.functionAlreadyExistsError(func)
     }
     val info = makeExprInfoForHiveFunction(funcDefinition)
     registry.registerFunction(identToRegister, info, functionBuilder)
-    logWarning(s"[DEBUG register] Registered as $identToRegister")
   }
 
   private def makeExprInfoForHiveFunction(func: CatalogFunction): ExpressionInfo = {
@@ -2042,9 +2038,6 @@ class SessionCatalog(
 
     val isTemporary = function.name.database.isEmpty
 
-    logWarning(
-      s"[DEBUG register] func=${function.name}, isTemp=$isTemporary, isTable=$isTableFunction")
-
     if (isTemporary) {
       // Use FunctionIdentifier with TEMP_FUNCTION_DB for temporary functions
       val tempIdentifier = tempFunctionIdentifier(function.name.funcName)
@@ -2056,7 +2049,6 @@ class SessionCatalog(
 
       val info = function.toExpressionInfo
       registry.registerFunction(tempIdentifier, info, functionBuilder)
-      logWarning(s"[DEBUG register] Registered temp func as $tempIdentifier")
     } else {
       // Persistent function - use original logic
       if (registry.functionExists(function.name) && !overrideIfExists) {
@@ -2064,7 +2056,6 @@ class SessionCatalog(
       }
       val info = function.toExpressionInfo
       registry.registerFunction(function.name, info, functionBuilder)
-      logWarning(s"[DEBUG register] Registered persistent func as ${function.name}")
     }
   }
 
@@ -2137,12 +2128,7 @@ class SessionCatalog(
     val qualifiedIdent = qualifyIdentifier(name)
     val db = qualifiedIdent.database.get
     val funcName = qualifiedIdent.funcName
-    val dbExists = databaseExists(db)
-    val funcExists = if (dbExists) externalCatalog.functionExists(db, funcName) else false
-    logWarning(
-      s"[DEBUG isPersistent] name=$name, qualified=$qualifiedIdent, dbExists=$dbExists, " +
-      s"funcExists=$funcExists")
-    dbExists && funcExists
+    databaseExists(db) && externalCatalog.functionExists(db, funcName)
   }
 
   /**
@@ -2168,42 +2154,27 @@ class SessionCatalog(
       val tempIdentifier = tempFunctionIdentifier(name)
       val tempResult = functionRegistry.lookupFunction(tempIdentifier)
 
-      // Also check what else exists in registry for this name
-      val unqualifiedExists = functionRegistry.functionExists(FunctionIdentifier(format(name)))
-      val allMatches = functionRegistry.listFunction()
-        .filter(_.funcName.equalsIgnoreCase(name))
-      logWarning(s"[DEBUG lookup] name=$name, temp=${tempResult.isDefined}, " +
-        s"unqual=$unqualifiedExists, allMatches=$allMatches")
-
       if (tempResult.isDefined) {
         // It's a temp function, track it for view resolution
         val isResolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty
         val referredTempFunctionNames = AnalysisContext.get.referredTempFunctionNames
-        logWarning(
-          s"[DEBUG lookup] resolveView=$isResolvingView, referred=$referredTempFunctionNames")
         if (isResolvingView) {
           // When resolving a view, only return a temp function if it's referred by this view.
-          val shouldUse = referredTempFunctionNames.contains(name)
-          logWarning(s"[DEBUG lookup] View context: shouldUse=$shouldUse")
-          if (shouldUse) {
+          if (referredTempFunctionNames.contains(name)) {
             tempResult
           } else {
-            logWarning(s"[DEBUG lookup] Returning None - temp not in view context")
             None
           }
         } else {
           // We are not resolving a view and the function is a temp one, add it to
           // AnalysisContext so if a view is being created, it can be checked.
-          logWarning(s"[DEBUG lookup] Not resolving view, adding $name")
           AnalysisContext.get.referredTempFunctionNames.add(name)
           tempResult
         }
       } else {
         // Not a temp function, check builtin function (without database qualifier)
         val builtinIdentifier = FunctionIdentifier(format(name))
-        val builtinResult = functionRegistry.lookupFunction(builtinIdentifier)
-        logWarning(s"[DEBUG lookup] No temp, builtin=${builtinResult.isDefined}")
-        builtinResult
+        functionRegistry.lookupFunction(builtinIdentifier)
       }
     }
   }
