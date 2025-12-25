@@ -145,8 +145,16 @@ class FunctionResolution(
       // Explicitly qualified as temp - resolve only temp
       v1SessionCatalog.resolveTempFunction(name.last, arguments)
     } else if (name.size == 1) {
-      // Unqualified: try temp first, then builtin (via SessionCatalog)
-      v1SessionCatalog.resolveBuiltinOrTempFunction(name.head, arguments)
+      // For unqualified names, check cross-type shadowing before resolving
+      // If a temp table function exists with this name, it shadows any builtin scalar function
+      val funcName = name.head
+      if (v1SessionCatalog.lookupTempTableFunction(funcName).isDefined) {
+        // Temp table function exists - will throw error in fallback check below
+        None
+      } else {
+        // No temp table function - safe to resolve as scalar
+        v1SessionCatalog.resolveBuiltinOrTempFunction(funcName, arguments)
+      }
     } else {
       None
     }
@@ -160,7 +168,7 @@ class FunctionResolution(
     // - Single source of truth (no duplicate registrations)
     //
     // Note: This also handles cross-type shadowing. If a temp table function shadows a builtin
-    // scalar function, the scalar lookup above returns None, and we fall through here to detect
+    // scalar function, the check above returns None, and we fall through here to detect
     // it's a pure table function and throw NOT_A_SCALAR_FUNCTION.
     if (expression.isEmpty) {
       val funcNameForCheck = if (name.size == 1) name.head else name.last
@@ -196,17 +204,26 @@ class FunctionResolution(
 
     // Step 1: Try to resolve as table function
     val tableFunctionResult = if (name.length == 1) {
-      v1SessionCatalog.resolveBuiltinOrTempTableFunction(name.head, arguments)
+      // For unqualified names, check cross-type shadowing before resolving
+      // If a temp scalar function exists with this name, it shadows any builtin table function
+      val funcName = name.head
+      if (v1SessionCatalog.lookupTempFunction(funcName).isDefined) {
+        // Temp scalar function exists - will throw error below
+        None
+      } else {
+        // No temp scalar function - safe to resolve as table function
+        v1SessionCatalog.resolveBuiltinOrTempTableFunction(funcName, arguments)
+      }
     } else {
       None
     }
 
     // Step 2: Fallback to scalar registry for type mismatch detection
-    // Architecture: Generators are one-way (table→scalar extraction). If a function exists
+    // Architecture: Generators are one-way (table-to-scalar extraction). If a function exists
     // ONLY as a scalar function and is used in table context, throw specific error.
     //
     // Note: This also handles cross-type shadowing. If a temp scalar function shadows a builtin
-    // table function, the table lookup above returns None, and we fall through here to detect
+    // table function, the check above returns None, and we fall through here to detect
     // it's a scalar-only function and throw NOT_A_TABLE_FUNCTION.
     if (tableFunctionResult.isEmpty && name.length == 1) {
       if (v1SessionCatalog.lookupBuiltinOrTempFunction(name.head).isDefined) {
