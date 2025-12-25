@@ -184,7 +184,8 @@ trait ExternalCatalog {
       loadPath: String,
       partition: TablePartitionSpec,
       replace: Boolean,
-      numDP: Int): Unit
+      numDP: Int,
+      confOverlay: Map[String, String]): Unit
 
   // --------------------------------------------------------------------------
   // Partitions

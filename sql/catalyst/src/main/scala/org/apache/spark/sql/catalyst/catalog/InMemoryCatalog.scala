@@ -416,7 +416,8 @@ class InMemoryCatalog(
       loadPath: String,
       partition: TablePartitionSpec,
       replace: Boolean,
-      numDP: Int): Unit = {
+      numDP: Int,
+      confOverlay: Map[String, String]): Unit = {
     throw QueryExecutionErrors.methodNotImplementedError("loadDynamicPartitions")
   }
 

@@ -464,7 +464,8 @@ class HiveClientSuite(version: String) extends HiveVersionSuite(version) {
       "src_part",
       partSpec,
       replace = false,
-      numDP = 1)
+      numDP = 1,
+      confOverlay = Map.empty)
   }
 
   test("renamePartitions") {

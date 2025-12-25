@@ -48,4 +48,26 @@ class HiveSQLInsertTestSuite extends SQLInsertTestSuite with TestHiveSingleton {
     checkError(exception = exception, sqlState = None, condition = v1ErrorClass,
       parameters = v1Parameters)
   }
+
+  test("propagateHiveConfs") {
+    withSQLConf(
+      HiveUtils.CONVERT_INSERTING_PARTITIONED_TABLE.key -> "false",
+      HiveUtils.PROPAGATE_HIVE_CONFS.key -> "hive.exec.max.dynamic.partitions") {
+      val cols = Seq("c1", "p1")
+      val df = sql("SELECT 1, * FROM range(3)")
+      withTable("t1") {
+        createTable("t1", cols, Seq("int", "int"), cols.takeRight(1))
+        spark.conf.set("hive.exec.max.dynamic.partitions", "2")
+        val e = intercept[Exception] {
+          processInsert("t1", df, overwrite = false)
+        }
+        assert(e.getMessage.contains(
+          "Number of dynamic partitions created is 3, which is more than 2."))
+        assume(spark.table("t1").count() === 0)
+        spark.conf.set("hive.exec.max.dynamic.partitions", "3")
+        processInsert("t1", df, overwrite = false)
+        assume(spark.table("t1").count() === 3)
+      }
+    }
+  }
 }

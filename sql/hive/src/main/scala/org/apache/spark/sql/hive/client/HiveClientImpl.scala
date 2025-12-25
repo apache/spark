@@ -271,7 +271,9 @@ private[hive] class HiveClientImpl(
   /**
    * Runs `f` with ThreadLocal session state and classloaders configured for this version of hive.
    */
-  def withHiveState[A](f: => A): A = retryLocked {
+  def withHiveState[A](f: => A): A = withHiveState[A](Map.empty[String, String])(f)
+
+  def withHiveState[A](confOverlay: Map[String, String])(f: => A): A = retryLocked {
     val original = Thread.currentThread().getContextClassLoader
     val originalConfLoader = state.getConf.getClassLoader
     // We explicitly set the context class loader since "conf.setClassLoader" does
@@ -290,12 +292,24 @@ private[hive] class HiveClientImpl(
     // with the HiveConf in `state` to override the context class loader of the current
     // thread.
     shim.setCurrentSessionState(state)
+    val overlay = confOverlay.map { case (key, newVal) =>
+      (key, Option(conf.get(key, null)), newVal)
+    }
+    overlay.foreach { case (key, _, newVal) =>
+      conf.set(key, newVal)
+    }
     val ret = try {
       f
     } catch {
       case e: NoClassDefFoundError if e.getMessage.contains("apache/hadoop/hive/serde2/SerDe") =>
         throw QueryExecutionErrors.serDeInterfaceNotFoundError(e)
     } finally {
+      overlay.foreach {
+        case (key, Some(originalVal), _) =>
+          conf.set(key, originalVal)
+        case (key, None, _) =>
+          conf.unset(key)
+      }
       state.getConf.setClassLoader(originalConfLoader)
       Thread.currentThread().setContextClassLoader(original)
     }
@@ -1001,7 +1015,8 @@ private[hive] class HiveClientImpl(
       tableName: String,
       partSpec: java.util.LinkedHashMap[String, String],
       replace: Boolean,
-      numDP: Int): Unit = withHiveState {
+      numDP: Int,
+      confOverlay: Map[String, String]): Unit = withHiveState(confOverlay) {
     val hiveTable = shim.getTable(client, dbName, tableName, true /* throw exception */)
     shim.loadDynamicPartitions(
       client,

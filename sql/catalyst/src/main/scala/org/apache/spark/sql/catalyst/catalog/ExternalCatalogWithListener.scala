@@ -191,8 +191,9 @@ class ExternalCatalogWithListener(delegate: ExternalCatalog)
       loadPath: String,
       partition: TablePartitionSpec,
       replace: Boolean,
-      numDP: Int): Unit = {
-    delegate.loadDynamicPartitions(db, table, loadPath, partition, replace, numDP)
+      numDP: Int,
+      confOverlay: Map[String, String]): Unit = {
+    delegate.loadDynamicPartitions(db, table, loadPath, partition, replace, numDP, confOverlay)
   }
 
   // --------------------------------------------------------------------------

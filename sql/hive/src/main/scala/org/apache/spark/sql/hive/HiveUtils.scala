@@ -239,6 +239,16 @@ private[spark] object HiveUtils extends Logging {
       .booleanConf
       .createWithDefault(true)
 
+  val PROPAGATE_HIVE_CONFS =
+    buildConf("spark.sql.hive.propagateHiveConfs")
+      .version("4.2.0")
+      .doc("Propagate the specific Hive configs from Spark session to Hive conf, to " +
+        "mitigate some common use cases that 'SET hive.foo=bar' does not takes effect. " +
+        "Currently, this only takes effect for loadDynamicPartitions.")
+      .stringConf
+      .toSequence
+      .createWithDefault(Seq("hive.exec.max.dynamic.partitions"))
+
   /**
    * The version of the hive client that will be used to communicate with the metastore.  Note that
    * this does not necessarily need to be the same version of Hive that is used internally by

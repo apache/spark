@@ -35,6 +35,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{FileFormat, V1WriteCommand, V1WritesUtils}
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl
 
 
@@ -191,13 +192,19 @@ case class InsertIntoHiveTable(
           }
         }
 
+        val confOverlay = sparkSession.conf.get(HiveUtils.PROPAGATE_HIVE_CONFS)
+          .map { k => k -> hadoopConf.get(k) }
+          .filter { case (_, v) => v != null }
+          .toMap
+
         externalCatalog.loadDynamicPartitions(
           db = table.database,
           table = table.identifier.table,
           tmpLocation.toString,
           partitionSpec,
           overwrite,
-          numDynamicPartitions)
+          numDynamicPartitions,
+          confOverlay)
       } else {
         // scalastyle:off
         // ifNotExists is only valid with static partition, refer to
