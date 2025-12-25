@@ -86,24 +86,24 @@ class SessionCatalog(
    * Database qualifier used to store temporary functions in the function registry.
    * Temporary functions use composite keys to coexist with builtin functions of the same name:
    * - Builtin functions: FunctionIdentifier(name, None)
-   * - Temp functions: FunctionIdentifier(name, Some("session"))
+   * - Temp functions: FunctionIdentifier(name, Some(CatalogManager.SESSION_NAMESPACE))
    * This allows both to exist in the same registry without conflicts.
    */
-  private val TEMP_FUNCTION_DB = "session"
+  private val TEMP_FUNCTION_DB = CatalogManager.SESSION_NAMESPACE
 
   /**
-   * Creates a FunctionIdentifier for a temporary function with the "session" database qualifier.
-   * This enables temporary functions to coexist with builtin functions of the same name.
+   * Creates a FunctionIdentifier for a temporary function with the TEMP_FUNCTION_DB database
+   * qualifier. This enables temporary functions to coexist with builtin functions of the same name.
    *
    * @param name The function name (unqualified)
-   * @return FunctionIdentifier with database = "session"
+   * @return FunctionIdentifier with database = TEMP_FUNCTION_DB
    */
   private def tempFunctionIdentifier(name: String): FunctionIdentifier =
     FunctionIdentifier(format(name), Some(TEMP_FUNCTION_DB))
 
   /**
    * Checks if a FunctionIdentifier represents a temporary function by checking for the
-   * "session" database qualifier.
+   * TEMP_FUNCTION_DB database qualifier.
    *
    * @param identifier The FunctionIdentifier to check
    * @return true if this is a temporary function identifier
@@ -1948,10 +1948,10 @@ class SessionCatalog(
     val func = funcDefinition.identifier
 
     // Determine the key to use for registration:
-    // - Temporary functions (unqualified): use composite key with "session" database
+    // - Temporary functions (unqualified): use composite key with TEMP_FUNCTION_DB database
     // - Persistent functions (qualified): keep qualification to avoid conflicts
     val identToRegister = if (func.database.isEmpty && useCompositeKey) {
-      // Temporary function: use session.funcName
+      // Temporary function: use TEMP_FUNCTION_DB.funcName
       tempFunctionIdentifier(func.funcName)
     } else {
       // Persistent function: keep original qualified identifier
@@ -2080,7 +2080,7 @@ class SessionCatalog(
    * or [[TableFunctionRegistry]]. Return true if function exists.
    */
   def unregisterFunction(name: FunctionIdentifier): Boolean = {
-    // If it's an unqualified name, it's a temp function stored with "session" database
+    // If it's an unqualified name, it's a temp function stored with TEMP_FUNCTION_DB database
     val tempIdent = if (name.database.isEmpty) tempFunctionIdentifier(name.funcName) else name
     functionRegistry.dropFunction(tempIdent) || tableFunctionRegistry.dropFunction(tempIdent)
   }
@@ -2101,7 +2101,7 @@ class SessionCatalog(
    * Returns whether it is a temporary function. If not existed, returns false.
    */
   def isTemporaryFunction(name: FunctionIdentifier): Boolean = {
-    // A temporary function is stored with database = "session"
+    // A temporary function is stored with database = TEMP_FUNCTION_DB
     if (name.database.isEmpty) {
       val tempIdent = tempFunctionIdentifier(name.funcName)
       functionRegistry.functionExists(tempIdent) ||
@@ -2116,7 +2116,7 @@ class SessionCatalog(
    * session. If not existed, return false.
    */
   def isRegisteredFunction(name: FunctionIdentifier): Boolean = {
-    // Check if it exists as temp (with "session" db) or builtin (without db) or persistent
+    // Check if it exists as temp (with TEMP_FUNCTION_DB db) or builtin (without db) or persistent
     if (name.database.isEmpty) {
       val tempIdent = tempFunctionIdentifier(name.funcName)
       val builtinIdent = FunctionIdentifier(format(name.funcName))
@@ -2191,7 +2191,7 @@ class SessionCatalog(
 
   /**
    * Generic helper for looking up functions with temp/builtin shadowing and view context.
-   * Checks temp function first (with "session" database qualifier), then built-in
+   * Checks temp function first (with TEMP_FUNCTION_DB database qualifier), then built-in
    * (without database qualifier). For temp functions, applies view resolution context.
    *
    * @param name The function name (unqualified)
@@ -2214,7 +2214,7 @@ class SessionCatalog(
     }
 
     operatorResult.orElse {
-      // Check temp function first (with "session" database qualifier)
+      // Check temp function first (with TEMP_FUNCTION_DB database qualifier)
       val tempIdentifier = tempFunctionIdentifier(name)
       val tempResult = registry.lookupFunction(tempIdentifier)
 
@@ -2369,8 +2369,9 @@ class SessionCatalog(
    * @param arguments The arguments to pass to the function
    * @param isBuiltin Predicate to check if a function is built-in (not temporary)
    * @param registry The registry to search (FunctionRegistry or TableFunctionRegistry)
-   * @param useTemporaryIdentifier If true, use temporary identifier (with "session" database);
-   *                               if false, use built-in identifier (without database)
+   * @param useTemporaryIdentifier If true, use temporary identifier (with
+   *                               TEMP_FUNCTION_DB database); if false, use built-in
+   *                               identifier (without database)
    * @tparam T The registry's type parameter (Expression for FunctionRegistry,
    *           LogicalPlan for TableFunctionRegistry)
    * @return Resolved function if found and visible in current context, None otherwise
@@ -2628,7 +2629,8 @@ class SessionCatalog(
   def listTemporaryFunctions(): Seq[FunctionIdentifier] = {
     (functionRegistry.listFunction() ++ tableFunctionRegistry.listFunction())
       .filter(isTempFunctionIdentifier)
-      .map(ident => FunctionIdentifier(ident.funcName)) // Strip the "session" database qualifier
+      // Strip the TEMP_FUNCTION_DB database qualifier
+      .map(ident => FunctionIdentifier(ident.funcName))
   }
 
   // -----------------

@@ -266,34 +266,9 @@ private[sql] trait SQLTestUtilsBase
       // temp tables that never got created.
       functions.foreach { case (functionName, isTemporary) =>
         val withTemporary = if (isTemporary) "TEMPORARY" else ""
-
-        // Debug: Check state before DROP
-        val catalog = spark.sessionState.catalog
-        val identifier = FunctionIdentifier(functionName)
-        // scalastyle:off println
-        println(s"[DEBUG] Before DROP $functionName:")
-        println(s"  functionExists: ${catalog.functionExists(identifier)}")
-        println(s"  isTemporaryFunction: ${catalog.isTemporaryFunction(identifier)}")
-        // scalastyle:on println
-
         spark.sql(s"DROP $withTemporary FUNCTION IF EXISTS $functionName")
-
-        // Debug: Check state after DROP
-        // scalastyle:off println
-        println(s"[DEBUG] After DROP $functionName:")
-        println(s"  functionExists: ${catalog.functionExists(identifier)}")
-        println(s"  isTemporaryFunction: ${catalog.isTemporaryFunction(identifier)}")
-        // scalastyle:on println
-
-        // For temporary functions, verify they were actually dropped
-        // For persistent functions, check they don't exist in the catalog
-        val stillExists = if (isTemporary) {
-          catalog.isTemporaryFunction(identifier)
-        } else {
-          catalog.functionExists(identifier)
-        }
         assert(
-          !stillExists,
+          !spark.sessionState.catalog.functionExists(FunctionIdentifier(functionName)),
           s"Function $functionName should have been dropped. But, it still exists.")
       }
     }

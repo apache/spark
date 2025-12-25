@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.variant._
 import org.apache.spark.sql.catalyst.expressions.xml._
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionBuilderBase, Generate, LogicalPlan, OneRowRelation, PythonWorkerLogs, Range}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -78,14 +79,15 @@ trait FunctionRegistryBase[T] {
   /* Create or replace a temporary function. */
   final def createOrReplaceTempFunction(
       name: String, builder: FunctionBuilder, source: String): Unit = {
-    // Internal functions (source="internal") are NOT qualified with "session" database
-    // because they use a separate internal registry and are resolved differently
+    // Internal functions (source="internal") are NOT qualified with
+    // CatalogManager.SESSION_NAMESPACE database because they use a separate
+    // internal registry and are resolved differently
     val identifier = if (source == "internal") {
       FunctionIdentifier(name)
     } else {
-      // Regular temporary functions are qualified with "session" database
+      // Regular temporary functions are qualified with CatalogManager.SESSION_NAMESPACE
       // to enable coexistence with builtin functions of the same name
-      FunctionIdentifier(name, Some("session"))
+      FunctionIdentifier(name, Some(CatalogManager.SESSION_NAMESPACE))
     }
     registerFunction(identifier, builder, source)
   }
