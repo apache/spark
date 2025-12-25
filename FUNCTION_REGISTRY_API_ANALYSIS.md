@@ -39,12 +39,12 @@
 object FunctionRegistry {
   val builtin: SimpleFunctionRegistry = { /* ~500 functions */ }
   val functionSet: Set[FunctionIdentifier] = builtin.listFunction().toSet
-  
+
   // SPECIAL: Internal registry for Connect/Column API and ML functions
   val internal: SimpleFunctionRegistry = { /* ~20 internal functions */ }
   // Examples: vector_to_array, array_to_vector, pandas_product, bloom_filter_agg
   // These are resolved DIRECTLY via FunctionRegistry.internal, bypassing SessionCatalog!
-  
+
   val builtinOperators: Map[String, ExpressionInfo] = { /* 4 operators */ }
 }
 
@@ -257,7 +257,7 @@ Spark **already has** a separate, immutable function registry for internal funct
 // In FunctionRegistry.scala
 object FunctionRegistry {
   val builtin: SimpleFunctionRegistry = { /* ~500 regular functions */ }
-  
+
   // SEPARATE STATIC REGISTRY - Never cloned!
   val internal: SimpleFunctionRegistry = new SimpleFunctionRegistry
 }
@@ -276,7 +276,7 @@ def resolveBuiltinOrTempFunction(
     name: Seq[String],
     arguments: Seq[Expression],
     u: UnresolvedFunction): Option[Expression] = {
-  
+
   // FIRST: Check if it's an internal function
   if (name.size == 1 && u.isInternal) {
     // Direct lookup in FunctionRegistry.internal - NO SessionCatalog!
