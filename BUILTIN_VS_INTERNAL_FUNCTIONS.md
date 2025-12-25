@@ -32,7 +32,7 @@
 -- Math functions
 SELECT abs(-5), sqrt(16), round(3.14159, 2)
 
--- String functions  
+-- String functions
 SELECT concat('hello', ' ', 'world'), upper('spark')
 
 -- Aggregate functions
@@ -174,7 +174,7 @@ def resolveBuiltinOrTempFunction(
     name: Seq[String],
     arguments: Seq[Expression],
     u: UnresolvedFunction): Option[Expression] = {
-  
+
   // FIRST: Check if it's an internal function
   if (name.size == 1 && u.isInternal) {
     // DIRECTLY access FunctionRegistry.internal
@@ -295,9 +295,8 @@ Our current architecture uses **composite keys** within the cloned registry:
 **Internal Functions:**
 - Implementation details for Connect/ML/Pandas
 - Single global registry (not cloned)
-- ~20 functions  
+- ~20 functions
 - Resolved directly via `isInternal` flag
 - Cannot be qualified or shadowed
 
 **Both serve different purposes, and the internal functions prove that having multiple registries (static + per-session) is a viable, production-ready pattern!**
-
