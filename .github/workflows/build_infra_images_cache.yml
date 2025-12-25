@@ -42,7 +42,6 @@ on:
     - 'dev/spark-test-image/python-313-nogil/Dockerfile'
     - 'dev/spark-test-image/python-314/Dockerfile'
     - 'dev/spark-test-image/python-314-nogil/Dockerfile'
-    - 'dev/spark-test-image/numpy-213/Dockerfile'
     - '.github/workflows/build_infra_images_cache.yml'
   # Create infra image when cutting down branches/tags
   create:
