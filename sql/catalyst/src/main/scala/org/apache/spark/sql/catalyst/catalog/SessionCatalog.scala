@@ -1932,14 +1932,13 @@ class SessionCatalog(
 
     // Determine the key to use for registration:
     // - Temporary functions (unqualified): use composite key with "session" database
-    // - Persistent functions (qualified): strip qualification for caching
+    // - Persistent functions (qualified): keep qualification to avoid conflicts
     val identToRegister = if (func.database.isEmpty && useCompositeKey) {
       // Temporary function: use session.funcName
       tempFunctionIdentifier(func.funcName)
     } else {
-      // Persistent function or not using composite keys:
-      // Cache with unqualified name so it can be found by unqualified lookups
-      FunctionIdentifier(func.funcName)
+      // Persistent function: keep original qualified identifier
+      func
     }
 
     if (registry.functionExists(identToRegister) && !overrideIfExists) {
@@ -2439,11 +2438,9 @@ class SessionCatalog(
       val qualifiedIdent = qualifyIdentifier(name)
       val db = qualifiedIdent.database.get
       val funcName = qualifiedIdent.funcName
-      // Persistent functions are cached with unqualified keys
-      val cacheKey = FunctionIdentifier(funcName)
-      if (registry.functionExists(cacheKey)) {
+      if (registry.functionExists(qualifiedIdent)) {
         // This function has been already loaded into the function registry.
-        registry.lookupFunction(cacheKey, arguments)
+        registry.lookupFunction(qualifiedIdent, arguments)
       } else {
         // The function has not been loaded to the function registry, which means
         // that the function is a persistent function (if it actually has been registered
@@ -2467,7 +2464,7 @@ class SessionCatalog(
           registerUserDefinedFunc(function)
         }
         // Now, we need to create the Expression.
-        registry.lookupFunction(cacheKey, arguments)
+        registry.lookupFunction(qualifiedIdent, arguments)
       }
     }
   }
