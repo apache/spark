@@ -648,8 +648,10 @@ object Core {
         "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
       )
     },
+    // Use Maven's output directory so sbt and Maven can share generated sources.
+    // Core uses protoc-jar-maven-plugin which outputs to target/generated-sources.
     (Compile / PB.targets) := Seq(
-      PB.gens.java -> (Compile / sourceManaged).value
+      PB.gens.java -> target.value / "generated-sources"
     )
   ) ++ {
     val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
@@ -734,19 +736,20 @@ object SparkConnectCommon {
   ) ++ {
     val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
     val connectPluginExecPath = sys.props.get("connect.plugin.executable.path")
+    // Use Maven's output directory so sbt and Maven can share generated sources
     if (sparkProtocExecPath.isDefined && connectPluginExecPath.isDefined) {
       Seq(
         (Compile / PB.targets) := Seq(
-          PB.gens.java -> (Compile / sourceManaged).value,
-          PB.gens.plugin(name = "grpc-java", path = connectPluginExecPath.get) -> (Compile / sourceManaged).value
+          PB.gens.java -> target.value / "generated-sources" / "protobuf" / "java",
+          PB.gens.plugin(name = "grpc-java", path = connectPluginExecPath.get) -> target.value / "generated-sources" / "protobuf" / "grpc-java"
         ),
         PB.protocExecutable := file(sparkProtocExecPath.get)
       )
     } else {
       Seq(
         (Compile / PB.targets) := Seq(
-          PB.gens.java -> (Compile / sourceManaged).value,
-          PB.gens.plugin("grpc-java") -> (Compile / sourceManaged).value
+          PB.gens.java -> target.value / "generated-sources" / "protobuf" / "java",
+          PB.gens.plugin("grpc-java") -> target.value / "generated-sources" / "protobuf" / "grpc-java"
         )
       )
     }
@@ -1286,7 +1289,9 @@ object SqlApi {
     (Antlr4 / antlr4PackageName) := Some("org.apache.spark.sql.catalyst.parser"),
     (Antlr4 / antlr4GenListener) := true,
     (Antlr4 / antlr4GenVisitor) := true,
-    (Antlr4 / antlr4TreatWarningsAsErrors) := true
+    (Antlr4 / antlr4TreatWarningsAsErrors) := true,
+    // Use Maven's output directory so sbt and Maven can share generated sources
+    (Antlr4 / javaSource) := target.value / "generated-sources" / "antlr4"
   )
 }
 
@@ -1303,8 +1308,10 @@ object SQL {
         "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
       )
     },
+    // Use Maven's output directory so sbt and Maven can share generated sources.
+    // sql/core uses protoc-jar-maven-plugin which outputs to target/generated-sources.
     (Compile / PB.targets) := Seq(
-      PB.gens.java -> (Compile / sourceManaged).value
+      PB.gens.java -> target.value / "generated-sources"
     )
   ) ++ {
     val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
