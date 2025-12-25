@@ -137,8 +137,17 @@ object YarnSparkHadoopUtil {
    * the behavior of '%' in a .cmd file: it gets interpreted as an incomplete environment
    * variable. Windows .cmd files escape a '%' by '%%'. Thus, the correct way of writing
    * '%%p' in an escaped way is '%%%%p'.
+   *
+   * Added kill on OOM only if spark.executor.killOnOOM is set to true.
    */
-  private[yarn] def addOutOfMemoryErrorArgument(javaOpts: ListBuffer[String]): Unit = {
+  private[yarn] def addOutOfMemoryErrorArgument(
+                                                 javaOpts: ListBuffer[String],
+                                                 conf: SparkConf): Unit = {
+
+    if (!conf.getBoolean("spark.executor.killOnOOM", false)) {
+      return
+    }
+
     if (!javaOpts.exists(_.contains("-XX:OnOutOfMemoryError"))) {
       if (Utils.isWindows) {
         javaOpts += escapeForShell("-XX:OnOutOfMemoryError=taskkill /F /PID %%%%p")
