@@ -2153,27 +2153,45 @@ class SessionCatalog(
       val tempIdentifier = tempFunctionIdentifier(name)
       val tempResult = functionRegistry.lookupFunction(tempIdentifier)
 
+      // scalastyle:off println
+      val isResolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty
+      val referredTempFunctionNames = AnalysisContext.get.referredTempFunctionNames
+      println(s"[DEBUG lookupBuiltinOrTemp] name=$name tempExists=${tempResult.isDefined}")
+      println(s"  isResolvingView=$isResolvingView referred=$referredTempFunctionNames")
+      // scalastyle:on println
+
       if (tempResult.isDefined) {
         // It's a temp function, track it for view resolution
-        val isResolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty
-        val referredTempFunctionNames = AnalysisContext.get.referredTempFunctionNames
         if (isResolvingView) {
           // When resolving a view, only return a temp function if it's referred by this view.
           if (referredTempFunctionNames.contains(name)) {
+            // scalastyle:off println
+            println(s"[DEBUG lookupBuiltinOrTemp] Temp in referred list")
+            // scalastyle:on println
             tempResult
           } else {
+            // scalastyle:off println
+            println(s"[DEBUG lookupBuiltinOrTemp] Temp NOT in referred list")
+            // scalastyle:on println
             None
           }
         } else {
           // We are not resolving a view and the function is a temp one, add it to
           // AnalysisContext so if a view is being created, it can be checked.
           AnalysisContext.get.referredTempFunctionNames.add(name)
+          // scalastyle:off println
+          println(s"[DEBUG lookupBuiltinOrTemp] Temp found, added to referred")
+          // scalastyle:on println
           tempResult
         }
       } else {
         // Not a temp function, check builtin function (without database qualifier)
         val builtinIdentifier = FunctionIdentifier(format(name))
-        functionRegistry.lookupFunction(builtinIdentifier)
+        val builtinResult = functionRegistry.lookupFunction(builtinIdentifier)
+        // scalastyle:off println
+        println(s"[DEBUG lookupBuiltinOrTemp] No temp, checking builtin: ${builtinResult.isDefined}")
+        // scalastyle:on println
+        builtinResult
       }
     }
   }
@@ -2266,6 +2284,9 @@ class SessionCatalog(
    * a function exists.
    */
   def resolveBuiltinOrTempFunction(name: String, arguments: Seq[Expression]): Option[Expression] = {
+    // scalastyle:off println
+    println(s"[DEBUG resolveBuiltinOrTemp] name=$name")
+    // scalastyle:on println
     // Check temp function first (shadowing)
     val tempIdentifier = tempFunctionIdentifier(name)
     val tempResult = resolveBuiltinOrTempFunctionInternal(
@@ -2323,16 +2344,30 @@ class SessionCatalog(
       isBuiltin: FunctionIdentifier => Boolean,
       lookupFunc: FunctionIdentifier => Option[T]): Option[T] = {
     val funcIdent = FunctionIdentifier(name)
+    // scalastyle:off println
+    val isResolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty
+    val referredTempFunctionNames = AnalysisContext.get.referredTempFunctionNames
+    println(s"[DEBUG lookupTempFuncWithViewContext] name=$name")
+    println(s"  isBuiltin=${isBuiltin(funcIdent)} isView=$isResolvingView")
+    println(s"  referred=$referredTempFunctionNames")
+    // scalastyle:on println
     if (isBuiltin(funcIdent)) {
+      // scalastyle:off println
+      println(s"[DEBUG lookupTempFuncWithViewContext] Is builtin, returning")
+      // scalastyle:on println
       lookupFunc(funcIdent)
     } else {
-      val isResolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty
-      val referredTempFunctionNames = AnalysisContext.get.referredTempFunctionNames
       if (isResolvingView) {
         // When resolving a view, only return a temp function if it's referred by this view.
         if (referredTempFunctionNames.contains(name)) {
+          // scalastyle:off println
+          println(s"[DEBUG lookupTempFuncWithViewContext] View: temp in referred")
+          // scalastyle:on println
           lookupFunc(funcIdent)
         } else {
+          // scalastyle:off println
+          println(s"[DEBUG lookupTempFuncWithViewContext] View: temp NOT in referred")
+          // scalastyle:on println
           None
         }
       } else {
@@ -2342,6 +2377,9 @@ class SessionCatalog(
           // `AnalysisContext`, so during the view creation, we can save all referred temp
           // functions to view metadata.
           AnalysisContext.get.referredTempFunctionNames.add(name)
+          // scalastyle:off println
+          println(s"[DEBUG lookupTempFuncWithViewContext] Temp found, added")
+          // scalastyle:on println
         }
         result
       }
@@ -2438,8 +2476,15 @@ class SessionCatalog(
       val qualifiedIdent = qualifyIdentifier(name)
       val db = qualifiedIdent.database.get
       val funcName = qualifiedIdent.funcName
+      // scalastyle:off println
+      println(s"[DEBUG resolvePersistent] name=$name qualId=$qualifiedIdent")
+      println(s"  exists=${registry.functionExists(qualifiedIdent)}")
+      // scalastyle:on println
       if (registry.functionExists(qualifiedIdent)) {
         // This function has been already loaded into the function registry.
+        // scalastyle:off println
+        println(s"[DEBUG resolvePersistent] Function already cached, looking up")
+        // scalastyle:on println
         registry.lookupFunction(qualifiedIdent, arguments)
       } else {
         // The function has not been loaded to the function registry, which means
@@ -2450,6 +2495,9 @@ class SessionCatalog(
         } catch {
           case _: AnalysisException => failFunctionLookup(qualifiedIdent)
         }
+        // scalastyle:off println
+        println(s"[DEBUG resolvePersistent] Loading: class=${catalogFunction.className}")
+        // scalastyle:on println
         // Please note that qualifiedName is provided by the user. However,
         // catalogFunction.identifier.unquotedString is returned by the underlying
         // catalog. So, it is possible that qualifiedName is not exactly the same as
