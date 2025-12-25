@@ -22,7 +22,7 @@ import org.apache.datasketches.memory.Memory
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLId, toSQLType}
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{AbstractDataType, ArrayType, BinaryType, DataType, DoubleType, FloatType, LongType, StringType, TypeCollection}
@@ -138,15 +138,9 @@ case class KllSketchGetNBigint(child: Expression) extends KllSketchGetNBase {
   override protected def withNewChildInternal(newChild: Expression): KllSketchGetNBigint =
     copy(child = newChild)
   override def prettyName: String = "kll_sketch_get_n_bigint"
+  override protected def kllUtilsMethod: String = "getKllLongsSketchN"
   override def nullSafeEval(input: Any): Any = {
-    try {
-      val buffer = input.asInstanceOf[Array[Byte]]
-      val sketch = KllLongsSketch.heapify(Memory.wrap(buffer))
-      sketch.getN()
-    } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
-    }
+    KllSketchUtils.getKllLongsSketchN(input, prettyName)
   }
 }
 
@@ -166,15 +160,9 @@ case class KllSketchGetNFloat(child: Expression) extends KllSketchGetNBase {
   override protected def withNewChildInternal(newChild: Expression): KllSketchGetNFloat =
     copy(child = newChild)
   override def prettyName: String = "kll_sketch_get_n_float"
+  override protected def kllUtilsMethod: String = "getKllFloatsSketchN"
   override def nullSafeEval(input: Any): Any = {
-    try {
-      val buffer = input.asInstanceOf[Array[Byte]]
-      val sketch = KllFloatsSketch.heapify(Memory.wrap(buffer))
-      sketch.getN()
-    } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
-    }
+    KllSketchUtils.getKllFloatsSketchN(input, prettyName)
   }
 }
 
@@ -194,26 +182,30 @@ case class KllSketchGetNDouble(child: Expression) extends KllSketchGetNBase {
   override protected def withNewChildInternal(newChild: Expression): KllSketchGetNDouble =
     copy(child = newChild)
   override def prettyName: String = "kll_sketch_get_n_double"
+  override protected def kllUtilsMethod: String = "getKllDoublesSketchN"
   override def nullSafeEval(input: Any): Any = {
-    try {
-      val buffer = input.asInstanceOf[Array[Byte]]
-      val sketch = KllDoublesSketch.heapify(Memory.wrap(buffer))
-      sketch.getN()
-    } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
-    }
+    KllSketchUtils.getKllDoublesSketchN(input, prettyName)
   }
 }
 
 /** This is a base class for the above expressions to reduce boilerplate. */
 abstract class KllSketchGetNBase
     extends UnaryExpression
-        with CodegenFallback
         with ImplicitCastInputTypes {
   override def dataType: DataType = LongType
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
   override def nullIntolerant: Boolean = true
+
+  protected def kllUtilsMethod: String
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val kllUtilsClassName = KllSketchUtils.getClass.getName.stripSuffix("$")
+    nullSafeCodeGen(ctx, ev, input => {
+      s"""
+        |${ev.value} = $kllUtilsClassName.$kllUtilsMethod($input, "$prettyName");
+      """.stripMargin
+    })
+  }
 }
 
 // scalastyle:off line.size.limit
@@ -698,4 +690,27 @@ abstract class KllSketchGetRankBase
   }
 }
 
+object KllSketchUtils {
+  @inline
+  private def getSketchN(
+      input: Any,
+      prettyName: String,
+      deserialize: Memory => Long): Long = {
+    try {
+      val bytes = input.asInstanceOf[Array[Byte]]
+      deserialize(Memory.wrap(bytes))
+    } catch {
+      case e: Exception =>
+        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+    }
+  }
 
+  def getKllLongsSketchN(input: Any, prettyName: String): Long =
+    getSketchN(input, prettyName, mem => KllLongsSketch.heapify(mem).getN())
+
+  def getKllFloatsSketchN(input: Any, prettyName: String): Long =
+    getSketchN(input, prettyName, mem => KllFloatsSketch.heapify(mem).getN())
+
+  def getKllDoublesSketchN(input: Any, prettyName: String): Long =
+    getSketchN(input, prettyName, mem => KllDoublesSketch.heapify(mem).getN())
+}
