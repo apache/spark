@@ -356,7 +356,7 @@ public class TaskMemoryManager {
   }
 
   public MemoryBlock allocatePage(long size, MemoryConsumer consumer) {
-    return allocatePage(size, consumer, false);
+    return allocatePage(size, consumer, 0);
   }
 
   /**
@@ -371,7 +371,7 @@ public class TaskMemoryManager {
   public MemoryBlock allocatePage(
       long size,
       MemoryConsumer consumer,
-      boolean isRetry) {
+      int retryCount) {
     assert(consumer != null);
     assert(consumer.getMode() == tungstenMemoryMode);
     if (size > MAXIMUM_PAGE_SIZE_BYTES) {
@@ -397,12 +397,14 @@ public class TaskMemoryManager {
     try {
       page = memoryManager.tungstenMemoryAllocator().allocate(acquired);
     } catch (OutOfMemoryError e) {
-      if (!isRetry) {
-        logger.warn("Failed to allocate a page ({} bytes), try again.", e,
-            MDC.of(LogKeys.PAGE_SIZE, acquired));
+      if (retryCount == 0) {
+        logger.warn("Failed to allocate a page ({} bytes) for {} times, try again.", e,
+            MDC.of(LogKeys.PAGE_SIZE, acquired),
+            MDC.of(LogKeys.NUM_RETRY, retryCount));
       } else {
-        logger.warn("Failed to allocate a page ({} bytes), try again.",
-            MDC.of(LogKeys.PAGE_SIZE, acquired));
+        logger.warn("Failed to allocate a page ({} bytes) for {} times, try again.",
+            MDC.of(LogKeys.PAGE_SIZE, acquired),
+            MDC.of(LogKeys.NUM_RETRY, retryCount));
       }
       // there is no enough memory actually, it means the actual free memory is smaller than
       // MemoryManager thought, we should keep the acquired memory.
@@ -411,7 +413,7 @@ public class TaskMemoryManager {
         allocatedPages.clear(pageNumber);
       }
       // this could trigger spilling to free some pages.
-      return allocatePage(size, consumer, true);
+      return allocatePage(size, consumer, retryCount + 1);
     }
     page.pageNumber = pageNumber;
     pageTable[pageNumber] = page;
