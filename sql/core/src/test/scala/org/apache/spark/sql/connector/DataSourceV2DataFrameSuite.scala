@@ -2054,7 +2054,7 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("SPARK-50844: CTAS/RTAS should trigger two query executions") {
+  test("CTAS/RTAS should trigger two query executions") {
     // CTAS/RTAS triggers 2 query executions:
     // 1. The outer CTAS/RTAS command execution
     // 2. The inner AppendData/OverwriteByExpression execution
