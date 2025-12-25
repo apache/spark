@@ -82,15 +82,32 @@ class SessionCatalog(
   import CatalogTypes.TablePartitionSpec
 
   // Marker database name for temporary functions to distinguish from builtin functions
-  // Builtin functions are stored with database = None
-  // Temp functions are stored with database = Some(TEMP_FUNCTION_DB)
+  /**
+   * Database qualifier used to store temporary functions in the function registry.
+   * Temporary functions use composite keys to coexist with builtin functions of the same name:
+   * - Builtin functions: FunctionIdentifier(name, None)
+   * - Temp functions: FunctionIdentifier(name, Some("session"))
+   * This allows both to exist in the same registry without conflicts.
+   */
   private val TEMP_FUNCTION_DB = "session"
 
-  // Helper to create a temp function identifier
+  /**
+   * Creates a FunctionIdentifier for a temporary function with the "session" database qualifier.
+   * This enables temporary functions to coexist with builtin functions of the same name.
+   *
+   * @param name The function name (unqualified)
+   * @return FunctionIdentifier with database = "session"
+   */
   private def tempFunctionIdentifier(name: String): FunctionIdentifier =
     FunctionIdentifier(format(name), Some(TEMP_FUNCTION_DB))
 
-  // Helper to check if an identifier is for a temp function
+  /**
+   * Checks if a FunctionIdentifier represents a temporary function by checking for the
+   * "session" database qualifier.
+   *
+   * @param identifier The FunctionIdentifier to check
+   * @return true if this is a temporary function identifier
+   */
   private def isTempFunctionIdentifier(identifier: FunctionIdentifier): Boolean =
     identifier.database.contains(TEMP_FUNCTION_DB)
 
@@ -2144,38 +2161,78 @@ class SessionCatalog(
   }
 
   /**
+   * Handles view resolution context for temporary functions.
+   * When resolving a view, only returns the result if the function is explicitly referred
+   * by that view. Otherwise, tracks the function reference for future view creation.
+   *
+   * @param name The function name (unqualified)
+   * @param result The result to wrap with view context handling
+   * @return The result if visible in current context, None otherwise
+   */
+  private def handleViewContext[T](name: String, result: Option[T]): Option[T] = {
+    if (result.isEmpty) {
+      return None
+    }
+
+    val isResolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty
+    val referredTempFunctionNames = AnalysisContext.get.referredTempFunctionNames
+
+    if (isResolvingView) {
+      // When resolving a view, only return a temp function if it's referred by this view.
+      if (referredTempFunctionNames.contains(name)) result else None
+    } else {
+      // We are not resolving a view and the function is a temp one, add it to
+      // AnalysisContext so if a view is being created, it can be checked.
+      AnalysisContext.get.referredTempFunctionNames.add(name)
+      result
+    }
+  }
+
+  /**
+   * Generic helper for looking up functions with temp/builtin shadowing and view context.
+   * Checks temp function first (with "session" database qualifier), then builtin
+   * (without database qualifier). For temp functions, applies view resolution context.
+   *
+   * @param name The function name (unqualified)
+   * @param registry The registry to search (FunctionRegistry or TableFunctionRegistry)
+   * @param checkBuiltinOperators Whether to check builtin operators first (scalar functions only)
+   * @tparam T The return type (Expression or LogicalPlan)
+   * @return ExpressionInfo if function found, None otherwise
+   */
+  private def lookupFunctionWithShadowing[T](
+      name: String,
+      registry: FunctionRegistryBase[T],
+      checkBuiltinOperators: Boolean): Option[ExpressionInfo] = {
+
+    // Check builtin operators (only for scalar functions)
+    val operatorResult = if (checkBuiltinOperators) {
+      FunctionRegistry.builtinOperators.get(name.toLowerCase(Locale.ROOT))
+    } else {
+      None
+    }
+
+    operatorResult.orElse {
+      // Check temp function first (with TEMP_FUNCTION_DB database qualifier)
+      val tempIdentifier = tempFunctionIdentifier(name)
+      val tempResult = registry.lookupFunction(tempIdentifier)
+
+      if (tempResult.isDefined) {
+        // It's a temp function, apply view resolution context
+        handleViewContext(name, tempResult)
+      } else {
+        // Not a temp function, check builtin function (without database qualifier)
+        val builtinIdentifier = FunctionIdentifier(format(name))
+        registry.lookupFunction(builtinIdentifier)
+      }
+    }
+  }
+
+  /**
    * Look up the `ExpressionInfo` of the given function by name if it's a built-in or temp function.
    * This only supports scalar functions.
    */
   def lookupBuiltinOrTempFunction(name: String): Option[ExpressionInfo] = {
-    FunctionRegistry.builtinOperators.get(name.toLowerCase(Locale.ROOT)).orElse {
-      // Check temp function first (with TEMP_FUNCTION_DB database qualifier)
-      val tempIdentifier = tempFunctionIdentifier(name)
-      val tempResult = functionRegistry.lookupFunction(tempIdentifier)
-
-      if (tempResult.isDefined) {
-        // It's a temp function, track it for view resolution
-        val isResolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty
-        val referredTempFunctionNames = AnalysisContext.get.referredTempFunctionNames
-        if (isResolvingView) {
-          // When resolving a view, only return a temp function if it's referred by this view.
-          if (referredTempFunctionNames.contains(name)) {
-            tempResult
-          } else {
-            None
-          }
-        } else {
-          // We are not resolving a view and the function is a temp one, add it to
-          // AnalysisContext so if a view is being created, it can be checked.
-          AnalysisContext.get.referredTempFunctionNames.add(name)
-          tempResult
-        }
-      } else {
-        // Not a temp function, check builtin function (without database qualifier)
-        val builtinIdentifier = FunctionIdentifier(format(name))
-        functionRegistry.lookupFunction(builtinIdentifier)
-      }
-    }
+    lookupFunctionWithShadowing(name, functionRegistry, checkBuiltinOperators = true)
   }
 
   /**
@@ -2183,32 +2240,7 @@ class SessionCatalog(
    * temp table function.
    */
   def lookupBuiltinOrTempTableFunction(name: String): Option[ExpressionInfo] = {
-    // Check temp table function first
-    val tempIdentifier = tempFunctionIdentifier(name)
-    val tempResult = tableFunctionRegistry.lookupFunction(tempIdentifier)
-
-    if (tempResult.isDefined) {
-      // It's a temp table function, track it for view resolution
-      val isResolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty
-      val referredTempFunctionNames = AnalysisContext.get.referredTempFunctionNames
-      if (isResolvingView) {
-        // When resolving a view, only return a temp function if it's referred by this view.
-        if (referredTempFunctionNames.contains(name)) {
-          tempResult
-        } else {
-          None
-        }
-      } else {
-        // We are not resolving a view and the function is a temp one, add it to
-        // AnalysisContext so if a view is being created, it can be checked.
-        AnalysisContext.get.referredTempFunctionNames.add(name)
-        tempResult
-      }
-    } else {
-      // Not a temp table function, check builtin table function
-      val builtinIdentifier = FunctionIdentifier(format(name))
-      tableFunctionRegistry.lookupFunction(builtinIdentifier)
-    }
+    lookupFunctionWithShadowing(name, tableFunctionRegistry, checkBuiltinOperators = false)
   }
 
   /**

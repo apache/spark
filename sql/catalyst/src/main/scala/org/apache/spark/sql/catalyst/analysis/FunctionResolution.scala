@@ -48,17 +48,29 @@ class FunctionResolution(
   private val trimWarningEnabled = new AtomicBoolean(true)
 
   /**
+   * Checks if a multi-part name is qualified with a specific namespace.
+   * Supports both 2-part (namespace.name) and 3-part (system.namespace.name) qualifications.
+   *
+   * @param nameParts The multi-part name to check
+   * @param namespace The namespace to check for (e.g., "builtin", "session")
+   * @return true if qualified with the given namespace
+   */
+  private def isQualifiedWithNamespace(nameParts: Seq[String], namespace: String): Boolean = {
+    nameParts.length match {
+      case 2 => nameParts.head.equalsIgnoreCase(namespace)
+      case 3 =>
+        nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+        nameParts(1).equalsIgnoreCase(namespace)
+      case _ => false
+    }
+  }
+
+  /**
    * Check if a function name is qualified as a builtin function.
    * Valid forms: builtin.func or system.builtin.func
    */
   private def maybeBuiltinFunctionName(nameParts: Seq[String]): Boolean = {
-    nameParts.length match {
-      case 2 => nameParts.head.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
-      case 3 =>
-        nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
-        nameParts(1).equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
-      case _ => false
-    }
+    isQualifiedWithNamespace(nameParts, CatalogManager.BUILTIN_NAMESPACE)
   }
 
   /**
@@ -66,13 +78,7 @@ class FunctionResolution(
    * Valid forms: session.func or system.session.func
    */
   private def maybeTempFunctionName(nameParts: Seq[String]): Boolean = {
-    nameParts.length match {
-      case 2 => nameParts.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
-      case 3 =>
-        nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
-        nameParts(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
-      case _ => false
-    }
+    isQualifiedWithNamespace(nameParts, CatalogManager.SESSION_NAMESPACE)
   }
 
   def resolveFunction(u: UnresolvedFunction): Expression = {
