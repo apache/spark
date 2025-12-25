@@ -3606,8 +3606,10 @@ def to_numeric(arg, errors="raise"):
         # If the series is already numeric, return as-is to preserve precision
         # This matches pandas behavior
         spark_type = arg.spark.data_type
-        if isinstance(spark_type, (ByteType, ShortType, IntegerType, LongType,
-                                   FloatType, DoubleType, DecimalType)):
+        if isinstance(
+            spark_type,
+            (ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType, DecimalType),
+        ):
             return arg
 
         # Use double (float64) instead of float (float32) to match pandas behavior
