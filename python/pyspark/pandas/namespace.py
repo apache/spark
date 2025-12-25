@@ -3560,7 +3560,7 @@ def to_numeric(arg, errors="raise"):
     0    1.0
     1    2.0
     2   -3.0
-    dtype: float32
+    dtype: float64
 
     If given Series contains invalid value to cast float, just cast it to `np.nan`
     when `errors` is set to "coerce".
@@ -3578,7 +3578,15 @@ def to_numeric(arg, errors="raise"):
     1    1.0
     2    2.0
     3   -3.0
-    dtype: float32
+    dtype: float64
+
+    If given Series is already numeric, return as-is to preserve precision.
+
+    >>> psser = ps.Series([-1554478299, 2])
+    >>> ps.to_numeric(psser)
+    0   -1554478299
+    1             2
+    dtype: int64
 
     Also support for list, tuple, np.array, or a scalar
 
@@ -3595,11 +3603,19 @@ def to_numeric(arg, errors="raise"):
     1.0
     """
     if isinstance(arg, Series):
+        # If the series is already numeric, return as-is to preserve precision
+        # This matches pandas behavior
+        spark_type = arg.spark.data_type
+        if isinstance(spark_type, (ByteType, ShortType, IntegerType, LongType,
+                                   FloatType, DoubleType, DecimalType)):
+            return arg
+
+        # Use double (float64) instead of float (float32) to match pandas behavior
         if errors == "coerce":
-            return arg._with_new_scol(arg.spark.column.cast("float"))
+            return arg._with_new_scol(arg.spark.column.cast("double"))
         elif errors == "raise":
             scol = arg.spark.column
-            scol_casted = scol.cast("float")
+            scol_casted = scol.cast("double")
             cond = F.when(
                 F.assert_true(scol.isNull() | scol_casted.isNotNull()).isNull(), scol_casted
             )
