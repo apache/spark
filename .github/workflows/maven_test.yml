@@ -181,7 +181,7 @@ jobs:
       - name: Install Python packages (Python 3.11)
         if: contains(matrix.modules, 'resource-managers#yarn') || (contains(matrix.modules, 'sql#core')) || contains(matrix.modules, 'connect')
         run: |
-          python3.11 -m pip install 'numpy>=1.22' pyarrow pandas pyyaml scipy unittest-xml-reporting 'grpcio==1.76.0' 'grpcio-status==1.76.0' 'protobuf==6.33.0' 'zstandard==0.25.0'
+          python3.11 -m pip install 'numpy>=2.0.0' pyarrow pandas pyyaml scipy unittest-xml-reporting 'grpcio==1.76.0' 'grpcio-status==1.76.0' 'protobuf==6.33.0' 'zstandard==0.25.0'
           python3.11 -m pip list
       # Run the tests using script command.
       # BSD's script command doesn't support -c option, and the usage is different from Linux's one.
