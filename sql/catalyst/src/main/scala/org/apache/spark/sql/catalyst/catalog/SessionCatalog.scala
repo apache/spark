@@ -2161,12 +2161,16 @@ class SessionCatalog(
   }
 
   /**
-   * Handles view resolution context for temporary functions.
+   * Handles view resolution context for temporary functions (both scalar and table-valued).
    * When resolving a view, only returns the result if the function is explicitly referred
    * by that view. Otherwise, tracks the function reference for future view creation.
    *
+   * This generic helper works for both scalar functions (FunctionRegistry) and table-valued
+   * functions (TableFunctionRegistry) due to the type parameter T.
+   *
    * @param name The function name (unqualified)
    * @param result The result to wrap with view context handling
+   * @tparam T The result type (ExpressionInfo, Expression, or LogicalPlan)
    * @return The result if visible in current context, None otherwise
    */
   private def handleViewContext[T](name: String, result: Option[T]): Option[T] =
@@ -2187,13 +2191,14 @@ class SessionCatalog(
 
   /**
    * Generic helper for looking up functions with temp/builtin shadowing and view context.
-   * Checks temp function first (with "session" database qualifier), then builtin
+   * Checks temp function first (with "session" database qualifier), then built-in
    * (without database qualifier). For temp functions, applies view resolution context.
    *
    * @param name The function name (unqualified)
    * @param registry The registry to search (FunctionRegistry or TableFunctionRegistry)
-   * @param checkBuiltinOperators Whether to check builtin operators first (scalar functions only)
-   * @tparam T The return type (Expression or LogicalPlan)
+   * @param checkBuiltinOperators Whether to check built-in operators first (scalar functions only)
+   * @tparam T The registry's type parameter (Expression for FunctionRegistry,
+   *           LogicalPlan for TableFunctionRegistry)
    * @return ExpressionInfo if function found, None otherwise
    */
   private def lookupFunctionWithShadowing[T](
@@ -2201,7 +2206,7 @@ class SessionCatalog(
       registry: FunctionRegistryBase[T],
       checkBuiltinOperators: Boolean): Option[ExpressionInfo] = {
 
-    // Check builtin operators (only for scalar functions)
+    // Check built-in operators (only for scalar functions)
     val operatorResult = if (checkBuiltinOperators) {
       FunctionRegistry.builtinOperators.get(name.toLowerCase(Locale.ROOT))
     } else {
@@ -2209,7 +2214,7 @@ class SessionCatalog(
     }
 
     operatorResult.orElse {
-      // Check temp function first (with TEMP_FUNCTION_DB database qualifier)
+      // Check temp function first (with "session" database qualifier)
       val tempIdentifier = tempFunctionIdentifier(name)
       val tempResult = registry.lookupFunction(tempIdentifier)
 
@@ -2217,7 +2222,7 @@ class SessionCatalog(
         // It's a temp function, apply view resolution context
         handleViewContext(name, tempResult)
       } else {
-        // Not a temp function, check builtin function (without database qualifier)
+        // Not a temp function, check built-in function (without database qualifier)
         val builtinIdentifier = FunctionIdentifier(format(name))
         registry.lookupFunction(builtinIdentifier)
       }
@@ -2249,6 +2254,14 @@ class SessionCatalog(
   }
 
   /**
+   * Look up only builtin table function (no temp).
+   */
+  def lookupBuiltinTableFunction(name: String): Option[ExpressionInfo] = {
+    val builtinIdentifier = FunctionIdentifier(format(name))
+    tableFunctionRegistry.lookupFunction(builtinIdentifier)
+  }
+
+  /**
    * Look up only temp function (no builtin).
    */
   def lookupTempFunction(name: String): Option[ExpressionInfo] = {
@@ -2258,6 +2271,18 @@ class SessionCatalog(
       // Return false if temp exists (not builtin)
       ident => !functionRegistry.functionExists(tempIdentifier),
       _ => functionRegistry.lookupFunction(tempIdentifier)))
+  }
+
+  /**
+   * Look up only temp table function (no builtin).
+   */
+  def lookupTempTableFunction(name: String): Option[ExpressionInfo] = {
+    val tempIdentifier = tempFunctionIdentifier(name)
+    if (tableFunctionRegistry.functionExists(tempIdentifier)) {
+      tableFunctionRegistry.lookupFunction(tempIdentifier)
+    } else {
+      None
+    }
   }
 
   /**
@@ -2309,14 +2334,15 @@ class SessionCatalog(
       name, arguments, TableFunctionRegistry.builtin.functionExists, tableFunctionRegistry)
 
   /**
-   * Helper to resolve functions with fallback from temporary to builtin.
-   * Tries temporary function first (shadowing), then falls back to builtin if not found.
+   * Helper to resolve functions with fallback from temporary to built-in.
+   * Tries temporary function first (shadowing), then falls back to built-in if not found.
    *
    * @param name The function name (unqualified)
    * @param arguments The arguments to pass to the function
-   * @param isBuiltin Predicate to check if a function is builtin
+   * @param isBuiltin Predicate to check if a function is built-in (not temporary)
    * @param registry The registry to search (FunctionRegistry or TableFunctionRegistry)
-   * @tparam T The return type (Expression or LogicalPlan)
+   * @tparam T The registry's type parameter (Expression for FunctionRegistry,
+   *           LogicalPlan for TableFunctionRegistry)
    * @return Resolved function if found, None otherwise
    */
   private def resolveFunctionWithFallback[T](
@@ -2326,21 +2352,36 @@ class SessionCatalog(
       registry: FunctionRegistryBase[T]): Option[T] = {
     // Try temporary function first (shadowing)
     resolveBuiltinOrTempFunctionInternal(
-      name, arguments, isBuiltin, registry, lookupAsTemporary = true)
+      name, arguments, isBuiltin, registry, useTemporaryIdentifier = true)
       .orElse {
-        // Fall back to builtin function
+        // Fall back to built-in function
         resolveBuiltinOrTempFunctionInternal(
-          name, arguments, isBuiltin, registry, lookupAsTemporary = false)
+          name, arguments, isBuiltin, registry, useTemporaryIdentifier = false)
       }
   }
 
+  /**
+   * Internal helper to resolve a function with a specific identifier type (temporary or built-in).
+   * This method handles view context resolution and is used by resolveFunctionWithFallback to
+   * implement the temp-first-then-builtin lookup strategy.
+   *
+   * @param name The function name (unqualified)
+   * @param arguments The arguments to pass to the function
+   * @param isBuiltin Predicate to check if a function is built-in (not temporary)
+   * @param registry The registry to search (FunctionRegistry or TableFunctionRegistry)
+   * @param useTemporaryIdentifier If true, use temporary identifier (with "session" database);
+   *                               if false, use built-in identifier (without database)
+   * @tparam T The registry's type parameter (Expression for FunctionRegistry,
+   *           LogicalPlan for TableFunctionRegistry)
+   * @return Resolved function if found and visible in current context, None otherwise
+   */
   private def resolveBuiltinOrTempFunctionInternal[T](
       name: String,
       arguments: Seq[Expression],
       isBuiltin: FunctionIdentifier => Boolean,
       registry: FunctionRegistryBase[T],
-      lookupAsTemporary: Boolean): Option[T] = synchronized {
-    val funcIdent = if (lookupAsTemporary) tempFunctionIdentifier(name)
+      useTemporaryIdentifier: Boolean): Option[T] = synchronized {
+    val funcIdent = if (useTemporaryIdentifier) tempFunctionIdentifier(name)
                     else FunctionIdentifier(format(name))
     if (!registry.functionExists(funcIdent)) {
       None

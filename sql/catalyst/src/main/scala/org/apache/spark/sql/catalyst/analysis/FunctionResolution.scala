@@ -23,7 +23,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan}
 import org.apache.spark.sql.connector.catalog.{
   CatalogManager,
   CatalogV2Util,
@@ -134,6 +134,8 @@ class FunctionResolution(
       name: Seq[String],
       arguments: Seq[Expression],
       u: UnresolvedFunction): Option[Expression] = {
+
+    // Step 1: Try to resolve as scalar function
     val expression = if (name.size == 1 && u.isInternal) {
       Option(FunctionRegistry.internal.lookupFunction(FunctionIdentifier(name.head), arguments))
     } else if (maybeBuiltinFunctionName(name)) {
@@ -143,16 +145,43 @@ class FunctionResolution(
       // Explicitly qualified as temp - resolve only temp
       v1SessionCatalog.resolveTempFunction(name.last, arguments)
     } else if (name.size == 1) {
+      // Unqualified: try temp first, then builtin (via SessionCatalog)
       v1SessionCatalog.resolveBuiltinOrTempFunction(name.head, arguments)
     } else {
       None
     }
 
-    // Only check if it's a table function if we didn't find it as a scalar function
+    // Step 2: Fallback to table registry for generators
+    // Architecture: Generator functions (explode, json_tuple, etc.) are registered ONLY in the
+    // table registry. When used in scalar context, we detect the Generate node and extract the
+    // underlying Generator expression. This provides a unified function namespace where:
+    // - Generators work in both scalar and table contexts
+    // - Pure table functions only work in table context
+    // - Single source of truth (no duplicate registrations)
+    //
+    // Note: This also handles cross-type shadowing. If a temp table function shadows a builtin
+    // scalar function, the scalar lookup above returns None, and we fall through here to detect
+    // it's a pure table function and throw NOT_A_SCALAR_FUNCTION.
     if (expression.isEmpty) {
       val funcNameForCheck = if (name.size == 1) name.head else name.last
-      if (v1SessionCatalog.lookupBuiltinOrTempTableFunction(funcNameForCheck).isDefined) {
-        throw QueryCompilationErrors.notAScalarFunctionError(name.mkString("."), u)
+
+      // Try to resolve as table function
+      val tableFunctionResult = if (name.size == 1) {
+        v1SessionCatalog.resolveBuiltinOrTempTableFunction(funcNameForCheck, arguments)
+      } else {
+        None
+      }
+
+      tableFunctionResult match {
+        case Some(Generate(generator, _, _, _, _, _)) =>
+          // Generator function: extract the underlying expression for scalar context
+          return Some(validateFunction(generator, arguments.length, u))
+        case Some(_) =>
+          // Pure table function: cannot use in scalar context
+          // (This includes the case where a temp table function shadows a builtin scalar)
+          throw QueryCompilationErrors.notAScalarFunctionError(name.mkString("."), u)
+        case None =>
+          // Not found anywhere
       }
     }
 
@@ -164,13 +193,21 @@ class FunctionResolution(
   def resolveBuiltinOrTempTableFunction(
       name: Seq[String],
       arguments: Seq[Expression]): Option[LogicalPlan] = {
+
+    // Step 1: Try to resolve as table function
     val tableFunctionResult = if (name.length == 1) {
       v1SessionCatalog.resolveBuiltinOrTempTableFunction(name.head, arguments)
     } else {
       None
     }
 
-    // Only check if it's a scalar function if we didn't find it as a table function
+    // Step 2: Fallback to scalar registry for type mismatch detection
+    // Architecture: Generators are one-way (table→scalar extraction). If a function exists
+    // ONLY as a scalar function and is used in table context, throw specific error.
+    //
+    // Note: This also handles cross-type shadowing. If a temp scalar function shadows a builtin
+    // table function, the table lookup above returns None, and we fall through here to detect
+    // it's a scalar-only function and throw NOT_A_TABLE_FUNCTION.
     if (tableFunctionResult.isEmpty && name.length == 1) {
       if (v1SessionCatalog.lookupBuiltinOrTempFunction(name.head).isDefined) {
         throw QueryCompilationErrors.notATableFunctionError(name.mkString("."))

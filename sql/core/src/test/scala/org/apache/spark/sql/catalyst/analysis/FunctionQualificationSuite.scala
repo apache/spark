@@ -246,4 +246,68 @@ class FunctionQualificationSuite extends SharedSparkSession {
     assert(exception.getMessage.contains("UNRESOLVED_ROUTINE"))
     assert(exception.getMessage.contains("non_existent_function"))
   }
+
+  // ==================== Cross-Type Shadowing ====================
+
+  test("temporary table function shadows builtin scalar function") {
+    // abs is a builtin scalar function
+    assert(sql("SELECT abs(-5)").collect()(0).getInt(0) == 5)
+
+    // Create a temp table function with the same name
+    sql("CREATE TEMPORARY FUNCTION abs(x INT) RETURNS TABLE(val INT) RETURN SELECT x * 2")
+
+    // Now trying to use abs in scalar context should fail with type error
+    val exception = intercept[AnalysisException] {
+      sql("SELECT abs(-5)")
+    }
+    assert(exception.getMessage.contains("NOT_A_SCALAR_FUNCTION"))
+    assert(exception.getMessage.contains("abs"))
+
+    // Using in table context should work
+    val result = sql("SELECT * FROM abs(5)").collect()
+    assert(result(0).getInt(0) == 10)
+
+    // Explicitly qualifying as builtin should work
+    assert(sql("SELECT builtin.abs(-5)").collect()(0).getInt(0) == 5)
+
+    sql("DROP TEMPORARY FUNCTION abs")
+  }
+
+  test("temporary scalar function shadows builtin table function") {
+    // range is a builtin table function
+    val rangeResult = sql("SELECT * FROM range(3)").collect()
+    assert(rangeResult.length == 3)
+
+    // Create a temp scalar function with the same name
+    sql("CREATE TEMPORARY FUNCTION range() RETURNS INT RETURN 999")
+
+    // Now trying to use range in table context should fail with type error
+    val exception = intercept[AnalysisException] {
+      sql("SELECT * FROM range()")
+    }
+    assert(exception.getMessage.contains("NOT_A_TABLE_FUNCTION"))
+    assert(exception.getMessage.contains("range"))
+
+    // Using in scalar context should work
+    assert(sql("SELECT range()").collect()(0).getInt(0) == 999)
+
+    sql("DROP TEMPORARY FUNCTION range")
+  }
+
+  test("qualified builtin bypasses temporary table function shadow") {
+    // Create temp table function that shadows builtin scalar
+    sql("CREATE TEMPORARY FUNCTION abs(x INT) RETURNS TABLE(val INT) RETURN SELECT x * 2")
+
+    // Qualified builtin reference should work in scalar context
+    assert(sql("SELECT builtin.abs(-5)").collect()(0).getInt(0) == 5)
+    assert(sql("SELECT system.builtin.abs(-5)").collect()(0).getInt(0) == 5)
+
+    // Note: Parser doesn't support qualified names in FROM clause (table-valued functions)
+    // so we can't test: SELECT * FROM session.abs(5)
+    // But unqualified works and uses the temp table function
+    val result = sql("SELECT * FROM abs(5)").collect()
+    assert(result(0).getInt(0) == 10)
+
+    sql("DROP TEMPORARY FUNCTION abs")
+  }
 }

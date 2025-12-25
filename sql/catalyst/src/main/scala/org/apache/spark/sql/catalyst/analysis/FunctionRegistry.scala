@@ -371,12 +371,8 @@ object FunctionRegistry {
     // misc non-aggregate functions
     expression[Abs]("abs"),
     expression[Coalesce]("coalesce"),
-    expressionBuilder("explode", ExplodeExpressionBuilder),
-    expressionGeneratorBuilderOuter("explode_outer", ExplodeExpressionBuilder),
     expression[Greatest]("greatest"),
     expression[If]("if"),
-    expressionBuilder("inline", InlineExpressionBuilder),
-    expressionGeneratorBuilderOuter("inline_outer", InlineExpressionBuilder),
     expression[IsNaN]("isnan"),
     expression[Nvl]("ifnull", setAlias = true),
     expression[IsNull]("isnull"),
@@ -387,13 +383,10 @@ object FunctionRegistry {
     expression[NullIfZero]("nullifzero"),
     expression[Nvl]("nvl"),
     expression[Nvl2]("nvl2"),
-    expressionBuilder("posexplode", PosExplodeExpressionBuilder),
-    expressionGeneratorBuilderOuter("posexplode_outer", PosExplodeExpressionBuilder),
     expression[Rand]("rand"),
     expression[Rand]("random", true, Some("3.0.0")),
     expression[Randn]("randn"),
     expression[RandStr]("randstr"),
-    expression[Stack]("stack"),
     expression[Uniform]("uniform"),
     expression[ZeroIfNull]("zeroifnull"),
     CaseWhen.registryEntry,
@@ -600,7 +593,6 @@ object FunctionRegistry {
     expression[StringLocate]("locate"),
     expressionBuilder("lpad", LPadExpressionBuilder),
     expression[StringTrimLeft]("ltrim"),
-    expression[JsonTuple]("json_tuple"),
     expression[StringLocate]("position", true, Some("2.3.0")),
     expression[FormatString]("printf", true),
     expression[RegExpExtract]("regexp_extract"),
@@ -1233,6 +1225,25 @@ object TableFunctionRegistry {
     (name, (info, newBuilder))
   }
 
+  /**
+   * Table-valued functions registry.
+   *
+   * Architecture: Generator functions (explode, json_tuple, posexplode, inline, stack, etc.) are
+   * registered ONLY in this table registry, not in the scalar registry. This provides a unified
+   * function namespace where:
+   * - Generators work in BOTH scalar and table contexts (one-way extraction)
+   * - Pure table functions (e.g., range) work ONLY in table context
+   * - Single source of truth (no duplicate registrations)
+   *
+   * Generator Extraction: When a generator is used in scalar context (e.g., SELECT clause),
+   * FunctionResolution detects the Generate node and extracts the underlying Generator expression.
+   * This extraction is ONE-WAY: generators (table functions) can be used in scalar context, but
+   * scalar functions cannot be used in table context. This asymmetry is by design - generators
+   * are special expressions that produce multiple rows, which is compatible with scalar usage
+   * via the Generate operator.
+   *
+   * @see FunctionResolution.resolveBuiltinOrTempFunction for generator extraction logic
+   */
   val logicalPlans: Map[String, (ExpressionInfo, TableFunctionBuilder)] = Map(
     logicalPlan[Range]("range"),
     generatorBuilder("explode", ExplodeGeneratorBuilder),
