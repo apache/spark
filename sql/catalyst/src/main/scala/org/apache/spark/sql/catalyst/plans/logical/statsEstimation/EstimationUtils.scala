@@ -243,10 +243,12 @@ object EstimationUtils {
     } else {
       // Computes the occupied portion of bins of the upperBound and lowerBound.
       val lowerBin = bins(lowerBinIndex)
-      val lowerPart = binHoldingRangePossibility(lowerBin.hi, lowerBound, lowerBin)
+      val lowerPart = if (lowerBin.hi == lowerBound && !lowerBoundInclusive) 0.0
+        else binHoldingRangePossibility(lowerBin.hi, lowerBound, lowerBin)
 
       val higherBin = bins(upperBinIndex)
-      val higherPart = binHoldingRangePossibility(upperBound, higherBin.lo, higherBin)
+      val higherPart = if (higherBin.lo == upperBound && !upperBoundInclusive) 0.0
+        else binHoldingRangePossibility(upperBound, higherBin.lo, higherBin)
 
       // The total number of bins is lowerPart + higherPart + bins between them
       lowerPart + higherPart + upperBinIndex - lowerBinIndex - 1
