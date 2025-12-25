@@ -368,7 +368,7 @@ public class TaskMemoryManager {
    *
    * @throws TooLargePageException
    */
-  public MemoryBlock allocatePage(
+  private MemoryBlock allocatePage(
       long size,
       MemoryConsumer consumer,
       int retryCount) {
