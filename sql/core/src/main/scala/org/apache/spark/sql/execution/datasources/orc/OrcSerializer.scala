@@ -181,6 +181,9 @@ class OrcSerializer(dataSchema: StructType) {
       val array = getter.getArray(ordinal)
       val numElements = array.numElements()
       val result = new OrcList[WritableComparable[_]](orcType, numElements)
+      if (numElements == 0) {
+        return result
+      }
       // Need to put all converted values to a list, can't reuse object.
       val elementConverter = newConverter(elementType, orcType.getChildren.get(0), reuseObj = false)
       var i = 0
