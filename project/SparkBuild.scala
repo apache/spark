@@ -1225,12 +1225,28 @@ object ExcludedDependencies {
  * client dependencies.
  */
 object ExcludeShims {
+  import bloop.integrations.sbt.BloopKeys
+
   val shimmedProjects = Set("spark-sql-api", "spark-connect-common", "spark-connect-client-jdbc", "spark-connect-client-jvm")
   val classPathFilter = TaskKey[Classpath => Classpath]("filter for classpath")
+
+  // Filter for bloopInternalClasspath which is Seq[(File, File)]
+  type BloopClasspath = Seq[(java.io.File, java.io.File)]
+  val bloopClasspathFilter = TaskKey[BloopClasspath => BloopClasspath]("filter for bloop classpath")
+
   lazy val settings = Seq(
     classPathFilter := {
       if (!shimmedProjects(moduleName.value)) {
         cp => cp.filterNot(_.data.name.contains("spark-connect-shims"))
+      } else {
+        identity _
+      }
+    },
+    bloopClasspathFilter := {
+      if (!shimmedProjects(moduleName.value)) {
+        cp => cp.filterNot { case (f1, f2) =>
+          f1.getPath.contains("connect-shims") || f2.getPath.contains("connect-shims")
+        }
       } else {
         identity _
       }
@@ -1247,6 +1263,11 @@ object ExcludeShims {
       classPathFilter.value((Test / internalDependencyClasspath).value),
     Test / internalDependencyAsJars :=
       classPathFilter.value((Test / internalDependencyAsJars).value),
+    // Filter bloop's internal classpath for correct IDE integration
+    Compile / BloopKeys.bloopInternalClasspath :=
+      bloopClasspathFilter.value((Compile / BloopKeys.bloopInternalClasspath).value),
+    Test / BloopKeys.bloopInternalClasspath :=
+      bloopClasspathFilter.value((Test / BloopKeys.bloopInternalClasspath).value),
   )
 }
 
