@@ -2077,35 +2077,25 @@ class Analyzer(
 
       plan.resolveExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
         case f @ UnresolvedFunction(nameParts, _, _, _, _, _, _) =>
-          // Delegate to FunctionResolution for centralized validation logic.
-          // This validates that the function exists and can be used in scalar context.
-          // For persistent functions, cache the normalized name to avoid repeated lookups.
-          try {
-            functionResolution.validateFunctionExistence(nameParts, f)
+          // Check cache first for persistent functions to avoid repeated external catalog lookups.
+          val CatalogAndIdentifier(catalog, ident) =
+            relationResolution.expandIdentifier(nameParts)
+          val fullName = normalizeFuncName(
+            (catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq)
 
-            // If validation passes, check if it's a persistent function and cache it.
-            if (!functionResolution.lookupBuiltinOrTempFunction(nameParts, Some(f)).isDefined &&
-                !functionResolution.lookupBuiltinOrTempTableFunction(nameParts).isDefined) {
-              // It's a persistent function - add to cache.
-              val CatalogAndIdentifier(catalog, ident) =
-                relationResolution.expandIdentifier(nameParts)
-              val fullName = normalizeFuncName(
-                (catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq)
+          if (externalFunctionNameSet.contains(fullName)) {
+            // Already validated this persistent function - skip validation.
+            f
+          } else {
+            // Not in cache - validate the function.
+            // Returns true if builtin/temp, false if persistent.
+            val isBuiltinOrTemp = functionResolution.validateFunctionExistence(nameParts, f)
+
+            // If it's a persistent function, add to cache.
+            if (!isBuiltinOrTemp) {
               externalFunctionNameSet.add(fullName)
             }
             f
-          } catch {
-            case e: AnalysisException =>
-              // Check if it's a cached persistent function before throwing error.
-              val CatalogAndIdentifier(catalog, ident) =
-                relationResolution.expandIdentifier(nameParts)
-              val fullName = normalizeFuncName(
-                (catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq)
-              if (externalFunctionNameSet.contains(fullName)) {
-                f  // Already validated in a previous occurrence.
-              } else {
-                throw e  // Not cached - propagate the error.
-              }
           }
       }
     }

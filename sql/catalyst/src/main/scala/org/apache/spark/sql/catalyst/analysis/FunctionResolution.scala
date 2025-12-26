@@ -136,18 +136,18 @@ class FunctionResolution(
    *
    * @param nameParts The function name parts.
    * @param node The UnresolvedFunction node for error reporting.
-   * @return Unit if valid, throws AnalysisException if invalid.
+   * @return true if the function is a builtin or temporary function, false if it's persistent.
    */
   def validateFunctionExistence(
       nameParts: Seq[String],
-      node: UnresolvedFunction): Unit = {
+      node: UnresolvedFunction): Boolean = {
 
     // Check if function exists as scalar function.
     val existsAsScalar = lookupBuiltinOrTempFunction(nameParts, Some(node)).isDefined
 
     if (existsAsScalar) {
       // Function exists in scalar registry, can be used in scalar context.
-      return
+      return true  // It's a builtin or temp function
     }
 
     // Check if function exists as table function.
@@ -170,7 +170,8 @@ class FunctionResolution(
         node.origin)
     }
 
-    // Function exists in external catalog - validation passes.
+    // Function exists in external catalog - it's persistent.
+    false  // Not a builtin or temp function
   }
 
   def resolveBuiltinOrTempFunction(
