@@ -916,18 +916,19 @@ class ScalarArrowUDFTestsMixin:
 
     def test_arrow_udf_chained_iii(self):
         import pyarrow as pa
+        import pyarrow.compute as pc
 
-        scalar_f = arrow_udf(lambda x: pa.compute.add(x, 1), LongType())
-        scalar_g = arrow_udf(lambda x: pa.compute.subtract(x, 1), LongType())
-        scalar_m = arrow_udf(lambda x, y: pa.compute.multiply(x, y), LongType())
+        scalar_f = arrow_udf(lambda x: pc.add(x, 1), LongType())
+        scalar_g = arrow_udf(lambda x: pc.subtract(x, 1), LongType())
+        scalar_m = arrow_udf(lambda x, y: pc.multiply(x, y), LongType())
 
         iter_f = arrow_udf(
-            lambda it: map(lambda x: pa.compute.add(x, 1), it),
+            lambda it: map(lambda x: pc.add(x, 1), it),
             LongType(),
             ArrowUDFType.SCALAR_ITER,
         )
         iter_g = arrow_udf(
-            lambda it: map(lambda x: pa.compute.subtract(x, 1), it),
+            lambda it: map(lambda x: pc.subtract(x, 1), it),
             LongType(),
             ArrowUDFType.SCALAR_ITER,
         )
@@ -935,7 +936,7 @@ class ScalarArrowUDFTestsMixin:
         @arrow_udf(LongType())
         def iter_m(it: Iterator[Tuple[pa.Array, pa.Array]]) -> Iterator[pa.Array]:
             for a, b in it:
-                yield pa.compute.multiply(a, b)
+                yield pc.multiply(a, b)
 
         df = self.spark.range(10)
         expected = df.select(((F.col("id") + 1) * (F.col("id") - 1)).alias("res")).collect()

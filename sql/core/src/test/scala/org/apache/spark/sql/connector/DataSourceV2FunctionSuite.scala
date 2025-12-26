@@ -702,6 +702,25 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     comparePlans(df1.queryExecution.optimizedPlan, df2.queryExecution.optimizedPlan)
     checkAnswer(df1, Row(3) :: Nil)
   }
+
+  test("simple function") {
+    catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
+    addFunction(Identifier.of(Array("ns"), "simple_strlen"), SimpleStrLen)
+    checkAnswer(sql("SELECT testcat.ns.simple_strlen('abc')"), Row(3) :: Nil)
+    checkAnswer(sql("SELECT testcat.ns.simple_strlen('hello world')"), Row(11) :: Nil)
+  }
+}
+
+case object SimpleStrLen extends SimpleFunction with ScalarFunction[Int] {
+  override def inputTypes(): Array[DataType] = Array(StringType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "simple_strlen"
+  override def description(): String = "simple string length function"
+
+  override def produceResult(input: InternalRow): Int = {
+    val s = input.getString(0)
+    s.length
+  }
 }
 
 case object StrLenDefault extends ScalarFunction[Int] {
