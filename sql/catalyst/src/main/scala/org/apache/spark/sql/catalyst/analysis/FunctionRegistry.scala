@@ -1235,25 +1235,6 @@ object TableFunctionRegistry {
     (name, (info, newBuilder))
   }
 
-  /**
-   * Table-valued functions registry.
-   *
-   * Architecture: Generator functions (explode, json_tuple, posexplode, inline, stack, etc.) are
-   * registered ONLY in this table registry, not in the scalar registry. This provides a unified
-   * function namespace where:
-   * - Generators work in BOTH scalar and table contexts (one-way extraction)
-   * - Pure table functions (e.g., range) work ONLY in table context
-   * - Single source of truth (no duplicate registrations)
-   *
-   * Generator Extraction: When a generator is used in scalar context (e.g., SELECT clause),
-   * FunctionResolution detects the Generate node and extracts the underlying Generator expression.
-   * This extraction is ONE-WAY: generators (table functions) can be used in scalar context, but
-   * scalar functions cannot be used in table context. This asymmetry is by design - generators
-   * are special expressions that produce multiple rows, which is compatible with scalar usage
-   * via the Generate operator.
-   *
-   * @see FunctionResolution.resolveBuiltinOrTempFunction for generator extraction logic
-   */
   val logicalPlans: Map[String, (ExpressionInfo, TableFunctionBuilder)] = Map(
     logicalPlan[Range]("range"),
     generatorBuilder("explode", ExplodeGeneratorBuilder),

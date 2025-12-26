@@ -123,8 +123,11 @@ class SessionCatalog(
    * The funcName field is unused (empty string) as these represent namespace templates.
    *
    * Resolution order:
-   * 1. system.session (temporary functions) - unless skipSession=true
+   * 1. system.session (temporary functions)
    * 2. system.builtin (built-in functions)
+   *
+   * View context handling: When resolving a view, handleViewContext filters temp functions
+   * based on the view's referred function list, so we always include system.session in the path.
    *
    * These are cached for performance since they're accessed frequently.
    */
@@ -138,19 +141,14 @@ class SessionCatalog(
     database = Some(CatalogManager.BUILTIN_NAMESPACE),
     catalog = Some(CatalogManager.SYSTEM_CATALOG_NAME))
 
-  // Cached resolution paths
-  private val FULL_RESOLUTION_PATH = Seq(SESSION_NAMESPACE_TEMPLATE, BUILTIN_NAMESPACE_TEMPLATE)
-  private val BUILTIN_ONLY_PATH = Seq(BUILTIN_NAMESPACE_TEMPLATE)
+  // Cached resolution path: always includes both session and builtin namespaces
+  private val RESOLUTION_PATH = Seq(SESSION_NAMESPACE_TEMPLATE, BUILTIN_NAMESPACE_TEMPLATE)
 
   /**
-   * Returns the resolution path based on context.
-   *
-   * @param skipSession If true, skip system.session (used in view resolution)
+   * Returns the resolution path for function lookup.
    * @return Ordered sequence of namespace identifiers
    */
-  private def resolutionPath(skipSession: Boolean = false): Seq[FunctionIdentifier] = {
-    if (skipSession) BUILTIN_ONLY_PATH else FULL_RESOLUTION_PATH
-  }
+  private def resolutionPath(): Seq[FunctionIdentifier] = RESOLUTION_PATH
 
   /**
    * Maps a namespace template to an actual storage identifier for a specific function.
@@ -2362,8 +2360,8 @@ class SessionCatalog(
 
     operatorResult.orElse {
       // Use PATH-based resolution
-      val isResolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty
-      val path = resolutionPath(skipSession = isResolvingView)
+      // Always include session namespace - handleViewContext filters based on view context
+      val path = resolutionPath()
 
       // Iterate through PATH and return the first match (short-circuit evaluation)
       path.iterator.flatMap { namespace =>
@@ -2491,8 +2489,8 @@ class SessionCatalog(
       registry: FunctionRegistryBase[T]): Option[T] = {
 
     // Use PATH-based resolution
-    val isResolvingView = AnalysisContext.get.catalogAndNamespace.nonEmpty
-    val path = resolutionPath(skipSession = isResolvingView)
+    // Always include session namespace - handleViewContext filters based on view context
+    val path = resolutionPath()
 
     // Iterate through PATH and return the first match (short-circuit evaluation)
     path.iterator.flatMap { namespace =>
