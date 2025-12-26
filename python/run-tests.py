@@ -22,7 +22,6 @@ import logging
 from argparse import ArgumentParser
 import os
 import io
-import signal
 import platform
 import pty
 import re
@@ -268,10 +267,8 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
     except subprocess.TimeoutExpired:
         if timeout and proc:
             LOGGER.exception("Got TimeoutExpired while running %s with %s", test_name, pyspark_python)
-            # proc.send_signal(signal.SIGUSR1)
-            # time.sleep(3)
             proc.terminate()
-            proc.communicate(timeout=3)
+            proc.communicate(timeout=60)
         else:
             raise
     except BaseException:
