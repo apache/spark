@@ -1244,8 +1244,9 @@ object ExcludeShims {
     },
     bloopClasspathFilter := {
       if (!shimmedProjects(moduleName.value)) {
+        // Note: bloop output directories use "connect-shims" (without "spark-" prefix)
         cp => cp.filterNot { case (f1, f2) =>
-          f1.getPath.contains("spark-connect-shims") || f2.getPath.contains("spark-connect-shims")
+          f1.getPath.contains("connect-shims") || f2.getPath.contains("connect-shims")
         }
       } else {
         identity _
