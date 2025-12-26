@@ -30,6 +30,7 @@ from socket import AF_INET, AF_INET6, SOCK_STREAM, SOMAXCONN
 from signal import SIGHUP, SIGTERM, SIGCHLD, SIG_DFL, SIG_IGN, SIGINT
 
 from pyspark.serializers import read_int, write_int, write_with_length, UTF8Deserializer
+from pyspark.errors import PySparkRuntimeError
 
 
 def compute_real_exit_code(exit_code):
@@ -174,15 +175,20 @@ def manager():
 
         while True:
             if poller is not None:
-                ready_fds = [fd_reverse_map[fd] for fd, _ in poller.poll(1000)]
-            else:
-                try:
-                    ready_fds = select.select([0, listen_sock], [], [], 1)[0]
-                except select.error as ex:
-                    if ex[0] == EINTR:
-                        continue
+                ready_fds = []
+                # Unlike select, poll timeout is in millis.
+                for fd, event in poller.poll(1000):
+                    if event & (select.POLLIN | select.POLLHUP):
+                        # Data can be read (for POLLHUP peer hang up, so reads will return
+                        # 0 bytes, in which case we want to break out - this is consistent
+                        # with how select behaves).
+                        ready_fds.append(fd_reverse_map[fd])
                     else:
-                        raise
+                        # Could be POLLERR or POLLNVAL (select would raise in this case).
+                        raise PySparkRuntimeError(f"Polling error - event {event} on fd {fd}")
+            else:
+                # If poll is not available, use select.
+                ready_fds = select.select([0, listen_sock], [], [], 1)[0]
 
             if 0 in ready_fds:
                 try:
