@@ -1,0 +1,3 @@
+-J-Xmx4g
+-J-Xms4g
+-J-XX:MaxMetaspaceSize=1g
