@@ -199,6 +199,11 @@ class HandleWorkerExceptionTests(unittest.TestCase):
         self.assertIn(self.exception_bytes, result)
         self.assertNotIn(self.traceback_bytes, result)
 
+    # @unittest.skip("temporary test for PYSPARK_TEST_TIMEOUT")
+    def test_timeout(self):
+        import time
+
+        time.sleep(100)
 
 if __name__ == "__main__":
     from pyspark.tests.test_util import *  # noqa: F401

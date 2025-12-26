@@ -22,6 +22,7 @@ import logging
 from argparse import ArgumentParser
 import os
 import io
+import signal
 import platform
 import pty
 import re
@@ -246,20 +247,17 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
                                                   suffix=".log", delete=False)
     LOGGER.info(
         "Starting test(%s): %s (temp output: %s)", pyspark_python, test_name, per_test_output.name)
+    cmd = [os.path.join(SPARK_HOME, "bin/pyspark")] + test_name.split()
     start_time = time.time()
+
     retcode = None
+    proc = None
     try:
         if timeout:
-            proc = subprocess.Popen(
-                [os.path.join(SPARK_HOME, "bin/pyspark")] + test_name.split(),
-                stderr=per_test_output, stdout=per_test_output, env=env)
+            proc = subprocess.Popen(cmd, stderr=per_test_output, stdout=per_test_output, env=env)
             retcode = proc.wait(timeout=timeout)
         else:
-            retcode = TestRunner(
-                [os.path.join(SPARK_HOME, "bin/pyspark")] + test_name.split(),
-                env,
-                per_test_output
-            ).run()
+            retcode = TestRunner(cmd, env, per_test_output).run()
         if not keep_test_output:
             # There exists a race condition in Python and it causes flakiness in MacOS
             # https://github.com/python/cpython/issues/73885
@@ -268,10 +266,12 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
             else:
                 shutil.rmtree(tmp_dir, ignore_errors=True)
     except subprocess.TimeoutExpired:
-        if timeout:
+        if timeout and proc:
             LOGGER.exception("Got TimeoutExpired while running %s with %s", test_name, pyspark_python)
+            # proc.send_signal(signal.SIGUSR1)
+            # time.sleep(3)
             proc.terminate()
-            proc.communicate()
+            proc.communicate(timeout=3)
         else:
             raise
     except BaseException:
