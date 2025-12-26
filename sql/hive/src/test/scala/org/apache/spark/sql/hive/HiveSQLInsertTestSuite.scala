@@ -59,6 +59,11 @@ class HiveSQLInsertTestSuite extends SQLInsertTestSuite with TestHiveSingleton {
       Seq(true, false).foreach { overwrite =>
         withTable("t1") {
           createTable("t1", cols, Seq("int", "int"), cols.takeRight(1))
+          assert(spark.table("t1").count() === 0)
+
+          spark.conf.set("hive.exec.max.dynamic.partitions", "3")
+          processInsert("t1", df, overwrite = overwrite)
+          assert(spark.table("t1").count() === 3)
 
           spark.conf.set("hive.exec.max.dynamic.partitions", "2")
           checkError(
@@ -71,12 +76,9 @@ class HiveSQLInsertTestSuite extends SQLInsertTestSuite with TestHiveSingleton {
               "numWrittenParts" -> "3",
               "maxDynamicPartitionsKey" -> HiveConf.ConfVars.DYNAMICPARTITIONMAXPARTS.varname,
               "maxDynamicPartitions" -> "2"))
-          assert(spark.table("t1").count() === 0)
-
-          spark.conf.set("hive.exec.max.dynamic.partitions", "3")
-          processInsert("t1", df, overwrite = overwrite)
           assert(spark.table("t1").count() === 3)
 
+          spark.conf.set("hive.exec.max.dynamic.partitions", "3")
           processInsert("t1", df, overwrite = overwrite)
           val expectedRowCount = if (overwrite) 3 else 6
           assert(spark.table("t1").count() === expectedRowCount)
