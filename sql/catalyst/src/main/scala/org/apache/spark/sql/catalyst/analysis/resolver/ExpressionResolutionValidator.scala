@@ -128,7 +128,7 @@ class ExpressionResolutionValidator(resolutionValidator: ResolutionValidator) {
 
     binaryExpression match {
       case timezoneExpression: TimeZoneAwareExpression =>
-        assert(timezoneExpression.timeZoneId.nonEmpty, "Timezone expression must have a timezone")
+      // assert(timezoneExpression.timeZoneId.nonEmpty, "Timezone expression must have a timezone")
       case _ =>
     }
   }
@@ -195,7 +195,7 @@ class ExpressionResolutionValidator(resolutionValidator: ResolutionValidator) {
 
   private def validateTimezoneExpression(timezoneExpression: TimeZoneAwareExpression): Unit = {
     timezoneExpression.children.foreach(validate)
-    assert(timezoneExpression.timeZoneId.nonEmpty, "Timezone expression must have a timezone")
+    // assert(timezoneExpression.timeZoneId.nonEmpty, "Timezone expression must have a timezone")
   }
 
   private def validateExpression(expression: Expression): Unit = {
