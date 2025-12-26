@@ -311,6 +311,70 @@ class FunctionQualificationSuite extends SharedSparkSession {
     sql("DROP TEMPORARY FUNCTION abs")
   }
 
+  test("cannot create both scalar and table temporary function with same name") {
+    // Create a scalar temporary function
+    sql("CREATE TEMPORARY FUNCTION dup_test() RETURNS INT RETURN 42")
+    assert(sql("SELECT dup_test()").collect()(0).getInt(0) == 42)
+
+    // Try to create a table function with the same name - should fail
+    val exception = intercept[AnalysisException] {
+      sql("CREATE TEMPORARY FUNCTION dup_test() RETURNS TABLE(val INT) RETURN SELECT 99")
+    }
+    checkError(
+      exception = exception,
+      condition = "ROUTINE_ALREADY_EXISTS",
+      parameters = Map(
+        "routineName" -> "`dup_test`",
+        "newRoutineType" -> "routine",
+        "existingRoutineType" -> "routine"))
+
+    // With OR REPLACE, it should replace the scalar function with table function
+    sql("CREATE OR REPLACE TEMPORARY FUNCTION dup_test() RETURNS TABLE(val INT) RETURN SELECT 99")
+
+    // Now it's a table function, scalar usage should fail
+    val scalarException = intercept[AnalysisException] {
+      sql("SELECT dup_test()")
+    }
+    assert(scalarException.getMessage.contains("NOT_A_SCALAR_FUNCTION"))
+
+    // Table usage should work
+    assert(sql("SELECT * FROM dup_test()").collect()(0).getInt(0) == 99)
+
+    sql("DROP TEMPORARY FUNCTION dup_test")
+  }
+
+  test("cannot create both table and scalar temporary function with same name") {
+    // Create a table temporary function first
+    sql("CREATE TEMPORARY FUNCTION dup_test2() RETURNS TABLE(val INT) RETURN SELECT 99")
+    assert(sql("SELECT * FROM dup_test2()").collect()(0).getInt(0) == 99)
+
+    // Try to create a scalar function with the same name - should fail
+    val exception = intercept[AnalysisException] {
+      sql("CREATE TEMPORARY FUNCTION dup_test2() RETURNS INT RETURN 42")
+    }
+    checkError(
+      exception = exception,
+      condition = "ROUTINE_ALREADY_EXISTS",
+      parameters = Map(
+        "routineName" -> "`dup_test2`",
+        "newRoutineType" -> "routine",
+        "existingRoutineType" -> "routine"))
+
+    // With OR REPLACE, it should replace the table function with scalar function
+    sql("CREATE OR REPLACE TEMPORARY FUNCTION dup_test2() RETURNS INT RETURN 42")
+
+    // Now it's a scalar function
+    assert(sql("SELECT dup_test2()").collect()(0).getInt(0) == 42)
+
+    // Table usage should fail
+    val tableException = intercept[AnalysisException] {
+      sql("SELECT * FROM dup_test2()")
+    }
+    assert(tableException.getMessage.contains("NOT_A_TABLE_FUNCTION"))
+
+    sql("DROP TEMPORARY FUNCTION dup_test2")
+  }
+
   // ==================== View Resolution with Temporary Functions ====================
   // Tests that temporary views can correctly reference temporary functions through
   // the PATH resolution system with proper view context filtering.

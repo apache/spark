@@ -2179,6 +2179,9 @@ class SessionCatalog(
 
   /**
    * Registers a temporary or permanent SQL function into a session-specific function registry.
+   * For temporary functions, validates that the function name doesn't exist as a different type
+   * (scalar vs. table) to prevent ambiguous DROP operations.
+   * For persistent functions, the metastore already enforces this constraint.
    */
   private def registerUserDefinedFunction[T](
       function: UserDefinedFunction,
@@ -2193,18 +2196,34 @@ class SessionCatalog(
       // Use FunctionIdentifier with TEMP_FUNCTION_DB for temporary functions
       val tempIdentifier = tempFunctionIdentifier(function.name.funcName)
 
-      // Check if this temp function already exists
+      // Check if this temp function already exists in the target registry
       if (registry.functionExists(tempIdentifier) && !overrideIfExists) {
         throw QueryCompilationErrors.functionAlreadyExistsError(function.name)
+      }
+
+      // Check if function exists in the OTHER registry as a different type.
+      // This prevents having both scalar and table temporary functions with the same name,
+      // which would make DROP TEMPORARY FUNCTION ambiguous (it would drop both).
+      val otherRegistry: FunctionRegistryBase[_] =
+        if (isTableFunction) functionRegistry else tableFunctionRegistry
+      if (otherRegistry.functionExists(tempIdentifier) && !overrideIfExists) {
+        throw QueryCompilationErrors.functionAlreadyExistsError(function.name)
+      }
+
+      // With OR REPLACE, drop from the other registry first if it exists there
+      if (overrideIfExists) {
+        otherRegistry.dropFunction(tempIdentifier)
       }
 
       val info = function.toExpressionInfo
       registry.registerFunction(tempIdentifier, info, functionBuilder)
     } else {
-      // Persistent function - use original logic
+      // Persistent function - the metastore already enforces cross-type uniqueness,
+      // so we only check the target registry here.
       if (registry.functionExists(function.name) && !overrideIfExists) {
         throw QueryCompilationErrors.functionAlreadyExistsError(function.name)
       }
+
       val info = function.toExpressionInfo
       registry.registerFunction(function.name, info, functionBuilder)
     }
