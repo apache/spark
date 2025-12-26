@@ -373,8 +373,12 @@ object FunctionRegistry {
     // misc non-aggregate functions
     expression[Abs]("abs"),
     expression[Coalesce]("coalesce"),
+    expressionBuilder("explode", ExplodeExpressionBuilder),
+    expressionGeneratorBuilderOuter("explode_outer", ExplodeExpressionBuilder),
     expression[Greatest]("greatest"),
     expression[If]("if"),
+    expressionBuilder("inline", InlineExpressionBuilder),
+    expressionGeneratorBuilderOuter("inline_outer", InlineExpressionBuilder),
     expression[IsNaN]("isnan"),
     expression[Nvl]("ifnull", setAlias = true),
     expression[IsNull]("isnull"),
@@ -385,10 +389,13 @@ object FunctionRegistry {
     expression[NullIfZero]("nullifzero"),
     expression[Nvl]("nvl"),
     expression[Nvl2]("nvl2"),
+    expressionBuilder("posexplode", PosExplodeExpressionBuilder),
+    expressionGeneratorBuilderOuter("posexplode_outer", PosExplodeExpressionBuilder),
     expression[Rand]("rand"),
     expression[Rand]("random", true, Some("3.0.0")),
     expression[Randn]("randn"),
     expression[RandStr]("randstr"),
+    expression[Stack]("stack"),
     expression[Uniform]("uniform"),
     expression[ZeroIfNull]("zeroifnull"),
     CaseWhen.registryEntry,
@@ -595,6 +602,7 @@ object FunctionRegistry {
     expression[StringLocate]("locate"),
     expressionBuilder("lpad", LPadExpressionBuilder),
     expression[StringTrimLeft]("ltrim"),
+    expression[JsonTuple]("json_tuple"),
     expression[StringLocate]("position", true, Some("2.3.0")),
     expression[FormatString]("printf", true),
     expression[RegExpExtract]("regexp_extract"),
@@ -786,16 +794,6 @@ object FunctionRegistry {
     expression[MapZipWith]("map_zip_with"),
     expression[ZipWith]("zip_with"),
     expression[Get]("get"),
-
-    // generator functions (for scalar context - SELECT clause)
-    // Note: These same functions are also in TableFunctionRegistry for table context (FROM clause).
-    // The _outer variants (explode_outer, posexplode_outer, etc.) are ONLY in the table registry
-    // because the "outer" semantic only makes sense in table context (affects the Generate node).
-    expressionBuilder("explode", ExplodeExpressionBuilder),
-    expressionBuilder("inline", InlineExpressionBuilder),
-    expressionBuilder("posexplode", PosExplodeExpressionBuilder),
-    expression[JsonTuple]("json_tuple"),
-    expression[Stack]("stack"),
 
     CreateStruct.registryEntry,
 
