@@ -15,6 +15,6 @@
 # limitations under the License.
 #
 
--J-Xmx4g
--J-Xms4g
+-J-Xmx8g
+-J-Xms8g
 -J-XX:MaxMetaspaceSize=1g
