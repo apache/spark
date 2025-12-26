@@ -2114,4 +2114,85 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
       sql(s"CREATE TABLE t (c STRING COLLATE system.builtin.UTF8_LCASE)")
     }
   }
+
+  test("null aware anti join from NOT IN with collated columns") {
+    val expectedAnswer = Seq()
+    val (tableName1, tableName2) = ("t1", "t2")
+    withTable(tableName1, tableName2) {
+      sql(s"CREATE TABLE $tableName1 (C1 STRING COLLATE UTF8_LCASE_RTRIM)")
+      sql(s"CREATE TABLE $tableName2 (C1 STRING COLLATE UTF8_LCASE_RTRIM)")
+      sql(s"INSERT INTO $tableName1 VALUES ('a')")
+      sql(s"INSERT INTO $tableName2 VALUES ('A   ')")
+
+      checkAnswer(sql(s"SELECT * FROM $tableName1 WHERE C1 NOT IN (SELECT * FROM $tableName2)"),
+        expectedAnswer)
+
+      sql(s"INSERT INTO $tableName1 VALUES (NULL)")
+      checkAnswer(sql(s"SELECT * FROM $tableName1 WHERE C1 NOT IN (SELECT * FROM $tableName2)"),
+        expectedAnswer)
+
+      sql(s"INSERT INTO $tableName1 VALUES ('b')")
+      checkAnswer(sql(s"SELECT * FROM $tableName1 WHERE C1 NOT IN (SELECT * FROM $tableName2)"),
+        expectedAnswer ++ Seq(Row("b")))
+      checkAnswer(sql(s"SELECT * FROM $tableName1 WHERE C1 NOT IN (SELECT * FROM $tableName2)" +
+        s" AND C1 = 'B  '"), Row("b"))
+      checkAnswer(sql(s"SELECT * FROM $tableName1 WHERE C1 NOT IN (SELECT * FROM $tableName2)" +
+        s" AND C1 > 'b'"), Seq())
+      checkAnswer(sql(s"SELECT * FROM $tableName1 WHERE C1 NOT IN (SELECT * FROM $tableName2)" +
+        s" AND C1 = 'c'"), Seq())
+
+      // This case results in empty output due to NULL in the t2.
+      sql(s"INSERT INTO $tableName2 VALUES (NULL)")
+      checkAnswer(sql(s"SELECT * FROM $tableName1 WHERE C1 NOT IN (SELECT * FROM $tableName2)"),
+        Seq())
+    }
+  }
+
+  test("null aware anti join from NOT IN with collated columns in array type") {
+    val expectedAnswer = Seq()
+    val (tableName1, tableName2) = ("t1", "t2")
+    withTable(tableName1, tableName2) {
+      sql(s"CREATE TABLE $tableName1 (C1 ARRAY<STRING COLLATE UTF8_LCASE_RTRIM>)")
+      sql(s"CREATE TABLE $tableName2 (C1 ARRAY<STRING COLLATE UTF8_LCASE_RTRIM>)")
+      sql(s"INSERT INTO $tableName1 VALUES (ARRAY('a  ', 'Aa '))")
+      sql(s"INSERT INTO $tableName2 VALUES (ARRAY('A', 'aa'))")
+
+      checkAnswer(sql(s"SELECT * FROM $tableName1 WHERE C1 NOT IN (SELECT * FROM $tableName2)"),
+        expectedAnswer)
+
+      sql(s"INSERT INTO $tableName1 VALUES (NULL)")
+      checkAnswer(sql(s"SELECT * FROM $tableName1 WHERE C1 NOT IN (SELECT * FROM $tableName2)"),
+        expectedAnswer)
+
+      // This case results in empty output due to NULL in the t2.
+      sql(s"INSERT INTO $tableName2 VALUES (NULL)")
+      checkAnswer(sql(s"SELECT * FROM $tableName1 WHERE C1 NOT IN (SELECT * FROM $tableName2)"),
+        Seq())
+    }
+  }
+
+  test("null aware anti join from NOT IN with collated columns in struct type") {
+    val expectedAnswer = Seq()
+    val (tableName1, tableName2) = ("t1", "t2")
+    withTable(tableName1, tableName2) {
+      sql(s"CREATE TABLE $tableName1 (C1 STRUCT<x: STRING COLLATE UTF8_LCASE_RTRIM," +
+        s" y: STRING COLLATE UTF8_LCASE_RTRIM>)")
+      sql(s"CREATE TABLE $tableName2 (C1 STRUCT<x: STRING COLLATE UTF8_LCASE_RTRIM," +
+        s" y: STRING COLLATE UTF8_LCASE_RTRIM>)")
+      sql(s"INSERT INTO $tableName1 VALUES (named_struct('x', 'a  ', 'y', 'Aa '))")
+      sql(s"INSERT INTO $tableName2 VALUES (named_struct('x', 'A', 'y', 'aa'))")
+
+      checkAnswer(sql(s"SELECT * FROM $tableName1 WHERE C1 NOT IN (SELECT * FROM $tableName2)"),
+        expectedAnswer)
+
+      sql(s"INSERT INTO $tableName1 VALUES (NULL)")
+      checkAnswer(sql(s"SELECT * FROM $tableName1 WHERE C1 NOT IN (SELECT * FROM $tableName2)"),
+        expectedAnswer)
+
+      // This case results in empty output due to NULL in the t2.
+      sql(s"INSERT INTO $tableName2 VALUES (NULL)")
+      checkAnswer(sql(s"SELECT * FROM $tableName1 WHERE C1 NOT IN (SELECT * FROM $tableName2)"),
+        Seq())
+    }
+  }
 }
