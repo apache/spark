@@ -28,7 +28,6 @@ import re
 import shutil
 import subprocess
 import sys
-import signal
 import tempfile
 from threading import Thread, Lock
 import time
@@ -250,11 +249,17 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
     start_time = time.time()
     retcode = None
     try:
-        retcode = TestRunner(
-            [os.path.join(SPARK_HOME, "bin/pyspark")] + test_name.split(),
-            env,
-            per_test_output
-        ).run()
+        if timeout:
+            proc = subprocess.Popen(
+                [os.path.join(SPARK_HOME, "bin/pyspark")] + test_name.split(),
+                stderr=per_test_output, stdout=per_test_output, env=env)
+            retcode = proc.wait(timeout=timeout)
+        else:
+            retcode = TestRunner(
+                [os.path.join(SPARK_HOME, "bin/pyspark")] + test_name.split(),
+                env,
+                per_test_output
+            ).run()
         if not keep_test_output:
             # There exists a race condition in Python and it causes flakiness in MacOS
             # https://github.com/python/cpython/issues/73885
@@ -263,9 +268,12 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
             else:
                 shutil.rmtree(tmp_dir, ignore_errors=True)
     except subprocess.TimeoutExpired:
-        LOGGER.exception("Got TimeoutExpired while running %s with %s", test_name, pyspark_python)
-        proc.terminate()
-        proc.communicate()
+        if timeout:
+            LOGGER.exception("Got TimeoutExpired while running %s with %s", test_name, pyspark_python)
+            proc.terminate()
+            proc.communicate()
+        else:
+            raise
     except BaseException:
         LOGGER.exception("Got exception while running %s with %s", test_name, pyspark_python)
         # Here, we use os._exit() instead of sys.exit() in order to force Python to exit even if
