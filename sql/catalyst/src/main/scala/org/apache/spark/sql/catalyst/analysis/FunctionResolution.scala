@@ -130,6 +130,49 @@ class FunctionResolution(
     }
   }
 
+  /**
+   * Validates that a function exists and can be used in the given context.
+   * This is used by the LookupFunctions analyzer rule for early validation.
+   *
+   * @param nameParts The function name parts.
+   * @param node The UnresolvedFunction node for error reporting.
+   * @return Unit if valid, throws AnalysisException if invalid.
+   */
+  def validateFunctionExistence(
+      nameParts: Seq[String],
+      node: UnresolvedFunction): Unit = {
+
+    // Check if function exists as scalar function.
+    val existsAsScalar = lookupBuiltinOrTempFunction(nameParts, Some(node)).isDefined
+
+    if (existsAsScalar) {
+      // Function exists in scalar registry, can be used in scalar context.
+      return
+    }
+
+    // Check if function exists as table function.
+    val existsAsTable = lookupBuiltinOrTempTableFunction(nameParts).isDefined
+
+    if (existsAsTable) {
+      // Function exists ONLY in table registry - cannot be used in scalar context.
+      throw QueryCompilationErrors.notAScalarFunctionError(nameParts.mkString("."), node)
+    }
+
+    // Not found in builtin/temp registries - check external catalog.
+    val CatalogAndIdentifier(catalog, ident) = relationResolution.expandIdentifier(nameParts)
+
+    if (!catalog.asFunctionCatalog.functionExists(ident)) {
+      // Function doesn't exist anywhere - throw UNRESOLVED_ROUTINE error.
+      val catalogPath = (catalog.name() +: catalogManager.currentNamespace).mkString(".")
+      throw QueryCompilationErrors.unresolvedRoutineError(
+        nameParts,
+        Seq("system.builtin", "system.session", catalogPath),
+        node.origin)
+    }
+
+    // Function exists in external catalog - validation passes.
+  }
+
   def resolveBuiltinOrTempFunction(
       name: Seq[String],
       arguments: Seq[Expression],

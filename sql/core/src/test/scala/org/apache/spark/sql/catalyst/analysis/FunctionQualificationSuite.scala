@@ -310,4 +310,318 @@ class FunctionQualificationSuite extends SharedSparkSession {
 
     sql("DROP TEMPORARY FUNCTION abs")
   }
+
+  // ==================== View Resolution with Temporary Functions ====================
+  // Tests that temporary views can correctly reference temporary functions through
+  // the PATH resolution system with proper view context filtering.
+
+  test("temporary view can reference temporary function") {
+    // Verifies that temporary functions are found when resolving views that reference them.
+    sql("CREATE TEMPORARY FUNCTION temp_upper(x STRING) RETURNS STRING RETURN upper(x)")
+
+    withTempView("v1") {
+      // Create temporary view that uses the temp function.
+      sql("CREATE TEMPORARY VIEW v1 AS SELECT temp_upper(col1) as result " +
+        "FROM VALUES ('hello'), ('world') AS t(col1)")
+
+      // Query the view - the temp function should be resolved.
+      val result = sql("SELECT * FROM v1").collect()
+      assert(result.length == 2)
+      assert(result(0).getString(0) == "HELLO")
+      assert(result(1).getString(0) == "WORLD")
+    }
+
+    sql("DROP TEMPORARY FUNCTION temp_upper")
+  }
+
+  test("permanent view cannot reference temporary function") {
+    // Verifies that creating a permanent view with a temporary function fails.
+    sql("CREATE TEMPORARY FUNCTION temp_func() RETURNS INT RETURN 42")
+
+    withView("perm_view") {
+      val exception = intercept[AnalysisException] {
+        sql("CREATE VIEW perm_view AS SELECT temp_func() as result FROM range(1)")
+      }
+      checkError(
+        exception = exception,
+        condition = "INVALID_TEMP_OBJ_REFERENCE",
+        parameters = Map(
+          "obj" -> "VIEW",
+          "objName" -> "`spark_catalog`.`default`.`perm_view`",
+          "tempObj" -> "FUNCTION",
+          "tempObjName" -> "`temp_func`"))
+    }
+
+    sql("DROP TEMPORARY FUNCTION temp_func")
+  }
+
+  test("querying view with temp function after session restart fails gracefully") {
+    // Simulates querying a view that referenced a temp function after the function
+    // is no longer registered (e.g., after session restart).
+    sql("CREATE TEMPORARY FUNCTION session_func(x INT) RETURNS INT RETURN x * 2")
+
+    withTempView("v_with_func") {
+      sql("CREATE TEMPORARY VIEW v_with_func AS SELECT session_func(5) as result")
+
+      // Query works when function is registered.
+      assert(sql("SELECT * FROM v_with_func").collect()(0).getInt(0) == 10)
+
+      // Drop the function (simulates session restart).
+      sql("DROP TEMPORARY FUNCTION session_func")
+
+      // Now querying the view should fail with UNRESOLVED_ROUTINE.
+      val exception = intercept[AnalysisException] {
+        sql("SELECT * FROM v_with_func")
+      }
+      assert(exception.getMessage.contains("UNRESOLVED_ROUTINE"))
+      assert(exception.getMessage.contains("session_func"))
+    }
+  }
+
+  test("temporary view with temp function shadowing builtin") {
+    // Verifies that views correctly use temporary functions that shadow builtins.
+    sql("CREATE TEMPORARY FUNCTION abs() RETURNS INT RETURN 999")
+
+    withTempView("v_shadow") {
+      // View should use the temp function (shadowing the builtin).
+      sql("CREATE TEMPORARY VIEW v_shadow AS SELECT abs() as result")
+      assert(sql("SELECT * FROM v_shadow").collect()(0).getInt(0) == 999)
+    }
+
+    sql("DROP TEMPORARY FUNCTION abs")
+  }
+
+  test("multiple temp functions in same view") {
+    // Verifies that views can reference multiple temporary functions.
+    sql("CREATE TEMPORARY FUNCTION func1(x INT) RETURNS INT RETURN x + 1")
+    sql("CREATE TEMPORARY FUNCTION func2(x INT) RETURNS INT RETURN x * 2")
+
+    withTempView("v_multi") {
+      sql("""CREATE TEMPORARY VIEW v_multi AS
+            |SELECT func1(value) as f1, func2(value) as f2
+            |FROM VALUES (5), (10) AS t(value)""".stripMargin)
+
+      val result = sql("SELECT * FROM v_multi").collect()
+      assert(result.length == 2)
+      assert(result(0).getInt(0) == 6)  // func1(5) = 6.
+      assert(result(0).getInt(1) == 10) // func2(5) = 10.
+      assert(result(1).getInt(0) == 11) // func1(10) = 11.
+      assert(result(1).getInt(1) == 20) // func2(10) = 20.
+    }
+
+    sql("DROP TEMPORARY FUNCTION func1")
+    sql("DROP TEMPORARY FUNCTION func2")
+  }
+
+  test("nested views with temp functions") {
+    // Verifies that nested views (view referencing another view) work with temp functions.
+    sql("CREATE TEMPORARY FUNCTION add_ten(x INT) RETURNS INT RETURN x + 10")
+
+    withTempView("v_base", "v_nested") {
+      // Base view uses the temp function.
+      sql("CREATE TEMPORARY VIEW v_base AS SELECT add_ten(value) as result " +
+        "FROM VALUES (1), (2), (3) AS t(value)")
+
+      // Nested view references the base view.
+      sql("CREATE TEMPORARY VIEW v_nested AS SELECT result * 2 as doubled FROM v_base")
+
+      val result = sql("SELECT * FROM v_nested").collect()
+      assert(result.length == 3)
+      assert(result(0).getInt(0) == 22) // (1+10)*2 = 22.
+      assert(result(1).getInt(0) == 24) // (2+10)*2 = 24.
+      assert(result(2).getInt(0) == 26) // (3+10)*2 = 26.
+    }
+
+    sql("DROP TEMPORARY FUNCTION add_ten")
+  }
+
+  // ==================== Persistent Function Resolution and PATH Order ====================
+  // Tests that persistent functions are resolved after session and builtin functions,
+  // and that PATH order is correctly maintained.
+
+  test("persistent function resolved after builtin and session") {
+    withUserDefinedFunction("my_upper" -> false) {
+      // Create a persistent function.
+      sql("""CREATE FUNCTION my_upper(x STRING)
+            |RETURNS STRING
+            |LANGUAGE SQL
+            |RETURN upper(concat(x, '_persistent'))""".stripMargin)
+
+      // Unqualified call should find the persistent function.
+      val result1 = sql("SELECT my_upper('test')").collect()
+      assert(result1(0).getString(0) == "TEST_PERSISTENT")
+
+      // Now create a temporary function with the same name.
+      sql("""CREATE TEMPORARY FUNCTION my_upper(x STRING)
+            |RETURNS STRING
+            |RETURN upper(concat(x, '_temp'))""".stripMargin)
+
+      // Unqualified call should now find the temp function (PATH order: session before persistent).
+      val result2 = sql("SELECT my_upper('test')").collect()
+      assert(result2(0).getString(0) == "TEST_TEMP")
+
+      // Fully qualified call should still find the persistent function.
+      val result3 = sql("SELECT spark_catalog.default.my_upper('test')").collect()
+      assert(result3(0).getString(0) == "TEST_PERSISTENT")
+
+      sql("DROP TEMPORARY FUNCTION my_upper")
+    }
+  }
+
+  test("builtin shadows persistent function with same name") {
+    withUserDefinedFunction("my_abs" -> false) {
+      // Create a persistent function named 'my_abs'.
+      sql("""CREATE FUNCTION my_abs(x INT)
+            |RETURNS INT
+            |LANGUAGE SQL
+            |RETURN x + 1000""".stripMargin)
+
+      // Create builtin 'abs' - this shadows any persistent 'abs'.
+      // Unqualified call finds the builtin.
+      val result1 = sql("SELECT abs(-5)").collect()
+      assert(result1(0).getInt(0) == 5) // Builtin abs.
+
+      // Fully qualified call finds our persistent function.
+      val result2 = sql("SELECT spark_catalog.default.my_abs(-5)").collect()
+      assert(result2(0).getInt(0) == 995)
+    }
+  }
+
+  test("persistent scalar function overrides persistent table function") {
+    withUserDefinedFunction("my_func" -> false, "my_table_func" -> false) {
+      // Create a persistent scalar function.
+      sql("""CREATE FUNCTION my_func()
+            |RETURNS INT
+            |LANGUAGE SQL
+            |RETURN 42""".stripMargin)
+
+      // Create a persistent table function with a different name.
+      sql("""CREATE FUNCTION my_table_func(x INT)
+            |RETURNS TABLE(val INT)
+            |RETURN SELECT x * 2""".stripMargin)
+
+      // Verify scalar function works.
+      val result1 = sql("SELECT my_func()").collect()
+      assert(result1(0).getInt(0) == 42)
+
+      // Verify table function works.
+      val result2 = sql("SELECT * FROM my_table_func(5)").collect()
+      assert(result2(0).getInt(0) == 10)
+
+      // Replace the table function with a scalar function (cross-type test).
+      sql("DROP FUNCTION my_table_func")
+      sql("""CREATE FUNCTION my_table_func(x INT)
+            |RETURNS INT
+            |LANGUAGE SQL
+            |RETURN x * 3""".stripMargin)
+
+      // Using in scalar context should work (finds scalar version).
+      val result3 = sql("SELECT my_table_func(5)").collect()
+      assert(result3(0).getInt(0) == 15)
+
+      // Using in table context should fail (no longer a table function).
+      val exception = intercept[AnalysisException] {
+        sql("SELECT * FROM my_table_func(5)")
+      }
+      assert(exception.getMessage.contains("NOT_A_TABLE_FUNCTION"))
+    }
+  }
+
+  // ==================== Schema Name Collisions ====================
+  // Tests that persistent functions in schemas named "builtin" or "session"
+  // can only be resolved with fully qualified names.
+
+  test("persistent function in 'builtin' schema accessible without collision") {
+    withDatabase("builtin") {
+      sql("CREATE DATABASE IF NOT EXISTS builtin")
+      sql("USE builtin")
+      // Create a persistent function in schema "builtin" with a unique name.
+      sql("""CREATE FUNCTION my_unique_func(x INT)
+            |RETURNS INT
+            |LANGUAGE SQL
+            |RETURN x + 100""".stripMargin)
+
+      // Unqualified call should find the persistent function (no collision with system.builtin).
+      val result1 = sql("SELECT my_unique_func(5)").collect()
+      assert(result1(0).getInt(0) == 105)
+
+      // Two-part qualification "builtin.my_unique_func" should also find it.
+      val result2 = sql("SELECT builtin.my_unique_func(5)").collect()
+      assert(result2(0).getInt(0) == 105)
+
+      // Fully qualified call should also work.
+      val result3 = sql("SELECT spark_catalog.builtin.my_unique_func(5)").collect()
+      assert(result3(0).getInt(0) == 105)
+
+      // Cleanup.
+      sql("DROP FUNCTION my_unique_func")
+      sql("USE default")
+    }
+  }
+
+  test("temp function shadows persistent in 'builtin' schema") {
+    withDatabase("builtin") {
+      sql("CREATE DATABASE IF NOT EXISTS builtin")
+      sql("USE builtin")
+      // Create a persistent function in schema "builtin".
+      sql("""CREATE FUNCTION my_shadow()
+            |RETURNS STRING
+            |LANGUAGE SQL
+            |RETURN 'persistent_builtin'""".stripMargin)
+
+      // Unqualified call finds the persistent function.
+      val result1 = sql("SELECT my_shadow()").collect()
+      assert(result1(0).getString(0) == "persistent_builtin")
+
+      // Now create a temporary function with the same name.
+      sql("CREATE TEMPORARY FUNCTION my_shadow() RETURNS STRING RETURN 'temp'")
+
+      // Unqualified call now finds temp function (system.session has priority in PATH).
+      val result2 = sql("SELECT my_shadow()").collect()
+      assert(result2(0).getString(0) == "temp")
+
+      // Two-part "builtin.my_shadow" should still find the persistent one
+      // (resolves to spark_catalog.builtin since system.builtin doesn't have it).
+      val result3 = sql("SELECT builtin.my_shadow()").collect()
+      assert(result3(0).getString(0) == "persistent_builtin")
+
+      // Fully qualified finds the persistent function.
+      val result4 = sql("SELECT spark_catalog.builtin.my_shadow()").collect()
+      assert(result4(0).getString(0) == "persistent_builtin")
+
+      // Qualified temp function access.
+      val result5 = sql("SELECT session.my_shadow()").collect()
+      assert(result5(0).getString(0) == "temp")
+
+      sql("DROP TEMPORARY FUNCTION my_shadow")
+      sql("DROP FUNCTION my_shadow")
+      sql("USE default")
+    }
+  }
+
+  test("builtin function has priority over persistent in 'builtin' schema") {
+    withDatabase("builtin") {
+      sql("CREATE DATABASE IF NOT EXISTS builtin")
+      // Create a persistent function named "upper" in schema "builtin".
+      sql("""CREATE FUNCTION builtin.upper(x STRING)
+            |RETURNS STRING
+            |LANGUAGE SQL
+            |RETURN concat(x, '_custom')""".stripMargin)
+
+      // Unqualified call finds system.builtin.upper.
+      val result1 = sql("SELECT upper('test')").collect()
+      assert(result1(0).getString(0) == "TEST") // Builtin behavior, not "_custom".
+
+      // Two-part "builtin.upper" also finds system.builtin.upper.
+      val result2 = sql("SELECT builtin.upper('test')").collect()
+      assert(result2(0).getString(0) == "TEST")
+
+      // Fully qualified finds the persistent function.
+      val result3 = sql("SELECT spark_catalog.builtin.upper('test')").collect()
+      assert(result3(0).getString(0) == "test_custom")
+
+      // Cleanup with fully qualified name.
+      sql("DROP FUNCTION spark_catalog.builtin.upper")
+    }
+  }
 }

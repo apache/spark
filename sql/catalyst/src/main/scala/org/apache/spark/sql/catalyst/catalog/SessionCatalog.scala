@@ -126,10 +126,11 @@ class SessionCatalog(
    * 1. system.session (temporary functions)
    * 2. system.builtin (built-in functions)
    *
-   * View context handling: When resolving a view, handleViewContext filters temp functions
-   * based on the view's referred function list, so we always include system.session in the path.
+   * When resolving a view, the system.session namespace is included in the path, but
+   * handleViewContext filters to only return temporary functions that were referred to
+   * when the view was created.
    *
-   * These are cached for performance since they're accessed frequently.
+   * These identifiers are cached for performance since they're accessed frequently.
    */
   private val SESSION_NAMESPACE_TEMPLATE = FunctionIdentifier(
     funcName = "",
@@ -141,12 +142,12 @@ class SessionCatalog(
     database = Some(CatalogManager.BUILTIN_NAMESPACE),
     catalog = Some(CatalogManager.SYSTEM_CATALOG_NAME))
 
-  // Cached resolution path: always includes both session and builtin namespaces
+  // The resolution path always includes both session and builtin namespaces.
   private val RESOLUTION_PATH = Seq(SESSION_NAMESPACE_TEMPLATE, BUILTIN_NAMESPACE_TEMPLATE)
 
   /**
    * Returns the resolution path for function lookup.
-   * @return Ordered sequence of namespace identifiers
+   * @return Ordered sequence of namespace identifiers.
    */
   private def resolutionPath(): Seq[FunctionIdentifier] = RESOLUTION_PATH
 
@@ -2336,22 +2337,22 @@ class SessionCatalog(
    * @return ExpressionInfo if function found, None otherwise
    */
   /**
-   * Generic helper for looking up functions using PATH-based resolution.
-   * Searches through the resolution path (temp to builtin) with proper view context handling.
+   * Looks up functions using PATH-based resolution.
+   * Searches through the resolution path (session then builtin) with view context handling.
    *
-   * @param name The function name (unqualified)
-   * @param registry The registry to search (FunctionRegistry or TableFunctionRegistry)
-   * @param checkBuiltinOperators Whether to check built-in operators first (scalar functions only)
+   * @param name The function name (unqualified).
+   * @param registry The registry to search (FunctionRegistry or TableFunctionRegistry).
+   * @param checkBuiltinOperators Whether to check built-in operators first (scalar functions only).
    * @tparam T The registry's type parameter (Expression for FunctionRegistry,
-   *           LogicalPlan for TableFunctionRegistry)
-   * @return ExpressionInfo if function found, None otherwise
+   *           LogicalPlan for TableFunctionRegistry).
+   * @return ExpressionInfo if function found, None otherwise.
    */
   private def lookupFunctionWithShadowing[T](
       name: String,
       registry: FunctionRegistryBase[T],
       checkBuiltinOperators: Boolean): Option[ExpressionInfo] = {
 
-    // Check built-in operators first (only for scalar functions)
+    // Check built-in operators first (only for scalar functions).
     val operatorResult = if (checkBuiltinOperators) {
       FunctionRegistry.builtinOperators.get(name.toLowerCase(Locale.ROOT))
     } else {
@@ -2359,11 +2360,10 @@ class SessionCatalog(
     }
 
     operatorResult.orElse {
-      // Use PATH-based resolution
-      // Always include session namespace - handleViewContext filters based on view context
+      // Use PATH-based resolution: iterate through namespaces until a match is found.
       val path = resolutionPath()
 
-      // Iterate through PATH and return the first match (short-circuit evaluation)
+      // Use iterator for short-circuit evaluation (stops at first match).
       path.iterator.flatMap { namespace =>
         lookupInNamespace(namespace, name, registry)
       }.nextOption()
@@ -2473,40 +2473,39 @@ class SessionCatalog(
     resolveFunctionWithFallback(name, arguments, tableFunctionRegistry)
 
   /**
-   * Helper to resolve functions using PATH-based resolution.
+   * Resolves functions using PATH-based resolution.
    * Searches through the resolution path, returning the first function found.
    *
-   * @param name The function name (unqualified)
-   * @param arguments The arguments to pass to the function
-   * @param registry The registry to search (FunctionRegistry or TableFunctionRegistry)
+   * @param name The function name (unqualified).
+   * @param arguments The arguments to pass to the function.
+   * @param registry The registry to search (FunctionRegistry or TableFunctionRegistry).
    * @tparam T The registry's type parameter (Expression for FunctionRegistry,
-   *           LogicalPlan for TableFunctionRegistry)
-   * @return Resolved function if found, None otherwise
+   *           LogicalPlan for TableFunctionRegistry).
+   * @return Resolved function if found, None otherwise.
    */
   private def resolveFunctionWithFallback[T](
       name: String,
       arguments: Seq[Expression],
       registry: FunctionRegistryBase[T]): Option[T] = {
 
-    // Use PATH-based resolution
-    // Always include session namespace - handleViewContext filters based on view context
+    // Use PATH-based resolution: iterate through namespaces until a match is found.
     val path = resolutionPath()
 
-    // Iterate through PATH and return the first match (short-circuit evaluation)
+    // Use iterator for short-circuit evaluation (stops at first match).
     path.iterator.flatMap { namespace =>
       resolveInNamespace(namespace, name, arguments, registry)
     }.nextOption()
   }
 
   /**
-   * Look up a temporary function with view context handling (legacy wrapper).
-   * This is kept for backwards compatibility with call sites that need the old signature.
+   * Looks up a temporary function with view context handling.
+   * Used by legacy code paths that need explicit control over the isBuiltin check.
    *
-   * @param name The function name
-   * @param isBuiltin Function to check if identifier is builtin (skip view context if true)
-   * @param lookupFunc Function to perform the actual lookup
-   * @tparam T The result type
-   * @return The lookup result with view context applied
+   * @param name The function name.
+   * @param isBuiltin Function to check if identifier is builtin (skip view context if true).
+   * @param lookupFunc Function to perform the actual lookup.
+   * @tparam T The result type.
+   * @return The lookup result with view context applied.
    */
   private def lookupTempFuncWithViewContext[T](
       name: String,
