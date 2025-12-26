@@ -17,12 +17,26 @@
 
 package org.apache.spark.sql.hive.execution.command
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.command.v1
-
 /**
  * The class contains tests for the `CREATE NAMESPACE` command to check V1 Hive external
  * table catalog.
  */
+
 class CreateNamespaceSuite extends v1.CreateNamespaceSuiteBase with CommandSuiteBase {
   override def commandVersion: String = super[CreateNamespaceSuiteBase].commandVersion
+
+  test("CATALOG_NOT_ASSOCIATED") {
+     val namespace = "ns1.ns2"
+     checkError(
+       exception = intercept[AnalysisException] {
+          sql(s"CREATE NAMESPACE $catalog.$namespace")
+       },
+        errorClass = "CATALOG_NOT_ASSOCIATED",
+        parameters = Map(
+           "ns" -> namespace
+       )
+     )
+   }
 }

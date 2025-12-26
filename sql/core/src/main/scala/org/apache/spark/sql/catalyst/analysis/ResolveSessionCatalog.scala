@@ -688,8 +688,9 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       case ResolvedNamespace(_, Seq(dbName)) => Some(dbName)
       case _ =>
         assert(resolved.namespace.length > 1)
-        throw QueryCompilationErrors.invalidDatabaseNameError(resolved.namespace.quoted)
-    }
+        throw QueryCompilationErrors.catalogNotAssociatedError(resolved.namespace.map(
+          quoteIfNeeded).mkString("."))
+     }
   }
 
   private def supportsV1Command(catalog: CatalogPlugin): Boolean = {

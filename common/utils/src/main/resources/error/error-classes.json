@@ -709,6 +709,11 @@
     ],
     "sqlState" : "42704"
   },
+  "CATALOG_NOT_ASSOCIATED" : {
+     "message" : [
+      "Namespace [<ns>] catalog you are trying to access is not currently associated with the Spark Engine."
+    ]
+  },
   "DISTINCT_WINDOW_FUNCTION_UNSUPPORTED" : {
     "message" : [
       "Distinct window functions are not supported: <windowExpr>."
@@ -3710,11 +3715,6 @@
   "_LEGACY_ERROR_TEMP_1054" : {
     "message" : [
       "ALTER COLUMN cannot find column <colName> in v1 table. Available: <fieldNames>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1055" : {
-    "message" : [
-      "The database name is not valid: <quoted>."
     ]
   },
   "_LEGACY_ERROR_TEMP_1057" : {
