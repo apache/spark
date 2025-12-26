@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.SparkThrowable
+import org.apache.hadoop.hive.conf.HiveConf
+
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.SQLInsertTestSuite
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
@@ -47,5 +49,40 @@ class HiveSQLInsertTestSuite extends SQLInsertTestSuite with TestHiveSingleton {
       v2Parameters: Map[String, String]): Unit = {
     checkError(exception = exception, sqlState = None, condition = v1ErrorClass,
       parameters = v1Parameters)
+  }
+
+  test("SPARK-54853: SET hive.exec.max.dynamic.partitions takes effect in session conf") {
+    withSQLConf(
+      HiveUtils.CONVERT_INSERTING_PARTITIONED_TABLE.key -> "false") {
+      val cols = Seq("c1", "p1")
+      val df = sql("SELECT 1, * FROM range(3)")
+      Seq(true, false).foreach { insertOverride =>
+        withTable("t1") {
+          createTable("t1", cols, Seq("int", "int"), cols.takeRight(1))
+
+          spark.conf.set("hive.exec.max.dynamic.partitions", "2")
+          checkError(
+            exception = intercept[SparkException] {
+              processInsert("t1", df, overwrite = insertOverride)
+            },
+            condition = "DYNAMIC_PARTITION_WRITE_PARTITION_NUM_LIMIT_EXCEEDED",
+            sqlState = Some("54054"),
+            parameters = Map(
+              "numWrittenParts" -> "3",
+              "maxDynamicPartitionsKey" -> HiveConf.ConfVars.DYNAMICPARTITIONMAXPARTS.varname,
+              "maxDynamicPartitions" -> "2",
+              "numWrittenParts" -> "3"))
+          assert(spark.table("t1").count() === 0)
+
+          spark.conf.set("hive.exec.max.dynamic.partitions", "3")
+          processInsert("t1", df, overwrite = insertOverride)
+          assert(spark.table("t1").count() === 3)
+
+          processInsert("t1", df, overwrite = insertOverride)
+          val expectedRowCount = if (insertOverride) 3 else 6
+          assert(spark.table("t1").count() === expectedRowCount)
+        }
+      }
+    }
   }
 }
