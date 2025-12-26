@@ -70,8 +70,7 @@ class HiveSQLInsertTestSuite extends SQLInsertTestSuite with TestHiveSingleton {
             parameters = Map(
               "numWrittenParts" -> "3",
               "maxDynamicPartitionsKey" -> HiveConf.ConfVars.DYNAMICPARTITIONMAXPARTS.varname,
-              "maxDynamicPartitions" -> "2",
-              "numWrittenParts" -> "3"))
+              "maxDynamicPartitions" -> "2"))
           assert(spark.table("t1").count() === 0)
 
           spark.conf.set("hive.exec.max.dynamic.partitions", "3")
