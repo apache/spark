@@ -56,14 +56,14 @@ class HiveSQLInsertTestSuite extends SQLInsertTestSuite with TestHiveSingleton {
       HiveUtils.CONVERT_INSERTING_PARTITIONED_TABLE.key -> "false") {
       val cols = Seq("c1", "p1")
       val df = sql("SELECT 1, * FROM range(3)")
-      Seq(true, false).foreach { insertOverride =>
+      Seq(true, false).foreach { overwrite =>
         withTable("t1") {
           createTable("t1", cols, Seq("int", "int"), cols.takeRight(1))
 
           spark.conf.set("hive.exec.max.dynamic.partitions", "2")
           checkError(
             exception = intercept[SparkException] {
-              processInsert("t1", df, overwrite = insertOverride)
+              processInsert("t1", df, overwrite = overwrite)
             },
             condition = "DYNAMIC_PARTITION_WRITE_PARTITION_NUM_LIMIT_EXCEEDED",
             sqlState = Some("54054"),
@@ -75,11 +75,11 @@ class HiveSQLInsertTestSuite extends SQLInsertTestSuite with TestHiveSingleton {
           assert(spark.table("t1").count() === 0)
 
           spark.conf.set("hive.exec.max.dynamic.partitions", "3")
-          processInsert("t1", df, overwrite = insertOverride)
+          processInsert("t1", df, overwrite = overwrite)
           assert(spark.table("t1").count() === 3)
 
-          processInsert("t1", df, overwrite = insertOverride)
-          val expectedRowCount = if (insertOverride) 3 else 6
+          processInsert("t1", df, overwrite = overwrite)
+          val expectedRowCount = if (overwrite) 3 else 6
           assert(spark.table("t1").count() === expectedRowCount)
         }
       }
