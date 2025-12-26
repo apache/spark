@@ -787,6 +787,16 @@ object FunctionRegistry {
     expression[ZipWith]("zip_with"),
     expression[Get]("get"),
 
+    // generator functions (for scalar context - SELECT clause)
+    // Note: These same functions are also in TableFunctionRegistry for table context (FROM clause).
+    // The _outer variants (explode_outer, posexplode_outer, etc.) are ONLY in the table registry
+    // because the "outer" semantic only makes sense in table context (affects the Generate node).
+    expressionBuilder("explode", ExplodeExpressionBuilder),
+    expressionBuilder("inline", InlineExpressionBuilder),
+    expressionBuilder("posexplode", PosExplodeExpressionBuilder),
+    expression[JsonTuple]("json_tuple"),
+    expression[Stack]("stack"),
+
     CreateStruct.registryEntry,
 
     // misc functions

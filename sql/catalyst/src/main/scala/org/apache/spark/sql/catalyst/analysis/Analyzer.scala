@@ -2086,11 +2086,8 @@ class Analyzer(
             // Function exists in scalar registry, can be used here
             f
           } else if (existsAsTable) {
-            // Function exists in table registry. Since generators have been removed from
-            // the scalar registry, we can't distinguish here. Let it through and let
-            // FunctionResolution.resolveBuiltinOrTempFunction handle it properly.
-            // It will extract generators or throw NOT_A_SCALAR_FUNCTION for pure table functions.
-            f
+            // Function exists ONLY in table registry - cannot be used in scalar context
+            throw QueryCompilationErrors.notAScalarFunctionError(nameParts.mkString("."), f)
           } else {
             val CatalogAndIdentifier(catalog, ident) =
               relationResolution.expandIdentifier(nameParts)

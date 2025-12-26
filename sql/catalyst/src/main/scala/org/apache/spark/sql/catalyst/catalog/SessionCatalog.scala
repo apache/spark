@@ -111,6 +111,55 @@ class SessionCatalog(
   private def isTempFunctionIdentifier(identifier: FunctionIdentifier): Boolean =
     identifier.database.contains(TEMP_FUNCTION_DB)
 
+  // --------------------------------
+  // | Unified Function Registry API |
+  // --------------------------------
+  // These methods provide a unified view over both scalar and table function registries,
+  // enforcing a single namespace where functions can exist as scalar-only, table-only, or both.
+
+  /**
+   * Check if a function exists in either registry (unified existence check).
+   */
+  def functionExistsUnified(name: FunctionIdentifier): Boolean = {
+    functionRegistry.functionExists(name) || tableFunctionRegistry.functionExists(name)
+  }
+
+  /**
+   * Check if a function can be used in scalar context (SELECT clause, etc.).
+   */
+  def existsAsScalarFunction(name: FunctionIdentifier): Boolean = {
+    functionRegistry.functionExists(name)
+  }
+
+  /**
+   * Check if a function can be used in table context (FROM clause).
+   */
+  def existsAsTableFunction(name: FunctionIdentifier): Boolean = {
+    tableFunctionRegistry.functionExists(name)
+  }
+
+  /**
+   * Get function capabilities: returns (canUseAsScalar, canUseAsTable).
+   * This allows checking what contexts a function supports.
+   */
+  def getFunctionCapabilities(name: FunctionIdentifier): (Boolean, Boolean) = {
+    (existsAsScalarFunction(name), existsAsTableFunction(name))
+  }
+
+  /**
+   * List all functions (scalar and table) with their capabilities.
+   * Useful for SHOW FUNCTIONS and introspection.
+   */
+  def listAllFunctionsWithCapabilities(): Seq[(FunctionIdentifier, Boolean, Boolean)] = {
+    val allNames =
+      (functionRegistry.listFunction() ++ tableFunctionRegistry.listFunction()).distinct
+    allNames.map { name =>
+      (name, existsAsScalarFunction(name), existsAsTableFunction(name))
+    }
+  }
+
+  // End unified API section
+
   // For testing only.
   def this(
       externalCatalog: ExternalCatalog,

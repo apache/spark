@@ -23,7 +23,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{
   CatalogManager,
   CatalogV2Util,
@@ -149,8 +149,8 @@ class FunctionResolution(
       // If a temp table function exists with this name, it shadows any builtin scalar function
       val funcName = name.head
       if (v1SessionCatalog.lookupTempTableFunction(funcName).isDefined) {
-        // Temp table function exists - will throw error in fallback check below
-        None
+        // Temp table function exists - throw error
+        throw QueryCompilationErrors.notAScalarFunctionError(name.mkString("."), u)
       } else {
         // No temp table function - safe to resolve as scalar
         v1SessionCatalog.resolveBuiltinOrTempFunction(funcName, arguments)
@@ -159,37 +159,11 @@ class FunctionResolution(
       None
     }
 
-    // Step 2: Fallback to table registry for generators
-    // Architecture: Generator functions (explode, json_tuple, etc.) are registered ONLY in the
-    // table registry. When used in scalar context, we detect the Generate node and extract the
-    // underlying Generator expression. This provides a unified function namespace where:
-    // - Generators work in both scalar and table contexts
-    // - Pure table functions only work in table context
-    // - Single source of truth (no duplicate registrations)
-    //
-    // Note: This also handles cross-type shadowing. If a temp table function shadows a builtin
-    // scalar function, the check above returns None, and we fall through here to detect
-    // it's a pure table function and throw NOT_A_SCALAR_FUNCTION.
-    if (expression.isEmpty) {
-      val funcNameForCheck = if (name.size == 1) name.head else name.last
-
-      // Try to resolve as table function
-      val tableFunctionResult = if (name.size == 1) {
-        v1SessionCatalog.resolveBuiltinOrTempTableFunction(funcNameForCheck, arguments)
-      } else {
-        None
-      }
-
-      tableFunctionResult match {
-        case Some(Generate(generator, _, _, _, _, _)) =>
-          // Generator function: extract the underlying expression for scalar context
-          return Some(validateFunction(generator, arguments.length, u))
-        case Some(_) =>
-          // Pure table function: cannot use in scalar context
-          // (This includes the case where a temp table function shadows a builtin scalar)
-          throw QueryCompilationErrors.notAScalarFunctionError(name.mkString("."), u)
-        case None =>
-          // Not found anywhere
+    // Step 2: Check for table-only functions (cross-type error detection)
+    // If not found as scalar, check if it exists as a table-only function
+    if (expression.isEmpty && name.size == 1) {
+      if (v1SessionCatalog.lookupBuiltinOrTempTableFunction(name.head).isDefined) {
+        throw QueryCompilationErrors.notAScalarFunctionError(name.mkString("."), u)
       }
     }
 
