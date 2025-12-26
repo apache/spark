@@ -88,6 +88,7 @@ abstract class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndA
       listener.onOtherEvent(SparkListenerSQLExecutionStart(
         0,
         Some(0),
+        None,
         "test",
         "test",
         df.queryExecution.toString,
@@ -144,6 +145,7 @@ abstract class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndA
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       0,
       Some(0),
+      None,
       "test",
       "test",
       df.queryExecution.toString,
@@ -152,6 +154,7 @@ abstract class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndA
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       1,
       Some(0),
+      None,
       "test",
       "test",
       df.queryExecution.toString,
@@ -161,6 +164,7 @@ abstract class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndA
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       2,
       Some(100),
+      None,
       "test",
       "test",
       df.queryExecution.toString,
@@ -192,6 +196,7 @@ abstract class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndA
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       0,
       None,
+      None,
       "test",
       "test",
       df.queryExecution.toString,
@@ -199,6 +204,7 @@ abstract class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndA
       System.currentTimeMillis()))
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       1,
+      None,
       None,
       "test",
       "test",
@@ -235,6 +241,7 @@ abstract class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndA
       listener.onOtherEvent(SparkListenerSQLExecutionStart(
         executionId,
         Some(executionId),
+        Some(df.queryExecution.queryId),
         "test",
         "test",
         df.queryExecution.toString,
