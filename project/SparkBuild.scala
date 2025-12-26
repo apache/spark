@@ -1245,7 +1245,7 @@ object ExcludeShims {
     bloopClasspathFilter := {
       if (!shimmedProjects(moduleName.value)) {
         cp => cp.filterNot { case (f1, f2) =>
-          f1.getPath.contains("connect-shims") || f2.getPath.contains("connect-shims")
+          f1.getPath.contains("spark-connect-shims") || f2.getPath.contains("spark-connect-shims")
         }
       } else {
         identity _
@@ -1266,6 +1266,8 @@ object ExcludeShims {
     // Filter bloop's internal classpath for correct IDE integration
     Compile / BloopKeys.bloopInternalClasspath :=
       bloopClasspathFilter.value((Compile / BloopKeys.bloopInternalClasspath).value),
+    Runtime / BloopKeys.bloopInternalClasspath :=
+      bloopClasspathFilter.value((Runtime / BloopKeys.bloopInternalClasspath).value),
     Test / BloopKeys.bloopInternalClasspath :=
       bloopClasspathFilter.value((Test / BloopKeys.bloopInternalClasspath).value),
   )
