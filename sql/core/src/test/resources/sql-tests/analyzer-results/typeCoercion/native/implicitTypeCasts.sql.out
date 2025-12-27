@@ -360,6 +360,28 @@ Project [length(cast(cast(1996-09-10 10:11:12.4 as timestamp) as string)) AS len
 
 
 -- !query
+SELECT '12:00:00' = TIME'12:00:00' FROM t
+-- !query analysis
+Project [(cast(12:00:00 as time(6)) = 12:00:00) AS (12:00:00 = TIME '12:00:00')#x]
++- SubqueryAlias t
+   +- View (`t`, [1#x])
+      +- Project [cast(1#x as int) AS 1#x]
+         +- Project [1 AS 1#x]
+            +- OneRowRelation
+
+
+-- !query
+SELECT '12:00:01' > TIME'12:00:00' FROM t
+-- !query analysis
+Project [(cast(12:00:01 as time(6)) > 12:00:00) AS (12:00:01 > TIME '12:00:00')#x]
++- SubqueryAlias t
+   +- View (`t`, [1#x])
+      +- Project [cast(1#x as int) AS 1#x]
+         +- Project [1 AS 1#x]
+            +- OneRowRelation
+
+
+-- !query
 SELECT year( '1996-01-10') FROM t
 -- !query analysis
 Project [year(cast(1996-01-10 as date)) AS year(1996-01-10)#x]
