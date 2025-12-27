@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution.python.PythonDataSourceSuiteBase
 import org.apache.spark.sql.execution.streaming.ProcessingTimeTrigger
 import org.apache.spark.sql.execution.streaming.checkpointing.{CommitLog, OffsetSeqLog}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
-import org.apache.spark.sql.streaming.StreamingQueryException
+import org.apache.spark.sql.streaming.{StreamingQueryException, Trigger}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -339,6 +339,61 @@ class PythonStreamingDataSourceSimpleSuite extends PythonDataSourceSuiteBase {
     testMicroBatchStreamError("latestOffset", "Exception: error reading available data") { stream =>
       stream.latestOffset()
     }
+  }
+
+  test("SPARK-54768: SimpleDataSourceStreamReader schema mismatch - prefetched batches") {
+    assume(shouldTestPandasUDFs)
+    val dataSourceScript =
+      s"""
+         |from pyspark.sql.datasource import DataSource, SimpleDataSourceStreamReader
+         |import pyarrow as pa
+         |
+         |class SchemaMismatchSimpleReader(SimpleDataSourceStreamReader):
+         |    def initialOffset(self):
+         |        return {"offset": 0}
+         |    def read(self, start: dict):
+         |        # Return PyArrow RecordBatch with STRING when INT is expected.
+         |        schema = pa.schema([pa.field("id", pa.string(), nullable=True)])
+         |        batch = pa.RecordBatch.from_arrays(
+         |            [pa.array(["1"], type=pa.string())], schema=schema)
+         |        return iter([batch]), {"offset": 1}
+         |    def readBetweenOffsets(self, start: dict, end: dict):
+         |        return iter([])
+         |    def commit(self, end: dict):
+         |        pass
+         |
+         |class $errorDataSourceName(DataSource):
+         |    def schema(self) -> str:
+         |        return "id INT NOT NULL"
+         |    def simpleStreamReader(self, schema):
+         |        return SchemaMismatchSimpleReader()
+         |""".stripMargin
+
+    val dataSource = createUserDefinedPythonDataSource(errorDataSourceName, dataSourceScript)
+    spark.dataSource.registerPython(errorDataSourceName, dataSource)
+
+    val df = spark.readStream.format(errorDataSourceName).load()
+    val err = intercept[StreamingQueryException] {
+      val q = df.writeStream
+        .trigger(Trigger.Once())
+        .foreachBatch((df: DataFrame, _: Long) => {
+          df.count()
+          ()
+        })
+        .start()
+      q.awaitTermination()
+    }
+    assert(err.getCause.isInstanceOf[SparkException])
+    val cause = err.getCause.asInstanceOf[SparkException]
+    checkErrorMatchPVals(
+      cause,
+      condition = "ARROW_TYPE_MISMATCH",
+      parameters = Map(
+        "operation" -> "Python streaming data source read",
+        "outputTypes" -> "StructType\\(StructField\\(id,IntegerType,false\\)\\)",
+        "actualDataTypes" -> "StructType\\(StructField\\(id,StringType,true\\)\\)"
+      )
+    )
   }
 }
 
