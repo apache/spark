@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.ui
 
+import java.util.UUID
+
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.databind.JavaType
 import com.fasterxml.jackson.databind.`type`.TypeFactory
@@ -48,6 +50,9 @@ case class SparkListenerSQLExecutionStart(
     // nested execution, then rootExecutionId = None
     @JsonDeserialize(contentAs = classOf[java.lang.Long])
     rootExecutionId: Option[Long],
+    // A unique identifier for the query execution. For the first execution it equals
+    // QueryExecution.queryId, for subsequent executions a new UUIDv7 is generated.
+    queryId: Option[UUID] = None,
     description: String,
     details: String,
     physicalPlanDescription: String,

@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.io.{BufferedWriter, OutputStreamWriter}
 import java.util.UUID
-import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.util.control.NonFatal
@@ -51,6 +51,7 @@ import org.apache.spark.sql.execution.streaming.runtime.{IncrementalExecution, W
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.scripting.SqlScriptingExecution
 import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.util.UUIDv7Generator
 import org.apache.spark.util.{LazyTry, Utils}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -70,6 +71,11 @@ class QueryExecution(
     val refreshPhaseEnabled: Boolean = true) extends Logging {
 
   val id: Long = QueryExecution.nextExecutionId
+  val queryId: UUID = UUIDv7Generator.generate()
+
+  // Tracks how many times this QueryExecution has been executed.
+  // Used by SQLExecution to determine whether to use qplQueryId or generate a new one.
+  val executionCount = new AtomicInteger(0)
 
   // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sparkSession.sessionState.planner

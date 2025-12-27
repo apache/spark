@@ -36,12 +36,14 @@ import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.SQL_EVENT_TRUNCATE_LENGTH
+import org.apache.spark.sql.util.UUIDv7Generator
 import org.apache.spark.util.Utils
 
 object SQLExecution extends Logging {
 
   val EXECUTION_ID_KEY = "spark.sql.execution.id"
   val EXECUTION_ROOT_ID_KEY = "spark.sql.execution.root.id"
+  val QUERY_ID_KEY: String = "spark.sql.query.id"
 
   private val _nextExecutionId = new AtomicLong(0)
 
@@ -92,8 +94,17 @@ object SQLExecution extends Logging {
     val sparkSession = queryExecution.sparkSession
     val sc = sparkSession.sparkContext
     val oldExecutionId = sc.getLocalProperty(EXECUTION_ID_KEY)
+    val oldQueryId = sc.getLocalProperty(QUERY_ID_KEY)
     val executionId = SQLExecution.nextExecutionId
+    // Use the original queryId for the first execution, generate new ones for
+    // subsequent executions
+    val queryId = if (queryExecution.executionCount.getAndIncrement() == 0) {
+      queryExecution.queryId
+    } else {
+      UUIDv7Generator.generate()
+    }
     sc.setLocalProperty(EXECUTION_ID_KEY, executionId.toString)
+    sc.setLocalProperty(QUERY_ID_KEY, queryId.toString)
     // Track the "root" SQL Execution Id for nested/sub queries. The current execution is the
     // root execution if the root execution ID is null.
     // And for the root execution, rootExecutionId == executionId.
@@ -142,6 +153,7 @@ object SQLExecution extends Logging {
             val startEvent = SparkListenerSQLExecutionStart(
               executionId = executionId,
               rootExecutionId = Some(rootExecutionId),
+              queryId = Some(queryId),
               description = desc,
               details = callSite.longForm,
               physicalPlanDescription = "",
@@ -233,6 +245,7 @@ object SQLExecution extends Logging {
     } finally {
       executionIdToQueryExecution.remove(executionId)
       sc.setLocalProperty(EXECUTION_ID_KEY, oldExecutionId)
+      sc.setLocalProperty(QUERY_ID_KEY, oldQueryId)
       // Unset the "root" SQL Execution Id once the "root" SQL execution completes.
       // The current execution is the root execution if rootExecutionId == executionId.
       if (sc.getLocalProperty(EXECUTION_ROOT_ID_KEY) == executionId.toString) {
