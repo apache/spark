@@ -157,7 +157,7 @@ Default behavior ensures no data loss:
 
 ## Exactly-Once Strategies
 
-### Idempotent Sink (Recommended)
+### Idempotent Sink 
 
 Deduplicate at sink using record coordinates (topic, partition, offset):
 
@@ -192,15 +192,6 @@ spark.readStream
   ...
 {% endhighlight %}
 
-## Differences from Traditional Kafka Source
-
-| Aspect | kafka | kafka-share |
-|--------|-------|-------------|
-| Partition assignment | Exclusive | Shared |
-| Offset tracking | Sequential per partition | Non-sequential sets |
-| Failure handling | Seek to last committed | Lock expiry + redelivery |
-| Commit semantics | Offset position | Per-record acknowledgment |
-| Parallelism | One consumer per partition | Configurable consumers |
 
 ## Deploying
 
