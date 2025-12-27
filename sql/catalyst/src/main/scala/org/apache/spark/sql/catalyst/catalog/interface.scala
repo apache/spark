@@ -960,6 +960,10 @@ object CatalogColumnStat extends Logging {
       forTimestampNTZ = forTimestampNTZ)
   }
 
+  def getTimeFormatter(): TimeFormatter = {
+    TimeFormatter.getFractionFormatter()
+  }
+
   /**
    * Converts from string representation of data type to the corresponding Catalyst data type.
    */
@@ -973,6 +977,7 @@ object CatalogColumnStat extends Logging {
       case TimestampType => getTimestampFormatter(isParsing = true).parse(s)
       case TimestampNTZType =>
         getTimestampFormatter(isParsing = true, forTimestampNTZ = true).parse(s)
+      case _: TimeType => getTimeFormatter().parse(s)
       case ByteType => s.toByte
       case ShortType => s.toShort
       case IntegerType => s.toInt
@@ -999,6 +1004,7 @@ object CatalogColumnStat extends Logging {
       case TimestampNTZType =>
         getTimestampFormatter(isParsing = false, forTimestampNTZ = true)
           .format(v.asInstanceOf[Long])
+      case _: TimeType => getTimeFormatter().format(v.asInstanceOf[Long])
       case BooleanType | _: IntegralType | FloatType | DoubleType => v
       case _: DecimalType => v.asInstanceOf[Decimal].toJavaBigDecimal
       // This version of Spark does not use min/max for binary/string types so we ignore it.
