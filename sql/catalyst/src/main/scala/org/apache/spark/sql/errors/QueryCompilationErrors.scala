@@ -1471,6 +1471,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("condition" -> condition.toString))
   }
 
+  def unsupportedUpdateByConditionWithSubqueryError(condition: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1108",
+      messageParameters = Map("condition" -> condition.toString))
+  }
+
   def cannotTranslateExpressionToSourceFilterError(f: Expression): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1109",
@@ -1482,6 +1488,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = "_LEGACY_ERROR_TEMP_1110",
       messageParameters = Map(
         "table" -> table.name,
+        "filters" -> filters.mkString("[", ", ", "]")))
+  }
+
+  def cannotUpdateTableWhereFiltersError(table: Table, filters: Array[Predicate]): Throwable = {
+    new AnalysisException(
+      errorClass = "_LEGACY_ERROR_TEMP_1110",
+      messageParameters = Map(
+        "table" -> s"Cannot update table ${table.name}",
         "filters" -> filters.mkString("[", ", ", "]")))
   }
 
@@ -1601,6 +1615,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def tableDoesNotSupportDeletesError(table: Table): Throwable = {
     tableDoesNotSupportError("deletes", table)
+  }
+
+  def tableDoesNotSupportUpdatesError(table: Table): Throwable = {
+    tableDoesNotSupportError("updates", table)
   }
 
   def tableDoesNotSupportTruncatesError(table: Table): Throwable = {
