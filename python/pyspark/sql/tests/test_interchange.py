@@ -1,0 +1,73 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+import unittest
+import pyarrow as pa
+import pandas as pd
+import pyspark.pandas as ps
+from pyspark.testing.utils import have_duckdb
+
+if have_duckdb:
+    import duckdb
+
+
+@unittest.skipIf(not have_duckdb, "duckdb is not installed")
+class TestSparkArrowCStreamer(unittest.TestCase):
+    def _create_arrow_c_stream(self):
+        pdf = pd.DataFrame([[1, "a"], [2, "b"], [3, "c"], [4, "d"]], columns=["id", "value"])
+        psdf = ps.from_pandas(pdf)
+        stream = pa.RecordBatchReader.from_stream(psdf)
+        return stream
+
+    def test_spark_arrow_c_streamer_arrow_consumer(self):
+        stream = self._create_arrow_c_stream()
+        assert isinstance(stream, pa.RecordBatchReader)
+        result = pa.Table.from_batches(stream)
+        schema = pa.schema(
+            [
+                ("__index_level_0__", pa.int64(), False),
+                ("id", pa.int64(), False),
+                ("value", pa.string(), False),
+            ]
+        )
+        expected = pa.Table.from_pandas(
+            pd.DataFrame(
+                [[0, 1, "a"], [1, 2, "b"], [2, 3, "c"], [3, 4, "d"]],
+                columns=["__index_level_0__", "id", "value"],
+            ),
+            schema=schema,
+        )
+        self.assertEqual(result, expected)
+
+    def test_spark_arrow_c_streamer_duckdb_consumer(self):
+        stream = self._create_arrow_c_stream()
+        assert isinstance(stream, pa.RecordBatchReader)
+        # Verify the contents of the DuckDB relation
+        result = duckdb.execute("SELECT id, value from stream").fetchall()
+        expected = [(1, "a"), (2, "b"), (3, "c"), (4, "d")]
+        self.assertEqual(result, expected)
+
+
+if __name__ == "__main__":
+    from pyspark.sql.tests.test_interchange import *  # noqa: F401
+
+    try:
+        import xmlrunner  # type: ignore
+
+        test_runner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
+    except ImportError:
+        test_runner = None
+    unittest.main(testRunner=test_runner, verbosity=2)
