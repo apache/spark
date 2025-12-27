@@ -34,7 +34,6 @@ import org.apache.spark.sql.internal.LegacyBehaviorPolicy._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.util.ArrayImplicits._
 
 
 abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with TestHiveSingleton {
@@ -568,23 +567,6 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         .mode(SaveMode.Overwrite)
         .save(subdir.getCanonicalPath)
 
-      // Inferring schema should throw error as it should not find any file to infer
-      val e = intercept[Exception] {
-        spark.read.format(dataSourceName).load(dir.getCanonicalPath)
-      }
-
-      e match {
-        case _: AnalysisException =>
-          assert(e.getMessage.contains("infer"))
-
-        case _: java.util.NoSuchElementException if e.getMessage.contains("dataSchema") =>
-          // Ignore error, the source format requires schema to be provided by user
-          // This is needed for SimpleTextHadoopFsRelationSuite as SimpleTextSource needs schema
-
-        case _ =>
-          fail("Unexpected error trying to infer schema from empty dir", e)
-      }
-
       /** Test whether data is read with the given path matches the expected answer */
       def testWithPath(path: File, expectedAnswer: Seq[Row]): Unit = {
         val df = spark.read
@@ -594,13 +576,13 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         checkAnswer(df, expectedAnswer)
       }
 
-      // Verify that reading by path 'dir/' gives empty results as there are no files in 'file'
-      // and it should not pick up files in 'dir/subdir'
+      // After SPARK-28098, we can read file from nested subdirectories.
       require(subdir.exists)
       require(subdir.listFiles().exists(!_.isDirectory))
-      testWithPath(dir, Seq.empty)
+      testWithPath(dir, (4 to 6).map(Row(_)))
 
-      // Verify that if there is data in dir, then reading by path 'dir/' reads only dataInDir
+      // Verify that if there is data in dir.
+      // After SPARK-28098, we can read both dataInSubdir and dataInDir
       dataInDir.write
         .format(dataSourceName)
         .mode(SaveMode.Append)   // append to prevent subdir from being deleted
@@ -608,7 +590,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       require(dir.listFiles().exists(!_.isDirectory))
       require(subdir.exists())
       require(subdir.listFiles().exists(!_.isDirectory))
-      testWithPath(dir, dataInDir.collect().toImmutableArraySeq)
+      testWithPath(dir, (1 to 6).map(Row(_)))
     }
   }
 
@@ -679,7 +661,8 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         checkAnswer(df, expectedDf)
       }
 
-      check(s"$dir/*/", dataInSubdir)
+      // After SPARK-28098, we can read all files from nested subdirectories.
+      check(s"$dir/*/", dataInSubdir.union(dataInSubsubdir).union(dataInAnotherSubsubdir))
       check(s"$dir/sub*/*", dataInSubdir.union(dataInSubsubdir))
       check(s"$dir/another*/*", dataInAnotherSubsubdir)
       check(s"$dir/*/another*", dataInAnotherSubsubdir)
