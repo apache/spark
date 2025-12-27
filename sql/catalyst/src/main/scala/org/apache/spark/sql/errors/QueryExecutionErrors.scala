@@ -3170,9 +3170,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("function" -> toSQLId(function)))
   }
 
-  def thetaInvalidLgNomEntries(function: String, min: Int, max: Int, value: Int): Throwable = {
+  def sketchInvalidLgNomEntries(function: String, min: Int, max: Int, value: Int): Throwable = {
     new SparkRuntimeException(
-      errorClass = "THETA_INVALID_LG_NOM_ENTRIES",
+      errorClass = "SKETCH_INVALID_LG_NOM_ENTRIES",
       messageParameters = Map(
         "function" -> toSQLId(function),
         "min" -> toSQLValue(min, IntegerType),
@@ -3222,5 +3222,25 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "functionName" -> toSQLId(function),
         "k" -> toSQLValue(k, IntegerType)))
+  }
+
+  def tupleInvalidInputSketchBuffer(function: String): Throwable = {
+    val reason: String = "Invalid buffer state or input data"
+    tupleInvalidInputSketchBuffer(function, reason)
+  }
+
+  def tupleInvalidInputSketchBuffer(function: String, reason: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
+      messageParameters = Map("function" -> toSQLId(function), "reason" -> reason))
+  }
+
+  def tupleInvalidMode(function: String, mode: String, validModes: Seq[String]): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "TUPLE_INVALID_SKETCH_MODE",
+      messageParameters = Map(
+        "function" -> toSQLId(function),
+        "mode" -> mode,
+        "validModes" -> validModes.mkString(", ")))
   }
 }
