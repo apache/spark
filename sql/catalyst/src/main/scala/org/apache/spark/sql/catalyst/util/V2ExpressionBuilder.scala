@@ -94,7 +94,7 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
       expr: Expression, isPredicate: Boolean = false): Option[V2Expression] = expr match {
     case literal: Literal => Some(translateLiteral(literal))
     case _ if expr.contextIndependentFoldable
-        && SQLConf.get.getConf(SQLConf.DATA_SOURCE_V2_EXPR_FOLDING) =>
+        && SQLConf.get.getConfByKeyStrict[Boolean]("spark.sql.optimizer.datasourceV2ExprFolding") =>
       // If the expression is context independent foldable, we can convert it to a literal.
       // This is useful for increasing the coverage of V2 expressions.
       val constantExpr = ConstantFolding.constantFolding(expr)
