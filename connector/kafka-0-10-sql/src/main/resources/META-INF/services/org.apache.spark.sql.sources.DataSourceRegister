@@ -16,3 +16,4 @@
 #
 
 org.apache.spark.sql.kafka010.KafkaSourceProvider
+org.apache.spark.sql.kafka010.share.KafkaShareSourceProvider
