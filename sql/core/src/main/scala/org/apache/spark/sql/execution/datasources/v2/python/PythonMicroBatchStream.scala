@@ -19,8 +19,9 @@ package org.apache.spark.sql.execution.datasources.v2.python
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory}
-import org.apache.spark.sql.connector.read.streaming.{AcceptsLatestSeenOffset, MicroBatchStream, Offset}
-import org.apache.spark.sql.execution.datasources.v2.python.PythonMicroBatchStream.nextStreamId
+import org.apache.spark.sql.connector.read.streaming.{AcceptsLatestSeenOffset, MicroBatchStream, Offset, ReadLimit}
+import org.apache.spark.sql.connector.read.streaming.SupportsAdmissionControl
+import org.apache.spark.sql.execution.datasources.v2.python.PythonMicroBatchStream._
 import org.apache.spark.sql.execution.python.streaming.PythonStreamingSourceRunner
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -35,6 +36,7 @@ class PythonMicroBatchStream(
     options: CaseInsensitiveStringMap
   )
   extends MicroBatchStream
+  with SupportsAdmissionControl
   with Logging
   with AcceptsLatestSeenOffset {
   private def createDataSourceFunc =
@@ -49,13 +51,59 @@ class PythonMicroBatchStream(
   // from python to JVM.
   private var cachedInputPartition: Option[(String, String, PythonStreamingInputPartition)] = None
 
+  // Store the latest available offset for reporting
+  private var latestAvailableOffset: Option[PythonStreamingSourceOffset] = None
+
   private val runner: PythonStreamingSourceRunner =
     new PythonStreamingSourceRunner(createDataSourceFunc, outputSchema)
   runner.init()
 
+  // Validate options early to fail fast
+  PythonMicroBatchStream.validateOptions(options)
+
   override def initialOffset(): Offset = PythonStreamingSourceOffset(runner.initialOffset())
 
-  override def latestOffset(): Offset = PythonStreamingSourceOffset(runner.latestOffset())
+  override def getDefaultReadLimit: ReadLimit = {
+    import scala.util.Try
+
+    def parseLong(key: String): Long = {
+      Try(options.get(key).toLong).toOption.filter(_ > 0).getOrElse {
+        throw new IllegalArgumentException(
+          s"Invalid value '${options.get(key)}' for option '$key', must be a positive integer")
+      }
+    }
+
+    if (options.containsKey(MAX_RECORDS_PER_BATCH)) {
+      val records = parseLong(MAX_RECORDS_PER_BATCH)
+      logInfo(s"Admission control: $MAX_RECORDS_PER_BATCH = $records")
+      ReadLimit.maxRows(records)
+    } else {
+      logDebug("No admission control limit configured, using allAvailable")
+      ReadLimit.allAvailable()
+    }
+  }
+
+  override def latestOffset(): Offset = {
+    // Required by MicroBatchStream. Since this stream implements SupportsAdmissionControl, the
+    // engine is expected to call latestOffset(startOffset, limit), but we delegate for safety.
+    latestOffset(null, getDefaultReadLimit)
+  }
+
+  override def latestOffset(startOffset: Offset, limit: ReadLimit): Offset = {
+    // Admission control is implemented on the Python side using data source options.
+    // We still validate configured options via getDefaultReadLimit(), but do not send ReadLimit
+    // to Python.
+    getDefaultReadLimit
+    val startJson = if (startOffset != null) startOffset.json() else "null"
+    val (cappedOffsetJson, trueLatestJson) = runner.latestOffsetWithReport(startJson)
+    val cappedOffset = PythonStreamingSourceOffset(cappedOffsetJson)
+    latestAvailableOffset = Some(PythonStreamingSourceOffset(trueLatestJson))
+    cappedOffset
+  }
+
+  override def reportLatestOffset(): Offset = {
+    latestAvailableOffset.orNull
+  }
 
   override def planInputPartitions(start: Offset, end: Offset): Array[InputPartition] = {
     val startOffsetJson = start.asInstanceOf[PythonStreamingSourceOffset].json
@@ -112,6 +160,23 @@ class PythonMicroBatchStream(
 
 object PythonMicroBatchStream {
   private var currentId = 0
+  val MAX_RECORDS_PER_BATCH = "maxRecordsPerBatch"
+  val MAX_FILES_PER_BATCH = "maxFilesPerBatch"
+  val MAX_BYTES_PER_BATCH = "maxBytesPerBatch"
+
+  private[python] def validateOptions(options: CaseInsensitiveStringMap): Unit = {
+    if (options.containsKey(MAX_FILES_PER_BATCH)) {
+      throw new IllegalArgumentException(
+        s"Option '$MAX_FILES_PER_BATCH' is not supported for Python data sources; " +
+          s"use '$MAX_RECORDS_PER_BATCH' instead.")
+    }
+    if (options.containsKey(MAX_BYTES_PER_BATCH)) {
+      throw new IllegalArgumentException(
+        s"Option '$MAX_BYTES_PER_BATCH' is not supported for Python data sources; " +
+          s"use '$MAX_RECORDS_PER_BATCH' instead.")
+    }
+  }
+
   def nextStreamId: Int = synchronized {
     currentId = currentId + 1
     currentId
