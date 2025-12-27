@@ -704,12 +704,6 @@ WithCTE
 
 
 -- !query
-SET spark.sql.legacy.ctePrecedencePolicy=EXCEPTION
--- !query analysis
-SetCommand (spark.sql.legacy.ctePrecedencePolicy,Some(EXCEPTION))
-
-
--- !query
 WITH RECURSIVE r(level, data) AS (
   VALUES (0, 0)
   UNION ALL
