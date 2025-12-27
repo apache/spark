@@ -594,20 +594,6 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
     }
   }
 
-  object UnboundZeroParameterProcedure extends UnboundProcedure {
-    override def name: String = "zero_params"
-    override def description: String = "zero parameter procedure"
-    override def bind(inputType: StructType): BoundProcedure = ZeroParameterProcedure
-  }
-
-  object ZeroParameterProcedure extends BoundProcedure {
-    override def name: String = "zero_params"
-    override def description: String = "zero parameter procedure"
-    override def isDeterministic: Boolean = true
-    override def parameters: Array[ProcedureParameter] = Array.empty
-    override def call(input: InternalRow): java.util.Iterator[Scan] = Collections.emptyIterator
-  }
-
   object UnboundVoidProcedure extends UnboundProcedure {
     override def name: String = "void"
     override def description: String = "void procedure"
