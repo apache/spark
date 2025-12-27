@@ -1985,7 +1985,7 @@ case class FetchCursor(
  * The logical plan of the CLOSE cursor command.
  */
 case class CloseCursor(
-    cursorName: String) extends Command {
+    cursorName: String) extends LeafCommand {
   override def children: Seq[LogicalPlan] = Nil
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = this
