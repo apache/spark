@@ -2484,12 +2484,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       maxDynamicPartitions: Int,
       maxDynamicPartitionsKey: String): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2277",
+      errorClass = "DYNAMIC_PARTITION_WRITE_PARTITION_NUM_LIMIT_EXCEEDED",
       messageParameters = Map(
-        "numWrittenParts" -> numWrittenParts.toString(),
+        "numWrittenParts" -> numWrittenParts.toString,
         "maxDynamicPartitionsKey" -> maxDynamicPartitionsKey,
-        "maxDynamicPartitions" -> maxDynamicPartitions.toString(),
-        "numWrittenParts" -> numWrittenParts.toString()),
+        "maxDynamicPartitions" -> maxDynamicPartitions.toString),
       cause = null)
   }
 
