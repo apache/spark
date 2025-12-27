@@ -46,6 +46,40 @@ class FunctionResolution(
 
   private val trimWarningEnabled = new AtomicBoolean(true)
 
+  /**
+   * Checks if a multi-part name is qualified with a specific namespace.
+   * Supports both 2-part (namespace.name) and 3-part (system.namespace.name) qualifications.
+   *
+   * @param nameParts The multi-part name to check
+   * @param namespace The namespace to check for (e.g., "builtin", "session")
+   * @return true if qualified with the given namespace
+   */
+  private def isQualifiedWithNamespace(nameParts: Seq[String], namespace: String): Boolean = {
+    nameParts.length match {
+      case 2 => nameParts.head.equalsIgnoreCase(namespace)
+      case 3 =>
+        nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+        nameParts(1).equalsIgnoreCase(namespace)
+      case _ => false
+    }
+  }
+
+  /**
+   * Check if a function name is qualified as a builtin function.
+   * Valid forms: builtin.func or system.builtin.func
+   */
+  private def maybeBuiltinFunctionName(nameParts: Seq[String]): Boolean = {
+    isQualifiedWithNamespace(nameParts, CatalogManager.BUILTIN_NAMESPACE)
+  }
+
+  /**
+   * Check if a function name is qualified as a session temporary function.
+   * Valid forms: session.func or system.session.func
+   */
+  private def maybeTempFunctionName(nameParts: Seq[String]): Boolean = {
+    isQualifiedWithNamespace(nameParts, CatalogManager.SESSION_NAMESPACE)
+  }
+
   def resolveFunction(u: UnresolvedFunction): Expression = {
     withPosition(u) {
       resolveBuiltinOrTempFunction(u.nameParts, u.arguments, u).getOrElse {
@@ -77,7 +111,14 @@ class FunctionResolution(
       u: Option[UnresolvedFunction]): Option[ExpressionInfo] = {
     if (name.size == 1 && u.exists(_.isInternal)) {
       FunctionRegistry.internal.lookupFunction(FunctionIdentifier(name.head))
+    } else if (maybeBuiltinFunctionName(name)) {
+      // Explicitly qualified as builtin - lookup only builtin
+      v1SessionCatalog.lookupBuiltinFunction(name.last)
+    } else if (maybeTempFunctionName(name)) {
+      // Explicitly qualified as temp - lookup only temp
+      v1SessionCatalog.lookupTempFunction(name.last)
     } else if (name.size == 1) {
+      // Unqualified - check temp first (shadowing), then builtin
       v1SessionCatalog.lookupBuiltinOrTempFunction(name.head)
     } else {
       None
@@ -92,17 +133,87 @@ class FunctionResolution(
     }
   }
 
+  /**
+   * Validates that a function exists and can be used in the given context.
+   * This is used by the LookupFunctions analyzer rule for early validation.
+   *
+   * @param nameParts The function name parts.
+   * @param node The UnresolvedFunction node for error reporting.
+   * @return true if the function is a builtin or temporary function, false if it's persistent.
+   */
+  def validateFunctionExistence(
+      nameParts: Seq[String],
+      node: UnresolvedFunction): Boolean = {
+
+    // Check if function exists as scalar function.
+    val existsAsScalar = lookupBuiltinOrTempFunction(nameParts, Some(node)).isDefined
+
+    if (existsAsScalar) {
+      // Function exists in scalar registry, can be used in scalar context.
+      return true  // It's a builtin or temp function
+    }
+
+    // Check if function exists as table function.
+    val existsAsTable = lookupBuiltinOrTempTableFunction(nameParts).isDefined
+
+    if (existsAsTable) {
+      // Function exists ONLY in table registry - cannot be used in scalar context.
+      throw QueryCompilationErrors.notAScalarFunctionError(nameParts.mkString("."), node)
+    }
+
+    // Not found in builtin/temp registries - check external catalog.
+    val CatalogAndIdentifier(catalog, ident) = relationResolution.expandIdentifier(nameParts)
+
+    if (!catalog.asFunctionCatalog.functionExists(ident)) {
+      // Function doesn't exist anywhere - throw UNRESOLVED_ROUTINE error.
+      val catalogPath = (catalog.name() +: catalogManager.currentNamespace).mkString(".")
+      throw QueryCompilationErrors.unresolvedRoutineError(
+        nameParts,
+        Seq("system.builtin", "system.session", catalogPath),
+        node.origin)
+    }
+
+    // Function exists in external catalog - it's persistent.
+    false  // Not a builtin or temp function
+  }
+
   def resolveBuiltinOrTempFunction(
       name: Seq[String],
       arguments: Seq[Expression],
       u: UnresolvedFunction): Option[Expression] = {
+
+    // Step 1: Try to resolve as scalar function
     val expression = if (name.size == 1 && u.isInternal) {
       Option(FunctionRegistry.internal.lookupFunction(FunctionIdentifier(name.head), arguments))
+    } else if (maybeBuiltinFunctionName(name)) {
+      // Explicitly qualified as builtin - resolve only builtin
+      v1SessionCatalog.resolveBuiltinFunction(name.last, arguments)
+    } else if (maybeTempFunctionName(name)) {
+      // Explicitly qualified as temp - resolve only temp
+      v1SessionCatalog.resolveTempFunction(name.last, arguments)
     } else if (name.size == 1) {
-      v1SessionCatalog.resolveBuiltinOrTempFunction(name.head, arguments)
+      // For unqualified names, check cross-type shadowing before resolving
+      // If a temp table function exists with this name, it shadows any builtin scalar function
+      val funcName = name.head
+      if (v1SessionCatalog.lookupTempTableFunction(funcName).isDefined) {
+        // Temp table function exists - throw error
+        throw QueryCompilationErrors.notAScalarFunctionError(name.mkString("."), u)
+      } else {
+        // No temp table function - safe to resolve as scalar
+        v1SessionCatalog.resolveBuiltinOrTempFunction(funcName, arguments)
+      }
     } else {
       None
     }
+
+    // Step 2: Check for table-only functions (cross-type error detection)
+    // If not found as scalar, check if it exists as a table-only function
+    if (expression.isEmpty && name.size == 1) {
+      if (v1SessionCatalog.lookupBuiltinOrTempTableFunction(name.head).isDefined) {
+        throw QueryCompilationErrors.notAScalarFunctionError(name.mkString("."), u)
+      }
+    }
+
     expression.map { func =>
       validateFunction(func, arguments.length, u)
     }
@@ -111,11 +222,37 @@ class FunctionResolution(
   def resolveBuiltinOrTempTableFunction(
       name: Seq[String],
       arguments: Seq[Expression]): Option[LogicalPlan] = {
-    if (name.length == 1) {
-      v1SessionCatalog.resolveBuiltinOrTempTableFunction(name.head, arguments)
+
+    // Step 1: Try to resolve as table function
+    val tableFunctionResult = if (name.length == 1) {
+      // For unqualified names, check cross-type shadowing before resolving
+      // If a temp scalar function exists with this name, it shadows any builtin table function
+      val funcName = name.head
+      if (v1SessionCatalog.lookupTempFunction(funcName).isDefined) {
+        // Temp scalar function exists - will throw error below
+        None
+      } else {
+        // No temp scalar function - safe to resolve as table function
+        v1SessionCatalog.resolveBuiltinOrTempTableFunction(funcName, arguments)
+      }
     } else {
       None
     }
+
+    // Step 2: Fallback to scalar registry for type mismatch detection
+    // Architecture: Generators are one-way (table-to-scalar extraction). If a function exists
+    // ONLY as a scalar function and is used in table context, throw specific error.
+    //
+    // Note: This also handles cross-type shadowing. If a temp scalar function shadows a builtin
+    // table function, the check above returns None, and we fall through here to detect
+    // it's a scalar-only function and throw NOT_A_TABLE_FUNCTION.
+    if (tableFunctionResult.isEmpty && name.length == 1) {
+      if (v1SessionCatalog.lookupBuiltinOrTempFunction(name.head).isDefined) {
+        throw QueryCompilationErrors.notATableFunctionError(name.mkString("."))
+      }
+    }
+
+    tableFunctionResult
   }
 
   private def resolveV1Function(

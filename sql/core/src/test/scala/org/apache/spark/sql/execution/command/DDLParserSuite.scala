@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.SparkThrowable
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, SchemaCompensation, UnresolvedAttribute, UnresolvedFunctionName, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, FileResource, FunctionResource, JarResource}
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -688,23 +689,23 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
 
     val sql1 = "DROP TEMPORARY FUNCTION a.b"
     checkError(
-      exception = parseException(sql1),
-      condition = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
-      parameters = Map("statement" -> "DROP TEMPORARY FUNCTION", "name" -> "`a`.`b`"),
-      context = ExpectedContext(
-        fragment = sql1,
-        start = 0,
-        stop = 26))
+      exception = intercept[AnalysisException](parser.parsePlan(sql1)),
+      condition = "INVALID_TEMP_OBJ_QUALIFIER",
+      parameters = Map(
+        "objectType" -> "FUNCTION",
+        "objectName" -> "`b`",
+        "qualifier" -> "`a`"),
+      queryContext = Array.empty)
 
     val sql2 = "DROP TEMPORARY FUNCTION IF EXISTS a.b"
     checkError(
-      exception = parseException(sql2),
-      condition = "INVALID_SQL_SYNTAX.MULTI_PART_NAME",
-      parameters = Map("statement" -> "DROP TEMPORARY FUNCTION", "name" -> "`a`.`b`"),
-      context = ExpectedContext(
-        fragment = sql2,
-        start = 0,
-        stop = 36))
+      exception = intercept[AnalysisException](parser.parsePlan(sql2)),
+      condition = "INVALID_TEMP_OBJ_QUALIFIER",
+      parameters = Map(
+        "objectType" -> "FUNCTION",
+        "objectName" -> "`b`",
+        "qualifier" -> "`a`"),
+      queryContext = Array.empty)
   }
 
   test("SPARK-32374: create temporary view with properties not allowed") {
