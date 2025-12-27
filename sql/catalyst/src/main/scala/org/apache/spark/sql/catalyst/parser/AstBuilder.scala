@@ -6614,7 +6614,7 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
     // Use visitMultipartIdentifier to properly handle IDENTIFIER('name')
-    val cursorName = visitMultipartIdentifier(ctx.multipartIdentifier()).mkString(".")
+    val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier())
 
     // Parse optional USING clause parameters
     // Extract both expressions and their names (if aliased)
@@ -6625,7 +6625,7 @@ class AstBuilder extends DataTypeAstBuilder
       }.unzip
     }.getOrElse((Seq.empty, Seq.empty))
 
-    SingleStatement(OpenCursor(cursorName, args, paramNames))
+    SingleStatement(OpenCursor(nameParts, args, paramNames))
   }
 
   /**
@@ -6643,7 +6643,7 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
     // Use visitMultipartIdentifier to properly handle IDENTIFIER('name')
-    val cursorName = visitMultipartIdentifier(ctx.multipartIdentifier()).mkString(".")
+    val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier())
 
     val targetVariables = ctx.identifierReference().asScala.map { varIdent =>
       val varName = if (varIdent.expression() != null) {
@@ -6657,7 +6657,7 @@ class AstBuilder extends DataTypeAstBuilder
       }
       UnresolvedAttribute(varName)
     }.toSeq
-    SingleStatement(FetchCursor(cursorName, targetVariables))
+    SingleStatement(FetchCursor(nameParts, targetVariables))
   }
 
   /**
@@ -6675,8 +6675,8 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
     // Use visitMultipartIdentifier to properly handle IDENTIFIER('name')
-    val cursorName = visitMultipartIdentifier(ctx.multipartIdentifier()).mkString(".")
-    SingleStatement(CloseCursor(cursorName))
+    val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier())
+    SingleStatement(CloseCursor(nameParts))
   }
 
   private def visitSetVariableImpl(

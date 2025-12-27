@@ -1945,12 +1945,12 @@ case class DeclareCursor(
 /**
  * The logical plan of the OPEN cursor command.
  *
- * @param cursorName Name of the cursor to open
+ * @param nameParts Cursor name parts (unqualified: Seq(name) or qualified: Seq(label, name))
  * @param args Parameter expressions from USING clause
  * @param paramNames Names for each parameter (empty string "" for positional parameters)
  */
 case class OpenCursor(
-    cursorName: String,
+    nameParts: Seq[String],
     args: Seq[Expression] = Seq.empty,
     paramNames: Seq[String] = Seq.empty) extends LeafCommand {
   override lazy val resolved: Boolean = args.forall(_.resolved)
@@ -1958,18 +1958,23 @@ case class OpenCursor(
 
 /**
  * The logical plan of the FETCH cursor command.
+ *
+ * @param nameParts Cursor name parts (unqualified: Seq(name) or qualified: Seq(label, name))
+ * @param targetVariables Target variables to fetch into
  */
 case class FetchCursor(
-    cursorName: String,
+    nameParts: Seq[String],
     targetVariables: Seq[Expression]) extends LeafCommand {
   override lazy val resolved: Boolean = targetVariables.forall(_.resolved)
 }
 
 /**
  * The logical plan of the CLOSE cursor command.
+ *
+ * @param nameParts Cursor name parts (unqualified: Seq(name) or qualified: Seq(label, name))
  */
 case class CloseCursor(
-    cursorName: String) extends LeafCommand
+    nameParts: Seq[String]) extends LeafCommand
 
 /**
  * The logical plan of the CALL statement.

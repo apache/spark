@@ -2038,3 +2038,116 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "FETCH cur INTO result"
   } ]
 }
+
+
+-- !query
+BEGIN
+  DECLARE result INT;
+  DECLARE my_cursor CURSOR FOR SELECT 42 AS val;
+  OPEN MY_CURSOR;
+  FETCH MY_CURSOR INTO result;
+  CLOSE MY_CURSOR;
+  VALUES (result);  -- Should return 42
+END
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`result`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 98,
+    "stopIndex" : 124,
+    "fragment" : "FETCH MY_CURSOR INTO result"
+  } ]
+}
+
+
+-- !query
+BEGIN
+  DECLARE result INT;
+  DECLARE MyCursor CURSOR FOR SELECT 99 AS val;
+  OPEN mycursor;
+  FETCH mycursor INTO result;
+  CLOSE mycursor;
+  VALUES (result);  -- Should return 99
+END
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`result`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 96,
+    "stopIndex" : 121,
+    "fragment" : "FETCH mycursor INTO result"
+  } ]
+}
+
+
+-- !query
+BEGIN
+  outer_lbl: BEGIN
+    DECLARE cur CURSOR FOR SELECT 123 AS val;
+    DECLARE result INT;
+
+    OPEN OUTER_LBL.cur;  -- Label in different case
+    FETCH OUTER_LBL.CUR INTO result;  -- Both in different case
+    CLOSE outer_lbl.CUR;  -- Cursor in different case
+
+    VALUES (result);  -- Should return 123
+  END;
+END
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkException
+{
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
+  "messageParameters" : {
+    "message" : "Invalid state transition from CURSOR to VARIABLE"
+  }
+}
+
+
+-- !query
+BEGIN
+  DECLARE result INT;
+  DECLARE IDENTIFIER('MyCase') CURSOR FOR SELECT 42;
+  OPEN IDENTIFIER('mycase');  -- Different case but should work (case-insensitive resolution)
+  FETCH IDENTIFIER('MYCASE') INTO result;  -- Another case variation
+  CLOSE IDENTIFIER('MyCaSe');  -- Yet another variation
+  VALUES (result);  -- Should return 42
+END
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`result`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 178,
+    "stopIndex" : 215,
+    "fragment" : "FETCH IDENTIFIER('MYCASE') INTO result"
+  } ]
+}

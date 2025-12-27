@@ -27,12 +27,12 @@ import org.apache.spark.sql.execution.datasources.v2.LeafV2CommandExec
 /**
  * Physical plan node for opening cursors.
  *
- * @param cursorName Name of the cursor to open
+ * @param nameParts Cursor name parts (unqualified: Seq(name) or qualified: Seq(label, name))
  * @param args Parameter expressions from USING clause (for parameterized cursors)
  * @param paramNames Names for each parameter (empty string for positional parameters)
  */
 case class OpenCursorExec(
-    cursorName: String,
+    nameParts: Seq[String],
     args: Seq[Expression] = Seq.empty,
     paramNames: Seq[String] = Seq.empty) extends LeafV2CommandExec {
 
@@ -40,26 +40,26 @@ case class OpenCursorExec(
     val scriptingContextManager = SqlScriptingContextManager.get()
       .getOrElse(throw new AnalysisException(
         errorClass = "CURSOR_OUTSIDE_SCRIPT",
-        messageParameters = Map("cursorName" -> cursorName)))
+        messageParameters = Map("cursorName" -> nameParts.mkString("."))))
 
     val scriptingContext = scriptingContextManager.getContext
       .asInstanceOf[org.apache.spark.sql.scripting.SqlScriptingExecutionContext]
 
-    // Parse and normalize cursor name for case sensitivity
-    val cursorNameParts = parseCursorName(cursorName)
+    // Normalize cursor name parts for case sensitivity
+    val normalizedParts = normalizeCursorNameParts(nameParts)
 
     // Find cursor in scope hierarchy
-    val cursorDef = scriptingContext.currentFrame.findCursorByNameParts(cursorNameParts)
+    val cursorDef = scriptingContext.currentFrame.findCursorByNameParts(normalizedParts)
       .getOrElse(
         throw new AnalysisException(
           errorClass = "CURSOR_NOT_FOUND",
-          messageParameters = Map("cursorName" -> cursorName)))
+          messageParameters = Map("cursorName" -> nameParts.mkString("."))))
 
     // Validate cursor is not already open
     if (cursorDef.isOpen) {
       throw new AnalysisException(
         errorClass = "CURSOR_ALREADY_OPEN",
-        messageParameters = Map("cursorName" -> cursorName))
+        messageParameters = Map("cursorName" -> nameParts.mkString(".")))
     }
 
     // Execute the query and get iterator over results
@@ -85,10 +85,10 @@ case class OpenCursorExec(
   }
 
   /**
-   * Parses and normalizes cursor name parts based on case sensitivity configuration.
+   * Normalizes cursor name parts based on case sensitivity configuration.
    */
-  private def parseCursorName(cursorName: String): Seq[String] = {
-    cursorName.split("\\.").toSeq.map { part =>
+  private def normalizeCursorNameParts(parts: Seq[String]): Seq[String] = {
+    parts.map { part =>
       if (session.sessionState.conf.caseSensitiveAnalysis) {
         part
       } else {

@@ -6729,11 +6729,6 @@
           "CONTINUE exception handler is not supported. Use EXIT handler."
         ]
       },
-      "SQL_CURSOR" : {
-        "message" : [
-          "SQL cursor operations (DECLARE CURSOR, OPEN, FETCH, CLOSE) are not supported."
-        ]
-      },
       "CREATE_FLOW_QUERY_EXECUTION" : {
         "message" : [
           "Direct execution of a CREATE FLOW statement is not supported. To create a flow, create and execute a pipeline with a SQL file containing your statement attached in the pipeline spec."
@@ -6959,6 +6954,11 @@
       "SET_VARIABLE_USING_SET" : {
         "message" : [
           "<variableName> is a VARIABLE and cannot be updated using the SET statement. Use SET VARIABLE <variableName> = ... instead."
+        ]
+      },
+      "SQL_CURSOR" : {
+        "message" : [
+          "SQL cursor operations (DECLARE CURSOR, OPEN, FETCH, CLOSE) are not supported."
         ]
       },
       "SQL_SCRIPTING" : {

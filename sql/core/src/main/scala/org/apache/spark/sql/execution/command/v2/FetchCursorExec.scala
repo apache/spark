@@ -27,35 +27,38 @@ import org.apache.spark.sql.execution.datasources.v2.LeafV2CommandExec
 
 /**
  * Physical plan node for fetching from cursors.
+ *
+ * @param nameParts Cursor name parts (unqualified: Seq(name) or qualified: Seq(label, name))
+ * @param targetVariables Variables to fetch into
  */
 case class FetchCursorExec(
-    cursorName: String,
+    nameParts: Seq[String],
     targetVariables: Seq[VariableReference]) extends LeafV2CommandExec {
 
   override protected def run(): Seq[InternalRow] = {
     val scriptingContextManager = SqlScriptingContextManager.get()
       .getOrElse(throw new AnalysisException(
         errorClass = "CURSOR_OUTSIDE_SCRIPT",
-        messageParameters = Map("cursorName" -> cursorName)))
+        messageParameters = Map("cursorName" -> nameParts.mkString("."))))
 
     val scriptingContext = scriptingContextManager.getContext
       .asInstanceOf[org.apache.spark.sql.scripting.SqlScriptingExecutionContext]
 
-    // Parse and normalize cursor name for case sensitivity
-    val cursorNameParts = parseCursorName(cursorName)
+    // Normalize cursor name parts for case sensitivity
+    val normalizedParts = normalizeCursorNameParts(nameParts)
 
     // Find cursor in scope hierarchy
-    val cursorDef = scriptingContext.currentFrame.findCursorByNameParts(cursorNameParts)
+    val cursorDef = scriptingContext.currentFrame.findCursorByNameParts(normalizedParts)
       .getOrElse(
         throw new AnalysisException(
           errorClass = "CURSOR_NOT_FOUND",
-          messageParameters = Map("cursorName" -> cursorName)))
+          messageParameters = Map("cursorName" -> nameParts.mkString("."))))
 
     // Validate cursor is open
     if (!cursorDef.isOpen) {
       throw new AnalysisException(
         errorClass = "CURSOR_NOT_OPEN",
-        messageParameters = Map("cursorName" -> cursorName))
+        messageParameters = Map("cursorName" -> nameParts.mkString(".")))
     }
 
     // Get next row from iterator
@@ -63,7 +66,7 @@ case class FetchCursorExec(
     if (!iterator.hasNext) {
       throw new AnalysisException(
         errorClass = "CURSOR_NO_MORE_ROWS",
-        messageParameters = Map("cursorName" -> cursorName))
+        messageParameters = Map("cursorName" -> nameParts.mkString(".")))
     }
 
     val externalRow = iterator.next()
@@ -93,10 +96,10 @@ case class FetchCursorExec(
   }
 
   /**
-   * Parses and normalizes cursor name parts based on case sensitivity configuration.
+   * Normalizes cursor name parts based on case sensitivity configuration.
    */
-  private def parseCursorName(cursorName: String): Seq[String] = {
-    cursorName.split("\\.").toSeq.map { part =>
+  private def normalizeCursorNameParts(parts: Seq[String]): Seq[String] = {
+    parts.map { part =>
       if (session.sessionState.conf.caseSensitiveAnalysis) {
         part
       } else {

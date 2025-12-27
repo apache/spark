@@ -850,8 +850,8 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 37: IDENTIFIER() with case-sensitive cursor name
--- EXPECTED: Success - IDENTIFIER preserves case
+-- Test 37: IDENTIFIER() clause for cursor names - preserves literal case
+-- EXPECTED: Success - IDENTIFIER() preserves the literal, but resolution is still case-insensitive
 --QUERY-DELIMITER-START
 BEGIN
   DECLARE result INT;
@@ -1197,5 +1197,65 @@ BEGIN
   CLOSE cur;
 
   VALUES (result);  -- Should return 46 (4 * 10 + 6)
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 53: Case insensitivity - DECLARE lowercase, OPEN uppercase
+-- EXPECTED: Success - cursor names should be case-insensitive by default
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE result INT;
+  DECLARE my_cursor CURSOR FOR SELECT 42 AS val;
+  OPEN MY_CURSOR;
+  FETCH MY_CURSOR INTO result;
+  CLOSE MY_CURSOR;
+  VALUES (result);  -- Should return 42
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 54: Case insensitivity - DECLARE MixedCase, OPEN lowercase
+-- EXPECTED: Success - cursor names should be case-insensitive by default
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE result INT;
+  DECLARE MyCursor CURSOR FOR SELECT 99 AS val;
+  OPEN mycursor;
+  FETCH mycursor INTO result;
+  CLOSE mycursor;
+  VALUES (result);  -- Should return 99
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 55: Case insensitivity - Label-qualified cursor with different cases
+-- EXPECTED: Success - both label and cursor name should be case-insensitive
+--QUERY-DELIMITER-START
+BEGIN
+  outer_lbl: BEGIN
+    DECLARE cur CURSOR FOR SELECT 123 AS val;
+    DECLARE result INT;
+
+    OPEN OUTER_LBL.cur;  -- Label in different case
+    FETCH OUTER_LBL.CUR INTO result;  -- Both in different case
+    CLOSE outer_lbl.CUR;  -- Cursor in different case
+
+    VALUES (result);  -- Should return 123
+  END;
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 56: Case insensitivity with IDENTIFIER() - resolution still case-insensitive
+-- EXPECTED: Success - IDENTIFIER() preserves literal but resolution uses caseSensitiveAnalysis
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE result INT;
+  DECLARE IDENTIFIER('MyCase') CURSOR FOR SELECT 42;
+  OPEN IDENTIFIER('mycase');  -- Different case but should work (case-insensitive resolution)
+  FETCH IDENTIFIER('MYCASE') INTO result;  -- Another case variation
+  CLOSE IDENTIFIER('MyCaSe');  -- Yet another variation
+  VALUES (result);  -- Should return 42
 END;
 --QUERY-DELIMITER-END
