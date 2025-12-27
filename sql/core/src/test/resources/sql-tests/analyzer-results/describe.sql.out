@@ -26,7 +26,7 @@ CREATE TEMPORARY VIEW temp_Data_Source_View
     To '10',
     Table 'test1')
 -- !query analysis
-CreateTempViewUsing [tableIdent:`temp_Data_Source_View` replace:false provider:org.apache.spark.sql.sources.DDLScanSource Map(From -> 1, To -> 10, Table -> test1)
+CreateTempViewUsing [tableIdent:`temp_Data_Source_View` ignoreIfExists:false replace:false provider:org.apache.spark.sql.sources.DDLScanSource Map(From -> 1, To -> 10, Table -> test1)
 
 
 -- !query
