@@ -4446,6 +4446,9 @@ class DataFrame:
         ...    def onQueryTerminated(self, event):
         ...        pass
         ...
+        ...    def onQueryExecutionStart(self, event):
+        ...        pass
+        ...
         >>> error_listener = MyErrorListener()
         >>> spark.streams.addListener(error_listener)
         >>> sdf = spark.readStream.format("rate").load().withColumn(

@@ -115,6 +115,9 @@ private[sql] class StreamingQueryStatusListener(
     ), checkTriggers = true)
     queryToProgress.remove(event.runId)
   }
+
+  override def onQueryExecutionStart(
+      event: StreamingQueryListener.QueryExecutionStartEvent): Unit = {}
 }
 
 private[spark] class StreamingQueryData(

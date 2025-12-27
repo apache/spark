@@ -39,6 +39,7 @@ from pyspark.sql.streaming.listener import (
     QueryProgressEvent,
     QueryTerminatedEvent,
     QueryIdleEvent,
+    QueryExecutionStartEvent,
 )
 from pyspark.worker_util import check_python_version
 
@@ -89,6 +90,8 @@ def main(infile: IO, outfile: IO) -> None:
             listener.onQueryIdle(QueryIdleEvent.fromJson(listener_event))
         elif listener_event_type == 3:
             listener.onQueryTerminated(QueryTerminatedEvent.fromJson(listener_event))
+        elif listener_event_type == 4:
+            listener.onQueryExecutionStart(QueryExecutionStartEvent.fromJson(listener_event))
 
     while True:
         event = utf8_deserializer.loads(infile)
