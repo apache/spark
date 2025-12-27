@@ -26,8 +26,40 @@
 --
 -- ============================================================================
 
+-- Test 0a: Verify DECLARE CURSOR is disabled by default
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE cur CURSOR FOR SELECT 1;
+END;
+--QUERY-DELIMITER-END
+
+-- Test 0b: Verify OPEN is disabled by default
+--QUERY-DELIMITER-START
+BEGIN
+  OPEN cur;
+END;
+--QUERY-DELIMITER-END
+
+-- Test 0c: Verify FETCH is disabled by default
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE x INT;
+  FETCH cur INTO x;
+END;
+--QUERY-DELIMITER-END
+
+-- Test 0d: Verify CLOSE is disabled by default
+--QUERY-DELIMITER-START
+BEGIN
+  CLOSE cur;
+END;
+--QUERY-DELIMITER-END
+
+-- Enable cursor and continue handler features for this test suite
+SET spark.sql.scripting.cursorEnabled=true;
+SET spark.sql.scripting.continueHandlerEnabled=true;
+
 -- Cursor scoping and state management tests
---SET spark.sql.scripting.continueHandlerEnabled=true
 
 -- Test 1a: Cursors have a separate namespace from local variables
 -- EXPECTED: Success - cursor and variable can have same name

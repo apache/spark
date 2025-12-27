@@ -66,36 +66,9 @@ class ResolveFetchCursor(val catalogManager: CatalogManager) extends Rule[Logica
           "Unexpected target variable expression in FetchCursor: " + other)
       }
 
+      // Check for duplicates immediately after resolution
+      checkForDuplicateVariables(resolvedVars)
+
       s.copy(parsedPlan = fetchCursor.copy(targetVariables = resolvedVars))
-
-    // Check for duplicates after resolution
-    case s @ SingleStatement(fetchCursor: FetchCursor)
-        if fetchCursor.targetVariables.forall(_.resolved) =>
-      val targetVariables = fetchCursor.targetVariables.map(_.asInstanceOf[VariableReference])
-      checkForDuplicateVariables(targetVariables)
-      s
-
-    // Also resolve unwrapped FetchCursor (when extracted from SingleStatement for execution)
-    case fetchCursor: FetchCursor if !fetchCursor.targetVariables.forall(_.resolved) =>
-      val resolvedVars = fetchCursor.targetVariables.map {
-        case u: UnresolvedAttribute =>
-          variableResolution.lookupVariable(
-            nameParts = u.nameParts
-          ) match {
-            case Some(variable) => variable.copy(canFold = false)
-            case _ => throw unresolvedVariableError(u.nameParts, Seq("SYSTEM", "SESSION"))
-          }
-
-        case other => throw SparkException.internalError(
-          "Unexpected target variable expression in FetchCursor: " + other)
-      }
-
-      fetchCursor.copy(targetVariables = resolvedVars)
-
-    // Check for duplicates after resolution
-    case fetchCursor: FetchCursor if fetchCursor.targetVariables.forall(_.resolved) =>
-      val targetVariables = fetchCursor.targetVariables.map(_.asInstanceOf[VariableReference])
-      checkForDuplicateVariables(targetVariables)
-      fetchCursor
   }
 }

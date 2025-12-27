@@ -6585,16 +6585,16 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitDeclareCursorStatement(
       ctx: DeclareCursorStatementContext): LogicalPlan = withOrigin(ctx) {
+    if (!conf.getConf(SQLConf.SQL_SCRIPTING_CURSOR_ENABLED)) {
+      throw SqlScriptingErrors.cursorNotSupported(CurrentOrigin.get)
+    }
+
     val cursorName = ctx.strictIdentifier().getText
     // Extract original SQL text to preserve parameter markers
     val queryText = getOriginalText(ctx.query())
 
-    // Use a placeholder plan (LocalRelation) - the actual query will be parsed at execution time
-    // This prevents parameter markers from being resolved during script analysis
-    val query: LogicalPlan = LocalRelation()
-
     val asensitive = ctx.ASENSITIVE() != null || ctx.INSENSITIVE() != null
-    SingleStatement(DeclareCursor(cursorName, query, queryText, asensitive))
+    SingleStatement(DeclareCursor(cursorName, queryText, asensitive))
   }
 
   /**
@@ -6609,21 +6609,19 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitOpenCursorStatement(
       ctx: OpenCursorStatementContext): LogicalPlan = withOrigin(ctx) {
+    if (!conf.getConf(SQLConf.SQL_SCRIPTING_CURSOR_ENABLED)) {
+      throw SqlScriptingErrors.cursorNotSupported(CurrentOrigin.get)
+    }
+
     val cursorName = ctx.multipartIdentifier().parts.asScala.map(_.getText).mkString(".")
 
     // Parse optional USING clause parameters
     // Extract both expressions and their names (if aliased)
     val (args, paramNames) = Option(ctx.params).map { params =>
-      val namedExprs = params.namedExpression().asScala.toSeq.map(visitNamedExpression)
-      val exprs = namedExprs.map {
-        case alias: Alias => alias.child  // Extract child expression
-        case expr => expr
-      }
-      val names = namedExprs.map {
-        case alias: Alias => alias.name  // Extract alias name
-        case _ => ""  // Positional parameter (no name)
-      }
-      (exprs, names)
+      params.namedExpression().asScala.toSeq.map(visitNamedExpression).map {
+        case alias: Alias => (alias.child, alias.name)
+        case expr => (expr, "")  // Empty string for positional parameter
+      }.unzip
     }.getOrElse((Seq.empty, Seq.empty))
 
     SingleStatement(OpenCursor(cursorName, args, paramNames))
@@ -6639,6 +6637,10 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitFetchCursorStatement(
       ctx: FetchCursorStatementContext): LogicalPlan = withOrigin(ctx) {
+    if (!conf.getConf(SQLConf.SQL_SCRIPTING_CURSOR_ENABLED)) {
+      throw SqlScriptingErrors.cursorNotSupported(CurrentOrigin.get)
+    }
+
     val cursorName = ctx.multipartIdentifier().parts.asScala.map(_.getText).mkString(".")
     val targetVariables = ctx.identifierReference().asScala.map { varIdent =>
       val varName = if (varIdent.expression() != null) {
@@ -6665,6 +6667,10 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitCloseCursorStatement(
       ctx: CloseCursorStatementContext): LogicalPlan = withOrigin(ctx) {
+    if (!conf.getConf(SQLConf.SQL_SCRIPTING_CURSOR_ENABLED)) {
+      throw SqlScriptingErrors.cursorNotSupported(CurrentOrigin.get)
+    }
+
     val cursorName = ctx.multipartIdentifier().parts.asScala.map(_.getText).mkString(".")
     SingleStatement(CloseCursor(cursorName))
   }

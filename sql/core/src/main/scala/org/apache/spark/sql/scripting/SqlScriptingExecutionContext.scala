@@ -306,31 +306,29 @@ class SqlScriptingExecutionScope(
  * @param name
  *   Name of the cursor.
  * @param query
- *   The query that defines the cursor (LogicalPlan).
+ *   The query that defines the cursor (LogicalPlan). For parameterized cursors,
+ *   this is updated with the analyzed plan when the cursor is opened.
  * @param queryText
  *   The original SQL text of the query (preserves parameter markers).
  * @param isOpen
  *   Whether the cursor is currently open.
- * @param resultData
- *   The cached result data (Array of InternalRows) when cursor is open.
- * @param currentPosition
- *   Current position in the result set (0-based index).
+ * @param resultIterator
+ *   The iterator over result rows when cursor is open. Uses toLocalIterator()
+ *   to avoid loading all data into memory at once.
  */
 case class CursorDefinition(
     name: String,
     var query: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan,
     queryText: String,
     var isOpen: Boolean = false,
-    var resultData: Option[Array[org.apache.spark.sql.catalyst.InternalRow]] = None,
-    var currentPosition: Int = -1) {
+    var resultIterator: Option[java.util.Iterator[org.apache.spark.sql.Row]] = None) {
 
   /**
    * Closes the cursor and releases its resources.
-   * Sets isOpen to false, releases result data, and resets position.
+   * Sets isOpen to false and releases the result iterator.
    */
   def close(): Unit = {
     isOpen = false
-    resultData = None
-    currentPosition = -1
+    resultIterator = None
   }
 }

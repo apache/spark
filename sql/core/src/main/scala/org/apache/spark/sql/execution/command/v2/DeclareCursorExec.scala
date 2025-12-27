@@ -20,23 +20,19 @@ package org.apache.spark.sql.execution.command.v2
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{InternalRow, SqlScriptingContextManager}
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.datasources.v2.LeafV2CommandExec
 import org.apache.spark.sql.scripting.CursorDefinition
 
 /**
  * Physical plan node for declaring cursors.
  * Creates a cursor definition in the current scope and parses its query from SQL text.
- * The query is parsed at declaration time but not analyzed to preserve parameter markers.
  *
  * @param cursorName Name of the cursor
- * @param query Placeholder LogicalPlan (not used at execution)
- * @param queryText Original SQL text of the cursor query (used for execution)
+ * @param queryText Original SQL text of the cursor query
  * @param asensitive Whether the cursor is ASENSITIVE (currently all cursors are INSENSITIVE)
  */
 case class DeclareCursorExec(
     cursorName: String,
-    query: LogicalPlan,
     queryText: String,
     asensitive: Boolean) extends LeafV2CommandExec {
 
@@ -65,11 +61,7 @@ case class DeclareCursorExec(
     val cursorDef = CursorDefinition(
       name = cursorName,
       query = parsedQuery,
-      queryText = queryText,
-      isOpen = false,
-      resultData = None,
-      currentPosition = -1
-    )
+      queryText = queryText)
 
     currentScope.cursors.put(cursorName, cursorDef)
 

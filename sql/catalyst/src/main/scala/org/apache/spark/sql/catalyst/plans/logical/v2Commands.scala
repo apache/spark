@@ -1928,47 +1928,31 @@ case class SetVariable(
 }
 
 /**
- * The logical plan of the DECLARE CURSOR command.
- * Note: The query child should not be fully analyzed/optimized at declaration time
- * because we need to re-analyze it each time the cursor is opened to see fresh
- * data.
- */
-/**
  * The logical plan of the DECLARE CURSOR statement.
  *
+ * The queryText is stored to support both parameterized and non-parameterized cursors.
+ * The query is parsed and analyzed when the cursor is declared at execution time.
+ *
  * @param cursorName Name of the cursor
- * @param query The parsed logical plan of the cursor query
  * @param queryText The original SQL text of the query (preserves parameter markers)
  * @param asensitive Whether the cursor is ASENSITIVE or INSENSITIVE
  */
 case class DeclareCursor(
     cursorName: String,
-    query: LogicalPlan,
     queryText: String,
-    asensitive: Boolean = true) extends UnaryCommand {
-  override def child: LogicalPlan = query
-  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
-    copy(query = newChild)
-
-  // Mark that the child query should not be eagerly analyzed
-  override lazy val resolved: Boolean = cursorName.nonEmpty
-}
+    asensitive: Boolean = true) extends LeafCommand
 
 /**
  * The logical plan of the OPEN cursor command.
  *
  * @param cursorName Name of the cursor to open
  * @param args Parameter expressions from USING clause
- * @param paramNames Names for each parameter (empty string for positional parameters)
+ * @param paramNames Names for each parameter (empty string "" for positional parameters)
  */
 case class OpenCursor(
     cursorName: String,
     args: Seq[Expression] = Seq.empty,
-    paramNames: Seq[String] = Seq.empty) extends Command {
-  override def children: Seq[LogicalPlan] = Nil
-  override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = this
-
+    paramNames: Seq[String] = Seq.empty) extends LeafCommand {
   override lazy val resolved: Boolean = args.forall(_.resolved)
 }
 
@@ -1985,11 +1969,7 @@ case class FetchCursor(
  * The logical plan of the CLOSE cursor command.
  */
 case class CloseCursor(
-    cursorName: String) extends LeafCommand {
-  override def children: Seq[LogicalPlan] = Nil
-  override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = this
-}
+    cursorName: String) extends LeafCommand
 
 /**
  * The logical plan of the CALL statement.

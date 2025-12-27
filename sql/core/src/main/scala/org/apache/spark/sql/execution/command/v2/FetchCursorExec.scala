@@ -58,17 +58,23 @@ case class FetchCursorExec(
         messageParameters = Map("cursorName" -> cursorName))
     }
 
-    // Advance to next row and validate data availability
-    cursorDef.currentPosition += 1
-    val resultData = cursorDef.resultData.get
-    if (cursorDef.currentPosition >= resultData.length) {
+    // Get next row from iterator
+    val iterator = cursorDef.resultIterator.get
+    if (!iterator.hasNext) {
       throw new AnalysisException(
         errorClass = "CURSOR_NO_MORE_ROWS",
         messageParameters = Map("cursorName" -> cursorName))
     }
 
-    val currentRow = resultData(cursorDef.currentPosition)
+    val externalRow = iterator.next()
     val variableManager = scriptingContextManager.getVariableManager
+
+    // Convert Row to InternalRow for processing
+    val schema = org.apache.spark.sql.catalyst.types.DataTypeUtils
+      .fromAttributes(cursorDef.query.output)
+    val converter = org.apache.spark.sql.catalyst.CatalystTypeConverters
+      .createToCatalystConverter(schema)
+    val currentRow = converter(externalRow).asInstanceOf[InternalRow]
 
     // SQL Standard special case: FETCH multiple columns INTO single STRUCT variable
     if (shouldFetchIntoStruct(targetVariables, currentRow)) {

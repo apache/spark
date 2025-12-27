@@ -21,6 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{InternalRow, SqlScriptingContextManager}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.execution.datasources.v2.LeafV2CommandExec
 
 /**
@@ -61,23 +62,24 @@ case class OpenCursorExec(
         messageParameters = Map("cursorName" -> cursorName))
     }
 
-    // Execute the query and collect results
-    val resultData = if (args.nonEmpty) {
+    // Execute the query and get iterator over results
+    val resultIterator = if (args.nonEmpty) {
       // Parameterized cursor: re-parse query text with bound parameters
-      val (data, analyzedPlan) = executeParameterizedQuery(cursorDef.queryText, args)
+      val (iterator, analyzedPlan) = executeParameterizedQuery(cursorDef.queryText, args)
       // Update the cursor's query with the analyzed plan so FETCH can access the schema
       cursorDef.query = analyzedPlan
-      data
+      iterator
     } else {
-      // Non-parameterized cursor: execute the analyzed plan directly
-      val queryExecution = session.sessionState.executePlan(cursorDef.query)
-      queryExecution.executedPlan.executeCollect()
+      // Non-parameterized cursor: use toLocalIterator to avoid loading all data into memory
+      val df = Dataset.ofRows(
+        session.asInstanceOf[org.apache.spark.sql.classic.SparkSession],
+        cursorDef.query)
+      df.toLocalIterator()
     }
 
     // Update cursor state to open
     cursorDef.isOpen = true
-    cursorDef.resultData = Some(resultData)
-    cursorDef.currentPosition = -1
+    cursorDef.resultIterator = Some(resultIterator)
 
     Nil
   }
@@ -98,21 +100,22 @@ case class OpenCursorExec(
   /**
    * Executes a parameterized query by re-parsing the SQL text with bound parameters.
    * This uses the same parameter binding mechanism as EXECUTE IMMEDIATE.
+   * Returns an iterator to avoid loading all data into memory, matching FOR loop behavior.
    *
    * @param queryText The SQL query text with parameter markers (? or :name)
    * @param args Parameter expressions to bind
-   * @return Tuple of (result rows, analyzed logical plan)
+   * @return Tuple of (result iterator, analyzed logical plan)
    */
   private def executeParameterizedQuery(
       queryText: String,
-      args: Seq[Expression]): (Array[InternalRow], LogicalPlan) = {
+      args: Seq[Expression]): (java.util.Iterator[org.apache.spark.sql.Row], LogicalPlan) = {
     val (paramValues, paramNames) = buildUnifiedParameters(args)
 
     // Use session.sql() with parameters (same as EXECUTE IMMEDIATE)
     val df = session.asInstanceOf[org.apache.spark.sql.classic.SparkSession]
       .sql(queryText, paramValues, paramNames)
 
-    (df.queryExecution.executedPlan.executeCollect(), df.queryExecution.analyzed)
+    (df.toLocalIterator(), df.queryExecution.analyzed)
   }
 
   /**

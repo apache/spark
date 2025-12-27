@@ -238,6 +238,14 @@ private[sql] object SqlScriptingErrors {
       messageParameters = Map.empty)
   }
 
+  def cursorNotSupported(origin: Origin): Throwable = {
+    new SqlScriptingException(
+      origin = origin,
+      errorClass = "UNSUPPORTED_FEATURE.SQL_CURSOR",
+      cause = null,
+      messageParameters = Map.empty)
+  }
+
   def invalidSqlStateValue(origin: Origin, sqlState: String): Throwable = {
     new SqlScriptingException(
       origin = origin,
