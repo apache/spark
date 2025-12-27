@@ -25,7 +25,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide, JoinSelectionHelper}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, HashPartitioningLike, Partitioning, PartitioningCollection, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan}
@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  * broadcast relation.  This data is then placed in a Spark broadcast variable.  The streamed
  * relation is not shuffled.
  */
-case class BroadcastHashJoinExec(
+case class BroadcastHashJoinExec private(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
     joinType: JoinType,
@@ -244,4 +244,28 @@ case class BroadcastHashJoinExec(
   override protected def withNewChildrenInternal(
       newLeft: SparkPlan, newRight: SparkPlan): BroadcastHashJoinExec =
     copy(left = newLeft, right = newRight)
+}
+
+object BroadcastHashJoinExec extends JoinSelectionHelper {
+  def apply(
+      leftKeys: Seq[Expression],
+      rightKeys: Seq[Expression],
+      joinType: JoinType,
+      buildSide: BuildSide,
+      condition: Option[Expression],
+      left: SparkPlan,
+      right: SparkPlan,
+      isNullAwareAntiJoin: Boolean = false): BroadcastHashJoinExec = {
+    val (normalizedLeftKeys, normalizedRightKeys) = HashJoin.normalizeJoinKeys(leftKeys, rightKeys)
+
+    new BroadcastHashJoinExec(
+      normalizedLeftKeys,
+      normalizedRightKeys,
+      joinType,
+      buildSide,
+      condition,
+      left,
+      right,
+      isNullAwareAntiJoin)
+  }
 }
