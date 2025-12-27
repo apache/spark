@@ -258,7 +258,7 @@ public class TaskMemoryManager {
         Utils.bytesToString(requested), consumerToSpill, requestingConsumer);
     }
     try {
-      long released = consumerToSpill.spill(requested, requestingConsumer);
+      long released = consumerToSpill.spillWithTiming(requested, requestingConsumer);
       if (released > 0) {
         if (logger.isDebugEnabled()) {
           logger.debug("Task {} spilled {} of requested {} from {} for {}", taskAttemptId,
