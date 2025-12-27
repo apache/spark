@@ -52,11 +52,11 @@ class FunctionResolution(
         val CatalogAndIdentifier(catalog, ident) =
           relationResolution.expandIdentifier(u.nameParts)
         catalog.asFunctionCatalog.loadFunction(ident) match {
-          case V1Function(_) =>
-            // this triggers the second time v1 function resolution but should be cheap
-            // (no RPC to external catalog), since the metadata has been already cached
-            // in FunctionRegistry during the above `catalog.loadFunction` call.
-            resolveV1Function(ident.asFunctionIdentifier, u.arguments, u)
+          case v1Func: V1Function =>
+            // V1Function has a lazy builder - invoke() triggers resource loading
+            // and builder creation only on first invocation
+            val func = v1Func.invoke(u.arguments)
+            validateFunction(func, u.arguments.length, u)
           case unboundV2Func =>
             resolveV2Function(unboundV2Func, u.arguments, u)
         }
@@ -116,14 +116,6 @@ class FunctionResolution(
     } else {
       None
     }
-  }
-
-  private def resolveV1Function(
-      ident: FunctionIdentifier,
-      arguments: Seq[Expression],
-      u: UnresolvedFunction): Expression = {
-    val func = v1SessionCatalog.resolvePersistentFunction(ident, arguments)
-    validateFunction(func, arguments.length, u)
   }
 
   private def validateFunction(

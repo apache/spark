@@ -483,8 +483,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         if conf.useV1Command =>
       ShowTablePropertiesCommand(ident, propertyKey, output)
 
-    case DescribeFunction(ResolvedNonPersistentFunc(_, V1Function(info)), extended) =>
-      DescribeFunctionCommand(info, extended)
+    case DescribeFunction(ResolvedNonPersistentFunc(_, v1Func: V1Function), extended) =>
+      DescribeFunctionCommand(v1Func.info, extended)
 
     case DescribeFunction(ResolvedPersistentFunc(catalog, _, func), extended) =>
       if (isSessionCatalog(catalog)) {
