@@ -389,12 +389,17 @@ Before using <code>keytab</code> and <code>principal</code> configuration option
 * The included JDBC driver version supports kerberos authentication with keytab.
 * There is a built-in connection provider which supports the used database.
 
-There is a built-in connection providers for the following databases:
+There are built-in connection providers for the following databases:
+* Databricks
 * DB2
-* MariaDB
-* MS Sql
+* Derby
+* H2
+* MariaDB and MySQL
+* Microsoft SQL Server
 * Oracle
 * PostgreSQL
+* Snowflake
+* Teradata
 
 If the requirements are not met, please consider using the <code>JdbcConnectionProvider</code> developer API to handle custom authentication.
 
