@@ -375,6 +375,7 @@ object ShuffleExchangeExec {
           case (partition, index) => (partition.toSeq(expressions.map(_.dataType)), index)
         }.toMap
         new KeyGroupedPartitioner(mutable.Map(valueMap.toSeq: _*), n)
+      case c: CustomFunctionPartitioning => c.partitioner
       case _ => throw SparkException.internalError(s"Exchange not implemented for $newPartitioning")
       // TODO: Handle BroadcastPartitioning.
     }
@@ -408,6 +409,9 @@ object ShuffleExchangeExec {
         // If the value is null, `InternalRow#getInt` returns 0.
         val projection = UnsafeProjection.create(s.partitionIdExpression :: Nil, outputAttributes)
         row => projection(row).getInt(0)
+      case c: CustomFunctionPartitioning =>
+        val getObject = ObjectOperator.deserializeRowToObject(c.deserializer, c.outputAttributes)
+        row => c.keyFunc(getObject(row))
       case _ => throw SparkException.internalError(s"Exchange not implemented for $newPartitioning")
     }
 

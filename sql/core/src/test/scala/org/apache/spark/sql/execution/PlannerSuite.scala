@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.{HashPartitioner, Partitioner, SparkUnsupportedOperationException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, DataFrame, Row}
 import org.apache.spark.sql.AnalysisException
@@ -1583,6 +1583,96 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     // Total shuffles: one for df1, one for df2, one for groupBy.
     // The groupBy reuse the output partitioning after DirectShufflePartitionID.
     checkShuffleCount(grouped, 3)
+  }
+
+  test("SPARK-27853: repartition with custom Partitioner using HashPartitioner") {
+    val ds = spark.range(100).as[Long]
+    val numPartitions = 10
+    val partitioner = new HashPartitioner(numPartitions)
+
+    val repartitioned = ds.repartition[Long](identity, partitioner)
+
+    assert(repartitioned.rdd.getNumPartitions == numPartitions)
+    assert(repartitioned.count() == 100)
+
+    val result = repartitioned.withColumn("partition_id", spark_partition_id()).collect()
+    result.foreach { row =>
+      val value = row.getAs[Long]("id")
+      val actualPartition = row.getAs[Int]("partition_id")
+      val expectedPartition = (value.hashCode() % numPartitions + numPartitions) % numPartitions
+      assert(actualPartition == expectedPartition,
+        s"Value $value should be in partition $expectedPartition but was in $actualPartition")
+    }
+  }
+
+  test("SPARK-27853: repartition with custom Partitioner and key extraction function") {
+    val ds = Seq(
+      ("Alice", 25),
+      ("Bob", 30),
+      ("Charlie", 25),
+      ("David", 30)
+    ).toDF("name", "age").as[(String, Int)]
+
+    val partitioner = new HashPartitioner(5)
+    val repartitioned = ds.repartition[Int](_._2, partitioner)
+
+    assert(repartitioned.rdd.getNumPartitions == 5)
+    assert(repartitioned.count() == 4)
+
+    val result = repartitioned.withColumn("partition_id", spark_partition_id()).collect()
+    val alicePartition = result.find(_.getAs[String]("name") == "Alice")
+      .get.getAs[Int]("partition_id")
+    val charliePartition = result.find(_.getAs[String]("name") == "Charlie")
+      .get.getAs[Int]("partition_id")
+    assert(alicePartition == charliePartition)
+
+    val bobPartition = result.find(_.getAs[String]("name") == "Bob")
+      .get.getAs[Int]("partition_id")
+    val davidPartition = result.find(_.getAs[String]("name") == "David")
+      .get.getAs[Int]("partition_id")
+    assert(bobPartition == davidPartition)
+  }
+
+  test("SPARK-27853: repartition with user-defined Partitioner") {
+    class EvenOddPartitioner extends Partitioner {
+      override def numPartitions: Int = 2
+      override def getPartition(key: Any): Int = key match {
+        case l: Long => if (l % 2 == 0) 0 else 1
+        case _ => 0
+      }
+    }
+
+    val ds = spark.range(20).as[Long]
+    val repartitioned = ds.repartition[Long](identity, new EvenOddPartitioner())
+
+    assert(repartitioned.rdd.getNumPartitions == 2)
+
+    val result = repartitioned.withColumn("partition_id", spark_partition_id()).collect()
+    result.foreach { row =>
+      val value = row.getAs[Long]("id")
+      val partition = row.getAs[Int]("partition_id")
+      val expected = if (value % 2 == 0) 0 else 1
+      assert(partition == expected,
+        s"Value $value should be in partition $expected but was in $partition")
+    }
+  }
+
+  test("SPARK-27853: repartition with custom Partitioner introduces shuffle") {
+    val ds = spark.range(100).as[Long]
+    val repartitioned = ds.repartition[Long](identity, new HashPartitioner(10))
+
+    val shuffles = collect(repartitioned.queryExecution.executedPlan) {
+      case s: ShuffleExchangeLike => s
+    }
+    assert(shuffles.nonEmpty)
+  }
+
+  test("SPARK-27853: repartition with custom Partitioner preserves data") {
+    val original = (1 to 1000).map(i => (i, s"value_$i")).toDF("id", "value").as[(Int, String)]
+
+    val repartitioned = original.repartition[Int](_._1, new HashPartitioner(20))
+
+    assert(original.collect().toSet == repartitioned.collect().toSet)
   }
 }
 
