@@ -2848,8 +2848,12 @@ class SparkContext(config: SparkConf) extends Logging {
    * @return the cleaned closure
    */
   private[spark] def clean[F <: AnyRef](f: F, checkSerializable: Boolean = true): F = {
-    SparkClosureCleaner.clean(f, checkSerializable)
-    f
+    if (Runtime.version().feature() > 21) {
+      SparkClosureCleaner.cleanAndRet(f, checkSerializable)
+    } else {
+      SparkClosureCleaner.clean(f, checkSerializable)
+      f
+    }
   }
 
   /**
