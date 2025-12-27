@@ -1579,7 +1579,7 @@
     "message" : [
       "Number of dynamic partitions created is <numWrittenParts>, which is more than <maxDynamicPartitions>. To solve this try to set <maxDynamicPartitionsKey> to at least <numWrittenParts>."
     ],
-    "sqlState": "54054"
+    "sqlState" : "54054"
   },
   "EMITTING_ROWS_OLDER_THAN_WATERMARK_NOT_ALLOWED" : {
     "message" : [
