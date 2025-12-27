@@ -806,6 +806,12 @@
     ],
     "sqlState" : "22003"
   },
+  "COMMENT_ON_COLUMN_REQUIRES_TABLE_NAME" : {
+    "message" : [
+      "COMMENT ON COLUMN requires at least table name and column name (e.g., table.column, database.table.column, or catalog.database.table.column). Found: <columnRef>."
+    ],
+    "sqlState" : "42601"
+  },
   "COMPARATOR_RETURNS_NULL" : {
     "message" : [
       "The comparator has returned a NULL for a comparison between <firstValue> and <secondValue>.",
