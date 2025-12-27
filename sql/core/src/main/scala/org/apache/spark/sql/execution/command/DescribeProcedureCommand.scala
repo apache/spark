@@ -18,15 +18,14 @@
 package org.apache.spark.sql.execution.command
 
 import scala.collection.mutable.ArrayBuffer
-import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.ResolvedProcedure
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connector.catalog.procedures.{ProcedureParameter, UnboundProcedure}
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.connector.catalog.procedures.{ProcedureParameter, SimpleProcedure, UnboundProcedure}
+import org.apache.spark.sql.types.StringType
 
 /**
  * A command for users to describe a procedure.
@@ -50,30 +49,23 @@ case class DescribeProcedureCommand(
     }
   }
 
-
   private def describeV2Procedure(procedure: UnboundProcedure): Seq[Row] = {
     val buffer = new ArrayBuffer[(String, String)]
     append(buffer, "Procedure:", procedure.name())
     append(buffer, "Description:", procedure.description())
 
-    try {
-      val bound = procedure.bind(new StructType())
-      val params = bound.parameters()
-      if (params != null && params.nonEmpty) {
-        val formattedParams = formatProcedureParameters(params)
-        append(buffer, "Parameters:", formattedParams.head)
-        formattedParams.tail.foreach(s => append(buffer, "", s))
-      } else {
-        append(buffer, "Parameters:", "()")
-      }
-    } catch {
-      case NonFatal(e) =>
-        // Ignore if binding fails
-        // UnboundProcedure requires binding to retrieve parameters. We try to bind with an empty
-        // argument list to get the parameters. If the procedure requires arguments, binding might
-        // fail. In that case, we suppress the exception and just show the procedure metadata
-        // without parameters, because we cannot know which overload to describe without arguments.
-        logWarning(s"Failed to bind procedure ${procedure.name()} for description", e)
+    procedure match {
+      case p: SimpleProcedure =>
+        val params = p.parameters()
+        if (params != null && params.nonEmpty) {
+          val formattedParams = formatProcedureParameters(params)
+          append(buffer, "Parameters:", formattedParams.head)
+          formattedParams.tail.foreach(s => append(buffer, "", s))
+        } else {
+          append(buffer, "Parameters:", "()")
+        }
+      case _ =>
+        // Do not show parameters for non-simple procedures
     }
 
     val keys = tabulate(buffer.map(_._1).toSeq)
@@ -81,9 +73,6 @@ case class DescribeProcedureCommand(
     keys.zip(values).map { case (key, value) => Row(s"$key $value") }
   }
 
-  // This helper is needed because the V2 Procedure API returns an array of ProcedureParameter,
-  // which differs from the StructType used by internal stored procedures (handled by
-  // formatParameters).
   private def formatProcedureParameters(params: Array[ProcedureParameter]): Seq[String] = {
     val paramsStrings = params.map { p =>
       val mode = p.mode().toString

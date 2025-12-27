@@ -493,7 +493,7 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
   }
 
   test("SPARK-51780: Implement DESC PROCEDURE") {
-    catalog.createProcedure(Identifier.of(Array("ns"), "foo"), UnboundSum)
+    catalog.createProcedure(Identifier.of(Array("ns"), "foo"), SimpleSum)
     catalog.createProcedure(Identifier.of(Array("ns", "db"), "abc"), UnboundLongSum)
     catalog.createProcedure(Identifier.of(Array(""), "xyz"), UnboundComplexProcedure)
     catalog.createProcedure(Identifier.of(Array(), "xxx"), UnboundStructProcedure)
@@ -517,24 +517,24 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
 
       checkAnswer(
         sql("DESC PROCEDURE cat.ns.foo"),
-        Row("Procedure:   sum") ::
-          Row("Description: sum integers") ::
+        Row("Procedure:   simple_sum") ::
+          Row("Description: simple sum integers") ::
           Row("Parameters:  IN in1 INT") ::
           Row("             IN in2 INT") :: Nil)
 
       checkAnswer(
         // use DESCRIBE instead of DESC
         sql("DESCRIBE PROCEDURE cat.ns.foo"),
-        Row("Procedure:   sum") ::
-          Row("Description: sum integers") ::
+        Row("Procedure:   simple_sum") ::
+          Row("Description: simple sum integers") ::
           Row("Parameters:  IN in1 INT") ::
           Row("             IN in2 INT") :: Nil)
 
       checkAnswer(
         // use default catalog
         sql("DESC PROCEDURE ns.foo"),
-        Row("Procedure:   sum") ::
-          Row("Description: sum integers") ::
+        Row("Procedure:   simple_sum") ::
+          Row("Description: simple sum integers") ::
           Row("Parameters:  IN in1 INT") ::
           Row("             IN in2 INT") :: Nil)
 
@@ -542,40 +542,29 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
         // use multi-part namespace
         sql("DESCRIBE PROCEDURE cat.ns.db.abc"),
         Row("Procedure:   long_sum") ::
-          Row("Description: sum longs") ::
-          Row("Parameters:  IN in1 BIGINT") ::
-          Row("             IN in2 BIGINT") :: Nil)
+          Row("Description: sum longs") :: Nil)
 
       checkAnswer(
         // use multi-part namespace with default catalog
         sql("DESCRIBE PROCEDURE ns.db.abc"),
         Row("Procedure:   long_sum") ::
-          Row("Description: sum longs") ::
-          Row("Parameters:  IN in1 BIGINT") ::
-          Row("             IN in2 BIGINT") :: Nil)
+          Row("Description: sum longs") :: Nil)
 
       checkAnswer(
         sql("DESC PROCEDURE cat.``.xyz"),
         Row("Procedure:   complex") ::
-          Row("Description: complex procedure") ::
-          Row("Parameters:  IN in1 STRING DEFAULT 'A'") ::
-          Row("             IN in2 STRING DEFAULT 'B'") ::
-          Row("             IN in3 INT    DEFAULT 1 + 1 - 1") :: Nil)
+          Row("Description: complex procedure") :: Nil)
 
       checkAnswer(
         sql("DESC PROCEDURE cat.xxx"),
         Row("Procedure:   struct_input") ::
-          Row("Description: struct procedure") ::
-          Row("Parameters:  IN in1 STRUCT<nested1: INT, nested2: STRING>") ::
-          Row("             IN in2 STRING                               ") :: Nil)
+          Row("Description: struct procedure") :: Nil)
 
       checkAnswer(
         // check across catalogs
         sql("DESC PROCEDURE cat2.ns_1.db_1.foo"),
         Row("Procedure:   void") ::
-          Row("Description: void procedure") ::
-          Row("Parameters:  IN in1 STRING") ::
-          Row("             IN in2 STRING") :: Nil)
+          Row("Description: void procedure") :: Nil)
     }
   }
 
@@ -589,7 +578,7 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
 
   test("SPARK-51780: DESC PROCEDURE with zero parameters") {
     catalog.createProcedure(
-      Identifier.of(Array("ns"), "zero_params"), UnboundZeroParameterProcedure)
+      Identifier.of(Array("ns"), "zero_params"), SimpleZeroParameterProcedure)
     checkAnswer(
       sql("DESC PROCEDURE cat.ns.zero_params"),
       Row("Procedure:   zero_params") ::
@@ -965,5 +954,13 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
     override def name: String = "simple_sum"
 
     override def description: String = "simple sum integers"
+  }
+
+  object SimpleZeroParameterProcedure extends SimpleProcedure {
+    override def name: String = "zero_params"
+    override def description: String = "zero parameter procedure"
+    override def isDeterministic: Boolean = true
+    override def parameters: Array[ProcedureParameter] = Array.empty
+    override def call(input: InternalRow): java.util.Iterator[Scan] = Collections.emptyIterator
   }
 }
