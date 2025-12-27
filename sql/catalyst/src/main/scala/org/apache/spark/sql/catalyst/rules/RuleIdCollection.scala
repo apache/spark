@@ -189,6 +189,7 @@ object RuleIdCollection {
     rulesNeedingIds = rulesNeedingIds ++ {
       // In the production code path, the following rules are run in CombinedTypeCoercionRule, and
       // hence we only need to add them for unit testing.
+      "org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion$AnsiFunctionArgumentConversion" ::
       "org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion$DateTimeOperations" ::
       "org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion$GetDateFieldOperations" ::
       "org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion$PromoteStringLiterals" ::
