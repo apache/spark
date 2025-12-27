@@ -19,13 +19,15 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.plans.logical.UsesCachedData
 import org.apache.spark.sql.types.StringType
 
 
 /**
  * The command for `SHOW CATALOGS`.
  */
-case class ShowCatalogsCommand(pattern: Option[String]) extends LeafRunnableCommand {
+case class ShowCatalogsCommand(pattern: Option[String])
+  extends LeafRunnableCommand with UsesCachedData {
   override val output: Seq[Attribute] = Seq(
     AttributeReference("catalog", StringType, nullable = false)())
 
