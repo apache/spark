@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.util;
 import org.apache.spark.unsafe.types.GeometryVal;
 import org.junit.jupiter.api.Test;
 
+import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.HexFormat;
 
@@ -82,11 +83,21 @@ class GeometryExecutionSuite {
 
   /** Tests for Geometry WKB parsing. */
 
+  // Helper method to create a simple WKB Point (0, 1)
+  private byte[] getTestWKBPoint() {
+    ByteBuffer bb = ByteBuffer.allocate(1 + 4 + 8 + 8);
+    bb.order(ByteOrder.LITTLE_ENDIAN);
+
+    bb.put((byte) 1);           // byte order = little endian
+    bb.putInt(1);               // type = 1 (Point)
+    bb.putDouble(0.0);          // X
+    bb.putDouble(1.0);          // Y
+    return bb.array();
+  }
+
   @Test
   void testFromWkbWithSridRudimentary() {
-    byte[] wkb = new byte[]{1, 2, 3};
-    // Note: This is a rudimentary WKB handling test; actual WKB parsing is not yet implemented.
-    // Once we implement the appropriate parsing logic, this test should be updated accordingly.
+    byte[] wkb = getTestWKBPoint();
     Geometry geometry = Geometry.fromWkb(wkb, 4326);
     assertNotNull(geometry);
     assertArrayEquals(wkb, geometry.toWkb());
@@ -95,7 +106,7 @@ class GeometryExecutionSuite {
 
   @Test
   void testFromWkbNoSridRudimentary() {
-    byte[] wkb = new byte[]{1, 2, 3};
+    byte[] wkb = getTestWKBPoint();
     // Note: This is a rudimentary WKB handling test; actual WKB parsing is not yet implemented.
     // Once we implement the appropriate parsing logic, this test should be updated accordingly.
     Geometry geometry = Geometry.fromWkb(wkb);
@@ -171,11 +182,9 @@ class GeometryExecutionSuite {
   @Test
   void testToWkbEndiannessXDR() {
     Geometry geometry = Geometry.fromBytes(testGeometryVal);
-    UnsupportedOperationException exception = assertThrows(
-      UnsupportedOperationException.class,
-      () -> geometry.toWkb(ByteOrder.BIG_ENDIAN)
-    );
-    assertEquals("Geometry WKB endianness is not yet supported.", exception.getMessage());
+    // WKB value (endianness: XDR) corresponding to WKT: POINT(1 2).
+    byte[] wkb = HexFormat.of().parseHex("00000000013FF00000000000004000000000000000");
+    assertArrayEquals(wkb, geometry.toWkb(ByteOrder.BIG_ENDIAN));
   }
 
   @Test
