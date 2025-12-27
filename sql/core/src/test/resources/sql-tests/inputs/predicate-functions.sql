@@ -94,6 +94,10 @@ select 1 not in ('2', '3', '4', null);
 select null not in (1, 2, 3);
 select null not in (1, 2, null);
 
+-- Empty IN clause (negative case - should error)
+select 1 in ();
+select 1 not in ();
+
 -- Between
 select 1 between 0 and 2;
 select 0.5 between 0 and 1;
