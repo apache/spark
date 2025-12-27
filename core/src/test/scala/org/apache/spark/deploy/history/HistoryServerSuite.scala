@@ -390,6 +390,23 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     assert(response.contains(SPARK_VERSION))
   }
 
+  test("SPARK-54857: XSS prevention in application and user names") {
+    implicit val formats = org.json4s.DefaultFormats
+
+    val appId = "local-1766844910796"
+    val response = getUrl(s"applications/$appId")
+    val app = JsonMethods.parse(response)
+
+    // Verify that malicious content is present in JSON (not escaped at API level)
+    (app \ "name").extract[String] should be ("<script>alert('XSS')</script>")
+    val attempt = (app \ "attempts")(0)
+    (attempt \ "sparkUser").extract[String] should be ("<script>alert('XSS')</script>")
+
+    // Verify that the history page HTML properly escapes the content
+    val historyPage = HistoryServerSuite.getUrl(buildPageAttemptUrl(appId, None))
+    historyPage should not include "<script>alert('XSS')</script>"
+  }
+
   /**
    * Verify that the security manager needed for the history server can be instantiated
    * when `spark.authenticate` is `true`, rather than raise an `IllegalArgumentException`.
