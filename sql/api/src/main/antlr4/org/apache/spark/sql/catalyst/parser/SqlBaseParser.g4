@@ -149,7 +149,7 @@ declareHandlerStatement
     ;
 
 declareCursorStatement
-    : DECLARE strictIdentifier (ASENSITIVE | INSENSITIVE)? CURSOR FOR query (FOR READ ONLY)?
+    : DECLARE name=errorCapturingIdentifier (ASENSITIVE | INSENSITIVE)? CURSOR FOR query (FOR READ ONLY)?
     ;
 
 openCursorStatement

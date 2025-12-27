@@ -1366,13 +1366,20 @@ BEGIN
   VALUES (x); -- Should return 99
 END
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "CURSOR_NOT_FOUND",
-  "sqlState" : "42883",
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
   "messageParameters" : {
-    "cursorName" : "IDENTIFIER('my_cursor')"
-  }
+    "objectName" : "`x`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 121,
+    "stopIndex" : 156,
+    "fragment" : "FETCH IDENTIFIER('my_cursor') INTO x"
+  } ]
 }
 
 
@@ -1386,13 +1393,20 @@ BEGIN
   VALUES (result); -- Should return 42
 END
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "CURSOR_NOT_FOUND",
-  "sqlState" : "42883",
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
   "messageParameters" : {
-    "cursorName" : "IDENTIFIER('MixedCase')"
-  }
+    "objectName" : "`result`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 119,
+    "stopIndex" : 159,
+    "fragment" : "FETCH IDENTIFIER('MixedCase') INTO result"
+  } ]
 }
 
 

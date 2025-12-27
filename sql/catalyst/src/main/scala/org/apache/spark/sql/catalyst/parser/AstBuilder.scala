@@ -6589,7 +6589,7 @@ class AstBuilder extends DataTypeAstBuilder
       throw SqlScriptingErrors.cursorNotSupported(CurrentOrigin.get)
     }
 
-    val cursorName = ctx.strictIdentifier().getText
+    val cursorName = getIdentifierText(ctx.name)
     // Extract original SQL text to preserve parameter markers
     val queryText = getOriginalText(ctx.query())
 
@@ -6613,7 +6613,8 @@ class AstBuilder extends DataTypeAstBuilder
       throw SqlScriptingErrors.cursorNotSupported(CurrentOrigin.get)
     }
 
-    val cursorName = ctx.multipartIdentifier().parts.asScala.map(_.getText).mkString(".")
+    // Use visitMultipartIdentifier to properly handle IDENTIFIER('name')
+    val cursorName = visitMultipartIdentifier(ctx.multipartIdentifier()).mkString(".")
 
     // Parse optional USING clause parameters
     // Extract both expressions and their names (if aliased)
@@ -6641,7 +6642,9 @@ class AstBuilder extends DataTypeAstBuilder
       throw SqlScriptingErrors.cursorNotSupported(CurrentOrigin.get)
     }
 
-    val cursorName = ctx.multipartIdentifier().parts.asScala.map(_.getText).mkString(".")
+    // Use visitMultipartIdentifier to properly handle IDENTIFIER('name')
+    val cursorName = visitMultipartIdentifier(ctx.multipartIdentifier()).mkString(".")
+
     val targetVariables = ctx.identifierReference().asScala.map { varIdent =>
       val varName = if (varIdent.expression() != null) {
         // IDENTIFIER(expression) case - not supported for variables
@@ -6671,7 +6674,8 @@ class AstBuilder extends DataTypeAstBuilder
       throw SqlScriptingErrors.cursorNotSupported(CurrentOrigin.get)
     }
 
-    val cursorName = ctx.multipartIdentifier().parts.asScala.map(_.getText).mkString(".")
+    // Use visitMultipartIdentifier to properly handle IDENTIFIER('name')
+    val cursorName = visitMultipartIdentifier(ctx.multipartIdentifier()).mkString(".")
     SingleStatement(CloseCursor(cursorName))
   }
 

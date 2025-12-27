@@ -46,8 +46,15 @@ case class DeclareCursorExec(
       .asInstanceOf[org.apache.spark.sql.scripting.SqlScriptingExecutionContext]
     val currentScope = scriptingContext.currentScope
 
+    // Normalize cursor name based on case sensitivity configuration
+    val normalizedName = if (session.sessionState.conf.caseSensitiveAnalysis) {
+      cursorName
+    } else {
+      cursorName.toLowerCase(java.util.Locale.ROOT)
+    }
+
     // Validate cursor doesn't already exist in current scope
-    if (currentScope.cursors.contains(cursorName)) {
+    if (currentScope.cursors.contains(normalizedName)) {
       throw new AnalysisException(
         errorClass = "CURSOR_ALREADY_EXISTS",
         messageParameters = Map("cursorName" -> cursorName))
@@ -58,12 +65,13 @@ case class DeclareCursorExec(
     val parsedQuery = session.sessionState.sqlParser.parsePlan(queryText)
 
     // Create cursor definition with parsed query and original SQL text
+    // Store with original name for display, but use normalized name as key
     val cursorDef = CursorDefinition(
       name = cursorName,
       query = parsedQuery,
       queryText = queryText)
 
-    currentScope.cursors.put(cursorName, cursorDef)
+    currentScope.cursors.put(normalizedName, cursorDef)
 
     Nil
   }
