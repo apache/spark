@@ -1112,11 +1112,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
-  "sqlState" : "42K05",
+  "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
+  "sqlState" : "42601",
   "messageParameters" : {
-    "namespace" : "`a`.`b`.`c`",
-    "sessionCatalog" : "spark_catalog"
+    "identifier" : "`a`.`b`.`c`.`d`",
+    "limit" : "2"
   },
   "queryContext" : [ {
     "objectType" : "",
