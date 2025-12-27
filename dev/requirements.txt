@@ -21,6 +21,11 @@ openpyxl
 # PySpark test dependencies (optional)
 coverage
 
+# Kafka streaming test dependencies (optional)
+# Required for running Kafka integration tests with Docker test containers
+testcontainers[kafka]>=3.7.0
+kafka-python>=2.0.2
+
 # Linter
 ruff==0.14.8
 mypy==1.8.0
