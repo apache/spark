@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.ResolveTimeZone
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
-import org.apache.spark.sql.catalyst.plans.PlanTestBase
+import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, MapData}
 import org.apache.spark.sql.internal.SQLConf
@@ -45,8 +45,8 @@ import org.apache.spark.sql.types._
  *       null in struct fields, array elements and map values). The framework will test the
  *       nullability flag of the expression automatically.
  */
-trait ExpressionEvalHelper extends ScalaCheckDrivenPropertyChecks with PlanTestBase {
-  self: SparkFunSuite =>
+trait ExpressionEvalHelper extends SparkFunSuite
+  with ScalaCheckDrivenPropertyChecks with PlanTest {
 
   protected def create_row(values: Any*): InternalRow = {
     InternalRow.fromSeq(values.map(CatalystTypeConverters.convertToCatalyst))
