@@ -659,6 +659,7 @@ object FunctionRegistry {
     expression[LocalTimestamp]("localtimestamp"),
     expression[DateDiff]("datediff"),
     expression[DateDiff]("date_diff", setAlias = true, Some("3.4.0")),
+    expression[TimestampBucket]("timestamp_bucket"),
     expression[DateAdd]("date_add"),
     expression[DateAdd]("dateadd", setAlias = true, Some("3.4.0")),
     expression[DateFormatClass]("date_format"),

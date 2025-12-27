@@ -24,7 +24,7 @@ import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkConf, SparkRuntimeException, SparkUpgradeException}
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{CEST, LA}
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, CEST, LA, UTC}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -1470,5 +1470,227 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(df.selectExpr("try_to_timestamp(a)"), Seq(Row(ts)))
     checkAnswer(df.select(try_to_timestamp(col("a"))), Seq(Row(ts)))
+  }
+
+  test("timestamp_bucket with various intervals") {
+    withSQLConf(
+      SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      // Hourly bucketing
+      checkAnswer(
+        sql("SELECT timestamp_bucket(INTERVAL '1' HOUR, TIMESTAMP'2024-12-04 14:30:00')"),
+        sql("SELECT TIMESTAMP'2024-12-04 14:00:00'"))
+
+      // 6-hour bucketing
+      checkAnswer(
+        sql("SELECT timestamp_bucket(INTERVAL '6' HOUR, TIMESTAMP'2024-12-04 14:30:00')"),
+        sql("SELECT TIMESTAMP'2024-12-04 12:00:00'"))
+
+      // Daily bucketing
+      checkAnswer(
+        sql("SELECT timestamp_bucket(INTERVAL '1' DAY, TIMESTAMP'2024-12-04 14:30:00')"),
+        sql("SELECT TIMESTAMP'2024-12-04 00:00:00'"))
+
+      // Weekly bucketing (default origin = Thursday)
+      checkAnswer(
+        sql("SELECT timestamp_bucket(INTERVAL '7' DAY, TIMESTAMP'2024-12-04 14:30:00')"),
+        sql("SELECT TIMESTAMP'2024-11-28 00:00:00'"))
+
+      // 15-minute bucketing
+      checkAnswer(
+        sql("SELECT timestamp_bucket(INTERVAL '15' MINUTE, TIMESTAMP'2024-12-04 14:47:00')"),
+        sql("SELECT TIMESTAMP'2024-12-04 14:45:00'"))
+    }
+  }
+
+  test("timestamp_bucket with custom origin") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // Monday-aligned weeks
+      checkAnswer(
+        sql("""SELECT timestamp_bucket(
+                 INTERVAL '7' DAY,
+                 DATE'2024-12-04',
+                 TIMESTAMP'1970-01-05 00:00:00'
+               )"""),
+        Row(Timestamp.valueOf("2024-12-02 00:00:00")) :: Nil)
+
+      // Sunday-aligned weeks
+      checkAnswer(
+        sql("""SELECT timestamp_bucket(
+                 INTERVAL '7' DAY,
+                 DATE'2024-12-04',
+                 TIMESTAMP'1970-01-04 00:00:00'
+               )"""),
+        Row(Timestamp.valueOf("2024-12-01 00:00:00")) :: Nil)
+
+      // Custom time origin (6-hour buckets starting at 3 AM)
+      checkAnswer(
+        sql("""SELECT timestamp_bucket(
+                 INTERVAL '6' HOUR,
+                 TIMESTAMP'2024-12-04 14:30:00',
+                 TIMESTAMP'2024-12-04 03:00:00'
+               )"""),
+        Row(Timestamp.valueOf("2024-12-04 09:00:00")) :: Nil)
+    }
+  }
+
+  test("timestamp_bucket with different input types") {
+    withSQLConf(
+      SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      // DATE input
+      checkAnswer(
+        sql("SELECT timestamp_bucket(INTERVAL '7' DAY, DATE'2024-12-04')"),
+        sql("SELECT TIMESTAMP'2024-11-28 00:00:00'"))
+
+      // TIMESTAMP input
+      checkAnswer(
+        sql("SELECT timestamp_bucket(INTERVAL '1' HOUR, TIMESTAMP'2024-12-04 14:30:00')"),
+        sql("SELECT TIMESTAMP'2024-12-04 14:00:00'"))
+
+      // TIMESTAMP_NTZ input
+      checkAnswer(
+        sql("SELECT timestamp_bucket(INTERVAL '1' HOUR, TIMESTAMP_NTZ'2024-12-04 14:30:00')"),
+        sql("SELECT TIMESTAMP'2024-12-04 14:00:00'"))
+    }
+  }
+
+  test("timestamp_bucket before origin") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // Timestamp before epoch
+      checkAnswer(
+        sql("SELECT timestamp_bucket(INTERVAL '1' HOUR, TIMESTAMP'1969-12-31 23:30:00')"),
+        Row(Timestamp.valueOf("1969-12-31 23:00:00")) :: Nil)
+
+      // Timestamp before custom origin
+      checkAnswer(
+        sql("""SELECT timestamp_bucket(
+                 INTERVAL '6' HOUR,
+                 TIMESTAMP'2023-12-31 22:00:00',
+                 TIMESTAMP'2024-01-01 00:00:00'
+               )"""),
+        Row(Timestamp.valueOf("2023-12-31 18:00:00")) :: Nil)
+
+      // Multiple buckets before origin
+      checkAnswer(
+        sql("""SELECT timestamp_bucket(
+                 INTERVAL '7' DAY,
+                 DATE'2023-12-15',
+                 TIMESTAMP'2024-01-01 00:00:00'
+               )"""),
+        Row(Timestamp.valueOf("2023-12-11 00:00:00")) :: Nil)
+    }
+  }
+
+  test("timestamp_bucket null handling") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkAnswer(
+        sql("SELECT timestamp_bucket(INTERVAL '1' HOUR, CAST(NULL AS TIMESTAMP))"),
+        Row(null) :: Nil)
+
+      checkAnswer(
+        sql("SELECT timestamp_bucket(CAST(NULL AS INTERVAL DAY), TIMESTAMP'2024-12-04 14:30:00')"),
+        Row(null) :: Nil)
+
+      checkAnswer(
+        sql("""SELECT timestamp_bucket(
+                 INTERVAL '1' HOUR, TIMESTAMP'2024-12-04', CAST(NULL AS TIMESTAMP)
+               )"""),
+        Row(null) :: Nil)
+    }
+  }
+
+  test("timestamp_bucket validation errors") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      // Zero interval
+      val e1 = intercept[AnalysisException] {
+        sql("SELECT timestamp_bucket(INTERVAL '0' SECOND, TIMESTAMP'2024-12-04')")
+      }
+      assert(e1.getMessage.contains("VALUE_OUT_OF_RANGE"))
+      assert(e1.getMessage.contains("bucket_width"))
+
+      // Negative interval
+      val e2 = intercept[AnalysisException] {
+        sql("SELECT timestamp_bucket(INTERVAL '-1' HOUR, TIMESTAMP'2024-12-04')")
+      }
+      assert(e2.getMessage.contains("VALUE_OUT_OF_RANGE"))
+      assert(e2.getMessage.contains("bucket_width"))
+
+      // Non-foldable bucket_width
+      withTable("test_table") {
+        sql(
+          """CREATE TABLE test_table (id INT, ts TIMESTAMP, interval_col INTERVAL DAY)
+            |USING parquet""".stripMargin)
+        val e3 = intercept[AnalysisException] {
+          sql("SELECT timestamp_bucket(interval_col, ts) FROM test_table")
+        }
+        assert(e3.getMessage.contains("NON_FOLDABLE_INPUT"))
+      }
+    }
+  }
+
+  test("timestamp_bucket DataFrame API") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withDefaultTimeZone(UTC) {
+        // Test 2-argument version (default origin) with SQL-created DataFrame
+        val result1 = sql("""
+          SELECT timestamp_bucket(INTERVAL '1' HOUR, ts) AS bucket
+          FROM VALUES
+            (TIMESTAMP'2024-12-04 14:30:00'),
+            (TIMESTAMP'2024-12-04 15:45:00'),
+            (TIMESTAMP'2024-12-04 16:20:00')
+          AS t(ts)
+        """)
+
+        checkAnswer(result1,
+          sql("""
+            SELECT TIMESTAMP'2024-12-04 14:00:00' UNION ALL
+            SELECT TIMESTAMP'2024-12-04 15:00:00' UNION ALL
+            SELECT TIMESTAMP'2024-12-04 16:00:00'
+          """))
+
+        // Test 3-argument version (custom origin) with SQL-created DataFrame
+        val result2 = sql("""
+          SELECT timestamp_bucket(
+            INTERVAL '6' HOUR,
+            ts,
+            TIMESTAMP'1970-01-01 00:00:00'
+          ) AS bucket
+          FROM VALUES
+            (TIMESTAMP'2024-12-04 14:30:00'),
+            (TIMESTAMP'2024-12-04 15:45:00'),
+            (TIMESTAMP'2024-12-04 19:20:00')
+          AS t(ts)
+        """)
+
+        checkAnswer(result2,
+          sql("""
+            SELECT TIMESTAMP'2024-12-04 12:00:00' UNION ALL
+            SELECT TIMESTAMP'2024-12-04 12:00:00' UNION ALL
+            SELECT TIMESTAMP'2024-12-04 18:00:00'
+          """))
+      }
+    }
+  }
+
+  test("timestamp_bucket aggregation") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val df = Seq(
+        (1, "2024-12-04 14:30:00"),
+        (2, "2024-12-04 15:45:00"),
+        (3, "2024-12-04 16:20:00"),
+        (4, "2024-12-04 16:50:00")
+      ).toDF("id", "ts")
+        .withColumn("ts", to_timestamp(col("ts")))
+
+      val result = df.groupBy(
+        timestamp_bucket(expr("INTERVAL '1' HOUR"), col("ts")).alias("hour")
+      ).count().orderBy("hour")
+
+      checkAnswer(result,
+        Row(Timestamp.valueOf("2024-12-04 14:00:00"), 1L) ::
+        Row(Timestamp.valueOf("2024-12-04 15:00:00"), 1L) ::
+        Row(Timestamp.valueOf("2024-12-04 16:00:00"), 2L) :: Nil)
+    }
   }
 }
