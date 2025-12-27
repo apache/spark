@@ -39,6 +39,11 @@ private[spark] case class KubernetesNFSVolumeConf(
     server: String)
   extends KubernetesVolumeSpecificConf
 
+private[spark] case class KubernetesCSIVolumeConf(
+    driverName: String,
+    attributes: Map[String, String])
+  extends KubernetesVolumeSpecificConf
+
 private[spark] case class KubernetesVolumeSpec(
     volumeName: String,
     mountPath: String,
