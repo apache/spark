@@ -2201,7 +2201,6 @@ class SessionCatalog(
         val builderFactory: () => FunctionBuilder = () => synchronized {
           // Re-check cache (another thread may have loaded it)
           functionRegistry.lookupFunctionBuilder(qualifiedIdent).getOrElse {
-            loadFunctionResources(funcMetadata.resources)
             if (funcMetadata.isUserDefinedFunction) {
               val udf = UserDefinedFunction.fromCatalogFunction(funcMetadata, parser)
               registerUserDefinedFunction[Expression](
@@ -2210,6 +2209,7 @@ class SessionCatalog(
                 functionRegistry,
                 makeUserDefinedScalarFuncBuilder(udf))
             } else {
+              loadFunctionResources(funcMetadata.resources)
               registerFunction(
                 funcMetadata,
                 overrideIfExists = false,
@@ -2241,7 +2241,6 @@ class SessionCatalog(
         // Hive table functions are not supported
         failFunctionLookup(qualifiedIdent)
       }
-      loadFunctionResources(funcMetadata.resources)
       val udf = UserDefinedFunction.fromCatalogFunction(funcMetadata, parser)
       registerUserDefinedFunction[LogicalPlan](
         udf,

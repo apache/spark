@@ -89,7 +89,7 @@ object V1Function {
    * Create a metadata-only V1Function (for DESCRIBE FUNCTION).
    * If invoke() is called, it will throw an error.
    */
-  def apply(info: ExpressionInfo): V1Function = {
+  def metadataOnly(info: ExpressionInfo): V1Function = {
     new V1Function(info, () => metadataOnlyBuilder)
   }
 }
