@@ -172,8 +172,12 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
       extensions.injectFunction(MyExtensions.myFunction)
     }
     withSession(extensions) { session =>
-      assert(session.sessionState.functionRegistry
-        .lookupFunction(MyExtensions.myFunction._1).isDefined)
+      // Extension functions are registered with database="session" to enable coexistence
+      // with builtin functions of the same name
+      val qualifiedIdent = FunctionIdentifier(
+        MyExtensions.myFunction._1.funcName,
+        Some("session"))
+      assert(session.sessionState.functionRegistry.lookupFunction(qualifiedIdent).isDefined)
     }
   }
 
@@ -380,8 +384,10 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
       assert(session.sessionState.analyzer.extendedCheckRules.contains(MyCheckRule(session)))
       assert(session.sessionState.optimizer.batches.flatMap(_.rules).contains(MyRule(session)))
       assert(session.sessionState.sqlParser.isInstanceOf[MyParser])
-      assert(session.sessionState.functionRegistry
-        .lookupFunction(MyExtensions.myFunction._1).isDefined)
+      // Extension functions are registered with database="session"
+      val qualifiedIdent = FunctionIdentifier(
+        MyExtensions.myFunction._1.funcName, Some("session"))
+      assert(session.sessionState.functionRegistry.lookupFunction(qualifiedIdent).isDefined)
       assert(session.sessionState.columnarRules.contains(
         MyColumnarRule(PreRuleReplaceAddWithBrokenVersion(), MyPostRule())))
     } finally {
@@ -408,10 +414,13 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
       assert(session.sessionState.optimizer.batches.flatMap(_.rules).filter(orderedRules.contains)
         .containsSlice(orderedRules ++ orderedRules)) // The optimizer rules are duplicated
       assert(session.sessionState.sqlParser === parser)
-      assert(session.sessionState.functionRegistry
-        .lookupFunction(MyExtensions.myFunction._1).isDefined)
-      assert(session.sessionState.functionRegistry
-        .lookupFunction(MyExtensions2.myFunction._1).isDefined)
+      // Extension functions are registered with database="session"
+      val qualifiedIdent1 = FunctionIdentifier(
+        MyExtensions.myFunction._1.funcName, Some("session"))
+      val qualifiedIdent2 = FunctionIdentifier(
+        MyExtensions2.myFunction._1.funcName, Some("session"))
+      assert(session.sessionState.functionRegistry.lookupFunction(qualifiedIdent1).isDefined)
+      assert(session.sessionState.functionRegistry.lookupFunction(qualifiedIdent2).isDefined)
     } finally {
       stop(session)
     }
@@ -437,8 +446,10 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
       val outerParser = session.sessionState.sqlParser
       assert(outerParser.isInstanceOf[MyParser])
       assert(outerParser.asInstanceOf[MyParser].delegate.isInstanceOf[MyParser])
-      assert(session.sessionState.functionRegistry
-        .lookupFunction(MyExtensions.myFunction._1).isDefined)
+      // Extension functions are registered with database="session"
+      val qualifiedIdent = FunctionIdentifier(
+        MyExtensions.myFunction._1.funcName, Some("session"))
+      assert(session.sessionState.functionRegistry.lookupFunction(qualifiedIdent).isDefined)
     } finally {
       stop(session)
     }
@@ -452,8 +463,9 @@ class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with Adapt
         classOf[MyExtensions2Duplicate].getCanonicalName).mkString(","))
       .getOrCreate()
     try {
+      // Extension functions are registered with database="session"
       val lastRegistered = session.sessionState.functionRegistry
-        .lookupFunction(FunctionIdentifier("myFunction2"))
+        .lookupFunction(FunctionIdentifier("myFunction2", Some("session")))
       assert(lastRegistered.isDefined)
       assert(lastRegistered.get !== MyExtensions2.myFunction._2)
       assert(lastRegistered.get === MyExtensions2Duplicate.myFunction._2)

@@ -2052,25 +2052,25 @@ class Analyzer(
 
       plan.resolveExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
         case f @ UnresolvedFunction(nameParts, _, _, _, _, _, _) =>
-          if (functionResolution.lookupBuiltinOrTempFunction(nameParts, Some(f)).isDefined) {
+          // Check cache first for persistent functions to avoid repeated external catalog lookups.
+          val CatalogAndIdentifier(catalog, ident) =
+            relationResolution.expandIdentifier(nameParts)
+          val fullName = normalizeFuncName(
+            (catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq)
+
+          if (externalFunctionNameSet.contains(fullName)) {
+            // Already validated this persistent function - skip validation.
             f
           } else {
-            val CatalogAndIdentifier(catalog, ident) =
-              relationResolution.expandIdentifier(nameParts)
-            val fullName =
-              normalizeFuncName((catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq)
-            if (externalFunctionNameSet.contains(fullName)) {
-              f
-            } else if (catalog.asFunctionCatalog.functionExists(ident)) {
+            // Not in cache - validate the function.
+            // Returns true if builtin/temp, false if persistent.
+            val isBuiltinOrTemp = functionResolution.validateFunctionExistence(nameParts, f)
+
+            // If it's a persistent function, add to cache.
+            if (!isBuiltinOrTemp) {
               externalFunctionNameSet.add(fullName)
-              f
-            } else {
-              val catalogPath = (catalog.name() +: catalogManager.currentNamespace).mkString(".")
-              throw QueryCompilationErrors.unresolvedRoutineError(
-                nameParts,
-                Seq("system.builtin", "system.session", catalogPath),
-                f.origin)
             }
+            f
           }
       }
     }
