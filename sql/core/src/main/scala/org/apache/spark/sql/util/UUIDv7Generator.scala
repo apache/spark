@@ -47,7 +47,7 @@ object UUIDv7Generator {
     val timestampMs = epochMilli & 0xFFFFFFFFFFFFL
 
     // 12 bits, avoid LSB as most HW clocks have resolution in range of 10-40 ns
-    val randA = (nano>> 4) & 0xFFF
+    val randA = (nano >> 4) & 0xFFF
 
     // Version 7 uses bits 12:15
     val msb = (timestampMs << 16) | (0x7 << 12) | randA

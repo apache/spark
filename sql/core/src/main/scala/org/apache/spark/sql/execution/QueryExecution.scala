@@ -74,7 +74,7 @@ class QueryExecution(
   val queryId: UUID = UUIDv7Generator.generate()
 
   // Tracks how many times this QueryExecution has been executed.
-  // Used by SQLExecution to determine whether to use qplQueryId or generate a new one.
+  // Used by SQLExecution to determine whether to use the existing queryId or generate a new one.
   val executionCount = new AtomicInteger(0)
 
   // TODO: Move the planner an optimizer into here from SessionState.

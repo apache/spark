@@ -68,7 +68,6 @@ class SparkConnectServerListenerSuite
         SparkListenerSQLExecutionStart(
           0,
           None,
-          None,
           null,
           null,
           null,
@@ -163,7 +162,6 @@ class SparkConnectServerListenerSuite
     listener.onOtherEvent(
       SparkListenerSQLExecutionStart(
         0,
-        None,
         None,
         null,
         null,
