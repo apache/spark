@@ -575,6 +575,7 @@ object SQLConf {
 
   val GEOSPATIAL_ENABLED =
     buildConf("spark.sql.geospatial.enabled")
+      .internal()
       .doc("When true, enables geospatial types (GEOGRAPHY/GEOMETRY) and ST functions.")
       .version("4.1.0")
       .booleanConf
@@ -934,6 +935,7 @@ object SQLConf {
 
   val ADAPTIVE_EXECUTION_ENABLED_IN_STATELESS_STREAMING =
     buildConf("spark.sql.adaptive.streaming.stateless.enabled")
+      .internal()
       .doc("When true, enable adaptive query execution for stateless streaming query. To " +
         "enable this config, `spark.sql.adaptive.enabled` needs to be also enabled.")
       .version("4.1.0")
@@ -1031,14 +1033,14 @@ object SQLConf {
       .checkValue(_ > 0, "The initial number of partitions must be positive.")
       .createOptional
 
-  lazy val ALLOW_COLLATIONS_IN_MAP_KEYS =
+  val ALLOW_COLLATIONS_IN_MAP_KEYS =
     buildConf("spark.sql.collation.allowInMapKeys")
       .doc("Allow for non-UTF8_BINARY collated strings inside of map's keys")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
 
-  lazy val OBJECT_LEVEL_COLLATIONS_ENABLED =
+  val OBJECT_LEVEL_COLLATIONS_ENABLED =
     buildConf("spark.sql.collation.objectLevel.enabled")
       .internal()
       .doc(
@@ -1050,7 +1052,7 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  lazy val SCHEMA_LEVEL_COLLATIONS_ENABLED =
+  val SCHEMA_LEVEL_COLLATIONS_ENABLED =
     buildConf("spark.sql.collation.schemaLevel.enabled")
       .internal()
       .doc(
@@ -1064,7 +1066,7 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  lazy val TRIM_COLLATION_ENABLED =
+  val TRIM_COLLATION_ENABLED =
     buildConf("spark.sql.collation.trim.enabled")
       .internal()
       .doc("When enabled allows the use of trim collations which trim trailing whitespaces from" +
@@ -1074,7 +1076,7 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  lazy val COLLATION_AWARE_HASHING_ENABLED =
+  val COLLATION_AWARE_HASHING_ENABLED =
     buildConf("spark.sql.legacy.collationAwareHashFunctions")
       .internal()
       .doc("Enables collation aware hashing (legacy behavior) for collated strings in " +
@@ -1221,6 +1223,7 @@ object SQLConf {
 
   val MAP_ZIP_WITH_USES_JAVA_COLLECTIONS =
     buildConf("spark.sql.mapZipWithUsesJavaCollections")
+      .internal()
       .doc("When true, the `map_zip_with` function uses Java collections instead of Scala " +
         "collections. This is useful for avoiding NaN equality issues.")
       .version("4.1.0")
@@ -1565,6 +1568,7 @@ object SQLConf {
 
   val PARQUET_VECTORIZED_READER_NULL_TYPE_ENABLED =
     buildConf("spark.sql.parquet.enableNullTypeVectorizedReader")
+      .internal()
       .doc("Enables vectorized Parquet reader support for NullType columns.")
       .version("4.1.0")
       .booleanConf
@@ -1598,6 +1602,7 @@ object SQLConf {
 
   val PARQUET_ANNOTATE_VARIANT_LOGICAL_TYPE =
     buildConf("spark.sql.parquet.variant.annotateLogicalType.enabled")
+      .internal()
       .doc("When enabled, Spark annotates the variant groups written to Parquet as the parquet " +
         "variant logical type.")
       .version("4.1.0")
@@ -2188,6 +2193,16 @@ object SQLConf {
     .version("4.0.0")
     .booleanConf
     .createWithDefault(true)
+
+  val VIEW_SCHEMA_EVOLUTION_PRESERVE_USER_COMMENTS =
+    buildConf("spark.sql.view.schemaEvolution.preserveUserComments")
+      .internal()
+      .doc("When enabled, views with SCHEMA EVOLUTION mode will preserve user-set view comments " +
+        "when the underlying table schema evolves. When disabled, view comments will be " +
+        "overwritten with table comments on every schema sync.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(true)
 
   val OUTPUT_COMMITTER_CLASS = buildConf("spark.sql.sources.outputCommitterClass")
     .version("1.4.0")
@@ -5396,6 +5411,7 @@ object SQLConf {
     .createWithDefault(LegacyBehaviorPolicy.CORRECTED)
 
   val CTE_RECURSION_LEVEL_LIMIT = buildConf("spark.sql.cteRecursionLevelLimit")
+    .internal()
     .doc("Maximum level of recursion that is allowed while executing a recursive CTE definition." +
       "If a query does not get exhausted before reaching this limit it fails. Use -1 for " +
       "unlimited.")
@@ -5404,6 +5420,7 @@ object SQLConf {
     .createWithDefault(100)
 
   val CTE_RECURSION_ROW_LIMIT = buildConf("spark.sql.cteRecursionRowLimit")
+    .internal()
     .doc("Maximum number of rows that can be returned when executing a recursive CTE definition." +
       "If a query does not get exhausted before reaching this limit it fails. Use -1 for " +
       "unlimited.")
@@ -5413,6 +5430,7 @@ object SQLConf {
 
   val CTE_RECURSION_ANCHOR_ROWS_LIMIT_TO_CONVERT_TO_LOCAL_RELATION =
     buildConf("spark.sql.cteRecursionAnchorRowsLimitToConvertToLocalRelation")
+      .internal()
       .doc("Maximum number of rows that the anchor in a recursive CTE can return for it to be" +
         "converted to a localRelation.")
       .version("4.1.0")
@@ -5584,6 +5602,7 @@ object SQLConf {
       .createWithDefault(false)
 
   val PYTHON_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.python.filterPushdown.enabled")
+    .internal()
     .doc("When true, enable filter pushdown to Python datasource, at the cost of running " +
       "Python worker one additional time during planning.")
     .version("4.1.0")
@@ -6757,6 +6776,7 @@ object SQLConf {
 
   val TIME_TYPE_ENABLED =
     buildConf("spark.sql.timeType.enabled")
+      .internal()
       .doc("When true, the TIME data type is supported.")
       .version("4.1.0")
       .booleanConf
@@ -7490,6 +7510,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def viewSchemaBindingEnabled: Boolean = getConf(VIEW_SCHEMA_BINDING_ENABLED)
 
   def viewSchemaCompensation: Boolean = getConf(VIEW_SCHEMA_COMPENSATION)
+
+  def viewSchemaEvolutionPreserveUserComments: Boolean =
+    getConf(VIEW_SCHEMA_EVOLUTION_PRESERVE_USER_COMMENTS)
 
   def defaultCacheStorageLevel: StorageLevel =
     StorageLevel.fromString(getConf(DEFAULT_CACHE_STORAGE_LEVEL).name())

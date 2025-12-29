@@ -30,6 +30,10 @@ class DataFrameParityTests(DataFrameTestsMixin, ReusedConnectTestCase):
     def test_toDF_with_schema_string(self):
         super().test_toDF_with_schema_string()
 
+    @unittest.skip("This test is dedicated for classic mode.")
+    def test_query_execution_unsupported_in_classic(self):
+        pass
+
 
 if __name__ == "__main__":
     import unittest
