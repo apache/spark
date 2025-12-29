@@ -18,8 +18,7 @@ package org.apache.spark.sql.util
 
 import java.time.Instant
 import java.util.UUID
-
-import scala.util.Random
+import java.util.concurrent.ThreadLocalRandom
 
 object UUIDv7Generator {
 
@@ -27,8 +26,6 @@ object UUIDv7Generator {
    * Follow the UUIDv7 specification defined in
    * https://datatracker.ietf.org/doc/html/draft-peabody-dispatch-new-uuid-format#section-5.2
    */
-
-  private val random = new Random()
 
   /**
    * Generate a UUIDv7 from the current time.
@@ -52,7 +49,7 @@ object UUIDv7Generator {
     // Version 7 uses bits 12:15
     val msb = (timestampMs << 16) | (0x7 << 12) | randA
 
-    val randB = random.nextLong()
+    val randB = ThreadLocalRandom.current().nextLong()
 
     // variant 0b10
     val randBWithVariant = (randB & 0x3FFFFFFFFFFFFFFFL) | 0x8000000000000000L
