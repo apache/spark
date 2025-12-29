@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.io.{BufferedWriter, OutputStreamWriter}
 import java.util.UUID
-import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.util.control.NonFatal
@@ -68,14 +68,13 @@ class QueryExecution(
     val tracker: QueryPlanningTracker = new QueryPlanningTracker,
     val mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
     val shuffleCleanupMode: ShuffleCleanupMode = DoNotCleanup,
-    val refreshPhaseEnabled: Boolean = true) extends Logging {
+    val refreshPhaseEnabled: Boolean = true,
+    val queryId: UUID = UUIDv7Generator.generate()) extends Logging {
 
   val id: Long = QueryExecution.nextExecutionId
-  val queryId: UUID = UUIDv7Generator.generate()
 
-  // Tracks how many times this QueryExecution has been executed.
   // Used by SQLExecution to determine whether to use the existing queryId or generate a new one.
-  val executionCount = new AtomicInteger(0)
+  private[sql] val firstExecution = new AtomicBoolean(true)
 
   // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sparkSession.sessionState.planner

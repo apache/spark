@@ -397,7 +397,7 @@ class SQLAppStatusListener(
   }
 
   private def onExecutionEnd(event: SparkListenerSQLExecutionEnd): Unit = {
-    val SparkListenerSQLExecutionEnd(executionId, time, errorMessage) = event
+    val SparkListenerSQLExecutionEnd(executionId, time, errorMessage, _) = event
     Option(liveExecutions.get(executionId)).foreach { exec =>
       exec.completionTime = Some(new Date(time))
       exec.errorMessage = errorMessage

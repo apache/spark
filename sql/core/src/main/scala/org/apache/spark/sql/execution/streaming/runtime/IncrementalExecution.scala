@@ -66,7 +66,10 @@ class IncrementalExecution(
     logicalPlan: LogicalPlan,
     val outputMode: OutputMode,
     val checkpointLocation: String,
-    override val queryId: UUID,
+    // For backward compatibility, streaming queries queryId is UUIDv4,
+    // see `StreamingQueryCheckpointMetadata.streamMetadata`.
+    // If not supplied, QueryExecution.queryId generates a new UUIDv7.
+    queryId: UUID,
     val runId: UUID,
     val currentBatchId: Long,
     val prevOffsetSeqMetadata: Option[OffsetSeqMetadataBase],

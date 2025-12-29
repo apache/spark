@@ -43,7 +43,7 @@ object SQLExecution extends Logging {
 
   val EXECUTION_ID_KEY = "spark.sql.execution.id"
   val EXECUTION_ROOT_ID_KEY = "spark.sql.execution.root.id"
-  val QUERY_ID_KEY: String = "spark.sql.query.id"
+  val QUERY_ID_KEY = "spark.sql.execution.query.id"
 
   private val _nextExecutionId = new AtomicLong(0)
 
@@ -98,7 +98,7 @@ object SQLExecution extends Logging {
     val executionId = SQLExecution.nextExecutionId
     // Use the original queryId for the first execution, generate new ones for
     // subsequent executions
-    val queryId = if (queryExecution.executionCount.getAndIncrement() == 0) {
+    val queryId = if (queryExecution.firstExecution.compareAndSet(true, false)) {
       queryExecution.queryId
     } else {
       UUIDv7Generator.generate()

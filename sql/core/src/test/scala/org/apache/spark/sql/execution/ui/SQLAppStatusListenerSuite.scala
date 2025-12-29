@@ -993,7 +993,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     spark.sparkContext.addSparkListener(new SparkListener {
       override def onOtherEvent(event: SparkListenerEvent): Unit = {
         event match {
-          case SparkListenerSQLExecutionEnd(_, _, Some(errorMessage)) =>
+          case SparkListenerSQLExecutionEnd(_, _, Some(errorMessage), _) =>
             received = errorMessage == Utils.exceptionString(e)
           case _ =>
         }
