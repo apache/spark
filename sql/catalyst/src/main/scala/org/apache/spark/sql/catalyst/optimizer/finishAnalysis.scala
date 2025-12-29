@@ -182,10 +182,16 @@ object SpecialDatetimeValues extends Rule[LogicalPlan] {
     plan.transformAllExpressionsWithPruning(_.containsPattern(CAST)) {
       case cast @ Cast(e, dt @ (DateType | TimestampType | TimestampNTZType), _, _)
         if e.foldable && e.dataType == StringType =>
-        Option(e.eval())
-          .flatMap(s => conv(dt)(s.toString, cast.zoneId))
+        Option(e.eval()).flatMap { s =>
+            if (Cast.needsTimeZone(e.dataType, dt)) {
+              conv(dt)(s.toString, cast.zoneId)
+            } else {
+              conv(dt)(s.toString, null)
+            }
+          }
           .map(Literal(_, dt))
           .getOrElse(cast)
+
     }
   }
 }
