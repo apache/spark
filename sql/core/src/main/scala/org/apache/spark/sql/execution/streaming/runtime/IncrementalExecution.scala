@@ -84,7 +84,8 @@ class IncrementalExecution(
     val isTerminatingTrigger: Boolean = false)
   extends QueryExecution(sparkSession, logicalPlan, mode = mode,
     shuffleCleanupMode =
-      QueryExecution.determineShuffleCleanupMode(sparkSession.sessionState.conf)) with Logging {
+      QueryExecution.determineShuffleCleanupMode(sparkSession.sessionState.conf),
+    queryId = queryId) with Logging {
 
   // Modified planner with stateful operations.
   override val planner: SparkPlanner = new SparkPlanner(
