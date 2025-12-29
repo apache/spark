@@ -33,6 +33,8 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
   implicit override val patienceConfig: PatienceConfig =
     PatienceConfig(timeout = scaled(Span(20, Seconds)), interval = scaled(Span(5, Millis)))
 
+  val blockTTL = 1000L
+
   val numExecs = 3
   val numParts = 3
   val TaskStarted = "TASK_STARTED"
@@ -64,8 +66,8 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
     val conf = new SparkConf()
       .setAppName("test-blockmanager-decommissioner")
       .setMaster("local-cluster[2, 1, 1024]")
-      .set(config.SPARK_TTL_BLOCK_CLEANER, 100L)
-      .set(config.SPARK_TTL_SHUFFLE_BLOCK_CLEANER, 100L)
+      .set(config.SPARK_TTL_BLOCK_CLEANER, blockTTL)
+      .set(config.SPARK_TTL_SHUFFLE_BLOCK_CLEANER, blockTTL)
     sc = new SparkContext(conf)
     sc.setLogLevel("DEBUG")
     TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
@@ -81,12 +83,11 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
   }
 
   test("Test that shuffle blocks are tracked properly and removed after TTL") {
-    val ttl = 100L
     val conf = new SparkConf()
       .setAppName("test-blockmanager-ttls-shuffle-only")
       .setMaster("local-cluster[2, 1, 1024]")
-      .set(config.SPARK_TTL_BLOCK_CLEANER, ttl)
-      .set(config.SPARK_TTL_SHUFFLE_BLOCK_CLEANER, ttl)
+      .set(config.SPARK_TTL_BLOCK_CLEANER, blockTTL)
+      .set(config.SPARK_TTL_SHUFFLE_BLOCK_CLEANER, blockTTL)
     sc = new SparkContext(conf)
     sc.setLogLevel("DEBUG")
     TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
@@ -109,18 +110,17 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
       val t = System.currentTimeMillis()
       assert(
       mapOutputTracker.shuffleAccessTime.isEmpty,
-      s"We should have no blocks since we are now at time ${t} with ttl of ${ttl}")
+      s"We should have no blocks since we are now at time ${t} with ttl of ${blockTTL}")
     }
   }
 
 
   test(s"Test that all blocks are tracked properly and removed after TTL") {
-    val ttl = 100L
     val conf = new SparkConf()
       .setAppName("test-blockmanager-ttls-enabled")
       .setMaster("local-cluster[2, 1, 1024]")
-      .set(config.SPARK_TTL_BLOCK_CLEANER, ttl)
-      .set(config.SPARK_TTL_SHUFFLE_BLOCK_CLEANER, ttl)
+      .set(config.SPARK_TTL_BLOCK_CLEANER, blockTTL)
+      .set(config.SPARK_TTL_SHUFFLE_BLOCK_CLEANER, blockTTL)
     sc = new SparkContext(conf)
     sc.setLogLevel("DEBUG")
     TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
@@ -138,9 +138,9 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
     eventually {
       val t = System.currentTimeMillis()
       assert(mapOutputTracker.shuffleAccessTime.isEmpty,
-        s"We should have no blocks since we are now at time ${t} with ttl of ${ttl}")
+        s"We should have no blocks since we are now at time ${t} with ttl of ${blockTTL}")
       assert(managerMasterEndpoint.rddAccessTime.isEmpty,
-        s"We should have no blocks since we are now at time ${t} with ttl of ${ttl}")
+        s"We should have no blocks since we are now at time ${t} with ttl of ${blockTTL}")
     }
     // And redoing the count should work and everything should come back.
     input.count()
