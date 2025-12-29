@@ -6082,7 +6082,7 @@
   },
   "TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS" : {
     "message" : [
-      "CREATE TEMPORARY VIEW or the corresponding Dataset APIs only accept single-part view names, but got: <actualName>."
+      "CREATE TEMPORARY VIEW only accepts single-part names or qualified names with `session` or `system.session` prefix, but got: <actualName>."
     ],
     "sqlState" : "428EK"
   },

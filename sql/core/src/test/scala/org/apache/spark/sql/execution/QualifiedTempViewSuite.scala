@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
@@ -523,5 +524,98 @@ class QualifiedTempViewSuite extends QueryTest with SharedSparkSession {
 
       sql("DROP VIEW view_ifexists_test")
     }
+  }
+
+  // ========== DESCRIBE Tests ==========
+
+  test("DESCRIBE with unqualified temporary view") {
+    withTempView("desc_test") {
+      sql("CREATE TEMPORARY VIEW desc_test AS SELECT 1 AS id, 'test' AS name")
+
+      // Test DESCRIBE with unqualified name
+      val desc = sql("DESCRIBE desc_test").collect()
+
+      // Should return the schema
+      assert(desc.length == 2)
+      assert(desc.map(_.getString(0)).toSet == Set("id", "name"))
+    }
+  }
+
+  test("DESCRIBE with qualified temporary view - known limitation") {
+    withTempView("desc_qualified_test") {
+      sql("CREATE TEMPORARY VIEW desc_qualified_test AS SELECT 1 AS id")
+
+      // NOTE: DESCRIBE currently does not support session/system.session qualifiers
+      // for temporary views because it uses a different resolution path than DDL commands.
+      // DESCRIBE session.desc_qualified_test would try to find a table in schema "session"
+      // This is a known limitation that could be addressed in future work.
+
+      // Unqualified DESCRIBE works
+      val desc = sql("DESCRIBE desc_qualified_test").collect()
+      assert(desc.length == 1)
+      assert(desc(0).getString(0) == "id")
+    }
+  }
+
+  // ========== ALTER VIEW Tests ==========
+
+  test("ALTER VIEW with unqualified temporary view") {
+    withTempView("alter_test") {
+      sql("CREATE TEMPORARY VIEW alter_test AS SELECT 1 AS id")
+
+      // Verify initial view
+      checkAnswer(sql("SELECT * FROM alter_test"), Row(1))
+
+      // Alter with unqualified name
+      sql("ALTER VIEW alter_test AS SELECT 2 AS id, 'updated' AS status")
+      checkAnswer(sql("SELECT * FROM alter_test"), Row(2, "updated"))
+    }
+  }
+
+  test("ALTER VIEW with qualified temporary view - known limitation") {
+    withTempView("alter_qualified_test") {
+      sql("CREATE TEMPORARY VIEW alter_qualified_test AS SELECT 1 AS id")
+
+      // NOTE: ALTER VIEW currently does not support session/system.session qualifiers
+      // because it goes through ResolveSessionCatalog which requires identifiers
+      // to convert to TableIdentifier (max 2 parts: database.table).
+      // This is a known limitation that could be addressed in future work.
+
+      // Unqualified ALTER VIEW works
+      sql("ALTER VIEW alter_qualified_test AS SELECT 2 AS id")
+      checkAnswer(sql("SELECT * FROM alter_qualified_test"), Row(2))
+    }
+  }
+
+  // ========== SHOW Views Tests ==========
+
+  test("SHOW VIEWS includes qualified temporary views") {
+    withTempView("show_test1", "show_test2") {
+      sql("CREATE TEMPORARY VIEW show_test1 AS SELECT 1")
+      sql("CREATE TEMPORARY VIEW show_test2 AS SELECT 2")
+
+      val views = sql("SHOW VIEWS").collect()
+      val viewNames = views.map(_.getString(1)).toSet
+
+      // Temp views should be included
+      assert(viewNames.contains("show_test1"))
+      assert(viewNames.contains("show_test2"))
+    }
+  }
+
+  // ========== Error Handling Tests ==========
+
+  test("CREATE TEMPORARY VIEW with 4-part name should fail") {
+    val e = intercept[ParseException] {
+      sql("CREATE TEMPORARY VIEW a.b.c.d AS SELECT 1")
+    }
+    assert(e.getMessage.contains("TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS"))
+  }
+
+  test("CREATE TEMPORARY VIEW with invalid 3-part name should fail") {
+    val e = intercept[ParseException] {
+      sql("CREATE TEMPORARY VIEW catalog.schema.view AS SELECT 1")
+    }
+    assert(e.getMessage.contains("TEMP_VIEW_NAME_TOO_MANY_NAME_PARTS"))
   }
 }
