@@ -36,7 +36,7 @@ object CollationTypeCoercion extends SQLConfHelper {
   private val COLLATION_CONTEXT_TAG = new TreeNodeTag[DataType]("collationContext")
 
   private def hasCollationContextTag(expr: Expression): Boolean = {
-    expr.getTagValue(COLLATION_CONTEXT_TAG).isDefined
+    expr.containsTag(COLLATION_CONTEXT_TAG)
   }
 
   def apply(expression: Expression): Expression = expression match {
