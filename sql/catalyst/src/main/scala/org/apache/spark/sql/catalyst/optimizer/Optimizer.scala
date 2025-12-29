@@ -2161,7 +2161,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       val (toSplit, leaveAsIs) = expensiveByUsed.partition {
         case (used, expensive) =>
           // We can't split these filters from this projection since they
-          // have a 1:1 mapping with all of the aliases.
+          // have a 1:1 mapping with all of the aliases. Since used is a subset
+          // of aliasMap we can just compare sizes for cheaper equality.
           if (used.size == aliasMap.size) {
             false
           } else {
@@ -2221,13 +2222,14 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
           fields, computedAliases.map(_.toAttribute) ++ unusedAliases),
           child = splittableFiltersDone)
 
-        if (leaveAsIs.isEmpty) {
+        val result = if (leaveAsIs.isEmpty) {
           topProjection
         } else {
           // Finally add any filters which could not be pushed or split
           val remainingConditions = leaveAsIs.map(_._2).flatten.toSeq
-          Filter(And(remainingConditions.reduce(And), condition), topProjection)
+          Filter(remainingConditions.reduce(And), topProjection)
         }
+        result
       }
 
     // We can push down deterministic predicate through Aggregate, including throwable predicate.

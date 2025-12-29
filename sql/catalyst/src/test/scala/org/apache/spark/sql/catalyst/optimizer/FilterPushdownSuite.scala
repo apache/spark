@@ -170,6 +170,27 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("SPARK-47672: Mixed non-splittable & cheap for exercising leaveAsIs") {
+    val originalQuery = testStringRelation
+      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("other") as "g", $"b")
+      .where(($"f" || $"g" || $"a" > 5) && $"a" < 20)
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // f and g are each splittable (each depends on a strict subset of the projection aliases),
+    // while (f || g) depends on all aliases. However since we've introduced
+    // all of the aliases by the time we get to g we then push it down past the final
+    // select because the final select is _just_ order (no projection introduction).
+    val correctAnswer = testStringRelation
+      .where($"a" < 20)
+      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("other") as "g", $"b")
+      .where(($"f" || $"g" || $"a" > 5))
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("SPARK-47672: Avoid double evaluation with projections but push components that can be") {
     val originalQuery = testStringRelation
       .select($"a", $"e".rlike("magic") as "f", $"e".rlike("notmagic") as "j", $"b")
