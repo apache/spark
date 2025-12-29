@@ -2484,7 +2484,7 @@ class DDLParserSuite extends AnalysisTest {
 
   test("DESCRIBE FUNCTION") {
     def createFuncPlan(name: Seq[String]): UnresolvedFunctionName = {
-      UnresolvedFunctionName(name, "DESCRIBE FUNCTION", false, None)
+      UnresolvedFunctionName(name, "DESCRIBE FUNCTION")
     }
     comparePlans(
       parsePlan("DESC FUNCTION a"),
@@ -2501,15 +2501,12 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("REFRESH FUNCTION") {
-    def createFuncPlan(name: Seq[String]): UnresolvedFunctionName = {
-      UnresolvedFunctionName(name, "REFRESH FUNCTION", true, None)
-    }
     parseCompare("REFRESH FUNCTION c",
-      RefreshFunction(createFuncPlan(Seq("c"))))
+      RefreshFunction(UnresolvedIdentifier(Seq("c"))))
     parseCompare("REFRESH FUNCTION b.c",
-      RefreshFunction(createFuncPlan(Seq("b", "c"))))
+      RefreshFunction(UnresolvedIdentifier(Seq("b", "c"))))
     parseCompare("REFRESH FUNCTION a.b.c",
-      RefreshFunction(createFuncPlan(Seq("a", "b", "c"))))
+      RefreshFunction(UnresolvedIdentifier(Seq("a", "b", "c"))))
   }
 
   test("CREATE INDEX") {
