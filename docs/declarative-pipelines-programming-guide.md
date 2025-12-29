@@ -139,7 +139,7 @@ Your pipelines implemented with the Python API must import this module. It's rec
 from pyspark import pipelines as dp
 ```
 
-### Creating Materialized View in Python
+### Creating a Materialized View in Python
 
 The `@dp.materialized_view` decorator tells SDP to create a materialized view based on the results of a function that performs a batch read:
 
@@ -165,7 +165,7 @@ def basic_mv() -> DataFrame:
     return spark.table("samples.nyctaxi.trips")
 ```
 
-### Creating Temporary View in Python
+### Creating a Temporary View in Python
 
 The `@dp.temporary_view` decorator tells SDP to create a temporary view based on the results of a function that performs a batch read:
 
@@ -180,7 +180,7 @@ def basic_tv() -> DataFrame:
 
 This temporary view can be read by other queries within the pipeline, but can't be read outside the scope of the pipeline.
 
-### Creating Streaming Table in Python
+### Creating a Streaming Table in Python
 
 You can create a streaming table using the `@dp.table` decorator with a function that performs a streaming read:
 
@@ -227,7 +227,7 @@ def batch_mv() -> DataFrame:
     return spark.read.format("json").load("/datasets/retail-org/sales_orders")
 ```
 
-### Querying Tables Defined in Your Pipeline in Python
+### Querying Tables Defined in a Pipeline in Python
 
 You can reference other tables defined in your pipeline in the same way you'd reference tables defined outside your pipeline:
 
@@ -352,7 +352,7 @@ for region in region_list:
         )
 ```
 
-### Using Multiple Flows to Write to Single Target
+### Using Multiple Flows to Write to a Single Target in Python
 
 You can create multiple flows that append data to the same dataset:
 
@@ -376,7 +376,7 @@ def append_customers_us_east() -> DataFrame:
 
 ## Programming with SDP in SQL
 
-### Creating Materialized View
+### Creating a Materialized View in SQL
 
 The basic syntax for creating a materialized view with SQL is:
 
@@ -385,7 +385,7 @@ CREATE MATERIALIZED VIEW basic_mv
 AS SELECT * FROM samples.nyctaxi.trips;
 ```
 
-### Creating Temporary View
+### Creating a Temporary View in SQL
 
 The basic syntax for creating a temporary view with SQL is:
 
@@ -394,7 +394,7 @@ CREATE TEMPORARY VIEW basic_tv
 AS SELECT * FROM samples.nyctaxi.trips;
 ```
 
-### Creating Streaming Table
+### Creating a Streaming Table in SQL
 
 When creating a streaming table, use the `STREAM` keyword to indicate streaming semantics for the source:
 
@@ -403,7 +403,7 @@ CREATE STREAMING TABLE basic_st
 AS SELECT * FROM STREAM samples.nyctaxi.trips;
 ```
 
-### Querying Tables Defined in Your Pipeline
+### Querying Tables Defined in a Pipeline in SQL
 
 You can reference other tables defined in your pipeline:
 
@@ -430,7 +430,7 @@ FROM customer_orders
 GROUP BY state, order_date;
 ```
 
-### Using Multiple Flows to Write to Single Target
+### Using Multiple Flows to Write to a Single Target in SQL
 
 You can create multiple flows that append data to the same target:
 
