@@ -6532,8 +6532,9 @@ class DataFrame:
         >>> import pyarrow as pa
         >>> df = spark.createDataFrame([(1, 21), (2, 30)], ("id", "age"))
         >>> def filter_func(iterator):
-        ...     for batch in iterator if len(batch) > 0:
-        ...         yield batch.filter(pa.compute.field("id") == 1)
+        ...     for batch in iterator:
+        ...         if batch.num_rows > 0:
+        ...             yield batch.filter(pa.compute.field("id") == 1)
         >>> df.mapInArrow(filter_func, df.schema).show()
         +---+---+
         | id|age|
