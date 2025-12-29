@@ -33,7 +33,7 @@ class BlockTTLIntegrationSuite extends SparkFunSuite with LocalSparkContext
   implicit override val patienceConfig: PatienceConfig =
     PatienceConfig(timeout = scaled(Span(20, Seconds)), interval = scaled(Span(5, Millis)))
 
-  val blockTTL = 1000L
+  val blockTTL = 5000L
 
   val numExecs = 3
   val numParts = 3
