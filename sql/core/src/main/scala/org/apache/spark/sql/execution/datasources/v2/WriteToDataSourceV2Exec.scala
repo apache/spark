@@ -737,8 +737,11 @@ private[v2] trait V2CreateTableAsSelectBaseExec extends LeafV2CommandExec {
       } else {
         AppendData.byPosition(relation, query, writeOptions)
       }
-      val qe = QueryExecution.create(session, writeCommand, refreshPhaseEnabled)
-      qe.assertCommandExecuted()
+      QueryExecution.runCommand(
+        session,
+        writeCommand,
+        "inner data writing for CTAS/RTAS",
+        refreshPhaseEnabled)
       DataSourceV2Utils.commitStagedChanges(sparkContext, table, metrics)
       Nil
     })(catchBlock = {

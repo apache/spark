@@ -113,11 +113,24 @@ class JDBCTableCatalog extends TableCatalog
   override def dropTable(ident: Identifier): Boolean = {
     checkNamespace(ident.namespace())
     JdbcUtils.withConnection(options) { conn =>
-      try {
-        JdbcUtils.dropTable(conn, getTableName(ident), options)
-        true
-      } catch {
-        case _: SQLException => false
+      JdbcUtils.classifyException(
+        condition = "FAILED_JDBC.DROP_TABLE",
+        messageParameters = Map(
+          "url" -> options.getRedactUrl(),
+          "tableName" -> toSQLId(ident)),
+        dialect,
+        description = s"Failed to drop table: $ident",
+        isRuntime = true) {
+        try {
+          JdbcUtils.dropTable(conn, getTableName(ident), options)
+          true
+        } catch {
+          // TableCatalog.dropTable API is designed to return false
+          // only in case table does not exist.
+          case e: SQLException if dialect.isObjectNotFoundException(e) =>
+            false
+          // All other SQLExceptions get classified and propagated
+        }
       }
     }
   }
