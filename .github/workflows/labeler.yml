@@ -56,7 +56,7 @@ jobs:
           const prNumber = context.payload.pull_request.number;
 
           // Extract JIRA IDs from PR title
-          const jiraIdRegex = /SPARK-\d+/g;
+          const jiraIdRegex = /\bSPARK-\d+\b/g;
           const jiraIds = prTitle.match(jiraIdRegex);
 
           // If no JIRA IDs found, check for [MINOR] tag
