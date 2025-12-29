@@ -70,10 +70,10 @@ if have_numpy:
 class UDFInputTypeTests(ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
-        super(UDFInputTypeTests, cls).setUpClass()
+        super().setUpClass()
 
     def setUp(self):
-        super(UDFInputTypeTests, self).setUp()
+        super().setUp()
 
     def test_udf_input_types_arrow_disabled(self):
         golden_file = os.path.join(

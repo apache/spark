@@ -36,9 +36,11 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
 
 trait OffsetSeqBase {
+  def version: Int
+
   def offsets: Seq[Option[OffsetV2]]
 
-  def metadataOpt: Option[OffsetSeqMetadata]
+  def metadataOpt: Option[OffsetSeqMetadataBase]
 
   override def toString: String = this match {
     case offsetMap: OffsetMap =>
@@ -93,9 +95,8 @@ trait OffsetSeqBase {
  */
 case class OffsetSeq(
     offsets: Seq[Option[OffsetV2]],
-    metadata: Option[OffsetSeqMetadata] = None) extends OffsetSeqBase {
-
-  override def metadataOpt: Option[OffsetSeqMetadata] = metadata
+    metadataOpt: Option[OffsetSeqMetadata] = None) extends OffsetSeqBase {
+  override def version: Int = OffsetSeqLog.VERSION_1
 }
 
 object OffsetSeq {
@@ -110,32 +111,59 @@ object OffsetSeq {
    * Returns a [[OffsetSeq]] with metadata and a variable sequence of offsets.
    * `nulls` in the sequence are converted to `None`s.
    */
-  def fill(metadata: Option[String], offsets: OffsetV2*): OffsetSeq = {
-    OffsetSeq(offsets.map(Option(_)), metadata.map(OffsetSeqMetadata.apply))
+  def fill(metadataOpt: Option[String], offsets: OffsetV2*): OffsetSeq = {
+    OffsetSeq(offsets.map(Option(_)), metadataOpt.map(OffsetSeqMetadata.apply))
   }
 }
-
 
 /**
  * A map-based collection of offsets, used to track the progress of processing data from one or more
  * streaming sources. Each source is identified by a string key (initially sourceId.toString()).
  * This replaces the sequence-based approach with a more flexible map-based approach to support
  * named source identities.
+ *
+ * Unlike [[OffsetSeq]], metadata is required (not optional) for [[OffsetMap]] as it contains
+ * essential information like source metadata.
  */
 case class OffsetMap(
     offsetsMap: Map[String, Option[OffsetV2]],
-    metadataOpt: Option[OffsetSeqMetadata] = None) extends OffsetSeqBase {
+    metadata: OffsetSeqMetadataV2) extends OffsetSeqBase {
+  override def version: Int = OffsetSeqLog.VERSION_2
 
   // OffsetMap does not support sequence-based access
   override def offsets: Seq[Option[OffsetV2]] = {
     throw new UnsupportedOperationException(
       "OffsetMap does not support sequence-based offsets access. Use offsetsMap directly.")
   }
+
+  override def metadataOpt: Option[OffsetSeqMetadataBase] = Some(metadata)
+}
+
+/**
+ * Base trait for offset sequence metadata.
+ *
+ * Valid combinations of offset log versions and metadata types:
+ * - VERSION_1 (sequence-based offset log): Uses [[OffsetSeq]] with [[OffsetSeqMetadata]]
+ * - VERSION_2 (map-based offset log): Uses [[OffsetMap]] with [[OffsetSeqMetadataV2]]
+ *
+ * The metadata version must match the offset log version for proper serialization and
+ * deserialization.
+ */
+trait OffsetSeqMetadataBase extends Serializable {
+  def batchWatermarkMs: Long
+  def batchTimestampMs: Long
+  def conf: Map[String, String]
+  def json: String
+  def version: Int
+  def sourceMetadataInfoOpt: Option[Map[String, SourceMetadataInfo]]
+  def controlBatchInfoOpt: Option[OffsetSeqControlBatchInfo]
 }
 
 /**
  * Contains metadata associated with a [[OffsetSeq]]. This information is
  * persisted to the offset log in the checkpoint location via the [[OffsetSeq]] metadata field.
+ *
+ * This is VERSION_1 metadata, used with sequence-based [[OffsetSeq]].
  *
  * @param batchWatermarkMs: The current eventTime watermark, used to
  * bound the lateness of data that will processed. Time unit: milliseconds
@@ -151,19 +179,24 @@ case class OffsetMap(
 case class OffsetSeqMetadata(
     batchWatermarkMs: Long = 0,
     batchTimestampMs: Long = 0,
-    conf: Map[String, String] = Map.empty,
-    version: Int = 1) {
-  def json: String = Serialization.write(this)(OffsetSeqMetadata.format)
+    conf: Map[String, String] = Map.empty) extends OffsetSeqMetadataBase {
+  override def json: String = Serialization.write(this)(OffsetSeqMetadata.format)
+
+  override def version: Int = OffsetSeqLog.VERSION_1
+
+  override def sourceMetadataInfoOpt: Option[Map[String, SourceMetadataInfo]] = None
+
+  override def controlBatchInfoOpt: Option[OffsetSeqControlBatchInfo] = None
 }
 
 object OffsetSeqMetadata extends Logging {
-  private implicit val format: Formats = Serialization.formats(NoTypeHints)
+  private[checkpointing] implicit val format: Formats = Serialization.formats(NoTypeHints)
   /**
    * These configs are related to streaming query execution and should not be changed across
    * batches of a streaming query. The values of these configs are persisted into the offset
    * log in the checkpoint position.
    */
-  private val relevantSQLConfs = Seq(
+  private[checkpointing] val relevantSQLConfs = Seq(
     STATE_STORE_PROVIDER_CLASS, STREAMING_MULTIPLE_WATERMARK_POLICY,
     FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION, STREAMING_AGGREGATION_STATE_FORMAT_VERSION,
     STREAMING_JOIN_STATE_FORMAT_VERSION, STATE_STORE_COMPRESSION_CODEC,
@@ -219,12 +252,12 @@ object OffsetSeqMetadata extends Logging {
     STATE_STORE_ROW_CHECKSUM_ENABLED.key -> "false"
   )
 
-  def readValue[T](metadataLog: OffsetSeqMetadata, confKey: ConfigEntry[T]): String = {
+  def readValue[T](metadataLog: OffsetSeqMetadataBase, confKey: ConfigEntry[T]): String = {
     readValueOpt(metadataLog, confKey).getOrElse(confKey.defaultValueString)
   }
 
   def readValueOpt[T](
-      metadataLog: OffsetSeqMetadata,
+      metadataLog: OffsetSeqMetadataBase,
       confKey: ConfigEntry[T]): Option[String] = {
     val actualKey = if (rebindSQLConfsSessionToOffsetLog.contains(confKey)) {
       rebindSQLConfsSessionToOffsetLog(confKey)
@@ -248,7 +281,7 @@ object OffsetSeqMetadata extends Logging {
   }
 
   /** Set the SparkSession configuration with the values in the metadata */
-  def setSessionConf(metadata: OffsetSeqMetadata, sessionConf: SQLConf): Unit = {
+  def setSessionConf(metadata: OffsetSeqMetadataBase, sessionConf: SQLConf): Unit = {
     def setOneSessionConf(confKeyInOffsetLog: String, confKeyInSession: String): Unit = {
       metadata.conf.get(confKeyInOffsetLog) match {
 
@@ -294,5 +327,85 @@ object OffsetSeqMetadata extends Logging {
       case (confInOffsetLog, confInSession) =>
         setOneSessionConf(confInOffsetLog.key, confInSession.key)
     }
+  }
+}
+
+/**
+ * This class is used to store the metadata for a source in the offset log within the
+ * streaming checkpoint.
+ *
+ * @param sourceId: The ID of the source.
+ * @param providerName: The name of the provider.
+ * @param apiVersion: The API version for the source - whether it is DSv1 or DSv2.
+ */
+case class SourceMetadataInfo(
+    sourceId: String,
+    providerName: String,
+    apiVersion: String) {
+  def json: String = Serialization.write(this)(OffsetSeqMetadata.format)
+}
+
+/**
+ * This class is used to store metadata about the type of control batch in the offset log.
+ *
+ * @param operationType The type of control batch operation.
+ * @param operationInfo Additional info about the control batch operation.
+ */
+case class OffsetSeqControlBatchInfo(
+    operationType: String,
+    operationInfo: Option[String] = None) {
+  def json: String = Serialization.write(this)(OffsetSeqControlBatchInfo.format)
+}
+
+object OffsetSeqControlBatchInfo {
+  private implicit val format: Formats = Serialization.formats(NoTypeHints)
+}
+
+/**
+ * Contains metadata associated with a [[OffsetMap]]. This information is
+ * persisted to the offset log in the checkpoint location via the [[OffsetMap]] metadata field.
+ *
+ * This is VERSION_2 metadata, used with map-based [[OffsetMap]].
+ *
+ * @param batchWatermarkMs: The current eventTime watermark, used to
+ * bound the lateness of data that will processed. Time unit: milliseconds
+ * @param batchTimestampMs: The current batch processing timestamp.
+ * Time unit: milliseconds
+ * @param conf: Additional conf_s to be persisted across batches,
+ * e.g. number of shuffle partitions.
+ * @param sourceMetadataInfo: The source related metadata for the streaming query,
+ * mapped by sourceId.
+ * @param controlBatchInfo: The control batch information if the current batch is a
+ * control batch. Value of None means current batch is a data batch.
+ */
+case class OffsetSeqMetadataV2(
+    batchWatermarkMs: Long = 0,
+    batchTimestampMs: Long = 0,
+    conf: Map[String, String] = Map.empty,
+    sourceMetadataInfo: Map[String, SourceMetadataInfo] = Map.empty,
+    controlBatchInfo: Option[OffsetSeqControlBatchInfo] = None) extends OffsetSeqMetadataBase {
+  override def version: Int = OffsetSeqLog.VERSION_2
+
+  override def sourceMetadataInfoOpt: Option[Map[String, SourceMetadataInfo]] =
+    Some(sourceMetadataInfo)
+
+  override def controlBatchInfoOpt: Option[OffsetSeqControlBatchInfo] = controlBatchInfo
+
+  override def json: String = Serialization.write(this)(OffsetSeqMetadata.format)
+}
+
+object OffsetSeqMetadataV2 {
+  private implicit val format: Formats = Serialization.formats(NoTypeHints)
+
+  def apply(json: String): OffsetSeqMetadataV2 = Serialization.read[OffsetSeqMetadataV2](json)
+
+  def apply(
+      batchWatermarkMs: Long,
+      batchTimestampMs: Long,
+      sessionConf: RuntimeConfig): OffsetSeqMetadataV2 = {
+    val confs = OffsetSeqMetadata.relevantSQLConfs.map {
+      conf => conf.key -> sessionConf.get(conf.key)
+    }.toMap
+    OffsetSeqMetadataV2(batchWatermarkMs, batchTimestampMs, confs)
   }
 }

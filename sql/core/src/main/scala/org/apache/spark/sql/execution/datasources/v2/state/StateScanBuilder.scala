@@ -46,10 +46,11 @@ class StateScanBuilder(
     stateVariableInfoOpt: Option[TransformWithStateVariableInfo],
     stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema],
     stateSchemaProviderOpt: Option[StateSchemaProvider],
-    joinColFamilyOpt: Option[String]) extends ScanBuilder {
+    joinColFamilyOpt: Option[String],
+    allColumnFamiliesReaderInfo: Option[AllColumnFamiliesReaderInfo]) extends ScanBuilder {
   override def build(): Scan = new StateScan(session, schema, sourceOptions, stateStoreConf,
     keyStateEncoderSpec, stateVariableInfoOpt, stateStoreColFamilySchemaOpt, stateSchemaProviderOpt,
-    joinColFamilyOpt)
+    joinColFamilyOpt, allColumnFamiliesReaderInfo)
 }
 
 /** An implementation of [[InputPartition]] for State Store data source. */
@@ -68,7 +69,8 @@ class StateScan(
     stateVariableInfoOpt: Option[TransformWithStateVariableInfo],
     stateStoreColFamilySchemaOpt: Option[StateStoreColFamilySchema],
     stateSchemaProviderOpt: Option[StateSchemaProvider],
-    joinColFamilyOpt: Option[String])
+    joinColFamilyOpt: Option[String],
+    allColumnFamiliesReaderInfo: Option[AllColumnFamiliesReaderInfo])
   extends Scan with Batch {
 
   // A Hadoop Configuration can be about 10 KB, which is pretty big, so broadcast it
@@ -144,7 +146,7 @@ class StateScan(
     case JoinSideValues.none =>
       new StatePartitionReaderFactory(stateStoreConf, hadoopConfBroadcast.value, schema,
         keyStateEncoderSpec, stateVariableInfoOpt, stateStoreColFamilySchemaOpt,
-        stateSchemaProviderOpt, joinColFamilyOpt)
+        stateSchemaProviderOpt, joinColFamilyOpt, allColumnFamiliesReaderInfo)
   }
 
   override def toBatch: Batch = this

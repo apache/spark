@@ -64,7 +64,7 @@ VALUES
     (CAST(7 AS DOUBLE), CAST(11 AS DOUBLE)) AS tab(col1, col2);
 
 -- BIGINT sketches
-SELECT split(kll_sketch_to_string_bigint(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
+SELECT lower(kll_sketch_to_string_bigint(agg)) LIKE '%kll%' AS str_contains_kll,
        abs(kll_sketch_get_quantile_bigint(agg, 0.5) - 4) < 1 AS median_close_to_4,
        abs(kll_sketch_get_rank_bigint(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
 FROM (
@@ -72,7 +72,7 @@ FROM (
     FROM t_byte_1_5_through_7_11
 );
 
-SELECT split(kll_sketch_to_string_bigint(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
+SELECT lower(kll_sketch_to_string_bigint(agg)) LIKE '%kll%' AS str_contains_kll,
        abs(kll_sketch_get_quantile_bigint(agg, 0.5) - 4) < 1 AS median_close_to_4,
        abs(kll_sketch_get_rank_bigint(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
 FROM (
@@ -80,7 +80,7 @@ FROM (
     FROM t_int_1_5_through_7_11
 );
 
-SELECT split(kll_sketch_to_string_bigint(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
+SELECT lower(kll_sketch_to_string_bigint(agg)) LIKE '%kll%' AS str_contains_kll,
        abs(kll_sketch_get_quantile_bigint(agg, 0.5) - 4) < 1 AS median_close_to_4,
        abs(kll_sketch_get_rank_bigint(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
 FROM (
@@ -88,7 +88,7 @@ FROM (
     FROM t_long_1_5_through_7_11
 );
 
-SELECT split(kll_sketch_to_string_bigint(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
+SELECT lower(kll_sketch_to_string_bigint(agg)) LIKE '%kll%' AS str_contains_kll,
        abs(kll_sketch_get_quantile_bigint(agg, 0.5) - 4) < 1 AS median_close_to_4,
        abs(kll_sketch_get_rank_bigint(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
 FROM (
@@ -97,7 +97,7 @@ FROM (
 );
 
 -- FLOAT sketches (only accepts float types to avoid precision loss)
-SELECT split(kll_sketch_to_string_float(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
+SELECT lower(kll_sketch_to_string_float(agg)) LIKE '%kll%' AS str_contains_kll,
        abs(kll_sketch_get_quantile_float(agg, 0.5) - 4.0) < 0.5 AS median_close_to_4,
        abs(kll_sketch_get_rank_float(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
 FROM (
@@ -106,7 +106,7 @@ FROM (
 );
 
 -- DOUBLE sketches (accepts float and double types to avoid precision loss from integer conversion)
-SELECT split(kll_sketch_to_string_double(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
+SELECT lower(kll_sketch_to_string_double(agg)) LIKE '%kll%' AS str_contains_kll,
        abs(kll_sketch_get_quantile_double(agg, 0.5) - 4.0) < 0.5 AS median_close_to_4,
        abs(kll_sketch_get_rank_double(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
 FROM (
@@ -115,7 +115,7 @@ FROM (
 );
 
 -- Test float column with double sketch (valid type promotion)
-SELECT split(kll_sketch_to_string_double(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
+SELECT lower(kll_sketch_to_string_double(agg)) LIKE '%kll%' AS str_contains_kll,
        abs(kll_sketch_get_quantile_double(agg, 0.5) - 4.0) < 0.5 AS median_close_to_4,
        abs(kll_sketch_get_rank_double(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
 FROM (
@@ -268,7 +268,7 @@ FROM t_long_1_5_through_7_11;
 -- These queries should fail with type mismatch or validation errors
 
 -- Type mismatch: BIGINT sketch does not accept DOUBLE columns
-SELECT split(kll_sketch_to_string_bigint(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
+SELECT lower(kll_sketch_to_string_bigint(agg)) LIKE '%kll%' AS str_contains_kll,
        abs(kll_sketch_get_quantile_bigint(agg, 0.5) - 4) < 1 AS median_close_to_4,
        abs(kll_sketch_get_rank_bigint(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
 FROM (
@@ -277,7 +277,7 @@ FROM (
 );
 
 -- Type mismatch: BIGINT sketch does not accept FLOAT columns
-SELECT split(kll_sketch_to_string_bigint(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
+SELECT lower(kll_sketch_to_string_bigint(agg)) LIKE '%kll%' AS str_contains_kll,
        abs(kll_sketch_get_quantile_bigint(agg, 0.5) - 4) < 1 AS median_close_to_4,
        abs(kll_sketch_get_rank_bigint(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
 FROM (
@@ -286,7 +286,7 @@ FROM (
 );
 
 -- Type mismatch: FLOAT sketch does not accept DOUBLE columns
-SELECT split(kll_sketch_to_string_float(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
+SELECT lower(kll_sketch_to_string_float(agg)) LIKE '%kll%' AS str_contains_kll,
        abs(kll_sketch_get_quantile_float(agg, 0.5) - 4.0) < 0.5 AS median_close_to_4,
        abs(kll_sketch_get_rank_float(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
 FROM (
@@ -378,7 +378,7 @@ FROM (
 -- interpret the binary data. This query succeeds even though we're using a DOUBLE
 -- to_string function on a BIGINT sketch. The function reads the binary representation
 -- and produces output, but the numeric values will be incorrectly interpreted.
-SELECT kll_sketch_to_string_double(agg) LIKE '%Kll%' AS contains_kll_header
+SELECT lower(kll_sketch_to_string_double(agg)) LIKE '%kll%' AS contains_kll_header
 FROM (
     SELECT kll_sketch_agg_bigint(col1) AS agg
     FROM t_long_1_5_through_7_11
@@ -462,6 +462,41 @@ SELECT kll_sketch_get_rank_double(agg, false) AS rank_boolean
 FROM (
     SELECT kll_sketch_agg_double(col1) AS agg
     FROM t_double_1_5_through_7_11
+);
+
+-- Negative tests for non-foldable (non-constant) rank/quantile arguments
+-- These tests verify that get_quantile and get_rank functions require compile-time constant arguments
+
+-- Non-foldable scalar rank argument to get_quantile (column reference)
+SELECT kll_sketch_get_quantile_bigint(agg, CAST(col1 AS DOUBLE) / 10.0) AS non_foldable_scalar_rank
+FROM (
+    SELECT kll_sketch_agg_bigint(col1) AS agg, col1
+    FROM t_long_1_5_through_7_11
+    GROUP BY col1
+);
+
+-- Non-foldable array rank argument to get_quantile (array containing column reference)
+SELECT kll_sketch_get_quantile_bigint(agg, array(0.25, CAST(col1 AS DOUBLE) / 10.0, 0.75)) AS non_foldable_array_rank
+FROM (
+    SELECT kll_sketch_agg_bigint(col1) AS agg, col1
+    FROM t_long_1_5_through_7_11
+    GROUP BY col1
+);
+
+-- Non-foldable scalar quantile argument to get_rank (column reference)
+SELECT kll_sketch_get_rank_bigint(agg, col1) AS non_foldable_scalar_quantile
+FROM (
+    SELECT kll_sketch_agg_bigint(col1) AS agg, col1
+    FROM t_long_1_5_through_7_11
+    GROUP BY col1
+);
+
+-- Non-foldable array quantile argument to get_rank (array containing column reference)
+SELECT kll_sketch_get_rank_bigint(agg, array(1L, col1, 5L)) AS non_foldable_array_quantile
+FROM (
+    SELECT kll_sketch_agg_bigint(col1) AS agg, col1
+    FROM t_long_1_5_through_7_11
+    GROUP BY col1
 );
 
 -- Clean up

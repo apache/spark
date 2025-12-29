@@ -303,6 +303,29 @@ class UnifiedUDFTestsMixin:
             result2 = self.spark.sql("SELECT pa_max(id) AS res FROM range(0, 10)").collect()
             self.assertEqual(result2, expected)
 
+    def test_grouped_agg_arrow_iter_udf(self):
+        import pyarrow as pa
+
+        @udf(returnType=LongType())
+        def pa_sum_iter(it: Iterator[pa.Array]) -> int:
+            total = 0
+            for arr in it:
+                total += pa.compute.sum(arr).as_py()
+            return total
+
+        self.assertEqual(pa_sum_iter.evalType, PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF)
+
+        df = self.spark.range(0, 10)
+        expected = df.select(sf.sum("id").alias("res")).collect()
+
+        result1 = df.select(pa_sum_iter("id").alias("res")).collect()
+        self.assertEqual(result1, expected)
+
+        with self.temp_func("pa_sum_iter"):
+            self.spark.udf.register("pa_sum_iter", pa_sum_iter)
+            result2 = self.spark.sql("SELECT pa_sum_iter(id) AS res FROM range(0, 10)").collect()
+            self.assertEqual(result2, expected)
+
     def test_window_agg_arrow_udf(self):
         import pyarrow as pa
 

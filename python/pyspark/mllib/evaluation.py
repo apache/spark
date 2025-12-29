@@ -82,7 +82,7 @@ class BinaryClassificationMetrics(JavaModelWrapper):
         assert sc._jvm is not None
         java_class = sc._jvm.org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
         java_model = java_class(df._jdf)
-        super(BinaryClassificationMetrics, self).__init__(java_model)
+        super().__init__(java_model)
 
     @property
     @since("1.4.0")
@@ -158,7 +158,7 @@ class RegressionMetrics(JavaModelWrapper):
         assert sc._jvm is not None
         java_class = sc._jvm.org.apache.spark.mllib.evaluation.RegressionMetrics
         java_model = java_class(df._jdf)
-        super(RegressionMetrics, self).__init__(java_model)
+        super().__init__(java_model)
 
     @property
     @since("1.4.0")
@@ -299,7 +299,7 @@ class MulticlassMetrics(JavaModelWrapper):
         assert sc._jvm is not None
         java_class = sc._jvm.org.apache.spark.mllib.evaluation.MulticlassMetrics
         java_model = java_class(df._jdf)
-        super(MulticlassMetrics, self).__init__(java_model)
+        super().__init__(java_model)
 
     @since("1.4.0")
     def confusionMatrix(self) -> Matrix:
@@ -465,7 +465,7 @@ class RankingMetrics(JavaModelWrapper, Generic[T]):
             predictionAndLabels, schema=sql_ctx.sparkSession._inferSchema(predictionAndLabels)
         )
         java_model = callMLlibFunc("newRankingMetrics", df._jdf)
-        super(RankingMetrics, self).__init__(java_model)
+        super().__init__(java_model)
 
     @since("1.4.0")
     def precisionAt(self, k: int) -> float:
@@ -581,7 +581,7 @@ class MultilabelMetrics(JavaModelWrapper):
         assert sc._jvm is not None
         java_class = sc._jvm.org.apache.spark.mllib.evaluation.MultilabelMetrics
         java_model = java_class(df._jdf)
-        super(MultilabelMetrics, self).__init__(java_model)
+        super().__init__(java_model)
 
     @since("1.4.0")
     def precision(self, label: Optional[float] = None) -> float:

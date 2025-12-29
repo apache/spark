@@ -50,15 +50,15 @@ from pyspark.util import PythonEvalType
 class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
     @unittest.skip("Unrelated test, and it fails when it runs duplicatedly.")
     def test_broadcast_in_udf(self):
-        super(ArrowPythonUDFTests, self).test_broadcast_in_udf()
+        super().test_broadcast_in_udf()
 
     @unittest.skip("Unrelated test, and it fails when it runs duplicatedly.")
     def test_register_java_function(self):
-        super(ArrowPythonUDFTests, self).test_register_java_function()
+        super().test_register_java_function()
 
     @unittest.skip("Unrelated test, and it fails when it runs duplicatedly.")
     def test_register_java_udaf(self):
-        super(ArrowPythonUDFTests, self).test_register_java_udaf()
+        super().test_register_java_udaf()
 
     def test_complex_input_types(self):
         row = (
@@ -485,7 +485,7 @@ class ArrowPythonUDFNonLegacyTestsMixin(ArrowPythonUDFTestsMixin):
 class ArrowPythonUDFTests(ArrowPythonUDFTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
-        super(ArrowPythonUDFTests, cls).setUpClass()
+        super().setUpClass()
         cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "true")
 
     @classmethod
@@ -493,21 +493,21 @@ class ArrowPythonUDFTests(ArrowPythonUDFTestsMixin, ReusedSQLTestCase):
         try:
             cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
         finally:
-            super(ArrowPythonUDFTests, cls).tearDownClass()
+            super().tearDownClass()
 
     @unittest.skip("Duplicate test; it is tested separately in legacy and non-legacy tests")
     def test_udf_binary_type(self):
-        super(ArrowPythonUDFTests, self).test_udf_binary_type()
+        super().test_udf_binary_type()
 
     @unittest.skip("Duplicate test; it is tested separately in legacy and non-legacy tests")
     def test_udf_binary_type_in_nested_structures(self):
-        super(ArrowPythonUDFTests, self).test_udf_binary_type_in_nested_structures()
+        super().test_udf_binary_type_in_nested_structures()
 
 
 class ArrowPythonUDFLegacyTests(ArrowPythonUDFLegacyTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
-        super(ArrowPythonUDFLegacyTests, cls).setUpClass()
+        super().setUpClass()
         cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.concurrency.level", "4")
         cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "true")
 
@@ -517,13 +517,13 @@ class ArrowPythonUDFLegacyTests(ArrowPythonUDFLegacyTestsMixin, ReusedSQLTestCas
             cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.concurrency.level")
             cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
         finally:
-            super(ArrowPythonUDFLegacyTests, cls).tearDownClass()
+            super().tearDownClass()
 
 
 class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
-        super(ArrowPythonUDFNonLegacyTests, cls).setUpClass()
+        super().setUpClass()
         cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "true")
 
     @classmethod
@@ -531,7 +531,7 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
         try:
             cls.spark.conf.unset("spark.sql.execution.pythonUDF.arrow.enabled")
         finally:
-            super(ArrowPythonUDFNonLegacyTests, cls).tearDownClass()
+            super().tearDownClass()
 
 
 if __name__ == "__main__":

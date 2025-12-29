@@ -1014,7 +1014,7 @@ class StreamingLinearRegressionWithSGD(StreamingLinearAlgorithm):
         self.miniBatchFraction = miniBatchFraction
         self.convergenceTol = convergenceTol
         self._model: Optional[LinearModel] = None
-        super(StreamingLinearRegressionWithSGD, self).__init__(model=self._model)
+        super().__init__(model=self._model)
 
     @since("1.5.0")
     def setInitialWeights(self, initialWeights: "VectorLike") -> "StreamingLinearRegressionWithSGD":

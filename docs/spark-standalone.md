@@ -389,7 +389,7 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td><code>spark.dead.worker.persistence</code></td>
   <td>15</td>
   <td>
-    Number of iterations to keep the deae worker information in UI. By default, the dead worker is visible for (15 + 1) * <code>spark.worker.timeout</code> since its last heartbeat.
+    Number of iterations to keep the dead worker information in UI. By default, the dead worker is visible for (15 + 1) * <code>spark.worker.timeout</code> since its last heartbeat.
   </td>
   <td>0.8.0</td>
 </tr>

@@ -178,13 +178,8 @@ class QueryExecution(
       // with the rest of processing of the root plan being just outputting command results,
       // for eagerly executed commands we mark this place as beginning of execution.
       tracker.setReadyForExecution()
-      val qe = new QueryExecution(sparkSession, p, mode = mode,
-        shuffleCleanupMode = shuffleCleanupMode, refreshPhaseEnabled = refreshPhaseEnabled)
-      val result = QueryExecution.withInternalError(s"Eagerly executed $name failed.") {
-        SQLExecution.withNewExecutionId(qe, Some(name)) {
-          qe.executedPlan.executeCollect()
-        }
-      }
+      val (qe, result) = QueryExecution.runCommand(
+        sparkSession, p, name, refreshPhaseEnabled, mode, Some(shuffleCleanupMode))
       CommandResult(
         qe.analyzed.output,
         qe.commandExecuted,
@@ -762,5 +757,29 @@ object QueryExecution {
       case NameParameterizedQuery(_: CompoundBody, _, _) => true
       case _ => false
     }
+  }
+
+  def runCommand(
+      sparkSession: SparkSession,
+      command: LogicalPlan,
+      name: String,
+      refreshPhaseEnabled: Boolean = true,
+      mode: CommandExecutionMode.Value = CommandExecutionMode.SKIP,
+      shuffleCleanupModeOpt: Option[ShuffleCleanupMode] = None)
+    : (QueryExecution, Array[InternalRow]) = {
+    val shuffleCleanupMode = shuffleCleanupModeOpt.getOrElse(
+      determineShuffleCleanupMode(sparkSession.sessionState.conf))
+    val qe = new QueryExecution(
+      sparkSession,
+      command,
+      mode = mode,
+      shuffleCleanupMode = shuffleCleanupMode,
+      refreshPhaseEnabled = refreshPhaseEnabled)
+    val result = QueryExecution.withInternalError(s"Executed $name failed.") {
+      SQLExecution.withNewExecutionId(qe, Some(name)) {
+        qe.executedPlan.executeCollect()
+      }
+    }
+    (qe, result)
   }
 }

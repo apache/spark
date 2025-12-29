@@ -66,7 +66,6 @@ from pyspark.sql.pandas.serializers import (
     ArrowStreamArrowUDFSerializer,
     ArrowStreamAggPandasUDFSerializer,
     ArrowStreamAggArrowUDFSerializer,
-    ArrowStreamAggArrowIterUDFSerializer,
     ArrowBatchUDFSerializer,
     ArrowStreamUDTFSerializer,
     ArrowStreamArrowUDTFSerializer,
@@ -119,7 +118,19 @@ class RunnerConf:
 
     def load(self, infile):
         num_conf = read_int(infile)
-        for i in range(num_conf):
+        # We do a sanity check here to reduce the possibility to stuck indefinitely
+        # due to an invalid messsage. If the numer of configurations is obviously
+        # wrong, we just raise an error directly.
+        # We hand-pick the configurations to send to the worker so the number should
+        # be very small (less than 100).
+        if num_conf < 0 or num_conf > 10000:
+            raise PySparkRuntimeError(
+                errorClass="PROTOCOL_ERROR",
+                messageParameters={
+                    "failure": f"Invalid number of configurations: {num_conf}",
+                },
+            )
+        for _ in range(num_conf):
             k = utf8_deserializer.loads(infile)
             v = utf8_deserializer.loads(infile)
             self._conf[k] = v
@@ -880,12 +891,14 @@ def wrap_grouped_transform_with_state_pandas_udf(f, return_type, runner_conf):
 
 def wrap_grouped_transform_with_state_pandas_init_state_udf(f, return_type, runner_conf):
     def wrapped(stateful_processor_api_client, mode, key, value_series_gen):
-        import pandas as pd
-
+        # Split the generator into two using itertools.tee
         state_values_gen, init_states_gen = itertools.tee(value_series_gen, 2)
-        state_values = (df for x, _ in state_values_gen if not (df := pd.concat(x, axis=1)).empty)
-        init_states = (df for _, x in init_states_gen if not (df := pd.concat(x, axis=1)).empty)
 
+        # Extract just the data DataFrames (first element of each tuple)
+        state_values = (data_df for data_df, _ in state_values_gen if not data_df.empty)
+
+        # Extract just the init DataFrames (second element of each tuple)
+        init_states = (init_df for _, init_df in init_states_gen if not init_df.empty)
         result_iter = f(stateful_processor_api_client, mode, key, state_values, init_states)
 
         # TODO(SPARK-49100): add verification that elements in result_iter are
@@ -1074,6 +1087,28 @@ def wrap_grouped_agg_arrow_iter_udf(f, args_offsets, kwargs_offsets, return_type
         # batch_iter: Iterator[pa.Array] (single) or Iterator[Tuple[pa.Array, ...]] (multiple)
         result = func(batch_iter)
         return pa.array([result])
+
+    return (
+        args_kwargs_offsets,
+        lambda *a: (wrapped(*a), arrow_return_type),
+    )
+
+
+def wrap_grouped_agg_pandas_iter_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf):
+    func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
+
+    arrow_return_type = to_arrow_type(
+        return_type, prefers_large_types=runner_conf.use_large_var_types
+    )
+
+    def wrapped(series_iter):
+        import pandas as pd
+
+        # series_iter: Iterator[pd.Series] (single column) or
+        # Iterator[Tuple[pd.Series, ...]] (multiple columns)
+        # This has already been adapted by the mapper function in read_udfs
+        result = func(series_iter)
+        return pd.Series([result])
 
     return (
         args_kwargs_offsets,
@@ -1385,6 +1420,7 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
         PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
         PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
         PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
+        PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
     ):
         args_offsets = []
         kwargs_offsets = {}
@@ -1494,6 +1530,10 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
         return wrap_grouped_agg_arrow_iter_udf(
             func, args_offsets, kwargs_offsets, return_type, runner_conf
         )
+    elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF:
+        return wrap_grouped_agg_pandas_iter_udf(
+            func, args_offsets, kwargs_offsets, return_type, runner_conf
+        )
     elif eval_type == PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF:
         return wrap_window_agg_pandas_udf(
             func, args_offsets, kwargs_offsets, return_type, runner_conf, udf_index
@@ -1512,10 +1552,8 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
 # It expects the UDTF to be in a specific format and performs various checks to
 # ensure the UDTF is valid. This function also prepares a mapper function for applying
 # the UDTF logic to input rows.
-def read_udtf(pickleSer, infile, eval_type):
+def read_udtf(pickleSer, infile, eval_type, runner_conf):
     if eval_type == PythonEvalType.SQL_ARROW_TABLE_UDF:
-        # Load conf used for arrow evaluation.
-        runner_conf = RunnerConf(infile)
         input_types = [
             field.dataType for field in _parse_datatype_json_string(utf8_deserializer.loads(infile))
         ]
@@ -1530,7 +1568,6 @@ def read_udtf(pickleSer, infile, eval_type):
         else:
             ser = ArrowStreamUDTFSerializer()
     elif eval_type == PythonEvalType.SQL_ARROW_UDTF:
-        runner_conf = RunnerConf(infile)
         # Read the table argument offsets
         num_table_arg_offsets = read_int(infile)
         table_arg_offsets = [read_int(infile) for _ in range(num_table_arg_offsets)]
@@ -1538,7 +1575,6 @@ def read_udtf(pickleSer, infile, eval_type):
         ser = ArrowStreamArrowUDTFSerializer(table_arg_offsets=table_arg_offsets)
     else:
         # Each row is a group so do not batch but send one by one.
-        runner_conf = RunnerConf()
         ser = BatchedSerializer(CPickleSerializer(), 1)
 
     # See 'PythonUDTFRunner.PythonUDFWriterThread.writeCommand'
@@ -2686,7 +2722,7 @@ def read_udtf(pickleSer, infile, eval_type):
         return mapper, None, ser, ser
 
 
-def read_udfs(pickleSer, infile, eval_type):
+def read_udfs(pickleSer, infile, eval_type, runner_conf):
     state_server_port = None
     key_schema = None
     if eval_type in (
@@ -2704,6 +2740,7 @@ def read_udfs(pickleSer, infile, eval_type):
         PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
         PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
         PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+        PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
         PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
         PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
@@ -2714,9 +2751,6 @@ def read_udfs(pickleSer, infile, eval_type):
         PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF,
         PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF,
     ):
-        # Load conf used for pandas_udf evaluation
-        runner_conf = RunnerConf(infile)
-
         state_object_schema = None
         if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE:
             state_object_schema = StructType.fromJson(json.loads(utf8_deserializer.loads(infile)))
@@ -2737,12 +2771,9 @@ def read_udfs(pickleSer, infile, eval_type):
             or eval_type == PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF
         ):
             ser = GroupArrowUDFSerializer(runner_conf.assign_cols_by_name)
-        elif eval_type == PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF:
-            ser = ArrowStreamAggArrowIterUDFSerializer(
-                runner_conf.timezone, True, runner_conf.assign_cols_by_name, True
-            )
         elif eval_type in (
             PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
             PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
         ):
             ser = ArrowStreamAggArrowUDFSerializer(
@@ -2750,6 +2781,7 @@ def read_udfs(pickleSer, infile, eval_type):
             )
         elif eval_type in (
             PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
             PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
         ):
             ser = ArrowStreamAggPandasUDFSerializer(
@@ -2868,7 +2900,6 @@ def read_udfs(pickleSer, infile, eval_type):
                 int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
             )
     else:
-        runner_conf = RunnerConf()
         batch_size = int(os.environ.get("PYTHON_UDF_BATCH_SIZE", "100"))
         ser = BatchedSerializer(CPickleSerializer(), batch_size)
 
@@ -3071,8 +3102,8 @@ def read_udfs(pickleSer, infile, eval_type):
 
                 def values_gen():
                     for x in a[2]:
-                        retVal = [x[1][o] for o in parsed_offsets[0][1]]
-                        initVal = [x[2][o] for o in parsed_offsets[1][1]]
+                        retVal = x[1]
+                        initVal = x[2]
                         yield retVal, initVal
 
                 # This must be generator comprehension - do not materialize.
@@ -3265,6 +3296,101 @@ def read_udfs(pickleSer, infile, eval_type):
                 batch_iter = (tuple(batch_columns[o] for o in arg_offsets) for batch_columns in a)
             return f(batch_iter)
 
+    elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF:
+        # We assume there is only one UDF here because grouped agg doesn't
+        # support combining multiple UDFs.
+        assert num_udfs == 1
+
+        arg_offsets, f = udfs[0]
+
+        # Convert to iterator of pandas Series:
+        # - Iterator[pd.Series] for single column
+        # - Iterator[Tuple[pd.Series, ...]] for multiple columns
+        def mapper(batch_iter):
+            # batch_iter is Iterator[Tuple[pd.Series, ...]] where each tuple represents one batch
+            # Convert to Iterator[pd.Series] or Iterator[Tuple[pd.Series, ...]] based on arg_offsets
+            if len(arg_offsets) == 1:
+                # Single column: Iterator[Tuple[pd.Series, ...]] -> Iterator[pd.Series]
+                series_iter = (batch_series[arg_offsets[0]] for batch_series in batch_iter)
+            else:
+                # Multiple columns: Iterator[Tuple[pd.Series, ...]] ->
+                # Iterator[Tuple[pd.Series, ...]]
+                series_iter = (
+                    tuple(batch_series[o] for o in arg_offsets) for batch_series in batch_iter
+                )
+            return f(series_iter)
+
+    elif eval_type in (
+        PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
+        PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
+    ):
+        import pyarrow as pa
+
+        # For SQL_GROUPED_AGG_ARROW_UDF and SQL_WINDOW_AGG_ARROW_UDF,
+        # convert iterator of batch columns to a concatenated RecordBatch
+        def mapper(a):
+            # a is Iterator[Tuple[pa.Array, ...]] - convert to RecordBatch
+            batches = []
+            for batch_columns in a:
+                # batch_columns is Tuple[pa.Array, ...] - convert to RecordBatch
+                batch = pa.RecordBatch.from_arrays(
+                    batch_columns, names=["_%d" % i for i in range(len(batch_columns))]
+                )
+                batches.append(batch)
+
+            # Concatenate all batches into one
+            if hasattr(pa, "concat_batches"):
+                concatenated_batch = pa.concat_batches(batches)
+            else:
+                # pyarrow.concat_batches not supported in old versions
+                concatenated_batch = pa.RecordBatch.from_struct_array(
+                    pa.concat_arrays([b.to_struct_array() for b in batches])
+                )
+
+            # Extract series using offsets (concatenated_batch.columns[o] gives pa.Array)
+            result = tuple(
+                f(*[concatenated_batch.columns[o] for o in arg_offsets]) for arg_offsets, f in udfs
+            )
+            # In the special case of a single UDF this will return a single result rather
+            # than a tuple of results; this is the format that the JVM side expects.
+            if len(result) == 1:
+                return result[0]
+            else:
+                return result
+
+    elif eval_type in (
+        PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+        PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+    ):
+        import pandas as pd
+
+        # For SQL_GROUPED_AGG_PANDAS_UDF and SQL_WINDOW_AGG_PANDAS_UDF,
+        # convert iterator of batch tuples to concatenated pandas Series
+        def mapper(batch_iter):
+            # batch_iter is Iterator[Tuple[pd.Series, ...]] where each tuple represents one batch
+            # Collect all batches and concatenate into single Series per column
+            batches = list(batch_iter)
+            if not batches:
+                # Empty batches - determine num_columns from all UDFs' arg_offsets
+                all_offsets = [o for arg_offsets, _ in udfs for o in arg_offsets]
+                num_columns = max(all_offsets) + 1 if all_offsets else 0
+                concatenated = [pd.Series(dtype=object) for _ in range(num_columns)]
+            else:
+                # Use actual number of columns from the first batch
+                num_columns = len(batches[0])
+                concatenated = [
+                    pd.concat([batch[i] for batch in batches], ignore_index=True)
+                    for i in range(num_columns)
+                ]
+
+            result = tuple(f(*[concatenated[o] for o in arg_offsets]) for arg_offsets, f in udfs)
+            # In the special case of a single UDF this will return a single result rather
+            # than a tuple of results; this is the format that the JVM side expects.
+            if len(result) == 1:
+                return result[0]
+            else:
+                return result
+
     else:
 
         def mapper(a):
@@ -3351,6 +3477,7 @@ def main(infile, outfile):
 
         _accumulatorRegistry.clear()
         eval_type = read_int(infile)
+        runner_conf = RunnerConf(infile)
         if eval_type == PythonEvalType.NON_UDF:
             func, profiler, deserializer, serializer = read_command(pickleSer, infile)
         elif eval_type in (
@@ -3358,9 +3485,13 @@ def main(infile, outfile):
             PythonEvalType.SQL_ARROW_TABLE_UDF,
             PythonEvalType.SQL_ARROW_UDTF,
         ):
-            func, profiler, deserializer, serializer = read_udtf(pickleSer, infile, eval_type)
+            func, profiler, deserializer, serializer = read_udtf(
+                pickleSer, infile, eval_type, runner_conf
+            )
         else:
-            func, profiler, deserializer, serializer = read_udfs(pickleSer, infile, eval_type)
+            func, profiler, deserializer, serializer = read_udfs(
+                pickleSer, infile, eval_type, runner_conf
+            )
 
         init_time = time.time()
 

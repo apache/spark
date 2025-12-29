@@ -268,7 +268,7 @@ object ApplyDefaultCollationToStringType extends Rule[LogicalPlan] {
       newType => columnDef.copy(dataType = replaceDefaultStringType(columnDef.dataType, newType))
 
     case cast: Cast if hasDefaultStringType(cast.dataType) &&
-      cast.getTagValue(Cast.USER_SPECIFIED_CAST).isDefined =>
+      cast.containsTag(Cast.USER_SPECIFIED_CAST) =>
       newType => cast.copy(dataType = replaceDefaultStringType(cast.dataType, newType))
 
     case Literal(value, dt) if hasDefaultStringType(dt) =>

@@ -566,7 +566,7 @@ class MLWriter(BaseReadWrite):
     """
 
     def __init__(self) -> None:
-        super(MLWriter, self).__init__()
+        super().__init__()
         self.shouldOverwrite: bool = False
         self.optionMap: Dict[str, Any] = {}
 
@@ -630,7 +630,7 @@ class JavaMLWriter(MLWriter):
     _jwrite: "JavaObject"
 
     def __init__(self, instance: "JavaMLWritable"):
-        super(JavaMLWriter, self).__init__()
+        super().__init__()
         _java_obj = instance._to_java()  # type: ignore[attr-defined]
         self._jwrite = _java_obj.write()
 
@@ -662,7 +662,7 @@ class GeneralJavaMLWriter(JavaMLWriter):
     """
 
     def __init__(self, instance: "JavaMLWritable"):
-        super(GeneralJavaMLWriter, self).__init__(instance)
+        super().__init__(instance)
 
     def format(self, source: str) -> "GeneralJavaMLWriter":
         """
@@ -723,7 +723,7 @@ class MLReader(BaseReadWrite, Generic[RL]):
     """
 
     def __init__(self) -> None:
-        super(MLReader, self).__init__()
+        super().__init__()
 
     def load(self, path: str) -> RL:
         """Load the ML instance from the input path."""
@@ -737,7 +737,7 @@ class JavaMLReader(MLReader[RL]):
     """
 
     def __init__(self, clazz: Type["JavaMLReadable[RL]"]) -> None:
-        super(JavaMLReader, self).__init__()
+        super().__init__()
         self._clazz = clazz
         self._jread = self._load_java_obj(clazz).read()
 
@@ -850,7 +850,7 @@ class DefaultParamsWriter(MLWriter):
     """
 
     def __init__(self, instance: "Params"):
-        super(DefaultParamsWriter, self).__init__()
+        super().__init__()
         self.instance = instance
 
     def saveImpl(self, path: str) -> None:
@@ -976,7 +976,7 @@ class DefaultParamsReader(MLReader[RL]):
     """
 
     def __init__(self, cls: Type[DefaultParamsReadable[RL]]):
-        super(DefaultParamsReader, self).__init__()
+        super().__init__()
         self.cls = cls
 
     @staticmethod

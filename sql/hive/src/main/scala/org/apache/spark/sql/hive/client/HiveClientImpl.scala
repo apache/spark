@@ -875,7 +875,7 @@ private[hive] class HiveClientImpl(
       // Since HIVE-18238(Hive 3.0.0), the Driver.close function's return type changed
       // and the CommandProcessorFactory.clean function removed.
       driver.getClass.getMethod("close").invoke(driver)
-      if (version != hive.v3_0 && version != hive.v3_1 && version != hive.v4_0) {
+      if (version < hive.v3_0) {
         CommandProcessorFactory.clean(conf)
       }
     }
@@ -1399,6 +1399,8 @@ private[hive] object HiveClientImpl extends Logging {
     if ("bonecp".equalsIgnoreCase(cpType)) {
       hiveConf.set("datanucleus.connectionPoolingType", "DBCP", SOURCE_SPARK)
     }
+    // SPARK-54853 handles this check on the Spark side
+    hiveConf.set("hive.exec.max.dynamic.partitions", Int.MaxValue.toString, SOURCE_SPARK)
     hiveConf
   }
 
