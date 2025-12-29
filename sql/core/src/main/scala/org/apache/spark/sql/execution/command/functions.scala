@@ -24,7 +24,8 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, ExpressionInfo}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.StringUtils
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 
@@ -139,13 +140,27 @@ case class DropFunctionCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     if (isTemp) {
-      assert(identifier.database.isEmpty)
+      // Extract the function name, handling qualified names like "system.session.func"
+      val funcName = if (identifier.database.isDefined) {
+        // Qualified name - validate it's a valid temporary function namespace
+        val db = identifier.database.get
+        if (db != "session" && db != CatalogManager.SESSION_NAMESPACE) {
+          throw QueryExecutionErrors.invalidNamespaceNameError(
+            Array(CatalogManager.SYSTEM_CATALOG_NAME, db))
+        }
+        identifier.funcName
+      } else {
+        identifier.funcName
+      }
+
       // Check if temp function exists first - if it does, allow dropping it even if a builtin
       // with the same name exists (shadowing case)
-      if (!catalog.isTemporaryFunction(identifier) && catalog.isBuiltinFunction(identifier)) {
-        throw QueryCompilationErrors.cannotDropBuiltinFuncError(identifier.funcName)
+      val unqualifiedIdent = FunctionIdentifier(funcName)
+      if (!catalog.isTemporaryFunction(unqualifiedIdent) &&
+          catalog.isBuiltinFunction(unqualifiedIdent)) {
+        throw QueryCompilationErrors.cannotDropBuiltinFuncError(funcName)
       }
-      catalog.dropTempFunction(identifier.funcName, ifExists)
+      catalog.dropTempFunction(funcName, ifExists)
     } else {
       // We are dropping a permanent function.
       catalog.dropFunction(identifier, ignoreIfNotExists = ifExists)

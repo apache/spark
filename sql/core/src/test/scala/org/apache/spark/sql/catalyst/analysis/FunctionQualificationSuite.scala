@@ -688,4 +688,58 @@ class FunctionQualificationSuite extends SharedSparkSession {
       sql("DROP FUNCTION spark_catalog.builtin.upper")
     }
   }
+
+  test("DESCRIBE FUNCTION works with qualified names") {
+    // Test DESCRIBE for builtin function with qualification
+    val builtinDesc = sql("DESCRIBE FUNCTION system.builtin.abs").collect()
+    assert(builtinDesc.length > 0)
+    assert(builtinDesc.head.getString(0).contains("abs"))
+
+    // Test DESCRIBE for temporary function
+    sql("CREATE TEMPORARY FUNCTION my_desc_func() RETURNS INT RETURN 42")
+    val tempDesc = sql("DESCRIBE FUNCTION system.session.my_desc_func").collect()
+    assert(tempDesc.length > 0)
+    assert(tempDesc.head.getString(0).contains("my_desc_func"))
+    sql("DROP TEMPORARY FUNCTION my_desc_func")
+
+    // Test DESCRIBE for persistent function
+    withUserDefinedFunction("my_persistent_desc" -> false) {
+      sql("CREATE FUNCTION my_persistent_desc AS 'test.MyUDF'")
+      val persistentDesc = sql("DESCRIBE FUNCTION my_persistent_desc").collect()
+      assert(persistentDesc.length > 0)
+      assert(persistentDesc.head.getString(0).contains("my_persistent_desc"))
+    }
+  }
+
+  test("SHOW FUNCTIONS includes builtin and session functions") {
+    // Create a temp function to test session namespace
+    sql("CREATE TEMPORARY FUNCTION my_show_func() RETURNS INT RETURN 1")
+
+    // SHOW FUNCTIONS should list all functions (builtin + temp + persistent)
+    val allFunctions = sql("SHOW FUNCTIONS").collect().map(_.getString(0))
+    assert(allFunctions.contains("abs"), "Should include builtin function 'abs'")
+    assert(allFunctions.contains("my_show_func"), "Should include temp function 'my_show_func'")
+
+    sql("DROP TEMPORARY FUNCTION my_show_func")
+  }
+
+  test("DROP FUNCTION with qualified names") {
+    // Test dropping temp function with session qualification
+    sql("CREATE TEMPORARY FUNCTION my_drop_func() RETURNS INT RETURN 1")
+    sql("DROP TEMPORARY FUNCTION system.session.my_drop_func")
+    val exception1 = intercept[AnalysisException] {
+      sql("SELECT my_drop_func()")
+    }
+    assert(exception1.getCondition == "UNRESOLVED_ROUTINE")
+
+    // Test dropping persistent function with full qualification
+    withUserDefinedFunction("my_drop_persistent" -> false) {
+      sql("CREATE FUNCTION my_drop_persistent AS 'test.MyUDF'")
+      sql("DROP FUNCTION spark_catalog.default.my_drop_persistent")
+      val exception2 = intercept[AnalysisException] {
+        sql("SELECT my_drop_persistent()")
+      }
+      assert(exception2.getCondition == "UNRESOLVED_ROUTINE")
+    }
+  }
 }
