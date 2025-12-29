@@ -14,15 +14,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.util
+package org.apache.spark.util
 
 import java.time.Instant
 import java.util.UUID
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.util.UUIDv7Generator
+import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
-class UUIDv7GeneratorSuite extends SparkFunSuite {
+class UUIDv7GeneratorSuite extends AnyFunSuite { // scalastyle:ignore funsuite
 
   private def convertTimestamp(uuid: UUID): Long = {
     val msb = uuid.getMostSignificantBits
@@ -101,3 +100,4 @@ class UUIDv7GeneratorSuite extends SparkFunSuite {
     assert(ordered == List(t1, t2, t3))
   }
 }
+

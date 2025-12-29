@@ -36,8 +36,7 @@ import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.SQL_EVENT_TRUNCATE_LENGTH
-import org.apache.spark.sql.util.UUIDv7Generator
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{Utils, UUIDv7Generator}
 
 object SQLExecution extends Logging {
 

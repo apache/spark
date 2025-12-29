@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.util
+package org.apache.spark.util
 
 import java.time.Instant
 import java.util.UUID
@@ -57,3 +57,4 @@ object UUIDv7Generator {
     new UUID(msb, randBWithVariant)
   }
 }
+
