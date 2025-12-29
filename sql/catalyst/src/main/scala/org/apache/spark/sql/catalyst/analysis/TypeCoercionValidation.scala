@@ -92,8 +92,7 @@ object TypeCoercionValidation extends QueryErrorsBase {
       var issueFixedIfAnsiOff = true
       getAllExpressions(nonAnsiPlan).foreach(_.foreachUp {
         case e: Expression
-            if e.getTagValue(DATA_TYPE_MISMATCH_ERROR).isDefined &&
-            e.checkInputDataTypes().isFailure =>
+            if e.containsTag(DATA_TYPE_MISMATCH_ERROR) && e.checkInputDataTypes().isFailure =>
           e.checkInputDataTypes() match {
             case TypeCheckResult.TypeCheckFailure(_) | _: TypeCheckResult.DataTypeMismatch =>
               issueFixedIfAnsiOff = false

@@ -1064,7 +1064,7 @@ class InternalFrame:
     def to_pandas_frame(self) -> pd.DataFrame:
         """Return as pandas DataFrame."""
         sdf = self.to_internal_spark_frame
-        pdf = sdf.toPandas()
+        pdf = sdf._to_pandas(pandasStructHandlingMode="row")
         if len(pdf) == 0 and len(sdf.schema) > 0:
             pdf = pdf.astype(
                 {field.name: spark_type_to_pandas_dtype(field.dataType) for field in sdf.schema}

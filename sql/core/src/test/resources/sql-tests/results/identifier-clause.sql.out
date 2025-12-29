@@ -1112,11 +1112,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
-  "sqlState" : "42601",
+  "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
+  "sqlState" : "42K05",
   "messageParameters" : {
-    "identifier" : "`a`.`b`.`c`.`d`",
-    "limit" : "2"
+    "namespace" : "`a`.`b`.`c`",
+    "sessionCatalog" : "spark_catalog"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2227,24 +2227,11 @@ struct<result:int>
 EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:alias ''.c1'') FROM integration_test AS IDENTIFIER(:alias) ORDER BY ALL'
   USING 't' AS alias
 -- !query schema
-struct<>
+struct<c1:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`t`.`c1`",
-    "proposal" : "`IDENTIFIER('t')`.`c1`, `IDENTIFIER('t')`.`c2`, `IDENTIFIER('t')`.`c4`"
-  },
-  "queryContext" : [ {
-    "objectType" : "EXECUTE IMMEDIATE",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 31,
-    "fragment" : "IDENTIFIER(:alias '.c1')"
-  } ]
-}
+1
+2
+3
 
 
 -- !query
@@ -2390,6 +2377,42 @@ struct<id:int,col:string,v1:int,v2:int>
 
 -- !query
 DROP TABLE unpivot_test
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TABLE describe_col_test(c1 INT, c2 STRING, c3 DOUBLE) USING CSV
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESCRIBE describe_col_test IDENTIFIER('c1')
+-- !query schema
+struct<info_name:string,info_value:string>
+-- !query output
+col_name	c1
+data_type	int
+comment	NULL
+
+
+-- !query
+DESCRIBE describe_col_test IDENTIFIER('c2')
+-- !query schema
+struct<info_name:string,info_value:string>
+-- !query output
+col_name	c2
+data_type	string
+comment	NULL
+
+
+-- !query
+DROP TABLE describe_col_test
 -- !query schema
 struct<>
 -- !query output

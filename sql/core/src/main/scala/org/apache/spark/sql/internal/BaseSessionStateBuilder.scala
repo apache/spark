@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTr
 import org.apache.spark.sql.catalyst.analysis.resolver.ResolverExtension
 import org.apache.spark.sql.catalyst.catalog.{FunctionExpressionBuilder, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExtractSemiStructuredFields}
+import org.apache.spark.sql.catalyst.normalizer.NormalizeCTEIds
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -404,6 +405,7 @@ abstract class BaseSessionStateBuilder(
   }
 
   protected def planNormalizationRules: Seq[Rule[LogicalPlan]] = {
+    NormalizeCTEIds +:
     extensions.buildPlanNormalizationRules(session)
   }
 
