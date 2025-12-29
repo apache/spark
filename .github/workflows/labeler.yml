@@ -152,10 +152,10 @@ jobs:
               commentBody += `Error: ${info.error}\n\n`;
             } else {
               commentBody += `=== ${info.type} ${info.id} ===\n`;
-              commentBody += `Summary ${info.summary}\n`;
-              commentBody += `Assignee ${info.assignee}\n`;
-              commentBody += `Status ${info.status}\n`;
-              commentBody += `Affected ${JSON.stringify(info.affected)}\n\n`;
+              commentBody += `Summary: ${info.summary}\n`;
+              commentBody += `Assignee: ${info.assignee}\n`;
+              commentBody += `Status: ${info.status}\n`;
+              commentBody += `Affected: ${JSON.stringify(info.affected)}\n\n`;
             }
           }
 
