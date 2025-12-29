@@ -1,0 +1,127 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.spark.util;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+class UUIDv7GeneratorSuite {
+
+    private long extractTimestamp(UUID uuid) {
+        long msb = uuid.getMostSignificantBits();
+        long timeLow = (msb >>> 32) & 0xFFFFFFFFL;
+        long timeMid = (msb >>> 16) & 0xFFFFL;
+        return (timeLow << 16) | timeMid;
+    }
+
+    @Test
+    void testCorrectFormat() {
+        UUID uuid = UUIDv7Generator.generate();
+        String[] parts = uuid.toString().split("-");
+
+        // number of parts should be 5 with lengths 8-4-4-4-12
+        assertEquals(5, parts.length);
+        assertEquals(8, parts[0].length());
+        assertEquals(4, parts[1].length());
+        assertEquals(4, parts[2].length());
+        assertEquals(4, parts[3].length());
+        assertEquals(12, parts[4].length());
+
+        // Version should be 7
+        int version = (int) ((uuid.getMostSignificantBits() >>> 12) & 0xF);
+        assertEquals(0x7, version);
+
+        // Variant should be 2 (0b10)
+        int variant = (int) ((uuid.getLeastSignificantBits() >>> 62) & 0x3);
+        assertEquals(0x2, variant);
+    }
+
+    @Test
+    void testUniqueValues() {
+        Set<UUID> uuids = new HashSet<>();
+        for (int i = 0; i < 10000; i++) {
+            uuids.add(UUIDv7Generator.generate());
+        }
+        assertEquals(10000, uuids.size());
+    }
+
+    @Test
+    void testMonotonicity() {
+        List<Long> timestamps = new ArrayList<>();
+        for (int i = 0; i < 1000; i++) {
+            UUID uuid = UUIDv7Generator.generate();
+            timestamps.add(extractTimestamp(uuid));
+        }
+
+        for (int i = 1; i < timestamps.size(); i++) {
+            assertTrue(timestamps.get(i) >= timestamps.get(i - 1),
+                "Timestamps should be monotonically non-decreasing");
+        }
+    }
+
+    @Test
+    void testTimestampAccuracy() {
+        long now = Instant.now().toEpochMilli();
+        UUID uuid = UUIDv7Generator.generate();
+        long uuidTs = extractTimestamp(uuid);
+        long delta = Math.abs(uuidTs - now);
+
+        assertTrue(delta < 10, "Timestamp should be within 10ms of current time");
+    }
+
+    @Test
+    void testUniquenessAtSameTimestamp() {
+        long epochMilli = 1717171717171L;
+        int nano = 555555555;
+
+        Set<UUID> uuids = new HashSet<>();
+        for (int i = 0; i < 1000; i++) {
+            uuids.add(UUIDv7Generator.generateFrom(epochMilli, nano));
+        }
+
+        assertEquals(1000, uuids.size());
+    }
+
+    @Test
+    void testCorrectTimestampEncoding() {
+        long epochMilli = 1717171717171L;
+        int nano = 987654321;
+        UUID uuid = UUIDv7Generator.generateFrom(epochMilli, nano);
+
+        long msb = uuid.getMostSignificantBits();
+        long encodedTimestamp = (msb >>> 16) & 0xFFFFFFFFFFFFL;
+        assertEquals(epochMilli & 0xFFFFFFFFFFFFL, encodedTimestamp);
+    }
+
+    @Test
+    void testOrderableByAscendingTimestamp() {
+        UUID t1 = UUIDv7Generator.generateFrom(1717171717171L, 100000000);
+        UUID t2 = UUIDv7Generator.generateFrom(1717171717172L, 100000000);
+        UUID t3 = UUIDv7Generator.generateFrom(1717171717173L, 100000000);
+
+        assertTrue(t1.compareTo(t2) < 0);
+        assertTrue(t2.compareTo(t3) < 0);
+    }
+}
+
