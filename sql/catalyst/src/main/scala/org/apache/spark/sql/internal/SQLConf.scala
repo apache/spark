@@ -915,7 +915,7 @@ object SQLConf {
         "retry all tasks of the consumer stages to avoid correctness issues.")
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val SHUFFLE_CHECKSUM_MISMATCH_FULL_RETRY_ENABLED =
     buildConf("spark.sql.shuffle.orderIndependentChecksum.enableFullRetryOnMismatch")
@@ -923,7 +923,7 @@ object SQLConf {
         "with its producer stages.")
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE =
     buildConf("spark.sql.adaptive.shuffle.targetPostShuffleInputSize")
@@ -1041,14 +1041,14 @@ object SQLConf {
       .checkValue(_ > 0, "The initial number of partitions must be positive.")
       .createOptional
 
-  lazy val ALLOW_COLLATIONS_IN_MAP_KEYS =
+  val ALLOW_COLLATIONS_IN_MAP_KEYS =
     buildConf("spark.sql.collation.allowInMapKeys")
       .doc("Allow for non-UTF8_BINARY collated strings inside of map's keys")
       .version("4.0.0")
       .booleanConf
       .createWithDefault(false)
 
-  lazy val OBJECT_LEVEL_COLLATIONS_ENABLED =
+  val OBJECT_LEVEL_COLLATIONS_ENABLED =
     buildConf("spark.sql.collation.objectLevel.enabled")
       .internal()
       .doc(
@@ -1060,7 +1060,7 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  lazy val SCHEMA_LEVEL_COLLATIONS_ENABLED =
+  val SCHEMA_LEVEL_COLLATIONS_ENABLED =
     buildConf("spark.sql.collation.schemaLevel.enabled")
       .internal()
       .doc(
@@ -1074,7 +1074,7 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  lazy val TRIM_COLLATION_ENABLED =
+  val TRIM_COLLATION_ENABLED =
     buildConf("spark.sql.collation.trim.enabled")
       .internal()
       .doc("When enabled allows the use of trim collations which trim trailing whitespaces from" +
@@ -1084,7 +1084,7 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  lazy val COLLATION_AWARE_HASHING_ENABLED =
+  val COLLATION_AWARE_HASHING_ENABLED =
     buildConf("spark.sql.legacy.collationAwareHashFunctions")
       .internal()
       .doc("Enables collation aware hashing (legacy behavior) for collated strings in " +

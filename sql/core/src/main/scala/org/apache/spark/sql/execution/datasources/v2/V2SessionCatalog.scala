@@ -35,7 +35,6 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -475,7 +474,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
   }
 
   override def loadFunction(ident: Identifier): UnboundFunction = {
-    V1Function(catalog.lookupPersistentFunction(ident.asFunctionIdentifier))
+    catalog.loadPersistentScalarFunction(ident.asFunctionIdentifier)
   }
 
   override def listFunctions(namespace: Array[String]): Array[Identifier] = {
