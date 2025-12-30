@@ -2644,27 +2644,35 @@ case class TimestampBucket(
     }
   }
 
+  @transient private lazy val convertToMicros: Any => Long = timestamp.dataType match {
+    case DateType =>
+      (value: Any) => value.asInstanceOf[Int] * MICROS_PER_DAY
+    case TimestampType | TimestampNTZType =>
+      (value: Any) => value.asInstanceOf[Long]
+  }
+
   override def nullSafeEval(
       bucketWidthValue: Any,
       timestampValue: Any,
       originValue: Any): Any = {
     val bucketMicros = bucketWidthValue.asInstanceOf[Long]
-
-    val timestampMicros = timestampValue match {
-      case days: Int => days.toLong * MICROS_PER_DAY
-      case micros: Long => micros
-    }
-
+    val timestampMicros = convertToMicros(timestampValue)
     val originMicros = originValue.asInstanceOf[Long]
-    val shiftedTimestamp = timestampMicros - originMicros
-    val bucketIndex = Math.floorDiv(shiftedTimestamp, bucketMicros)
 
-    originMicros + (bucketIndex * bucketMicros)
+    originMicros + (Math.floorDiv(timestampMicros - originMicros, bucketMicros) * bucketMicros)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (bucket, timestamp, origin) =>
-      s"$origin + (java.lang.Math.floorDiv($timestamp - $origin, $bucket) * $bucket)")
+    val timestampDataType = timestamp.dataType
+    defineCodeGen(ctx, ev, (bucket, timestamp, origin) => {
+      val timestampMicros = timestampDataType match {
+        case DateType =>
+          s"((long)$timestamp) * ${MICROS_PER_DAY}L"
+        case TimestampType | TimestampNTZType =>
+          timestamp
+      }
+      s"$origin + (java.lang.Math.floorDiv($timestampMicros - $origin, $bucket) * $bucket)"
+    })
   }
 
   override def prettyName: String = "timestamp_bucket"

@@ -1535,23 +1535,27 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("timestamp_bucket with different input types") {
-    withSQLConf(
-      SQLConf.ANSI_ENABLED.key -> "true",
-      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
-      // DATE input
-      checkAnswer(
-        sql("SELECT timestamp_bucket(INTERVAL '7' DAY, DATE'2024-12-04')"),
-        sql("SELECT TIMESTAMP'2024-11-28 00:00:00'"))
-
-      // TIMESTAMP input
-      checkAnswer(
-        sql("SELECT timestamp_bucket(INTERVAL '1' HOUR, TIMESTAMP'2024-12-04 14:30:00')"),
-        sql("SELECT TIMESTAMP'2024-12-04 14:00:00'"))
-
-      // TIMESTAMP_NTZ input
-      checkAnswer(
-        sql("SELECT timestamp_bucket(INTERVAL '1' HOUR, TIMESTAMP_NTZ'2024-12-04 14:30:00')"),
-        sql("SELECT TIMESTAMP'2024-12-04 14:00:00'"))
+    Seq(true, false).foreach { codegenEnabled =>
+      withSQLConf(
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled.toString,
+        SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        checkAnswer(
+          sql("""
+            SELECT
+              timestamp_bucket(INTERVAL '7' DAY, DATE'2024-12-04'),
+              timestamp_bucket(INTERVAL '7' DAY, TIMESTAMP'2024-12-04 14:30:00'),
+              timestamp_bucket(INTERVAL '1' HOUR, TIMESTAMP'2024-12-04 14:30:00'),
+              timestamp_bucket(INTERVAL '1' HOUR, TIMESTAMP_NTZ'2024-12-04 16:45:00')
+          """),
+          sql("""
+            SELECT
+              TIMESTAMP'2024-11-28 00:00:00',
+              TIMESTAMP'2024-11-28 00:00:00',
+              TIMESTAMP'2024-12-04 14:00:00',
+              TIMESTAMP'2024-12-04 16:00:00'
+          """))
+      }
     }
   }
 
