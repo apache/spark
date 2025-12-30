@@ -907,7 +907,7 @@ object SQLConf {
         "retry all tasks of the consumer stages to avoid correctness issues.")
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   private[spark] val SHUFFLE_CHECKSUM_MISMATCH_FULL_RETRY_ENABLED =
     buildConf("spark.sql.shuffle.orderIndependentChecksum.enableFullRetryOnMismatch")
@@ -915,7 +915,7 @@ object SQLConf {
         "with its producer stages.")
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE =
     buildConf("spark.sql.adaptive.shuffle.targetPostShuffleInputSize")
