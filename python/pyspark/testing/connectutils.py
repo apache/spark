@@ -17,6 +17,9 @@
 import shutil
 import tempfile
 import os
+import sys
+import signal
+import faulthandler
 import functools
 import unittest
 import uuid
@@ -177,6 +180,9 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
 
     @classmethod
     def setUpClass(cls):
+        if os.environ.get("PYSPARK_TEST_TIMEOUT"):
+            faulthandler.register(signal.SIGTERM, file=sys.__stderr__, all_threads=True)
+
         # This environment variable is for interrupting hanging ML-handler and making the
         # tests fail fast.
         os.environ["SPARK_CONNECT_ML_HANDLER_INTERRUPTION_TIMEOUT_MINUTES"] = "5"
@@ -197,6 +203,9 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
 
     @classmethod
     def tearDownClass(cls):
+        if os.environ.get("PYSPARK_TEST_TIMEOUT"):
+            faulthandler.unregister(signal.SIGTERM)
+
         shutil.rmtree(cls.tempdir.name, ignore_errors=True)
         cls.spark.stop()
 

@@ -157,7 +157,7 @@ object NormalizePlan extends PredicateHelper {
             .reduce(And)
         Join(left, right, newJoinType, Some(newCondition), hint)
       case project: Project
-          if project.getTagValue(ResolverTag.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION).isDefined =>
+          if project.containsTag(ResolverTag.PROJECT_FOR_EXPRESSION_ID_DEDUPLICATION) =>
         project.child
 
       case aggregate @ Aggregate(_, _, innerProject: Project, _) =>

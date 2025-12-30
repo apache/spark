@@ -26,7 +26,7 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, DefaultValue, Identifier, InMemoryCatalog}
-import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, ProcedureParameter, UnboundProcedure}
+import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, ProcedureParameter, SimpleProcedure, UnboundProcedure}
 import org.apache.spark.sql.connector.catalog.procedures.ProcedureParameter.Mode
 import org.apache.spark.sql.connector.catalog.procedures.ProcedureParameter.Mode.{IN, INOUT, OUT}
 import org.apache.spark.sql.connector.expressions.{Expression, GeneralScalarExpression, LiteralValue}
@@ -486,6 +486,12 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
     checkAnswer(sql("CALL cat.ns.sum(5)"), Row(9) :: Nil)
   }
 
+  test("simple procedure") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "simple_sum"), SimpleSum)
+    checkAnswer(sql("CALL cat.ns.simple_sum(3, 7)"), Row(10) :: Nil)
+    checkAnswer(sql("CALL cat.ns.simple_sum(in2 => 4, in1 => 6)"), Row(10) :: Nil)
+  }
+
   test("SPARK-51780: Implement DESC PROCEDURE") {
     catalog.createProcedure(Identifier.of(Array("ns"), "foo"), UnboundSum)
     catalog.createProcedure(Identifier.of(Array("ns", "db"), "abc"), UnboundLongSum)
@@ -610,7 +616,7 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
   object UnboundNonExecutableSum extends UnboundProcedure {
     override def name: String = "sum"
     override def description: String = "sum integers"
-    override def bind(inputType: StructType): BoundProcedure = Sum
+    override def bind(inputType: StructType): BoundProcedure = NonExecutableSum
   }
 
   object NonExecutableSum extends BoundProcedure {
@@ -633,10 +639,10 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
   object UnboundSum extends UnboundProcedure {
     override def name: String = "sum"
     override def description: String = "sum integers"
-    override def bind(inputType: StructType): BoundProcedure = Sum
+    override def bind(inputType: StructType): BoundProcedure = new Sum
   }
 
-  object Sum extends BoundProcedure {
+  class Sum extends BoundProcedure {
     override def name: String = "sum"
 
     override def description: String = "sum integers"
@@ -896,5 +902,11 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
       dataType: DataType) extends ProcedureParameter {
     override def defaultValue: DefaultValue = null
     override def comment: String = null
+  }
+
+  object SimpleSum extends Sum with SimpleProcedure {
+    override def name: String = "simple_sum"
+
+    override def description: String = "simple sum integers"
   }
 }
