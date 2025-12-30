@@ -282,16 +282,21 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
     # Exit on the first failure but exclude the code 5 for no test ran, see SPARK-46801.
     if retcode != 0 and retcode != 5:
         try:
+            per_test_output.seek(0)
             with FAILURE_REPORTING_LOCK:
                 with open(LOG_FILE, 'ab') as log_file:
-                    per_test_output.seek(0)
                     log_file.writelines(per_test_output)
-                per_test_output.seek(0)
-                for line in per_test_output:
-                    decoded_line = line.decode("utf-8", "replace")
-                    if not re.match('[0-9]+', decoded_line):
-                        print(decoded_line, end='')
-                per_test_output.close()
+
+            # We don't want the logging lines interleave with the test output, so we read the
+            # full file and output with LOGGER which has internal locking.
+            per_test_output.seek(0)
+            lines = []
+            for line in per_test_output:
+                line = line.decode("utf-8", "replace")
+                if not re.match('[0-9]+', line):
+                    lines.append(line)
+            LOGGER.error(f"{test_name} with {pyspark_python} failed:\n{''.join(lines)}")
+            per_test_output.close()
         except BaseException:
             LOGGER.exception("Got an exception while trying to print failed test output")
         finally:
