@@ -4477,6 +4477,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val SQL_SCRIPTING_SELECT_INTO_ENABLED =
+    buildConf("spark.sql.scripting.selectIntoEnabled")
+      .internal()
+      .doc("When true, enables SELECT INTO statement within SQL scripts. " +
+        "SELECT INTO allows assigning query results directly to variables.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val CONCAT_BINARY_AS_STRING = buildConf("spark.sql.function.concatBinaryAsString")
     .doc("When this option is set to false and all inputs are binary, `functions.concat` returns " +
       "an output as binary. Otherwise, it returns as a string.")

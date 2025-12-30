@@ -38,7 +38,7 @@ private[v2] object VariableSetter {
       variable: VariableReference,
       value: Any,
       conf: SQLConf,
-      tempVariableManager: org.apache.spark.sql.catalyst.analysis.TempVariableManager): Unit = {
+      tempVariableManager: org.apache.spark.sql.catalyst.catalog.TempVariableManager): Unit = {
     val namePartsCaseAdjusted = if (conf.caseSensitiveAnalysis) {
       variable.originalNameParts
     } else {

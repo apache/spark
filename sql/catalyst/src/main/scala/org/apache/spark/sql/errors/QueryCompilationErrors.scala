@@ -4238,6 +4238,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
+  def selectIntoFeatureDisabled(): Throwable = {
+    throw new AnalysisException(
+      errorClass = "SELECT_INTO_FEATURE_DISABLED",
+      messageParameters = Map.empty)
+  }
+
   def selectIntoOnlyAtTopLevel(): Throwable = {
     throw new AnalysisException(
       errorClass = "SELECT_INTO_ONLY_AT_TOP_LEVEL",

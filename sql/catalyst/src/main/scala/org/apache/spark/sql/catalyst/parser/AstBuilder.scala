@@ -1560,6 +1560,11 @@ class AstBuilder extends DataTypeAstBuilder
 
     // Check for INTO clause
     if (selectClause.targetVariable != null) {
+      // Check if SELECT INTO feature is enabled
+      if (!conf.getConf(SQLConf.SQL_SCRIPTING_SELECT_INTO_ENABLED)) {
+        throw QueryCompilationErrors.selectIntoFeatureDisabled()
+      }
+
       // SELECT INTO is not allowed in pipe operator context (same as subqueries/set operations)
       if (isPipeOperatorSelect) {
         throw QueryCompilationErrors.selectIntoOnlyAtTopLevel()

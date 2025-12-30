@@ -4016,6 +4016,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "SELECT_INTO_FEATURE_DISABLED" : {
+    "message" : [
+      "SELECT INTO feature is disabled. Enable it by setting spark.sql.scripting.selectIntoEnabled=true."
+    ],
+    "sqlState" : "0A000"
+  },
   "SELECT_INTO_ONLY_AT_TOP_LEVEL" : {
     "message" : [
       "SELECT INTO is only allowed in top-level SELECT statements. It cannot be used in subqueries, nested query expressions, pipe operator context, or as part of set operations (UNION, INTERSECT, EXCEPT, SETMINUS)."
