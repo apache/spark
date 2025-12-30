@@ -1399,6 +1399,8 @@ private[hive] object HiveClientImpl extends Logging {
     if ("bonecp".equalsIgnoreCase(cpType)) {
       hiveConf.set("datanucleus.connectionPoolingType", "DBCP", SOURCE_SPARK)
     }
+    // SPARK-54853 handles this check on the Spark side
+    hiveConf.set("hive.exec.max.dynamic.partitions", Int.MaxValue.toString, SOURCE_SPARK)
     hiveConf
   }
 

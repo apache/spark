@@ -134,7 +134,7 @@ struct<>
 
 
 -- !query
-SELECT split(kll_sketch_to_string_bigint(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
+SELECT lower(kll_sketch_to_string_bigint(agg)) LIKE '%kll%' AS str_contains_kll,
        abs(kll_sketch_get_quantile_bigint(agg, 0.5) - 4) < 1 AS median_close_to_4,
        abs(kll_sketch_get_rank_bigint(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
 FROM (
@@ -148,7 +148,7 @@ true	true	true
 
 
 -- !query
-SELECT split(kll_sketch_to_string_bigint(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
+SELECT lower(kll_sketch_to_string_bigint(agg)) LIKE '%kll%' AS str_contains_kll,
        abs(kll_sketch_get_quantile_bigint(agg, 0.5) - 4) < 1 AS median_close_to_4,
        abs(kll_sketch_get_rank_bigint(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
 FROM (
@@ -162,7 +162,7 @@ true	true	true
 
 
 -- !query
-SELECT split(kll_sketch_to_string_bigint(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
+SELECT lower(kll_sketch_to_string_bigint(agg)) LIKE '%kll%' AS str_contains_kll,
        abs(kll_sketch_get_quantile_bigint(agg, 0.5) - 4) < 1 AS median_close_to_4,
        abs(kll_sketch_get_rank_bigint(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
 FROM (
@@ -176,7 +176,7 @@ true	true	true
 
 
 -- !query
-SELECT split(kll_sketch_to_string_bigint(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
+SELECT lower(kll_sketch_to_string_bigint(agg)) LIKE '%kll%' AS str_contains_kll,
        abs(kll_sketch_get_quantile_bigint(agg, 0.5) - 4) < 1 AS median_close_to_4,
        abs(kll_sketch_get_rank_bigint(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
 FROM (
@@ -190,7 +190,7 @@ true	true	true
 
 
 -- !query
-SELECT split(kll_sketch_to_string_float(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
+SELECT lower(kll_sketch_to_string_float(agg)) LIKE '%kll%' AS str_contains_kll,
        abs(kll_sketch_get_quantile_float(agg, 0.5) - 4.0) < 0.5 AS median_close_to_4,
        abs(kll_sketch_get_rank_float(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
 FROM (
@@ -204,7 +204,7 @@ true	true	true
 
 
 -- !query
-SELECT split(kll_sketch_to_string_double(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
+SELECT lower(kll_sketch_to_string_double(agg)) LIKE '%kll%' AS str_contains_kll,
        abs(kll_sketch_get_quantile_double(agg, 0.5) - 4.0) < 0.5 AS median_close_to_4,
        abs(kll_sketch_get_rank_double(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
 FROM (
@@ -218,7 +218,7 @@ true	true	true
 
 
 -- !query
-SELECT split(kll_sketch_to_string_double(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
+SELECT lower(kll_sketch_to_string_double(agg)) LIKE '%kll%' AS str_contains_kll,
        abs(kll_sketch_get_quantile_double(agg, 0.5) - 4.0) < 0.5 AS median_close_to_4,
        abs(kll_sketch_get_rank_double(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
 FROM (
@@ -512,7 +512,7 @@ struct<n_k_100:bigint>
 
 
 -- !query
-SELECT split(kll_sketch_to_string_bigint(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
+SELECT lower(kll_sketch_to_string_bigint(agg)) LIKE '%kll%' AS str_contains_kll,
        abs(kll_sketch_get_quantile_bigint(agg, 0.5) - 4) < 1 AS median_close_to_4,
        abs(kll_sketch_get_rank_bigint(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
 FROM (
@@ -536,15 +536,15 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 273,
-    "stopIndex" : 299,
+    "startIndex" : 264,
+    "stopIndex" : 290,
     "fragment" : "kll_sketch_agg_bigint(col1)"
   } ]
 }
 
 
 -- !query
-SELECT split(kll_sketch_to_string_bigint(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
+SELECT lower(kll_sketch_to_string_bigint(agg)) LIKE '%kll%' AS str_contains_kll,
        abs(kll_sketch_get_quantile_bigint(agg, 0.5) - 4) < 1 AS median_close_to_4,
        abs(kll_sketch_get_rank_bigint(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
 FROM (
@@ -568,15 +568,15 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 273,
-    "stopIndex" : 299,
+    "startIndex" : 264,
+    "stopIndex" : 290,
     "fragment" : "kll_sketch_agg_bigint(col1)"
   } ]
 }
 
 
 -- !query
-SELECT split(kll_sketch_to_string_float(agg), '\n')[1] LIKE '%Kll%' AS str_contains_kll,
+SELECT lower(kll_sketch_to_string_float(agg)) LIKE '%kll%' AS str_contains_kll,
        abs(kll_sketch_get_quantile_float(agg, 0.5) - 4.0) < 0.5 AS median_close_to_4,
        abs(kll_sketch_get_rank_float(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
 FROM (
@@ -600,8 +600,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 274,
-    "stopIndex" : 299,
+    "startIndex" : 265,
+    "stopIndex" : 290,
     "fragment" : "kll_sketch_agg_float(col1)"
   } ]
 }
@@ -953,7 +953,7 @@ true
 
 
 -- !query
-SELECT kll_sketch_to_string_double(agg) LIKE '%Kll%' AS contains_kll_header
+SELECT lower(kll_sketch_to_string_double(agg)) LIKE '%kll%' AS contains_kll_header
 FROM (
     SELECT kll_sketch_agg_bigint(col1) AS agg
     FROM t_long_1_5_through_7_11
@@ -1391,6 +1391,126 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "startIndex" : 8,
     "stopIndex" : 45,
     "fragment" : "kll_sketch_get_rank_double(agg, false)"
+  } ]
+}
+
+
+-- !query
+SELECT kll_sketch_get_quantile_bigint(agg, CAST(col1 AS DOUBLE) / 10.0) AS non_foldable_scalar_rank
+FROM (
+    SELECT kll_sketch_agg_bigint(col1) AS agg, col1
+    FROM t_long_1_5_through_7_11
+    GROUP BY col1
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputExpr" : "\"(CAST(col1 AS DOUBLE) / 10.0)\"",
+    "inputName" : "`rank`",
+    "inputType" : "\"DOUBLE\"",
+    "sqlExpr" : "\"kll_sketch_get_quantile_bigint(agg, (CAST(col1 AS DOUBLE) / 10.0))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 71,
+    "fragment" : "kll_sketch_get_quantile_bigint(agg, CAST(col1 AS DOUBLE) / 10.0)"
+  } ]
+}
+
+
+-- !query
+SELECT kll_sketch_get_quantile_bigint(agg, array(0.25, CAST(col1 AS DOUBLE) / 10.0, 0.75)) AS non_foldable_array_rank
+FROM (
+    SELECT kll_sketch_agg_bigint(col1) AS agg, col1
+    FROM t_long_1_5_through_7_11
+    GROUP BY col1
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputExpr" : "\"array(0.25, (CAST(col1 AS DOUBLE) / 10.0), 0.75)\"",
+    "inputName" : "`rank`",
+    "inputType" : "\"ARRAY<DOUBLE>\"",
+    "sqlExpr" : "\"kll_sketch_get_quantile_bigint(agg, array(0.25, (CAST(col1 AS DOUBLE) / 10.0), 0.75))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 90,
+    "fragment" : "kll_sketch_get_quantile_bigint(agg, array(0.25, CAST(col1 AS DOUBLE) / 10.0, 0.75))"
+  } ]
+}
+
+
+-- !query
+SELECT kll_sketch_get_rank_bigint(agg, col1) AS non_foldable_scalar_quantile
+FROM (
+    SELECT kll_sketch_agg_bigint(col1) AS agg, col1
+    FROM t_long_1_5_through_7_11
+    GROUP BY col1
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputExpr" : "\"col1\"",
+    "inputName" : "`quantile`",
+    "inputType" : "\"BIGINT\"",
+    "sqlExpr" : "\"kll_sketch_get_rank_bigint(agg, col1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 44,
+    "fragment" : "kll_sketch_get_rank_bigint(agg, col1)"
+  } ]
+}
+
+
+-- !query
+SELECT kll_sketch_get_rank_bigint(agg, array(1L, col1, 5L)) AS non_foldable_array_quantile
+FROM (
+    SELECT kll_sketch_agg_bigint(col1) AS agg, col1
+    FROM t_long_1_5_through_7_11
+    GROUP BY col1
+)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputExpr" : "\"array(1, col1, 5)\"",
+    "inputName" : "`quantile`",
+    "inputType" : "\"ARRAY<BIGINT>\"",
+    "sqlExpr" : "\"kll_sketch_get_rank_bigint(agg, array(1, col1, 5))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 59,
+    "fragment" : "kll_sketch_get_rank_bigint(agg, array(1L, col1, 5L))"
   } ]
 }
 

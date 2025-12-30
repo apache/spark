@@ -112,6 +112,7 @@ case class AddColumns(
     columnsToAdd: Seq[QualifiedColType]) extends AlterTableCommand {
   columnsToAdd.foreach { c =>
     TypeUtils.failWithIntervalType(c.dataType)
+    TypeUtils.failUnsupportedDataType(c.dataType, conf)
   }
 
   override lazy val resolved: Boolean = table.resolved && columnsToAdd.forall(_.resolved)
@@ -144,6 +145,7 @@ case class ReplaceColumns(
     columnsToAdd: Seq[QualifiedColType]) extends AlterTableCommand {
   columnsToAdd.foreach { c =>
     TypeUtils.failWithIntervalType(c.dataType)
+    TypeUtils.failUnsupportedDataType(c.dataType, conf)
   }
 
   override lazy val resolved: Boolean = table.resolved && columnsToAdd.forall(_.resolved)

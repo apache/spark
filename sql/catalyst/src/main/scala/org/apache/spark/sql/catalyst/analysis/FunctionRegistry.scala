@@ -90,11 +90,16 @@ trait FunctionRegistryBase[T] {
   /* List all of the registered function names. */
   def listFunction(): Seq[FunctionIdentifier]
 
-  /* Get the class of the registered function by specified name. */
-  def lookupFunction(name: FunctionIdentifier): Option[ExpressionInfo]
+  /* Get both ExpressionInfo and FunctionBuilder in a single lookup. */
+  def lookupFunctionEntry(name: FunctionIdentifier): Option[(ExpressionInfo, FunctionBuilder)]
+
+  /* Get the ExpressionInfo of the registered function by specified name. */
+  def lookupFunction(name: FunctionIdentifier): Option[ExpressionInfo] =
+    lookupFunctionEntry(name).map(_._1)
 
   /* Get the builder of the registered function by specified name. */
-  def lookupFunctionBuilder(name: FunctionIdentifier): Option[FunctionBuilder]
+  def lookupFunctionBuilder(name: FunctionIdentifier): Option[FunctionBuilder] =
+    lookupFunctionEntry(name).map(_._2)
 
   /** Drop a function and return whether the function existed. */
   def dropFunction(name: FunctionIdentifier): Boolean
@@ -245,13 +250,9 @@ trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging
     functionBuilders.iterator.map(_._1).toList
   }
 
-  override def lookupFunction(name: FunctionIdentifier): Option[ExpressionInfo] = synchronized {
-    functionBuilders.get(normalizeFuncName(name)).map(_._1)
-  }
-
-  override def lookupFunctionBuilder(
-      name: FunctionIdentifier): Option[FunctionBuilder] = synchronized {
-    functionBuilders.get(normalizeFuncName(name)).map(_._2)
+  override def lookupFunctionEntry(
+      name: FunctionIdentifier): Option[(ExpressionInfo, FunctionBuilder)] = synchronized {
+    functionBuilders.get(normalizeFuncName(name))
   }
 
   override def dropFunction(name: FunctionIdentifier): Boolean = synchronized {
@@ -281,11 +282,8 @@ trait EmptyFunctionRegistryBase[T] extends FunctionRegistryBase[T] {
     throw SparkUnsupportedOperationException()
   }
 
-  override def lookupFunction(name: FunctionIdentifier): Option[ExpressionInfo] = {
-    throw SparkUnsupportedOperationException()
-  }
-
-  override def lookupFunctionBuilder(name: FunctionIdentifier): Option[FunctionBuilder] = {
+  override def lookupFunctionEntry(
+      name: FunctionIdentifier): Option[(ExpressionInfo, FunctionBuilder)] = {
     throw SparkUnsupportedOperationException()
   }
 
@@ -825,6 +823,7 @@ object FunctionRegistry {
     expression[ThetaDifference]("theta_difference"),
     expression[ThetaIntersection]("theta_intersection"),
     expression[ApproxTopKEstimate]("approx_top_k_estimate"),
+    expression[Measure]("measure"),
 
     // grouping sets
     expression[Grouping]("grouping"),

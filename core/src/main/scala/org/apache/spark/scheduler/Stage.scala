@@ -84,6 +84,14 @@ private[scheduler] abstract class Stage(
    */
   private[scheduler] var maxChecksumMismatchedId: Int = nextAttemptId
 
+  /**
+   * The max attempt id we should ignore results for this stage, indicating there are ancestor
+   * stages having been detected with checksum mismatches. This stage is probably also
+   * indeterminate, so we need to avoid completing the stage and the job with incorrect result
+   * by ignoring the task output from previous attempts which might consume inconsistent data
+   */
+  private[scheduler] var maxAttemptIdToIgnore: Option[Int] = None
+
   val name: String = callSite.shortForm
   val details: String = callSite.longForm
 
@@ -106,6 +114,14 @@ private[scheduler] abstract class Stage(
 
   private[scheduler] def clearFailures() : Unit = {
     failedAttemptIds.clear()
+  }
+
+  /** Mark the latest attempt as rollback */
+  private[scheduler] def markAsRollingBack(): Unit = {
+    // Only if the stage has been submitted
+    if (getNextAttemptId > 0) {
+      maxAttemptIdToIgnore = Some(latestInfo.attemptNumber())
+    }
   }
 
   /** Creates a new attempt for this stage by creating a new StageInfo with a new attempt ID. */

@@ -113,7 +113,7 @@ class LocalDataToArrowConversion:
         dataType: DataType,
         nullable: bool = True,
         *,
-        none_on_identity: bool = True,
+        none_on_identity: bool = False,
         int_to_decimal_coercion_enabled: bool = False,
     ) -> Optional[Callable]:
         pass
@@ -436,11 +436,8 @@ class LocalDataToArrowConversion:
                 return value
 
             return convert_other
-        else:
-            if none_on_identity:
-                return None
-            else:
-                return lambda value: value
+        else:  # pragma: no cover
+            assert False, f"Need converter for {dataType} but failed to find one."
 
     @staticmethod
     def convert(data: Sequence[Any], schema: StructType, use_large_var_types: bool) -> "pa.Table":
@@ -613,23 +610,16 @@ class ArrowTableToRowsConversion:
                 dataType.elementType, none_on_identity=True, binary_as_bytes=binary_as_bytes
             )
 
-            if element_conv is None:
+            assert (
+                element_conv is not None
+            ), f"_need_converter() returned True for ArrayType of {dataType.elementType}"
 
-                def convert_array(value: Any) -> Any:
-                    if value is None:
-                        return None
-                    else:
-                        assert isinstance(value, list)
-                        return value
-
-            else:
-
-                def convert_array(value: Any) -> Any:
-                    if value is None:
-                        return None
-                    else:
-                        assert isinstance(value, list)
-                        return [element_conv(v) for v in value]
+            def convert_array(value: Any) -> Any:
+                if value is None:
+                    return None
+                else:
+                    assert isinstance(value, list)
+                    return [element_conv(v) for v in value]
 
             return convert_array
 
@@ -793,11 +783,8 @@ class ArrowTableToRowsConversion:
 
             return convert_geometry
 
-        else:
-            if none_on_identity:
-                return None
-            else:
-                return lambda value: value
+        else:  # pragma: no cover
+            assert False, f"Need converter for {dataType} but failed to find one."
 
     @overload
     @staticmethod
@@ -811,7 +798,9 @@ class ArrowTableToRowsConversion:
 
     @overload
     @staticmethod
-    def convert(table: "pa.Table", schema: StructType, *, return_as_tuples: bool) -> List[tuple]:
+    def convert(
+        table: "pa.Table", schema: StructType, *, return_as_tuples: bool
+    ) -> List[Row | tuple]:
         pass
 
     @staticmethod  # type: ignore[misc]
