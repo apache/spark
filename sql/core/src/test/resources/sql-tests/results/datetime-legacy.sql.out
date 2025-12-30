@@ -1275,9 +1275,9 @@ struct<timestamp_bucket(INTERVAL '01' HOUR, TIMESTAMP '2024-12-04 14:30:00', TIM
 -- !query
 select timestamp_bucket(INTERVAL '1' HOUR, timestamp_ntz'2024-12-04 14:30:00')
 -- !query schema
-struct<timestamp_bucket(INTERVAL '01' HOUR, TIMESTAMP_NTZ '2024-12-04 14:30:00', TIMESTAMP '1969-12-31 16:00:00'):timestamp>
+struct<timestamp_bucket(INTERVAL '01' HOUR, TIMESTAMP_NTZ '2024-12-04 14:30:00', TIMESTAMP '1969-12-31 16:00:00'):timestamp_ntz>
 -- !query output
-2024-12-04 06:00:00
+2024-12-04 14:00:00
 
 
 -- !query

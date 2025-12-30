@@ -6881,7 +6881,8 @@ object functions {
    *   The temporal value to bucket. Accepts DATE, TIMESTAMP, or TIMESTAMP_NTZ. DATE values are
    *   implicitly cast to TIMESTAMP at midnight.
    * @return
-   *   The start timestamp of the bucket (TIMESTAMP type).
+   *   The start timestamp of the bucket. DATE input returns TIMESTAMP. TIMESTAMP and
+   *   TIMESTAMP_NTZ inputs preserve their types.
    * @group datetime_funcs
    * @since 4.2.0
    */
@@ -6906,7 +6907,8 @@ object functions {
    *   The timestamp to align buckets to. Must be a constant/foldable TIMESTAMP. For example, use
    *   TIMESTAMP'1970-01-05' for Monday-aligned weeks.
    * @return
-   *   The start timestamp of the bucket (TIMESTAMP type).
+   *   The start timestamp of the bucket. DATE input returns TIMESTAMP. TIMESTAMP and
+   *   TIMESTAMP_NTZ inputs preserve their types.
    * @group datetime_funcs
    * @since 4.2.0
    */

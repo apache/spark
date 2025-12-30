@@ -2552,6 +2552,8 @@ case class DateDiff(endDate: Expression, startDate: Expression)
        2024-12-04 14:00:00
       > SELECT _FUNC_(INTERVAL '6' HOUR, TIMESTAMP'2024-12-04 14:30:00', TIMESTAMP'2024-12-04 00:00:00');
        2024-12-04 12:00:00
+      > SELECT _FUNC_(INTERVAL '1' HOUR, TIMESTAMP_NTZ'2024-12-04 14:30:00');
+       2024-12-04 14:00:00
       > SELECT _FUNC_(INTERVAL '7' DAY, DATE'2024-12-04', TIMESTAMP'1970-01-01 00:00:00');
        2024-11-28 00:00:00
       > SELECT _FUNC_(INTERVAL '7' DAY, DATE'2024-12-04', TIMESTAMP'1970-01-05 00:00:00');
@@ -2564,7 +2566,7 @@ case class DateDiff(endDate: Expression, startDate: Expression)
       * The origin must be a constant TIMESTAMP expression.
       * Sub-day intervals (hours, minutes, seconds) are supported.
       * Timestamps before the origin are handled correctly using floor division.
-      * Always returns TIMESTAMP type, regardless of input type.
+      * Return type: DATE input returns TIMESTAMP, TIMESTAMP and TIMESTAMP_NTZ inputs preserve their types.
   """,
   group = "datetime_funcs",
   since = "4.2.0")
@@ -2590,7 +2592,11 @@ case class TimestampBucket(
     TimestampType
   )
 
-  override def dataType: DataType = TimestampType
+  override def dataType: DataType = timestamp.dataType match {
+    case DateType => TimestampType
+    case TimestampNTZType => TimestampNTZType
+    case TimestampType => TimestampType
+  }
 
   override def nullable: Boolean =
     bucketWidth.nullable || timestamp.nullable || originTimestamp.nullable

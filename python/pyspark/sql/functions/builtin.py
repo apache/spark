@@ -13128,14 +13128,18 @@ def timestamp_bucket(
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        The start timestamp of the bucket (TIMESTAMP type).
-        Always returns TIMESTAMP regardless of input types.
+        The start timestamp of the bucket. The return type depends on the input:
+
+        - DATE input → TIMESTAMP (converted to timezone-aware)
+        - TIMESTAMP input → TIMESTAMP (type preserved)
+        - TIMESTAMP_NTZ input → TIMESTAMP_NTZ (type preserved)
 
     Notes
     -----
     - Bucket boundaries are aligned to the specified origin
     - When origin is not specified, defaults to Unix epoch (1970-01-01 00:00:00 UTC)
-    - The return type is always TIMESTAMP (not TIMESTAMP_NTZ)
+    - DATE inputs are converted to TIMESTAMP (timezone-aware)
+    - TIMESTAMP and TIMESTAMP_NTZ inputs preserve their types
     - For DATE inputs, the date is treated as midnight in the session timezone
     - Sub-day intervals (hours, minutes, seconds) are supported
     - Timestamps before the origin are handled correctly using floor division
@@ -13207,24 +13211,29 @@ def timestamp_bucket(
 
     Example 4: Using with TIMESTAMP_NTZ (no timezone)
 
+    The return type preserves TIMESTAMP_NTZ when the input is TIMESTAMP_NTZ:
+
     >>> df_ntz = spark.createDataFrame([
     ...     (1, datetime.datetime(2024, 12, 4, 14, 30, 0)),
     ...     (2, datetime.datetime(2024, 12, 4, 15, 45, 0))
     ... ], ['id', 'ts'])
     >>> df_ntz = df_ntz.selectExpr("id", "CAST(ts AS TIMESTAMP_NTZ) AS ts_ntz")
-    >>> df_ntz.select(
+    >>> result = df_ntz.select(
     ...     sf.timestamp_bucket(
     ...         sf.expr("INTERVAL '1' HOUR"),
     ...         df_ntz.ts_ntz,
     ...         sf.lit(datetime.datetime(2024, 12, 4))
     ...     ).alias("hour")
-    ... ).show()
+    ... )
+    >>> result.show()
     +-------------------+
     |               hour|
     +-------------------+
     |2024-12-04 14:00:00|
     |2024-12-04 15:00:00|
     +-------------------+
+    >>> result.schema["hour"].dataType
+    TimestampNTZType()
     """
     if origin is None:
         return _invoke_function_over_columns("timestamp_bucket", bucket_width, timestamp)
