@@ -1556,7 +1556,25 @@ class AstBuilder extends DataTypeAstBuilder
       isPipeOperatorSelect)
 
     // Hint
-    selectClause.hints.asScala.foldRight(plan)(withHints)
+    val planWithHints = selectClause.hints.asScala.foldRight(plan)(withHints)
+
+    // Check for INTO clause
+    if (selectClause.targetVariable != null) {
+      // SELECT INTO is not allowed in pipe operator context
+      if (isPipeOperatorSelect) {
+        operationNotAllowed("SELECT INTO is not allowed in pipe operator context", selectClause)
+      }
+
+      val targetVars = visitMultipartIdentifierList(selectClause.targetVariable)
+      // We create an UnresolvedSelectInto node here. The actual validation of
+      // whether this is at top level, not in set operation, and within SQL script
+      // will be done in an analysis rule.
+      // For now, we set isTopLevel and isInSetOperation to false - they will be
+      // determined during analysis.
+      UnresolvedSelectInto(planWithHints, targetVars, isTopLevel = false, isInSetOperation = false)
+    } else {
+      planWithHints
+    }
   }
 
   def visitCommonSelectQueryClausePlan(

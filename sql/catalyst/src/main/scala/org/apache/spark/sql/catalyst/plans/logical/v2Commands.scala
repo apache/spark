@@ -1917,10 +1917,16 @@ case class DropVariable(
 
 /**
  * The logical plan of the SET VARIABLE command.
+ * @param targetVariables The variables to set
+ * @param sourceQuery The query that produces the values
+ * @param skipNoRows If true, when the query returns zero rows, variables are not updated.
+ *                   If false, when the query returns zero rows, variables are set to null.
+ *                   Used by SELECT INTO (true) vs EXECUTE IMMEDIATE INTO (false).
  */
 case class SetVariable(
     targetVariables: Seq[Expression],
-    sourceQuery: LogicalPlan)
+    sourceQuery: LogicalPlan,
+    skipNoRows: Boolean = false)
   extends UnaryCommand {
   override def child: LogicalPlan = sourceQuery
   override protected def withNewChildInternal(newChild: LogicalPlan): SetVariable =

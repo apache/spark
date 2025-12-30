@@ -31,16 +31,28 @@ import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
 
 /**
  * Physical plan node for setting a variable.
+ * @param variables The variables to set
+ * @param query The query that produces the values
+ * @param skipNoRows If true, when the query returns zero rows, variables are not updated.
+ *                   If false, when the query returns zero rows, variables are set to null.
+ *                   Used by SELECT INTO (true) vs EXECUTE IMMEDIATE INTO (false).
  */
-case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
+case class SetVariableExec(
+    variables: Seq[VariableReference],
+    query: SparkPlan,
+    skipNoRows: Boolean = false)
   extends V2CommandExec with UnaryLike[SparkPlan] {
 
   override protected def run(): Seq[InternalRow] = {
     val values = query.executeCollect()
     if (values.length == 0) {
-      variables.foreach { v =>
-        setVariable(v, null)
+      if (!skipNoRows) {
+        // EXECUTE IMMEDIATE INTO behavior: set variables to null when no rows returned
+        variables.foreach { v =>
+          setVariable(v, null)
+        }
       }
+      // For SELECT INTO (skipNoRows=true): do nothing, variables remain unchanged
     } else if (values.length > 1) {
       throw new SparkException(
         errorClass = "ROW_SUBQUERY_TOO_MANY_ROWS",

@@ -1230,6 +1230,28 @@ case class UnresolvedExecuteImmediate(
   final override val nodePatterns: Seq[TreePattern] = Seq(EXECUTE_IMMEDIATE)
 }
 
+/**
+ * A SELECT statement with an INTO clause, which is unresolved.
+ * This will be resolved to a SetVariable plan during analysis.
+ *
+ * @param query the SELECT query
+ * @param targetVariables variables to store the result of the query
+ * @param isTopLevel whether this SELECT INTO is at the top level (not nested)
+ * @param isInSetOperation whether this SELECT INTO is part of a UNION/INTERSECT/EXCEPT
+ */
+case class UnresolvedSelectInto(
+    query: LogicalPlan,
+    targetVariables: Seq[Expression],
+    isTopLevel: Boolean,
+    isInSetOperation: Boolean)
+  extends UnresolvedUnaryNode {
+
+  override def child: LogicalPlan = query
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedSelectInto =
+    copy(query = newChild)
+}
+
 case class UnresolvedEventTimeWatermark(
     eventTimeColExpr: NamedExpression,
     delay: CalendarInterval,
