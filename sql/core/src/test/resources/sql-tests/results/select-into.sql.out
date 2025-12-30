@@ -12,14 +12,174 @@ struct<>
 
 
 -- !query
+SET spark.sql.scripting.selectIntoEnabled=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.scripting.selectIntoEnabled	false
+
+
+-- !query
+struct<key:string,value:string>
+spark.sql.scripting.selectIntoEnabled	false
+
+
+BEGIN
+  DECLARE v1 INT
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'struct'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+SELECT id INTO v1 FROM tbl_view WHERE id = 10
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "SELECT_INTO_FEATURE_DISABLED",
+  "sqlState" : "0A000"
+}
+
+
+-- !query
+END
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'END'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+struct<>
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "SELECT_INTO_FEATURE_DISABLED",
+  "sqlState" : "0A000"
+}
+
+
+SET spark.sql.scripting.selectIntoEnabled=true
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'struct'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+struct<key:string,value:string>
+spark.sql.scripting.selectIntoEnabled	true
+
+
+BEGIN
+  DECLARE v1 INT
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'struct'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+SELECT id INTO v1 FROM tbl_view WHERE id = 10
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "SELECT_INTO_FEATURE_DISABLED",
+  "sqlState" : "0A000"
+}
+
+
+-- !query
+SELECT v1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`v1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 9,
+    "fragment" : "v1"
+  } ]
+}
+
+
+-- !query
+END
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'END'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+struct<v1:int>
+10
+
+
 SELECT id INTO res_id FROM tbl_view WHERE id = 10
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "SELECT_INTO_NOT_IN_SQL_SCRIPT",
-  "sqlState" : "0A000"
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'struct'",
+    "hint" : ""
+  }
 }
 
 
@@ -40,7 +200,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'struct'",
     "hint" : ""
@@ -53,9 +213,9 @@ SELECT (SELECT id INTO outer_id FROM tbl_view WHERE id = 10) as nested
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "SELECT_INTO_NOT_IN_SQL_SCRIPT",
+  "errorClass" : "SELECT_INTO_FEATURE_DISABLED",
   "sqlState" : "0A000"
 }
 
@@ -68,7 +228,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'END'",
     "hint" : ""
@@ -81,7 +241,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "SELECT_INTO_ONLY_AT_TOP_LEVEL",
-  "sqlState" : "0A000"
+  "sqlState" : "42601"
 }
 
 
@@ -93,7 +253,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'struct'",
     "hint" : ""
@@ -108,9 +268,9 @@ SELECT id INTO res_id FROM tbl_view WHERE id = 10
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "SELECT_INTO_NOT_IN_SQL_SCRIPT",
+  "errorClass" : "SELECT_INTO_FEATURE_DISABLED",
   "sqlState" : "0A000"
 }
 
@@ -123,7 +283,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'END'",
     "hint" : ""
@@ -136,8 +296,9 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "SELECT_INTO_ONLY_AT_TOP_LEVEL",
-  "sqlState" : "0A000"
+  "sqlState" : "42601"
 }
+
 
 BEGIN
   DECLARE res_id INT
@@ -147,7 +308,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'struct'",
     "hint" : ""
@@ -162,9 +323,9 @@ SELECT id INTO res_id FROM tbl_view WHERE id = 10
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "SELECT_INTO_NOT_IN_SQL_SCRIPT",
+  "errorClass" : "SELECT_INTO_FEATURE_DISABLED",
   "sqlState" : "0A000"
 }
 
@@ -177,7 +338,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'END'",
     "hint" : ""
@@ -190,8 +351,9 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "SELECT_INTO_ONLY_AT_TOP_LEVEL",
-  "sqlState" : "0A000"
+  "sqlState" : "42601"
 }
+
 
 BEGIN
   DECLARE res_id INT
@@ -201,7 +363,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'struct'",
     "hint" : ""
@@ -216,9 +378,9 @@ SELECT id INTO res_id FROM tbl_view WHERE id = 10
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "SELECT_INTO_NOT_IN_SQL_SCRIPT",
+  "errorClass" : "SELECT_INTO_FEATURE_DISABLED",
   "sqlState" : "0A000"
 }
 
@@ -231,7 +393,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'END'",
     "hint" : ""
@@ -244,7 +406,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 {
   "errorClass" : "SELECT_INTO_ONLY_AT_TOP_LEVEL",
-  "sqlState" : "0A000"
+  "sqlState" : "42601"
 }
 
 
@@ -256,7 +418,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'struct'",
     "hint" : ""
@@ -285,9 +447,9 @@ SELECT id, name INTO v1, v2, v3 FROM tbl_view WHERE id = 10
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "SELECT_INTO_NOT_IN_SQL_SCRIPT",
+  "errorClass" : "SELECT_INTO_FEATURE_DISABLED",
   "sqlState" : "0A000"
 }
 
@@ -300,7 +462,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'END'",
     "hint" : ""
@@ -320,6 +482,7 @@ org.apache.spark.sql.AnalysisException
   }
 }
 
+
 BEGIN
   DECLARE v1 INT
 -- !query schema
@@ -328,7 +491,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'struct'",
     "hint" : ""
@@ -341,9 +504,9 @@ SELECT id, name INTO v1 FROM tbl_view WHERE id = 10
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "SELECT_INTO_NOT_IN_SQL_SCRIPT",
+  "errorClass" : "SELECT_INTO_FEATURE_DISABLED",
   "sqlState" : "0A000"
 }
 
@@ -356,7 +519,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'END'",
     "hint" : ""
@@ -376,6 +539,7 @@ org.apache.spark.sql.AnalysisException
   }
 }
 
+
 BEGIN
   DECLARE v1 INT
 -- !query schema
@@ -384,7 +548,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'struct'",
     "hint" : ""
@@ -427,9 +591,9 @@ SELECT id + 10, id * 2 INTO v1, v2, v3 FROM tbl_view WHERE id = 10
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "SELECT_INTO_NOT_IN_SQL_SCRIPT",
+  "errorClass" : "SELECT_INTO_FEATURE_DISABLED",
   "sqlState" : "0A000"
 }
 
@@ -442,7 +606,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'END'",
     "hint" : ""
@@ -471,7 +635,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'struct'",
     "hint" : ""
@@ -484,9 +648,9 @@ SELECT id, name, id + 10 INTO result_struct FROM tbl_view WHERE id = 10
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "SELECT_INTO_NOT_IN_SQL_SCRIPT",
+  "errorClass" : "SELECT_INTO_FEATURE_DISABLED",
   "sqlState" : "0A000"
 }
 
@@ -499,7 +663,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'END'",
     "hint" : ""
@@ -529,7 +693,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'struct'",
     "hint" : ""
@@ -542,9 +706,9 @@ SELECT id INTO v1 FROM tbl_view
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "SELECT_INTO_NOT_IN_SQL_SCRIPT",
+  "errorClass" : "SELECT_INTO_FEATURE_DISABLED",
   "sqlState" : "0A000"
 }
 
@@ -557,7 +721,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'END'",
     "hint" : ""
@@ -582,7 +746,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'struct'",
     "hint" : ""
@@ -595,9 +759,9 @@ SELECT id INTO v1 FROM tbl_view WHERE id = 30
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "SELECT_INTO_NOT_IN_SQL_SCRIPT",
+  "errorClass" : "SELECT_INTO_FEATURE_DISABLED",
   "sqlState" : "0A000"
 }
 
@@ -632,7 +796,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'END'",
     "hint" : ""
@@ -644,6 +808,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 struct<v1:int>
 30
 
+
 BEGIN
   DECLARE var1 INT
 -- !query schema
@@ -652,7 +817,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'struct'",
     "hint" : ""
@@ -673,9 +838,9 @@ SELECT id, name INTO var1, var2 FROM tbl_view WHERE id = 20
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "SELECT_INTO_NOT_IN_SQL_SCRIPT",
+  "errorClass" : "SELECT_INTO_FEATURE_DISABLED",
   "sqlState" : "0A000"
 }
 
@@ -710,7 +875,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'END'",
     "hint" : ""
@@ -722,6 +887,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 struct<var1:int,var2:string>
 20	name2
 
+
 BEGIN
   DECLARE v1 INT
 -- !query schema
@@ -730,7 +896,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'struct'",
     "hint" : ""
@@ -758,9 +924,9 @@ SELECT id + 10, id * 2 INTO v1, v2 FROM tbl_view WHERE id = 10
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "SELECT_INTO_NOT_IN_SQL_SCRIPT",
+  "errorClass" : "SELECT_INTO_FEATURE_DISABLED",
   "sqlState" : "0A000"
 }
 
@@ -795,7 +961,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'END'",
     "hint" : ""
@@ -807,6 +973,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 struct<v1:int,v2:int>
 20	20
 
+
 BEGIN
   DECLARE result_struct STRUCT<field1: INT, field2: STRING>
 -- !query schema
@@ -815,7 +982,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'struct'",
     "hint" : ""
@@ -828,9 +995,9 @@ SELECT id, name INTO result_struct FROM tbl_view WHERE id = 10
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "SELECT_INTO_NOT_IN_SQL_SCRIPT",
+  "errorClass" : "SELECT_INTO_FEATURE_DISABLED",
   "sqlState" : "0A000"
 }
 
@@ -865,7 +1032,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'END'",
     "hint" : ""
@@ -877,6 +1044,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 struct<result_struct:struct<field1:int,field2:string>>
 {"field1":10,"field2":"name1"}
 
+
 BEGIN
   DECLARE my_struct STRUCT<a: INT, b: STRING>
 -- !query schema
@@ -885,7 +1053,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'struct'",
     "hint" : ""
@@ -898,9 +1066,9 @@ SELECT id, name INTO my_struct FROM tbl_view WHERE id = 20
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "SELECT_INTO_NOT_IN_SQL_SCRIPT",
+  "errorClass" : "SELECT_INTO_FEATURE_DISABLED",
   "sqlState" : "0A000"
 }
 
@@ -935,7 +1103,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'END'",
     "hint" : ""
@@ -956,7 +1124,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'struct'",
     "hint" : ""
@@ -1030,9 +1198,9 @@ SELECT id, name INTO v1, v2 FROM tbl_view WHERE id = 999
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "SELECT_INTO_NOT_IN_SQL_SCRIPT",
+  "errorClass" : "SELECT_INTO_FEATURE_DISABLED",
   "sqlState" : "0A000"
 }
 
@@ -1067,7 +1235,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'END'",
     "hint" : ""
@@ -1080,6 +1248,7 @@ struct<v1:int,v2:string>
 99	initial
 99	initial
 
+
 BEGIN
   DECLARE v1 INT
 -- !query schema
@@ -1088,7 +1257,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'struct'",
     "hint" : ""
@@ -1139,9 +1308,9 @@ SELECT id INTO v1 FROM tbl_view WHERE 1=0
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "SELECT_INTO_NOT_IN_SQL_SCRIPT",
+  "errorClass" : "SELECT_INTO_FEATURE_DISABLED",
   "sqlState" : "0A000"
 }
 
@@ -1176,7 +1345,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'END'",
     "hint" : ""
@@ -1189,6 +1358,7 @@ struct<v1:int>
 42
 42
 
+
 BEGIN
   DECLARE v1 INT
 -- !query schema
@@ -1197,7 +1367,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'struct'",
     "hint" : ""
@@ -1232,9 +1402,9 @@ SELECT id INTO v1 FROM tbl_view WHERE FALSE
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "SELECT_INTO_NOT_IN_SQL_SCRIPT",
+  "errorClass" : "SELECT_INTO_FEATURE_DISABLED",
   "sqlState" : "0A000"
 }
 
@@ -1269,7 +1439,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'END'",
     "hint" : ""
@@ -1282,6 +1452,7 @@ struct<v1:int>
 NULL
 NULL
 
+
 BEGIN
   DECLARE my_struct STRUCT<x: INT, y: STRING>
 -- !query schema
@@ -1290,7 +1461,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'struct'",
     "hint" : ""
@@ -1341,9 +1512,9 @@ SELECT id, name INTO my_struct FROM tbl_view WHERE id < 0
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "SELECT_INTO_NOT_IN_SQL_SCRIPT",
+  "errorClass" : "SELECT_INTO_FEATURE_DISABLED",
   "sqlState" : "0A000"
 }
 
@@ -1378,7 +1549,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'END'",
     "hint" : ""
@@ -1400,7 +1571,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'struct'",
     "hint" : ""
@@ -1428,9 +1599,9 @@ SELECT * INTO v1, v2 FROM tbl_view WHERE id = 10
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "SELECT_INTO_NOT_IN_SQL_SCRIPT",
+  "errorClass" : "SELECT_INTO_FEATURE_DISABLED",
   "sqlState" : "0A000"
 }
 
@@ -1465,7 +1636,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'END'",
     "hint" : ""
@@ -1477,6 +1648,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 struct<v1:int,v2:string>
 10	name1
 
+
 BEGIN
   DECLARE a INT
 -- !query schema
@@ -1485,7 +1657,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'struct'",
     "hint" : ""
@@ -1506,9 +1678,9 @@ SELECT id AS my_id, name AS my_name INTO a, b FROM tbl_view WHERE id = 30
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "SELECT_INTO_NOT_IN_SQL_SCRIPT",
+  "errorClass" : "SELECT_INTO_FEATURE_DISABLED",
   "sqlState" : "0A000"
 }
 
@@ -1543,7 +1715,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'END'",
     "hint" : ""
@@ -1562,7 +1734,7 @@ struct<>
 org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "0A000",
+  "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'struct'",
     "hint" : ""

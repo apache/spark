@@ -21,10 +21,10 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
- * Interactive test suite for SELECT INTO functionality.
+ * Test suite for SELECT INTO functionality.
  * Tests various scenarios including CTEs, local variables, and session variables.
  */
-class SelectIntoInteractiveSuite extends QueryTest with SharedSparkSession {
+class SelectIntoSuite extends QueryTest with SharedSparkSession {
 
   override protected def sparkConf: SparkConf = {
     super.sparkConf
