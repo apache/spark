@@ -1069,6 +1069,13 @@ class Analyzer(
       case view: View if !view.child.resolved =>
         ViewResolution
           .resolve(view, options, resolveChild = executeSameContext, checkAnalysis = checkAnalysis)
+      // Resolve V2TableReference nodes in already-resolved views (e.g., temp views storing
+      // analyzed plans). V2TableReference is a placeholder for DSv2 tables that needs to be
+      // resolved to DataSourceV2Relation on each view access.
+      case view: View =>
+        view.copy(child = view.child.resolveOperatorsUp {
+          case r: V2TableReference => relationResolution.resolveReference(r)
+        })
       case p @ SubqueryAlias(_, view: View) =>
         p.copy(child = resolveViews(view, options))
       case _ => plan
