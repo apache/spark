@@ -84,7 +84,7 @@ abstract class DefaultCollationTestSuite extends QueryTest with SharedSparkSessi
 
   // This is used for tests that don't depend on explicitly specifying the data type
   // (these tests still test the string type), or ones that are not applicable to char/varchar
-  // types. E.g., UDFs don't support char/varchar as input parameters/return types.
+  // types.
   protected def stringTestNames: Seq[String] = Seq(
     "default string producing expressions in CTAS definition",
     "ctas with complex types",

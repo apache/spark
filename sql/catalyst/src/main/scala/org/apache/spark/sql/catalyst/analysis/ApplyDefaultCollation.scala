@@ -114,7 +114,7 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
   private def getCollationFromTableProps(t: LogicalPlan): Option[String] = {
     t match {
       case resolvedTbl: ResolvedTable
-         if resolvedTbl.table.properties.containsKey(TableCatalog.PROP_COLLATION) =>
+          if resolvedTbl.table.properties.containsKey(TableCatalog.PROP_COLLATION) =>
         Some(resolvedTbl.table.properties.get(TableCatalog.PROP_COLLATION))
       case _ => None
     }
@@ -124,12 +124,13 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
    * Determines the default collation for an object in the following order:
    * 1. Use the object's explicitly defined default collation, if available.
    * 2. Otherwise, use the default collation defined by the object's schema.
+   * 3. If not defined in the schema, use the default collation from the object's catalog.
    *
    * If none of these collations are specified, None will be persisted as the default collation,
    * which means the system default collation `UTF8_BINARY` will be used and the plan will not be
    * changed.
    * This function applies to DDL commands. An object's default collation is persisted at the moment
-   * of its creation, and altering the schema collation will not affect existing objects.
+   * of its creation, and altering the schema collation or catalog will not affect existing objects.
    */
   def resolveDefaultCollation(plan: LogicalPlan): LogicalPlan = {
     try {
