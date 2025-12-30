@@ -114,7 +114,12 @@ class TestRunner:
             asyncio.run(self.handle_inout())
         except subprocess.TimeoutExpired:
             LOGGER.error(f"Test {self.test_name} timed out")
-        return self.p.wait(timeout=60)
+        try:
+            return self.p.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            # If SIGTERM is intercepted, do a hard kill
+            self.p.kill()
+            return self.p.wait()
 
     async def handle_inout(self):
         tasks = []
