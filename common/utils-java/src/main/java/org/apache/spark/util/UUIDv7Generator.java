@@ -16,59 +16,54 @@
  */
 package org.apache.spark.util;
 
-import java.time.Instant;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Generator for UUIDv7 as defined in
- * https://datatracker.ietf.org/doc/html/draft-peabody-dispatch-new-uuid-format#section-5.2
+ * Generator for UUIDv7 as defined in RFC 9562.
+ * https://www.rfc-editor.org/rfc/rfc9562.html
  *
  * UUIDv7 is a time-ordered UUID that embeds a Unix timestamp in milliseconds,
  * making it suitable for use as database keys and for cases where temporal
  * ordering is beneficial.
+ *
+ * The generate() method guarantees monotonicity by tracking the last used timestamp
+ * and incrementing if necessary when the clock hasn't advanced.
  */
 public final class UUIDv7Generator {
 
+    /**
+     * Tracks the last timestamp used to ensure monotonicity.
+     * If the system clock returns the same or earlier time, we increment from this value.
+     */
+    private static final AtomicLong lastTimestamp = new AtomicLong(0);
+
     private UUIDv7Generator() {
-        // Prevent instantiation
+        // Prevent instantiation, as this is a util class.
     }
 
     /**
-     * Generate a UUIDv7 from the current time.
+     * Generate a UUIDv7 with guaranteed monotonicity.
+     *
+     * This method ensures each generated UUID has a timestamp greater than or equal to
+     * the previous one, even if the system clock goes backwards or returns the same value.
      *
      * @return a new UUIDv7
      */
     public static UUID generate() {
-        Instant now = Instant.now();
-        return generateFrom(now.toEpochMilli(), now.getNano());
-    }
+        long timestamp = lastTimestamp.updateAndGet(last -> {
+            long now = System.currentTimeMillis();
+            return now > last ? now : last + 1;
+        });
 
-    /**
-     * Generate a UUIDv7 from the given timestamp components.
-     * This method is deterministic for the timestamp portion but includes
-     * random bits for uniqueness.
-     *
-     * @param epochMilli the Unix timestamp in milliseconds
-     * @param nano the nanosecond component (used for sub-millisecond ordering)
-     * @return a new UUIDv7
-     */
-    public static UUID generateFrom(long epochMilli, int nano) {
-        // 48 bits for timestamp
-        long timestampMs = epochMilli & 0xFFFFFFFFFFFFL;
-
-        // 12 bits from nano, avoid LSB as most HW clocks have resolution in range of 10-40 ns
-        int randA = (nano >> 4) & 0xFFF;
-
-        // Version 7 uses bits 12:15
-        long msb = (timestampMs << 16) | (0x7L << 12) | randA;
+        // 48-bit timestamp | 4-bit version (0111) | 12-bit rand_a
+        long msb = (timestamp << 16) | (0x7L << 12) | (ThreadLocalRandom.current().nextInt() & 0xFFF);
 
         long randB = ThreadLocalRandom.current().nextLong();
+        // Set variant to IETF (0b10)
+        long lsb = (randB & 0x3FFFFFFFFFFFFFFFL) | 0x8000000000000000L;
 
-        // variant 0b10
-        long randBWithVariant = (randB & 0x3FFFFFFFFFFFFFFFL) | 0x8000000000000000L;
-
-        return new UUID(msb, randBWithVariant);
+        return new UUID(msb, lsb);
     }
 }
-
