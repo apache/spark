@@ -28,6 +28,50 @@ import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
+import org.apache.spark.sql.internal.SQLConf
+
+/**
+ * Helper object for setting variables, shared by SetVariableExec and SelectIntoVariableExec.
+ */
+private[v2] object VariableSetter {
+  def setVariable(
+      variable: VariableReference,
+      value: Any,
+      conf: SQLConf,
+      tempVariableManager: org.apache.spark.sql.catalyst.analysis.TempVariableManager): Unit = {
+    val namePartsCaseAdjusted = if (conf.caseSensitiveAnalysis) {
+      variable.originalNameParts
+    } else {
+      variable.originalNameParts.map(_.toLowerCase(Locale.ROOT))
+    }
+
+    val scriptingVariableManager = SqlScriptingContextManager.get().map(_.getVariableManager)
+
+    val variableManager = variable.catalog match {
+      case FakeLocalCatalog if scriptingVariableManager.isEmpty =>
+        throw SparkException.internalError("Variable has FakeLocalCatalog, " +
+          "but ScriptingVariableManager is None.")
+
+      case FakeLocalCatalog if scriptingVariableManager.get.get(namePartsCaseAdjusted).isEmpty =>
+        throw SparkException.internalError("Local variable should be present " +
+          "because analysis has already determined it exists.")
+
+      case FakeLocalCatalog => scriptingVariableManager.get
+
+      case FakeSystemCatalog if tempVariableManager.get(namePartsCaseAdjusted).isEmpty =>
+        throw unresolvedVariableError(namePartsCaseAdjusted, Seq("SYSTEM", "SESSION"))
+
+      case FakeSystemCatalog => tempVariableManager
+
+      case c => throw SparkException.internalError("Unexpected catalog: " + c)
+    }
+
+    val varDef = VariableDefinition(
+      variable.identifier, variable.varDef.defaultValueSQL, Literal(value, variable.dataType))
+
+    variableManager.set(namePartsCaseAdjusted, varDef)
+  }
+}
 
 /**
  * Physical plan node for setting a variable.
@@ -39,7 +83,8 @@ case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
     val values = query.executeCollect()
     if (values.length == 0) {
       variables.foreach { v =>
-        setVariable(v, null)
+        VariableSetter.setVariable(
+          v, null, session.sessionState.conf, session.sessionState.catalogManager.tempVariableManager)
       }
     } else if (values.length > 1) {
       throw new SparkException(
@@ -50,47 +95,11 @@ case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
       val row = values(0)
       variables.zipWithIndex.foreach { case (v, index) =>
         val value = row.get(index, v.dataType)
-        setVariable(v, value)
+        VariableSetter.setVariable(
+          v, value, session.sessionState.conf, session.sessionState.catalogManager.tempVariableManager)
       }
     }
     Seq.empty
-  }
-
-  private def setVariable(
-      variable: VariableReference,
-      value: Any): Unit = {
-    val namePartsCaseAdjusted = if (session.sessionState.conf.caseSensitiveAnalysis) {
-      variable.originalNameParts
-    } else {
-      variable.originalNameParts.map(_.toLowerCase(Locale.ROOT))
-    }
-
-    val tempVariableManager = session.sessionState.catalogManager.tempVariableManager
-    val scriptingVariableManager = SqlScriptingContextManager.get().map(_.getVariableManager)
-
-    val variableManager = variable.catalog match {
-      case FakeLocalCatalog if scriptingVariableManager.isEmpty =>
-        throw SparkException.internalError("SetVariableExec: Variable has FakeLocalCatalog, " +
-          "but ScriptingVariableManager is None.")
-
-      case FakeLocalCatalog if scriptingVariableManager.get.get(namePartsCaseAdjusted).isEmpty =>
-        throw SparkException.internalError("Local variable should be present in SetVariableExec" +
-          "because ResolveSetVariable has already determined it exists.")
-
-      case FakeLocalCatalog => scriptingVariableManager.get
-
-      case FakeSystemCatalog if tempVariableManager.get(namePartsCaseAdjusted).isEmpty =>
-        throw unresolvedVariableError(namePartsCaseAdjusted, Seq("SYSTEM", "SESSION"))
-
-      case FakeSystemCatalog => tempVariableManager
-
-      case c => throw SparkException.internalError("Unexpected catalog in SetVariableExec: " + c)
-    }
-
-    val varDef = VariableDefinition(
-      variable.identifier, variable.varDef.defaultValueSQL, Literal(value, variable.dataType))
-
-    variableManager.set(namePartsCaseAdjusted, varDef)
   }
 
   override def output: Seq[Attribute] = Seq.empty
@@ -125,48 +134,11 @@ case class SelectIntoVariableExec(
       val row = values(0)
       variables.zipWithIndex.foreach { case (v, index) =>
         val value = row.get(index, v.dataType)
-        setVariable(v, value)
+        VariableSetter.setVariable(
+          v, value, session.sessionState.conf, session.sessionState.catalogManager.tempVariableManager)
       }
     }
     Seq.empty
-  }
-
-  private def setVariable(
-      variable: VariableReference,
-      value: Any): Unit = {
-    val namePartsCaseAdjusted = if (session.sessionState.conf.caseSensitiveAnalysis) {
-      variable.originalNameParts
-    } else {
-      variable.originalNameParts.map(_.toLowerCase(Locale.ROOT))
-    }
-
-    val tempVariableManager = session.sessionState.catalogManager.tempVariableManager
-    val scriptingVariableManager = SqlScriptingContextManager.get().map(_.getVariableManager)
-
-    val variableManager = variable.catalog match {
-      case FakeLocalCatalog if scriptingVariableManager.isEmpty =>
-        throw SparkException.internalError("SelectIntoVariableExec: Variable has " +
-          "FakeLocalCatalog, but ScriptingVariableManager is None.")
-
-      case FakeLocalCatalog if scriptingVariableManager.get.get(namePartsCaseAdjusted).isEmpty =>
-        throw SparkException.internalError("Local variable should be present in " +
-          "SelectIntoVariableExec because analysis has already determined it exists.")
-
-      case FakeLocalCatalog => scriptingVariableManager.get
-
-      case FakeSystemCatalog if tempVariableManager.get(namePartsCaseAdjusted).isEmpty =>
-        throw unresolvedVariableError(namePartsCaseAdjusted, Seq("SYSTEM", "SESSION"))
-
-      case FakeSystemCatalog => tempVariableManager
-
-      case c =>
-        throw SparkException.internalError("Unexpected catalog in SelectIntoVariableExec: " + c)
-    }
-
-    val varDef = VariableDefinition(
-      variable.identifier, variable.varDef.defaultValueSQL, Literal(value, variable.dataType))
-
-    variableManager.set(namePartsCaseAdjusted, varDef)
   }
 
   override def output: Seq[Attribute] = Seq.empty

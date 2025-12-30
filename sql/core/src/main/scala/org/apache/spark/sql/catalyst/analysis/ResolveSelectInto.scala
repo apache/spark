@@ -66,11 +66,11 @@ object ResolveSelectInto extends Rule[LogicalPlan] {
   }
 
   /**
-   * Check if a plan is a set operation (UNION, INTERSECT, EXCEPT, SETMINUS).
+   * Check if a plan is a set operation (UNION, INTERSECT, EXCEPT).
    */
   private def isSetOperation(plan: LogicalPlan): Boolean = {
-    plan.nodeName match {
-      case "Union" | "Intersect" | "Except" | "Distinct" => true
+    plan match {
+      case _: Union | _: Intersect | _: Except => true
       case _ => false
     }
   }
@@ -97,7 +97,7 @@ object ResolveSelectInto extends Rule[LogicalPlan] {
           val numVars = targetVariables.length
           val finalTargetVars = extractTargetVariables(targetVariables)
 
-          // Handle struct unpacking (Condition 4):
+          // Handle struct unpacking:
           // If exactly one target variable AND it's a struct type AND query has > 1 column,
           // then wrap the columns into a struct
           val finalQuery = if (numVars == 1 && numCols > 1) {

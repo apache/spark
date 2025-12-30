@@ -1917,10 +1917,6 @@ case class DropVariable(
 
 /**
  * The logical plan of the SET VARIABLE command.
- * Used by EXECUTE IMMEDIATE INTO.
- * When query returns zero rows, variables are set to null.
- * @param targetVariables The variables to set
- * @param sourceQuery The query that produces the values
  */
 case class SetVariable(
     targetVariables: Seq[Expression],
