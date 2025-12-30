@@ -1407,8 +1407,8 @@ collateClause
 
 nonTrivialPrimitiveType
     : STRING collateClause?
-    | (CHARACTER | CHAR) (LEFT_PAREN length=integerValue RIGHT_PAREN)?
-    | VARCHAR (LEFT_PAREN length=integerValue RIGHT_PAREN)?
+    | (CHARACTER | CHAR) (LEFT_PAREN length=integerValue RIGHT_PAREN)? collateClause?
+    | VARCHAR (LEFT_PAREN length=integerValue RIGHT_PAREN)? collateClause?
     | (DECIMAL | DEC | NUMERIC)
         (LEFT_PAREN precision=integerValue (COMMA scale=integerValue)? RIGHT_PAREN)?
     | INTERVAL

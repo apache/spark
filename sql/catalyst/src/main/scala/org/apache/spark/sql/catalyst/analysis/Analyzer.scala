@@ -474,7 +474,7 @@ class Analyzer(
       ResolveAliases ::
       ResolveSubquery ::
       ResolveSubqueryColumnAliases ::
-      ApplyDefaultCollationToStringType ::
+      ApplyDefaultCollation ::
       ResolveWindowOrder ::
       ResolveWindowFrame ::
       ResolveNaturalAndUsingJoin ::
