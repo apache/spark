@@ -678,6 +678,7 @@ Geospatial ST Functions
     st_asbinary
     st_geogfromwkb
     st_geomfromwkb
+    st_setsrid
     st_srid
 
 
@@ -710,6 +711,7 @@ Table-Valued Functions
     TableValuedFunction.json_tuple
     TableValuedFunction.posexplode
     TableValuedFunction.posexplode_outer
+    TableValuedFunction.python_worker_logs
     TableValuedFunction.range
     TableValuedFunction.sql_keywords
     TableValuedFunction.stack

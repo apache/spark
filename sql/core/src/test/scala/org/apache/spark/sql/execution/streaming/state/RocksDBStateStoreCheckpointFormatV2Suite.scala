@@ -122,6 +122,8 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
     )
   }
 
+  override def allColumnFamilyNames: Set[String] = innerStore.allColumnFamilyNames
+
   override def put(
       key: UnsafeRow,
       value: UnsafeRow,
@@ -197,8 +199,13 @@ class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
 
   override def close(): Unit = innerProvider.close()
 
-  override def getStore(version: Long, stateStoreCkptId: Option[String] = None): StateStore = {
-    val innerStateStore = innerProvider.getStore(version, stateStoreCkptId)
+  override def getStore(
+      version: Long,
+      stateStoreCkptId: Option[String] = None,
+      forceSnapshotOnCommit: Boolean = false,
+      loadEmpty: Boolean = false): StateStore = {
+    val innerStateStore = innerProvider.getStore(version, stateStoreCkptId,
+      forceSnapshotOnCommit, loadEmpty)
     CkptIdCollectingStateStoreWrapper(innerStateStore)
   }
 
@@ -211,7 +218,8 @@ class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
   override def upgradeReadStoreToWriteStore(
       readStore: ReadStateStore,
       version: Long,
-      uniqueId: Option[String] = None): StateStore = {
+      uniqueId: Option[String] = None,
+      forceSnapshotOnCommit: Boolean = false): StateStore = {
     // Following the pattern from RocksDBStateStoreProvider, we verify version and id match
     assert(version == readStore.version,
       s"Can only upgrade readStore to writeStore with the same version," +
@@ -230,7 +238,7 @@ class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
 
     // Delegate to inner provider to upgrade the store
     val upgradedStore = innerProvider.upgradeReadStoreToWriteStore(
-      innerReadStore, version, uniqueId)
+      innerReadStore, version, uniqueId, forceSnapshotOnCommit)
 
     // Wrap the upgraded store with CkptIdCollectingStateStoreWrapper
     CkptIdCollectingStateStoreWrapper(upgradedStore)

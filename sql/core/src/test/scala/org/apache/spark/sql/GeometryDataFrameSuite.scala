@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import scala.collection.immutable.Seq
 
 import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -177,5 +178,36 @@ class GeometryDataFrameSuite extends QueryTest with SharedSparkSession {
     val df = spark.sql(s"SELECT ST_GeomFromWKB(X'$pointString')")
     val expectedGeom = Geometry.fromWKB(pointBytes, 0)
     checkAnswer(df, Seq(Row(expectedGeom)))
+  }
+
+  test("geospatial feature disabled") {
+    withSQLConf(SQLConf.GEOSPATIAL_ENABLED.key -> "false") {
+      val geometry = Geometry.fromWKB(point1, 4326)
+      val schema = StructType(Seq(StructField("col1", GeometryType(4326))))
+      // RDD[Row] + schema.
+      val rdd = sparkContext.parallelize(Seq(Row(geometry)))
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.createDataFrame(rdd, schema).collect()
+        },
+        condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED"
+      )
+      // Java List[Row] + schema.
+      val javaList = java.util.Arrays.asList(Row(geometry))
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.createDataFrame(javaList, schema).collect()
+        },
+        condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED"
+      )
+      // Implicit encoder path.
+      import testImplicits._
+      checkError(
+        exception = intercept[AnalysisException] {
+          Seq(geometry).toDF("g").collect()
+        },
+        condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED"
+      )
+    }
   }
 }

@@ -39,7 +39,7 @@ class ArrowPythonUDTFRunner(
     protected override val schema: StructType,
     protected override val timeZoneId: String,
     protected override val largeVarTypes: Boolean,
-    protected override val workerConf: Map[String, String],
+    protected override val runnerConf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     sessionUUID: Option[String])
@@ -83,6 +83,8 @@ class ArrowPythonUDTFRunner(
   override val killOnIdleTimeout: Boolean = SQLConf.get.pythonUDFWorkerKillOnIdleTimeout
   override val tracebackDumpIntervalSeconds: Long =
     SQLConf.get.pythonUDFWorkerTracebackDumpIntervalSeconds
+  override val killWorkerOnFlushFailure: Boolean =
+    SQLConf.get.pythonUDFDaemonKillWorkerOnFlushFailure
 
   override val errorOnDuplicatedFieldNames: Boolean = true
 

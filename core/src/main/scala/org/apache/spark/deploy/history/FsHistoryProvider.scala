@@ -502,7 +502,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     var count: Int = 0
     try {
       val newLastScanTime = clock.getTimeMillis()
-      logInfo(log"Scanning ${MDC(HISTORY_DIR, logDir)} with " +
+      logDebug(log"Scanning ${MDC(HISTORY_DIR, logDir)} with " +
         log"lastScanTime=${MDC(LAST_SCAN_TIME, lastScanTime)}")
 
       // Mark entries that are processing as not stale. Such entries do not have a chance to be

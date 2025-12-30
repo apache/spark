@@ -99,8 +99,9 @@ from pyspark.sql.connect.plan import (
 )
 from pyspark.sql.connect.observation import Observation
 from pyspark.sql.connect.utils import get_python_ver
-from pyspark.sql.pandas.types import _create_converter_to_pandas, from_arrow_schema
-from pyspark.sql.types import DataType, StructType, _has_type
+from pyspark.sql.pandas.types import from_arrow_schema
+from pyspark.sql.pandas.conversion import _convert_arrow_table_to_pandas
+from pyspark.sql.types import DataType, StructType
 from pyspark.util import PythonEvalType
 from pyspark.storagelevel import StorageLevel
 from pyspark.errors import PySparkValueError, PySparkAssertionError, PySparkNotImplementedError
@@ -500,6 +501,20 @@ class PlanObservedMetrics(ObservedMetrics):
     @property
     def keys(self) -> List[str]:
         return self._keys
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serializable dictionary representation of this observed metrics.
+
+        Returns
+        -------
+        dict
+            A dictionary with keys 'name', 'keys', and 'pairs'.
+        """
+        return {
+            "name": self._name,
+            "keys": self._keys,
+            "pairs": self.pairs,
+        }
 
 
 class AnalyzeResult:
@@ -972,7 +987,7 @@ class SparkConnectClient(object):
         return table, schema, ei
 
     def to_pandas(
-        self, plan: pb2.Plan, observations: Dict[str, Observation]
+        self, plan: pb2.Plan, observations: Dict[str, Observation], **kwargs: Any
     ) -> Tuple["pd.DataFrame", "ExecutionInfo"]:
         """
         Return given plan as a pandas DataFrame.
@@ -987,16 +1002,20 @@ class SparkConnectClient(object):
         # Get all related configs in a batch
         (
             timezone,
-            struct_in_pandas,
-            self_destruct,
+            structHandlingMode,
+            selfDestruct,
         ) = self.get_configs(
             "spark.sql.session.timeZone",
             "spark.sql.execution.pandas.structHandlingMode",
             "spark.sql.execution.arrow.pyspark.selfDestruct.enabled",
         )
 
+        # if pandasStructHandlingMode is explicitly set, override the runtime config
+        if "pandasStructHandlingMode" in kwargs:
+            structHandlingMode = str(kwargs["pandasStructHandlingMode"])
+
         table, schema, metrics, observed_metrics, _ = self._execute_and_fetch(
-            req, observations, self_destruct == "true"
+            req, observations, selfDestruct == "true"
         )
         assert table is not None
         ei = ExecutionInfo(metrics, observed_metrics)
@@ -1004,71 +1023,14 @@ class SparkConnectClient(object):
         schema = schema or from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
         assert schema is not None and isinstance(schema, StructType)
 
-        # Rename columns to avoid duplicated column names during processing
-        temp_col_names = [f"col_{i}" for i in range(len(schema.names))]
-        table = table.rename_columns(temp_col_names)
-
-        # Pandas DataFrame created from PyArrow uses datetime64[ns] for date type
-        # values, but we should use datetime.date to match the behavior with when
-        # Arrow optimization is disabled.
-        pandas_options = {"coerce_temporal_nanoseconds": True}
-        if self_destruct == "true" and table.num_rows > 0:
-            # Configure PyArrow to use as little memory as possible:
-            # self_destruct - free columns as they are converted
-            # split_blocks - create a separate Pandas block for each column
-            # use_threads - convert one column at a time
-            pandas_options.update(
-                {
-                    "self_destruct": True,
-                    "split_blocks": True,
-                    "use_threads": False,
-                }
-            )
-
-        if len(schema.names) > 0:
-            error_on_duplicated_field_names: bool = False
-            if struct_in_pandas == "legacy" and any(
-                _has_type(f.dataType, StructType) for f in schema.fields
-            ):
-                error_on_duplicated_field_names = True
-                struct_in_pandas = "dict"
-
-            # SPARK-51112: If the table is empty, we avoid using pyarrow to_pandas to create the
-            # DataFrame, as it may fail with a segmentation fault.
-            if table.num_rows == 0:
-                # For empty tables, create empty Series with converters to preserve dtypes
-                pdf = pd.concat(
-                    [
-                        _create_converter_to_pandas(
-                            field.dataType,
-                            field.nullable,
-                            timezone=timezone,
-                            struct_in_pandas=struct_in_pandas,
-                            error_on_duplicated_field_names=error_on_duplicated_field_names,
-                        )(pd.Series([], name=temp_col_names[i], dtype="object"))
-                        for i, field in enumerate(schema.fields)
-                    ],
-                    axis="columns",
-                )
-            else:
-                pdf = pd.concat(
-                    [
-                        _create_converter_to_pandas(
-                            field.dataType,
-                            field.nullable,
-                            timezone=timezone,
-                            struct_in_pandas=struct_in_pandas,
-                            error_on_duplicated_field_names=error_on_duplicated_field_names,
-                        )(arrow_col.to_pandas(**pandas_options))
-                        for arrow_col, field in zip(table.columns, schema.fields)
-                    ],
-                    axis="columns",
-                )
-            # Restore original column names (including duplicates)
-            pdf.columns = schema.names
-        else:
-            # empty columns
-            pdf = table.to_pandas(**pandas_options)
+        pdf = _convert_arrow_table_to_pandas(
+            arrow_table=table,
+            schema=schema,
+            timezone=timezone,
+            struct_handling_mode=structHandlingMode,
+            date_as_object=False,
+            self_destruct=selfDestruct == "true",
+        )
 
         if len(metrics) > 0:
             pdf.attrs["metrics"] = metrics

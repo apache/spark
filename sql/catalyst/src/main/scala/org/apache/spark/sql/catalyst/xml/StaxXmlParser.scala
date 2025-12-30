@@ -41,7 +41,7 @@ import org.apache.spark.{SparkIllegalArgumentException, SparkUpgradeException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow, ToStringBase}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException, DateFormatter, DropMalformedMode, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException, DateFormatter, DropMalformedMode, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode, TimeFormatter, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.xml.StaxXmlParser.convertStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -76,6 +76,8 @@ class StaxXmlParser(
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
+
+  private lazy val timeFormatter = TimeFormatter(options.timeFormatInRead, isParsing = true)
 
   private lazy val binaryParser = ToStringBase.getBinaryParser
 
@@ -600,6 +602,7 @@ class StaxXmlParser(
         case _: TimestampType => parseXmlTimestamp(datum, options)
         case _: TimestampNTZType => timestampNTZFormatter.parseWithoutTimeZone(datum, false)
         case _: DateType => parseXmlDate(datum, options)
+        case _: TimeType => timeFormatter.parse(datum)
         case _: StringType => UTF8String.fromString(datum)
         case _: BinaryType => binaryParser(UTF8String.fromString(datum))
         case _ => throw new SparkIllegalArgumentException(
@@ -649,6 +652,7 @@ class StaxXmlParser(
         case DateType => castTo(value, DateType)
         case TimestampType => castTo(value, TimestampType)
         case TimestampNTZType => castTo(value, TimestampNTZType)
+        case _: TimeType => castTo(value, TimeType())
         case FloatType => signSafeToFloat(value)
         case ByteType => castTo(value, ByteType)
         case ShortType => castTo(value, ShortType)

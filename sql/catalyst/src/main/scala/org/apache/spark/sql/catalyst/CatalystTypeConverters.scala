@@ -61,6 +61,7 @@ object CatalystTypeConverters {
   }
 
   private def getConverterForType(dataType: DataType): CatalystTypeConverter[Any, Any, Any] = {
+    TypeUtils.failUnsupportedDataType(dataType, SQLConf.get)
     val converter = dataType match {
       case udt: UserDefinedType[_] => UDTConverter(udt)
       case arrayType: ArrayType => ArrayConverter(arrayType.elementType)
@@ -349,10 +350,19 @@ object CatalystTypeConverters {
       row.getUTF8String(column).toString
   }
 
+  private def assertGeospatialEnabled(): Unit = {
+    if (!SQLConf.get.geospatialEnabled) {
+      throw new org.apache.spark.sql.AnalysisException(
+        errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",
+        messageParameters = scala.collection.immutable.Map.empty)
+    }
+  }
+
   private class GeometryConverter(dataType: GeometryType)
       extends CatalystTypeConverter[Any, org.apache.spark.sql.types.Geometry, GeometryVal] {
     override def toCatalystImpl(scalaValue: Any): GeometryVal = scalaValue match {
-      case g: org.apache.spark.sql.types.Geometry => STUtils.serializeGeomFromWKB(g, dataType)
+      case g: org.apache.spark.sql.types.Geometry if SQLConf.get.geospatialEnabled =>
+        STUtils.serializeGeomFromWKB(g, dataType)
       case other => throw new SparkIllegalArgumentException(
         errorClass = "_LEGACY_ERROR_TEMP_3219",
         messageParameters = scala.collection.immutable.Map(
@@ -360,17 +370,24 @@ object CatalystTypeConverters {
           "otherClass" -> other.getClass.getCanonicalName,
           "dataType" -> StringType.sql))
     }
-    override def toScala(catalystValue: GeometryVal): org.apache.spark.sql.types.Geometry =
+    override def toScala(catalystValue: GeometryVal): org.apache.spark.sql.types.Geometry = {
+      assertGeospatialEnabled()
       if (catalystValue == null) null
       else STUtils.deserializeGeom(catalystValue, dataType)
-    override def toScalaImpl(row: InternalRow, column: Int): org.apache.spark.sql.types.Geometry =
+    }
+
+    override def toScalaImpl(row: InternalRow, column: Int):
+        org.apache.spark.sql.types.Geometry = {
+      assertGeospatialEnabled()
       STUtils.deserializeGeom(row.getGeometry(0), dataType)
+    }
   }
 
   private class GeographyConverter(dataType: GeographyType)
       extends CatalystTypeConverter[Any, org.apache.spark.sql.types.Geography, GeographyVal] {
     override def toCatalystImpl(scalaValue: Any): GeographyVal = scalaValue match {
-      case g: org.apache.spark.sql.types.Geography => STUtils.serializeGeogFromWKB(g, dataType)
+      case g: org.apache.spark.sql.types.Geography if SQLConf.get.geospatialEnabled =>
+        STUtils.serializeGeogFromWKB(g, dataType)
       case other => throw new SparkIllegalArgumentException(
         errorClass = "_LEGACY_ERROR_TEMP_3219",
         messageParameters = scala.collection.immutable.Map(
@@ -378,11 +395,17 @@ object CatalystTypeConverters {
           "otherClass" -> other.getClass.getCanonicalName,
           "dataType" -> StringType.sql))
     }
-    override def toScala(catalystValue: GeographyVal): org.apache.spark.sql.types.Geography =
+    override def toScala(catalystValue: GeographyVal): org.apache.spark.sql.types.Geography = {
+      assertGeospatialEnabled()
       if (catalystValue == null) null
       else STUtils.deserializeGeog(catalystValue, dataType)
-    override def toScalaImpl(row: InternalRow, column: Int): org.apache.spark.sql.types.Geography =
+    }
+
+    override def toScalaImpl(row: InternalRow, column: Int):
+        org.apache.spark.sql.types.Geography = {
+      assertGeospatialEnabled()
       STUtils.deserializeGeog(row.getGeography(0), dataType)
+    }
   }
 
   private object DateConverter extends CatalystTypeConverter[Any, Date, Any] {

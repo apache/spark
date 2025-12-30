@@ -259,9 +259,9 @@ statement
         createTableClauses
         (AS? query)?                                                   #replaceTable
     | ANALYZE TABLE identifierReference partitionSpec? COMPUTE STATISTICS
-        (identifier | FOR COLUMNS identifierSeq | FOR ALL COLUMNS)?    #analyze
+        (simpleIdentifier | FOR COLUMNS identifierSeq | FOR ALL COLUMNS)?    #analyze
     | ANALYZE TABLES ((FROM | IN) identifierReference)? COMPUTE STATISTICS
-        (identifier)?                                                  #analyzeTables
+        (simpleIdentifier)?                                            #analyzeTables
     | ALTER TABLE identifierReference
         ADD (COLUMN | COLUMNS)
         columns=qualifiedColTypeWithPositionList                       #addTableColumns
@@ -323,6 +323,14 @@ statement
          (PARTITIONED ON identifierList) |
          (TBLPROPERTIES propertyList))*
         AS query                                                       #createView
+    | CREATE (OR REPLACE)?
+        VIEW (IF errorCapturingNot EXISTS)? identifierReference
+        identifierCommentList?
+        ((WITH METRICS) |
+         routineLanguage |
+         commentSpec |
+         (TBLPROPERTIES propertyList))*
+        AS codeLiteral                                                 #createMetricView
     | CREATE (OR REPLACE)? GLOBAL? TEMPORARY VIEW
         tableIdentifier (LEFT_PAREN colTypeList RIGHT_PAREN)? tableProvider
         (OPTIONS propertyList)?                                        #createTempViewUsing
@@ -383,7 +391,7 @@ statement
     | TRUNCATE TABLE identifierReference partitionSpec?                #truncateTable
     | (MSCK)? REPAIR TABLE identifierReference
         (option=(ADD|DROP|SYNC) PARTITIONS)?                           #repairTable
-    | op=(ADD | LIST) identifier .*?                                   #manageResource
+    | op=(ADD | LIST) simpleIdentifier .*?                             #manageResource
     | CREATE INDEX (IF errorCapturingNot EXISTS)? identifier ON TABLE?
         identifierReference (USING indexType=identifier)?
         LEFT_PAREN columns=multipartIdentifierPropertyList RIGHT_PAREN
@@ -687,7 +695,7 @@ createFileFormat
 
 fileFormat
     : INPUTFORMAT inFmt=stringLit OUTPUTFORMAT outFmt=stringLit    #tableFileFormat
-    | identifier                                             #genericFileFormat
+    | simpleIdentifier                                             #genericFileFormat
     ;
 
 storageHandler
@@ -695,7 +703,7 @@ storageHandler
     ;
 
 resource
-    : identifier stringLit
+    : simpleIdentifier stringLit
     ;
 
 dmlStatementNoWith
@@ -1523,6 +1531,17 @@ complexColType
     : errorCapturingIdentifier COLON? dataType (errorCapturingNot NULL)? commentSpec?
     ;
 
+// The code literal is defined as a dollar quoted string.
+// A dollar quoted string consists of
+// - a begin tag which contains a dollar sign, an optional tag, and another dollar sign,
+// - a string literal that is made up of arbitrary sequence of characters, and
+// - an end tag which has to be exact the same as the begin tag.
+// As the string literal can contain dollar signs, we add + to DOLLAR_QUOTED_STRING_BODY to avoid
+// the parser eagarly matching END_DOLLAR_QUOTED_STRING when seeing a dollar sign.
+codeLiteral
+    : BEGIN_DOLLAR_QUOTED_STRING DOLLAR_QUOTED_STRING_BODY+ END_DOLLAR_QUOTED_STRING
+    ;
+
 routineCharacteristics
     : (routineLanguage
     | specificName
@@ -1997,7 +2016,9 @@ ansiNonReserved
     | MATCHED
     | MATERIALIZED
     | MAX
+    | MEASURE
     | MERGE
+    | METRICS
     | MICROSECOND
     | MICROSECONDS
     | MILLISECOND
@@ -2387,7 +2408,9 @@ nonReserved
     | MATCHED
     | MATERIALIZED
     | MAX
+    | MEASURE
     | MERGE
+    | METRICS
     | MICROSECOND
     | MICROSECONDS
     | MILLISECOND

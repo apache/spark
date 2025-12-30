@@ -226,7 +226,6 @@ class SeriesStringOpsAdvTests(
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.pandas.tests.series.test_string_ops_adv import *  # noqa: F401
 
     try:

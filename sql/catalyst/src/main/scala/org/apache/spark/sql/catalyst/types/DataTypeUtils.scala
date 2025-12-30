@@ -249,5 +249,38 @@ object DataTypeUtils {
     case v: Long => fromDecimal(Decimal(BigDecimal(v)))
     case _ => forType(literal.dataType)
   }
+
+  /**
+   * Extracts all struct field paths from a nested StructType.
+   */
+  def extractAllFieldPaths(schema: StructType, basePath: Seq[String] = Seq.empty):
+  Seq[Seq[String]] = {
+    schema.flatMap { field =>
+      val fieldPath = basePath :+ field.name
+      field.dataType match {
+        case struct: StructType =>
+          fieldPath +: extractAllFieldPaths(struct, fieldPath)
+        case _ =>
+          Seq(fieldPath)
+      }
+    }
+  }
+
+  /**
+   * Extracts only leaf-level field paths from a nested StructType.
+   * Unlike extractAllFieldPaths, this method does not include intermediate struct paths.
+   */
+  def extractLeafFieldPaths(schema: StructType, basePath: Seq[String] = Seq.empty):
+  Seq[Seq[String]] = {
+    schema.flatMap { field =>
+      val fieldPath = basePath :+ field.name
+      field.dataType match {
+        case struct: StructType =>
+          extractLeafFieldPaths(struct, fieldPath)
+        case _ =>
+          Seq(fieldPath)
+      }
+    }
+  }
 }
 

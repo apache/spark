@@ -467,7 +467,8 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def collect(self) -> List[Row]:
         with SCCallSiteSync(self._sc):
             sock_info = self._jdf.collectToPython()
-        return list(_load_from_socket(sock_info, BatchedSerializer(CPickleSerializer())))
+        with _load_from_socket(sock_info, BatchedSerializer(CPickleSerializer())) as stream:
+            return list(stream)
 
     def toLocalIterator(self, prefetchPartitions: bool = False) -> Iterator[Row]:
         with SCCallSiteSync(self._sc):
@@ -488,7 +489,8 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
     def tail(self, num: int) -> List[Row]:
         with SCCallSiteSync(self._sc):
             sock_info = self._jdf.tailToPython(num)
-        return list(_load_from_socket(sock_info, BatchedSerializer(CPickleSerializer())))
+        with _load_from_socket(sock_info, BatchedSerializer(CPickleSerializer())) as stream:
+            return list(stream)
 
     def foreach(self, f: Callable[[Row], None]) -> None:
         self.rdd.foreach(f)
@@ -1839,7 +1841,10 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         return PandasConversionMixin.toArrow(self)
 
     def toPandas(self) -> "PandasDataFrameLike":
-        return PandasConversionMixin.toPandas(self)
+        return PandasConversionMixin._to_pandas(self)
+
+    def _to_pandas(self, **kwargs: Any) -> "PandasDataFrameLike":
+        return PandasConversionMixin._to_pandas(self, **kwargs)
 
     def transpose(self, indexColumn: Optional["ColumnOrName"] = None) -> ParentDataFrame:
         if indexColumn is not None:
@@ -2006,7 +2011,7 @@ def _test() -> None:
         import pyarrow as pa
         from pyspark.loose_version import LooseVersion
 
-        if LooseVersion(pa.__version__) < LooseVersion("17.0.0"):
+        if LooseVersion(pa.__version__) < LooseVersion("21.0.0"):
             del pyspark.sql.dataframe.DataFrame.mapInArrow.__doc__
 
     spark = (

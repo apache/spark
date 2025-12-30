@@ -19,7 +19,7 @@
 import json
 import unittest
 
-from pyspark.errors import PySparkValueError
+from pyspark.errors import PySparkRuntimeError, PySparkValueError
 from pyspark.errors.error_classes import ERROR_CLASSES_JSON
 from pyspark.errors.utils import ErrorClassesReader
 
@@ -107,6 +107,16 @@ class ErrorsTest(unittest.TestCase):
         )
         subclass_map = error_reader.error_info_map["TEST_ERROR_WITH_SUB_CLASS"]["sub_class"]
         self.assertEqual(breaking_change_info2, subclass_map["SUBCLASS"]["breaking_change_info"])
+
+    def test_sqlstate(self):
+        error = PySparkRuntimeError(errorClass="APPLICATION_NAME_NOT_SET", messageParameters={})
+        self.assertIsNone(error.getSqlState())
+
+        error = PySparkRuntimeError(
+            errorClass="SESSION_MUTATION_IN_DECLARATIVE_PIPELINE.SET_RUNTIME_CONF",
+            messageParameters={"method": "set"},
+        )
+        self.assertIsNone(error.getSqlState())
 
 
 if __name__ == "__main__":

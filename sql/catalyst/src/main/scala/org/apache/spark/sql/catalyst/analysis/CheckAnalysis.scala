@@ -340,6 +340,12 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           errorClass = "UNSUPPORTED_FEATURE.OVERWRITE_BY_SUBQUERY",
           messageParameters = Map.empty)
 
+      case p: PlanWithUnresolvedIdentifier if !p.identifierExpr.resolved =>
+        p.identifierExpr.failAnalysis(
+          errorClass = "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+          messageParameters = Map("name" -> "IDENTIFIER", "expr" -> p.identifierExpr.sql)
+        )
+
       case operator: LogicalPlan =>
         operator transformExpressionsDown {
           case hof: HigherOrderFunction if hof.arguments.exists {
@@ -706,6 +712,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             }
 
             create.tableSchema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
+            TypeUtils.failUnsupportedDataType(create.tableSchema, SQLConf.get)
             SchemaUtils.checkIndeterminateCollationInSchema(create.tableSchema)
 
           case write: V2WriteCommand if write.resolved =>
@@ -891,7 +898,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 "invalidExprSqls" -> invalidExprSqls.mkString(", ")))
 
           case j @ LateralJoin(_, right, _, _)
-              if j.getTagValue(LateralJoin.BY_TABLE_ARGUMENT).isEmpty =>
+              if !j.containsTag(LateralJoin.BY_TABLE_ARGUMENT) =>
             right.plan.foreach {
               case Generate(pyudtf: PythonUDTF, _, _, _, _, _)
                   if pyudtf.evalType == PythonEvalType.SQL_ARROW_UDTF =>

@@ -344,6 +344,10 @@ object SerializerBuildHelper {
     case BoxedDoubleEncoder => createSerializerForDouble(input)
     case JavaEnumEncoder(_) => createSerializerForJavaEnum(input)
     case ScalaEnumEncoder(_, _) => createSerializerForScalaEnum(input)
+    case _ @ (_: GeographyEncoder | _: GeometryEncoder) if !SQLConf.get.geospatialEnabled =>
+      throw new org.apache.spark.sql.AnalysisException(
+        errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",
+        messageParameters = scala.collection.immutable.Map.empty)
     case g: GeographyEncoder => createSerializerForGeographyType(input, g.dt)
     case g: GeometryEncoder => createSerializerForGeometryType(input, g.dt)
     case CharEncoder(length) => createSerializerForChar(input, length)
@@ -363,6 +367,8 @@ object SerializerBuildHelper {
     case TimestampEncoder(false) => createSerializerForSqlTimestamp(input)
     case InstantEncoder(false) => createSerializerForJavaInstant(input)
     case LocalDateTimeEncoder => createSerializerForLocalDateTime(input)
+    case LocalTimeEncoder if !SQLConf.get.isTimeTypeEnabled =>
+      throw org.apache.spark.sql.errors.QueryCompilationErrors.unsupportedTimeTypeError()
     case LocalTimeEncoder => createSerializerForLocalTime(input)
     case UDTEncoder(udt, udtClass) => createSerializerForUserDefinedType(input, udt, udtClass)
     case OptionEncoder(valueEnc) =>

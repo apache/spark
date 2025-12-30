@@ -72,6 +72,21 @@ class InitCLITests(ReusedConnectTestCase):
                     Path("transformations") / "example_sql_materialized_view.sql",
                 )
 
+    def test_init_existing_directory(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_name = "test_project"
+            with change_dir(Path(temp_dir)):
+                init(project_name)
+
+                with self.assertRaises(FileExistsError) as context:
+                    init(project_name)
+
+                expected_message = (
+                    f"Directory '{project_name}' already exists. "
+                    "Please choose a different name or remove the existing directory."
+                )
+                self.assertEqual(str(context.exception), expected_message)
+
 
 if __name__ == "__main__":
     try:

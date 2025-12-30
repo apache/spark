@@ -20,7 +20,8 @@ package org.apache.spark.sql.connect.client.jdbc
 import java.io.{InputStream, Reader}
 import java.net.URL
 import java.sql.{Array => JdbcArray, _}
-import java.time.LocalTime
+import java.time.{LocalDateTime, LocalTime}
+import java.time.temporal.ChronoUnit
 import java.util
 import java.util.Calendar
 
@@ -44,9 +45,15 @@ class SparkConnectResultSet(
   private var cursor: Int = 0
 
   private var _wasNull: Boolean = false
-  override def wasNull: Boolean = _wasNull
+
+  override def wasNull: Boolean = {
+    checkOpen()
+    _wasNull
+  }
 
   override def next(): Boolean = {
+    checkOpen()
+
     val hasNext = iterator.hasNext
     if (hasNext) {
       currentRow = iterator.next()
@@ -60,7 +67,7 @@ class SparkConnectResultSet(
     hasNext
   }
 
-  @volatile protected var closed: Boolean = false
+  @volatile private var closed: Boolean = false
 
   override def isClosed: Boolean = closed
 
@@ -97,6 +104,8 @@ class SparkConnectResultSet(
   }
 
   override def findColumn(columnLabel: String): Int = {
+    checkOpen()
+
     sparkResult.schema.getFieldIndex(columnLabel) match {
       case Some(i) => i + 1
       case None =>
@@ -105,7 +114,13 @@ class SparkConnectResultSet(
   }
 
   override def getString(columnIndex: Int): String = {
-    getColumnValue(columnIndex, null: String) { idx => String.valueOf(currentRow.get(idx)) }
+    getColumnValue(columnIndex, null: String) { idx =>
+      currentRow.get(idx) match {
+        case bytes: Array[Byte] =>
+          new String(bytes, java.nio.charset.StandardCharsets.UTF_8)
+        case other => String.valueOf(other)
+      }
+    }
   }
 
   override def getBoolean(columnIndex: Int): Boolean = {
@@ -156,9 +171,8 @@ class SparkConnectResultSet(
       // Note: java.sql.Time can only store up to millisecond precision (3 digits).
       // For TIME types with higher precision (TIME(4-9)), microseconds/nanoseconds are truncated.
       // If user needs full precision,
-      // should use: getObject(columnIndex, classOf[java.time.LocalTime])
-      val millisSinceMidnight =
-        java.time.temporal.ChronoUnit.MILLIS.between(LocalTime.MIDNIGHT, localTime)
+      // should use: getObject(columnIndex, classOf[LocalTime])
+      val millisSinceMidnight = ChronoUnit.MILLIS.between(LocalTime.MIDNIGHT, localTime)
       new Time(millisSinceMidnight)
     }
   }
@@ -172,9 +186,9 @@ class SparkConnectResultSet(
         sparkResult.schema.fields(idx).dataType match {
           case TimestampNTZType =>
             // TIMESTAMP_NTZ is represented as LocalDateTime
-            Timestamp.valueOf(value.asInstanceOf[java.time.LocalDateTime])
+            Timestamp.valueOf(value.asInstanceOf[LocalDateTime])
           case TimestampType =>
-            // TIMESTAMP is represented as java.sql.Timestamp
+            // TIMESTAMP is represented as Timestamp
             value.asInstanceOf[Timestamp]
           case other =>
             throw new SQLException(
@@ -533,52 +547,46 @@ class SparkConnectResultSet(
     throw new SQLFeatureNotSupportedException
 
   /**
-   * Gets the value of the designated column in the current row as a java.sql.Date object.
-   * The Calendar parameter is ignored for Date type since it is not timezone-aware.
+   * @inheritdoc
    *
-   * @param columnIndex the first column is 1, the second is 2, ...
-   * @param cal the Calendar to use in constructing the date (ignored for Date type)
-   * @return the column value; if the value is SQL NULL, the value returned is null
+   * Note: The Calendar parameter is ignored. Spark Connect handles timezone conversions
+   * server-side to avoid client/server timezone inconsistencies.
    */
   override def getDate(columnIndex: Int, cal: Calendar): Date = {
     getDate(columnIndex)
   }
 
   /**
-   * Gets the value of the designated column in the current row as a java.sql.Date object.
-   * The Calendar parameter is ignored for Date type since it is not timezone-aware.
+   * @inheritdoc
    *
-   * @param columnLabel the label for the column specified with the SQL AS clause
-   * @param cal the Calendar to use in constructing the date (ignored for Date type)
-   * @return the column value; if the value is SQL NULL, the value returned is null
+   * Note: The Calendar parameter is ignored. Spark Connect handles timezone conversions
+   * server-side to avoid client/server timezone inconsistencies.
    */
   override def getDate(columnLabel: String, cal: Calendar): Date =
     getDate(findColumn(columnLabel))
 
   /**
-   * Gets the value of the designated column in the current row as a java.sql.Time object.
-   * The Calendar parameter is ignored for Time type since it is not timezone-aware.
+   * @inheritdoc
    *
-   * @param columnIndex the first column is 1, the second is 2, ...
-   * @param cal the Calendar to use in constructing the time (ignored for Time type)
-   * @return the column value; if the value is SQL NULL, the value returned is null
+   * Note: The Calendar parameter is ignored. Spark Connect handles timezone conversions
+   * server-side to avoid client/server timezone inconsistencies.
    */
   override def getTime(columnIndex: Int, cal: Calendar): Time = {
     getTime(columnIndex)
   }
 
   /**
-   * Gets the value of the designated column in the current row as a java.sql.Time object.
-   * The Calendar parameter is ignored for Time type since it is not timezone-aware.
+   * @inheritdoc
    *
-   * @param columnLabel the label for the column specified with the SQL AS clause
-   * @param cal the Calendar to use in constructing the time (ignored for Time type)
-   * @return the column value; if the value is SQL NULL, the value returned is null
+   * Note: The Calendar parameter is ignored. Spark Connect handles timezone conversions
+   * server-side to avoid client/server timezone inconsistencies.
    */
   override def getTime(columnLabel: String, cal: Calendar): Time =
     getTime(findColumn(columnLabel))
 
   /**
+   * @inheritdoc
+   *
    * Note: The Calendar parameter is ignored. Spark Connect handles timezone conversions
    * server-side to avoid client/server timezone inconsistencies.
    */
@@ -587,6 +595,8 @@ class SparkConnectResultSet(
   }
 
   /**
+   * @inheritdoc
+   *
    * Note: The Calendar parameter is ignored. Spark Connect handles timezone conversions
    * server-side to avoid client/server timezone inconsistencies.
    */

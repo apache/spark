@@ -66,7 +66,8 @@ class QueryExecution(
     val logical: LogicalPlan,
     val tracker: QueryPlanningTracker = new QueryPlanningTracker,
     val mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
-    val shuffleCleanupMode: ShuffleCleanupMode = DoNotCleanup) extends Logging {
+    val shuffleCleanupMode: ShuffleCleanupMode = DoNotCleanup,
+    val refreshPhaseEnabled: Boolean = true) extends Logging {
 
   val id: Long = QueryExecution.nextExecutionId
 
@@ -177,13 +178,8 @@ class QueryExecution(
       // with the rest of processing of the root plan being just outputting command results,
       // for eagerly executed commands we mark this place as beginning of execution.
       tracker.setReadyForExecution()
-      val qe = new QueryExecution(sparkSession, p, mode = mode,
-        shuffleCleanupMode = shuffleCleanupMode)
-      val result = QueryExecution.withInternalError(s"Eagerly executed $name failed.") {
-        SQLExecution.withNewExecutionId(qe, Some(name)) {
-          qe.executedPlan.executeCollect()
-        }
-      }
+      val (qe, result) = QueryExecution.runCommand(
+        sparkSession, p, name, refreshPhaseEnabled, mode, Some(shuffleCleanupMode))
       CommandResult(
         qe.analyzed.output,
         qe.commandExecuted,
@@ -207,7 +203,11 @@ class QueryExecution(
   // there may be delay between analysis and subsequent phases
   // therefore, refresh captured table versions to reflect latest data
   private val lazyTableVersionsRefreshed = LazyTry {
-    V2TableRefreshUtil.refreshVersions(commandExecuted)
+    if (refreshPhaseEnabled) {
+      V2TableRefreshUtil.refresh(sparkSession, commandExecuted, versionedOnly = true)
+    } else {
+      commandExecuted
+    }
   }
 
   private[sql] def tableVersionsRefreshed: LogicalPlan = lazyTableVersionsRefreshed.get
@@ -569,6 +569,18 @@ object QueryExecution {
 
   private def nextExecutionId: Long = _nextExecutionId.getAndIncrement
 
+  private[execution] def create(
+      sparkSession: SparkSession,
+      logical: LogicalPlan,
+      refreshPhaseEnabled: Boolean = true): QueryExecution = {
+    new QueryExecution(
+      sparkSession,
+      logical,
+      mode = CommandExecutionMode.ALL,
+      shuffleCleanupMode = determineShuffleCleanupMode(sparkSession.sessionState.conf),
+      refreshPhaseEnabled = refreshPhaseEnabled)
+  }
+
   /**
    * Construct a sequence of rules that are used to prepare a planned [[SparkPlan]] for execution.
    * These rules will make sure subqueries are planned, make sure the data partitioning and ordering
@@ -745,5 +757,29 @@ object QueryExecution {
       case NameParameterizedQuery(_: CompoundBody, _, _) => true
       case _ => false
     }
+  }
+
+  def runCommand(
+      sparkSession: SparkSession,
+      command: LogicalPlan,
+      name: String,
+      refreshPhaseEnabled: Boolean = true,
+      mode: CommandExecutionMode.Value = CommandExecutionMode.SKIP,
+      shuffleCleanupModeOpt: Option[ShuffleCleanupMode] = None)
+    : (QueryExecution, Array[InternalRow]) = {
+    val shuffleCleanupMode = shuffleCleanupModeOpt.getOrElse(
+      determineShuffleCleanupMode(sparkSession.sessionState.conf))
+    val qe = new QueryExecution(
+      sparkSession,
+      command,
+      mode = mode,
+      shuffleCleanupMode = shuffleCleanupMode,
+      refreshPhaseEnabled = refreshPhaseEnabled)
+    val result = QueryExecution.withInternalError(s"Executed $name failed.") {
+      SQLExecution.withNewExecutionId(qe, Some(name)) {
+        qe.executedPlan.executeCollect()
+      }
+    }
+    (qe, result)
   }
 }

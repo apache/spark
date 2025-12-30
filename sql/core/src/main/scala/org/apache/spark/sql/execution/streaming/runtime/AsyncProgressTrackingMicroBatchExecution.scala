@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.streaming.WriteToStream
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.{AvailableNowTrigger, OneTimeTrigger, ProcessingTimeTrigger}
-import org.apache.spark.sql.execution.streaming.checkpointing.{AsyncCommitLog, AsyncOffsetSeqLog, CommitMetadata, OffsetSeq}
+import org.apache.spark.sql.execution.streaming.checkpointing.{AsyncCommitLog, AsyncOffsetSeqLog, CommitMetadata, OffsetSeqBase}
 import org.apache.spark.sql.execution.streaming.operators.stateful.StateStoreWriter
 import org.apache.spark.sql.streaming.Trigger
 import org.apache.spark.util.{Clock, ThreadUtils}
@@ -49,7 +49,7 @@ class AsyncProgressTrackingMicroBatchExecution(
   // Offsets that are ready to be committed by the source.
   // This is needed so that we can call source commit in the same thread as micro-batch execution
   // to be thread safe
-  private val sourceCommitQueue = new ConcurrentLinkedQueue[OffsetSeq]()
+  private val sourceCommitQueue = new ConcurrentLinkedQueue[OffsetSeqBase]()
 
   // to cache the batch id of the last batch written to storage
   private val lastBatchPersistedToDurableStorage = new AtomicLong(-1)
@@ -104,7 +104,7 @@ class AsyncProgressTrackingMicroBatchExecution(
   // perform quick validation to fail faster
   validateAndGetTrigger()
 
-  override def validateOffsetLogAndGetPrevOffset(latestBatchId: Long): Option[OffsetSeq] = {
+  override def validateOffsetLogAndGetPrevOffset(latestBatchId: Long): Option[OffsetSeqBase] = {
     /* Initialize committed offsets to a committed batch, which at this
      * is the second latest batch id in the offset log.
      * The offset log may not be contiguous */
@@ -137,14 +137,15 @@ class AsyncProgressTrackingMicroBatchExecution(
     // Because we are using a thread pool with only one thread, async writes to the offset log
     // are still written in a serial / in order fashion
     offsetLog
-      .addAsync(execCtx.batchId, execCtx.endOffsets.toOffsetSeq(sources, execCtx.offsetSeqMetadata))
-      .thenAccept(tuple => {
-        val (batchId, persistedToDurableStorage) = tuple
+      .addAsync(execCtx.batchId,
+        execCtx.endOffsets.toOffsets(sources, sourceIdMap, execCtx.offsetSeqMetadata))
+      .thenAccept((tuple: (Long, Boolean)) => {
+        val (batchId: Long, persistedToDurableStorage: Boolean) = tuple
         if (persistedToDurableStorage) {
           // batch id cache not initialized
           if (lastBatchPersistedToDurableStorage.get == -1) {
             lastBatchPersistedToDurableStorage.set(
-              offsetLog.getPrevBatchFromStorage(batchId).getOrElse(-1))
+              offsetLog.getPrevBatchFromStorage(batchId).getOrElse(-1L))
           }
 
           if (batchId != 0 && lastBatchPersistedToDurableStorage.get != -1) {

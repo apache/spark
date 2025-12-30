@@ -20,6 +20,7 @@ import os
 import pydoc
 import shutil
 import tempfile
+import warnings
 import unittest
 from typing import cast
 import io
@@ -1044,6 +1045,18 @@ class DataFrameTestsMixin:
         df = self.spark.range(10).localCheckpoint(eager=True, storageLevel=StorageLevel.DISK_ONLY)
         df.collect()
 
+    def test_socket_leak(self):
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always", ResourceWarning)
+            df = self.spark.range(10)
+            df.collect()
+
+            df = self.spark.range(10)
+            for _ in df.toLocalIterator():
+                pass
+
+        self.assertEqual(w, [])
+
     def test_transpose(self):
         df = self.spark.createDataFrame([{"a": "x", "b": "y", "c": "z"}])
 
@@ -1170,8 +1183,6 @@ class DataFrameTestsMixin:
             [Row(dt="08/01/2017", month_y=i) for i in range(12)],
         )
 
-
-class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
     def test_query_execution_unsupported_in_classic(self):
         with self.assertRaises(PySparkValueError) as pe:
             self.spark.range(1).executionInfo
@@ -1181,6 +1192,10 @@ class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
             errorClass="CLASSIC_OPERATION_NOT_SUPPORTED_ON_DF",
             messageParameters={"member": "queryExecution"},
         )
+
+
+class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
+    pass
 
 
 if __name__ == "__main__":
