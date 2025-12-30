@@ -266,7 +266,9 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
                 shutil.rmtree(tmp_dir, ignore_errors=True)
     except subprocess.TimeoutExpired:
         if timeout and proc:
-            LOGGER.exception("Got TimeoutExpired while running %s with %s", test_name, pyspark_python)
+            LOGGER.exception(
+                "Got TimeoutExpired while running %s with %s", test_name, pyspark_python
+            )
             proc.terminate()
             proc.communicate(timeout=60)
         else:
