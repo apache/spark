@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.SqlScriptingContextManager
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateNamedStruct, Expression, Literal, VariableReference}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SetVariable}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SelectIntoVariable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.StructType
@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.StructType
 /**
  * Analysis rule that resolves SELECT INTO statements.
  * This rule validates the context (SQL script only, top-level only, not in set operations)
- * and converts UnresolvedSelectInto to SetVariable.
+ * and converts UnresolvedSelectInto to SelectIntoVariable.
  */
 object ResolveSelectInto extends Rule[LogicalPlan] {
 
@@ -86,14 +86,9 @@ object ResolveSelectInto extends Rule[LogicalPlan] {
           throw QueryCompilationErrors.selectIntoNotInSqlScript()
         }
 
-        // Validation 2: Check if at top level
-        if (!isTopLevel) {
-          throw QueryCompilationErrors.selectIntoInNestedQuery()
-        }
-
-        // Validation 3: Check if in set operation
-        if (isInSetOperation) {
-          throw QueryCompilationErrors.selectIntoInSetOperation()
+        // Validation 2 & 3: Check if at top level and not in set operation
+        if (!isTopLevel || isInSetOperation) {
+          throw QueryCompilationErrors.selectIntoOnlyAtTopLevel()
         }
 
         // All validations passed - convert to SetVariable
@@ -144,10 +139,10 @@ object ResolveSelectInto extends Rule[LogicalPlan] {
             query
           }
 
-          // For SELECT INTO, when zero rows are returned, variables should remain unchanged.
-          // This is different from EXECUTE IMMEDIATE INTO which sets variables to null.
-          // We use skipNoRows=true to indicate this behavior.
-          SetVariable(finalTargetVars, finalQuery, skipNoRows = true)
+          // Use SelectIntoVariable which has different zero-row behavior than SetVariable.
+          // When zero rows are returned, SelectIntoVariable keeps variables unchanged,
+          // whereas SetVariable (used by EXECUTE IMMEDIATE INTO) sets them to null.
+          SelectIntoVariable(finalTargetVars, finalQuery)
         } else {
           // Not all resolved yet - wait for next iteration
           node

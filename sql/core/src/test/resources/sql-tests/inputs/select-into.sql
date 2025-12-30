@@ -24,9 +24,10 @@ org.apache.spark.sql.AnalysisException
 }
 
 -- =============================================================================
--- ERROR CONDITION 1: SELECT INTO not allowed in nested queries/subqueries
+-- ERROR CONDITIONS 1 & 2: SELECT INTO only at top level
 -- =============================================================================
 
+-- Test: SELECT INTO in subquery
 -- !query
 BEGIN
   DECLARE outer_id INT;
@@ -37,15 +38,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "SELECT_INTO_IN_NESTED_QUERY",
+  "errorClass" : "SELECT_INTO_ONLY_AT_TOP_LEVEL",
   "sqlState" : "42601"
 }
 
--- =============================================================================
--- ERROR CONDITION 2: SELECT INTO not allowed in set operations
--- =============================================================================
-
--- Test with UNION
+-- Test: SELECT INTO with UNION
 -- !query
 BEGIN
   DECLARE res_id INT;
@@ -58,11 +55,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "SELECT_INTO_IN_SET_OPERATION",
+  "errorClass" : "SELECT_INTO_ONLY_AT_TOP_LEVEL",
   "sqlState" : "42601"
 }
 
--- Test with INTERSECT
+-- Test: SELECT INTO with INTERSECT
 -- !query
 BEGIN
   DECLARE res_id INT;
@@ -75,11 +72,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "SELECT_INTO_IN_SET_OPERATION",
+  "errorClass" : "SELECT_INTO_ONLY_AT_TOP_LEVEL",
   "sqlState" : "42601"
 }
 
--- Test with EXCEPT
+-- Test: SELECT INTO with EXCEPT
 -- !query
 BEGIN
   DECLARE res_id INT;
@@ -92,7 +89,7 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "SELECT_INTO_IN_SET_OPERATION",
+  "errorClass" : "SELECT_INTO_ONLY_AT_TOP_LEVEL",
   "sqlState" : "42601"
 }
 

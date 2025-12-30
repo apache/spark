@@ -80,7 +80,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 struct<>
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "SELECT_INTO_IN_NESTED_QUERY",
+  "errorClass" : "SELECT_INTO_ONLY_AT_TOP_LEVEL",
   "sqlState" : "42601"
 }
 
@@ -135,7 +135,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 struct<>
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "SELECT_INTO_IN_SET_OPERATION",
+  "errorClass" : "SELECT_INTO_ONLY_AT_TOP_LEVEL",
   "sqlState" : "42601"
 }
 
@@ -189,7 +189,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 struct<>
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "SELECT_INTO_IN_SET_OPERATION",
+  "errorClass" : "SELECT_INTO_ONLY_AT_TOP_LEVEL",
   "sqlState" : "42601"
 }
 
@@ -243,7 +243,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 struct<>
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "SELECT_INTO_IN_SET_OPERATION",
+  "errorClass" : "SELECT_INTO_ONLY_AT_TOP_LEVEL",
   "sqlState" : "42601"
 }
 

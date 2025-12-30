@@ -4238,15 +4238,9 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
-  def selectIntoInNestedQuery(): Throwable = {
+  def selectIntoOnlyAtTopLevel(): Throwable = {
     throw new AnalysisException(
-      errorClass = "SELECT_INTO_IN_NESTED_QUERY",
-      messageParameters = Map.empty)
-  }
-
-  def selectIntoInSetOperation(): Throwable = {
-    throw new AnalysisException(
-      errorClass = "SELECT_INTO_IN_SET_OPERATION",
+      errorClass = "SELECT_INTO_ONLY_AT_TOP_LEVEL",
       messageParameters = Map.empty)
   }
 

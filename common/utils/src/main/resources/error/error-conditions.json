@@ -4016,15 +4016,9 @@
     ],
     "sqlState" : "42601"
   },
-  "SELECT_INTO_IN_NESTED_QUERY" : {
+  "SELECT_INTO_ONLY_AT_TOP_LEVEL" : {
     "message" : [
-      "SELECT INTO is not allowed in subqueries or nested query expressions. INTO clause must be used in the top-level SELECT statement only."
-    ],
-    "sqlState" : "42601"
-  },
-  "SELECT_INTO_IN_SET_OPERATION" : {
-    "message" : [
-      "SELECT INTO is not allowed in queries that are part of set operations (UNION, INTERSECT, EXCEPT, SETMINUS). INTO clause can only be used in standalone SELECT statements."
+      "SELECT INTO is only allowed in top-level SELECT statements. It cannot be used in subqueries, nested query expressions, or as part of set operations (UNION, INTERSECT, EXCEPT, SETMINUS)."
     ],
     "sqlState" : "42601"
   },
