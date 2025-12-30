@@ -4014,11 +4014,11 @@
     "message" : [
       "SELECT INTO is only allowed in SQL scripts. Use SELECT without INTO, or execute this query within a BEGIN...END block."
     ],
-    "sqlState" : "42601"
+    "sqlState" : "0A000"
   },
   "SELECT_INTO_ONLY_AT_TOP_LEVEL" : {
     "message" : [
-      "SELECT INTO is only allowed in top-level SELECT statements. It cannot be used in subqueries, nested query expressions, or as part of set operations (UNION, INTERSECT, EXCEPT, SETMINUS)."
+      "SELECT INTO is only allowed in top-level SELECT statements. It cannot be used in subqueries, nested query expressions, pipe operator context, or as part of set operations (UNION, INTERSECT, EXCEPT, SETMINUS)."
     ],
     "sqlState" : "42601"
   },

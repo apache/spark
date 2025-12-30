@@ -1560,9 +1560,9 @@ class AstBuilder extends DataTypeAstBuilder
 
     // Check for INTO clause
     if (selectClause.targetVariable != null) {
-      // SELECT INTO is not allowed in pipe operator context
+      // SELECT INTO is not allowed in pipe operator context (same as subqueries/set operations)
       if (isPipeOperatorSelect) {
-        operationNotAllowed("SELECT INTO is not allowed in pipe operator context", selectClause)
+        throw QueryCompilationErrors.selectIntoOnlyAtTopLevel()
       }
 
       val targetVars = visitMultipartIdentifierList(selectClause.targetVariable)

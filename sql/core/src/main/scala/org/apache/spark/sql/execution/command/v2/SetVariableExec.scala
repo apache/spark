@@ -30,20 +30,14 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
 
 /**
- * Physical plan node for setting a variable from EXECUTE IMMEDIATE INTO.
- * When query returns zero rows, variables are set to null.
- * @param variables The variables to set
- * @param query The query that produces the values
+ * Physical plan node for setting a variable.
  */
-case class SetVariableExec(
-    variables: Seq[VariableReference],
-    query: SparkPlan)
+case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
   extends V2CommandExec with UnaryLike[SparkPlan] {
 
   override protected def run(): Seq[InternalRow] = {
     val values = query.executeCollect()
     if (values.length == 0) {
-      // EXECUTE IMMEDIATE INTO behavior: set variables to null when no rows returned
       variables.foreach { v =>
         setVariable(v, null)
       }
