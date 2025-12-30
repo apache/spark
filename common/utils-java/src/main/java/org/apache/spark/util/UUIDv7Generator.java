@@ -24,12 +24,10 @@ import java.util.concurrent.atomic.AtomicLong;
  * Generator for UUIDv7 as defined in RFC 9562.
  * https://www.rfc-editor.org/rfc/rfc9562.html
  *
- * UUIDv7 is a time-ordered UUID that embeds a Unix timestamp in milliseconds,
- * making it suitable for use as database keys and for cases where temporal
- * ordering is beneficial.
+ * UUIDv7 is a time-ordered UUID that embeds a Unix timestamp in milliseconds.
  *
  * The generate() method guarantees monotonicity by tracking the last used timestamp
- * and incrementing if necessary when the clock hasn't advanced.
+ * and increments if necessary when the clock hasn't advanced.
  */
 public final class UUIDv7Generator {
 
@@ -44,10 +42,10 @@ public final class UUIDv7Generator {
     }
 
     /**
-     * Generate a UUIDv7 with guaranteed monotonicity.
+     * Generate a UUIDv7.
      *
      * This method ensures each generated UUID has a timestamp greater than or equal to
-     * the previous one, even if the system clock goes backwards or returns the same value.
+     * the previous one, incrementing when the clock hasn't advanced from lastTimestamp.
      *
      * @return a new UUIDv7
      */
