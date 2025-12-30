@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.SqlScriptingContextManager
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateNamedStruct, Expression, Literal, VariableReference}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SelectIntoVariable}
+import org.apache.spark.sql.catalyst.plans.logical.{Except, Intersect, LogicalPlan, Project, SelectIntoVariable, Union}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.StructType

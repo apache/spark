@@ -84,7 +84,8 @@ case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
     if (values.length == 0) {
       variables.foreach { v =>
         VariableSetter.setVariable(
-          v, null, session.sessionState.conf, session.sessionState.catalogManager.tempVariableManager)
+          v, null, session.sessionState.conf,
+          session.sessionState.catalogManager.tempVariableManager)
       }
     } else if (values.length > 1) {
       throw new SparkException(
@@ -96,7 +97,8 @@ case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
       variables.zipWithIndex.foreach { case (v, index) =>
         val value = row.get(index, v.dataType)
         VariableSetter.setVariable(
-          v, value, session.sessionState.conf, session.sessionState.catalogManager.tempVariableManager)
+          v, value, session.sessionState.conf,
+          session.sessionState.catalogManager.tempVariableManager)
       }
     }
     Seq.empty
@@ -135,7 +137,8 @@ case class SelectIntoVariableExec(
       variables.zipWithIndex.foreach { case (v, index) =>
         val value = row.get(index, v.dataType)
         VariableSetter.setVariable(
-          v, value, session.sessionState.conf, session.sessionState.catalogManager.tempVariableManager)
+          v, value, session.sessionState.conf,
+          session.sessionState.catalogManager.tempVariableManager)
       }
     }
     Seq.empty
