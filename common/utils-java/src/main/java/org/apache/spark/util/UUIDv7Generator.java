@@ -16,8 +16,8 @@
  */
 package org.apache.spark.util;
 
+import java.security.SecureRandom;
 import java.util.UUID;
-import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Generator for UUIDv7 as defined in RFC 9562.
@@ -36,6 +36,13 @@ public final class UUIDv7Generator {
     }
 
     /**
+     * Holder class used for lazy initialization of SecureRandom.
+     */
+    private static class Holder {
+        static final SecureRandom SECURE_RANDOM = new SecureRandom();
+    }
+
+    /**
      * Generate a UUIDv7 from the current time.
      *
      * The generated UUID embeds a 48-bit Unix timestamp (milliseconds since epoch),
@@ -49,9 +56,9 @@ public final class UUIDv7Generator {
         long timestamp = System.currentTimeMillis();
 
         // 48-bit timestamp | 4-bit version (0111) | 12-bit rand_a
-        long msb = (timestamp << 16) | (0x7L << 12) | (ThreadLocalRandom.current().nextInt() & 0xFFF);
+        long msb = (timestamp << 16) | (0x7L << 12) | (Holder.SECURE_RANDOM.nextInt() & 0xFFF);
 
-        long randB = ThreadLocalRandom.current().nextLong();
+        long randB = Holder.SECURE_RANDOM.nextLong();
         // Set variant to IETF (0b10)
         long lsb = (randB & 0x3FFFFFFFFFFFFFFFL) | 0x8000000000000000L;
 
