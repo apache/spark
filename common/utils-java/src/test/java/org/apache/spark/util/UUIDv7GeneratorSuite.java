@@ -73,18 +73,17 @@ class UUIDv7GeneratorSuite {
         }
 
         for (int i = 1; i < timestamps.size(); i++) {
-            assertTrue(timestamps.get(i) >= timestamps.get(i - 1),
-                "Timestamps should be monotonically non-decreasing");
+            assertTrue(timestamps.get(i) >= timestamps.get(i - 1));
         }
     }
 
     @Test
     void testTimestampAccuracy() {
-        long now = Instant.now().toEpochMilli();
+        long before = System.currentTimeMillis();
         UUID uuid = UUIDv7Generator.generate();
+        long after = System.currentTimeMillis();
         long uuidTs = extractTimestamp(uuid);
 
-        // Note: timestamp may be ahead of the wall clock due to monotonicity guarantee
-        assertTrue(uuidTs >= now - 10, "Timestamp should be close to current time");
+        assertTrue(uuidTs >= before && uuidTs <= after);
     }
 }

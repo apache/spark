@@ -18,7 +18,6 @@ package org.apache.spark.util;
 
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Generator for UUIDv7 as defined in RFC 9562.
@@ -26,34 +25,28 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * UUIDv7 is a time-ordered UUID that embeds a Unix timestamp in milliseconds.
  *
- * The generate() method guarantees monotonicity by tracking the last used timestamp
- * and increments if necessary when the clock hasn't advanced.
+ * Monotonicity is best-effort but not strictly guaranteed by this implementation,
+ * in rare cases such as concurrent generation within the same millisecond or clock adjustments.
+ * This trade-off is intentional to avoid throughput degradation or thread contention.
  */
 public final class UUIDv7Generator {
-
-    /**
-     * Tracks the last timestamp used to ensure monotonicity.
-     * If the system clock returns the same or earlier time, we increment from this value.
-     */
-    private static final AtomicLong lastTimestamp = new AtomicLong(0);
 
     private UUIDv7Generator() {
         // Prevent instantiation, as this is a util class.
     }
 
     /**
-     * Generate a UUIDv7.
+     * Generate a UUIDv7 from the current time.
      *
-     * This method ensures each generated UUID has a timestamp greater than or equal to
-     * the previous one, incrementing when the clock hasn't advanced from lastTimestamp.
+     * The generated UUID embeds a 48-bit Unix timestamp (milliseconds since epoch),
+     * followed by random bits for uniqueness. Monotonicity is best-effort: UUIDs
+     * generated across different milliseconds will be ordered, but UUIDs within
+     * the same millisecond may have random ordering.
      *
      * @return a new UUIDv7
      */
     public static UUID generate() {
-        long timestamp = lastTimestamp.updateAndGet(last -> {
-            long now = System.currentTimeMillis();
-            return now > last ? now : last + 1;
-        });
+        long timestamp = System.currentTimeMillis();
 
         // 48-bit timestamp | 4-bit version (0111) | 12-bit rand_a
         long msb = (timestamp << 16) | (0x7L << 12) | (ThreadLocalRandom.current().nextInt() & 0xFFF);
