@@ -23,10 +23,12 @@ import org.apache.spark.sql.catalyst.util.CollationFactory
 /**
  * A data type representing fixed-length character strings with a specified length.
  *
- * @param length The fixed length of the char string (must be non-negative)
- * @param collation Optional collation ID for string comparison and sorting. If None,
- *   uses UTF8_BINARY_COLLATION_ID. The reason for using an `Option` is to be able to see in
- *   the analyzer whether the collation was explicitly specified or not.
+ * @param length
+ *   The fixed length of the char string (must be non-negative)
+ * @param collation
+ *   Optional collation ID for string comparison and sorting. If None, uses
+ *   UTF8_BINARY_COLLATION_ID. The reason for using an `Option` is to be able to see in the
+ *   analyzer whether the collation was explicitly specified or not.
  */
 @Experimental
 case class CharType private[sql] (length: Int, collation: Option[Int])

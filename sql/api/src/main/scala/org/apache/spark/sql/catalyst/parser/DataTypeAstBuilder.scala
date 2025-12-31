@@ -300,39 +300,38 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
             case Seq(_) => StringType
             case Seq(_, ctx: CollateClauseContext) =>
               val collationNameParts = visitCollateClause(ctx).toArray
-              val collationId = CollationFactory.fullyQualifiedNameToId(
-                visitCollateClause(ctx).toArray
-              )
+              val collationId =
+                CollationFactory.fullyQualifiedNameToId(visitCollateClause(ctx).toArray)
               StringType(collationId)
           }
         case CHARACTER | CHAR =>
           (Option(currentCtx.length), Option(currentCtx.collateClause)) match {
             case (None, _) =>
               throw QueryParsingErrors.charVarcharTypeMissingLengthError(
-                currentCtx.start.getText, ctx)
+                currentCtx.start.getText,
+                ctx)
 
             case (Some(length), None) =>
               CharType(length.getText.toInt)
 
             case (Some(length), Some(collate)) =>
-              val collationId = CollationFactory.fullyQualifiedNameToId(
-                visitCollateClause(collate).toArray
-              )
+              val collationId =
+                CollationFactory.fullyQualifiedNameToId(visitCollateClause(collate).toArray)
               CharType(length.getText.toInt, collationId)
           }
         case VARCHAR =>
           (Option(currentCtx.length), Option(currentCtx.collateClause)) match {
             case (None, _) =>
               throw QueryParsingErrors.charVarcharTypeMissingLengthError(
-                currentCtx.start.getText, ctx)
+                currentCtx.start.getText,
+                ctx)
 
             case (Some(length), None) =>
               VarcharType(length.getText.toInt)
 
             case (Some(length), Some(collate)) =>
-              val collationId = CollationFactory.fullyQualifiedNameToId(
-                visitCollateClause(collate).toArray
-              )
+              val collationId =
+                CollationFactory.fullyQualifiedNameToId(visitCollateClause(collate).toArray)
               VarcharType(length.getText.toInt, collationId)
           }
         case DECIMAL | DEC | NUMERIC =>
