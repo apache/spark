@@ -4021,36 +4021,6 @@
     ],
     "sqlState" : "07501"
   },
-  "SELECT_INTO_NOT_IN_SQL_SCRIPT" : {
-    "message" : [
-      "SELECT INTO is only allowed in SQL scripts. Use SELECT without INTO, or execute this query within a BEGIN...END block."
-    ],
-    "sqlState" : "0A000"
-  },
-  "SELECT_INTO_FEATURE_DISABLED" : {
-    "message" : [
-      "SELECT INTO feature is disabled. Enable it by setting spark.sql.scripting.selectIntoEnabled=true."
-    ],
-    "sqlState" : "0A000"
-  },
-  "SELECT_INTO_ONLY_AT_TOP_LEVEL" : {
-    "message" : [
-      "SELECT INTO is only allowed in top-level SELECT statements. It cannot be used in subqueries, nested query expressions, pipe operator context, or as part of set operations (UNION, INTERSECT, EXCEPT, SETMINUS)."
-    ],
-    "sqlState" : "42601"
-  },
-  "SELECT_INTO_VARIABLE_COUNT_MISMATCH" : {
-    "message" : [
-      "The number of target variables in the INTO clause (<numVars>) does not match the number of columns in the SELECT statement (<numCols>)."
-    ],
-    "sqlState" : "21000"
-  },
-  "SELECT_INTO_STRUCT_FIELD_MISMATCH" : {
-    "message" : [
-      "When using SELECT INTO with a single struct variable, the number of columns (<numCols>) must match the number of struct fields (<numFields>). Struct type: <structType>."
-    ],
-    "sqlState" : "21000"
-  },
   "INVALID_STATEMENT_OR_CLAUSE" : {
     "message" : [
       "The statement or clause: <operation> is not valid."
@@ -5403,6 +5373,36 @@
       "The seed expression <seedExpr> of the expression <exprWithSeed> must be foldable."
     ],
     "sqlState" : "42K08"
+  },
+  "SELECT_INTO_FEATURE_DISABLED" : {
+    "message" : [
+      "SELECT INTO feature is disabled. Enable it by setting spark.sql.scripting.selectIntoEnabled=true."
+    ],
+    "sqlState" : "0A000"
+  },
+  "SELECT_INTO_NOT_IN_SQL_SCRIPT" : {
+    "message" : [
+      "SELECT INTO is only allowed in SQL scripts. Use SELECT without INTO, or execute this query within a BEGIN...END block."
+    ],
+    "sqlState" : "0A000"
+  },
+  "SELECT_INTO_ONLY_AT_TOP_LEVEL" : {
+    "message" : [
+      "SELECT INTO is only allowed in top-level SELECT statements. It cannot be used in subqueries, nested query expressions, pipe operator context, or as part of set operations (UNION, INTERSECT, EXCEPT, SETMINUS)."
+    ],
+    "sqlState" : "42601"
+  },
+  "SELECT_INTO_STRUCT_FIELD_MISMATCH" : {
+    "message" : [
+      "When using SELECT INTO with a single struct variable, the number of columns (<numCols>) must match the number of struct fields (<numFields>). Struct type: <structType>."
+    ],
+    "sqlState" : "21000"
+  },
+  "SELECT_INTO_VARIABLE_COUNT_MISMATCH" : {
+    "message" : [
+      "The number of target variables in the INTO clause (<numVars>) does not match the number of columns in the SELECT statement (<numCols>)."
+    ],
+    "sqlState" : "21000"
   },
   "SHOW_COLUMNS_WITH_CONFLICT_NAMESPACE" : {
     "message" : [
