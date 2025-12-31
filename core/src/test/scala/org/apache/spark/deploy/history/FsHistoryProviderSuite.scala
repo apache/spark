@@ -121,7 +121,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     writeFile(newAppComplete, None,
       SparkListenerApplicationStart(newAppComplete.getName(), Some("new-app-complete"), 1L, "test",
         None),
-      SparkListenerApplicationEnd(5L)
+      SparkListenerApplicationEnd(5L, Some(1))
       )
 
     // Write a new-style application log.
@@ -153,17 +153,18 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
           end: Long,
           lastMod: Long,
           user: String,
-          completed: Boolean): ApplicationInfo = {
+          completed: Boolean,
+          exitCode: Option[Int] = None): ApplicationInfo = {
 
         val duration = if (end > 0) end - start else 0
         new ApplicationInfo(id, name, None, None, None, None,
           List(ApplicationAttemptInfo(None, new Date(start),
-            new Date(end), new Date(lastMod), duration, user, completed, None, SPARK_VERSION)))
+            new Date(end), new Date(lastMod), duration, user, completed, exitCode, SPARK_VERSION)))
       }
 
       // For completed files, lastUpdated would be lastModified time.
       list(0) should be (makeAppInfo("new-app-complete", newAppComplete.getName(), 1L, 5L,
-        newAppComplete.lastModified(), "test", true))
+        newAppComplete.lastModified(), "test", true, Some(1)))
       list(1) should be (makeAppInfo("new-complete-lzf", newAppCompressedComplete.getName(),
         1L, 4L, newAppCompressedComplete.lastModified(), "test", true))
 
