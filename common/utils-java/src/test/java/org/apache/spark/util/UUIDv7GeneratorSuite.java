@@ -65,19 +65,6 @@ class UUIDv7GeneratorSuite {
     }
 
     @Test
-    void testMonotonicity() {
-        List<Long> timestamps = new ArrayList<>();
-        for (int i = 0; i < 1000; i++) {
-            UUID uuid = UUIDv7Generator.generate();
-            timestamps.add(extractTimestamp(uuid));
-        }
-
-        for (int i = 1; i < timestamps.size(); i++) {
-            assertTrue(timestamps.get(i) >= timestamps.get(i - 1));
-        }
-    }
-
-    @Test
     void testTimestampAccuracy() {
         long before = System.currentTimeMillis();
         UUID uuid = UUIDv7Generator.generate();

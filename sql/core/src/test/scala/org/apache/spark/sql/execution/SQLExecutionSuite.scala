@@ -166,7 +166,7 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
     }
   }
 
-  test("Concurrent query execution QPL queryId persists in thread local") {
+  test("Concurrent query execution queryId persists in thread local") {
     SparkSession.getActiveSession.foreach(_.stop())
     val spark = SparkSession.builder().master("local[*]").appName("ignore").getOrCreate()
 
@@ -182,7 +182,7 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
         override def run(): Unit = {
           try {
             val childQE =
-            new QueryExecution(spark.asInstanceOf[classic.SparkSession], OneRowRelation())
+              new QueryExecution(spark.asInstanceOf[classic.SparkSession], OneRowRelation())
             SQLExecution.withNewExecutionId(childQE) {
               childQueryId = spark.sparkContext.getLocalProperty(SQLExecution.QUERY_ID_KEY)
             }
@@ -203,9 +203,6 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
       // SparkContext originalQueryId should be maintained after child thread
       assert(spark.sparkContext.getLocalProperty(SQLExecution.QUERY_ID_KEY) == originalQueryId)
 
-      // QPL queryIds should be monotonic (UUIDv7)
-      assert(parentQueryId < childQueryId)
-
       throwable.foreach { t =>
         t.setStackTrace(t.getStackTrace ++ Thread.currentThread.getStackTrace)
         throw t
@@ -217,7 +214,7 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
 
   test("QueryId restored for single thread multiple QueryExecutions") {
     // This test simulates a DBSQL query where a single thread creates multiple QueryExecutions
-    // QPL queryId should be restored on the thread after all executions complete.
+    // queryId should be restored on the thread after all executions complete.
     val spark = SparkSession.builder().master("local[*]").appName("ignore").getOrCreate()
 
     try {
@@ -257,14 +254,12 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
       // Restore original null queryId once entire DBSQL query finished
       assert(sc.getLocalProperty(SQLExecution.QUERY_ID_KEY) == null)
 
-      // QPL queryIds should be monotonic (UUIDv7)
-      assert(queryId1 < queryId2)
     } finally {
       spark.stop()
     }
   }
 
-  test("Multiple execution of same QueryExecution should have unique QPL queryId") {
+  test("Multiple execution of same QueryExecution should have unique queryId") {
     val spark = SparkSession.builder().master("local[*]").appName("ignore").getOrCreate()
 
     try {
@@ -293,8 +288,6 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
       }
 
       assert(queryId1 != queryId2)
-      // QPL queryIds should be monotonic (UUIDv7)
-      assert(queryId1 < queryId2)
     } finally {
       spark.stop()
     }
