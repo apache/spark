@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.io.{File, FilenameFilter}
 import java.nio.file.{Files, Paths}
 import java.time.{Duration, LocalDateTime, LocalTime, Period}
+import java.util
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.HashSet
@@ -41,6 +42,8 @@ import org.apache.spark.sql.connector.catalog.CatalogPlugin
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.InMemoryCatalog
+import org.apache.spark.sql.connector.catalog.TableWritePrivilege
+import org.apache.spark.sql.connector.catalog.TruncatableTable
 import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, RDDScanExec, SparkPlan, SparkPlanInfo}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEPropagateEmptyRelation}
 import org.apache.spark.sql.execution.columnar._
@@ -68,6 +71,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.testcat", classOf[InMemoryCatalog].getName)
+    .set("spark.sql.catalog.testcat.copyOnLoad", "true")
 
   setupTestData()
 
@@ -2560,6 +2564,103 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       condition = "TABLE_OR_VIEW_NOT_FOUND",
       parameters = Map("relationName" -> "`non_existent`"),
       context = ExpectedContext("non_existent", 14, 25))
+  }
+
+  test("SPARK-54022: caching table via CACHE TABLE should pin table state") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, value INT, category STRING) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 10, 'A'), (2, 20, 'B'), (3, 30, 'A')")
+
+      // cache table
+      sql(s"CACHE TABLE $t")
+
+      // verify caching works as expected
+      assertCached(spark.table(t))
+      checkAnswer(spark.table(t), Seq(Row(1, 10, "A"), Row(2, 20, "B"), Row(3, 30, "A")))
+
+      // modify table directly to mimic external changes
+      val tableCatalog = catalog("testcat").asTableCatalog
+      val table = tableCatalog.loadTable(ident, util.Set.of(TableWritePrivilege.DELETE))
+      table.asInstanceOf[TruncatableTable].truncateTable()
+
+      // verify this has no impact on cached state
+      assertCached(spark.table(t))
+      checkAnswer(spark.table(t), Seq(Row(1, 10, "A"), Row(2, 20, "B"), Row(3, 30, "A")))
+
+      // add more data within session that should invalidate cache
+      sql(s"INSERT INTO $t VALUES (10, 100, 'x')")
+
+      // table should be re-cached correctly
+      assertCached(spark.table(t))
+      checkAnswer(spark.table(t), Seq(Row(10, 100, "x")))
+    }
+  }
+
+  test("SPARK-46741: Cache Table with CTE should work") {
+    withTempView("t1", "t2") {
+      sql(
+        """
+          |CREATE TEMPORARY VIEW t1
+          |AS
+          |SELECT * FROM VALUES (0, 0), (1, 1), (2, 2) AS t(c1, c2)
+          |""".stripMargin)
+      sql(
+        """
+          |CREATE TEMPORARY VIEW t2 AS
+          |WITH v as (
+          |  SELECT c1 + c1 c3 FROM t1
+          |)
+          |SELECT SUM(c3) s FROM v
+          |""".stripMargin)
+      sql(
+        """
+          |CACHE TABLE cache_nested_cte_table
+          |WITH
+          |v AS (
+          |  SELECT c1 * c2 c3 from t1
+          |)
+          |SELECT SUM(c3) FROM v
+          |EXCEPT
+          |SELECT s FROM t2
+          |""".stripMargin)
+
+      val df = sql("SELECT * FROM cache_nested_cte_table")
+
+      val inMemoryTableScan = collect(df.queryExecution.executedPlan) {
+        case i: InMemoryTableScanExec => i
+      }
+      assert(inMemoryTableScan.size == 1)
+      checkAnswer(df, Row(5) :: Nil)
+
+      sql(
+        """
+          |CACHE TABLE cache_subquery_cte_table
+          |WITH v AS (
+          |  SELECT c1 * c2 c3 from t1
+          |)
+          |SELECT *
+          |FROM v
+          |WHERE EXISTS (
+          |  WITH cte AS (SELECT 1 AS id)
+          |  SELECT 1
+          |  FROM cte
+          |  WHERE cte.id = v.c3
+          |)
+          |""".stripMargin)
+
+      val cteInSubquery = sql(
+        """
+          |SELECT * FROM cache_subquery_cte_table
+          |""".stripMargin)
+
+      val subqueryInMemoryTableScan = collect(cteInSubquery.queryExecution.executedPlan) {
+        case i: InMemoryTableScanExec => i
+      }
+      assert(subqueryInMemoryTableScan.size == 1)
+      checkAnswer(cteInSubquery, Row(1) :: Nil)
+    }
   }
 
   private def cacheManager = spark.sharedState.cacheManager

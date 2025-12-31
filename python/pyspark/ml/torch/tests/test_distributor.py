@@ -69,7 +69,7 @@ def create_training_function(mnist_dir_path: str) -> Callable:
 
     class Net(nn.Module):
         def __init__(self) -> None:
-            super(Net, self).__init__()
+            super().__init__()
             self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
             self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
             self.conv2_drop = nn.Dropout2d()
@@ -305,6 +305,23 @@ class TorchDistributorBaselineUnitTestsMixin:
             expected_distributed_mode_output,
         )
         self.delete_env_vars(input_env_vars)
+
+    @patch.dict(
+        os.environ,
+        {
+            "CUDA_VISIBLE_DEVICES": "0,1,2,3",
+            "MASTER_ADDR": "11.22.33.44",
+            "MASTER_PORT": "6677",
+            "RANK": "1",
+        },
+    )
+    def test_multi_gpu_node_get_torchrun_args(self):
+        torchrun_args, processes_per_node = TorchDistributor._get_torchrun_args(False, 8)
+        self.assertEqual(
+            torchrun_args,
+            ["--nnodes=2", "--node_rank=1", "--rdzv_endpoint=11.22.33.44:6677", "--rdzv_id=0"],
+        )
+        self.assertEqual(processes_per_node, 4)
 
 
 @unittest.skipIf(not have_torch, torch_requirement_message)

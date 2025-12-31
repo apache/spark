@@ -632,6 +632,9 @@ class StandaloneDynamicAllocationSuite
         Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
       backend.driverEndpoint.askSync[Boolean](message)
       backend.driverEndpoint.send(LaunchedExecutor(id))
+      eventually(timeout(10.seconds), interval(100.millis)) {
+        assert(backend.getExecutorAvailableCpus(id).exists(_ > 0))
+      }
     }
   }
 

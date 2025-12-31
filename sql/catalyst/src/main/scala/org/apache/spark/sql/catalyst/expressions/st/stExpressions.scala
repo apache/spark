@@ -17,12 +17,30 @@
 
 package org.apache.spark.sql.catalyst.expressions.st
 
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.trees._
 import org.apache.spark.sql.catalyst.util.{Geography, Geometry, STUtils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
+/**
+ * ST expressions are behind a feature flag while the geospatial module is under development.
+ */
+
+sealed trait GeospatialInputTypes extends ImplicitCastInputTypes {
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (!SQLConf.get.geospatialEnabled) {
+      throw new AnalysisException(
+        errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",
+        messageParameters = Map.empty
+      )
+    }
+    super.checkInputDataTypes()
+  }
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines expressions for geospatial operations.
@@ -61,7 +79,7 @@ private[sql] object ExpressionDefaults {
 )
 case class ST_AsBinary(geo: Expression)
     extends RuntimeReplaceable
-    with ImplicitCastInputTypes
+    with GeospatialInputTypes
     with UnaryLike[Expression] {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(
@@ -109,7 +127,7 @@ case class ST_AsBinary(geo: Expression)
 )
 case class ST_GeogFromWKB(wkb: Expression)
     extends RuntimeReplaceable
-    with ImplicitCastInputTypes
+    with GeospatialInputTypes
     with UnaryLike[Expression] {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
@@ -153,7 +171,7 @@ case class ST_GeogFromWKB(wkb: Expression)
 )
 case class ST_GeomFromWKB(wkb: Expression)
     extends RuntimeReplaceable
-    with ImplicitCastInputTypes
+    with GeospatialInputTypes
     with UnaryLike[Expression] {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
@@ -201,7 +219,7 @@ case class ST_GeomFromWKB(wkb: Expression)
 )
 case class ST_Srid(geo: Expression)
     extends RuntimeReplaceable
-    with ImplicitCastInputTypes
+    with GeospatialInputTypes
     with UnaryLike[Expression] {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(
@@ -249,7 +267,7 @@ case class ST_Srid(geo: Expression)
 )
 case class ST_SetSrid(geo: Expression, srid: Expression)
     extends RuntimeReplaceable
-    with ImplicitCastInputTypes
+    with GeospatialInputTypes
     with BinaryLike[Expression] {
 
   override def inputTypes: Seq[AbstractDataType] =

@@ -461,17 +461,19 @@ private[spark] object UIUtils extends Logging {
       if (skipped > 0) s" ($skipped skipped)" else ""
     } + killTaskReasonText
 
+    // scalastyle:off line.size.limit
     <div class="progress">
-      <span style="text-align:center; position:absolute; width:100%;" title={progressTitle}>
-        {completed}/{total}
-        { if (failed == 0 && skipped == 0 && started > 0) s"($started running)" }
-        { if (failed > 0) s"($failed failed)" }
-        { if (skipped > 0) s"($skipped skipped)" }
-        { killTaskReasonText }
+      <span style="display: flex; align-items: center; justify-content: center; position:absolute; width:100%; height:100%; text-align:center;" title={progressTitle}>
+        { s"$completed/$total" +
+            (if (failed == 0 && skipped == 0 && started > 0) s" ($started running)" else "") +
+            (if (failed > 0) s" ($failed failed)" else "") +
+            (if (skipped > 0) s" ($skipped skipped)" else "") +
+            killTaskReasonText }
       </span>
       <div class="progress-bar progress-completed" style={completeWidth}></div>
       <div class="progress-bar progress-started" style={startWidth}></div>
     </div>
+    // scalastyle:on line.size.limit
   }
 
   /** Return a "DAG visualization" DOM element that expands into a visualization for a stage. */

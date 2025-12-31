@@ -81,7 +81,7 @@ class AsyncOffsetSeqLog(
    *         the async write of the batch is completed.  Future may also be completed exceptionally
    *         to indicate some write error.
    */
-  def addAsync(batchId: Long, metadata: OffsetSeq): CompletableFuture[(Long, Boolean)] = {
+  def addAsync(batchId: Long, metadata: OffsetSeqBase): CompletableFuture[(Long, Boolean)] = {
     require(metadata != null, "'null' metadata cannot written to a metadata log")
 
     def issueAsyncWrite(batchId: Long): CompletableFuture[Long] = {

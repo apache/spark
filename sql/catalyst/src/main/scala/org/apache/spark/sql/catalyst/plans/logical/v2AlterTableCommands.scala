@@ -48,7 +48,11 @@ trait AlterTableCommand extends UnaryCommand {
  */
 case class CommentOnTable(table: LogicalPlan, comment: String) extends AlterTableCommand {
   override def changes: Seq[TableChange] = {
-    Seq(TableChange.setProperty(TableCatalog.PROP_COMMENT, comment))
+    if (comment == null) {
+      Seq(TableChange.removeProperty(TableCatalog.PROP_COMMENT))
+    } else {
+      Seq(TableChange.setProperty(TableCatalog.PROP_COMMENT, comment))
+    }
   }
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(table = newChild)
@@ -108,6 +112,7 @@ case class AddColumns(
     columnsToAdd: Seq[QualifiedColType]) extends AlterTableCommand {
   columnsToAdd.foreach { c =>
     TypeUtils.failWithIntervalType(c.dataType)
+    TypeUtils.failUnsupportedDataType(c.dataType, conf)
   }
 
   override lazy val resolved: Boolean = table.resolved && columnsToAdd.forall(_.resolved)
@@ -140,6 +145,7 @@ case class ReplaceColumns(
     columnsToAdd: Seq[QualifiedColType]) extends AlterTableCommand {
   columnsToAdd.foreach { c =>
     TypeUtils.failWithIntervalType(c.dataType)
+    TypeUtils.failUnsupportedDataType(c.dataType, conf)
   }
 
   override lazy val resolved: Boolean = table.resolved && columnsToAdd.forall(_.resolved)

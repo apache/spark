@@ -254,7 +254,7 @@ class LDATest(SparkSessionTestCase):
 
 class FPGrowthTests(SparkSessionTestCase):
     def setUp(self):
-        super(FPGrowthTests, self).setUp()
+        super().setUp()
         self.data = self.spark.createDataFrame(
             [([1, 2],), ([1, 2],), ([1, 2, 3],), ([1, 3],)], ["items"]
         )

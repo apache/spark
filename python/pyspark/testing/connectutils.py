@@ -17,15 +17,17 @@
 import shutil
 import tempfile
 import os
+import sys
+import signal
+import faulthandler
 import functools
 import unittest
 import uuid
 import contextlib
+from typing import Callable, Optional
 
 from pyspark import Row, SparkConf
-from pyspark.util import is_remote_only
-from pyspark.testing.utils import PySparkErrorTestUtils
-from pyspark import Row, SparkConf
+from pyspark.loose_version import LooseVersion
 from pyspark.util import is_remote_only
 from pyspark.testing.utils import (
     have_pandas,
@@ -178,6 +180,9 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
 
     @classmethod
     def setUpClass(cls):
+        if os.environ.get("PYSPARK_TEST_TIMEOUT"):
+            faulthandler.register(signal.SIGTERM, file=sys.__stderr__, all_threads=True)
+
         # This environment variable is for interrupting hanging ML-handler and making the
         # tests fail fast.
         os.environ["SPARK_CONNECT_ML_HANDLER_INTERRUPTION_TIMEOUT_MINUTES"] = "5"
@@ -198,6 +203,9 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
 
     @classmethod
     def tearDownClass(cls):
+        if os.environ.get("PYSPARK_TEST_TIMEOUT"):
+            faulthandler.unregister(signal.SIGTERM)
+
         shutil.rmtree(cls.tempdir.name, ignore_errors=True)
         cls.spark.stop()
 
@@ -235,7 +243,7 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
 class ReusedMixedTestCase(ReusedConnectTestCase, SQLTestUtils):
     @classmethod
     def setUpClass(cls):
-        super(ReusedMixedTestCase, cls).setUpClass()
+        super().setUpClass()
         # Disable the shared namespace so pyspark.sql.functions, etc point the regular
         # PySpark libraries.
         os.environ["PYSPARK_NO_NAMESPACE_SHARE"] = "1"
@@ -251,7 +259,7 @@ class ReusedMixedTestCase(ReusedConnectTestCase, SQLTestUtils):
             cls.spark = cls.connect
             del os.environ["PYSPARK_NO_NAMESPACE_SHARE"]
         finally:
-            super(ReusedMixedTestCase, cls).tearDownClass()
+            super().tearDownClass()
 
     def compare_by_show(self, df1, df2, n: int = 20, truncate: int = 20):
         from pyspark.sql.classic.dataframe import DataFrame as SDF
@@ -306,3 +314,28 @@ class ReusedMixedTestCase(ReusedConnectTestCase, SQLTestUtils):
                 yield
 
         return _both_conf()
+
+
+def skip_if_server_version_is(
+    cond: Callable[[LooseVersion], bool], reason: Optional[str] = None
+) -> Callable:
+    def decorator(f: Callable) -> Callable:
+        @functools.wraps(f)
+        def wrapper(self, *args, **kwargs):
+            version = self.spark.version
+            if cond(LooseVersion(version)):
+                raise unittest.SkipTest(
+                    f"Skipping test {f.__name__} because server version is {version}"
+                    + (f" ({reason})" if reason else "")
+                )
+            return f(self, *args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
+def skip_if_server_version_is_greater_than_or_equal_to(
+    version: str, reason: Optional[str] = None
+) -> Callable:
+    return skip_if_server_version_is(lambda v: v >= LooseVersion(version), reason)

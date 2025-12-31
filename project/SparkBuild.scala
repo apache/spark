@@ -367,6 +367,8 @@ object SparkBuild extends PomBuild {
         "org.apache.spark.kafka010",
         "org.apache.spark.network",
         "org.apache.spark.sql.avro",
+        "org.apache.spark.sql.metricview",
+        "org.apache.spark.sql.pipelines",
         "org.apache.spark.sql.scripting",
         "org.apache.spark.types.variant",
         "org.apache.spark.ui.flamegraph",
@@ -646,8 +648,10 @@ object Core {
         "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
       )
     },
+    // Use Maven's output directory so sbt and Maven can share generated sources.
+    // Core uses protoc-jar-maven-plugin which outputs to target/generated-sources.
     (Compile / PB.targets) := Seq(
-      PB.gens.java -> (Compile / sourceManaged).value
+      PB.gens.java -> target.value / "generated-sources"
     )
   ) ++ {
     val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
@@ -732,19 +736,20 @@ object SparkConnectCommon {
   ) ++ {
     val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
     val connectPluginExecPath = sys.props.get("connect.plugin.executable.path")
+    // Use Maven's output directory so sbt and Maven can share generated sources
     if (sparkProtocExecPath.isDefined && connectPluginExecPath.isDefined) {
       Seq(
         (Compile / PB.targets) := Seq(
-          PB.gens.java -> (Compile / sourceManaged).value,
-          PB.gens.plugin(name = "grpc-java", path = connectPluginExecPath.get) -> (Compile / sourceManaged).value
+          PB.gens.java -> target.value / "generated-sources" / "protobuf" / "java",
+          PB.gens.plugin(name = "grpc-java", path = connectPluginExecPath.get) -> target.value / "generated-sources" / "protobuf" / "grpc-java"
         ),
         PB.protocExecutable := file(sparkProtocExecPath.get)
       )
     } else {
       Seq(
         (Compile / PB.targets) := Seq(
-          PB.gens.java -> (Compile / sourceManaged).value,
-          PB.gens.plugin("grpc-java") -> (Compile / sourceManaged).value
+          PB.gens.java -> target.value / "generated-sources" / "protobuf" / "java",
+          PB.gens.plugin("grpc-java") -> target.value / "generated-sources" / "protobuf" / "grpc-java"
         )
       )
     }
@@ -1212,6 +1217,7 @@ object ExcludedDependencies {
     libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") },
     excludeDependencies ++= Seq(
       ExclusionRule(organization = "ch.qos.logback"),
+      ExclusionRule("org.lz4", "lz4-java"),
       ExclusionRule("org.slf4j", "slf4j-simple"),
       ExclusionRule("javax.servlet", "javax.servlet-api"))
   )
@@ -1222,12 +1228,29 @@ object ExcludedDependencies {
  * client dependencies.
  */
 object ExcludeShims {
+  import bloop.integrations.sbt.BloopKeys
+
   val shimmedProjects = Set("spark-sql-api", "spark-connect-common", "spark-connect-client-jdbc", "spark-connect-client-jvm")
   val classPathFilter = TaskKey[Classpath => Classpath]("filter for classpath")
+
+  // Filter for bloopInternalClasspath which is Seq[(File, File)]
+  type BloopClasspath = Seq[(java.io.File, java.io.File)]
+  val bloopClasspathFilter = TaskKey[BloopClasspath => BloopClasspath]("filter for bloop classpath")
+
   lazy val settings = Seq(
     classPathFilter := {
       if (!shimmedProjects(moduleName.value)) {
         cp => cp.filterNot(_.data.name.contains("spark-connect-shims"))
+      } else {
+        identity _
+      }
+    },
+    bloopClasspathFilter := {
+      if (!shimmedProjects(moduleName.value)) {
+        // Note: bloop output directories use "connect-shims" (without "spark-" prefix)
+        cp => cp.filterNot { case (f1, f2) =>
+          f1.getPath.contains("connect-shims") || f2.getPath.contains("connect-shims")
+        }
       } else {
         identity _
       }
@@ -1244,6 +1267,13 @@ object ExcludeShims {
       classPathFilter.value((Test / internalDependencyClasspath).value),
     Test / internalDependencyAsJars :=
       classPathFilter.value((Test / internalDependencyAsJars).value),
+    // Filter bloop's internal classpath for correct IDE integration
+    Compile / BloopKeys.bloopInternalClasspath :=
+      bloopClasspathFilter.value((Compile / BloopKeys.bloopInternalClasspath).value),
+    Runtime / BloopKeys.bloopInternalClasspath :=
+      bloopClasspathFilter.value((Runtime / BloopKeys.bloopInternalClasspath).value),
+    Test / BloopKeys.bloopInternalClasspath :=
+      bloopClasspathFilter.value((Test / BloopKeys.bloopInternalClasspath).value),
   )
 }
 
@@ -1283,7 +1313,9 @@ object SqlApi {
     (Antlr4 / antlr4PackageName) := Some("org.apache.spark.sql.catalyst.parser"),
     (Antlr4 / antlr4GenListener) := true,
     (Antlr4 / antlr4GenVisitor) := true,
-    (Antlr4 / antlr4TreatWarningsAsErrors) := true
+    (Antlr4 / antlr4TreatWarningsAsErrors) := true,
+    // Use Maven's output directory so sbt and Maven can share generated sources
+    (Antlr4 / javaSource) := target.value / "generated-sources" / "antlr4"
   )
 }
 
@@ -1300,8 +1332,10 @@ object SQL {
         "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
       )
     },
+    // Use Maven's output directory so sbt and Maven can share generated sources.
+    // sql/core uses protoc-jar-maven-plugin which outputs to target/generated-sources.
     (Compile / PB.targets) := Seq(
-      PB.gens.java -> (Compile / sourceManaged).value
+      PB.gens.java -> target.value / "generated-sources"
     )
   ) ++ {
     val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
@@ -1531,6 +1565,8 @@ object Unidoc {
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/classic/")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/execution")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/internal")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/metricview")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/pipelines")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/scripting")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/ml")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/hive")))

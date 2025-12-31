@@ -39,7 +39,7 @@ private[jdbc] object JdbcTypeUtils {
     case DateType => Types.DATE
     case TimestampType => Types.TIMESTAMP
     case TimestampNTZType => Types.TIMESTAMP
-    case BinaryType => Types.BINARY
+    case BinaryType => Types.VARBINARY
     case _: TimeType => Types.TIME
     case other =>
       throw new SQLFeatureNotSupportedException(s"DataType $other is not supported yet.")
@@ -83,7 +83,7 @@ private[jdbc] object JdbcTypeUtils {
     case LongType => 19
     case FloatType => 7
     case DoubleType => 15
-    case StringType => 255
+    case StringType => Int.MaxValue
     case DecimalType.Fixed(p, _) => p
     case DateType => 10
     case TimestampType => 29

@@ -21,9 +21,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.util.TypeUtils.{toSQLConf, toSQLId}
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.DataType
 
 /**
  * Resolve the lambda variables exposed by a higher order functions.
@@ -50,53 +47,6 @@ object ResolveLambdaVariables extends Rule[LogicalPlan] {
   }
 
   /**
-   * Create a bound lambda function by binding the arguments of a lambda function to the given
-   * partial arguments (dataType and nullability only). If the expression happens to be an already
-   * bound lambda function then we assume it has been bound to the correct arguments and do
-   * nothing. This function will produce a lambda function with hidden arguments when it is passed
-   * an arbitrary expression.
-   */
-  private def createLambda(
-      e: Expression,
-      argInfo: Seq[(DataType, Boolean)]): LambdaFunction = e match {
-    case f: LambdaFunction if f.bound => f
-
-    case LambdaFunction(function, names, _) =>
-      if (names.size != argInfo.size) {
-        e.failAnalysis(
-          errorClass = "INVALID_LAMBDA_FUNCTION_CALL.NUM_ARGS_MISMATCH",
-          messageParameters = Map(
-            "expectedNumArgs" -> names.size.toString,
-            "actualNumArgs" -> argInfo.size.toString))
-      }
-
-      if (names.map(a => conf.canonicalize(a.name)).distinct.size < names.size) {
-        e.failAnalysis(
-          errorClass = "INVALID_LAMBDA_FUNCTION_CALL.DUPLICATE_ARG_NAMES",
-          messageParameters = Map(
-            "args" -> names.map(a => conf.canonicalize(a.name)).map(toSQLId(_)).mkString(", "),
-            "caseSensitiveConfig" -> toSQLConf(SQLConf.CASE_SENSITIVE.key)))
-      }
-
-      val arguments = argInfo.zip(names).map {
-        case ((dataType, nullable), ne) =>
-          NamedLambdaVariable(ne.name, dataType, nullable)
-      }
-      LambdaFunction(function, arguments)
-
-    case _ =>
-      // This expression does not consume any of the lambda's arguments (it is independent). We do
-      // create a lambda function with default parameters because this is expected by the higher
-      // order function. Note that we hide the lambda variables produced by this function in order
-      // to prevent accidental naming collisions.
-      val arguments = argInfo.zipWithIndex.map {
-        case ((dataType, nullable), i) =>
-          NamedLambdaVariable(s"col$i", dataType, nullable)
-      }
-      LambdaFunction(e, arguments, hidden = true)
-  }
-
-  /**
    * Resolve lambda variables in the expression subtree, using the passed lambda variable registry.
    */
   private def resolve(e: Expression, parentLambdaMap: LambdaVariableMap): Expression = e match {
@@ -104,7 +54,7 @@ object ResolveLambdaVariables extends Rule[LogicalPlan] {
 
     case h: HigherOrderFunction if h.argumentsResolved && h.checkArgumentDataTypes().isSuccess =>
       SubqueryExpressionInLambdaOrHigherOrderFunctionValidator(e)
-      h.bind(createLambda).mapChildren(resolve(_, parentLambdaMap))
+      h.bind(LambdaBinder(_, _)).mapChildren(resolve(_, parentLambdaMap))
 
     case l: LambdaFunction if !l.bound =>
       SubqueryExpressionInLambdaOrHigherOrderFunctionValidator(e)

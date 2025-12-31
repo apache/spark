@@ -1930,7 +1930,7 @@ class CreateView(LogicalPlan):
 
 class WriteOperation(LogicalPlan):
     def __init__(self, child: "LogicalPlan") -> None:
-        super(WriteOperation, self).__init__(child)
+        super().__init__(child)
         self.source: Optional[str] = None
         self.path: Optional[str] = None
         self.table_name: Optional[str] = None
@@ -2037,7 +2037,7 @@ class WriteOperation(LogicalPlan):
 
 class WriteOperationV2(LogicalPlan):
     def __init__(self, child: "LogicalPlan", table_name: str) -> None:
-        super(WriteOperationV2, self).__init__(child)
+        super().__init__(child)
         self.table_name: Optional[str] = table_name
         self.provider: Optional[str] = None
         self.partitioning_columns: List[Column] = []
@@ -2101,7 +2101,7 @@ class WriteOperationV2(LogicalPlan):
 
 class WriteStreamOperation(LogicalPlan):
     def __init__(self, child: "LogicalPlan") -> None:
-        super(WriteStreamOperation, self).__init__(child)
+        super().__init__(child)
         self.write_op = proto.WriteStreamOperationStart()
 
     def command(self, session: "SparkConnectClient") -> proto.Command:

@@ -217,10 +217,10 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
 
   test("desc table constraints") {
     withNamespaceAndTable("ns", "pk_table", nonPartitionCatalog) { tbl =>
-      withTable("fk_table") {
+      withNamespaceAndTable("ns", "fk_table", nonPartitionCatalog) { fkTable =>
         sql(
           s"""
-             |CREATE TABLE fk_table (id INT PRIMARY KEY) USING parquet
+             |CREATE TABLE $fkTable (id INT PRIMARY KEY) $defaultUsing
         """.stripMargin)
         sql(
           s"""
@@ -230,7 +230,7 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
              |  b STRING,
              |  c STRING,
              |  PRIMARY KEY (id),
-             |  CONSTRAINT fk_a FOREIGN KEY (a) REFERENCES fk_table(id) RELY,
+             |  CONSTRAINT fk_a FOREIGN KEY (a) REFERENCES $fkTable(id) RELY,
              |  CONSTRAINT uk_b UNIQUE (b),
              |  CONSTRAINT uk_a_c UNIQUE (a, c),
              |  CONSTRAINT c1 CHECK (c IS NOT NULL),
@@ -243,7 +243,7 @@ class DescribeTableSuite extends command.DescribeTableSuiteBase
         var expectedConstraintsDdl = Array(
           "# Constraints,,",
           "pk_table_pk,PRIMARY KEY (id) NOT ENFORCED,",
-          "fk_a,FOREIGN KEY (a) REFERENCES fk_table (id) NOT ENFORCED RELY,",
+          s"fk_a,FOREIGN KEY (a) REFERENCES $fkTable (id) NOT ENFORCED RELY,",
           "uk_b,UNIQUE (b) NOT ENFORCED,",
           "uk_a_c,UNIQUE (a, c) NOT ENFORCED,",
           "c1,CHECK (c IS NOT NULL) ENFORCED,",
