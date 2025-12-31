@@ -972,11 +972,11 @@ VALUES(IDENTIFIER('a.b.c.d')())
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
-  "sqlState" : "42601",
+  "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
+  "sqlState" : "42K05",
   "messageParameters" : {
-    "identifier" : "`a`.`b`.`c`.`d`",
-    "limit" : "2"
+    "namespace" : "`a`.`b`.`c`",
+    "sessionCatalog" : "spark_catalog"
   },
   "queryContext" : [ {
     "objectType" : "",
