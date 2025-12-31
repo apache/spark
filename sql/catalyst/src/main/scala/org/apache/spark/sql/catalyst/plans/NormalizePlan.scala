@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.catalyst.plans
 
-import java.util.HashMap
-
 import org.apache.spark.sql.catalyst.analysis.NormalizeableRelation
 import org.apache.spark.sql.catalyst.analysis.resolver.ResolverTag
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.normalizer.NormalizeCTEIds
 import org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions
 import org.apache.spark.sql.catalyst.plans.logical._
 
@@ -31,7 +30,8 @@ import org.apache.spark.sql.catalyst.plans.logical._
  */
 object NormalizePlan extends PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = {
-    val withNormalizedExpressions = normalizeExpressions(plan)
+    val withNormalizedCTEIds = NormalizeCTEIds.apply(plan)
+    val withNormalizedExpressions = normalizeExpressions(withNormalizedCTEIds)
     val withNormalizedExprIds = normalizeExprIds(withNormalizedExpressions)
     normalizePlan(withNormalizedExprIds)
   }
@@ -130,7 +130,6 @@ object NormalizePlan extends PredicateHelper {
    * - Normalizes inner [[Aggregate]] nodes by sorting aggregate expressions lists alphabetically.
    */
   def normalizePlan(plan: LogicalPlan): LogicalPlan = {
-    val cteIdNormalizer = new CteIdNormalizer
     plan.transformUpWithSubqueries {
       case Filter(condition: Expression, child: LogicalPlan) =>
         Filter(
@@ -203,16 +202,8 @@ object NormalizePlan extends PredicateHelper {
         localRelation.copy(data = localRelation.data.map { row =>
           unsafeProjection(row)
         })
-      case cteRelationDef: CTERelationDef =>
-        cteIdNormalizer.normalizeDef(cteRelationDef)
       case unionLoop: UnionLoop =>
-        cteIdNormalizer.normalizeUnionLoop(
-          unionLoop.copy(outputAttrIds = Seq.fill(unionLoop.outputAttrIds.size)(ExprId(0)))
-        )
-      case cteRelationRef: CTERelationRef =>
-        cteIdNormalizer.normalizeRef(cteRelationRef)
-      case unionLoopRef: UnionLoopRef =>
-        cteIdNormalizer.normalizeUnionLoopRef(unionLoopRef)
+        unionLoop.copy(outputAttrIds = Seq.fill(unionLoop.outputAttrIds.size)(ExprId(0)))
       case normalizeableRelation: NormalizeableRelation =>
         normalizeableRelation.normalize()
     }
@@ -241,51 +232,5 @@ object NormalizePlan extends PredicateHelper {
 
   private def normalizeAggregateListOrder(aggregate: Aggregate): Aggregate = {
     aggregate.copy(aggregateExpressions = aggregate.aggregateExpressions.sortBy(_.name))
-  }
-}
-
-/**
- * Helper class used for normalization of CTE ids in the plan.
- */
-class CteIdNormalizer {
-  private var cteIdCounter: Long = 0
-  private val oldToNewIdMapping = new HashMap[Long, Long]
-
-  def normalizeDef(cteRelationDef: CTERelationDef): CTERelationDef = {
-    try {
-      if (oldToNewIdMapping.containsKey(cteRelationDef)) {
-        cteRelationDef.copy(id = oldToNewIdMapping.get(cteRelationDef.id))
-      } else {
-        oldToNewIdMapping.put(cteRelationDef.id, cteIdCounter)
-        cteRelationDef.copy(id = cteIdCounter)
-      }
-    } finally {
-      cteIdCounter += 1
-    }
-  }
-
-  def normalizeRef(cteRelationRef: CTERelationRef): CTERelationRef = {
-    if (oldToNewIdMapping.containsKey(cteRelationRef.cteId)) {
-      cteRelationRef.copy(cteId = oldToNewIdMapping.get(cteRelationRef.cteId))
-    } else {
-      cteRelationRef
-    }
-  }
-
-  def normalizeUnionLoop(unionLoop: UnionLoop): UnionLoop = {
-    if (oldToNewIdMapping.containsKey(unionLoop.id)) {
-      unionLoop.copy(id = oldToNewIdMapping.get(unionLoop.id))
-    } else {
-      unionLoop
-    }
-  }
-
-  def normalizeUnionLoopRef(unionLoopRef: UnionLoopRef): UnionLoopRef = {
-    try {
-      oldToNewIdMapping.put(unionLoopRef.loopId, cteIdCounter)
-      unionLoopRef.copy(loopId = cteIdCounter)
-    } finally {
-      cteIdCounter += 1
-    }
   }
 }
