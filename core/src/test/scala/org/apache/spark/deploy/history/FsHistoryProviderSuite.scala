@@ -158,7 +158,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
         val duration = if (end > 0) end - start else 0
         new ApplicationInfo(id, name, None, None, None, None,
           List(ApplicationAttemptInfo(None, new Date(start),
-            new Date(end), new Date(lastMod), duration, user, completed, SPARK_VERSION)))
+            new Date(end), new Date(lastMod), duration, user, completed, None, SPARK_VERSION)))
       }
 
       // For completed files, lastUpdated would be lastModified time.
@@ -1381,7 +1381,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
 
     val serializer = new KVStoreScalaSerializer()
     val appInfo = new ApplicationAttemptInfo(None, new Date(1), new Date(1), new Date(1),
-      10, "spark", false, "dummy")
+      10, "spark", false, None, "dummy")
     val attemptInfoWithIndexAsNone = new AttemptInfoWrapper(appInfo, "dummyPath", 10, None,
       None, None, None, None)
     assertSerDe(serializer, attemptInfoWithIndexAsNone)

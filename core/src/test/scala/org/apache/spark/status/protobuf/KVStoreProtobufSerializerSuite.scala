@@ -385,6 +385,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         duration = 100,
         sparkUser = "user",
         completed = false,
+        exitCode = None,
         appSparkVersion = "3.4.0"
       ),
       ApplicationAttemptInfo(
@@ -395,6 +396,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
         duration = 100,
         sparkUser = null,
         completed = true,
+        exitCode = Some(1),
         appSparkVersion = null
       ))
     val input = new ApplicationInfoWrapper(
