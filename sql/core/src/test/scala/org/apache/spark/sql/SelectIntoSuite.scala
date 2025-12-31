@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
@@ -29,6 +30,7 @@ class SelectIntoSuite extends QueryTest with SharedSparkSession {
   override protected def sparkConf: SparkConf = {
     super.sparkConf
       .set("spark.sql.variable.substitute", "false")
+      .set(SQLConf.ANSI_ENABLED.key, "true")
   }
 
   test("SELECT INTO - Simple with local variables") {
@@ -127,8 +129,8 @@ class SelectIntoSuite extends QueryTest with SharedSparkSession {
 
   test("SELECT INTO - Session variables") {
     // Declare session variables
-    spark.sql("DECLARE SESSION top_earner STRING")
-    spark.sql("DECLARE SESSION top_salary INT")
+    spark.sql("DECLARE VARIABLE top_earner STRING")
+    spark.sql("DECLARE VARIABLE top_salary INT")
 
     val script1 =
       """

@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.SqlScriptingContextManager
 import org.apache.spark.sql.catalyst.expressions.{Alias, CreateNamedStruct, Expression, Literal, VariableReference}
-import org.apache.spark.sql.catalyst.plans.logical.{Except, Intersect, LogicalPlan, Project, SelectIntoVariable, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, Except, GlobalLimit, Intersect, LocalLimit, LogicalPlan, Project, SelectIntoVariable, Sort, Union, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.StructType
@@ -32,11 +32,116 @@ import org.apache.spark.sql.types.StructType
 object ResolveSelectInto extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    // First pass: mark top-level SELECT INTO nodes and detect set operations
-    val markedPlan = markTopLevelAndSetOperations(plan, isTopLevel = true, isInSetOperation = false)
+    // Early exit: if plan doesn't contain UnresolvedSelectInto, skip all processing
+    if (!containsUnresolvedSelectInto(plan)) {
+      plan
+    } else {
+      // First pass: mark top-level SELECT INTO nodes and detect set operations
+      val markedPlan = markTopLevelAndSetOperations(
+        plan, isTopLevel = true, isInSetOperation = false)
 
-    // Second pass: resolve and validate
-    resolveSelectInto(markedPlan)
+      // Second pass: hoist UnresolvedSelectInto above Sort/Limit
+      // This fixes the parser structure where ORDER BY/LIMIT are added after SELECT INTO
+      val hoistedPlan = hoistSelectInto(markedPlan)
+
+      // Third pass: resolve and validate
+      resolveSelectInto(hoistedPlan)
+    }
+  }
+
+  /**
+   * Check if the plan contains any UnresolvedSelectInto nodes.
+   */
+  private def containsUnresolvedSelectInto(plan: LogicalPlan): Boolean = {
+    plan.find(_.isInstanceOf[UnresolvedSelectInto]).isDefined
+  }
+
+  /**
+   * Hoist UnresolvedSelectInto nodes to wrap their parent Sort/Limit nodes.
+   * This fixes the parser structure where ORDER BY/LIMIT are added after the SELECT clause,
+   * so they end up as parents of UnresolvedSelectInto instead of children.
+   *
+   * Transforms:
+   *   Sort -> Limit -> UnresolvedSelectInto -> query
+   * Into:
+   *   UnresolvedSelectInto -> Sort -> Limit -> query
+   */
+  private def hoistSelectInto(plan: LogicalPlan): LogicalPlan = {
+    // Transform to hoist UnresolvedSelectInto above query organization operators
+    // Use resolveOperatorsUp since we're in an analysis rule
+    plan.resolveOperatorsUp {
+      case s: Sort if isSelectIntoDescendant(s.child) =>
+        hoistFromOrganizationOp(s, s.child, c => s.copy(child = c))
+
+      case l: GlobalLimit if isSelectIntoDescendant(l.child) =>
+        hoistFromOrganizationOp(l, l.child, c => l.copy(child = c))
+
+      case l: LocalLimit if isSelectIntoDescendant(l.child) =>
+        hoistFromOrganizationOp(l, l.child, c => l.copy(child = c))
+    }
+  }
+
+  /**
+   * Check if the immediate child is either UnresolvedSelectInto or another query
+   * organization operator that contains one.
+   */
+  private def isSelectIntoDescendant(child: LogicalPlan): Boolean = {
+    child match {
+      case _: UnresolvedSelectInto => true
+      case s: Sort => isSelectIntoDescendant(s.child)
+      case l: GlobalLimit => isSelectIntoDescendant(l.child)
+      case l: LocalLimit => isSelectIntoDescendant(l.child)
+      case _ => false
+    }
+  }
+
+  /**
+   * Hoist UnresolvedSelectInto from within a query organization operator.
+   * Returns the hoisted plan.
+   */
+  private def hoistFromOrganizationOp(
+      parent: LogicalPlan,
+      child: LogicalPlan,
+      recreateParent: LogicalPlan => LogicalPlan): LogicalPlan = {
+    child match {
+      case selectInto: UnresolvedSelectInto =>
+        // Direct child is UnresolvedSelectInto - hoist it above parent
+        selectInto.copy(query = recreateParent(selectInto.query))
+
+      case s: Sort =>
+        // Child is Sort, recurse to find UnresolvedSelectInto deeper
+        val hoisted = hoistFromOrganizationOp(s, s.child, c => s.copy(child = c))
+        hoisted match {
+          case selectInto: UnresolvedSelectInto =>
+            // Successfully hoisted from deeper level, now wrap parent too
+            selectInto.copy(query = recreateParent(selectInto.query))
+          case _ =>
+            // No hoisting happened, return parent with updated child
+            recreateParent(hoisted)
+        }
+
+      case l: GlobalLimit =>
+        val hoisted = hoistFromOrganizationOp(l, l.child, c => l.copy(child = c))
+        hoisted match {
+          case selectInto: UnresolvedSelectInto =>
+            selectInto.copy(query = recreateParent(selectInto.query))
+          case _ =>
+            recreateParent(hoisted)
+        }
+
+      case l: LocalLimit =>
+        val hoisted = hoistFromOrganizationOp(l, l.child, c => l.copy(child = c))
+        hoisted match {
+          case selectInto: UnresolvedSelectInto =>
+            selectInto.copy(query = recreateParent(selectInto.query))
+          case _ =>
+            recreateParent(hoisted)
+        }
+
+      case _ =>
+        // Child is not a query organization op, no hoisting needed
+        parent
+    }
   }
 
   /**
@@ -58,10 +163,24 @@ object ResolveSelectInto extends Rule[LogicalPlan] {
         p.mapChildren(child =>
           markTopLevelAndSetOperations(child, isTopLevel = false, isInSetOperation = true))
 
+      case w: WithCTE =>
+        // Special case for WithCTE: it has multiple children (CTE definitions + main plan),
+        // but only the main plan should be considered for top-level context.
+        // Mark the CTE definitions as not top-level, but pass isTopLevel to the main plan.
+        val markedCteDefs = w.cteDefs.map(cteDef =>
+          markTopLevelAndSetOperations(cteDef, isTopLevel = false, isInSetOperation)
+            .asInstanceOf[CTERelationDef])
+        val markedPlan = markTopLevelAndSetOperations(w.plan, isTopLevel, isInSetOperation)
+        w.copy(plan = markedPlan, cteDefs = markedCteDefs)
+
       case _ =>
-        // For other nodes, continue traversal but not at top level anymore
+        // For other nodes, continue traversal.
+        // If we're at top level and this is a unary node (like Sort, Limit, Project),
+        // the child can still be considered top-level.
+        // Otherwise (binary nodes, multi-child nodes), children are not top-level.
+        val childIsTopLevel = isTopLevel && plan.children.length == 1
         plan.mapChildren(child =>
-          markTopLevelAndSetOperations(child, isTopLevel = false, isInSetOperation))
+          markTopLevelAndSetOperations(child, childIsTopLevel, isInSetOperation))
     }
   }
 
