@@ -134,6 +134,7 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
       assert(attempt.endTime.getTime() === -1L)
       assert(attempt.sparkUser === "user")
       assert(!attempt.completed)
+      assert(attempt.exitCode === None)
       assert(attempt.appSparkVersion === "TestSparkVersion")
     }
 
@@ -691,7 +692,7 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
     }
 
     // End the application.
-    listener.onApplicationEnd(SparkListenerApplicationEnd(42L))
+    listener.onApplicationEnd(SparkListenerApplicationEnd(42L, Some(1)))
 
     check[ApplicationInfoWrapper]("id") { app =>
       assert(app.info.name === "name")
@@ -706,6 +707,7 @@ abstract class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter 
       assert(attempt.duration === 41L)
       assert(attempt.sparkUser === "user")
       assert(attempt.completed)
+      assert(attempt.exitCode === Some(1))
     }
   }
 
