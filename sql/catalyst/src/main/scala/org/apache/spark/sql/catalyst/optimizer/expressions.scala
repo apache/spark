@@ -359,7 +359,7 @@ object OptimizeIn extends Rule[LogicalPlan] {
 object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsAnyPattern(AND, OR, NOT), ruleId) {
-    case q: LogicalPlan => q.transformExpressionsUpWithPruning(
+    case q: LogicalPlan => q.transformExpressionsDownWithPruning(
       _.containsAnyPattern(AND, OR, NOT), ruleId) {
       case TrueLiteral And e => e
       case e And TrueLiteral => e

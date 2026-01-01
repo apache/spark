@@ -291,6 +291,14 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
     checkCondition(Not(IsNull($"b")), IsNotNull($"b"))
   }
 
+  test("SPARK-54881: simplify Not(A <= B OR A >= B) to (a > b AND a < b) in single pass ") {
+    val initialExpr = Not(($"a" <= $"b") || ($"a" >= $"b"))
+    val expectedOptimizedExpr = $"a" > $"b" && $"a" < $"b"
+    val planAfterRuleApp = BooleanSimplification.apply(testRelation.where(initialExpr).analyze)
+    val expectedOptPlan = testRelation.where(expectedOptimizedExpr).analyze
+    comparePlans(expectedOptPlan, planAfterRuleApp)
+  }
+
   protected def assertEquivalent(e1: Expression, e2: Expression): Unit = {
     val correctAnswer = Project(Alias(e2, "out")() :: Nil, OneRowRelation()).analyze
     val actual = Optimize.execute(Project(Alias(e1, "out")() :: Nil, OneRowRelation()).analyze)
