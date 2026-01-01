@@ -135,36 +135,18 @@ object ResolveSelectInto extends Rule[LogicalPlan] {
   }
 
   /**
-   * Check if the plan contains any UnresolvedSelectInto nodes.
+   * Returns true if the plan contains any [[UnresolvedSelectInto]] nodes.
    */
   private def containsUnresolvedSelectInto(plan: LogicalPlan): Boolean = {
     plan.find(_.isInstanceOf[UnresolvedSelectInto]).isDefined
   }
 
   /**
-   * Hoist UnresolvedSelectInto nodes to wrap their parent Sort/Limit nodes.
-   * This fixes the parser structure where ORDER BY/LIMIT are added after the SELECT clause,
-   * so they end up as parents of UnresolvedSelectInto instead of children.
+   * Returns true if the plan is a query organization operator.
    *
-   * Transforms:
-   *   Sort -> Limit -> UnresolvedSelectInto -> query
-   * Into:
-   *   UnresolvedSelectInto -> Sort -> Limit -> query
-   *
-   * Example:
-   *   Before: Sort(LocalLimit(UnresolvedSelectInto(Project(...))))
-   *   After:  UnresolvedSelectInto(Sort(LocalLimit(Project(...))))
-   */
-  private def hoistSelectInto(plan: LogicalPlan): LogicalPlan = {
-    plan.resolveOperatorsUp {
-      case op if isQueryOrganizationOp(op) && isSelectIntoDescendant(getChild(op)) =>
-        hoistFromOrganizationOp(op)
-    }
-  }
-
-  /**
-   * Check if a plan is a query organization operator (Sort, GlobalLimit, or LocalLimit).
-   * These are the operators that can appear between SELECT and UnresolvedSelectInto.
+   * Query organization operators (Sort, GlobalLimit, LocalLimit) can appear between
+   * the SELECT clause and [[UnresolvedSelectInto]] in the parser output and need to
+   * be repositioned during hoisting.
    */
   private def isQueryOrganizationOp(plan: LogicalPlan): Boolean = plan match {
     case _: Sort | _: GlobalLimit | _: LocalLimit => true
