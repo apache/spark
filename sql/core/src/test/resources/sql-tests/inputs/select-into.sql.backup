@@ -57,20 +57,8 @@
 --  35. Multiple rows returned (error)
 -- =================
 
--- =============================================================================
--- SECTION A: FEATURE CONFIGURATION
--- =============================================================================
-
--- =============================================================================
--- Test 1: Enable ANSI mode for overflow detection
--- =============================================================================
-
--- !query
+-- Enable ANSI mode for overflow error tests
 SET spark.sql.ansi.enabled = true;
--- !query schema
-struct<key:string,value:string>
--- !query output
-spark.sql.ansi.enabled	true
 
 -- Setup test data
 CREATE TEMPORARY VIEW tbl_view AS SELECT * FROM VALUES
@@ -80,7 +68,7 @@ CREATE TEMPORARY VIEW tbl_view AS SELECT * FROM VALUES
 AS tbl_view(id, name);
 
 -- =============================================================================
--- Test 2: Disable SELECT INTO feature flag
+-- Test 1: Disable SELECT INTO feature flag
 -- =============================================================================
 
 -- !query
@@ -91,7 +79,7 @@ struct<key:string,value:string>
 spark.sql.scripting.selectIntoEnabled	false
 
 -- =============================================================================
--- Test 3: SELECT INTO rejected when feature disabled
+-- Test 2: SELECT INTO rejected when feature disabled
 -- =============================================================================
 
 -- !query
@@ -109,7 +97,7 @@ org.apache.spark.sql.AnalysisException
 }
 
 -- =============================================================================
--- Test 4: Re-enable SELECT INTO feature flag
+-- Test 3: Re-enable SELECT INTO feature flag
 -- =============================================================================
 
 -- !query
@@ -120,11 +108,226 @@ struct<key:string,value:string>
 spark.sql.scripting.selectIntoEnabled	true
 
 -- =============================================================================
--- SECTION B: BASIC USAGE
+-- Test 4: Verify SELECT INTO works after re-enabling
 -- =============================================================================
 
+-- !query
+BEGIN
+  DECLARE v1 INT;
+  SELECT id INTO v1 FROM tbl_view WHERE id = 10;
+  SELECT v1;
+END;
+-- !query schema
+struct<v1:int>
+-- !query output
+10
+
 -- =============================================================================
--- Test 5: Single column into single variable
+-- Test 5: SELECT INTO outside SQL script
+-- =============================================================================
+
+-- !query
+SELECT id INTO res_id FROM tbl_view WHERE id = 10;
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "SELECT_INTO_NOT_IN_SQL_SCRIPT",
+  "sqlState" : "0A000"
+}
+
+-- =============================================================================
+-- Test 6: SELECT INTO in subquery
+-- =============================================================================
+
+-- !query
+BEGIN
+  DECLARE outer_id INT;
+  SELECT (SELECT id INTO outer_id FROM tbl_view WHERE id = 10) as nested;
+END;
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "SELECT_INTO_ONLY_AT_TOP_LEVEL",
+  "sqlState" : "42601"
+}
+
+-- =============================================================================
+-- Test 7: SELECT INTO with UNION
+-- =============================================================================
+
+-- !query
+BEGIN
+  DECLARE res_id INT;
+  SELECT id INTO res_id FROM tbl_view WHERE id = 10
+  UNION
+  SELECT id FROM tbl_view WHERE id = 20;
+END;
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "SELECT_INTO_ONLY_AT_TOP_LEVEL",
+  "sqlState" : "42601"
+}
+
+-- =============================================================================
+-- Test 8: SELECT INTO with INTERSECT
+-- =============================================================================
+
+-- !query
+BEGIN
+  DECLARE res_id INT;
+  SELECT id INTO res_id FROM tbl_view WHERE id = 10
+  INTERSECT
+  SELECT id FROM tbl_view WHERE id = 10;
+END;
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "SELECT_INTO_ONLY_AT_TOP_LEVEL",
+  "sqlState" : "42601"
+}
+
+-- =============================================================================
+-- Test 9: SELECT INTO with EXCEPT
+-- =============================================================================
+
+-- !query
+BEGIN
+  DECLARE res_id INT;
+  SELECT id INTO res_id FROM tbl_view WHERE id = 10
+  EXCEPT
+  SELECT id FROM tbl_view WHERE id = 20;
+END;
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "SELECT_INTO_ONLY_AT_TOP_LEVEL",
+  "sqlState" : "42601"
+}
+
+-- =============================================================================
+-- Test 10: Too many variables (3 vars, 2 columns)
+-- =============================================================================
+
+-- !query
+BEGIN
+  DECLARE v1 INT;
+  DECLARE v2 STRING;
+  DECLARE v3 INT;
+  SELECT id, name INTO v1, v2, v3 FROM tbl_view WHERE id = 10;
+END;
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "SELECT_INTO_VARIABLE_COUNT_MISMATCH",
+  "sqlState" : "21000",
+  "messageParameters" : {
+    "numCols" : "2",
+    "numVars" : "3"
+  }
+}
+
+-- =============================================================================
+-- Test 11: Too few variables (1 var, 2 columns)
+-- =============================================================================
+
+-- !query
+BEGIN
+  DECLARE v1 INT;
+  SELECT id, name INTO v1 FROM tbl_view WHERE id = 10;
+END;
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "SELECT_INTO_VARIABLE_COUNT_MISMATCH",
+  "sqlState" : "21000",
+  "messageParameters" : {
+    "numCols" : "2",
+    "numVars" : "1"
+  }
+}
+
+-- =============================================================================
+-- Test 12: Variable count mismatch with expressions
+-- =============================================================================
+
+-- !query
+BEGIN
+  DECLARE v1 INT;
+  DECLARE v2 INT;
+  DECLARE v3 INT;
+  SELECT id + 10, id * 2 INTO v1, v2, v3 FROM tbl_view WHERE id = 10;
+END;
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "SELECT_INTO_VARIABLE_COUNT_MISMATCH",
+  "sqlState" : "21000",
+  "messageParameters" : {
+    "numCols" : "2",
+    "numVars" : "3"
+  }
+}
+
+-- =============================================================================
+-- Test 13: Struct field count mismatch
+-- =============================================================================
+
+-- !query
+BEGIN
+  DECLARE result_struct STRUCT<f1: INT, f2: STRING>;
+  SELECT id, name, id + 10 INTO result_struct FROM tbl_view WHERE id = 10;
+END;
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "SELECT_INTO_STRUCT_FIELD_MISMATCH",
+  "sqlState" : "21000",
+  "messageParameters" : {
+    "numCols" : "3",
+    "numFields" : "2",
+    "structType" : "\"STRUCT<f1: INT, f2: STRING>\""
+  }
+}
+
+-- =============================================================================
+-- Test 14: Multiple rows returned
+-- =============================================================================
+
+-- !query
+BEGIN
+  DECLARE v1 INT;
+  SELECT id INTO v1 FROM tbl_view;
+END;
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkException
+{
+  "errorClass" : "ROW_SUBQUERY_TOO_MANY_ROWS",
+  "sqlState" : "21000"
+}
+
+-- =============================================================================
+-- Test 15: Single column into single variable
 -- =============================================================================
 
 -- !query
@@ -139,7 +342,7 @@ struct<v1:int>
 30
 
 -- =============================================================================
--- Test 6: Multiple columns into multiple variables
+-- Test 16: Multiple columns into multiple variables
 -- =============================================================================
 
 -- !query
@@ -155,7 +358,7 @@ struct<var1:int,var2:string>
 20	name2
 
 -- =============================================================================
--- Test 7: Expressions into variables
+-- Test 17: Expressions into variables
 -- =============================================================================
 
 -- !query
@@ -169,207 +372,6 @@ END;
 struct<v1:int,v2:int>
 -- !query output
 20	20
-
--- =============================================================================
--- Test 8: SELECT * with INTO
--- =============================================================================
-
--- !query
-BEGIN
-  DECLARE v1 INT;
-  DECLARE v2 STRING;
-  SELECT * INTO v1, v2 FROM tbl_view WHERE id = 10;
-  SELECT v1, v2;
-END;
--- !query schema
-struct<v1:int,v2:string>
--- !query output
-10	name1
-
--- =============================================================================
--- Test 9: Column aliases with INTO
--- =============================================================================
-
--- !query
-BEGIN
-  DECLARE a INT;
-  DECLARE b STRING;
-  SELECT id AS my_id, name AS my_name INTO a, b FROM tbl_view WHERE id = 30;
-  SELECT a, b;
-END;
--- !query schema
-struct<a:int,b:string>
--- !query output
-30	name3
-
--- =============================================================================
--- SECTION C: TYPE CASTING
--- =============================================================================
-
--- =============================================================================
--- Test 10: Implicit upcast (INT to BIGINT)
--- =============================================================================
-
--- !query
-BEGIN
-  DECLARE big_var BIGINT;
-  SELECT id INTO big_var FROM tbl_view WHERE id = 10;
-  SELECT big_var, typeof(big_var);
-END;
--- !query schema
-struct<big_var:bigint,typeof(big_var):string>
--- !query output
-10	bigint
-
--- =============================================================================
--- Test 11: Implicit downcast with precision loss (DOUBLE to INT)
--- =============================================================================
-
--- !query
-BEGIN
-  DECLARE int_var INT;
-  SELECT CAST(1.9 AS DOUBLE) AS dval INTO int_var;
-  SELECT int_var, typeof(int_var);
-END;
--- !query schema
-struct<int_var:int,typeof(int_var):string>
--- !query output
-1	int
-
--- =============================================================================
--- Test 12: Invalid cast error (STRING to INT)
--- =============================================================================
-
--- !query
-BEGIN
-  DECLARE int_var INT;
-  SELECT name INTO int_var FROM tbl_view WHERE id = 10;
-END;
--- !query schema
-struct<>
--- !query output
-org.apache.spark.SparkRuntimeException
-{
-  "errorClass" : "INVALID_VARIABLE_TYPE_FOR_ASSIGNMENT",
-  "sqlState" : "42821",
-  "messageParameters" : {
-    "sqlValue" : "name1",
-    "sqlValueType" : "STRING",
-    "varName" : "`int_var`",
-    "varType" : "INT"
-  }
-}
-
--- =============================================================================
--- Test 13: Numeric overflow (large DOUBLE to INT)
--- =============================================================================
-
--- !query
-BEGIN
-  DECLARE int_var INT;
-  SELECT CAST(1.0E10 AS DOUBLE) AS bigval INTO int_var;
-END;
--- !query schema
-struct<>
--- !query output
-org.apache.spark.SparkArithmeticException
-{
-  "errorClass" : "CAST_OVERFLOW",
-  "sqlState" : "22003",
-  "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "sourceType" : "\"DOUBLE\"",
-    "targetType" : "\"INT\"",
-    "value" : "1.0E10D"
-  }
-}
-
--- =============================================================================
--- Test 14: Numeric overflow (INT to SMALLINT)
--- =============================================================================
-
--- !query
-BEGIN
-  DECLARE small_var SMALLINT;
-  SELECT 100000 AS bigint INTO small_var;
-END;
--- !query schema
-struct<>
--- !query output
-org.apache.spark.SparkArithmeticException
-{
-  "errorClass" : "CAST_OVERFLOW",
-  "sqlState" : "22003",
-  "messageParameters" : {
-    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
-    "sourceType" : "\"INT\"",
-    "targetType" : "\"SMALLINT\"",
-    "value" : "100000"
-  }
-}
-
--- =============================================================================
--- SECTION D: VARIABLE SCOPING
--- =============================================================================
-
--- =============================================================================
--- Test 15: Local and session variables combined
--- =============================================================================
-
--- !query
-BEGIN
-  DECLARE local_var INT;
-  DECLARE VARIABLE session_var STRING DEFAULT 'initial';
-  SELECT id, name INTO local_var, session_var FROM tbl_view WHERE id = 10;
-  SELECT local_var, session_var;
-END;
--- !query schema
-struct<local_var:int,session_var:string>
--- !query output
-10	name1
-
--- Verify session variable persists
--- !query
-SELECT session_var;
--- !query schema
-struct<session_var:string>
--- !query output
-name1
-
--- =============================================================================
--- Test 16: Qualified variable names (system.session.varname)
--- =============================================================================
-
--- !query
-BEGIN
-  DECLARE myvar INT DEFAULT 99;
-  SELECT id INTO system.session.myvar FROM tbl_view WHERE id = 20;
-  SELECT system.session.myvar;
-END;
--- !query schema
-struct<myvar:int>
--- !query output
-20
-
--- =============================================================================
--- Test 17: IDENTIFIER clause for variable names
--- =============================================================================
-
--- !query
-BEGIN
-  DECLARE v1 INT;
-  DECLARE v2 STRING;
-  SELECT id, name INTO IDENTIFIER('v1'), IDENTIFIER('v2') FROM tbl_view WHERE id = 30;
-  SELECT v1, v2;
-END;
--- !query schema
-struct<v1:int,v2:string>
--- !query output
-30	name3
-
--- =============================================================================
--- SECTION E: STRUCT HANDLING
--- =============================================================================
 
 -- =============================================================================
 -- Test 18: Struct unpacking (multiple columns into single struct)
@@ -402,31 +404,24 @@ struct<a:int,b:string>
 20	name2
 
 -- =============================================================================
--- Test 20: Struct field count mismatch (error)
+-- Test 20: Multiple variables remain unchanged on zero rows
 -- =============================================================================
 
 -- !query
 BEGIN
-  DECLARE result_struct STRUCT<f1: INT, f2: STRING>;
-  SELECT id, name, id + 10 INTO result_struct FROM tbl_view WHERE id = 10;
+  DECLARE v1 INT;
+  DECLARE v2 STRING;
+  SET VAR v1 = 99;
+  SET VAR v2 = 'initial';
+  SELECT v1, v2;
+  SELECT id, name INTO v1, v2 FROM tbl_view WHERE id = 999;
+  SELECT v1, v2;
 END;
 -- !query schema
-struct<>
+struct<v1:int,v2:string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "SELECT_INTO_STRUCT_FIELD_MISMATCH",
-  "sqlState" : "21000",
-  "messageParameters" : {
-    "numCols" : "3",
-    "numFields" : "2",
-    "structType" : "\"STRUCT<f1: INT, f2: STRING>\""
-  }
-}
-
--- =============================================================================
--- SECTION F: ZERO ROWS BEHAVIOR
--- =============================================================================
+99	initial
+99	initial
 
 -- =============================================================================
 -- Test 21: Single variable remains unchanged on zero rows
@@ -447,27 +442,7 @@ struct<v1:int>
 42
 
 -- =============================================================================
--- Test 22: Multiple variables remain unchanged on zero rows
--- =============================================================================
-
--- !query
-BEGIN
-  DECLARE v1 INT;
-  DECLARE v2 STRING;
-  SET VAR v1 = 99;
-  SET VAR v2 = 'initial';
-  SELECT v1, v2;
-  SELECT id, name INTO v1, v2 FROM tbl_view WHERE id = 999;
-  SELECT v1, v2;
-END;
--- !query schema
-struct<v1:int,v2:string>
--- !query output
-99	initial
-99	initial
-
--- =============================================================================
--- Test 23: NULL variables remain NULL on zero rows
+-- Test 22: NULL variables remain NULL on zero rows
 -- =============================================================================
 
 -- !query
@@ -484,7 +459,7 @@ NULL
 NULL
 
 -- =============================================================================
--- Test 24: Struct variables remain unchanged on zero rows
+-- Test 23: Struct variables remain unchanged on zero rows
 -- =============================================================================
 
 -- !query
@@ -502,11 +477,39 @@ struct<my_struct:struct<x:int,y:string>>
 {"x":100,"y":"original"}
 
 -- =============================================================================
--- SECTION G: RESULT SET BEHAVIOR
+-- Test 24: SELECT * with INTO
 -- =============================================================================
 
+-- !query
+BEGIN
+  DECLARE v1 INT;
+  DECLARE v2 STRING;
+  SELECT * INTO v1, v2 FROM tbl_view WHERE id = 10;
+  SELECT v1, v2;
+END;
+-- !query schema
+struct<v1:int,v2:string>
+-- !query output
+10	name1
+
 -- =============================================================================
--- Test 25: SELECT INTO does not return a result set
+-- Test 25: Column aliases with INTO
+-- =============================================================================
+
+-- !query
+BEGIN
+  DECLARE a INT;
+  DECLARE b STRING;
+  SELECT id AS my_id, name AS my_name INTO a, b FROM tbl_view WHERE id = 30;
+  SELECT a, b;
+END;
+-- !query schema
+struct<a:int,b:string>
+-- !query output
+30	name3
+
+-- =============================================================================
+-- Test 26: SELECT INTO does not return a result set (last SELECT without INTO is returned)
 -- =============================================================================
 
 -- !query
@@ -524,64 +527,7 @@ struct<v1:int,v2:string>
 20	name3
 
 -- =============================================================================
--- SECTION H: ERROR CASES - CONTEXT/PLACEMENT
--- =============================================================================
-
--- =============================================================================
--- Test 26: SELECT INTO outside SQL script (not in BEGIN...END)
--- =============================================================================
-
--- !query
-SELECT id INTO res_id FROM tbl_view WHERE id = 10;
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "SELECT_INTO_NOT_IN_SQL_SCRIPT",
-  "sqlState" : "0A000"
-}
-
--- =============================================================================
--- Test 27: SELECT INTO in subquery
--- =============================================================================
-
--- !query
-BEGIN
-  DECLARE outer_id INT;
-  SELECT (SELECT id INTO outer_id FROM tbl_view WHERE id = 10) as nested;
-END;
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "SELECT_INTO_ONLY_AT_TOP_LEVEL",
-  "sqlState" : "42601"
-}
-
--- =============================================================================
--- Test 28: SELECT INTO in UNION (first branch)
--- =============================================================================
-
--- !query
-BEGIN
-  DECLARE res_id INT;
-  SELECT id INTO res_id FROM tbl_view WHERE id = 10
-  UNION
-  SELECT id FROM tbl_view WHERE id = 20;
-END;
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "SELECT_INTO_ONLY_AT_TOP_LEVEL",
-  "sqlState" : "42601"
-}
-
--- =============================================================================
--- Test 29: SELECT INTO in UNION (last branch)
+-- Test 27: INTO blocked in last branch of UNION
 -- =============================================================================
 
 -- !query
@@ -601,135 +547,160 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 }
 
 -- =============================================================================
--- Test 30: SELECT INTO in INTERSECT
+-- Test 28: SELECT INTO with local and session variables combined
 -- =============================================================================
 
 -- !query
 BEGIN
-  DECLARE res_id INT;
-  SELECT id INTO res_id FROM tbl_view WHERE id = 10
-  INTERSECT
-  SELECT id FROM tbl_view WHERE id = 10;
+  DECLARE local_var INT;
+  DECLARE VARIABLE session_var STRING DEFAULT 'initial';
+  SELECT id, name INTO local_var, session_var FROM tbl_view WHERE id = 10;
+  SELECT local_var, session_var;
 END;
 -- !query schema
-struct<>
+struct<local_var:int,session_var:string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "SELECT_INTO_ONLY_AT_TOP_LEVEL",
-  "sqlState" : "42601"
-}
+10	name1
+
+-- Verify session variable persists
+-- !query
+SELECT session_var;
+-- !query schema
+struct<session_var:string>
+-- !query output
+name1
 
 -- =============================================================================
--- Test 31: SELECT INTO in EXCEPT
+-- Test 29: SELECT INTO with qualified local variable names
 -- =============================================================================
 
 -- !query
 BEGIN
-  DECLARE res_id INT;
-  SELECT id INTO res_id FROM tbl_view WHERE id = 10
-  EXCEPT
-  SELECT id FROM tbl_view WHERE id = 20;
+  DECLARE myvar INT DEFAULT 99;
+  SELECT id INTO system.session.myvar FROM tbl_view WHERE id = 20;
+  SELECT system.session.myvar;
 END;
 -- !query schema
-struct<>
+struct<myvar:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "SELECT_INTO_ONLY_AT_TOP_LEVEL",
-  "sqlState" : "42601"
-}
+20
 
 -- =============================================================================
--- SECTION I: ERROR CASES - DATA ISSUES
--- =============================================================================
-
--- =============================================================================
--- Test 32: Too many variables (3 vars, 2 columns)
+-- Test 30: SELECT INTO with IDENTIFIER clause for variable names
 -- =============================================================================
 
 -- !query
 BEGIN
   DECLARE v1 INT;
   DECLARE v2 STRING;
-  DECLARE v3 INT;
-  SELECT id, name INTO v1, v2, v3 FROM tbl_view WHERE id = 10;
+  SELECT id, name INTO IDENTIFIER('v1'), IDENTIFIER('v2') FROM tbl_view WHERE id = 30;
+  SELECT v1, v2;
 END;
 -- !query schema
-struct<>
+struct<v1:int,v2:string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "SELECT_INTO_VARIABLE_COUNT_MISMATCH",
-  "sqlState" : "21000",
-  "messageParameters" : {
-    "numCols" : "2",
-    "numVars" : "3"
-  }
-}
+30	name3
 
 -- =============================================================================
--- Test 33: Too few variables (1 var, 2 columns)
+-- Test 31: Implicit casting (INT to BIGINT)
 -- =============================================================================
 
 -- !query
 BEGIN
-  DECLARE v1 INT;
-  SELECT id, name INTO v1 FROM tbl_view WHERE id = 10;
+  DECLARE big_var BIGINT;
+  SELECT id INTO big_var FROM tbl_view WHERE id = 10;
+  SELECT big_var, typeof(big_var);
 END;
 -- !query schema
-struct<>
+struct<big_var:bigint,typeof(big_var):string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "SELECT_INTO_VARIABLE_COUNT_MISMATCH",
-  "sqlState" : "21000",
-  "messageParameters" : {
-    "numCols" : "2",
-    "numVars" : "1"
-  }
-}
+10	bigint
 
 -- =============================================================================
--- Test 34: Variable count mismatch with expressions
+-- Test 32: Casting error (STRING to INT with invalid value)
 -- =============================================================================
 
 -- !query
 BEGIN
-  DECLARE v1 INT;
-  DECLARE v2 INT;
-  DECLARE v3 INT;
-  SELECT id + 10, id * 2 INTO v1, v2, v3 FROM tbl_view WHERE id = 10;
+  DECLARE int_var INT;
+  SELECT name INTO int_var FROM tbl_view WHERE id = 10;
 END;
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "SELECT_INTO_VARIABLE_COUNT_MISMATCH",
-  "sqlState" : "21000",
+  "errorClass" : "INVALID_VARIABLE_TYPE_FOR_ASSIGNMENT",
+  "sqlState" : "42821",
   "messageParameters" : {
-    "numCols" : "2",
-    "numVars" : "3"
+    "sqlValue" : "name1",
+    "sqlValueType" : "STRING",
+    "varName" : "`int_var`",
+    "varType" : "INT"
   }
 }
 
 -- =============================================================================
--- Test 35: Multiple rows returned (error)
+-- Test 33: Implicit casting with precision loss (DOUBLE to INT)
 -- =============================================================================
 
 -- !query
 BEGIN
-  DECLARE v1 INT;
-  SELECT id INTO v1 FROM tbl_view;
+  DECLARE int_var INT;
+  SELECT CAST(1.9 AS DOUBLE) AS dval INTO int_var;
+  SELECT int_var, typeof(int_var);
+END;
+-- !query schema
+struct<int_var:int,typeof(int_var):string>
+-- !query output
+1	int
+
+-- =============================================================================
+-- Test 34: Numeric overflow error (large DOUBLE to INT)
+-- =============================================================================
+
+-- !query
+BEGIN
+  DECLARE int_var INT;
+  SELECT CAST(1.0E10 AS DOUBLE) AS bigval INTO int_var;
 END;
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
+org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "ROW_SUBQUERY_TOO_MANY_ROWS",
-  "sqlState" : "21000"
+  "errorClass" : "CAST_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "sourceType" : "\"DOUBLE\"",
+    "targetType" : "\"INT\"",
+    "value" : "1.0E10D"
+  }
+}
+
+-- =============================================================================
+-- Test 35: Numeric overflow error (INT to SMALLINT)
+-- =============================================================================
+
+-- !query
+BEGIN
+  DECLARE small_var SMALLINT;
+  SELECT 100000 AS bigint INTO small_var;
+END;
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "CAST_OVERFLOW",
+  "sqlState" : "22003",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "sourceType" : "\"INT\"",
+    "targetType" : "\"SMALLINT\"",
+    "value" : "100000"
+  }
 }
 
 -- Clean up
