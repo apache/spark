@@ -447,4 +447,151 @@ class SelectIntoSuite extends QueryTest with SharedSparkSession {
     assert(result.length == 1)
     assert(result(0).getString(0) == "Engineering")
   }
+
+  test("SELECT INTO - Edge case: HAVING clause") {
+    val script =
+      """
+        |BEGIN
+        |  DECLARE high_dept STRING;
+        |  DECLARE emp_count BIGINT;
+        |
+        |  CREATE OR REPLACE TEMP VIEW employees AS
+        |  SELECT * FROM VALUES
+        |    (1, 'Alice', 'Engineering'),
+        |    (2, 'Bob', 'Sales'),
+        |    (3, 'Charlie', 'Engineering'),
+        |    (4, 'Diana', 'HR')
+        |  AS t(emp_id, name, department);
+        |
+        |  SELECT department, COUNT(*) INTO high_dept, emp_count
+        |  FROM employees
+        |  GROUP BY department
+        |  HAVING COUNT(*) >= 2
+        |  ORDER BY COUNT(*) DESC
+        |  LIMIT 1;
+        |
+        |  SELECT high_dept, emp_count;
+        |END;
+      """.stripMargin
+
+    val result = spark.sql(script).collect()
+    assert(result.length == 1)
+    assert(result(0).getString(0) == "Engineering")
+    assert(result(0).getLong(1) == 2L)
+  }
+
+  test("SELECT INTO - Edge case: Multiple ORDER BY with LIMIT") {
+    val script =
+      """
+        |BEGIN
+        |  DECLARE second_name STRING;
+        |
+        |  CREATE OR REPLACE TEMP VIEW employees AS
+        |  SELECT * FROM VALUES
+        |    (1, 'Alice', 'A'),
+        |    (2, 'Bob', 'B'),
+        |    (3, 'Charlie', 'C')
+        |  AS t(id, name, code);
+        |
+        |  SELECT name INTO second_name
+        |  FROM employees
+        |  WHERE id > 1
+        |  ORDER BY id ASC, code DESC
+        |  LIMIT 1;
+        |
+        |  SELECT second_name;
+        |END;
+      """.stripMargin
+
+    val result = spark.sql(script).collect()
+    assert(result.length == 1)
+    assert(result(0).getString(0) == "Bob")
+  }
+
+  test("SELECT INTO - Edge case: Long variable name") {
+    val longVarName = "v" + "ery_long_variable_name" * 10  // ~240 chars
+    val script =
+      s"""
+        |BEGIN
+        |  DECLARE $longVarName STRING;
+        |
+        |  CREATE OR REPLACE TEMP VIEW tbl AS
+        |  SELECT 'test' AS col;
+        |
+        |  SELECT col INTO $longVarName FROM tbl;
+        |
+        |  SELECT $longVarName;
+        |END;
+      """.stripMargin
+
+    val result = spark.sql(script).collect()
+    assert(result.length == 1)
+    assert(result(0).getString(0) == "test")
+  }
+
+  test("SELECT INTO - Edge case: NULL value with typed variable") {
+    val script =
+      """
+        |BEGIN
+        |  DECLARE int_var INT = 999;
+        |
+        |  CREATE OR REPLACE TEMP VIEW tbl AS
+        |  SELECT NULL AS null_col;
+        |
+        |  SELECT null_col INTO int_var FROM tbl;
+        |
+        |  SELECT int_var;
+        |END;
+      """.stripMargin
+
+    val result = spark.sql(script).collect()
+    assert(result.length == 1)
+    assert(result(0).isNullAt(0))
+  }
+
+  test("SELECT INTO - Edge case: Zero rows preserves NULL value") {
+    val script =
+      """
+        |BEGIN
+        |  DECLARE test_var STRING;  -- Defaults to NULL
+        |
+        |  CREATE OR REPLACE TEMP VIEW tbl AS
+        |  SELECT * FROM VALUES (1, 'Alice') AS t(id, name);
+        |
+        |  -- Zero rows: variable remains NULL
+        |  SELECT name INTO test_var FROM tbl WHERE id > 100;
+        |
+        |  SELECT test_var;
+        |END;
+      """.stripMargin
+
+    val result = spark.sql(script).collect()
+    assert(result.length == 1)
+    assert(result(0).isNullAt(0))
+  }
+
+  test("SELECT INTO - Error: SELECT INTO inside CTE definition") {
+    val script =
+      """
+        |BEGIN
+        |  DECLARE v1 INT;
+        |
+        |  CREATE OR REPLACE TEMP VIEW employees AS
+        |  SELECT * FROM VALUES (1, 'Alice'), (2, 'Bob') AS t(id, name);
+        |
+        |  WITH bad_cte AS (
+        |    SELECT id INTO v1 FROM employees WHERE id = 1
+        |  )
+        |  SELECT * FROM bad_cte;
+        |END;
+      """.stripMargin
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.sql(script).collect()
+      },
+      condition = "SELECT_INTO_ONLY_AT_TOP_LEVEL",
+      parameters = Map.empty
+    )
+  }
 }

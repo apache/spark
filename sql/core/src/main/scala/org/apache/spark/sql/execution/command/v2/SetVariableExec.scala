@@ -74,18 +74,68 @@ private[v2] object VariableSetter {
 }
 
 /**
- * Physical plan node for setting a variable.
+ * Defines how variables should behave when the query returns zero rows.
  */
-case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
-  extends V2CommandExec with UnaryLike[SparkPlan] {
+private[v2] sealed trait ZeroRowBehavior
+private[v2] object ZeroRowBehavior {
+  /**
+   * Set variables to NULL when query returns zero rows.
+   * Used by EXECUTE IMMEDIATE INTO.
+   */
+  case object SetToNull extends ZeroRowBehavior
 
-  override protected def run(): Seq[InternalRow] = {
+  /**
+   * Keep variables unchanged when query returns zero rows.
+   * Used by SELECT INTO.
+   */
+  case object KeepUnchanged extends ZeroRowBehavior
+}
+
+/**
+ * Helper object for executing variable assignment queries.
+ * Consolidates common logic between SetVariableExec and SelectIntoVariableExec.
+ *
+ * The key difference between these two is zero-row behavior:
+ * - EXECUTE IMMEDIATE INTO (SetVariableExec): Sets variables to NULL
+ * - SELECT INTO (SelectIntoVariableExec): Keeps variables unchanged
+ *
+ * Both share the same logic for single-row (assign values) and multi-row (error) cases.
+ */
+private[v2] object VariableExecutor {
+  /**
+   * Execute a query and assign its results to variables.
+   *
+   * Behavior based on number of rows returned:
+   * - 0 rows: Depends on zeroRowBehavior (SetToNull vs KeepUnchanged)
+   * - 1 row: Assigns column values to variables
+   * - 2+ rows: Throws ROW_SUBQUERY_TOO_MANY_ROWS error
+   *
+   * @param query The query to execute
+   * @param variables The target variables
+   * @param zeroRowBehavior How to handle zero-row results
+   * @param conf SQL configuration
+   * @param tempVariableManager Temp variable manager
+   * @return Empty sequence (variable assignment produces no output)
+   */
+  def executeWithVariables(
+      query: SparkPlan,
+      variables: Seq[VariableReference],
+      zeroRowBehavior: ZeroRowBehavior,
+      conf: SQLConf,
+      tempVariableManager: org.apache.spark.sql.catalyst.catalog.TempVariableManager
+  ): Seq[InternalRow] = {
     val values = query.executeCollect()
+
     if (values.length == 0) {
-      variables.foreach { v =>
-        VariableSetter.setVariable(
-          v, null, session.sessionState.conf,
-          session.sessionState.catalogManager.tempVariableManager)
+      // Handle zero rows based on the behavior
+      zeroRowBehavior match {
+        case ZeroRowBehavior.SetToNull =>
+          // EXECUTE IMMEDIATE INTO: set all variables to null
+          variables.foreach { v =>
+            VariableSetter.setVariable(v, null, conf, tempVariableManager)
+          }
+        case ZeroRowBehavior.KeepUnchanged =>
+          // SELECT INTO: do nothing, variables remain unchanged
       }
     } else if (values.length > 1) {
       throw new SparkException(
@@ -93,15 +143,32 @@ case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
         messageParameters = Map.empty,
         cause = null)
     } else {
+      // Exactly one row: assign values to variables
       val row = values(0)
       variables.zipWithIndex.foreach { case (v, index) =>
         val value = row.get(index, v.dataType)
-        VariableSetter.setVariable(
-          v, value, session.sessionState.conf,
-          session.sessionState.catalogManager.tempVariableManager)
+        VariableSetter.setVariable(v, value, conf, tempVariableManager)
       }
     }
+
     Seq.empty
+  }
+}
+
+/**
+ * Physical plan node for setting a variable.
+ * Used by EXECUTE IMMEDIATE INTO.
+ */
+case class SetVariableExec(variables: Seq[VariableReference], query: SparkPlan)
+  extends V2CommandExec with UnaryLike[SparkPlan] {
+
+  override protected def run(): Seq[InternalRow] = {
+    VariableExecutor.executeWithVariables(
+      query,
+      variables,
+      ZeroRowBehavior.SetToNull,
+      session.sessionState.conf,
+      session.sessionState.catalogManager.tempVariableManager)
   }
 
   override def output: Seq[Attribute] = Seq.empty
@@ -124,24 +191,12 @@ case class SelectIntoVariableExec(
   extends V2CommandExec with UnaryLike[SparkPlan] {
 
   override protected def run(): Seq[InternalRow] = {
-    val values = query.executeCollect()
-    if (values.length == 0) {
-      // SELECT INTO behavior: do nothing, variables remain unchanged
-    } else if (values.length > 1) {
-      throw new SparkException(
-        errorClass = "ROW_SUBQUERY_TOO_MANY_ROWS",
-        messageParameters = Map.empty,
-        cause = null)
-    } else {
-      val row = values(0)
-      variables.zipWithIndex.foreach { case (v, index) =>
-        val value = row.get(index, v.dataType)
-        VariableSetter.setVariable(
-          v, value, session.sessionState.conf,
-          session.sessionState.catalogManager.tempVariableManager)
-      }
-    }
-    Seq.empty
+    VariableExecutor.executeWithVariables(
+      query,
+      variables,
+      ZeroRowBehavior.KeepUnchanged,
+      session.sessionState.conf,
+      session.sessionState.catalogManager.tempVariableManager)
   }
 
   override def output: Seq[Attribute] = Seq.empty

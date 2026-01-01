@@ -1565,18 +1565,13 @@ class AstBuilder extends DataTypeAstBuilder
         throw QueryCompilationErrors.selectIntoFeatureDisabled()
       }
 
-      // SELECT INTO is not allowed in pipe operator context (same as subqueries/set operations)
-      if (isPipeOperatorSelect) {
-        throw QueryCompilationErrors.selectIntoOnlyAtTopLevel()
-      }
-
       val targetVars = visitMultipartIdentifierList(selectClause.targetVariable)
-      // We create an UnresolvedSelectInto node here. The actual validation of
-      // whether this is at top level, not in set operation, and within SQL script
-      // will be done in an analysis rule.
-      // For now, we set isTopLevel and isInSetOperation to false - they will be
-      // determined during analysis.
-      UnresolvedSelectInto(planWithHints, targetVars, isTopLevel = false, isInSetOperation = false)
+      // Create UnresolvedSelectInto with context flags set to their initial values.
+      // The analyzer will update these flags and perform validation.
+      UnresolvedSelectInto(planWithHints, targetVars,
+        isTopLevel = false,
+        isInSetOperation = false,
+        isPipeOperator = isPipeOperatorSelect)
     } else {
       planWithHints
     }
