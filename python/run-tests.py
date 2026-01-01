@@ -182,6 +182,14 @@ class TestRunner:
             self.write_task = None
             self.pdb_mode = False
 
+        if self.timeout_task is not None:
+            self.timeout_task.cancel()
+            try:
+                await self.timeout_task
+            except asyncio.CancelledError:
+                pass
+            self.timeout_task = None
+
     # Writer: forward our stdin to child tty
     async def write_to_child(self):
         while True:
