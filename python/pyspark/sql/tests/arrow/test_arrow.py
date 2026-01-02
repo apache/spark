@@ -59,7 +59,6 @@ from pyspark.testing.sqlutils import (
     pyarrow_requirement_message,
 )
 from pyspark.errors import ArithmeticException, PySparkTypeError, UnsupportedOperationException
-from pyspark.loose_version import LooseVersion
 from pyspark.util import is_remote_only
 
 if have_pandas:
