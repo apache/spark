@@ -102,7 +102,8 @@ class SQLJsonProtocolSuite extends SparkFunSuite with LocalSparkSession {
         |  "Event" : "org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionEnd",
         |  "executionId" : 1,
         |  "time" : 10,
-        |  "errorMessage" : $errorMessageJson
+        |  "errorMessage" : $errorMessageJson,
+        |  "queryId" : null
         |}
       """.stripMargin))
     // scalastyle:on
