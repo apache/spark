@@ -7485,7 +7485,7 @@
   },
   "VECTOR_DIMENSION_MISMATCH" : {
     "message" : [
-      "For the <functionName> function, both vectors must have the same dimension, but got <leftDim> and <rightDim>."
+      "Vectors passed to <functionName> must have the same dimension, but got <leftDim> and <rightDim>."
     ],
     "sqlState" : "22000"
   },
