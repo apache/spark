@@ -95,6 +95,7 @@ private[protobuf] class ApplicationInfoWrapperSerializer
     info.attemptId.foreach{ id =>
       builder.setAttemptId(id)
     }
+    info.exitCode.foreach(builder.setExitCode)
     builder.build()
   }
 
