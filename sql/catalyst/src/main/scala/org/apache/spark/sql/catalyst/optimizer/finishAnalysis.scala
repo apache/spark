@@ -80,7 +80,7 @@ object RewriteNonCorrelatedExists extends Rule[LogicalPlan] {
  * Computes expressions in inline tables. This rule is supposed to be called at the very end
  * of the analysis phase, given that all the expressions need to be fully resolved/replaced
  * at this point.
- * 
+ *
  * Note: Inline tables with outer references (correlated) are NOT evaluated here - they will
  * be rewritten by RewriteCorrelatedInlineTable and handled by the decorrelation framework.
  * If spark.sql.legacy.valuesGeneralizedExpressionsEnabled is false, we'll never see such

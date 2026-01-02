@@ -54,22 +54,22 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * This rule should run before decorrelation (PullupCorrelatedPredicates).
  */
 object RewriteCorrelatedInlineTable extends Rule[LogicalPlan] {
-  
+
   def apply(plan: LogicalPlan): LogicalPlan = {
     // Note: No need to check config here. If config is disabled, we never reach here
     // with correlated tables (they're rejected during analysis).
-    
+
     // Need to transform both the plan tree AND expressions containing plans (like LateralSubquery)
     plan.transformUpWithPruning(
       _.containsPattern(org.apache.spark.sql.catalyst.trees.TreePattern.INLINE_TABLE_EVAL)) {
-      case table: ResolvedInlineTable 
+      case table: ResolvedInlineTable
           if table.rows.flatten.exists(SubExprUtils.containsOuter) =>
         rewriteTable(table)
     }.transformAllExpressionsWithPruning(
       _.containsPattern(org.apache.spark.sql.catalyst.trees.TreePattern.INLINE_TABLE_EVAL)) {
       case ls: LateralSubquery =>
         val newPlan = ls.plan.transformUp {
-          case table: ResolvedInlineTable 
+          case table: ResolvedInlineTable
               if table.rows.flatten.exists(SubExprUtils.containsOuter) =>
             rewriteTable(table)
         }
