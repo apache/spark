@@ -72,11 +72,12 @@ object SQLExecution extends Logging {
   }
 
   private def extractShuffleIds(plan: SparkPlan): Seq[Int] = {
-    plan match {
+    val shuffleIdsOption = plan.collectFirst {
       case ae: AdaptiveSparkPlanExec =>
         ae.context.shuffleIds.asScala.keys.toSeq
-      case nonAdaptivePlan =>
-        nonAdaptivePlan.collect {
+    }
+    shuffleIdsOption.getOrElse {
+        plan.collect {
           case exec: ShuffleExchangeLike => exec.shuffleId
         }
     }

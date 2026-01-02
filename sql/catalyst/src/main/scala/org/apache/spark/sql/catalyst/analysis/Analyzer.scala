@@ -2102,7 +2102,7 @@ class Analyzer(
             throw QueryCompilationErrors.expectPersistentFuncError(
               nameParts.head, cmd, mismatchHint, u)
           } else {
-            ResolvedNonPersistentFunc(nameParts.head, V1Function(info))
+            ResolvedNonPersistentFunc(nameParts.head, V1Function.metadataOnly(info))
           }
         }.getOrElse {
           val CatalogAndIdentifier(catalog, ident) =

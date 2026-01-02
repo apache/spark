@@ -38,7 +38,6 @@ import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, DefaultVa
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -671,7 +670,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
       throw SparkUnsupportedOperationException()
     }
     override def loadFunction(ident: Identifier): UnboundFunction = {
-      V1Function(v1Catalog.lookupPersistentFunction(ident.asFunctionIdentifier))
+      v1Catalog.loadPersistentScalarFunction(ident.asFunctionIdentifier)
     }
     override def functionExists(ident: Identifier): Boolean = {
       v1Catalog.isPersistentFunction(ident.asFunctionIdentifier)
