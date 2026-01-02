@@ -80,11 +80,23 @@ object RewriteNonCorrelatedExists extends Rule[LogicalPlan] {
  * Computes expressions in inline tables. This rule is supposed to be called at the very end
  * of the analysis phase, given that all the expressions need to be fully resolved/replaced
  * at this point.
+ *
+ * Note: Inline tables with outer references (correlated) are NOT evaluated here - they will
+ * be rewritten by RewriteCorrelatedInlineTable and handled by the decorrelation framework.
  */
 object EvalInlineTables extends Rule[LogicalPlan] with CastSupport {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan.transformDownWithSubqueriesAndPruning(_.containsPattern(INLINE_TABLE_EVAL)) {
-      case table: ResolvedInlineTable => eval(table)
+      case table: ResolvedInlineTable =>
+        // Check if table has outer references (correlated expressions)
+        val hasOuterRefs = table.rows.flatten.exists(SubExprUtils.containsOuter)
+        if (hasOuterRefs) {
+          // Keep as ResolvedInlineTable - will be rewritten by RewriteCorrelatedInlineTable
+          table
+        } else {
+          // Safe to evaluate - no outer dependencies
+          eval(table)
+        }
     }
   }
 

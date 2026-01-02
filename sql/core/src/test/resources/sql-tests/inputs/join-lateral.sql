@@ -297,7 +297,7 @@ SELECT * FROM t1 JOIN LATERAL
   INTERSECT ALL
   SELECT t4.c2
   FROM   t4);
-  
+
 SELECT * FROM t1 JOIN LATERAL
   (SELECT t2.c2
   FROM   t2
@@ -313,7 +313,7 @@ SELECT * FROM t1 JOIN LATERAL
   EXCEPT ALL
   SELECT t4.c2
   FROM   t4);
-  
+
 SELECT * FROM t1 JOIN LATERAL
   (SELECT t2.c2
   FROM   t2
@@ -557,3 +557,43 @@ DROP VIEW t1;
 DROP VIEW t2;
 DROP VIEW t3;
 DROP VIEW t4;
+
+-- ============================================================================
+-- LATERAL VALUES - Test correlated inline tables (Phase 2)
+-- ============================================================================
+
+-- Basic correlated LATERAL VALUES
+SELECT * FROM VALUES (1) AS t(c1), LATERAL (VALUES (t.c1)) AS s(c2);
+
+-- Multiple columns in correlated VALUES
+SELECT * FROM VALUES (1, 2) AS t(c1, c2), LATERAL (VALUES (t.c1, t.c2)) AS s(c3, c4);
+
+-- Expressions in correlated VALUES
+SELECT * FROM VALUES (1, 2) AS t(c1, c2), LATERAL (VALUES (t.c1 + t.c2)) AS s(c3);
+
+-- Multiple rows in outer table
+SELECT * FROM VALUES (1), (2), (3) AS t(c1), LATERAL (VALUES (t.c1 * 2)) AS s(c2) ORDER BY c1;
+
+-- Multiple rows in correlated VALUES
+SELECT * FROM VALUES (1, 2) AS t(c1, c2), LATERAL (VALUES (t.c1), (t.c2)) AS s(c3) ORDER BY c3;
+
+-- Multiple rows in both outer and VALUES
+SELECT * FROM VALUES (1), (2) AS t(c1), LATERAL (VALUES (t.c1), (t.c1 + 10)) AS s(c2) ORDER BY c1, c2;
+
+-- Correlated VALUES with nondeterministic function
+SELECT t.c1, s.c2 FROM VALUES (1) AS t(c1), LATERAL (VALUES (t.c1, rand())) AS s(c2, c3) ORDER BY c1;
+
+-- Multiple rows with correlation and nondeterministic
+SELECT t.c1 FROM VALUES (1), (2) AS t(c1), LATERAL (VALUES (t.c1, rand())) AS s(c2, c3) ORDER BY c1;
+
+-- Correlated VALUES with type coercion
+SELECT * FROM VALUES (1) AS t(c1), LATERAL (VALUES (t.c1, 2.0), (t.c1 + 1, 3.0)) AS s(c2, c3) ORDER BY c2;
+
+-- Correlated VALUES with NULL
+SELECT * FROM VALUES (1, NULL) AS t(c1, c2), LATERAL (VALUES (t.c1, t.c2)) AS s(c3, c4);
+
+-- Correlated VALUES with complex expressions
+SELECT * FROM VALUES (1, 2, 3) AS t(c1, c2, c3), LATERAL (VALUES (t.c1 * t.c2 + t.c3)) AS s(c4);
+
+-- LEFT OUTER JOIN with correlated VALUES
+SELECT * FROM VALUES (1), (2) AS t(c1) LEFT JOIN LATERAL (VALUES (t.c1 * 10)) AS s(c2) ON TRUE ORDER BY c1;

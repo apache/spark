@@ -174,4 +174,69 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
     val converted2 = EvaluateUnresolvedInlineTable.findCommonTypesAndCast(table2)
     assert(converted2.schema.fields(0).nullable)
   }
+
+  test("EvalInlineTables should skip correlated tables") {
+    import org.apache.spark.sql.catalyst.expressions.{Attribute, OuterReference}
+    import org.apache.spark.sql.types.IntegerType
+    
+    // Create a ResolvedInlineTable with OuterReference
+    val outerAttr = Attribute("outer_c1", IntegerType)()
+    val outerRef = OuterReference(outerAttr)
+    
+    val table = ResolvedInlineTable(
+      rows = Seq(Seq(outerRef)),
+      output = Seq(Attribute("c1", IntegerType)())
+    )
+    
+    // EvalInlineTables should skip this because it has outer references
+    val result = EvalInlineTables(table)
+    
+    // Should remain as ResolvedInlineTable (not converted to LocalRelation)
+    assert(result.isInstanceOf[ResolvedInlineTable])
+    assert(result == table)
+  }
+
+  test("earlyEvalIfPossible detects outer references") {
+    import org.apache.spark.sql.catalyst.expressions.{Attribute, OuterReference}
+    import org.apache.spark.sql.types.IntegerType
+    
+    // Create table with outer reference
+    val outerAttr = Attribute("outer_c1", IntegerType)()
+    val outerRef = OuterReference(outerAttr)
+    
+    val unresolvedTable = UnresolvedInlineTable(
+      names = Seq("c1"),
+      rows = Seq(Seq(outerRef))
+    )
+    
+    // After resolving, should create ResolvedInlineTable
+    val resolved = EvaluateUnresolvedInlineTable.findCommonTypesAndCast(unresolvedTable)
+    assert(resolved.isInstanceOf[ResolvedInlineTable])
+    
+    // earlyEvalIfPossible should NOT convert to LocalRelation
+    val result = EvaluateUnresolvedInlineTable.evaluateUnresolvedInlineTable(unresolvedTable)
+    assert(result.isInstanceOf[ResolvedInlineTable])
+  }
+
+  test("mix of nondeterministic and outer references") {
+    import org.apache.spark.sql.catalyst.expressions.{Attribute, OuterReference}
+    import org.apache.spark.sql.types.IntegerType
+    
+    // Create table with both Rand and OuterReference
+    val outerAttr = Attribute("outer_c1", IntegerType)()
+    val outerRef = OuterReference(outerAttr)
+    
+    val table = ResolvedInlineTable(
+      rows = Seq(Seq(Rand(1), outerRef)),
+      output = Seq(
+        Attribute("c1", org.apache.spark.sql.types.DoubleType)(),
+        Attribute("c2", IntegerType)()
+      )
+    )
+    
+    // Should not be evaluated (has outer references)
+    val result = EvalInlineTables(table)
+    assert(result.isInstanceOf[ResolvedInlineTable])
+    assert(result == table)
+  }
 }
