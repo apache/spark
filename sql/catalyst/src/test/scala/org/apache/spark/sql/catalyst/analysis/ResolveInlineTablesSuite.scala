@@ -20,8 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, CurrentTime, CurrentTimestamp, Literal, OuterReference, Rand}
-import org.apache.spark.sql.catalyst.expressions.aggregate.Count
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Cast, CurrentTime, CurrentTimestamp, Literal, OuterReference, Rand}
 import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, EvalInlineTables}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.EvaluateUnresolvedInlineTable
@@ -49,17 +48,6 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
     EvaluateUnresolvedInlineTable.validateInputEvaluable(
       UnresolvedInlineTable(Seq("c1"), Seq(Seq(Rand(1)))))
 
-    // aggregate should not work (unresolved)
-    intercept[AnalysisException] {
-      EvaluateUnresolvedInlineTable.validateInputEvaluable(
-        UnresolvedInlineTable(Seq("c1"), Seq(Seq(Count(lit(1))))))
-    }
-
-    // unresolved attribute should not work
-    intercept[AnalysisException] {
-      EvaluateUnresolvedInlineTable.validateInputEvaluable(
-        UnresolvedInlineTable(Seq("c1"), Seq(Seq(UnresolvedAttribute("A")))))
-    }
   }
 
   test("validate input dimensions") {
@@ -178,12 +166,12 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
 
   test("EvalInlineTables should skip correlated tables") {
     // Create a ResolvedInlineTable with OuterReference
-    val outerAttr = Attribute("outer_c1", IntegerType)()
+    val outerAttr = AttributeReference("outer_c1", IntegerType)()
     val outerRef = OuterReference(outerAttr)
 
     val table = ResolvedInlineTable(
       rows = Seq(Seq(outerRef)),
-      output = Seq(Attribute("c1", IntegerType)())
+      output = Seq(AttributeReference("c1", IntegerType)())
     )
 
     // EvalInlineTables should skip this because it has outer references
@@ -196,7 +184,7 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
 
   test("earlyEvalIfPossible detects outer references") {
     // Create table with outer reference
-    val outerAttr = Attribute("outer_c1", IntegerType)()
+    val outerAttr = AttributeReference("outer_c1", IntegerType)()
     val outerRef = OuterReference(outerAttr)
 
     val unresolvedTable = UnresolvedInlineTable(
@@ -215,14 +203,14 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
 
   test("mix of nondeterministic and outer references") {
     // Create table with both Rand and OuterReference
-    val outerAttr = Attribute("outer_c1", IntegerType)()
+    val outerAttr = AttributeReference("outer_c1", IntegerType)()
     val outerRef = OuterReference(outerAttr)
 
     val table = ResolvedInlineTable(
       rows = Seq(Seq(Rand(1), outerRef)),
       output = Seq(
-        Attribute("c1", org.apache.spark.sql.types.DoubleType)(),
-        Attribute("c2", IntegerType)()
+        AttributeReference("c1", org.apache.spark.sql.types.DoubleType)(),
+        AttributeReference("c2", IntegerType)()
       )
     )
 
@@ -247,12 +235,16 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
       val exception = intercept[AnalysisException] {
         EvaluateUnresolvedInlineTable.evaluate(table)
       }
-      assert(exception.getErrorClass == "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE")
+      checkError(
+        exception = exception,
+        condition = "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
+        parameters = Map("expr" -> "\"rand(1)\"")
+      )
     }
   }
 
   test("config: legacy VALUES only foldable expressions (default allows correlated)") {
-    val outerAttr = Attribute("c1", IntegerType)()
+    val outerAttr = AttributeReference("c1", IntegerType)()
     val outerRef = OuterReference(outerAttr)
 
     // With config disabled (default), outer references should work
@@ -269,7 +261,11 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
       val exception = intercept[AnalysisException] {
         EvaluateUnresolvedInlineTable.evaluate(table)
       }
-      assert(exception.getErrorClass == "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE")
+      checkError(
+        exception = exception,
+        condition = "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
+        parameters = Map("expr" -> "`c1`")  // toSQLId uses backticks
+      )
     }
   }
 

@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions.{AliasHelper, EvalHelper, Expression, SubExprUtils}
+import org.apache.spark.sql.catalyst.expressions.{AliasHelper, EvalHelper, Expression, OuterReference, SubExprUtils}
 import org.apache.spark.sql.catalyst.optimizer.EvalInlineTables
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
@@ -126,9 +126,22 @@ object EvaluateUnresolvedInlineTable extends SQLConfHelper
         } else if (conf.legacyValuesOnlyFoldableExpressions &&
                    !trimAliases(prepareForEval(e)).foldable) {
           // Legacy mode: only foldable expressions allowed
+          // For OuterReference, show the qualified column name instead of outer(...)
+          val errorExpr = if (e.isInstanceOf[OuterReference]) {
+            val outerRef = e.asInstanceOf[OuterReference]
+            val ref = outerRef.e
+            // Show as `table.column` if qualified, otherwise just `column`
+            if (ref.qualifier.nonEmpty) {
+              toSQLId(ref.qualifier :+ ref.name)
+            } else {
+              toSQLId(ref.name)
+            }
+          } else {
+            toSQLExpr(e)
+          }
           e.failAnalysis(
             errorClass = "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-            messageParameters = Map("expr" -> toSQLExpr(e)))
+            messageParameters = Map("expr" -> errorExpr))
         }
       }
     }
