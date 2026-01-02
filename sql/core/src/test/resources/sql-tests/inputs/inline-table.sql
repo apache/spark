@@ -35,7 +35,7 @@ select * from values ("one", array(0, 1)), ("two", array(2, 3)) as data(a, b);
 -- decimal and double coercion
 select * from values ("one", 2.0), ("two", 3.0D) as data(a, b);
 
--- error reporting: nondeterministic function rand
+-- nondeterministic function rand - should now work
 select * from values ("one", rand(5)), ("two", 3.0D) as data(a, b);
 
 -- error reporting: different number of columns
@@ -66,3 +66,21 @@ select count(distinct ct) from values now(), now(), now() as data(ct);
 
 -- current_timestamp() should be kept as tempResolved inline expression.
 select count(distinct ct) from values current_timestamp(), current_timestamp() as data(ct);
+
+-- nondeterministic expressions with multiple rows
+select * from values (rand()), (rand()), (rand()) as data(a);
+
+-- nondeterministic with different seeds produces different sequences
+select * from values (rand(1)), (rand(2)), (rand(3)) as data(a);
+
+-- random() function (alias for rand)
+select * from values (random()), (random()) as data(a);
+
+-- uuid() function
+select length(a) from values (uuid()), (uuid()) as data(a);
+
+-- mix of deterministic and nondeterministic
+select * from values (1, rand(5)), (2, rand(5)) as data(a, b);
+
+-- nondeterministic in more complex expressions
+select * from values (1 + rand(5)), (2 + rand(5)) as data(a);

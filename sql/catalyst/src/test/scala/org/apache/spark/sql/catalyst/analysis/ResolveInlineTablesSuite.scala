@@ -36,7 +36,7 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
 
   private def lit(v: Any): Literal = Literal(v)
 
-  test("validate inputs are foldable") {
+  test("validate inputs are resolved") {
     EvaluateUnresolvedInlineTable.validateInputEvaluable(
       UnresolvedInlineTable(Seq("c1", "c2"), Seq(Seq(lit(1)))))
 
@@ -44,13 +44,11 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
     EvaluateUnresolvedInlineTable.validateInputEvaluable(
       UnresolvedInlineTable(Seq("c1", "c2"), Seq(Seq(Alias(lit(1), "a")()))))
 
-    // nondeterministic (rand) should not work
-    intercept[AnalysisException] {
-      EvaluateUnresolvedInlineTable.validateInputEvaluable(
-        UnresolvedInlineTable(Seq("c1"), Seq(Seq(Rand(1)))))
-    }
+    // nondeterministic (rand) should now work
+    EvaluateUnresolvedInlineTable.validateInputEvaluable(
+      UnresolvedInlineTable(Seq("c1"), Seq(Seq(Rand(1)))))
 
-    // aggregate should not work
+    // aggregate should not work (unresolved)
     intercept[AnalysisException] {
       EvaluateUnresolvedInlineTable.validateInputEvaluable(
         UnresolvedInlineTable(Seq("c1"), Seq(Seq(Count(lit(1))))))
@@ -150,6 +148,21 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
     assert(output.map(_.dataType) == Seq(TimestampType))
     assert(data.size == 1)
     assert(data.head.getLong(0) == correct)
+  }
+
+  test("nondeterministic expressions are kept as ResolvedInlineTable") {
+    // Non-deterministic expressions should not be early-evaluated
+    val table = UnresolvedInlineTable(Seq("c1"), Seq(Seq(Rand(1)), Seq(Rand(2))))
+    val resolved = ResolveInlineTables(table)
+
+    // Should stay as ResolvedInlineTable, not converted to LocalRelation
+    assert(resolved.isInstanceOf[ResolvedInlineTable])
+
+    // But can be evaluated by EvalInlineTables during optimization
+    val evaluated = EvalInlineTables(resolved)
+    assert(evaluated.isInstanceOf[LocalRelation])
+    val data = evaluated.asInstanceOf[LocalRelation].data
+    assert(data.size == 2)
   }
 
   test("nullability inference in convert") {

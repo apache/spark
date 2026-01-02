@@ -92,7 +92,16 @@ object EvalInlineTables extends Rule[LogicalPlan] with CastSupport {
       val newRows: Seq[InternalRow] =
         table.rows.map { row => InternalRow.fromSeq(row.map { e =>
           try {
-            prepareForEval(e).eval()
+            val prepared = prepareForEval(e)
+            // Initialize nondeterministic expressions before evaluation
+            prepared match {
+              case n: Nondeterministic =>
+                // Initialize with partition index 0 since we're evaluating on the driver
+                n.initialize(0)
+                n.eval()
+              case _ =>
+                prepared.eval()
+            }
           } catch {
             case NonFatal(ex) =>
               table.failAnalysis(

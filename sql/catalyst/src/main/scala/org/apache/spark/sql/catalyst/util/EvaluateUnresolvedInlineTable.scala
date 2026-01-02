@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions.{AliasHelper, EvalHelper, Expression}
+import org.apache.spark.sql.catalyst.expressions.{AliasHelper, EvalHelper, Expression, SubExprUtils}
 import org.apache.spark.sql.catalyst.optimizer.EvalInlineTables
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
@@ -48,13 +48,33 @@ object EvaluateUnresolvedInlineTable extends SQLConfHelper
 
   /**
    * This function attempts to early evaluate rows in inline table.
-   * If evaluation doesn't rely on non-deterministic expressions (e.g. current_like)
-   * expressions will be evaluated and inlined as [[LocalRelation]]
+   * Early evaluation to [[LocalRelation]] is only possible when:
+   * 1. No outer references (correlated references)
+   * 2. No CURRENT_LIKE expressions (need to be replaced by ComputeCurrentTime first)
+   * 3. All expressions are foldable (can be evaluated without input rows)
+   *
+   * If any of these conditions are not met, the table is kept as [[ResolvedInlineTable]]
+   * for evaluation during optimization or execution phase.
    * This is package visible for unit testing.
    */
   private def earlyEvalIfPossible(table: ResolvedInlineTable): LogicalPlan = {
-    val earlyEvalPossible = table.rows.flatten.forall(!_.containsPattern(CURRENT_LIKE))
-    if (earlyEvalPossible) EvalInlineTables.eval(table) else table
+    val allExpressions = table.rows.flatten
+
+    // Check for outer references (correlated expressions)
+    val hasOuterReferences = allExpressions.exists(SubExprUtils.containsOuter)
+
+    // Check for CURRENT_LIKE expressions (will be replaced later)
+    val hasCurrentLike = allExpressions.exists(_.containsPattern(CURRENT_LIKE))
+
+    // Check if all expressions are foldable (can be evaluated at analysis time)
+    val allFoldable = allExpressions.forall(e => trimAliases(prepareForEval(e)).foldable)
+
+    // Only early-eval if no special handling is needed
+    if (!hasOuterReferences && !hasCurrentLike && allFoldable) {
+      EvalInlineTables.eval(table)
+    } else {
+      table
+    }
   }
 
   /**
@@ -81,18 +101,14 @@ object EvaluateUnresolvedInlineTable extends SQLConfHelper
   }
 
   /**
-   * Validates that all inline table data are valid expressions that can be evaluated
-   * (in this they must be foldable).
-   * Note that nondeterministic expressions are not supported since they are not foldable.
-   * Exception are CURRENT_LIKE expressions, which are replaced by a literal in later stages.
+   * Validates that all inline table data are valid expressions that can be evaluated.
+   * Both deterministic and non-deterministic expressions are allowed.
    * This is package visible for unit testing.
    */
   def validateInputEvaluable(table: UnresolvedInlineTable): Unit = {
     table.rows.foreach { row =>
       row.foreach { e =>
-        if (e.containsPattern(CURRENT_LIKE)) {
-          // Do nothing.
-        } else if (!e.resolved || !trimAliases(prepareForEval(e)).foldable) {
+        if (!e.resolved) {
           e.failAnalysis(
             errorClass = "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
             messageParameters = Map("expr" -> toSQLExpr(e)))
