@@ -128,7 +128,10 @@ class TestRunner:
         if self.timeout is not None:
             self.timeout_task = asyncio.create_task(self.check_timeout())
             tasks.append(self.timeout_task)
-        await asyncio.gather(*tasks)
+        try:
+            await asyncio.gather(*tasks)
+        except asyncio.CancelledError:
+            pass
 
     def output_line(self, line):
         if self.pdb_mode:
@@ -184,10 +187,6 @@ class TestRunner:
 
         if self.timeout_task is not None:
             self.timeout_task.cancel()
-            try:
-                await self.timeout_task
-            except asyncio.CancelledError:
-                pass
             self.timeout_task = None
 
     # Writer: forward our stdin to child tty
