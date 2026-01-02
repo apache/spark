@@ -103,7 +103,19 @@ object EvalInlineTables extends Rule[LogicalPlan] with CastSupport {
     }
   }
 
-    def eval(table: ResolvedInlineTable): LocalRelation = {
+    /**
+   * Evaluates the expressions in a [[ResolvedInlineTable]] and produces a [[LocalRelation]].
+   *
+   * Non-deterministic expressions are initialized with partition index 0 (driver side)
+   * before evaluation to ensure consistent random number generation.
+   */
+  /**
+   * Evaluates the expressions in a [[ResolvedInlineTable]] and produces a [[LocalRelation]].
+   *
+   * Non-deterministic expressions are initialized with partition index 0 (driver side)
+   * before evaluation to ensure consistent random number generation.
+   */
+  def eval(table: ResolvedInlineTable): LocalRelation = {
       val newRows: Seq[InternalRow] =
         table.rows.map { row => InternalRow.fromSeq(row.map { e =>
           try {

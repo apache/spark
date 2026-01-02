@@ -47,14 +47,16 @@ object EvaluateUnresolvedInlineTable extends SQLConfHelper
   }
 
   /**
-   * This function attempts to early evaluate rows in inline table.
-   * Early evaluation to [[LocalRelation]] is only possible when:
-   * 1. No outer references (correlated references)
-   * 2. No CURRENT_LIKE expressions (need to be replaced by ComputeCurrentTime first)
-   * 3. All expressions are foldable (can be evaluated without input rows)
+   * Attempts early evaluation of inline table rows to [[LocalRelation]].
    *
-   * If any of these conditions are not met, the table is kept as [[ResolvedInlineTable]]
-   * for evaluation during optimization or execution phase.
+   * Early evaluation is only performed when all of the following conditions are met:
+   * 1. No outer references (correlated references to outer query columns)
+   * 2. No CURRENT_LIKE expressions (must be replaced by ComputeCurrentTime first)
+   * 3. All expressions are foldable (can be evaluated at planning time without input rows)
+   *
+   * If any condition is not met, the table remains as [[ResolvedInlineTable]] for later
+   * evaluation during optimization or execution.
+   *
    * This is package visible for unit testing.
    */
   private def earlyEvalIfPossible(table: ResolvedInlineTable): LogicalPlan = {
@@ -101,10 +103,15 @@ object EvaluateUnresolvedInlineTable extends SQLConfHelper
   }
 
   /**
-   * Validates that all inline table data are valid expressions that can be evaluated.
-   * When spark.sql.legacy.values.onlyFoldableExpressions is true, only foldable expressions
-   * are allowed (pre-4.1 behavior). When false (default), both deterministic and
-   * non-deterministic expressions are allowed.
+   * Validates that all inline table expressions are resolved and evaluable.
+   *
+   * When spark.sql.legacy.values.onlyFoldableExpressions is true, only foldable (constant)
+   * expressions are allowed. When false (default), non-deterministic expressions
+   * (e.g., random(), uuid()) and correlated references (OuterReference) are also allowed.
+   *
+   * CURRENT_LIKE expressions (current_timestamp, now, etc.) are always allowed regardless
+   * of the config setting.
+   *
    * This is package visible for unit testing.
    */
   def validateInputEvaluable(table: UnresolvedInlineTable): Unit = {
