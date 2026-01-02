@@ -20,12 +20,13 @@ package org.apache.spark.sql.catalyst.analysis
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, CurrentTime, CurrentTimestamp, Literal, Rand}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, CurrentTime, CurrentTimestamp, Literal, OuterReference, Rand}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, EvalInlineTables}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.EvaluateUnresolvedInlineTable
-import org.apache.spark.sql.types.{LongType, NullType, TimestampType, TimeType}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{IntegerType, LongType, NullType, TimestampType, TimeType}
 
 /**
  * Unit tests for [[ResolveInlineTables]]. Note that there are also test cases defined in
@@ -176,9 +177,6 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
   }
 
   test("EvalInlineTables should skip correlated tables") {
-    import org.apache.spark.sql.catalyst.expressions.{Attribute, OuterReference}
-    import org.apache.spark.sql.types.IntegerType
-
     // Create a ResolvedInlineTable with OuterReference
     val outerAttr = Attribute("outer_c1", IntegerType)()
     val outerRef = OuterReference(outerAttr)
@@ -197,9 +195,6 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
   }
 
   test("earlyEvalIfPossible detects outer references") {
-    import org.apache.spark.sql.catalyst.expressions.{Attribute, OuterReference}
-    import org.apache.spark.sql.types.IntegerType
-
     // Create table with outer reference
     val outerAttr = Attribute("outer_c1", IntegerType)()
     val outerRef = OuterReference(outerAttr)
@@ -219,9 +214,6 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
   }
 
   test("mix of nondeterministic and outer references") {
-    import org.apache.spark.sql.catalyst.expressions.{Attribute, OuterReference}
-    import org.apache.spark.sql.types.IntegerType
-
     // Create table with both Rand and OuterReference
     val outerAttr = Attribute("outer_c1", IntegerType)()
     val outerRef = OuterReference(outerAttr)
@@ -260,9 +252,6 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
   }
 
   test("config: legacy VALUES only foldable expressions (default allows correlated)") {
-    import org.apache.spark.sql.catalyst.expressions.{Attribute, OuterReference}
-    import org.apache.spark.sql.types.IntegerType
-
     val outerAttr = Attribute("c1", IntegerType)()
     val outerRef = OuterReference(outerAttr)
 
