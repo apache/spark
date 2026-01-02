@@ -4844,6 +4844,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val LEGACY_VALUES_ONLY_FOLDABLE_EXPRESSIONS =
+    buildConf("spark.sql.legacy.values.onlyFoldableExpressions")
+      .doc(
+        "When true, VALUES clauses only allow foldable (constant) expressions, matching " +
+        "the behavior before Spark 4.1. When false (default), VALUES allows non-deterministic " +
+        "expressions (e.g., random(), uuid()) and correlated references in LATERAL VALUES " +
+        "(e.g., LATERAL(VALUES(t.c1))). " +
+        "Note: CURRENT_LIKE expressions (current_timestamp, now, etc.) are always allowed."
+      )
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val DECORRELATE_SET_OPS_ENABLED =
     buildConf("spark.sql.optimizer.decorrelateSetOps.enabled")
       .internal()
@@ -7879,6 +7892,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def decorrelateInnerQueryEnabledForExistsIn: Boolean =
     !getConf(SQLConf.DECORRELATE_EXISTS_IN_SUBQUERY_LEGACY_INCORRECT_COUNT_HANDLING_ENABLED)
+
+  def legacyValuesOnlyFoldableExpressions: Boolean =
+    getConf(SQLConf.LEGACY_VALUES_ONLY_FOLDABLE_EXPRESSIONS)
 
   def maxConcurrentOutputFileWriters: Int = getConf(SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS)
 

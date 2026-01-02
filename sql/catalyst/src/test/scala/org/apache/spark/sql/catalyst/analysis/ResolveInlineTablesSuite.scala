@@ -178,19 +178,19 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
   test("EvalInlineTables should skip correlated tables") {
     import org.apache.spark.sql.catalyst.expressions.{Attribute, OuterReference}
     import org.apache.spark.sql.types.IntegerType
-    
+
     // Create a ResolvedInlineTable with OuterReference
     val outerAttr = Attribute("outer_c1", IntegerType)()
     val outerRef = OuterReference(outerAttr)
-    
+
     val table = ResolvedInlineTable(
       rows = Seq(Seq(outerRef)),
       output = Seq(Attribute("c1", IntegerType)())
     )
-    
+
     // EvalInlineTables should skip this because it has outer references
     val result = EvalInlineTables(table)
-    
+
     // Should remain as ResolvedInlineTable (not converted to LocalRelation)
     assert(result.isInstanceOf[ResolvedInlineTable])
     assert(result == table)
@@ -199,20 +199,20 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
   test("earlyEvalIfPossible detects outer references") {
     import org.apache.spark.sql.catalyst.expressions.{Attribute, OuterReference}
     import org.apache.spark.sql.types.IntegerType
-    
+
     // Create table with outer reference
     val outerAttr = Attribute("outer_c1", IntegerType)()
     val outerRef = OuterReference(outerAttr)
-    
+
     val unresolvedTable = UnresolvedInlineTable(
       names = Seq("c1"),
       rows = Seq(Seq(outerRef))
     )
-    
+
     // After resolving, should create ResolvedInlineTable
     val resolved = EvaluateUnresolvedInlineTable.findCommonTypesAndCast(unresolvedTable)
     assert(resolved.isInstanceOf[ResolvedInlineTable])
-    
+
     // earlyEvalIfPossible should NOT convert to LocalRelation
     val result = EvaluateUnresolvedInlineTable.evaluateUnresolvedInlineTable(unresolvedTable)
     assert(result.isInstanceOf[ResolvedInlineTable])
@@ -221,11 +221,11 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
   test("mix of nondeterministic and outer references") {
     import org.apache.spark.sql.catalyst.expressions.{Attribute, OuterReference}
     import org.apache.spark.sql.types.IntegerType
-    
+
     // Create table with both Rand and OuterReference
     val outerAttr = Attribute("outer_c1", IntegerType)()
     val outerRef = OuterReference(outerAttr)
-    
+
     val table = ResolvedInlineTable(
       rows = Seq(Seq(Rand(1), outerRef)),
       output = Seq(
@@ -233,10 +233,79 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
         Attribute("c2", IntegerType)()
       )
     )
-    
+
     // Should not be evaluated (has outer references)
     val result = EvalInlineTables(table)
     assert(result.isInstanceOf[ResolvedInlineTable])
     assert(result == table)
+  }
+
+  test("config: legacy VALUES only foldable expressions (default allows non-deterministic)") {
+    // With config disabled (default), non-deterministic expressions should work
+    withSQLConf(SQLConf.LEGACY_VALUES_ONLY_FOLDABLE_EXPRESSIONS.key -> "false") {
+      val table = UnresolvedInlineTable(Seq("c1"), Seq(Seq(Rand(1))))
+      val evaluated = EvaluateUnresolvedInlineTable.evaluate(table)
+      // Should create ResolvedInlineTable (not fail)
+      assert(evaluated.isInstanceOf[ResolvedInlineTable])
+    }
+
+    // With legacy config enabled, non-deterministic expressions should be rejected
+    withSQLConf(SQLConf.LEGACY_VALUES_ONLY_FOLDABLE_EXPRESSIONS.key -> "true") {
+      val table = UnresolvedInlineTable(Seq("c1"), Seq(Seq(Rand(1))))
+      val exception = intercept[AnalysisException] {
+        EvaluateUnresolvedInlineTable.evaluate(table)
+      }
+      assert(exception.getErrorClass == "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE")
+    }
+  }
+
+  test("config: legacy VALUES only foldable expressions (default allows correlated)") {
+    import org.apache.spark.sql.catalyst.expressions.{Attribute, OuterReference}
+    import org.apache.spark.sql.types.IntegerType
+
+    val outerAttr = Attribute("c1", IntegerType)()
+    val outerRef = OuterReference(outerAttr)
+
+    // With config disabled (default), outer references should work
+    withSQLConf(SQLConf.LEGACY_VALUES_ONLY_FOLDABLE_EXPRESSIONS.key -> "false") {
+      val table = UnresolvedInlineTable(Seq("col"), Seq(Seq(outerRef)))
+      val evaluated = EvaluateUnresolvedInlineTable.evaluate(table)
+      // Should create ResolvedInlineTable (not fail)
+      assert(evaluated.isInstanceOf[ResolvedInlineTable])
+    }
+
+    // With legacy config enabled, outer references should be rejected
+    withSQLConf(SQLConf.LEGACY_VALUES_ONLY_FOLDABLE_EXPRESSIONS.key -> "true") {
+      val table = UnresolvedInlineTable(Seq("col"), Seq(Seq(outerRef)))
+      val exception = intercept[AnalysisException] {
+        EvaluateUnresolvedInlineTable.evaluate(table)
+      }
+      assert(exception.getErrorClass == "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE")
+    }
+  }
+
+  test("config: CURRENT_LIKE expressions always allowed regardless of config") {
+    // CURRENT_LIKE expressions should be allowed even when legacy config is enabled
+    withSQLConf(SQLConf.LEGACY_VALUES_ONLY_FOLDABLE_EXPRESSIONS.key -> "true") {
+      val table = UnresolvedInlineTable(Seq("c1"), Seq(Seq(CurrentTimestamp())))
+      val evaluated = EvaluateUnresolvedInlineTable.evaluate(table)
+      // Should create ResolvedInlineTable (not fail)
+      assert(evaluated.isInstanceOf[ResolvedInlineTable])
+    }
+  }
+
+  test("config: foldable expressions always allowed regardless of config") {
+    // Foldable expressions should always work
+    withSQLConf(SQLConf.LEGACY_VALUES_ONLY_FOLDABLE_EXPRESSIONS.key -> "true") {
+      val table = UnresolvedInlineTable(Seq("c1", "c2"), Seq(
+        Seq(Literal(1), Literal(2)),
+        Seq(Literal(3), Literal(4))
+      ))
+      val evaluated = EvaluateUnresolvedInlineTable.evaluate(table)
+      // Should evaluate to LocalRelation
+      assert(evaluated.isInstanceOf[LocalRelation])
+      val relation = evaluated.asInstanceOf[LocalRelation]
+      assert(relation.data.length == 2)
+    }
   }
 }

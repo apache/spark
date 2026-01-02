@@ -102,13 +102,23 @@ object EvaluateUnresolvedInlineTable extends SQLConfHelper
 
   /**
    * Validates that all inline table data are valid expressions that can be evaluated.
-   * Both deterministic and non-deterministic expressions are allowed.
+   * When spark.sql.legacy.values.onlyFoldableExpressions is true, only foldable expressions
+   * are allowed (pre-4.1 behavior). When false (default), both deterministic and
+   * non-deterministic expressions are allowed.
    * This is package visible for unit testing.
    */
   def validateInputEvaluable(table: UnresolvedInlineTable): Unit = {
     table.rows.foreach { row =>
       row.foreach { e =>
-        if (!e.resolved) {
+        if (e.containsPattern(CURRENT_LIKE)) {
+          // CURRENT_LIKE expressions are always allowed
+        } else if (!e.resolved) {
+          e.failAnalysis(
+            errorClass = "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
+            messageParameters = Map("expr" -> toSQLExpr(e)))
+        } else if (conf.legacyValuesOnlyFoldableExpressions &&
+                   !trimAliases(prepareForEval(e)).foldable) {
+          // Legacy mode: only foldable expressions allowed
           e.failAnalysis(
             errorClass = "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
             messageParameters = Map("expr" -> toSQLExpr(e)))

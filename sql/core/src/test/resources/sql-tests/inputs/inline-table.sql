@@ -108,7 +108,7 @@ select * from values (1, 2) as t(c1, c2), lateral (values (t.c1), (t.c2)) as s(c
 select * from values (1), (2) as t(c1), lateral (values (t.c1), (t.c1 + 10)) as s(c2) order by c1, c2;
 
 -- correlated with mix of expressions
-select * from values (1, 2) as t(c1, c2), 
+select * from values (1, 2) as t(c1, c2),
   lateral (values (t.c1, t.c2, t.c1 + t.c2)) as s(c3, c4, c5);
 
 -- ============================================================================
@@ -116,15 +116,15 @@ select * from values (1, 2) as t(c1, c2),
 -- ============================================================================
 
 -- correlation with nondeterministic
-select t.c1, s.c2 from values (1) as t(c1), 
+select t.c1, s.c2 from values (1) as t(c1),
   lateral (values (t.c1, rand())) as s(c2, c3) order by c1;
 
 -- multiple rows with correlation and nondeterministic
-select t.c1 from values (1), (2) as t(c1), 
+select t.c1 from values (1), (2) as t(c1),
   lateral (values (t.c1, rand())) as s(c2, c3) order by c1;
 
 -- multiple VALUES rows with correlation and nondeterministic
-select t.c1 from values (1) as t(c1), 
+select t.c1 from values (1) as t(c1),
   lateral (values (t.c1, rand()), (t.c1 + 1, rand())) as s(c2, c3) order by c2;
 
 -- ============================================================================
@@ -132,22 +132,21 @@ select t.c1 from values (1) as t(c1),
 -- ============================================================================
 
 -- correlated with CURRENT_LIKE
-select * from values (1) as t(c1), 
+select * from values (1) as t(c1),
   lateral (values (t.c1, current_date)) as s(c2, c3);
 
 -- correlated with type coercion
-select * from values (1) as t(c1), 
+select * from values (1) as t(c1),
   lateral (values (t.c1, 2.0), (t.c1 + 1, 3.0)) as s(c2, c3) order by c2;
 
 -- correlated with null
-select * from values (1, null) as t(c1, c2), 
+select * from values (1, null) as t(c1, c2),
   lateral (values (t.c1, t.c2)) as s(c3, c4);
 
 -- correlated with complex expressions
-select * from values (1, 2, 3) as t(c1, c2, c3), 
+select * from values (1, 2, 3) as t(c1, c2, c3),
   lateral (values (t.c1 * t.c2 + t.c3)) as s(c4);
 
 -- left outer lateral join
-select * from values (1), (2) as t(c1) 
+select * from values (1), (2) as t(c1)
   left join lateral (values (t.c1 * 10)) as s(c2) on true order by c1;
-
