@@ -714,6 +714,8 @@ class CliSuite extends SparkFunSuite {
           "-e", "select 1 / 0"),
         errorResponses = Seq("DIVIDE_BY_ZERO"))(expected.toImmutableArraySeq: _*)
     }
+    // DIVIDE_BY_ZERO has SQLSTATE 22012 (not XX***), so it's a user error
+    // and should NOT show stack traces, regardless of silent mode
     check(
       format = ErrorMessageFormat.PRETTY,
       errorMessage =
@@ -725,6 +727,26 @@ class CliSuite extends SparkFunSuite {
       silent = true)
     check(
       format = ErrorMessageFormat.PRETTY,
+      errorMessage =
+        """[DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+          |== SQL (line 1, position 8) ==
+          |select 1 / 0
+          |       ^^^^^
+          |""".stripMargin,
+      silent = false)
+    // DEBUG format should always show stack traces, even for user errors
+    // Silent mode still suppresses stack traces
+    check(
+      format = ErrorMessageFormat.DEBUG,
+      errorMessage =
+        """[DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+          |== SQL (line 1, position 8) ==
+          |select 1 / 0
+          |       ^^^^^
+          |""".stripMargin,
+      silent = true)
+    check(
+      format = ErrorMessageFormat.DEBUG,
       errorMessage =
         """[DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
           |== SQL (line 1, position 8) ==
