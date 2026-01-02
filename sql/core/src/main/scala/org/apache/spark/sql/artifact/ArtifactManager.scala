@@ -422,8 +422,7 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
     artifactPath)
   // Ensure that no reference to `this` is captured/help by the cleanup lambda
   private def getCleanable: Cleaner.Cleanable = cleaner.register(
-    this,
-    () => ArtifactManager.cleanUpGlobalResources(cleanUpStateForGlobalResources)
+    this, new StateCleanupRunner(cleanUpStateForGlobalResources)
   )
   private var cleanable = getCleanable
 
@@ -527,6 +526,12 @@ object ArtifactManager extends Logging {
   private[artifact] object SparkContextResourceType extends Enumeration {
     type ResourceType = Value
     val JAR, FILE, ARCHIVE = Value
+  }
+
+  private class StateCleanupRunner(cleanupState: ArtifactStateForCleanup) extends Runnable {
+    override def run(): Unit = {
+      ArtifactManager.cleanUpGlobalResources(cleanupState)
+    }
   }
 
   // Shared cleaner instance
