@@ -120,4 +120,70 @@ class JsonInferSchemaSuite extends SparkFunSuite with SQLHelper {
       """{"a": "2884-06-24T02:45:51.138"}""",
       StringType)
   }
+
+  test("SPARK-54908: dateFormat option is applied during JSON schema inference") {
+    // This test verifies that dateFormat is now applied during schema inference
+    // Expected behavior: date-only strings matching dateFormat should be inferred as DateType
+
+    // Test case 1: Date-only string with dateFormat specified
+    // Should infer as DateType
+    checkType(
+      Map("dateFormat" -> "ddMMMyy"),
+      """{"a": "02JUL14"}""",
+      DateType)
+
+    // Test case 2: Date-only string with dateFormat, inferTimestamp disabled
+    // Should still infer as DateType when dateFormat is provided
+    checkType(
+      Map("dateFormat" -> "ddMMMyy", "inferTimestamp" -> "false"),
+      """{"a": "02JUL14"}""",
+      DateType)
+
+    // Test case 3: Date-only string with dateFormat, inferTimestamp enabled
+    // Should infer as DateType (not TimestampType) when dateFormat matches but timestamp doesn't
+    checkType(
+      Map("dateFormat" -> "ddMMMyy", "inferTimestamp" -> "true"),
+      """{"a": "02JUL14"}""",
+      DateType)
+
+    // Test case 4: Timestamp string should still work correctly
+    // Timestamp patterns take precedence over date patterns
+    checkType(
+      Map(
+        "dateFormat" -> "ddMMMyy",
+        "timestampFormat" -> "ddMMMyy HH:mm:ss.SSS 'UTC'",
+        "inferTimestamp" -> "true"
+      ),
+      """{"a": "02JUL14 12:17:43.39 UTC"}""",
+      TimestampType)
+
+    // Test case 5: Mixed date and timestamp in same JSON object
+    // created_at should be DateType, updated_at should be TimestampType
+    val jsonOptions = new JSONOptions(
+      Map(
+        "dateFormat" -> "ddMMMyy",
+        "timestampFormat" -> "ddMMMyy HH:mm:ss.SSS 'UTC'",
+        "inferTimestamp" -> "true"
+      ),
+      "UTC",
+      "")
+    val inferSchema = new JsonInferSchema(jsonOptions)
+    val factory = jsonOptions.buildJsonFactory()
+    val jsonString = """{"created_at": "02JUL14", "updated_at": "02JUL14 12:17:43.39 UTC"}"""
+    val parser = CreateJacksonParser.string(factory, jsonString)
+    parser.nextToken()
+    val inferredType = inferSchema.inferField(parser)
+
+    // Verify created_at is DateType
+    val createdField = inferredType.asInstanceOf[StructType].fields.find(_.name == "created_at")
+    assert(createdField.isDefined, "created_at field should exist")
+    assert(createdField.get.dataType === DateType,
+      "created_at should be inferred as DateType")
+
+    // Verify updated_at is TimestampType
+    val updatedField = inferredType.asInstanceOf[StructType].fields.find(_.name == "updated_at")
+    assert(updatedField.isDefined, "updated_at field should exist")
+    assert(updatedField.get.dataType === TimestampType,
+      "updated_at should be inferred as TimestampType")
+  }
 }
