@@ -539,9 +539,7 @@ def _check_arrow_array_timestamps_localize(
                 a.items, mt.valueType, truncate, timezone
             ),
         }
-        # SPARK-48302: PyArrow added support for mask argument to pa.MapArray.from_arrays in
-        # version 17.0.0
-        if a.null_count and LooseVersion(pa.__version__) >= LooseVersion("17.0.0"):
+        if a.null_count:
             params["mask"] = a.is_null()
 
         return pa.MapArray.from_arrays(**params)
