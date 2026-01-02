@@ -343,16 +343,16 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
               }
             }
           </li>
-          <li>
-            <strong>Status:</strong>
-            {
-              exitCode match {
-                case Some(code) if code == 0 => "Success"
-                case Some(code) => s"Failure ($code)"
-                case None => "Running"
-              }
+          {
+            exitCode match {
+              case Some(code) if code != 0 =>
+                <li>
+                  <strong>Final Status:</strong>
+                  {s"Failure (exit code: $code)"}
+                </li>
+              case _ => <!-- -->
             }
-          </li>
+          }
           <li>
             <strong>Scheduling Mode: </strong>
             {schedulingMode}
