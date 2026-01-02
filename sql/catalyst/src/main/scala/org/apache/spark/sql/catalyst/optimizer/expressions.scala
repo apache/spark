@@ -500,11 +500,11 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
     case Not(a LessThanOrEqual b) => GreaterThan(a, b)
 
     case Not(a Or b) =>
-      And(Not(a), Not(b)).transformDownWithPruning(_.containsAnyPattern(AND, OR, NOT), ruleId) {
+      And(Not(a), Not(b)).transformDownWithPruning(_.containsPattern(NOT), ruleId) {
         actualExprTransformer
       }
     case Not(a And b) =>
-      Or(Not(a), Not(b)).transformDownWithPruning(_.containsAnyPattern(AND, OR, NOT), ruleId) {
+      Or(Not(a), Not(b)).transformDownWithPruning(_.containsPattern(NOT), ruleId) {
         actualExprTransformer
       }
 
