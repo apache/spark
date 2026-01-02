@@ -462,6 +462,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
                   t match {
                     case st: SparkThrowable =>
                       val sqlState = st.getSqlState
+                      // Print if: internal error (XX***) OR no SQLSTATE
                       sqlState == null || sqlState.startsWith("XX")
                     case _ => true // Non-SparkThrowable exceptions always get stack traces
                   }

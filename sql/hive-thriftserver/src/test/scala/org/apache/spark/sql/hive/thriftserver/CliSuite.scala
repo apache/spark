@@ -554,22 +554,26 @@ class CliSuite extends SparkFunSuite {
     )
   }
 
-  testRetry("SparkException with root cause will be printStacktrace") {
-    // If it is not in silent mode, will print the stacktrace
+  testRetry("DEBUG format prints stack traces for all errors") {
+    // In DEBUG format with silent=false, stack traces are always printed
     runCliWithin(
       1.minute,
-      extraArgs = Seq("--hiveconf", "hive.session.silent=false",
+      extraArgs = Seq(
+        "--hiveconf", "hive.session.silent=false",
+        "--conf", s"${SQLConf.ERROR_MESSAGE_FORMAT.key}=${ErrorMessageFormat.DEBUG}",
         "-e", "select from_json('a', 'a INT', map('mode', 'FAILFAST'));"),
       errorResponses = Seq("JsonParseException"))(
-      ("", "SparkException: [MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION]"),
+      ("", "[MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION]"),
       ("", "JsonParseException: Unrecognized token 'a'"))
-    // If it is in silent mode, will print the error message only
+    // In DEBUG format with silent=true, stack traces are suppressed
     runCliWithin(
       1.minute,
-      extraArgs = Seq("--conf", "spark.hive.session.silent=true",
+      extraArgs = Seq(
+        "--conf", "spark.hive.session.silent=true",
+        "--conf", s"${SQLConf.ERROR_MESSAGE_FORMAT.key}=${ErrorMessageFormat.DEBUG}",
         "-e", "select from_json('a', 'a INT', map('mode', 'FAILFAST'));"),
-      errorResponses = Seq("SparkException"))(
-      ("", "SparkException: [MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION]"))
+      errorResponses = Seq("MALFORMED_RECORD_IN_PARSING"))(
+      ("", "[MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION]"))
   }
 
   test("SPARK-30808: use Java 8 time API in Thrift SQL CLI by default") {
@@ -715,7 +719,7 @@ class CliSuite extends SparkFunSuite {
         errorResponses = Seq("DIVIDE_BY_ZERO"))(expected.toImmutableArraySeq: _*)
     }
     // DIVIDE_BY_ZERO has SQLSTATE 22012 (not XX***), so it's a user error
-    // and should NOT show stack traces, regardless of silent mode
+    // It also has no cause, so stack traces should NOT be shown in PRETTY mode
     check(
       format = ErrorMessageFormat.PRETTY,
       errorMessage =
