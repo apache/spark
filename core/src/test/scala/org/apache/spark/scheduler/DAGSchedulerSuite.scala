@@ -3275,7 +3275,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   test("SPARK-25341: abort stage while using old fetch protocol") {
     conf.set(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL.key, "true")
     // Construct the scenario of indeterminate stage fetch failed.
-    constructIndeterminateStageFetchFailed()
+    constructChecksumMismatchStageFetchFailed(
+      checksumMismatchFullRetryEnabled = false)
     // The job should fail because Spark can't rollback the shuffle map stage while
     // using old protocol.
     assert(failure != null && failure.getMessage.contains(
@@ -3313,7 +3314,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // First shuffle map stage resubmitted and reran all tasks.
     assert(taskSets(4).stageId == 0)
     assert(taskSets(4).stageAttemptId == 1)
-    assert(taskSets(4).tasks.length == 2)
+    assert(taskSets(4).tasks.length == 1)
 
     // Finish all stage.
     completeShuffleMapStageSuccessfully(0, 1, 2)
@@ -3470,8 +3471,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     scheduler.resubmitFailedStages()
 
     // Check all indeterminate stage roll back.
-    checkAndCompleteRetryStage(3, 0, shuffleId1)
-    checkAndCompleteRetryStage(4, 1, shuffleId2)
+    checkAndCompleteRetryStage(3, 0, shuffleId1, numTasks = 1)
+    checkAndCompleteRetryStage(4, 1, shuffleId2, numTasks = 1)
     checkAndCompleteRetryStage(5, 2, shuffleId3)
 
     // Result stage success, all job ended.
@@ -3482,13 +3483,14 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   // Construct the scenario of stages with checksum mismatches and FetchFailed.
-  private def constructChecksumMismatchStageFetchFailed(): (Int, Int) = {
-    val shuffleMapRdd1 = new MyRDD(sc, 2, Nil)
+  private def constructChecksumMismatchStageFetchFailed(
+      checksumMismatchFullRetryEnabled: Boolean = true): (Int, Int) = {
+    val shuffleMapRdd1 = new MyRDD(sc, 2, Nil, indeterminate = true)
 
     val shuffleDep1 = new ShuffleDependency(
       shuffleMapRdd1,
       new HashPartitioner(2),
-      _checksumMismatchFullRetryEnabled = true
+      _checksumMismatchFullRetryEnabled = checksumMismatchFullRetryEnabled
     )
     val shuffleId1 = shuffleDep1.shuffleId
     val shuffleMapRdd2 = new MyRDD(sc, 2, List(shuffleDep1), tracker = mapOutputTracker)
@@ -3496,7 +3498,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val shuffleDep2 = new ShuffleDependency(
       shuffleMapRdd2,
       new HashPartitioner(2),
-      _checksumMismatchFullRetryEnabled = true
+      _checksumMismatchFullRetryEnabled = checksumMismatchFullRetryEnabled
     )
     val shuffleId2 = shuffleDep2.shuffleId
     val finalRdd = new MyRDD(sc, 2, List(shuffleDep2), tracker = mapOutputTracker)
@@ -4635,7 +4637,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // Shuffle blocks of "hostC" is lost, so first task of the `shuffleMapRdd2` needs to retry.
     assert(failedStages.collect {
       case stage: ShuffleMapStage if stage.shuffleDep.shuffleId == shuffleId2 => stage
-    }.head.findMissingPartitions() == Seq(0))
+    }.head.findMissingPartitions() == Seq(0, 1))
     // The result stage is still waiting for its 2 tasks to complete
     assert(failedStages.collect {
       case stage: ResultStage => stage
@@ -4643,7 +4645,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // shuffleMergeId for indeterminate stages would start from 1
     assert(failedStages.collect {
       case stage: ShuffleMapStage => stage.shuffleDep.shuffleMergeId
-    }.forall(x => x == 1))
+    }.forall(x => x == 2))
     scheduler.resubmitFailedStages()
 
     // The first task of the `shuffleMapRdd2` failed with fetch failure

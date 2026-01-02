@@ -1569,20 +1569,15 @@ private[spark] class DAGScheduler(
             // loss. Moreover, because this check occurs later in the process, if a result stage task
             // has successfully completed, we can detect this and abort the job, as rolling back a
             // result stage is not possible.
-            val stagesToRollback = collectSucceedingStages(sms)
-            filterAndAbortUnrollbackableStages(stagesToRollback)
+            rollbackSucceedingStages(sms, rollbackCurrentStage = true)
             // stages which cannot be rolled back were aborted which leads to removing the
-            // the dependant job(s) from the active jobs set
-            val numActiveJobsWithStageAfterRollback =
-              activeJobs.count(job => stagesToRollback.contains(job.finalStage))
-            if (numActiveJobsWithStageAfterRollback == 0) {
+            // the dependant job(s) and stages. If current stage is not needed anymore, return.
+            if (!stageIdToStage.contains(stage.id)) {
               logInfo(log"All jobs depending on the indeterminate stage " +
                 log"(${MDC(STAGE_ID, stage.id)}) were aborted so this stage is not needed anymore.")
               return
             }
           }
-          mapOutputTracker.unregisterAllMapAndMergeOutput(sms.shuffleDep.shuffleId)
-          sms.shuffleDep.newShuffleMergeState()
         }
       case _ =>
     }
@@ -1903,9 +1898,15 @@ private[spark] class DAGScheduler(
    * the map tasks are re-tried. For stages where rollback and retry all tasks are not possible,
    * we will need to abort the stages.
    */
-  private[scheduler] def rollbackSucceedingStages(mapStage: ShuffleMapStage): Unit = {
-    val stagesToRollback = collectSucceedingStages(mapStage).filterNot(_ == mapStage)
-    val stagesCanRollback = filterAndAbortUnrollbackableStages(stagesToRollback)
+  private[scheduler] def rollbackSucceedingStages(
+      mapStage: ShuffleMapStage,
+      rollbackCurrentStage: Boolean = false): Unit = {
+    val stagesToRollback = if (rollbackCurrentStage) {
+      collectSucceedingStages(mapStage)
+    } else {
+      collectSucceedingStages(mapStage).filterNot(_ == mapStage)
+    }
+    val stagesCanRollback = filterAndAbortUnrollbackableStages(mapStage, stagesToRollback)
     // stages which cannot be rolled back were aborted which leads to removing the
     // the dependant job(s) from the active jobs set, there could be no active jobs
     // left depending on the indeterminate stage and hence no need to roll back any stages.
@@ -1920,9 +1921,15 @@ private[spark] class DAGScheduler(
       // Rollback the running stages first to avoid triggering more fetch failures.
       stagesToRollback.toSeq.sortBy(!runningStages.contains(_)).foreach {
         case sms: ShuffleMapStage =>
-          rollbackShuffleMapStage(sms, "rolling back due to indeterminate " +
-            s"output of shuffle map stage $mapStage")
-          sms.markAsRollingBack()
+          // Iterate over the stages to rollback and checking whether the stage has been rolled back
+          // for the current attempt to avoid rolling back the same stage attempt multiple times.
+          val alreadyRollingBack =
+            sms.maxAttemptIdToIgnore.contains(sms.latestInfo.attemptNumber())
+          if (!alreadyRollingBack) {
+            rollbackShuffleMapStage(sms, "rolling back due to indeterminate " +
+              s"output of shuffle map stage $mapStage")
+            sms.markAsRollingBack()
+          }
 
         case rs: ResultStage =>
           rs.markAsRollingBack()
@@ -2320,11 +2327,7 @@ private[spark] class DAGScheduler(
               // guaranteed to be determinate, so the input data of the reducers will not change
               // even if the map tasks are re-tried.
               if (mapStage.isIndeterminate && !mapStage.shuffleDep.checksumMismatchFullRetryEnabled) {
-                val stagesToRollback = collectSucceedingStages(mapStage)
-                val stagesCanRollback = filterAndAbortUnrollbackableStages(stagesToRollback)
-                logInfo(log"The shuffle map stage ${MDC(STAGE, mapStage)} with indeterminate output " +
-                  log"was failed, we will roll back and rerun below stages which include itself and all " +
-                  log"its indeterminate child stages: ${MDC(STAGES, stagesCanRollback)}")
+                rollbackSucceedingStages(mapStage, rollbackCurrentStage = true)
               }
 
               // We expect one executor failure to trigger many FetchFailures in rapid succession,
@@ -2511,11 +2514,12 @@ private[spark] class DAGScheduler(
   /**
    * Abort stages where roll back is requested but cannot be completed.
    *
+   * @param sms the shuffle map stage with indeterminate output
    * @param stagesToRollback stages to roll back
    * @return Shuffle map stages which need and can be rolled back
    */
   private def filterAndAbortUnrollbackableStages(
-      stagesToRollback: HashSet[Stage]): HashSet[Stage] = {
+      sms: ShuffleMapStage, stagesToRollback: HashSet[Stage]): HashSet[Stage] = {
 
     def generateErrorMessage(stage: Stage): String = {
       "A shuffle map stage with indeterminate output was failed and retried. " +
@@ -2528,14 +2532,21 @@ private[spark] class DAGScheduler(
     val rollingBackStages = HashSet[Stage]()
     stagesToRollback.foreach {
       case mapStage: ShuffleMapStage =>
-        if (mapStage.numAvailableOutputs > 0) {
+        // Abort the indeterminate shuffle map stage if succeeding staged ever executed
+        // and SHUFFLE_USE_OLD_FETCH_PROTOCOL is true
+        if (mapStage.numAvailableOutputs > 0 || mapStage.getNextAttemptId > 0) {
           if (sc.conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)) {
             val reason = "A shuffle map stage with indeterminate output was failed " +
               "and retried. However, Spark can only do this while using the new " +
               "shuffle block fetching protocol. Please check the config " +
               "'spark.shuffle.useOldFetchProtocol', see more detail in " +
               "SPARK-27665 and SPARK-25341."
-            abortStage(mapStage, reason, None)
+            // We should abort the final stages to make sure the job fails. Otherwise, nothing
+            // would happen if the shuffle output are available since the job would be considered
+            // as no longer depending on the stage.
+            mapStage.jobIds.flatMap(jobIdToActiveJob.get)
+              .map(_.finalStage)
+              .foreach(abortStage(_, reason, None))
           } else {
             rollingBackStages += mapStage
           }
