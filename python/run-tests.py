@@ -196,8 +196,6 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
         'SPARK_PREPEND_CLASSES': '1',
         'PYSPARK_PYTHON': which(pyspark_python),
         'PYSPARK_DRIVER_PYTHON': which(pyspark_python),
-        # Preserve legacy nested timezone behavior for pyarrow>=2, remove after SPARK-32285
-        'PYARROW_IGNORE_TIMEZONE': '1',
     })
 
     if "SPARK_CONNECT_TESTING_REMOTE" in os.environ:

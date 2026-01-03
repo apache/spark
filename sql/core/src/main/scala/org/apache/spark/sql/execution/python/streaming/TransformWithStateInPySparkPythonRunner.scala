@@ -238,9 +238,11 @@ abstract class TransformWithStateInPySparkPythonBaseRunner[I](
   protected val arrowMaxRecordsPerBatch = sqlConf.arrowMaxRecordsPerBatch
   protected val arrowMaxBytesPerBatch = sqlConf.arrowMaxBytesPerBatch
 
-  override protected val runnerConf: Map[String, String] = initialRunnerConf +
-    (SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> arrowMaxRecordsPerBatch.toString) +
-    (SQLConf.ARROW_EXECUTION_MAX_BYTES_PER_BATCH.key -> arrowMaxBytesPerBatch.toString)
+  override protected def runnerConf: Map[String, String] =
+    super.runnerConf ++ initialRunnerConf ++ Map(
+      SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> arrowMaxRecordsPerBatch.toString,
+      SQLConf.ARROW_EXECUTION_MAX_BYTES_PER_BATCH.key -> arrowMaxBytesPerBatch.toString
+    )
 
   // Use lazy val to initialize the fields before these are accessed in [[PythonArrowInput]]'s
   // constructor.

@@ -271,4 +271,10 @@ private[spark] object UI {
     .version("4.0.0")
     .timeConf(TimeUnit.MILLISECONDS)
     .createWithDefaultString("30s")
+
+  val UI_SHOW_ERROR_STACKS = ConfigBuilder("spark.ui.showErrorStacks")
+    .doc("Whether to display stack traces in the UI error pages.")
+    .version("4.2.0")
+    .booleanConf
+    .createWithDefault(true)
 }
