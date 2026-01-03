@@ -3534,7 +3534,7 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("Overwrite: REPLACE WHERE with BY NAME - column reordering") {
+  test("Selective Overwrite: REPLACE WHERE with BY NAME - column reordering") {
     val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
     df.createOrReplaceTempView("source")
     val df2 = spark.createDataFrame(Seq(("d", 4L), ("e", 5L), ("f", 6L))).toDF("data", "id")
@@ -3580,7 +3580,7 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("Overwrite: REPLACE WHERE without BY NAME - different order, compatible types") {
+  test("Overwrite: REPLACE WHERE without BY NAME - different column order between 2 tables, compatible types") {
     val df = spark.createDataFrame(Seq((1L, 11L), (2L, 12L), (3L, 13L))).toDF("id", "data")
     df.createOrReplaceTempView("source")
     val df2 = spark.createDataFrame(Seq((14L, 4L), (15L, 5L), (16L, 6L))).toDF("data", "id")
