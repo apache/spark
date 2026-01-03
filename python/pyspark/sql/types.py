@@ -376,6 +376,20 @@ class BooleanType(AtomicType, metaclass=DataTypeSingleton):
 class DatetimeType(AtomicType):
     """Super class of all datetime data type."""
 
+    # Whether we only allow
+    # aware timestamp < - > TimestampType
+    # naive timestamp < - > TimestampNTZType
+    enforce_timezone_match: ClassVar[bool] = False
+
+    def __init__(self):
+        self.enforce_timezone_match = DatetimeType.enforce_timezone_match
+        try:
+            sc = get_active_spark_context()
+            if sc.getConf().get("spark.sql.session.enforceTimeZoneMatch", "false").lower() == "true":
+                self.enforce_timezone_match = True
+        except PySparkRuntimeError:
+            pass
+
 
 class DateType(DatetimeType, metaclass=DataTypeSingleton):
     """Date (datetime.date) data type."""
@@ -454,20 +468,34 @@ class TimestampType(DatetimeType, metaclass=DataTypeSingleton):
 
     def toInternal(self, dt: datetime.datetime) -> int:
         if dt is not None:
-            seconds = (
-                calendar.timegm(dt.utctimetuple()) if dt.tzinfo else time.mktime(dt.timetuple())
-            )
-            return int(seconds) * 1000000 + dt.microsecond
+            if self.enforce_timezone_match:
+                if dt.tzinfo is None:
+                    raise PySparkValueError("Timezone-aware datetime is required.")
+                seconds = calendar.timegm(dt.utctimetuple())
+            else:
+                seconds = (
+                    calendar.timegm(dt.utctimetuple()) if dt.tzinfo else time.mktime(dt.timetuple())
+                )
+                return int(seconds) * 1000000 + dt.microsecond
 
     def fromInternal(self, ts: int) -> datetime.datetime:
         if ts is not None:
-            # using int to avoid precision loss in float
-            # If TimestampType.tz_info is not None, we need to use it to convert the timestamp.
-            # Otherwise, we need to use the default timezone.
-            # We need to replace the tzinfo to None to keep backward compatibility
-            return datetime.datetime.fromtimestamp(ts // 1000000, self.tz_info).replace(
-                microsecond=ts % 1000000, tzinfo=None
-            )
+            if self.enforce_timezone_match:
+                if self.tz_info is None:
+                    raise PySparkValueError("Timezone info is not set for TimestampType.")
+                return (
+                    datetime.datetime.fromtimestamp(ts // 1000000, datetime.timezone.utc)
+                    .replace(microsecond=ts % 1000000)
+                    .astimezone(self.tz_info)
+                )
+            else:
+                # using int to avoid precision loss in float
+                # If TimestampType.tz_info is not None, we need to use it to convert the timestamp.
+                # Otherwise, we need to use the default timezone.
+                # We need to replace the tzinfo to None to keep backward compatibility
+                return datetime.datetime.fromtimestamp(ts // 1000000, self.tz_info).replace(
+                    microsecond=ts % 1000000, tzinfo=None
+                )
 
 
 class TimestampNTZType(DatetimeType, metaclass=DataTypeSingleton):
@@ -482,6 +510,9 @@ class TimestampNTZType(DatetimeType, metaclass=DataTypeSingleton):
 
     def toInternal(self, dt: datetime.datetime) -> int:
         if dt is not None:
+            if self.enforce_timezone_match:
+                if dt.tzinfo is not None:
+                    raise PySparkValueError("Naive datetime is required.")
             seconds = calendar.timegm(dt.timetuple())
             return int(seconds) * 1000000 + dt.microsecond
 

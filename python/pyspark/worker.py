@@ -75,6 +75,7 @@ from pyspark.sql.types import (
     ArrayType,
     BinaryType,
     DataType,
+    DatetimeType,
     MapType,
     Row,
     StringType,
@@ -115,6 +116,7 @@ class RunnerConf:
         self._conf = {}
         if infile is not None:
             self.load(infile)
+            self.setup()
 
     def load(self, infile):
         num_conf = read_int(infile)
@@ -134,6 +136,10 @@ class RunnerConf:
             k = utf8_deserializer.loads(infile)
             v = utf8_deserializer.loads(infile)
             self._conf[k] = v
+
+    def setup(self):
+        if self.get("spark.sql.session.enforceTimeZoneMatch", "false") == "true":
+            DatetimeType.enforce_timezone_match = True
 
     def get(self, key: str, default=""):
         val = self._conf.get(key, default)

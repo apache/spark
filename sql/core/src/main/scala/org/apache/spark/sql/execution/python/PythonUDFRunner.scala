@@ -68,6 +68,16 @@ abstract class BasePythonUDFRunner(
 
   protected def writeUDF(dataOut: DataOutputStream): Unit
 
+  override protected def runnerConf: Map[String, String] = {
+    logWarning("Returning runner conf")
+    super.runnerConf ++ Map(
+      "spark.sql.session.enforceTimeZoneMatch" ->
+        SQLConf.get.sessionEnforceTimeZoneMatch.toString(),
+      "spark.sql.session.timeZone" ->
+        SQLConf.get.sessionLocalTimeZone
+    )
+  }
+
   protected override def newWriter(
       env: SparkEnv,
       worker: PythonWorker,
