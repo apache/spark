@@ -33,6 +33,8 @@ jobs:
     with:
       envs: >-
         {
+          "PYSPARK_IMAGE_TO_TEST": "python-311",
+          "PYTHON_TO_TEST": "python3.11",
           "PYSPARK_CODECOV_TEST": "true"
         }
     secrets:
