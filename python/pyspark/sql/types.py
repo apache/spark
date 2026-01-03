@@ -340,8 +340,8 @@ class IntegralType(NumericType, metaclass=DataTypeSingleton):
     def coerce(
         self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
     ) -> Any:
-        if value is None or policy == CoercionPolicy.STRICT:
-            return value
+        if value is None:
+            return None
         # int (non-bool) -> int: exact match
         if isinstance(value, int) and not isinstance(value, bool):
             return value
@@ -361,8 +361,8 @@ class FractionalType(NumericType):
     def coerce(
         self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
     ) -> Any:
-        if value is None or policy == CoercionPolicy.STRICT:
-            return value
+        if value is None:
+            return None
         # float -> float: exact match
         if isinstance(value, float):
             return value
@@ -478,7 +478,10 @@ class BinaryType(AtomicType, metaclass=DataTypeSingleton):
     def coerce(
         self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
     ) -> Any:
-        if value is None or policy == CoercionPolicy.STRICT or isinstance(value, bytes):
+        if value is None:
+            return None
+        # bytes -> binary: exact match
+        if isinstance(value, bytes):
             return value
         # bytearray -> binary: both paths convert
         if isinstance(value, bytearray):
@@ -501,7 +504,10 @@ class BooleanType(AtomicType, metaclass=DataTypeSingleton):
     def coerce(
         self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
     ) -> Any:
-        if value is None or policy == CoercionPolicy.STRICT or isinstance(value, bool):
+        if value is None:
+            return None
+        # bool -> boolean: exact match
+        if isinstance(value, bool):
             return value
         # Other types: pickle returns None
         if policy == CoercionPolicy.WARN and isinstance(value, (int, float)):
@@ -540,8 +546,8 @@ class DateType(DatetimeType, metaclass=DataTypeSingleton):
     def coerce(
         self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
     ) -> Any:
-        if value is None or policy == CoercionPolicy.STRICT:
-            return value
+        if value is None:
+            return None
         # date -> date: exact match
         if isinstance(value, datetime.date) and not isinstance(value, datetime.datetime):
             return value
@@ -706,8 +712,12 @@ class DecimalType(FractionalType):
     def coerce(
         self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
     ) -> Any:
-        if value is None or policy == CoercionPolicy.STRICT or isinstance(value, decimal.Decimal):
+        if value is None:
+            return None
+        # Decimal -> decimal: exact match
+        if isinstance(value, decimal.Decimal):
             return value
+        # Other types: pickle returns None
         if (
             policy == CoercionPolicy.WARN
             and isinstance(value, (int, float))
@@ -1248,7 +1258,10 @@ class ArrayType(DataType):
     def coerce(
         self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
     ) -> Any:
-        if value is None or policy == CoercionPolicy.STRICT or isinstance(value, list):
+        if value is None:
+            return None
+        # list -> array: exact match
+        if isinstance(value, list):
             return value
         # tuple -> array: both paths convert
         if isinstance(value, tuple) or isinstance(value, array) or isinstance(value, bytearray):
@@ -1418,8 +1431,12 @@ class MapType(DataType):
     def coerce(
         self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
     ) -> Any:
-        if value is None or policy == CoercionPolicy.STRICT or isinstance(value, dict):
+        if value is None:
+            return None
+        # dict -> map: exact match
+        if isinstance(value, dict):
             return value
+        # Other types: pickle returns None
         return None
 
     def _build_formatted_string(
@@ -2057,7 +2074,10 @@ class StructType(DataType):
     def coerce(
         self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
     ) -> Any:
-        if value is None or policy == CoercionPolicy.STRICT or isinstance(value, Row):
+        if value is None:
+            return None
+        # Row -> struct: exact match
+        if isinstance(value, Row):
             return value
         # tuple -> struct: both paths convert
         if isinstance(value, tuple):
