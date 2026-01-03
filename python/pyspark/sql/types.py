@@ -419,10 +419,7 @@ class StringType(AtomicType):
     def coerce(
         self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
     ) -> Any:
-        if value is None:
-            return None
-        # str -> string: exact match
-        if isinstance(value, str):
+        if value is None or isinstance(value, str):
             return value
         # bool -> string: pickle gives 'true'/'false' (Java toString)
         if isinstance(value, bool):
@@ -481,10 +478,7 @@ class BinaryType(AtomicType, metaclass=DataTypeSingleton):
     def coerce(
         self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
     ) -> Any:
-        if value is None or policy == CoercionPolicy.STRICT:
-            return value
-        # bytes -> binary: exact match
-        if isinstance(value, bytes):
+        if value is None or policy == CoercionPolicy.STRICT or isinstance(value, bytes):
             return value
         # bytearray -> binary: both paths convert
         if isinstance(value, bytearray):
@@ -507,10 +501,7 @@ class BooleanType(AtomicType, metaclass=DataTypeSingleton):
     def coerce(
         self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
     ) -> Any:
-        if value is None or policy == CoercionPolicy.STRICT:
-            return value
-        # bool -> boolean: exact match
-        if isinstance(value, bool):
+        if value is None or policy == CoercionPolicy.STRICT or isinstance(value, bool):
             return value
         # Other types: pickle returns None
         if policy == CoercionPolicy.WARN and isinstance(value, (int, float)):
@@ -648,10 +639,8 @@ class TimestampType(DatetimeType, metaclass=DataTypeSingleton):
     def coerce(
         self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
     ) -> Any:
-        if value is None:
-            return None
         # datetime -> timestamp: exact match
-        if isinstance(value, datetime.datetime):
+        if value is None or isinstance(value, datetime.datetime):
             return value
         # All other types raise in both pickle and Arrow
         raise TypeError(f"Cannot coerce {type(value).__name__} to TimestampType")
@@ -717,12 +706,8 @@ class DecimalType(FractionalType):
     def coerce(
         self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
     ) -> Any:
-        if value is None or policy == CoercionPolicy.STRICT:
+        if value is None or policy == CoercionPolicy.STRICT or isinstance(value, decimal.Decimal):
             return value
-        # Decimal -> decimal: exact match
-        if isinstance(value, decimal.Decimal):
-            return value
-        # Other types: pickle returns None
         if (
             policy == CoercionPolicy.WARN
             and isinstance(value, (int, float))
@@ -1263,19 +1248,10 @@ class ArrayType(DataType):
     def coerce(
         self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
     ) -> Any:
-        if value is None or policy == CoercionPolicy.STRICT:
-            return value
-        # list -> array: exact match
-        if isinstance(value, list):
+        if value is None or policy == CoercionPolicy.STRICT or isinstance(value, list):
             return value
         # tuple -> array: both paths convert
-        if isinstance(value, tuple):
-            return list(value)
-        # array.array -> array: both paths convert
-        if isinstance(value, array):
-            return list(value)
-        # bytearray -> array: both paths convert (as list of ints)
-        if isinstance(value, bytearray):
+        if isinstance(value, tuple) or isinstance(value, array) or isinstance(value, bytearray):
             return list(value)
         # Row -> array: pickle raises
         if hasattr(value, "__class__") and value.__class__.__name__ == "Row":
@@ -1442,12 +1418,8 @@ class MapType(DataType):
     def coerce(
         self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
     ) -> Any:
-        if value is None or policy == CoercionPolicy.STRICT:
+        if value is None or policy == CoercionPolicy.STRICT or isinstance(value, dict):
             return value
-        # dict -> map: exact match
-        if isinstance(value, dict):
-            return value
-        # Other types: pickle returns None
         return None
 
     def _build_formatted_string(
@@ -2085,10 +2057,7 @@ class StructType(DataType):
     def coerce(
         self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
     ) -> Any:
-        if value is None or policy == CoercionPolicy.STRICT:
-            return value
-        # Row -> struct: exact match
-        if isinstance(value, Row):
+        if value is None or policy == CoercionPolicy.STRICT or isinstance(value, Row):
             return value
         # tuple -> struct: both paths convert
         if isinstance(value, tuple):
