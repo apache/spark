@@ -340,12 +340,9 @@ class IntegralType(NumericType, metaclass=DataTypeSingleton):
     def coerce(
         self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
     ) -> Any:
-        if value is None:
-            return None
-        # STRICT: no-op, let Arrow handle natively
-        if policy == CoercionPolicy.STRICT:
+        if value is None or policy == CoercionPolicy.STRICT:
             return value
-        # int (non-bool) -> int: exact match for all policies
+        # int (non-bool) -> int: exact match
         if isinstance(value, int) and not isinstance(value, bool):
             return value
         # Other types: pickle returns None
