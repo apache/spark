@@ -654,11 +654,11 @@ jobs:
         name: PySpark
         verbose: true
     - name: Upload test results to Codecov
-      # if: fromJSON(inputs.envs).PYSPARK_CODECOV_TEST == 'true'
+      if: (!cancelled()) && fromJSON(inputs.envs).PYSPARK_CODECOV_TEST == 'true'
       uses: codecov/codecov-action@v5
       with:
         report_type: 'test_results'
-        files: '**/target/test-reports/*.xml,**/target/surefire-reports/*.xml'
+        files: '**/target/test-reports/*.xml'
         flags: unittests
         name: PySpark-Test-Results
         token: ${{ secrets.codecov_token }}
