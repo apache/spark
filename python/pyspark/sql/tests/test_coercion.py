@@ -22,7 +22,7 @@ These tests verify that the CoercionPolicy enum and DataType.coerce() method
 correctly handle type coercion with different policies:
 - PERMISSIVE: matches legacy pickle behavior (returns None for most type mismatches)
 - WARN: same as PERMISSIVE but logs warnings when Arrow would behave differently
-- STRICT: matches Arrow behavior (aggressive conversions or raises exceptions)
+- STRICT: no-op, returns value unchanged (Arrow handles type conversion natively)
 
 The goal is to enable Arrow by default without breaking existing code.
 """
@@ -94,9 +94,9 @@ class BooleanCoercionTests(unittest.TestCase):
         self.assertIsNone(self.boolean_type.coerce(0, CoercionPolicy.PERMISSIVE))
 
     def test_int_to_boolean_strict(self):
-        """int -> boolean: STRICT converts (Arrow behavior)."""
-        self.assertEqual(self.boolean_type.coerce(1, CoercionPolicy.STRICT), True)
-        self.assertEqual(self.boolean_type.coerce(0, CoercionPolicy.STRICT), False)
+        """int -> boolean: STRICT is no-op (returns value unchanged)."""
+        self.assertEqual(self.boolean_type.coerce(1, CoercionPolicy.STRICT), 1)
+        self.assertEqual(self.boolean_type.coerce(0, CoercionPolicy.STRICT), 0)
 
     def test_int_to_boolean_warn(self):
         """int -> boolean: WARN returns None but logs warning."""
@@ -110,18 +110,17 @@ class BooleanCoercionTests(unittest.TestCase):
         self.assertIsNone(self.boolean_type.coerce(0.0, CoercionPolicy.PERMISSIVE))
 
     def test_float_to_boolean_strict(self):
-        """float -> boolean: STRICT converts (Arrow behavior)."""
-        self.assertEqual(self.boolean_type.coerce(1.0, CoercionPolicy.STRICT), True)
-        self.assertEqual(self.boolean_type.coerce(0.0, CoercionPolicy.STRICT), False)
+        """float -> boolean: STRICT is no-op (returns value unchanged)."""
+        self.assertEqual(self.boolean_type.coerce(1.0, CoercionPolicy.STRICT), 1.0)
+        self.assertEqual(self.boolean_type.coerce(0.0, CoercionPolicy.STRICT), 0.0)
 
     def test_string_to_boolean_permissive(self):
         """str -> boolean: PERMISSIVE returns None."""
         self.assertIsNone(self.boolean_type.coerce("true", CoercionPolicy.PERMISSIVE))
 
     def test_string_to_boolean_strict(self):
-        """str -> boolean: STRICT raises exception."""
-        with self.assertRaises(TypeError):
-            self.boolean_type.coerce("true", CoercionPolicy.STRICT)
+        """str -> boolean: STRICT is no-op (returns value unchanged)."""
+        self.assertEqual(self.boolean_type.coerce("true", CoercionPolicy.STRICT), "true")
 
 
 class IntegerCoercionTests(unittest.TestCase):
@@ -151,10 +150,10 @@ class IntegerCoercionTests(unittest.TestCase):
             self.assertIsNone(int_type.coerce(False, CoercionPolicy.PERMISSIVE))
 
     def test_bool_to_int_strict(self):
-        """bool -> int: STRICT raises exception (Arrow behavior)."""
+        """bool -> int: STRICT is no-op (returns value unchanged)."""
         for int_type in self.int_types:
-            with self.assertRaises(TypeError):
-                int_type.coerce(True, CoercionPolicy.STRICT)
+            self.assertEqual(int_type.coerce(True, CoercionPolicy.STRICT), True)
+            self.assertEqual(int_type.coerce(False, CoercionPolicy.STRICT), False)
 
     def test_float_to_int_permissive(self):
         """float -> int: PERMISSIVE returns None (pickle behavior)."""
@@ -163,10 +162,10 @@ class IntegerCoercionTests(unittest.TestCase):
             self.assertIsNone(int_type.coerce(1.9, CoercionPolicy.PERMISSIVE))
 
     def test_float_to_int_strict(self):
-        """float -> int: STRICT truncates (Arrow behavior)."""
+        """float -> int: STRICT is no-op (returns value unchanged)."""
         for int_type in self.int_types:
-            self.assertEqual(int_type.coerce(1.0, CoercionPolicy.STRICT), 1)
-            self.assertEqual(int_type.coerce(1.9, CoercionPolicy.STRICT), 1)
+            self.assertEqual(int_type.coerce(1.0, CoercionPolicy.STRICT), 1.0)
+            self.assertEqual(int_type.coerce(1.9, CoercionPolicy.STRICT), 1.9)
 
     def test_decimal_to_int_permissive(self):
         """Decimal -> int: PERMISSIVE returns None (pickle behavior)."""
@@ -174,9 +173,9 @@ class IntegerCoercionTests(unittest.TestCase):
             self.assertIsNone(int_type.coerce(Decimal(1), CoercionPolicy.PERMISSIVE))
 
     def test_decimal_to_int_strict(self):
-        """Decimal -> int: STRICT converts (Arrow behavior)."""
+        """Decimal -> int: STRICT is no-op (returns value unchanged)."""
         for int_type in self.int_types:
-            self.assertEqual(int_type.coerce(Decimal(1), CoercionPolicy.STRICT), 1)
+            self.assertEqual(int_type.coerce(Decimal(1), CoercionPolicy.STRICT), Decimal(1))
 
     def test_string_to_int_permissive(self):
         """str -> int: PERMISSIVE returns None."""
@@ -184,10 +183,9 @@ class IntegerCoercionTests(unittest.TestCase):
             self.assertIsNone(int_type.coerce("1", CoercionPolicy.PERMISSIVE))
 
     def test_string_to_int_strict(self):
-        """str -> int: STRICT raises exception."""
+        """str -> int: STRICT is no-op (returns value unchanged)."""
         for int_type in self.int_types:
-            with self.assertRaises(TypeError):
-                int_type.coerce("1", CoercionPolicy.STRICT)
+            self.assertEqual(int_type.coerce("1", CoercionPolicy.STRICT), "1")
 
 
 class FloatCoercionTests(unittest.TestCase):
@@ -215,9 +213,9 @@ class FloatCoercionTests(unittest.TestCase):
             self.assertIsNone(float_type.coerce(1, CoercionPolicy.PERMISSIVE))
 
     def test_int_to_float_strict(self):
-        """int -> float: STRICT converts (Arrow behavior)."""
+        """int -> float: STRICT is no-op (returns value unchanged)."""
         for float_type in self.float_types:
-            self.assertEqual(float_type.coerce(1, CoercionPolicy.STRICT), 1.0)
+            self.assertEqual(float_type.coerce(1, CoercionPolicy.STRICT), 1)
 
     def test_bool_to_float_permissive(self):
         """bool -> float: PERMISSIVE returns None (pickle behavior)."""
@@ -226,10 +224,10 @@ class FloatCoercionTests(unittest.TestCase):
             self.assertIsNone(float_type.coerce(False, CoercionPolicy.PERMISSIVE))
 
     def test_bool_to_float_strict(self):
-        """bool -> float: STRICT converts (Arrow behavior)."""
+        """bool -> float: STRICT is no-op (returns value unchanged)."""
         for float_type in self.float_types:
-            self.assertEqual(float_type.coerce(True, CoercionPolicy.STRICT), 1.0)
-            self.assertEqual(float_type.coerce(False, CoercionPolicy.STRICT), 0.0)
+            self.assertEqual(float_type.coerce(True, CoercionPolicy.STRICT), True)
+            self.assertEqual(float_type.coerce(False, CoercionPolicy.STRICT), False)
 
     def test_decimal_to_float_permissive(self):
         """Decimal -> float: PERMISSIVE returns None (pickle behavior)."""
@@ -237,9 +235,9 @@ class FloatCoercionTests(unittest.TestCase):
             self.assertIsNone(float_type.coerce(Decimal(1), CoercionPolicy.PERMISSIVE))
 
     def test_decimal_to_float_strict(self):
-        """Decimal -> float: STRICT converts (Arrow behavior)."""
+        """Decimal -> float: STRICT is no-op (returns value unchanged)."""
         for float_type in self.float_types:
-            self.assertEqual(float_type.coerce(Decimal(1), CoercionPolicy.STRICT), 1.0)
+            self.assertEqual(float_type.coerce(Decimal(1), CoercionPolicy.STRICT), Decimal(1))
 
 
 class StringCoercionTests(unittest.TestCase):
@@ -296,12 +294,17 @@ class DateCoercionTests(unittest.TestCase):
         for policy in CoercionPolicy:
             self.assertIsNone(self.date_type.coerce(None, policy))
 
-    def test_datetime_to_date_all_policies(self):
-        """datetime -> date: both paths extract date part."""
+    def test_datetime_to_date_permissive_and_warn(self):
+        """datetime -> date: PERMISSIVE/WARN extract date part."""
         dt_val = datetime.datetime(1970, 1, 1, 12, 30, 45)
         expected = datetime.date(1970, 1, 1)
-        for policy in CoercionPolicy:
+        for policy in [CoercionPolicy.PERMISSIVE, CoercionPolicy.WARN]:
             self.assertEqual(self.date_type.coerce(dt_val, policy), expected)
+
+    def test_datetime_to_date_strict(self):
+        """datetime -> date: STRICT is no-op (returns value unchanged)."""
+        dt_val = datetime.datetime(1970, 1, 1, 12, 30, 45)
+        self.assertEqual(self.date_type.coerce(dt_val, CoercionPolicy.STRICT), dt_val)
 
     def test_int_to_date_permissive(self):
         """int -> date: PERMISSIVE raises TypeError (pickle behavior)."""
@@ -309,9 +312,8 @@ class DateCoercionTests(unittest.TestCase):
             self.date_type.coerce(1, CoercionPolicy.PERMISSIVE)
 
     def test_int_to_date_strict(self):
-        """int -> date: STRICT converts (days since epoch, Arrow behavior)."""
-        expected = datetime.date(1970, 1, 2)
-        self.assertEqual(self.date_type.coerce(1, CoercionPolicy.STRICT), expected)
+        """int -> date: STRICT is no-op (returns value unchanged)."""
+        self.assertEqual(self.date_type.coerce(1, CoercionPolicy.STRICT), 1)
 
 
 class TimestampCoercionTests(unittest.TestCase):
@@ -356,11 +358,16 @@ class BinaryCoercionTests(unittest.TestCase):
         for policy in CoercionPolicy:
             self.assertEqual(self.binary_type.coerce(b"ABC", policy), b"ABC")
 
-    def test_bytearray_to_binary_all_policies(self):
-        """bytearray -> binary should work for all policies."""
+    def test_bytearray_to_binary_permissive_and_warn(self):
+        """bytearray -> binary: PERMISSIVE/WARN convert to bytes."""
         ba = bytearray([65, 66, 67])
-        for policy in CoercionPolicy:
+        for policy in [CoercionPolicy.PERMISSIVE, CoercionPolicy.WARN]:
             self.assertEqual(self.binary_type.coerce(ba, policy), b"ABC")
+
+    def test_bytearray_to_binary_strict(self):
+        """bytearray -> binary: STRICT is no-op (returns value unchanged)."""
+        ba = bytearray([65, 66, 67])
+        self.assertEqual(self.binary_type.coerce(ba, CoercionPolicy.STRICT), ba)
 
     def test_none_to_binary_all_policies(self):
         """None -> binary should return None for all policies."""
@@ -374,9 +381,8 @@ class BinaryCoercionTests(unittest.TestCase):
         )
 
     def test_str_to_binary_strict(self):
-        """str -> binary: STRICT raises exception (Arrow behavior)."""
-        with self.assertRaises(TypeError):
-            self.binary_type.coerce("a", CoercionPolicy.STRICT)
+        """str -> binary: STRICT is no-op (returns value unchanged)."""
+        self.assertEqual(self.binary_type.coerce("a", CoercionPolicy.STRICT), "a")
 
 
 class ArrayCoercionTests(unittest.TestCase):
@@ -390,27 +396,41 @@ class ArrayCoercionTests(unittest.TestCase):
         for policy in CoercionPolicy:
             self.assertEqual(self.array_int_type.coerce([1, 2, 3], policy), [1, 2, 3])
 
-    def test_tuple_to_array_all_policies(self):
-        """tuple -> array should convert to list for all policies."""
-        for policy in CoercionPolicy:
+    def test_tuple_to_array_permissive_and_warn(self):
+        """tuple -> array: PERMISSIVE/WARN convert to list."""
+        for policy in [CoercionPolicy.PERMISSIVE, CoercionPolicy.WARN]:
             self.assertEqual(self.array_int_type.coerce((1, 2, 3), policy), [1, 2, 3])
+
+    def test_tuple_to_array_strict(self):
+        """tuple -> array: STRICT is no-op (returns value unchanged)."""
+        self.assertEqual(self.array_int_type.coerce((1, 2, 3), CoercionPolicy.STRICT), (1, 2, 3))
 
     def test_none_to_array_all_policies(self):
         """None -> array should return None for all policies."""
         for policy in CoercionPolicy:
             self.assertIsNone(self.array_int_type.coerce(None, policy))
 
-    def test_python_array_to_array_all_policies(self):
-        """array.array -> array should convert for all policies."""
+    def test_python_array_to_array_permissive_and_warn(self):
+        """array.array -> array: PERMISSIVE/WARN convert to list."""
         arr = array.array("i", [1, 2, 3])
-        for policy in CoercionPolicy:
+        for policy in [CoercionPolicy.PERMISSIVE, CoercionPolicy.WARN]:
             self.assertEqual(self.array_int_type.coerce(arr, policy), [1, 2, 3])
 
-    def test_bytearray_to_int_array_all_policies(self):
-        """bytearray -> array<int>: both paths convert."""
+    def test_python_array_to_array_strict(self):
+        """array.array -> array: STRICT is no-op (returns value unchanged)."""
+        arr = array.array("i", [1, 2, 3])
+        self.assertEqual(self.array_int_type.coerce(arr, CoercionPolicy.STRICT), arr)
+
+    def test_bytearray_to_int_array_permissive_and_warn(self):
+        """bytearray -> array<int>: PERMISSIVE/WARN convert to list."""
         ba = bytearray([65, 66, 67])
-        for policy in CoercionPolicy:
+        for policy in [CoercionPolicy.PERMISSIVE, CoercionPolicy.WARN]:
             self.assertEqual(self.array_int_type.coerce(ba, policy), [65, 66, 67])
+
+    def test_bytearray_to_int_array_strict(self):
+        """bytearray -> array<int>: STRICT is no-op (returns value unchanged)."""
+        ba = bytearray([65, 66, 67])
+        self.assertEqual(self.array_int_type.coerce(ba, CoercionPolicy.STRICT), ba)
 
 
 class StructCoercionTests(unittest.TestCase):
@@ -426,17 +446,25 @@ class StructCoercionTests(unittest.TestCase):
             result = self.struct_type.coerce(row, policy)
             self.assertEqual(result._1, 1)
 
-    def test_tuple_to_struct_all_policies(self):
-        """tuple -> struct should work for all policies."""
-        for policy in CoercionPolicy:
+    def test_tuple_to_struct_permissive_and_warn(self):
+        """tuple -> struct: PERMISSIVE/WARN convert to Row."""
+        for policy in [CoercionPolicy.PERMISSIVE, CoercionPolicy.WARN]:
             result = self.struct_type.coerce((1,), policy)
             self.assertEqual(result._1, 1)
 
-    def test_dict_to_struct_all_policies(self):
-        """dict -> struct: both paths support this."""
-        for policy in CoercionPolicy:
+    def test_tuple_to_struct_strict(self):
+        """tuple -> struct: STRICT is no-op (returns value unchanged)."""
+        self.assertEqual(self.struct_type.coerce((1,), CoercionPolicy.STRICT), (1,))
+
+    def test_dict_to_struct_permissive_and_warn(self):
+        """dict -> struct: PERMISSIVE/WARN convert to Row."""
+        for policy in [CoercionPolicy.PERMISSIVE, CoercionPolicy.WARN]:
             result = self.struct_type.coerce({"_1": 1}, policy)
             self.assertEqual(result._1, 1)
+
+    def test_dict_to_struct_strict(self):
+        """dict -> struct: STRICT is no-op (returns value unchanged)."""
+        self.assertEqual(self.struct_type.coerce({"_1": 1}, CoercionPolicy.STRICT), {"_1": 1})
 
     def test_none_to_struct_all_policies(self):
         """None -> struct should return None for all policies."""
@@ -449,9 +477,8 @@ class StructCoercionTests(unittest.TestCase):
         self.assertEqual(result._1, 1)
 
     def test_list_to_struct_strict(self):
-        """list -> struct: STRICT raises exception (Arrow behavior)."""
-        with self.assertRaises(TypeError):
-            self.struct_type.coerce([1], CoercionPolicy.STRICT)
+        """list -> struct: STRICT is no-op (returns value unchanged)."""
+        self.assertEqual(self.struct_type.coerce([1], CoercionPolicy.STRICT), [1])
 
 
 class MapCoercionTests(unittest.TestCase):
@@ -475,9 +502,8 @@ class MapCoercionTests(unittest.TestCase):
         self.assertIsNone(self.map_type.coerce([1, 2], CoercionPolicy.PERMISSIVE))
 
     def test_other_to_map_strict(self):
-        """other -> map: STRICT raises exception."""
-        with self.assertRaises(TypeError):
-            self.map_type.coerce([1, 2], CoercionPolicy.STRICT)
+        """other -> map: STRICT is no-op (returns value unchanged)."""
+        self.assertEqual(self.map_type.coerce([1, 2], CoercionPolicy.STRICT), [1, 2])
 
 
 class DecimalCoercionTests(unittest.TestCase):
@@ -503,10 +529,8 @@ class DecimalCoercionTests(unittest.TestCase):
         self.assertIsNone(self.decimal_type.coerce(1, CoercionPolicy.PERMISSIVE))
 
     def test_int_to_decimal_strict(self):
-        """int -> decimal: STRICT converts (Arrow behavior)."""
-        self.assertEqual(
-            self.decimal_type.coerce(1, CoercionPolicy.STRICT), Decimal("1")
-        )
+        """int -> decimal: STRICT is no-op (returns value unchanged)."""
+        self.assertEqual(self.decimal_type.coerce(1, CoercionPolicy.STRICT), 1)
 
 
 class DefaultPolicyTests(unittest.TestCase):
