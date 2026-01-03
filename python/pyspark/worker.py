@@ -197,6 +197,10 @@ class RunnerConf:
     def arrow_concurrency_level(self) -> int:
         return int(self.get("spark.sql.execution.pythonUDF.arrow.concurrency.level", -1))
 
+    @property
+    def coercion_policy(self) -> str:
+        return self.get("spark.sql.execution.pythonUDF.coercion.policy", "permissive")
+
 
 def report_times(outfile, boot, init, finish):
     write_int(SpecialLengths.TIMING_DATA, outfile)
