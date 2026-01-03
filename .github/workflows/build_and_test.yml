@@ -654,7 +654,7 @@ jobs:
         name: PySpark
         verbose: true
     - name: Upload test results to Codecov
-      if: fromJSON(inputs.envs).PYSPARK_CODECOV_TEST == 'true'
+      # if: fromJSON(inputs.envs).PYSPARK_CODECOV_TEST == 'true'
       uses: codecov/codecov-action@v5
       with:
         report_type: 'test_results'
