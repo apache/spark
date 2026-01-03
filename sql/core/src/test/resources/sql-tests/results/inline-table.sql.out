@@ -107,23 +107,10 @@ two	3.0
 -- !query
 select * from values ("one", rand(5)), ("two", 3.0D) as data(a, b)
 -- !query schema
-struct<>
+struct<a:string,b:double>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "expr" : "\"rand(5)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 30,
-    "stopIndex" : 36,
-    "fragment" : "rand(5)"
-  } ]
-}
+one	0.02390696427502892
+two	3.0
 
 
 -- !query
@@ -224,19 +211,19 @@ select * from values ("one", count(1)), ("two", 2) as data(a, b)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
-  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-  "sqlState" : "42000",
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
+  "sqlState" : "42K0E",
   "messageParameters" : {
-    "expr" : "\"count(1)\""
+    "invalidExprSqls" : "\"count(1)\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 30,
-    "stopIndex" : 37,
-    "fragment" : "count(1)"
+    "startIndex" : 15,
+    "stopIndex" : 64,
+    "fragment" : "values (\"one\", count(1)), (\"two\", 2) as data(a, b)"
   } ]
 }
 
@@ -287,3 +274,224 @@ select count(distinct ct) from values current_timestamp(), current_timestamp() a
 struct<count(DISTINCT ct):bigint>
 -- !query output
 1
+
+
+-- !query
+select * from values (rand()), (rand()), (rand()) as data(a)
+-- !query schema
+struct<a:double>
+-- !query output
+0.31695535108691264
+0.4517497534237762
+0.9819075640707866
+
+
+-- !query
+select * from values (rand(1)), (rand(2)), (rand(3)) as data(a)
+-- !query schema
+struct<a:double>
+-- !query output
+0.25738143505962285
+0.5311207224659675
+0.6363787615254752
+
+
+-- !query
+select * from values (random()), (random()) as data(a)
+-- !query schema
+struct<a:double>
+-- !query output
+0.11735918929648681
+0.20319457587269207
+
+
+-- !query
+select length(a) from values (uuid()), (uuid()) as data(a)
+-- !query schema
+struct<length(a):int>
+-- !query output
+36
+36
+
+
+-- !query
+select * from values (1, rand(5)), (2, rand(5)) as data(a, b)
+-- !query schema
+struct<a:int,b:double>
+-- !query output
+1	0.02390696427502892
+2	0.02390696427502892
+
+
+-- !query
+select * from values (1 + rand(5)), (2 + rand(5)) as data(a)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "sqlExpr" : "\"(1 + rand(5))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 60,
+    "fragment" : "values (1 + rand(5)), (2 + rand(5)) as data(a)"
+  } ]
+}
+
+
+-- !query
+select * from values (1) as t(c1), lateral (values (t.c1)) as s(c2)
+-- !query schema
+struct<c1:int,c2:int>
+-- !query output
+1	1
+
+
+-- !query
+select * from values (1, 2) as t(c1, c2), lateral (values (t.c1, t.c2)) as s(c3, c4)
+-- !query schema
+struct<c1:int,c2:int,c3:int,c4:int>
+-- !query output
+1	2	1	2
+
+
+-- !query
+select * from values (1, 2) as t(c1, c2), lateral (values (t.c1 + t.c2)) as s(c3)
+-- !query schema
+struct<c1:int,c2:int,c3:int>
+-- !query output
+1	2	3
+
+
+-- !query
+select * from values (1), (2), (3) as t(c1), lateral (values (t.c1 * 2)) as s(c2) order by c1
+-- !query schema
+struct<c1:int,c2:int>
+-- !query output
+1	2
+2	4
+3	6
+
+
+-- !query
+select * from values (1, 2) as t(c1, c2), lateral (values (t.c1), (t.c2)) as s(c3) order by c3
+-- !query schema
+struct<c1:int,c2:int,c3:int>
+-- !query output
+1	2	1
+1	2	2
+
+
+-- !query
+select * from values (1), (2) as t(c1), lateral (values (t.c1), (t.c1 + 10)) as s(c2) order by c1, c2
+-- !query schema
+struct<c1:int,c2:int>
+-- !query output
+1	1
+1	11
+2	2
+2	12
+
+
+-- !query
+select * from values (1, 2) as t(c1, c2),
+  lateral (values (t.c1, t.c2, t.c1 + t.c2)) as s(c3, c4, c5)
+-- !query schema
+struct<c1:int,c2:int,c3:int,c4:int,c5:int>
+-- !query output
+1	2	1	2	3
+
+
+-- !query
+select t.c1, s.c2 from values (1) as t(c1),
+  lateral (values (t.c1, rand())) as s(c2, c3) order by c1
+-- !query schema
+struct<c1:int,c2:int>
+-- !query output
+1	1
+
+
+-- !query
+select t.c1 from values (1), (2) as t(c1),
+  lateral (values (t.c1, rand())) as s(c2, c3) order by c1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.NON_DETERMINISTIC_LATERAL_SUBQUERIES",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "treeNode" : "LateralJoin lateral-subquery#x [c1#x], Inner\n:  +- SubqueryAlias s\n:     +- Project [col1#x AS c2#x, col2#x AS c3#x]\n:        +- ResolvedInlineTable [[outer(c1#x), rand(number)]], [col1#x, col2#x]\n+- SubqueryAlias t\n   +- LocalRelation [c1#x]\n"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 13,
+    "stopIndex" : 89,
+    "fragment" : "from values (1), (2) as t(c1),\n  lateral (values (t.c1, rand())) as s(c2, c3)"
+  } ]
+}
+
+
+-- !query
+select t.c1 from values (1) as t(c1),
+  lateral (values (t.c1, rand()), (t.c1 + 1, rand())) as s(c2, c3) order by c2
+-- !query schema
+struct<c1:int>
+-- !query output
+1
+1
+
+
+-- !query
+select * from values (1) as t(c1),
+  lateral (values (t.c1, current_date)) as s(c2, c3)
+-- !query schema
+struct<c1:int,c2:int,c3:date>
+-- !query output
+1	1	2026-01-02
+
+
+-- !query
+select * from values (1) as t(c1),
+  lateral (values (t.c1, 2.0), (t.c1 + 1, 3.0)) as s(c2, c3) order by c2
+-- !query schema
+struct<c1:int,c2:int,c3:decimal(2,1)>
+-- !query output
+1	1	2.0
+1	2	3.0
+
+
+-- !query
+select * from values (1, null) as t(c1, c2),
+  lateral (values (t.c1, t.c2)) as s(c3, c4)
+-- !query schema
+struct<c1:int,c2:void,c3:int,c4:void>
+-- !query output
+
+
+
+-- !query
+select * from values (1, 2, 3) as t(c1, c2, c3),
+  lateral (values (t.c1 * t.c2 + t.c3)) as s(c4)
+-- !query schema
+struct<c1:int,c2:int,c3:int,c4:int>
+-- !query output
+1	2	3	5
+
+
+-- !query
+select * from values (1), (2) as t(c1)
+  left join lateral (values (t.c1 * 10)) as s(c2) on true order by c1
+-- !query schema
+struct<c1:int,c2:int>
+-- !query output
+1	10
+2	20

@@ -182,25 +182,6 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
     assert(result == table)
   }
 
-  test("earlyEvalIfPossible detects outer references") {
-    // Create table with outer reference
-    val outerAttr = AttributeReference("outer_c1", IntegerType)()
-    val outerRef = OuterReference(outerAttr)
-
-    val unresolvedTable = UnresolvedInlineTable(
-      names = Seq("c1"),
-      rows = Seq(Seq(outerRef))
-    )
-
-    // After resolving, should create ResolvedInlineTable
-    val resolved = EvaluateUnresolvedInlineTable.findCommonTypesAndCast(unresolvedTable)
-    assert(resolved.isInstanceOf[ResolvedInlineTable])
-
-    // earlyEvalIfPossible should NOT convert to LocalRelation
-    val result = EvaluateUnresolvedInlineTable.evaluateUnresolvedInlineTable(unresolvedTable)
-    assert(result.isInstanceOf[ResolvedInlineTable])
-  }
-
   test("mix of nondeterministic and outer references") {
     // Create table with both Rand and OuterReference
     val outerAttr = AttributeReference("outer_c1", IntegerType)()
@@ -243,15 +224,15 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
     }
   }
 
-  test("config: legacy VALUES only foldable expressions (default allows correlated)") {
+  test("config: legacy VALUES only foldable (default allows non-determ and correlated)") {
     val outerAttr = AttributeReference("c1", IntegerType)()
     val outerRef = OuterReference(outerAttr)
 
-    // With config disabled (default), outer references should work
+    // With config disabled (default), outer references should be allowed
     withSQLConf(SQLConf.LEGACY_VALUES_ONLY_FOLDABLE_EXPRESSIONS.key -> "false") {
       val table = UnresolvedInlineTable(Seq("col"), Seq(Seq(outerRef)))
       val evaluated = EvaluateUnresolvedInlineTable.evaluate(table)
-      // Should create ResolvedInlineTable (not fail)
+      // Should create ResolvedInlineTable (not fail during analysis)
       assert(evaluated.isInstanceOf[ResolvedInlineTable])
     }
 
@@ -264,7 +245,7 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
       checkError(
         exception = exception,
         condition = "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
-        parameters = Map("expr" -> "`c1`")  // toSQLId uses backticks
+        parameters = Map("expr" -> "`c1`")  // Shows column name, not outer(c1)
       )
     }
   }

@@ -112,6 +112,9 @@ object EvaluateUnresolvedInlineTable extends SQLConfHelper
    * CURRENT_LIKE expressions (current_timestamp, now, etc.) are always allowed regardless
    * of the config setting.
    *
+   * Note: OuterReference validation happens later. If used outside a LATERAL context,
+   * the decorrelation framework will reject it.
+   *
    * This is package visible for unit testing.
    */
   def validateInputEvaluable(table: UnresolvedInlineTable): Unit = {
@@ -125,19 +128,16 @@ object EvaluateUnresolvedInlineTable extends SQLConfHelper
             messageParameters = Map("expr" -> toSQLExpr(e)))
         } else if (conf.legacyValuesOnlyFoldableExpressions &&
                    !trimAliases(prepareForEval(e)).foldable) {
-          // Legacy mode: only foldable expressions allowed
-          // For OuterReference, show the qualified column name instead of outer(...)
-          val errorExpr = if (e.isInstanceOf[OuterReference]) {
-            val outerRef = e.asInstanceOf[OuterReference]
-            val ref = outerRef.e
-            // Show as `table.column` if qualified, otherwise just `column`
-            if (ref.qualifier.nonEmpty) {
-              toSQLId(ref.qualifier :+ ref.name)
-            } else {
-              toSQLId(ref.name)
-            }
-          } else {
-            toSQLExpr(e)
+          // Legacy mode: only foldable (constant) expressions allowed
+          // For OuterReference, show the column name instead of outer(...)
+          val errorExpr = e match {
+            case OuterReference(ref) =>
+              if (ref.qualifier.nonEmpty) {
+                toSQLId(ref.qualifier :+ ref.name)
+              } else {
+                toSQLId(ref.name)
+              }
+            case _ => toSQLExpr(e)
           }
           e.failAnalysis(
             errorClass = "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
