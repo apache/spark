@@ -315,6 +315,7 @@ def wrap_arrow_batch_udf(f, args_offsets, kwargs_offsets, return_type, runner_co
 
 def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, runner_conf):
     from pyspark.sql.pandas.types import to_arrow_type
+    from pyspark.sql.types import CoercionPolicy
 
     func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
 
@@ -326,6 +327,15 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
     arrow_return_type = to_arrow_type(
         return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
     )
+
+    # Get coercion policy from runner config, default to PERMISSIVE for backward compatibility
+    coercion_policy = getattr(runner_conf, "coercion_policy", CoercionPolicy.PERMISSIVE)
+    if isinstance(coercion_policy, str):
+        coercion_policy = CoercionPolicy(coercion_policy.lower())
+
+    # Apply coercion to match pickle behavior when using PERMISSIVE policy
+    def coerce_result(result):
+        return return_type.coerce(result, coercion_policy)
 
     if zero_arg_exec:
 
@@ -347,7 +357,7 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
                 Takes list of Python objects and returns tuple of
                 (results, arrow_return_type, return_type).
                 """
-                return list(pool.map(lambda row: func(*row), get_args(*args)))
+                return list(pool.map(lambda row: coerce_result(func(*row)), get_args(*args)))
 
     else:
 
@@ -357,7 +367,7 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
             Takes list of Python objects and returns tuple of
             (results, arrow_return_type, return_type).
             """
-            return [func(*row) for row in get_args(*args)]
+            return [coerce_result(func(*row)) for row in get_args(*args)]
 
     def verify_result_length(result, length):
         if len(result) != length:

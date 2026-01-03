@@ -4382,6 +4382,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PYTHON_UDF_COERCION_POLICY =
+    buildConf("spark.sql.execution.pythonUDF.coercion.policy")
+      .doc("Controls how Python UDF return values are coerced to match the declared return type. " +
+        "Valid values are: 'permissive' (default) - matches legacy pandas behavior with " +
+        "implicit type conversions; 'warn' - same as permissive but logs warnings; " +
+        "'strict' - raises errors for type mismatches, matching Arrow semantics.")
+      .version("4.1.0")
+      .stringConf
+      .checkValues(Set("permissive", "warn", "strict"))
+      .createWithDefault("permissive")
+
   val PYTHON_PLANNER_EXEC_MEMORY =
     buildConf("spark.sql.planner.pythonExecution.memory")
       .doc("Specifies the memory allocation for executing Python code in Spark driver, in MiB. " +
@@ -7715,6 +7726,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def legacyPandasConversion: Boolean = getConf(PYTHON_TABLE_UDF_LEGACY_PANDAS_CONVERSION_ENABLED)
 
   def legacyPandasConversionUDF: Boolean = getConf(PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED)
+
+  def pythonUDFCoercionPolicy: String = getConf(PYTHON_UDF_COERCION_POLICY)
 
   def pythonPlannerExecMemory: Option[Long] = getConf(PYTHON_PLANNER_EXEC_MEMORY)
 

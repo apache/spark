@@ -175,9 +175,12 @@ object ArrowPythonRunner {
     val profiler = conf.pythonUDFProfiler.map(p =>
       Seq(SQLConf.PYTHON_UDF_PROFILER.key -> p)
     ).getOrElse(Seq.empty)
+    val coercionPolicy = Seq(
+      SQLConf.PYTHON_UDF_COERCION_POLICY.key ->
+      conf.pythonUDFCoercionPolicy)
     Map(timeZoneConf ++ pandasColsByName ++ arrowSafeTypeCheck ++
       arrowAyncParallelism ++ useLargeVarTypes ++
       intToDecimalCoercion ++ binaryAsBytes ++
-      legacyPandasConversion ++ legacyPandasConversionUDF ++ profiler: _*)
+      legacyPandasConversion ++ legacyPandasConversionUDF ++ profiler ++ coercionPolicy: _*)
   }
 }
