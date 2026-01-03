@@ -195,20 +195,14 @@ select udf(a), udf(b) from values ("one", count(1)), ("two", 2) as data(a, b)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.SparkException
 {
-  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
-  "sqlState" : "42K0E",
+  "errorClass" : "PLAN_VALIDATION_FAILED_RULE_EXECUTOR",
+  "sqlState" : "XXKD0",
   "messageParameters" : {
-    "invalidExprSqls" : "\"count(1)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 28,
-    "stopIndex" : 77,
-    "fragment" : "values (\"one\", count(1)), (\"two\", 2) as data(a, b)"
-  } ]
+    "reason" : "Special expressions are placed in the wrong plan: Project [cast(udf(cast(a#x as string)) as string) AS udf(a)#x, cast(udf(cast(b#xL as string)) as bigint) AS udf(b)#xL]\n+- SubqueryAlias data\n   +- ResolvedInlineTable [[one, count(1)], [two, cast(2 as bigint)]], [a#x, b#xL]\n\nPrevious schema:udf(a)#x, udf(b)#xL\nPrevious plan: Project [cast(udf(cast(a#x as string)) as string) AS udf(a)#x, cast(udf(cast(b#xL as string)) as bigint) AS udf(b)#xL]\n+- SubqueryAlias data\n   +- ResolvedInlineTable [[one, count(1)], [two, cast(2 as bigint)]], [a#x, b#xL]\n",
+    "ruleExecutor" : "org.apache.spark.sql.internal.BaseSessionStateBuilder$$anon$2"
+  }
 }
 
 

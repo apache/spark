@@ -880,6 +880,24 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               messageParameters = Map("sqlExprs" -> o.expressions.map(toSQLExpr(_)).mkString(", "))
             )
 
+          // ResolvedInlineTable with OuterReference is only allowed in LATERAL contexts
+          case table: ResolvedInlineTable if !isInLateralContext(table, plan) =>
+            val outerRefs = table.rows.flatten.collect {
+              case o: OuterReference => o
+            }
+            if (outerRefs.nonEmpty) {
+              val outerRef = outerRefs.head
+              val ref = outerRef.e
+              val errorExpr = if (ref.qualifier.nonEmpty) {
+                toSQLId(ref.qualifier :+ ref.name)
+              } else {
+                toSQLId(ref.name)
+              }
+              table.failAnalysis(
+                errorClass = "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
+                messageParameters = Map("expr" -> errorExpr))
+            }
+
           case _: UnresolvedHint => throw SparkException.internalError(
             "Logical hint operator should be removed during analysis.")
 
@@ -937,6 +955,28 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       case a: Aggregate => a.aggregateExpressions ++ a.groupingExpressions
       case _ => plan.expressions
     }
+  }
+
+  /**
+   * Check if a ResolvedInlineTable is within a LATERAL context.
+   * This is determined by checking if it appears within a LateralSubquery expression.
+   */
+  private def isInLateralContext(table: ResolvedInlineTable, rootPlan: LogicalPlan): Boolean = {
+    var isLateral = false
+    rootPlan.foreach { node =>
+      node.expressions.foreach { expr =>
+        expr.foreach {
+          case LateralSubquery(subPlan, _, _, _, _) =>
+            // Check if the table appears anywhere in this lateral subquery
+            subPlan.foreach {
+              case t: ResolvedInlineTable if t == table => isLateral = true
+              case _ =>
+            }
+          case _ =>
+        }
+      }
+    }
+    isLateral
   }
 
   def checkSubqueryExpression(plan: LogicalPlan, expr: SubqueryExpression): Unit = {

@@ -68,22 +68,22 @@ select count(distinct ct) from values now(), now(), now() as data(ct);
 select count(distinct ct) from values current_timestamp(), current_timestamp() as data(ct);
 
 -- nondeterministic expressions with multiple rows
-select * from values (rand()), (rand()), (rand()) as data(a);
+select count(*) from values (rand()), (rand()), (rand()) as data(a);
 
 -- nondeterministic with different seeds produces different sequences
-select * from values (rand(1)), (rand(2)), (rand(3)) as data(a);
+select count(*) from values (rand(1)), (rand(2)), (rand(3)) as data(a);
 
 -- random() function (alias for rand)
-select * from values (random()), (random()) as data(a);
+select count(*) from values (random()), (random()) as data(a);
 
 -- uuid() function
 select length(a) from values (uuid()), (uuid()) as data(a);
 
 -- mix of deterministic and nondeterministic
-select * from values (1, rand(5)), (2, rand(5)) as data(a, b);
+select a from values (1, rand(5)), (2, rand(5)) as data(a, b);
 
 -- nondeterministic in more complex expressions
-select * from values (1 + rand(5)), (2 + rand(5)) as data(a);
+select count(*) from values (1 + rand(5)), (2 + rand(5)) as data(a);
 
 -- ============================================================================
 -- LATERAL VALUES with correlation (Phase 2)

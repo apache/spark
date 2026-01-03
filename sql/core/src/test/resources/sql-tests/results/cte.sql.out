@@ -296,7 +296,7 @@ FROM t
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
   "sqlState" : "42000",
@@ -306,9 +306,9 @@ org.apache.spark.sql.AnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 36,
-    "stopIndex" : 37,
-    "fragment" : "id"
+    "startIndex" : 29,
+    "stopIndex" : 38,
+    "fragment" : "VALUES(id)"
   } ]
 }
 
