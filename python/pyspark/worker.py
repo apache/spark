@@ -201,6 +201,10 @@ class RunnerConf:
     def profiler(self) -> Optional[str]:
         return self.get("spark.sql.pyspark.udf.profiler", None)
 
+    @property
+    def coercion_policy(self) -> str:
+        return self.get("spark.sql.execution.pythonUDF.coercion.policy", "permissive")
+
 
 def report_times(outfile, boot, init, finish):
     write_int(SpecialLengths.TIMING_DATA, outfile)
