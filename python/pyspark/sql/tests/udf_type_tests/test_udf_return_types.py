@@ -64,12 +64,10 @@ if have_numpy:
     not have_pandas
     or not have_pyarrow
     or not have_numpy
-    or LooseVersion(np.__version__) < LooseVersion("2.0.0")
-    or platform.system() == "Darwin",
+    or LooseVersion(np.__version__) < LooseVersion("2.0.0"),
     pandas_requirement_message
     or pyarrow_requirement_message
-    or numpy_requirement_message
-    or "float128 not supported on macos",
+    or numpy_requirement_message,
 )
 class UDFReturnTypeTests(ReusedSQLTestCase):
     @classmethod
@@ -128,7 +126,6 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
             np.arange(1, 3).astype("float16"),
             np.arange(1, 3).astype("float32"),
             np.arange(1, 3).astype("float64"),
-            np.arange(1, 3).astype("float128"),
             np.arange(1, 3).astype("complex64"),
             np.arange(1, 3).astype("complex128"),
             list("ab"),
