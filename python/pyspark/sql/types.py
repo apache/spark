@@ -346,13 +346,12 @@ class IntegralType(NumericType, metaclass=DataTypeSingleton):
         if isinstance(value, int) and not isinstance(value, bool):
             return value
         # Other types: pickle returns None
-        if policy == CoercionPolicy.WARN:
-            if isinstance(value, (bool, float, decimal.Decimal)):
-                warnings.warn(
-                    f"Coercing {type(value).__name__} to integer returns None in pickle mode "
-                    "but would convert or raise in Arrow mode",
-                    UserWarning,
-                )
+        if policy == CoercionPolicy.WARN and isinstance(value, (bool, float, decimal.Decimal)):
+            warnings.warn(
+                f"Coercing {type(value).__name__} to integer returns None in pickle mode "
+                "but would convert or raise in Arrow mode",
+                UserWarning,
+            )
         return None
 
 
@@ -368,13 +367,12 @@ class FractionalType(NumericType):
         if isinstance(value, float):
             return value
         # Other types: pickle returns None
-        if policy == CoercionPolicy.WARN:
-            if isinstance(value, (bool, int, decimal.Decimal)):
-                warnings.warn(
-                    f"Coercing {type(value).__name__} to float returns None in pickle mode "
-                    "but would convert in Arrow mode",
-                    UserWarning,
-                )
+        if policy == CoercionPolicy.WARN and isinstance(value, (bool, int, decimal.Decimal)):
+            warnings.warn(
+                f"Coercing {type(value).__name__} to float returns None in pickle mode "
+                "but would convert in Arrow mode",
+                UserWarning,
+            )
         return None
 
 
@@ -515,13 +513,12 @@ class BooleanType(AtomicType, metaclass=DataTypeSingleton):
         if isinstance(value, bool):
             return value
         # Other types: pickle returns None
-        if policy == CoercionPolicy.WARN:
-            if isinstance(value, (int, float)):
-                warnings.warn(
-                    f"Coercing {type(value).__name__} to boolean returns None in pickle mode "
-                    "but would convert to bool in Arrow mode",
-                    UserWarning,
-                )
+        if policy == CoercionPolicy.WARN and isinstance(value, (int, float)):
+            warnings.warn(
+                f"Coercing {type(value).__name__} to boolean returns None in pickle mode "
+                "but would convert to bool in Arrow mode",
+                UserWarning,
+            )
         return None
 
 
@@ -726,13 +723,16 @@ class DecimalType(FractionalType):
         if isinstance(value, decimal.Decimal):
             return value
         # Other types: pickle returns None
-        if policy == CoercionPolicy.WARN:
-            if isinstance(value, (int, float)) and not isinstance(value, bool):
-                warnings.warn(
-                    f"Coercing {type(value).__name__} to decimal returns None in pickle mode "
-                    "but raises in Arrow mode",
-                    UserWarning,
-                )
+        if (
+            policy == CoercionPolicy.WARN
+            and isinstance(value, (int, float))
+            and not isinstance(value, bool)
+        ):
+            warnings.warn(
+                f"Coercing {type(value).__name__} to decimal returns None in pickle mode "
+                "but raises in Arrow mode",
+                UserWarning,
+            )
         return None
 
 
