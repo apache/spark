@@ -4846,6 +4846,7 @@ object SQLConf {
 
   val LEGACY_VALUES_ONLY_FOLDABLE_EXPRESSIONS =
     buildConf("spark.sql.legacy.values.onlyFoldableExpressions")
+      .internal()
       .doc(
         "When true, VALUES clauses only allow foldable (constant) expressions, matching " +
         "the behavior before Spark 4.1. When false (default), VALUES allows non-deterministic " +
