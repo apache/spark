@@ -362,10 +362,7 @@ class FractionalType(NumericType):
     def coerce(
         self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
     ) -> Any:
-        if value is None:
-            return None
-        # STRICT: no-op, let Arrow handle natively
-        if policy == CoercionPolicy.STRICT:
+        if value is None or policy == CoercionPolicy.STRICT:
             return value
         # float -> float: exact match
         if isinstance(value, float):
@@ -486,10 +483,7 @@ class BinaryType(AtomicType, metaclass=DataTypeSingleton):
     def coerce(
         self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
     ) -> Any:
-        if value is None:
-            return None
-        # STRICT: no-op, let Arrow handle natively
-        if policy == CoercionPolicy.STRICT:
+        if value is None or policy == CoercionPolicy.STRICT:
             return value
         # bytes -> binary: exact match
         if isinstance(value, bytes):
@@ -515,10 +509,7 @@ class BooleanType(AtomicType, metaclass=DataTypeSingleton):
     def coerce(
         self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
     ) -> Any:
-        if value is None:
-            return None
-        # STRICT: no-op, let Arrow handle natively
-        if policy == CoercionPolicy.STRICT:
+        if value is None or policy == CoercionPolicy.STRICT:
             return value
         # bool -> boolean: exact match
         if isinstance(value, bool):
@@ -561,10 +552,7 @@ class DateType(DatetimeType, metaclass=DataTypeSingleton):
     def coerce(
         self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
     ) -> Any:
-        if value is None:
-            return None
-        # STRICT: no-op, let Arrow handle natively
-        if policy == CoercionPolicy.STRICT:
+        if value is None or policy == CoercionPolicy.STRICT:
             return value
         # date -> date: exact match
         if isinstance(value, datetime.date) and not isinstance(value, datetime.datetime):
@@ -732,10 +720,7 @@ class DecimalType(FractionalType):
     def coerce(
         self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
     ) -> Any:
-        if value is None:
-            return None
-        # STRICT: no-op, let Arrow handle natively
-        if policy == CoercionPolicy.STRICT:
+        if value is None or policy == CoercionPolicy.STRICT:
             return value
         # Decimal -> decimal: exact match
         if isinstance(value, decimal.Decimal):
@@ -1278,10 +1263,7 @@ class ArrayType(DataType):
     def coerce(
         self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
     ) -> Any:
-        if value is None:
-            return None
-        # STRICT: no-op, let Arrow handle natively
-        if policy == CoercionPolicy.STRICT:
+        if value is None or policy == CoercionPolicy.STRICT:
             return value
         # list -> array: exact match
         if isinstance(value, list):
@@ -1460,10 +1442,7 @@ class MapType(DataType):
     def coerce(
         self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
     ) -> Any:
-        if value is None:
-            return None
-        # STRICT: no-op, let Arrow handle natively
-        if policy == CoercionPolicy.STRICT:
+        if value is None or policy == CoercionPolicy.STRICT:
             return value
         # dict -> map: exact match
         if isinstance(value, dict):
@@ -2106,10 +2085,7 @@ class StructType(DataType):
     def coerce(
         self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
     ) -> Any:
-        if value is None:
-            return None
-        # STRICT: no-op, let Arrow handle natively
-        if policy == CoercionPolicy.STRICT:
+        if value is None or policy == CoercionPolicy.STRICT:
             return value
         # Row -> struct: exact match
         if isinstance(value, Row):
