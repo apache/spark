@@ -225,41 +225,7 @@ class DataType:
     def coerce(
         self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
     ) -> Any:
-        """
-        Coerce a Python value to this data type using the specified policy.
-
-        This method provides unified type coercion that can behave like either
-        the legacy pickle-based UDF path or the Arrow-optimized UDF path,
-        depending on the policy.
-
-        .. versionadded:: 4.1.0
-
-        Parameters
-        ----------
-        value : Any
-            The Python value to coerce.
-        policy : CoercionPolicy, optional
-            The coercion policy to use. Defaults to PERMISSIVE for backward
-            compatibility with pickle-based UDFs.
-
-        Returns
-        -------
-        Any
-            The coerced value, or None if coercion failed (in PERMISSIVE mode).
-
-        Raises
-        ------
-        TypeError
-            If coercion fails and policy is STRICT.
-
-        Notes
-        -----
-        Subclasses should override this method to provide type-specific
-        coercion logic. The base implementation returns the value unchanged
-        for None, otherwise delegates to subclass-specific logic.
-        """
-        if value is None:
-            return None
+        """Coerce a Python value to this data type. Base implementation is a no-op."""
         return value
 
     def _as_nullable(self) -> "DataType":
