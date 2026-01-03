@@ -333,9 +333,17 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
     if isinstance(coercion_policy, str):
         coercion_policy = CoercionPolicy(coercion_policy.lower())
 
-    # Apply coercion to match pickle behavior when using PERMISSIVE policy
-    def coerce_result(result):
-        return return_type.coerce(result, coercion_policy)
+    # Apply coercion to match pickle behavior when using PERMISSIVE/WARN policy
+    # STRICT policy is a no-op - Arrow handles type conversion natively
+    if coercion_policy == CoercionPolicy.STRICT:
+
+        def coerce_result(result):
+            return result  # no-op, let Arrow handle natively
+
+    else:
+
+        def coerce_result(result):
+            return return_type.coerce(result, coercion_policy)
 
     if zero_arg_exec:
 
