@@ -3770,7 +3770,8 @@ object SQLConf {
 
   val SESSION_ENFORCE_TIMEZONE_MATCH =
     buildConf(SqlApiConfHelper.SESSION_ENFORCE_TIMEZONE_MATCH_KEY)
-    .doc("When true, the session local timezone must match the timezone of the data source.")
+    .doc("When true, only timezone aware timestamps can be converted to/from TimestampType " +
+      "and only naive timestamps can be converted to/from TimestampNTZType. ")
     .version("4.2.0")
     .booleanConf
     .createWithDefault(false)
