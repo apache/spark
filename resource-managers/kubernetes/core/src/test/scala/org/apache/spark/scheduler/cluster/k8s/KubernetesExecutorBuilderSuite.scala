@@ -16,12 +16,16 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-import io.fabric8.kubernetes.client.KubernetesClient
+import scala.jdk.CollectionConverters.IterableHasAsScala
 
-import org.apache.spark.{SecurityManager, SparkConf}
+import io.fabric8.kubernetes.api.model.Service
+import io.fabric8.kubernetes.client.KubernetesClient
+import org.mockito.Mockito.mock
+
+import org.apache.spark.{SecurityManager, SparkConf, SparkIllegalArgumentException}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.features.KubernetesExecutorCustomFeatureConfigStep
-import org.apache.spark.internal.config.ConfigEntry
+import org.apache.spark.internal.config.{BLOCK_MANAGER_PORT, ConfigEntry}
 import org.apache.spark.resource.ResourceProfile
 
 class KubernetesExecutorBuilderSuite extends PodBuilderSuite {
@@ -64,6 +68,57 @@ class KubernetesExecutorBuilderSuite extends PodBuilderSuite {
     val secMgr = new SecurityManager(sparkConf)
     val defaultProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
     new KubernetesExecutorBuilder().buildFromFeatures(conf, secMgr, client, defaultProfile).pod
+  }
+
+  test("SPARK-52505: check executor kubernetes spec with service disabled by default") {
+    val sparkConf = baseConf
+    val conf = KubernetesTestConf.createExecutorConf(sparkConf = sparkConf)
+    val secMgr = new SecurityManager(sparkConf)
+    val client = mock(classOf[KubernetesClient])
+    val profile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+    val spec = new KubernetesExecutorBuilder().buildFromFeatures(conf, secMgr, client, profile)
+
+    val containerEnvs = spec.pod.container.getEnv.asScala
+    assert(!containerEnvs.exists(_.getName === "EXECUTOR_SERVICE_NAME"))
+
+    assert(spec.executorKubernetesResources.size === 0)
+  }
+
+  test("SPARK-52505: check executor kubernetes spec with service enabled") {
+    val sparkConf = baseConf.clone
+      .set(Config.KUBERNETES_EXECUTOR_ENABLE_SERVICE, true)
+      .set(BLOCK_MANAGER_PORT, 1234)
+    val conf = KubernetesTestConf.createExecutorConf(sparkConf = sparkConf)
+    val secMgr = new SecurityManager(sparkConf)
+    val client = mock(classOf[KubernetesClient])
+    val profile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+    val spec = new KubernetesExecutorBuilder().buildFromFeatures(conf, secMgr, client, profile)
+
+    val containerEnvs = spec.pod.container.getEnv.asScala
+    assert(containerEnvs.exists(_.getName === "EXECUTOR_SERVICE_NAME"))
+    val containerEnv = containerEnvs.filter(_.getName === "EXECUTOR_SERVICE_NAME").head
+    assert(containerEnv.getValue === "svc-appId-exec-1")
+
+    assert(spec.executorKubernetesResources.size === 1)
+    val resource = spec.executorKubernetesResources.head
+    assert(resource.getKind === "Service")
+    val service = resource.asInstanceOf[Service]
+    assert(service.getMetadata.getName === "svc-appId-exec-1")
+    assert(service.getSpec.getPorts.size() === 1)
+    val port = service.getSpec.getPorts.get(0)
+    assert(port.getName === "spark-block-manager")
+    assert(port.getPort === 1234)
+  }
+
+  test("SPARK-52505: check executor kubernetes service requires block manager port") {
+    val sparkConf = baseConf.clone.set(Config.KUBERNETES_EXECUTOR_ENABLE_SERVICE, true)
+    val conf = KubernetesTestConf.createExecutorConf(sparkConf = sparkConf)
+    val secMgr = new SecurityManager(sparkConf)
+    val client = mock(classOf[KubernetesClient])
+    val profile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+    assertThrows[SparkIllegalArgumentException] {
+      new KubernetesExecutorBuilder().buildFromFeatures(conf, secMgr, client, profile)
+    }
   }
 }
 
