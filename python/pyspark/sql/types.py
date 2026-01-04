@@ -174,6 +174,22 @@ class CoercionPolicy(StrEnum):
     """
 
 
+# Set to track which coercion warnings have been issued (to avoid duplicates)
+_issued_coercion_warnings: set = set()
+
+
+def _warn_coercion_once(message: str) -> None:
+    """Issue a coercion warning only once per unique message."""
+    if message not in _issued_coercion_warnings:
+        _issued_coercion_warnings.add(message)
+        warnings.warn(message, UserWarning)
+
+
+def _clear_coercion_warnings() -> None:
+    """Clear the set of issued coercion warnings. Used for testing."""
+    _issued_coercion_warnings.clear()
+
+
 class DataType:
     """Base class for data types."""
 
@@ -347,10 +363,9 @@ class IntegralType(NumericType, metaclass=DataTypeSingleton):
             return value
         # Other types: pickle returns None
         if policy == CoercionPolicy.WARN and isinstance(value, (bool, float, decimal.Decimal)):
-            warnings.warn(
+            _warn_coercion_once(
                 f"Coercing {type(value).__name__} to integer returns None in pickle mode "
-                "but would convert or raise in Arrow mode",
-                UserWarning,
+                "but would convert or raise in Arrow mode"
             )
         return None
 
@@ -368,10 +383,9 @@ class FractionalType(NumericType):
             return value
         # Other types: pickle returns None
         if policy == CoercionPolicy.WARN and isinstance(value, (bool, int, decimal.Decimal)):
-            warnings.warn(
+            _warn_coercion_once(
                 f"Coercing {type(value).__name__} to float returns None in pickle mode "
-                "but would convert in Arrow mode",
-                UserWarning,
+                "but would convert in Arrow mode"
             )
         return None
 
@@ -489,9 +503,8 @@ class BinaryType(AtomicType, metaclass=DataTypeSingleton):
         # str -> binary: pickle encodes to bytes
         if isinstance(value, str):
             if policy == CoercionPolicy.WARN:
-                warnings.warn(
-                    "Coercing str to binary encodes in pickle mode but raises in Arrow mode",
-                    UserWarning,
+                _warn_coercion_once(
+                    "Coercing str to binary encodes in pickle mode but raises in Arrow mode"
                 )
             return value.encode("utf-8")
         # Other types: return None
@@ -511,10 +524,9 @@ class BooleanType(AtomicType, metaclass=DataTypeSingleton):
             return value
         # Other types: pickle returns None
         if policy == CoercionPolicy.WARN and isinstance(value, (int, float)):
-            warnings.warn(
+            _warn_coercion_once(
                 f"Coercing {type(value).__name__} to boolean returns None in pickle mode "
-                "but would convert to bool in Arrow mode",
-                UserWarning,
+                "but would convert to bool in Arrow mode"
             )
         return None
 
@@ -557,10 +569,9 @@ class DateType(DatetimeType, metaclass=DataTypeSingleton):
         # int/float/Decimal -> date: pickle raises
         if isinstance(value, (int, float, decimal.Decimal)) and not isinstance(value, bool):
             if policy == CoercionPolicy.WARN:
-                warnings.warn(
+                _warn_coercion_once(
                     f"Coercing {type(value).__name__} to date raises in pickle mode "
-                    "but converts (days since epoch) in Arrow mode",
-                    UserWarning,
+                    "but converts (days since epoch) in Arrow mode"
                 )
             raise TypeError(f"Cannot coerce {type(value).__name__} to DateType")
         # Other types: raise
@@ -723,10 +734,9 @@ class DecimalType(FractionalType):
             and isinstance(value, (int, float))
             and not isinstance(value, bool)
         ):
-            warnings.warn(
+            _warn_coercion_once(
                 f"Coercing {type(value).__name__} to decimal returns None in pickle mode "
-                "but raises in Arrow mode",
-                UserWarning,
+                "but raises in Arrow mode"
             )
         return None
 
@@ -1269,9 +1279,8 @@ class ArrayType(DataType):
         # Row -> array: pickle raises
         if hasattr(value, "__class__") and value.__class__.__name__ == "Row":
             if policy == CoercionPolicy.WARN:
-                warnings.warn(
-                    "Coercing Row to array raises in pickle mode but converts in Arrow mode",
-                    UserWarning,
+                _warn_coercion_once(
+                    "Coercing Row to array raises in pickle mode but converts in Arrow mode"
                 )
             raise TypeError("Cannot coerce Row to ArrayType")
         # Other types: return None
@@ -2088,9 +2097,8 @@ class StructType(DataType):
         # list -> struct: pickle converts
         if isinstance(value, list):
             if policy == CoercionPolicy.WARN:
-                warnings.warn(
-                    "Coercing list to struct works in pickle mode but raises in Arrow mode",
-                    UserWarning,
+                _warn_coercion_once(
+                    "Coercing list to struct works in pickle mode but raises in Arrow mode"
                 )
             return _create_row(self.names, value)
         # Other types: raise
