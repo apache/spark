@@ -122,7 +122,7 @@ class CoercionPolicy(StrEnum):
     This enum controls how values are coerced when the Python UDF returns
     a value that doesn't exactly match the declared return type.
 
-    .. versionadded:: 4.1.0
+    .. versionadded:: 4.2.0
 
     Notes
     -----
