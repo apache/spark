@@ -1973,9 +1973,11 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                         yield (
                             batch_key,
                             pd.DataFrame(rows) if len(rows) > 0 else EMPTY_DATAFRAME.copy(),
-                            pd.DataFrame(init_state_rows)
-                            if len(init_state_rows) > 0
-                            else EMPTY_DATAFRAME.copy(),
+                            (
+                                pd.DataFrame(init_state_rows)
+                                if len(init_state_rows) > 0
+                                else EMPTY_DATAFRAME.copy()
+                            ),
                         )
                         rows = []
                         init_state_rows = []
@@ -1983,9 +1985,11 @@ class TransformWithStateInPandasInitStateSerializer(TransformWithStateInPandasSe
                     yield (
                         batch_key,
                         pd.DataFrame(rows) if len(rows) > 0 else EMPTY_DATAFRAME.copy(),
-                        pd.DataFrame(init_state_rows)
-                        if len(init_state_rows) > 0
-                        else EMPTY_DATAFRAME.copy(),
+                        (
+                            pd.DataFrame(init_state_rows)
+                            if len(init_state_rows) > 0
+                            else EMPTY_DATAFRAME.copy()
+                        ),
                     )
 
         _batches = super(ArrowStreamPandasSerializer, self).load_stream(stream)

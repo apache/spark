@@ -111,6 +111,7 @@ class ResourceInformation(google.protobuf.message.Message):
         self,
     ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """(Required) An array of strings describing the addresses of the resource."""
+
     def __init__(
         self,
         *,
@@ -273,6 +274,7 @@ class ResourceProfile(google.protobuf.message.Message):
         """(Optional) Resource requests for executors. Mapped from the resource name
         (e.g., cores, memory, CPU) to its specific request.
         """
+
     @property
     def task_resources(
         self,
@@ -280,13 +282,16 @@ class ResourceProfile(google.protobuf.message.Message):
         """(Optional) Resource requests for tasks. Mapped from the resource name
         (e.g., cores, memory, CPU) to its specific request.
         """
+
     def __init__(
         self,
         *,
-        executor_resources: collections.abc.Mapping[builtins.str, global___ExecutorResourceRequest]
-        | None = ...,
-        task_resources: collections.abc.Mapping[builtins.str, global___TaskResourceRequest]
-        | None = ...,
+        executor_resources: (
+            collections.abc.Mapping[builtins.str, global___ExecutorResourceRequest] | None
+        ) = ...,
+        task_resources: (
+            collections.abc.Mapping[builtins.str, global___TaskResourceRequest] | None
+        ) = ...,
     ) -> None: ...
     def ClearField(
         self,
@@ -384,6 +389,7 @@ class JvmOrigin(google.protobuf.message.Message):
         global___StackTraceElement
     ]:
         """(Optional) Stack trace."""
+
     def __init__(
         self,
         *,

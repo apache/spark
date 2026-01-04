@@ -121,12 +121,10 @@ class GroupedData:
         return f"GroupedData[{grouping_str}, value: [{value_str}], type: {type_str}]"
 
     @overload
-    def agg(self, *exprs: Column) -> "DataFrame":
-        ...
+    def agg(self, *exprs: Column) -> "DataFrame": ...
 
     @overload
-    def agg(self, __exprs: Dict[str, str]) -> "DataFrame":
-        ...
+    def agg(self, __exprs: Dict[str, str]) -> "DataFrame": ...
 
     def agg(self, *exprs: Union[Column, Dict[str, str]]) -> "DataFrame":
         from pyspark.sql.connect.dataframe import DataFrame
