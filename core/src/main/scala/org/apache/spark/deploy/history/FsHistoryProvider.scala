@@ -403,7 +403,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val date = new Date(0)
     val lastUpdate = new Date()
     val info = ApplicationAttemptInfo(
-      attemptId, date, date, lastUpdate, 0, "spark", false, "unknown")
+      attemptId, date, date, lastUpdate, 0, "spark", false, None, "unknown")
     addListing(new ApplicationInfoWrapper(
       ApplicationInfo(appId, appId, None, None, None, None, List.empty),
       List(new AttemptInfoWrapper(info, logPath, 0, Some(1), None, None, None, None))))
@@ -1603,6 +1603,7 @@ private[history] class AppListingListener(
     attempt.lastUpdated = new Date(reader.modificationTime)
     attempt.duration = event.time - attempt.startTime.getTime()
     attempt.completed = true
+    attempt.exitCode = event.exitCode
   }
 
   override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate): Unit = {
@@ -1669,6 +1670,7 @@ private[history] class AppListingListener(
     var duration = 0L
     var sparkUser: String = null
     var completed = false
+    var exitCode = Option.empty[Int]
     var appSparkVersion = ""
 
     var adminAcls: Option[String] = None
@@ -1685,6 +1687,7 @@ private[history] class AppListingListener(
         duration,
         sparkUser,
         completed,
+        exitCode,
         appSparkVersion)
       new AttemptInfoWrapper(
         apiInfo,
