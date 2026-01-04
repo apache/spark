@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/rvben/rumdl/main/rumdl.schema.json
+# Global settings
+[global]
+line-length = 140
+
+# Disable specific rules for specific files
+[per-file-ignores]
+"**/declarative-pipelines-programming-guide.md" = ["MD046"]  # Ignore Use fenced code blocks

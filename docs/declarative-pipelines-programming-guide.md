@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
-     http://www.apache.org/licenses/LICENSE-2.0
- 
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -24,14 +24,21 @@ license: |
 
 ## What is Spark Declarative Pipelines (SDP)?
 
-Spark Declarative Pipelines (SDP) is a declarative framework for building reliable, maintainable, and testable data pipelines on Apache Spark. SDP simplifies ETL development by allowing you to focus on the transformations you want to apply to your data, rather than the mechanics of pipeline execution.
+<!-- rumdl-disable MD013 -->
+Spark Declarative Pipelines (SDP) is a declarative framework for building reliable, maintainable, and testable data pipelines on Apache Spark.
+SDP simplifies ETL development by allowing you to focus on the transformations you want to apply to your data, rather than the mechanics of pipeline execution.
+<!-- rumdl-enable MD013 -->
 
 SDP is designed for both batch and streaming data processing, supporting common use cases such as:
-- Data ingestion from cloud storage (Amazon S3, Azure ADLS Gen2, Google Cloud Storage)
-- Data ingestion from message buses (Apache Kafka, Amazon Kinesis, Google Pub/Sub, Azure EventHub)
-- Incremental batch and streaming transformations
 
-The key advantage of SDP is its declarative approach - you define what tables should exist and what their contents should be, and SDP handles the orchestration, compute management, and error handling automatically.
+* Data ingestion from cloud storage (Amazon S3, Azure ADLS Gen2, Google Cloud Storage)
+* Data ingestion from message buses (Apache Kafka, Amazon Kinesis, Google Pub/Sub, Azure EventHub)
+* Incremental batch and streaming transformations
+
+<!-- rumdl-disable MD013 -->
+The key advantage of SDP is its declarative approach.
+You define what tables should exist and their contents, and SDP handles the orchestration, compute management, and error handling automatically.
+<!-- rumdl-enable MD013 -->
 
 ![Dataflow Graph](img/declarative-pipelines-dataflow-graph.png)
 
@@ -39,7 +46,7 @@ The key advantage of SDP is its declarative approach - you define what tables sh
 
 A quick way to install SDP is with pip:
 
-```
+```shell
 pip install pyspark[pipelines]
 ```
 
@@ -49,7 +56,8 @@ See the [downloads page](//spark.apache.org/downloads.html) for more installatio
 
 ### Flows
 
-A flow is the foundational data processing concept in SDP which supports both streaming and batch semantics. A flow reads data from a source, applies user-defined processing logic, and writes the result into a target dataset.
+A flow is the foundational data processing concept in SDP which supports both streaming and batch semantics.
+A flow reads data from a source, applies user-defined processing logic, and writes the result into a target dataset.
 
 For example, when you author a query like:
 
@@ -62,30 +70,40 @@ SDP creates the table named `target_table` along with a flow that reads new data
 
 ### Datasets
 
-A dataset is a queryable object that's the output of one of more flows within a pipeline. Flows in the pipeline can also read from datasets produced in the pipeline.
+A dataset is a queryable object that's the output of one of more flows within a pipeline.
+Flows in the pipeline can also read from datasets produced in the pipeline.
 
-- **Streaming Table** – a definition of a table and one or more streaming flows written into it. Streaming tables support incremental processing of data, allowing you to process only new data as it arrives.
-- **Materialized View** – a view that is precomputed into a table. A materialized view always has exactly one batch flow writing to it.
-- **Temporary View** – a view that is scoped to an execution of the pipeline. It can be referenced from flows within the pipeline. It's useful for encapsulating transformations and intermediate logical entities that multiple other elements of the pipeline depend on.
+* **Streaming Table** – a definition of a table and one or more streaming flows written into it.
+    Streaming tables support incremental processing of data, allowing you to process only new data as it arrives.
+* **Materialized View** – a view that is precomputed into a table.
+    A materialized view always has exactly one batch flow writing to it.
+* **Temporary View** – a view that is scoped to an execution of the pipeline.
+    It can be referenced from flows within the pipeline.
+    It's useful for encapsulating transformations and intermediate logical entities that multiple other elements of the pipeline depend on.
 
 ### Pipelines
 
-A pipeline is the primary unit of development and execution in SDP. A pipeline can contain one or more flows, streaming tables, and materialized views. While your pipeline runs, it analyzes the dependencies of your defined objects and orchestrates their order of execution and parallelization automatically.
+A pipeline is the primary unit of development and execution in SDP.
+A pipeline can contain one or more flows, streaming tables, and materialized views.
+<!-- rumdl-disable MD013 -->
+While your pipeline runs, it analyzes the dependencies of your defined objects and orchestrates their order of execution and parallelization automatically.
+<!-- rumdl-enable MD013 -->
 
 ### Pipeline Projects
 
-A pipeline project is a set of source files that contain code definitions of the datasets and flows that make up a pipeline. The source files can be `.py` or `.sql` files.
+A pipeline project is a set of source files that contain code definitions of the datasets and flows that make up a pipeline.
+The source files can be `.py` or `.sql` files.
 
 It's conventional to name pipeline spec files `spark-pipeline.yml` or `spark-pipeline.yaml`.
 
 A YAML-formatted pipeline spec file contains the top-level configuration for the pipeline project with the following fields:
 
-- **name** (Required) - The name of the pipeline project.
-- **libraries** (Required) - The paths with the transformation source files in SQL or Python.
-- **storage** (Required) – A directory where checkpoints can be stored for streaming tables within the pipeline.
-- **database** (Optional) - The default target database for pipeline outputs. **schema** can alternatively be used as an alias.
-- **catalog** (Optional) - The default target catalog for pipeline outputs.
-- **configuration** (Optional) - Map of Spark configuration properties.
+* **name** (Required) - The name of the pipeline project.
+* **libraries** (Required) - The paths with the transformation source files in SQL or Python.
+* **storage** (Required) – A directory where checkpoints can be stored for streaming tables within the pipeline.
+* **database** (Optional) - The default target database for pipeline outputs. **schema** can alternatively be used as an alias.
+* **catalog** (Optional) - The default target catalog for pipeline outputs.
+* **configuration** (Optional) - Map of Spark configuration properties.
 
 An example pipeline spec file:
 
@@ -101,33 +119,38 @@ configuration:
   spark.sql.shuffle.partitions: "1000"
 ```
 
-The `spark-pipelines init` command, described below, makes it easy to generate a pipeline project with default configuration and directory structure.
+Use `spark-pipelines init` command, described below, to generate a pipeline project with the default configuration and directory structure.
 
 ## The `spark-pipelines` Command Line Interface
 
 The `spark-pipelines` command line interface (CLI) is the primary way to manage a pipeline.
 
-`spark-pipelines` is built on top of `spark-submit`, meaning that it supports all cluster managers supported by `spark-submit`. It supports all `spark-submit` arguments except for `--class`.
+`spark-pipelines` is built on top of `spark-submit`, meaning that it supports all cluster managers supported by `spark-submit`.
+It supports all `spark-submit` arguments except for `--class`.
 
 ### `spark-pipelines init`
 
-`spark-pipelines init --name my_pipeline` generates a simple pipeline project, inside a directory named `my_pipeline`, including a spec file and example transformation definitions.
+`spark-pipelines init --name my_pipeline` generates a simple pipeline project, inside a directory named `my_pipeline`,
+including a spec file and example transformation definitions.
 
 ### `spark-pipelines run`
 
 `spark-pipelines run` launches an execution of a pipeline and monitors its progress until it completes.
 
-The `--spec` parameter allows selecting the pipeline spec file. If not provided, the CLI will look in the current directory and parent directories for one of the files:
+The `--spec` parameter allows selecting the pipeline spec file.
+If not provided, the CLI will look in the current directory and parent directories for one of the files:
 
 * `spark-pipeline.yml`
 * `spark-pipeline.yaml`
 
 ### `spark-pipelines dry-run`
 
-`spark-pipelines dry-run` launches an execution of a pipeline that doesn't write or read any data, but catches many kinds of errors that would be caught if the pipeline were to actually run. E.g.
-- Syntax errors – e.g. invalid Python or SQL code
-- Analysis errors – e.g. selecting from a table or a column that doesn't exist
-- Graph validation errors - e.g. cyclic dependencies
+`spark-pipelines dry-run` launches an execution of a pipeline that doesn't write or read any data,
+but catches many kinds of errors that would be caught if the pipeline were to actually run. E.g.
+
+* Syntax errors (e.g., invalid Python or SQL code)
+* Analysis errors (e.g., selecting from a table or a column that doesn't exist)
+* Graph validation errors (e.g., cyclic dependencies)
 
 ## Programming with SDP in Python
 
@@ -453,22 +476,24 @@ SELECT * FROM STREAM(customers_us_east);
 
 ### Python Considerations
 
-- SDP evaluates the code that defines a pipeline multiple times during planning and pipeline runs. Python functions that define datasets should include only the code required to define the table or view.
-- The function used to define a dataset must return a `pyspark.sql.DataFrame`.
-- Never use methods that save or write to files or tables as part of your SDP dataset code.
-- When using the `for` loop pattern to define datasets in Python, ensure that the list of values passed to the `for` loop is always additive.
+* SDP evaluates the code that defines a pipeline multiple times during planning and pipeline runs.
+    Python functions that define datasets should include only the code required to define the table or view.
+* The function used to define a dataset must return a `pyspark.sql.DataFrame`.
+* Never use methods that save or write to files or tables as part of your SDP dataset code.
+* When using the `for` loop pattern to define datasets in Python,
+    ensure that the list of values passed to the `for` loop is always additive.
 
 Examples of Spark SQL operations that should never be used in SDP code:
 
-- `collect()`
-- `count()`
-- `pivot()`
-- `toPandas()`
-- `save()`
-- `saveAsTable()`
-- `start()`
-- `toTable()`
+* `collect()`
+* `count()`
+* `pivot()`
+* `toPandas()`
+* `save()`
+* `saveAsTable()`
+* `start()`
+* `toTable()`
 
 ### SQL Considerations
 
-- The `PIVOT` clause is not supported in SDP SQL.
+* The `PIVOT` clause is not supported in SDP SQL.
