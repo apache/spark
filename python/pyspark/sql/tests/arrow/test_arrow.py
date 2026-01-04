@@ -59,7 +59,6 @@ from pyspark.testing.sqlutils import (
     pyarrow_requirement_message,
 )
 from pyspark.errors import ArithmeticException, PySparkTypeError, UnsupportedOperationException
-from pyspark.loose_version import LooseVersion
 from pyspark.util import is_remote_only
 
 if have_pandas:
@@ -1658,18 +1657,7 @@ class ArrowTestsMixin:
         )
         df = self.spark.createDataFrame(origin)
         t = df.toArrow()
-
-        # SPARK-48302: PyArrow versions before 17.0.0 replaced nulls with empty lists when
-        # reconstructing MapArray columns to localize timestamps
-        if LooseVersion(pa.__version__) >= LooseVersion("17.0.0"):
-            expected = origin
-        else:
-            expected = pa.table(
-                [[dict(ts=datetime.datetime(2023, 1, 1, 8, 0, 0)), []]],
-                schema=origin_schema,
-            )
-
-        self.assertTrue(t.equals(expected))
+        self.assertTrue(t.equals(origin))
 
     def test_createDataFrame_udt(self):
         for arrow_enabled in [True, False]:
@@ -1925,14 +1913,14 @@ class MaxResultArrowTests(unittest.TestCase):
 class EncryptionArrowTests(ArrowTests):
     @classmethod
     def conf(cls):
-        return super(EncryptionArrowTests, cls).conf().set("spark.io.encryption.enabled", "true")
+        return super().conf().set("spark.io.encryption.enabled", "true")
 
 
 class RDDBasedArrowTests(ArrowTests):
     @classmethod
     def conf(cls):
         return (
-            super(RDDBasedArrowTests, cls)
+            super()
             .conf()
             .set("spark.sql.execution.arrow.localRelationThreshold", "0")
             # to test multiple partitions

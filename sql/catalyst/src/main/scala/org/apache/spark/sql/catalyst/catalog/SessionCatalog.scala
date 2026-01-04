@@ -32,7 +32,6 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
@@ -49,6 +48,8 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
+import org.apache.spark.sql.internal.connector.V1Function
+import org.apache.spark.sql.metricview.util.MetricViewPlanner
 import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, PartitioningUtils}
 import org.apache.spark.util.ArrayImplicits._
@@ -943,13 +944,36 @@ class SessionCatalog(
     val table = qualifiedIdent.table
     val multiParts = Seq(CatalogManager.SESSION_CATALOG_NAME, db, table)
 
-    if (metadata.tableType == CatalogTableType.VIEW) {
+    if (CatalogTable.isMetricView(metadata)) {
+      parseMetricViewDefinition(metadata)
+    } else if (metadata.tableType == CatalogTableType.VIEW) {
       // The relation is a view, so we wrap the relation by:
       // 1. Add a [[View]] operator over the relation to keep track of the view desc;
       // 2. Wrap the logical plan in a [[SubqueryAlias]] which tracks the name of the view.
       SubqueryAlias(multiParts, fromCatalogTable(metadata, isTempView = false))
     } else {
       SubqueryAlias(multiParts, UnresolvedCatalogRelation(metadata, options))
+    }
+  }
+
+  private def parseMetricViewDefinition(metadata: CatalogTable): LogicalPlan = {
+    val viewDefinition = metadata.viewText.getOrElse {
+      throw SparkException.internalError("Invalid view without text.")
+    }
+    val viewConfigs = metadata.viewSQLConfigs
+    val origin = CurrentOrigin.get.copy(
+      objectType = Some("METRIC VIEW"),
+      objectName = Some(metadata.qualifiedName)
+    )
+    SQLConf.withExistingConf(
+      View.effectiveSQLConf(
+        configs = viewConfigs,
+        isTempView = false
+      )
+    ) {
+      CurrentOrigin.withOrigin(origin) {
+        MetricViewPlanner.planRead(metadata, viewDefinition, parser, metadata.schema)
+      }
     }
   }
 
@@ -2129,55 +2153,75 @@ class SessionCatalog(
   }
 
   /**
-   * Look up the `ExpressionInfo` of the given function by name if it's a persistent function.
-   * This supports both scalar and table functions.
+   * Look up a persistent function's ExpressionInfo by name (for DESCRIBE FUNCTION).
+   * This only fetches metadata without loading resources or creating builders.
    */
   def lookupPersistentFunction(name: FunctionIdentifier): ExpressionInfo = {
     val qualifiedIdent = qualifyIdentifier(name)
-    val db = qualifiedIdent.database.get
-    val funcName = qualifiedIdent.funcName
+    // Check if already cached in either registry
     functionRegistry.lookupFunction(qualifiedIdent)
       .orElse(tableFunctionRegistry.lookupFunction(qualifiedIdent))
       .getOrElse {
-        requireDbExists(db)
-        if (externalCatalog.functionExists(db, funcName)) {
-          val metadata = externalCatalog.getFunction(db, funcName)
-          if (metadata.isUserDefinedFunction) {
-            UserDefinedFunction.fromCatalogFunction(metadata, parser).toExpressionInfo
-          } else {
-            makeExprInfoForHiveFunction(metadata.copy(identifier = qualifiedIdent))
-          }
+        val funcMetadata = fetchCatalogFunction(qualifiedIdent)
+        if (funcMetadata.isUserDefinedFunction) {
+          UserDefinedFunction.fromCatalogFunction(funcMetadata, parser).toExpressionInfo
         } else {
-          failFunctionLookup(name)
+          makeExprInfoForHiveFunction(funcMetadata)
         }
       }
   }
 
   /**
-   * Look up a persistent scalar function by name and resolves it to an Expression.
+   * Load a persistent scalar function by name.
+   * Returns V1Function with:
+   * - Eager info (from cache or catalog fetch, no resource loading)
+   * - Lazy builder (resource loading only on first invoke)
+   *
+   * This matches V1 behavior where DESCRIBE doesn't load resources.
    */
-  def resolvePersistentFunction(
-      name: FunctionIdentifier, arguments: Seq[Expression]): Expression = {
-    resolvePersistentFunctionInternal[Expression](
-      name,
-      arguments,
-      functionRegistry,
-      registerHiveFunc = func =>
-        registerFunction(
-          func,
-          overrideIfExists = false,
-          registry = functionRegistry,
-          functionBuilder = makeFunctionBuilder(func)
-        ),
-      registerUserDefinedFunc = function => {
-        val builder = makeUserDefinedScalarFuncBuilder(function)
-        registerUserDefinedFunction[Expression](
-          function = function,
-          overrideIfExists = false,
-          registry = functionRegistry,
-          functionBuilder = builder)
-      }
-    )
+  def loadPersistentScalarFunction(name: FunctionIdentifier): V1Function = {
+    val qualifiedIdent = qualifyIdentifier(name)
+
+    // Check cache first (no synchronization needed for reads)
+    functionRegistry.lookupFunctionEntry(qualifiedIdent) match {
+      case Some((cachedInfo, cachedBuilder)) =>
+        // Already cached - return with eager builder
+        V1Function(cachedInfo, cachedBuilder)
+
+      case None =>
+        // Fetch metadata eagerly (no resource loading yet)
+        val funcMetadata = fetchCatalogFunction(qualifiedIdent)
+        val info = if (funcMetadata.isUserDefinedFunction) {
+          UserDefinedFunction.fromCatalogFunction(funcMetadata, parser).toExpressionInfo
+        } else {
+          makeExprInfoForHiveFunction(funcMetadata)
+        }
+
+        // Builder factory - loads resources only on first invoke()
+        val builderFactory: () => FunctionBuilder = () => synchronized {
+          // Re-check cache (another thread may have loaded it)
+          functionRegistry.lookupFunctionBuilder(qualifiedIdent).getOrElse {
+            if (funcMetadata.isUserDefinedFunction) {
+              val udf = UserDefinedFunction.fromCatalogFunction(funcMetadata, parser)
+              registerUserDefinedFunction[Expression](
+                udf,
+                overrideIfExists = false,
+                functionRegistry,
+                makeUserDefinedScalarFuncBuilder(udf))
+            } else {
+              loadFunctionResources(funcMetadata.resources)
+              registerFunction(
+                funcMetadata,
+                overrideIfExists = false,
+                functionRegistry,
+                makeFunctionBuilder(funcMetadata))
+            }
+            functionRegistry.lookupFunctionBuilder(qualifiedIdent).get
+          }
+        }
+
+        V1Function(info, builderFactory)
+    }
   }
 
   /**
@@ -2185,66 +2229,45 @@ class SessionCatalog(
    */
   def resolvePersistentTableFunction(
       name: FunctionIdentifier,
-      arguments: Seq[Expression]): LogicalPlan = {
-    resolvePersistentFunctionInternal[LogicalPlan](
-      name,
-      arguments,
-      tableFunctionRegistry,
-      // We don't support persistent Hive table functions yet.
-      registerHiveFunc = (func: CatalogFunction) => failFunctionLookup(name),
-      registerUserDefinedFunc = function => {
-        val builder = makeUserDefinedTableFuncBuilder(function)
-        registerUserDefinedFunction[LogicalPlan](
-          function = function,
-          overrideIfExists = false,
-          registry = tableFunctionRegistry,
-          functionBuilder = builder)
+      arguments: Seq[Expression]): LogicalPlan = synchronized {
+    val qualifiedIdent = qualifyIdentifier(name)
+    if (tableFunctionRegistry.functionExists(qualifiedIdent)) {
+      // Already cached
+      tableFunctionRegistry.lookupFunction(qualifiedIdent, arguments)
+    } else {
+      // Load from catalog
+      val funcMetadata = fetchCatalogFunction(qualifiedIdent)
+      if (!funcMetadata.isUserDefinedFunction) {
+        // Hive table functions are not supported
+        failFunctionLookup(qualifiedIdent)
       }
-    )
+      val udf = UserDefinedFunction.fromCatalogFunction(funcMetadata, parser)
+      registerUserDefinedFunction[LogicalPlan](
+        udf,
+        overrideIfExists = false,
+        tableFunctionRegistry,
+        makeUserDefinedTableFuncBuilder(udf))
+      tableFunctionRegistry.lookupFunction(qualifiedIdent, arguments)
+    }
   }
 
-  private def resolvePersistentFunctionInternal[T](
-      name: FunctionIdentifier,
-      arguments: Seq[Expression],
-      registry: FunctionRegistryBase[T],
-      registerHiveFunc: CatalogFunction => Unit,
-      registerUserDefinedFunc: UserDefinedFunction => Unit): T = {
-    // `synchronized` is used to prevent multiple threads from concurrently resolving the
-    // same function that has not yet been loaded into the function registry. This is needed
-    // because calling `registerFunction` twice with `overrideIfExists = false` can lead to
-    // a FunctionAlreadyExistsException.
-    synchronized {
-      val qualifiedIdent = qualifyIdentifier(name)
-      val db = qualifiedIdent.database.get
-      val funcName = qualifiedIdent.funcName
-      if (registry.functionExists(qualifiedIdent)) {
-        // This function has been already loaded into the function registry.
-        registry.lookupFunction(qualifiedIdent, arguments)
-      } else {
-        // The function has not been loaded to the function registry, which means
-        // that the function is a persistent function (if it actually has been registered
-        // in the metastore). We need to first put the function in the function registry.
-        val catalogFunction = try {
-          externalCatalog.getFunction(db, funcName)
-        } catch {
-          case _: AnalysisException => failFunctionLookup(qualifiedIdent)
-        }
-        // Please note that qualifiedName is provided by the user. However,
-        // catalogFunction.identifier.unquotedString is returned by the underlying
-        // catalog. So, it is possible that qualifiedName is not exactly the same as
-        // catalogFunction.identifier.unquotedString (difference is on case-sensitivity).
-        // At here, we preserve the input from the user.
-        val funcMetadata = catalogFunction.copy(identifier = qualifiedIdent)
-        if (!catalogFunction.isUserDefinedFunction) {
-          loadFunctionResources(catalogFunction.resources)
-          registerHiveFunc(funcMetadata)
-        } else {
-          val function = UserDefinedFunction.fromCatalogFunction(funcMetadata, parser)
-          registerUserDefinedFunc(function)
-        }
-        // Now, we need to create the Expression.
-        registry.lookupFunction(qualifiedIdent, arguments)
-      }
+  /**
+   * Fetch a catalog function from the external catalog.
+   */
+  private def fetchCatalogFunction(qualifiedIdent: FunctionIdentifier): CatalogFunction = {
+    val db = qualifiedIdent.database.get
+    val funcName = qualifiedIdent.funcName
+    requireDbExists(db)
+    try {
+      // Please note that qualifiedIdent is provided by the user. However,
+      // CatalogFunction.identifier is returned by the underlying catalog.
+      // So, it is possible that qualifiedIdent is not exactly the same as
+      // catalogFunction.identifier (difference is on case-sensitivity).
+      // At here, we preserve the input from the user.
+      externalCatalog.getFunction(db, funcName).copy(identifier = qualifiedIdent)
+    } catch {
+      case _: NoSuchPermanentFunctionException | _: NoSuchFunctionException =>
+        failFunctionLookup(qualifiedIdent)
     }
   }
 
@@ -2266,9 +2289,9 @@ class SessionCatalog(
   def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): Expression = {
     if (name.database.isEmpty) {
       resolveBuiltinOrTempFunction(name.funcName, children)
-        .getOrElse(resolvePersistentFunction(name, children))
+        .getOrElse(loadPersistentScalarFunction(name).invoke(children))
     } else {
-      resolvePersistentFunction(name, children)
+      loadPersistentScalarFunction(name).invoke(children)
     }
   }
 

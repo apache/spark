@@ -55,7 +55,6 @@ from pyspark.ml.classification import (
     MultilayerPerceptronClassificationTrainingSummary,
 )
 from pyspark.ml.regression import DecisionTreeRegressionModel
-from pyspark.sql import is_remote
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -276,9 +275,6 @@ class ClassificationTestsMixin:
             self.assertAlmostEqual(s.weightedFMeasure(1.0), 1.0, 2)
 
         check_summary()
-        if is_remote():
-            self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
-            check_summary()
 
         s = model.summary
         # test evaluation (with training dataset) produces a summary with same values
@@ -329,9 +325,6 @@ class ClassificationTestsMixin:
             self.assertAlmostEqual(s.weightedFMeasure(1.0), 0.65, 2)
 
         check_summary()
-        if is_remote():
-            self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
-            check_summary()
 
         s = model.summary
         # test evaluation (with training dataset) produces a summary with same values
@@ -455,9 +448,6 @@ class ClassificationTestsMixin:
             self.assertEqual(summary.predictions.columns, expected_cols)
 
         check_summary()
-        if is_remote():
-            self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
-            check_summary()
 
         summary2 = model.evaluate(df)
         self.assertIsInstance(summary2, LinearSVCSummary)
@@ -560,9 +550,6 @@ class ClassificationTestsMixin:
             self.assertEqual(summary.predictions.columns, expected_cols)
 
         check_summary()
-        if is_remote():
-            self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
-            check_summary()
 
         summary2 = model.evaluate(df)
         self.assertIsInstance(summary2, FMClassificationSummary)
@@ -814,9 +801,6 @@ class ClassificationTestsMixin:
             self.assertEqual(summary.predictions.columns, expected_cols)
 
         check_summary()
-        if is_remote():
-            self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
-            check_summary()
 
         summary2 = model.evaluate(df)
         self.assertTrue(isinstance(summary2, BinaryRandomForestClassificationSummary))
@@ -905,9 +889,6 @@ class ClassificationTestsMixin:
             self.assertEqual(summary.predictions.columns, expected_cols)
 
         check_summary()
-        if is_remote():
-            self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
-            check_summary()
 
         summary2 = model.evaluate(df)
         self.assertTrue(isinstance(summary2, RandomForestClassificationSummary))
@@ -1006,9 +987,6 @@ class ClassificationTestsMixin:
             self.assertEqual(summary.predictions.columns, expected_cols)
 
         check_summary()
-        if is_remote():
-            self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
-            check_summary()
 
         summary2 = model.evaluate(df)
         self.assertIsInstance(summary2, MultilayerPerceptronClassificationSummary)

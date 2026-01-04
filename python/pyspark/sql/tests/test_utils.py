@@ -35,6 +35,7 @@ from pyspark.sql import Row
 import pyspark.sql.functions as F
 from pyspark.sql.functions import to_date, unix_timestamp, from_unixtime
 from pyspark.sql.types import (
+    DecimalType,
     StringType,
     ArrayType,
     LongType,
@@ -1544,8 +1545,6 @@ class UtilsTestsMixin:
         )
 
     def test_list_row_unequal_schema(self):
-        from pyspark.sql import Row
-
         df1 = self.spark.createDataFrame(
             data=[
                 (1, 3000),
@@ -1765,8 +1764,6 @@ class UtilsTestsMixin:
     def test_assert_schema_equal_with_decimal_types(self):
         """Test assertSchemaEqual with decimal types of different precision and scale
         (SPARK-51062)."""
-        from pyspark.sql.types import StructType, StructField, DecimalType
-
         # Same precision and scale - should pass
         s1 = StructType(
             [

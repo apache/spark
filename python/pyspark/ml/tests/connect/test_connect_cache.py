@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import json
 import unittest
 
 from pyspark.ml.linalg import Vectors
@@ -44,8 +45,9 @@ class MLConnectCacheTests(ReusedConnectTestCase):
 
         cache_info = spark.client._get_ml_cache_info()
         self.assertEqual(len(cache_info), 1)
-        self.assertTrue(
-            "obj: class org.apache.spark.ml.classification.LinearSVCModel" in cache_info[0],
+        self.assertEqual(
+            json.loads(cache_info[0])["class"],
+            "org.apache.spark.ml.classification.LinearSVCModel",
             cache_info,
         )
         # the `model._summary` holds another ref to the remote model.
@@ -100,7 +102,7 @@ class MLConnectCacheTests(ReusedConnectTestCase):
         self.assertEqual(len(cache_info), 3)
         self.assertTrue(
             all(
-                "obj: class org.apache.spark.ml.classification.LinearSVCModel" in c
+                json.loads(c)["class"] == "org.apache.spark.ml.classification.LinearSVCModel"
                 for c in cache_info
             ),
             cache_info,

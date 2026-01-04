@@ -22,7 +22,8 @@
   "ATTRIBUTE_NOT_SUPPORTED": {
     "message": [
       "Attribute `<attr_name>` is not supported."
-    ]
+    ],
+    "sqlState": "0A000"
   },
   "AXIS_LENGTH_MISMATCH": {
     "message": [
@@ -102,22 +103,26 @@
   "CANNOT_INFER_EMPTY_SCHEMA": {
     "message": [
       "Can not infer schema from an empty dataset."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "CANNOT_INFER_SCHEMA_FOR_TYPE": {
     "message": [
       "Can not infer schema for type: `<data_type>`."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "CANNOT_INFER_TYPE_FOR_FIELD": {
     "message": [
       "Unable to infer the type of the field `<field_name>`."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "CANNOT_MERGE_TYPE": {
     "message": [
       "Can not merge type `<data_type1>` and `<data_type2>`."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "CANNOT_OPEN_SOCKET": {
     "message": [
@@ -157,7 +162,8 @@
   "CLASSIC_OPERATION_NOT_SUPPORTED_ON_DF": {
     "message": [
       "Calling property or member '<member>' is not supported in PySpark Classic, please use Spark Connect instead."
-    ]
+    ],
+    "sqlState": "0A000"
   },
   "COLLATION_INVALID_PROVIDER": {
     "message": [
@@ -527,7 +533,8 @@
   "JVM_ATTRIBUTE_NOT_SUPPORTED": {
     "message": [
       "Attribute `<attr_name>` is not supported in Spark Connect as it depends on the JVM. If you need to use this attribute, do not use Spark Connect when creating your session. Visit https://spark.apache.org/docs/latest/sql-getting-started.html#starting-point-sparksession for creating regular Spark Session in detail."
-    ]
+    ],
+    "sqlState": "0A000"
   },
   "KEY_NOT_EXISTS": {
     "message": [
@@ -602,137 +609,164 @@
   "NOT_BOOL": {
     "message": [
       "Argument `<arg_name>` should be a bool, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_BOOL_OR_DICT_OR_FLOAT_OR_INT_OR_LIST_OR_STR_OR_TUPLE": {
     "message": [
       "Argument `<arg_name>` should be a bool, dict, float, int, str or tuple, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_BOOL_OR_DICT_OR_FLOAT_OR_INT_OR_STR": {
     "message": [
       "Argument `<arg_name>` should be a bool, dict, float, int or str, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_BOOL_OR_FLOAT_OR_INT": {
     "message": [
       "Argument `<arg_name>` should be a bool, float or int, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_BOOL_OR_FLOAT_OR_INT_OR_LIST_OR_NONE_OR_STR_OR_TUPLE": {
     "message": [
       "Argument `<arg_name>` should be a bool, float, int, list, None, str or tuple, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_BOOL_OR_FLOAT_OR_INT_OR_STR": {
     "message": [
       "Argument `<arg_name>` should be a bool, float, int or str, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_BOOL_OR_LIST": {
     "message": [
       "Argument `<arg_name>` should be a bool or list, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_BOOL_OR_STR": {
     "message": [
       "Argument `<arg_name>` should be a bool or str, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_CALLABLE": {
     "message": [
       "Argument `<arg_name>` should be a callable, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_COLUMN": {
     "message": [
       "Argument `<arg_name>` should be a Column, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_COLUMN_OR_DATATYPE_OR_STR": {
     "message": [
       "Argument `<arg_name>` should be a Column, str or DataType, but got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_COLUMN_OR_FLOAT_OR_INT_OR_LIST_OR_STR": {
     "message": [
       "Argument `<arg_name>` should be a Column, float, integer, list or string, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_COLUMN_OR_INT": {
     "message": [
       "Argument `<arg_name>` should be a Column or int, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_COLUMN_OR_INT_OR_LIST_OR_STR_OR_TUPLE": {
     "message": [
       "Argument `<arg_name>` should be a Column, int, list, str or tuple, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_COLUMN_OR_INT_OR_STR": {
     "message": [
       "Argument `<arg_name>` should be a Column, int or str, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_COLUMN_OR_LIST_OR_STR": {
     "message": [
       "Argument `<arg_name>` should be a Column, list or str, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_COLUMN_OR_STR": {
     "message": [
       "Argument `<arg_name>` should be a Column or str, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_COLUMN_OR_STR_OR_STRUCT": {
     "message": [
       "Argument `<arg_name>` should be a StructType, Column or str, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_DATAFRAME": {
     "message": [
       "Argument `<arg_name>` should be a DataFrame, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_DATATYPE_OR_STR": {
     "message": [
       "Argument `<arg_name>` should be a DataType or str, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_DICT": {
     "message": [
       "Argument `<arg_name>` should be a dict, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_EXPRESSION": {
     "message": [
       "Argument `<arg_name>` should be an Expression, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_FLOAT_OR_INT": {
     "message": [
       "Argument `<arg_name>` should be a float or int, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_FLOAT_OR_INT_OR_LIST_OR_STR": {
     "message": [
       "Argument `<arg_name>` should be a float, int, list or str, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_IMPLEMENTED": {
     "message": [
       "<feature> is not implemented."
-    ]
+    ],
+    "sqlState": "0A000"
   },
   "NOT_INT": {
     "message": [
       "Argument `<arg_name>` should be an int, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_INT_OR_SLICE_OR_STR": {
     "message": [
       "Argument `<arg_name>` should be an int, slice or str, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_IN_BARRIER_STAGE": {
     "message": [
@@ -742,87 +776,104 @@
   "NOT_ITERABLE": {
     "message": [
       "<objectName> is not iterable."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_LIST": {
     "message": [
       "Argument `<arg_name>` should be a list, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_LIST_OF_COLUMN": {
     "message": [
       "Argument `<arg_name>` should be a list[Column]."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_LIST_OF_COLUMN_OR_STR": {
     "message": [
       "Argument `<arg_name>` should be a list[Column]."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_LIST_OF_FLOAT_OR_INT": {
     "message": [
       "Argument `<arg_name>` should be a list[float, int], got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_LIST_OF_STR": {
     "message": [
       "Argument `<arg_name>` should be a list[str], got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_LIST_OR_NONE_OR_STRUCT": {
     "message": [
       "Argument `<arg_name>` should be a list, None or StructType, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_LIST_OR_STR_OR_TUPLE": {
     "message": [
       "Argument `<arg_name>` should be a list, str or tuple, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_LIST_OR_TUPLE": {
     "message": [
       "Argument `<arg_name>` should be a list or tuple, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_NUMERIC_COLUMNS": {
     "message": [
       "Numeric aggregation function can only be applied on numeric columns, got <invalid_columns>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_OBSERVATION_OR_STR": {
     "message": [
       "Argument `<arg_name>` should be an Observation or str, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_SAME_TYPE": {
     "message": [
       "Argument `<arg_name1>` and `<arg_name2>` should be the same type, got <arg_type1> and <arg_type2>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_STR": {
     "message": [
       "Argument `<arg_name>` should be a str, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_STRUCT": {
     "message": [
       "Argument `<arg_name>` should be a struct type, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_STR_OR_LIST_OF_RDD": {
     "message": [
       "Argument `<arg_name>` should be a str or list[RDD], got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_STR_OR_STRUCT": {
     "message": [
       "Argument `<arg_name>` should be a str or struct type, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NOT_WINDOWSPEC": {
     "message": [
       "Argument `<arg_name>` should be a WindowSpec, got <arg_type>."
-    ]
+    ],
+    "sqlState": "42K09"
   },
   "NO_ACTIVE_EXCEPTION": {
     "message": [
@@ -832,12 +883,14 @@
   "NO_ACTIVE_OR_DEFAULT_SESSION": {
     "message": [
       "No active or default Spark session found. Please create a new Spark session before running the code."
-    ]
+    ],
+    "sqlState": "08003"
   },
   "NO_ACTIVE_SESSION": {
     "message": [
       "No active Spark session found. Please create a new Spark session before running the code."
-    ]
+    ],
+    "sqlState": "08003"
   },
   "NO_OBSERVE_BEFORE_GET": {
     "message": [
@@ -862,7 +915,8 @@
   "ONLY_SUPPORTED_WITH_SPARK_CONNECT": {
     "message": [
       "<feature> is only supported with Spark Connect; however, the current Spark session does not use Spark Connect."
-    ]
+    ],
+    "sqlState": "0A000"
   },
   "PACKAGE_NOT_INSTALLED": {
     "message": [
@@ -939,6 +993,11 @@
   "PLOT_NOT_NUMERIC_COLUMN_ARGUMENT": {
     "message": [
       "Argument <arg_name> must be a numerical column for plotting, got <arg_type>."
+    ]
+  },
+  "PROTOCOL_ERROR": {
+    "message": [
+      "<failure>. This usually indicates that the message does not conform to the protocol."
     ]
   },
   "PYTHON_HASH_SEED_NOT_SET": {
@@ -1025,7 +1084,8 @@
   "SESSION_ALREADY_EXIST": {
     "message": [
       "Cannot start a remote Spark session because there is a regular Spark session already running."
-    ]
+    ],
+    "sqlState": "08002"
   },
   "SESSION_MUTATION_IN_DECLARATIVE_PIPELINE": {
     "message": [

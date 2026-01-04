@@ -946,7 +946,7 @@ case class StateStoreSaveExec(
     }
   }
 
-  override def shortName: String = "stateStoreSave"
+  override def shortName: String = StatefulOperatorsUtils.STATE_STORE_SAVE_EXEC_OP_NAME
 
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
     (outputMode.contains(Append) || outputMode.contains(Update)) &&
@@ -1074,7 +1074,8 @@ case class SessionWindowStateStoreSaveExec(
 
   override def keyExpressions: Seq[Attribute] = keyWithoutSessionExpressions
 
-  override def shortName: String = "sessionWindowStateStoreSaveExec"
+  override def shortName: String =
+    StatefulOperatorsUtils.SESSION_WINDOW_STATE_STORE_SAVE_EXEC_OP_NAME
 
   private val stateManager = StreamingSessionWindowStateManager.createStateManager(
     keyWithoutSessionExpressions, sessionExpression, child.output, stateFormatVersion)
@@ -1395,7 +1396,7 @@ case class StreamingDeduplicateExec(
     removeKeysOlderThanWatermark(store)
   }
 
-  override def shortName: String = "dedupe"
+  override def shortName: String = StatefulOperatorsUtils.DEDUPLICATE_EXEC_OP_NAME
 
   override protected def withNewChildInternal(newChild: SparkPlan): StreamingDeduplicateExec =
     copy(child = newChild)
@@ -1415,6 +1416,12 @@ object StreamingDeduplicateExec {
   private val EMPTY_ROW =
     UnsafeProjection.create(Array[DataType](NullType)).apply(InternalRow.apply(null))
 }
+
+/**
+ * For Deduplicate, the state key is the partition key i.e. the dedup key
+ */
+class StreamingDeduplicateStatePartitionKeyExtractor(stateKeySchema: StructType)
+  extends NoopStatePartitionKeyExtractor(stateKeySchema)
 
 case class StreamingDeduplicateWithinWatermarkExec(
     keyExpressions: Seq[Attribute],
@@ -1478,7 +1485,7 @@ case class StreamingDeduplicateWithinWatermarkExec(
     }
   }
 
-  override def shortName: String = "dedupeWithinWatermark"
+  override def shortName: String = StatefulOperatorsUtils.DEDUPLICATE_WITHIN_WATERMARK_EXEC_OP_NAME
 
   override def validateAndMaybeEvolveStateSchema(
       hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
@@ -1493,6 +1500,12 @@ case class StreamingDeduplicateWithinWatermarkExec(
   override protected def withNewChildInternal(
       newChild: SparkPlan): StreamingDeduplicateWithinWatermarkExec = copy(child = newChild)
 }
+
+/**
+ * For DeduplicateWithinWatermark, the state key is the partition key i.e. the dedup key
+ */
+class StreamingDedupWithinWatermarkStatePartitionKeyExtractor(stateKeySchema: StructType)
+  extends NoopStatePartitionKeyExtractor(stateKeySchema)
 
 trait SchemaValidationUtils extends Logging {
 
@@ -1561,4 +1574,14 @@ object StatefulOperatorsUtils {
     TRANSFORM_WITH_STATE_IN_PYSPARK_EXEC_OP_NAME
   )
   val SYMMETRIC_HASH_JOIN_EXEC_OP_NAME = "symmetricHashJoin"
+  val STATE_STORE_SAVE_EXEC_OP_NAME = "stateStoreSave"
+  val DEDUPLICATE_EXEC_OP_NAME = "dedupe"
+  val DEDUPLICATE_WITHIN_WATERMARK_EXEC_OP_NAME = "dedupeWithinWatermark"
+  val SESSION_WINDOW_STATE_STORE_SAVE_EXEC_OP_NAME = "sessionWindowStateStoreSaveExec"
+  val FLAT_MAP_GROUPS_WITH_STATE_EXEC_OP_NAME = "flatMapGroupsWithState"
+  val FLAT_MAP_GROUPS_IN_PANDAS_WITH_STATE_EXEC_OP_NAME = "applyInPandasWithState"
+  val FLAT_MAP_GROUPS_OP_NAMES: Seq[String] = Seq(
+    FLAT_MAP_GROUPS_WITH_STATE_EXEC_OP_NAME,
+    FLAT_MAP_GROUPS_IN_PANDAS_WITH_STATE_EXEC_OP_NAME
+  )
 }

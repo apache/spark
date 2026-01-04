@@ -17,11 +17,11 @@
 # under the License.
 #
 
-name: "Build / Python-only (master, Python 3.11, Numpy 2.1.3)"
+name: "Build / Python-only (master, Python 3.14, no GIL)"
 
 on:
   schedule:
-    - cron: '0 3 */3 * *'
+    - cron: '0 20 */3 * *'
   workflow_dispatch:
 
 jobs:
@@ -37,8 +37,9 @@ jobs:
       hadoop: hadoop3
       envs: >-
         {
-          "PYSPARK_IMAGE_TO_TEST": "numpy-213",
-          "PYTHON_TO_TEST": "python3.11"
+          "PYSPARK_IMAGE_TO_TEST": "python-314-nogil",
+          "PYTHON_TO_TEST": "python3.14t",
+          "PYTHON_GIL": "0"
         }
       jobs: >-
         {

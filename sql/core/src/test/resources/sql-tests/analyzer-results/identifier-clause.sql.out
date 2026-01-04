@@ -972,11 +972,11 @@ VALUES(IDENTIFIER('a.b.c.d')())
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "IDENTIFIER_TOO_MANY_NAME_PARTS",
-  "sqlState" : "42601",
+  "errorClass" : "REQUIRES_SINGLE_PART_NAMESPACE",
+  "sqlState" : "42K05",
   "messageParameters" : {
-    "identifier" : "`a`.`b`.`c`.`d`",
-    "limit" : "2"
+    "namespace" : "`a`.`b`.`c`",
+    "sessionCatalog" : "spark_catalog"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2021,22 +2021,11 @@ Project [map(mykey, 42)[mykey] AS result#x]
 EXECUTE IMMEDIATE 'SELECT IDENTIFIER(:alias ''.c1'') FROM integration_test AS IDENTIFIER(:alias) ORDER BY ALL'
   USING 't' AS alias
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`t`.`c1`",
-    "proposal" : "`IDENTIFIER('t')`.`c1`, `IDENTIFIER('t')`.`c2`, `IDENTIFIER('t')`.`c4`"
-  },
-  "queryContext" : [ {
-    "objectType" : "EXECUTE IMMEDIATE",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 31,
-    "fragment" : "IDENTIFIER(:alias '.c1')"
-  } ]
-}
+Sort [c1#x ASC NULLS FIRST], true
++- Project [c1#x]
+   +- SubqueryAlias t
+      +- SubqueryAlias spark_catalog.identifier_clause_test_schema.integration_test
+         +- Relation spark_catalog.identifier_clause_test_schema.integration_test[c1#x,c2#x,c4#x] csv
 
 
 -- !query
@@ -2180,6 +2169,31 @@ DROP TABLE unpivot_test
 -- !query analysis
 DropTable false, false
 +- ResolvedIdentifier V2SessionCatalog(spark_catalog), identifier_clause_test_schema.unpivot_test
+
+
+-- !query
+CREATE TABLE describe_col_test(c1 INT, c2 STRING, c3 DOUBLE) USING CSV
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`identifier_clause_test_schema`.`describe_col_test`, false
+
+
+-- !query
+DESCRIBE describe_col_test IDENTIFIER('c1')
+-- !query analysis
+DescribeColumnCommand `spark_catalog`.`identifier_clause_test_schema`.`describe_col_test`, [spark_catalog, identifier_clause_test_schema, describe_col_test, c1], false, [info_name#x, info_value#x]
+
+
+-- !query
+DESCRIBE describe_col_test IDENTIFIER('c2')
+-- !query analysis
+DescribeColumnCommand `spark_catalog`.`identifier_clause_test_schema`.`describe_col_test`, [spark_catalog, identifier_clause_test_schema, describe_col_test, c2], false, [info_name#x, info_value#x]
+
+
+-- !query
+DROP TABLE describe_col_test
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), identifier_clause_test_schema.describe_col_test
 
 
 -- !query
