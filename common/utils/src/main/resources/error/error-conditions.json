@@ -2884,12 +2884,6 @@
     },
     "sqlState" : "42602"
   },
-  "MATERIALIZED_VIEW_WITH_MULTIPLE_QUERIES" : {
-    "message" : [
-      "Invalid destination <tableName> with multiple flows: <flows>."
-    ],
-    "sqlState" : "42000"
-  },
   "INVALID_DRIVER_MEMORY" : {
     "message" : [
       "System memory <systemMemory> must be at least <minSystemMemory>.",
@@ -4442,6 +4436,12 @@
       "Variant binary is malformed. Please check the data source is valid."
     ],
     "sqlState" : "22023"
+  },
+  "MATERIALIZED_VIEW_WITH_MULTIPLE_QUERIES" : {
+    "message" : [
+      "Invalid destination <tableName> with multiple flows: <flows>."
+    ],
+    "sqlState" : "42000"
   },
   "MERGE_CARDINALITY_VIOLATION" : {
     "message" : [
