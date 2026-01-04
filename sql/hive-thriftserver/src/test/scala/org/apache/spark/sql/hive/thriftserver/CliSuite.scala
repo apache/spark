@@ -554,22 +554,26 @@ class CliSuite extends SparkFunSuite {
     )
   }
 
-  testRetry("SparkException with root cause will be printStacktrace") {
-    // If it is not in silent mode, will print the stacktrace
+  testRetry("DEBUG format prints stack traces for all errors") {
+    // In DEBUG format with silent=false, stack traces are always printed
     runCliWithin(
       1.minute,
-      extraArgs = Seq("--hiveconf", "hive.session.silent=false",
+      extraArgs = Seq(
+        "--hiveconf", "hive.session.silent=false",
+        "--conf", s"${SQLConf.ERROR_MESSAGE_FORMAT.key}=${ErrorMessageFormat.DEBUG}",
         "-e", "select from_json('a', 'a INT', map('mode', 'FAILFAST'));"),
       errorResponses = Seq("JsonParseException"))(
-      ("", "SparkException: [MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION]"),
+      ("", "[MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION]"),
       ("", "JsonParseException: Unrecognized token 'a'"))
-    // If it is in silent mode, will print the error message only
+    // In DEBUG format with silent=true, stack traces are suppressed
     runCliWithin(
       1.minute,
-      extraArgs = Seq("--conf", "spark.hive.session.silent=true",
+      extraArgs = Seq(
+        "--conf", "spark.hive.session.silent=true",
+        "--conf", s"${SQLConf.ERROR_MESSAGE_FORMAT.key}=${ErrorMessageFormat.DEBUG}",
         "-e", "select from_json('a', 'a INT', map('mode', 'FAILFAST'));"),
-      errorResponses = Seq("SparkException"))(
-      ("", "SparkException: [MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION]"))
+      errorResponses = Seq("MALFORMED_RECORD_IN_PARSING"))(
+      ("", "[MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION]"))
   }
 
   test("SPARK-30808: use Java 8 time API in Thrift SQL CLI by default") {
@@ -714,6 +718,8 @@ class CliSuite extends SparkFunSuite {
           "-e", "select 1 / 0"),
         errorResponses = Seq("DIVIDE_BY_ZERO"))(expected.toImmutableArraySeq: _*)
     }
+    // DIVIDE_BY_ZERO has SQLSTATE 22012 (not XX***), so it's a user error
+    // It also has no cause, so stack traces should NOT be shown in PRETTY mode
     check(
       format = ErrorMessageFormat.PRETTY,
       errorMessage =
@@ -725,6 +731,26 @@ class CliSuite extends SparkFunSuite {
       silent = true)
     check(
       format = ErrorMessageFormat.PRETTY,
+      errorMessage =
+        """[DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+          |== SQL (line 1, position 8) ==
+          |select 1 / 0
+          |       ^^^^^
+          |""".stripMargin,
+      silent = false)
+    // DEBUG format should always show stack traces, even for user errors
+    // Silent mode still suppresses stack traces
+    check(
+      format = ErrorMessageFormat.DEBUG,
+      errorMessage =
+        """[DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
+          |== SQL (line 1, position 8) ==
+          |select 1 / 0
+          |       ^^^^^
+          |""".stripMargin,
+      silent = true)
+    check(
+      format = ErrorMessageFormat.DEBUG,
       errorMessage =
         """[DIVIDE_BY_ZERO] Division by zero. Use `try_divide` to tolerate divisor being 0 and return NULL instead. If necessary set "spark.sql.ansi.enabled" to "false" to bypass this error.
           |== SQL (line 1, position 8) ==
