@@ -385,7 +385,10 @@ class DatetimeType(AtomicType):
         self.enforce_timezone_match = DatetimeType.enforce_timezone_match
         try:
             sc = get_active_spark_context()
-            if sc.getConf().get("spark.sql.session.enforceTimeZoneMatch", "false").lower() == "true":
+            if (
+                sc.getConf().get("spark.sql.session.enforceTimeZoneMatch", "false").lower()
+                == "true"
+            ):
                 self.enforce_timezone_match = True
         except PySparkRuntimeError:
             pass
