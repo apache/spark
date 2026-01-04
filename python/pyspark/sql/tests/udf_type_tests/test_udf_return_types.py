@@ -246,12 +246,15 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
 
         test_name = "Pandas UDF type coercion"
 
-        results = self._generate_pandas_udf_type_coercion_results()
-        header = ["SQL Type \\ Pandas Value(Type)"] + [
-            f"{str(v).replace(chr(10), ' ')}({type(v).__name__})" for v in self.pandas_test_data
-        ]
-        actual_output = format_type_table(results, header)
-        self._compare_or_create_golden_file(actual_output, golden_file, test_name)
+        # Use STRICT policy to preserve original Arrow behavior for golden file comparison
+        with self.sql_conf({"spark.sql.execution.pythonUDF.coercion.policy": "strict"}):
+            results = self._generate_pandas_udf_type_coercion_results()
+            header = ["SQL Type \\ Pandas Value(Type)"] + [
+                f"{str(v).replace(chr(10), ' ')}({type(v).__name__})"
+                for v in self.pandas_test_data
+            ]
+            actual_output = format_type_table(results, header)
+            self._compare_or_create_golden_file(actual_output, golden_file, test_name)
 
     def _generate_pandas_udf_type_coercion_results(self):
         def work(spark_type):
