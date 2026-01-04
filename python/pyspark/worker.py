@@ -139,7 +139,7 @@ class RunnerConf:
 
     def setup(self):
         if self.get("spark.sql.session.enforceTimeZoneMatch", "false") == "true":
-            DatetimeType.enforce_timezone_match = True
+            DatetimeType.enforce_timezone_match_default = True
 
     def get(self, key: str, default=""):
         val = self._conf.get(key, default)

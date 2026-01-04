@@ -379,10 +379,10 @@ class DatetimeType(AtomicType):
     # Whether we only allow
     # aware timestamp < - > TimestampType
     # naive timestamp < - > TimestampNTZType
-    enforce_timezone_match: ClassVar[bool] = False
+    enforce_timezone_match_default: ClassVar[bool] = False
 
-    def __init__(self):
-        self.enforce_timezone_match = DatetimeType.enforce_timezone_match
+    def __init__(self) -> None:
+        self.enforce_timezone_match = DatetimeType.enforce_timezone_match_default
         try:
             sc = get_active_spark_context()
             if (
@@ -477,9 +477,9 @@ class TimestampType(DatetimeType, metaclass=DataTypeSingleton):
                 seconds = calendar.timegm(dt.utctimetuple())
             else:
                 seconds = (
-                    calendar.timegm(dt.utctimetuple()) if dt.tzinfo else time.mktime(dt.timetuple())
+                    calendar.timegm(dt.utctimetuple()) if dt.tzinfo else int(time.mktime(dt.timetuple()))
                 )
-                return int(seconds) * 1000000 + dt.microsecond
+            return int(seconds) * 1000000 + dt.microsecond
 
     def fromInternal(self, ts: int) -> datetime.datetime:
         if ts is not None:
