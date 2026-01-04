@@ -240,6 +240,7 @@ def to_arrow_type(
 
 def to_arrow_schema(
     schema: StructType,
+    *,
     error_on_duplicated_field_names_in_struct: bool = False,
     timestamp_utc: bool = True,
     prefers_large_types: bool = False,
