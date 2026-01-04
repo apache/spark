@@ -71,6 +71,7 @@ if TYPE_CHECKING:
 
 def to_arrow_type(
     dt: DataType,
+    *,
     error_on_duplicated_field_names_in_struct: bool = False,
     timestamp_utc: bool = True,
     prefers_large_types: bool = False,
@@ -140,9 +141,9 @@ def to_arrow_type(
             "element",
             to_arrow_type(
                 dt.elementType,
-                error_on_duplicated_field_names_in_struct,
-                timestamp_utc,
-                prefers_large_types,
+                error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
+                timestamp_utc=timestamp_utc,
+                prefers_large_types=prefers_large_types,
             ),
             nullable=dt.containsNull,
         )
@@ -152,9 +153,9 @@ def to_arrow_type(
             "key",
             to_arrow_type(
                 dt.keyType,
-                error_on_duplicated_field_names_in_struct,
-                timestamp_utc,
-                prefers_large_types,
+                error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
+                timestamp_utc=timestamp_utc,
+                prefers_large_types=prefers_large_types,
             ),
             nullable=False,
         )
@@ -162,9 +163,9 @@ def to_arrow_type(
             "value",
             to_arrow_type(
                 dt.valueType,
-                error_on_duplicated_field_names_in_struct,
-                timestamp_utc,
-                prefers_large_types,
+                error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
+                timestamp_utc=timestamp_utc,
+                prefers_large_types=prefers_large_types,
             ),
             nullable=dt.valueContainsNull,
         )
@@ -181,9 +182,9 @@ def to_arrow_type(
                 field.name,
                 to_arrow_type(
                     field.dataType,
-                    error_on_duplicated_field_names_in_struct,
-                    timestamp_utc,
-                    prefers_large_types,
+                    error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
+                    timestamp_utc=timestamp_utc,
+                    prefers_large_types=prefers_large_types,
                 ),
                 nullable=field.nullable,
             )
@@ -195,9 +196,9 @@ def to_arrow_type(
     elif isinstance(dt, UserDefinedType):
         arrow_type = to_arrow_type(
             dt.sqlType(),
-            error_on_duplicated_field_names_in_struct,
-            timestamp_utc,
-            prefers_large_types,
+            error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
+            timestamp_utc=timestamp_utc,
+            prefers_large_types=prefers_large_types,
         )
     elif type(dt) == VariantType:
         fields = [
@@ -271,9 +272,9 @@ def to_arrow_schema(
             field.name,
             to_arrow_type(
                 field.dataType,
-                error_on_duplicated_field_names_in_struct,
-                timestamp_utc,
-                prefers_large_types,
+                error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
+                timestamp_utc=timestamp_utc,
+                prefers_large_types=prefers_large_types,
             ),
             nullable=field.nullable,
         )
