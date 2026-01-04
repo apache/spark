@@ -17,43 +17,13 @@
 
 package org.apache.spark.mllib.linalg
 
-import dev.ludovic.netlib.blas.{BLAS => NetlibBLAS, JavaBLAS => NetlibJavaBLAS, NativeBLAS => NetlibNativeBLAS}
-
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.linalg.BLAS.{getBLAS, nativeBLAS}
 
 /**
  * BLAS routines for MLlib's vectors and matrices.
  */
 private[spark] object BLAS extends Serializable with Logging {
-
-  @transient private var _javaBLAS: NetlibBLAS = _
-  @transient private var _nativeBLAS: NetlibBLAS = _
-  private val nativeL1Threshold: Int = 256
-
-  // For level-1 function dspmv, use javaBLAS for better performance.
-  private[spark] def javaBLAS: NetlibBLAS = {
-    if (_javaBLAS == null) {
-      _javaBLAS = NetlibJavaBLAS.getInstance
-    }
-    _javaBLAS
-  }
-
-  // For level-3 routines, we use the native BLAS.
-  private[spark] def nativeBLAS: NetlibBLAS = {
-    if (_nativeBLAS == null) {
-      _nativeBLAS =
-        try { NetlibNativeBLAS.getInstance } catch { case _: Throwable => javaBLAS }
-    }
-    _nativeBLAS
-  }
-
-  private[spark] def getBLAS(vectorSize: Int): NetlibBLAS = {
-    if (vectorSize < nativeL1Threshold) {
-      javaBLAS
-    } else {
-      nativeBLAS
-    }
-  }
 
   /**
    * y += a * x
