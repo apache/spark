@@ -86,7 +86,7 @@ class GroupTestsMixin:
             ["a", "b"],
         )
 
-        with self.tempView("v"):
+        with self.temp_view("v"):
             df.createOrReplaceTempView("v")
 
             # basic case
@@ -158,7 +158,7 @@ class GroupTestsMixin:
             ["a", "b"],
         )
 
-        with self.tempView("v"):
+        with self.temp_view("v"):
             df.createOrReplaceTempView("v")
 
             df1 = spark.sql("select * from v order by 1 desc;")
