@@ -691,12 +691,27 @@ class SessionCatalog(
   /**
    * Alter the definition of a local/global temp view matching the given name, returns true if a
    * temp view is matched and altered, false otherwise.
+   *
+   * Supports qualified names with system.session or session prefix for local temp views.
    */
   def alterTempViewDefinition(
       name: TableIdentifier,
       viewDefinition: TemporaryViewRelation): Boolean = synchronized {
+    import org.apache.spark.sql.connector.catalog.CatalogManager
+
     val viewName = format(name.table)
-    if (name.database.isEmpty) {
+    val nameParts = toNameParts(name)
+
+    // Check if it's a qualified local temp view (session.viewName or system.session.viewName)
+    val isQualifiedLocalTempView = nameParts.length match {
+      case 2 => nameParts.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
+      case 3 => nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+                nameParts(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
+      case _ => false
+    }
+
+    if (name.database.isEmpty || isQualifiedLocalTempView) {
+      // Unqualified name or qualified local temp view
       if (tempViews.contains(viewName)) {
         createTempView(viewName, viewDefinition, overrideIfExists = true)
         true
@@ -704,6 +719,7 @@ class SessionCatalog(
         false
       }
     } else if (format(name.database.get) == globalTempDatabase) {
+      // Global temp view
       globalTempViewManager.update(viewName, viewDefinition)
     } else {
       false
@@ -758,11 +774,25 @@ class SessionCatalog(
 
   /**
    * Return the raw logical plan of a temporary local or global view for the given name.
+   *
+   * Supports qualified names:
+   * - name: unqualified local temp view
+   * - session.name or system.session.name: qualified local temp view
+   * - globalTempDB.name: global temp view
    */
   def getRawLocalOrGlobalTempView(name: Seq[String]): Option[TemporaryViewRelation] = {
+    import org.apache.spark.sql.connector.catalog.CatalogManager
     name match {
       case Seq(v) => getRawTempView(v)
       case Seq(db, v) if isGlobalTempViewDB(db) => getRawGlobalTempView(v)
+      // Handle session.viewName qualification for local temp views
+      case Seq(namespace, v) if namespace.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) =>
+        getRawTempView(v)
+      // Handle system.session.viewName qualification for local temp views
+      case Seq(catalog, namespace, v)
+          if catalog.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+             namespace.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE) =>
+        getRawTempView(v)
       case _ => None
     }
   }
