@@ -4388,7 +4388,7 @@ object SQLConf {
         "Valid values are: 'permissive' (default) - matches legacy pandas behavior with " +
         "implicit type conversions; 'warn' - same as permissive but logs warnings; " +
         "'strict' - raises errors for type mismatches, matching Arrow semantics.")
-      .version("4.1.0")
+      .version("4.2.0")
       .stringConf
       .checkValues(Set("permissive", "warn", "strict"))
       .createWithDefault("permissive")
