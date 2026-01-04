@@ -1034,8 +1034,13 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
 
   test("MsSqlServerDialect jdbc type mapping") {
     val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver")
+    Seq(true, false).foreach { useDatetime2 =>
+      withSQLConf(SQLConf.MSSQLSERVER_USE_DATETIME2_FOR_TIMESTAMP.key -> s"$useDatetime2") {
+        val expectedTimestampType = if (useDatetime2) "DATETIME2" else "DATETIME"
     assert(msSqlServerDialect.getJDBCType(TimestampType).map(_.databaseTypeDefinition).get ==
-      "DATETIME")
+          expectedTimestampType)
+      }
+    }
     assert(msSqlServerDialect.getJDBCType(StringType).map(_.databaseTypeDefinition).get ==
       "NVARCHAR(MAX)")
     assert(msSqlServerDialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get ==
