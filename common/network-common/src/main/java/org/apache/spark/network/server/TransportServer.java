@@ -20,11 +20,14 @@ package org.apache.spark.network.server;
 import java.io.Closeable;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 import com.codahale.metrics.Counter;
+import com.codahale.metrics.Metric;
 import com.codahale.metrics.MetricSet;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
@@ -156,7 +159,12 @@ public class TransportServer implements Closeable {
   }
 
   public MetricSet getAllMetrics() {
-    return metrics;
+    return () -> {
+      Map<String, Metric> allMetrics = new HashMap<>();
+      allMetrics.putAll(metrics.getMetrics());
+      allMetrics.putAll(context.getChunkFetchMetrics().getMetrics());
+      return allMetrics;
+    };
   }
 
   @Override
