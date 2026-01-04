@@ -885,7 +885,7 @@ case class FileSourceScanExec(
           Seq.empty
         }
       }
-    }.toArray.sortBy(_.length)(implicitly[Ordering[Long]].reverse)
+    }.toArray
 
     val partitions = FilePartition
       .getFilePartitions(relation.sparkSession, splitFiles.toImmutableArraySeq, maxSplitBytes)
