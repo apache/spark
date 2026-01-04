@@ -2837,6 +2837,10 @@ class AstBuilder extends DataTypeAstBuilder
       case SqlBaseParser.IN if ctx.query != null =>
         invertIfNotDefined(InSubquery(getValueExpressions(e), ListQuery(plan(ctx.query))))
       case SqlBaseParser.IN =>
+        // Validate that IN clause is not empty
+        if (ctx.expression.isEmpty) {
+          throw QueryParsingErrors.emptyInPredicateError(ctx)
+        }
         invertIfNotDefined(In(e, ctx.expression.asScala.map(expression).toSeq))
       case SqlBaseParser.LIKE | SqlBaseParser.ILIKE =>
         Option(ctx.quantifier).map(_.getType) match {

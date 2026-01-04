@@ -1214,7 +1214,7 @@ booleanExpression
 
 predicate
     : errorCapturingNot? kind=BETWEEN lower=valueExpression AND upper=valueExpression
-    | errorCapturingNot? kind=IN LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN
+    | errorCapturingNot? kind=IN (LEFT_PAREN RIGHT_PAREN | LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN)
     | errorCapturingNot? kind=IN LEFT_PAREN query RIGHT_PAREN
     | errorCapturingNot? kind=RLIKE pattern=valueExpression
     | errorCapturingNot? kind=(LIKE | ILIKE) quantifier=(ANY | SOME | ALL) (LEFT_PAREN RIGHT_PAREN | LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN)
