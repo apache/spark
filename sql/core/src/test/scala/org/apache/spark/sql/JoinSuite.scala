@@ -1271,6 +1271,22 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     }
   }
 
+  test("SPARK-45846: optimizeNullAwareAntiJoin should respect autoBroadcastJoinThreshold") {
+    withSQLConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // When broadcast is disabled, null-aware anti-join should not use BroadcastHashJoinExec
+      val df = sql("select * from testData where key not in (select a from testData2)")
+      val physical = df.queryExecution.sparkPlan
+      // Collect all BroadcastHashJoinExec nodes
+      val broadcastHashJoins = collect(physical) {
+        case j: BroadcastHashJoinExec => j
+      }
+      // Verify no BroadcastHashJoinExec with isNullAwareAntiJoin is used
+      assert(broadcastHashJoins.forall(!_.isNullAwareAntiJoin),
+        "Null-aware anti-join should not use BroadcastHashJoinExec when broadcast is disabled")
+    }
+  }
+
   test("SPARK-32399: Full outer shuffled hash join") {
     val inputDFs = Seq(
       // Test unique join key
