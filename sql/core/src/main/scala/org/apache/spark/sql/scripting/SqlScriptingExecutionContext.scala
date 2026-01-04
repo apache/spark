@@ -105,6 +105,46 @@ class SqlScriptingExecutionFrame(
   // List of scopes that are currently active.
   private[scripting] val scopes: ListBuffer[SqlScriptingExecutionScope] = ListBuffer.empty
 
+  /**
+   * Find a cursor by name in the scope hierarchy, searching from innermost to outermost.
+   *
+   * @param cursorName The cursor name to find
+   * @return The cursor definition if found
+   */
+  def findCursor(cursorName: String): Option[CursorDefinition] = {
+    findCursorByNameParts(Seq(cursorName))
+  }
+
+  /**
+   * Find a cursor by name parts (label and name) in the scope hierarchy.
+   * Supports both unqualified (Seq(name)) and qualified (Seq(label, name)) cursor references.
+   *
+   * @param nameParts The cursor name parts (either Seq(name) or Seq(label, name))
+   * @return The cursor definition if found
+   */
+  def findCursorByNameParts(nameParts: Seq[String]): Option[CursorDefinition] = {
+    def isScopeOfCursor(
+        nameParts: Seq[String],
+        scope: SqlScriptingExecutionScope
+    ): Boolean = nameParts match {
+      case Seq(name) => scope.cursors.contains(name)
+      // Qualified case.
+      case Seq(label, _) => scope.label == label
+      case _ =>
+        throw SparkException.internalError("Expected 1 or 2 nameParts for cursor lookup.")
+    }
+
+    scopes.reverseIterator.foreach { scope =>
+      if (isScopeOfCursor(nameParts, scope)) {
+        val cursorOpt = scope.cursors.get(nameParts.last)
+        if (cursorOpt.isDefined) {
+          return cursorOpt
+        }
+      }
+    }
+    None
+  }
+
   override def hasNext: Boolean = executionPlan.getTreeIterator.hasNext
 
   override def next(): CompoundStatementExec = {
@@ -125,11 +165,13 @@ class SqlScriptingExecutionFrame(
 
     // Remove all scopes until the one with the given label.
     while (scopes.nonEmpty && scopes.last.label != label) {
+      scopes.last.cleanup()
       scopes.remove(scopes.length - 1)
     }
 
     // Remove the scope with the given label.
     if (scopes.nonEmpty) {
+      scopes.last.cleanup()
       scopes.remove(scopes.length - 1)
     }
   }
@@ -182,6 +224,19 @@ class SqlScriptingExecutionScope(
     val label: String,
     val triggerToExceptionHandlerMap: TriggerToExceptionHandlerMap) {
   val variables = new mutable.HashMap[String, VariableDefinition]
+  val cursors = new mutable.HashMap[String, CursorDefinition]
+
+  /**
+   * Cleanup resources when this scope is being removed.
+   * Closes all open cursors and releases their result data.
+   */
+  def cleanup(): Unit = {
+    cursors.values.foreach { cursor =>
+      if (cursor.isOpen) {
+        cursor.close()
+      }
+    }
+  }
 
   /**
    * Finds the most appropriate error handler for exception based on its condition and SQL state.
@@ -242,5 +297,38 @@ class SqlScriptingExecutionScope(
     }
 
     errorHandler
+  }
+}
+
+/**
+ * Definition of a cursor in SQL scripting.
+ *
+ * @param name
+ *   Name of the cursor.
+ * @param query
+ *   The query that defines the cursor (LogicalPlan). For parameterized cursors,
+ *   this is updated with the analyzed plan when the cursor is opened.
+ * @param queryText
+ *   The original SQL text of the query (preserves parameter markers).
+ * @param isOpen
+ *   Whether the cursor is currently open.
+ * @param resultIterator
+ *   The iterator over result rows when cursor is open. Uses toLocalIterator()
+ *   to avoid loading all data into memory at once.
+ */
+case class CursorDefinition(
+    name: String,
+    var query: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan,
+    queryText: String,
+    var isOpen: Boolean = false,
+    var resultIterator: Option[java.util.Iterator[org.apache.spark.sql.Row]] = None) {
+
+  /**
+   * Closes the cursor and releases its resources.
+   * Sets isOpen to false and releases the result iterator.
+   */
+  def close(): Unit = {
+    isOpen = false
+    resultIterator = None
   }
 }

@@ -481,6 +481,7 @@ class Analyzer(
       ResolveOutputRelation ::
       new ResolveTableConstraints(catalogManager) ::
       new ResolveSetVariable(catalogManager) ::
+      new ResolveFetchCursor(catalogManager) ::
       ExtractWindowExpressions ::
       GlobalAggregates ::
       ResolveAggregateFunctions ::
@@ -1466,6 +1467,9 @@ class Analyzer(
       // Don't wait other rules to resolve the child plans of `SetVariable` as we need
       // to resolve column "DEFAULT" in the child plans so that they must be unresolved.
       case s: SetVariable => resolveColumnDefaultInCommandInputQuery(s)
+
+      // Skip FetchCursor - let ResolveFetchCursor handle variable resolution
+      case f: FetchCursor => f
 
       // Wait for other rules to resolve child plans first
       case p: LogicalPlan if !p.childrenResolved => p
