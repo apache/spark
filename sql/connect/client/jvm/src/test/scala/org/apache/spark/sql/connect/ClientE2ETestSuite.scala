@@ -19,7 +19,7 @@ package org.apache.spark.sql.connect
 import java.io.{ByteArrayOutputStream, PrintStream}
 import java.nio.file.Files
 import java.time.{DateTimeException, LocalTime}
-import java.util.Properties
+import java.util.{Properties, TimeZone}
 
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
@@ -1051,6 +1051,19 @@ class ClientE2ETestSuite
 
     assert(spark.conf.contains(entryWithDefault.key))
     assert(!spark.conf.contains("nope"))
+  }
+
+  test("RuntimeConfig.get multiple keys") {
+    assert(spark.conf.getMap().isEmpty)
+    val result = spark.conf.getMap(
+      "spark.sql.ansi.enabled",
+      "spark.sql.session.timeZone",
+      "spark.sql.binaryOutputStyle")
+    val expected = Map(
+      "spark.sql.ansi.enabled" -> "true",
+      "spark.sql.session.timeZone" -> TimeZone.getDefault.getID,
+      "spark.sql.binaryOutputStyle" -> "")
+    assert(result == expected)
   }
 
   test("SparkVersion") {
