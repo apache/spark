@@ -240,7 +240,8 @@ abstract class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndA
         df.queryExecution.toString,
         SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
         System.currentTimeMillis(),
-        Map.empty))
+        Map.empty,
+        queryId = Some(df.queryExecution.queryId)))
       listener.onOtherEvent(SparkListenerSQLExecutionEnd(
         executionId, System.currentTimeMillis(), Some("Oops")))
       listener.onJobStart(SparkListenerJobStart(
