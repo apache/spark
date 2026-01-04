@@ -238,9 +238,7 @@ class DataType:
         """
         return obj
 
-    def coerce(
-        self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
-    ) -> Any:
+    def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
         """Coerce a Python value to this data type. Base implementation is a no-op."""
         return value
 
@@ -353,9 +351,7 @@ class NumericType(AtomicType):
 class IntegralType(NumericType, metaclass=DataTypeSingleton):
     """Integral data types."""
 
-    def coerce(
-        self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
-    ) -> Any:
+    def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
         if value is None:
             return None
         # int (non-bool) -> int: exact match
@@ -373,9 +369,7 @@ class IntegralType(NumericType, metaclass=DataTypeSingleton):
 class FractionalType(NumericType):
     """Fractional data types."""
 
-    def coerce(
-        self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
-    ) -> Any:
+    def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
         if value is None:
             return None
         # float -> float: exact match
@@ -430,9 +424,7 @@ class StringType(AtomicType):
     def isUTF8BinaryCollation(self) -> bool:
         return self.collation == "UTF8_BINARY"
 
-    def coerce(
-        self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
-    ) -> Any:
+    def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
         if value is None or isinstance(value, str):
             return value
         # bool -> string: pickle gives 'true'/'false' (Java toString)
@@ -489,9 +481,7 @@ class VarcharType(AtomicType):
 class BinaryType(AtomicType, metaclass=DataTypeSingleton):
     """Binary (byte array) data type."""
 
-    def coerce(
-        self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
-    ) -> Any:
+    def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
         if value is None:
             return None
         # bytes -> binary: exact match
@@ -514,9 +504,7 @@ class BinaryType(AtomicType, metaclass=DataTypeSingleton):
 class BooleanType(AtomicType, metaclass=DataTypeSingleton):
     """Boolean data type."""
 
-    def coerce(
-        self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
-    ) -> Any:
+    def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
         if value is None:
             return None
         # bool -> boolean: exact match
@@ -555,9 +543,7 @@ class DateType(DatetimeType, metaclass=DataTypeSingleton):
         """Convert days since epoch to date."""
         return datetime.date.fromordinal(days + self.EPOCH_ORDINAL)
 
-    def coerce(
-        self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
-    ) -> Any:
+    def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
         if value is None:
             return None
         # date -> date: exact match
@@ -573,9 +559,15 @@ class DateType(DatetimeType, metaclass=DataTypeSingleton):
                     f"Coercing {type(value).__name__} to date raises in pickle mode "
                     "but converts (days since epoch) in Arrow mode"
                 )
-            raise TypeError(f"Cannot coerce {type(value).__name__} to DateType")
+            raise PySparkTypeError(
+                errorClass="CANNOT_CONVERT_TYPE",
+                messageParameters={"from_type": type(value).__name__, "to_type": "DateType"},
+            )
         # Other types: raise
-        raise TypeError(f"Cannot coerce {type(value).__name__} to DateType")
+        raise PySparkTypeError(
+            errorClass="CANNOT_CONVERT_TYPE",
+            messageParameters={"from_type": type(value).__name__, "to_type": "DateType"},
+        )
 
 
 class AnyTimeType(DatetimeType):
@@ -653,14 +645,15 @@ class TimestampType(DatetimeType, metaclass=DataTypeSingleton):
                 microsecond=ts % 1000000, tzinfo=None
             )
 
-    def coerce(
-        self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
-    ) -> Any:
+    def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
         # datetime -> timestamp: exact match
         if value is None or isinstance(value, datetime.datetime):
             return value
         # All other types raise in both pickle and Arrow
-        raise TypeError(f"Cannot coerce {type(value).__name__} to TimestampType")
+        raise PySparkTypeError(
+            errorClass="CANNOT_CONVERT_TYPE",
+            messageParameters={"from_type": type(value).__name__, "to_type": "TimestampType"},
+        )
 
 
 class TimestampNTZType(DatetimeType, metaclass=DataTypeSingleton):
@@ -720,9 +713,7 @@ class DecimalType(FractionalType):
     def __repr__(self) -> str:
         return "DecimalType(%d,%d)" % (self.precision, self.scale)
 
-    def coerce(
-        self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
-    ) -> Any:
+    def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
         if value is None:
             return None
         # Decimal -> decimal: exact match
@@ -1265,9 +1256,7 @@ class ArrayType(DataType):
             return obj
         return obj and [self.elementType.fromInternal(v) for v in obj]
 
-    def coerce(
-        self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
-    ) -> Any:
+    def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
         if value is None:
             return None
         # list -> array: exact match
@@ -1282,7 +1271,10 @@ class ArrayType(DataType):
                 _warn_coercion_once(
                     "Coercing Row to array raises in pickle mode but converts in Arrow mode"
                 )
-            raise TypeError("Cannot coerce Row to ArrayType")
+            raise PySparkTypeError(
+                errorClass="CANNOT_CONVERT_TYPE",
+                messageParameters={"from_type": "Row", "to_type": "ArrayType"},
+            )
         # Other types: return None
         return None
 
@@ -1437,9 +1429,7 @@ class MapType(DataType):
             (self.keyType.fromInternal(k), self.valueType.fromInternal(v)) for k, v in obj.items()
         )
 
-    def coerce(
-        self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
-    ) -> Any:
+    def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
         if value is None:
             return None
         # dict -> map: exact match
@@ -2080,9 +2070,7 @@ class StructType(DataType):
             values = obj
         return _create_row(self.names, values)
 
-    def coerce(
-        self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE
-    ) -> Any:
+    def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
         if value is None:
             return None
         # Row -> struct: exact match
@@ -2102,7 +2090,10 @@ class StructType(DataType):
                 )
             return _create_row(self.names, value)
         # Other types: raise
-        raise TypeError(f"Cannot coerce {type(value).__name__} to StructType")
+        raise PySparkTypeError(
+            errorClass="CANNOT_CONVERT_TYPE",
+            messageParameters={"from_type": type(value).__name__, "to_type": "StructType"},
+        )
 
     def _build_formatted_string(
         self,
