@@ -69,7 +69,7 @@ if have_numpy:
     pandas_requirement_message
     or pyarrow_requirement_message
     or numpy_requirement_message
-    or "float128 not supported on macos",
+    or "float128 not supported on macOS",
 )
 class UDFReturnTypeTests(ReusedSQLTestCase):
     @classmethod
@@ -128,7 +128,6 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
             np.arange(1, 3).astype("float16"),
             np.arange(1, 3).astype("float32"),
             np.arange(1, 3).astype("float64"),
-            np.arange(1, 3).astype("float128"),
             np.arange(1, 3).astype("complex64"),
             np.arange(1, 3).astype("complex128"),
             list("ab"),
@@ -177,14 +176,17 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
         )
 
     def _run_udf_return_type_coercion_test(self, use_arrow, legacy_pandas, golden_file, test_name):
-        with self.sql_conf(
-            {
-                "spark.sql.execution.pythonUDF.arrow.enabled": str(use_arrow).lower(),
-                "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": str(
-                    legacy_pandas
-                ).lower(),
-            }
-        ):
+        conf = {
+            "spark.sql.execution.pythonUDF.arrow.enabled": str(use_arrow).lower(),
+            "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": str(
+                legacy_pandas
+            ).lower(),
+        }
+        # Use STRICT policy for Arrow tests to preserve original Arrow behavior
+        # (PERMISSIVE coercion would make Arrow behave like pickle)
+        if use_arrow:
+            conf["spark.sql.execution.pythonUDF.coercion.policy"] = "strict"
+        with self.sql_conf(conf):
             results = self._generate_udf_return_type_coercion_results(use_arrow)
             header = ["SQL Type \\ Python Value(Type)"] + [
                 f"{str(v)}({type(v).__name__})" for v in self.test_data

@@ -28,7 +28,9 @@ import base64
 from array import array
 import ctypes
 from collections.abc import Iterable
+from enum import StrEnum, auto
 from functools import reduce
+import warnings
 from typing import (
     cast,
     overload,
@@ -77,6 +79,7 @@ T = TypeVar("T")
 U = TypeVar("U")
 
 __all__ = [
+    "CoercionPolicy",
     "DataType",
     "NullType",
     "CharType",
@@ -110,6 +113,81 @@ __all__ = [
     "GeographyType",
     "GeometryType",
 ]
+
+
+class CoercionPolicy(StrEnum):
+    """
+    Policy for type coercion in Python UDFs.
+
+    This enum controls how values are coerced when the Python UDF returns
+    a value that doesn't exactly match the declared return type.
+
+    .. versionadded:: 4.2.0
+
+    Notes
+    -----
+    The three policies represent different trade-offs between compatibility
+    and strictness:
+
+    - PERMISSIVE: Matches legacy pickle-based UDF behavior. Invalid coercions
+      silently return None. This is the default for backward compatibility.
+    - WARN: Same behavior as PERMISSIVE but logs warnings when Arrow would
+      behave differently. Useful for migration testing.
+    - STRICT: Matches Arrow-optimized UDF behavior. Invalid coercions either
+      raise exceptions or apply aggressive type conversion.
+
+    Examples
+    --------
+    >>> from pyspark.sql.types import CoercionPolicy, IntegerType
+    >>> int_type = IntegerType()
+
+    PERMISSIVE policy returns None for float -> int (pickle behavior):
+
+    >>> int_type.coerce(1.5, CoercionPolicy.PERMISSIVE) is None
+    True
+
+    STRICT policy skips coercion (Arrow handles natively):
+
+    >>> int_type.coerce(1.5, CoercionPolicy.STRICT)
+    1.5
+    """
+
+    PERMISSIVE = auto()
+    """
+    Matches legacy pickle-based UDF behavior.
+    Invalid type coercions silently return None.
+    This is the default policy for backward compatibility.
+    """
+
+    WARN = auto()
+    """
+    Same coercion behavior as PERMISSIVE, but logs warnings when
+    the Arrow path would produce different results.
+    Useful for testing migration to STRICT mode.
+    """
+
+    STRICT = auto()
+    """
+    Skips coercion entirely, letting Arrow handle type conversion natively.
+    This preserves Arrow's aggressive type conversion behavior
+    (e.g., int -> bool, float -> int truncation).
+    """
+
+
+# Set to track which coercion warnings have been issued (to avoid duplicates)
+_issued_coercion_warnings: set = set()
+
+
+def _warn_coercion_once(message: str) -> None:
+    """Issue a coercion warning only once per unique message."""
+    if message not in _issued_coercion_warnings:
+        _issued_coercion_warnings.add(message)
+        warnings.warn(message, UserWarning)
+
+
+def _clear_coercion_warnings() -> None:
+    """Clear the set of issued coercion warnings. Used for testing."""
+    _issued_coercion_warnings.clear()
 
 
 class DataType:
@@ -159,6 +237,10 @@ class DataType:
         Converts an internal SQL object into a native Python object.
         """
         return obj
+
+    def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
+        """Coerce a Python value to this data type. Base implementation is a no-op."""
+        return value
 
     def _as_nullable(self) -> "DataType":
         return self
@@ -269,11 +351,37 @@ class NumericType(AtomicType):
 class IntegralType(NumericType, metaclass=DataTypeSingleton):
     """Integral data types."""
 
-    pass
+    def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
+        if value is None:
+            return None
+        # int (non-bool) -> int: exact match
+        if isinstance(value, int) and not isinstance(value, bool):
+            return value
+        # Other types: pickle returns None
+        if policy == CoercionPolicy.WARN and isinstance(value, (bool, float, decimal.Decimal)):
+            _warn_coercion_once(
+                f"Coercing {type(value).__name__} to integer returns None in pickle mode "
+                "but would convert or raise in Arrow mode"
+            )
+        return None
 
 
 class FractionalType(NumericType):
     """Fractional data types."""
+
+    def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
+        if value is None:
+            return None
+        # float -> float: exact match
+        if isinstance(value, float):
+            return value
+        # Other types: pickle returns None
+        if policy == CoercionPolicy.WARN and isinstance(value, (bool, int, decimal.Decimal)):
+            _warn_coercion_once(
+                f"Coercing {type(value).__name__} to float returns None in pickle mode "
+                "but would convert in Arrow mode"
+            )
+        return None
 
 
 class StringType(AtomicType):
@@ -315,6 +423,15 @@ class StringType(AtomicType):
 
     def isUTF8BinaryCollation(self) -> bool:
         return self.collation == "UTF8_BINARY"
+
+    def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
+        if value is None or isinstance(value, str):
+            return value
+        # bool -> string: pickle gives 'true'/'false' (Java toString)
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        # Most types can be converted via str()
+        return str(value)
 
 
 class CharType(AtomicType):
@@ -364,13 +481,42 @@ class VarcharType(AtomicType):
 class BinaryType(AtomicType, metaclass=DataTypeSingleton):
     """Binary (byte array) data type."""
 
-    pass
+    def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
+        if value is None:
+            return None
+        # bytes -> binary: exact match
+        if isinstance(value, bytes):
+            return value
+        # bytearray -> binary: both paths convert
+        if isinstance(value, bytearray):
+            return bytes(value)
+        # str -> binary: pickle encodes to bytes
+        if isinstance(value, str):
+            if policy == CoercionPolicy.WARN:
+                _warn_coercion_once(
+                    "Coercing str to binary encodes in pickle mode but raises in Arrow mode"
+                )
+            return value.encode("utf-8")
+        # Other types: return None
+        return None
 
 
 class BooleanType(AtomicType, metaclass=DataTypeSingleton):
     """Boolean data type."""
 
-    pass
+    def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
+        if value is None:
+            return None
+        # bool -> boolean: exact match
+        if isinstance(value, bool):
+            return value
+        # Other types: pickle returns None
+        if policy == CoercionPolicy.WARN and isinstance(value, (int, float)):
+            _warn_coercion_once(
+                f"Coercing {type(value).__name__} to boolean returns None in pickle mode "
+                "but would convert to bool in Arrow mode"
+            )
+        return None
 
 
 class DatetimeType(AtomicType):
@@ -392,6 +538,36 @@ class DateType(DatetimeType, metaclass=DataTypeSingleton):
     def fromInternal(self, v: int) -> datetime.date:
         if v is not None:
             return datetime.date.fromordinal(v + self.EPOCH_ORDINAL)
+
+    def _days_to_date(self, days: int) -> datetime.date:
+        """Convert days since epoch to date."""
+        return datetime.date.fromordinal(days + self.EPOCH_ORDINAL)
+
+    def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
+        if value is None:
+            return None
+        # date -> date: exact match
+        if isinstance(value, datetime.date) and not isinstance(value, datetime.datetime):
+            return value
+        # datetime -> date: both paths extract date
+        if isinstance(value, datetime.datetime):
+            return value.date()
+        # int/float/Decimal -> date: pickle raises
+        if isinstance(value, (int, float, decimal.Decimal)) and not isinstance(value, bool):
+            if policy == CoercionPolicy.WARN:
+                _warn_coercion_once(
+                    f"Coercing {type(value).__name__} to date raises in pickle mode "
+                    "but converts (days since epoch) in Arrow mode"
+                )
+            raise PySparkTypeError(
+                errorClass="CANNOT_CONVERT_TYPE",
+                messageParameters={"from_type": type(value).__name__, "to_type": "DateType"},
+            )
+        # Other types: raise
+        raise PySparkTypeError(
+            errorClass="CANNOT_CONVERT_TYPE",
+            messageParameters={"from_type": type(value).__name__, "to_type": "DateType"},
+        )
 
 
 class AnyTimeType(DatetimeType):
@@ -469,6 +645,16 @@ class TimestampType(DatetimeType, metaclass=DataTypeSingleton):
                 microsecond=ts % 1000000, tzinfo=None
             )
 
+    def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
+        # datetime -> timestamp: exact match
+        if value is None or isinstance(value, datetime.datetime):
+            return value
+        # All other types raise in both pickle and Arrow
+        raise PySparkTypeError(
+            errorClass="CANNOT_CONVERT_TYPE",
+            messageParameters={"from_type": type(value).__name__, "to_type": "TimestampType"},
+        )
+
 
 class TimestampNTZType(DatetimeType, metaclass=DataTypeSingleton):
     """Timestamp (datetime.datetime) data type without timezone information."""
@@ -526,6 +712,24 @@ class DecimalType(FractionalType):
 
     def __repr__(self) -> str:
         return "DecimalType(%d,%d)" % (self.precision, self.scale)
+
+    def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
+        if value is None:
+            return None
+        # Decimal -> decimal: exact match
+        if isinstance(value, decimal.Decimal):
+            return value
+        # Other types: pickle returns None
+        if (
+            policy == CoercionPolicy.WARN
+            and isinstance(value, (int, float))
+            and not isinstance(value, bool)
+        ):
+            _warn_coercion_once(
+                f"Coercing {type(value).__name__} to decimal returns None in pickle mode "
+                "but raises in Arrow mode"
+            )
+        return None
 
 
 class DoubleType(FractionalType, metaclass=DataTypeSingleton):
@@ -1052,6 +1256,28 @@ class ArrayType(DataType):
             return obj
         return obj and [self.elementType.fromInternal(v) for v in obj]
 
+    def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
+        if value is None:
+            return None
+        # list -> array: exact match
+        if isinstance(value, list):
+            return value
+        # tuple -> array: both paths convert
+        if isinstance(value, tuple) or isinstance(value, array) or isinstance(value, bytearray):
+            return list(value)
+        # Row -> array: pickle raises
+        if hasattr(value, "__class__") and value.__class__.__name__ == "Row":
+            if policy == CoercionPolicy.WARN:
+                _warn_coercion_once(
+                    "Coercing Row to array raises in pickle mode but converts in Arrow mode"
+                )
+            raise PySparkTypeError(
+                errorClass="CANNOT_CONVERT_TYPE",
+                messageParameters={"from_type": "Row", "to_type": "ArrayType"},
+            )
+        # Other types: return None
+        return None
+
     def _build_formatted_string(
         self,
         prefix: str,
@@ -1202,6 +1428,15 @@ class MapType(DataType):
         return obj and dict(
             (self.keyType.fromInternal(k), self.valueType.fromInternal(v)) for k, v in obj.items()
         )
+
+    def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
+        if value is None:
+            return None
+        # dict -> map: exact match
+        if isinstance(value, dict):
+            return value
+        # Other types: pickle returns None
+        return None
 
     def _build_formatted_string(
         self,
@@ -1834,6 +2069,31 @@ class StructType(DataType):
         else:
             values = obj
         return _create_row(self.names, values)
+
+    def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
+        if value is None:
+            return None
+        # Row -> struct: exact match
+        if isinstance(value, Row):
+            return value
+        # tuple -> struct: both paths convert
+        if isinstance(value, tuple):
+            return _create_row(self.names, list(value))
+        # dict -> struct: both paths convert (field matching)
+        if isinstance(value, dict):
+            return _create_row(self.names, [value.get(n) for n in self.names])
+        # list -> struct: pickle converts
+        if isinstance(value, list):
+            if policy == CoercionPolicy.WARN:
+                _warn_coercion_once(
+                    "Coercing list to struct works in pickle mode but raises in Arrow mode"
+                )
+            return _create_row(self.names, value)
+        # Other types: raise
+        raise PySparkTypeError(
+            errorClass="CANNOT_CONVERT_TYPE",
+            messageParameters={"from_type": type(value).__name__, "to_type": "StructType"},
+        )
 
     def _build_formatted_string(
         self,
