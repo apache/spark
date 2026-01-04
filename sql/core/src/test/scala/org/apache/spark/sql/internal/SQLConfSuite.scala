@@ -183,6 +183,78 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("proto-backed config - OPTIMIZER_MAX_ITERATIONS") {
+    // Verify that the config is loaded from the prototext file with correct properties
+    val config = SQLConf.OPTIMIZER_MAX_ITERATIONS
+    assert(config.key === "spark.sql.optimizer.maxIterations")
+    assert(config.defaultValueString === "100")
+    assert(config.doc === "The max number of iterations the optimizer runs.")
+    assert(config.version === "2.0.0")
+    // This config is internal (not public)
+    assert(!config.isPublic)
+
+    // Verify the config works correctly at runtime
+    sqlConf.clear()
+    assert(sqlConf.getConf(config) === 100)
+    sql(s"set ${config.key}=50")
+    assert(sqlConf.getConf(config) === 50)
+    sqlConf.clear()
+  }
+
+  test("proto-backed config with checkValue - SHUFFLE_HASH_JOIN_FACTOR") {
+    val config = SQLConf.SHUFFLE_HASH_JOIN_FACTOR
+    assert(config.key === "spark.sql.shuffledHashJoinFactor")
+    assert(config.defaultValueString === "3")
+    assert(config.version === "3.3.0")
+    assert(config.isPublic)
+
+    // Verify the config works correctly at runtime
+    sqlConf.clear()
+    assert(sqlConf.getConf(config) === 3)
+    sql(s"set ${config.key}=5")
+    assert(sqlConf.getConf(config) === 5)
+
+    // Verify the checkValue validation works - value must be >= 1
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        spark.conf.set(config.key, 0)
+      },
+      condition = "INVALID_CONF_VALUE.REQUIREMENT",
+      parameters = Map(
+        "confName" -> config.key,
+        "confValue" -> "0",
+        "confRequirement" -> "The shuffle hash join factor cannot be negative."))
+
+    sqlConf.clear()
+  }
+
+  test("getConfByKeyStrict - read proto-backed config by key") {
+    sqlConf.clear()
+
+    // Test reading default value
+    assert(sqlConf.getConfByKeyStrict[Int]("spark.sql.optimizer.maxIterations") === 100)
+    assert(sqlConf.getConfByKeyStrict[Boolean](
+      "spark.sql.optimizer.datasourceV2ExprFolding") === true)
+
+    // Test reading configured value
+    sql("set spark.sql.optimizer.maxIterations=50")
+    assert(sqlConf.getConfByKeyStrict[Int]("spark.sql.optimizer.maxIterations") === 50)
+
+    // Test that non-existent key throws error
+    val e = intercept[Exception] {
+      sqlConf.getConfByKeyStrict[Int]("spark.nonexistent.config")
+    }
+    assert(e.getMessage.contains("not found in ConfigRegistry"))
+
+    // Test that type mismatch throws ClassCastException
+    // spark.sql.optimizer.maxIterations is an INT config, reading as Boolean should fail
+    intercept[ClassCastException] {
+      sqlConf.getConfByKeyStrict[Boolean]("spark.sql.optimizer.maxIterations")
+    }
+
+    sqlConf.clear()
+  }
+
   test("reset - user-defined conf") {
     sqlConf.clear()
     val userDefinedConf = "x.y.z.reset"
