@@ -329,12 +329,6 @@ private[spark] class ExecutorAllocationManager(
     }
   }
 
-  // Please do not delete this function, the tests in `ExecutorAllocationManagerSuite`
-  // need to access `listener.totalRunningTasksPerResourceProfile` with `synchronized`.
-  private def totalRunningTasksPerResourceProfile(id: Int): Int = synchronized {
-    listener.totalRunningTasksPerResourceProfile(id)
-  }
-
   /**
    * This is called at a fixed interval to regulate the number of pending executor requests
    * and number of executors running.
