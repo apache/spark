@@ -196,7 +196,9 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
                 df_int_value.select(udf(lambda x: x, "decimal")("value").alias("res")).collect()
 
             with self.assertRaises(PythonException):
-                df_floating_value.select(udf(lambda x: x, "decimal")("value").alias("res")).collect()
+                df_floating_value.select(
+                    udf(lambda x: x, "decimal")("value").alias("res")
+                ).collect()
 
     def test_arrow_udf_int_to_decimal_coercion(self):
         # Use STRICT policy to let Arrow handle type coercion natively,

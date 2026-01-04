@@ -141,15 +141,11 @@ class ArrowUDFCoercionTests(ReusedSQLTestCase):
         for spark_type in self.test_types:
             for value in self.test_data:
                 # Run with pickle (Arrow disabled)
-                with self.sql_conf(
-                    {"spark.sql.execution.pythonUDF.arrow.enabled": "false"}
-                ):
+                with self.sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": "false"}):
                     pickle_result = self._run_udf(value, spark_type, use_arrow=False)
 
                 # Run with Arrow enabled (uses PERMISSIVE coercion by default)
-                with self.sql_conf(
-                    {"spark.sql.execution.pythonUDF.arrow.enabled": "true"}
-                ):
+                with self.sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": "true"}):
                     arrow_result = self._run_udf(value, spark_type, use_arrow=True)
 
                 # Compare results
@@ -190,15 +186,11 @@ class ArrowUDFCoercionTests(ReusedSQLTestCase):
         for value, spark_type, description in test_cases:
             with self.subTest(msg=description):
                 # Run with pickle (Arrow disabled)
-                with self.sql_conf(
-                    {"spark.sql.execution.pythonUDF.arrow.enabled": "false"}
-                ):
+                with self.sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": "false"}):
                     pickle_result = self._run_udf(value, spark_type, use_arrow=False)
 
                 # Run with Arrow enabled
-                with self.sql_conf(
-                    {"spark.sql.execution.pythonUDF.arrow.enabled": "true"}
-                ):
+                with self.sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": "true"}):
                     arrow_result = self._run_udf(value, spark_type, use_arrow=True)
 
                 self.assertEqual(
@@ -301,7 +293,9 @@ class ArrowUDFCoercionTests(ReusedSQLTestCase):
                 if permissive_result[0] == "error" or strict_result[0] == "error":
                     # If both error, that's unexpected - fail
                     if permissive_result[0] == "error" and strict_result[0] == "error":
-                        self.skipTest(f"{description}: Both policies errored - likely environment issue")
+                        self.skipTest(
+                            f"{description}: Both policies errored - likely environment issue"
+                        )
                     continue
 
                 # PERMISSIVE should return None for these cases

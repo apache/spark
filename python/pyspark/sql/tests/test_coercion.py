@@ -34,6 +34,7 @@ import datetime
 import unittest
 from decimal import Decimal
 
+from pyspark.errors import PySparkTypeError
 from pyspark.sql import Row
 from pyspark.sql.types import (
     ArrayType,
@@ -219,12 +220,8 @@ class StringCoercionTests(unittest.TestCase):
 
     def test_bool_to_string_permissive(self):
         """bool -> string: PERMISSIVE returns 'true'/'false' (Java toString)."""
-        self.assertEqual(
-            self.string_type.coerce(True, CoercionPolicy.PERMISSIVE), "true"
-        )
-        self.assertEqual(
-            self.string_type.coerce(False, CoercionPolicy.PERMISSIVE), "false"
-        )
+        self.assertEqual(self.string_type.coerce(True, CoercionPolicy.PERMISSIVE), "true")
+        self.assertEqual(self.string_type.coerce(False, CoercionPolicy.PERMISSIVE), "false")
 
     def test_float_to_string_permissive_and_warn(self):
         """float -> string: converted via str()."""
@@ -258,8 +255,8 @@ class DateCoercionTests(unittest.TestCase):
             self.assertEqual(self.date_type.coerce(dt_val, policy), expected)
 
     def test_int_to_date_permissive(self):
-        """int -> date: PERMISSIVE raises TypeError (pickle behavior)."""
-        with self.assertRaises(TypeError):
+        """int -> date: PERMISSIVE raises PySparkTypeError (pickle behavior)."""
+        with self.assertRaises(PySparkTypeError):
             self.date_type.coerce(1, CoercionPolicy.PERMISSIVE)
 
 
@@ -282,16 +279,16 @@ class TimestampCoercionTests(unittest.TestCase):
             self.assertIsNone(self.timestamp_type.coerce(None, policy))
 
     def test_date_to_timestamp_permissive_and_warn(self):
-        """date -> timestamp: raises TypeError for PERMISSIVE and WARN."""
+        """date -> timestamp: raises PySparkTypeError for PERMISSIVE and WARN."""
         date_val = datetime.date(1970, 1, 1)
         for policy in [CoercionPolicy.PERMISSIVE, CoercionPolicy.WARN]:
-            with self.assertRaises(TypeError):
+            with self.assertRaises(PySparkTypeError):
                 self.timestamp_type.coerce(date_val, policy)
 
     def test_int_to_timestamp_permissive_and_warn(self):
-        """int -> timestamp: raises TypeError for PERMISSIVE and WARN."""
+        """int -> timestamp: raises PySparkTypeError for PERMISSIVE and WARN."""
         for policy in [CoercionPolicy.PERMISSIVE, CoercionPolicy.WARN]:
-            with self.assertRaises(TypeError):
+            with self.assertRaises(PySparkTypeError):
                 self.timestamp_type.coerce(1, policy)
 
 
@@ -320,9 +317,7 @@ class BinaryCoercionTests(unittest.TestCase):
 
     def test_str_to_binary_permissive(self):
         """str -> binary: PERMISSIVE encodes (pickle behavior)."""
-        self.assertEqual(
-            self.binary_type.coerce("a", CoercionPolicy.PERMISSIVE), b"a"
-        )
+        self.assertEqual(self.binary_type.coerce("a", CoercionPolicy.PERMISSIVE), b"a")
 
 
 class ArrayCoercionTests(unittest.TestCase):
@@ -429,9 +424,7 @@ class DecimalCoercionTests(unittest.TestCase):
     def test_decimal_to_decimal_permissive_and_warn(self):
         """Decimal -> decimal should work for PERMISSIVE and WARN."""
         for policy in [CoercionPolicy.PERMISSIVE, CoercionPolicy.WARN]:
-            self.assertEqual(
-                self.decimal_type.coerce(Decimal("123"), policy), Decimal("123")
-            )
+            self.assertEqual(self.decimal_type.coerce(Decimal("123"), policy), Decimal("123"))
 
     def test_none_to_decimal_permissive_and_warn(self):
         """None -> decimal should return None for PERMISSIVE and WARN."""
@@ -460,8 +453,8 @@ class DefaultPolicyTests(unittest.TestCase):
         self.assertIsNone(int_type.coerce(1.0))
 
         date_type = DateType()
-        # int -> date: PERMISSIVE raises TypeError (pickle behavior)
-        with self.assertRaises(TypeError):
+        # int -> date: PERMISSIVE raises PySparkTypeError (pickle behavior)
+        with self.assertRaises(PySparkTypeError):
             date_type.coerce(1)
 
 

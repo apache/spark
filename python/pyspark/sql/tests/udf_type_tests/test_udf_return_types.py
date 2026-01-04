@@ -69,7 +69,7 @@ if have_numpy:
     pandas_requirement_message
     or pyarrow_requirement_message
     or numpy_requirement_message
-    or "float128 not supported on macOS"
+    or "float128 not supported on macOS",
 )
 class UDFReturnTypeTests(ReusedSQLTestCase):
     @classmethod
