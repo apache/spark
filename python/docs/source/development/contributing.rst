@@ -215,7 +215,7 @@ Note that:
 
 * In addition, pandas-on-Spark (``pyspark.pandas``) also uses `snake_case` because this package is free from API consistency with other languages.
 
-PySpark leverages linters such as `pycodestyle <https://pycodestyle.pycqa.org/en/latest/>`_ and `flake8 <https://flake8.pycqa.org/en/latest/>`_, which ``dev/lint-python`` runs. Therefore, make sure to run that script to double check.
+PySpark leverages linters such as `pycodestyle <https://pycodestyle.pycqa.org/en/latest/>`_ and `ruff <https://docs.astral.sh/ruff/>`_, which ``dev/lint-python`` runs. Therefore, make sure to run that script to double check.
 
 
 Docstring Conventions
