@@ -600,7 +600,9 @@ class SparkSession:
                 deduped_schema = cast(StructType, _deduplicate_field_names(schema))
                 spark_types = [field.dataType for field in deduped_schema.fields]
                 arrow_schema = to_arrow_schema(
-                    deduped_schema, prefers_large_types=prefers_large_types
+                    deduped_schema,
+                    timezone="UTC",
+                    prefers_large_types=prefers_large_types,
                 )
                 arrow_types = [field.type for field in arrow_schema]
                 _cols = [str(x) if not isinstance(x, str) else x for x in schema.fieldNames()]
@@ -620,7 +622,7 @@ class SparkSession:
                     for t in data.dtypes
                 ]
                 arrow_types = [
-                    to_arrow_type(dt, prefers_large_types=prefers_large_types)
+                    to_arrow_type(dt, timezone="UTC", prefers_large_types=prefers_large_types)
                     if dt is not None
                     else None
                     for dt in spark_types
@@ -667,6 +669,7 @@ class SparkSession:
                     to_arrow_schema(
                         schema,
                         error_on_duplicated_field_names_in_struct=True,
+                        timezone="UTC",
                         prefers_large_types=prefers_large_types,
                     )
                 )

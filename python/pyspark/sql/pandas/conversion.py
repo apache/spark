@@ -218,7 +218,9 @@ class PandasConversionMixin:
 
                 require_minimum_pyarrow_version()
                 arrow_schema = to_arrow_schema(
-                    self.schema, prefers_large_types=prefers_large_var_types
+                    self.schema,
+                    timezone="UTC",
+                    prefers_large_types=prefers_large_var_types,
                 )
             except Exception as e:
                 if arrowPySparkFallbackEnabled == "true":
@@ -345,6 +347,7 @@ class PandasConversionMixin:
         schema = to_arrow_schema(
             self.schema,
             error_on_duplicated_field_names_in_struct=True,
+            timezone="UTC",
             prefers_large_types=prefers_large_var_types,
         )
 
@@ -435,7 +438,9 @@ class PandasConversionMixin:
             from pyspark.sql.pandas.types import to_arrow_schema
             import pyarrow as pa
 
-            schema = to_arrow_schema(self.schema, prefers_large_types=prefers_large_var_types)
+            schema = to_arrow_schema(
+                self.schema, timezone="UTC", prefers_large_types=prefers_large_var_types
+            )
             empty_arrays = [pa.array([], type=field.type) for field in schema]
             return [pa.RecordBatch.from_arrays(empty_arrays, schema=schema)]
 
@@ -882,7 +887,7 @@ class SparkConversionMixin:
             [
                 (
                     c,
-                    to_arrow_type(t, prefers_large_types=prefers_large_var_types)
+                    to_arrow_type(t, timezone="UTC", prefers_large_types=prefers_large_var_types)
                     if t is not None
                     else None,
                     t,
@@ -961,6 +966,7 @@ class SparkConversionMixin:
             to_arrow_schema(
                 schema,
                 error_on_duplicated_field_names_in_struct=True,
+                timezone="UTC",
                 prefers_large_types=prefers_large_var_types,
             )
         )
