@@ -34,6 +34,7 @@ import org.apache.spark.deploy.k8s.KubernetesConf
 import org.apache.spark.deploy.k8s.KubernetesUtils.addOwnerReference
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config._
+import org.apache.spark.metrics.source.Source
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.cluster.SchedulerBackendUtils.DEFAULT_NUMBER_EXECUTORS
 import org.apache.spark.util.{Clock, Utils}
@@ -97,6 +98,8 @@ class ExecutorPodsAllocator(
 
   protected val shouldDeleteExecutors = conf.get(KUBERNETES_DELETE_EXECUTORS)
 
+  protected val isBackoffEnabled = conf.get(KUBERNETES_ALLOCATION_EXECUTOR_BACKOFF_ENABLED)
+
   val driverPod = kubernetesDriverPodName
     .map(name => Option(kubernetesClient.pods()
       .inNamespace(namespace)
@@ -127,6 +130,12 @@ class ExecutorPodsAllocator(
   // if they happen to come up before the deletion takes effect.
   @volatile protected var deletedExecutorIds = Set.empty[Long]
 
+  private val backoffControllerOpt = if (isBackoffEnabled) {
+    Some(new ExecutorPodsBackoffController(conf, clock))
+  } else {
+    None
+  }
+
   def start(applicationId: String, schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
     appId = applicationId
     driverPod.foreach { pod =>
@@ -156,6 +165,13 @@ class ExecutorPodsAllocator(
     }
   }
 
+  override def metricsSources: Seq[Source] = backoffControllerOpt.map(_.metricsSource).toSeq
+
+  override def onRegisterExecutorMsgReceived(executorId: String): Unit = {
+    logDebug(s"Received RegisterExecutor from executor $executorId. Recording executor as started.")
+    backoffControllerOpt.foreach(_.recordExecutorStarted(executorId.toLong))
+  }
+
   def isDeleted(executorId: String): Boolean = deletedExecutorIds.contains(executorId.toLong)
 
   protected def onNewSnapshots(
@@ -163,6 +179,17 @@ class ExecutorPodsAllocator(
       schedulerBackend: KubernetesClusterSchedulerBackend,
       snapshots: Seq[ExecutorPodsSnapshot]): Unit = {
     logDebug(s"Received ${snapshots.size} snapshots")
+
+    backoffControllerOpt.foreach { backoffController =>
+      // pods in PodRunning state are not reported as started here. We wait for a stronger
+      // signal - when the executor registers with the driver (see onRegisterExecutorMsgReceived)
+      val allPodStates = snapshots.flatMap(_.executorPods)
+      allPodStates.collect { case (execId, PodFailed(_)) => execId }.distinct
+        .foreach(backoffController.recordFailure)
+      allPodStates.collect { case (execId, PodDeleted(_)) => execId }.distinct
+        .foreach(backoffController.recordDeleted)
+    }
+
     val k8sKnownExecIds = snapshots.flatMap(_.executorPods.keys).distinct
     newlyCreatedExecutors --= k8sKnownExecIds
     schedulerKnownNewlyCreatedExecs --= k8sKnownExecIds
@@ -208,6 +235,7 @@ class ExecutorPodsAllocator(
         log"application missed the deletion event.")
 
       newlyCreatedExecutors --= timedOut
+      backoffControllerOpt.foreach(c => timedOut.foreach(c.recordFailure))
       if (shouldDeleteExecutors) {
         Utils.tryLogNonFatalError {
           kubernetesClient
@@ -366,28 +394,41 @@ class ExecutorPodsAllocator(
       }
     }
 
+    val backoffLimit = if (backoffControllerOpt.exists(_.isBackoffState())) {
+      1
+    } else {
+      Int.MaxValue
+    }
+
     // Try to request new executors only when there exist remaining slots within the maximum
     // number of pending pods and new snapshot arrives in case of waiting for releasing of the
-    // existing PVCs
-    val remainingSlotFromPendingPods = maxPendingPods - totalNotRunningPodCount
-    if (remainingSlotFromPendingPods > 0 && podsToAllocateWithRpId.size > 0 &&
-        !(snapshots.isEmpty && podAllocOnPVC && maxPVCs <= PVC_COUNTER.get())) {
-      ExecutorPodsAllocator.splitSlots(podsToAllocateWithRpId, remainingSlotFromPendingPods)
+    // existing PVCs. Also respect backoff limit and delay.
+    val remainingSlotFromPendingPodsAndBackoff =
+      math.min(maxPendingPods - totalNotRunningPodCount, backoffLimit)
+    if (remainingSlotFromPendingPodsAndBackoff > 0 && podsToAllocateWithRpId.size > 0 &&
+        !(snapshots.isEmpty && podAllocOnPVC && maxPVCs <= PVC_COUNTER.get()) &&
+      backoffControllerOpt.forall(_.canRequestNow())) {
+      ExecutorPodsAllocator.splitSlots(
+          podsToAllocateWithRpId, remainingSlotFromPendingPodsAndBackoff)
         .foreach { case ((rpId, podCountForRpId, targetNum, pendingPodCountForRpId),
             sharedSlotFromPendingPods) =>
         val remainingSlotsForRpId = maxPendingPodsPerRpid - pendingPodCountForRpId
         val numMissingPodsForRpId = targetNum - podCountForRpId
         val numExecutorsToAllocate = Seq(numMissingPodsForRpId, podAllocationSize,
           sharedSlotFromPendingPods, remainingSlotsForRpId).min
+        val backoffStateDesc = backoffControllerOpt.map(_.currentStateDescription())
+          .getOrElse("disabled")
 
         logInfo(log"Going to request ${MDC(LogKeys.COUNT, numExecutorsToAllocate)} executors from" +
           log" Kubernetes for ResourceProfile Id: ${MDC(LogKeys.RESOURCE_PROFILE_ID, rpId)}, " +
           log"target: ${MDC(LogKeys.NUM_POD_TARGET, targetNum)}, " +
           log"known: ${MDC(LogKeys.NUM_POD, podCountForRpId)}, sharedSlotFromPendingPods: " +
-          log"${MDC(LogKeys.NUM_POD_SHARED_SLOT, sharedSlotFromPendingPods)}.")
+          log"${MDC(LogKeys.NUM_POD_SHARED_SLOT, sharedSlotFromPendingPods)}, " +
+          log"backoff: ${MDC(LogKeys.DESCRIPTION, backoffStateDesc)}.")
         requestNewExecutors(numExecutorsToAllocate, applicationId, rpId, k8sKnownPVCNames)
       }
     }
+    backoffControllerOpt.foreach(c => _deletedExecutorIds.foreach(c.recordDeleted))
     deletedExecutorIds = _deletedExecutorIds
 
     // Update the flag that helps the setTotalExpectedExecutors() callback avoid triggering this
@@ -459,31 +500,39 @@ class ExecutorPodsAllocator(
         .build()
       val resources = replacePVCsIfNeeded(
         podWithAttachedContainer, resolvedExecutorSpec.executorKubernetesResources, reusablePVCs)
-      val createdExecutorPod =
-        kubernetesClient.pods().inNamespace(namespace).resource(podWithAttachedContainer).create()
       try {
-        addOwnerReference(createdExecutorPod, resources)
-        resources
-          .filter(_.getKind == "PersistentVolumeClaim")
-          .foreach { resource =>
-            if (conf.get(KUBERNETES_DRIVER_OWN_PVC) && driverPod.nonEmpty) {
-              addOwnerReference(driverPod.get, Seq(resource))
+        backoffControllerOpt.foreach(_.recordPodRequest(newExecutorId))
+        val createdExecutorPod =
+          kubernetesClient.pods().inNamespace(namespace).resource(podWithAttachedContainer).create()
+        try {
+          addOwnerReference(createdExecutorPod, resources)
+          resources
+            .filter(_.getKind == "PersistentVolumeClaim")
+            .foreach { resource =>
+              if (conf.get(KUBERNETES_DRIVER_OWN_PVC) && driverPod.nonEmpty) {
+                addOwnerReference(driverPod.get, Seq(resource))
+              }
+              val pvc = resource.asInstanceOf[PersistentVolumeClaim]
+              logInfo(log"Trying to create PersistentVolumeClaim " +
+                log"${MDC(LogKeys.PVC_METADATA_NAME, pvc.getMetadata.getName)} with " +
+                log"StorageClass ${MDC(LogKeys.CLASS_NAME, pvc.getSpec.getStorageClassName)}")
+              kubernetesClient.persistentVolumeClaims().inNamespace(namespace).resource(pvc)
+                .create()
+              PVC_COUNTER.incrementAndGet()
             }
-            val pvc = resource.asInstanceOf[PersistentVolumeClaim]
-            logInfo(log"Trying to create PersistentVolumeClaim " +
-              log"${MDC(LogKeys.PVC_METADATA_NAME, pvc.getMetadata.getName)} with " +
-              log"StorageClass ${MDC(LogKeys.CLASS_NAME, pvc.getSpec.getStorageClassName)}")
-            kubernetesClient.persistentVolumeClaims().inNamespace(namespace).resource(pvc).create()
-            PVC_COUNTER.incrementAndGet()
-          }
-        newlyCreatedExecutors(newExecutorId) = (resourceProfileId, clock.getTimeMillis())
-        logDebug(s"Requested executor with id $newExecutorId from Kubernetes.")
+          newlyCreatedExecutors(newExecutorId) = (resourceProfileId, clock.getTimeMillis())
+          logDebug(s"Requested executor with id $newExecutorId from Kubernetes.")
+        } catch {
+          case NonFatal(e) =>
+            kubernetesClient.pods()
+              .inNamespace(namespace)
+              .resource(createdExecutorPod)
+              .delete()
+            throw e
+        }
       } catch {
         case NonFatal(e) =>
-          kubernetesClient.pods()
-            .inNamespace(namespace)
-            .resource(createdExecutorPod)
-            .delete()
+          backoffControllerOpt.foreach(_.recordFailure(newExecutorId))
           throw e
       }
     }
