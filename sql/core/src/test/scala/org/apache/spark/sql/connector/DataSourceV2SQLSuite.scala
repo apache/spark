@@ -3682,12 +3682,12 @@ class DataSourceV2SQLSuiteV1Filter
   test("CREATE TABLE with invalid default value") {
     withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Format, ") {
       withTable("t") {
-        // The default value fails to analyze.
+        // The default value references a non-existing column, which is not a constant.
         checkError(
           exception = intercept[AnalysisException] {
             sql(s"create table t(s int default badvalue) using $v2Format")
           },
-          condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+          condition = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
           parameters = Map(
             "statement" -> "CREATE TABLE",
             "colName" -> "`s`",
@@ -3700,13 +3700,12 @@ class DataSourceV2SQLSuiteV1Filter
     withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Format, ") {
       withTable("t") {
         sql(s"create table t(i boolean) using $v2Format")
-
-        // The default value fails to analyze.
+        // The default value references a non-existing column, which is not a constant.
         checkError(
           exception = intercept[AnalysisException] {
             sql(s"replace table t(s int default badvalue) using $v2Format")
           },
-          condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+          condition = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
           parameters = Map(
             "statement" -> "REPLACE TABLE",
             "colName" -> "`s`",

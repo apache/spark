@@ -339,6 +339,7 @@ class MetadataBuilder {
 
   private def put(key: String, value: Any): this.type = {
     map.put(key, value)
+    runtimeMap.remove(key)
     this
   }
 

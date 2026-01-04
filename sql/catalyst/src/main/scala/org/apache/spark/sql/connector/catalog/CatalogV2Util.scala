@@ -365,7 +365,7 @@ private[sql] object CatalogV2Util {
     }
     validateTableProviderForDefaultValue(
       newSchema, tableProvider, statementType, addNewColumnToExistingTable)
-    constantFoldCurrentDefaultsToExistDefaults(newSchema, statementType)
+    newSchema
   }
 
   private def replace(

@@ -144,22 +144,18 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
     case CreateTable(tableDesc, mode, None) if DDLUtils.isDatasourceTable(tableDesc) =>
       ResolveDefaultColumns.validateTableProviderForDefaultValue(
         tableDesc.schema, tableDesc.provider, "CREATE TABLE", false)
-      val newSchema: StructType =
-        ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
-          tableDesc.schema, "CREATE TABLE")
 
-      if (GeneratedColumn.hasGeneratedColumns(newSchema)) {
+      if (GeneratedColumn.hasGeneratedColumns(tableDesc.schema)) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
           tableDesc.identifier, "generated columns")
       }
 
-      if (IdentityColumn.hasIdentityColumns(newSchema)) {
+      if (IdentityColumn.hasIdentityColumns(tableDesc.schema)) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
           tableDesc.identifier, "identity columns")
       }
 
-      val newTableDesc = tableDesc.copy(schema = newSchema)
-      CreateDataSourceTableCommand(newTableDesc, ignoreIfExists = mode == SaveMode.Ignore)
+      CreateDataSourceTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
 
     case CreateTable(tableDesc, mode, Some(query))
         if query.resolved && DDLUtils.isDatasourceTable(tableDesc) =>
