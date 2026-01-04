@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, Exists, Expression, IsNotNull, Literal, MetadataAttribute, MonotonicallyIncreasingID, OuterReference, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, Exists, Expression, IsNotNull, Literal, MetadataAttribute, MonotonicallyIncreasingID, Or, OuterReference, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, JoinType, LeftAnti, LeftOuter, RightOuter}
@@ -172,12 +172,14 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       readRelation, joinPlan, matchedActions, notMatchedActions,
       notMatchedBySourceActions, metadataAttrs, checkCardinality)
 
-    // predicates of the ON condition can be used to filter the target table (planning & runtime)
-    // only if there is no NOT MATCHED BY SOURCE clause
-    val (pushableCond, groupFilterCond) = if (notMatchedBySourceActions.isEmpty) {
-      (cond, Some(toGroupFilterCondition(relation, source, cond)))
+    val pushableCond = (
+      Seq(cond) ++ notMatchedBySourceActions.map(_.condition.getOrElse(TrueLiteral))
+    ).reduce(Or)
+
+    val groupFilterCond = if (notMatchedBySourceActions.isEmpty) {
+      Some(toGroupFilterCondition(relation, source, cond))
     } else {
-      (TrueLiteral, None)
+      None
     }
 
     // build a plan to replace read groups in the table
