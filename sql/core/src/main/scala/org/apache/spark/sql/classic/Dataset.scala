@@ -28,7 +28,7 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.text.StringEscapeUtils
 
-import org.apache.spark.{sql, SparkException, TaskContext}
+import org.apache.spark.{sql, Partitioner, SparkException, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
@@ -1547,6 +1547,27 @@ class Dataset[T] private[sql](
   def repartitionById(numPartitions: Int, partitionIdExpr: Column): Dataset[T] = {
     val directShufflePartitionIdCol = Column(DirectShufflePartitionID(partitionIdExpr.expr))
     repartitionByExpression(Some(numPartitions), Seq(directShufflePartitionIdCol))
+  }
+
+  /**
+   * Returns a new Dataset partitioned using the specified partitioner.
+   *
+   * This is similar to RDD's `partitionBy` method. The key extraction function is applied to each
+   * element to extract the key, which is then passed to the partitioner to determine the target
+   * partition.
+   *
+   * {{{
+   *   // Repartition using a custom partitioner
+   *   ds.repartition[String](_.userId, new HashPartitioner(100))
+   * }}}
+   *
+   * @group typedrel
+   * @since 4.1.0
+   */
+  def repartition[K: Encoder](
+      keyFunc: T => K,
+      partitioner: Partitioner): Dataset[T] = withSameTypedPlan {
+    RepartitionByPartitioner(keyFunc, partitioner, logicalPlan)
   }
 
   protected def repartitionByRange(
