@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, CTERelationRef, LocalRelation, LogicalPlan, UnionLoop, UnionLoopRef, WithCTE}
 import org.apache.spark.sql.types.BooleanType
 
 class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
@@ -139,7 +139,7 @@ class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
 
     // Before applying timezone, no timezone is set.
     testPlan.expressions.foreach {
-      case _ @ AssertTrue(firstCast: Cast, _, _ @ If(secondCast: Cast, _, _)) =>
+      case _@AssertTrue(firstCast: Cast, _, _@If(secondCast: Cast, _, _)) =>
         assert(firstCast.timeZoneId.isEmpty)
         assert(secondCast.timeZoneId.isEmpty)
       case _ =>
@@ -150,7 +150,7 @@ class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
 
     // After applying timezone, only the second cast gets timezone.
     resolvedTestPlan.expressions.foreach {
-      case _ @ AssertTrue(firstCast: Cast, _, _ @ If(secondCast: Cast, _, _)) =>
+      case _@AssertTrue(firstCast: Cast, _, _@If(secondCast: Cast, _, _)) =>
         assert(firstCast.timeZoneId.isEmpty)
         assert(secondCast.timeZoneId.isDefined)
       case _ =>
@@ -192,6 +192,56 @@ class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
 
     assert(baselinePlan != testPlan)
     assert(NormalizePlan(baselinePlan) == NormalizePlan(testPlan))
+  }
+
+  test("Normalize rCTEs") {
+    val col1 = $"col1".int
+    val col2 = col1.newInstance()
+    val anchor = LocalRelation(col1)
+
+    // Create two full recursive CTEs - WithCTE with a CTERelationDef with a UnionLoop and
+    // UnionLoopRef with the same id, and a reference to the CTE in the child of the WithCTE.
+    val recursiveCTE1 = WithCTE(
+      plan = CTERelationRef(
+        cteId = 100L,
+        _resolved = true,
+        output = Seq(col1),
+        isStreaming = false
+      ),
+      cteDefs = Seq(CTERelationDef(
+        child = UnionLoop(
+          id = 100L,
+          anchor = anchor,
+          recursion = UnionLoopRef(loopId = 100L, output = Seq(col2), accumulated = false),
+          outputAttrIds = Seq(ExprId(1), ExprId(2))
+        ),
+        id = 100L
+      ))
+    )
+
+    val recursiveCTE2 = WithCTE(
+      plan = CTERelationRef(
+        cteId = 200L,
+        _resolved = true,
+        output = Seq(col1),
+        isStreaming = false
+      ),
+      cteDefs = Seq(CTERelationDef(
+        child = UnionLoop(
+          id = 200L,
+          anchor = anchor,
+          recursion = UnionLoopRef(loopId = 200L, output = Seq(col2), accumulated = false),
+          outputAttrIds = Seq(ExprId(3), ExprId(4))
+        ),
+        id = 200L
+      ))
+    )
+
+    // Before normalization, plans are different
+    assert(recursiveCTE1 != recursiveCTE2)
+
+    // After normalization, they should be equal
+    assert(NormalizePlan(recursiveCTE1) == NormalizePlan(recursiveCTE2))
   }
 
   private def setTimezoneForAllExpression(plan: LogicalPlan): LogicalPlan = {
