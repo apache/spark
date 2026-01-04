@@ -25,6 +25,7 @@ import scala.annotation.tailrec
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.types.ops.PhyTypeOps
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
@@ -869,7 +870,7 @@ private[columnar] object ColumnType {
       case ByteType => BYTE
       case ShortType => SHORT
       case IntegerType | DateType | _: YearMonthIntervalType => INT
-      case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
+      case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
         LONG
       case FloatType => FLOAT
       case DoubleType => DOUBLE
@@ -882,6 +883,8 @@ private[columnar] object ColumnType {
       case map: MapType => MAP(PhysicalMapType(map.keyType, map.valueType, map.valueContainsNull))
       case struct: StructType => STRUCT(PhysicalStructType(struct.fields))
       case udt: UserDefinedType[_] => ColumnType(udt.sqlType)
+      case _ if PhyTypeOps.supports(dataType)
+        && PhyTypeOps(dataType).getPhysicalType == PhysicalLongType => LONG
       case _ => throw ExecutionErrors.unsupportedDataTypeError(dataType)
     }
   }
