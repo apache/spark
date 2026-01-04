@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.SparkThrowable
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, SchemaCompensation, UnresolvedAttribute, UnresolvedFunctionName, UnresolvedIdentifier}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, GlobalTempView, LocalTempView, SchemaCompensation, UnresolvedAttribute, UnresolvedIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, FileResource, FunctionResource, JarResource}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans
@@ -666,22 +666,18 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   test("DROP FUNCTION") {
-    def createFuncPlan(name: Seq[String]): UnresolvedFunctionName = {
-      UnresolvedFunctionName(name, "DROP FUNCTION", true,
-        Some("Please use fully qualified identifier to drop the persistent function."))
-    }
     comparePlans(
       parser.parsePlan("DROP FUNCTION a"),
-      DropFunction(createFuncPlan(Seq("a")), false))
+      DropFunction(UnresolvedIdentifier(Seq("a")), false))
     comparePlans(
       parser.parsePlan("DROP FUNCTION a.b.c"),
-      DropFunction(createFuncPlan(Seq("a", "b", "c")), false))
+      DropFunction(UnresolvedIdentifier(Seq("a", "b", "c")), false))
     comparePlans(
       parser.parsePlan("DROP TEMPORARY FUNCTION a"),
       DropFunctionCommand(Seq("a").asFunctionIdentifier, false, true))
     comparePlans(
       parser.parsePlan("DROP FUNCTION IF EXISTS a.b.c"),
-      DropFunction(createFuncPlan(Seq("a", "b", "c")), true))
+      DropFunction(UnresolvedIdentifier(Seq("a", "b", "c")), true))
     comparePlans(
       parser.parsePlan("DROP TEMPORARY FUNCTION IF EXISTS a"),
       DropFunctionCommand(Seq("a").asFunctionIdentifier, true, true))
