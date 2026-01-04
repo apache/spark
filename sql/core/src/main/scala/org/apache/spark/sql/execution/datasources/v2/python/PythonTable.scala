@@ -35,6 +35,9 @@ class PythonTable(
     BATCH_READ, BATCH_WRITE, MICRO_BATCH_READ, STREAMING_WRITE, TRUNCATE)
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+    // Fail fast on unsupported streaming admission-control options during analysis, so errors are
+    // raised at readStream.load() time (instead of later when the stream starts).
+    PythonMicroBatchStream.validateOptions(options)
     new PythonScanBuilder(ds, shortName, outputSchema, options)
   }
 
