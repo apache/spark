@@ -631,6 +631,20 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   }
 
   /**
+   * A variant of [[foreachWithSubqueries]] with pruning support.
+   * Only traverses nodes that match the given condition.
+   */
+  def foreachWithSubqueriesAndPruning(
+      cond: TreePatternBits => Boolean)(f: PlanType => Unit): Unit = {
+    if (!cond.apply(this)) {
+      return
+    }
+    f(this)
+    subqueries.foreach(_.foreachWithSubqueriesAndPruning(cond)(f))
+    children.foreach(_.foreachWithSubqueriesAndPruning(cond)(f))
+  }
+
+  /**
    * A variant of `collect`. This method not only apply the given function to all elements in this
    * plan, also considering all the plans in its (nested) subqueries.
    */

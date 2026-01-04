@@ -242,7 +242,7 @@ class SparkConnectPlanner(
     }
 
     if (executeHolderOpt.isDefined) {
-      plan.transformUpWithSubqueriesAndPruning(_.containsPattern(TreePattern.COLLECT_METRICS)) {
+      plan.foreachWithSubqueriesAndPruning(_.containsPattern(TreePattern.COLLECT_METRICS)) {
         case collectMetrics: CollectMetrics if !collectMetrics.child.isStreaming =>
           // TODO this might be too complex for no good reason. It might
           //  be easier to inspect the plan after it completes.
@@ -250,9 +250,10 @@ class SparkConnectPlanner(
             collectMetrics.name,
             collectMetrics.dataframeId)
           executeHolder.addObservation(collectMetrics.name, observation)
-          collectMetrics
+        case _ =>
       }
-    } else plan
+    }
+    plan
   }
 
   private def transformRelationPlugin(extension: ProtoAny): LogicalPlan = {
