@@ -2626,6 +2626,46 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("COMMENT ON TABLE a.b.c IS 'xYz'"),
       CommentOnTable(UnresolvedTable(Seq("a", "b", "c"), "COMMENT ON TABLE"), "xYz"))
+
+    // Test COMMENT ON COLUMN with fully qualified name (catalog.database.table.column)
+    comparePlans(
+      parsePlan("COMMENT ON COLUMN my_catalog.my_db.my_table.my_column IS NULL"),
+      CommentOnColumn(
+        UnresolvedTable(Seq("my_catalog", "my_db", "my_table"), "COMMENT ON COLUMN"),
+        UnresolvedFieldName(Seq("my_column")),
+        ""))
+
+    // Test COMMENT ON COLUMN with 3-part name (database.table.column)
+    comparePlans(
+      parsePlan("COMMENT ON COLUMN a.b.c.d IS 'column comment'"),
+      CommentOnColumn(
+        UnresolvedTable(Seq("a", "b", "c"), "COMMENT ON COLUMN"),
+        UnresolvedFieldName(Seq("d")),
+        "column comment"))
+
+    // Test COMMENT ON COLUMN with 2-part name (table.column) - uses current catalog and database
+    comparePlans(
+      parsePlan("COMMENT ON COLUMN my_table.my_column IS 'simple comment'"),
+      CommentOnColumn(
+        UnresolvedTable(Seq("my_table"), "COMMENT ON COLUMN"),
+        UnresolvedFieldName(Seq("my_column")),
+        "simple comment"))
+
+    // Test COMMENT ON COLUMN with 'NULL' string literal
+    comparePlans(
+      parsePlan("COMMENT ON COLUMN a.b.c.d IS 'NULL'"),
+      CommentOnColumn(
+        UnresolvedTable(Seq("a", "b", "c"), "COMMENT ON COLUMN"),
+        UnresolvedFieldName(Seq("d")),
+        "NULL"))
+
+    // Test COMMENT ON COLUMN with empty string
+    comparePlans(
+      parsePlan("COMMENT ON COLUMN a.b.c.d IS ''"),
+      CommentOnColumn(
+        UnresolvedTable(Seq("a", "b", "c"), "COMMENT ON COLUMN"),
+        UnresolvedFieldName(Seq("d")),
+        ""))
   }
 
   test("create table - without using") {
@@ -2775,6 +2815,7 @@ class DDLParserSuite extends AnalysisTest {
           None,
           None,
           dropDefault = true))))
+
     // Make sure that the parser returns an exception when the feature is disabled.
     withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
       val sql = "CREATE TABLE my_tab(a INT, b STRING NOT NULL DEFAULT \"abc\") USING parquet"
