@@ -78,6 +78,11 @@
       <groupId>org.scala-lang.modules</groupId>
       <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
     </dependency>
+    <!--
+      NOTE: Kafka Share Groups (Queue Semantics) require Kafka client 4.0+
+      The ShareConsumer API is available starting from Kafka 4.0.
+      Update kafka.version to 4.0.0+ in parent pom.xml for share group support.
+    -->
     <dependency>
       <groupId>org.apache.kafka</groupId>
       <artifactId>kafka-clients</artifactId>
