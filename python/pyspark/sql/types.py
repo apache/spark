@@ -477,7 +477,9 @@ class TimestampType(DatetimeType, metaclass=DataTypeSingleton):
                 seconds = calendar.timegm(dt.utctimetuple())
             else:
                 seconds = (
-                    calendar.timegm(dt.utctimetuple()) if dt.tzinfo else int(time.mktime(dt.timetuple()))
+                    calendar.timegm(dt.utctimetuple())
+                    if dt.tzinfo
+                    else int(time.mktime(dt.timetuple()))
                 )
             return int(seconds) * 1000000 + dt.microsecond
 
