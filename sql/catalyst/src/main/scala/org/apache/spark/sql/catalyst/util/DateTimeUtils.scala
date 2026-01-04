@@ -303,12 +303,20 @@ object DateTimeUtils extends SparkDateTimeUtils {
       days: Int,
       microseconds: Long,
       zoneId: ZoneId): Long = {
-    val resultTimestamp = microsToInstant(start)
-      .atZone(zoneId)
-      .plusMonths(months)
-      .plusDays(days)
-      .plus(microseconds, ChronoUnit.MICROS)
-    instantToMicros(resultTimestamp.toInstant)
+    try {
+      val resultTimestamp = microsToInstant(start)
+        .atZone(zoneId)
+        .plusMonths(months)
+        .plusDays(days)
+        .plus(microseconds, ChronoUnit.MICROS)
+      instantToMicros(resultTimestamp.toInstant)
+    } catch {
+      case e: ArithmeticException =>
+        val startInstant = microsToInstant(start)
+        throw new ArithmeticException(
+          s"${e.getMessage}. Input timestamp: $startInstant, interval: " +
+          s"months=$months, days=$days, microseconds=$microseconds, zoneId=$zoneId")
+    }
   }
 
   /**
