@@ -190,9 +190,9 @@ trait CreatableRelationProvider {
       case MapType(k, v, _) => supportsDataType(k) && supportsDataType(v)
       case StructType(fields) => fields.forall(f => supportsDataType(f.dataType))
       case udt: UserDefinedType[_] => supportsDataType(udt.sqlType)
-      case BinaryType | BooleanType | ByteType | CharType(_) | DateType | _ : DecimalType |
+      case BinaryType | BooleanType | ByteType | _: CharType | DateType | _: DecimalType |
            DoubleType | FloatType | IntegerType | LongType | NullType | ObjectType(_) | ShortType |
-           _: StringType | TimestampNTZType | TimestampType | VarcharType(_) => true
+           _: StringType | TimestampNTZType | TimestampType | _: VarcharType => true
       case _ => false
     }
   }

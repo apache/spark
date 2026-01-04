@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.internal.SqlApiConf
-import org.apache.spark.sql.types.{ArrayType, CharType, DataType, MapType, StringType, StructType, VarcharType}
+import org.apache.spark.sql.types.{ArrayType, CharType, DataType, MapType, StructType, VarcharType}
 
 trait SparkCharVarcharUtils {
 
@@ -54,7 +54,8 @@ trait SparkCharVarcharUtils {
       StructType(fields.map { field =>
         field.copy(dataType = replaceCharVarcharWithString(field.dataType))
       })
-    case CharType(_) | VarcharType(_) if !SqlApiConf.get.preserveCharVarcharTypeInfo => StringType
+    case c: CharType if !SqlApiConf.get.preserveCharVarcharTypeInfo => c.toStringType
+    case v: VarcharType if !SqlApiConf.get.preserveCharVarcharTypeInfo => v.toStringType
     case _ => dt
   }
 }
