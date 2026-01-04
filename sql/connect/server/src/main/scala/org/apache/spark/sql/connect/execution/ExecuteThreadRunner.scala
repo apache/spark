@@ -231,11 +231,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
 
       val observedMetrics: Map[String, Seq[(Option[String], Any, Option[DataType])]] = {
         executeHolder.observations.map { case (name, observation) =>
-          val values =
-            observation.getRowOrEmpty
-              .map(SparkConnectPlanExecution.toObservedMetricsValues(_))
-              .getOrElse(Seq.empty)
-          name -> values
+          name -> SparkConnectPlanExecution.toObservedMetricsValues(observation.getRow)
         }.toMap
       }
       val accumulatedInPython: Map[String, Seq[(Option[String], Any, Option[DataType])]] = {
