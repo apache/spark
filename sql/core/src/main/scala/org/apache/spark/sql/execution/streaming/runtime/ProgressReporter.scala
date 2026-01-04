@@ -43,7 +43,7 @@ import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadataB
 import org.apache.spark.sql.execution.streaming.operators.stateful.{EventTimeWatermarkExec, StateStoreWriter}
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.streaming._
-import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryProgressEvent}
+import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryExecutionStartEvent, QueryIdleEvent, QueryProgressEvent}
 import org.apache.spark.util.{Clock, Utils}
 
 /**
@@ -63,6 +63,9 @@ class ProgressReporter(
 
   val shouldValidateStateStoreCommit = new AtomicBoolean(false)
 
+  // The timestamp we last reported a QueryExecutionStart event
+  private var lastQueryExecutionStartEventTime = Long.MinValue
+
   /** Holds the most recent query progress updates.  Accesses must lock on the queue itself. */
   private val progressBuffer = new mutable.Queue[StreamingQueryProgress]()
 
@@ -74,6 +77,12 @@ class ProgressReporter(
 
   val stateStoreCoordinator: StateStoreCoordinatorRef =
     sparkSession.sessionState.streamingQueryManager.stateStoreCoordinator
+
+  val queryExecutionStartEventEnabled: Boolean =
+    sparkSession.sessionState.conf.streamingQueryExecutionStartEventEnabled
+
+  val queryExecutionStartEventMinInterval: Long =
+    sparkSession.sessionState.conf.streamingQueryExecutionStartEventMinInterval
 
   private val timestampFormat =
     DateTimeFormatter
@@ -124,6 +133,25 @@ class ProgressReporter(
       }
 
       lastNoExecutionProgressEventTime = now
+    }
+  }
+
+  def updateQueryExecutionStart(
+      id: UUID,
+      runId: UUID,
+      name: String,
+      currentTriggerStartTimestamp: Long): Unit = {
+    if (queryExecutionStartEventEnabled) {
+      val now = triggerClock.getTimeMillis()
+      if (now - lastQueryExecutionStartEventTime >= queryExecutionStartEventMinInterval) {
+        postEvent(
+          new QueryExecutionStartEvent(
+            id,
+            runId,
+            name,
+            formatTimestamp(currentTriggerStartTimestamp)))
+        lastQueryExecutionStartEventTime = now
+      }
     }
   }
 
@@ -229,6 +257,11 @@ abstract class ProgressContext(
     currentTriggerEndOffsets = null
     currentTriggerLatestOffsets = null
     currentDurationsMs.clear()
+  }
+
+  /** Report that a trigger has started and will process data. */
+  def reportExecutionStart(): Unit = {
+    progressReporter.updateQueryExecutionStart(id, runId, name, currentTriggerStartTimestamp)
   }
 
   /**

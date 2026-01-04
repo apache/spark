@@ -78,6 +78,12 @@ abstract class StreamingQueryListener extends Serializable {
    * @since 2.0.0
    */
   def onQueryTerminated(event: QueryTerminatedEvent): Unit
+
+  /**
+   * Called when a query's microbatch trigger is started.
+   * @since 4.2.0
+   */
+  def onQueryExecutionStart(event: QueryExecutionStartEvent): Unit = {}
 }
 
 /**
@@ -93,6 +99,8 @@ private[spark] trait PythonStreamingQueryListener {
   def onQueryIdle(event: QueryIdleEvent): Unit
 
   def onQueryTerminated(event: QueryTerminatedEvent): Unit
+
+  def onQueryExecutionStart(event: QueryExecutionStartEvent): Unit
 }
 
 private[spark] class PythonStreamingQueryListenerWrapper(listener: PythonStreamingQueryListener)
@@ -106,6 +114,9 @@ private[spark] class PythonStreamingQueryListenerWrapper(listener: PythonStreami
   override def onQueryIdle(event: QueryIdleEvent): Unit = listener.onQueryIdle(event)
 
   def onQueryTerminated(event: QueryTerminatedEvent): Unit = listener.onQueryTerminated(event)
+
+  override def onQueryExecutionStart(event: QueryExecutionStartEvent): Unit =
+    listener.onQueryExecutionStart(event)
 }
 
 /**
@@ -305,6 +316,47 @@ object StreamingQueryListener extends Serializable {
         parser.getUUID("runId"),
         Option(parser.getString("exception")),
         Option(parser.getString("errorClassOnException")))
+    }
+  }
+
+  /**
+   * Event representing that the trigger of a query has started.
+   *
+   * @param id
+   *   A unique query id that persists across restarts. See `StreamingQuery.id()`.
+   * @param runId
+   *   A query id that is unique for every start/restart. See `StreamingQuery.runId()`.
+   * @param name
+   *   User-specified name of the query, null if not specified.
+   * @param timestamp
+   *   The timestamp start of a query trigger
+   */
+  @Evolving
+  class QueryExecutionStartEvent private[sql] (
+      val id: UUID,
+      val runId: UUID,
+      val name: String,
+      val timestamp: String)
+      extends Event
+      with Serializable {
+    def json: String = compact(render(jsonValue))
+
+    private def jsonValue: JValue = {
+      ("id" -> JString(id.toString)) ~
+        ("runId" -> JString(runId.toString)) ~
+        ("name" -> JString(name)) ~
+        ("timestamp" -> JString(timestamp))
+    }
+  }
+
+  private[spark] object QueryExecutionStartEvent {
+    private[spark] def fromJson(json: String): QueryExecutionStartEvent = {
+      val parser = EventParser(json)
+      new QueryExecutionStartEvent(
+        parser.getUUID("id"),
+        parser.getUUID("runId"),
+        parser.getString("name"),
+        parser.getString("timestamp"))
     }
   }
 }
