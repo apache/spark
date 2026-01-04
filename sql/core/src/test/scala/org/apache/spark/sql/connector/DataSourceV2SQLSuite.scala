@@ -3580,7 +3580,8 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("Overwrite: REPLACE WHERE without BY NAME - different column order between 2 tables, compatible types") {
+  test("Overwrite: REPLACE WHERE without BY NAME - different column order between 2 tables, " +
+    "compatible types") {
     val df = spark.createDataFrame(Seq((1L, 11L), (2L, 12L), (3L, 13L))).toDF("id", "data")
     df.createOrReplaceTempView("source")
     val df2 = spark.createDataFrame(Seq((14L, 4L), (15L, 5L), (16L, 6L))).toDF("data", "id")
