@@ -19,15 +19,14 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.concurrent.ExecutionException
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodeGenerator}
-import org.apache.spark.sql.catalyst.plans.PlanTestBase
+import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
-class CodeGeneratorWithInterpretedFallbackSuite extends SparkFunSuite with PlanTestBase {
+class CodeGeneratorWithInterpretedFallbackSuite extends PlanTest {
 
   val codegenOnly = CodegenObjectFactoryMode.CODEGEN_ONLY.toString
   val noCodegen = CodegenObjectFactoryMode.NO_CODEGEN.toString

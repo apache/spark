@@ -19,7 +19,6 @@ package org.apache.spark.sql.test
 
 import scala.concurrent.duration._
 
-import org.scalatest.{BeforeAndAfterEach, Suite}
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.{DebugFilesystem, SparkConf}
@@ -29,6 +28,10 @@ import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
+
+trait SparkSessionProvider {
+  protected def spark: SparkSession
+}
 
 trait SharedSparkSession extends SQLTestUtils with SharedSparkSessionBase {
 
@@ -61,8 +64,8 @@ trait SharedSparkSession extends SQLTestUtils with SharedSparkSessionBase {
  */
 trait SharedSparkSessionBase
   extends SQLTestUtilsBase
-  with BeforeAndAfterEach
-  with Eventually { self: Suite =>
+  with SparkSessionProvider
+  with Eventually {
 
   protected def sparkConf = {
     val conf = new SparkConf()
