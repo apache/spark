@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UNRESOLVED_COLLATION}
 import org.apache.spark.sql.catalyst.util.{AttributeNameParser, CollationFactory}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
 
@@ -54,10 +53,6 @@ object CollateExpressionBuilder extends ExpressionBuilder {
             if (evalCollation == null) {
               throw QueryCompilationErrors.unexpectedNullError("collation", collationExpr)
             } else {
-              if (!SQLConf.get.trimCollationEnabled &&
-                evalCollation.toString.toUpperCase().contains("TRIM")) {
-                throw QueryCompilationErrors.trimCollationNotEnabledError()
-              }
               Collate(e, UnresolvedCollation(
                 AttributeNameParser.parseAttributeName(evalCollation.toString)))
             }
