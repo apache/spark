@@ -28,7 +28,7 @@ import base64
 from array import array
 import ctypes
 from collections.abc import Iterable
-from enum import StrEnum, auto
+from enum import Enum
 from functools import reduce
 import warnings
 from typing import (
@@ -115,7 +115,7 @@ __all__ = [
 ]
 
 
-class CoercionPolicy(StrEnum):
+class CoercionPolicy(str, Enum):
     """
     Policy for type coercion in Python UDFs.
 
@@ -152,21 +152,21 @@ class CoercionPolicy(StrEnum):
     1.5
     """
 
-    PERMISSIVE = auto()
+    PERMISSIVE = "permissive"
     """
     Matches legacy pickle-based UDF behavior.
     Invalid type coercions silently return None.
     This is the default policy for backward compatibility.
     """
 
-    WARN = auto()
+    WARN = "warn"
     """
     Same coercion behavior as PERMISSIVE, but logs warnings when
     the Arrow path would produce different results.
     Useful for testing migration to STRICT mode.
     """
 
-    STRICT = auto()
+    STRICT = "strict"
     """
     Skips coercion entirely, letting Arrow handle type conversion natively.
     This preserves Arrow's aggressive type conversion behavior
