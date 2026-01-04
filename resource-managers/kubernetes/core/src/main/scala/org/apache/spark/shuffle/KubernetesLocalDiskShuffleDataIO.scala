@@ -29,7 +29,7 @@ class KubernetesLocalDiskShuffleDataIO(sparkConf: SparkConf) extends ShuffleData
   require(sparkConf.get(KUBERNETES_DRIVER_REUSE_PVC), "Ephemeral PVCs are required")
 
   override def driver(): ShuffleDriverComponents =
-    new LocalDiskShuffleDriverComponents()
+    new LocalDiskShuffleDriverComponents(sparkConf)
 
   override def executor(): ShuffleExecutorComponents =
     new KubernetesLocalDiskShuffleExecutorComponents(sparkConf)

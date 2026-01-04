@@ -279,6 +279,38 @@ private class ShuffleStatus(
   // TODO support updateMergeResult for similar use cases as updateMapOutput
 
   /**
+   * Updates all shuffle outputs associated with this host.
+   */
+  def updateOutputsOnHost(host: String, bm: BlockManagerId): Unit = withWriteLock {
+    logDebug(s"Updating outputs for host ${host}")
+    updateOutputsByFilter(x => x.host == host, bm)
+  }
+
+  /**
+   * Updates all map outputs associated with the specified executor.
+   */
+  def updateOutputsOnExecutor(execId: String, bm: BlockManagerId): Unit = withWriteLock {
+    logDebug(s"Updating outputs for execId ${execId}")
+    updateOutputsByFilter(x => x.executorId == execId, bm)
+  }
+
+  /**
+   * Updates all shuffle outputs which satisfies the filter.
+   */
+  def updateOutputsByFilter(
+      f: BlockManagerId => Boolean,
+      bm: BlockManagerId): Unit = withWriteLock {
+    for (mapIndex <- mapStatuses.indices) {
+      // get the map status from mapStatuses, or if deleted, from mapStatusesDeleted
+      val currentMapStatus = Option(mapStatuses(mapIndex)).getOrElse(mapStatusesDeleted(mapIndex))
+      if (currentMapStatus != null && f(currentMapStatus.location)) {
+        // use updateMapOutput so we can recover deleted map statuses
+        updateMapOutput(currentMapStatus.mapId, bm)
+      }
+    }
+  }
+
+  /**
    * Remove the merge result which was served by the specified block manager.
    */
   def removeMergeResult(reduceId: Int, bmAddress: BlockManagerId): Unit = withWriteLock {
@@ -937,6 +969,20 @@ private[spark] class MapOutputTrackerMaster(
       shuffleStatus.invalidateSerializedMapOutputStatusCache()
       shuffleStatus.invalidateSerializedMergeOutputStatusCache()
     }
+  }
+
+  /**
+   * Updates all shuffle outputs associated with this host.
+   */
+  def updateOutputsOnHost(host: String, bm: BlockManagerId): Unit = {
+    shuffleStatuses.valuesIterator.foreach { _.updateOutputsOnHost(host, bm) }
+  }
+
+  /**
+   * Updates all shuffle outputs associated with this executor.
+   */
+  def updateOutputsOnExecutor(execId: String, bm: BlockManagerId): Unit = {
+    shuffleStatuses.valuesIterator.foreach { _.updateOutputsOnExecutor(execId, bm) }
   }
 
   /**
