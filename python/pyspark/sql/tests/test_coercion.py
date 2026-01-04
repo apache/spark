@@ -53,6 +53,7 @@ from pyspark.sql.types import (
     StructType,
     TimestampType,
     CoercionPolicy,
+    _clear_coercion_warnings,
 )
 
 
@@ -77,6 +78,7 @@ class BooleanCoercionTests(unittest.TestCase):
     """Tests for BooleanType coercion."""
 
     def setUp(self):
+        _clear_coercion_warnings()
         self.boolean_type = BooleanType()
 
     def test_bool_to_boolean_permissive_and_warn(self):
@@ -115,6 +117,7 @@ class IntegerCoercionTests(unittest.TestCase):
     """Tests for integer types (ByteType, ShortType, IntegerType, LongType)."""
 
     def setUp(self):
+        _clear_coercion_warnings()
         self.int_types = [ByteType(), ShortType(), IntegerType(), LongType()]
 
     def test_int_to_int_permissive_and_warn(self):
@@ -158,6 +161,7 @@ class FloatCoercionTests(unittest.TestCase):
     """Tests for FloatType and DoubleType coercion."""
 
     def setUp(self):
+        _clear_coercion_warnings()
         self.float_types = [FloatType(), DoubleType()]
 
     def test_float_to_float_permissive_and_warn(self):
@@ -194,6 +198,7 @@ class StringCoercionTests(unittest.TestCase):
     """Tests for StringType coercion."""
 
     def setUp(self):
+        _clear_coercion_warnings()
         self.string_type = StringType()
 
     def test_str_to_string_permissive_and_warn(self):
@@ -231,6 +236,7 @@ class DateCoercionTests(unittest.TestCase):
     """Tests for DateType coercion."""
 
     def setUp(self):
+        _clear_coercion_warnings()
         self.date_type = DateType()
 
     def test_date_to_date_permissive_and_warn(self):
@@ -261,6 +267,7 @@ class TimestampCoercionTests(unittest.TestCase):
     """Tests for TimestampType coercion."""
 
     def setUp(self):
+        _clear_coercion_warnings()
         self.timestamp_type = TimestampType()
 
     def test_datetime_to_timestamp_permissive_and_warn(self):
@@ -292,6 +299,7 @@ class BinaryCoercionTests(unittest.TestCase):
     """Tests for BinaryType coercion."""
 
     def setUp(self):
+        _clear_coercion_warnings()
         self.binary_type = BinaryType()
 
     def test_bytes_to_binary_permissive_and_warn(self):
@@ -321,6 +329,7 @@ class ArrayCoercionTests(unittest.TestCase):
     """Tests for ArrayType coercion."""
 
     def setUp(self):
+        _clear_coercion_warnings()
         self.array_int_type = ArrayType(IntegerType())
 
     def test_list_to_array_permissive_and_warn(self):
@@ -355,6 +364,7 @@ class StructCoercionTests(unittest.TestCase):
     """Tests for StructType coercion."""
 
     def setUp(self):
+        _clear_coercion_warnings()
         self.struct_type = StructType([StructField("_1", IntegerType())])
 
     def test_row_to_struct_permissive_and_warn(self):
@@ -391,6 +401,7 @@ class MapCoercionTests(unittest.TestCase):
     """Tests for MapType coercion."""
 
     def setUp(self):
+        _clear_coercion_warnings()
         self.map_type = MapType(StringType(), IntegerType())
 
     def test_dict_to_map_permissive_and_warn(self):
@@ -412,6 +423,7 @@ class DecimalCoercionTests(unittest.TestCase):
     """Tests for DecimalType coercion."""
 
     def setUp(self):
+        _clear_coercion_warnings()
         self.decimal_type = DecimalType(10, 0)
 
     def test_decimal_to_decimal_permissive_and_warn(self):
@@ -433,6 +445,9 @@ class DecimalCoercionTests(unittest.TestCase):
 
 class DefaultPolicyTests(unittest.TestCase):
     """Tests that coerce() defaults to PERMISSIVE policy."""
+
+    def setUp(self):
+        _clear_coercion_warnings()
 
     def test_default_policy_is_permissive(self):
         """coerce() without policy should behave like PERMISSIVE."""
