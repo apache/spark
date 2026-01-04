@@ -15,17 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.command
-
-import org.apache.spark.sql.{Row, SparkSession}
+package org.apache.spark.sql.catalyst.plans.logical
 
 /**
- * Clear all cached data from the in-memory cache.
+ * A marker trait for [[Command]] operators that should use cached results from CacheManager.
+ *
+ * By default, all commands skip the cache in CacheManager. Commands that extend this
+ * trait will opt-in to using cached data for their child query plans (and are eagerly-evaluated
+ * on df.cache()).
  */
-case object ClearCacheCommand extends LeafRunnableCommand {
+trait UsesCachedData extends Command
 
-  override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.catalog.clearCache()
-    Seq.empty[Row]
-  }
-}
