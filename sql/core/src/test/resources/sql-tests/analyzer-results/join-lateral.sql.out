@@ -3086,3 +3086,213 @@ DropTableCommand `spark_catalog`.`default`.`t3`, false, true, false
 DROP VIEW t4
 -- !query analysis
 DropTableCommand `spark_catalog`.`default`.`t4`, false, true, false
+
+
+-- !query
+SELECT * FROM VALUES (1) AS t(c1), LATERAL (VALUES (t.c1)) AS s(c2)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expr" : "`t`.`c1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 45,
+    "stopIndex" : 57,
+    "fragment" : "VALUES (t.c1)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM VALUES (1, 2) AS t(c1, c2), LATERAL (VALUES (t.c1, t.c2)) AS s(c3, c4)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expr" : "`t`.`c1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 52,
+    "stopIndex" : 70,
+    "fragment" : "VALUES (t.c1, t.c2)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM VALUES (1, 2) AS t(c1, c2), LATERAL (VALUES (t.c1 + t.c2)) AS s(c3)
+-- !query analysis
+Project [c1#x, c2#x, c3#x]
++- LateralJoin lateral-subquery#x [c1#x && c2#x], Inner
+   :  +- SubqueryAlias s
+   :     +- Project [col1#x AS c3#x]
+   :        +- ResolvedInlineTable [[(outer(c1#x) + outer(c2#x))]], [col1#x]
+   +- SubqueryAlias t
+      +- LocalRelation [c1#x, c2#x]
+
+
+-- !query
+SELECT * FROM VALUES (1), (2), (3) AS t(c1), LATERAL (VALUES (t.c1 * 2)) AS s(c2) ORDER BY c1
+-- !query analysis
+Sort [c1#x ASC NULLS FIRST], true
++- Project [c1#x, c2#x]
+   +- LateralJoin lateral-subquery#x [c1#x], Inner
+      :  +- SubqueryAlias s
+      :     +- Project [col1#x AS c2#x]
+      :        +- ResolvedInlineTable [[(outer(c1#x) * 2)]], [col1#x]
+      +- SubqueryAlias t
+         +- LocalRelation [c1#x]
+
+
+-- !query
+SELECT * FROM VALUES (1, 2) AS t(c1, c2), LATERAL (VALUES (t.c1), (t.c2)) AS s(c3) ORDER BY c3
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expr" : "`t`.`c1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 52,
+    "stopIndex" : 72,
+    "fragment" : "VALUES (t.c1), (t.c2)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM VALUES (1), (2) AS t(c1), LATERAL (VALUES (t.c1), (t.c1 + 10)) AS s(c2) ORDER BY c1, c2
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expr" : "`t`.`c1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 50,
+    "stopIndex" : 75,
+    "fragment" : "VALUES (t.c1), (t.c1 + 10)"
+  } ]
+}
+
+
+-- !query
+SELECT t.c1, s.c2 FROM VALUES (1) AS t(c1), LATERAL (VALUES (t.c1, rand())) AS s(c2, c3) ORDER BY c1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expr" : "`t`.`c1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 54,
+    "stopIndex" : 74,
+    "fragment" : "VALUES (t.c1, rand())"
+  } ]
+}
+
+
+-- !query
+SELECT t.c1 FROM VALUES (1), (2) AS t(c1), LATERAL (VALUES (t.c1, rand())) AS s(c2, c3) ORDER BY c1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expr" : "`t`.`c1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 53,
+    "stopIndex" : 73,
+    "fragment" : "VALUES (t.c1, rand())"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM VALUES (1) AS t(c1), LATERAL (VALUES (t.c1, 2.0), (t.c1 + 1, 3.0)) AS s(c2, c3) ORDER BY c2
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expr" : "`t`.`c1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 45,
+    "stopIndex" : 79,
+    "fragment" : "VALUES (t.c1, 2.0), (t.c1 + 1, 3.0)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM VALUES (1, NULL) AS t(c1, c2), LATERAL (VALUES (t.c1, t.c2)) AS s(c3, c4)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "expr" : "`t`.`c1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 55,
+    "stopIndex" : 73,
+    "fragment" : "VALUES (t.c1, t.c2)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM VALUES (1, 2, 3) AS t(c1, c2, c3), LATERAL (VALUES (t.c1 * t.c2 + t.c3)) AS s(c4)
+-- !query analysis
+Project [c1#x, c2#x, c3#x, c4#x]
++- LateralJoin lateral-subquery#x [c1#x && c2#x && c3#x], Inner
+   :  +- SubqueryAlias s
+   :     +- Project [col1#x AS c4#x]
+   :        +- ResolvedInlineTable [[((outer(c1#x) * outer(c2#x)) + outer(c3#x))]], [col1#x]
+   +- SubqueryAlias t
+      +- LocalRelation [c1#x, c2#x, c3#x]
+
+
+-- !query
+SELECT * FROM VALUES (1), (2) AS t(c1) LEFT JOIN LATERAL (VALUES (t.c1 * 10)) AS s(c2) ON TRUE ORDER BY c1
+-- !query analysis
+Sort [c1#x ASC NULLS FIRST], true
++- Project [c1#x, c2#x]
+   +- LateralJoin lateral-subquery#x [c1#x], LeftOuter, true
+      :  +- SubqueryAlias s
+      :     +- Project [col1#x AS c2#x]
+      :        +- ResolvedInlineTable [[(outer(c1#x) * 10)]], [col1#x]
+      +- SubqueryAlias t
+         +- LocalRelation [c1#x]
