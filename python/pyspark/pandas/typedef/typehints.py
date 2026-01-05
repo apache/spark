@@ -304,7 +304,9 @@ def spark_type_to_pandas_dtype(
             .lower()
             == "true"
         )
-        return np.dtype(to_arrow_type(spark_type, prefers_large_var_types).to_pandas_dtype())
+        return np.dtype(
+            to_arrow_type(spark_type, prefers_large_types=prefers_large_var_types).to_pandas_dtype()
+        )
 
 
 def pandas_on_spark_type(tpe: Union[str, type, Dtype]) -> Tuple[Dtype, types.DataType]:

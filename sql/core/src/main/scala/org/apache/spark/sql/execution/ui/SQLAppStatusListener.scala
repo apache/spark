@@ -343,7 +343,7 @@ class SQLAppStatusListener(
 
   private def onExecutionStart(event: SparkListenerSQLExecutionStart): Unit = {
     val SparkListenerSQLExecutionStart(executionId, rootExecutionId, description, details,
-      physicalPlanDescription, sparkPlanInfo, time, modifiedConfigs, _, _) = event
+      physicalPlanDescription, sparkPlanInfo, time, modifiedConfigs, _, _, _) = event
 
     val planGraph = SparkPlanGraph(sparkPlanInfo)
     val sqlPlanMetrics = planGraph.allNodes.flatMap { node =>
@@ -397,7 +397,7 @@ class SQLAppStatusListener(
   }
 
   private def onExecutionEnd(event: SparkListenerSQLExecutionEnd): Unit = {
-    val SparkListenerSQLExecutionEnd(executionId, time, errorMessage) = event
+    val SparkListenerSQLExecutionEnd(executionId, time, errorMessage, _) = event
     Option(liveExecutions.get(executionId)).foreach { exec =>
       exec.completionTime = Some(new Date(time))
       exec.errorMessage = errorMessage

@@ -344,7 +344,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
       val listener = new SparkListener {
         override def onOtherEvent(event: SparkListenerEvent): Unit = {
           event match {
-            case SparkListenerSQLExecutionStart(_, _, _, _, planDescription, _, _, _, _, _) =>
+            case SparkListenerSQLExecutionStart(_, _, _, _, planDescription, _, _, _, _, _, _) =>
               assert(expected.forall(planDescription.contains))
               checkDone = true
             case _ => // ignore other events
@@ -993,7 +993,7 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     spark.sparkContext.addSparkListener(new SparkListener {
       override def onOtherEvent(event: SparkListenerEvent): Unit = {
         event match {
-          case SparkListenerSQLExecutionEnd(_, _, Some(errorMessage)) =>
+          case SparkListenerSQLExecutionEnd(_, _, Some(errorMessage), _) =>
             received = errorMessage == Utils.exceptionString(e)
           case _ =>
         }

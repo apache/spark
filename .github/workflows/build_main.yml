@@ -30,5 +30,12 @@ jobs:
       packages: write
     name: Run
     uses: ./.github/workflows/build_and_test.yml
+    with:
+      envs: >-
+        {
+          "PYSPARK_IMAGE_TO_TEST": "python-311",
+          "PYTHON_TO_TEST": "python3.11",
+          "PYSPARK_CODECOV_TEST": "true"
+        }
     secrets:
       codecov_token: ${{ secrets.CODECOV_TOKEN }}

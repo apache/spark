@@ -4437,6 +4437,12 @@
     ],
     "sqlState" : "22023"
   },
+  "MATERIALIZED_VIEW_WITH_MULTIPLE_QUERIES" : {
+    "message" : [
+      "Invalid destination <tableName> with multiple flows: <flows>."
+    ],
+    "sqlState" : "42000"
+  },
   "MERGE_CARDINALITY_VIOLATION" : {
     "message" : [
       "The ON search condition of the MERGE statement matched a single row from the target table with multiple rows of the source table.",
@@ -5079,6 +5085,12 @@
       }
     },
     "sqlState" : "42710"
+  },
+  "PIPELINE_GRAPH_NOT_TOPOLOGICALLY_SORTED" : {
+    "message" : [
+      "There is a cycle between <flowName> and <inputName>."
+    ],
+    "sqlState" : "0A000"
   },
   "PIPELINE_SQL_GRAPH_ELEMENT_REGISTRATION_ERROR" : {
     "message" : [

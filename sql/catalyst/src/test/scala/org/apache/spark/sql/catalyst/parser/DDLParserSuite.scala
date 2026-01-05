@@ -49,6 +49,11 @@ class DDLParserSuite extends AnalysisTest {
           case u: UnresolvedRelation => i.copy(table = u.clearWritePrivileges)
           case _ => i
         }
+      case o: OverwriteByExpression =>
+        o.table match {
+          case u: UnresolvedRelation => o.copy(table = u.clearWritePrivileges)
+          case _ => o
+        }
     }
     comparePlans(parsed, expected, checkAnalysis = false)
   }
@@ -1761,6 +1766,28 @@ class DDLParserSuite extends AnalysisTest {
         "error" -> "'c1'",
         "hint" -> "")
     )
+  }
+
+  test("insert table: REPLACE WHERE with BY NAME") {
+    parseCompare(
+      "INSERT INTO testcat.ns1.ns2.tbl BY NAME REPLACE WHERE a > 5 SELECT * FROM source",
+      OverwriteByExpression.byName(
+        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+        org.apache.spark.sql.catalyst.expressions.GreaterThan(
+          UnresolvedAttribute("a"),
+          Literal(5))))
+  }
+
+  test("insert table: REPLACE WHERE without BY NAME") {
+    parseCompare(
+      "INSERT INTO testcat.ns1.ns2.tbl REPLACE WHERE a > 5 SELECT * FROM source",
+      OverwriteByExpression.byPosition(
+        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+        Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+        org.apache.spark.sql.catalyst.expressions.GreaterThan(
+          UnresolvedAttribute("a"),
+          Literal(5))))
   }
 
   test("delete from table: delete all") {
