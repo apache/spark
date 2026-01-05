@@ -156,7 +156,7 @@ class SessionTimeoutProcessor extends StatefulProcessor[String, String, (String,
       timerValues: TimerValues,
       expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
     lastSeenState.clear()
-    Iterator.single((key, s"session-expired,${timerValues.getCurrentProcessingTimeInMs()}"))
+    Iterator.single((key, s"session-expired@${timerValues.getCurrentProcessingTimeInMs()}"))
   }
 }
 
@@ -250,22 +250,21 @@ class TopKProcessor(k: Int, ttl: TTLConfig = TTLConfig.NONE)
       key: String,
       inputRows: Iterator[(String, Double)],
       timerValues: TimerValues): Iterator[(String, Double)] = {
-    // Load existing list into a buffer
+    // Load existing list into a buffer.
     val current = ArrayBuffer[Double]()
     topKState.get().foreach(current += _)
 
-    // Add new values and recompute top-K
+    // Add new values and recompute top-K.
     inputRows.foreach {
       case (_, score) =>
         current += score
     }
     val updatedTopK = current.sorted(Ordering[Double].reverse).take(k)
 
-    // Persist back
-    topKState.clear()
+    // Store the new state.
     topKState.put(updatedTopK.toArray)
 
-    // Emit snapshot of top-K for this key
+    // Emit snapshot of top-K for this key.
     updatedTopK.iterator.map(v => (key, v))
   }
 }
