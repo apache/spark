@@ -41,7 +41,7 @@ class TwsTesterSuite extends SparkFunSuite {
   test("TwsTester should allow direct access to ValueState") {
     val processor = new RunningCountProcessor[String]()
     val tester = new TwsTester[String, String, (String, Long)](processor)
-    tester.setValueState[Long]("count", "foo", 5)
+    tester.updateValueState[Long]("count", "foo", 5)
     tester.test("foo", List("a"))
     assert(tester.peekValueState[Long]("count", "foo").get == 6L)
   }
@@ -74,8 +74,8 @@ class TwsTesterSuite extends SparkFunSuite {
 
   test("TwsTester should allow direct access to ListState") {
     val tester = new TwsTester(new TopKProcessor(2))
-    tester.setListState("topK", "a", List(6.0, 5.0))
-    tester.setListState("topK", "b", List(8.0, 7.0))
+    tester.updateListState("topK", "a", List(6.0, 5.0))
+    tester.updateListState("topK", "b", List(8.0, 7.0))
     tester.test("a", List(("", 10.0)))
     tester.test("b", List(("", 7.5)))
     tester.test("c", List(("", 1.0)))
@@ -128,8 +128,8 @@ class TwsTesterSuite extends SparkFunSuite {
     val tester = new TwsTester(new WordFrequencyProcessor())
 
     // Set initial state directly
-    tester.setMapState("frequencies", "user1", Map("hello" -> 5L, "world" -> 3L))
-    tester.setMapState("frequencies", "user2", Map("spark" -> 10L))
+    tester.updateMapState("frequencies", "user1", Map("hello" -> 5L, "world" -> 3L))
+    tester.updateMapState("frequencies", "user2", Map("spark" -> 10L))
 
     // Process new words
     tester.test("user1", List(("", "hello")))
@@ -157,7 +157,7 @@ class TwsTesterSuite extends SparkFunSuite {
     // Example of helper function using TwsTester to inspect how processing a single row changes
     // state.
     def testStepFunction(key: String, inputRow: String, stateIn: Long): Long = {
-      tester.setValueState[Long]("count", key, stateIn)
+      tester.updateValueState[Long]("count", key, stateIn)
       tester.test(key, List(inputRow))
       tester.peekValueState("count", key).get
     }
@@ -273,8 +273,8 @@ class TwsTesterSuite extends SparkFunSuite {
 
   test("TwsTester should delete value state") {
     val valueTester = new TwsTester(new RunningCountProcessor[String]())
-    valueTester.setValueState[Long]("count", "key1", 10L)
-    valueTester.setValueState[Long]("count", "key2", 20L)
+    valueTester.updateValueState[Long]("count", "key1", 10L)
+    valueTester.updateValueState[Long]("count", "key2", 20L)
     assert(valueTester.peekValueState[Long]("count", "key1").get == 10L)
     valueTester.deleteState("count", "key1")
     assert(valueTester.peekValueState[Long]("count", "key1").isEmpty)
@@ -283,8 +283,8 @@ class TwsTesterSuite extends SparkFunSuite {
 
   test("TwsTester should delete list state") {
     val listTester = new TwsTester(new TopKProcessor(3))
-    listTester.setListState("topK", "key1", List(1.0, 2.0, 3.0))
-    listTester.setListState("topK", "key2", List(4.0, 5.0))
+    listTester.updateListState("topK", "key1", List(1.0, 2.0, 3.0))
+    listTester.updateListState("topK", "key2", List(4.0, 5.0))
     assert(listTester.peekListState[Double]("topK", "key1") == List(1.0, 2.0, 3.0))
     listTester.deleteState("topK", "key1")
     assert(listTester.peekListState[Double]("topK", "key1").isEmpty)
@@ -293,8 +293,8 @@ class TwsTesterSuite extends SparkFunSuite {
 
   test("TwsTester should delete map state") {
     val mapTester = new TwsTester(new WordFrequencyProcessor())
-    mapTester.setMapState("frequencies", "user1", Map("hello" -> 5L, "world" -> 3L))
-    mapTester.setMapState("frequencies", "user2", Map("spark" -> 10L))
+    mapTester.updateMapState("frequencies", "user1", Map("hello" -> 5L, "world" -> 3L))
+    mapTester.updateMapState("frequencies", "user2", Map("spark" -> 10L))
     assert(
       mapTester
         .peekMapState[String, Long]("frequencies", "user1") == Map("hello" -> 5L, "world" -> 3L)

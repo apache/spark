@@ -286,7 +286,7 @@ class InMemoryStatefulProcessorHandle(val timeMode: TimeMode, val clock: Clock)
 
   override def deleteIfExists(stateName: String): Unit = states.remove(stateName)
 
-  def setValueState[T](stateName: String, value: T): Unit = {
+  def updateValueState[T](stateName: String, value: T): Unit = {
     require(states.contains(stateName), s"State $stateName has not been initialized.")
     states(stateName).asInstanceOf[InMemoryValueState[T]].update(value)
   }
@@ -296,7 +296,7 @@ class InMemoryStatefulProcessorHandle(val timeMode: TimeMode, val clock: Clock)
     Option(states(stateName).asInstanceOf[InMemoryValueState[T]].get())
   }
 
-  def setListState[T](stateName: String, value: List[T])(implicit ct: ClassTag[T]): Unit = {
+  def updateListState[T](stateName: String, value: List[T])(implicit ct: ClassTag[T]): Unit = {
     require(states.contains(stateName), s"State $stateName has not been initialized.")
     states(stateName).asInstanceOf[InMemoryListState[T]].put(value.toArray)
   }
@@ -306,7 +306,7 @@ class InMemoryStatefulProcessorHandle(val timeMode: TimeMode, val clock: Clock)
     states(stateName).asInstanceOf[InMemoryListState[T]].get().toList
   }
 
-  def setMapState[MK, MV](stateName: String, value: Map[MK, MV]): Unit = {
+  def updateMapState[MK, MV](stateName: String, value: Map[MK, MV]): Unit = {
     require(states.contains(stateName), s"State $stateName has not been initialized.")
     val mapState = states(stateName).asInstanceOf[InMemoryMapState[MK, MV]]
     mapState.clear()

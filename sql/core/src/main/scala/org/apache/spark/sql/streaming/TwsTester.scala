@@ -35,7 +35,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
  * '''Supported:'''
  *  - Processing input rows and producing output rows via `test()`.
  *  - Initial state setup via constructor parameter.
- *  - Direct state manipulation via `setValueState`, `setListState`, `setMapState`.
+ *  - Direct state manipulation via `updateValueState`, `updateListState`, `updateMapState`.
  *  - Direct state inspection via `peekValueState`, `peekListState`, `peekMapState`.
  *  - Timers in ProcessingTime mode (use `advanceProcessingTime` to fire timers).
  *  - Timers in EventTime mode (use `eventTimeExtractor` and `watermarkDelayMs` to configure;
@@ -62,7 +62,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
  * @param initialState initial state for each key as a list of (key, state) tuples.
  * @param timeMode time mode (None, ProcessingTime or EventTime).
  * @param outputMode output mode (Append, Update, or Complete).
- * @param realTimeMode whether input rows should be processed one-by-one (separate call to
+ * @param isRealTimeMode whether input rows should be processed one-by-one (separate call to
  *     handleInputRows) for each input row.
  * @param eventTimeExtractor function to extract event time from input rows. Required if and
  *     only if timeMode is EventTime.
@@ -71,14 +71,14 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
  * @tparam K the type of grouping key.
  * @tparam I the type of input rows.
  * @tparam O the type of output rows.
- * @since 4.0.2
+ * @since 4.2.0
  */
 class TwsTester[K, I, O](
     val processor: StatefulProcessor[K, I, O],
     val initialState: List[(K, Any)] = List(),
     val timeMode: TimeMode = TimeMode.None,
     val outputMode: OutputMode = OutputMode.Append,
-    val realTimeMode: Boolean = false,
+    val isRealTimeMode: Boolean = false,
     val eventTimeExtractor: I => Timestamp = null,
     val watermarkDelayMs: Long = 0L) {
   val clock: Clock = new Clock {
@@ -104,7 +104,7 @@ class TwsTester[K, I, O](
     case _ =>
       require(
         initialState.isEmpty,
-        "Passed initial state, but the stateful processor doesn't support initial state."
+        "Initial state is provided, but the stateful processor doesn't support initial state."
       )
   }
 
@@ -130,7 +130,7 @@ class TwsTester[K, I, O](
    *         in EventTime mode)
    */
   def test(key: K, values: List[I]): List[O] = {
-    if (realTimeMode) {
+    if (isRealTimeMode) {
       values.flatMap(value => testInternal(key, List(value))).toList
     } else {
       testInternal(key, values)
@@ -151,9 +151,9 @@ class TwsTester[K, I, O](
   }
 
   /** Sets the value state for a given key. */
-  def setValueState[T](stateName: String, key: K, value: T): Unit = {
+  def updateValueState[T](stateName: String, key: K, value: T): Unit = {
     ImplicitGroupingKeyTracker.setImplicitKey(key)
-    handle.setValueState[T](stateName, value)
+    handle.updateValueState[T](stateName, value)
   }
 
   /** Retrieves the value state for a given key. */
@@ -163,9 +163,9 @@ class TwsTester[K, I, O](
   }
 
   /** Sets the list state for a given key. */
-  def setListState[T](stateName: String, key: K, value: List[T])(implicit ct: ClassTag[T]): Unit = {
+  def updateListState[T](stateName: String, key: K, value: List[T])(implicit ct: ClassTag[T]): Unit = {
     ImplicitGroupingKeyTracker.setImplicitKey(key)
-    handle.setListState[T](stateName, value)
+    handle.updateListState[T](stateName, value)
   }
 
   /** Retrieves the list state for a given key. */
@@ -175,9 +175,9 @@ class TwsTester[K, I, O](
   }
 
   /** Sets the map state for a given key. */
-  def setMapState[MK, MV](stateName: String, key: K, value: Map[MK, MV]): Unit = {
+  def updateMapState[MK, MV](stateName: String, key: K, value: Map[MK, MV]): Unit = {
     ImplicitGroupingKeyTracker.setImplicitKey(key)
-    handle.setMapState[MK, MV](stateName, value)
+    handle.updateMapState[MK, MV](stateName, value)
   }
 
   /** Retrieves the map state for a given key. */
