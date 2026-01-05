@@ -17,9 +17,10 @@
 package org.apache.spark.sql.streaming
 
 import java.sql.Timestamp
-import java.time.{Clock, Instant, ZoneId}
 
 import scala.reflect.ClassTag
+
+import org.apache.spark.util.ManualClock
 
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.ImplicitGroupingKeyTracker
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.testing.InMemoryStatefulProcessorHandle
@@ -81,13 +82,9 @@ class TwsTester[K, I, O](
     val isRealTimeMode: Boolean = false,
     val eventTimeExtractor: I => Timestamp = null,
     val watermarkDelayMs: Long = 0L) {
-  val clock: Clock = new Clock {
-    override def instant(): Instant = Instant.ofEpochMilli(currentProcessingTimeMs)
-    override def getZone: ZoneId = ZoneId.systemDefault()
-    override def withZone(zone: ZoneId): Clock = this
-  }
-
-  private val handle = new InMemoryStatefulProcessorHandle(timeMode, clock)
+  
+  private val processingTimeClock = new ManualClock(0L)
+  private val handle = new InMemoryStatefulProcessorHandle(timeMode, processingTimeClock)
 
   if (timeMode == TimeMode.EventTime) {
     require(
@@ -193,7 +190,6 @@ class TwsTester[K, I, O](
   }
 
   // Logic for dealing with timers.
-  private var currentProcessingTimeMs: Long = 0L
   private var currentWatermarkMs: Long = 0L
 
   private def handleExpiredTimers(): List[O] = {
@@ -202,7 +198,7 @@ class TwsTester[K, I, O](
     }
     val timerValues = getTimerValues()
     val expiryThreshold = if (timeMode == TimeMode.ProcessingTime()) {
-      currentProcessingTimeMs
+      processingTimeClock.getTimeMillis()
     } else if (timeMode == TimeMode.EventTime()) {
       currentWatermarkMs
     } else {
@@ -238,7 +234,7 @@ class TwsTester[K, I, O](
       timeMode == TimeMode.ProcessingTime(),
       "advanceProcessingTime is only supported with TimeMode.ProcessingTime."
     )
-    currentProcessingTimeMs += durationMs
+    processingTimeClock.advance(durationMs)
     handleExpiredTimers()
   }
 
@@ -270,7 +266,7 @@ class TwsTester[K, I, O](
   }
 
   private def getTimerValues(): TimerValues = {
-    val processingTimeOpt = if (timeMode != TimeMode.None) Some(currentProcessingTimeMs) else None
+    val processingTimeOpt = if (timeMode != TimeMode.None) Some(processingTimeClock.getTimeMillis()) else None
     val watermarkOpt = if (timeMode == TimeMode.EventTime()) Some(currentWatermarkMs) else None
     new TimerValuesImpl(processingTimeOpt, watermarkOpt)
   }

@@ -16,8 +16,9 @@
  */
 package org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.testing
 
-import java.time.{Clock, Instant}
 import java.util.UUID
+
+import org.apache.spark.util.Clock
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -30,23 +31,23 @@ import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, StatefulP
 /** Helper to track expired keys. */
 class TtlTracker(val clock: Clock, ttl: TTLConfig) {
   require(!ttl.ttlDuration.isNegative())
-  private val keyToLastUpdatedTime = mutable.Map[Any, Instant]()
+  private val keyToLastUpdatedTimeMs = mutable.Map[Any, Long]()
 
   def isKeyExpired(): Boolean = {
     if (ttl.ttlDuration.isZero()) {
       return false
     }
     val key = ImplicitGroupingKeyTracker.getImplicitKeyOption.get
-    if (!keyToLastUpdatedTime.contains(key)) {
+    if (!keyToLastUpdatedTimeMs.contains(key)) {
       return false
     }
-    val expiration: Instant = keyToLastUpdatedTime.get(key).get.plus(ttl.ttlDuration)
-    return expiration.isBefore(clock.instant())
+    val expirationMs = keyToLastUpdatedTimeMs(key) + ttl.ttlDuration.toMillis
+    expirationMs < clock.getTimeMillis()
   }
 
   def onKeyUpdated(): Unit = {
     val key = ImplicitGroupingKeyTracker.getImplicitKeyOption.get
-    keyToLastUpdatedTime.put(key, clock.instant())
+    keyToLastUpdatedTimeMs.put(key, clock.getTimeMillis())
   }
 }
 
