@@ -436,6 +436,7 @@ object SparkConnectService extends Logging {
       return
     }
 
+    sessionManager.initializeBaseSession(sc)
     startGRPCService()
     createListenerAndUI(sc)
 
