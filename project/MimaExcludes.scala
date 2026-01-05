@@ -35,6 +35,8 @@ object MimaExcludes {
 
   // Exclude rules for 4.2.x from 4.1.0
   lazy val v42excludes = v41excludes ++ Seq(
+    // Add DEBUG format to ErrorMessageFormat enum
+    ProblemFilters.exclude[Problem]("org.apache.spark.ErrorMessageFormat*")
   )
 
   // Exclude rules for 4.1.x from 4.0.0

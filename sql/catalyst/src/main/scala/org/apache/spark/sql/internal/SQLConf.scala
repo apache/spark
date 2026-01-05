@@ -6193,7 +6193,9 @@ object SQLConf {
 
   val ERROR_MESSAGE_FORMAT = buildConf("spark.sql.error.messageFormat")
     .doc("When PRETTY, the error message consists of textual representation of error class, " +
-      "message and query context. The MINIMAL and STANDARD formats are pretty JSON formats where " +
+      "message and query context. Stack traces are only shown for internal errors " +
+      "(SQLSTATE XX***). When DEBUG, the output is the same as PRETTY but stack traces are " +
+      "always included. The MINIMAL and STANDARD formats are pretty JSON formats where " +
       "STANDARD includes an additional JSON field `message`. This configuration property " +
       "influences on error messages of Thrift Server and SQL CLI while running queries.")
     .version("3.4.0")
