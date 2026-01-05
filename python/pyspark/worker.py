@@ -2916,6 +2916,17 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
         for i in range(num_udfs)
     ]
 
+    # Configure selective column conversion for scalar pandas UDF
+    # Only convert Arrow columns that are actually used by UDFs
+    offset_remap = None
+    if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF:
+        if hasattr(ser, "configure_selective_conversion"):
+            all_offsets = set()
+            for arg_offsets, _ in udfs:
+                if isinstance(arg_offsets, (list, tuple)):
+                    all_offsets.update(arg_offsets)
+            offset_remap = ser.configure_selective_conversion(all_offsets)
+
     is_scalar_iter = eval_type in (
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
         PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
@@ -3392,15 +3403,30 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
                 return result
 
     else:
+        # Define mapper with or without index remapping for selective column conversion
+        if offset_remap is not None:
+            # Use remapped indices when selective conversion is enabled
+            def mapper(a):
+                result = tuple(
+                    f(*[a[offset_remap[o]] for o in arg_offsets]) for arg_offsets, f in udfs
+                )
+                # In the special case of a single UDF this will return a single result rather
+                # than a tuple of results; this is the format that the JVM side expects.
+                if len(result) == 1:
+                    return result[0]
+                else:
+                    return result
 
-        def mapper(a):
-            result = tuple(f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs)
-            # In the special case of a single UDF this will return a single result rather
-            # than a tuple of results; this is the format that the JVM side expects.
-            if len(result) == 1:
-                return result[0]
-            else:
-                return result
+        else:
+            # Original mapper (no remapping)
+            def mapper(a):
+                result = tuple(f(*[a[o] for o in arg_offsets]) for arg_offsets, f in udfs)
+                # In the special case of a single UDF this will return a single result rather
+                # than a tuple of results; this is the format that the JVM side expects.
+                if len(result) == 1:
+                    return result[0]
+                else:
+                    return result
 
     def func(_, it):
         return map(mapper, it)

@@ -2043,6 +2043,63 @@ class ScalarPandasUDFTestsMixin:
                     result = df.select(plus_two("id").alias("result")).collect()
                     self.assertEqual(expected, result)
 
+    def test_selective_column_conversion(self):
+        """Test that selective conversion only converts used columns."""
+        # Create DataFrame with 10 columns, but UDF only uses 2
+        df = self.spark.range(100).select(*[col("id").alias(f"col_{i}") for i in range(10)])
+
+        @pandas_udf("long")
+        def add_cols(a: pd.Series, b: pd.Series) -> pd.Series:
+            return a + b
+
+        result = df.select(add_cols(col("col_0"), col("col_5")).alias("result")).collect()
+        expected = [Row(result=i + i) for i in range(100)]
+        self.assertEqual(result, expected)
+
+    def test_selective_conversion_all_columns(self):
+        """Test when all columns are used."""
+        df = self.spark.range(100).select(col("id").alias("a"), (col("id") * 2).alias("b"))
+
+        @pandas_udf("long")
+        def add_all(a: pd.Series, b: pd.Series) -> pd.Series:
+            return a + b
+
+        result = df.select(add_all(col("a"), col("b")).alias("result")).collect()
+        expected = [Row(result=i + i * 2) for i in range(100)]
+        self.assertEqual(result, expected)
+
+    def test_selective_conversion_multiple_udfs(self):
+        """Test with multiple UDFs using different columns."""
+        df = self.spark.range(100).select(
+            col("id").alias("a"),
+            (col("id") * 2).alias("b"),
+            (col("id") * 3).alias("c"),
+        )
+
+        @pandas_udf("long")
+        def use_a(a: pd.Series) -> pd.Series:
+            return a * 2
+
+        @pandas_udf("long")
+        def use_c(c: pd.Series) -> pd.Series:
+            return c + 1
+
+        result = df.select(use_a(col("a")).alias("r1"), use_c(col("c")).alias("r2")).collect()
+        expected = [Row(r1=i * 2, r2=i * 3 + 1) for i in range(100)]
+        self.assertEqual(result, expected)
+
+    def test_selective_conversion_single_column(self):
+        """Test with a single column UDF from many columns."""
+        df = self.spark.range(100).select(*[col("id").alias(f"col_{i}") for i in range(5)])
+
+        @pandas_udf("long")
+        def double_it(x: pd.Series) -> pd.Series:
+            return x * 2
+
+        result = df.select(double_it(col("col_3")).alias("result")).collect()
+        expected = [Row(result=i * 2) for i in range(100)]
+        self.assertEqual(result, expected)
+
 
 class ScalarPandasUDFTests(ScalarPandasUDFTestsMixin, ReusedSQLTestCase):
     @classmethod
