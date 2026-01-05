@@ -244,6 +244,37 @@ class ExecutorPodsBackoffControllerSuite extends SparkFunSuite {
     assert(controller.isBackoffState())
   }
 
+  test("backoff exit then re-entry with mixed success and failures") {
+    val (controller, clock, metrics) = createController()
+
+    for (i <- 1 to FAILURE_THRESHOLD) {
+      controller.recordPodRequest(i.toLong)
+      controller.recordFailure(i.toLong)
+    }
+    assert(controller.isBackoffState())
+    clock.advance(INITIAL_DELAY_MS)
+    // request 3 executors while in backoff
+    controller.recordPodRequest(10L)
+    controller.recordPodRequest(11L)
+    controller.recordPodRequest(12L)
+    assert(controller.isBackoffState())
+
+    // first executor succeeds - should exit backoff
+    controller.recordExecutorStarted(10L)
+    assert(controller.isNormalState())
+    assert(controller.startupFailureCountInWindow() == 0)
+
+    // two other executors fail - should accumulate failures and re-enter backoff
+    controller.recordFailure(11L)
+    assert(controller.isNormalState())
+    assert(controller.startupFailureCountInWindow() == 1)
+
+    controller.recordFailure(12L)
+    assert(controller.isBackoffState())
+    assert(metrics.backoffEntryCounter.getCount == 2)
+    assert(metrics.backoffExitCounter.getCount == 1)
+  }
+
   test("backoff delay calculation doesn't overflow") {
     val (controller, _, _) = createController()
 
