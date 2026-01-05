@@ -224,9 +224,32 @@ class InMemoryTimers {
 }
 
 /**
- * In-memory implementation of StatefulProcessorHandle.
+ * In-memory implementation of StatefulProcessorHandle for testing purposes.
  *
- * Supports TTL and directly accessing state.
+ * == Internal Implementation ==
+ *
+ * '''State Storage:''' All state is stored in Scala mutable collections. A central
+ * `states: Map[String, Any]` maps state names to their corresponding in-memory state instances
+ * (InMemoryValueState, InMemoryListState, or InMemoryMapState). Each state instance internally
+ * uses a `Map[Any, T]` where the key is the implicit grouping key obtained from
+ * [[ImplicitGroupingKeyTracker]].
+ *
+ * '''Grouping Key Tracking:''' Operations on state are scoped to the current grouping key,
+ * which is retrieved via `ImplicitGroupingKeyTracker.getImplicitKeyOption`. This mirrors the
+ * production implementation where state is partitioned by key.
+ *
+ * '''TTL Support:''' Each state instance contains a [[TtlTracker]] that records the last update
+ * time for each grouping key. On read operations, if the elapsed time since the last update
+ * exceeds the configured TTL duration, the state is treated as expired (returns None/empty).
+ * TTL expiration is checked lazily on access rather than eagerly cleaning up.
+ *
+ * '''Timers:''' Managed by [[InMemoryTimers]], which maintains a `Map[Long, Set[Any]]` mapping
+ * expiration timestamps to sets of grouping keys. Expired timers can be queried via
+ * `listExpiredTimers()`.
+ *
+ * '''Direct State Access:''' Unlike the production handle, this implementation exposes
+ * `peekXxxState` and `updateXxxState` methods for test assertions and setup, allowing
+ * direct manipulation of state without going through the processor logic.
  */
 class InMemoryStatefulProcessorHandle(val timeMode: TimeMode, val clock: Clock)
   extends StatefulProcessorHandle {
