@@ -25,7 +25,7 @@ import org.apache.spark.sql.internal.SQLConf
 /** Test suite for TwsTester utility class. */
 class TwsTesterSuite extends SparkFunSuite {
 
-  test("TwsTester should correctly test RunningCountProcessor") {
+  test("TwsTester should correctly test processor with ValueState") {
     val tester = new TwsTester(new RunningCountProcessor[String]())
     assert(tester.test("key1", List("a")) == List(("key1", 1L)))
     assert(tester.test("key2", List("a", "a")) == List(("key2", 2L)))
@@ -46,7 +46,7 @@ class TwsTesterSuite extends SparkFunSuite {
     assert(tester.peekValueState[Long]("count", "foo").get == 6L)
   }
 
-  test("TwsTester should correctly test TopKProcessor") {
+  test("TwsTester should correctly test processor with ListState") {
     val tester = new TwsTester(new TopKProcessor(2))
     val ans1 = tester.test("key1", List(("b", 2.0), ("c", 3.0), ("a", 1.0)))
     assert(ans1 == List(("key1", 3.0), ("key1", 2.0)))
@@ -79,7 +79,7 @@ class TwsTesterSuite extends SparkFunSuite {
     assert(tester.peekListState[Double]("topK", "d") == List())
   }
 
-  test("TwsTester should correctly test WordFrequencyProcessor") {
+  test("TwsTester should correctly test processor with MapState") {
     val tester = new TwsTester(new WordFrequencyProcessor())
     val ans1 =
       tester.test("user1", List(("", "hello"), ("", "world"), ("", "hello"), ("", "world")))
@@ -178,7 +178,7 @@ class TwsTesterSuite extends SparkFunSuite {
     assert(exception.getMessage.contains("stateful processor doesn't support initial state"))
   }
 
-  test("TwsTester should test RunningCountProcessor row-by-row") {
+  test("TwsTester should support row-by-row processing") {
     val tester = new TwsTester(new RunningCountProcessor[String]())
 
     // Example of helper function to test how TransformWithState processes rows one-by-one, which
