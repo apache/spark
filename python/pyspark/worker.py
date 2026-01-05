@@ -655,7 +655,9 @@ def wrap_cogrouped_map_pandas_udf(f, return_type, argspec, runner_conf):
 
         return result
 
-    arrow_return_type = to_arrow_type(return_type, runner_conf.use_large_var_types)
+    arrow_return_type = to_arrow_type(
+        return_type, prefers_large_types=runner_conf.use_large_var_types
+    )
     return lambda kl, vl, kr, vr: [(wrapped(kl, vl, kr, vr), arrow_return_type)]
 
 
@@ -774,7 +776,9 @@ def wrap_grouped_map_arrow_udf(f, return_type, argspec, runner_conf):
 
         yield from result.to_batches()
 
-    arrow_return_type = to_arrow_type(return_type, runner_conf.use_large_var_types)
+    arrow_return_type = to_arrow_type(
+        return_type, prefers_large_types=runner_conf.use_large_var_types
+    )
     return lambda k, v: (wrapped(k, v), arrow_return_type)
 
 
@@ -801,7 +805,9 @@ def wrap_grouped_map_arrow_iter_udf(f, return_type, argspec, runner_conf):
 
         yield from map(verify_element, result)
 
-    arrow_return_type = to_arrow_type(return_type, runner_conf.use_large_var_types)
+    arrow_return_type = to_arrow_type(
+        return_type, prefers_large_types=runner_conf.use_large_var_types
+    )
     return lambda k, v: (wrapped(k, v), arrow_return_type)
 
 
@@ -831,7 +837,9 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec, runner_conf):
 
         yield result
 
-    arrow_return_type = to_arrow_type(return_type, runner_conf.use_large_var_types)
+    arrow_return_type = to_arrow_type(
+        return_type, prefers_large_types=runner_conf.use_large_var_types
+    )
 
     def flatten_wrapper(k, v):
         # Return Iterator[[(df, arrow_type)]] directly
@@ -866,7 +874,9 @@ def wrap_grouped_map_pandas_iter_udf(f, return_type, argspec, runner_conf):
 
         yield from map(verify_element, result)
 
-    arrow_return_type = to_arrow_type(return_type, runner_conf.use_large_var_types)
+    arrow_return_type = to_arrow_type(
+        return_type, prefers_large_types=runner_conf.use_large_var_types
+    )
 
     def flatten_wrapper(k, v):
         # Return Iterator[[(df, arrow_type)]] directly
@@ -885,7 +895,9 @@ def wrap_grouped_transform_with_state_pandas_udf(f, return_type, runner_conf):
 
         return result_iter
 
-    arrow_return_type = to_arrow_type(return_type, runner_conf.use_large_var_types)
+    arrow_return_type = to_arrow_type(
+        return_type, prefers_large_types=runner_conf.use_large_var_types
+    )
     return lambda p, m, k, v: [(wrapped(p, m, k, v), arrow_return_type)]
 
 
@@ -906,7 +918,9 @@ def wrap_grouped_transform_with_state_pandas_init_state_udf(f, return_type, runn
 
         return result_iter
 
-    arrow_return_type = to_arrow_type(return_type, runner_conf.use_large_var_types)
+    arrow_return_type = to_arrow_type(
+        return_type, prefers_large_types=runner_conf.use_large_var_types
+    )
     return lambda p, m, k, v: [(wrapped(p, m, k, v), arrow_return_type)]
 
 
@@ -919,7 +933,9 @@ def wrap_grouped_transform_with_state_udf(f, return_type, runner_conf):
 
         return result_iter
 
-    arrow_return_type = to_arrow_type(return_type, runner_conf.use_large_var_types)
+    arrow_return_type = to_arrow_type(
+        return_type, prefers_large_types=runner_conf.use_large_var_types
+    )
     return lambda p, m, k, v: [(wrapped(p, m, k, v), arrow_return_type)]
 
 
@@ -939,7 +955,9 @@ def wrap_grouped_transform_with_state_init_state_udf(f, return_type, runner_conf
 
         return result_iter
 
-    arrow_return_type = to_arrow_type(return_type, runner_conf.use_large_var_types)
+    arrow_return_type = to_arrow_type(
+        return_type, prefers_large_types=runner_conf.use_large_var_types
+    )
     return lambda p, m, k, v: [(wrapped(p, m, k, v), arrow_return_type)]
 
 
@@ -1032,7 +1050,9 @@ def wrap_grouped_map_pandas_udf_with_state(f, return_type, runner_conf):
             state,
         )
 
-    arrow_return_type = to_arrow_type(return_type, runner_conf.use_large_var_types)
+    arrow_return_type = to_arrow_type(
+        return_type, prefers_large_types=runner_conf.use_large_var_types
+    )
     return lambda k, v, s: [(wrapped(k, v, s), arrow_return_type)]
 
 
