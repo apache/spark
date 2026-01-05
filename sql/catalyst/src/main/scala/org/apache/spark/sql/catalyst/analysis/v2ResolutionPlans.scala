@@ -265,7 +265,6 @@ object ResolvedIdentifier {
 object FakeSystemCatalog extends CatalogPlugin {
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
   override def name(): String = "system"
-  override def close(): Unit = {}
 }
 
 /**
@@ -274,5 +273,4 @@ object FakeSystemCatalog extends CatalogPlugin {
 object FakeLocalCatalog extends CatalogPlugin {
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
   override def name(): String = "local"
-  override def close(): Unit = {}
 }

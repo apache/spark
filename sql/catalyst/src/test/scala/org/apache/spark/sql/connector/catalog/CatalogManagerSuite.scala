@@ -130,9 +130,7 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
 
   test("CatalogManager.close should close all closeable catalogs") {
     val catalogManager = new CatalogManager(FakeV2SessionCatalog, createSessionCatalog())
-    withSQLConf("spark.sql.catalog.dummy" -> classOf[DummyCatalog].getName,
-      "spark.sql.catalog.closeable" -> classOf[CloseableCatalog].getName) {
-      catalogManager.setCurrentCatalog("dummy")
+    withSQLConf("spark.sql.catalog.closeable" -> classOf[CloseableCatalog].getName) {
       val closeable = catalogManager.catalog("closeable").asInstanceOf[CloseableCatalog]
       assert(!closeable.isClosed)
       catalogManager.close()

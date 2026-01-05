@@ -111,7 +111,11 @@ private[sql] class SessionState(
   def catalogManager: CatalogManager = analyzer.catalogManager
 
   override def close(): Unit = {
-    catalogManager.close()
+    try {
+      catalogManager.close()
+    } finally {
+      artifactManager.close()
+    }
   }
 
   def newHadoopConf(): Configuration = SessionState.newHadoopConf(
