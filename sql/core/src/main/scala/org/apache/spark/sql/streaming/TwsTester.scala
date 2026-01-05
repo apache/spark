@@ -110,10 +110,9 @@ class TwsTester[K, I, O](
 
   private def handleInitialState[S](): Unit = {
     val p = processor.asInstanceOf[StatefulProcessorWithInitialState[K, I, O, S]]
-    initialState.foreach {
-      case (key, state) =>
-        ImplicitGroupingKeyTracker.setImplicitKey(key)
-        p.handleInitialState(key, state.asInstanceOf[S], getTimerValues())
+    initialState.foreach { case (key, state) =>
+      ImplicitGroupingKeyTracker.setImplicitKey(key)
+      p.handleInitialState(key, state.asInstanceOf[S], getTimerValues())
     }
   }
 
@@ -194,8 +193,8 @@ class TwsTester[K, I, O](
   }
 
   // Logic for dealing with timers.
-  private var currentProcessingTimeMs: Long = 0
-  private var currentWatermarkMs: Long = 0
+  private var currentProcessingTimeMs: Long = 0L
+  private var currentWatermarkMs: Long = 0L
 
   private def handleExpiredTimers(): List[O] = {
     if (timeMode == TimeMode.None) {

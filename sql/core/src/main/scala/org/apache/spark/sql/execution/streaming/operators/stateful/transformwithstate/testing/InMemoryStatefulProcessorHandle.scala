@@ -223,15 +223,15 @@ class InMemoryTimers {
  * Supports TTL and directly accessing state.
  */
 class InMemoryStatefulProcessorHandle(val timeMode: TimeMode, val clock: Clock)
-    extends StatefulProcessorHandle {
+  extends StatefulProcessorHandle {
+  
   private val states = mutable.Map[String, Any]()
   val timers = new InMemoryTimers()
 
   override def getValueState[T](
       stateName: String,
       valEncoder: Encoder[T],
-      ttlConfig: TTLConfig
-  ): ValueState[T] = {
+      ttlConfig: TTLConfig): ValueState[T] = {
     states
       .getOrElseUpdate(stateName, new InMemoryValueState[T](clock, ttlConfig))
       .asInstanceOf[InMemoryValueState[T]]
@@ -243,8 +243,7 @@ class InMemoryStatefulProcessorHandle(val timeMode: TimeMode, val clock: Clock)
   override def getListState[T](
       stateName: String,
       valEncoder: Encoder[T],
-      ttlConfig: TTLConfig
-  ): ListState[T] = {
+      ttlConfig: TTLConfig): ListState[T] = {
     states
       .getOrElseUpdate(stateName, new InMemoryListState[T](clock, ttlConfig))
       .asInstanceOf[InMemoryListState[T]]
@@ -257,16 +256,14 @@ class InMemoryStatefulProcessorHandle(val timeMode: TimeMode, val clock: Clock)
       stateName: String,
       userKeyEnc: Encoder[K],
       valEncoder: Encoder[V],
-      ttlConfig: TTLConfig
-  ): MapState[K, V] = {
+      ttlConfig: TTLConfig): MapState[K, V] = {
     states
       .getOrElseUpdate(stateName, new InMemoryMapState[K, V](clock, ttlConfig))
       .asInstanceOf[InMemoryMapState[K, V]]
   }
 
   override def getMapState[K: Encoder, V: Encoder](
-      stateName: String,
-      ttlConfig: TTLConfig): MapState[K, V] =
+      stateName: String, ttlConfig: TTLConfig): MapState[K, V] =
     getMapState(stateName, implicitly[Encoder[K]], implicitly[Encoder[V]], ttlConfig)
 
   override def getQueryInfo(): QueryInfo =
