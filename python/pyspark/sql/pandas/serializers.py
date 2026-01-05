@@ -539,9 +539,7 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         self._ndarray_as_list = ndarray_as_list
         self._arrow_cast = arrow_cast
         self._input_types = input_types
-        # Selective column conversion optimization
         self._used_column_offsets: Optional[List[int]] = None
-        self._selective_conversion: bool = False
 
     def arrow_to_pandas(self, arrow_column, idx):
         import pyarrow.types as types
@@ -584,41 +582,20 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
             )
         return s
 
-    def configure_selective_conversion(
-        self, used_offsets: Set[int]
-    ) -> Optional[dict[int, int]]:
+    def set_used_columns(self, used_offsets: Set[int]) -> Optional[dict[int, int]]:
         """
-        Configure selective column conversion for Pandas UDFs.
-
-        Only columns in `used_offsets` will be converted from Arrow to Pandas,
-        improving performance when UDFs use a subset of available columns.
-
-        Parameters
-        ----------
-        used_offsets : set
-            Set of column indices that are actually used by UDFs
-
-        Returns
-        -------
-        dict or None
-            Mapping from original offset to new index, or None if not needed
+        Set which columns to convert. Returns offset remap dict or None.
         """
         if not used_offsets:
-            self._selective_conversion = False
             self._used_column_offsets = None
             return None
 
-        self._selective_conversion = True
         self._used_column_offsets = sorted(used_offsets)
         return {offset: i for i, offset in enumerate(self._used_column_offsets)}
 
     def load_stream(self, stream) -> Iterator[List["pd.Series"]]:
         """
         Deserialize ArrowRecordBatches to a list of pandas.Series.
-
-        When selective conversion is enabled, only converts columns in
-        `_used_column_offsets` and returns a smaller list (not full width).
-        The mapper in worker.py must use remapped indices.
         """
         import pandas as pd
         import pyspark
@@ -632,16 +609,10 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
 
             col_idx = (
                 self._used_column_offsets
-                if self._selective_conversion and self._used_column_offsets is not None
+                if self._used_column_offsets is not None
                 else range(batch.num_columns)
             )
-            pandas_batches = [
-                self.arrow_to_pandas(
-                    batch.column(i),
-                    i,
-                )
-                for i in col_idx
-            ]
+            pandas_batches = [self.arrow_to_pandas(batch.column(i), i) for i in col_idx]
             yield pandas_batches
 
     def _create_struct_array(

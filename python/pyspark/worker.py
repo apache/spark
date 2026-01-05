@@ -2916,16 +2916,15 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
         for i in range(num_udfs)
     ]
 
-    # Configure selective column conversion for scalar pandas UDF
     # Only convert Arrow columns that are actually used by UDFs
     offset_remap = None
     if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF:
-        if hasattr(ser, "configure_selective_conversion"):
+        if hasattr(ser, "set_used_columns"):
             all_offsets = set()
             for arg_offsets, _ in udfs:
                 if isinstance(arg_offsets, (list, tuple)):
                     all_offsets.update(arg_offsets)
-            offset_remap = ser.configure_selective_conversion(all_offsets)
+            offset_remap = ser.set_used_columns(all_offsets)
 
     is_scalar_iter = eval_type in (
         PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
