@@ -42,6 +42,8 @@ case class CollectMetricsExec(
     acc
   }
 
+  private var collectedMetricsRow: Row = _
+
   private[sql] def accumulatorId: Long = {
     accumulator.id
   }
@@ -56,7 +58,14 @@ case class CollectMetricsExec(
       .asInstanceOf[InternalRow => Row]
   }
 
-  def collectedMetrics: Row = toRowConverter(accumulator.value)
+  def collectedMetrics: Row = {
+    accumulator.synchronized {
+      if (collectedMetricsRow == null) {
+        collectedMetricsRow = toRowConverter(accumulator.value)
+      }
+      collectedMetricsRow
+    }
+  }
 
   override def output: Seq[Attribute] = child.output
 
@@ -65,7 +74,10 @@ case class CollectMetricsExec(
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
   override def resetMetrics(): Unit = {
-    accumulator.reset()
+    accumulator.synchronized {
+      accumulator.reset()
+      collectedMetricsRow = null
+    }
     super.resetMetrics()
   }
 
