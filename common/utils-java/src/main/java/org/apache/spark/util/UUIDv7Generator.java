@@ -31,37 +31,37 @@ import java.util.UUID;
  */
 public final class UUIDv7Generator {
 
-    private UUIDv7Generator() {
-        // Prevent instantiation, as this is a util class.
-    }
+  private UUIDv7Generator() {
+    // Prevent instantiation, as this is a util class.
+  }
 
-    /**
-     * Holder class used for lazy initialization of SecureRandom.
-     */
-    private static class Holder {
-        static final SecureRandom SECURE_RANDOM = new SecureRandom();
-    }
+  /**
+   * Holder class used for lazy initialization of SecureRandom.
+   */
+  private static class Holder {
+    static final SecureRandom SECURE_RANDOM = new SecureRandom();
+  }
 
-    /**
-     * Generate a UUIDv7 from the current time.
-     *
-     * The generated UUID embeds a 48-bit Unix timestamp (milliseconds since epoch),
-     * followed by random bits for uniqueness. Monotonicity is best-effort: UUIDs
-     * generated across different milliseconds will be ordered, but UUIDs within
-     * the same millisecond may have random ordering.
-     *
-     * @return a new UUIDv7
-     */
-    public static UUID generate() {
-        long timestamp = System.currentTimeMillis();
+  /**
+   * Generate a UUIDv7 from the current time.
+   *
+   * The generated UUID embeds a 48-bit Unix timestamp (milliseconds since epoch),
+   * followed by random bits for uniqueness. Monotonicity is best-effort: UUIDs
+   * generated across different milliseconds will be ordered, but UUIDs within
+   * the same millisecond may have random ordering.
+   *
+   * @return a new UUIDv7
+   */
+  public static UUID generate() {
+    long timestamp = System.currentTimeMillis();
 
-        // 48-bit timestamp | 4-bit version (0111) | 12-bit rand_a
-        long msb = (timestamp << 16) | (0x7L << 12) | (Holder.SECURE_RANDOM.nextInt() & 0xFFF);
+    // 48-bit timestamp | 4-bit version (0111) | 12-bit rand_a
+    long msb = (timestamp << 16) | (0x7L << 12) | (Holder.SECURE_RANDOM.nextInt() & 0xFFF);
 
-        long randB = Holder.SECURE_RANDOM.nextLong();
-        // Set variant to IETF (0b10)
-        long lsb = (randB & 0x3FFFFFFFFFFFFFFFL) | 0x8000000000000000L;
+    long randB = Holder.SECURE_RANDOM.nextLong();
+    // Set variant to IETF (0b10)
+    long lsb = (randB & 0x3FFFFFFFFFFFFFFFL) | 0x8000000000000000L;
 
-        return new UUID(msb, lsb);
-    }
+    return new UUID(msb, lsb);
+  }
 }
