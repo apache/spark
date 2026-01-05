@@ -433,74 +433,25 @@ class TwsTesterSuite extends SparkFunSuite {
     assert(tester.peekValueState[Long]("lastSeen", "key2").isEmpty)
   }
 
-  test("TwsTester should support EventTime timers fired by data-driven watermark") {
-    import java.sql.Timestamp
-
-    // Event time extractor: input is (eventTimeMs, value), extract eventTimeMs
-    val eventTimeExtractor: ((Long, String)) => Timestamp = {
-      case (eventTimeMs, _) => new Timestamp(eventTimeMs)
-    }
-
-    val tester = new TwsTester(
-      new EventTimeSessionProcessor(),
-      timeMode = TimeMode.EventTime(),
-      eventTimeExtractor = eventTimeExtractor,
-      watermarkDelayMs = 2000 // 2 second watermark delay
-    )
-
-    // Process event at t=10000 for key1 - registers timer at t=15000
-    // Watermark becomes: 10000 - 2000 = 8000 (timer at 15000 won't fire)
-    val result1 = tester.test("key1", List((10000L, "hello")))
-    assert(result1 == List(("key1", "received:hello@10000")))
-
-    // Process event at t=12000 for key2 - registers timer at t=17000
-    // Watermark becomes: 12000 - 2000 = 10000 (still not enough for key1's timer at 15000)
-    val result2 = tester.test("key2", List((12000L, "world")))
-    assert(result2 == List(("key2", "received:world@12000")))
-
-    // Process event at t=20000 for key3 - watermark becomes 18000
-    // This should fire key1's timer at 15000 and key2's timer at 17000
-    val result3 = tester.test("key3", List((20000L, "new")))
-    assert(result3.contains(("key3", "received:new@20000")))
-    // Both key1 and key2 timers should have fired
-    assert(result3.exists(r => r._1 == "key1" && r._2.startsWith("session-expired@watermark=")))
-    assert(result3.exists(r => r._1 == "key2" && r._2.startsWith("session-expired@watermark=")))
-
-    // Verify state is cleared for key1 and key2 after timer expiry
-    assert(tester.peekValueState[Long]("lastEventTime", "key1").isEmpty)
-    assert(tester.peekValueState[Long]("lastEventTime", "key2").isEmpty)
-    // key3 should still have state (timer at 25000 hasn't fired yet)
-    assert(tester.peekValueState[Long]("lastEventTime", "key3").isDefined)
-  }
-
   test("TwsTester should support EventTime timers fired by manual watermark advance") {
-    import java.sql.Timestamp
-
-    val eventTimeExtractor: ((Long, String)) => Timestamp = {
-      case (eventTimeMs, _) => new Timestamp(eventTimeMs)
-    }
-
     val tester = new TwsTester(
       new EventTimeSessionProcessor(),
-      timeMode = TimeMode.EventTime(),
-      eventTimeExtractor = eventTimeExtractor,
-      watermarkDelayMs = 2000
+      timeMode = TimeMode.EventTime()
     )
 
     // Process event at t=10000 for key1 - registers timer at t=15000
-    // Watermark: 10000 - 2000 = 8000
+    // Note: watermark starts at 0 and must be advanced manually
     val result1 = tester.test("key1", List((10000L, "hello")))
     assert(result1 == List(("key1", "received:hello@10000")))
 
     // Process another event at t=12000 for key1 - should cancel timer at t=15000
     // and register new timer at t=17000
-    // Watermark: 12000 - 2000 = 10000
     val result2 = tester.test("key1", List((12000L, "hello2")))
     assert(result2 == List(("key1", "received:hello2@12000")))
 
-    // Advance watermark to 16000 (past where old timer at 15000 would have fired)
+    // Manually advance watermark to 16000 (past where old timer at 15000 would have fired)
     // No timer should fire because the old timer was cancelled
-    val expired1 = tester.advanceWatermark(6000) // 10000 + 6000 = 16000
+    val expired1 = tester.advanceWatermark(16000) // 0 + 16000 = 16000
     assert(expired1.isEmpty, "Old timer should have been cancelled, but it fired")
 
     // Verify state is still present (session not expired yet)
@@ -514,91 +465,6 @@ class TwsTesterSuite extends SparkFunSuite {
 
     // Verify state is cleared
     assert(tester.peekValueState[Long]("lastEventTime", "key1").isEmpty)
-  }
-
-  test("TwsTester should filter late events in EventTime mode") {
-    import java.sql.Timestamp
-
-    // Create a processor that counts events - we'll use the count to verify filtering
-    // Input format: (eventTimeMs: Long, value: String)
-    val eventTimeExtractor: ((Long, String)) => Timestamp = {
-      case (eventTimeMs, _) => new Timestamp(eventTimeMs)
-    }
-
-    val tester = new TwsTester(
-      new EventTimeCountProcessor(),
-      timeMode = TimeMode.EventTime(),
-      eventTimeExtractor = eventTimeExtractor,
-      watermarkDelayMs = 1000 // 1 second watermark delay
-    )
-
-    // Initially watermark is 0, so all events should be processed
-    // Process events at t=5000, t=6000, t=7000 - watermark becomes 7000 - 1000 = 6000
-    val result1 = tester.test("key1", List((5000L, "a"), (6000L, "b"), (7000L, "c")))
-    assert(result1 == List(("key1", 3L))) // 3 events counted
-    assert(tester.peekValueState[Long]("count", "key1").get == 3L)
-
-    // Now watermark is 6000. Send events with mixed event times:
-    // - (4000L, "late1") -> event time 4000 < watermark 6000, should be FILTERED
-    // - (5000L, "late2") -> event time 5000 < watermark 6000, should be FILTERED
-    // - (6000L, "ontime1") -> event time 6000 >= watermark 6000, should be PROCESSED
-    // - (8000L, "ontime2") -> event time 8000 >= watermark 6000, should be PROCESSED
-    val result2 = tester.test(
-      "key1",
-      List(
-        (4000L, "late1"),
-        (5000L, "late2"),
-        (6000L, "ontime1"),
-        (8000L, "ontime2")
-      )
-    )
-    // Only 2 events should be processed (the on-time ones)
-    assert(result2 == List(("key1", 5L))) // 3 + 2 = 5
-    assert(tester.peekValueState[Long]("count", "key1").get == 5L)
-
-    // Watermark should have advanced to max(8000) - 1000 = 7000
-    // Now send another late event at t=6500 (< 7000), should be filtered
-    val result3 = tester.test("key1", List((6500L, "late3")))
-    assert(result3 == List(("key1", 5L))) // Still 5, no new events processed
-    assert(tester.peekValueState[Long]("count", "key1").get == 5L)
-
-    // Send an on-time event at t=10000
-    val result4 = tester.test("key1", List((10000L, "ontime3")))
-    assert(result4 == List(("key1", 6L))) // 5 + 1 = 6
-    assert(tester.peekValueState[Long]("count", "key1").get == 6L)
-  }
-
-  test("TwsTester should filter all late events when all are older than watermark") {
-    import java.sql.Timestamp
-
-    val eventTimeExtractor: ((Long, String)) => Timestamp = {
-      case (eventTimeMs, _) => new Timestamp(eventTimeMs)
-    }
-
-    val tester = new TwsTester(
-      new EventTimeCountProcessor(),
-      timeMode = TimeMode.EventTime(),
-      eventTimeExtractor = eventTimeExtractor,
-      watermarkDelayMs = 0 // No delay for simplicity
-    )
-
-    // Process events to advance watermark to 10000
-    tester.test("key1", List((10000L, "a")))
-    assert(tester.peekValueState[Long]("count", "key1").get == 1L)
-
-    // Now send only late events - all should be filtered, count unchanged
-    val result = tester.test(
-      "key1",
-      List(
-        (1000L, "late1"),
-        (5000L, "late2"),
-        (9999L, "late3")
-      )
-    )
-    // No events processed - handleInputRows is called with empty iterator
-    // This should still return output but count shouldn't change
-    assert(result == List(("key1", 1L))) // Count still 1
-    assert(tester.peekValueState[Long]("count", "key1").get == 1L)
   }
 }
 

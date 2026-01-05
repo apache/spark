@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.streaming
 
-import java.sql.Timestamp
-
 import scala.reflect.ClassTag
 
 import org.apache.spark.util.ManualClock
@@ -39,20 +37,20 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
  *  - Direct state manipulation via `updateValueState`, `updateListState`, `updateMapState`.
  *  - Direct state inspection via `peekValueState`, `peekListState`, `peekMapState`.
  *  - Timers in ProcessingTime mode (use `advanceProcessingTime` to fire timers).
- *  - Timers in EventTime mode (use `eventTimeExtractor` and `watermarkDelayMs` to configure;
- *    watermark advances automatically based on event times, or use `advanceWatermark` manually).
- *  - Late event filtering in EventTime mode (events older than the current watermark are dropped).
+ *  - Timers in EventTime mode (use `advanceWatermark` to manually advance the watermark
+ *    and fire expired timers).
  *  - TTL for ValueState, ListState, and MapState (use ProcessingTime mode and
  *    `advanceProcessingTime` to test expiry).
  *
- * '''Testing EventTime Mode:'''
- *  To test with EventTime, provide `eventTimeExtractor` (a function extracting the event
- *  timestamp from each input row) and `watermarkDelayMs` (the watermark delay in milliseconds).
- *  The watermark is computed as `max(event_time_seen) - watermarkDelayMs` and is updated
- *  automatically after each `test()` call. Late events (with event time older than the current
- *  watermark) are filtered out before processing, matching production behavior. Timers with
- *  expiry time <= watermark will fire. You can also manually advance the watermark using
- *  `advanceWatermark()`.
+ * '''Not Supported:'''
+ *  - '''Automatic watermark propagation''': In production Spark streaming, the watermark is
+ *    computed from event times and propagated at the end of each microbatch. TwsTester does
+ *    not simulate this behavior because it processes keys individually rather than in batches.
+ *    To test watermark-dependent logic, use `advanceWatermark()` to manually set the watermark
+ *    to the desired value before calling `test()`.
+ *  - '''Late event filtering''': Since TwsTester does not track event times or automatically
+ *    advance the watermark, it also does not filter late events. All input rows passed to
+ *    `test()` will be processed regardless of their event time.
  *
  * '''Use Cases:'''
  *  - '''Primary''': Unit testing business logic in `handleInputRows` implementations.
@@ -65,10 +63,6 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
  * @param outputMode output mode (Append, Update, or Complete).
  * @param isRealTimeMode whether input rows should be processed one-by-one (separate call to
  *     handleInputRows) for each input row.
- * @param eventTimeExtractor function to extract event time from input rows. Required if and
- *     only if timeMode is EventTime.
- * @param watermarkDelayMs watermark delay in milliseconds. The watermark is computed as
- *     `max(event_time) - watermarkDelayMs`. Required if and only if timeMode is EventTime.
  * @tparam K the type of grouping key.
  * @tparam I the type of input rows.
  * @tparam O the type of output rows.
@@ -79,19 +73,10 @@ class TwsTester[K, I, O](
     val initialState: List[(K, Any)] = List(),
     val timeMode: TimeMode = TimeMode.None,
     val outputMode: OutputMode = OutputMode.Append,
-    val isRealTimeMode: Boolean = false,
-    val eventTimeExtractor: I => Timestamp = null,
-    val watermarkDelayMs: Long = 0L) {
+    val isRealTimeMode: Boolean = false) {
   
   private val processingTimeClock = new ManualClock(0L)
   private val handle = new InMemoryStatefulProcessorHandle(timeMode, processingTimeClock)
-
-  if (timeMode == TimeMode.EventTime) {
-    require(
-      eventTimeExtractor != null,
-      "eventTimeExtractor must be provided when timeMode is EventTime."
-    )
-  }
 
   processor.setHandle(handle)
   processor.init(outputMode, timeMode)
@@ -116,15 +101,14 @@ class TwsTester[K, I, O](
   /**
    * Processes input rows for a single key through the stateful processor.
    *
-   * In EventTime mode, late events (with event time older than the current watermark) are
-   * filtered out before processing. After processing, the watermark is updated based on
-   * the maximum event time seen (using `eventTimeExtractor`) minus `watermarkDelayMs`,
-   * and any expired timers are fired.
+   * All input rows are passed directly to `handleInputRows` without filtering. In EventTime
+   * mode, the current watermark value is available to the processor via `TimerValues`, but
+   * the watermark is not automatically advanced based on event times. Use `advanceWatermark()`
+   * to manually advance the watermark if needed.
    *
    * @param key the grouping key
    * @param values input rows to process
-   * @return all output rows produced by the processor (including any from expired timers
-   *         in EventTime mode)
+   * @return all output rows produced by the processor
    */
   def test(key: K, values: List[I]): List[O] = {
     if (isRealTimeMode) {
@@ -137,14 +121,7 @@ class TwsTester[K, I, O](
   private def testInternal(key: K, values: List[I]): List[O] = {
     ImplicitGroupingKeyTracker.setImplicitKey(key)
     val timerValues = getTimerValues()
-    val filteredValues = filterLateEvents(values)
-    var result: List[O] =
-      processor.handleInputRows(key, filteredValues.iterator, timerValues).toList
-    if (timeMode == TimeMode.EventTime()) {
-      updateWatermarkFromEventTime(values)
-      result ++= handleExpiredTimers()
-    }
-    result
+    processor.handleInputRows(key, values.iterator, timerValues).toList
   }
 
   /** Sets the value state for a given key. */
@@ -241,8 +218,9 @@ class TwsTester[K, I, O](
   /**
    * Advances the watermark and fires all expired event-time timers.
    *
-   * Use this in EventTime mode to manually advance the watermark beyond what the
-   * event times in the data would produce. Timers with expiry time <= new watermark will fire.
+   * Use this in EventTime mode to manually advance the watermark. This is the only way to
+   * advance the watermark in TwsTester, as automatic watermark propagation based on event
+   * times is not supported. Timers with expiry time <= new watermark will fire.
    *
    * @param durationMs the amount of time to advance the watermark in milliseconds
    * @return output rows emitted by `handleExpiredTimer` for all fired timers
@@ -256,26 +234,9 @@ class TwsTester[K, I, O](
     handleExpiredTimers()
   }
 
-  private def updateWatermarkFromEventTime(values: List[I]): Unit = {
-    require(timeMode == TimeMode.EventTime())
-    require(eventTimeExtractor != null)
-    values.foreach { value =>
-      val eventTimeMs = eventTimeExtractor(value).getTime
-      currentWatermarkMs = Math.max(currentWatermarkMs, eventTimeMs - watermarkDelayMs)
-    }
-  }
-
   private def getTimerValues(): TimerValues = {
     val processingTimeOpt = if (timeMode != TimeMode.None) Some(processingTimeClock.getTimeMillis()) else None
     val watermarkOpt = if (timeMode == TimeMode.EventTime()) Some(currentWatermarkMs) else None
     new TimerValuesImpl(processingTimeOpt, watermarkOpt)
-  }
-
-  /** Filters out late events based on the current watermark, in EventTime mode. */
-  private def filterLateEvents(values: List[I]): List[I] = {
-    if (timeMode != TimeMode.EventTime()) {
-      return values
-    }
-    values.filter(eventTimeExtractor(_).getTime >= currentWatermarkMs)
   }
 }
