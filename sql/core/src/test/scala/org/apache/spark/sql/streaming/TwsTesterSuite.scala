@@ -47,13 +47,6 @@ class TwsTesterSuite extends SparkFunSuite {
   }
 
   test("TwsTester should correctly test TopKProcessor") {
-    val input: List[(String, (String, Double))] = List(
-      ("key2", ("c", 30.0)),
-      ("key2", ("d", 40.0)),
-      ("key2", ("a", 10.0)),
-      ("key2", ("b", 20.0)),
-      ("key3", ("a", 100.0))
-    )
     val tester = new TwsTester(new TopKProcessor(2))
     val ans1 = tester.test("key1", List(("b", 2.0), ("c", 3.0), ("a", 1.0)))
     assert(ans1 == List(("key1", 3.0), ("key1", 2.0)))
@@ -271,6 +264,44 @@ class TwsTesterSuite extends SparkFunSuite {
     )
   }
 
+  test("TwsTester: value-get before value-set") {
+    val tester = new TwsTester(new AllMethodsTestProcessor())
+    val results = tester.test("k", List("value-get", "value-set", "value-get"))
+    assert(results == List(("k", ""), ("k", "value-set:done"), ("k", "42")))
+  }
+
+  test("TwsTester: list operations") {
+    val tester = new TwsTester(new AllMethodsTestProcessor())
+    val results =
+      tester.test(
+        "k",
+        List(
+          "list-get",
+          "list-append",
+          "list-get",
+          "list-append",
+          "list-get",
+          "list-put",
+          "list-get",
+          "list-clear",
+          "list-get"
+        )
+      )
+    assert(
+      results == List(
+        ("k", "list-get:"),
+        ("k", "list-append:done"),
+        ("k", "list-get:a,b"),
+        ("k", "list-append:done"),
+        ("k", "list-get:a,b,a,b"),
+        ("k", "list-put:done"),
+        ("k", "list-get:put"),
+        ("k", "list-clear:done"),
+        ("k", "list-get:")
+      )
+    )
+  }
+
   test("TwsTester should delete value state") {
     val valueTester = new TwsTester(new RunningCountProcessor[String]())
     valueTester.updateValueState[Long]("count", "key1", 10L)
@@ -461,21 +492,28 @@ class TwsTesterSuite extends SparkFunSuite {
     val result1 = tester.test("key1", List((10000L, "hello")))
     assert(result1 == List(("key1", "received:hello@10000")))
 
-    // Process event at t=11000 for key2 - registers timer at t=16000
-    // Watermark: 11000 - 2000 = 9000
-    val result2 = tester.test("key2", List((11000L, "world")))
-    assert(result2 == List(("key2", "received:world@11000")))
+    // Process another event at t=12000 for key1 - should cancel timer at t=15000
+    // and register new timer at t=17000
+    // Watermark: 12000 - 2000 = 10000
+    val result2 = tester.test("key1", List((12000L, "hello2")))
+    assert(result2 == List(("key1", "received:hello2@12000")))
 
-    // Manually advance watermark by 7000ms (from 9000 to 16000)
-    // This should fire key1's timer (15000) and key2's timer (16000)
-    val expired = tester.advanceWatermark(7000)
-    assert(expired.size == 2)
-    assert(expired.exists(r => r._1 == "key1" && r._2.startsWith("session-expired@watermark=")))
-    assert(expired.exists(r => r._1 == "key2" && r._2.startsWith("session-expired@watermark=")))
+    // Advance watermark to 16000 (past where old timer at 15000 would have fired)
+    // No timer should fire because the old timer was cancelled
+    val expired1 = tester.advanceWatermark(6000) // 10000 + 6000 = 16000
+    assert(expired1.isEmpty, "Old timer should have been cancelled, but it fired")
+
+    // Verify state is still present (session not expired yet)
+    assert(tester.peekValueState[Long]("lastEventTime", "key1").isDefined)
+
+    // Now advance watermark past the new timer at 17000
+    val expired2 = tester.advanceWatermark(2000) // 16000 + 2000 = 18000
+    assert(expired2.size == 1)
+    assert(expired2.head._1 == "key1")
+    assert(expired2.head._2.startsWith("session-expired@watermark="))
 
     // Verify state is cleared
     assert(tester.peekValueState[Long]("lastEventTime", "key1").isEmpty)
-    assert(tester.peekValueState[Long]("lastEventTime", "key2").isEmpty)
   }
 
   test("TwsTester should filter late events in EventTime mode") {

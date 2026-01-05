@@ -44,6 +44,8 @@ class AllMethodsTestProcessor extends StatefulProcessor[String, String, (String,
       cmd match {
         case "value-exists" =>
           results += ((key, s"value-exists:${valueState.exists()}"))
+        case "value-get" =>
+          results += ((key, if (valueState.exists()) valueState.get().toString() else ""))
         case "value-set" =>
           valueState.update(42)
           results += ((key, "value-set:done"))
@@ -62,6 +64,12 @@ class AllMethodsTestProcessor extends StatefulProcessor[String, String, (String,
         case "list-get" =>
           val items = listState.get().toList.mkString(",")
           results += ((key, s"list-get:$items"))
+        case "list-put" =>
+          listState.put(Array("put"))
+          results += ((key, "list-put:done"))
+        case "list-clear" =>
+          listState.clear()
+          results += ((key, "list-clear:done"))
         case "map-exists" =>
           results += ((key, s"map-exists:${mapState.exists()}"))
         case "map-add" =>
@@ -181,14 +189,14 @@ class EventTimeSessionProcessor
       timerValues: TimerValues): Iterator[(String, String)] = {
     val results = scala.collection.mutable.ArrayBuffer[(String, String)]()
 
+    // Clear any existing timer if we have previous state
+   if (lastEventTimeState.exists()) {
+      val oldTimerTime = lastEventTimeState.get() + 5000
+      getHandle.deleteTimer(oldTimerTime)
+    }
+
     inputRows.foreach {
       case (eventTimeMs, value) =>
-        // Clear any existing timer if we have previous state
-        if (lastEventTimeState.exists()) {
-          val oldTimerTime = lastEventTimeState.get() + 5000
-          getHandle.deleteTimer(oldTimerTime)
-        }
-
         // Update last event time and register new timer
         lastEventTimeState.update(eventTimeMs)
         getHandle.registerTimer(eventTimeMs + 5000) // 5 second timeout from event time
