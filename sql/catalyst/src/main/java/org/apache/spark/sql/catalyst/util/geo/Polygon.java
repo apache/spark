@@ -23,14 +23,10 @@ import java.util.List;
  */
 class Polygon extends GeometryModel {
   private final List<Ring> rings;
-  private final boolean hasZ;
-  private final boolean hasM;
 
   Polygon(List<Ring> rings, int srid, boolean hasZ, boolean hasM) {
-    super(GeoTypeId.POLYGON, srid);
+    super(GeoTypeId.POLYGON, srid, hasZ, hasM);
     this.rings = rings;
-    this.hasZ = hasZ;
-    this.hasM = hasM;
   }
 
   List<Ring> getRings() {
@@ -57,30 +53,6 @@ class Polygon extends GeometryModel {
   @Override
   int getDimensionCount() {
     return 2 + (hasZ ? 1 : 0) + (hasM ? 1 : 0);
-  }
-
-  @Override
-  boolean hasZ() {
-    return hasZ;
-  }
-
-  @Override
-  boolean hasM() {
-    return hasM;
-  }
-
-  @Override
-  public String toString() {
-    if (isEmpty()) {
-      return "POLYGON EMPTY";
-    }
-    StringBuilder sb = new StringBuilder("POLYGON (");
-    for (int i = 0; i < rings.size(); i++) {
-      if (i > 0) sb.append(", ");
-      sb.append(rings.get(i).toString());
-    }
-    sb.append(")");
-    return sb.toString();
   }
 }
 

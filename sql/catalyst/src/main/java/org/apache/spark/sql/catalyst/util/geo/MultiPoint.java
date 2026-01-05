@@ -23,14 +23,10 @@ import java.util.List;
  */
 class MultiPoint extends GeometryModel {
   private final List<Point> points;
-  private final boolean hasZ;
-  private final boolean hasM;
 
   MultiPoint(List<Point> points, int srid, boolean hasZ, boolean hasM) {
-    super(GeoTypeId.MULTI_POINT, srid);
+    super(GeoTypeId.MULTI_POINT, srid, hasZ, hasM);
     this.points = points;
-    this.hasZ = hasZ;
-    this.hasM = hasM;
   }
 
   List<Point> getPoints() {
@@ -49,24 +45,6 @@ class MultiPoint extends GeometryModel {
   @Override
   int getDimensionCount() {
     return 2 + (hasZ ? 1 : 0) + (hasM ? 1 : 0);
-  }
-
-  @Override
-  boolean hasZ() {
-    return hasZ;
-  }
-
-  @Override
-  boolean hasM() {
-    return hasM;
-  }
-
-  @Override
-  public String toString() {
-    if (isEmpty()) {
-      return "MULTIPOINT EMPTY";
-    }
-    return "MULTIPOINT (" + points.size() + " points)";
   }
 }
 

@@ -23,14 +23,10 @@ import java.util.List;
  */
 class LineString extends GeometryModel {
   private final List<Point> points;
-  private final boolean hasZ;
-  private final boolean hasM;
 
   LineString(List<Point> points, int srid, boolean hasZ, boolean hasM) {
-    super(GeoTypeId.LINESTRING, srid);
+    super(GeoTypeId.LINESTRING, srid, hasZ, hasM);
     this.points = points;
-    this.hasZ = hasZ;
-    this.hasM = hasM;
   }
 
   List<Point> getPoints() {
@@ -49,16 +45,6 @@ class LineString extends GeometryModel {
   @Override
   int getDimensionCount() {
     return 2 + (hasZ ? 1 : 0) + (hasM ? 1 : 0);
-  }
-
-  @Override
-  boolean hasZ() {
-    return hasZ;
-  }
-
-  @Override
-  boolean hasM() {
-    return hasM;
   }
 
   @Override

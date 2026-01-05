@@ -23,14 +23,10 @@ import java.util.List;
  */
 class GeometryCollection extends GeometryModel {
   private final List<GeometryModel> geometries;
-  private final boolean hasZ;
-  private final boolean hasM;
 
   GeometryCollection(List<GeometryModel> geometries, int srid, boolean hasZ, boolean hasM) {
-    super(GeoTypeId.GEOMETRY_COLLECTION, srid);
+    super(GeoTypeId.GEOMETRY_COLLECTION, srid, hasZ, hasM);
     this.geometries = geometries;
-    this.hasZ = hasZ;
-    this.hasM = hasM;
   }
 
   List<GeometryModel> getGeometries() {
@@ -49,24 +45,6 @@ class GeometryCollection extends GeometryModel {
   @Override
   int getDimensionCount() {
     return 2 + (hasZ ? 1 : 0) + (hasM ? 1 : 0);
-  }
-
-  @Override
-  boolean hasZ() {
-    return hasZ;
-  }
-
-  @Override
-  boolean hasM() {
-    return hasM;
-  }
-
-  @Override
-  public String toString() {
-    if (isEmpty()) {
-      return "GEOMETRYCOLLECTION EMPTY";
-    }
-    return "GEOMETRYCOLLECTION (" + geometries.size() + " geometries)";
   }
 }
 

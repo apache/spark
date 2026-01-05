@@ -27,17 +27,7 @@ import java.util.Arrays;
 /**
  * Test suite for WKB error handling and edge cases.
  */
-public class WkbErrorHandlingTest {
-
-  private byte[] hexToBytes(String hex) {
-    int len = hex.length();
-    byte[] data = new byte[len / 2];
-    for (int i = 0; i < len; i += 2) {
-      data[i / 2] = (byte) ((Character.digit(hex.charAt(i), 16) << 4)
-          + Character.digit(hex.charAt(i + 1), 16));
-    }
-    return data;
-  }
+public class WkbErrorHandlingTest extends WkbTestBase {
 
   /**
    * Helper method to assert that parsing a WKB hex string throws WkbParseException
@@ -115,6 +105,18 @@ public class WkbErrorHandlingTest {
   }
 
   @Test
+  public void testTruncatedByte() {
+    // Only one byte (FF) of the 4-byte INT field.
+    String hex = "0102000000ff";
+    byte[] truncated = hexToBytes(hex);
+    WkbReader reader = new WkbReader();
+    WkbParseException ex = Assertions.assertThrows(
+      WkbParseException.class, () -> reader.read(truncated));
+    Assertions.assertTrue(ex.getMessage().toUpperCase().contains(hex.toUpperCase()),
+      "Exception message should contain the WKB hex: " + hex);
+  }
+
+  @Test
   public void testTruncatedLineString() {
     // LineString with declared 2 points but only 1 provided
     String hex = "010200000002000000" +  // LineString with 2 points
@@ -139,7 +141,7 @@ public class WkbErrorHandlingTest {
       new Point(new double[]{1.0, 0.0}, 0),
       new Point(new double[]{0.0, 0.0}, 0)  // Only 3 points
     );
-    Ring invalidRing = new Ring(tooFewPoints, false, false);
+    Ring invalidRing = new Ring(tooFewPoints);
 
     // This ring should not pass isClosed() check since it has fewer than 4 points
     Assertions.assertFalse(invalidRing.isClosed(),

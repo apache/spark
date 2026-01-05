@@ -16,16 +16,12 @@
  */
 package org.apache.spark.sql.catalyst.util.geo;
 
-import java.util.Arrays;
-
 /**
  * Represents a point geometry with coordinates.
  */
 class Point extends GeometryModel {
   private final double[] coordinates;
-  private final boolean is_Empty;
-  private final boolean hasZ;
-  private final boolean hasM;
+  private final boolean isEmpty;
 
   /**
    * Creates a Point with coordinates, SRID, and dimension flags.
@@ -36,10 +32,8 @@ class Point extends GeometryModel {
    * @param hasM true if the point has an M coordinate
    */
   Point(double[] coordinates, int srid, boolean hasZ, boolean hasM) {
-    super(GeoTypeId.POINT, srid);
+    super(GeoTypeId.POINT, srid, hasZ, hasM);
     this.coordinates = coordinates;
-    this.hasZ = hasZ;
-    this.hasM = hasM;
     // Check if the point is empty (any coordinate is NaN)
     boolean empty = false;
     for (double coord : coordinates) {
@@ -48,7 +42,7 @@ class Point extends GeometryModel {
         break;
       }
     }
-    this.is_Empty = empty;
+    this.isEmpty = empty;
   }
 
   /**
@@ -97,30 +91,12 @@ class Point extends GeometryModel {
 
   @Override
   boolean isEmpty() {
-    return is_Empty;
+    return isEmpty;
   }
 
   @Override
   int getDimensionCount() {
     return coordinates.length;
-  }
-
-  @Override
-  boolean hasZ() {
-    return hasZ;
-  }
-
-  @Override
-  boolean hasM() {
-    return hasM;
-  }
-
-  @Override
-  public String toString() {
-    if (is_Empty) {
-      return "POINT EMPTY";
-    }
-    return "POINT (" + Arrays.toString(coordinates) + ")";
   }
 }
 

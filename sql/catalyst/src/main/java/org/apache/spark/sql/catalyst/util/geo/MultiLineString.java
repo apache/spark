@@ -23,14 +23,10 @@ import java.util.List;
  */
 class MultiLineString extends GeometryModel {
   private final List<LineString> lineStrings;
-  private final boolean hasZ;
-  private final boolean hasM;
 
   MultiLineString(List<LineString> lineStrings, int srid, boolean hasZ, boolean hasM) {
-    super(GeoTypeId.MULTI_LINESTRING, srid);
+    super(GeoTypeId.MULTI_LINESTRING, srid, hasZ, hasM);
     this.lineStrings = lineStrings;
-    this.hasZ = hasZ;
-    this.hasM = hasM;
   }
 
   List<LineString> getLineStrings() {
@@ -49,24 +45,6 @@ class MultiLineString extends GeometryModel {
   @Override
   int getDimensionCount() {
     return 2 + (hasZ ? 1 : 0) + (hasM ? 1 : 0);
-  }
-
-  @Override
-  boolean hasZ() {
-    return hasZ;
-  }
-
-  @Override
-  boolean hasM() {
-    return hasM;
-  }
-
-  @Override
-  public String toString() {
-    if (isEmpty()) {
-      return "MULTILINESTRING EMPTY";
-    }
-    return "MULTILINESTRING (" + lineStrings.size() + " linestrings)";
   }
 }
 

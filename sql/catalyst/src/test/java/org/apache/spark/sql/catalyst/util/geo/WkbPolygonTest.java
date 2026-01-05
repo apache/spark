@@ -38,7 +38,7 @@ public class WkbPolygonTest {
         new Point(new double[]{0.0, 4.0}, 0),
         new Point(new double[]{0.0, 0.0}, 0)
     );
-    Ring ring = new Ring(ringPoints, false, false);
+    Ring ring = new Ring(ringPoints);
     Polygon polygon = new Polygon(Arrays.asList(ring), 0, false, false);
 
     Assertions.assertFalse(polygon.isEmpty(), "Polygon should not be empty");
@@ -68,7 +68,7 @@ public class WkbPolygonTest {
         new Point(new double[]{0.0, 10.0}, 0),
         new Point(new double[]{0.0, 0.0}, 0)
     );
-    Ring exteriorRing = new Ring(exteriorPoints, false, false);
+    Ring exteriorRing = new Ring(exteriorPoints);
 
     // Interior ring (hole)
     List<Point> interiorPoints = Arrays.asList(
@@ -78,7 +78,7 @@ public class WkbPolygonTest {
         new Point(new double[]{2.0, 8.0}, 0),
         new Point(new double[]{2.0, 2.0}, 0)
     );
-    Ring interiorRing = new Ring(interiorPoints, false, false);
+    Ring interiorRing = new Ring(interiorPoints);
 
     Polygon polygon = new Polygon(Arrays.asList(exteriorRing, interiorRing), 0, false, false);
 
@@ -99,7 +99,7 @@ public class WkbPolygonTest {
         new Point(new double[]{0.0, 5.0}, 0),
         new Point(new double[]{0.0, 0.0}, 0)
     );
-    Ring ring = new Ring(ringPoints, false, false);
+    Ring ring = new Ring(ringPoints);
     Polygon original = new Polygon(Arrays.asList(ring), 0, false, false);
 
     // Write to WKB
@@ -130,7 +130,7 @@ public class WkbPolygonTest {
         new Point(new double[]{0.0, 1.0}, 0),
         new Point(new double[]{0.0, 0.0}, 0)
     );
-    Ring closedRing = new Ring(closedPoints, false, false);
+    Ring closedRing = new Ring(closedPoints);
     Assertions.assertTrue(closedRing.isClosed(), "Ring should be closed");
 
     // Non-closed ring (fewer than 4 points)
@@ -139,7 +139,7 @@ public class WkbPolygonTest {
         new Point(new double[]{1.0, 0.0}, 0),
         new Point(new double[]{1.0, 1.0}, 0)
     );
-    Ring openRing = new Ring(openPoints, false, false);
+    Ring openRing = new Ring(openPoints);
     Assertions.assertFalse(openRing.isClosed(),
         "Ring with fewer than 4 points should not be closed");
 
@@ -151,7 +151,7 @@ public class WkbPolygonTest {
         new Point(new double[]{0.0, 1.0}, 0),
         new Point(new double[]{0.1, 0.1}, 0)  // Different from first point
     );
-    Ring notClosedRing = new Ring(notClosedPoints, false, false);
+    Ring notClosedRing = new Ring(notClosedPoints);
     Assertions.assertFalse(notClosedRing.isClosed(),
         "Ring where first and last points differ should not be closed");
   }
@@ -165,7 +165,7 @@ public class WkbPolygonTest {
         new Point(new double[]{0.5, 0.866}, 0),
         new Point(new double[]{0.0, 0.0}, 0)
     );
-    Ring ring = new Ring(trianglePoints, false, false);
+    Ring ring = new Ring(trianglePoints);
     Polygon triangle = new Polygon(Arrays.asList(ring), 0, false, false);
 
     Assertions.assertEquals(4, triangle.getExteriorRing().getNumPoints(),
@@ -182,7 +182,7 @@ public class WkbPolygonTest {
         new Point(new double[]{0.0, 1.0}, 0),
         new Point(new double[]{0.0, 0.0}, 0)
     );
-    Ring ring = new Ring(ringPoints, false, false);
+    Ring ring = new Ring(ringPoints);
     Polygon polygon = new Polygon(Arrays.asList(ring), 0, false, false);
 
     String str = polygon.toString();

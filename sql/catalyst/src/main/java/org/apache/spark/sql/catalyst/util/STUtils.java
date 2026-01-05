@@ -63,17 +63,6 @@ public final class STUtils {
     return toPhysVal(Geometry.fromBytes(geographyVal.getBytes()));
   }
 
-  public static void parseWKB(byte[] wkb, int srid) {
-    new WkbReader().read(wkb, srid);
-  }
-
-  public static GeometryVal physicalValFromWKB(byte[] wkb, int srid) {
-    byte[] bytes = new byte[HEADER_SIZE + wkb.length];
-    ByteBuffer.wrap(bytes).order(DEFAULT_ENDIANNESS).putInt(srid);
-    System.arraycopy(wkb, 0, bytes, WKB_OFFSET, wkb.length);
-    return GeometryVal.fromBytes(bytes);
-  }
-
   /** Geospatial type encoder/decoder utilities. */
 
   public static GeometryVal serializeGeomFromWKB(org.apache.spark.sql.types.Geometry geometry,

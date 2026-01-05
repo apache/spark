@@ -25,25 +25,33 @@ public abstract class GeometryModel {
   /** GeometryModel internal implementation. */
 
   // Geometry type and SRID information
+  // The GeoTypeId enum represents the OGC WKB base code for the geometry type.
   protected GeoTypeId typeId;
   protected int sridValue;
 
-  /** GeometryModel constants. */
-
-  // The default SRID value for GEOMETRY values.
-  static int DEFAULT_SRID = 0;
+  // Dimension flags
+  protected final boolean hasZ;
+  protected final boolean hasM;
 
   /** GeometryModel constructors. */
 
-  // Protected constructor for subclasses
-  protected GeometryModel(GeoTypeId typeId, int srid) {
+  /**
+   * Constructor for GeometryModel.
+   * @param typeId enum representing OGC WKB base code.
+   * @param srid spatial reference ID.
+   * @param hasZ whether this geometry has Z coordinate.
+   * @param hasM whether this geometry has M coordinate.
+   */
+  protected GeometryModel(GeoTypeId typeId, int srid, boolean hasZ, boolean hasM) {
     this.typeId = typeId;
     this.sridValue = srid;
+    this.hasZ = hasZ;
+    this.hasM = hasM;
   }
 
   /** GeometryModel getters and instance methods. */
 
-  // Returns the geometry type ID
+  // Returns the geometry type ID (OGC WKB base code)
   GeoTypeId getTypeId() {
     return typeId;
   }
@@ -70,15 +78,13 @@ public abstract class GeometryModel {
   }
 
   // Returns true if this geometry has Z coordinate
-  // Subclasses should override this method
   boolean hasZ() {
-    return false;
+    return hasZ;
   }
 
   // Returns true if this geometry has M coordinate
-  // Subclasses should override this method
   boolean hasM() {
-    return false;
+    return hasM;
   }
 
   /** Type checking methods for GeometryModel subclasses. */
@@ -119,8 +125,6 @@ public abstract class GeometryModel {
   }
 
   /** Type casting methods for GeometryModel subclasses. */
-
-  // Casts this geometry to Point if it is an instance of Point
   Point asPoint() {
     if (isPoint()) {
       return (Point) this;
@@ -128,7 +132,6 @@ public abstract class GeometryModel {
     throw new ClassCastException("Cannot cast " + getClass().getSimpleName() + " to Point");
   }
 
-  // Casts this geometry to LineString if it is an instance of LineString
   LineString asLineString() {
     if (isLineString()) {
       return (LineString) this;
@@ -136,7 +139,6 @@ public abstract class GeometryModel {
     throw new ClassCastException("Cannot cast " + getClass().getSimpleName() + " to LineString");
   }
 
-  // Casts this geometry to Polygon if it is an instance of Polygon
   Polygon asPolygon() {
     if (isPolygon()) {
       return (Polygon) this;
@@ -144,7 +146,6 @@ public abstract class GeometryModel {
     throw new ClassCastException("Cannot cast " + getClass().getSimpleName() + " to Polygon");
   }
 
-  // Casts this geometry to MultiPoint if it is an instance of MultiPoint
   MultiPoint asMultiPoint() {
     if (isMultiPoint()) {
       return (MultiPoint) this;
@@ -152,7 +153,6 @@ public abstract class GeometryModel {
     throw new ClassCastException("Cannot cast " + getClass().getSimpleName() + " to MultiPoint");
   }
 
-  // Casts this geometry to MultiLineString if it is an instance of MultiLineString
   MultiLineString asMultiLineString() {
     if (isMultiLineString()) {
       return (MultiLineString) this;
@@ -161,7 +161,6 @@ public abstract class GeometryModel {
       "Cannot cast " + getClass().getSimpleName() + " to MultiLineString");
   }
 
-  // Casts this geometry to MultiPolygon if it is an instance of MultiPolygon
   MultiPolygon asMultiPolygon() {
     if (isMultiPolygon()) {
       return (MultiPolygon) this;
@@ -169,7 +168,6 @@ public abstract class GeometryModel {
     throw new ClassCastException("Cannot cast " + getClass().getSimpleName() + " to MultiPolygon");
   }
 
-  // Casts this geometry to GeometryCollection if it is an instance of GeometryCollection
   GeometryCollection asGeometryCollection() {
     if (isGeometryCollection()) {
       return (GeometryCollection) this;
@@ -177,6 +175,5 @@ public abstract class GeometryModel {
     throw new ClassCastException(
       "Cannot cast " + getClass().getSimpleName() + " to GeometryCollection");
   }
-
 }
 

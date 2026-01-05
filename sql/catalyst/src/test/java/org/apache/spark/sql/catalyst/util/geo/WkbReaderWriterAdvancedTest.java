@@ -30,31 +30,7 @@ import java.util.List;
  * These tests verify WKB round-trip (read/write) for various geometry types
  * in different dimensions (2D, 3DZ, 3DM, 4D).
  */
-public class WkbReaderWriterAdvancedTest {
-
-  /**
-   * Helper method to convert hex string to byte array
-   */
-  private byte[] hexToBytes(String hex) {
-    int len = hex.length();
-    byte[] data = new byte[len / 2];
-    for (int i = 0; i < len; i += 2) {
-      data[i / 2] = (byte) ((Character.digit(hex.charAt(i), 16) << 4)
-          + Character.digit(hex.charAt(i + 1), 16));
-    }
-    return data;
-  }
-
-  /**
-   * Helper method to convert byte array to hex string
-   */
-  private String bytesToHex(byte[] bytes) {
-    StringBuilder sb = new StringBuilder();
-    for (byte b : bytes) {
-      sb.append(String.format("%02x", b));
-    }
-    return sb.toString();
-  }
+public class WkbReaderWriterAdvancedTest extends WkbTestBase {
 
   /**
    * Test helper to verify WKB parsing from hex string in both byte orders

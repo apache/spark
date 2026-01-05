@@ -23,14 +23,10 @@ import java.util.List;
  */
 class MultiPolygon extends GeometryModel {
   private final List<Polygon> polygons;
-  private final boolean hasZ;
-  private final boolean hasM;
 
   MultiPolygon(List<Polygon> polygons, int srid, boolean hasZ, boolean hasM) {
-    super(GeoTypeId.MULTI_POLYGON, srid);
+    super(GeoTypeId.MULTI_POLYGON, srid, hasZ, hasM);
     this.polygons = polygons;
-    this.hasZ = hasZ;
-    this.hasM = hasM;
   }
 
   List<Polygon> getPolygons() {
@@ -49,24 +45,6 @@ class MultiPolygon extends GeometryModel {
   @Override
   int getDimensionCount() {
     return 2 + (hasZ ? 1 : 0) + (hasM ? 1 : 0);
-  }
-
-  @Override
-  boolean hasZ() {
-    return hasZ;
-  }
-
-  @Override
-  boolean hasM() {
-    return hasM;
-  }
-
-  @Override
-  public String toString() {
-    if (isEmpty()) {
-      return "MULTIPOLYGON EMPTY";
-    }
-    return "MULTIPOLYGON (" + polygons.size() + " polygons)";
   }
 }
 
