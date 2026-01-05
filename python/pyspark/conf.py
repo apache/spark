@@ -172,12 +172,10 @@ class SparkConf:
         return self
 
     @overload
-    def setExecutorEnv(self, key: str, value: str) -> "SparkConf":
-        ...
+    def setExecutorEnv(self, key: str, value: str) -> "SparkConf": ...
 
     @overload
-    def setExecutorEnv(self, *, pairs: List[Tuple[str, str]]) -> "SparkConf":
-        ...
+    def setExecutorEnv(self, *, pairs: List[Tuple[str, str]]) -> "SparkConf": ...
 
     def setExecutorEnv(
         self,
@@ -212,16 +210,13 @@ class SparkConf:
         return self
 
     @overload
-    def get(self, key: str) -> Optional[str]:
-        ...
+    def get(self, key: str) -> Optional[str]: ...
 
     @overload
-    def get(self, key: str, defaultValue: None) -> Optional[str]:
-        ...
+    def get(self, key: str, defaultValue: None) -> Optional[str]: ...
 
     @overload
-    def get(self, key: str, defaultValue: str) -> str:
-        ...
+    def get(self, key: str, defaultValue: str) -> str: ...
 
     def get(self, key: str, defaultValue: Optional[str] = None) -> Optional[str]:
         """Get the configured value for some key, or return a default otherwise."""

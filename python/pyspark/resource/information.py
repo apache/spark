@@ -19,7 +19,6 @@ from typing import List
 
 
 class ResourceInformation:
-
     """
     Class to hold information about a type of Resource. A resource could be a GPU, FPGA, etc.
     The array of addresses are resource specific and its up to the user to interpret the address.

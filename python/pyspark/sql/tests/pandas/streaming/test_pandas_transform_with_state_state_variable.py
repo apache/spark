@@ -63,8 +63,7 @@ from pyspark.sql.tests.pandas.helper.helper_pandas_transform_with_state import (
 class TransformWithStateStateVariableTestsMixin:
     @classmethod
     @abstractmethod
-    def use_pandas(cls) -> bool:
-        ...
+    def use_pandas(cls) -> bool: ...
 
     @classmethod
     def get_processor(cls, stateful_processor_factory) -> StatefulProcessor:
