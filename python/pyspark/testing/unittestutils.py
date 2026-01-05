@@ -18,11 +18,11 @@
 import unittest
 
 
-def main(module="__main__"):
+def main(module="__main__", output="target/test-reports"):
     try:
         import xmlrunner
 
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
+        testRunner = xmlrunner.XMLTestRunner(output=output, verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(module=module, testRunner=testRunner, verbosity=2)
