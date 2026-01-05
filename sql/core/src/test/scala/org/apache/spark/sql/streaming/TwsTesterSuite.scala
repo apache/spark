@@ -612,6 +612,10 @@ class TwsTesterSuite extends SparkFunSuite {
 class TwsTesterFuzzTestSuite extends StreamTest {
   import testImplicits._
 
+  // Seed for random number generators - replace with a specific value to reproduce failures
+  private val fuzzTestSeed: Long = System.currentTimeMillis()
+  logInfo(s"TwsTesterFuzzTestSuite using seed: $fuzzTestSeed")
+
   // Disable thread auditing for this suite since it runs integration tests with
   // real streaming queries that create asynchronously-stopped threads
   override protected val enableAutoThreadAudit = false
@@ -680,7 +684,7 @@ class TwsTesterFuzzTestSuite extends StreamTest {
   }
 
   test("fuzz test with RunningCountProcessor") {
-    val random = new scala.util.Random(0)
+    val random = new scala.util.Random(fuzzTestSeed)
     val input = List.fill(1000) {
       (s"key${random.nextInt(10)}", random.alphanumeric.take(5).mkString)
     }
@@ -689,7 +693,7 @@ class TwsTesterFuzzTestSuite extends StreamTest {
   }
 
   test("fuzz test with TopKProcessor") {
-    val random = new scala.util.Random(0)
+    val random = new scala.util.Random(fuzzTestSeed)
     val input = List.fill(1000) {
       (
         s"key${random.nextInt(10)}",
@@ -701,7 +705,7 @@ class TwsTesterFuzzTestSuite extends StreamTest {
   }
 
   test("fuzz test with WordFrequencyProcessor") {
-    val random = new scala.util.Random(0)
+    val random = new scala.util.Random(fuzzTestSeed)
     val words = Array("spark", "scala", "flink", "kafka", "hadoop", "hive", "presto", "trino")
     val input = List.fill(1000) {
       (s"key${random.nextInt(10)}", ("", words(random.nextInt(words.length))))
@@ -711,7 +715,7 @@ class TwsTesterFuzzTestSuite extends StreamTest {
   }
 
   test("fuzz test for AllMethodsTestProcessor") {
-    val random = new scala.util.Random(0)
+    val random = new scala.util.Random(fuzzTestSeed)
     val commands = Array(
       "value-exists",
       "value-set",
