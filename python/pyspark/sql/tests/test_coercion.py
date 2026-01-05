@@ -436,6 +436,125 @@ class DecimalCoercionTests(unittest.TestCase):
         self.assertIsNone(self.decimal_type.coerce(1, CoercionPolicy.PERMISSIVE))
 
 
+class NestedTypeCoercionTests(unittest.TestCase):
+    """Tests for recursive coercion in nested types (ArrayType, MapType, StructType)."""
+
+    def setUp(self):
+        _clear_coercion_warnings()
+
+    def test_array_element_coercion(self):
+        """ArrayType should recursively coerce elements."""
+        array_int_type = ArrayType(IntegerType())
+        # float elements should be coerced to None for IntegerType
+        for policy in [CoercionPolicy.PERMISSIVE, CoercionPolicy.WARN]:
+            result = array_int_type.coerce([1.5, 2.5, 3.5], policy)
+            self.assertEqual(result, [None, None, None])
+
+    def test_array_element_coercion_mixed(self):
+        """ArrayType should coerce each element independently."""
+        array_int_type = ArrayType(IntegerType())
+        # Mix of valid and invalid types
+        for policy in [CoercionPolicy.PERMISSIVE, CoercionPolicy.WARN]:
+            result = array_int_type.coerce([1, 2.5, 3], policy)
+            self.assertEqual(result, [1, None, 3])
+
+    def test_array_element_coercion_with_none(self):
+        """ArrayType should handle None elements correctly."""
+        array_int_type = ArrayType(IntegerType())
+        for policy in [CoercionPolicy.PERMISSIVE, CoercionPolicy.WARN]:
+            result = array_int_type.coerce([1, None, 3], policy)
+            self.assertEqual(result, [1, None, 3])
+
+    def test_nested_array_coercion(self):
+        """Nested ArrayType should coerce recursively."""
+        nested_array_type = ArrayType(ArrayType(IntegerType()))
+        for policy in [CoercionPolicy.PERMISSIVE, CoercionPolicy.WARN]:
+            result = nested_array_type.coerce([[1, 2.5], [3.5, 4]], policy)
+            self.assertEqual(result, [[1, None], [None, 4]])
+
+    def test_map_value_coercion(self):
+        """MapType should recursively coerce values."""
+        map_type = MapType(StringType(), IntegerType())
+        for policy in [CoercionPolicy.PERMISSIVE, CoercionPolicy.WARN]:
+            result = map_type.coerce({"a": 1.5, "b": 2}, policy)
+            self.assertEqual(result, {"a": None, "b": 2})
+
+    def test_map_key_coercion(self):
+        """MapType should recursively coerce keys."""
+        map_type = MapType(StringType(), IntegerType())
+        for policy in [CoercionPolicy.PERMISSIVE, CoercionPolicy.WARN]:
+            # int key should be coerced to string "1"
+            result = map_type.coerce({1: 2}, policy)
+            self.assertEqual(result, {"1": 2})
+
+    def test_map_nested_value_coercion(self):
+        """MapType with nested value type should coerce recursively."""
+        map_type = MapType(StringType(), ArrayType(IntegerType()))
+        for policy in [CoercionPolicy.PERMISSIVE, CoercionPolicy.WARN]:
+            result = map_type.coerce({"a": [1, 2.5, 3]}, policy)
+            self.assertEqual(result, {"a": [1, None, 3]})
+
+    def test_struct_field_coercion_from_row(self):
+        """StructType should recursively coerce fields from Row."""
+        struct_type = StructType([StructField("x", IntegerType())])
+        row = Row(x=1.5)
+        for policy in [CoercionPolicy.PERMISSIVE, CoercionPolicy.WARN]:
+            result = struct_type.coerce(row, policy)
+            self.assertIsNone(result.x)
+
+    def test_struct_field_coercion_from_tuple(self):
+        """StructType should recursively coerce fields from tuple."""
+        struct_type = StructType([StructField("x", IntegerType())])
+        for policy in [CoercionPolicy.PERMISSIVE, CoercionPolicy.WARN]:
+            result = struct_type.coerce((1.5,), policy)
+            self.assertIsNone(result.x)
+
+    def test_struct_field_coercion_from_dict(self):
+        """StructType should recursively coerce fields from dict."""
+        struct_type = StructType([StructField("x", IntegerType())])
+        for policy in [CoercionPolicy.PERMISSIVE, CoercionPolicy.WARN]:
+            result = struct_type.coerce({"x": 1.5}, policy)
+            self.assertIsNone(result.x)
+
+    def test_struct_field_coercion_from_list(self):
+        """StructType should recursively coerce fields from list."""
+        struct_type = StructType([StructField("x", IntegerType())])
+        result = struct_type.coerce([1.5], CoercionPolicy.PERMISSIVE)
+        self.assertIsNone(result.x)
+
+    def test_struct_multiple_fields_coercion(self):
+        """StructType with multiple fields should coerce each field."""
+        struct_type = StructType([StructField("a", IntegerType()), StructField("b", StringType())])
+        for policy in [CoercionPolicy.PERMISSIVE, CoercionPolicy.WARN]:
+            result = struct_type.coerce((1.5, 123), policy)
+            self.assertIsNone(result.a)  # float -> int: None
+            self.assertEqual(result.b, "123")  # int -> string: "123"
+
+    def test_nested_struct_coercion(self):
+        """Nested StructType should coerce recursively."""
+        inner_struct = StructType([StructField("x", IntegerType())])
+        outer_struct = StructType([StructField("inner", inner_struct)])
+        for policy in [CoercionPolicy.PERMISSIVE, CoercionPolicy.WARN]:
+            result = outer_struct.coerce((Row(x=1.5),), policy)
+            self.assertIsNone(result.inner.x)
+
+    def test_struct_with_array_field_coercion(self):
+        """StructType with ArrayType field should coerce recursively."""
+        struct_type = StructType([StructField("arr", ArrayType(IntegerType()))])
+        for policy in [CoercionPolicy.PERMISSIVE, CoercionPolicy.WARN]:
+            result = struct_type.coerce(([1, 2.5, 3],), policy)
+            self.assertEqual(result.arr, [1, None, 3])
+
+    def test_array_of_struct_coercion(self):
+        """ArrayType of StructType should coerce recursively."""
+        struct_type = StructType([StructField("x", IntegerType())])
+        array_struct_type = ArrayType(struct_type)
+        for policy in [CoercionPolicy.PERMISSIVE, CoercionPolicy.WARN]:
+            result = array_struct_type.coerce([Row(x=1), Row(x=2.5)], policy)
+            self.assertEqual(result[0].x, 1)
+            self.assertIsNone(result[1].x)
+
+
 class DefaultPolicyTests(unittest.TestCase):
     """Tests that coerce() defaults to PERMISSIVE policy."""
 

@@ -1259,12 +1259,12 @@ class ArrayType(DataType):
     def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
         if value is None:
             return None
-        # list -> array: exact match
+        # list -> array: exact match, recursively coerce elements
         if isinstance(value, list):
-            return value
-        # tuple -> array: both paths convert
+            return [self.elementType.coerce(v, policy) for v in value]
+        # tuple -> array: both paths convert, recursively coerce elements
         if isinstance(value, tuple) or isinstance(value, array) or isinstance(value, bytearray):
-            return list(value)
+            return [self.elementType.coerce(v, policy) for v in value]
         # Row -> array: pickle raises
         if hasattr(value, "__class__") and value.__class__.__name__ == "Row":
             if policy == CoercionPolicy.WARN:
@@ -1432,9 +1432,12 @@ class MapType(DataType):
     def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
         if value is None:
             return None
-        # dict -> map: exact match
+        # dict -> map: exact match, recursively coerce keys and values
         if isinstance(value, dict):
-            return value
+            return {
+                self.keyType.coerce(k, policy): self.valueType.coerce(v, policy)
+                for k, v in value.items()
+            }
         # Other types: pickle returns None
         return None
 
@@ -2073,22 +2076,35 @@ class StructType(DataType):
     def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
         if value is None:
             return None
-        # Row -> struct: exact match
+        # Row -> struct: exact match, recursively coerce fields
         if isinstance(value, Row):
-            return value
-        # tuple -> struct: both paths convert
+            coerced_values = [
+                field.dataType.coerce(value[i], policy) for i, field in enumerate(self.fields)
+            ]
+            return _create_row(self.names, coerced_values)
+        # tuple -> struct: both paths convert, recursively coerce fields
         if isinstance(value, tuple):
-            return _create_row(self.names, list(value))
-        # dict -> struct: both paths convert (field matching)
+            coerced_values = [
+                field.dataType.coerce(value[i], policy) for i, field in enumerate(self.fields)
+            ]
+            return _create_row(self.names, coerced_values)
+        # dict -> struct: both paths convert (field matching), recursively coerce fields
         if isinstance(value, dict):
-            return _create_row(self.names, [value.get(n) for n in self.names])
-        # list -> struct: pickle converts
+            coerced_values = [
+                field.dataType.coerce(value.get(n), policy)
+                for n, field in zip(self.names, self.fields)
+            ]
+            return _create_row(self.names, coerced_values)
+        # list -> struct: pickle converts, recursively coerce fields
         if isinstance(value, list):
             if policy == CoercionPolicy.WARN:
                 _warn_coercion_once(
                     "Coercing list to struct works in pickle mode but raises in Arrow mode"
                 )
-            return _create_row(self.names, value)
+            coerced_values = [
+                field.dataType.coerce(value[i], policy) for i, field in enumerate(self.fields)
+            ]
+            return _create_row(self.names, coerced_values)
         # Other types: raise
         raise PySparkTypeError(
             errorClass="CANNOT_CONVERT_TYPE",

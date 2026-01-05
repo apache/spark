@@ -580,6 +580,8 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_session",
         "pyspark.sql.tests.test_subquery",
         "pyspark.sql.tests.test_types",
+        "pyspark.sql.tests.test_coercion",
+        "pyspark.sql.tests.test_arrow_udf_coercion",
         "pyspark.sql.tests.test_geographytype",
         "pyspark.sql.tests.test_geometrytype",
         "pyspark.sql.tests.test_udf",
