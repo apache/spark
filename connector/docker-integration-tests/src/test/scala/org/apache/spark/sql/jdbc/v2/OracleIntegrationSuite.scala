@@ -22,10 +22,8 @@ import java.util.Locale
 
 import org.apache.spark.{SparkConf, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalyst.expressions.EvalMode
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.OracleDatabaseOnDocker
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
@@ -205,10 +203,6 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
     }
   }
 
-  // Oracle only supports TimestampType so `month(date)` will be analyzed to
-  // `month(cast(date) as date)` and cast is not pushdownable in non-ansi mode
-  private def ansiMode: Boolean = EvalMode.fromSQLConf(SQLConf.get) == EvalMode.ANSI
-
   override def testDatetime(tbl: String): Unit = {
     val df1 = sql(s"SELECT name FROM $tbl WHERE " +
       "dayofyear(date1) > 100 AND dayofmonth(date1) > 10 ")
@@ -225,14 +219,12 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
     assert(rows2(0).getString(0) === "amy")
     assert(rows2(1).getString(0) === "alex")
 
-    if (ansiMode) {
-      val df3 = sql(s"SELECT name FROM $tbl WHERE month(date1) = 5")
-      checkFilterPushed(df3)
-      val rows3 = df3.collect()
-      assert(rows3.length === 2)
-      assert(rows3(0).getString(0) === "amy")
-      assert(rows3(1).getString(0) === "alex")
-    }
+    val df3 = sql(s"SELECT name FROM $tbl WHERE month(date1) = 5")
+    checkFilterPushed(df3)
+    val rows3 = df3.collect()
+    assert(rows3.length === 2)
+    assert(rows3(0).getString(0) === "amy")
+    assert(rows3(1).getString(0) === "alex")
 
     val df4 = sql(s"SELECT name FROM $tbl WHERE hour(time1) = 0 AND minute(time1) = 0")
     checkFilterPushed(df4)
@@ -304,30 +296,26 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
       assert(rows(0).getString(0) === "amy")
     }
 
-    if (ansiMode) {
-      withClue("dayofmonth") {
-        val dom = sql(s"SELECT dayofmonth(date1) FROM $tbl WHERE name = 'amy'")
-          .collect().head.getInt(0)
-        val df = sql(s"SELECT name FROM $tbl WHERE dayofmonth(date1) = $dom")
-        checkFilterPushed(df)
-        val rows = df.collect()
-        assert(rows.length === 1)
-        assert(rows(0).getString(0) === "amy")
-      }
+    withClue("dayofmonth") {
+      val dom = sql(s"SELECT dayofmonth(date1) FROM $tbl WHERE name = 'amy'")
+        .collect().head.getInt(0)
+      val df = sql(s"SELECT name FROM $tbl WHERE dayofmonth(date1) = $dom")
+      checkFilterPushed(df)
+      val rows = df.collect()
+      assert(rows.length === 1)
+      assert(rows(0).getString(0) === "amy")
     }
 
-    if (ansiMode) {
-      withClue("year") {
-        val year = sql(s"SELECT year(date1) FROM $tbl WHERE name = 'amy'")
-          .collect().head.getInt(0)
-        val df = sql(s"SELECT name FROM $tbl WHERE year(date1) = $year")
-        checkFilterPushed(df)
-        val rows = df.collect()
-        assert(rows.length === 3)
-        assert(rows(0).getString(0) === "amy")
-        assert(rows5(1).getString(0) === "alex")
-        assert(rows5(2).getString(0) === "tom")
-      }
+    withClue("year") {
+      val year = sql(s"SELECT year(date1) FROM $tbl WHERE name = 'amy'")
+        .collect().head.getInt(0)
+      val df = sql(s"SELECT name FROM $tbl WHERE year(date1) = $year")
+      checkFilterPushed(df)
+      val rows = df.collect()
+      assert(rows.length === 3)
+      assert(rows(0).getString(0) === "amy")
+      assert(rows5(1).getString(0) === "alex")
+      assert(rows5(2).getString(0) === "tom")
     }
 
     withClue("second") {
@@ -346,13 +334,11 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
     assert(rows9.length === 1)
     assert(rows9(0).getString(0) === "alex")
 
-    if (ansiMode) {
-      val df10 = sql(s"SELECT name FROM $tbl WHERE trunc(date1, 'week') = date'2022-05-16'")
-      checkFilterPushed(df10)
-      val rows10 = df10.collect()
-      assert(rows10.length === 2)
-      assert(rows10(0).getString(0) === "amy")
-      assert(rows10(1).getString(0) === "alex")
-    }
+    val df10 = sql(s"SELECT name FROM $tbl WHERE trunc(date1, 'week') = date'2022-05-16'")
+    checkFilterPushed(df10)
+    val rows10 = df10.collect()
+    assert(rows10.length === 2)
+    assert(rows10(0).getString(0) === "amy")
+    assert(rows10(1).getString(0) === "alex")
   }
 }

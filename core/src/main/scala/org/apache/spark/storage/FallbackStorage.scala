@@ -36,6 +36,7 @@ import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcTimeout}
 import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleBlockInfo}
 import org.apache.spark.shuffle.IndexShuffleBlockResolver.NOOP_REDUCE_ID
+import org.apache.spark.storage.BlockManagerMessages.RemoveShuffle
 import org.apache.spark.util.Utils
 
 /**
@@ -95,7 +96,8 @@ private[storage] class FallbackStorage(conf: SparkConf) extends Logging {
   }
 }
 
-private[storage] class NoopRpcEndpointRef(conf: SparkConf) extends RpcEndpointRef(conf) {
+private[storage] class FallbackStorageRpcEndpointRef(conf: SparkConf, hadoopConf: Configuration)
+    extends RpcEndpointRef(conf) {
   // scalastyle:off executioncontextglobal
   import scala.concurrent.ExecutionContext.Implicits.global
   // scalastyle:on executioncontextglobal
@@ -103,6 +105,11 @@ private[storage] class NoopRpcEndpointRef(conf: SparkConf) extends RpcEndpointRe
   override def name: String = "fallback"
   override def send(message: Any): Unit = {}
   override def ask[T: ClassTag](message: Any, timeout: RpcTimeout): Future[T] = {
+    message match {
+      case RemoveShuffle(shuffleId) =>
+        FallbackStorage.cleanUp(conf, hadoopConf, Some(shuffleId))
+      case _ => // no-op
+    }
     Future{true.asInstanceOf[T]}
   }
 }
@@ -120,20 +127,25 @@ private[spark] object FallbackStorage extends Logging {
   }
 
   /** Register the fallback block manager and its RPC endpoint. */
-  def registerBlockManagerIfNeeded(master: BlockManagerMaster, conf: SparkConf): Unit = {
+  def registerBlockManagerIfNeeded(
+      master: BlockManagerMaster,
+      conf: SparkConf,
+      hadoopConf: Configuration): Unit = {
     if (conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {
       master.registerBlockManager(
-        FALLBACK_BLOCK_MANAGER_ID, Array.empty[String], 0, 0, new NoopRpcEndpointRef(conf))
+        FALLBACK_BLOCK_MANAGER_ID, Array.empty[String], 0, 0,
+        new FallbackStorageRpcEndpointRef(conf, hadoopConf))
     }
   }
 
-  /** Clean up the generated fallback location for this app. */
-  def cleanUp(conf: SparkConf, hadoopConf: Configuration): Unit = {
+  /** Clean up the generated fallback location for this app (and shuffle id if given). */
+  def cleanUp(conf: SparkConf, hadoopConf: Configuration, shuffleId: Option[Int] = None): Unit = {
     if (conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined &&
         conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_CLEANUP) &&
         conf.contains("spark.app.id")) {
-      val fallbackPath =
+      val fallbackPath = shuffleId.foldLeft(
         new Path(conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).get, conf.getAppId)
+      ) { case (path, shuffleId) => new Path(path, shuffleId.toString) }
       val fallbackUri = fallbackPath.toUri
       val fallbackFileSystem = FileSystem.get(fallbackUri, hadoopConf)
       // The fallback directory for this app may not be created yet.

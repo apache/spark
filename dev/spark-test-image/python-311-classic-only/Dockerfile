@@ -24,7 +24,7 @@ LABEL org.opencontainers.image.ref.name="Apache Spark Infra Image For PySpark Cl
 # Overwrite this label to avoid exposing the underlying Ubuntu OS version label
 LABEL org.opencontainers.image.version=""
 
-ENV FULL_REFRESH_DATE=20250618
+ENV FULL_REFRESH_DATE=20251224
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
@@ -49,6 +49,7 @@ RUN apt-get update && apt-get install -y \
     libpython3-dev \
     libssl-dev \
     libtiff5-dev \
+    libwebp-dev \
     libxml2-dev \
     openjdk-17-jdk-headless \
     pkg-config \
@@ -67,13 +68,13 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 
-ARG BASIC_PIP_PKGS="numpy pyarrow>=21.0.0 pandas==2.3.1 plotly<6.0.0 matplotlib openpyxl memory-profiler>=0.61.0 mlflow>=2.8.1 scipy scikit-learn>=1.3.2"
+ARG BASIC_PIP_PKGS="numpy pyarrow>=22.0.0 pandas==2.3.3 plotly<6.0.0 matplotlib openpyxl memory-profiler>=0.61.0 mlflow>=2.8.1 scipy scikit-learn>=1.3.2"
 ARG TEST_PIP_PKGS="coverage unittest-xml-reporting"
 
 # Install Python 3.11 packages
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
-RUN python3.11 -m pip install --ignore-installed blinker>=1.6.2 # mlflow needs this
+RUN python3.11 -m pip install --ignore-installed 'blinker>=1.6.2' # mlflow needs this
 RUN python3.11 -m pip install $BASIC_PIP_PKGS $TEST_PIP_PKGS && \
-    python3.11 -m pip install 'torch<2.6.0' torchvision --index-url https://download.pytorch.org/whl/cpu && \
+    python3.11 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
     python3.11 -m pip install deepspeed torcheval && \
     python3.11 -m pip cache purge

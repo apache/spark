@@ -148,6 +148,20 @@ class SQLTestUtils:
                 self.spark.catalog.dropTempView(v)
 
     @contextmanager
+    def temp_func(self, *functions):
+        """
+        A convenient context manager to test with some specific temporary functions.
+        This drops the temporary functions if it exists.
+        """
+        assert hasattr(self, "spark"), "it should have 'spark' attribute, having a spark session."
+
+        try:
+            yield
+        finally:
+            for f in functions:
+                self.spark.sql("DROP TEMPORARY FUNCTION IF EXISTS %s" % f)
+
+    @contextmanager
     def function(self, *functions):
         """
         A convenient context manager to test with some specific functions. This drops the given
@@ -194,7 +208,8 @@ class SQLTestUtils:
 class ReusedSQLTestCase(ReusedPySparkTestCase, SQLTestUtils, PySparkErrorTestUtils):
     @classmethod
     def setUpClass(cls):
-        super(ReusedSQLTestCase, cls).setUpClass()
+        super().setUpClass()
+
         cls._legacy_sc = cls.sc
         cls.spark = SparkSession(cls.sc)
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
@@ -204,6 +219,14 @@ class ReusedSQLTestCase(ReusedPySparkTestCase, SQLTestUtils, PySparkErrorTestUti
 
     @classmethod
     def tearDownClass(cls):
-        super(ReusedSQLTestCase, cls).tearDownClass()
-        cls.spark.stop()
-        shutil.rmtree(cls.tempdir.name, ignore_errors=True)
+        try:
+            cls.spark.stop()
+            shutil.rmtree(cls.tempdir.name, ignore_errors=True)
+        finally:
+            super().tearDownClass()
+
+    def tearDown(self):
+        try:
+            self.spark._jsparkSession.cleanupPythonWorkerLogs()
+        finally:
+            super().tearDown()

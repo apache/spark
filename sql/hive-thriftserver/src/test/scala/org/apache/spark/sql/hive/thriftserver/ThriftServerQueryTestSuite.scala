@@ -103,7 +103,10 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     "timestampNTZ/datetime-special-ansi.sql",
     // SPARK-47264
     "view-with-default-collation.sql",
-    "collations.sql",
+    "collations-basic.sql",
+    "collations-aliases.sql",
+    "collations-padding-trim.sql",
+    "collations-string-functions.sql",
     "listagg-collations.sql",
     "pipe-operators.sql",
     // VARIANT type

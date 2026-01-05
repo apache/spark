@@ -19,6 +19,9 @@ package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.catalyst.plans.logical.Filter
+import org.apache.spark.sql.catalyst.util.AttributeNameParser
+import org.apache.spark.sql.catalyst.util.QuotingUtils.quoteNameParts
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.catalog.constraints.Check
 import org.apache.spark.sql.execution.command.DDLCommandTestUtils
@@ -28,11 +31,11 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
   override protected def command: String = "Check CONSTRAINT"
 
   test("Nondeterministic expression -- alter table") {
-    withTable("t") {
-      sql("create table t(i double)")
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (i DOUBLE) $defaultUsing")
       val query =
-        """
-          |ALTER TABLE t ADD CONSTRAINT c1 CHECK (i > rand(0))
+        s"""
+          |ALTER TABLE $t ADD CONSTRAINT c1 CHECK (i > rand(0))
           |""".stripMargin
       val error = intercept[AnalysisException] {
         sql(query)
@@ -44,8 +47,8 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         parameters = Map("checkCondition" -> "i > rand(0)"),
         context = ExpectedContext(
           fragment = "i > rand(0)",
-          start = 40,
-          stop = 50
+          start = 67,
+          stop = 77
         )
       )
     }
@@ -76,27 +79,31 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
   }
 
   test("Expression referring a column of another table -- alter table") {
-    withTable("t", "t2") {
-      sql("CREATE TABLE t(i DOUBLE) USING parquet")
-      sql("CREATE TABLE t2(j STRING) USING parquet")
-      val query =
-        """
-          |ALTER TABLE t ADD CONSTRAINT c1 CHECK (len(t2.j) > 0)
-          |""".stripMargin
-      val error = intercept[AnalysisException] {
-        sql(query)
-      }
-      checkError(
-        exception = error,
-        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-        sqlState = "42703",
-        parameters = Map("objectName" -> "`t2`.`j`", "proposal" -> "`t`.`i`"),
-        context = ExpectedContext(
-          fragment = "t2.j",
-          start = 44,
-          stop = 47
+    withNamespaceAndTable("ns", "tbl_1", nonPartitionCatalog) { t1 =>
+      withNamespaceAndTable("ns", "tbl_2", nonPartitionCatalog) { t2 =>
+        sql(s"CREATE TABLE $t1(i DOUBLE) $defaultUsing")
+        sql(s"CREATE TABLE $t2(j STRING) $defaultUsing")
+        val query =
+          s"""
+            |ALTER TABLE $t1 ADD CONSTRAINT c1 CHECK (len($t2.j) > 0)
+            |""".stripMargin
+        val error = intercept[AnalysisException] {
+          sql(query)
+        }
+        checkError(
+          exception = error,
+          condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+          sqlState = "42703",
+          parameters = Map(
+            "objectName" -> quoteNameParts(AttributeNameParser.parseAttributeName(s"$t2.j")),
+            "proposal" -> quoteNameParts(AttributeNameParser.parseAttributeName(s"$t1.i"))),
+          context = ExpectedContext(
+            fragment = s"$t2.j",
+            start = 73,
+            stop = 104
+          )
         )
-      )
+      }
     }
   }
 
@@ -206,7 +213,7 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         sql(s"INSERT INTO $t VALUES (1, 'a'), (null, 'b')")
         sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (id > 0) $characteristic")
         val table = loadTable(nonPartitionCatalog, "ns", "tbl")
-        assert(table.currentVersion() == "2")
+        assert(table.version() == "2")
         assert(table.validatedVersion() == "1")
         val constraint = getCheckConstraint(table)
         assert(constraint.name() == "c1")
@@ -253,7 +260,7 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       // Add a valid check constraint
       sql(s"ALTER TABLE $t ADD CONSTRAINT valid_positive_num CHECK (s.num >= -1)")
       val table = loadTable(nonPartitionCatalog, "ns", "tbl")
-      assert(table.currentVersion() == "2")
+      assert(table.version() == "2")
       assert(table.validatedVersion() == "1")
       val constraint = getCheckConstraint(table)
       assert(constraint.name() == "valid_positive_num")
@@ -283,7 +290,7 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       // Add a valid check constraint
       sql(s"ALTER TABLE $t ADD CONSTRAINT valid_map_val CHECK (m['a'] >= -1)")
       val table = loadTable(nonPartitionCatalog, "ns", "tbl")
-      assert(table.currentVersion() == "2")
+      assert(table.version() == "2")
       assert(table.validatedVersion() == "1")
       val constraint = getCheckConstraint(table)
       assert(constraint.name() == "valid_map_val")
@@ -311,7 +318,7 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       // Add a valid check constraint
       sql(s"ALTER TABLE $t ADD CONSTRAINT valid_array CHECK (a[1] >= -2)")
       val table = loadTable(nonPartitionCatalog, "ns", "tbl")
-      assert(table.currentVersion() == "2")
+      assert(table.version() == "2")
       assert(table.validatedVersion() == "1")
       val constraint = getCheckConstraint(table)
       assert(constraint.name() == "valid_array")
@@ -1147,6 +1154,49 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
         checkAnswer(spark.table(target),
           Seq(Row(1, 10, Seq(5, 6)), Row(2, 20, Seq(7, 8)),
             Row(3, 30, null), Row(4, 40, null)))
+      }
+    }
+  }
+
+  test("Check constraint with constant valid expression should be optimized out") {
+    Seq(
+      "1 > 0",
+      "abs(-99) < 100",
+      "null",
+      "current_date() > DATE'2023-01-01'"
+    ).foreach { constant =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT, value INT," +
+          s" CONSTRAINT positive_id CHECK ($constant)) $defaultUsing")
+        val optimizedPlan =
+          sql(s"INSERT INTO $t VALUES (1, 10), (2, 20)").queryExecution.optimizedPlan
+        val filter = optimizedPlan.collectFirst {
+          case f: Filter => f
+        }
+        assert(filter.isEmpty)
+      }
+    }
+  }
+
+  test("Check constraint with constant invalid expression should throw error") {
+    Seq(
+      "1 < 0",
+      "abs(-99) > 100",
+      "current_date() < DATE'2023-01-01'"
+    ).foreach { constant =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT, value INT," +
+          s" CONSTRAINT positive_id CHECK ($constant)) $defaultUsing")
+        val error = intercept[SparkRuntimeException] {
+          sql(s"INSERT INTO $t VALUES (1, 10), (2, 20)")
+        }
+        checkError(
+          exception = error,
+          condition = "CHECK_CONSTRAINT_VIOLATION",
+          sqlState = "23001",
+          parameters = Map("constraintName" -> "positive_id", "expression" -> constant,
+            "values" -> "")
+        )
       }
     }
   }

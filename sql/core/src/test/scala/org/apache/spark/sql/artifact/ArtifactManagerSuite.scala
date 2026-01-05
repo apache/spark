@@ -20,8 +20,9 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path, Paths}
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException}
 import org.apache.spark.metrics.source.CodegenMetrics
+import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
@@ -346,6 +347,76 @@ class ArtifactManagerSuite extends SharedSparkSession {
     }
   }
 
+  test("Add multiple artifacts to local session and check if all are added despite exception") {
+    val copyDir = Utils.createTempDir().toPath
+    Utils.copyDirectory(artifactPath.toFile, copyDir.toFile)
+
+    val artifact1Path = "my/custom/pkg/artifact1.jar"
+    val artifact2Path = "my/custom/pkg/artifact2.jar"
+    val targetPath = Paths.get(artifact1Path)
+    val targetPath2 = Paths.get(artifact2Path)
+
+    val classPath1 = copyDir.resolve("Hello.class")
+    val classPath2 = copyDir.resolve("udf_noA.jar")
+    assume(artifactPath.resolve("Hello.class").toFile.exists)
+    assume(artifactPath.resolve("smallClassFile.class").toFile.exists)
+
+    val artifact1 = Artifact.newArtifactFromExtension(
+      targetPath.getFileName.toString,
+      targetPath,
+      new Artifact.LocalFile(Paths.get(classPath1.toString)))
+
+    val alreadyExistingArtifact = Artifact.newArtifactFromExtension(
+      targetPath2.getFileName.toString,
+      targetPath,
+      new Artifact.LocalFile(Paths.get(classPath2.toString)))
+
+    val artifact2 = Artifact.newArtifactFromExtension(
+      targetPath2.getFileName.toString,
+      targetPath2,
+      new Artifact.LocalFile(Paths.get(classPath2.toString)))
+
+    spark.artifactManager.addLocalArtifacts(Seq(artifact1))
+
+    val ex = intercept[SparkRuntimeException] {
+      spark.artifactManager.addLocalArtifacts(
+        Seq(alreadyExistingArtifact, artifact2, alreadyExistingArtifact))
+    }
+
+    checkError(
+      exception = ex,
+      condition = "ARTIFACT_ALREADY_EXISTS",
+      parameters = Map("normalizedRemoteRelativePath" -> s"jars/${targetPath.toString}"))
+
+    assert(ex.getSuppressed.length == 1)
+    assert(ex.getSuppressed.head.isInstanceOf[SparkRuntimeException])
+    val suppressed = ex.getSuppressed.head.asInstanceOf[SparkRuntimeException]
+
+    checkError(
+      exception = suppressed,
+      condition = "ARTIFACT_ALREADY_EXISTS",
+      parameters = Map("normalizedRemoteRelativePath" -> s"jars/${targetPath.toString}"))
+
+    // Artifact1 should have been added
+    val expectedFile1 = ArtifactManager.artifactRootDirectory
+      .resolve(s"$sessionUUID/jars/$artifact1Path")
+      .toFile
+    assert(expectedFile1.exists())
+
+    // Artifact2 should have been added despite exception
+    val expectedFile2 = ArtifactManager.artifactRootDirectory
+      .resolve(s"$sessionUUID/jars/$artifact2Path")
+      .toFile
+    assert(expectedFile2.exists())
+
+    // Cleanup
+    artifactManager.cleanUpResourcesForTesting()
+    val sessionDir = ArtifactManager.artifactRootDirectory.resolve(sessionUUID).toFile
+
+    assert(!expectedFile1.exists())
+    assert(!sessionDir.exists())
+  }
+
   test("Added artifact can be loaded by the current SparkSession") {
     val path = artifactPath.resolve("IntSumUdf.class")
     assume(path.toFile.exists)
@@ -432,15 +503,8 @@ class ArtifactManagerSuite extends SharedSparkSession {
       assert(newArtifactManager.artifactPath !== artifactManager.artifactPath)
 
       // Load the cached artifact
-      val blockManager = newSession.sparkContext.env.blockManager
-      for (sessionId <- Seq(spark.sessionUUID, newSession.sessionUUID)) {
-        val cacheId = CacheId(sessionId, "test")
-        try {
-          assert(blockManager.getLocalBytes(cacheId).get.toByteBuffer().array() === testBytes)
-        } finally {
-          blockManager.releaseLock(cacheId)
-        }
-      }
+      assert(spark.artifactManager.getCachedBlockId("test")
+        == newArtifactManager.getCachedBlockId("test"))
 
       val allFiles = Utils.listFiles(newArtifactManager.artifactPath.toFile)
       assert(allFiles.size() === 3)
@@ -467,6 +531,55 @@ class ArtifactManagerSuite extends SharedSparkSession {
       val msg = instance.getClass.getMethod("msg").invoke(instance)
       assert(msg == "Hello Talon! Nice to meet you!")
     }
+  }
+
+  test("Share blocks between ArtifactManagers") {
+    def isBlockRegistered(id: CacheId): Boolean = {
+      sparkContext.env.blockManager.getStatus(id).isDefined
+    }
+
+    def addCachedArtifact(session: SparkSession, name: String, data: String): CacheId = {
+      val bytes = new Artifact.InMemory(data.getBytes(StandardCharsets.UTF_8))
+      session.artifactManager.addLocalArtifacts(Artifact.newCacheArtifact(name, bytes) :: Nil)
+      val id = CacheId(session.sessionUUID, name)
+      assert(isBlockRegistered(id))
+      id
+    }
+
+    // Create fresh session so there is no interference with other tests.
+    val session1 = spark.newSession()
+    val b1 = addCachedArtifact(session1, "b1", "b_one")
+    val b2 = addCachedArtifact(session1, "b2", "b_two")
+
+    // Clone, check that existing blocks are the same, add another block, clean-up, make sure
+    // shared blocks survive and new block is cleaned.
+    val session2 = session1.cloneSession()
+    val b3 = addCachedArtifact(session2, "b3", "b_three")
+    session2.artifactManager.cleanUpResourcesForTesting()
+    assert(isBlockRegistered(b1))
+    assert(isBlockRegistered(b2))
+    assert(!isBlockRegistered(b3))
+
+    // Clone, check that existing blocks are the same, replace existing blocks, clone parent, check
+    // that inherited blocks are removed now.
+    val session3 = session1.cloneSession()
+    session1.artifactManager.cleanUpResourcesForTesting()
+    assert(isBlockRegistered(b1))
+    assert(isBlockRegistered(b2))
+    assert(session3.artifactManager.getCachedBlockId("b1").get == b1)
+    assert(session3.artifactManager.getCachedBlockId("b2").get == b2)
+
+    val b1a = addCachedArtifact(session3, "b1", "b_one_a")
+    val b2a = addCachedArtifact(session3, "b2", "b_two_a")
+    assert(!isBlockRegistered(b1))
+    assert(!isBlockRegistered(b2))
+    assert(session3.artifactManager.getCachedBlockId("b1").get == b1a)
+    assert(session3.artifactManager.getCachedBlockId("b2").get == b2a)
+
+    // Clean-up last AM. No block should be left.
+    session3.artifactManager.cleanUpResourcesForTesting()
+    assert(!isBlockRegistered(b1a))
+    assert(!isBlockRegistered(b2a))
   }
 
   test("Codegen cache should be invalid when artifacts are added - class artifact") {

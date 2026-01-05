@@ -18,11 +18,10 @@
 package org.apache.spark.deploy
 
 import org.scalatest.BeforeAndAfterEach
-import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.SparkUserAppException
 
-class SparkPipelinesSuite extends SparkSubmitTestUtils with Matchers with BeforeAndAfterEach {
+class SparkPipelinesSuite extends SparkSubmitTestUtils with BeforeAndAfterEach {
   test("only spark submit args") {
     val args = Array(
       "--remote",
@@ -36,7 +35,8 @@ class SparkPipelinesSuite extends SparkSubmitTestUtils with Matchers with Before
       "spark.conf2=3"
     )
     assert(
-      SparkPipelines.constructSparkSubmitArgs(args, sparkHome = "abc") ==
+      SparkPipelines.constructSparkSubmitArgs(
+        pipelinesCliFile = "abc/python/pyspark/pipelines/cli.py", args = args) ==
       Seq(
         "--deploy-mode",
         "client",
@@ -58,10 +58,11 @@ class SparkPipelinesSuite extends SparkSubmitTestUtils with Matchers with Before
     val args = Array(
       "run",
       "--spec",
-      "pipeline.yml"
+      "spark-pipeline.yml"
     )
     assert(
-      SparkPipelines.constructSparkSubmitArgs(args, sparkHome = "abc") ==
+      SparkPipelines.constructSparkSubmitArgs(
+        pipelinesCliFile = "abc/python/pyspark/pipelines/cli.py", args = args) ==
       Seq(
         "--conf",
         "spark.api.mode=connect",
@@ -70,7 +71,7 @@ class SparkPipelinesSuite extends SparkSubmitTestUtils with Matchers with Before
         "abc/python/pyspark/pipelines/cli.py",
         "run",
         "--spec",
-        "pipeline.yml"
+        "spark-pipeline.yml"
       )
     )
   }
@@ -82,12 +83,13 @@ class SparkPipelinesSuite extends SparkSubmitTestUtils with Matchers with Before
       "run",
       "--supervise",
       "--spec",
-      "pipeline.yml",
+      "spark-pipeline.yml",
       "--conf",
       "spark.conf2=3"
     )
     assert(
-      SparkPipelines.constructSparkSubmitArgs(args, sparkHome = "abc") ==
+      SparkPipelines.constructSparkSubmitArgs(
+        pipelinesCliFile = "abc/python/pyspark/pipelines/cli.py", args = args) ==
       Seq(
         "--supervise",
         "--conf",
@@ -99,7 +101,7 @@ class SparkPipelinesSuite extends SparkSubmitTestUtils with Matchers with Before
         "abc/python/pyspark/pipelines/cli.py",
         "run",
         "--spec",
-        "pipeline.yml"
+        "spark-pipeline.yml"
       )
     )
   }
@@ -110,8 +112,82 @@ class SparkPipelinesSuite extends SparkSubmitTestUtils with Matchers with Before
       "org.apache.spark.deploy.SparkPipelines"
     )
     intercept[SparkUserAppException] {
-      SparkPipelines.constructSparkSubmitArgs(args, sparkHome = "abc")
+      SparkPipelines.constructSparkSubmitArgs(
+        pipelinesCliFile = "abc/python/pyspark/pipelines/cli.py", args = args)
     }
+  }
+
+  test("spark.api.mode arg") {
+    var args = Array("--conf", "spark.api.mode=classic")
+    intercept[SparkUserAppException] {
+      SparkPipelines.constructSparkSubmitArgs(
+        pipelinesCliFile = "abc/python/pyspark/pipelines/cli.py", args = args)
+    }
+    args = Array("-c", "spark.api.mode=classic")
+    intercept[SparkUserAppException] {
+      SparkPipelines.constructSparkSubmitArgs(
+        pipelinesCliFile = "abc/python/pyspark/pipelines/cli.py", args = args)
+    }
+    args = Array("--conf", "spark.api.mode=CONNECT")
+    assert(
+      SparkPipelines.constructSparkSubmitArgs(
+        pipelinesCliFile = "abc/python/pyspark/pipelines/cli.py", args = args) ==
+        Seq(
+          "--conf",
+          "spark.api.mode=connect",
+          "--remote",
+          "local",
+          "abc/python/pyspark/pipelines/cli.py"
+        )
+    )
+    args = Array("--conf", "spark.api.mode=CoNNect")
+    assert(
+      SparkPipelines.constructSparkSubmitArgs(
+        pipelinesCliFile = "abc/python/pyspark/pipelines/cli.py", args = args) ==
+        Seq(
+          "--conf",
+          "spark.api.mode=connect",
+          "--remote",
+          "local",
+          "abc/python/pyspark/pipelines/cli.py"
+        )
+    )
+    args = Array("--conf", "spark.api.mode=connect")
+    assert(
+      SparkPipelines.constructSparkSubmitArgs(
+        pipelinesCliFile = "abc/python/pyspark/pipelines/cli.py", args = args) ==
+        Seq(
+          "--conf",
+          "spark.api.mode=connect",
+          "--remote",
+          "local",
+          "abc/python/pyspark/pipelines/cli.py"
+        )
+    )
+    args = Array("--conf", "spark.api.mode= connect")
+    assert(
+      SparkPipelines.constructSparkSubmitArgs(
+        pipelinesCliFile = "abc/python/pyspark/pipelines/cli.py", args = args) ==
+        Seq(
+          "--conf",
+          "spark.api.mode=connect",
+          "--remote",
+          "local",
+          "abc/python/pyspark/pipelines/cli.py"
+        )
+    )
+    args = Array("-c", "spark.api.mode=connect")
+    assert(
+      SparkPipelines.constructSparkSubmitArgs(
+        pipelinesCliFile = "abc/python/pyspark/pipelines/cli.py", args = args) ==
+        Seq(
+          "--conf",
+          "spark.api.mode=connect",
+          "--remote",
+          "local",
+          "abc/python/pyspark/pipelines/cli.py"
+        )
+    )
   }
 
   test("name arg") {
@@ -121,7 +197,8 @@ class SparkPipelinesSuite extends SparkSubmitTestUtils with Matchers with Before
       "myproject"
     )
     assert(
-      SparkPipelines.constructSparkSubmitArgs(args, sparkHome = "abc") ==
+      SparkPipelines.constructSparkSubmitArgs(
+        pipelinesCliFile = "abc/python/pyspark/pipelines/cli.py", args = args) ==
         Seq(
           "--conf",
           "spark.api.mode=connect",

@@ -21,6 +21,7 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.spark.*;
 import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper;
@@ -49,6 +50,7 @@ import org.apache.spark.network.util.LimitedInputStream;
 import org.apache.spark.scheduler.MapStatus;
 import org.apache.spark.security.CryptoStreamUtils;
 import org.apache.spark.serializer.*;
+import org.apache.spark.shuffle.checksum.RowBasedChecksum;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleExecutorComponents;
 import org.apache.spark.storage.*;
@@ -174,11 +176,18 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
       File file = (File) invocationOnMock.getArguments()[0];
       return Utils.tempFileWith(file);
     });
-
+    resetDependency(false);
     when(taskContext.taskMetrics()).thenReturn(taskMetrics);
+    when(taskContext.taskMemoryManager()).thenReturn(taskMemoryManager);
+  }
+
+  private void resetDependency(boolean rowBasedChecksumEnabled) {
     when(shuffleDep.serializer()).thenReturn(serializer);
     when(shuffleDep.partitioner()).thenReturn(hashPartitioner);
-    when(taskContext.taskMemoryManager()).thenReturn(taskMemoryManager);
+    final int checksumSize = rowBasedChecksumEnabled ? NUM_PARTITIONS : 0;
+    final RowBasedChecksum[] rowBasedChecksums =
+        createPartitionRowBasedChecksums(checksumSize);
+    when(shuffleDep.rowBasedChecksums()).thenReturn(rowBasedChecksums);
   }
 
   private UnsafeShuffleWriter<Object, Object> createWriter(boolean transferToEnabled)
@@ -317,7 +326,7 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
   @Test
   public void writeChecksumFileWithoutSpill() throws Exception {
     IndexShuffleBlockResolver blockResolver =
-      new IndexShuffleBlockResolver(conf, blockManager, Collections.emptyMap());
+      new IndexShuffleBlockResolver(conf, blockManager, new ConcurrentHashMap<>());
     ShuffleChecksumBlockId checksumBlockId =
       new ShuffleChecksumBlockId(0, 0, IndexShuffleBlockResolver.NOOP_REDUCE_ID());
     String checksumAlgorithm = conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ALGORITHM());
@@ -348,7 +357,7 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
   @Test
   public void writeChecksumFileWithSpill() throws Exception {
     IndexShuffleBlockResolver blockResolver =
-      new IndexShuffleBlockResolver(conf, blockManager, Collections.emptyMap());
+      new IndexShuffleBlockResolver(conf, blockManager, new ConcurrentHashMap<>());
     ShuffleChecksumBlockId checksumBlockId =
       new ShuffleChecksumBlockId(0, 0, IndexShuffleBlockResolver.NOOP_REDUCE_ID());
     String checksumAlgorithm = conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ALGORITHM());
@@ -611,6 +620,43 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
     writer.insertRecordIntoSorter(new Tuple2<>(2, 2));
     writer.stop(false);
     assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
+  public void testRowBasedChecksum() throws IOException, SparkException {
+    final ArrayList<Product2<Object, Object>> dataToWrite = new ArrayList<>();
+    for (int i = 0; i < NUM_PARTITIONS; i++) {
+      for (int j = 0; j < 5; j++) {
+        dataToWrite.add(new Tuple2<>(i, i + j));
+      }
+    }
+
+    long[] checksumValues = new long[0];
+    long aggregatedChecksumValue = 0;
+    try {
+      for (int i = 0; i < 100; i++) {
+        resetDependency(true);
+        final UnsafeShuffleWriter<Object, Object> writer = createWriter(false);
+        Collections.shuffle(dataToWrite);
+        writer.write(dataToWrite.iterator());
+        writer.stop(true);
+
+        if (i == 0) {
+          checksumValues = getRowBasedChecksumValues(writer.getRowBasedChecksums());
+          assertEquals(checksumValues.length, NUM_PARTITIONS);
+          Arrays.stream(checksumValues).allMatch(v -> v > 0);
+
+          aggregatedChecksumValue = writer.getAggregatedChecksumValue();
+          assert(aggregatedChecksumValue != 0);
+        } else {
+          assertArrayEquals(checksumValues,
+                  getRowBasedChecksumValues(writer.getRowBasedChecksums()));
+          assertEquals(aggregatedChecksumValue, writer.getAggregatedChecksumValue());
+        }
+      }
+    } finally {
+      resetDependency(false);
+    }
   }
 
   @Test

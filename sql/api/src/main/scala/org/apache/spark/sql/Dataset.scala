@@ -2968,6 +2968,20 @@ abstract class Dataset[T] extends Serializable {
   }
 
   /**
+   * Repartition the Dataset into the given number of partitions using the specified partition ID
+   * expression.
+   *
+   * @param numPartitions
+   *   the number of partitions to use.
+   * @param partitionIdExpr
+   *   the expression to be used as the partition ID. Must be an integer type.
+   *
+   * @group typedrel
+   * @since 4.1.0
+   */
+  def repartitionById(numPartitions: Int, partitionIdExpr: Column): Dataset[T]
+
+  /**
    * Returns a new Dataset that has exactly `numPartitions` partitions, when the fewer partitions
    * are requested. If a larger number of partitions is requested, it will stay at the current
    * number of partitions. Similar to coalesce defined on an `RDD`, this operation results in a
@@ -3004,6 +3018,8 @@ abstract class Dataset[T] extends Serializable {
   /**
    * Persist this Dataset with the default storage level (`MEMORY_AND_DISK`).
    *
+   * @note
+   *   Cached data is shared across all Spark sessions on the cluster.
    * @group basic
    * @since 1.6.0
    */
@@ -3012,6 +3028,8 @@ abstract class Dataset[T] extends Serializable {
   /**
    * Persist this Dataset with the default storage level (`MEMORY_AND_DISK`).
    *
+   * @note
+   *   Cached data is shared across all Spark sessions on the cluster.
    * @group basic
    * @since 1.6.0
    */
@@ -3023,6 +3041,8 @@ abstract class Dataset[T] extends Serializable {
    * @param newLevel
    *   One of: `MEMORY_ONLY`, `MEMORY_AND_DISK`, `MEMORY_ONLY_SER`, `MEMORY_AND_DISK_SER`,
    *   `DISK_ONLY`, `MEMORY_ONLY_2`, `MEMORY_AND_DISK_2`, etc.
+   * @note
+   *   Cached data is shared across all Spark sessions on the cluster.
    * @group basic
    * @since 1.6.0
    */
@@ -3042,6 +3062,9 @@ abstract class Dataset[T] extends Serializable {
    *
    * @param blocking
    *   Whether to block until all blocks are deleted.
+   * @note
+   *   Cached data is shared across all Spark sessions on the cluster, so unpersisting it affects
+   *   all sessions.
    * @group basic
    * @since 1.6.0
    */
@@ -3051,6 +3074,9 @@ abstract class Dataset[T] extends Serializable {
    * Mark the Dataset as non-persistent, and remove all blocks for it from memory and disk. This
    * will not un-persist any cached data that is built upon this Dataset.
    *
+   * @note
+   *   Cached data is shared across all Spark sessions on the cluster, so unpersisting it affects
+   *   all sessions.
    * @group basic
    * @since 1.6.0
    */

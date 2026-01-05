@@ -73,11 +73,28 @@ object InvalidInputErrors {
       s"Not found any cached local relation with the hash: " +
         s"$hash in the session with sessionUUID $sessionUUID.")
 
+  def notFoundChunkedCachedLocalRelationBlock(
+      hash: String,
+      sessionUUID: String): InvalidPlanInput =
+    InvalidPlanInput(
+      s"Not found chunked cached local relation block with the hash: " +
+        s"$hash in the session with sessionUUID $sessionUUID.")
+
+  def localRelationSizeLimitExceeded(actualSize: Long, limit: Long): InvalidPlanInput =
+    InvalidPlanInput(
+      s"Cached local relation size ($actualSize bytes) exceeds the limit ($limit bytes).")
+
+  def localRelationChunkSizeLimitExceeded(limit: Long): InvalidPlanInput =
+    InvalidPlanInput(s"One of cached local relation chunks exceeded the limit of $limit bytes.")
+
   def withColumnsRequireSingleNamePart(got: String): InvalidPlanInput =
     InvalidPlanInput(s"WithColumns require column name only contains one name part, but got $got")
 
   def inputDataForLocalRelationNoSchema(): InvalidPlanInput =
     InvalidPlanInput("Input data for LocalRelation does not produce a schema.")
+
+  def chunkedCachedLocalRelationWithoutData(): InvalidPlanInput =
+    InvalidPlanInput("ChunkedCachedLocalRelation should contain data.")
 
   def schemaRequiredForLocalRelation(): InvalidPlanInput =
     InvalidPlanInput("Schema for LocalRelation is required when the input data is not provided.")

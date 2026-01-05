@@ -228,6 +228,12 @@ private[spark] object History {
     .intConf
     .createWithDefaultFunction(() => Math.ceil(Runtime.getRuntime.availableProcessors() / 4f).toInt)
 
+  val NUM_COMPACT_THREADS = ConfigBuilder("spark.history.fs.numCompactThreads")
+    .version("4.1.0")
+    .doc("Number of threads that will be used by history server to compact event logs.")
+    .intConf
+    .createWithDefaultFunction(() => Math.ceil(Runtime.getRuntime.availableProcessors() / 4f).toInt)
+
   val RETAINED_APPLICATIONS = ConfigBuilder("spark.history.retainedApplications")
     .version("1.0.0")
     .doc("The number of applications to retain UI data for in the cache. If this cap is " +

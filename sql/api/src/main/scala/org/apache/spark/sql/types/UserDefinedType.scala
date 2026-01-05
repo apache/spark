@@ -93,7 +93,7 @@ abstract class UserDefinedType[UserType >: Null] extends DataType with Serializa
     case _ => false
   }
 
-  override def catalogString: String = sqlType.simpleString
+  override def catalogString: String = sqlType.catalogString
 
   /**
    * This method is used to convert the value of a UDT to a string representation.

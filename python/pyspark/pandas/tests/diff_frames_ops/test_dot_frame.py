@@ -91,7 +91,6 @@ class DiffFramesDotFrameTests(DiffFramesDotFrameMixin, PandasOnSparkTestCase, SQ
 
 
 if __name__ == "__main__":
-    import unittest
     from pyspark.pandas.tests.diff_frames_ops.test_dot_frame import *  # noqa: F401
 
     try:

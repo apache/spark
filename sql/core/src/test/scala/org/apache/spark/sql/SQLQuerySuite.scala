@@ -4770,7 +4770,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       spark.sql("explain explain explain select ?", Array(1)),
       """== Physical Plan ==
         |Execute ExplainCommand
-        |   +- ExplainCommand ExplainCommand 'PosParameterizedQuery [1], SimpleMode, SimpleMode
+        |   +- ExplainCommand ExplainCommand 'Project [unresolvedalias(1)], SimpleMode, SimpleMode
 
         |"""
     )
@@ -4779,7 +4779,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       // scalastyle:off
       """== Physical Plan ==
         |Execute ExplainCommand
-        |   +- ExplainCommand ExplainCommand 'NameParameterizedQuery [first], [1], SimpleMode, SimpleMode
+        |   +- ExplainCommand ExplainCommand 'Project [unresolvedalias(1)], SimpleMode, SimpleMode
 
         |"""
       // scalastyle:on
@@ -4789,7 +4789,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       spark.sql("explain describe select ?", Array(1)),
       """== Physical Plan ==
         |Execute DescribeQueryCommand
-        |   +- DescribeQueryCommand select ?
+        |   +- DescribeQueryCommand select 1
 
         |"""
     )
@@ -4797,7 +4797,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       spark.sql("explain describe select :first", Map("first" -> 1)),
       """== Physical Plan ==
         |Execute DescribeQueryCommand
-        |   +- DescribeQueryCommand select :first
+        |   +- DescribeQueryCommand select 1
 
         |"""
     )
@@ -4805,10 +4805,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     checkQueryPlan(
       spark.sql("explain extended select * from values (?, ?) t(x, y)", Array(1, "a")),
       """== Parsed Logical Plan ==
-        |'PosParameterizedQuery [1, a]
-        |+- 'Project [*]
-        |   +- 'SubqueryAlias t
-        |      +- 'UnresolvedInlineTable [x, y], [[posparameter(39), posparameter(42)]]
+        |'Project [*]
+        |+- SubqueryAlias t
+        |   +- LocalRelation [x#N, y#N]
 
         |== Analyzed Logical Plan ==
         |x: int, y: string
@@ -4829,10 +4828,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         Map("first" -> 1, "second" -> "a")
       ),
       """== Parsed Logical Plan ==
-        |'NameParameterizedQuery [first, second], [1, a]
-        |+- 'Project [*]
-        |   +- 'SubqueryAlias t
-        |      +- 'UnresolvedInlineTable [x, y], [[namedparameter(first), namedparameter(second)]]
+        |'Project [*]
+        |+- SubqueryAlias t
+        |   +- LocalRelation [x#N, y#N]
 
         |== Analyzed Logical Plan ==
         |x: int, y: string
@@ -5072,6 +5070,23 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         |ORDER BY s DESC""".stripMargin)
 
     checkAnswer(df, Seq(Row(null, null, 820), Row(null, "east", 420), Row("a", null, 370)))
+  }
+
+  test("SPARK-53308: Don't remove aliases in RemoveRedundantAliases that would cause duplicates") {
+    val df = sql("SELECT col1 FROM values(1) WHERE 1 IN (SELECT col1 UNION SELECT col1);")
+
+    checkAnswer(df, Row(1))
+  }
+
+  test("SPARK-53734: Prefer table column over LCA when resolving array index") {
+    val query = "SELECT 1 AS col1, col2[col1] FROM VALUES(0, ARRAY(1, 2));"
+    withSQLConf(SQLConf.PREFER_COLUMN_OVER_LCA_IN_ARRAY_INDEX.key -> "true") {
+      checkAnswer(sql(query), Row(1, 1))
+    }
+
+    withSQLConf(SQLConf.PREFER_COLUMN_OVER_LCA_IN_ARRAY_INDEX.key -> "false") {
+      checkAnswer(sql(query), Row(1, 2))
+    }
   }
 }
 

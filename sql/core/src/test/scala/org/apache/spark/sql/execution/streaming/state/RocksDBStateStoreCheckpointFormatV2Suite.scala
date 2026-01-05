@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.streaming.state.StateStoreTestsHelper
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
-import org.apache.spark.sql.streaming.OutputMode.Update
+import org.apache.spark.sql.streaming.OutputMode.{Append, Update}
 import org.apache.spark.sql.test.TestSparkSession
 import org.apache.spark.sql.types.StructType
 
@@ -68,6 +68,12 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
       key: UnsafeRow,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow = {
     innerStore.get(key, colFamilyName)
+  }
+
+  override def keyExists(
+      key: UnsafeRow,
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Boolean = {
+    innerStore.keyExists(key, colFamilyName)
   }
 
   override def valuesIterator(
@@ -116,11 +122,20 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
     )
   }
 
+  override def allColumnFamilyNames: Set[String] = innerStore.allColumnFamilyNames
+
   override def put(
       key: UnsafeRow,
       value: UnsafeRow,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
     innerStore.put(key, value, colFamilyName)
+  }
+
+  override def putList(
+      key: UnsafeRow,
+      values: Array[UnsafeRow],
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    innerStore.putList(key, values, colFamilyName)
   }
 
   override def remove(
@@ -134,6 +149,13 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
       value: UnsafeRow,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
     innerStore.merge(key, value, colFamilyName)
+  }
+
+  override def mergeList(
+      key: UnsafeRow,
+      values: Array[UnsafeRow],
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Unit = {
+    innerStore.mergeList(key, values, colFamilyName)
   }
 
   override def commit(): Long = innerStore.commit()
@@ -177,8 +199,13 @@ class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
 
   override def close(): Unit = innerProvider.close()
 
-  override def getStore(version: Long, stateStoreCkptId: Option[String] = None): StateStore = {
-    val innerStateStore = innerProvider.getStore(version, stateStoreCkptId)
+  override def getStore(
+      version: Long,
+      stateStoreCkptId: Option[String] = None,
+      forceSnapshotOnCommit: Boolean = false,
+      loadEmpty: Boolean = false): StateStore = {
+    val innerStateStore = innerProvider.getStore(version, stateStoreCkptId,
+      forceSnapshotOnCommit, loadEmpty)
     CkptIdCollectingStateStoreWrapper(innerStateStore)
   }
 
@@ -191,7 +218,8 @@ class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
   override def upgradeReadStoreToWriteStore(
       readStore: ReadStateStore,
       version: Long,
-      uniqueId: Option[String] = None): StateStore = {
+      uniqueId: Option[String] = None,
+      forceSnapshotOnCommit: Boolean = false): StateStore = {
     // Following the pattern from RocksDBStateStoreProvider, we verify version and id match
     assert(version == readStore.version,
       s"Can only upgrade readStore to writeStore with the same version," +
@@ -210,7 +238,7 @@ class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
 
     // Delegate to inner provider to upgrade the store
     val upgradedStore = innerProvider.upgradeReadStoreToWriteStore(
-      innerReadStore, version, uniqueId)
+      innerReadStore, version, uniqueId, forceSnapshotOnCommit)
 
     // Wrap the upgraded store with CkptIdCollectingStateStoreWrapper
     CkptIdCollectingStateStoreWrapper(upgradedStore)
@@ -606,6 +634,29 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
     assert(checkpointInfoList.count(_.partitionId == 1) == numBatches * numStateStores)
     for (i <- 1 to numBatches) {
       assert(checkpointInfoList.count(_.batchVersion == i) == numStateStores * 2)
+    }
+    validateBaseCheckpointInfo()
+  }
+
+  def validateCheckpointInfoGlobalLimit(
+      numBatches: Int,
+      numStateStores: Int,
+      batchVersionSet: Set[Long]): Unit = {
+    val checkpointInfoList = CkptIdCollectingStateStoreWrapper.getStateStoreCheckpointInfos
+    // We have 6 batches, 1 partitions (since global limit), and 1 state store per batch
+    assert(checkpointInfoList.size == numBatches * numStateStores * 1)
+    checkpointInfoList.foreach { l =>
+      assert(l.stateStoreCkptId.isDefined)
+      if (batchVersionSet.contains(l.batchVersion)) {
+        assert(l.baseStateStoreCkptId.isDefined)
+      }
+    }
+    assert(checkpointInfoList.count(_.partitionId == 0) == numBatches * numStateStores)
+    // Since we use global limit, there should be no partition 1
+    assert(checkpointInfoList.count(_.partitionId == 1) == 0)
+    for (i <- 1 to numBatches) {
+      // Since we use global limit, there should be only one store per batch
+      assert(checkpointInfoList.count(_.batchVersion == i) == numStateStores * 1)
     }
     validateBaseCheckpointInfo()
   }
@@ -1172,6 +1223,54 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
     validateCheckpointInfo(6, 1, Set(2, 4, 6))
   }
 
+
+  // No matter the number of shuffle partitions, global limit should always use one partition
+  Seq(1, 2, 10, 200).foreach { shufflePartitions =>
+    testWithCheckpointInfoTracked(
+      s"checkpointFormatVersion2 validate StreamingGlobalLimit with " +
+      s"shufflePartitions = $shufflePartitions") {
+      withTempDir { checkpointDir =>
+        withSQLConf((SQLConf.SHUFFLE_PARTITIONS.key, shufflePartitions.toString)) {
+          val inputData = MemoryStream[Int]
+          val aggregated = inputData
+            .toDF()
+            .limit(10)
+
+          testStream(aggregated, Append)(
+            StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+            AddData(inputData, 3),
+            CheckLastBatch(3),
+            AddData(inputData, 3, 2),
+            CheckLastBatch(3, 2),
+            StopStream
+          )
+
+          // Test recovery
+          testStream(aggregated, Append)(
+            StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+            AddData(inputData, 4, 1, 3),
+            CheckLastBatch(4, 1, 3),
+            AddData(inputData, 5, 4, 4),
+            CheckLastBatch(5, 4, 4),
+            StopStream
+          )
+
+          // crash recovery again
+          testStream(aggregated, Append)(
+            StartStream(checkpointLocation = checkpointDir.getAbsolutePath),
+            AddData(inputData, 4, 7),
+            CheckLastBatch(4),
+            AddData(inputData, 5),
+            CheckLastBatch(),
+            StopStream
+          )
+
+          validateCheckpointInfoGlobalLimit(6, 1, Set(2, 3, 4, 5, 6))
+        }
+      }
+    }
+  }
+
   test("checkpointFormatVersion2 validate transformWithState") {
     withTempDir { checkpointDir =>
       val inputData = MemoryStream[String]
@@ -1233,3 +1332,10 @@ class RocksDBStateStoreCheckpointFormatV2Suite extends StreamTest
     }
   }
 }
+
+/**
+ * Test suite that runs all RocksDBStateStoreCheckpointFormatV2Suite tests
+ * with row checksum enabled.
+ */
+class RocksDBStateStoreCheckpointFormatV2SuiteWithRowChecksum
+  extends RocksDBStateStoreCheckpointFormatV2Suite with EnableStateStoreRowChecksum

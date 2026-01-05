@@ -1015,6 +1015,21 @@ class Dataset[T] private[sql] (
     }
   }
 
+  private def buildRepartitionById(numPartitions: Int, partitionExpr: Column): Dataset[T] = {
+    val exprBuilder = proto.Expression.newBuilder()
+    val directShufflePartitionIdExpr = exprBuilder
+      .setDirectShufflePartitionId(
+        exprBuilder.getDirectShufflePartitionIdBuilder
+          .setChild(toExpr(partitionExpr)))
+      .build()
+    sparkSession.newDataset(agnosticEncoder, partitionExpr :: Nil) { builder =>
+      val repartitionBuilder = builder.getRepartitionByExpressionBuilder
+        .setInput(plan.getRoot)
+        .addAllPartitionExprs(Seq(directShufflePartitionIdExpr).asJava)
+      repartitionBuilder.setNumPartitions(numPartitions)
+    }
+  }
+
   /** @inheritdoc */
   def repartition(numPartitions: Int): Dataset[T] = {
     buildRepartition(numPartitions, shuffle = true)
@@ -1044,6 +1059,11 @@ class Dataset[T] private[sql] (
       case e => e.asc
     }
     buildRepartitionByExpression(numPartitions, sortExprs)
+  }
+
+  /** @inheritdoc */
+  def repartitionById(numPartitions: Int, partitionIdExpr: Column): Dataset[T] = {
+    buildRepartitionById(numPartitions, partitionIdExpr)
   }
 
   /** @inheritdoc */

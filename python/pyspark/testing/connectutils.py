@@ -16,17 +16,15 @@
 #
 import shutil
 import tempfile
-import typing
 import os
 import functools
 import unittest
 import uuid
 import contextlib
+from typing import Callable, Optional
 
 from pyspark import Row, SparkConf
-from pyspark.util import is_remote_only
-from pyspark.testing.utils import PySparkErrorTestUtils
-from pyspark import Row, SparkConf
+from pyspark.loose_version import LooseVersion
 from pyspark.util import is_remote_only
 from pyspark.testing.utils import (
     have_pandas,
@@ -44,6 +42,7 @@ from pyspark.testing.utils import (
     should_test_connect,
     PySparkErrorTestUtils,
 )
+from pyspark.testing.utils import PySparkBaseTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.sql.session import SparkSession as PySparkSession
 
@@ -52,6 +51,7 @@ if should_test_connect:
     from pyspark.sql.connect.dataframe import DataFrame
     from pyspark.sql.connect.plan import Read, Range, SQL, LogicalPlan
     from pyspark.sql.connect.session import SparkSession
+    import pyspark.sql.connect.proto as pb2
 
 
 class MockRemoteSession:
@@ -73,7 +73,7 @@ class MockRemoteSession:
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
-class PlanOnlyTestFixture(unittest.TestCase, PySparkErrorTestUtils):
+class PlanOnlyTestFixture(PySparkBaseTestCase, PySparkErrorTestUtils):
     if should_test_connect:
 
         class MockDF(DataFrame):
@@ -113,6 +113,16 @@ class PlanOnlyTestFixture(unittest.TestCase, PySparkErrorTestUtils):
         def _session_sql(cls, query):
             return cls._df_mock(SQL(query))
 
+        @classmethod
+        def _set_relation_in_plan(self, plan: pb2.Plan, relation: pb2.Relation) -> None:
+            # Skip plan compression in plan-only tests.
+            plan.root.CopyFrom(relation)
+
+        @classmethod
+        def _set_command_in_plan(self, plan: pb2.Plan, command: pb2.Command) -> None:
+            # Skip plan compression in plan-only tests.
+            plan.command.CopyFrom(command)
+
         if have_pandas:
 
             @classmethod
@@ -122,13 +132,14 @@ class PlanOnlyTestFixture(unittest.TestCase, PySparkErrorTestUtils):
         @classmethod
         def setUpClass(cls):
             cls.connect = MockRemoteSession()
-            cls.session = SparkSession.builder.remote().getOrCreate()
             cls.tbl_name = "test_connect_plan_only_table_1"
 
             cls.connect.set_hook("readTable", cls._read_table)
             cls.connect.set_hook("range", cls._session_range)
             cls.connect.set_hook("sql", cls._session_sql)
             cls.connect.set_hook("with_plan", cls._with_plan)
+            cls.connect.set_hook("_set_relation_in_plan", cls._set_relation_in_plan)
+            cls.connect.set_hook("_set_command_in_plan", cls._set_command_in_plan)
 
         @classmethod
         def tearDownClass(cls):
@@ -139,7 +150,7 @@ class PlanOnlyTestFixture(unittest.TestCase, PySparkErrorTestUtils):
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
-class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUtils):
+class ReusedConnectTestCase(PySparkBaseTestCase, SQLTestUtils, PySparkErrorTestUtils):
     """
     Spark Connect version of :class:`pyspark.testing.sqlutils.ReusedSQLTestCase`.
     """
@@ -167,6 +178,8 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
 
     @classmethod
     def setUpClass(cls):
+        super().setUpClass()
+
         # This environment variable is for interrupting hanging ML-handler and making the
         # tests fail fast.
         os.environ["SPARK_CONNECT_ML_HANDLER_INTERRUPTION_TIMEOUT_MINUTES"] = "5"
@@ -176,6 +189,7 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
             .remote(cls.master())
             .getOrCreate()
         )
+        cls._client = cls.spark.client
         cls._legacy_sc = None
         if not is_remote_only():
             cls._legacy_sc = PySparkSession._instantiatedSession._sc
@@ -186,12 +200,24 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
 
     @classmethod
     def tearDownClass(cls):
-        shutil.rmtree(cls.tempdir.name, ignore_errors=True)
-        cls.spark.stop()
+        try:
+            shutil.rmtree(cls.tempdir.name, ignore_errors=True)
+            cls.spark.stop()
+        finally:
+            super().tearDownClass()
 
     def setUp(self) -> None:
         # force to clean up the ML cache before each test
-        self.spark.client._cleanup_ml_cache()
+        self._client._cleanup_ml_cache()
+
+    def tearDown(self):
+        try:
+            if self._legacy_sc is not None and self._client._server_session_id is not None:
+                self._legacy_sc._jvm.PythonSQLUtils.cleanupPythonWorkerLogs(
+                    self._client._server_session_id, self._legacy_sc._jsc.sc()
+                )
+        finally:
+            super().tearDown()
 
     def test_assert_remote_mode(self):
         from pyspark.sql import is_remote
@@ -214,7 +240,7 @@ class ReusedConnectTestCase(unittest.TestCase, SQLTestUtils, PySparkErrorTestUti
 class ReusedMixedTestCase(ReusedConnectTestCase, SQLTestUtils):
     @classmethod
     def setUpClass(cls):
-        super(ReusedMixedTestCase, cls).setUpClass()
+        super().setUpClass()
         # Disable the shared namespace so pyspark.sql.functions, etc point the regular
         # PySpark libraries.
         os.environ["PYSPARK_NO_NAMESPACE_SHARE"] = "1"
@@ -230,11 +256,7 @@ class ReusedMixedTestCase(ReusedConnectTestCase, SQLTestUtils):
             cls.spark = cls.connect
             del os.environ["PYSPARK_NO_NAMESPACE_SHARE"]
         finally:
-            super(ReusedMixedTestCase, cls).tearDownClass()
-
-    def setUp(self) -> None:
-        # force to clean up the ML cache before each test
-        self.connect.client._cleanup_ml_cache()
+            super().tearDownClass()
 
     def compare_by_show(self, df1, df2, n: int = 20, truncate: int = 20):
         from pyspark.sql.classic.dataframe import DataFrame as SDF
@@ -257,3 +279,60 @@ class ReusedMixedTestCase(ReusedConnectTestCase, SQLTestUtils):
     def test_assert_remote_mode(self):
         # no need to test this in mixed mode
         pass
+
+    def connect_conf(self, conf_dict):
+        """Context manager to set configuration on Spark Connect session"""
+
+        @contextlib.contextmanager
+        def _connect_conf():
+            old_values = {}
+            for key, value in conf_dict.items():
+                old_values[key] = self.connect.conf.get(key, None)
+                self.connect.conf.set(key, value)
+            try:
+                yield
+            finally:
+                for key, old_value in old_values.items():
+                    if old_value is None:
+                        self.connect.conf.unset(key)
+                    else:
+                        self.connect.conf.set(key, old_value)
+
+        return _connect_conf()
+
+    def both_conf(self, conf_dict):
+        """Context manager to set configuration on both classic and Connect sessions"""
+
+        @contextlib.contextmanager
+        def _both_conf():
+            with contextlib.ExitStack() as stack:
+                stack.enter_context(self.sql_conf(conf_dict))
+                stack.enter_context(self.connect_conf(conf_dict))
+                yield
+
+        return _both_conf()
+
+
+def skip_if_server_version_is(
+    cond: Callable[[LooseVersion], bool], reason: Optional[str] = None
+) -> Callable:
+    def decorator(f: Callable) -> Callable:
+        @functools.wraps(f)
+        def wrapper(self, *args, **kwargs):
+            version = self.spark.version
+            if cond(LooseVersion(version)):
+                raise unittest.SkipTest(
+                    f"Skipping test {f.__name__} because server version is {version}"
+                    + (f" ({reason})" if reason else "")
+                )
+            return f(self, *args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
+def skip_if_server_version_is_greater_than_or_equal_to(
+    version: str, reason: Optional[str] = None
+) -> Callable:
+    return skip_if_server_version_is(lambda v: v >= LooseVersion(version), reason)

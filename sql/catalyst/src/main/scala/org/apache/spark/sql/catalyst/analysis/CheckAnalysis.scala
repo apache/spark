@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.{SparkException, SparkThrowable}
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.analysis.ResolveWithCTE.checkIfSelfReferenceIsPlacedCorrectly
@@ -338,6 +339,12 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
         o.deleteExpr.failAnalysis (
           errorClass = "UNSUPPORTED_FEATURE.OVERWRITE_BY_SUBQUERY",
           messageParameters = Map.empty)
+
+      case p: PlanWithUnresolvedIdentifier if !p.identifierExpr.resolved =>
+        p.identifierExpr.failAnalysis(
+          errorClass = "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
+          messageParameters = Map("name" -> "IDENTIFIER", "expr" -> p.identifierExpr.sql)
+        )
 
       case operator: LogicalPlan =>
         operator transformExpressionsDown {
@@ -705,6 +712,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             }
 
             create.tableSchema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
+            TypeUtils.failUnsupportedDataType(create.tableSchema, SQLConf.get)
             SchemaUtils.checkIndeterminateCollationInSchema(create.tableSchema)
 
           case write: V2WriteCommand if write.resolved =>
@@ -888,6 +896,17 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               errorClass = "UNSUPPORTED_EXPR_FOR_OPERATOR",
               messageParameters = Map(
                 "invalidExprSqls" -> invalidExprSqls.mkString(", ")))
+
+          case j @ LateralJoin(_, right, _, _)
+              if !j.containsTag(LateralJoin.BY_TABLE_ARGUMENT) =>
+            right.plan.foreach {
+              case Generate(pyudtf: PythonUDTF, _, _, _, _, _)
+                  if pyudtf.evalType == PythonEvalType.SQL_ARROW_UDTF =>
+                  j.failAnalysis(
+                    errorClass = "LATERAL_JOIN_WITH_ARROW_UDTF_UNSUPPORTED",
+                    messageParameters = Map.empty)
+              case _ =>
+            }
 
           case _ => // Analysis successful!
         }

@@ -242,6 +242,13 @@ abstract class SparkFunSuite
     }
   }
 
+  protected def namedGridTest[A](testNamePrefix: String, testTags: Tag*)(params: Map[String, A])(
+    testFun: A => Unit): Unit = {
+    for (param <- params) {
+      test(testNamePrefix + s" ${param._1}", testTags: _*)(testFun(param._2))
+    }
+  }
+
   /**
    * Creates a temporary directory, which is then passed to `f` and will be deleted after `f`
    * returns.

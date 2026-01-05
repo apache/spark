@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io._
-import java.nio.charset.StandardCharsets.UTF_8
 import java.util.{ArrayList => JArrayList, List => JList, Locale}
 import java.util.concurrent.TimeUnit
 
@@ -41,7 +40,6 @@ import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkThrowable, SparkThr
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.util.SQLKeywordUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl
@@ -98,15 +96,9 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     val sessionState = new CliSessionState(cliConf)
 
     sessionState.in = System.in
-    try {
-      sessionState.out = new PrintStream(System.out, true, UTF_8.name())
-      sessionState.info = new PrintStream(System.err, true, UTF_8.name())
-      sessionState.err = new PrintStream(System.err, true, UTF_8.name())
-    } catch {
-      case e: UnsupportedEncodingException =>
-        closeHiveSessionStateIfStarted(sessionState)
-        exit(ERROR_PATH_NOT_FOUND)
-    }
+    sessionState.out = SparkSQLEnv.out
+    sessionState.err = SparkSQLEnv.err
+    sessionState.info = SparkSQLEnv.err
 
     if (!oproc.process_stage2(sessionState)) {
       closeHiveSessionStateIfStarted(sessionState)
@@ -178,17 +170,6 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     // Thus we can load all jars passed by --jars and AddJarsCommand.
     sessionState.getConf.setClassLoader(SparkSQLEnv.sparkSession.sharedState.jarClassLoader)
 
-    // TODO work around for set the log output to console, because the HiveContext
-    // will set the output into an invalid buffer.
-    sessionState.in = System.in
-    try {
-      sessionState.out = new PrintStream(System.out, true, UTF_8.name())
-      sessionState.info = new PrintStream(System.err, true, UTF_8.name())
-      sessionState.err = new PrintStream(System.err, true, UTF_8.name())
-    } catch {
-      case e: UnsupportedEncodingException => exit(ERROR_PATH_NOT_FOUND)
-    }
-
     // We don't propagate hive.metastore.warehouse.dir, because it might has been adjusted in
     // [[SharedState.loadHiveConfFile]] based on the user specified or default values of
     // spark.sql.warehouse.dir and hive.metastore.warehouse.dir.
@@ -219,7 +200,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
         exit(ERROR_PATH_NOT_FOUND)
     }
 
-    val reader = new ConsoleReader()
+    val reader = new ConsoleReader(new FileInputStream(FileDescriptor.in), sessionState.out)
     reader.setBellEnabled(false)
     reader.setExpandEvents(false)
     // reader.setDebug(new PrintWriter(new FileWriter("writer.debug", true)))
@@ -470,9 +451,24 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
                 case _ => t.getMessage
               }
               err.println(msg)
-              if (format == ErrorMessageFormat.PRETTY &&
-                !sessionState.getIsSilent &&
-                (!t.isInstanceOf[AnalysisException] || t.getCause != null)) {
+              // Print stack traces based on format and error type:
+              // - DEBUG format: Always print stack traces (for debugging)
+              // - PRETTY format: Only for internal errors (SQLSTATE XX***)
+              // - MINIMAL/STANDARD formats: Never print stack traces (JSON only)
+              val shouldPrintStackTrace = format match {
+                case ErrorMessageFormat.DEBUG => true // Always print in DEBUG mode
+                case ErrorMessageFormat.PRETTY =>
+                  // In PRETTY mode, only print for internal errors
+                  t match {
+                    case st: SparkThrowable =>
+                      val sqlState = st.getSqlState
+                      // Print if: internal error (XX***) OR no SQLSTATE
+                      sqlState == null || sqlState.startsWith("XX")
+                    case _ => true // Non-SparkThrowable exceptions always get stack traces
+                  }
+                case _ => false // MINIMAL and STANDARD never print stack traces
+              }
+              if (shouldPrintStackTrace && !sessionState.getIsSilent) {
                 t.printStackTrace(err)
               }
               driver.close()
@@ -502,7 +498,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
             }
           } catch {
             case e: IOException =>
-              console.printError(
+              err.println(
                 s"""Failed with exception ${e.getClass.getName}: ${e.getMessage}
                    |${Utils.stringifyException(e)}
                  """.stripMargin)
@@ -518,7 +514,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           if (counter != 0) {
             responseMsg += s", Fetched $counter row(s)"
           }
-          console.printInfo(responseMsg, null)
+          err.println(responseMsg)
           // Destroy the driver to release all the locks.
           driver.destroy()
         } else {
@@ -706,4 +702,3 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     ret
   }
 }
-

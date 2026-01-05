@@ -78,7 +78,7 @@ class StreamRelationSuite extends SharedSparkSession with AnalysisTest {
   }
 
   test("STREAM options are parsed correctly for streaming by identifier") {
-    val plan = parsePlan("SELECT * FROM STREAM table1 AS t WITH ('key'='value')")
+    val plan = parsePlan("SELECT * FROM STREAM table1 WITH ('key'='value') AS t")
     comparePlans(
       plan,
       Project(

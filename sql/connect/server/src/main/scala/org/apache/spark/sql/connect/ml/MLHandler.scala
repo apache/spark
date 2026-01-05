@@ -229,20 +229,6 @@ private[connect] object MLHandler extends Logging {
           } catch {
             case _: UnsupportedOperationException => ()
           }
-          if (estimator.getClass.getName == "org.apache.spark.ml.fpm.FPGrowth") {
-            throw MlUnsupportedException(
-              "FPGrowth algorithm is not supported " +
-                "if Spark Connect model cache offloading is enabled.")
-          }
-          if (estimator.getClass.getName == "org.apache.spark.ml.clustering.LDA"
-            && estimator
-              .asInstanceOf[org.apache.spark.ml.clustering.LDA]
-              .getOptimizer
-              .toLowerCase() == "em") {
-            throw MlUnsupportedException(
-              "LDA algorithm with 'em' optimizer is not supported " +
-                "if Spark Connect model cache offloading is enabled.")
-          }
         }
 
         EstimatorUtils.warningMessagesBuffer.set(new mutable.ArrayBuffer[String]())
@@ -447,6 +433,15 @@ private[connect] object MLHandler extends Logging {
       case proto.MlCommand.CommandCase.CREATE_SUMMARY =>
         val createSummaryCmd = mlCommand.getCreateSummary
         createModelSummary(sessionHolder, createSummaryCmd)
+
+      case proto.MlCommand.CommandCase.GET_MODEL_SIZE =>
+        val modelRefId = mlCommand.getGetModelSize.getModelRef.getId
+        val model = mlCache.get(modelRefId)
+        val modelSize = model.asInstanceOf[Model[_]].estimatedSize
+        proto.MlCommandResult
+          .newBuilder()
+          .setParam(LiteralValueProtoConverter.toLiteralProto(modelSize))
+          .build()
 
       case other => throw MlUnsupportedException(s"$other not supported")
     }

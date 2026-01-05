@@ -22,9 +22,14 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Spark SQL 4.1 to 4.2
+
+- Since Spark 4.2, Spark enables order-independent checksums for shuffle outputs by default to detect data inconsistencies during indeterminate shuffle stage retries. If a checksum mismatch is detected, Spark rolls back and re-executes all succeeding stages that depend on the shuffle output. If rolling back is not possible for some succeeding stages, the job will fail. To restore the previous behavior, set `spark.sql.shuffle.orderIndependentChecksum.enabled` and `spark.sql.shuffle.orderIndependentChecksum.enableFullRetryOnMismatch` to `false`.
+
 ## Upgrading from Spark SQL 4.0 to 4.1
 
-- Since Spark 4.1, `mapInPandas` and `mapInArrow` enforces strict validation of the result against the schema. The column names must exactly match and types must match with compatible nullability. To restore the previous behavior, set `spark.sql.execution.arrow.pyspark.validateSchema.enabled` to `false`.
+- Since Spark 4.1, the Parquet reader no longer assumes all struct values to be null, if all the requested fields are missing in the parquet file. The new default behavior is to read an additional struct field that is present in the file to determine nullness. To restore the previous behavior, set `spark.sql.legacy.parquet.returnNullStructIfAllFieldsMissing` to `true`.
+- Since Spark 4.1, the Spark Thrift Server returns the corrected 1-based ORDINAL_POSITION in the result of GetColumns operation, instead of the wrongly 0-based. To restore the previous behavior, set `spark.sql.legacy.hive.thriftServer.useZeroBasedColumnOrdinalPosition` to `true`.
 
 ## Upgrading from Spark SQL 3.5 to 4.0
 

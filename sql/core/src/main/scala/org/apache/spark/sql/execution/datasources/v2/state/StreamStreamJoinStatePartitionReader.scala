@@ -24,7 +24,7 @@ import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, Par
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions.JoinSideValues
 import org.apache.spark.sql.execution.datasources.v2.state.utils.SchemaUtil
 import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
-import org.apache.spark.sql.execution.streaming.operators.stateful.join.{JoinStateManagerStoreGenerator, SymmetricHashJoinStateManager}
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.{JoinStateManagerStoreGenerator, SnapshotOptions, SymmetricHashJoinStateManager}
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{JoinSide, LeftSide, RightSide}
 import org.apache.spark.sql.execution.streaming.state.StateStoreConf
 import org.apache.spark.sql.types.{BooleanType, StructType}
@@ -71,6 +71,47 @@ class StreamStreamJoinStatePartitionReader(
       throw StateDataSourceErrors.internalError("Unexpected join side for stream-stream read!")
   }
 
+  private val usesVirtualColumnFamilies = StreamStreamJoinStateHelper.usesVirtualColumnFamilies(
+    hadoopConf.value,
+    partition.sourceOptions.stateCheckpointLocation.toString,
+    partition.sourceOptions.operatorId)
+
+  private val startStateStoreCheckpointIds =
+    SymmetricHashJoinStateManager.getStateStoreCheckpointIds(
+      partition.partition,
+      partition.sourceOptions.startOperatorStateUniqueIds,
+      usesVirtualColumnFamilies)
+
+  private val endStateStoreCheckpointIds =
+    SymmetricHashJoinStateManager.getStateStoreCheckpointIds(
+      partition.partition,
+      partition.sourceOptions.endOperatorStateUniqueIds,
+      usesVirtualColumnFamilies)
+
+  private val startKeyToNumValuesStateStoreCkptId = if (joinSide == LeftSide) {
+    startStateStoreCheckpointIds.left.keyToNumValues
+  } else {
+    startStateStoreCheckpointIds.right.keyToNumValues
+  }
+
+  private val startKeyWithIndexToValueStateStoreCkptId = if (joinSide == LeftSide) {
+    startStateStoreCheckpointIds.left.keyWithIndexToValue
+  } else {
+    startStateStoreCheckpointIds.right.keyWithIndexToValue
+  }
+
+  private val endKeyToNumValuesStateStoreCkptId = if (joinSide == LeftSide) {
+    endStateStoreCheckpointIds.left.keyToNumValues
+  } else {
+    endStateStoreCheckpointIds.right.keyToNumValues
+  }
+
+  private val endKeyWithIndexToValueStateStoreCkptId = if (joinSide == LeftSide) {
+    endStateStoreCheckpointIds.left.keyWithIndexToValue
+  } else {
+    endStateStoreCheckpointIds.right.keyWithIndexToValue
+  }
+
   /*
    * This is to handle the difference of schema across state format versions. The major difference
    * is whether we have added new field(s) in addition to the fields from input schema.
@@ -85,10 +126,7 @@ class StreamStreamJoinStatePartitionReader(
       // column from the value schema to get the actual fields.
       if (maybeMatchedColumn.name == "matched" && maybeMatchedColumn.dataType == BooleanType) {
         // If checkpoint is using one store and virtual column families, version is 3
-        if (StreamStreamJoinStateHelper.usesVirtualColumnFamilies(
-          hadoopConf.value,
-          partition.sourceOptions.stateCheckpointLocation.toString,
-          partition.sourceOptions.operatorId)) {
+        if (usesVirtualColumnFamilies) {
           (valueSchema.dropRight(1), 3)
         } else {
           (valueSchema.dropRight(1), 2)
@@ -130,13 +168,19 @@ class StreamStreamJoinStatePartitionReader(
         storeConf = storeConf,
         hadoopConf = hadoopConf.value,
         partitionId = partition.partition,
-        keyToNumValuesStateStoreCkptId = None,
-        keyWithIndexToValueStateStoreCkptId = None,
+        keyToNumValuesStateStoreCkptId = startKeyToNumValuesStateStoreCkptId,
+        keyWithIndexToValueStateStoreCkptId = startKeyWithIndexToValueStateStoreCkptId,
         formatVersion,
         skippedNullValueCount = None,
         useStateStoreCoordinator = false,
-        snapshotStartVersion =
-          partition.sourceOptions.fromSnapshotOptions.map(_.snapshotStartBatchId + 1),
+        snapshotOptions =
+          partition.sourceOptions.fromSnapshotOptions.map(opts => SnapshotOptions(
+            snapshotVersion = opts.snapshotStartBatchId + 1,
+            endVersion = partition.sourceOptions.batchId + 1,
+            startKeyToNumValuesStateStoreCkptId = startKeyToNumValuesStateStoreCkptId,
+            startKeyWithIndexToValueStateStoreCkptId = startKeyWithIndexToValueStateStoreCkptId,
+            endKeyToNumValuesStateStoreCkptId = endKeyToNumValuesStateStoreCkptId,
+            endKeyWithIndexToValueStateStoreCkptId = endKeyWithIndexToValueStateStoreCkptId)),
         joinStoreGenerator = new JoinStateManagerStoreGenerator()
       )
     }

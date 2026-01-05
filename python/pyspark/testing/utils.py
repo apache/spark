@@ -20,6 +20,7 @@ import struct
 import sys
 import unittest
 import difflib
+import faulthandler
 import functools
 from decimal import Decimal
 from time import time, sleep
@@ -268,7 +269,19 @@ class QuietTest:
         self.log4j.LogManager.getRootLogger().setLevel(self.old_level)
 
 
-class PySparkTestCase(unittest.TestCase):
+class PySparkBaseTestCase(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        if os.environ.get("PYSPARK_TEST_TIMEOUT"):
+            faulthandler.register(signal.SIGTERM, file=sys.__stderr__, all_threads=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        if os.environ.get("PYSPARK_TEST_TIMEOUT"):
+            faulthandler.unregister(signal.SIGTERM)
+
+
+class PySparkTestCase(PySparkBaseTestCase):
     def setUp(self):
         from pyspark import SparkContext
 
@@ -281,7 +294,7 @@ class PySparkTestCase(unittest.TestCase):
         sys.path = self._old_sys_path
 
 
-class ReusedPySparkTestCase(unittest.TestCase):
+class ReusedPySparkTestCase(PySparkBaseTestCase):
     @classmethod
     def conf(cls):
         """
@@ -291,6 +304,8 @@ class ReusedPySparkTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        super().setUpClass()
+
         from pyspark import SparkContext
 
         cls.sc = SparkContext(cls.master(), cls.__name__, conf=cls.conf())
@@ -301,7 +316,10 @@ class ReusedPySparkTestCase(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        cls.sc.stop()
+        try:
+            cls.sc.stop()
+        finally:
+            super().tearDownClass()
 
     def test_assert_classic_mode(self):
         from pyspark.sql import is_remote
@@ -459,6 +477,7 @@ def assertSchemaEqual(
     ignoreColumnOrder: bool = False,
     ignoreColumnName: bool = False,
 ):
+    __tracebackhide__ = True
     r"""
     A util function to assert equality between DataFrame schemas `actual` and `expected`.
 
@@ -591,6 +610,10 @@ def assertSchemaEqual(
         if dt1.typeName() == dt2.typeName():
             if dt1.typeName() == "array":
                 return compare_datatypes_ignore_nullable(dt1.elementType, dt2.elementType)
+            elif dt1.typeName() == "map":
+                return compare_datatypes_ignore_nullable(
+                    dt1.keyType, dt2.keyType
+                ) and compare_datatypes_ignore_nullable(dt1.valueType, dt2.valueType)
             elif dt1.typeName() == "decimal":
                 # Fix for SPARK-51062: Compare precision and scale for decimal types
                 return dt1.precision == dt2.precision and dt1.scale == dt2.scale
@@ -648,6 +671,7 @@ def assertDataFrameEqual(
     showOnlyDiff: bool = False,
     includeDiffRows=False,
 ):
+    __tracebackhide__ = True
     r"""
     A util function to assert equality between `actual` and `expected`
     (DataFrames or lists of Rows), with optional parameters `checkRowOrder`, `rtol`, and `atol`.
@@ -1034,6 +1058,7 @@ def assertDataFrameEqual(
     def assert_rows_equal(
         rows1: List[Row], rows2: List[Row], maxErrors: int = None, showOnlyDiff: bool = False
     ):
+        __tracebackhide__ = True
         zipped = list(zip_longest(rows1, rows2))
         diff_rows_cnt = 0
         diff_rows = []

@@ -35,7 +35,6 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -126,7 +125,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
       }
     } catch {
       case _: NoSuchNamespaceException =>
-        throw QueryCompilationErrors.noSuchTableError(ident)
+        throw QueryCompilationErrors.noSuchTableError(name(), ident)
     }
   }
 
@@ -284,7 +283,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
       catalog.getTableMetadata(ident.asTableIdentifier)
     } catch {
       case _: NoSuchTableException =>
-        throw QueryCompilationErrors.noSuchTableError(ident)
+        throw QueryCompilationErrors.noSuchTableError(name(), ident)
     }
 
     val properties = CatalogV2Util.applyPropertiesChanges(catalogTable.properties, changes)
@@ -313,7 +312,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
       }
     } catch {
       case _: NoSuchTableException =>
-        throw QueryCompilationErrors.noSuchTableError(ident)
+        throw QueryCompilationErrors.noSuchTableError(name(), ident)
     }
 
     null // Return null to save the `loadTable` call for ALTER TABLE.
@@ -475,7 +474,7 @@ class V2SessionCatalog(catalog: SessionCatalog)
   }
 
   override def loadFunction(ident: Identifier): UnboundFunction = {
-    V1Function(catalog.lookupPersistentFunction(ident.asFunctionIdentifier))
+    catalog.loadPersistentScalarFunction(ident.asFunctionIdentifier)
   }
 
   override def listFunctions(namespace: Array[String]): Array[Identifier] = {

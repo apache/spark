@@ -46,6 +46,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.orc.{OrcFilters, OrcOptions, OrcUtils}
 import org.apache.spark.sql.hive.{HiveInspectors, HiveShim}
+import org.apache.spark.sql.internal.SessionStateHelper
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
@@ -54,7 +55,10 @@ import org.apache.spark.util.SerializableConfiguration
  * `FileFormat` for reading ORC files. If this is moved or renamed, please update
  * `DataSource`'s backwardCompatibilityMap.
  */
-case class OrcFileFormat() extends FileFormat with DataSourceRegister with Serializable {
+case class OrcFileFormat() extends FileFormat
+  with DataSourceRegister
+  with SessionStateHelper
+  with Serializable {
 
   override def shortName(): String = "orc"
 
@@ -64,14 +68,14 @@ case class OrcFileFormat() extends FileFormat with DataSourceRegister with Seria
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    val orcOptions = new OrcOptions(options, sparkSession.sessionState.conf)
+    val orcOptions = new OrcOptions(options, getSqlConf(sparkSession))
     if (orcOptions.mergeSchema) {
       SchemaMergeUtils.mergeSchemasInParallel(
         sparkSession, options, files, OrcFileOperator.readOrcSchemasInParallel)
     } else {
       OrcFileOperator.readSchema(
         files.map(_.getPath.toString),
-        Some(sparkSession.sessionState.newHadoopConfWithOptions(options)),
+        Some(getHadoopConf(sparkSession, options)),
         orcOptions.ignoreCorruptFiles
       )
     }
@@ -83,7 +87,7 @@ case class OrcFileFormat() extends FileFormat with DataSourceRegister with Seria
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
 
-    val orcOptions = new OrcOptions(options, sparkSession.sessionState.conf)
+    val orcOptions = new OrcOptions(options, getSqlConf(sparkSession))
 
     val configuration = job.getConfiguration
 
@@ -133,7 +137,7 @@ case class OrcFileFormat() extends FileFormat with DataSourceRegister with Seria
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
 
-    if (sparkSession.sessionState.conf.orcFilterPushDown) {
+    if (getSqlConf(sparkSession).orcFilterPushDown) {
       // Sets pushed predicates
       OrcFilters.createFilter(requiredSchema, filters).foreach { f =>
         hadoopConf.set(OrcFileFormat.SARG_PUSHDOWN, toKryo(f))
@@ -144,7 +148,7 @@ case class OrcFileFormat() extends FileFormat with DataSourceRegister with Seria
     val broadcastedHadoopConf =
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     val ignoreCorruptFiles =
-      new OrcOptions(options, sparkSession.sessionState.conf).ignoreCorruptFiles
+      new OrcOptions(options, getSqlConf(sparkSession)).ignoreCorruptFiles
 
     (file: PartitionedFile) => {
       val conf = broadcastedHadoopConf.value.value

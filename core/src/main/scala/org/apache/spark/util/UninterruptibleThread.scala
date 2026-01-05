@@ -107,8 +107,11 @@ private[spark] class UninterruptibleThread(
       // super.interrupt() is called. In this case to prevent runUninterruptibly() from being
       // interrupted, we use awaitInterruptThread flag. We need to set it only if
       // runUninterruptibly() is not yet set uninterruptible to true (!shouldInterruptThread) and
-      // there is no other threads that called interrupt (awaitInterruptThread is already true)
-      if (!shouldInterruptThread && !awaitInterruptThread) {
+      // there is no other threads that called interrupt (awaitInterruptThread is already true or
+      // isInterrupted is true. (SPARK-53394) Otherwise, the state of shouldInterruptThread would
+      // become inconsistent between isInterruptible() and isInterruptPending(), leading to
+      // UninterruptibleThread be interruptible under runUninterruptibly.)
+      if (!shouldInterruptThread && !awaitInterruptThread && !isInterrupted) {
         awaitInterruptThread = true
         true
       } else {

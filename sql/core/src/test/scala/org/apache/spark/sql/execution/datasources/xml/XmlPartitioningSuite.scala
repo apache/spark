@@ -21,17 +21,20 @@ import org.scalatest.matchers.should.Matchers
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Tests various cases of partition size, compression.
  */
-final class XmlPartitioningSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
+class XmlPartitioningSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll {
+  protected val legacyParserEnabled: Boolean = false
 
-  private def doPartitionTest(suffix: String, blockSize: Long, large: Boolean): Unit = {
+  protected def doPartitionTest(suffix: String, blockSize: Long, large: Boolean): Unit = {
     val spark = SparkSession.builder()
       .master("local[2]")
       .appName("XmlPartitioningSuite")
       .config("spark.hadoop.fs.local.block.size", blockSize)
+      .config(SQLConf.LEGACY_XML_PARSER_ENABLED.key, legacyParserEnabled)
       .getOrCreate()
     try {
       val fileName = s"test-data/xml-resources/fias_house${if (large) ".large" else ""}.xml$suffix"
@@ -72,4 +75,8 @@ final class XmlPartitioningSuite extends SparkFunSuite with Matchers with Before
     doPartitionTest(".gz", 500, true)
   }
 
+}
+
+class XmlPartitioningSuiteWithLegacyParser extends XmlPartitioningSuite {
+  override protected val legacyParserEnabled: Boolean = true
 }

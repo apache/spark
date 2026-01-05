@@ -31,7 +31,9 @@ import org.apache.spark.sql.connect.common.ProtoUtils
 import org.apache.spark.sql.connect.planner.InvalidInputErrors
 import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteSessionTag, SparkConnectService}
 import org.apache.spark.sql.connect.utils.ErrorUtils
+import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.Utils
+import org.apache.spark.util.Utils.CONNECT_EXECUTE_THREAD_PREFIX
 
 /**
  * This class launches the actual execution in an execution thread. The execution pushes the
@@ -227,21 +229,22 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
             executeHolder.request.getPlan.getDescriptorForType)
       }
 
-      val observedMetrics: Map[String, Seq[(Option[String], Any)]] = {
+      val observedMetrics: Map[String, Seq[(Option[String], Any, Option[DataType])]] = {
         executeHolder.observations.map { case (name, observation) =>
-          val values = observation.getOrEmpty.map { case (key, value) =>
-            (Some(key), value)
-          }.toSeq
+          val values =
+            observation.getRowOrEmpty
+              .map(SparkConnectPlanExecution.toObservedMetricsValues(_))
+              .getOrElse(Seq.empty)
           name -> values
         }.toMap
       }
-      val accumulatedInPython: Map[String, Seq[(Option[String], Any)]] = {
+      val accumulatedInPython: Map[String, Seq[(Option[String], Any, Option[DataType])]] = {
         executeHolder.sessionHolder.pythonAccumulator.flatMap { accumulator =>
           accumulator.synchronized {
             val value = accumulator.value.asScala.toSeq
             if (value.nonEmpty) {
               accumulator.reset()
-              Some("__python_accumulator__" -> value.map(value => (None, value)))
+              Some("__python_accumulator__" -> value.map(value => (None, value, None)))
             } else {
               None
             }
@@ -327,7 +330,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
   }
 
   private class ExecutionThread()
-      extends Thread(s"SparkConnectExecuteThread_opId=${executeHolder.operationId}") {
+      extends Thread(s"${CONNECT_EXECUTE_THREAD_PREFIX}_opId=${executeHolder.operationId}") {
     override def run(): Unit = execute()
   }
 }

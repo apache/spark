@@ -22,13 +22,17 @@ import java.nio.channels.{Channels, ReadableByteChannel}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
 
+import org.apache.arrow.compression.{Lz4CompressionCodec, ZstdCompressionCodec}
 import org.apache.arrow.flatbuf.MessageHeader
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector._
+import org.apache.arrow.vector.compression.{CompressionCodec, NoCompressionCodec}
 import org.apache.arrow.vector.ipc.{ArrowStreamReader, ArrowStreamWriter, ReadChannel, WriteChannel}
 import org.apache.arrow.vector.ipc.message.{ArrowRecordBatch, IpcOption, MessageSerializer}
 
+import org.apache.spark.SparkException
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
@@ -37,12 +41,12 @@ import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.classic.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.ArrowUtils
+import org.apache.spark.sql.util.{ArrowUtils, CloseableIterator, ConcatenatingArrowStreamReader, MessageIterator}
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.util.{ByteBufferOutputStream, SizeEstimator, Utils}
 import org.apache.spark.util.ArrayImplicits._
-
 
 /**
  * Writes serialized ArrowRecordBatches to a DataOutputStream in the Arrow stream format.
@@ -92,8 +96,26 @@ private[sql] object ArrowConverters extends Logging {
       ArrowUtils.rootAllocator.newChildAllocator(
         s"to${this.getClass.getSimpleName}", 0, Long.MaxValue)
 
-    private val root = VectorSchemaRoot.create(arrowSchema, allocator)
-    protected val unloader = new VectorUnloader(root)
+    protected val root = VectorSchemaRoot.create(arrowSchema, allocator)
+
+    // Create compression codec based on config
+    private val compressionCodecName = SQLConf.get.arrowCompressionCodec
+    private val codec = compressionCodecName match {
+      case "none" => NoCompressionCodec.INSTANCE
+      case "zstd" =>
+        val compressionLevel = SQLConf.get.arrowZstdCompressionLevel
+        val factory = CompressionCodec.Factory.INSTANCE
+        val codecType = new ZstdCompressionCodec(compressionLevel).getCodecType()
+        factory.createCodec(codecType)
+      case "lz4" =>
+        val factory = CompressionCodec.Factory.INSTANCE
+        val codecType = new Lz4CompressionCodec().getCodecType()
+        factory.createCodec(codecType)
+      case other =>
+        throw SparkException.internalError(
+          s"Unsupported Arrow compression codec: $other. Supported values: none, zstd, lz4")
+    }
+    protected val unloader = new VectorUnloader(root, true, codec, true)
     protected val arrowWriter = ArrowWriter.create(root)
 
     Option(context).foreach {_.addTaskCompletionListener[Unit] { _ =>
@@ -106,8 +128,7 @@ private[sql] object ArrowConverters extends Logging {
     }
 
     override def next(): Array[Byte] = {
-      val out = new ByteArrayOutputStream()
-      val writeChannel = new WriteChannel(Channels.newChannel(out))
+      var bytes: Array[Byte] = null
 
       Utils.tryWithSafeFinally {
         var rowCount = 0L
@@ -118,13 +139,13 @@ private[sql] object ArrowConverters extends Logging {
         }
         arrowWriter.finish()
         val batch = unloader.getRecordBatch()
-        MessageSerializer.serialize(writeChannel, batch)
+        bytes = serializeBatch(batch)
         batch.close()
       } {
         arrowWriter.reset()
       }
 
-      out.toByteArray
+      bytes
     }
 
     override def close(): Unit = {
@@ -265,6 +286,87 @@ private[sql] object ArrowConverters extends Logging {
   }
 
   /**
+   * This is a class that converts input data in the form of a Byte array to InternalRow instances
+   * implementing the Iterator interface.
+   *
+   * The input data must be a valid Arrow IPC stream, this means that the first message is always
+   * the schema followed by N record batches.
+   *
+   * @param input Input Data
+   * @param context Task Context for Spark
+   */
+  private[sql] class InternalRowIteratorFromIPCStream(
+      ipcStreams: Iterator[Array[Byte]],
+      context: TaskContext)
+    extends CloseableIterator[InternalRow] {
+
+    // Create an allocator used for all Arrow related memory.
+    protected val allocator: BufferAllocator = ArrowUtils.rootAllocator.newChildAllocator(
+      s"to${this.getClass.getSimpleName}",
+      0,
+      Long.MaxValue)
+
+    private val reader = {
+      val messages = ipcStreams.map { bytes =>
+        new MessageIterator(new ByteArrayInputStream(bytes), allocator)
+      }
+      new ConcatenatingArrowStreamReader(allocator, messages, destructive = true)
+    }
+
+    lazy val schema: StructType = try {
+      ArrowUtils.fromArrowSchema(reader.getVectorSchemaRoot.getSchema)
+    } catch {
+      case NonFatal(e) =>
+        // Since this triggers a read (which involves allocating buffers) we have to clean-up.
+        close()
+        throw e
+    }
+
+    private var rowIterator: Iterator[InternalRow] = Iterator.empty
+
+    // Metrics to track batch processing
+    private var _batchesLoaded: Int = 0
+    private var _totalRowsProcessed: Long = 0L
+
+    if (context != null) {
+      context.addTaskCompletionListener[Unit] { _ =>
+        close()
+      }
+    }
+
+    // Public accessors for metrics
+    def batchesLoaded: Int = _batchesLoaded
+    def totalRowsProcessed: Long = _totalRowsProcessed
+    def allocatedMemory: Long = allocator.getAllocatedMemory
+    def peakMemoryAllocation: Long = allocator.getPeakMemoryAllocation
+
+    override def hasNext: Boolean = {
+      while (!rowIterator.hasNext) {
+        if (reader.loadNextBatch()) {
+          rowIterator = vectorSchemaRootToIter(reader.getVectorSchemaRoot)
+          _batchesLoaded += 1
+        } else {
+          close()
+          return false
+        }
+      }
+      true
+    }
+
+    override def next(): InternalRow = {
+      if (!hasNext) {
+        throw new NoSuchElementException("No more elements in iterator")
+      }
+      _totalRowsProcessed += 1
+      rowIterator.next()
+    }
+
+    override def close(): Unit = {
+      closeAll(reader, allocator)
+    }
+  }
+
+  /**
    * An InternalRow iterator which parse data from serialized ArrowRecordBatches, subclass should
    * implement [[nextBatch]] to parse data from binary records.
    */
@@ -383,6 +485,29 @@ private[sql] object ArrowConverters extends Logging {
   }
 
   /**
+   * Creates an iterator from a Byte array to deserialize an Arrow IPC stream with exactly
+   * one schema and a varying number of record batches. Returns an iterator over the
+   * created InternalRow.
+   */
+  private[sql] def fromIPCStream(input: Array[Byte]):
+    (CloseableIterator[InternalRow], StructType) = {
+    fromIPCStream(Iterator.single(input))
+  }
+
+  private[sql] def fromIPCStream(inputs: Iterator[Array[Byte]]):
+    (CloseableIterator[InternalRow], StructType) = {
+    val iterator = new InternalRowIteratorFromIPCStream(inputs, null)
+    (iterator, iterator.schema)
+  }
+
+  // Overloaded method for tests to access the iterator with metrics
+  private[sql] def fromIPCStreamWithIterator(input: Array[Byte], context: TaskContext):
+    (InternalRowIteratorFromIPCStream, StructType) = {
+    val iterator = new InternalRowIteratorFromIPCStream(Iterator.single(input), context)
+    (iterator, iterator.schema)
+  }
+
+  /**
    * Convert an arrow batch container into an iterator of InternalRow.
    */
   private def vectorSchemaRootToIter(root: VectorSchemaRoot): Iterator[InternalRow] = {
@@ -406,6 +531,13 @@ private[sql] object ArrowConverters extends Logging {
       new ReadChannel(Channels.newChannel(in)), allocator)  // throws IOException
   }
 
+  private[arrow] def serializeBatch(batch: ArrowRecordBatch): Array[Byte] = {
+    val out = new ByteArrayOutputStream()
+    val writeChannel = new WriteChannel(Channels.newChannel(out))
+    MessageSerializer.serialize(writeChannel, batch)
+    out.toByteArray
+  }
+
   /**
    * Create a DataFrame from an iterator of serialized ArrowRecordBatches.
    */
@@ -413,25 +545,41 @@ private[sql] object ArrowConverters extends Logging {
       arrowBatches: Iterator[Array[Byte]],
       schemaString: String,
       session: SparkSession): DataFrame = {
-    val schema = DataType.fromJson(schemaString).asInstanceOf[StructType]
+    toDataFrame(
+      arrowBatches,
+      DataType.fromJson(schemaString).asInstanceOf[StructType],
+      session,
+      session.sessionState.conf.sessionLocalTimeZone,
+      false,
+      session.sessionState.conf.arrowUseLargeVarTypes)
+  }
+
+  /**
+   * Create a DataFrame from an iterator of serialized ArrowRecordBatches.
+   */
+  private[sql] def toDataFrame(
+      arrowBatches: Iterator[Array[Byte]],
+      schema: StructType,
+      session: SparkSession,
+      timeZoneId: String,
+      errorOnDuplicatedFieldNames: Boolean,
+      largeVarTypes: Boolean): DataFrame = {
     val attrs = toAttributes(schema)
     val batchesInDriver = arrowBatches.toArray
-    val largeVarTypes = session.sessionState.conf.arrowUseLargeVarTypes
     val shouldUseRDD = session.sessionState.conf
       .arrowLocalRelationThreshold < batchesInDriver.map(_.length.toLong).sum
 
     if (shouldUseRDD) {
       logDebug("Using RDD-based createDataFrame with Arrow optimization.")
-      val timezone = session.sessionState.conf.sessionLocalTimeZone
       val rdd = session.sparkContext
         .parallelize(batchesInDriver.toImmutableArraySeq, batchesInDriver.length)
         .mapPartitions { batchesInExecutors =>
           ArrowConverters.fromBatchIterator(
             batchesInExecutors,
             schema,
-            timezone,
-            errorOnDuplicatedFieldNames = false,
-            largeVarTypes = largeVarTypes,
+            timeZoneId,
+            errorOnDuplicatedFieldNames,
+            largeVarTypes,
             TaskContext.get())
         }
       session.internalCreateDataFrame(rdd.setName("arrow"), schema)
@@ -440,9 +588,9 @@ private[sql] object ArrowConverters extends Logging {
       val data = ArrowConverters.fromBatchIterator(
         batchesInDriver.iterator,
         schema,
-        session.sessionState.conf.sessionLocalTimeZone,
-        errorOnDuplicatedFieldNames = false,
-        largeVarTypes = largeVarTypes,
+        timeZoneId,
+        errorOnDuplicatedFieldNames,
+        largeVarTypes,
         TaskContext.get())
 
       // Project/copy it. Otherwise, the Arrow column vectors will be closed and released out.

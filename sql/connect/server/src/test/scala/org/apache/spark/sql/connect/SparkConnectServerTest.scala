@@ -16,28 +16,29 @@
  */
 package org.apache.spark.sql.connect
 
-import java.io.ByteArrayInputStream
 import java.util.{TimeZone, UUID}
 
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.arrow.memory.RootAllocator
-import org.apache.arrow.vector.ipc.ArrowStreamReader
 import org.scalatest.concurrent.{Eventually, TimeLimits}
 import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.connect.proto
-import org.apache.spark.connect.proto.ExecutePlanResponse
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.connect.client.{CloseableIterator, CustomSparkConnectBlockingStub, ExecutePlanResponseReattachableIterator, RetryPolicy, SparkConnectClient, SparkConnectStubState}
+import org.apache.spark.sql.classic
+import org.apache.spark.sql.connect
+import org.apache.spark.sql.connect.client.{CustomSparkConnectBlockingStub, ExecutePlanResponseReattachableIterator, RetryPolicy, SparkConnectClient, SparkConnectStubState}
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
 import org.apache.spark.sql.connect.dsl.plans._
-import org.apache.spark.sql.connect.service.{ExecuteHolder, SparkConnectService}
+import org.apache.spark.sql.connect.service.{ExecuteHolder, SessionKey, SparkConnectService}
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.util.CloseableIterator
 
 /**
  * Base class and utilities for a test suite that starts and tests the real SparkConnectService
@@ -70,12 +71,12 @@ trait SparkConnectServerTest extends SharedSparkSession {
     super.afterAll()
   }
 
-  override def beforeEach(): Unit = {
+  protected override def beforeEach(): Unit = {
     super.beforeEach()
     clearAllExecutions()
   }
 
-  override def afterEach(): Unit = {
+  protected override def afterEach(): Unit = {
     clearAllExecutions()
     super.afterEach()
   }
@@ -324,42 +325,70 @@ trait SparkConnectServerTest extends SharedSparkSession {
     runQuery(plan, queryTimeout, iterSleep)
   }
 
-  protected def checkSqlCommandResponse(
-      result: ExecutePlanResponse.SqlCommandResult,
-      expected: Seq[Seq[Any]]): Unit = {
-    // Extract the serialized Arrow data as a byte array.
-    val dataBytes = result.getRelation.getLocalRelation.getData.toByteArray
+  /**
+   * Helper method to create a connect SparkSession that connects to the localhost server. Similar
+   * to withClient, but provides a full SparkSession API instead of just a client.
+   *
+   * @param sessionId
+   *   Optional session ID (defaults to defaultSessionId)
+   * @param userId
+   *   Optional user ID (defaults to defaultUserId)
+   * @param f
+   *   Function to execute with the session
+   */
+  protected def withSession(sessionId: String = defaultSessionId, userId: String = defaultUserId)(
+      f: SparkSession => Unit): Unit = {
+    withSession(f, sessionId, userId)
+  }
 
-    // Create an ArrowStreamReader to deserialize the data.
-    val allocator = new RootAllocator(Long.MaxValue)
-    val inputStream = new ByteArrayInputStream(dataBytes)
-    val reader = new ArrowStreamReader(inputStream, allocator)
+  /**
+   * Helper method to create a connect SparkSession with default session and user IDs.
+   *
+   * @param f
+   *   Function to execute with the session
+   */
+  protected def withSession(f: SparkSession => Unit): Unit = {
+    withSession(f, defaultSessionId, defaultUserId)
+  }
 
-    try {
-      // Read the schema and data.
-      val root = reader.getVectorSchemaRoot
-      // Load the first batch of data.
-      reader.loadNextBatch()
+  private def withSession(f: SparkSession => Unit, sessionId: String, userId: String): Unit = {
+    val client = SparkConnectClient
+      .builder()
+      .port(serverPort)
+      .sessionId(sessionId)
+      .userId(userId)
+      .build()
 
-      // Get dimensions.
-      val rowCount = root.getRowCount
-      val colCount = root.getFieldVectors.size
-      assert(rowCount == expected.length, "Row count mismatch")
-      assert(colCount == expected.head.length, "Column count mismatch")
-
-      // Compare to expected.
-      for (i <- 0 until rowCount) {
-        for (j <- 0 until colCount) {
-          val col = root.getFieldVectors.get(j)
-          val value = col.getObject(i)
-          print(value)
-          assert(value == expected(i)(j), s"Value mismatch at ($i, $j)")
-        }
-      }
-    } finally {
-      // Clean up resources.
-      reader.close()
-      allocator.close()
+    val session = connect.SparkSession
+      .builder()
+      .client(client)
+      .create()
+    try f(session)
+    finally {
+      session.close()
     }
+  }
+
+  /**
+   * Get the server-side SparkSession corresponding to a client SparkSession.
+   *
+   * This helper takes a sql.SparkSession (which is assumed to be a connect.SparkSession),
+   * extracts the userId and sessionId from it, and looks up the corresponding server-side classic
+   * SparkSession using SparkConnectSessionManager.
+   *
+   * @param clientSession
+   *   The client SparkSession (must be a connect.SparkSession)
+   * @return
+   *   The server-side classic SparkSession
+   */
+  protected def getServerSession(clientSession: SparkSession): classic.SparkSession = {
+    val connectSession = clientSession.asInstanceOf[connect.SparkSession]
+    val userId = connectSession.client.userId
+    val sessionId = connectSession.sessionId
+    val key = SessionKey(userId, sessionId)
+    SparkConnectService.sessionManager
+      .getIsolatedSessionIfPresent(key)
+      .get
+      .session
   }
 }

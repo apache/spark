@@ -16,17 +16,30 @@
 #
 
 import unittest
+import logging
 
 from pyspark.sql.functions import arrow_udf, ArrowUDFType
-from pyspark.util import PythonEvalType
+from pyspark.util import PythonEvalType, is_remote_only
 from pyspark.sql import Row
+from pyspark.sql.types import (
+    ArrayType,
+    YearMonthIntervalType,
+    StructType,
+    StructField,
+    VariantType,
+    VariantVal,
+)
 from pyspark.sql import functions as sf
 from pyspark.errors import AnalysisException, PythonException
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.utils import (
+    have_numpy,
+    numpy_requirement_message,
     have_pyarrow,
     pyarrow_requirement_message,
+    assertDataFrameEqual,
 )
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from typing import Iterator, Tuple
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -138,6 +151,7 @@ class GroupedAggArrowUDFTestsMixin:
 
         self.assertEqual(expected, result.collect())
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_basic(self):
         df = self.data
         weighted_mean_udf = self.arrow_agg_weighted_mean_udf
@@ -260,6 +274,7 @@ class GroupedAggArrowUDFTestsMixin:
         self.assertEqual(expected5, result5.collect())
         self.assertEqual(expected6, result6.collect())
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_multiple_udfs(self):
         """
         Test multiple group aggregate pandas UDFs in one agg function.
@@ -476,12 +491,19 @@ class GroupedAggArrowUDFTestsMixin:
         )
 
         self.assertEqual(sum_arrow_udf.evalType, PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF)
-        group_agg_pandas_udf = self.spark.udf.register("sum_arrow_udf", sum_arrow_udf)
-        self.assertEqual(group_agg_pandas_udf.evalType, PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF)
-        q = "SELECT sum_arrow_udf(v1) FROM VALUES (3, 0), (2, 0), (1, 1) tbl(v1, v2) GROUP BY v2"
-        actual = sorted(map(lambda r: r[0], self.spark.sql(q).collect()))
-        expected = [1, 5]
-        self.assertEqual(actual, expected)
+
+        with self.temp_func("sum_arrow_udf"):
+            group_agg_pandas_udf = self.spark.udf.register("sum_arrow_udf", sum_arrow_udf)
+            self.assertEqual(
+                group_agg_pandas_udf.evalType, PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF
+            )
+            q = """
+                SELECT sum_arrow_udf(v1)
+                FROM VALUES (3, 0), (2, 0), (1, 1) tbl(v1, v2) GROUP BY v2
+                """
+            actual = sorted(map(lambda r: r[0], self.spark.sql(q).collect()))
+            expected = [1, 5]
+            self.assertEqual(actual, expected)
 
     def test_grouped_with_empty_partition(self):
         import pyarrow as pa
@@ -504,10 +526,10 @@ class GroupedAggArrowUDFTestsMixin:
             return float(pa.compute.max(v).as_py())
 
         df = self.spark.range(0, 100)
-        self.spark.udf.register("max_udf", max_udf)
 
-        with self.tempView("table"):
+        with self.tempView("table"), self.temp_func("max_udf"):
             df.createTempView("table")
+            self.spark.udf.register("max_udf", max_udf)
 
             agg1 = df.agg(max_udf(df["id"]))
             agg2 = self.spark.sql("select max_udf(id) from table")
@@ -529,11 +551,12 @@ class GroupedAggArrowUDFTestsMixin:
 
         assert filtered.collect()[0]["mean"] == 42.0
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_named_arguments(self):
         df = self.data
         weighted_mean = self.arrow_agg_weighted_mean_udf
 
-        with self.tempView("v"):
+        with self.tempView("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -557,11 +580,12 @@ class GroupedAggArrowUDFTestsMixin:
                         df.groupby("id").agg(sf.mean(df.v).alias("wm")).collect(),
                     )
 
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
     def test_named_arguments_negative(self):
         df = self.data
         weighted_mean = self.arrow_agg_weighted_mean_udf
 
-        with self.tempView("v"):
+        with self.tempView("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -601,7 +625,7 @@ class GroupedAggArrowUDFTestsMixin:
 
             return np.average(kwargs["v"], weights=kwargs["w"])
 
-        with self.tempView("v"):
+        with self.tempView("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -646,7 +670,7 @@ class GroupedAggArrowUDFTestsMixin:
         def biased_sum(v, w=None):
             return pa.compute.sum(v).as_py() + (pa.compute.sum(w).as_py() if w is not None else 100)
 
-        with self.tempView("v"):
+        with self.tempView("v"), self.temp_func("biased_sum"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("biased_sum", biased_sum)
 
@@ -777,6 +801,73 @@ class GroupedAggArrowUDFTestsMixin:
 
         self.assertEqual(expected1.collect(), result1.collect())
 
+    def test_time_min(self):
+        import pyarrow as pa
+
+        df = self.spark.sql(
+            """
+            SELECT * FROM VALUES
+            (1, TIME '12:34:56'),
+            (1, TIME '1:2:3'),
+            (2, TIME '0:58:59'),
+            (2, TIME '10:58:59'),
+            (2, TIME '10:00:03')
+            AS tab(i, t)
+            """
+        )
+
+        @arrow_udf("time", ArrowUDFType.GROUPED_AGG)
+        def agg_min_time(v):
+            assert isinstance(v, pa.Array)
+            assert isinstance(v, pa.Time64Array)
+            return pa.compute.min(v)
+
+        expected1 = df.select(sf.min("t").alias("res"))
+        result1 = df.select(agg_min_time("t").alias("res"))
+        self.assertEqual(expected1.collect(), result1.collect())
+
+        expected2 = df.groupby("i").agg(sf.min("t").alias("res")).sort("i")
+        result2 = df.groupby("i").agg(agg_min_time("t").alias("res")).sort("i")
+        self.assertEqual(expected2.collect(), result2.collect())
+
+    def test_input_output_variant(self):
+        import pyarrow as pa
+
+        @arrow_udf("variant")
+        def first_variant(v: pa.Array) -> pa.Scalar:
+            assert isinstance(v, pa.Array)
+            assert isinstance(v, pa.StructArray)
+            assert isinstance(v.field("metadata"), pa.BinaryArray)
+            assert isinstance(v.field("value"), pa.BinaryArray)
+            return v[0]
+
+        @arrow_udf("variant")
+        def last_variant(v: pa.Array) -> pa.Scalar:
+            assert isinstance(v, pa.Array)
+            assert isinstance(v, pa.StructArray)
+            assert isinstance(v.field("metadata"), pa.BinaryArray)
+            assert isinstance(v.field("value"), pa.BinaryArray)
+            return v[-1]
+
+        df = self.spark.range(0, 10).selectExpr("parse_json(cast(id as string)) v")
+        result = df.select(
+            first_variant("v").alias("first"),
+            last_variant("v").alias("last"),
+        )
+        self.assertEqual(
+            result.schema,
+            StructType(
+                [
+                    StructField("first", VariantType(), True),
+                    StructField("last", VariantType(), True),
+                ]
+            ),
+        )
+
+        row = result.first()
+        self.assertIsInstance(row.first, VariantVal)
+        self.assertIsInstance(row.last, VariantVal)
+
     def test_return_type_coercion(self):
         import pyarrow as pa
 
@@ -810,6 +901,388 @@ class GroupedAggArrowUDFTestsMixin:
             # pyarrow.lib.ArrowInvalid:
             # Integer value 2147483657 not in range: -2147483648 to 2147483647
             result3.collect()
+
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
+    def test_return_numpy_scalar(self):
+        import numpy as np
+        import pyarrow as pa
+
+        @arrow_udf("long")
+        def np_max_udf(v: pa.Array) -> np.int64:
+            assert isinstance(v, pa.Array)
+            return np.max(v)
+
+        @arrow_udf("long")
+        def np_min_udf(v: pa.Array) -> np.int64:
+            assert isinstance(v, pa.Array)
+            return np.min(v)
+
+        @arrow_udf("double")
+        def np_avg_udf(v: pa.Array) -> np.float64:
+            assert isinstance(v, pa.Array)
+            return np.mean(v)
+
+        df = self.spark.range(10)
+        expected = df.select(
+            sf.max("id").alias("max"),
+            sf.min("id").alias("min"),
+            sf.avg("id").alias("avg"),
+        )
+
+        result = df.select(
+            np_max_udf("id").alias("max"),
+            np_min_udf("id").alias("min"),
+            np_avg_udf("id").alias("avg"),
+        )
+        self.assertEqual(expected.collect(), result.collect())
+
+    def test_unsupported_return_types(self):
+        import pyarrow as pa
+
+        with self.quiet():
+            with self.assertRaisesRegex(
+                NotImplementedError,
+                "Invalid return type with grouped aggregate "
+                "Arrow UDFs.*ArrayType.*YearMonthIntervalType",
+            ):
+                arrow_udf(
+                    lambda x: x,
+                    ArrayType(ArrayType(YearMonthIntervalType())),
+                    ArrowUDFType.GROUPED_AGG,
+                )
+
+            with self.assertRaisesRegex(
+                NotImplementedError,
+                "Invalid return type with grouped aggregate "
+                "Arrow UDFs.*ArrayType.*YearMonthIntervalType",
+            ):
+
+                @arrow_udf(ArrayType(ArrayType(YearMonthIntervalType())), ArrowUDFType.GROUPED_AGG)
+                def func_a(a: pa.Array) -> pa.Scalar:
+                    return pa.compute.max(a)
+
+    def test_0_args(self):
+        import pyarrow as pa
+
+        df = self.spark.range(10).withColumn("k", sf.col("id") % 3)
+
+        @arrow_udf("long", ArrowUDFType.GROUPED_AGG)
+        def arrow_max(v) -> int:
+            return pa.compute.max(v).as_py()
+
+        @arrow_udf("long", ArrowUDFType.GROUPED_AGG)
+        def arrow_lit_1() -> int:
+            return 1
+
+        expected1 = df.select(sf.max("id").alias("res1"), sf.lit(1).alias("res1"))
+        result1 = df.select(arrow_max("id").alias("res1"), arrow_lit_1().alias("res1"))
+        self.assertEqual(expected1.collect(), result1.collect())
+
+        expected2 = (
+            df.groupby("k")
+            .agg(
+                sf.max("id").alias("res1"),
+                sf.lit(1).alias("res1"),
+            )
+            .sort("k")
+        )
+        result2 = (
+            df.groupby("k")
+            .agg(
+                arrow_max("id").alias("res1"),
+                arrow_lit_1().alias("res1"),
+            )
+            .sort("k")
+        )
+        self.assertEqual(expected2.collect(), result2.collect())
+
+    def test_arrow_batch_slicing(self):
+        import pyarrow as pa
+
+        df = self.spark.range(10000000).select(
+            (sf.col("id") % 2).alias("key"), sf.col("id").alias("v")
+        )
+
+        @arrow_udf("long", ArrowUDFType.GROUPED_AGG)
+        def arrow_max(v):
+            assert len(v) == 10000000 / 2, len(v)
+            return pa.compute.max(v)
+
+        expected = (df.groupby("key").agg(sf.max("v").alias("res")).sort("key")).collect()
+
+        for maxRecords, maxBytes in [(1000, 2**31 - 1), (0, 1048576), (1000, 1048576)]:
+            with self.subTest(maxRecords=maxRecords, maxBytes=maxBytes):
+                with self.sql_conf(
+                    {
+                        "spark.sql.execution.arrow.maxRecordsPerBatch": maxRecords,
+                        "spark.sql.execution.arrow.maxBytesPerBatch": maxBytes,
+                    }
+                ):
+                    result = (
+                        df.groupBy("key").agg(arrow_max("v").alias("res")).sort("key")
+                    ).collect()
+
+                    self.assertEqual(expected, result)
+
+    @unittest.skipIf(is_remote_only(), "Requires JVM access")
+    def test_grouped_agg_arrow_udf_with_logging(self):
+        import pyarrow as pa
+
+        @arrow_udf("double", ArrowUDFType.GROUPED_AGG)
+        def my_grouped_agg_arrow_udf(x):
+            assert isinstance(x, pa.Array)
+            logger = logging.getLogger("test_grouped_agg_arrow")
+            logger.warning(f"grouped agg arrow udf: {len(x)}")
+            return pa.compute.sum(x)
+
+        df = self.spark.createDataFrame(
+            [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v")
+        )
+
+        with self.sql_conf({"spark.sql.pyspark.worker.logging.enabled": "true"}):
+            assertDataFrameEqual(
+                df.groupby("id").agg(my_grouped_agg_arrow_udf("v").alias("result")),
+                [Row(id=1, result=3.0), Row(id=2, result=18.0)],
+            )
+
+            logs = self.spark.tvf.python_worker_logs()
+
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg=f"grouped agg arrow udf: {n}",
+                        context={"func_name": my_grouped_agg_arrow_udf.__name__},
+                        logger="test_grouped_agg_arrow",
+                    )
+                    for n in [2, 3]
+                ],
+            )
+
+    def test_iterator_grouped_agg_single_column(self):
+        """
+        Test iterator API for grouped aggregation with single column.
+        """
+        import pyarrow as pa
+        from typing import Iterator
+
+        @arrow_udf("double")
+        def arrow_mean_iter(it: Iterator[pa.Array]) -> float:
+            sum_val = 0.0
+            cnt = 0
+            for v in it:
+                assert isinstance(v, pa.Array)
+                sum_val += pa.compute.sum(v).as_py()
+                cnt += len(v)
+            return sum_val / cnt if cnt > 0 else 0.0
+
+        df = self.spark.createDataFrame(
+            [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v")
+        )
+
+        result = df.groupby("id").agg(arrow_mean_iter(df["v"]).alias("mean")).sort("id")
+        expected = df.groupby("id").agg(sf.mean(df["v"]).alias("mean")).sort("id").collect()
+
+        self.assertEqual(expected, result.collect())
+
+    @unittest.skipIf(not have_numpy, numpy_requirement_message)
+    def test_iterator_grouped_agg_multiple_columns(self):
+        """
+        Test iterator API for grouped aggregation with multiple columns.
+        """
+        import pyarrow as pa
+        import numpy as np
+
+        @arrow_udf("double")
+        def arrow_weighted_mean_iter(it: Iterator[Tuple[pa.Array, pa.Array]]) -> float:
+            weighted_sum = 0.0
+            weight = 0.0
+            for v, w in it:
+                assert isinstance(v, pa.Array)
+                assert isinstance(w, pa.Array)
+                weighted_sum += np.dot(v, w)
+                weight += pa.compute.sum(w).as_py()
+            return weighted_sum / weight if weight > 0 else 0.0
+
+        df = self.spark.createDataFrame(
+            [(1, 1.0, 1.0), (1, 2.0, 2.0), (2, 3.0, 1.0), (2, 5.0, 2.0), (2, 10.0, 3.0)],
+            ("id", "v", "w"),
+        )
+
+        result = (
+            df.groupby("id")
+            .agg(arrow_weighted_mean_iter(df["v"], df["w"]).alias("wm"))
+            .sort("id")
+            .collect()
+        )
+
+        # Expected weighted means:
+        # Group 1: (1.0*1.0 + 2.0*2.0) / (1.0 + 2.0) = 5.0 / 3.0
+        # Group 2: (3.0*1.0 + 5.0*2.0 + 10.0*3.0) / (1.0 + 2.0 + 3.0) = 43.0 / 6.0
+        expected = [(1, 5.0 / 3.0), (2, 43.0 / 6.0)]
+
+        self.assertEqual(len(result), len(expected))
+        for r, (exp_id, exp_wm) in zip(result, expected):
+            self.assertEqual(r["id"], exp_id)
+            self.assertAlmostEqual(r["wm"], exp_wm, places=5)
+
+    def test_iterator_grouped_agg_eval_type(self):
+        """
+        Test that the eval type is correctly inferred for iterator grouped agg UDFs.
+        """
+        import pyarrow as pa
+        from typing import Iterator
+
+        @arrow_udf("double")
+        def arrow_sum_iter(it: Iterator[pa.Array]) -> float:
+            total = 0.0
+            for v in it:
+                total += pa.compute.sum(v).as_py()
+            return total
+
+        self.assertEqual(arrow_sum_iter.evalType, PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF)
+
+    def test_iterator_grouped_agg_partial_consumption(self):
+        """
+        Test that iterator grouped agg UDF can partially consume batches.
+        This ensures that batches are processed one by one without loading all data into memory.
+        """
+        import pyarrow as pa
+        from typing import Iterator
+
+        # Create a dataset with multiple batches per group
+        # Use small batch size to ensure multiple batches per group
+        # Use same value for all data points to avoid ordering issues
+        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 2}):
+            df = self.spark.createDataFrame(
+                [(1, 1.0), (1, 1.0), (1, 1.0), (1, 1.0), (2, 1.0), (2, 1.0)], ("id", "v")
+            )
+
+            @arrow_udf("struct<count:bigint,sum:double>")
+            def arrow_count_sum_partial(it: Iterator[pa.Array]) -> dict:
+                # Only consume first two batches, then return
+                # This tests that partial consumption works correctly
+                total = 0.0
+                count = 0
+                for i, v in enumerate(it):
+                    if i < 2:  # Only process first 2 batches
+                        total += pa.compute.sum(v).as_py()
+                        count += len(v)
+                    else:
+                        # Stop early - partial consumption
+                        break
+                return {"count": count, "sum": total}
+
+            result = (
+                df.groupby("id").agg(arrow_count_sum_partial(df["v"]).alias("result")).sort("id")
+            )
+
+            # Verify results are correct for partial consumption
+            # With batch size = 2:
+            # Group 1 (id=1): 4 values in 2 batches -> processes both batches
+            #   Batch 1: [1.0, 1.0], Batch 2: [1.0, 1.0]
+            #   Result: count=4, sum=4.0
+            # Group 2 (id=2): 2 values in 1 batch -> processes 1 batch (only 1 batch available)
+            #   Batch 1: [1.0, 1.0]
+            #   Result: count=2, sum=2.0
+            actual = result.collect()
+            self.assertEqual(len(actual), 2, "Should have results for both groups")
+
+            # Verify both groups were processed correctly
+            # Group 1: processes 2 batches (all available)
+            group1_result = next(row for row in actual if row["id"] == 1)
+            self.assertEqual(
+                group1_result["result"]["count"],
+                4,
+                msg="Group 1 should process 4 values (2 batches)",
+            )
+            self.assertAlmostEqual(
+                group1_result["result"]["sum"], 4.0, places=5, msg="Group 1 should sum to 4.0"
+            )
+
+            # Group 2: processes 1 batch (only batch available)
+            group2_result = next(row for row in actual if row["id"] == 2)
+            self.assertEqual(
+                group2_result["result"]["count"],
+                2,
+                msg="Group 2 should process 2 values (1 batch)",
+            )
+            self.assertAlmostEqual(
+                group2_result["result"]["sum"], 2.0, places=5, msg="Group 2 should sum to 2.0"
+            )
+
+    def test_iterator_grouped_agg_sql_single_column(self):
+        """
+        Test iterator API for grouped aggregation with single column in SQL.
+        """
+        import pyarrow as pa
+
+        @arrow_udf("double")
+        def arrow_mean_iter(it: Iterator[pa.Array]) -> float:
+            sum_val = 0.0
+            cnt = 0
+            for v in it:
+                assert isinstance(v, pa.Array)
+                sum_val += pa.compute.sum(v).as_py()
+                cnt += len(v)
+            return sum_val / cnt if cnt > 0 else 0.0
+
+        df = self.spark.createDataFrame(
+            [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)], ("id", "v")
+        )
+
+        with self.tempView("test_table"), self.temp_func("arrow_mean_iter"):
+            df.createOrReplaceTempView("test_table")
+            self.spark.udf.register("arrow_mean_iter", arrow_mean_iter)
+
+            # Test SQL query with GROUP BY
+            result_sql = self.spark.sql(
+                "SELECT id, arrow_mean_iter(v) as mean FROM test_table GROUP BY id ORDER BY id"
+            )
+            expected = df.groupby("id").agg(sf.mean(df["v"]).alias("mean")).sort("id").collect()
+
+            self.assertEqual(expected, result_sql.collect())
+
+    def test_iterator_grouped_agg_sql_multiple_columns(self):
+        """
+        Test iterator API for grouped aggregation with multiple columns in SQL.
+        """
+        import pyarrow as pa
+
+        @arrow_udf("double")
+        def arrow_weighted_mean_iter(it: Iterator[Tuple[pa.Array, pa.Array]]) -> float:
+            weighted_sum = 0.0
+            weight = 0.0
+            for v, w in it:
+                assert isinstance(v, pa.Array)
+                assert isinstance(w, pa.Array)
+                weighted_sum += pa.compute.sum(pa.compute.multiply(v, w)).as_py()
+                weight += pa.compute.sum(w).as_py()
+            return weighted_sum / weight if weight > 0 else 0.0
+
+        df = self.spark.createDataFrame(
+            [(1, 1.0, 1.0), (1, 2.0, 2.0), (2, 3.0, 1.0), (2, 5.0, 2.0), (2, 10.0, 3.0)],
+            ("id", "v", "w"),
+        )
+
+        with self.tempView("test_table"), self.temp_func("arrow_weighted_mean_iter"):
+            df.createOrReplaceTempView("test_table")
+            self.spark.udf.register("arrow_weighted_mean_iter", arrow_weighted_mean_iter)
+
+            # Test SQL query with GROUP BY and multiple columns
+            result_sql = self.spark.sql(
+                "SELECT id, arrow_weighted_mean_iter(v, w) as wm "
+                "FROM test_table GROUP BY id ORDER BY id"
+            )
+
+            # Expected weighted means:
+            # Group 1: (1.0*1.0 + 2.0*2.0) / (1.0 + 2.0) = 5.0 / 3.0
+            # Group 2: (3.0*1.0 + 5.0*2.0 + 10.0*3.0) / (1.0 + 2.0 + 3.0) = 43.0 / 6.0
+            expected = [Row(id=1, wm=5.0 / 3.0), Row(id=2, wm=43.0 / 6.0)]
+
+            actual_results = result_sql.collect()
+            self.assertEqual(actual_results, expected)
 
 
 class GroupedAggArrowUDFTests(GroupedAggArrowUDFTestsMixin, ReusedSQLTestCase):

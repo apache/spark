@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.util
 
 import scala.collection.mutable.ArrayBuffer
+import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
@@ -37,7 +38,6 @@ import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, DefaultVa
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -379,27 +379,33 @@ object ResolveDefaultColumns extends QueryErrorsBase
     val defaultSQL = field.metadata.getString(EXISTS_DEFAULT_COLUMN_METADATA_KEY)
 
     // Parse the expression.
-    val expr = Literal.fromSQL(defaultSQL) match {
-      // EXISTS_DEFAULT will have a cast from analyze() due to coerceDefaultValue
-      // hence we need to add timezone to the cast if necessary
-      case c: Cast if c.child.resolved && c.needsTimeZone =>
-        c.withTimeZone(SQLConf.get.sessionLocalTimeZone)
-      case e: Expression => e
-    }
+    val resolvedExpr = Try(Literal.fromSQL(defaultSQL)) match {
+      case Success(literal) =>
+        val expr = literal match {
+          // EXISTS_DEFAULT will have a cast from analyze() due to coerceDefaultValue
+          // hence we need to add timezone to the cast if necessary
+          case c: Cast if c.child.resolved && c.needsTimeZone =>
+            c.withTimeZone(SQLConf.get.sessionLocalTimeZone)
+          case e: Expression => e
+        }
 
-    // Check invariants
-    if (expr.containsPattern(PLAN_EXPRESSION)) {
-      throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
-        "", field.name, defaultSQL)
-    }
+        // Check invariants
+        if (expr.containsPattern(PLAN_EXPRESSION)) {
+          throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
+            "", field.name, defaultSQL)
+        }
 
-    val resolvedExpr = expr match {
-      case _: ExprLiteral => expr
-      case c: Cast if c.resolved => expr
-      case _ =>
+        expr match {
+          case _: ExprLiteral => expr
+          case c: Cast if c.resolved => expr
+          case _ =>
+            fallbackResolveExistenceDefaultValue(field)
+        }
+
+      case Failure(_) =>
+        // If Literal.fromSQL fails, use fallback resolution
         fallbackResolveExistenceDefaultValue(field)
     }
-
     coerceDefaultValue(resolvedExpr, field.dataType, "", field.name, defaultSQL)
   }
 
@@ -473,7 +479,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
     val ret = analyzed match {
       case equivalent if equivalent.dataType == supplanted =>
         equivalent
-      case canUpCast if Cast.canUpCast(canUpCast.dataType, supplanted) =>
+      case _ if Cast.canAssignDefaultValue(analyzed.dataType, supplanted) =>
         Cast(analyzed, supplanted, Some(conf.sessionLocalTimeZone))
       case other =>
         defaultValueFromWiderTypeLiteral(other, supplanted, colName).getOrElse(
@@ -664,7 +670,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
       throw SparkUnsupportedOperationException()
     }
     override def loadFunction(ident: Identifier): UnboundFunction = {
-      V1Function(v1Catalog.lookupPersistentFunction(ident.asFunctionIdentifier))
+      v1Catalog.loadPersistentScalarFunction(ident.asFunctionIdentifier)
     }
     override def functionExists(ident: Identifier): Boolean = {
       v1Catalog.isPersistentFunction(ident.asFunctionIdentifier)

@@ -106,7 +106,7 @@ case class UnionLoopExec(
   private def executeAndCacheAndCount(plan: LogicalPlan, currentLimit: Int) = {
     // In case limit is defined, we create a (local) limit node above the plan and execute
     // the newly created plan.
-    val planWithLimit = if (limit.isDefined) {
+    val planWithLimit = if (limit.isDefined && limit.get >= 0) {
       LocalLimit(Literal(currentLimit), plan)
     } else {
       plan
@@ -167,6 +167,8 @@ case class UnionLoopExec(
     // the user knows they aren't getting all the rows they requested.
     var currentLimit = limit.getOrElse(rowLimit)
 
+    val unlimitedRecursion = currentLimit == -1
+
     val userSpecifiedLimit = limit.isDefined
 
     val unionChildren = mutable.ArrayBuffer.empty[LogicalPlan]
@@ -183,7 +185,10 @@ case class UnionLoopExec(
 
     // Main loop for obtaining the result of the recursive query.
     while (prevCount > 0 && !limitReached) {
-      var prevPlan: LogicalPlan = null
+      // The optimizer might have removed the UnionLoopRef in the recursion node (for example as a
+      // result of an empty join). In this case, prevPlan cannot be defined according to the cases
+      // below, so we set a default value of the previous result here.
+      var prevPlan: LogicalPlan = prevDF.logicalPlan
 
       // If the recursive part contains non-deterministic expressions that depends on a seed, we
       // need to create a new seed since the seed for this expression is set in the analysis, and
@@ -237,7 +242,7 @@ case class UnionLoopExec(
 
       unionChildren += prevPlan
 
-      if (rowLimit != -1) {
+      if (!unlimitedRecursion) {
         currentLimit -= prevCount.toInt
         if (currentLimit <= 0) {
           if (userSpecifiedLimit) {

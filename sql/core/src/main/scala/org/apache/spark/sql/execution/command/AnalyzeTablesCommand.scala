@@ -39,7 +39,7 @@ case class AnalyzeTablesCommand(
       } catch {
         case NonFatal(e) =>
           logWarning(log"Failed to analyze table ${MDC(TABLE_NAME, tbl.table)} in the " +
-            log"database ${MDC(DATABASE_NAME, db)} because of ${MDC(ERROR, e.toString)}}", e)
+            log"database ${MDC(DATABASE_NAME, db)} because of ${MDC(ERROR, e.toString)}", e)
       }
     }
     Seq.empty[Row]

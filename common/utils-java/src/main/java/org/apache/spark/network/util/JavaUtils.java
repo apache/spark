@@ -367,7 +367,7 @@ public class JavaUtils {
 
   public static Set<Path> listPaths(File dir) throws IOException {
     if (dir == null) throw new IllegalArgumentException("Input directory is null");
-    if (!dir.exists() || !dir.isDirectory()) return Collections.emptySet();
+    if (!dir.exists() || !dir.isDirectory()) return Set.of();
     try (var stream = Files.walk(dir.toPath(), FileVisitOption.FOLLOW_LINKS)) {
       return stream.filter(Files::isRegularFile).collect(Collectors.toCollection(HashSet::new));
     }
@@ -375,7 +375,7 @@ public class JavaUtils {
 
   public static Set<File> listFiles(File dir) throws IOException {
     if (dir == null) throw new IllegalArgumentException("Input directory is null");
-    if (!dir.exists() || !dir.isDirectory()) return Collections.emptySet();
+    if (!dir.exists() || !dir.isDirectory()) return Set.of();
     try (var stream = Files.walk(dir.toPath(), FileVisitOption.FOLLOW_LINKS)) {
       return stream
         .filter(Files::isRegularFile)

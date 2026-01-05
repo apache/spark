@@ -21,7 +21,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.LogKeys.CONFIG
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec, HiveTableRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -31,7 +31,7 @@ import org.apache.spark.sql.connector.catalog.{CatalogExtension, CatalogManager,
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
+import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.connector.V1Function
@@ -128,6 +128,25 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case DropColumns(ResolvedV1TableIdentifier(ident), _, _) =>
       throw QueryCompilationErrors.unsupportedTableOperationError(ident, "DROP COLUMN")
 
+    // V1 and hive tables do not support constraints
+    case AddConstraint(ResolvedV1TableIdentifier(ident), _) =>
+      throw QueryCompilationErrors.unsupportedTableOperationError(ident, "ADD CONSTRAINT")
+
+    case DropConstraint(ResolvedV1TableIdentifier(ident), _, _, _) =>
+      throw QueryCompilationErrors.unsupportedTableOperationError(ident, "DROP CONSTRAINT")
+
+    case a: AddCheckConstraint
+        if a.child.exists {
+          case _: LogicalRelation => true
+          case _: HiveTableRelation => true
+          case _ => false
+        } =>
+      val tableIdent = a.child.collectFirst {
+        case l: LogicalRelation => l.catalogTable.get.identifier
+        case h: HiveTableRelation => h.tableMeta.identifier
+      }.get
+      throw QueryCompilationErrors.unsupportedTableOperationError(tableIdent, "ADD CONSTRAINT")
+
     case SetTableProperties(ResolvedV1TableIdentifier(ident), props) =>
       AlterTableSetPropertiesCommand(ident, props, isView = false)
 
@@ -187,6 +206,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         c.tableSpec.provider, tableSpec.options, c.tableSpec.location, c.tableSpec.serde,
         ctas = false)
       if (!isV2Provider(provider)) {
+        if (tableSpec.constraints.nonEmpty) {
+          throw QueryCompilationErrors.unsupportedTableOperationError(
+            ident, "CONSTRAINT")
+        }
         constructV1TableCmd(None, c.tableSpec, ident, c.tableSchema, c.partitioning,
           c.ignoreIfExists, storageFormat, provider)
       } else {
@@ -203,6 +226,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         ctas = true)
 
       if (!isV2Provider(provider)) {
+        if (tableSpec.constraints.nonEmpty) {
+          throw QueryCompilationErrors.unsupportedTableOperationError(
+            ident, "CONSTRAINT")
+        }
         constructV1TableCmd(Some(c.query), c.tableSpec, ident, new StructType, c.partitioning,
           c.ignoreIfExists, storageFormat, provider)
       } else {
@@ -439,13 +466,13 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         viewSchemaMode = viewSchemaMode)
 
     case CreateView(ResolvedIdentifier(catalog, _), _, _, _, _, _, _, _, _, _) =>
-      throw QueryCompilationErrors.missingCatalogAbilityError(catalog, "views")
+      throw QueryCompilationErrors.missingCatalogViewsAbilityError(catalog)
 
     case ShowViews(ns: ResolvedNamespace, pattern, output) =>
       ns match {
         case ResolvedDatabaseInSessionCatalog(db) => ShowViewsCommand(db, pattern, output)
         case _ =>
-          throw QueryCompilationErrors.missingCatalogAbilityError(ns.catalog, "views")
+          throw QueryCompilationErrors.missingCatalogViewsAbilityError(ns.catalog)
       }
 
     // If target is view, force use v1 command
@@ -456,14 +483,14 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         if conf.useV1Command =>
       ShowTablePropertiesCommand(ident, propertyKey, output)
 
-    case DescribeFunction(ResolvedNonPersistentFunc(_, V1Function(info)), extended) =>
-      DescribeFunctionCommand(info, extended)
+    case DescribeFunction(ResolvedNonPersistentFunc(_, v1Func: V1Function), extended) =>
+      DescribeFunctionCommand(v1Func.info, extended)
 
     case DescribeFunction(ResolvedPersistentFunc(catalog, _, func), extended) =>
       if (isSessionCatalog(catalog)) {
         DescribeFunctionCommand(func.asInstanceOf[V1Function].info, extended)
       } else {
-        throw QueryCompilationErrors.missingCatalogAbilityError(catalog, "functions")
+        throw QueryCompilationErrors.missingCatalogFunctionsAbilityError(catalog)
       }
 
     case ShowFunctions(
@@ -476,7 +503,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           identifier.asFunctionIdentifier)
         DropFunctionCommand(funcIdentifier, ifExists, false)
       } else {
-        throw QueryCompilationErrors.missingCatalogAbilityError(catalog, "DROP FUNCTION")
+        throw QueryCompilationErrors.missingCatalogDropFunctionAbilityError(catalog)
       }
 
     case RefreshFunction(ResolvedPersistentFunc(catalog, identifier, _)) =>
@@ -485,7 +512,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           identifier.asFunctionIdentifier)
         RefreshFunctionCommand(funcIdentifier.database, funcIdentifier.funcName)
       } else {
-        throw QueryCompilationErrors.missingCatalogAbilityError(catalog, "REFRESH FUNCTION")
+        throw QueryCompilationErrors.missingCatalogRefreshFunctionAbilityError(catalog)
       }
 
     case CreateFunction(
@@ -499,7 +526,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         replace)
 
     case CreateFunction(ResolvedIdentifier(catalog, _), _, _, _, _) =>
-      throw QueryCompilationErrors.missingCatalogAbilityError(catalog, "CREATE FUNCTION")
+      throw QueryCompilationErrors.missingCatalogCreateFunctionAbilityError(catalog)
 
     case c @ CreateUserDefinedFunction(
         ResolvedIdentifierInSessionCatalog(ident), _, _, _, _, _, _, _, _, _, _, _) =>
@@ -520,7 +547,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     case CreateUserDefinedFunction(
         ResolvedIdentifier(catalog, _), _, _, _, _, _, _, _, _, _, _, _) =>
-      throw QueryCompilationErrors.missingCatalogAbilityError(catalog, "CREATE FUNCTION")
+      throw QueryCompilationErrors.missingCatalogCreateFunctionAbilityError(catalog)
   }
 
   private def constructV1TableCmd(

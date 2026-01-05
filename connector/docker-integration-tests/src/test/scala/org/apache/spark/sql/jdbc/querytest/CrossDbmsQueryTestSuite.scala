@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.jdbc
+package org.apache.spark.sql.jdbc.querytest
 
 import java.io.File
 import java.nio.file.Files
@@ -25,6 +25,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.SQLQueryTestHelper
+import org.apache.spark.sql.jdbc.DockerJDBCIntegrationSuite
 
 /**
  * This suite builds off of that to allow us to run other DBMS against the SQL test golden files (on

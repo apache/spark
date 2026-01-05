@@ -194,8 +194,7 @@ class ProfilerCollector(ABC):
             s = stats.get(id)
 
             if s is not None:
-                if not os.path.exists(path):
-                    os.makedirs(path)
+                os.makedirs(path, exist_ok=True)
                 p = os.path.join(path, f"udf_{id}_perf.pstats")
                 s.dump_stats(p)
 
@@ -231,8 +230,7 @@ class ProfilerCollector(ABC):
             cm = code_map.get(id)
 
             if cm is not None:
-                if not os.path.exists(path):
-                    os.makedirs(path)
+                os.makedirs(path, exist_ok=True)
                 p = os.path.join(path, f"udf_{id}_memory.txt")
 
                 with open(p, "w+") as f:
@@ -316,7 +314,7 @@ class Profile:
     """User-facing profile API. This instance can be accessed by
     :attr:`spark.profile`.
 
-    .. versionadded: 4.0.0
+    .. versionadded:: 4.0.0
     """
 
     def __init__(self, profiler_collector: ProfilerCollector):
@@ -421,7 +419,8 @@ class Profile:
         id : int
             The UDF ID whose profiling results should be rendered.
         type : str, optional
-            The profiler type to clear results for, which can be either "perf" or "memory".
+            The profiler type to render results for, which can be either "perf" or "memory".
+            If not specified, defaults to "perf".
         renderer : str or callable, optional
             The renderer to use. If not specified, the default renderer will be "flameprof"
             for the "perf" profiler, which returns an :class:`IPython.display.HTML` object in

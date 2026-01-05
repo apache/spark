@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.command
+package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.execution.command.CreatePipelineDatasetAsSelectParserSuiteBase
 
 /**
  * The class contains tests for the `CREATE MATERIALIZED VIEW ... AS ...` command
@@ -28,7 +29,7 @@ class CreateMaterializedViewAsSelectParserSuite
 
   test("Cannot create materialized view without subquery") {
     val ex = intercept[ParseException] {
-      parser.parsePlan(s"CREATE MATERIALIZED VIEW table")
+      parser.parsePlan(s"CREATE $datasetSqlSyntax table")
     }
     assert(ex.getMessage.contains(s"Unable to find query for CREATE $datasetSqlSyntax statement."))
   }

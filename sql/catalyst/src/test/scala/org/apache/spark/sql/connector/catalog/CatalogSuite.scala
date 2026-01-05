@@ -1286,8 +1286,8 @@ class CatalogSuite extends SparkFunSuite {
     val table = catalog.createTable(testIdent, columns, emptyTrans, emptyProps)
       .asInstanceOf[InMemoryTable]
     table.withData(Array(
-      new BufferedRows("3").withRow(InternalRow(0, "abc", "3")),
-      new BufferedRows("4").withRow(InternalRow(1, "def", "4"))))
+      BufferedRows("3", table.columns()).withRow(InternalRow(0, "abc", "3")),
+      BufferedRows("4", table.columns()).withRow(InternalRow(1, "def", "4"))))
     assert(table.truncateTable())
     assert(table.rows.isEmpty)
   }
@@ -1308,8 +1308,8 @@ class CatalogSuite extends SparkFunSuite {
     partTable.createPartition(partIdent, new util.HashMap[String, String]())
     partTable.createPartition(partIdent1, new util.HashMap[String, String]())
     partTable.withData(Array(
-      new BufferedRows("0").withRow(InternalRow(0, 0)),
-      new BufferedRows("1").withRow(InternalRow(1, 1))
+      BufferedRows("0", table.columns()).withRow(InternalRow(0, 0)),
+      BufferedRows("1", table.columns()).withRow(InternalRow(1, 1))
     ))
     assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 2)
     assert(partTable.rows.nonEmpty)
@@ -1357,24 +1357,24 @@ class CatalogSuite extends SparkFunSuite {
     intercept[NoSuchFunctionException](catalog.loadFunction(Identifier.of(Array("ns1"), "func")))
   }
 
-  test("currentVersion") {
+  test("version") {
     val catalog = newCatalog()
 
     val table = catalog.createTable(testIdent, columns, emptyTrans, emptyProps)
       .asInstanceOf[InMemoryTable]
-    assert(table.currentVersion() == "0")
+    assert(table.version() == "0")
     table.withData(Array(
-      new BufferedRows("3").withRow(InternalRow(0, "abc", "3")),
-      new BufferedRows("4").withRow(InternalRow(1, "def", "4"))))
-    assert(table.currentVersion() == "1")
+      BufferedRows("3", table.columns()).withRow(InternalRow(0, "abc", "3")),
+      BufferedRows("4", table.columns()).withRow(InternalRow(1, "def", "4"))))
+    assert(table.version() == "1")
 
     table.truncateTable()
-    assert(catalog.loadTable(testIdent).currentVersion() == "2")
+    assert(catalog.loadTable(testIdent).version() == "2")
 
     catalog.alterTable(testIdent, TableChange.setProperty("prop-1", "1"))
-    assert(catalog.loadTable(testIdent).currentVersion() == "3")
+    assert(catalog.loadTable(testIdent).version() == "3")
 
     catalog.alterTable(testIdent, TableChange.addConstraint(constraints.apply(0), "3"))
-    assert(catalog.loadTable(testIdent).currentVersion() == "4")
+    assert(catalog.loadTable(testIdent).version() == "4")
   }
 }

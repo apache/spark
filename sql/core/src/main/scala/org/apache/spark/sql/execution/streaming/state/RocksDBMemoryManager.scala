@@ -108,7 +108,8 @@ object RocksDBMemoryManager extends Logging with UnmanagedMemoryConsumer {
    * @return The adjusted memory usage accounting for sharing in bounded memory mode
    */
   def getInstanceMemoryUsage(uniqueId: String, totalMemoryUsage: Long): Long = {
-    val instanceInfo = instanceMemoryMap.get(uniqueId)
+    val instanceInfo = instanceMemoryMap.
+      getOrDefault(uniqueId, InstanceMemoryInfo(0L, isBoundedMemory = false))
     if (instanceInfo.isBoundedMemory) {
       // In bounded memory mode, divide by the number of bounded instances
       // since they share the same memory pool
@@ -117,6 +118,29 @@ object RocksDBMemoryManager extends Logging with UnmanagedMemoryConsumer {
     } else {
       // In unbounded memory mode, each instance has its own memory
       totalMemoryUsage
+    }
+  }
+
+  /**
+   * Get the pinned blocks memory usage for a specific instance, accounting for bounded memory
+   * sharing.
+   * @param uniqueId The instance's unique identifier
+   * @param totalPinnedUsage The total pinned usage from the cache
+   * @return The adjusted pinned blocks memory usage accounting for sharing in bounded memory mode
+   */
+  def getInstancePinnedBlocksMemUsage(
+      uniqueId: String,
+      totalPinnedUsage: Long): Long = {
+    val instanceInfo = instanceMemoryMap.
+      getOrDefault(uniqueId, InstanceMemoryInfo(0L, isBoundedMemory = false))
+    if (instanceInfo.isBoundedMemory) {
+      // In bounded memory mode, divide by the number of bounded instances
+      // since they share the same cache
+      val numBoundedInstances = getNumRocksDBInstances(true /* boundedMemory */)
+      totalPinnedUsage / numBoundedInstances
+    } else {
+      // In unbounded memory mode, each instance has its own cache
+      totalPinnedUsage
     }
   }
 

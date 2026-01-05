@@ -144,8 +144,8 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
 
   protected def readFooter(path: Path, configuration: Configuration): ParquetMetadata = {
     ParquetFooterReader.readFooter(
-      configuration,
-      new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE),
+      HadoopInputFile.fromPath(
+        new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE), configuration),
       ParquetMetadataConverter.NO_FILTER)
   }
 

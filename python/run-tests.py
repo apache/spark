@@ -17,10 +17,13 @@
 # limitations under the License.
 #
 
+import asyncio
 import logging
 from argparse import ArgumentParser
 import os
+import io
 import platform
+import pty
 import re
 import shutil
 import subprocess
@@ -73,6 +76,138 @@ if "SPARK_SKIP_CONNECT_COMPAT_TESTS" not in os.environ:
         raise RuntimeError("Cannot find assembly build directory, please build Spark first.")
 
 
+class TestRunner:
+    def __init__(self, test_name, cmd, env, test_output, timeout=None):
+        self.test_name = test_name
+        self.cmd = cmd
+        self.env = env
+        self.test_output = test_output
+        self.timeout = timeout
+        self.p = None
+        self.pdb_mode = False
+        self.master_fd = None
+        self.write_task = None
+        self.read_task = None
+        self.timeout_task = None
+
+    def run(self):
+        """
+        Run a command in subprocess, with stdin, stdout, stderr hooked.
+        In normaly case, all the outputs from subprocess will be redirected to
+        the test_output file.
+        When `(Pdb)` is detected, the subprocess will be in interactive mode,
+        and the output will be redirected to the console.
+        """
+        self.master_fd, slave_fd = pty.openpty()
+
+        # Start child connected to the PTY
+        self.p = subprocess.Popen(
+            self.cmd,
+            env=self.env,
+            stdin=slave_fd,
+            stdout=slave_fd,
+            stderr=slave_fd,
+        )
+        os.close(slave_fd)
+
+        try:
+            asyncio.run(self.handle_inout())
+        except subprocess.TimeoutExpired:
+            LOGGER.error(f"Test {self.test_name} timed out")
+        try:
+            return self.p.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            # If SIGTERM is intercepted, do a hard kill
+            self.p.kill()
+            return self.p.wait()
+
+    async def handle_inout(self):
+        tasks = []
+        self.read_task = asyncio.create_task(self.read_from_child())
+        tasks.append(self.read_task)
+        if self.timeout is not None:
+            self.timeout_task = asyncio.create_task(self.check_timeout())
+            tasks.append(self.timeout_task)
+        try:
+            await asyncio.gather(*tasks)
+        except asyncio.CancelledError:
+            pass
+
+    def output_line(self, line):
+        if self.pdb_mode:
+            sys.stdout.write(line.decode("utf-8", "replace"))
+            sys.stdout.flush()
+        else:
+            if isinstance(self.test_output, io.TextIOBase):
+                self.test_output.write(line.decode("utf-8", "replace"))
+            else:
+                self.test_output.write(line)
+
+    def process_buffer(self, buffer, force_flush=False):
+        # Process all full lines first
+        while (nl := buffer.find(b"\n")) != -1:
+            self.output_line(buffer[:nl + 1])
+            buffer = buffer[nl + 1:]
+        # Process the remaining buffer
+        if b"(Pdb)" in buffer:
+            self.pdb_mode = True
+            self.output_line(buffer)
+            return b""
+        elif force_flush:
+            self.output_line(buffer)
+            return b""
+        else:
+            return buffer
+
+    # Reader: forward child output to our stdout
+    async def read_from_child(self):
+        buffer = b""
+        while True:
+            try:
+                data = await asyncio.to_thread(os.read, self.master_fd, 1024)
+            except OSError:
+                break
+            if not data:
+                break
+            buffer += data
+            buffer = self.process_buffer(buffer)
+            if self.pdb_mode and self.write_task is None:
+                self.write_task = asyncio.create_task(self.write_to_child())
+        buffer = self.process_buffer(buffer, force_flush=True)
+        self.test_output.flush()
+
+        if self.write_task is not None:
+            self.write_task.cancel()
+            try:
+                await self.write_task
+            except asyncio.CancelledError:
+                pass
+            self.write_task = None
+            self.pdb_mode = False
+
+        if self.timeout_task is not None:
+            self.timeout_task.cancel()
+            self.timeout_task = None
+
+    # Writer: forward our stdin to child tty
+    async def write_to_child(self):
+        while True:
+            data = await self.loop.run_in_executor(None, sys.stdin.buffer.read, 1)
+            if not data:
+                break
+            os.write(self.master_fd, data)
+
+    # Kill the child process if the timeout is reached
+    async def check_timeout(self):
+        await asyncio.sleep(self.timeout)
+        if self.pdb_mode:
+            # We don't want to kill the process if it's in pdb mode
+            return
+        if self.p.poll() is None:
+            self.p.terminate()
+            raise subprocess.TimeoutExpired(self.cmd, self.timeout)
+
+
 def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_output):
     """
     Runs an individual test. This function is called by the multi-process runner of all tests.
@@ -96,8 +231,6 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
         'SPARK_PREPEND_CLASSES': '1',
         'PYSPARK_PYTHON': which(pyspark_python),
         'PYSPARK_DRIVER_PYTHON': which(pyspark_python),
-        # Preserve legacy nested timezone behavior for pyarrow>=2, remove after SPARK-32285
-        'PYARROW_IGNORE_TIMEZONE': '1',
     })
 
     if "SPARK_CONNECT_TESTING_REMOTE" in os.environ:
@@ -134,6 +267,11 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
 
     env["PYSPARK_SUBMIT_ARGS"] = " ".join(spark_args)
 
+    timeout = os.environ.get("PYSPARK_TEST_TIMEOUT")
+    if timeout is not None:
+        env["PYSPARK_TEST_TIMEOUT"] = timeout
+        timeout = int(timeout)
+
     output_prefix = get_valid_filename(pyspark_python + "__" + test_name + "__").lstrip("_")
     # Delete is always set to False since the cleanup will be either done by removing the
     # whole test dir, or the test output is retained.
@@ -141,11 +279,12 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
                                                   suffix=".log", delete=False)
     LOGGER.info(
         "Starting test(%s): %s (temp output: %s)", pyspark_python, test_name, per_test_output.name)
+    cmd = [os.path.join(SPARK_HOME, "bin/pyspark")] + test_name.split()
     start_time = time.time()
+
+    retcode = None
     try:
-        retcode = subprocess.Popen(
-            [os.path.join(SPARK_HOME, "bin/pyspark")] + test_name.split(),
-            stderr=per_test_output, stdout=per_test_output, env=env).wait()
+        retcode = TestRunner(test_name, cmd, env, per_test_output, timeout).run()
         if not keep_test_output:
             # There exists a race condition in Python and it causes flakiness in MacOS
             # https://github.com/python/cpython/issues/73885
@@ -162,16 +301,21 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
     # Exit on the first failure but exclude the code 5 for no test ran, see SPARK-46801.
     if retcode != 0 and retcode != 5:
         try:
+            per_test_output.seek(0)
             with FAILURE_REPORTING_LOCK:
                 with open(LOG_FILE, 'ab') as log_file:
-                    per_test_output.seek(0)
                     log_file.writelines(per_test_output)
-                per_test_output.seek(0)
-                for line in per_test_output:
-                    decoded_line = line.decode("utf-8", "replace")
-                    if not re.match('[0-9]+', decoded_line):
-                        print(decoded_line, end='')
-                per_test_output.close()
+
+            # We don't want the logging lines interleave with the test output, so we read the
+            # full file and output with LOGGER which has internal locking.
+            per_test_output.seek(0)
+            lines = []
+            for line in per_test_output:
+                line = line.decode("utf-8", "replace")
+                if not re.match('[0-9]+', line):
+                    lines.append(line)
+            LOGGER.error(f"{test_name} with {pyspark_python} failed:\n{''.join(lines)}")
+            per_test_output.close()
         except BaseException:
             LOGGER.exception("Got an exception while trying to print failed test output")
         finally:
@@ -212,15 +356,11 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
 
 
 def get_default_python_executables():
-    python_execs = [x for x in ["python3.11", "pypy3"] if which(x)]
+    if which("pypy3"):
+        python_execs = [sys.executable, "pypy3"]
+    else:
+        python_execs = [sys.executable]
 
-    if "python3.11" not in python_execs:
-        p = which("python3")
-        if not p:
-            LOGGER.error("No python3 executable found.  Exiting!")
-            os._exit(1)
-        else:
-            python_execs.insert(0, p)
     return python_execs
 
 

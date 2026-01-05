@@ -19,15 +19,16 @@ package org.apache.spark.sql.internal
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.{DataSourceRegistration, ExperimentalMethods, SparkSessionExtensions, UDTFRegistration}
 import org.apache.spark.sql.artifact.ArtifactManager
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, FunctionRegistry, InvokeProcedures, ReplaceCharWithVarchar, ResolveDataSource, ResolveSessionCatalog, ResolveTranspose, TableFunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, FunctionRegistry, InvokeProcedures, ReplaceCharWithVarchar, ResolveDataSource, ResolveEventTimeWatermark, ResolveExecuteImmediate, ResolveMetricView, ResolveSessionCatalog, ResolveTranspose, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.analysis.resolver.ResolverExtension
 import org.apache.spark.sql.catalyst.catalog.{FunctionExpressionBuilder, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExtractSemiStructuredFields}
+import org.apache.spark.sql.catalyst.normalizer.NormalizeCTEIds
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.classic.{SparkSession, Strategy, StreamingQueryManager, UDFRegistration}
+import org.apache.spark.sql.classic.{SparkSession, Strategy, StreamingCheckpointManager, StreamingQueryManager, UDFRegistration}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{ColumnarRule, CommandExecutionMode, QueryExecution, SparkOptimizer, SparkPlanner, SparkSqlParser}
@@ -176,6 +177,8 @@ abstract class BaseSessionStateBuilder(
 
   protected lazy val catalogManager = new CatalogManager(v2SessionCatalog, catalog)
 
+  protected lazy val sharedRelationCache = session.sharedState.relationCache
+
   /**
    * Interface exposed to the user for registering user-defined functions.
    *
@@ -197,7 +200,7 @@ abstract class BaseSessionStateBuilder(
    *
    * Note: this depends on the `conf` and `catalog` fields.
    */
-  protected def analyzer: Analyzer = new Analyzer(catalogManager) {
+  protected def analyzer: Analyzer = new Analyzer(catalogManager, sharedRelationCache) {
     override val hintResolutionRules: Seq[Rule[LogicalPlan]] =
       customHintResolutionRules
 
@@ -243,8 +246,11 @@ abstract class BaseSessionStateBuilder(
         ResolveWriteToStream +:
         new EvalSubqueriesForTimeTravel +:
         new ResolveTranspose(session) +:
+        ResolveMetricView(session) +:
         new InvokeProcedures(session) +:
+        ResolveExecuteImmediate(session, this.catalogManager) +:
         ExtractSemiStructuredFields +:
+        ResolveEventTimeWatermark +:
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
@@ -399,6 +405,7 @@ abstract class BaseSessionStateBuilder(
   }
 
   protected def planNormalizationRules: Seq[Rule[LogicalPlan]] = {
+    NormalizeCTEIds +:
     extensions.buildPlanNormalizationRules(session)
   }
 
@@ -407,13 +414,20 @@ abstract class BaseSessionStateBuilder(
    */
   protected def createQueryExecution:
     (LogicalPlan, CommandExecutionMode.Value) => QueryExecution =
-      (plan, mode) => new QueryExecution(session, plan, mode = mode)
+      (plan, mode) => new QueryExecution(session, plan, mode = mode,
+        shuffleCleanupMode = QueryExecution.determineShuffleCleanupMode(session.sessionState.conf))
 
   /**
    * Interface to start and stop streaming queries.
    */
   protected def streamingQueryManager: StreamingQueryManager =
     new StreamingQueryManager(session, conf)
+
+  /**
+   * Interface to manage streaming query checkpoints.
+   */
+  private[spark] def streamingCheckpointManager: StreamingCheckpointManager =
+    new StreamingCheckpointManager(session, conf)
 
   /**
    * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
@@ -462,6 +476,7 @@ abstract class BaseSessionStateBuilder(
       () => optimizer,
       planner,
       () => streamingQueryManager,
+      () => streamingCheckpointManager,
       listenerManager,
       () => resourceLoader,
       createQueryExecution,

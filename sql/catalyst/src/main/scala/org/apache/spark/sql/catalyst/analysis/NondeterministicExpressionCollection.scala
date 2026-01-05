@@ -38,7 +38,7 @@ object NondeterministicExpressionCollection {
             case namedExpression: NamedExpression => namedExpression
             case _ => Alias(nondeterministicExpr, "_nondeterministic")()
           }
-          nonDeterministicToAttributes.put(nondeterministicExpr, namedExpression)
+          nonDeterministicToAttributes.put(nondeterministicExpr.canonicalized, namedExpression)
         }
       }
     }

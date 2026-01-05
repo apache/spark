@@ -33,5 +33,6 @@ Each of the below sections contains code-driven examples to help you get familia
    udfandudtf
    sql
    loadandbehold
+   ansi_migration_guide
 
 

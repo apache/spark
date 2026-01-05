@@ -26,13 +26,14 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, DefaultValue, Identifier, InMemoryCatalog}
-import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, ProcedureParameter, UnboundProcedure}
+import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, ProcedureParameter, SimpleProcedure, UnboundProcedure}
 import org.apache.spark.sql.connector.catalog.procedures.ProcedureParameter.Mode
 import org.apache.spark.sql.connector.catalog.procedures.ProcedureParameter.Mode.{IN, INOUT, OUT}
 import org.apache.spark.sql.connector.expressions.{Expression, GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.read.{LocalScan, Scan}
 import org.apache.spark.sql.errors.DataTypeErrors.{toSQLType, toSQLValue}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.CASE_SENSITIVE
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, DataTypes, IntegerType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -65,6 +66,24 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
   test("named arguments") {
     catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
     checkAnswer(sql("CALL cat.ns.sum(in2 => 3, in1 => 5)"), Row(8) :: Nil)
+  }
+
+  test("SPARK-53523: named arguments respect spark.sql.caseSensitive") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
+    withSQLConf(CASE_SENSITIVE.key -> "true") {
+      checkError(
+        exception = intercept[AnalysisException](
+          sql("CALL cat.ns.sum(IN1 => 3, in2 => 5)")
+        ),
+        condition = "UNRECOGNIZED_PARAMETER_NAME",
+        parameters = Map(
+          "routineName" -> toSQLId("sum"),
+          "argumentName" -> toSQLId("IN1"),
+          "proposal" -> (toSQLId("in1") + " " + toSQLId("in2"))))
+    }
+    withSQLConf(CASE_SENSITIVE.key -> "false") {
+      checkAnswer(sql("CALL cat.ns.sum(IN1 => 3, in2 => 5)"), Row(8) :: Nil)
+    }
   }
 
   test("position and named arguments") {
@@ -121,6 +140,18 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
       Row(3) :: Nil)
   }
 
+  test("IDENTIFIER inside EXPLAIN") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
+    val explain1 = spark.sql(
+      "EXPLAIN CALL IDENTIFIER(:p1)(5, 3)",
+      Map("p1" -> "cat.ns.sum")).head().getString(0)
+    assert(explain1.contains("Call cat.ns.sum(5, 3)"))
+    val explain2 = spark.sql(
+      "EXPLAIN EXTENDED CALL IDENTIFIER(:p1)(10, 10)",
+      Map("p1" -> "cat.ns.sum")).head().getString(0)
+    assert(explain2.contains("Call cat.ns.sum(10, 10)"))
+  }
+
   test("parameterized statements") {
     catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
     checkAnswer(
@@ -145,16 +176,16 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
         exception = intercept[AnalysisException](
           sql("CALL testcat.procedure(1, 2)")
         ),
-        condition = "_LEGACY_ERROR_TEMP_1184",
-        parameters = Map("plugin" -> "testcat", "ability" -> "procedures")
+        condition = "MISSING_CATALOG_ABILITY.PROCEDURES",
+        parameters = Map("plugin" -> "testcat")
       )
 
       checkError(
         exception = intercept[AnalysisException](
           sql("SHOW PROCEDURES IN testcat")
         ),
-        condition = "_LEGACY_ERROR_TEMP_1184",
-        parameters = Map("plugin" -> "testcat", "ability" -> "procedures")
+        condition = "MISSING_CATALOG_ABILITY.PROCEDURES",
+        parameters = Map("plugin" -> "testcat")
       )
     }
   }
@@ -455,6 +486,12 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
     checkAnswer(sql("CALL cat.ns.sum(5)"), Row(9) :: Nil)
   }
 
+  test("simple procedure") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "simple_sum"), SimpleSum)
+    checkAnswer(sql("CALL cat.ns.simple_sum(3, 7)"), Row(10) :: Nil)
+    checkAnswer(sql("CALL cat.ns.simple_sum(in2 => 4, in1 => 6)"), Row(10) :: Nil)
+  }
+
   test("SPARK-51780: Implement DESC PROCEDURE") {
     catalog.createProcedure(Identifier.of(Array("ns"), "foo"), UnboundSum)
     catalog.createProcedure(Identifier.of(Array("ns", "db"), "abc"), UnboundLongSum)
@@ -579,7 +616,7 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
   object UnboundNonExecutableSum extends UnboundProcedure {
     override def name: String = "sum"
     override def description: String = "sum integers"
-    override def bind(inputType: StructType): BoundProcedure = Sum
+    override def bind(inputType: StructType): BoundProcedure = NonExecutableSum
   }
 
   object NonExecutableSum extends BoundProcedure {
@@ -602,10 +639,10 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
   object UnboundSum extends UnboundProcedure {
     override def name: String = "sum"
     override def description: String = "sum integers"
-    override def bind(inputType: StructType): BoundProcedure = Sum
+    override def bind(inputType: StructType): BoundProcedure = new Sum
   }
 
-  object Sum extends BoundProcedure {
+  class Sum extends BoundProcedure {
     override def name: String = "sum"
 
     override def description: String = "sum integers"
@@ -865,5 +902,11 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
       dataType: DataType) extends ProcedureParameter {
     override def defaultValue: DefaultValue = null
     override def comment: String = null
+  }
+
+  object SimpleSum extends Sum with SimpleProcedure {
+    override def name: String = "simple_sum"
+
+    override def description: String = "simple sum integers"
   }
 }

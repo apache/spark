@@ -26,12 +26,14 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 import scala.jdk.CollectionConverters._
 
+import io.grpc.{CallOptions, Channel, ClientCall, ClientInterceptor, ForwardingClientCall, ForwardingClientCallListener, MethodDescriptor}
 import org.apache.commons.io.output.TeeOutputStream
 import org.scalactic.TolerantNumerics
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkUpgradeException}
 import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
+import org.apache.spark.connect.proto
 import org.apache.spark.internal.config.ConfigBuilder
 import org.apache.spark.sql.{functions, AnalysisException, Observation, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, TableAlreadyExistsException, TempTableAlreadyExistsException}
@@ -39,9 +41,9 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connect.ConnectConversions._
-import org.apache.spark.sql.connect.client.{RetryPolicy, SparkConnectClient, SparkResult}
+import org.apache.spark.sql.connect.client.{PlanCompressionOptions, RetryPolicy, SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.test.{ConnectFunSuite, IntegrationTestUtils, QueryTest, RemoteSparkSession, SQLHelper}
-import org.apache.spark.sql.connect.test.SparkConnectServerUtils.port
+import org.apache.spark.sql.connect.test.SparkConnectServerUtils.{createSparkSession, port}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types._
@@ -459,7 +461,7 @@ class ClientE2ETestSuite
       assert(result.length == 10)
     } finally {
       // clean up
-      assertThrows[SparkException] {
+      assertThrows[AnalysisException] {
         spark.read.jdbc(url = s"$url;drop=true", table, new Properties()).collect()
       }
     }
@@ -1685,6 +1687,338 @@ class ClientE2ETestSuite
 
       val df = spark.read.load(path)
       assert(df.count() == 100)
+    }
+  }
+
+  test("SPARK-52930: the nullability of arrays should be preserved using typedlit") {
+    val arrays = Seq(
+      (typedlit(Array[Int]()), false),
+      (typedlit(Array[Int](1)), false),
+      (typedlit(Array[Integer]()), true),
+      (typedlit(Array[Integer](1)), true))
+    for ((array, containsNull) <- arrays) {
+      val df = spark.sql("select 1").select(array)
+      df.createOrReplaceTempView("test_array_nullability")
+      val schema = spark.sql("select * from test_array_nullability").schema
+      assert(schema.fields.head.dataType.asInstanceOf[ArrayType].containsNull === containsNull)
+    }
+  }
+
+  test("SPARK-52930: the nullability of map values should be preserved using typedlit") {
+    val maps = Seq(
+      (typedlit(Map[String, Int]()), false),
+      (typedlit(Map[String, Int]("a" -> 1)), false),
+      (typedlit(Map[String, Integer]()), true),
+      (typedlit(Map[String, Integer]("a" -> 1)), true))
+    for ((map, valueContainsNull) <- maps) {
+      val df = spark.sql("select 1").select(map)
+      df.createOrReplaceTempView("test_map_nullability")
+      val schema = spark.sql("select * from test_map_nullability").schema
+      assert(
+        schema.fields.head.dataType.asInstanceOf[MapType].valueContainsNull === valueContainsNull)
+    }
+  }
+
+  test("SPARK-54043: DirectShufflePartitionID should be supported") {
+    val df = spark.range(100).withColumn("expected_p_id", col("id") % 10)
+    val repartitioned = df.repartitionById(10, col("expected_p_id").cast("int"))
+    val result = repartitioned.withColumn("actual_p_id", spark_partition_id())
+
+    assert(result.filter(col("expected_p_id") =!= col("actual_p_id")).count() == 0)
+
+    val negativeDf = spark.range(10).toDF("id")
+    val negativeRepartitioned = negativeDf.repartitionById(10, (col("id") - 5).cast("int"))
+    val negativeResult =
+      negativeRepartitioned
+        .withColumn("actual_p_id", spark_partition_id())
+        .collect()
+
+    assert(negativeResult.forall(row => {
+      val actualPartitionId = row.getAs[Int]("actual_p_id")
+      val id = row.getAs[Long]("id")
+      val expectedPartitionId = {
+        val mod = (id - 5) % 10
+        if (mod < 0) mod + 10 else mod
+      }.toInt
+      actualPartitionId == expectedPartitionId
+    }))
+
+    val nullDf = spark.range(10).toDF("id")
+    val nullExpr = when(col("id") < 5, col("id")).otherwise(lit(null)).cast("int")
+    val nullRepartitioned = nullDf.repartitionById(10, nullExpr)
+    val nullResult = nullRepartitioned.withColumn("actual_p_id", spark_partition_id()).collect()
+
+    val nullRows = nullResult.filter(_.getAs[Long]("id") >= 5)
+    assert(nullRows.forall(_.getAs[Int]("actual_p_id") == 0))
+  }
+
+  test("SPARK-53490: struct type in observed metrics") {
+    val observation = Observation("struct")
+    spark
+      .range(10)
+      .observe(observation, struct(count(lit(1)).as("rows"), max("id").as("maxid")).as("struct"))
+      .collect()
+    val expectedSchema =
+      StructType(Seq(StructField("rows", LongType), StructField("maxid", LongType)))
+    val expectedValue = new GenericRowWithSchema(Array(10, 9), expectedSchema)
+    assert(observation.get.size === 1)
+    assert(observation.get.contains("struct"))
+    assert(observation.get("struct") === expectedValue)
+  }
+
+  test("SPARK-53490: array type in observed metrics") {
+    val observation = Observation("array")
+    spark
+      .range(10)
+      .observe(observation, array(count(lit(1))).as("array"))
+      .collect()
+    assert(observation.get.size === 1)
+    assert(observation.get.contains("array"))
+    assert(observation.get("array") === Array(10))
+  }
+
+  test("SPARK-53490: map type in observed metrics") {
+    val observation = Observation("map")
+    spark
+      .range(10)
+      .observe(observation, map(lit("count"), count(lit(1))).as("map"))
+      .collect()
+    assert(observation.get.size === 1)
+    assert(observation.get.contains("map"))
+    assert(observation.get("map") === Map("count" -> 10))
+  }
+
+  test("SPARK-53553: null value handling in literals") {
+    val df = spark.sql("select 1").select(typedlit(Array[Integer](1, null)).as("arr_col"))
+    val result = df.collect()
+    assert(result.length === 1)
+    assert(result(0).getAs[Array[Integer]]("arr_col") === Array(1, null))
+  }
+
+  // SQL Scripting tests
+  test("SQL Script result") {
+    val df = spark.sql("""BEGIN
+        |  IF 1=1 THEN
+        |    SELECT 1;
+        |  ELSE
+        |    SELECT 3;
+        |  END IF;
+        |END
+        |""".stripMargin)
+    checkAnswer(df, Seq(Row(1)))
+  }
+
+  test("SQL Script schema") {
+    withTable("script_tbl") {
+      val df = spark.sql("""BEGIN
+          |  CREATE TABLE script_tbl (a INT, b STRING);
+          |  INSERT INTO script_tbl VALUES (1, 'Hello'), (2, 'World');
+          |  SELECT * FROM script_tbl;
+          |END
+          |""".stripMargin)
+      assert(
+        df.schema == StructType(
+          StructField("a", IntegerType, nullable = true)
+            :: StructField("b", StringType, nullable = true)
+            :: Nil))
+    }
+  }
+
+  test("SQL Script empty result") {
+    withTable("script_tbl") {
+      val df = spark.sql("""BEGIN
+          |  CREATE TABLE script_tbl (a INT, b STRING);
+          |  SELECT * FROM script_tbl;
+          |END
+          |""".stripMargin)
+      assert(
+        df.schema == StructType(
+          StructField("a", IntegerType, nullable = true)
+            :: StructField("b", StringType, nullable = true)
+            :: Nil))
+      checkAnswer(df, Seq.empty)
+    }
+  }
+
+  test("SQL Script no result") {
+    withTable("script_tbl") {
+      val df = spark.sql("""BEGIN
+          |  CREATE TABLE script_tbl (a INT, b STRING);
+          |END
+          |""".stripMargin)
+      assert(df.schema == StructType(Nil))
+      checkAnswer(df, Seq.empty)
+    }
+  }
+
+  // Helper class to capture Arrow batch chunk information from gRPC responses
+  private class ArrowBatchInterceptor extends ClientInterceptor {
+    case class BatchInfo(
+        batchIndex: Int,
+        rowCount: Long,
+        startOffset: Long,
+        chunks: Seq[ChunkInfo]) {
+      def totalChunks: Int = chunks.length
+    }
+
+    case class ChunkInfo(
+        batchIndex: Int,
+        chunkIndex: Int,
+        numChunksInBatch: Int,
+        rowCount: Long,
+        startOffset: Long,
+        dataSize: Int)
+
+    private val batches: mutable.Buffer[BatchInfo] = mutable.Buffer.empty
+    private var currentBatchIndex: Int = 0
+    private val currentBatchChunks: mutable.Buffer[ChunkInfo] = mutable.Buffer.empty
+
+    override def interceptCall[ReqT, RespT](
+        method: MethodDescriptor[ReqT, RespT],
+        callOptions: CallOptions,
+        next: Channel): ClientCall[ReqT, RespT] = {
+      new ForwardingClientCall.SimpleForwardingClientCall[ReqT, RespT](
+        next.newCall(method, callOptions)) {
+        override def start(
+            responseListener: ClientCall.Listener[RespT],
+            headers: io.grpc.Metadata): Unit = {
+          super.start(
+            new ForwardingClientCallListener.SimpleForwardingClientCallListener[RespT](
+              responseListener) {
+              override def onMessage(message: RespT): Unit = {
+                message match {
+                  case response: proto.ExecutePlanResponse if response.hasArrowBatch =>
+                    val arrowBatch = response.getArrowBatch
+                    // Track chunk information for every chunk
+                    currentBatchChunks += ChunkInfo(
+                      batchIndex = currentBatchIndex,
+                      chunkIndex = arrowBatch.getChunkIndex.toInt,
+                      numChunksInBatch = arrowBatch.getNumChunksInBatch.toInt,
+                      rowCount = arrowBatch.getRowCount,
+                      startOffset = arrowBatch.getStartOffset,
+                      dataSize = arrowBatch.getData.size())
+                    // When we receive the last chunk, create the BatchInfo
+                    if (currentBatchChunks.length == arrowBatch.getNumChunksInBatch) {
+                      batches += BatchInfo(
+                        batchIndex = currentBatchIndex,
+                        rowCount = arrowBatch.getRowCount,
+                        startOffset = arrowBatch.getStartOffset,
+                        chunks = currentBatchChunks.toList)
+                      currentBatchChunks.clear()
+                      currentBatchIndex += 1
+                    }
+                  case _ => // Not an ExecutePlanResponse with ArrowBatch, ignore
+                }
+                super.onMessage(message)
+              }
+            },
+            headers)
+        }
+      }
+    }
+
+    // Get all batch information
+    def getBatchInfos: Seq[BatchInfo] = batches.toSeq
+
+    def clear(): Unit = {
+      currentBatchIndex = 0
+      currentBatchChunks.clear()
+      batches.clear()
+    }
+  }
+
+  test("Arrow batch result chunking") {
+    // This test validates that the client can correctly reassemble chunked Arrow batches
+    // using SequenceInputStream as implemented in SparkResult.processResponses
+
+    // Two cases are tested here:
+    // (a) client preferred chunk size is set: the server should respect it
+    // (b) client preferred chunk size is not set: the server should use its own max chunk size
+    Seq((Some(1024), None), (None, Some(1024))).foreach {
+      case (preferredChunkSizeOpt, maxChunkSizeOpt) =>
+        // Create interceptor to capture chunk information
+        val arrowBatchInterceptor = new ArrowBatchInterceptor()
+
+        try {
+          // Set preferred chunk size if specified and add interceptor
+          preferredChunkSizeOpt match {
+            case Some(size) =>
+              spark = createSparkSession(
+                _.preferredArrowChunkSize(Some(size)).interceptor(arrowBatchInterceptor))
+            case None =>
+              spark = createSparkSession(_.interceptor(arrowBatchInterceptor))
+          }
+          // Set server max chunk size if specified
+          maxChunkSizeOpt.foreach { size =>
+            spark.conf.set("spark.connect.session.resultChunking.maxChunkSize", size.toString)
+          }
+
+          val sqlQuery =
+            "select id, CAST(id + 0.5 AS DOUBLE) as double_val from range(0, 2000, 1, 4)"
+
+          // Execute the query using withResult to access SparkResult object
+          spark.sql(sqlQuery).withResult { result =>
+            // Verify the results are correct and complete
+            assert(result.length == 2000)
+
+            // Get batch information from interceptor
+            val batchInfos = arrowBatchInterceptor.getBatchInfos
+
+            // Assert there are 4 batches (partitions) in total
+            assert(batchInfos.length == 4)
+
+            // Validate chunk information for each batch
+            val maxChunkSize = preferredChunkSizeOpt.orElse(maxChunkSizeOpt).get
+            batchInfos.foreach { batch =>
+              // In this example, the max chunk size is set to a small value,
+              // so each Arrow batch should be split into multiple chunks
+              assert(batch.totalChunks > 5)
+              assert(batch.chunks.nonEmpty)
+              assert(batch.chunks.length == batch.totalChunks)
+              batch.chunks.zipWithIndex.foreach { case (chunk, expectedIndex) =>
+                assert(chunk.chunkIndex == expectedIndex)
+                assert(chunk.numChunksInBatch == batch.totalChunks)
+                assert(chunk.rowCount == batch.rowCount)
+                assert(chunk.startOffset == batch.startOffset)
+                assert(chunk.dataSize > 0)
+                assert(chunk.dataSize <= maxChunkSize)
+              }
+            }
+
+            // Validate data integrity across the range to ensure chunking didn't corrupt anything
+            val rows = result.toArray
+            var expectedId = 0L
+            rows.foreach { row =>
+              assert(row.getLong(0) == expectedId)
+              val expectedDouble = expectedId + 0.5
+              val actualDouble = row.getDouble(1)
+              assert(math.abs(actualDouble - expectedDouble) < 0.001)
+              expectedId += 1
+            }
+          }
+        } finally {
+          // Clean up configurations
+          maxChunkSizeOpt.foreach { _ =>
+            spark.conf.unset("spark.connect.session.resultChunking.maxChunkSize")
+          }
+          arrowBatchInterceptor.clear()
+        }
+    }
+  }
+
+  test("Plan compression works correctly") {
+    val originalPlanCompressionOptions = spark.client.getPlanCompressionOptions
+    assert(originalPlanCompressionOptions.nonEmpty)
+    assert(originalPlanCompressionOptions.get.thresholdBytes > 0)
+    assert(originalPlanCompressionOptions.get.algorithm == "ZSTD")
+    try {
+      spark.client.setPlanCompressionOptions(Some(PlanCompressionOptions(1000, "ZSTD")))
+      // Execution should work
+      assert(spark.sql(s"select '${"Apache Spark" * 10000}' as value").collect().length == 1)
+      // Analysis should work
+      assert(spark.sql(s"select '${"Apache Spark" * 10000}' as value").columns.length == 1)
+    } finally {
+      spark.client.setPlanCompressionOptions(originalPlanCompressionOptions)
     }
   }
 }

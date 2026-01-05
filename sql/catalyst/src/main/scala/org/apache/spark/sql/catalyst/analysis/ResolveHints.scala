@@ -171,7 +171,7 @@ object ResolveHints {
   }
 
   /**
-   * COALESCE Hint accepts names "COALESCE", "REPARTITION", and "REPARTITION_BY_RANGE".
+   * COALESCE Hint accepts names "COALESCE", "REPARTITION", "REPARTITION_BY_RANGE" and "REBALANCE".
    */
   object ResolveCoalesceHints extends Rule[LogicalPlan] {
     private def getNumOfPartitions(hint: UnresolvedHint): (Option[Int], Seq[Expression]) = {

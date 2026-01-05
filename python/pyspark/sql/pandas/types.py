@@ -21,8 +21,11 @@ pandas instances during the type conversion.
 """
 import datetime
 import itertools
+import functools
+from decimal import Decimal
 from typing import Any, Callable, Iterable, List, Optional, Union, TYPE_CHECKING
 
+from pyspark.errors import PySparkTypeError, UnsupportedOperationException, PySparkValueError
 from pyspark.sql.types import (
     cast,
     BooleanType,
@@ -50,10 +53,12 @@ from pyspark.sql.types import (
     UserDefinedType,
     VariantType,
     VariantVal,
+    GeometryType,
+    Geometry,
+    GeographyType,
+    Geography,
     _create_row,
 )
-from pyspark.errors import PySparkTypeError, UnsupportedOperationException, PySparkValueError
-from pyspark.loose_version import LooseVersion
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -66,6 +71,7 @@ if TYPE_CHECKING:
 
 def to_arrow_type(
     dt: DataType,
+    *,
     error_on_duplicated_field_names_in_struct: bool = False,
     timestamp_utc: bool = True,
     prefers_large_types: bool = False,
@@ -135,9 +141,9 @@ def to_arrow_type(
             "element",
             to_arrow_type(
                 dt.elementType,
-                error_on_duplicated_field_names_in_struct,
-                timestamp_utc,
-                prefers_large_types,
+                error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
+                timestamp_utc=timestamp_utc,
+                prefers_large_types=prefers_large_types,
             ),
             nullable=dt.containsNull,
         )
@@ -147,9 +153,9 @@ def to_arrow_type(
             "key",
             to_arrow_type(
                 dt.keyType,
-                error_on_duplicated_field_names_in_struct,
-                timestamp_utc,
-                prefers_large_types,
+                error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
+                timestamp_utc=timestamp_utc,
+                prefers_large_types=prefers_large_types,
             ),
             nullable=False,
         )
@@ -157,9 +163,9 @@ def to_arrow_type(
             "value",
             to_arrow_type(
                 dt.valueType,
-                error_on_duplicated_field_names_in_struct,
-                timestamp_utc,
-                prefers_large_types,
+                error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
+                timestamp_utc=timestamp_utc,
+                prefers_large_types=prefers_large_types,
             ),
             nullable=dt.valueContainsNull,
         )
@@ -176,9 +182,9 @@ def to_arrow_type(
                 field.name,
                 to_arrow_type(
                     field.dataType,
-                    error_on_duplicated_field_names_in_struct,
-                    timestamp_utc,
-                    prefers_large_types,
+                    error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
+                    timestamp_utc=timestamp_utc,
+                    prefers_large_types=prefers_large_types,
                 ),
                 nullable=field.nullable,
             )
@@ -190,9 +196,9 @@ def to_arrow_type(
     elif isinstance(dt, UserDefinedType):
         arrow_type = to_arrow_type(
             dt.sqlType(),
-            error_on_duplicated_field_names_in_struct,
-            timestamp_utc,
-            prefers_large_types,
+            error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
+            timestamp_utc=timestamp_utc,
+            prefers_large_types=prefers_large_types,
         )
     elif type(dt) == VariantType:
         fields = [
@@ -200,6 +206,28 @@ def to_arrow_type(
             # The metadata field is tagged so we can identify that the arrow struct actually
             # represents a variant.
             pa.field("metadata", pa.binary(), nullable=False, metadata={b"variant": b"true"}),
+        ]
+        arrow_type = pa.struct(fields)
+    elif type(dt) == GeometryType:
+        fields = [
+            pa.field("srid", pa.int32(), nullable=False),
+            pa.field(
+                "wkb",
+                pa.binary(),
+                nullable=False,
+                metadata={b"geometry": b"true", b"srid": str(dt.srid)},
+            ),
+        ]
+        arrow_type = pa.struct(fields)
+    elif type(dt) == GeographyType:
+        fields = [
+            pa.field("srid", pa.int32(), nullable=False),
+            pa.field(
+                "wkb",
+                pa.binary(),
+                nullable=False,
+                metadata={b"geography": b"true", b"srid": str(dt.srid)},
+            ),
         ]
         arrow_type = pa.struct(fields)
     else:
@@ -212,6 +240,7 @@ def to_arrow_type(
 
 def to_arrow_schema(
     schema: StructType,
+    *,
     error_on_duplicated_field_names_in_struct: bool = False,
     timestamp_utc: bool = True,
     prefers_large_types: bool = False,
@@ -244,9 +273,9 @@ def to_arrow_schema(
             field.name,
             to_arrow_type(
                 field.dataType,
-                error_on_duplicated_field_names_in_struct,
-                timestamp_utc,
-                prefers_large_types,
+                error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
+                timestamp_utc=timestamp_utc,
+                prefers_large_types=prefers_large_types,
             ),
             nullable=field.nullable,
         )
@@ -270,6 +299,38 @@ def is_variant(at: "pa.DataType") -> bool:
         )
         for field in at
     ) and any(field.name == "value" for field in at)
+
+
+def is_geometry(at: "pa.DataType") -> bool:
+    """Check if a PyArrow struct data type represents a geometry"""
+    import pyarrow.types as types
+
+    assert types.is_struct(at)
+
+    return any(
+        (
+            field.name == "wkb"
+            and b"geometry" in field.metadata
+            and field.metadata[b"geometry"] == b"true"
+        )
+        for field in at
+    ) and any(field.name == "srid" for field in at)
+
+
+def is_geography(at: "pa.DataType") -> bool:
+    """Check if a PyArrow struct data type represents a geography"""
+    import pyarrow.types as types
+
+    assert types.is_struct(at)
+
+    return any(
+        (
+            field.name == "wkb"
+            and b"geography" in field.metadata
+            and field.metadata[b"geography"] == b"true"
+        )
+        for field in at
+    ) and any(field.name == "srid" for field in at)
 
 
 def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> DataType:
@@ -305,7 +366,7 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
         spark_type = BinaryType()
     elif types.is_date32(at):
         spark_type = DateType()
-    elif types.is_time(at):
+    elif types.is_time64(at):
         spark_type = TimeType()
     elif types.is_timestamp(at) and prefer_timestamp_ntz and at.tz is None:
         spark_type = TimestampNTZType()
@@ -314,19 +375,41 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
     elif types.is_duration(at):
         spark_type = DayTimeIntervalType()
     elif types.is_list(at):
-        spark_type = ArrayType(from_arrow_type(at.value_type, prefer_timestamp_ntz))
+        spark_type = ArrayType(
+            elementType=from_arrow_type(at.value_type, prefer_timestamp_ntz),
+            containsNull=at.value_field.nullable,
+        )
     elif types.is_fixed_size_list(at):
-        spark_type = ArrayType(from_arrow_type(at.value_type, prefer_timestamp_ntz))
+        spark_type = ArrayType(
+            elementType=from_arrow_type(at.value_type, prefer_timestamp_ntz),
+            containsNull=at.value_field.nullable,
+        )
     elif types.is_large_list(at):
-        spark_type = ArrayType(from_arrow_type(at.value_type, prefer_timestamp_ntz))
+        spark_type = ArrayType(
+            elementType=from_arrow_type(at.value_type, prefer_timestamp_ntz),
+            containsNull=at.value_field.nullable,
+        )
     elif types.is_map(at):
         spark_type = MapType(
-            from_arrow_type(at.key_type, prefer_timestamp_ntz),
-            from_arrow_type(at.item_type, prefer_timestamp_ntz),
+            keyType=from_arrow_type(at.key_type, prefer_timestamp_ntz),
+            valueType=from_arrow_type(at.item_type, prefer_timestamp_ntz),
+            valueContainsNull=at.item_field.nullable,
         )
     elif types.is_struct(at):
         if is_variant(at):
             return VariantType()
+        elif is_geometry(at):
+            srid = int(at.field("wkb").metadata.get(b"srid"))
+            if srid == GeometryType.MIXED_SRID:
+                return GeometryType("ANY")
+            else:
+                return GeometryType(srid)
+        elif is_geography(at):
+            srid = int(at.field("wkb").metadata.get(b"srid"))
+            if srid == GeographyType.MIXED_SRID:
+                return GeographyType("ANY")
+            else:
+                return GeographyType(srid)
         return StructType(
             [
                 StructField(
@@ -457,9 +540,7 @@ def _check_arrow_array_timestamps_localize(
                 a.items, mt.valueType, truncate, timezone
             ),
         }
-        # SPARK-48302: PyArrow added support for mask argument to pa.MapArray.from_arrays in
-        # version 17.0.0
-        if a.null_count and LooseVersion(pa.__version__) >= LooseVersion("17.0.0"):
+        if a.null_count:
             params["mask"] = a.is_null()
 
         return pa.MapArray.from_arrays(**params)
@@ -775,6 +856,7 @@ def _to_corrected_pandas_type(dt: DataType) -> Optional[Any]:
         return None
 
 
+@functools.lru_cache(maxsize=64)
 def _create_converter_to_pandas(
     data_type: DataType,
     nullable: bool = True,
@@ -1077,6 +1159,8 @@ def _create_converter_to_pandas(
         elif isinstance(dt, VariantType):
 
             def convert_variant(value: Any) -> Any:
+                if isinstance(value, VariantVal):
+                    return value
                 if (
                     isinstance(value, dict)
                     and all(key in value for key in ["value", "metadata"])
@@ -1087,6 +1171,40 @@ def _create_converter_to_pandas(
                     raise PySparkValueError(errorClass="MALFORMED_VARIANT")
 
             return convert_variant
+
+        elif isinstance(dt, GeographyType):
+
+            def convert_geography(value: Any) -> Any:
+                if value is None:
+                    return None
+                elif (
+                    isinstance(value, dict)
+                    and all(key in value for key in ["wkb", "srid"])
+                    and isinstance(value["wkb"], bytes)
+                    and isinstance(value["srid"], int)
+                ):
+                    return Geography.fromWKB(value["wkb"], value["srid"])
+                else:
+                    raise PySparkValueError(errorClass="MALFORMED_GEOGRAPHY")
+
+            return convert_geography
+
+        elif isinstance(dt, GeometryType):
+
+            def convert_geometry(value: Any) -> Any:
+                if value is None:
+                    return None
+                elif (
+                    isinstance(value, dict)
+                    and all(key in value for key in ["wkb", "srid"])
+                    and isinstance(value["wkb"], bytes)
+                    and isinstance(value["srid"], int)
+                ):
+                    return Geometry.fromWKB(value["wkb"], value["srid"])
+                else:
+                    raise PySparkValueError(errorClass="MALFORMED_GEOMETRY")
+
+            return convert_geometry
 
         else:
             return None
@@ -1100,12 +1218,14 @@ def _create_converter_to_pandas(
         return lambda pser: pser
 
 
+@functools.lru_cache(maxsize=64)
 def _create_converter_from_pandas(
     data_type: DataType,
     *,
     timezone: Optional[str] = None,
     error_on_duplicated_field_names: bool = True,
     ignore_unexpected_complex_type_values: bool = False,
+    int_to_decimal_coercion_enabled: bool = False,
 ) -> Callable[["pd.Series"], "pd.Series"]:
     """
     Create a converter of pandas Series to create Spark DataFrame with Arrow optimization.
@@ -1144,6 +1264,29 @@ def _create_converter_from_pandas(
             return _check_series_convert_timestamps_internal(pser, timezone)
 
         return correct_timestamp
+
+    elif isinstance(data_type, DecimalType):
+        if int_to_decimal_coercion_enabled:
+            # For decimal with low precision, e.g. pa.decimal128(1)
+            # pa.Array.from_pandas(pd.Series([1,2,3])).cast(pa.decimal128(1)) fails with
+            # ArrowInvalid: Precision is not great enough for the result.
+            # It should be at least 19.
+            # Here change it to
+            # pa.Array.from_pandas(pd.Series([1,2,3]).apply(
+            #     lambda x: Decimal(x))).cast(pa.decimal128(1))
+
+            def convert_int_to_decimal(pser: pd.Series) -> pd.Series:
+                if pd.api.types.is_integer_dtype(pser):  # type: ignore[attr-defined]
+                    return pser.apply(  # type: ignore[return-value]
+                        lambda x: Decimal(x) if pd.notna(x) else None
+                    )
+                else:
+                    return pser
+
+            return convert_int_to_decimal
+
+        else:
+            return lambda pser: pser
 
     def _converter(dt: DataType) -> Optional[Callable[[Any], Any]]:
         if isinstance(dt, ArrayType):
@@ -1349,6 +1492,22 @@ def _create_converter_from_pandas(
                 return {"value": variant.value, "metadata": variant.metadata}
 
             return convert_variant
+
+        elif isinstance(dt, GeographyType):
+
+            def convert_geography(value: Any) -> Any:
+                assert isinstance(value, Geography)
+                return {"srid": value.srid, "wkb": value.wkb}
+
+            return convert_geography
+
+        elif isinstance(dt, GeometryType):
+
+            def convert_geometry(value: Any) -> Any:
+                assert isinstance(value, Geometry)
+                return {"srid": value.srid, "wkb": value.wkb}
+
+            return convert_geometry
 
         return None
 
