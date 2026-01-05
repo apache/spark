@@ -151,7 +151,6 @@ private[spark] class ExecutorPodsBackoffController(
           s"Transitioning to Normal state.")
         currentState = NormalState()
         metricsSource.backoffExitCounter.inc()
-        executorsAwaitingStartedConfirmation.clear()
       case _ =>
     }
   }
