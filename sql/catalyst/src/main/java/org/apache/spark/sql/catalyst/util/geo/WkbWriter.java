@@ -40,13 +40,13 @@ public class WkbWriter {
 
     // Determine dimension offset based on hasZ and hasM flags
     if (hasZ && hasM) {
-      return baseType + WkbConstants.DIM_OFFSET_ZM;
+      return baseType + WkbUtil.DIM_OFFSET_ZM;
     } else if (hasZ) {
-      return baseType + WkbConstants.DIM_OFFSET_Z;
+      return baseType + WkbUtil.DIM_OFFSET_Z;
     } else if (hasM) {
-      return baseType + WkbConstants.DIM_OFFSET_M;
+      return baseType + WkbUtil.DIM_OFFSET_M;
     } else {
-      return baseType + WkbConstants.DIM_OFFSET_2D;
+      return baseType + WkbUtil.DIM_OFFSET_2D;
     }
   }
 
@@ -81,51 +81,51 @@ public class WkbWriter {
     int dimCount = geometry.getDimensionCount();
 
     // Header: endianness (1 byte) + type (4 bytes)
-    int size = WkbConstants.BYTE_SIZE + WkbConstants.INT_SIZE;
+    int size = WkbUtil.BYTE_SIZE + WkbUtil.INT_SIZE;
 
     if (geometry instanceof Point) {
       Point point = (Point) geometry;
-      size += point.getCoordinates().length * WkbConstants.DOUBLE_SIZE;
+      size += point.getCoordinates().length * WkbUtil.DOUBLE_SIZE;
     } else if (geometry instanceof LineString) {
       LineString lineString = (LineString) geometry;
       // Number of points (4 bytes) + coordinates
-      size += WkbConstants.INT_SIZE;
-      size += lineString.getNumPoints() * dimCount * WkbConstants.DOUBLE_SIZE;
+      size += WkbUtil.INT_SIZE;
+      size += lineString.getNumPoints() * dimCount * WkbUtil.DOUBLE_SIZE;
     } else if (geometry instanceof Polygon) {
       Polygon polygon = (Polygon) geometry;
       // Number of rings (4 bytes)
-      size += WkbConstants.INT_SIZE;
+      size += WkbUtil.INT_SIZE;
       for (Ring ring : polygon.getRings()) {
         int numPoints = ring.getNumPoints();
         // Number of points in ring (4 bytes) + coordinates
-        size += WkbConstants.INT_SIZE;
-        size += numPoints * dimCount * WkbConstants.DOUBLE_SIZE;
+        size += WkbUtil.INT_SIZE;
+        size += numPoints * dimCount * WkbUtil.DOUBLE_SIZE;
       }
     } else if (geometry instanceof MultiPoint) {
       MultiPoint mp = (MultiPoint) geometry;
       // Number of geometries (4 bytes)
-      size += WkbConstants.INT_SIZE;
+      size += WkbUtil.INT_SIZE;
       for (Point p : mp.getPoints()) {
         size += calculateSize(p);
       }
     } else if (geometry instanceof MultiLineString) {
       MultiLineString mls = (MultiLineString) geometry;
       // Number of geometries (4 bytes)
-      size += WkbConstants.INT_SIZE;
+      size += WkbUtil.INT_SIZE;
       for (LineString ls : mls.getLineStrings()) {
         size += calculateSize(ls);
       }
     } else if (geometry instanceof MultiPolygon) {
       MultiPolygon mpoly = (MultiPolygon) geometry;
       // Number of geometries (4 bytes)
-      size += WkbConstants.INT_SIZE;
+      size += WkbUtil.INT_SIZE;
       for (Polygon poly : mpoly.getPolygons()) {
         size += calculateSize(poly);
       }
     } else if (geometry instanceof GeometryCollection) {
       GeometryCollection gc = (GeometryCollection) geometry;
       // Number of geometries (4 bytes)
-      size += WkbConstants.INT_SIZE;
+      size += WkbUtil.INT_SIZE;
       for (GeometryModel geom : gc.getGeometries()) {
         size += calculateSize(geom);
       }
@@ -139,7 +139,7 @@ public class WkbWriter {
   private void writeGeometry(ByteBuffer buffer, GeometryModel geometry, ByteOrder byteOrder) {
     // Write endianness
     buffer.put(byteOrder == ByteOrder.LITTLE_ENDIAN
-      ? WkbConstants.LITTLE_ENDIAN : WkbConstants.BIG_ENDIAN);
+      ? WkbUtil.LITTLE_ENDIAN : WkbUtil.BIG_ENDIAN);
 
     // Write type
     int type = getWkbType(geometry);

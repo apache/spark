@@ -21,35 +21,12 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.nio.ByteOrder;
+import java.util.List;
 
 /**
  * Test suite for WKB (Well-Known Binary) reader and writer functionality.
  */
-public class WkbReaderWriterGeometryModelTest {
-
-  /**
-   * Helper method to convert hex string to byte array
-   */
-  private byte[] hexToBytes(String hex) {
-    int len = hex.length();
-    byte[] data = new byte[len / 2];
-    for (int i = 0; i < len; i += 2) {
-      data[i / 2] = (byte) ((Character.digit(hex.charAt(i), 16) << 4)
-          + Character.digit(hex.charAt(i + 1), 16));
-    }
-    return data;
-  }
-
-  /**
-   * Helper method to convert byte array to hex string
-   */
-  private String bytesToHex(byte[] bytes) {
-    StringBuilder sb = new StringBuilder();
-    for (byte b : bytes) {
-      sb.append(String.format("%02x", b));
-    }
-    return sb.toString();
-  }
+public class WkbReaderWriterGeometryModelTest extends WkbTestBase {
 
   /**
    * Test helper to verify WKB round-trip (write and read)
@@ -292,7 +269,7 @@ public class WkbReaderWriterGeometryModelTest {
         new Point(new double[]{0.0, 4.0}, 0),
         new Point(new double[]{0.0, 0.0}, 0)
     );
-    Ring ring = new Ring(ringPoints, false, false);
+    Ring ring = new Ring(ringPoints);
     java.util.List<Ring> rings = java.util.Arrays.asList(ring);
     Polygon polygon = new Polygon(rings, 0, false, false);
 
@@ -381,6 +358,40 @@ public class WkbReaderWriterGeometryModelTest {
     GeometryModel parsed = reader.read(wkb, 4326);
 
     Assertions.assertEquals(4326, parsed.srid(), "SRID should be preserved");
+  }
+
+  @Test
+  public void testGeometryCollectionDifferentEndianness() {
+    // GEOMETRYCOLLECTION(
+    //  POINT(1 2),   -- big endian
+    //  POINT(3 4)    -- little endian
+    //)
+
+    String wkbLe = "01070000000200000000000000013ff00000000000004000000000000000010100000000000000000008400000000000001040"; // checkstyle.off: LineLength
+    String wkbBe = "00000000070000000200000000013ff00000000000004000000000000000010100000000000000000008400000000000001040"; // checkstyle.off: LineLength
+    WkbReader reader = new WkbReader();
+    GeometryModel parsedLe = reader.read(hexToBytes(wkbLe));
+
+    Assertions.assertInstanceOf(GeometryCollection.class, parsedLe, "Should be GeometryCollection");
+    List<GeometryModel> childLe = parsedLe.asGeometryCollection().getGeometries();
+    for (GeometryModel geom : childLe) {
+      Assertions.assertTrue(geom.isPoint(), "Child should be Point");
+    }
+    Assertions.assertEquals(1.0, childLe.get(0).asPoint().getX(), 0.0001, "First point X mismatch");
+    Assertions.assertEquals(2.0, childLe.get(0).asPoint().getY(), 0.0001, "First point Y mismatch");
+    Assertions.assertEquals(3.0, childLe.get(1).asPoint().getX(), 0.0001, "Second point X mismatch");
+    Assertions.assertEquals(4.0, childLe.get(1).asPoint().getY(), 0.0001, "Second point Y mismatch");
+
+    GeometryModel parsedBe = reader.read(hexToBytes(wkbBe));
+    Assertions.assertInstanceOf(GeometryCollection.class, parsedBe, "Should be GeometryCollection");
+    List<GeometryModel> childBe = parsedBe.asGeometryCollection().getGeometries();
+    for (GeometryModel geom : childBe) {
+      Assertions.assertTrue(geom.isPoint(), "Child should be Point");
+    }
+    Assertions.assertEquals(1.0, childBe.get(0).asPoint().getX(), 0.0001, "First point X mismatch");
+    Assertions.assertEquals(2.0, childBe.get(0).asPoint().getY(), 0.0001, "First point Y mismatch");
+    Assertions.assertEquals(3.0, childBe.get(1).asPoint().getX(), 0.0001, "Second point X mismatch");
+    Assertions.assertEquals(4.0, childBe.get(1).asPoint().getY(), 0.0001, "Second point Y mismatch");
   }
 }
 

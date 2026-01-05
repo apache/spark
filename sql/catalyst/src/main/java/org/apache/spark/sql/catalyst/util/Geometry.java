@@ -124,8 +124,6 @@ public final class Geometry implements Geo {
 
   @Override
   public byte[] toWkb() {
-    // This method returns only the WKB portion of the in-memory Geometry representation.
-    // Note that the header is skipped, and that the WKB is returned as-is (little-endian).
     return toWkbInternal(DEFAULT_ENDIANNESS);
   }
 

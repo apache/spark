@@ -20,16 +20,15 @@ import java.util.List;
 
 /**
  * Represents a ring (closed linestring) in a polygon.
+ *
+ * In line with OGC standards, a ring must have at least 4 points,
+ * with the first and last point being identical to close the ring.
  */
 class Ring {
   private final List<Point> points;
-  private final boolean hasZ;
-  private final boolean hasM;
 
-  Ring(List<Point> points, boolean hasZ, boolean hasM) {
+  Ring(List<Point> points) {
     this.points = points;
-    this.hasZ = hasZ;
-    this.hasM = hasM;
   }
 
   List<Point> getPoints() {
@@ -44,18 +43,6 @@ class Ring {
     return points.isEmpty();
   }
 
-  int getDimensionCount() {
-    return 2 + (hasZ ? 1 : 0) + (hasM ? 1 : 0);
-  }
-
-  boolean hasZ() {
-    return hasZ;
-  }
-
-  boolean hasM() {
-    return hasM;
-  }
-
   boolean isClosed() {
     if (points.size() < 4) {
       return false;
@@ -63,21 +50,6 @@ class Ring {
     Point first = points.get(0);
     Point last = points.get(points.size() - 1);
     return first.getX() == last.getX() && first.getY() == last.getY();
-  }
-
-  @Override
-  public String toString() {
-    if (isEmpty()) {
-      return "()";
-    }
-    StringBuilder sb = new StringBuilder("(");
-    for (int i = 0; i < points.size(); i++) {
-      if (i > 0) sb.append(", ");
-      Point p = points.get(i);
-      sb.append(p.getX()).append(" ").append(p.getY());
-    }
-    sb.append(")");
-    return sb.toString();
   }
 }
 

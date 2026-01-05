@@ -23,17 +23,7 @@ import org.junit.jupiter.api.Test;
 /**
  * Comprehensive test suite for WKB Point geometries.
  */
-public class WkbPointTest {
-
-  private byte[] hexToBytes(String hex) {
-    int len = hex.length();
-    byte[] data = new byte[len / 2];
-    for (int i = 0; i < len; i += 2) {
-      data[i / 2] = (byte) ((Character.digit(hex.charAt(i), 16) << 4)
-          + Character.digit(hex.charAt(i + 1), 16));
-    }
-    return data;
-  }
+public class WkbPointTest extends WkbTestBase {
 
   @Test
   public void testEmptyPoint() {
