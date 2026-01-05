@@ -222,9 +222,9 @@ private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase {
  * prone to leaving multiple overlapping [[org.apache.spark.SparkContext]]s in the same JVM.
  */
 private[sql] trait SQLTestUtilsBase
-  extends Eventually
-  with SQLTestData
-  with PlanTestBase {
+  extends PlanTestBase
+  with Eventually
+  with SQLTestData {
 
   protected def sparkContext = spark.sparkContext
 

@@ -25,28 +25,7 @@ import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 import org.scalatest.time._ // scalastyle:ignore
 
 /**
- * Base abstract class for all unit tests in Spark for handling common functionality.
- *
- * Thread audit happens normally here automatically when a new test suite created.
- * The only prerequisite for that is that the test class must extend [[SparkFunSuite]].
- *
- * It is possible to override the default thread audit behavior by setting enableAutoThreadAudit
- * to false and manually calling the audit methods, if desired. For example:
- *
- * class MyTestSuite extends SparkFunSuite {
- *
- *   override val enableAutoThreadAudit = false
- *
- *   protected override def beforeAll(): Unit = {
- *     doThreadPreAudit()
- *     super.beforeAll()
- *   }
- *
- *   protected override def afterAll(): Unit = {
- *     super.afterAll()
- *     doThreadPostAudit()
- *   }
- * }
+ * Base Spark AnyFunSuite with the abilities from SparkTestSuite
  */
 abstract class SparkFunSuite
   extends AnyFunSuite // scalastyle:ignore funsuite

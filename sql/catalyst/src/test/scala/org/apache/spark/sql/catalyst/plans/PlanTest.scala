@@ -60,7 +60,7 @@ trait CodegenInterpretedPlanTest extends PlanTest {
  * Provides helper methods for comparing plans, but without the overhead of
  * mandating a FunSuite.
  */
-trait PlanTestBase extends PredicateHelper with SQLHelper with SparkTestSuite {
+trait PlanTestBase extends SparkTestSuite with PredicateHelper with SQLHelper {
 
   protected def normalizeExprIds(plan: LogicalPlan): LogicalPlan =
     NormalizePlan.normalizeExprIds(plan)

@@ -39,7 +39,10 @@ import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.util.{AccumulatorContext, Utils}
 
 /**
- * Base abstract class for all unit tests in Spark for handling common functionality.
+ * Base trait for all unit tests in Spark for handling common functionality.
+ * The major difference between this trait and SparkFunSuite:
+ * 1, SparkFunSuite extends AnyFunSuite, while this trait can be used for all test styles.
+ * 2, SparkFunSuite provides some extra testing functions based on AnyFunSuite's test function.
  *
  * Thread audit happens normally here automatically when a new test suite created.
  *
@@ -406,8 +409,9 @@ trait SparkTestSuite
       condition = "TABLE_OR_VIEW_NOT_FOUND",
       parameters = Map("relationName" -> tableName))
 
-  protected def checkErrorTableAlreadyExists(exception: SparkThrowable,
-                                             tableName: String): Unit =
+  protected def checkErrorTableAlreadyExists(
+      exception: SparkThrowable,
+      tableName: String): Unit =
     checkError(exception = exception,
       condition = "TABLE_OR_VIEW_ALREADY_EXISTS",
       parameters = Map("relationName" -> tableName))
