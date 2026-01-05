@@ -5963,6 +5963,20 @@
     ],
     "sqlState" : "XXKST"
   },
+  "STREAMING_QUERY_EVOLUTION_ERROR" : {
+    "message" : [
+      "Streaming query evolution error:"
+    ],
+    "subClass" : {
+      "UNNAMED_STREAMING_SOURCES_WITH_ENFORCEMENT" : {
+        "message" : [
+          "When streaming source evolution is enabled, all streaming sources must be explicitly named using the .name() API. The following sources are unnamed:",
+          "<sourceInfo>"
+        ]
+      }
+    },
+    "sqlState" : "42KDE"
+  },
   "STREAMING_REAL_TIME_MODE" : {
     "message" : [
       "Streaming real-time mode has the following limitation:"
