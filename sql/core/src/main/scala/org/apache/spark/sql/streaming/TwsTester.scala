@@ -183,14 +183,11 @@ class TwsTester[K, I, O](
     }
 
     var ans: List[O] = List()
-    for (key <- handle.timers.getAllKeysWithTimers[K]()) {
+    for ((timerExpiryTimeMs, key) <- handle.timers.listExpiredTimers[K](expiryThreshold)) {
       ImplicitGroupingKeyTracker.setImplicitKey(key)
-      val expiredTimers: List[Long] = handle.listTimers().filter(_ <= expiryThreshold).toList
-      for (timerExpiryTimeMs <- expiredTimers) {
-        val expiredTimerInfo = new ExpiredTimerInfoImpl(Some(timerExpiryTimeMs))
-        ans = ans ++ processor.handleExpiredTimer(key, timerValues, expiredTimerInfo).toList
-        handle.deleteTimer(timerExpiryTimeMs)
-      }
+      val expiredTimerInfo = new ExpiredTimerInfoImpl(Some(timerExpiryTimeMs))
+      ans = ans ++ processor.handleExpiredTimer(key, timerValues, expiredTimerInfo).toList
+      handle.deleteTimer(timerExpiryTimeMs)
     }
     ans
   }

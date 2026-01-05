@@ -185,36 +185,41 @@ class InMemoryMapState[K, V](clock: Clock, ttl: TTLConfig) extends MapState[K, V
 
 /** In-memory timers. */
 class InMemoryTimers {
-  private val keyToTimers = mutable.Map[Any, mutable.TreeSet[Long]]()
+  // Maps expiration times to keys.
+  // If time t is mapped to key k, there is a timer associated with key k expiring at time t.
+  private val timeToKeys = mutable.Map[Long, mutable.HashSet[Any]]()
 
   def registerTimer(expiryTimestampMs: Long): Unit = {
     val groupingKey = ImplicitGroupingKeyTracker.getImplicitKeyOption.get
-    if (!keyToTimers.contains(groupingKey)) {
-      keyToTimers.put(groupingKey, mutable.TreeSet[Long]())
+    if (!timeToKeys.contains(expiryTimestampMs)) {
+      timeToKeys.put(expiryTimestampMs, mutable.HashSet[Any]())
     }
-    keyToTimers(groupingKey).add(expiryTimestampMs)
+    timeToKeys(expiryTimestampMs).add(groupingKey)
   }
 
   def deleteTimer(expiryTimestampMs: Long): Unit = {
     val groupingKey = ImplicitGroupingKeyTracker.getImplicitKeyOption.get
-    if (keyToTimers.contains(groupingKey)) {
-      keyToTimers(groupingKey).remove(expiryTimestampMs)
-      if (keyToTimers(groupingKey).isEmpty) {
-        keyToTimers.remove(groupingKey)
+    if (timeToKeys.contains(expiryTimestampMs)) {
+      timeToKeys(expiryTimestampMs).remove(groupingKey)
+      if (timeToKeys(expiryTimestampMs).isEmpty) {
+        timeToKeys.remove(expiryTimestampMs)
       }
     }
   }
 
   def listTimers(): Iterator[Long] = {
     val groupingKey = ImplicitGroupingKeyTracker.getImplicitKeyOption.get
-    keyToTimers.get(groupingKey) match {
-      case Some(timers) => timers.iterator
-      case None => Iterator.empty
-    }
+    timeToKeys.iterator.filter(_._2.contains(groupingKey) ).map(_._1)
   }
 
-  def getAllKeysWithTimers[K](): Iterator[K] = {
-    keyToTimers.keys.iterator.map(_.asInstanceOf[K])
+  // Lists pairs (expiryTimestampMs, key) for all timers such that expiryTimestampMs<=currentTimeMs.
+  // Result is ordered by timestamp.
+  def listExpiredTimers[K](currentTimeMs: Long): List[(Long, K)] = {
+    timeToKeys.iterator
+      .filter(_._1 <= currentTimeMs)
+      .flatMap(entry => entry._2.map(key => (entry._1, key.asInstanceOf[K])))
+      .toList
+      .sortBy(_._1)
   }
 }
 
@@ -265,7 +270,8 @@ class InMemoryStatefulProcessorHandle(val timeMode: TimeMode, val clock: Clock)
   }
 
   override def getMapState[K: Encoder, V: Encoder](
-      stateName: String, ttlConfig: TTLConfig): MapState[K, V] =
+      stateName: String,
+      ttlConfig: TTLConfig): MapState[K, V] =
     getMapState(stateName, implicitly[Encoder[K]], implicitly[Encoder[V]], ttlConfig)
 
   override def getQueryInfo(): QueryInfo = queryInfo
