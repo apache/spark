@@ -224,9 +224,10 @@ class InMemoryTimers {
  */
 class InMemoryStatefulProcessorHandle(val timeMode: TimeMode, val clock: Clock)
   extends StatefulProcessorHandle {
-  
+
   private val states = mutable.Map[String, Any]()
   val timers = new InMemoryTimers()
+  private val queryInfo = new QueryInfoImpl(UUID.randomUUID(), UUID.randomUUID(), 0L)
 
   override def getValueState[T](
       stateName: String,
@@ -266,8 +267,7 @@ class InMemoryStatefulProcessorHandle(val timeMode: TimeMode, val clock: Clock)
       stateName: String, ttlConfig: TTLConfig): MapState[K, V] =
     getMapState(stateName, implicitly[Encoder[K]], implicitly[Encoder[V]], ttlConfig)
 
-  override def getQueryInfo(): QueryInfo =
-    new QueryInfoImpl(UUID.randomUUID(), UUID.randomUUID(), 0L)
+  override def getQueryInfo(): QueryInfo = queryInfo
 
   override def registerTimer(expiryTimestampMs: Long): Unit = {
     require(timeMode != TimeMode.None, "Timers are not supported with TimeMode.None.")
