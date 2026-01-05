@@ -284,7 +284,7 @@ class FrameApplyFunctionMixin:
         def identify5(
             x,
         ) -> ps.DataFrame[
-            [("number", int), ("color", str)], [("a", int), ("b", List[int])]  # noqa: F405
+            [("number", int), ("color", str)], [("a", int), ("b", List[int])]  # noqa: F821
         ]:
             return x
 

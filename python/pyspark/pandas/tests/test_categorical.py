@@ -414,7 +414,7 @@ class CategoricalTestsMixin:
 
         pdf, psdf = self.df_pair
 
-        def to_str(pdf) -> 'ps.DataFrame["a":str, "b":str]':  # noqa: F405
+        def to_str(pdf) -> 'ps.DataFrame["a":str, "b":str]':  # noqa: F821
             return pdf.astype(str)
 
         self.assert_eq(
@@ -474,7 +474,7 @@ class CategoricalTestsMixin:
 
         pdf, psdf = self.df_pair
 
-        def to_str(pdf) -> 'ps.DataFrame["a":str, "b":str]':  # noqa: F405
+        def to_str(pdf) -> 'ps.DataFrame["a":str, "b":str]':  # noqa: F821
             return pdf.astype(str)
 
         self.assert_eq(
