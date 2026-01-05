@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import unittest
 
 from pyspark.errors import AnalysisException, QueryContextType, SparkRuntimeException
 from pyspark.sql import functions as sf
@@ -1202,12 +1201,6 @@ class SubqueryTests(SubqueryTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_subquery import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

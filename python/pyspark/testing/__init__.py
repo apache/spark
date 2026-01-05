@@ -42,6 +42,7 @@ if sys.version_info >= (3, 12) and _unittest_main is None:
     unittest.main = unittest_main
 
 
+from pyspark.testing.unittestutils import main
 from pyspark.testing.utils import assertDataFrameEqual, assertSchemaEqual
 
-__all__ = ["assertDataFrameEqual", "assertSchemaEqual"]
+__all__ = ["assertDataFrameEqual", "assertSchemaEqual", "main"]
