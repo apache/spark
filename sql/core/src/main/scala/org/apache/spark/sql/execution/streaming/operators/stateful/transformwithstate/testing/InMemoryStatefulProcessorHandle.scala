@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
 import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, StatefulProcessorHandle, TimeMode, TTLConfig, ValueState}
 
 /** Helper to track expired keys. */
-class TtlTracker(val clock: Clock, ttl: TTLConfig) {
+class TtlTracker(clock: Clock, ttl: TTLConfig) {
   require(!ttl.ttlDuration.isNegative())
   private val keyToLastUpdatedTimeMs = mutable.Map[Any, Long]()
 
@@ -251,11 +251,11 @@ class InMemoryTimers {
  * `peekXxxState` and `updateXxxState` methods for test assertions and setup, allowing
  * direct manipulation of state without going through the processor logic.
  */
-class InMemoryStatefulProcessorHandle(val timeMode: TimeMode, val clock: Clock)
+class InMemoryStatefulProcessorHandle(private val timeMode: TimeMode, private val clock: Clock)
   extends StatefulProcessorHandle {
 
-  private val states = mutable.Map[String, Any]()
   val timers = new InMemoryTimers()
+  private val states = mutable.Map[String, Any]()
   private val queryInfo = new QueryInfoImpl(UUID.randomUUID(), UUID.randomUUID(), 0L)
 
   override def getValueState[T](

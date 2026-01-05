@@ -69,12 +69,12 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
  * @since 4.2.0
  */
 class TwsTester[K, I, O](
-    val processor: StatefulProcessor[K, I, O],
-    val initialState: List[(K, Any)] = List(),
-    val timeMode: TimeMode = TimeMode.None,
-    val outputMode: OutputMode = OutputMode.Append,
-    val isRealTimeMode: Boolean = false) {
-  
+    private val processor: StatefulProcessor[K, I, O],
+    private val initialState: List[(K, Any)] = List(),
+    private val timeMode: TimeMode = TimeMode.None,
+    private val outputMode: OutputMode = OutputMode.Append,
+    private val isRealTimeMode: Boolean = false) {
+
   private val processingTimeClock = new ManualClock(0L)
   private val handle = new InMemoryStatefulProcessorHandle(timeMode, processingTimeClock)
 
