@@ -89,7 +89,7 @@ class InMemoryListState[T](clock: Clock, ttl: TTLConfig) extends ListState[T] {
   override def exists(): Boolean = getList.isDefined
 
   override def get(): Iterator[T] = {
-    getList.orElse(Some(mutable.ArrayBuffer.empty[T])).get.iterator
+    getList.getOrElse(mutable.ArrayBuffer.empty[T]).iterator
   }
 
   override def put(newState: Array[T]): Unit = {
