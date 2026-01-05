@@ -391,11 +391,11 @@ class TwsTesterSuite extends SparkFunSuite {
 
     // Advance time by 6 seconds (total t=11000) - key1's timer should fire
     val expired2 = tester.advanceProcessingTime(6000)
-    assert(expired2 == List(("key1", "session-expired")))
+    assert(expired2 == List(("key1", "session-expired,11000")))
 
     // Advance time by 5 seconds (total t=16000) - key2's timer should fire
     val expired3 = tester.advanceProcessingTime(5000)
-    assert(expired3 == List(("key2", "session-expired")))
+    assert(expired3 == List(("key2", "session-expired,16000")))
 
     // Verify state is cleared after session expiry
     assert(tester.peekValueState[Long]("lastSeen", "key1").isEmpty)

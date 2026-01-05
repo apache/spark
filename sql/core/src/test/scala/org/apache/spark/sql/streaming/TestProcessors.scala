@@ -37,8 +37,7 @@ class AllMethodsTestProcessor extends StatefulProcessor[String, String, (String,
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
-      timerValues: TimerValues
-  ): Iterator[(String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String)] = {
     val results = ArrayBuffer[(String, String)]()
 
     inputRows.foreach { cmd =>
@@ -106,16 +105,14 @@ class RunningCountProcessor[T](ttl: TTLConfig = TTLConfig.NONE)
   override def handleInitialState(
       key: String,
       initialState: Long,
-      timerValues: TimerValues
-  ): Unit = {
+      timerValues: TimerValues): Unit = {
     countState.update(initialState)
   }
 
   override def handleInputRows(
       key: String,
       inputRows: Iterator[T],
-      timerValues: TimerValues
-  ): Iterator[(String, Long)] = {
+      timerValues: TimerValues): Iterator[(String, Long)] = {
     val incoming = inputRows.size
     val current = countState.get()
     val updated = current + incoming
@@ -138,8 +135,7 @@ class SessionTimeoutProcessor extends StatefulProcessor[String, String, (String,
   override def handleInputRows(
       key: String,
       inputRows: Iterator[String],
-      timerValues: TimerValues
-  ): Iterator[(String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String)] = {
     val currentTime = timerValues.getCurrentProcessingTimeInMs()
 
     // Clear any existing timer if we have previous state
@@ -158,10 +154,9 @@ class SessionTimeoutProcessor extends StatefulProcessor[String, String, (String,
   override def handleExpiredTimer(
       key: String,
       timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo
-  ): Iterator[(String, String)] = {
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
     lastSeenState.clear()
-    Iterator.single((key, "session-expired"))
+    Iterator.single((key, s"session-expired,${timerValues.getCurrentProcessingTimeInMs()}"))
   }
 }
 
@@ -183,8 +178,7 @@ class EventTimeSessionProcessor
   override def handleInputRows(
       key: String,
       inputRows: Iterator[(Long, String)],
-      timerValues: TimerValues
-  ): Iterator[(String, String)] = {
+      timerValues: TimerValues): Iterator[(String, String)] = {
     val results = scala.collection.mutable.ArrayBuffer[(String, String)]()
 
     inputRows.foreach {
@@ -208,8 +202,7 @@ class EventTimeSessionProcessor
   override def handleExpiredTimer(
       key: String,
       timerValues: TimerValues,
-      expiredTimerInfo: ExpiredTimerInfo
-  ): Iterator[(String, String)] = {
+      expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
     val watermark = timerValues.getCurrentWatermarkInMs()
     lastEventTimeState.clear()
     Iterator.single((key, s"session-expired@watermark=$watermark"))
@@ -233,8 +226,7 @@ class EventTimeCountProcessor extends StatefulProcessor[String, (Long, String), 
   override def handleInputRows(
       key: String,
       inputRows: Iterator[(Long, String)],
-      timerValues: TimerValues
-  ): Iterator[(String, Long)] = {
+      timerValues: TimerValues): Iterator[(String, Long)] = {
     val incoming = inputRows.size
     val current = if (countState.exists()) countState.get() else 0L
     val updated = current + incoming
@@ -257,8 +249,7 @@ class TopKProcessor(k: Int, ttl: TTLConfig = TTLConfig.NONE)
   override def handleInputRows(
       key: String,
       inputRows: Iterator[(String, Double)],
-      timerValues: TimerValues
-  ): Iterator[(String, Double)] = {
+      timerValues: TimerValues): Iterator[(String, Double)] = {
     // Load existing list into a buffer
     val current = ArrayBuffer[Double]()
     topKState.get().foreach(current += _)
@@ -294,8 +285,7 @@ class WordFrequencyProcessor(ttl: TTLConfig = TTLConfig.NONE)
   override def handleInputRows(
       key: String,
       inputRows: Iterator[(String, String)],
-      timerValues: TimerValues
-  ): Iterator[(String, String, Long)] = {
+      timerValues: TimerValues): Iterator[(String, String, Long)] = {
     val results = ArrayBuffer[(String, String, Long)]()
 
     inputRows.foreach {
