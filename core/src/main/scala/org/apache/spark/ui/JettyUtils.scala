@@ -268,7 +268,7 @@ private[spark] object JettyUtils extends Logging {
     val server = new Server(pool)
 
     val errorHandler = new ErrorHandler()
-    errorHandler.setShowStacks(true)
+    errorHandler.setShowStacks(conf.get(UI_SHOW_ERROR_STACKS))
     server.setErrorHandler(errorHandler)
 
     val collection = new ContextHandlerCollection

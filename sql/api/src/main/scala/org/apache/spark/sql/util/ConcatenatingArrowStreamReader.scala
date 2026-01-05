@@ -25,6 +25,8 @@ import org.apache.arrow.vector.ipc.{ArrowReader, ReadChannel}
 import org.apache.arrow.vector.ipc.message.{ArrowDictionaryBatch, ArrowMessage, ArrowRecordBatch, MessageChannelReader, MessageResult, MessageSerializer}
 import org.apache.arrow.vector.types.pojo.Schema
 
+import org.apache.spark.SparkException
+
 /**
  * An [[ArrowReader]] that concatenates multiple [[MessageIterator]]s into a single stream. Each
  * iterator represents a single IPC stream. The concatenated streams all must have the same
@@ -62,7 +64,7 @@ private[sql] class ConcatenatingArrowStreamReader(
       totalBytesRead += current.bytesRead
       current = input.next()
       if (current.schema != getVectorSchemaRoot.getSchema) {
-        throw new IllegalStateException()
+        throw SparkException.internalError("IPC Streams have different schemas.")
       }
     }
     if (current.hasNext) {
