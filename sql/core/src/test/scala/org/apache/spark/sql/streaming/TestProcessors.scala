@@ -311,3 +311,45 @@ class WordFrequencyProcessor(ttl: TTLConfig = TTLConfig.NONE)
     results.iterator
   }
 }
+
+// Case classes for complex data type testing
+case class UserEvent(action: String, amount: Double, timestamp: Long)
+case class UserProfile(totalAmount: Double, eventCount: Long, lastEventTime: Long)
+case class UserSummary(key: String, profile: UserProfile)
+
+/**
+ * Processor that uses complex case classes for input, state, and output.
+ * Tracks user activity by aggregating events into a profile.
+ */
+class UserProfileProcessor extends StatefulProcessor[String, UserEvent, UserSummary] {
+
+  @transient private var profileState: ValueState[UserProfile] = _
+
+  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
+    profileState = getHandle.getValueState[UserProfile](
+      "profile",
+      Encoders.product[UserProfile],
+      TTLConfig.NONE
+    )
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[UserEvent],
+      timerValues: TimerValues): Iterator[UserSummary] = {
+    val current = if (profileState.exists()) profileState.get()
+                  else UserProfile(0.0, 0L, 0L)
+
+    var updated = current
+    inputRows.foreach { event =>
+      updated = UserProfile(
+        updated.totalAmount + event.amount,
+        updated.eventCount + 1,
+        math.max(updated.lastEventTime, event.timestamp)
+      )
+    }
+
+    profileState.update(updated)
+    Iterator.single(UserSummary(key, updated))
+  }
+}

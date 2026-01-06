@@ -466,6 +466,47 @@ class TwsTesterSuite extends SparkFunSuite {
     // Verify state is cleared
     assert(tester.peekValueState[Long]("lastEventTime", "key1").isEmpty)
   }
+
+  test("TwsTester should support complex case class data types") {
+    val tester = new TwsTester(new UserProfileProcessor())
+
+    // Process events for user1
+    val result1 = tester.test(
+      "user1",
+      List(
+        UserEvent("purchase", 100.0, 1000L),
+        UserEvent("refund", -20.0, 2000L),
+        UserEvent("purchase", 50.0, 3000L)
+      )
+    )
+    assert(result1 == List(UserSummary("user1", UserProfile(130.0, 3L, 3000L))))
+
+    // Process events for user2
+    val result2 = tester.test(
+      "user2",
+      List(UserEvent("purchase", 200.0, 5000L))
+    )
+    assert(result2 == List(UserSummary("user2", UserProfile(200.0, 1L, 5000L))))
+
+    // Process more events for user1 - state should accumulate
+    val result3 = tester.test(
+      "user1",
+      List(UserEvent("purchase", 70.0, 4000L))
+    )
+    assert(result3 == List(UserSummary("user1", UserProfile(200.0, 4L, 4000L))))
+
+    // Verify state using peekValueState with complex case class
+    val user1Profile = tester.peekValueState[UserProfile]("profile", "user1")
+    assert(user1Profile.isDefined)
+    assert(user1Profile.get == UserProfile(200.0, 4L, 4000L))
+
+    val user2Profile = tester.peekValueState[UserProfile]("profile", "user2")
+    assert(user2Profile.isDefined)
+    assert(user2Profile.get == UserProfile(200.0, 1L, 5000L))
+
+    // Non-existent user should have no state
+    assert(tester.peekValueState[UserProfile]("profile", "user3").isEmpty)
+  }
 }
 
 /**
