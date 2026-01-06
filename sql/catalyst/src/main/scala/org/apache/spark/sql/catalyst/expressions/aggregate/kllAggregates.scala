@@ -168,7 +168,7 @@ case class KllSketchAggBigint(
       KllLongsSketch.heapify(Memory.wrap(buffer))
     } catch {
       case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName, e.getMessage)
     }
   } else {
     this.createAggregationBuffer()
@@ -304,7 +304,7 @@ case class KllSketchAggFloat(
       KllFloatsSketch.heapify(Memory.wrap(buffer))
     } catch {
       case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName, e.getMessage)
     }
   } else {
     this.createAggregationBuffer()
@@ -442,7 +442,7 @@ case class KllSketchAggDouble(
       KllDoublesSketch.heapify(Memory.wrap(buffer))
     } catch {
       case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName, e.getMessage)
     }
   } else {
     this.createAggregationBuffer()

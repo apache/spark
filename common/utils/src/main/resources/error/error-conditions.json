@@ -4293,7 +4293,7 @@
   },
   "KLL_SKETCH_INVALID_INPUT" : {
     "message" : [
-      "For function <functionName>, invalid KLL sketch binary data: <reason>"
+      "Invalid call to <function>; only valid KLL sketch buffers are supported as inputs (such as those produced by the `kll_sketch_agg` function)."
     ],
     "sqlState" : "22000"
   },

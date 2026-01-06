@@ -2820,6 +2820,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "function" -> toSQLId(function)))
   }
 
+  def kllInvalidInputSketchBuffer(function: String, reason: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "KLL_SKETCH_INVALID_INPUT",
+      messageParameters = Map(
+        "functionName" -> toSQLId(function),
+        "reason" -> reason))
+  }
+
   def hllUnionDifferentLgK(left: Int, right: Int, function: String): Throwable = {
     new SparkRuntimeException(
       errorClass = "HLL_UNION_DIFFERENT_LG_K",
@@ -3191,14 +3199,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "functionName" -> toSQLId(function),
         "quantile" -> toSQLValue(quantile, DoubleType)))
-  }
-
-  def kllSketchInvalidInputError(function: String, reason: String): Throwable = {
-    new SparkRuntimeException(
-      errorClass = "KLL_SKETCH_INVALID_INPUT",
-      messageParameters = Map(
-        "functionName" -> toSQLId(function),
-        "reason" -> reason))
   }
 
   def kllSketchIncompatibleMergeError(function: String, reason: String): Throwable = {
