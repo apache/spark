@@ -39,7 +39,7 @@ case class VectorCosineSimilarity(left: Expression, right: Expression)
     extends RuntimeReplaceable with ImplicitCastInputTypes {
 
   override lazy val replacement: Expression = StaticInvoke(
-    classOf[ExpressionImplUtils],
+    classOf[VectorFunctionImplUtils],
     FloatType,
     "vectorCosineSimilarity",
     Seq(left, right, Literal(prettyName)),
@@ -77,7 +77,7 @@ case class VectorInnerProduct(left: Expression, right: Expression)
     extends RuntimeReplaceable with ImplicitCastInputTypes {
 
   override lazy val replacement: Expression = StaticInvoke(
-    classOf[ExpressionImplUtils],
+    classOf[VectorFunctionImplUtils],
     FloatType,
     "vectorInnerProduct",
     Seq(left, right, Literal(prettyName)),
@@ -115,7 +115,7 @@ case class VectorL2Distance(left: Expression, right: Expression)
     extends RuntimeReplaceable with ImplicitCastInputTypes {
 
   override lazy val replacement: Expression = StaticInvoke(
-    classOf[ExpressionImplUtils],
+    classOf[VectorFunctionImplUtils],
     FloatType,
     "vectorL2Distance",
     Seq(left, right, Literal(prettyName)),
