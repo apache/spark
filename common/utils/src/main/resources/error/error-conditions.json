@@ -6144,7 +6144,7 @@
   },
   "TUPLE_INVALID_INPUT_SKETCH_BUFFER" : {
     "message" : [
-      "Invalid call to <function>: <reason>. Only valid Tuple sketch buffers are supported as inputs (such as those produced by the corresponding `tuple_sketch_agg_*` function)."
+      "Invalid call to <function>; only valid Tuple sketch buffers are supported as inputs (such as those produced by the corresponding `tuple_sketch_agg_*` function)."
     ],
     "sqlState" : "22000"
   },

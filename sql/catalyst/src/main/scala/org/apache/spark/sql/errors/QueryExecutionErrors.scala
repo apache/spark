@@ -3225,14 +3225,9 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def tupleInvalidInputSketchBuffer(function: String): Throwable = {
-    val reason: String = "Invalid buffer state or input data"
-    tupleInvalidInputSketchBuffer(function, reason)
-  }
-
-  def tupleInvalidInputSketchBuffer(function: String, reason: String): Throwable = {
     new SparkRuntimeException(
       errorClass = "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
-      messageParameters = Map("function" -> toSQLId(function), "reason" -> reason))
+      messageParameters = Map("function" -> toSQLId(function)))
   }
 
   def tupleInvalidMode(function: String, mode: String, validModes: Seq[String]): Throwable = {

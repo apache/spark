@@ -23,7 +23,6 @@ import org.apache.datasketches.theta.CompactSketch
 import org.apache.datasketches.tuple.{Sketch, Sketches, Summary, TupleSketchIterator}
 import org.apache.datasketches.tuple.adouble.{DoubleSummary, DoubleSummaryDeserializer}
 import org.apache.datasketches.tuple.aninteger.{IntegerSummary, IntegerSummaryDeserializer}
-import org.apache.datasketches.tuple.strings.{ArrayOfStringsSummary, ArrayOfStringsSummaryDeserializer}
 
 import org.apache.spark.sql.errors.QueryExecutionErrors
 
@@ -192,7 +191,7 @@ object ThetaSketchUtils {
       Sketches.heapifySketch(memory, deserializer)
     } catch {
       case e: Exception =>
-        throw QueryExecutionErrors.tupleInvalidInputSketchBuffer(prettyName, e.getMessage)
+        throw QueryExecutionErrors.tupleInvalidInputSketchBuffer(prettyName)
     }
   }
 
@@ -224,22 +223,6 @@ object ThetaSketchUtils {
       bytes: Array[Byte],
       prettyName: String): Sketch[IntegerSummary] = {
     heapifyTupleSketch(bytes, new IntegerSummaryDeserializer(), prettyName)
-  }
-
-  /**
-   * Deserializes a String summary type binary tuple sketch representation into a Sketch.
-   *
-   * @param bytes
-   *   The binary sketch data to deserialize
-   * @param prettyName
-   *   The display name of the function/expression for error messages
-   * @return
-   *   A deserialized sketch
-   */
-  def heapifyStringTupleSketch(
-      bytes: Array[Byte],
-      prettyName: String): Sketch[ArrayOfStringsSummary] = {
-    heapifyTupleSketch(bytes, new ArrayOfStringsSummaryDeserializer(), prettyName)
   }
 
   /**

@@ -168,9 +168,7 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
         ThetaSketchUtils.heapifyDoubleTupleSketch(invalidBytes, "test_function")
       },
       condition = "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
-      parameters = Map(
-        "function" -> "`test_function`",
-        "reason" -> "Possible corruption: Invalid Family: COMPACT"))
+      parameters = Map("function" -> "`test_function`"))
   }
 
   test("getDoubleSummaryMode: returns correct mode for valid strings") {
@@ -216,44 +214,7 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
         ThetaSketchUtils.heapifyIntegerTupleSketch(invalidBytes, "test_function")
       },
       condition = "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
-      parameters = Map(
-        "function" -> "`test_function`",
-        "reason" -> "Possible corruption: Invalid Family: COMPACT"))
-  }
-
-  test("heapifyStringTupleSketch: successfully deserializes valid tuple sketch bytes") {
-    import org.apache.datasketches.tuple.strings.{ArrayOfStringsSummary, ArrayOfStringsSummaryFactory}
-    // Create a valid string tuple sketch and get its bytes
-    val summaryFactory = new ArrayOfStringsSummaryFactory()
-    val updateSketch =
-      new UpdatableSketchBuilder[Array[String], ArrayOfStringsSummary](summaryFactory)
-        .build()
-
-    updateSketch.update("test1", Array("a"))
-    updateSketch.update("test2", Array("b"))
-    updateSketch.update("test3", Array("c"))
-
-    val compactSketch = updateSketch.compact()
-    val validBytes = compactSketch.toByteArray
-
-    // Test that heapifyStringTupleSketch can successfully deserialize the valid bytes
-    val heapifiedSketch = ThetaSketchUtils.heapifyStringTupleSketch(validBytes, "test_function")
-
-    assert(heapifiedSketch != null)
-    assert(heapifiedSketch.getEstimate == compactSketch.getEstimate)
-    assert(heapifiedSketch.getRetainedEntries == compactSketch.getRetainedEntries)
-  }
-
-  test("heapifyStringTupleSketch: throws exception for invalid bytes") {
-    val invalidBytes = Array[Byte](1, 2, 3, 4, 5)
-    checkError(
-      exception = intercept[SparkRuntimeException] {
-        ThetaSketchUtils.heapifyStringTupleSketch(invalidBytes, "test_function")
-      },
-      condition = "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
-      parameters = Map(
-        "function" -> "`test_function`",
-        "reason" -> "Possible corruption: Invalid Family: COMPACT"))
+      parameters = Map("function" -> "`test_function`"))
   }
 
   test("aggregateNumericSummaries: sum mode aggregates correctly for Double") {
