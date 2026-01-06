@@ -195,7 +195,7 @@
     <!-- org.apache.commons/commons-lang3/-->
     <commons-lang3.version>3.20.0</commons-lang3.version>
     <!-- org.apache.commons/commons-pool2/-->
-    <commons-pool2.version>2.12.1</commons-pool2.version>
+    <commons-pool2.version>2.13.1</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <guava.version>33.4.8-jre</guava.version>
     <guava.failureaccess.version>1.0.3</guava.failureaccess.version>
