@@ -26,7 +26,6 @@ from decimal import Decimal
 from typing import Any, Callable, Iterable, List, Optional, Union, TYPE_CHECKING
 
 from pyspark.errors import PySparkTypeError, UnsupportedOperationException, PySparkValueError
-from pyspark.loose_version import LooseVersion
 from pyspark.sql.types import (
     cast,
     BooleanType,
@@ -72,8 +71,9 @@ if TYPE_CHECKING:
 
 def to_arrow_type(
     dt: DataType,
+    *,
     error_on_duplicated_field_names_in_struct: bool = False,
-    timestamp_utc: bool = True,
+    timezone: Optional[str] = None,
     prefers_large_types: bool = False,
 ) -> "pa.DataType":
     """
@@ -86,12 +86,8 @@ def to_arrow_type(
     error_on_duplicated_field_names_in_struct: bool, default False
         Whether to raise an exception when there are duplicated field names in a
         :class:`pyspark.sql.types.StructType`. (default ``False``)
-    timestamp_utc : bool, default True
-        If ``True`` (the default), :class:`TimestampType` is converted to a timezone-aware
-        :class:`pyarrow.TimestampType` with UTC as the timezone. If ``False``,
-        :class:`TimestampType` is converted to a timezone-naive :class:`pyarrow.TimestampType`.
-        The JVM expects timezone-aware timestamps to be in UTC. Always keep this set to ``True``
-        except in special cases, such as when this function is used in a test.
+    timezone : str, default None
+        timeZone required for TimestampType
 
     Returns
     -------
@@ -115,21 +111,15 @@ def to_arrow_type(
         arrow_type = pa.float64()
     elif type(dt) == DecimalType:
         arrow_type = pa.decimal128(dt.precision, dt.scale)
-    elif type(dt) == StringType and prefers_large_types:
-        arrow_type = pa.large_string()
     elif type(dt) == StringType:
-        arrow_type = pa.string()
-    elif type(dt) == BinaryType and prefers_large_types:
-        arrow_type = pa.large_binary()
+        arrow_type = pa.large_string() if prefers_large_types else pa.string()
     elif type(dt) == BinaryType:
-        arrow_type = pa.binary()
+        arrow_type = pa.large_binary() if prefers_large_types else pa.binary()
     elif type(dt) == DateType:
         arrow_type = pa.date32()
-    elif type(dt) == TimestampType and timestamp_utc:
-        # Timestamps should be in UTC, JVM Arrow timestamps require a timezone to be read
-        arrow_type = pa.timestamp("us", tz="UTC")
     elif type(dt) == TimestampType:
-        arrow_type = pa.timestamp("us", tz=None)
+        assert timezone is not None
+        arrow_type = pa.timestamp("us", tz=timezone)
     elif type(dt) == TimestampNTZType:
         arrow_type = pa.timestamp("us", tz=None)
     elif type(dt) == DayTimeIntervalType:
@@ -141,9 +131,9 @@ def to_arrow_type(
             "element",
             to_arrow_type(
                 dt.elementType,
-                error_on_duplicated_field_names_in_struct,
-                timestamp_utc,
-                prefers_large_types,
+                error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
+                timezone=timezone,
+                prefers_large_types=prefers_large_types,
             ),
             nullable=dt.containsNull,
         )
@@ -153,9 +143,9 @@ def to_arrow_type(
             "key",
             to_arrow_type(
                 dt.keyType,
-                error_on_duplicated_field_names_in_struct,
-                timestamp_utc,
-                prefers_large_types,
+                error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
+                timezone=timezone,
+                prefers_large_types=prefers_large_types,
             ),
             nullable=False,
         )
@@ -163,9 +153,9 @@ def to_arrow_type(
             "value",
             to_arrow_type(
                 dt.valueType,
-                error_on_duplicated_field_names_in_struct,
-                timestamp_utc,
-                prefers_large_types,
+                error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
+                timezone=timezone,
+                prefers_large_types=prefers_large_types,
             ),
             nullable=dt.valueContainsNull,
         )
@@ -182,9 +172,9 @@ def to_arrow_type(
                 field.name,
                 to_arrow_type(
                     field.dataType,
-                    error_on_duplicated_field_names_in_struct,
-                    timestamp_utc,
-                    prefers_large_types,
+                    error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
+                    timezone=timezone,
+                    prefers_large_types=prefers_large_types,
                 ),
                 nullable=field.nullable,
             )
@@ -196,9 +186,9 @@ def to_arrow_type(
     elif isinstance(dt, UserDefinedType):
         arrow_type = to_arrow_type(
             dt.sqlType(),
-            error_on_duplicated_field_names_in_struct,
-            timestamp_utc,
-            prefers_large_types,
+            error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
+            timezone=timezone,
+            prefers_large_types=prefers_large_types,
         )
     elif type(dt) == VariantType:
         fields = [
@@ -240,8 +230,9 @@ def to_arrow_type(
 
 def to_arrow_schema(
     schema: StructType,
+    *,
     error_on_duplicated_field_names_in_struct: bool = False,
-    timestamp_utc: bool = True,
+    timezone: Optional[str] = None,
     prefers_large_types: bool = False,
 ) -> "pa.Schema":
     """
@@ -254,12 +245,8 @@ def to_arrow_schema(
     error_on_duplicated_field_names_in_struct: bool, default False
         Whether to raise an exception when there are duplicated field names in an inner
         :class:`pyspark.sql.types.StructType`. (default ``False``)
-    timestamp_utc : bool, default True
-        If ``True`` (the default), :class:`TimestampType` is converted to a timezone-aware
-        :class:`pyarrow.TimestampType` with UTC as the timezone. If ``False``,
-        :class:`TimestampType` is converted to a timezone-naive :class:`pyarrow.TimestampType`.
-        The JVM expects timezone-aware timestamps to be in UTC. Always keep this set to ``True``
-        except in special cases, such as when this function is used in a test
+    timezone : str, default None
+        timeZone required for TimestampType
 
     Returns
     -------
@@ -272,9 +259,9 @@ def to_arrow_schema(
             field.name,
             to_arrow_type(
                 field.dataType,
-                error_on_duplicated_field_names_in_struct,
-                timestamp_utc,
-                prefers_large_types,
+                error_on_duplicated_field_names_in_struct=error_on_duplicated_field_names_in_struct,
+                timezone=timezone,
+                prefers_large_types=prefers_large_types,
             ),
             nullable=field.nullable,
         )
@@ -539,9 +526,7 @@ def _check_arrow_array_timestamps_localize(
                 a.items, mt.valueType, truncate, timezone
             ),
         }
-        # SPARK-48302: PyArrow added support for mask argument to pa.MapArray.from_arrays in
-        # version 17.0.0
-        if a.null_count and LooseVersion(pa.__version__) >= LooseVersion("17.0.0"):
+        if a.null_count:
             params["mask"] = a.is_null()
 
         return pa.MapArray.from_arrays(**params)

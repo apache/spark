@@ -1575,6 +1575,12 @@
     ],
     "sqlState" : "42734"
   },
+  "DYNAMIC_PARTITION_WRITE_PARTITION_NUM_LIMIT_EXCEEDED" : {
+    "message" : [
+      "Number of dynamic partitions created is <numWrittenParts>, which is more than <maxDynamicPartitions>. To solve this try to set <maxDynamicPartitionsKey> to at least <numWrittenParts>."
+    ],
+    "sqlState" : "54054"
+  },
   "EMITTING_ROWS_OLDER_THAN_WATERMARK_NOT_ALLOWED" : {
     "message" : [
       "Previous node emitted a row with eventTime=<emittedRowEventTime> which is older than current_watermark_value=<currentWatermark>",
@@ -1766,6 +1772,11 @@
       "DROP_NAMESPACE" : {
         "message" : [
           "Drop the namespace <namespace>."
+        ]
+      },
+      "DROP_TABLE" : {
+        "message" : [
+          "Drop the table <tableName>."
         ]
       },
       "GET_TABLES" : {
@@ -4426,6 +4437,12 @@
     ],
     "sqlState" : "22023"
   },
+  "MATERIALIZED_VIEW_WITH_MULTIPLE_QUERIES" : {
+    "message" : [
+      "Invalid destination <tableName> with multiple flows: <flows>."
+    ],
+    "sqlState" : "42000"
+  },
   "MERGE_CARDINALITY_VIOLATION" : {
     "message" : [
       "The ON search condition of the MERGE statement matched a single row from the target table with multiple rows of the source table.",
@@ -5068,6 +5085,12 @@
       }
     },
     "sqlState" : "42710"
+  },
+  "PIPELINE_GRAPH_NOT_TOPOLOGICALLY_SORTED" : {
+    "message" : [
+      "There is a cycle between <flowName> and <inputName>."
+    ],
+    "sqlState" : "0A000"
   },
   "PIPELINE_SQL_GRAPH_ELEMENT_REGISTRATION_ERROR" : {
     "message" : [
@@ -9402,11 +9425,6 @@
   "_LEGACY_ERROR_TEMP_2273" : {
     "message" : [
       "<message>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2277" : {
-    "message" : [
-      "Number of dynamic partitions created is <numWrittenParts>, which is more than <maxDynamicPartitions>. To solve this try to set <maxDynamicPartitionsKey> to at least <numWrittenParts>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2330" : {

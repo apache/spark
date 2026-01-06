@@ -88,7 +88,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
     case Size(c: CreateMap, _) if c.children.forall(hasNoSideEffect) =>
       Literal(c.children.length / 2)
 
-    case e if e.getTagValue(FAILED_TO_EVALUATE).isDefined => e
+    case e if e.containsTag(FAILED_TO_EVALUATE) => e
 
     // Fold expressions that are foldable.
     case e if e.foldable => tryFold(e, isConditionalBranch)

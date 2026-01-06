@@ -1840,7 +1840,11 @@ class DataFrame(ParentDataFrame):
         return (table, schema)
 
     def toArrow(self) -> "pa.Table":
-        schema = to_arrow_schema(self.schema, error_on_duplicated_field_names_in_struct=True)
+        schema = to_arrow_schema(
+            self.schema,
+            error_on_duplicated_field_names_in_struct=True,
+            timezone="UTC",
+        )
         table, _ = self._to_table()
         return table.cast(schema)
 
@@ -2376,7 +2380,7 @@ def _test() -> None:
         import pyarrow as pa
         from pyspark.loose_version import LooseVersion
 
-        if LooseVersion(pa.__version__) < LooseVersion("17.0.0"):
+        if LooseVersion(pa.__version__) < LooseVersion("21.0.0"):
             del pyspark.sql.dataframe.DataFrame.mapInArrow.__doc__
 
     globs["spark"] = (

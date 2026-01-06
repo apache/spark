@@ -45,7 +45,7 @@ class CoGroupedArrowPythonRunner(
     rightSchema: StructType,
     timeZoneId: String,
     largeVarTypes: Boolean,
-    protected override val runnerConf: Map[String, String],
+    pythonRunnerConf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     sessionUUID: Option[String],
@@ -54,6 +54,8 @@ class CoGroupedArrowPythonRunner(
     (Iterator[InternalRow], Iterator[InternalRow]), ColumnarBatch](
     funcs.map(_._1), evalType, argOffsets, jobArtifactUUID, pythonMetrics)
   with BasicPythonArrowOutput {
+
+  override protected def runnerConf: Map[String, String] = super.runnerConf ++ pythonRunnerConf
 
   override val envVars: util.Map[String, String] = {
     val envVars = new util.HashMap(funcs.head._1.funcs.head.envVars)

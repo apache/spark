@@ -19,12 +19,15 @@ package org.apache.spark.sql.execution.datasources.v2.state
 import java.sql.Timestamp
 
 import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.{LeftSide, RightSide}
+import org.apache.spark.sql.execution.streaming.operators.stateful.join.SymmetricHashJoinStateManager
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
-import org.apache.spark.sql.execution.streaming.state.StateStore
+import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateStore}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
-import org.apache.spark.sql.streaming.util.StreamManualClock
+import org.apache.spark.sql.streaming.util.{ColumnFamilyMetadata, StreamManualClock}
+import org.apache.spark.sql.types.{BooleanType, IntegerType, LongType, NullType, StringType, StructField, StructType, TimestampType}
 
 trait StateDataSourceTestBase extends StreamTest with StateStoreMetricsTest {
   import testImplicits._
@@ -457,3 +460,284 @@ case class SessionUpdate(
     durationMs: Long,
     numEvents: Int,
     expired: Boolean)
+
+// Utility for runCompositeKeyStreamingAggregationQuery
+// todo: Move runCompositeKeyStreamingAggregationQuery to this class
+object CompositeKeyAggregationTestUtils {
+  def getSchemas(stateVersion: Int): (StructType, StructType) = {
+    val metadata = getSchemasWithMetadata(stateVersion)
+    (metadata.keySchema, metadata.valueSchema)
+  }
+
+  def getSchemasWithMetadata(stateVersion: Int): ColumnFamilyMetadata = {
+    val keySchema = StructType(Array(
+      StructField("groupKey", IntegerType, nullable = false),
+      StructField("fruit", StringType, nullable = true)
+    ))
+
+    val valueSchema = if (stateVersion == 1) {
+      // State version 1 includes key columns in the value
+      StructType(Array(
+        StructField("groupKey", IntegerType, nullable = false),
+        StructField("fruit", StringType, nullable = true),
+        StructField("count", LongType, nullable = false),
+        StructField("sum", LongType, nullable = false),
+        StructField("max", IntegerType, nullable = false),
+        StructField("min", IntegerType, nullable = false)
+      ))
+    } else {
+      // State version 2 excludes key columns from the value
+      StructType(Array(
+        StructField("count", LongType, nullable = false),
+        StructField("sum", LongType, nullable = false),
+        StructField("max", IntegerType, nullable = false),
+        StructField("min", IntegerType, nullable = false)
+      ))
+    }
+
+    val encoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
+    ColumnFamilyMetadata(keySchema, valueSchema, encoderSpec)
+  }
+}
+
+// Utility for run DropDuplicatesQueries
+// todo: Move run DropDuplicatesQueries to this class
+object DropDuplicatesTestUtils {
+  def getDropDuplicatesSchemas(): (StructType, StructType) = {
+    val metadata = getDropDuplicatesSchemasWithMetadata()
+    (metadata.keySchema, metadata.valueSchema)
+  }
+
+  def getDropDuplicatesSchemasWithMetadata(): ColumnFamilyMetadata = {
+    val keySchema = StructType(Array(
+      StructField("value", IntegerType, nullable = false),
+      StructField("eventTime", TimestampType)
+    ))
+    val valueSchema = StructType(Array(
+      StructField("__dummy__", NullType)
+    ))
+    val encoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
+    ColumnFamilyMetadata(keySchema, valueSchema, encoderSpec)
+  }
+
+  def getDropDuplicatesWithColumnSchemas(): (StructType, StructType) = {
+    val metadata = getDropDuplicatesWithColumnSchemasWithMetadata()
+    (metadata.keySchema, metadata.valueSchema)
+  }
+
+  def getDropDuplicatesWithColumnSchemasWithMetadata(): ColumnFamilyMetadata = {
+    val keySchema = StructType(Array(
+      StructField("col1", StringType, nullable = true)
+    ))
+    val valueSchema = StructType(Array(
+      StructField("__dummy__", NullType, nullable = true)
+    ))
+    val encoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
+    ColumnFamilyMetadata(keySchema, valueSchema, encoderSpec)
+  }
+
+  def getDropDuplicatesWithinWatermarkSchemas(): (StructType, StructType) = {
+    val metadata = getDropDuplicatesWithinWatermarkSchemasWithMetadata()
+    (metadata.keySchema, metadata.valueSchema)
+  }
+
+  def getDropDuplicatesWithinWatermarkSchemasWithMetadata(): ColumnFamilyMetadata = {
+    val keySchema = StructType(Array(
+      StructField("_1", StringType, nullable = true)
+    ))
+    val valueSchema = StructType(Array(
+      StructField("expiresAtMicros", LongType, nullable = false)
+    ))
+    val encoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
+    ColumnFamilyMetadata(keySchema, valueSchema, encoderSpec)
+  }
+}
+
+/**
+ * Test utility object providing schema definitions for simple streaming aggregation.
+ * Used by StatePartitionAllColumnFamiliesWriterSuite and StatePartitionAllColumnFamiliesReaderSuite
+ * to eliminate code duplication.
+ */
+object SimpleAggregationTestUtils {
+  def getSchemas(stateVersion: Int): (StructType, StructType) = {
+    val metadata = getSchemasWithMetadata(stateVersion)
+    (metadata.keySchema, metadata.valueSchema)
+  }
+
+  def getSchemasWithMetadata(stateVersion: Int): ColumnFamilyMetadata = {
+    val keySchema = StructType(Array(
+      StructField("groupKey", IntegerType, nullable = false)
+    ))
+
+    val valueSchema = if (stateVersion == 1) {
+      // State version 1 includes key columns in the value
+      StructType(Array(
+        StructField("groupKey", IntegerType, nullable = false),
+        StructField("count", LongType, nullable = false),
+        StructField("sum", LongType, nullable = false),
+        StructField("max", IntegerType, nullable = false),
+        StructField("min", IntegerType, nullable = false)
+      ))
+    } else {
+      // State version 2 excludes key columns from the value
+      StructType(Array(
+        StructField("count", LongType, nullable = false),
+        StructField("sum", LongType, nullable = false),
+        StructField("max", IntegerType, nullable = false),
+        StructField("min", IntegerType, nullable = false)
+      ))
+    }
+
+    val encoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
+    ColumnFamilyMetadata(keySchema, valueSchema, encoderSpec)
+  }
+}
+
+/**
+ * Test utility object providing schema definitions for flatMapGroupsWithState.
+ */
+object FlatMapGroupsWithStateTestUtils {
+
+  def getSchemas(stateVersion: Int): (StructType, StructType) = {
+    val metadata = getSchemasWithMetadata(stateVersion)
+    (metadata.keySchema, metadata.valueSchema)
+  }
+
+  def getSchemasWithMetadata(stateVersion: Int): ColumnFamilyMetadata = {
+    val keySchema = StructType(Array(
+      StructField("value", StringType, nullable = true)
+    ))
+
+    val valueSchema = if (stateVersion == 1) {
+      // State version 1: Flat structure
+      StructType(Array(
+        StructField("numEvents", IntegerType, nullable = false),
+        StructField("startTimestampMs", LongType, nullable = false),
+        StructField("endTimestampMs", LongType, nullable = false),
+        StructField("timeoutTimestamp", IntegerType, nullable = false)
+      ))
+    } else {
+      // State version 2: Nested structure with groupState wrapper
+      StructType(Array(
+        StructField("groupState", StructType(Array(
+          StructField("numEvents", IntegerType, nullable = false),
+          StructField("startTimestampMs", LongType, nullable = false),
+          StructField("endTimestampMs", LongType, nullable = false)
+        )), nullable = false),
+        StructField("timeoutTimestamp", LongType, nullable = false)
+      ))
+    }
+
+    val encoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
+    ColumnFamilyMetadata(keySchema, valueSchema, encoderSpec)
+  }
+}
+
+/**
+ * Test utility object providing schema definitions for runSessionWindowAggregationQuery
+ */
+object SessionWindowTestUtils {
+
+  def getSchemas(): (StructType, StructType) = {
+    val metadata = getSchemasWithMetadata()
+    (metadata.keySchema, metadata.valueSchema)
+  }
+
+  def getSchemasWithMetadata(): ColumnFamilyMetadata = {
+    val keySchema = StructType(Array(
+      StructField("sessionId", StringType, nullable = false),
+      StructField("sessionStartTime", TimestampType, nullable = false)
+    ))
+    val valueSchema = StructType(Array(
+      StructField("session_window", StructType(Array(
+        StructField("start", TimestampType),
+        StructField("end", TimestampType)
+      )), nullable = false),
+      StructField("sessionId", StringType, nullable = false),
+      StructField("count", LongType, nullable = false)
+    ))
+    val encoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
+    ColumnFamilyMetadata(keySchema, valueSchema, encoderSpec)
+  }
+}
+
+/**
+ * Test utility object providing schema definitions and constants for runStreamStreamJoinQuery
+ */
+object StreamStreamJoinTestUtils {
+  // All state store names from SymmetricHashJoinStateManager
+  private val allStoreNames: Seq[String] =
+    SymmetricHashJoinStateManager.allStateStoreNames(LeftSide, RightSide)
+
+  // Column family names for keyToNumValues stores (derived from allStateStoreNames)
+  val KEY_TO_NUM_VALUES_ALL: Seq[String] =
+    allStoreNames.filter(_.endsWith(SymmetricHashJoinStateManager.KeyToNumValuesType.toString))
+
+  // Column family names for keyWithIndexToValue stores (derived from allStateStoreNames)
+  val KEY_WITH_INDEX_ALL: Seq[String] =
+    allStoreNames.filter(_.endsWith(SymmetricHashJoinStateManager.KeyWithIndexToValueType.toString))
+
+  def getKeyToNumValuesSchemas(): (StructType, StructType) = {
+    val metadata = getKeyToNumValuesSchemasWithMetadata()
+    (metadata.keySchema, metadata.valueSchema)
+  }
+
+  def getKeyToNumValuesSchemasWithMetadata(): ColumnFamilyMetadata = {
+    val keySchema = StructType(Array(
+      StructField("key", IntegerType)
+    ))
+    val valueSchema = StructType(Array(
+      StructField("value", LongType)
+    ))
+    val encoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
+    ColumnFamilyMetadata(keySchema, valueSchema, encoderSpec)
+  }
+
+  def getKeyWithIndexToValueSchemas(stateVersion: Int): (StructType, StructType) = {
+    val metadata = getKeyWithIndexToValueSchemasWithMetadata(stateVersion)
+    (metadata.keySchema, metadata.valueSchema)
+  }
+
+  def getKeyWithIndexToValueSchemasWithMetadata(stateVersion: Int): ColumnFamilyMetadata = {
+    val keySchema = StructType(Array(
+      StructField("key", IntegerType, nullable = false),
+      StructField("index", LongType)
+    ))
+
+    val valueSchema = if (stateVersion == 2 || stateVersion == 3) {
+      StructType(Array(
+        StructField("value", IntegerType, nullable = false),
+        StructField("time", TimestampType, nullable = false),
+        StructField("matched", BooleanType)
+      ))
+    } else {
+      StructType(Array(
+        StructField("value", IntegerType, nullable = false),
+        StructField("time", TimestampType, nullable = false)
+      ))
+    }
+
+    val encoderSpec = NoPrefixKeyStateEncoderSpec(keySchema)
+    ColumnFamilyMetadata(keySchema, valueSchema, encoderSpec)
+  }
+
+  def getJoinV3ColumnSchemaMap(): Map[String, (StructType, StructType)] = {
+    getJoinV3ColumnSchemaMapWithMetadata().view.mapValues { metadata =>
+      (metadata.keySchema, metadata.valueSchema)
+    }.toMap
+  }
+
+  def getJoinV3ColumnSchemaMapWithMetadata(): Map[String, ColumnFamilyMetadata] = {
+    val (keyToNumKeySchema, keyToNumValueSchema) = getKeyToNumValuesSchemas()
+    val (keyWithIndexKeySchema, keyWithIndexValueSchema) = getKeyWithIndexToValueSchemas(3)
+
+    val keyToNumEncoderSpec = NoPrefixKeyStateEncoderSpec(keyToNumKeySchema)
+    val keyWithIndexEncoderSpec = NoPrefixKeyStateEncoderSpec(keyWithIndexKeySchema)
+
+    KEY_TO_NUM_VALUES_ALL.map(name => name -> ColumnFamilyMetadata(
+      keyToNumKeySchema, keyToNumValueSchema, keyToNumEncoderSpec)).toMap ++
+    KEY_WITH_INDEX_ALL.map(name => name -> ColumnFamilyMetadata(
+      keyWithIndexKeySchema, keyWithIndexValueSchema, keyWithIndexEncoderSpec)).toMap
+
+  }
+}
