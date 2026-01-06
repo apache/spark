@@ -27,48 +27,19 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
 import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, StatefulProcessorHandle, TimeMode, TTLConfig, ValueState}
 import org.apache.spark.util.Clock
 
-/** Helper to track expired keys. */
-class TtlTracker(clock: Clock, ttl: TTLConfig) {
-  require(!ttl.ttlDuration.isNegative())
-  private val keyToLastUpdatedTimeMs = mutable.Map[Any, Long]()
-
-  def isKeyExpired(): Boolean = {
-    if (ttl.ttlDuration.isZero()) {
-      return false
-    }
-    val key = ImplicitGroupingKeyTracker.getImplicitKeyOption.get
-    if (!keyToLastUpdatedTimeMs.contains(key)) {
-      return false
-    }
-    val expirationMs = keyToLastUpdatedTimeMs(key) + ttl.ttlDuration.toMillis
-    expirationMs < clock.getTimeMillis()
-  }
-
-  def onKeyUpdated(): Unit = {
-    val key = ImplicitGroupingKeyTracker.getImplicitKeyOption.get
-    keyToLastUpdatedTimeMs.put(key, clock.getTimeMillis())
-  }
-}
-
 /** In-memory implementation of ValueState. */
 class InMemoryValueState[T](clock: Clock, ttl: TTLConfig) extends ValueState[T] {
   private val keyToStateValue = mutable.Map[Any, T]()
-  private val ttlTracker = new TtlTracker(clock, ttl)
 
   private def getValue: Option[T] = {
-    if (ttlTracker.isKeyExpired()) {
-      return None
-    }
     keyToStateValue.get(ImplicitGroupingKeyTracker.getImplicitKeyOption.get)
   }
   override def exists(): Boolean = getValue.isDefined
 
   override def get(): T = getValue.getOrElse(null.asInstanceOf[T])
 
-  override def update(newState: T): Unit = {
-    ttlTracker.onKeyUpdated()
+  override def update(newState: T): Unit =
     keyToStateValue.put(ImplicitGroupingKeyTracker.getImplicitKeyOption.get, newState)
-  }
 
   override def clear(): Unit =
     keyToStateValue.remove(ImplicitGroupingKeyTracker.getImplicitKeyOption.get)
@@ -77,12 +48,8 @@ class InMemoryValueState[T](clock: Clock, ttl: TTLConfig) extends ValueState[T] 
 /** In-memory implementation of ListState. */
 class InMemoryListState[T](clock: Clock, ttl: TTLConfig) extends ListState[T] {
   private val keyToStateValue = mutable.Map[Any, mutable.ArrayBuffer[T]]()
-  private val ttlTracker = new TtlTracker(clock, ttl)
 
   private def getList: Option[mutable.ArrayBuffer[T]] = {
-    if (ttlTracker.isKeyExpired()) {
-      return None
-    }
     keyToStateValue.get(ImplicitGroupingKeyTracker.getImplicitKeyOption.get)
   }
 
@@ -93,7 +60,6 @@ class InMemoryListState[T](clock: Clock, ttl: TTLConfig) extends ListState[T] {
   }
 
   override def put(newState: Array[T]): Unit = {
-    ttlTracker.onKeyUpdated()
     keyToStateValue.put(
       ImplicitGroupingKeyTracker.getImplicitKeyOption.get,
       mutable.ArrayBuffer.empty[T] ++ newState
@@ -101,7 +67,6 @@ class InMemoryListState[T](clock: Clock, ttl: TTLConfig) extends ListState[T] {
   }
 
   override def appendValue(newState: T): Unit = {
-    ttlTracker.onKeyUpdated()
     if (!exists()) {
       keyToStateValue.put(
         ImplicitGroupingKeyTracker.getImplicitKeyOption.get,
@@ -112,7 +77,6 @@ class InMemoryListState[T](clock: Clock, ttl: TTLConfig) extends ListState[T] {
   }
 
   override def appendList(newState: Array[T]): Unit = {
-    ttlTracker.onKeyUpdated()
     if (!exists()) {
       keyToStateValue.put(
         ImplicitGroupingKeyTracker.getImplicitKeyOption.get,
@@ -130,14 +94,9 @@ class InMemoryListState[T](clock: Clock, ttl: TTLConfig) extends ListState[T] {
 /** In-memory implementation of MapState. */
 class InMemoryMapState[K, V](clock: Clock, ttl: TTLConfig) extends MapState[K, V] {
   private val keyToStateValue = mutable.Map[Any, mutable.HashMap[K, V]]()
-  private val ttlTracker = new TtlTracker(clock, ttl)
-
-  private def getMap: Option[mutable.HashMap[K, V]] = {
-    if (ttlTracker.isKeyExpired()) {
-      return None
-    }
+  
+  private def getMap: Option[mutable.HashMap[K, V]] =
     keyToStateValue.get(ImplicitGroupingKeyTracker.getImplicitKeyOption.get)
-  }
 
   override def exists(): Boolean = getMap.isDefined
 
@@ -150,7 +109,6 @@ class InMemoryMapState[K, V](clock: Clock, ttl: TTLConfig) extends MapState[K, V
   }
 
   override def updateValue(key: K, value: V): Unit = {
-    ttlTracker.onKeyUpdated()
     if (!exists()) {
       keyToStateValue.put(
         ImplicitGroupingKeyTracker.getImplicitKeyOption.get,
@@ -236,11 +194,6 @@ class InMemoryTimers {
  * '''Grouping Key Tracking:''' Operations on state are scoped to the current grouping key,
  * which is retrieved via `ImplicitGroupingKeyTracker.getImplicitKeyOption`. This mirrors the
  * production implementation where state is partitioned by key.
- *
- * '''TTL Support:''' Each state instance contains a [[TtlTracker]] that records the last update
- * time for each grouping key. On read operations, if the elapsed time since the last update
- * exceeds the configured TTL duration, the state is treated as expired (returns None/empty).
- * TTL expiration is checked lazily on access rather than eagerly cleaning up.
  *
  * '''Timers:''' Managed by [[InMemoryTimers]], which maintains a `Map[Long, Set[Any]]` mapping
  * expiration timestamps to sets of grouping keys. Expired timers can be queried via

@@ -38,10 +38,9 @@ import org.apache.spark.util.ManualClock
  *  - Timers in ProcessingTime mode (use `setProcessingTime` to fire timers).
  *  - Timers in EventTime mode (use `setWatermark` to manually set the watermark
  *    and fire expired timers).
- *  - TTL for ValueState, ListState, and MapState (use ProcessingTime mode and
- *    `setProcessingTime` to test expiry).
  *
  * '''Not Supported:'''
+ *  - '''TTL'''. States persist indefinitely, even if TTLConfig is set.
  *  - '''Automatic watermark propagation''': In production Spark streaming, the watermark is
  *    computed from event times and propagated at the end of each microbatch. TwsTester does
  *    not simulate this behavior because it processes keys individually rather than in batches.
@@ -209,7 +208,10 @@ class TwsTester[K, I, O](
       timeMode == TimeMode.ProcessingTime(),
       "setProcessingTime is only supported with TimeMode.ProcessingTime."
     )
-    require(currentTimeMs > processingTimeClock.getTimeMillis, "Processing time must move forward.")
+    require(
+      currentTimeMs > processingTimeClock.getTimeMillis(),
+      "Processing time must move forward."
+    )
     processingTimeClock.setTime(currentTimeMs)
     handleExpiredTimers()
   }
