@@ -299,6 +299,19 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
     comparePlans(expectedOptPlan, planAfterRuleApp)
   }
 
+  test("SPARK-54881: simplify Not((expr1 OR expr2) AND (expr3 OR expr4)) in single pass") {
+    val initialExpr = Not(($"a" <= $"b" || $"c" > $"a" + 4) || ($"a" >= $"b" && $"c" < $"a"))
+
+    val expectedOptimizedExpr = And(
+      And($"a" > $"b", $"c" <= $"a" + 4),
+      Or($"a" < $"b", $"c" >= $"a")
+    )
+
+    val planAfterRuleApp = BooleanSimplification.apply(testRelation.where(initialExpr).analyze)
+    val expectedOptPlan = testRelation.where(expectedOptimizedExpr).analyze
+    comparePlans(expectedOptPlan, planAfterRuleApp)
+  }
+
   protected def assertEquivalent(e1: Expression, e2: Expression): Unit = {
     val correctAnswer = Project(Alias(e2, "out")() :: Nil, OneRowRelation()).analyze
     val actual = Optimize.execute(Project(Alias(e1, "out")() :: Nil, OneRowRelation()).analyze)
