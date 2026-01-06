@@ -36,17 +36,17 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
  *  - Initial state setup via constructor parameter.
  *  - Direct state manipulation via `updateValueState`, `updateListState`, `updateMapState`.
  *  - Direct state inspection via `peekValueState`, `peekListState`, `peekMapState`.
- *  - Timers in ProcessingTime mode (use `advanceProcessingTime` to fire timers).
- *  - Timers in EventTime mode (use `advanceWatermark` to manually advance the watermark
+ *  - Timers in ProcessingTime mode (use `setProcessingTime` to fire timers).
+ *  - Timers in EventTime mode (use `setWatermark` to manually set the watermark
  *    and fire expired timers).
  *  - TTL for ValueState, ListState, and MapState (use ProcessingTime mode and
- *    `advanceProcessingTime` to test expiry).
+ *    `setProcessingTime` to test expiry).
  *
  * '''Not Supported:'''
  *  - '''Automatic watermark propagation''': In production Spark streaming, the watermark is
  *    computed from event times and propagated at the end of each microbatch. TwsTester does
  *    not simulate this behavior because it processes keys individually rather than in batches.
- *    To test watermark-dependent logic, use `advanceWatermark()` to manually set the watermark
+ *    To test watermark-dependent logic, use `setWatermark()` to manually set the watermark
  *    to the desired value before calling `test()`.
  *  - '''Late event filtering''': Since TwsTester does not track event times or automatically
  *    advance the watermark, it also does not filter late events. All input rows passed to
@@ -92,9 +92,10 @@ class TwsTester[K, I, O](
 
   private def handleInitialState[S](): Unit = {
     val p = processor.asInstanceOf[StatefulProcessorWithInitialState[K, I, O, S]]
-    initialState.foreach { case (key, state) =>
-      ImplicitGroupingKeyTracker.setImplicitKey(key)
-      p.handleInitialState(key, state.asInstanceOf[S], getTimerValues())
+    initialState.foreach {
+      case (key, state) =>
+        ImplicitGroupingKeyTracker.setImplicitKey(key)
+        p.handleInitialState(key, state.asInstanceOf[S], getTimerValues())
     }
   }
 
@@ -103,8 +104,8 @@ class TwsTester[K, I, O](
    *
    * All input rows are passed directly to `handleInputRows` without filtering. In EventTime
    * mode, the current watermark value is available to the processor via `TimerValues`, but
-   * the watermark is not automatically advanced based on event times. Use `advanceWatermark()`
-   * to manually advance the watermark if needed.
+   * the watermark is not automatically advanced based on event times. Use `setWatermark()`
+   * to manually set the watermark if needed.
    *
    * @param key the grouping key
    * @param values input rows to process
@@ -137,7 +138,8 @@ class TwsTester[K, I, O](
   }
 
   /** Sets the list state for a given key. */
-  def updateListState[T](stateName: String, key: K, value: List[T])(implicit ct: ClassTag[T]): Unit = {
+  def updateListState[T](stateName: String, key: K, value: List[T])(
+      implicit ct: ClassTag[T]): Unit = {
     ImplicitGroupingKeyTracker.setImplicitKey(key)
     handle.updateListState[T](stateName, value)
   }
@@ -193,46 +195,49 @@ class TwsTester[K, I, O](
   }
 
   /**
-   * Advances the simulated processing time and fires all expired timers.
+   * Sets the simulated processing time and fires all expired timers.
    *
    * Call this after `test()` to simulate time passage and trigger any timers registered
    * with `registerTimer()`. Timers with expiry time <= current processing time will fire,
    * invoking `handleExpiredTimer` for each. This mirrors Spark's behavior where timers
    * are processed after input data within a microbatch.
    *
-   * @param durationMs the amount of time to advance in milliseconds
+   * @param currentTimeMs the processing time to set in milliseconds
    * @return output rows emitted by `handleExpiredTimer` for all fired timers
    */
-  def advanceProcessingTime(durationMs: Long): List[O] = {
+  def setProcessingTime(currentTimeMs: Long): List[O] = {
     require(
       timeMode == TimeMode.ProcessingTime(),
-      "advanceProcessingTime is only supported with TimeMode.ProcessingTime."
+      "setProcessingTime is only supported with TimeMode.ProcessingTime."
     )
-    processingTimeClock.advance(durationMs)
+    require(currentTimeMs > processingTimeClock.getTimeMillis, "Processing time must move forward.")
+    processingTimeClock.setTime(currentTimeMs)
     handleExpiredTimers()
   }
 
   /**
-   * Advances the watermark and fires all expired event-time timers.
+   * Sets the watermark and fires all expired event-time timers.
    *
-   * Use this in EventTime mode to manually advance the watermark. This is the only way to
-   * advance the watermark in TwsTester, as automatic watermark propagation based on event
+   * Use this in EventTime mode to manually set the watermark. This is the only way to
+   * set the watermark in TwsTester, as automatic watermark propagation based on event
    * times is not supported. Timers with expiry time <= new watermark will fire.
    *
-   * @param durationMs the amount of time to advance the watermark in milliseconds
+   * @param currentWatermarkMs the watermark to set in milliseconds
    * @return output rows emitted by `handleExpiredTimer` for all fired timers
    */
-  def advanceWatermark(durationMs: Long): List[O] = {
+  def setWatermark(currentWatermarkMs: Long): List[O] = {
     require(
       timeMode == TimeMode.EventTime(),
-      "advanceWatermark is only supported with TimeMode.EventTime."
+      "setWatermark is only supported with TimeMode.EventTime."
     )
-    currentWatermarkMs += durationMs
+    require(currentWatermarkMs > this.currentWatermarkMs, "Watermark must move forward.")
+    this.currentWatermarkMs = currentWatermarkMs
     handleExpiredTimers()
   }
 
   private def getTimerValues(): TimerValues = {
-    val processingTimeOpt = if (timeMode != TimeMode.None) Some(processingTimeClock.getTimeMillis()) else None
+    val processingTimeOpt =
+      if (timeMode != TimeMode.None) Some(processingTimeClock.getTimeMillis()) else None
     val watermarkOpt = if (timeMode == TimeMode.EventTime()) Some(currentWatermarkMs) else None
     new TimerValuesImpl(processingTimeOpt, watermarkOpt)
   }

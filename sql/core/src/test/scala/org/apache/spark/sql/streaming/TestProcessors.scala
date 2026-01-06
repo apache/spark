@@ -172,6 +172,7 @@ class SessionTimeoutProcessor extends StatefulProcessor[String, String, (String,
  * Processor that registers an event time timer based on watermark.
  * Input format: (eventTimeMs: Long, value: String)
  * Registers a timer at eventTime + 5000ms. Timer fires when watermark passes that time.
+ * Assumes that there are no out of order events and events are always in order based on timestamp.
  */
 class EventTimeSessionProcessor
     extends StatefulProcessor[String, (Long, String), (String, String)] {

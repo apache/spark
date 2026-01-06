@@ -347,12 +347,12 @@ class TwsTesterSuite extends SparkFunSuite {
     tester.test("key1", List("a"))
     assert(tester.peekValueState[Long]("count", "key1").get == 1L)
 
-    // Advance time by 3 seconds - state should still exist
-    tester.advanceProcessingTime(3000)
+    // Set time to 3 seconds - state should still exist
+    tester.setProcessingTime(3000)
     assert(tester.peekValueState[Long]("count", "key1").get == 1L)
 
-    // Advance time by 3 more seconds (total 6s) - state should be expired
-    tester.advanceProcessingTime(3000)
+    // Set time to 6 seconds - state should be expired
+    tester.setProcessingTime(6000)
     assert(tester.peekValueState[Long]("count", "key1").isEmpty)
   }
 
@@ -368,12 +368,12 @@ class TwsTesterSuite extends SparkFunSuite {
     tester.test("key1", List(("a", 1.0), ("b", 2.0), ("c", 3.0)))
     assert(tester.peekListState[Double]("topK", "key1") == List(3.0, 2.0, 1.0))
 
-    // Advance time by 3 seconds - state should still exist
-    tester.advanceProcessingTime(3000)
+    // Set time to 3 seconds - state should still exist
+    tester.setProcessingTime(3000)
     assert(tester.peekListState[Double]("topK", "key1") == List(3.0, 2.0, 1.0))
 
-    // Advance time by 3 more seconds (total 6s) - state should be expired
-    tester.advanceProcessingTime(3000)
+    // Set time to 6 seconds - state should be expired
+    tester.setProcessingTime(6000)
     assert(tester.peekListState[Double]("topK", "key1").isEmpty)
   }
 
@@ -391,14 +391,14 @@ class TwsTesterSuite extends SparkFunSuite {
       tester.peekMapState[String, Long]("frequencies", "user1") == Map("hello" -> 1L, "world" -> 1L)
     )
 
-    // Advance time by 3 seconds - state should still exist
-    tester.advanceProcessingTime(3000)
+    // Set time to 3 seconds - state should still exist
+    tester.setProcessingTime(3000)
     assert(
       tester.peekMapState[String, Long]("frequencies", "user1") == Map("hello" -> 1L, "world" -> 1L)
     )
 
-    // Advance time by 3 more seconds (total 6s) - state should be expired
-    tester.advanceProcessingTime(3000)
+    // Set time to 6 seconds - state should be expired
+    tester.setProcessingTime(6000)
     assert(tester.peekMapState[String, Long]("frequencies", "user1").isEmpty)
   }
 
@@ -412,20 +412,20 @@ class TwsTesterSuite extends SparkFunSuite {
     val result1 = tester.test("key1", List("hello"))
     assert(result1 == List(("key1", "received:hello")))
 
-    // Advance time by 5 seconds - timer should NOT fire yet
-    val expired1 = tester.advanceProcessingTime(5000)
+    // Set time to 5 seconds - timer should NOT fire yet
+    val expired1 = tester.setProcessingTime(5000)
     assert(expired1.isEmpty)
 
     // Process input for key2 at t=5000 - should register timer at t=15000
     val result2 = tester.test("key2", List("world"))
     assert(result2 == List(("key2", "received:world")))
 
-    // Advance time by 6 seconds (total t=11000) - key1's timer should fire
-    val expired2 = tester.advanceProcessingTime(6000)
+    // Set time to 11 seconds - key1's timer should fire
+    val expired2 = tester.setProcessingTime(11000)
     assert(expired2 == List(("key1", "session-expired@11000")))
 
-    // Advance time by 5 seconds (total t=16000) - key2's timer should fire
-    val expired3 = tester.advanceProcessingTime(5000)
+    // Set time to 16 seconds - key2's timer should fire
+    val expired3 = tester.setProcessingTime(16000)
     assert(expired3 == List(("key2", "session-expired@16000")))
 
     // Verify state is cleared after session expiry
@@ -449,16 +449,16 @@ class TwsTesterSuite extends SparkFunSuite {
     val result2 = tester.test("key1", List((12000L, "hello2")))
     assert(result2 == List(("key1", "received:hello2@12000")))
 
-    // Manually advance watermark to 16000 (past where old timer at 15000 would have fired)
+    // Set watermark to 16000 (past where old timer at 15000 would have fired)
     // No timer should fire because the old timer was cancelled
-    val expired1 = tester.advanceWatermark(16000) // 0 + 16000 = 16000
+    val expired1 = tester.setWatermark(16000)
     assert(expired1.isEmpty, "Old timer should have been cancelled, but it fired")
 
     // Verify state is still present (session not expired yet)
     assert(tester.peekValueState[Long]("lastEventTime", "key1").isDefined)
 
-    // Now advance watermark past the new timer at 17000
-    val expired2 = tester.advanceWatermark(2000) // 16000 + 2000 = 18000
+    // Now set watermark past the new timer at 17000
+    val expired2 = tester.setWatermark(18000)
     assert(expired2.size == 1)
     assert(expired2.head._1 == "key1")
     assert(expired2.head._2.startsWith("session-expired@watermark="))
