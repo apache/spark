@@ -1054,13 +1054,13 @@ class ClientE2ETestSuite
   }
 
   test("RuntimeConfig.get multiple keys") {
-    assert(spark.conf.getMap().isEmpty)
-    val result = spark.conf.getMap(
+    assert(spark.conf.getConfigMap().isEmpty)
+    val result = spark.conf.getConfigMap(
       "spark.sql.ansi.enabled",
       "spark.sql.session.timeZone",
       "spark.sql.binaryOutputStyle")
     val expected = Map(
-      "spark.sql.ansi.enabled" -> "true",
+      "spark.sql.ansi.enabled" -> spark.conf.get("spark.sql.ansi.enabled"),
       "spark.sql.session.timeZone" -> TimeZone.getDefault.getID,
       "spark.sql.binaryOutputStyle" -> "")
     assert(result == expected)

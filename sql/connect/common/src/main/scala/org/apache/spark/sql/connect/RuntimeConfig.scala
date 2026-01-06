@@ -116,7 +116,7 @@ class RuntimeConfig private[sql] (client: SparkConnectClient)
     }
   }
 
-  private[connect] def getMap(keys: String*): Map[String, String] = {
+  private[connect] def getConfigMap(keys: String*): Map[String, String] = {
     val response = executeConfigRequest { builder =>
       val getBuilder = builder.getGetBuilder
       keys.foreach(getBuilder.addKeys)
