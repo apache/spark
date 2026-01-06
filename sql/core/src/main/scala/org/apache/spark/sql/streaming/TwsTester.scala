@@ -18,11 +18,10 @@ package org.apache.spark.sql.streaming
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.util.ManualClock
-
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.ImplicitGroupingKeyTracker
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.testing.InMemoryStatefulProcessorHandle
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.{ExpiredTimerInfoImpl, TimerValuesImpl}
+import org.apache.spark.util.ManualClock
 
 /**
  * Testing utility for transformWithState stateful processors.

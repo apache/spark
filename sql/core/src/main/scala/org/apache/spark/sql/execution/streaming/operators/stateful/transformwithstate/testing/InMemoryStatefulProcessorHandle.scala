@@ -18,8 +18,6 @@ package org.apache.spark.sql.execution.streaming.operators.stateful.transformwit
 
 import java.util.UUID
 
-import org.apache.spark.util.Clock
-
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
@@ -27,6 +25,7 @@ import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.ImplicitGroupingKeyTracker
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.QueryInfoImpl
 import org.apache.spark.sql.streaming.{ListState, MapState, QueryInfo, StatefulProcessorHandle, TimeMode, TTLConfig, ValueState}
+import org.apache.spark.util.Clock
 
 /** Helper to track expired keys. */
 class TtlTracker(clock: Clock, ttl: TTLConfig) {
