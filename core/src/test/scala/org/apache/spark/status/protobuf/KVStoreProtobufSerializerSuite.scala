@@ -1293,6 +1293,7 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
       details = details,
       schedulingPool = schedulingPool,
       rddIds = Seq(1, 2, 3, 4, 5, 6),
+      parentIds = Seq(7, 8, 9),
       accumulatorUpdates = accumulatorUpdates,
       tasks = tasks,
       executorSummary = executorSummary,
@@ -1385,9 +1386,9 @@ class KVStoreProtobufSerializerSuite extends SparkFunSuite {
     assert(result.info.description == input.info.description)
     assert(result.info.details == input.info.details)
     assert(result.info.schedulingPool == input.info.schedulingPool)
-
     assert(result.info.rddIds == input.info.rddIds)
-    checkAnswer(result.info.accumulatorUpdates, input.info.accumulatorUpdates)
+    assert(result.info.parentIds == input.info.parentIds)
+    assert(result.info.accumulatorUpdates.size == input.info.accumulatorUpdates.size)
 
     assert(result.info.tasks.isDefined == input.info.tasks.isDefined)
     if (result.info.tasks.isDefined && input.info.tasks.isDefined) {

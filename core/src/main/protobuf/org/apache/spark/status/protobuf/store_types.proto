@@ -589,6 +589,7 @@ message StageData {
   optional string scheduling_pool = 42;
 
   repeated int64 rdd_ids = 43;
+  repeated int64 parent_ids = 65;
   repeated AccumulableInfo accumulator_updates = 44;
   map<int64, TaskData> tasks = 45;
   map<string, ExecutorStageSummary> executor_summary = 46;

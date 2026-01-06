@@ -316,7 +316,8 @@ class StageData private[spark](
     val taskMetricsDistributions: Option[TaskMetricDistributions],
     val executorMetricsDistributions: Option[ExecutorMetricsDistributions],
     val isShufflePushEnabled: Boolean,
-    val shuffleMergersCount: Int)
+    val shuffleMergersCount: Int,
+    val parentIds: collection.Seq[Int] = Nil)
 
 class TaskData private[spark](
     val taskId: Long,
