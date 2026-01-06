@@ -6109,6 +6109,18 @@
     ],
     "sqlState" : "428EK"
   },
+  "THETA_FAMILY_MUST_BE_CONSTANT" : {
+    "message" : [
+      "Invalid call to <function>; the `family` value must be a constant value, but got a non-constant expression."
+    ],
+    "sqlState" : "42K0E"
+  },
+  "THETA_INVALID_FAMILY" : {
+    "message" : [
+      "Invalid call to <function>; the `family` parameter must be one of: <validFamilies>, but got: <value>."
+    ],
+    "sqlState" : "22546"
+  },
   "THETA_INVALID_INPUT_SKETCH_BUFFER" : {
     "message" : [
       "Invalid call to <function>; only valid Theta sketch buffers are supported as inputs (such as those produced by the `theta_sketch_agg` function)."

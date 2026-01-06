@@ -3185,6 +3185,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("function" -> toSQLId(function)))
   }
 
+  def thetaFamilyMustBeConstantError(function: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "THETA_FAMILY_MUST_BE_CONSTANT",
+      messageParameters = Map("function" -> toSQLId(function)))
+  }
+
   def kllSketchInvalidQuantileRangeError(function: String, quantile: Double): Throwable = {
     new SparkRuntimeException(
       errorClass = "KLL_SKETCH_INVALID_QUANTILE_RANGE",
@@ -3221,5 +3227,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "functionName" -> toSQLId(function),
         "k" -> toSQLValue(k, IntegerType)))
+  }
+
+  def thetaInvalidFamily(function: String, value: String, validFamilies:
+      Seq[String]): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "THETA_INVALID_FAMILY",
+      messageParameters = Map(
+        "function" -> toSQLId(function),
+        "value" -> toSQLValue(value, StringType),
+        "validFamilies" -> validFamilies.map(f => toSQLId(f)).mkString(", ")))
   }
 }
