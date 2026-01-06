@@ -4577,13 +4577,13 @@ DropFunctionCommand spark_catalog.default.foo1b2, true, false
 -- !query
 DROP FUNCTION IF EXISTS foo1c1
 -- !query analysis
-NoopCommand DROP FUNCTION, [foo1c1]
+DropFunctionCommand spark_catalog.default.foo1c1, true, false
 
 
 -- !query
 DROP FUNCTION IF EXISTS foo1c2
 -- !query analysis
-NoopCommand DROP FUNCTION, [foo1c2]
+DropFunctionCommand spark_catalog.default.foo1c2, true, false
 
 
 -- !query
@@ -4619,49 +4619,49 @@ DropFunctionCommand spark_catalog.default.foo1d6, true, false
 -- !query
 DROP FUNCTION IF EXISTS foo1e1
 -- !query analysis
-NoopCommand DROP FUNCTION, [foo1e1]
+DropFunctionCommand spark_catalog.default.foo1e1, true, false
 
 
 -- !query
 DROP FUNCTION IF EXISTS foo1e2
 -- !query analysis
-NoopCommand DROP FUNCTION, [foo1e2]
+DropFunctionCommand spark_catalog.default.foo1e2, true, false
 
 
 -- !query
 DROP FUNCTION IF EXISTS foo1e3
 -- !query analysis
-NoopCommand DROP FUNCTION, [foo1e3]
+DropFunctionCommand spark_catalog.default.foo1e3, true, false
 
 
 -- !query
 DROP FUNCTION IF EXISTS foo1f1
 -- !query analysis
-NoopCommand DROP FUNCTION, [foo1f1]
+DropFunctionCommand spark_catalog.default.foo1f1, true, false
 
 
 -- !query
 DROP FUNCTION IF EXISTS foo1f2
 -- !query analysis
-NoopCommand DROP FUNCTION, [foo1f2]
+DropFunctionCommand spark_catalog.default.foo1f2, true, false
 
 
 -- !query
 DROP FUNCTION IF EXISTS foo1g1
 -- !query analysis
-NoopCommand DROP FUNCTION, [foo1g1]
+DropFunctionCommand spark_catalog.default.foo1g1, true, false
 
 
 -- !query
 DROP FUNCTION IF EXISTS foo1g2
 -- !query analysis
-NoopCommand DROP FUNCTION, [foo1g2]
+DropFunctionCommand spark_catalog.default.foo1g2, true, false
 
 
 -- !query
 DROP FUNCTION IF EXISTS foo2a0
 -- !query analysis
-NoopCommand DROP FUNCTION, [foo2a0]
+DropFunctionCommand spark_catalog.default.foo2a0, true, false
 
 
 -- !query
@@ -4679,37 +4679,37 @@ DropFunctionCommand spark_catalog.default.foo2a4, true, false
 -- !query
 DROP FUNCTION IF EXISTS foo2b1
 -- !query analysis
-NoopCommand DROP FUNCTION, [foo2b1]
+DropFunctionCommand spark_catalog.default.foo2b1, true, false
 
 
 -- !query
 DROP FUNCTION IF EXISTS foo2b2
 -- !query analysis
-NoopCommand DROP FUNCTION, [foo2b2]
+DropFunctionCommand spark_catalog.default.foo2b2, true, false
 
 
 -- !query
 DROP FUNCTION IF EXISTS foo2c1
 -- !query analysis
-NoopCommand DROP FUNCTION, [foo2c1]
+DropFunctionCommand spark_catalog.default.foo2c1, true, false
 
 
 -- !query
 DROP FUNCTION IF EXISTS foo31
 -- !query analysis
-NoopCommand DROP FUNCTION, [foo31]
+DropFunctionCommand spark_catalog.default.foo31, true, false
 
 
 -- !query
 DROP FUNCTION IF EXISTS foo32
 -- !query analysis
-NoopCommand DROP FUNCTION, [foo32]
+DropFunctionCommand spark_catalog.default.foo32, true, false
 
 
 -- !query
 DROP FUNCTION IF EXISTS foo33
 -- !query analysis
-NoopCommand DROP FUNCTION, [foo33]
+DropFunctionCommand spark_catalog.default.foo33, true, false
 
 
 -- !query
@@ -4721,7 +4721,7 @@ DropFunctionCommand spark_catalog.default.foo41, true, false
 -- !query
 DROP FUNCTION IF EXISTS foo42
 -- !query analysis
-NoopCommand DROP FUNCTION, [foo42]
+DropFunctionCommand spark_catalog.default.foo42, true, false
 
 
 -- !query
@@ -4811,7 +4811,7 @@ DropFunctionCommand spark_catalog.default.foo9h, true, false
 -- !query
 DROP FUNCTION IF EXISTS foo9i
 -- !query analysis
-NoopCommand DROP FUNCTION, [foo9i]
+DropFunctionCommand spark_catalog.default.foo9i, true, false
 
 
 -- !query
@@ -5003,13 +5003,13 @@ DropFunctionCommand spark_catalog.default.foo2_2b, true, false
 -- !query
 DROP FUNCTION IF EXISTS foo2_2c
 -- !query analysis
-NoopCommand DROP FUNCTION, [foo2_2c]
+DropFunctionCommand spark_catalog.default.foo2_2c, true, false
 
 
 -- !query
 DROP FUNCTION IF EXISTS foo2_2d
 -- !query analysis
-NoopCommand DROP FUNCTION, [foo2_2d]
+DropFunctionCommand spark_catalog.default.foo2_2d, true, false
 
 
 -- !query
@@ -5159,7 +5159,7 @@ DropFunctionCommand spark_catalog.default.foo3_2d1, true, false
 -- !query
 DROP FUNCTION IF EXISTS foo3_2d2
 -- !query analysis
-NoopCommand DROP FUNCTION, [foo3_2d2]
+DropFunctionCommand spark_catalog.default.foo3_2d2, true, false
 
 
 -- !query
@@ -5285,7 +5285,7 @@ DropFunctionCommand spark_catalog.default.foo3_12e, true, false
 -- !query
 DROP FUNCTION IF EXISTS foo3_12f
 -- !query analysis
-NoopCommand DROP FUNCTION, [foo3_12f]
+DropFunctionCommand spark_catalog.default.foo3_12f, true, false
 
 
 -- !query

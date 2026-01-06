@@ -204,31 +204,19 @@ case class ShowFunctionsCommand(
  *    REFRESH FUNCTION functionName
  * }}}
  */
-case class RefreshFunctionCommand(
-    databaseName: Option[String],
-    functionName: String)
-  extends LeafRunnableCommand {
+case class RefreshFunctionCommand(identifier: FunctionIdentifier) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val ident = FunctionIdentifier(functionName, databaseName)
-    if (FunctionRegistry.builtin.functionExists(ident)) {
-      throw QueryCompilationErrors.cannotRefreshBuiltInFuncError(functionName)
-    }
-    if (catalog.isTemporaryFunction(ident)) {
-      throw QueryCompilationErrors.cannotRefreshTempFuncError(functionName)
-    }
-
-    val qualified = catalog.qualifyIdentifier(ident)
     // we only refresh the permanent function.
-    if (catalog.isPersistentFunction(qualified)) {
+    if (catalog.isPersistentFunction(identifier)) {
       // register overwrite function.
-      val func = catalog.getFunctionMetadata(qualified)
+      val func = catalog.getFunctionMetadata(identifier)
       catalog.registerFunction(func, true)
     } else {
       // clear cached function and throw exception
-      catalog.unregisterFunction(qualified)
-      throw QueryCompilationErrors.noSuchFunctionError(qualified)
+      catalog.unregisterFunction(identifier)
+      throw QueryCompilationErrors.noSuchFunctionError(identifier)
     }
 
     Seq.empty[Row]

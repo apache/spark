@@ -540,13 +540,13 @@ DescribeFunctionCommand org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 -- !query
 REFRESH FUNCTION IDENTIFIER('ident.' || 'myDoubleAvg')
 -- !query analysis
-RefreshFunctionCommand ident, mydoubleavg
+RefreshFunctionCommand spark_catalog.ident.myDoubleAvg
 
 
 -- !query
 DROP FUNCTION IDENTIFIER('ident.' || 'myDoubleAvg')
 -- !query analysis
-DropFunctionCommand spark_catalog.ident.mydoubleavg, false, false
+DropFunctionCommand spark_catalog.ident.myDoubleAvg, false, false
 
 
 -- !query
