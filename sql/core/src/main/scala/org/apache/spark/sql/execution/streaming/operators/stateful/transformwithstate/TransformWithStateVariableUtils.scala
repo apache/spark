@@ -65,6 +65,7 @@ object TransformWithStateVariableUtils {
   }
 
   def getStateNameFromRowCounterCFName(colFamilyName: String): String = {
+    require(isRowCounterCFName(colFamilyName))
     colFamilyName.substring(ROW_COUNTER_CF_PREFIX.length)
   }
 }

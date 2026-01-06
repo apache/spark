@@ -76,8 +76,8 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
         sourceOptions.resolvedCpLocation,
         stateConf.providerClass)
     }
-    val stateStoreReaderInfo = getStoreMetadataAndRunChecks(sourceOptions)
 
+    val stateStoreReaderInfo = getStoreMetadataAndRunChecks(sourceOptions)
     // The key state encoder spec should be available for all operators except stream-stream joins
     val keyStateEncoderSpec = if (stateStoreReaderInfo.keyStateEncoderSpecOpt.isDefined) {
       stateStoreReaderInfo.keyStateEncoderSpecOpt.get
@@ -91,7 +91,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       stateStoreReaderInfo.stateStoreColFamilySchemaOpt,
       stateStoreReaderInfo.stateSchemaProviderOpt,
       stateStoreReaderInfo.joinColFamilyOpt,
-      Option(stateStoreReaderInfo.allColumnFamiliesReaderInfo))
+      stateStoreReaderInfo.allColumnFamiliesReaderInfo)
   }
 
   override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
@@ -100,7 +100,6 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
 
     val stateStoreReaderInfo = getStoreMetadataAndRunChecks(sourceOptions)
     val oldSchemaFilePaths = StateDataSource.getOldSchemaFilePaths(sourceOptions, hadoopConf)
-    val allCFReaderInfo = stateStoreReaderInfo.allColumnFamiliesReaderInfo
 
     val stateCheckpointLocation = sourceOptions.stateCheckpointLocation
     try {
@@ -120,13 +119,12 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
           (resultSchema.keySchema, resultSchema.valueSchema)
       }
 
-      val stateVarInfo = stateStoreReaderInfo.transformWithStateVariableInfoOpt
       SchemaUtil.getSourceSchema(sourceOptions, keySchema,
         valueSchema,
-        stateVarInfo,
+        stateStoreReaderInfo.transformWithStateVariableInfoOpt,
         stateStoreReaderInfo.stateStoreColFamilySchemaOpt,
-        allCFReaderInfo.operatorName,
-        allCFReaderInfo.stateFormatVersion)
+        stateStoreReaderInfo.allColumnFamiliesReaderInfo.map(_.operatorName),
+        stateStoreReaderInfo.allColumnFamiliesReaderInfo.flatMap(_.stateFormatVersion))
     } catch {
       case NonFatal(e) =>
         throw StateDataSourceErrors.failedToReadStateSchema(sourceOptions, e)
@@ -137,15 +135,21 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
 
   /**
    * Return the state format version for SYMMETRIC_HASH_JOIN operators.
-   * This currently only support join operators because this function is only used by
-   * PartitionKeyExtractor and PartitionKeyExtractor only needs state format version for
-   * join operators.
+   * This currently only supports join operators because this function is only used to
+   * create a PartitionKeyExtractor through PartitionKeyExtractorFactory where only join operators
+   * require state format version
    */
   private def getStateFormatVersion(
-      storeMetadata: Array[StateMetadataTableEntry]): Option[Int] = {
+      storeMetadata: Array[StateMetadataTableEntry],
+      checkpointLocation: String
+    ): Option[Int] = {
     if (storeMetadata.nonEmpty &&
       storeMetadata.head.operatorName == StatefulOperatorsUtils.SYMMETRIC_HASH_JOIN_EXEC_OP_NAME) {
-      Some(session.conf.get(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION))
+      new StreamingQueryCheckpointMetadata(session, checkpointLocation).offsetLog
+        .getLatest()
+        .flatMap(_._2.metadataOpt)
+        .flatMap(_.conf.get(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key))
+        .map(_.toInt)
     } else {
       None
     }
@@ -321,15 +325,13 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
             // because we need to use matching stateVariableInfo and stateStoreColFamilySchemaOpt
             // to inferSchema (partitionKey in particular) later
             stateVarName = operatorProperties.stateVariables.head.stateName
-          }
-
-          if (sourceOptions.internalOnlyReadAllColumnFamilies) {
             stateVariableInfos = operatorProperties.stateVariables
           }
+
           var stateVarInfoList = operatorProperties.stateVariables
             .filter(stateVar => stateVar.stateName == stateVarName)
-          if (stateVarInfoList.isEmpty &&
-            StateStoreColumnFamilySchemaUtils.isTestingInternalColFamily(stateVarName)) {
+          if (!TimerStateUtils.isTimerCFName(stateVarName) &&
+              StateStoreColumnFamilySchemaUtils.isTestingInternalColFamily(stateVarName)) {
             // pass this dummy TWSStateVariableInfo for TWS internal column family during testing,
             // because internalColumns are not register in operatorProperties.stateVariables,
             // thus stateVarInfoList will be empty.
@@ -398,15 +400,21 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
     }
 
     val operatorName = if (storeMetadata.nonEmpty) storeMetadata.head.operatorName else ""
-    val stateFormatVersion = getStateFormatVersion(storeMetadata)
+    val stateFormatVersion = getStateFormatVersion(storeMetadata, sourceOptions.resolvedCpLocation)
+    val allColFamilyReaderInfoOpt: Option[AllColumnFamiliesReaderInfo] =
+      if (sourceOptions.internalOnlyReadAllColumnFamilies) {
+        Option(AllColumnFamiliesReaderInfo(
+          stateStoreColFamilySchemas, stateVariableInfos, operatorName, stateFormatVersion))
+      } else {
+        None
+      }
     StateStoreReaderInfo(
       keyStateEncoderSpecOpt,
       stateStoreColFamilySchemaOpt,
       transformWithStateVariableInfoOpt,
       stateSchemaProvider,
       joinColFamilyOpt,
-      AllColumnFamiliesReaderInfo(
-        stateStoreColFamilySchemas, stateVariableInfos, operatorName, stateFormatVersion)
+      allColFamilyReaderInfoOpt
     )
   }
 
@@ -795,7 +803,7 @@ case class StateStoreReaderInfo(
     stateSchemaProviderOpt: Option[StateSchemaProvider],
     joinColFamilyOpt: Option[String], // Only used for join op with state format v3
     // List of all column family schemas - used when internalOnlyReadAllColumnFamilies=true
-    allColumnFamiliesReaderInfo: AllColumnFamiliesReaderInfo
+    allColumnFamiliesReaderInfo: Option[AllColumnFamiliesReaderInfo]
 )
 
 object StateDataSource {

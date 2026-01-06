@@ -123,7 +123,7 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
     val keyConverter = CatalystTypeConverters.createToCatalystConverter(keySchema)
     val valueConverter = CatalystTypeConverters.createToCatalystConverter(valueSchema)
 
-    // Convert normal data to (partitionKeyStr, keyBytes, valueBytes)
+    // Convert normal data to (partitionKeyStruct, keyBytes, valueBytes)
     val normalData = normalDf.toSeq.map { row =>
       val key = row.getStruct(1)
       val value = if (row.isNullAt(2)) null else row.getStruct(2)
@@ -154,7 +154,7 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
       (keyBytes, valueBytes, partitionKey)
     }
 
-    // Extract (partitionKeyStr, keyBytes, valueBytes) from bytes read data
+    // Extract (partitionKeyStruct, keyBytes, valueBytes) from bytes read data
     val bytesData = filteredBytesData.map { row =>
       val partitionKey = row.getStruct(0)
       val keyBytes = row.getAs[Array[Byte]](1)
@@ -169,11 +169,11 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
     assert(normalSorted.length == bytesSorted.length,
       s"Size mismatch: normal has ${normalSorted.length}, bytes has ${bytesSorted.length}")
 
-    // Compare each tuple (partitionKeyStr, keyBytes, valueBytes)
+    // Compare each tuple (partitionKeyStruct, keyBytes, valueBytes)
     normalSorted.zip(bytesSorted).zipWithIndex.foreach {
-      case (((normalKey, normalValue, normalPartKey),
-             (bytesKey, bytesValue, bytesPartKey)), idx) =>
-        assert(normalPartKey == bytesPartKey)
+      case (((normalKey, normalValue, normalPartitionKey),
+             (bytesKey, bytesValue, bytesPartitionKey)), idx) =>
+        assert(normalPartitionKey == bytesPartitionKey)
         assert(Arrays.equals(normalKey, bytesKey),
           s"Key mismatch at index $idx:\n" +
             s"  Normal: ${normalKey.mkString("[", ",", "]")}\n" +
@@ -473,7 +473,9 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
                 tempDir.getAbsolutePath,
                 keyWithIndexKeySchema,
                 keyWithIndexValueSchema,
-                Some(storeName))
+                Some(storeName),
+                partitionKeyExtractor = Some(compositeKey =>
+                  Row(compositeKey.getInt(0))))
             }
           }
         }

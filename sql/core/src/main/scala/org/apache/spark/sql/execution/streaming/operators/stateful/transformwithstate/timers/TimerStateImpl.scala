@@ -61,6 +61,7 @@ object TimerStateUtils {
   }
 
   def isTimerSecondaryIndexCF(colFamilyName: String): Boolean = {
+    assert(isTimerCFName(colFamilyName), s"Column family name must be for a timer: $colFamilyName")
     colFamilyName.endsWith(TIMESTAMP_TO_KEY_CF)
   }
 
