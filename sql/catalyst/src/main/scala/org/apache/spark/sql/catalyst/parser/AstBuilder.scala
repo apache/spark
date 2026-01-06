@@ -928,11 +928,15 @@ class AstBuilder extends DataTypeAstBuilder
       case ctx: InsertIntoReplaceWhereContext =>
         val options = Option(ctx.optionsClause())
         withIdentClause(ctx.identifierReference, Seq(query), (ident, otherPlans) => {
-          OverwriteByExpression.byPosition(
-            createUnresolvedRelation(ctx.identifierReference, ident, options,
-              Seq(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE), isStreaming = false),
-            otherPlans.head,
-            expression(ctx.whereClause().booleanExpression()))
+          val table = createUnresolvedRelation(ctx.identifierReference, ident, options,
+            Seq(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE), isStreaming = false)
+          val deleteExpr = expression(ctx.whereClause().booleanExpression())
+          val isByName = ctx.NAME() != null
+          if (isByName) {
+            OverwriteByExpression.byName(table, otherPlans.head, deleteExpr)
+          } else {
+            OverwriteByExpression.byPosition(table, otherPlans.head, deleteExpr)
+          }
         })
       case dir: InsertOverwriteDirContext =>
         val (isLocal, storage, provider) = visitInsertOverwriteDir(dir)

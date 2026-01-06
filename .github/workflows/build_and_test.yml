@@ -566,6 +566,7 @@ jobs:
       SKIP_PACKAGING: true
       METASPACE_SIZE: 1g
       BRANCH: ${{ inputs.branch }}
+      PYSPARK_TEST_TIMEOUT: 450
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v4
@@ -652,6 +653,15 @@ jobs:
         flags: unittests
         name: PySpark
         verbose: true
+    - name: Upload test results to Codecov
+      if: (!cancelled()) && fromJSON(inputs.envs).PYSPARK_CODECOV_TEST == 'true'
+      uses: codecov/codecov-action@v5
+      with:
+        report_type: 'test_results'
+        files: '**/target/test-reports/*.xml'
+        flags: unittests
+        name: PySpark-Test-Results
+        token: ${{ secrets.codecov_token }}
     - name: Upload test results to report
       env: ${{ fromJSON(inputs.envs) }}
       if: always()

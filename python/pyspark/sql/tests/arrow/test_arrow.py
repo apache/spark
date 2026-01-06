@@ -59,7 +59,6 @@ from pyspark.testing.sqlutils import (
     pyarrow_requirement_message,
 )
 from pyspark.errors import ArithmeticException, PySparkTypeError, UnsupportedOperationException
-from pyspark.loose_version import LooseVersion
 from pyspark.util import is_remote_only
 
 if have_pandas:
@@ -758,11 +757,11 @@ class ArrowTestsMixin:
     def test_schema_conversion_roundtrip(self):
         from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
 
-        arrow_schema = to_arrow_schema(self.schema, prefers_large_types=False)
+        arrow_schema = to_arrow_schema(self.schema, timezone="UTC", prefers_large_types=False)
         schema_rt = from_arrow_schema(arrow_schema, prefer_timestamp_ntz=True)
         self.assertEqual(self.schema, schema_rt)
 
-        arrow_schema = to_arrow_schema(self.schema, prefers_large_types=True)
+        arrow_schema = to_arrow_schema(self.schema, timezone="UTC", prefers_large_types=True)
         schema_rt = from_arrow_schema(arrow_schema, prefer_timestamp_ntz=True)
         self.assertEqual(self.schema, schema_rt)
 
@@ -824,11 +823,11 @@ class ArrowTestsMixin:
             ),
         ]:
             with self.subTest(data_type=t):
-                at = to_arrow_type(t)
+                at = to_arrow_type(t, timezone="UTC")
                 t2 = from_arrow_type(at)
                 self.assertEqual(t, t2)
 
-                at2 = to_arrow_type(t, prefers_large_types=True)
+                at2 = to_arrow_type(t, timezone="UTC", prefers_large_types=True)
                 t3 = from_arrow_type(at2)
                 self.assertEqual(t, t3)
 
@@ -1539,22 +1538,6 @@ class ArrowTestsMixin:
 
         self.assertEqual(df.first(), expected)
 
-    def test_createDataFrame_arrow_nested_timestamp(self):
-        from pyspark.sql.pandas.types import to_arrow_schema
-
-        schema = self.schema_nested_timestamp
-        data = self.data_nested_timestamp
-        pdf = pd.DataFrame.from_records(data, columns=schema.names)
-        arrow_schema = to_arrow_schema(schema, timestamp_utc=False)
-        t = pa.Table.from_pandas(pdf, arrow_schema)
-
-        with self.sql_conf({"spark.sql.session.timeZone": "America/New_York"}):
-            df = self.spark.createDataFrame(t, schema)
-
-        expected = self.data_nested_timestamp_expected_ny
-
-        self.assertEqual(df.first(), expected)
-
     def test_toPandas_timestmap_tzinfo(self):
         for arrow_enabled in [True, False]:
             with self.subTest(arrow_enabled=arrow_enabled):
@@ -1621,15 +1604,15 @@ class ArrowTestsMixin:
         assert_frame_equal(pdf, expected)
 
     def test_toArrow_nested_timestamp(self):
+        from pyspark.sql.pandas.types import to_arrow_schema
+
         schema = self.schema_nested_timestamp
         data = self.data_nested_timestamp
         df = self.spark.createDataFrame(data, schema)
 
         t = df.toArrow()
 
-        from pyspark.sql.pandas.types import to_arrow_schema
-
-        arrow_schema = to_arrow_schema(schema)
+        arrow_schema = to_arrow_schema(schema, timezone="UTC")
         expected = pa.Table.from_pydict(
             {
                 "ts": [datetime.datetime(2023, 1, 1, 8, 0, 0)],
@@ -1658,18 +1641,7 @@ class ArrowTestsMixin:
         )
         df = self.spark.createDataFrame(origin)
         t = df.toArrow()
-
-        # SPARK-48302: PyArrow versions before 17.0.0 replaced nulls with empty lists when
-        # reconstructing MapArray columns to localize timestamps
-        if LooseVersion(pa.__version__) >= LooseVersion("17.0.0"):
-            expected = origin
-        else:
-            expected = pa.table(
-                [[dict(ts=datetime.datetime(2023, 1, 1, 8, 0, 0)), []]],
-                schema=origin_schema,
-            )
-
-        self.assertTrue(t.equals(expected))
+        self.assertTrue(t.equals(origin))
 
     def test_createDataFrame_udt(self):
         for arrow_enabled in [True, False]:
