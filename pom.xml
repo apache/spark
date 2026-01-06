@@ -165,7 +165,7 @@
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>1.0.6</aws.kinesis.producer.version>
     <!-- Do not use 3.0.0: https://github.com/GoogleCloudDataproc/hadoop-connectors/issues/1114 -->
-    <gcs-connector.version>hadoop3-2.2.29</gcs-connector.version>
+    <gcs-connector.version>hadoop3-2.2.31</gcs-connector.version>
     <analyticsaccelerator-s3.version>1.3.0</analyticsaccelerator-s3.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.14</commons.httpclient.version>
