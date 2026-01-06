@@ -401,6 +401,10 @@ table t
 |> extend 1 as `x.y.z`
 |> drop `x.y.z`;
 
+-- Dropping a struct field using qualified name.
+table st
+|> drop col.i1;
+
 -- DROP operators: negative tests.
 ----------------------------------
 
@@ -408,10 +412,7 @@ table t
 table t
 |> drop z;
 
--- Attempting to drop a struct field.
-table st
-|> drop col.i1;
-
+-- Attempting to drop a column using a backquoted name with dot (looks for a literal column name).
 table st
 |> drop `col.i1`;
 

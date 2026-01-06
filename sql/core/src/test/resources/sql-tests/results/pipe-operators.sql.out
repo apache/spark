@@ -1022,6 +1022,15 @@ struct<x:int,y:string>
 
 
 -- !query
+table st
+|> drop col.i1
+-- !query schema
+struct<x:int,col:struct<i2:int>>
+-- !query output
+1	{"i2":3}
+
+
+-- !query
 table t
 |> drop z
 -- !query schema
@@ -1042,23 +1051,6 @@ org.apache.spark.sql.AnalysisException
     "stopIndex" : 17,
     "fragment" : "table t\n|> drop z"
   } ]
-}
-
-
--- !query
-table st
-|> drop col.i1
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'.'",
-    "hint" : ""
-  }
 }
 
 

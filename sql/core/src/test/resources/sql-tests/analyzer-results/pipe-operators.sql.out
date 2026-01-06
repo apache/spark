@@ -1100,6 +1100,15 @@ Project [x#x, y#x]
 
 
 -- !query
+table st
+|> drop col.i1
+-- !query analysis
+Project [x#x, update_fields(col#x, dropfield(), i1) AS col#x]
++- SubqueryAlias spark_catalog.default.st
+   +- Relation spark_catalog.default.st[x#x,col#x] parquet
+
+
+-- !query
 table t
 |> drop z
 -- !query analysis
@@ -1118,21 +1127,6 @@ org.apache.spark.sql.AnalysisException
     "stopIndex" : 17,
     "fragment" : "table t\n|> drop z"
   } ]
-}
-
-
--- !query
-table st
-|> drop col.i1
--- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'.'",
-    "hint" : ""
-  }
 }
 
 
