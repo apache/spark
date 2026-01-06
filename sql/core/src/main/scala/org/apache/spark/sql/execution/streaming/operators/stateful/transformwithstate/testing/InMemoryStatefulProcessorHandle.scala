@@ -94,7 +94,7 @@ class InMemoryListState[T](clock: Clock, ttl: TTLConfig) extends ListState[T] {
 /** In-memory implementation of MapState. */
 class InMemoryMapState[K, V](clock: Clock, ttl: TTLConfig) extends MapState[K, V] {
   private val keyToStateValue = mutable.Map[Any, mutable.HashMap[K, V]]()
-  
+
   private def getMap: Option[mutable.HashMap[K, V]] =
     keyToStateValue.get(ImplicitGroupingKeyTracker.getImplicitKeyOption.get)
 

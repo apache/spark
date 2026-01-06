@@ -59,8 +59,6 @@ import org.apache.spark.util.ManualClock
  * @param initialState initial state for each key as a list of (key, state) tuples.
  * @param timeMode time mode (None, ProcessingTime or EventTime).
  * @param outputMode output mode (Append, Update, or Complete).
- * @param isRealTimeMode whether input rows should be processed one-by-one (separate call to
- *     handleInputRows) for each input row.
  * @tparam K the type of grouping key.
  * @tparam I the type of input rows.
  * @tparam O the type of output rows.
@@ -70,8 +68,7 @@ class TwsTester[K, I, O](
     private val processor: StatefulProcessor[K, I, O],
     private val initialState: List[(K, Any)] = List(),
     private val timeMode: TimeMode = TimeMode.None,
-    private val outputMode: OutputMode = OutputMode.Append,
-    private val isRealTimeMode: Boolean = false) {
+    private val outputMode: OutputMode = OutputMode.Append) {
 
   private val processingTimeClock = new ManualClock(0L)
   private val handle = new InMemoryStatefulProcessorHandle(timeMode, processingTimeClock)
@@ -110,14 +107,6 @@ class TwsTester[K, I, O](
    * @return all output rows produced by the processor
    */
   def test(key: K, values: List[I]): List[O] = {
-    if (isRealTimeMode) {
-      values.flatMap(value => testInternal(key, List(value))).toList
-    } else {
-      testInternal(key, values)
-    }
-  }
-
-  private def testInternal(key: K, values: List[I]): List[O] = {
     ImplicitGroupingKeyTracker.setImplicitKey(key)
     val timerValues = getTimerValues()
     processor.handleInputRows(key, values.iterator, timerValues).toList
