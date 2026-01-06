@@ -214,7 +214,7 @@ class FunctionsTestsMixin:
         self.assertTrue(df.is_cached)
         self.assertEqual(2, df.count())
 
-        with self.tempView("temp"):
+        with self.temp_view("temp"):
             df.createOrReplaceTempView("temp")
             df = self.spark.sql("select foo from temp")
             df.count()

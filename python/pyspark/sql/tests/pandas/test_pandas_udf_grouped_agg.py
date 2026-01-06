@@ -586,7 +586,7 @@ class GroupedAggPandasUDFTestsMixin:
 
         df = self.spark.range(0, 100)
 
-        with self.tempView("table"), self.temp_func("max_udf"):
+        with self.temp_view("table"), self.temp_func("max_udf"):
             df.createTempView("table")
             self.spark.udf.register("max_udf", max_udf)
 
@@ -613,7 +613,7 @@ class GroupedAggPandasUDFTestsMixin:
         df = self.data
         weighted_mean = self.pandas_agg_weighted_mean_udf
 
-        with self.tempView("v"), self.temp_func("weighted_mean"):
+        with self.temp_view("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -638,7 +638,7 @@ class GroupedAggPandasUDFTestsMixin:
         df = self.data
         weighted_mean = self.pandas_agg_weighted_mean_udf
 
-        with self.tempView("v"), self.temp_func("weighted_mean"):
+        with self.temp_view("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -678,7 +678,7 @@ class GroupedAggPandasUDFTestsMixin:
 
             return np.average(kwargs["v"], weights=kwargs["w"])
 
-        with self.tempView("v"), self.temp_func("weighted_mean"):
+        with self.temp_view("v"), self.temp_func("weighted_mean"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("weighted_mean", weighted_mean)
 
@@ -718,7 +718,7 @@ class GroupedAggPandasUDFTestsMixin:
         def biased_sum(v, w=None):
             return v.sum() + (w.sum() if w is not None else 100)
 
-        with self.tempView("v"), self.temp_func("biased_sum"):
+        with self.temp_view("v"), self.temp_func("biased_sum"):
             df.createOrReplaceTempView("v")
             self.spark.udf.register("biased_sum", biased_sum)
 

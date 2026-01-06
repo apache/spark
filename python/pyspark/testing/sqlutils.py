@@ -134,7 +134,7 @@ class SQLTestUtils:
                 self.spark.sql("DROP TABLE IF EXISTS %s" % t)
 
     @contextmanager
-    def tempView(self, *views):
+    def temp_view(self, *views):
         """
         A convenient context manager to test with some specific views. This drops the given views
         if it exists.

@@ -72,7 +72,7 @@ class CatalogTestsMixin:
         with self.database("some_db"):
             spark.sql("CREATE DATABASE some_db")
             with self.table("tab1", "some_db.tab2", "tab3_via_catalog"):
-                with self.tempView("temp_tab"):
+                with self.temp_view("temp_tab"):
                     self.assertEqual(spark.catalog.listTables(), [])
                     self.assertEqual(spark.catalog.listTables("some_db"), [])
                     spark.createDataFrame([(1, 1)]).createOrReplaceTempView("temp_tab")

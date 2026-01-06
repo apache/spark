@@ -1380,7 +1380,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         )
 
         self.result_count_pdf_arrow_type = to_arrow_type(
-            self.result_count_df_type, prefers_large_types=prefers_large_var_types
+            self.result_count_df_type, timezone="UTC", prefers_large_types=prefers_large_var_types
         )
 
         self.result_state_df_type = StructType(
@@ -1393,7 +1393,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         )
 
         self.result_state_pdf_arrow_type = to_arrow_type(
-            self.result_state_df_type, prefers_large_types=prefers_large_var_types
+            self.result_state_df_type, timezone="UTC", prefers_large_types=prefers_large_var_types
         )
         self.arrow_max_records_per_batch = (
             arrow_max_records_per_batch if arrow_max_records_per_batch > 0 else 2**31 - 1

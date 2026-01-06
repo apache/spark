@@ -149,7 +149,7 @@ class TypesTestsMixin:
         self.assertEqual([], df.rdd.map(lambda r: r.l).first())
         self.assertEqual([None, ""], df.rdd.map(lambda r: r.s).collect())
 
-        with self.tempView("test"):
+        with self.temp_view("test"):
             df.createOrReplaceTempView("test")
             result = self.spark.sql("SELECT l from test")
             self.assertEqual([], result.head()[0])
@@ -165,7 +165,7 @@ class TypesTestsMixin:
         self.assertEqual({}, df2.rdd.map(lambda r: r.d).first())
         self.assertEqual([None, ""], df2.rdd.map(lambda r: r.s).collect())
 
-        with self.tempView("test2"):
+        with self.temp_view("test2"):
             df2.createOrReplaceTempView("test2")
             result = self.spark.sql("SELECT l from test2")
             self.assertEqual([], result.head()[0])
@@ -612,7 +612,7 @@ class TypesTestsMixin:
         )
         self.assertEqual(r, results.first())
 
-        with self.tempView("table2"):
+        with self.temp_view("table2"):
             df.createOrReplaceTempView("table2")
             r = self.spark.sql(
                 "SELECT byte1 - 1 AS byte1, byte2 + 1 AS byte2, "
@@ -627,7 +627,7 @@ class TypesTestsMixin:
         self.assertEqual(1, row.asDict()["l"][0].a)
         df = self.spark.createDataFrame([row])
 
-        with self.tempView("test"):
+        with self.temp_view("test"):
             df.createOrReplaceTempView("test")
             row = self.spark.sql("select l, d from test").head()
             self.assertEqual(1, row.asDict()["l"][0].a)
@@ -1112,7 +1112,7 @@ class TypesTestsMixin:
         field = [f for f in schema.fields if f.name == "point"][0]
         self.assertEqual(type(field.dataType), ExamplePointUDT)
 
-        with self.tempView("labeled_point"):
+        with self.temp_view("labeled_point"):
             df.createOrReplaceTempView("labeled_point")
             point = self.spark.sql("SELECT point FROM labeled_point").head().point
             self.assertEqual(point, ExamplePoint(1.0, 2.0))
@@ -1123,7 +1123,7 @@ class TypesTestsMixin:
         field = [f for f in schema.fields if f.name == "point"][0]
         self.assertEqual(type(field.dataType), PythonOnlyUDT)
 
-        with self.tempView("labeled_point"):
+        with self.temp_view("labeled_point"):
             df.createOrReplaceTempView("labeled_point")
             point = self.spark.sql("SELECT point FROM labeled_point").head().point
             self.assertEqual(point, PythonOnlyPoint(1.0, 2.0))
@@ -1135,7 +1135,7 @@ class TypesTestsMixin:
         field = [f for f in schema.fields if f.name == "point"][0]
         self.assertEqual(type(field.dataType), ExamplePointUDT)
 
-        with self.tempView("labeled_point"):
+        with self.temp_view("labeled_point"):
             df.createOrReplaceTempView("labeled_point")
             point = self.spark.sql("SELECT point FROM labeled_point").head().point
             self.assertEqual(point, ExamplePoint(1.0, 2.0))
@@ -1146,7 +1146,7 @@ class TypesTestsMixin:
         field = [f for f in schema.fields if f.name == "point"][0]
         self.assertEqual(type(field.dataType), PythonOnlyUDT)
 
-        with self.tempView("labeled_point"):
+        with self.temp_view("labeled_point"):
             df.createOrReplaceTempView("labeled_point")
             point = self.spark.sql("SELECT point FROM labeled_point").head().point
             self.assertEqual(point, PythonOnlyPoint(1.0, 2.0))

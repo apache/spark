@@ -177,7 +177,7 @@ class UnifiedUDFTestsMixin:
         result1 = df.withColumn("res", pd_win_max("v").over(w)).collect()
         self.assertEqual(result1, expected)
 
-        with self.tempView("pd_tbl"), self.temp_func("pd_win_max"):
+        with self.temp_view("pd_tbl"), self.temp_func("pd_win_max"):
             df.createOrReplaceTempView("pd_tbl")
             self.spark.udf.register("pd_win_max", pd_win_max)
 
@@ -355,7 +355,7 @@ class UnifiedUDFTestsMixin:
         result1 = df.withColumn("mean_v", pa_win_max("v").over(w)).collect()
         self.assertEqual(result1, expected)
 
-        with self.tempView("pa_tbl"), self.temp_func("pa_win_max"):
+        with self.temp_view("pa_tbl"), self.temp_func("pa_win_max"):
             df.createOrReplaceTempView("pa_tbl")
             self.spark.udf.register("pa_win_max", pa_win_max)
 

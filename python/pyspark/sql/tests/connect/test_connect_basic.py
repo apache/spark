@@ -769,7 +769,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
     def test_create_global_temp_view(self):
         # SPARK-41127: test global temp view creation.
-        with self.tempView("view_1"):
+        with self.temp_view("view_1"):
             self.connect.sql("SELECT 1 AS X LIMIT 0").createGlobalTempView("view_1")
             self.connect.sql("SELECT 2 AS X LIMIT 1").createOrReplaceGlobalTempView("view_1")
             self.assertTrue(self.spark.catalog.tableExists("global_temp.view_1"))
@@ -781,7 +781,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
 
     def test_create_session_local_temp_view(self):
         # SPARK-41372: test session local temp view creation.
-        with self.tempView("view_local_temp"):
+        with self.temp_view("view_local_temp"):
             self.connect.sql("SELECT 1 AS X").createTempView("view_local_temp")
             self.assertEqual(self.connect.sql("SELECT * FROM view_local_temp").count(), 1)
             self.connect.sql("SELECT 1 AS X LIMIT 0").createOrReplaceTempView("view_local_temp")

@@ -679,7 +679,7 @@ class DataFrameTestsMixin:
     def test_cache_table(self):
         spark = self.spark
         tables = ["tab1", "tab2", "tab3"]
-        with self.tempView(*tables):
+        with self.temp_view(*tables):
             for i, tab in enumerate(tables):
                 spark.createDataFrame([(2, i), (3, i)]).createOrReplaceTempView(tab)
                 self.assertFalse(spark.catalog.isCached(tab))

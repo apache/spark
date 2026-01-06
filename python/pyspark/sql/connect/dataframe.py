@@ -1840,7 +1840,11 @@ class DataFrame(ParentDataFrame):
         return (table, schema)
 
     def toArrow(self) -> "pa.Table":
-        schema = to_arrow_schema(self.schema, error_on_duplicated_field_names_in_struct=True)
+        schema = to_arrow_schema(
+            self.schema,
+            error_on_duplicated_field_names_in_struct=True,
+            timezone="UTC",
+        )
         table, _ = self._to_table()
         return table.cast(schema)
 

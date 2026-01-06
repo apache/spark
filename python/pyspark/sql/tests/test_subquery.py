@@ -95,7 +95,7 @@ class SubqueryTestsMixin:
         )
 
     def test_uncorrelated_scalar_subquery_with_view(self):
-        with self.tempView("subqueryData"):
+        with self.temp_view("subqueryData"):
             df = self.spark.createDataFrame(
                 [(1, "one"), (2, "two"), (3, "three")], ["key", "value"]
             )
@@ -157,7 +157,7 @@ class SubqueryTestsMixin:
             )
 
     def test_scalar_subquery_against_local_relations(self):
-        with self.tempView("t1", "t2"):
+        with self.temp_view("t1", "t2"):
             self.spark.createDataFrame([(1, 1), (2, 2)], ["c1", "c2"]).createOrReplaceTempView("t1")
             self.spark.createDataFrame([(1, 1), (2, 2)], ["c1", "c2"]).createOrReplaceTempView("t2")
 
@@ -203,7 +203,7 @@ class SubqueryTestsMixin:
             )
 
     def test_correlated_scalar_subquery(self):
-        with self.tempView("l", "r"):
+        with self.temp_view("l", "r"):
             self.df1.createOrReplaceTempView("l")
             self.df2.createOrReplaceTempView("r")
 
@@ -368,7 +368,7 @@ class SubqueryTestsMixin:
                 )
 
     def test_exists_subquery(self):
-        with self.tempView("l", "r"):
+        with self.temp_view("l", "r"):
             self.df1.createOrReplaceTempView("l")
             self.df2.createOrReplaceTempView("r")
 
@@ -460,7 +460,7 @@ class SubqueryTestsMixin:
                 )
 
     def test_in_subquery(self):
-        with self.tempView("l", "r", "t"):
+        with self.temp_view("l", "r", "t"):
             self.df1.createOrReplaceTempView("l")
             self.df2.createOrReplaceTempView("r")
             self.spark.table("r").filter(
@@ -500,7 +500,7 @@ class SubqueryTestsMixin:
                     ),
                 )
 
-            with self.subTest("IN with struct"), self.tempView("ll", "rr"):
+            with self.subTest("IN with struct"), self.temp_view("ll", "rr"):
                 self.spark.table("l").select(
                     "*", sf.struct("a", "b").alias("sab")
                 ).createOrReplaceTempView("ll")
@@ -665,7 +665,7 @@ class SubqueryTestsMixin:
                 )
 
     def test_scalar_subquery_with_missing_outer_reference(self):
-        with self.tempView("l", "r"):
+        with self.temp_view("l", "r"):
             self.df1.createOrReplaceTempView("l")
             self.df2.createOrReplaceTempView("r")
 
@@ -706,7 +706,7 @@ class SubqueryTestsMixin:
         return self.spark.table("t3")
 
     def test_lateral_join_with_single_column_select(self):
-        with self.tempView("t1", "t2"):
+        with self.temp_view("t1", "t2"):
             t1 = self.table1()
             t2 = self.table2()
 
@@ -724,7 +724,7 @@ class SubqueryTestsMixin:
             )
 
     def test_lateral_join_with_star_expansion(self):
-        with self.tempView("t1", "t2"):
+        with self.temp_view("t1", "t2"):
             t1 = self.table1()
             t2 = self.table2()
 
@@ -746,7 +746,7 @@ class SubqueryTestsMixin:
             )
 
     def test_lateral_join_with_different_join_types(self):
-        with self.tempView("t1"):
+        with self.temp_view("t1"):
             t1 = self.table1()
 
             assertDataFrameEqual(
@@ -800,7 +800,7 @@ class SubqueryTestsMixin:
             )
 
     def test_lateral_join_with_subquery_alias(self):
-        with self.tempView("t1"):
+        with self.temp_view("t1"):
             t1 = self.table1()
 
             assertDataFrameEqual(
@@ -814,7 +814,7 @@ class SubqueryTestsMixin:
             )
 
     def test_lateral_join_with_correlated_predicates(self):
-        with self.tempView("t1", "t2"):
+        with self.temp_view("t1", "t2"):
             t1 = self.table1()
             t2 = self.table2()
 
@@ -836,7 +836,7 @@ class SubqueryTestsMixin:
             )
 
     def test_lateral_join_with_aggregation_and_correlated_predicates(self):
-        with self.tempView("t1", "t2"):
+        with self.temp_view("t1", "t2"):
             t1 = self.table1()
             t2 = self.table2()
 
@@ -854,7 +854,7 @@ class SubqueryTestsMixin:
             )
 
     def test_lateral_join_reference_preceding_from_clause_items(self):
-        with self.tempView("t1", "t2"):
+        with self.temp_view("t1", "t2"):
             t1 = self.table1()
             t2 = self.table2()
 
@@ -866,7 +866,7 @@ class SubqueryTestsMixin:
             )
 
     def test_multiple_lateral_joins(self):
-        with self.tempView("t1"):
+        with self.temp_view("t1"):
             t1 = self.table1()
 
             assertDataFrameEqual(
@@ -896,7 +896,7 @@ class SubqueryTestsMixin:
             )
 
     def test_lateral_join_in_between_regular_joins(self):
-        with self.tempView("t1", "t2"):
+        with self.temp_view("t1", "t2"):
             t1 = self.table1()
             t2 = self.table2()
 
@@ -917,7 +917,7 @@ class SubqueryTestsMixin:
             )
 
     def test_nested_lateral_joins(self):
-        with self.tempView("t1", "t2"):
+        with self.temp_view("t1", "t2"):
             t1 = self.table1()
             t2 = self.table2()
 
@@ -942,7 +942,7 @@ class SubqueryTestsMixin:
             )
 
     def test_scalar_subquery_inside_lateral_join(self):
-        with self.tempView("t1", "t2"):
+        with self.temp_view("t1", "t2"):
             t1 = self.table1()
             t2 = self.table2()
 
@@ -976,7 +976,7 @@ class SubqueryTestsMixin:
             )
 
     def test_lateral_join_inside_subquery(self):
-        with self.tempView("t1", "t2"):
+        with self.temp_view("t1", "t2"):
             t1 = self.table1()
             t2 = self.table2()
 
@@ -1014,7 +1014,7 @@ class SubqueryTestsMixin:
             )
 
     def test_lateral_join_with_table_valued_functions(self):
-        with self.tempView("t1", "t3"):
+        with self.temp_view("t1", "t3"):
             t1 = self.table1()
             t3 = self.table3()
 
@@ -1044,7 +1044,7 @@ class SubqueryTestsMixin:
             )
 
     def test_lateral_join_with_table_valued_functions_and_join_conditions(self):
-        with self.tempView("t1", "t3"):
+        with self.temp_view("t1", "t3"):
             t1 = self.table1()
             t3 = self.table3()
 
@@ -1076,7 +1076,7 @@ class SubqueryTestsMixin:
             )
 
     def test_subquery_with_generator_and_tvf(self):
-        with self.tempView("t1"):
+        with self.temp_view("t1"):
             t1 = self.table1()
 
             assertDataFrameEqual(
@@ -1089,7 +1089,7 @@ class SubqueryTestsMixin:
             )
 
     def test_subquery_in_join_condition(self):
-        with self.tempView("t1", "t2"):
+        with self.temp_view("t1", "t2"):
             t1 = self.table1()
             t2 = self.table2()
 
@@ -1102,7 +1102,7 @@ class SubqueryTestsMixin:
         self.check_subquery_in_unpivot(QueryContextType.DataFrame, "exists")
 
     def check_subquery_in_unpivot(self, query_context_type, fragment):
-        with self.tempView("t1", "t2"):
+        with self.temp_view("t1", "t2"):
             t1 = self.table1()
             t2 = self.table2()
 
@@ -1121,7 +1121,7 @@ class SubqueryTestsMixin:
             )
 
     def test_subquery_in_transpose(self):
-        with self.tempView("t1"):
+        with self.temp_view("t1"):
             t1 = self.table1()
 
             with self.assertRaises(AnalysisException) as pe:
@@ -1134,7 +1134,7 @@ class SubqueryTestsMixin:
             )
 
     def test_subquery_in_with_columns(self):
-        with self.tempView("t1"):
+        with self.temp_view("t1"):
             t1 = self.table1()
 
             assertDataFrameEqual(
@@ -1169,7 +1169,7 @@ class SubqueryTestsMixin:
             )
 
     def test_subquery_in_with_columns_renamed(self):
-        with self.tempView("t1"):
+        with self.temp_view("t1"):
             t1 = self.table1()
 
             assertDataFrameEqual(
@@ -1185,13 +1185,13 @@ class SubqueryTestsMixin:
             )
 
     def test_subquery_in_drop(self):
-        with self.tempView("t1"):
+        with self.temp_view("t1"):
             t1 = self.table1()
 
             assertDataFrameEqual(t1.drop(self.spark.range(1).select(sf.lit("c1")).scalar()), t1)
 
     def test_subquery_in_repartition(self):
-        with self.tempView("t1"):
+        with self.temp_view("t1"):
             t1 = self.table1()
 
             assertDataFrameEqual(t1.repartition(self.spark.range(1).select(sf.lit(1)).scalar()), t1)

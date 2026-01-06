@@ -305,7 +305,9 @@ def spark_type_to_pandas_dtype(
             == "true"
         )
         return np.dtype(
-            to_arrow_type(spark_type, prefers_large_types=prefers_large_var_types).to_pandas_dtype()
+            to_arrow_type(
+                spark_type, timezone="UTC", prefers_large_types=prefers_large_var_types
+            ).to_pandas_dtype()
         )
 
 

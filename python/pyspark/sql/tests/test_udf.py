@@ -102,7 +102,7 @@ class BaseUDFTestsMixin(object):
             self.assertEqual(row[0], 4)
 
     def test_udf2(self):
-        with self.tempView("test"):
+        with self.temp_view("test"):
             self.spark.catalog.registerFunction("strlen", lambda string: len(string), IntegerType())
             self.spark.createDataFrame([("test",)], ["a"]).createOrReplaceTempView("test")
             [res] = self.spark.sql("SELECT strlen(a) FROM test WHERE strlen(a) > 1").collect()
@@ -323,7 +323,7 @@ class BaseUDFTestsMixin(object):
             self.assertEqual(row[0], "bar")
 
     def test_udf_with_array_type(self):
-        with self.tempView("test"), self.temp_func("copylist", "maplen"):
+        with self.temp_view("test"), self.temp_func("copylist", "maplen"):
             self.spark.createDataFrame(
                 [
                     ([0, 1, 2], {"key": [0, 1, 2, 3, 4]}),
@@ -922,7 +922,7 @@ class BaseUDFTestsMixin(object):
     # SPARK-26293
     def test_udf_in_subquery(self):
         f = udf(lambda x: x, "long")
-        with self.tempView("v"):
+        with self.temp_view("v"):
             self.spark.range(1).filter(f("id") >= 0).createTempView("v")
             result = self.spark.sql(
                 "select i from values(0L) as data(i) where i in (select id from v)"
