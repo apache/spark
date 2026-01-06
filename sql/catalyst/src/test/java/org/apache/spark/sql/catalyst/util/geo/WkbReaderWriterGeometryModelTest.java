@@ -379,8 +379,10 @@ public class WkbReaderWriterGeometryModelTest extends WkbTestBase {
     }
     Assertions.assertEquals(1.0, childLe.get(0).asPoint().getX(), 0.0001, "First point X mismatch");
     Assertions.assertEquals(2.0, childLe.get(0).asPoint().getY(), 0.0001, "First point Y mismatch");
-    Assertions.assertEquals(3.0, childLe.get(1).asPoint().getX(), 0.0001, "Second point X mismatch");
-    Assertions.assertEquals(4.0, childLe.get(1).asPoint().getY(), 0.0001, "Second point Y mismatch");
+    Assertions.assertEquals(3.0, childLe.get(1).asPoint().getX(), 0.0001,
+      "Second point X mismatch");
+    Assertions.assertEquals(4.0, childLe.get(1).asPoint().getY(), 0.0001,
+      "Second point Y mismatch");
 
     GeometryModel parsedBe = reader.read(hexToBytes(wkbBe));
     Assertions.assertInstanceOf(GeometryCollection.class, parsedBe, "Should be GeometryCollection");
@@ -390,8 +392,10 @@ public class WkbReaderWriterGeometryModelTest extends WkbTestBase {
     }
     Assertions.assertEquals(1.0, childBe.get(0).asPoint().getX(), 0.0001, "First point X mismatch");
     Assertions.assertEquals(2.0, childBe.get(0).asPoint().getY(), 0.0001, "First point Y mismatch");
-    Assertions.assertEquals(3.0, childBe.get(1).asPoint().getX(), 0.0001, "Second point X mismatch");
-    Assertions.assertEquals(4.0, childBe.get(1).asPoint().getY(), 0.0001, "Second point Y mismatch");
+    Assertions.assertEquals(3.0, childBe.get(1).asPoint().getX(), 0.0001,
+      "Second point X mismatch");
+    Assertions.assertEquals(4.0, childBe.get(1).asPoint().getY(), 0.0001,
+      "Second point Y mismatch");
   }
 }
 

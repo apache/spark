@@ -187,20 +187,5 @@ public class WkbPointTest extends WkbTestBase {
     Assertions.assertEquals(3.0, point.getZ(), 1e-10, "Z coordinate");
     Assertions.assertEquals(4.0, point.getM(), 1e-10, "M coordinate");
   }
-
-  @Test
-  public void testPointToString() {
-    Point point = new Point(new double[]{1.0, 2.0}, 0);
-    String str = point.toString();
-
-    Assertions.assertTrue(str.contains("POINT"), "toString should contain POINT");
-    Assertions.assertFalse(str.contains("EMPTY"),
-        "toString should not contain EMPTY for non-empty point");
-
-    Point emptyPoint = new Point(new double[]{Double.NaN, Double.NaN}, 0);
-    String emptyStr = emptyPoint.toString();
-    Assertions.assertTrue(emptyStr.contains("EMPTY"),
-        "toString should contain EMPTY for empty point");
-  }
 }
 

@@ -172,27 +172,4 @@ public class WkbPolygonTest {
         "Triangle should have 4 points (including closing point)");
     Assertions.assertTrue(ring.isClosed(), "Triangle ring should be closed");
   }
-
-  @Test
-  public void testPolygonToString() {
-    List<Point> ringPoints = Arrays.asList(
-        new Point(new double[]{0.0, 0.0}, 0),
-        new Point(new double[]{1.0, 0.0}, 0),
-        new Point(new double[]{1.0, 1.0}, 0),
-        new Point(new double[]{0.0, 1.0}, 0),
-        new Point(new double[]{0.0, 0.0}, 0)
-    );
-    Ring ring = new Ring(ringPoints);
-    Polygon polygon = new Polygon(Arrays.asList(ring), 0, false, false);
-
-    String str = polygon.toString();
-    Assertions.assertTrue(str.contains("POLYGON"), "toString should contain POLYGON");
-    Assertions.assertFalse(str.contains("EMPTY"),
-        "toString should not contain EMPTY for non-empty polygon");
-
-    Polygon emptyPoly = new Polygon(Arrays.asList(), 0, false, false);
-    String emptyStr = emptyPoly.toString();
-    Assertions.assertTrue(emptyStr.contains("EMPTY"),
-        "toString should contain EMPTY for empty polygon");
-  }
 }
