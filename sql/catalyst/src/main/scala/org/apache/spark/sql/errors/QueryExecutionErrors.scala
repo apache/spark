@@ -2820,12 +2820,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "function" -> toSQLId(function)))
   }
 
-  def kllInvalidInputSketchBuffer(function: String, reason: String): Throwable = {
+  def kllInvalidInputSketchBuffer(function: String, reason: String = ""): Throwable = {
     new SparkRuntimeException(
       errorClass = "KLL_SKETCH_INVALID_INPUT",
       messageParameters = Map(
-        "functionName" -> toSQLId(function),
-        "reason" -> reason))
+        "function" -> toSQLId(function)))
   }
 
   def hllUnionDifferentLgK(left: Int, right: Int, function: String): Throwable = {

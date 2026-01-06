@@ -892,12 +892,12 @@ FROM (
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
+org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
+  "errorClass" : "KLL_SKETCH_INVALID_INPUT",
+  "sqlState" : "22000",
   "messageParameters" : {
-    "message" : "Undefined error message parameter for error class: 'KLL_SKETCH_INVALID_INPUT', MessageTemplate: Invalid call to <function>; only valid KLL sketch buffers are supported as inputs (such as those produced by the `kll_sketch_agg` function)., Parameters: Map(functionName -> `kll_sketch_get_rank_bigint`, reason -> reqOffset: 40, reqLength: 56, (reqOff + reqLen): 96, allocSize: 60)"
+    "function" : "`kll_sketch_get_rank_bigint`"
   }
 }
 
@@ -928,12 +928,12 @@ SELECT kll_sketch_get_quantile_bigint(CAST('not_a_sketch' AS BINARY), 0.5) AS in
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
+org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
+  "errorClass" : "KLL_SKETCH_INVALID_INPUT",
+  "sqlState" : "22000",
   "messageParameters" : {
-    "message" : "Undefined error message parameter for error class: 'KLL_SKETCH_INVALID_INPUT', MessageTemplate: Invalid call to <function>; only valid KLL sketch buffers are supported as inputs (such as those produced by the `kll_sketch_agg` function)., Parameters: Map(functionName -> `kll_sketch_get_quantile_bigint`, reason -> Error combination of PreInts and SerVer: PreInts: 110, SerVer: 111)"
+    "function" : "`kll_sketch_get_quantile_bigint`"
   }
 }
 
@@ -1094,12 +1094,12 @@ SELECT kll_sketch_get_n_bigint(X'deadbeef') AS invalid_binary_bigint
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
+org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
+  "errorClass" : "KLL_SKETCH_INVALID_INPUT",
+  "sqlState" : "22000",
   "messageParameters" : {
-    "message" : "Undefined error message parameter for error class: 'KLL_SKETCH_INVALID_INPUT', MessageTemplate: Invalid call to <function>; only valid KLL sketch buffers are supported as inputs (such as those produced by the `kll_sketch_agg` function)., Parameters: Map(functionName -> `kll_sketch_get_n_bigint`, reason -> A sketch memory image must be at least 8 bytes. 4)"
+    "function" : "`kll_sketch_get_n_bigint`"
   }
 }
 
@@ -1109,12 +1109,12 @@ SELECT kll_sketch_get_n_float(X'cafebabe') AS invalid_binary_float
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
+org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
+  "errorClass" : "KLL_SKETCH_INVALID_INPUT",
+  "sqlState" : "22000",
   "messageParameters" : {
-    "message" : "Undefined error message parameter for error class: 'KLL_SKETCH_INVALID_INPUT', MessageTemplate: Invalid call to <function>; only valid KLL sketch buffers are supported as inputs (such as those produced by the `kll_sketch_agg` function)., Parameters: Map(functionName -> `kll_sketch_get_n_float`, reason -> A sketch memory image must be at least 8 bytes. 4)"
+    "function" : "`kll_sketch_get_n_float`"
   }
 }
 
@@ -1124,12 +1124,12 @@ SELECT kll_sketch_get_n_double(X'12345678') AS invalid_binary_double
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
+org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
+  "errorClass" : "KLL_SKETCH_INVALID_INPUT",
+  "sqlState" : "22000",
   "messageParameters" : {
-    "message" : "Undefined error message parameter for error class: 'KLL_SKETCH_INVALID_INPUT', MessageTemplate: Invalid call to <function>; only valid KLL sketch buffers are supported as inputs (such as those produced by the `kll_sketch_agg` function)., Parameters: Map(functionName -> `kll_sketch_get_n_double`, reason -> A sketch memory image must be at least 8 bytes. 4)"
+    "function" : "`kll_sketch_get_n_double`"
   }
 }
 
