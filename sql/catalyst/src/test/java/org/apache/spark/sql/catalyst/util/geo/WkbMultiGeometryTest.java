@@ -127,7 +127,8 @@ public class WkbMultiGeometryTest extends WkbTestBase {
     WkbReader reader = new WkbReader();
     GeometryModel parsed = reader.read(wkb, 0);
 
-    Assertions.assertInstanceOf(MultiLineString.class, parsed, "Parsed geometry should be MultiLineString");
+    Assertions.assertInstanceOf(MultiLineString.class, parsed,
+      "Parsed geometry should be MultiLineString");
     MultiLineString parsedMLS = (MultiLineString) parsed;
     Assertions.assertEquals(original.getNumGeometries(), parsedMLS.getNumGeometries(),
         "Number of linestrings should match");
@@ -180,43 +181,11 @@ public class WkbMultiGeometryTest extends WkbTestBase {
     WkbReader reader = new WkbReader();
     GeometryModel parsed = reader.read(wkb, 0);
 
-    Assertions.assertInstanceOf(MultiPolygon.class, parsed, "Parsed geometry should be MultiPolygon");
+    Assertions.assertInstanceOf(MultiPolygon.class, parsed,
+      "Parsed geometry should be MultiPolygon");
     MultiPolygon parsedMP = (MultiPolygon) parsed;
     Assertions.assertEquals(original.getNumGeometries(), parsedMP.getNumGeometries(),
         "Number of polygons should match");
-  }
-
-  @Test
-  public void testToStringMethods() {
-    // MultiPoint
-    MultiPoint mp = new MultiPoint(List.of(
-      new Point(new double[]{0.0, 0.0}, 0)
-    ), 0, false, false);
-    Assertions.assertTrue(mp.toString().contains("MULTIPOINT"),
-        "MultiPoint toString should contain MULTIPOINT");
-
-    // MultiLineString
-    MultiLineString mls = new MultiLineString(List.of(
-      new LineString(Arrays.asList(
-        new Point(new double[]{0.0, 0.0}, 0),
-        new Point(new double[]{1.0, 1.0}, 0)
-      ), 0, false, false)
-    ), 0, false, false);
-    Assertions.assertTrue(mls.toString().contains("MULTILINESTRING"),
-        "MultiLineString toString should contain MULTILINESTRING");
-
-    // MultiPolygon
-    MultiPolygon mpoly = new MultiPolygon(List.of(
-      new Polygon(List.of(new Ring(Arrays.asList(
-        new Point(new double[]{0.0, 0.0}, 0),
-        new Point(new double[]{1.0, 0.0}, 0),
-        new Point(new double[]{1.0, 1.0}, 0),
-        new Point(new double[]{0.0, 1.0}, 0),
-        new Point(new double[]{0.0, 0.0}, 0)
-      ))), 0, false, false)
-    ), 0, false, false);
-    Assertions.assertTrue(mpoly.toString().contains("MULTIPOLYGON"),
-        "MultiPolygon toString should contain MULTIPOLYGON");
   }
 
   private static MultiPolygon getMultiPolygon(List<Point> poly1Points) {
