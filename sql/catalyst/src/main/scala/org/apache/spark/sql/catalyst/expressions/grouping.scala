@@ -282,19 +282,7 @@ object GroupingAnalytics extends AliasHelper {
       if (!resolved) {
         None
       } else {
-        val groups = exprsNoAlias.flatMap {
-          case gs: BaseGroupingSets => gs.groupByExprs
-          case other: Expression => other :: Nil
-        }
-        val unmergedSelectedGroupByExprs = exprsNoAlias.map {
-          case gs: BaseGroupingSets => gs.selectedGroupByExprs
-          case other: Expression => Seq(Seq(other))
-        }
-        val selectedGroupByExprs = unmergedSelectedGroupByExprs.tail
-          .foldLeft(unmergedSelectedGroupByExprs.head) { (x, y) =>
-            for (a <- x; b <- y) yield a ++ b
-          }
-        Some(selectedGroupByExprs, BaseGroupingSets.distinctGroupByExprs(groups))
+        GroupingAnalyticsExtractor(exprsNoAlias)
       }
     }
   }
