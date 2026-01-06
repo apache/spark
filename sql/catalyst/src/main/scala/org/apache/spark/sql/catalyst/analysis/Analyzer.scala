@@ -755,6 +755,7 @@ class Analyzer(
         groupByExprs: Seq[Expression],
         aggregationExprs: Seq[NamedExpression],
         child: LogicalPlan): LogicalPlan = {
+      val aggregationExprsNoAlias = aggregationExprs.map(trimNonTopLevelAliases)
 
       if (groupByExprs.size > GroupingID.dataType.defaultSize * 8) {
         throw QueryCompilationErrors.groupingSizeTooLargeError(GroupingID.dataType.defaultSize * 8)
@@ -775,7 +776,7 @@ class Analyzer(
       val groupingAttrs = expand.output.drop(child.output.length)
 
       val aggregations = constructAggregateExprs(
-        groupByExprs, aggregationExprs, groupByAliases, groupingAttrs, gid)
+        groupByExprs, aggregationExprsNoAlias, groupByAliases, groupingAttrs, gid)
 
       Aggregate(groupingAttrs, aggregations, expand)
     }
@@ -2102,7 +2103,7 @@ class Analyzer(
             throw QueryCompilationErrors.expectPersistentFuncError(
               nameParts.head, cmd, mismatchHint, u)
           } else {
-            ResolvedNonPersistentFunc(nameParts.head, V1Function(info))
+            ResolvedNonPersistentFunc(nameParts.head, V1Function.metadataOnly(info))
           }
         }.getOrElse {
           val CatalogAndIdentifier(catalog, ident) =

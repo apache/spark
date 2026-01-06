@@ -907,7 +907,7 @@ object SQLConf {
         "retry all tasks of the consumer stages to avoid correctness issues.")
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val SHUFFLE_CHECKSUM_MISMATCH_FULL_RETRY_ENABLED =
     buildConf("spark.sql.shuffle.orderIndependentChecksum.enableFullRetryOnMismatch")
@@ -915,7 +915,7 @@ object SQLConf {
         "with its producer stages.")
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE =
     buildConf("spark.sql.adaptive.shuffle.targetPostShuffleInputSize")
@@ -6193,7 +6193,9 @@ object SQLConf {
 
   val ERROR_MESSAGE_FORMAT = buildConf("spark.sql.error.messageFormat")
     .doc("When PRETTY, the error message consists of textual representation of error class, " +
-      "message and query context. The MINIMAL and STANDARD formats are pretty JSON formats where " +
+      "message and query context. Stack traces are only shown for internal errors " +
+      "(SQLSTATE XX***). When DEBUG, the output is the same as PRETTY but stack traces are " +
+      "always included. The MINIMAL and STANDARD formats are pretty JSON formats where " +
       "STANDARD includes an additional JSON field `message`. This configuration property " +
       "influences on error messages of Thrift Server and SQL CLI while running queries.")
     .version("3.4.0")
