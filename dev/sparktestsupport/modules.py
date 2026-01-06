@@ -646,7 +646,7 @@ pyspark_streaming = Module(
 
 pyspark_structured_streaming = Module(
     name="pyspark-structured-streaming",
-    dependencies=[pyspark_core, pyspark_streaming, pyspark_sql],
+    dependencies=[pyspark_core, pyspark_streaming, pyspark_sql, sql_kafka],
     source_file_regexes=[
         "python/pyspark/sql/streaming",
         "python/pyspark/sql/pandas",
