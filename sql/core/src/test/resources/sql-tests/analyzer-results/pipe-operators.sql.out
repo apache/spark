@@ -1103,7 +1103,7 @@ Project [x#x, y#x]
 table st
 |> drop col.i1
 -- !query analysis
-Project [x#x, update_fields(col#x, dropfield(), i1) AS col#x]
+Project [x#x, named_struct(i2, col#x.i2) AS col#x]
 +- SubqueryAlias spark_catalog.default.st
    +- Relation spark_catalog.default.st[x#x,col#x] parquet
 
