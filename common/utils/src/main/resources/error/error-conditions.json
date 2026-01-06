@@ -4291,7 +4291,7 @@
     ],
     "sqlState" : "22000"
   },
-  "KLL_SKETCH_INVALID_INPUT" : {
+  "KLL_INVALID_INPUT_SKETCH_BUFFER" : {
     "message" : [
       "Invalid call to <function>; only valid KLL sketch buffers are supported as inputs (such as those produced by the `kll_sketch_agg` function)."
     ],

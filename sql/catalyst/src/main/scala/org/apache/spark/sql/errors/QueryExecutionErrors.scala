@@ -2822,7 +2822,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def kllInvalidInputSketchBuffer(function: String, reason: String = ""): Throwable = {
     new SparkRuntimeException(
-      errorClass = "KLL_SKETCH_INVALID_INPUT",
+      errorClass = "KLL_INVALID_INPUT_SKETCH_BUFFER",
       messageParameters = Map(
         "function" -> toSQLId(function)))
   }

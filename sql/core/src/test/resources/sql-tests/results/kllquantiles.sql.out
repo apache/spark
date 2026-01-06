@@ -894,7 +894,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "KLL_SKETCH_INVALID_INPUT",
+  "errorClass" : "KLL_INVALID_INPUT_SKETCH_BUFFER",
   "sqlState" : "22000",
   "messageParameters" : {
     "function" : "`kll_sketch_get_rank_bigint`"
@@ -930,7 +930,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "KLL_SKETCH_INVALID_INPUT",
+  "errorClass" : "KLL_INVALID_INPUT_SKETCH_BUFFER",
   "sqlState" : "22000",
   "messageParameters" : {
     "function" : "`kll_sketch_get_quantile_bigint`"
@@ -1096,7 +1096,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "KLL_SKETCH_INVALID_INPUT",
+  "errorClass" : "KLL_INVALID_INPUT_SKETCH_BUFFER",
   "sqlState" : "22000",
   "messageParameters" : {
     "function" : "`kll_sketch_get_n_bigint`"
@@ -1111,7 +1111,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "KLL_SKETCH_INVALID_INPUT",
+  "errorClass" : "KLL_INVALID_INPUT_SKETCH_BUFFER",
   "sqlState" : "22000",
   "messageParameters" : {
     "function" : "`kll_sketch_get_n_float`"
@@ -1126,7 +1126,7 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "KLL_SKETCH_INVALID_INPUT",
+  "errorClass" : "KLL_INVALID_INPUT_SKETCH_BUFFER",
   "sqlState" : "22000",
   "messageParameters" : {
     "function" : "`kll_sketch_get_n_double`"
