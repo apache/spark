@@ -32,4 +32,10 @@ class FailInSetUpClassTests(unittest.TestCase):
 if __name__ == "__main__":
     from pyspark.testing import main
 
-    main()
+    # Do not keep XML report because the test is supposed to fail.
+    # We do not want to confuse XML report consumers.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        try:
+            main(output=tmpdir)
+        except SystemExit as e:
+            assert e.code == 1, f"status code: {e.code}"
