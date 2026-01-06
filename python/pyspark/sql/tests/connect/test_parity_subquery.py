@@ -25,7 +25,7 @@ from pyspark.testing.connectutils import ReusedConnectTestCase
 
 class SubqueryParityTests(SubqueryTestsMixin, ReusedConnectTestCase):
     def test_scalar_subquery_with_missing_outer_reference(self):
-        with self.tempView("l", "r"):
+        with self.temp_view("l", "r"):
             self.df1.createOrReplaceTempView("l")
             self.df2.createOrReplaceTempView("r")
 
