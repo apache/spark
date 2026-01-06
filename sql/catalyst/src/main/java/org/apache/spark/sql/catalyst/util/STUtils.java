@@ -16,16 +16,11 @@
  */
 package org.apache.spark.sql.catalyst.util;
 
-import org.apache.spark.sql.catalyst.util.geo.WkbReader;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.GeographyType;
 import org.apache.spark.sql.types.GeometryType;
 import org.apache.spark.unsafe.types.GeographyVal;
 import org.apache.spark.unsafe.types.GeometryVal;
-
-import java.nio.ByteBuffer;
-
-import static org.apache.spark.sql.catalyst.util.Geo.*;
 
 // This class defines static methods that used to implement ST expressions using `StaticInvoke`.
 public final class STUtils {
@@ -153,4 +148,5 @@ public final class STUtils {
   public static int stSrid(GeometryVal geom) {
     return fromPhysVal(geom).srid();
   }
+
 }
