@@ -456,7 +456,7 @@ abstract class KllSketchGetQuantileBase
     } catch {
       case e: org.apache.datasketches.common.SketchesArgumentException =>
         if (e.getMessage.contains("normalized rank")) {
-          throw QueryExecutionErrors.kllSketchInvalidQuantileRangeError(prettyName, rankForError)
+          throw QueryExecutionErrors.kllSketchInvalidQuantileRangeError(prettyName)
         } else {
           throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
         }

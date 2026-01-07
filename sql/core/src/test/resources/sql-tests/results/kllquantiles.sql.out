@@ -832,13 +832,12 @@ FROM (
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkRuntimeException
+org.apache.spark.SparkException
 {
-  "errorClass" : "KLL_SKETCH_INVALID_QUANTILE_RANGE",
-  "sqlState" : "22003",
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
   "messageParameters" : {
-    "functionName" : "`kll_sketch_get_quantile_bigint`",
-    "quantile" : "-0.5D"
+    "message" : "Undefined error message parameter for error class: 'KLL_SKETCH_INVALID_QUANTILE_RANGE', MessageTemplate: For function <functionName>, the quantile value must be between 0.0 and 1.0 (inclusive), but got <quantile>., Parameters: Map(functionName -> `kll_sketch_get_quantile_bigint`)"
   }
 }
 
@@ -852,13 +851,12 @@ FROM (
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkRuntimeException
+org.apache.spark.SparkException
 {
-  "errorClass" : "KLL_SKETCH_INVALID_QUANTILE_RANGE",
-  "sqlState" : "22003",
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
   "messageParameters" : {
-    "functionName" : "`kll_sketch_get_quantile_bigint`",
-    "quantile" : "1.5D"
+    "message" : "Undefined error message parameter for error class: 'KLL_SKETCH_INVALID_QUANTILE_RANGE', MessageTemplate: For function <functionName>, the quantile value must be between 0.0 and 1.0 (inclusive), but got <quantile>., Parameters: Map(functionName -> `kll_sketch_get_quantile_bigint`)"
   }
 }
 
@@ -872,13 +870,12 @@ FROM (
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkRuntimeException
+org.apache.spark.SparkException
 {
-  "errorClass" : "KLL_SKETCH_INVALID_QUANTILE_RANGE",
-  "sqlState" : "22003",
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
   "messageParameters" : {
-    "functionName" : "`kll_sketch_get_quantile_float`",
-    "quantile" : "-0.1D"
+    "message" : "Undefined error message parameter for error class: 'KLL_SKETCH_INVALID_QUANTILE_RANGE', MessageTemplate: For function <functionName>, the quantile value must be between 0.0 and 1.0 (inclusive), but got <quantile>., Parameters: Map(functionName -> `kll_sketch_get_quantile_float`)"
   }
 }
 

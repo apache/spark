@@ -3192,12 +3192,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("function" -> toSQLId(function)))
   }
 
-  def kllSketchInvalidQuantileRangeError(function: String, quantile: Double): Throwable = {
+  def kllSketchInvalidQuantileRangeError(function: String): Throwable = {
     new SparkRuntimeException(
       errorClass = "KLL_SKETCH_INVALID_QUANTILE_RANGE",
       messageParameters = Map(
-        "functionName" -> toSQLId(function),
-        "quantile" -> toSQLValue(quantile, DoubleType)))
+        "functionName" -> toSQLId(function)))
   }
 
   def kllSketchIncompatibleMergeError(function: String, reason: String): Throwable = {
