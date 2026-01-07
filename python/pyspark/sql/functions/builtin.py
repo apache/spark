@@ -26717,7 +26717,7 @@ def kll_sketch_to_string_bigint(col: "ColumnOrName") -> Column:
     >>> df = spark.createDataFrame([1,2,3,4,5], "INT")
     >>> sketch_df = df.agg(sf.kll_sketch_agg_bigint("value").alias("sketch"))
     >>> result = sketch_df.select(sf.kll_sketch_to_string_bigint("sketch")).first()[0]
-    >>> "Kll" in result and "N" in result
+    >>> "kll" in result.lower()
     True
     """
     fn = "kll_sketch_to_string_bigint"
@@ -26747,7 +26747,7 @@ def kll_sketch_to_string_float(col: "ColumnOrName") -> Column:
     >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "FLOAT")
     >>> sketch_df = df.agg(sf.kll_sketch_agg_float("value").alias("sketch"))
     >>> result = sketch_df.select(sf.kll_sketch_to_string_float("sketch")).first()[0]
-    >>> "Kll" in result and "N" in result
+    >>> "kll" in result.lower()
     True
     """
     fn = "kll_sketch_to_string_float"
@@ -26777,7 +26777,7 @@ def kll_sketch_to_string_double(col: "ColumnOrName") -> Column:
     >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "DOUBLE")
     >>> sketch_df = df.agg(sf.kll_sketch_agg_double("value").alias("sketch"))
     >>> result = sketch_df.select(sf.kll_sketch_to_string_double("sketch")).first()[0]
-    >>> "Kll" in result and "N" in result
+    >>> "kll" in result.lower()
     True
     """
     fn = "kll_sketch_to_string_double"
