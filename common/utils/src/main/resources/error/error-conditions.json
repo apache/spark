@@ -5577,7 +5577,7 @@
   },
   "STATE_REWRITER_INVALID_CHECKPOINT" : {
     "message" : [
-      "The provided checkpoint location '<checkpointLocation>' is in an invalid state."
+      "The state rewrite checkpoint location '<checkpointLocation>' is in an invalid state."
     ],
     "subClass" : {
       "MISSING_KEY_ENCODER_SPEC" : {
