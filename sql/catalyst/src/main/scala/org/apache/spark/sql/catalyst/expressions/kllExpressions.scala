@@ -242,7 +242,7 @@ case class KllSketchMergeBigint(left: Expression, right: Expression) extends Kll
       leftSketch.toByteArray
     } catch {
       case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidSketchBufferError(prettyName)
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   }
 }
@@ -273,7 +273,7 @@ case class KllSketchMergeFloat(left: Expression, right: Expression) extends KllS
       leftSketch.toByteArray
     } catch {
       case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidSketchBufferError(prettyName)
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   }
 }
@@ -304,7 +304,7 @@ case class KllSketchMergeDouble(left: Expression, right: Expression) extends Kll
       leftSketch.toByteArray
     } catch {
       case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidSketchBufferError(prettyName)
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   }
 }

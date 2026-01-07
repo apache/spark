@@ -909,12 +909,12 @@ FROM (
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.SparkException
+org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
+  "errorClass" : "KLL_INVALID_INPUT_SKETCH_BUFFER",
+  "sqlState" : "22000",
   "messageParameters" : {
-    "message" : "Undefined error message parameter for error class: 'KLL_INVALID_INPUT_SKETCH_BUFFER', MessageTemplate: Invalid call to <function>; only valid KLL sketch buffers are supported as inputs (such as those produced by the `kll_sketch_agg` function)., Parameters: Map(functionName -> `kll_sketch_merge_bigint`)"
+    "function" : "`kll_sketch_merge_bigint`"
   }
 }
 

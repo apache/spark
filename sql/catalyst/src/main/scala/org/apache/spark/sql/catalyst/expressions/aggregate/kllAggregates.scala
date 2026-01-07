@@ -152,7 +152,7 @@ case class KllSketchAggBigint(
       updateBuffer
     } catch {
       case _: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidSketchBufferError(prettyName)
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   }
 
@@ -288,7 +288,7 @@ case class KllSketchAggFloat(
       updateBuffer
     } catch {
       case _: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidSketchBufferError(prettyName)
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   }
 
@@ -426,7 +426,7 @@ case class KllSketchAggDouble(
       updateBuffer
     } catch {
       case _: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidSketchBufferError(prettyName)
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   }
 

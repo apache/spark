@@ -3199,13 +3199,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "functionName" -> toSQLId(function)))
   }
 
-  def kllSketchInvalidSketchBufferError(function: String): Throwable = {
-    new SparkRuntimeException(
-      errorClass = "KLL_INVALID_INPUT_SKETCH_BUFFER",
-      messageParameters = Map(
-        "functionName" -> toSQLId(function)))
-  }
-
   def kllSketchKMustBeConstantError(function: String): Throwable = {
     new SparkRuntimeException(
       errorClass = "KLL_SKETCH_K_MUST_BE_CONSTANT",
