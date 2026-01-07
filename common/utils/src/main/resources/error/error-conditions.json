@@ -4291,15 +4291,9 @@
     ],
     "sqlState" : "22000"
   },
-  "KLL_SKETCH_INCOMPATIBLE_MERGE" : {
-    "message" : [
-      "For function <functionName>, cannot merge KLL sketches: <reason>"
-    ],
-    "sqlState" : "22000"
-  },
   "KLL_SKETCH_INVALID_QUANTILE_RANGE" : {
     "message" : [
-      "For function <functionName>, the quantile value must be between 0.0 and 1.0 (inclusive), but got <quantile>."
+      "For function <functionName>, the quantile value must be between 0.0 and 1.0 (inclusive)."
     ],
     "sqlState" : "22003"
   },
