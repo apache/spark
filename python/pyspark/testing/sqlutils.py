@@ -57,7 +57,7 @@ def search_jar(project_relative_path, sbt_jar_name_prefix, mvn_jar_name_prefix):
     # Note that 'sbt_jar_name_prefix' and 'mvn_jar_name_prefix' are used since the prefix can
     # vary for SBT or Maven specifically. See also SPARK-26856
     project_full_path = os.path.join(SPARK_HOME, project_relative_path)
-    print(f'project_full_path: {project_full_path}/')
+    print(f'!-- project_full_path: {project_full_path}/')
     list_all_files_and_dirs(project_full_path)
 
     # We should ignore the following jars
@@ -69,9 +69,18 @@ def search_jar(project_relative_path, sbt_jar_name_prefix, mvn_jar_name_prefix):
         os.path.join(project_full_path, "target/scala-*/%s*.jar" % sbt_jar_name_prefix)
     )
 
+    print(f'!-- sbt_build jars found: {sbt_build}')
+
     maven_build = glob.glob(os.path.join(project_full_path, "target/%s*.jar" % mvn_jar_name_prefix))
+
+    print(f'!-- maven_build jars found: {maven_build}')
+
     jar_paths = sbt_build + maven_build
+    print(f'!-- jar_paths: {jar_paths}')
+
     jars = [jar for jar in jar_paths if not jar.endswith(ignored_jar_suffixes)]
+
+    print(f'!-- jars: {jars}')
 
     if not jars:
         return None
