@@ -623,11 +623,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * A variant of [[foreach]] which considers plan nodes inside subqueries as well.
    */
   def foreachWithSubqueries(f: PlanType => Unit): Unit = {
-    def actualFunc(plan: PlanType): Unit = {
-      f(plan)
-      plan.subqueries.foreach(_.foreachWithSubqueries(f))
-    }
-    foreach(actualFunc)
+    f(this)
+    subqueries.foreach(_.foreachWithSubqueries(f))
+    children.foreach(_.foreachWithSubqueries(f))
   }
 
   /**
