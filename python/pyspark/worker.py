@@ -3474,7 +3474,6 @@ def main(infile, outfile):
 
         shuffle.MemoryBytesSpilled = 0
         shuffle.DiskBytesSpilled = 0
-        _accumulatorRegistry.clear()
 
         setup_spark_files(infile)
         setup_broadcasts(infile)
