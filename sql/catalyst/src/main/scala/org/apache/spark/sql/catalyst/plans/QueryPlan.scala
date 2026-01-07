@@ -636,15 +636,12 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    */
   def foreachWithSubqueriesAndPruning(
       cond: TreePatternBits => Boolean)(f: PlanType => Unit): Unit = {
-    def traverse(plan: PlanType): Unit = {
-      if (!cond.apply(plan)) {
-        return
-      }
-      f(plan)
-      plan.subqueries.foreach(traverse)
-      plan.children.foreach(traverse)
+    if (!cond.apply(this)) {
+      return
     }
-    traverse(this)
+    f(this)
+    subqueries.foreach(_.foreachWithSubqueriesAndPruning(cond)(f))
+    children.foreach(_.foreachWithSubqueriesAndPruning(cond)(f))
   }
 
   /**
