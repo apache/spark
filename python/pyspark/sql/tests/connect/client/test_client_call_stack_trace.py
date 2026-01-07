@@ -180,7 +180,7 @@ class CallStackTraceIntegrationTestCase(unittest.TestCase):
                         self.assertIsInstance(stack_trace_element.file_name, str)
 
             self.assertTrue(
-                "test_execute_plan_request_includes_call_stack_with_env_var" in functions,
+                "test_execute_plan_request_includes_call_stack" in functions,
                 f"Expected user function names not found in: {functions}",
             )
             self.assertTrue(
@@ -213,7 +213,7 @@ class CallStackTraceIntegrationTestCase(unittest.TestCase):
                         self.assertIsInstance(stack_trace_element.file_name, str)
 
             self.assertTrue(
-                "test_analyze_plan_request_includes_call_stack_with_env_var" in functions,
+                "test_analyze_plan_request_includes_call_stack" in functions,
                 f"Expected user function names not found in: {functions}",
             )
             self.assertTrue(
