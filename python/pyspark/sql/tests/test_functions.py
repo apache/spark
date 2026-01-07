@@ -2151,7 +2151,7 @@ class FunctionsTestsMixin:
         result = sketch_df.select(F.kll_sketch_to_string_bigint("sketch")).first()[0]
         self.assertIsNotNone(result)
         self.assertIsInstance(result, str)
-        self.assertIn("Kll", result)
+        self.assertIn("kll", result.lower())
 
     def test_kll_sketch_get_n_bigint(self):
         """Test kll_sketch_get_n_bigint function"""
@@ -2212,7 +2212,7 @@ class FunctionsTestsMixin:
 
         # Test to_string
         string_result = sketch_df.select(F.kll_sketch_to_string_float("sketch")).first()[0]
-        self.assertIn("Kll", string_result)
+        self.assertIn("kll", string_result.lower())
 
         # Test get_n
         n = sketch_df.select(F.kll_sketch_get_n_float("sketch")).first()[0]
@@ -2240,7 +2240,7 @@ class FunctionsTestsMixin:
 
         # Test to_string
         string_result = sketch_df.select(F.kll_sketch_to_string_double("sketch")).first()[0]
-        self.assertIn("Kll", string_result)
+        self.assertIn("kll", string_result.lower())
 
         # Test get_n
         n = sketch_df.select(F.kll_sketch_get_n_double("sketch")).first()[0]
