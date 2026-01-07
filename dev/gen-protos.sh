@@ -116,7 +116,7 @@ for f in `find gen/proto/python -name "*.py*"`; do
   rm $f.bak
 done
 
-black --config $SPARK_HOME/dev/pyproject.toml gen/proto/python
+black --config $SPARK_HOME/pyproject.toml gen/proto/python
 
 # Last step copy the result files to the destination module.
 for f in `find gen/proto/python -name "*.py*"`; do
