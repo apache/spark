@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
-import org.apache.spark.sql.types.{AbstractDataType, ArrayType, FloatType, StringType}
+import org.apache.spark.sql.errors.QueryErrorsBase
+import org.apache.spark.sql.types.{ArrayType, FloatType, StringType}
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -36,17 +39,37 @@ import org.apache.spark.sql.types.{AbstractDataType, ArrayType, FloatType, Strin
 )
 // scalastyle:on line.size.limit
 case class VectorCosineSimilarity(left: Expression, right: Expression)
-    extends RuntimeReplaceable with ImplicitCastInputTypes {
+    extends RuntimeReplaceable with QueryErrorsBase {
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    (left.dataType, right.dataType) match {
+      case (ArrayType(FloatType, _), ArrayType(FloatType, _)) =>
+        TypeCheckResult.TypeCheckSuccess
+      case (ArrayType(FloatType, _), _) =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> ordinalNumber(1),
+            "requiredType" -> toSQLType(ArrayType(FloatType)),
+            "inputSql" -> toSQLExpr(right),
+            "inputType" -> toSQLType(right.dataType)))
+      case _ =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> ordinalNumber(0),
+            "requiredType" -> toSQLType(ArrayType(FloatType)),
+            "inputSql" -> toSQLExpr(left),
+            "inputType" -> toSQLType(left.dataType)))
+    }
+  }
 
   override lazy val replacement: Expression = StaticInvoke(
     classOf[VectorFunctionImplUtils],
     FloatType,
     "vectorCosineSimilarity",
     Seq(left, right, Literal(prettyName)),
-    inputTypes :+ StringType)
-
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(ArrayType(FloatType), ArrayType(FloatType))
+    Seq(ArrayType(FloatType), ArrayType(FloatType), StringType))
 
   override def prettyName: String = "vector_cosine_similarity"
 
@@ -74,17 +97,37 @@ case class VectorCosineSimilarity(left: Expression, right: Expression)
 )
 // scalastyle:on line.size.limit
 case class VectorInnerProduct(left: Expression, right: Expression)
-    extends RuntimeReplaceable with ImplicitCastInputTypes {
+    extends RuntimeReplaceable with QueryErrorsBase {
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    (left.dataType, right.dataType) match {
+      case (ArrayType(FloatType, _), ArrayType(FloatType, _)) =>
+        TypeCheckResult.TypeCheckSuccess
+      case (ArrayType(FloatType, _), _) =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> ordinalNumber(1),
+            "requiredType" -> toSQLType(ArrayType(FloatType)),
+            "inputSql" -> toSQLExpr(right),
+            "inputType" -> toSQLType(right.dataType)))
+      case _ =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> ordinalNumber(0),
+            "requiredType" -> toSQLType(ArrayType(FloatType)),
+            "inputSql" -> toSQLExpr(left),
+            "inputType" -> toSQLType(left.dataType)))
+    }
+  }
 
   override lazy val replacement: Expression = StaticInvoke(
     classOf[VectorFunctionImplUtils],
     FloatType,
     "vectorInnerProduct",
     Seq(left, right, Literal(prettyName)),
-    inputTypes :+ StringType)
-
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(ArrayType(FloatType), ArrayType(FloatType))
+    Seq(ArrayType(FloatType), ArrayType(FloatType), StringType))
 
   override def prettyName: String = "vector_inner_product"
 
@@ -112,17 +155,37 @@ case class VectorInnerProduct(left: Expression, right: Expression)
 )
 // scalastyle:on line.size.limit
 case class VectorL2Distance(left: Expression, right: Expression)
-    extends RuntimeReplaceable with ImplicitCastInputTypes {
+    extends RuntimeReplaceable with QueryErrorsBase {
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    (left.dataType, right.dataType) match {
+      case (ArrayType(FloatType, _), ArrayType(FloatType, _)) =>
+        TypeCheckResult.TypeCheckSuccess
+      case (ArrayType(FloatType, _), _) =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> ordinalNumber(1),
+            "requiredType" -> toSQLType(ArrayType(FloatType)),
+            "inputSql" -> toSQLExpr(right),
+            "inputType" -> toSQLType(right.dataType)))
+      case _ =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> ordinalNumber(0),
+            "requiredType" -> toSQLType(ArrayType(FloatType)),
+            "inputSql" -> toSQLExpr(left),
+            "inputType" -> toSQLType(left.dataType)))
+    }
+  }
 
   override lazy val replacement: Expression = StaticInvoke(
     classOf[VectorFunctionImplUtils],
     FloatType,
     "vectorL2Distance",
     Seq(left, right, Literal(prettyName)),
-    inputTypes :+ StringType)
-
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(ArrayType(FloatType), ArrayType(FloatType))
+    Seq(ArrayType(FloatType), ArrayType(FloatType), StringType))
 
   override def prettyName: String = "vector_l2_distance"
 
