@@ -4285,15 +4285,15 @@
     ],
     "sqlState" : "42K0E"
   },
-  "KLL_SKETCH_INCOMPATIBLE_MERGE" : {
-    "message" : [
-      "For function <functionName>, cannot merge KLL sketches: <reason>"
-    ],
-    "sqlState" : "22000"
-  },
   "KLL_INVALID_INPUT_SKETCH_BUFFER" : {
     "message" : [
       "Invalid call to <function>; only valid KLL sketch buffers are supported as inputs (such as those produced by the `kll_sketch_agg` function)."
+    ],
+    "sqlState" : "22000"
+  },
+  "KLL_SKETCH_INCOMPATIBLE_MERGE" : {
+    "message" : [
+      "For function <functionName>, cannot merge KLL sketches: <reason>"
     ],
     "sqlState" : "22000"
   },
