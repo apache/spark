@@ -633,50 +633,6 @@ def _is_pyspark_source(filename: str) -> bool:
     return filename.startswith(PYSPARK_ROOT)
 
 
-def _retrieve_stack_frames() -> List[CallSite]:
-    """
-    Return a list of CallSites representing the relevant stack frames in the callstack.
-    """
-    frames = traceback.extract_stack()
-
-    filtered_stack_frames = []
-    for i, frame in enumerate(frames):
-        filename, lineno, func, _ = frame
-        if _is_pyspark_source(filename):
-            # Do not include PySpark internal frames as they are not user application code
-            break
-        if i + 1 < len(frames):
-            _, _, func, _ = frames[i + 1]
-        filtered_stack_frames.append(CallSite(function=func, file=filename, linenum=lineno))
-
-    return filtered_stack_frames
-
-
-def _build_call_stack_trace() -> Optional[any_pb2.Any]:
-    """
-    Build a call stack trace for the current Spark Connect action
-    Returns
-    -------
-    FetchErrorDetailsResponse.Error: An Error object containing list of stack frames
-    of the user code packed as Any protobuf.59
-    """
-    if os.getenv("SPARK_CONNECT_DEBUG_CLIENT_CALL_STACK", "false").lower() in ("true", "1"):
-        stack_frames = _retrieve_stack_frames()
-        call_stack = FetchErrorDetailsResponse.Error()
-        for call_site in stack_frames:
-            stack_trace_element = pb2.FetchErrorDetailsResponse.StackTraceElement()
-            stack_trace_element.declaring_class = ""  # unknown information
-            stack_trace_element.method_name = call_site.function
-            stack_trace_element.file_name = call_site.file
-            stack_trace_element.line_number = call_site.linenum
-            call_stack.stack_trace.append(stack_trace_element)
-        if len(call_stack.stack_trace) > 0:
-            call_stack_details = any_pb2.Any()
-            call_stack_details.Pack(call_stack)
-            return call_stack_details
-    return None
-
-
 class SparkConnectClient(object):
     """
     Conceptually the remote spark session that communicates with the server
@@ -867,6 +823,50 @@ class SparkConnectClient(object):
         Return list of currently used policies
         """
         return list(self._retry_policies)
+    
+    @classmethod
+    def _retrieve_stack_frames(cls) -> List[CallSite]:
+        """
+        Return a list of CallSites representing the relevant stack frames in the callstack.
+        """
+        frames = traceback.extract_stack()
+
+        filtered_stack_frames = []
+        for i, frame in enumerate(frames):
+            filename, lineno, func, _ = frame
+            if _is_pyspark_source(filename):
+                # Do not include PySpark internal frames as they are not user application code
+                break
+            if i + 1 < len(frames):
+                _, _, func, _ = frames[i + 1]
+            filtered_stack_frames.append(CallSite(function=func, file=filename, linenum=lineno))
+
+        return filtered_stack_frames
+
+    @classmethod
+    def _build_call_stack_trace(cls) -> Optional[any_pb2.Any]:
+        """
+        Build a call stack trace for the current Spark Connect action
+        Returns
+        -------
+        FetchErrorDetailsResponse.Error: An Error object containing list of stack frames
+        of the user code packed as Any protobuf
+        """
+        if os.getenv("SPARK_CONNECT_DEBUG_CLIENT_CALL_STACK", "false").lower() in ("true", "1"):
+            stack_frames = cls._retrieve_stack_frames()
+            call_stack = FetchErrorDetailsResponse.Error()
+            for call_site in stack_frames:
+                stack_trace_element = pb2.FetchErrorDetailsResponse.StackTraceElement()
+                stack_trace_element.declaring_class = ""  # unknown information
+                stack_trace_element.method_name = call_site.function
+                stack_trace_element.file_name = call_site.file
+                stack_trace_element.line_number = call_site.linenum
+                call_stack.stack_trace.append(stack_trace_element)
+            if len(call_stack.stack_trace) > 0:
+                call_stack_details = any_pb2.Any()
+                call_stack_details.Pack(call_stack)
+                return call_stack_details
+        return None
 
     def register_udf(
         self,
@@ -1348,8 +1348,7 @@ class SparkConnectClient(object):
             req.operation_id = operation_id
         self._update_request_with_user_context_extensions(req)
 
-        call_stack_trace = _build_call_stack_trace()
-        if call_stack_trace:
+        if call_stack_trace := self.__class__._build_call_stack_trace():
             req.user_context.extensions.append(call_stack_trace)
         return req
 
@@ -1362,8 +1361,7 @@ class SparkConnectClient(object):
         if self._user_id:
             req.user_context.user_id = self._user_id
         self._update_request_with_user_context_extensions(req)
-        call_stack_trace = _build_call_stack_trace()
-        if call_stack_trace:
+        if call_stack_trace := self.__class__._build_call_stack_trace():
             req.user_context.extensions.append(call_stack_trace)
         return req
 
@@ -1780,8 +1778,7 @@ class SparkConnectClient(object):
         if self._user_id:
             req.user_context.user_id = self._user_id
         self._update_request_with_user_context_extensions(req)
-        call_stack_trace = _build_call_stack_trace()
-        if call_stack_trace:
+        if call_stack_trace := self.__class__._build_call_stack_trace():
             req.user_context.extensions.append(call_stack_trace)
         return req
 
