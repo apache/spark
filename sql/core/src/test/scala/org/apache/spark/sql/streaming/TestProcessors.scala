@@ -164,7 +164,7 @@ class SessionTimeoutProcessor extends StatefulProcessor[String, String, (String,
       timerValues: TimerValues,
       expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
     lastSeenState.clear()
-    Iterator.single((key, s"session-expired@${timerValues.getCurrentProcessingTimeInMs()}"))
+    Iterator.single((key, s"session-expired@${expiredTimerInfo.getExpiryTimeInMs()}"))
   }
 }
 
@@ -214,7 +214,9 @@ class EventTimeSessionProcessor
       expiredTimerInfo: ExpiredTimerInfo): Iterator[(String, String)] = {
     val watermark = timerValues.getCurrentWatermarkInMs()
     lastEventTimeState.clear()
-    Iterator.single((key, s"session-expired@watermark=$watermark"))
+    Iterator.single(
+      (key, s"session-expired@${expiredTimerInfo.getExpiryTimeInMs()}")
+    )
   }
 }
 

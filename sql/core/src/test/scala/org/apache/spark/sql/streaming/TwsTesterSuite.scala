@@ -355,11 +355,11 @@ class TwsTesterSuite extends SparkFunSuite {
 
     // Set time to 11 seconds - key1's timer should fire
     val expired2 = tester.setProcessingTime(11000)
-    assert(expired2 == List(("key1", "session-expired@11000")))
+    assert(expired2 == List(("key1", "session-expired@10000")))
 
     // Set time to 16 seconds - key2's timer should fire
     val expired3 = tester.setProcessingTime(16000)
-    assert(expired3 == List(("key2", "session-expired@16000")))
+    assert(expired3 == List(("key2", "session-expired@15000")))
 
     // Verify state is cleared after session expiry
     assert(tester.peekValueState[Long]("lastSeen", "key1").isEmpty)
@@ -394,7 +394,7 @@ class TwsTesterSuite extends SparkFunSuite {
     val expired2 = tester.setWatermark(18000)
     assert(expired2.size == 1)
     assert(expired2.head._1 == "key1")
-    assert(expired2.head._2.startsWith("session-expired@watermark="))
+    assert(expired2.head._2.startsWith("session-expired@17000"))
 
     // Verify state is cleared
     assert(tester.peekValueState[Long]("lastEventTime", "key1").isEmpty)

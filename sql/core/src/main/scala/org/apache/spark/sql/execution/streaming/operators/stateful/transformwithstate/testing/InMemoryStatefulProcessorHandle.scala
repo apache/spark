@@ -203,7 +203,7 @@ class InMemoryTimers {
  * `peekXxxState` and `updateXxxState` methods for test assertions and setup, allowing
  * direct manipulation of state without going through the processor logic.
  */
-class InMemoryStatefulProcessorHandle(private val timeMode: TimeMode, private val clock: Clock)
+class InMemoryStatefulProcessorHandle(timeMode: TimeMode, clock: Clock)
   extends StatefulProcessorHandle {
 
   val timers = new InMemoryTimers()
