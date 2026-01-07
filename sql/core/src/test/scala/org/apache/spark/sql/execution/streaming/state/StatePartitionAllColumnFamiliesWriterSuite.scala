@@ -683,6 +683,7 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
             performRoundTripTest(
               sourceDir.getAbsolutePath,
               targetDir.getAbsolutePath,
+              storeToColumnFamilies = Map(StateStoreId.DEFAULT_STORE_NAME -> schemas.keys.toList),
               storeToColumnFamilyToSelectExprs =
                 Map(StateStoreId.DEFAULT_STORE_NAME -> columnFamilyToSelectExprs),
               storeToColumnFamilyToStateSourceOptions =
@@ -721,12 +722,14 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
               StopStream
             )
 
-            val (_, selectExprs, stateSourceOptions) =
+            val (schemaMap, selectExprs, stateSourceOptions) =
               getTimerStateConfigsForCountState(TimeMode.EventTime())
 
             performRoundTripTest(
               sourceDir.getAbsolutePath,
               targetDir.getAbsolutePath,
+              storeToColumnFamilies =
+                Map(StateStoreId.DEFAULT_STORE_NAME -> schemaMap.keys.toList),
               storeToColumnFamilyToSelectExprs =
                 Map(StateStoreId.DEFAULT_STORE_NAME -> selectExprs),
               storeToColumnFamilyToStateSourceOptions =
@@ -770,12 +773,14 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
               StopStream
             )
 
-            val (_, selectExprs, sourceOptions) =
+            val (schemaMap, selectExprs, sourceOptions) =
               getTimerStateConfigsForCountState(TimeMode.ProcessingTime())
 
             performRoundTripTest(
               sourceDir.getAbsolutePath,
               targetDir.getAbsolutePath,
+              storeToColumnFamilies =
+                Map(StateStoreId.DEFAULT_STORE_NAME -> schemaMap.keys.toList),
               storeToColumnFamilyToSelectExprs =
                 Map(StateStoreId.DEFAULT_STORE_NAME -> selectExprs),
               storeToColumnFamilyToStateSourceOptions =
@@ -842,6 +847,8 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
             performRoundTripTest(
               sourceDir.getAbsolutePath,
               targetDir.getAbsolutePath,
+              storeToColumnFamilies =
+                Map(StateStoreId.DEFAULT_STORE_NAME -> schemas.keys.toList),
               storeToColumnFamilyToSelectExprs =
                 Map(StateStoreId.DEFAULT_STORE_NAME -> columnFamilyToSelectExprs),
               storeToColumnFamilyToStateSourceOptions =
@@ -899,6 +906,8 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
             performRoundTripTest(
               sourceDir.getAbsolutePath,
               targetDir.getAbsolutePath,
+              storeToColumnFamilies =
+                Map(StateStoreId.DEFAULT_STORE_NAME -> schemas.keys.toList),
               storeToColumnFamilyToSelectExprs =
                 Map(StateStoreId.DEFAULT_STORE_NAME -> columnFamilyToSelectExprs),
               storeToColumnFamilyToStateSourceOptions =
@@ -952,6 +961,8 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
             performRoundTripTest(
               sourceDir.getAbsolutePath,
               targetDir.getAbsolutePath,
+              storeToColumnFamilies =
+                Map(StateStoreId.DEFAULT_STORE_NAME -> schemas.keys.toList),
               storeToColumnFamilyToStateSourceOptions =
                 Map(StateStoreId.DEFAULT_STORE_NAME -> columnFamilyToStateSourceOptions),
               operatorName = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME

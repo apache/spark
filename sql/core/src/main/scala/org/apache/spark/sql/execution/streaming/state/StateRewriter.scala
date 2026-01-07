@@ -43,7 +43,7 @@ import org.apache.spark.util.SerializableConfiguration
  * and then writes the state back to a (possibly different) checkpoint location for a new batch ID.
  *
  * Example use case is for offline state repartitioning.
- * Can also be used to support state rewind and other use cases.
+ * Can also be used to support other use cases.
  *
  * @param sparkSession The active Spark session.
  * @param readBatchId The batch ID for reading state.
