@@ -1841,7 +1841,10 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         return PandasConversionMixin.toArrow(self)
 
     def toPandas(self) -> "PandasDataFrameLike":
-        return PandasConversionMixin.toPandas(self)
+        return PandasConversionMixin._to_pandas(self)
+
+    def _to_pandas(self, **kwargs: Any) -> "PandasDataFrameLike":
+        return PandasConversionMixin._to_pandas(self, **kwargs)
 
     def transpose(self, indexColumn: Optional["ColumnOrName"] = None) -> ParentDataFrame:
         if indexColumn is not None:
@@ -2008,7 +2011,7 @@ def _test() -> None:
         import pyarrow as pa
         from pyspark.loose_version import LooseVersion
 
-        if LooseVersion(pa.__version__) < LooseVersion("17.0.0"):
+        if LooseVersion(pa.__version__) < LooseVersion("21.0.0"):
             del pyspark.sql.dataframe.DataFrame.mapInArrow.__doc__
 
     spark = (

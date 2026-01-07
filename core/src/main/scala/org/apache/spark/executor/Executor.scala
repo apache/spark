@@ -24,7 +24,7 @@ import java.net.{URI, URL, URLClassLoader}
 import java.nio.ByteBuffer
 import java.util.{Locale, Properties}
 import java.util.concurrent._
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 import java.util.concurrent.locks.ReentrantLock
 import javax.annotation.concurrent.GuardedBy
 
@@ -40,7 +40,7 @@ import org.slf4j.{MDC => SLF4JMDC}
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.executor.Executor.TASK_THREAD_NAME_PREFIX
+import org.apache.spark.executor.Executor.{IDLE_TASK_THREAD_NAME, TASK_THREAD_NAME_PREFIX}
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.config._
@@ -59,13 +59,63 @@ import org.apache.spark.util._
 import org.apache.spark.util.ArrayImplicits._
 
 private[spark] class IsolatedSessionState(
-  val sessionUUID: String,
-  var urlClassLoader: MutableURLClassLoader,
-  var replClassLoader: ClassLoader,
-  val currentFiles: HashMap[String, Long],
-  val currentJars: HashMap[String, Long],
-  val currentArchives: HashMap[String, Long],
-  val replClassDirUri: Option[String])
+    val sessionUUID: String,
+    var urlClassLoader: MutableURLClassLoader,
+    var replClassLoader: ClassLoader,
+    val currentFiles: HashMap[String, Long],
+    val currentJars: HashMap[String, Long],
+    val currentArchives: HashMap[String, Long],
+    val replClassDirUri: Option[String]) extends Logging {
+
+  // Reference count for the number of running tasks using this session.
+  private val refCount: AtomicInteger = new AtomicInteger(0)
+
+  // Whether this session has been evicted from the cache.
+  @volatile private var evicted: Boolean = false
+
+  /** Increment the reference count, indicating a task is using this session. */
+  def acquire(): Unit = refCount.incrementAndGet()
+
+  /** Decrement the reference count. If evicted and no more tasks, clean up. */
+  def release(): Unit = {
+    if (refCount.decrementAndGet() == 0 && evicted) {
+      cleanup()
+    }
+  }
+
+  /** Mark this session as evicted. If no tasks are using it, clean up immediately. */
+  def markEvicted(): Unit = {
+    evicted = true
+    if (refCount.get() == 0) {
+      cleanup()
+    } else {
+      logInfo(log"Session ${MDC(SESSION_ID, sessionUUID)} evicted but still in use by " +
+        log"${MDC(LogKeys.COUNT, refCount.get())} task(s), deferring cleanup")
+    }
+  }
+
+  private def cleanup(): Unit = {
+    // Close the urlClassLoader to release resources.
+    try {
+      urlClassLoader match {
+        case cl: URLClassLoader =>
+          cl.close()
+          logInfo(log"Closed urlClassLoader for session ${MDC(SESSION_ID, sessionUUID)}")
+        case _ =>
+      }
+    } catch {
+      case NonFatal(e) =>
+        logWarning(log"Failed to close urlClassLoader for session " +
+          log"${MDC(SESSION_ID, sessionUUID)}", e)
+    }
+    // Delete session files.
+    val sessionBasedRoot = new File(SparkFiles.getRootDirectory(), sessionUUID)
+    if (sessionBasedRoot.isDirectory && sessionBasedRoot.exists()) {
+      Utils.deleteRecursively(sessionBasedRoot)
+    }
+    logInfo(log"Session cleaned up: ${MDC(SESSION_ID, sessionUUID)}")
+  }
+}
 
 /**
  * Spark executor, backed by a threadpool to run tasks.
@@ -220,25 +270,9 @@ private[spark] class Executor(
         val state = notification.getValue
         // Cache is always used for isolated sessions.
         assert(!isDefaultState(state.sessionUUID))
-        // Close the urlClassLoader to release resources.
-        try {
-          state.urlClassLoader match {
-            case urlClassLoader: URLClassLoader =>
-              urlClassLoader.close()
-              logInfo(log"Closed urlClassLoader (URLClassLoader) for evicted session " +
-                log"${MDC(SESSION_ID, state.sessionUUID)}")
-            case _ =>
-          }
-        } catch {
-          case NonFatal(e) =>
-            logWarning(log"Failed to close urlClassLoader for session " +
-              log"${MDC(SESSION_ID, state.sessionUUID)}", e)
-        }
-        val sessionBasedRoot = new File(SparkFiles.getRootDirectory(), state.sessionUUID)
-        if (sessionBasedRoot.isDirectory && sessionBasedRoot.exists()) {
-          Utils.deleteRecursively(sessionBasedRoot)
-        }
-        logInfo(log"Session evicted: ${MDC(SESSION_ID, state.sessionUUID)}")
+        // Mark evicted - cleanup will happen immediately if no tasks are using it,
+        // or when the last task releases it.
+        state.markEvicted()
       }
     })
     .build[String, IsolatedSessionState]
@@ -600,6 +634,9 @@ private[spark] class Executor(
         case _ => defaultSessionState
       }
 
+      // Pin the session to prevent its class loader from being closed while this task is running.
+      isolatedSession.acquire()
+
       setMDCForTask(taskName, mdcProperties)
       threadId = Thread.currentThread.getId
       Thread.currentThread.setName(threadName)
@@ -905,6 +942,9 @@ private[spark] class Executor(
           // are known, and metricsPoller.onTaskStart was called.
           metricsPoller.onTaskCompletion(taskId, task.stageId, task.stageAttemptId)
         }
+        // Release the session reference. If evicted and this was the last task, cleanup happens.
+        isolatedSession.release()
+        Thread.currentThread().setName(s"$IDLE_TASK_THREAD_NAME#$threadId" )
       }
     }
 
@@ -1349,6 +1389,7 @@ private[spark] class Executor(
 
 private[spark] object Executor extends Logging {
   val TASK_THREAD_NAME_PREFIX = "Executor task launch worker"
+  val IDLE_TASK_THREAD_NAME = "Executor task idle worker"
 
   // This is reserved for internal use by components that need to read task properties before a
   // task is fully deserialized. When possible, the TaskContext.getLocalProperty call should be

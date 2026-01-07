@@ -460,3 +460,21 @@ Project [col#x, count(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FO
          +- Window [count(1) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS count(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#xL]
             +- Aggregate [count(1) AS count(1)#xL]
                +- OneRowRelation
+
+
+-- !query
+SELECT explode(array(array(0), array(1), array(2))) as arr, explode(arr) as col
+-- !query analysis
+Project [arr#x, col#x]
++- Generate explode(arr#x), false, [col#x]
+   +- Generate explode(array(array(0), array(1), array(2))), false, [arr#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT explode(arr) as col, explode(array(array(0), array(1), array(2))) as arr
+-- !query analysis
+Project [col#x, arr#x]
++- Generate explode(arr#x), false, [col#x]
+   +- Generate explode(array(array(0), array(1), array(2))), false, [arr#x]
+      +- OneRowRelation

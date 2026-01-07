@@ -235,6 +235,7 @@ object AnalysisContext {
 object Analyzer {
   // List of configurations that should be passed on when resolving views and SQL UDF.
   private val RETAINED_ANALYSIS_FLAGS = Seq(
+    "spark.sql.view.schemaEvolution.preserveUserComments",
     // retainedHiveConfigs
     // TODO: remove these Hive-related configs after the `RelationConversions` is moved to
     // optimization phase.
@@ -754,6 +755,7 @@ class Analyzer(
         groupByExprs: Seq[Expression],
         aggregationExprs: Seq[NamedExpression],
         child: LogicalPlan): LogicalPlan = {
+      val aggregationExprsNoAlias = aggregationExprs.map(trimNonTopLevelAliases)
 
       if (groupByExprs.size > GroupingID.dataType.defaultSize * 8) {
         throw QueryCompilationErrors.groupingSizeTooLargeError(GroupingID.dataType.defaultSize * 8)
@@ -774,7 +776,7 @@ class Analyzer(
       val groupingAttrs = expand.output.drop(child.output.length)
 
       val aggregations = constructAggregateExprs(
-        groupByExprs, aggregationExprs, groupByAliases, groupingAttrs, gid)
+        groupByExprs, aggregationExprsNoAlias, groupByAliases, groupingAttrs, gid)
 
       Aggregate(groupingAttrs, aggregations, expand)
     }
@@ -951,32 +953,7 @@ class Analyzer(
       // TypeCoercionBase.UnpivotCoercion determines valueType
       // and casts values once values are set and resolved
       case Unpivot(Some(ids), Some(values), aliases, variableColumnName, valueColumnNames, child) =>
-
-        def toString(values: Seq[NamedExpression]): String =
-          values.map(v => v.name).mkString("_")
-
-        // construct unpivot expressions for Expand
-        val exprs: Seq[Seq[Expression]] =
-          values.zip(aliases.getOrElse(values.map(_ => None))).map {
-            case (vals, Some(alias)) => (ids :+ Literal(alias)) ++ vals
-            case (Seq(value), None) => (ids :+ Literal(value.name)) :+ value
-            // there are more than one value in vals
-            case (vals, None) => (ids :+ Literal(toString(vals))) ++ vals
-          }
-
-        // construct output attributes
-        val variableAttr = AttributeReference(variableColumnName, StringType, nullable = false)()
-        val valueAttrs = valueColumnNames.zipWithIndex.map {
-          case (valueColumnName, idx) =>
-            AttributeReference(
-              valueColumnName,
-              values.head(idx).dataType,
-              values.map(_(idx)).exists(_.nullable))()
-        }
-        val output = (ids.map(_.toAttribute) :+ variableAttr) ++ valueAttrs
-
-        // expand the unpivot expressions
-        Expand(exprs, output, child)
+        UnpivotTransformer(ids, values, aliases, variableColumnName, valueColumnNames, child)
     }
   }
 
@@ -2126,7 +2103,7 @@ class Analyzer(
             throw QueryCompilationErrors.expectPersistentFuncError(
               nameParts.head, cmd, mismatchHint, u)
           } else {
-            ResolvedNonPersistentFunc(nameParts.head, V1Function(info))
+            ResolvedNonPersistentFunc(nameParts.head, V1Function.metadataOnly(info))
           }
         }.getOrElse {
           val CatalogAndIdentifier(catalog, ident) =
@@ -2308,10 +2285,10 @@ class Analyzer(
   object ResolveProcedures extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(UNRESOLVED_PROCEDURE), ruleId) {
-      case Call(UnresolvedProcedure(CatalogAndIdentifier(catalog, ident)), args, execute) =>
+      case UnresolvedProcedure(CatalogAndIdentifier(catalog, ident)) =>
         val procedureCatalog = catalog.asProcedureCatalog
         val procedure = load(procedureCatalog, ident)
-        Call(ResolvedProcedure(procedureCatalog, ident, procedure), args, execute)
+        ResolvedProcedure(procedureCatalog, ident, procedure)
     }
 
     private def load(catalog: ProcedureCatalog, ident: Identifier): UnboundProcedure = {

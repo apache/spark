@@ -2484,12 +2484,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       maxDynamicPartitions: Int,
       maxDynamicPartitionsKey: String): Throwable = {
     new SparkException(
-      errorClass = "_LEGACY_ERROR_TEMP_2277",
+      errorClass = "DYNAMIC_PARTITION_WRITE_PARTITION_NUM_LIMIT_EXCEEDED",
       messageParameters = Map(
-        "numWrittenParts" -> numWrittenParts.toString(),
+        "numWrittenParts" -> numWrittenParts.toString,
         "maxDynamicPartitionsKey" -> maxDynamicPartitionsKey,
-        "maxDynamicPartitions" -> maxDynamicPartitions.toString(),
-        "numWrittenParts" -> numWrittenParts.toString()),
+        "maxDynamicPartitions" -> maxDynamicPartitions.toString),
       cause = null)
   }
 
@@ -3222,6 +3221,18 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "functionName" -> toSQLId(function),
         "k" -> toSQLValue(k, IntegerType)))
+  }
+
+  def vectorDimensionMismatchError(
+    function: String,
+    leftDim: Int,
+    rightDim: Int): RuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "VECTOR_DIMENSION_MISMATCH",
+      messageParameters = Map(
+        "functionName" -> toSQLId(function),
+        "leftDim" -> leftDim.toString,
+        "rightDim" -> rightDim.toString))
   }
 
   def tupleInvalidInputSketchBuffer(function: String): Throwable = {

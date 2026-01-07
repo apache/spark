@@ -1071,7 +1071,7 @@ class DataSourceV2DataFrameSuite
            c1 timestamp,
            current_timestamp TIMESTAMP DEFAULT c1)""")
         },
-        condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+        condition = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
         parameters = Map(
           "statement" -> "CREATE TABLE",
           "colName" -> "`current_timestamp`",
@@ -2051,6 +2051,41 @@ class DataSourceV2DataFrameSuite
     catalog(catalogName) match {
       case inMemory: BasicInMemoryTableCatalog => inMemory.pinTable(ident, version)
       case _ => fail(s"can't pin $ident in $catalogName")
+    }
+  }
+
+  test("CTAS/RTAS should trigger two query executions") {
+    // CTAS/RTAS triggers 2 query executions:
+    // 1. The outer CTAS/RTAS command execution
+    // 2. The inner AppendData/OverwriteByExpression execution
+    var executionCount = 0
+    val listener = new QueryExecutionListener {
+      override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
+        executionCount += 1
+      }
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+    }
+
+    try {
+      spark.listenerManager.register(listener)
+      val t = "testcat.ns1.ns2.tbl"
+      withTable(t) {
+        // Test CTAS (CreateTableAsSelect)
+        executionCount = 0
+        sql(s"CREATE TABLE $t USING foo AS SELECT 1 as id, 'a' as data")
+        sparkContext.listenerBus.waitUntilEmpty()
+        assert(executionCount == 2,
+          s"CTAS should trigger 2 executions, got $executionCount")
+
+        // Test RTAS (ReplaceTableAsSelect)
+        executionCount = 0
+        sql(s"CREATE OR REPLACE TABLE $t USING foo AS SELECT 2 as id, 'b' as data")
+        sparkContext.listenerBus.waitUntilEmpty()
+        assert(executionCount == 2,
+          s"RTAS should trigger 2 executions, got $executionCount")
+      }
+    } finally {
+      spark.listenerManager.unregister(listener)
     }
   }
 }

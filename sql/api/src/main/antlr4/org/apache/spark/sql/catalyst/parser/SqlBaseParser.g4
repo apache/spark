@@ -259,9 +259,9 @@ statement
         createTableClauses
         (AS? query)?                                                   #replaceTable
     | ANALYZE TABLE identifierReference partitionSpec? COMPUTE STATISTICS
-        (identifier | FOR COLUMNS identifierSeq | FOR ALL COLUMNS)?    #analyze
+        (simpleIdentifier | FOR COLUMNS identifierSeq | FOR ALL COLUMNS)?    #analyze
     | ANALYZE TABLES ((FROM | IN) identifierReference)? COMPUTE STATISTICS
-        (identifier)?                                                  #analyzeTables
+        (simpleIdentifier)?                                            #analyzeTables
     | ALTER TABLE identifierReference
         ADD (COLUMN | COLUMNS)
         columns=qualifiedColTypeWithPositionList                       #addTableColumns
@@ -391,7 +391,7 @@ statement
     | TRUNCATE TABLE identifierReference partitionSpec?                #truncateTable
     | (MSCK)? REPAIR TABLE identifierReference
         (option=(ADD|DROP|SYNC) PARTITIONS)?                           #repairTable
-    | op=(ADD | LIST) identifier .*?                                   #manageResource
+    | op=(ADD | LIST) simpleIdentifier .*?                             #manageResource
     | CREATE INDEX (IF errorCapturingNot EXISTS)? identifier ON TABLE?
         identifierReference (USING indexType=identifier)?
         LEFT_PAREN columns=multipartIdentifierPropertyList RIGHT_PAREN
@@ -562,7 +562,7 @@ query
 insertInto
     : INSERT OVERWRITE TABLE? identifierReference optionsClause? (partitionSpec (IF errorCapturingNot EXISTS)?)?  ((BY NAME) | identifierList)? #insertOverwriteTable
     | INSERT INTO TABLE? identifierReference optionsClause? partitionSpec? (IF errorCapturingNot EXISTS)? ((BY NAME) | identifierList)?   #insertIntoTable
-    | INSERT INTO TABLE? identifierReference optionsClause? REPLACE whereClause                                             #insertIntoReplaceWhere
+    | INSERT INTO TABLE? identifierReference optionsClause? (BY NAME)? REPLACE whereClause              #insertIntoReplaceWhere
     | INSERT OVERWRITE LOCAL? DIRECTORY path=stringLit rowFormat? createFileFormat?                     #insertOverwriteHiveDir
     | INSERT OVERWRITE LOCAL? DIRECTORY (path=stringLit)? tableProvider (OPTIONS options=propertyList)? #insertOverwriteDir
     ;
@@ -695,7 +695,7 @@ createFileFormat
 
 fileFormat
     : INPUTFORMAT inFmt=stringLit OUTPUTFORMAT outFmt=stringLit    #tableFileFormat
-    | identifier                                             #genericFileFormat
+    | simpleIdentifier                                             #genericFileFormat
     ;
 
 storageHandler
@@ -703,7 +703,7 @@ storageHandler
     ;
 
 resource
-    : identifier stringLit
+    : simpleIdentifier stringLit
     ;
 
 dmlStatementNoWith

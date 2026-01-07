@@ -1320,6 +1320,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         // Create a test column family
         val testCfName = "test_cf"
         db.createColFamilyIfAbsent(testCfName, isInternal = false)
+        assert(db.allColumnFamilyNames == Set(StateStore.DEFAULT_COL_FAMILY_NAME, testCfName))
 
         // Write initial data
         db.load(0)

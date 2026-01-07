@@ -1572,7 +1572,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
         val decimal = input1.asInstanceOf[Decimal]
         if (_scale >= 0) {
           // Overflow cannot happen, so no need to control nullOnOverflow
-          decimal.toPrecision(decimal.precision, s, mode)
+          decimal.toPrecision(p, s, mode)
         } else {
           Decimal(decimal.toBigDecimal.setScale(_scale, mode), p, s)
         }
@@ -1644,10 +1644,9 @@ abstract class RoundBase(child: Expression, scale: Expression,
       case DecimalType.Fixed(p, s) =>
         if (_scale >= 0) {
           s"""
-            ${ev.value} = ${ce.value}.toPrecision(${ce.value}.precision(), $s,
-            Decimal.$modeStr(), true, null);
+            ${ev.value} = ${ce.value}.toPrecision($p, $s, Decimal.$modeStr(), true, null);
             ${ev.isNull} = ${ev.value} == null;"""
-       } else {
+        } else {
           s"""
             ${ev.value} = new Decimal().set(${ce.value}.toBigDecimal()
             .setScale(${_scale}, Decimal.$modeStr()), $p, $s);

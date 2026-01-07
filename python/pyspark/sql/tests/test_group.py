@@ -86,7 +86,7 @@ class GroupTestsMixin:
             ["a", "b"],
         )
 
-        with self.tempView("v"):
+        with self.temp_view("v"):
             df.createOrReplaceTempView("v")
 
             # basic case
@@ -158,7 +158,7 @@ class GroupTestsMixin:
             ["a", "b"],
         )
 
-        with self.tempView("v"):
+        with self.temp_view("v"):
             df.createOrReplaceTempView("v")
 
             df1 = spark.sql("select * from v order by 1 desc;")
@@ -202,13 +202,6 @@ class GroupTests(GroupTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.sql.tests.test_group import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()
