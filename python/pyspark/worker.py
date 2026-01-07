@@ -3462,7 +3462,6 @@ def main(infile, outfile):
             key = utf8_deserializer.loads(infile)
             name = utf8_deserializer.loads(infile)
             addresses = []
-            taskContext._resources = {}
             for a in range(read_int(infile)):
                 addresses.append(utf8_deserializer.loads(infile))
             taskContext._resources[key] = ResourceInformation(name, addresses)
