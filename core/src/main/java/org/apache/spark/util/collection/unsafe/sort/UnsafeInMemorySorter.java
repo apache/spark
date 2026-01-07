@@ -177,7 +177,8 @@ public final class UnsafeInMemorySorter {
         // Set the array to null instead of allocating a new array. Allocating an array could have
         // triggered another spill and this method already is called from UnsafeExternalSorter when
         // spilling. Attempting to allocate while spilling is dangerous, as we could be holding onto
-        // a large partially complete allocation, which may prevent other memory from being allocated.
+        // a large partially complete allocation, which may prevent other memory from being
+        // allocated.
         // Instead we will allocate the new array when it is necessary.
         array = null;
         usableCapacity = 0;
