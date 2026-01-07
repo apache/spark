@@ -19,16 +19,16 @@ import argparse
 import sys
 
 
-def build_parser():
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Dump threads of a process and its children")
     parser.add_argument("-p", "--pid", type=int, required=True, help="The PID to dump")
     return parser
 
 
-def main():
+def main() -> int:
     try:
         import psutil
-        from pystack.__main__ import main as pystack_main
+        from pystack.__main__ import main as pystack_main  # type: ignore
     except ImportError:
         print("pystack and psutil are not installed")
         return 1
