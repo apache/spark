@@ -22,7 +22,7 @@ def main(module="__main__", output="target/test-reports"):
     try:
         import xmlrunner
 
-        testRunner = xmlrunner.XMLTestRunner(output=output, verbosity=2)
+        testRunner = xmlrunner.XMLTestRunner(output=output, verbosity=2, outsuffix="")
     except ImportError:
         testRunner = None
     unittest.main(module=module, testRunner=testRunner, verbosity=2)
