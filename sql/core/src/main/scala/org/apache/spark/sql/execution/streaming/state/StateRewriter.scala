@@ -23,6 +23,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkIllegalStateException, TaskContext}
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.DataFrame
@@ -35,7 +36,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
 import org.apache.spark.sql.execution.streaming.runtime.{StreamingCheckpointConstants, StreamingQueryCheckpointMetadata}
 import org.apache.spark.sql.execution.streaming.state.{StatePartitionAllColumnFamiliesWriter, StateSchemaCompatibilityChecker}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 /**
  * State Rewriter is used to rewrite the state stores for a stateful streaming query.
@@ -88,6 +89,15 @@ class StateRewriter(
       log"readBatchId=${MDC(BATCH_ID, readBatchId)}, " +
       log"writeBatchId=${MDC(BATCH_ID, writeBatchId)}")
 
+    val (_, timeTakenMs) = Utils.timeTakenMs {
+      runInternal()
+    }
+
+    logInfo(log"State rewrite completed in ${MDC(DURATION, timeTakenMs)} ms for " +
+      log"checkpointLocation=${MDC(CHECKPOINT_LOCATION, resolvedCheckpointLocation)}")
+  }
+
+  private def runInternal(): Unit = {
     try {
       val stateMetadataReader = new StateMetadataPartitionReader(
         resolvedCheckpointLocation,
@@ -96,7 +106,8 @@ class StateRewriter(
 
       val allOperatorsMetadata = stateMetadataReader.allOperatorStateMetadata
       if (allOperatorsMetadata.isEmpty) {
-        // Could be the query is stateless or ran on older spark version without op metadata
+        // Its possible that the query is stateless
+        // or ran on older spark version without op metadata
         throw StateRewriterErrors.missingOperatorMetadataError(
           resolvedCheckpointLocation, readBatchId)
       }
@@ -123,70 +134,15 @@ class StateRewriter(
 
         // Rewrite each state store of the operator
         stateStoresMetadata.foreach { stateStoreMetadata =>
-          // Read state
-          val stateDf = sparkSession.read
-            .format("statestore")
-            .option(StateSourceOptions.PATH, checkpointLocationForRead)
-            .option(StateSourceOptions.BATCH_ID, readBatchId)
-            .option(StateSourceOptions.OPERATOR_ID, opMetadata.operatorInfo.operatorId)
-            .option(StateSourceOptions.STORE_NAME, stateStoreMetadata.storeName)
-            .option(StateSourceOptions.INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES, "true")
-            .load()
-
-          // Run the caller state transformation func if provided
-          // Otherwise, use the state as is
-          val updatedStateDf = transformFunc.map(func => func(stateDf)).getOrElse(stateDf)
-          require(updatedStateDf.schema == stateDf.schema,
-            s"State transformation function must return a DataFrame with the same schema " +
-              s"as the original state DataFrame. Original schema: ${stateDf.schema}, " +
-              s"Updated schema: ${updatedStateDf.schema}")
-
-          val storeSchemaFiles = storeToSchemaFilesMap(stateStoreMetadata.storeName)
-          val schemaProvider = createStoreSchemaProviderIfTWS(
-            opMetadata.operatorInfo.operatorName,
-            storeSchemaFiles
-          )
-          val writerColFamilyInfoMap = getWriterColFamilyInfoMap(
-            opMetadata.operatorInfo.operatorId,
+          rewriteStore(
+            opMetadata,
             stateStoreMetadata,
-            storeSchemaFiles,
-            stateVarsIfTws
+            storeConf,
+            hadoopConfBroadcast,
+            storeToSchemaFilesMap(stateStoreMetadata.storeName),
+            stateVarsIfTws,
+            sqlConfEntries
           )
-
-          logInfo(log"Writing new state for " +
-            log"operator=${MDC(OP_TYPE, opMetadata.operatorInfo.operatorName)}, " +
-            log"stateStore=${MDC(STATE_NAME, stateStoreMetadata.storeName)}, " +
-            log"numColumnFamilies=${MDC(COUNT, writerColFamilyInfoMap.size)}, " +
-            log"numSchemaFiles=${MDC(NUM_FILES, storeSchemaFiles.size)}, " +
-            log"for new batch=${MDC(BATCH_ID, writeBatchId)}, " +
-            log"for checkpoint=${MDC(CHECKPOINT_LOCATION, resolvedCheckpointLocation)}")
-
-          // Write state for each partition on the executor.
-          // Setting this as local val,
-          // to avoid serializing the entire Rewriter object per partition.
-          val targetCheckpointLocation = resolvedCheckpointLocation
-          val currentBatchId = writeBatchId
-          updatedStateDf.queryExecution.toRdd.foreachPartition { partitionIter =>
-            // Recreate SQLConf on executor from serialized entries
-            val executorSqlConf = new SQLConf()
-            sqlConfEntries.foreach { case (k, v) => executorSqlConf.setConfString(k, v) }
-
-            val partitionWriter = new StatePartitionAllColumnFamiliesWriter(
-              storeConf,
-              hadoopConfBroadcast.value.value,
-              TaskContext.get().partitionId(),
-              targetCheckpointLocation,
-              opMetadata.operatorInfo.operatorId,
-              stateStoreMetadata.storeName,
-              currentBatchId,
-              writerColFamilyInfoMap,
-              opMetadata.operatorInfo.operatorName,
-              schemaProvider,
-              executorSqlConf
-            )
-
-            partitionWriter.write(partitionIter)
-          }
         }
       }
     } catch {
@@ -196,6 +152,80 @@ class StateRewriter(
           log"readBatchId=${MDC(BATCH_ID, readBatchId)}, " +
           log"writeBatchId=${MDC(BATCH_ID, writeBatchId)}", e)
         throw e
+    }
+  }
+
+  private def rewriteStore(
+      opMetadata: OperatorStateMetadata,
+      stateStoreMetadata: StateStoreMetadata,
+      storeConf: StateStoreConf,
+      hadoopConfBroadcast: Broadcast[SerializableConfiguration],
+      storeSchemaFiles: List[Path],
+      stateVarsIfTws: Map[String, TransformWithStateVariableInfo],
+      sqlConfEntries: Map[String, String]
+  ): Unit = {
+    // Read state
+    val stateDf = sparkSession.read
+      .format("statestore")
+      .option(StateSourceOptions.PATH, checkpointLocationForRead)
+      .option(StateSourceOptions.BATCH_ID, readBatchId)
+      .option(StateSourceOptions.OPERATOR_ID, opMetadata.operatorInfo.operatorId)
+      .option(StateSourceOptions.STORE_NAME, stateStoreMetadata.storeName)
+      .option(StateSourceOptions.INTERNAL_ONLY_READ_ALL_COLUMN_FAMILIES, "true")
+      .load()
+
+    // Run the caller state transformation func if provided
+    // Otherwise, use the state as is
+    val updatedStateDf = transformFunc.map(func => func(stateDf)).getOrElse(stateDf)
+    require(updatedStateDf.schema == stateDf.schema,
+      s"State transformation function must return a DataFrame with the same schema " +
+        s"as the original state DataFrame. Original schema: ${stateDf.schema}, " +
+        s"Updated schema: ${updatedStateDf.schema}")
+
+    val schemaProvider = createStoreSchemaProviderIfTWS(
+      opMetadata.operatorInfo.operatorName,
+      storeSchemaFiles
+    )
+    val writerColFamilyInfoMap = getWriterColFamilyInfoMap(
+      opMetadata.operatorInfo.operatorId,
+      stateStoreMetadata,
+      storeSchemaFiles,
+      stateVarsIfTws
+    )
+
+    logInfo(log"Writing new state for " +
+      log"operator=${MDC(OP_TYPE, opMetadata.operatorInfo.operatorName)}, " +
+      log"stateStore=${MDC(STATE_NAME, stateStoreMetadata.storeName)}, " +
+      log"numColumnFamilies=${MDC(COUNT, writerColFamilyInfoMap.size)}, " +
+      log"numSchemaFiles=${MDC(NUM_FILES, storeSchemaFiles.size)}, " +
+      log"for new batch=${MDC(BATCH_ID, writeBatchId)}, " +
+      log"for checkpoint=${MDC(CHECKPOINT_LOCATION, resolvedCheckpointLocation)}")
+
+    // Write state for each partition on the executor.
+    // Setting this as local val,
+    // to avoid serializing the entire Rewriter object per partition.
+    val targetCheckpointLocation = resolvedCheckpointLocation
+    val currentBatchId = writeBatchId
+    updatedStateDf.queryExecution.toRdd.foreachPartition { partitionIter =>
+      // Recreate SQLConf on executor from serialized entries
+      val executorSqlConf = new SQLConf()
+      sqlConfEntries.foreach { case (k, v) => executorSqlConf.setConfString(k, v) }
+
+      val partitionWriter = new StatePartitionAllColumnFamiliesWriter(
+        storeConf,
+        hadoopConfBroadcast.value.value,
+        TaskContext.get().partitionId(),
+        targetCheckpointLocation,
+        opMetadata.operatorInfo.operatorId,
+        stateStoreMetadata.storeName,
+        currentBatchId,
+        writerColFamilyInfoMap,
+        opMetadata.operatorInfo.operatorName,
+        schemaProvider,
+        executorSqlConf
+      )
+
+      partitionWriter.write(partitionIter)
     }
   }
 
@@ -260,7 +290,8 @@ class StateRewriter(
       oldSchemaFilePaths = schemaFiles)
     // Read the latest state schema from the provided path for v2 or from the dedicated path
     // for v1
-    manager.readSchemaFile()
+    manager
+      .readSchemaFile()
       .map { schema =>
         schema.colFamilyName -> createKeyEncoderSpecIfAbsent(schema, storeMetadata) }.toMap
   }
