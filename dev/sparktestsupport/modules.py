@@ -1160,6 +1160,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.client.test_artifact",
         "pyspark.sql.tests.connect.client.test_artifact_localcluster",
         "pyspark.sql.tests.connect.client.test_client",
+        "pyspark.sql.tests.connect.client.test_client_call_stack_trace",
         "pyspark.sql.tests.connect.client.test_reattach",
         "pyspark.sql.tests.connect.test_resources",
         "pyspark.sql.tests.connect.shell.test_progress",
