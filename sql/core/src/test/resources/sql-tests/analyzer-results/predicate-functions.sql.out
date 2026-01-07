@@ -524,9 +524,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "INVALID_SQL_SYNTAX.EMPTY_IN_PREDICATE",
   "sqlState" : "42000",
-  "messageParameters" : {
-    "alternative" : "Consider using 'WHERE FALSE' if you need an always-false condition, or provide at least one value in the IN list."
-  },
+  "messageParameters" : { },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -544,9 +542,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
 {
   "errorClass" : "INVALID_SQL_SYNTAX.EMPTY_IN_PREDICATE",
   "sqlState" : "42000",
-  "messageParameters" : {
-    "alternative" : "Consider using 'WHERE FALSE' if you need an always-false condition, or provide at least one value in the IN list."
-  },
+  "messageParameters" : { },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",

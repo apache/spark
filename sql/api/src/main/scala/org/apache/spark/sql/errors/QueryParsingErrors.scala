@@ -824,9 +824,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   def emptyInPredicateError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.EMPTY_IN_PREDICATE",
-      messageParameters = Map(
-        "alternative" -> ("Consider using 'WHERE FALSE' if you need an always-false condition, " +
-          "or provide at least one value in the IN list.")),
+      messageParameters = Map.empty,
       ctx)
   }
 

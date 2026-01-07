@@ -728,16 +728,13 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
   }
 
   test("INVALID_SQL_SYNTAX.EMPTY_IN_PREDICATE: Empty IN clause") {
-    val alternativeMsg = "Consider using 'WHERE FALSE' if you need an always-false condition, " +
-      "or provide at least one value in the IN list."
-
     // Test with single column IN ()
     // PredicateContext captures "IN ()" starting at position 33
     checkError(
       exception = parseException("SELECT * FROM range(10) WHERE id IN ()"),
       condition = "INVALID_SQL_SYNTAX.EMPTY_IN_PREDICATE",
       sqlState = "42000",
-      parameters = Map("alternative" -> alternativeMsg),
+      parameters = Map.empty,
       context = ExpectedContext(
         fragment = "IN ()",
         start = 33,
@@ -749,7 +746,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       exception = parseException("SELECT * FROM range(10) WHERE (id + 1) IN ()"),
       condition = "INVALID_SQL_SYNTAX.EMPTY_IN_PREDICATE",
       sqlState = "42000",
-      parameters = Map("alternative" -> alternativeMsg),
+      parameters = Map.empty,
       context = ExpectedContext(
         fragment = "IN ()",
         start = 39,
@@ -761,7 +758,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       exception = parseException("SELECT * FROM range(10) WHERE id NOT IN ()"),
       condition = "INVALID_SQL_SYNTAX.EMPTY_IN_PREDICATE",
       sqlState = "42000",
-      parameters = Map("alternative" -> alternativeMsg),
+      parameters = Map.empty,
       context = ExpectedContext(
         fragment = "NOT IN ()",
         start = 33,
