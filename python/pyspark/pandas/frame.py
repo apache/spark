@@ -1713,8 +1713,9 @@ class DataFrame(Frame, Generic[T]):
                 numeric_col_names[i],
                 F.col(f"{auxiliary_col_name}.{CORRELATION_CORR_OUTPUT_COLUMN}"),
             )
+
+        index_col_names: List[str] = []
         if internal.column_labels_level > 1:
-            index_col_names: List[str] = []
             for level in range(0, internal.column_labels_level):
                 index_col_name = SPARK_INDEX_NAME_FORMAT(level)
                 indices = [label[level] for label in numeric_labels]
