@@ -16,7 +16,6 @@
 #
 
 import time
-import unittest
 
 from pyspark.sql import Row, Observation, functions as F
 from pyspark.sql.types import StructType, LongType
@@ -246,12 +245,6 @@ class DataFrameObservationTests(
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_observation import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

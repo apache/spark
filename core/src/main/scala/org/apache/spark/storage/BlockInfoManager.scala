@@ -397,7 +397,10 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = false
     blockInfo(blockId) { (info, condition) =>
       if (info.writerTask != BlockInfo.NO_WRITER) {
         info.writerTask = BlockInfo.NO_WRITER
-        writeLocksByTask.get(taskAttemptId).remove(blockId)
+        val blockIds = writeLocksByTask.get(taskAttemptId)
+        if (blockIds != null) {
+          blockIds.remove(blockId)
+        }
       } else {
         // There can be a race between unlock and releaseAllLocksForTask which causes negative
         // reader counts. We need to check if the readLocksByTask per tasks are present, if they
@@ -489,23 +492,33 @@ private[storage] class BlockInfoManager(trackingCacheVisibility: Boolean = false
     val writeLocks = Option(writeLocksByTask.remove(taskAttemptId)).getOrElse(util.Set.of())
     writeLocks.forEach { blockId =>
       blockInfo(blockId) { (info, condition) =>
-        assert(info.writerTask == taskAttemptId)
-        info.writerTask = BlockInfo.NO_WRITER
-        condition.signalAll()
+        // Check the existence of `blockId` because `unlock` may have already removed it
+        // concurrently.
+        if (writeLocks.contains(blockId)) {
+          blocksWithReleasedLocks += blockId
+          assert(info.writerTask == taskAttemptId)
+          info.writerTask = BlockInfo.NO_WRITER
+          condition.signalAll()
+        }
       }
-      blocksWithReleasedLocks += blockId
     }
 
     val readLocks = Option(readLocksByTask.remove(taskAttemptId))
       .getOrElse(ImmutableMultiset.of[BlockId])
     readLocks.entrySet().forEach { entry =>
       val blockId = entry.getElement
-      val lockCount = entry.getCount
-      blocksWithReleasedLocks += blockId
       blockInfo(blockId) { (info, condition) =>
-        info.readerCount -= lockCount
-        assert(info.readerCount >= 0)
-        condition.signalAll()
+        // Calculating lockCount by readLocks.count instead of entry.getCount is intentional. See
+        // discussion in SPARK-50771 and the corresponding PR.
+        val lockCount = readLocks.count(blockId)
+
+        // lockCount can be 0 if read locks for `blockId` are released in `unlock` concurrently.
+        if (lockCount > 0) {
+          blocksWithReleasedLocks += blockId
+          info.readerCount -= lockCount
+          assert(info.readerCount >= 0)
+          condition.signalAll()
+        }
       }
     }
 
