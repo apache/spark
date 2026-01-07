@@ -190,7 +190,7 @@ object ThetaSketchUtils {
     try {
       Sketches.heapifySketch(memory, deserializer)
     } catch {
-      case e: Exception =>
+      case _: Exception =>
         throw QueryExecutionErrors.tupleInvalidInputSketchBuffer(prettyName)
     }
   }
