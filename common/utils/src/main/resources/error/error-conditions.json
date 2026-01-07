@@ -5587,6 +5587,32 @@
     },
     "sqlState" : "42616"
   },
+  "STATE_REWRITER_INVALID_CHECKPOINT" : {
+    "message" : [
+      "The state rewrite checkpoint location '<checkpointLocation>' is in an invalid state."
+    ],
+    "subClass" : {
+      "MISSING_KEY_ENCODER_SPEC" : {
+        "message" : [
+          "Key state encoder spec is expected for column family '<colFamilyName>' but was not found.",
+          "This is likely a bug, please report it."
+        ]
+      },
+      "MISSING_OPERATOR_METADATA" : {
+        "message" : [
+          "No stateful operator metadata was found for batch <batchId>.",
+          "Ensure that the checkpoint is for a stateful streaming query and the query ran on a Spark version that supports operator metadata (Spark 4.0+)."
+        ]
+      },
+      "UNSUPPORTED_STATE_STORE_METADATA_VERSION" : {
+        "message" : [
+          "Unsupported state store metadata version encountered.",
+          "Only StateStoreMetadataV1 and StateStoreMetadataV2 are supported."
+        ]
+      }
+    },
+    "sqlState" : "55019"
+  },
   "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS" : {
     "message" : [
       "Failed to create column family with unsupported starting character and name=<colFamilyName>."
