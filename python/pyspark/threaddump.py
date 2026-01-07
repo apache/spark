@@ -27,8 +27,8 @@ def build_parser():
 
 def main():
     try:
-        import pystack
         import psutil
+        from pystack.__main__ import main as pystack_main
     except ImportError:
         print("pystack and psutil are not installed")
         return 1
@@ -47,13 +47,11 @@ def main():
         return 2
 
     for pid in pids:
-        from pystack.__main__ import main as pystack_main
-
         sys.argv = ["pystack", "remote", str(pid)]
         try:
             print(f"Dumping threads for process {pid}")
             pystack_main()
-        except Exception as e:
+        except Exception:
             # We might tried to dump a process that is not a Python process
             pass
 
