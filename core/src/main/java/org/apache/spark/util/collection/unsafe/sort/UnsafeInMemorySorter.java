@@ -169,21 +169,27 @@ public final class UnsafeInMemorySorter {
    * Free the memory used by pointer array.
    */
   public void freeMemory() {
-    if (consumer != null) {
-      if (array != null) {
-        consumer.freeArray(array);
-      }
+    LongArray arrayToFree = null;
+    try {
+      synchronized (this) {
+        arrayToFree = array;
 
-      // Set the array to null instead of allocating a new array. Allocating an array could have
-      // triggered another spill and this method already is called from UnsafeExternalSorter when
-      // spilling. Attempting to allocate while spilling is dangerous, as we could be holding onto
-      // a large partially complete allocation, which may prevent other memory from being allocated.
-      // Instead we will allocate the new array when it is necessary.
-      array = null;
-      usableCapacity = 0;
+        // Set the array to null instead of allocating a new array. Allocating an array could have
+        // triggered another spill and this method already is called from UnsafeExternalSorter when
+        // spilling. Attempting to allocate while spilling is dangerous, as we could be holding onto
+        // a large partially complete allocation, which may prevent other memory from being allocated.
+        // Instead we will allocate the new array when it is necessary.
+        array = null;
+        usableCapacity = 0;
+
+        pos = 0;
+        nullBoundaryPos = 0;
+      }
+    } finally {
+      if (consumer != null && arrayToFree != null) {
+        consumer.freeArray(arrayToFree);
+      }
     }
-    pos = 0;
-    nullBoundaryPos = 0;
   }
 
   /**
@@ -227,8 +233,10 @@ public final class UnsafeInMemorySorter {
         pos * 8L);
       consumer.freeArray(array);
     }
-    array = newArray;
-    usableCapacity = getUsableCapacity();
+    synchronized (this) {
+      array = newArray;
+      usableCapacity = getUsableCapacity();
+    }
   }
 
   /**
