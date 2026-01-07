@@ -1138,6 +1138,7 @@ class Analyzer(
 
       case r: V2TableReference =>
         relationResolution.resolveReference(r)
+
       case r @ RelationTimeTravel(u: UnresolvedRelation, timestamp, version)
           if timestamp.forall(ts => ts.resolved && !SubqueryExpression.hasSubquery(ts)) =>
         val timeTravelSpec = TimeTravelSpec.create(timestamp, version, conf.sessionLocalTimeZone)
