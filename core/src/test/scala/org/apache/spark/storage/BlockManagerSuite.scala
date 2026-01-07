@@ -2634,7 +2634,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
     assert(logBlockIds.contains(logBlockId1) && logBlockIds.contains(logBlockId2))
   }
 
-  test("SPARK-53446: Optimize BlockManager remove operations with cached block mappings") {
+  test(
+    "SPARK-53446/SPARK-54947: Optimize BlockManager remove operations with cached block mappings") {
     val store = makeBlockManager(8000, "executor1")
     val broadcastId = BroadcastBlockId(0)
     val rddId = RDDBlockId(1, 3)
