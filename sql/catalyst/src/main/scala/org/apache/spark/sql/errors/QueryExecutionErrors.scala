@@ -3223,7 +3223,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "k" -> toSQLValue(k, IntegerType)))
   }
 
-  def vectorDimensionMismatchError(function: String, leftDim: Int, rightDim: Int): RuntimeException = {
+  def vectorDimensionMismatchError(
+    function: String,
+    leftDim: Int,
+    rightDim: Int): RuntimeException = {
     new SparkRuntimeException(
       errorClass = "VECTOR_DIMENSION_MISMATCH",
       messageParameters = Map(

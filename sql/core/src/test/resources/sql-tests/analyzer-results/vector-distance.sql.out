@@ -72,25 +72,8 @@ Project [vector_l2_distance(array(0.0, 0.0), array(3.0, 4.0)) AS vector_l2_dista
 -- !query
 SELECT vector_cosine_similarity(array(), array())
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"array()\"",
-    "inputType" : "\"ARRAY<VOID>\"",
-    "paramIndex" : "first",
-    "requiredType" : "\"ARRAY<FLOAT>\"",
-    "sqlExpr" : "\"vector_cosine_similarity(array(), array())\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 49,
-    "fragment" : "vector_cosine_similarity(array(), array())"
-  } ]
-}
+Project [vector_cosine_similarity(cast(array() as array<float>), cast(array() as array<float>)) AS vector_cosine_similarity(array(), array())#x]
++- OneRowRelation
 
 
 -- !query
@@ -117,145 +100,43 @@ Project [vector_cosine_similarity(array(0.0, 0.0, 0.0), array(1.0, 2.0, 3.0)) AS
 -- !query
 SELECT vector_cosine_similarity(NULL, array(1.0F, 2.0F, 3.0F))
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"NULL\"",
-    "inputType" : "\"VOID\"",
-    "paramIndex" : "first",
-    "requiredType" : "\"ARRAY<FLOAT>\"",
-    "sqlExpr" : "\"vector_cosine_similarity(NULL, array(1.0, 2.0, 3.0))\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 62,
-    "fragment" : "vector_cosine_similarity(NULL, array(1.0F, 2.0F, 3.0F))"
-  } ]
-}
+Project [vector_cosine_similarity(cast(null as array<float>), array(1.0, 2.0, 3.0)) AS vector_cosine_similarity(NULL, array(1.0, 2.0, 3.0))#x]
++- OneRowRelation
 
 
 -- !query
 SELECT vector_cosine_similarity(array(1.0F, 2.0F, 3.0F), NULL)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"NULL\"",
-    "inputType" : "\"VOID\"",
-    "paramIndex" : "second",
-    "requiredType" : "\"ARRAY<FLOAT>\"",
-    "sqlExpr" : "\"vector_cosine_similarity(array(1.0, 2.0, 3.0), NULL)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 62,
-    "fragment" : "vector_cosine_similarity(array(1.0F, 2.0F, 3.0F), NULL)"
-  } ]
-}
+Project [vector_cosine_similarity(array(1.0, 2.0, 3.0), cast(null as array<float>)) AS vector_cosine_similarity(array(1.0, 2.0, 3.0), NULL)#x]
++- OneRowRelation
 
 
 -- !query
 SELECT vector_inner_product(NULL, array(1.0F, 2.0F, 3.0F))
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"NULL\"",
-    "inputType" : "\"VOID\"",
-    "paramIndex" : "first",
-    "requiredType" : "\"ARRAY<FLOAT>\"",
-    "sqlExpr" : "\"vector_inner_product(NULL, array(1.0, 2.0, 3.0))\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 58,
-    "fragment" : "vector_inner_product(NULL, array(1.0F, 2.0F, 3.0F))"
-  } ]
-}
+Project [vector_inner_product(cast(null as array<float>), array(1.0, 2.0, 3.0)) AS vector_inner_product(NULL, array(1.0, 2.0, 3.0))#x]
++- OneRowRelation
 
 
 -- !query
 SELECT vector_inner_product(array(1.0F, 2.0F, 3.0F), NULL)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"NULL\"",
-    "inputType" : "\"VOID\"",
-    "paramIndex" : "second",
-    "requiredType" : "\"ARRAY<FLOAT>\"",
-    "sqlExpr" : "\"vector_inner_product(array(1.0, 2.0, 3.0), NULL)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 58,
-    "fragment" : "vector_inner_product(array(1.0F, 2.0F, 3.0F), NULL)"
-  } ]
-}
+Project [vector_inner_product(array(1.0, 2.0, 3.0), cast(null as array<float>)) AS vector_inner_product(array(1.0, 2.0, 3.0), NULL)#x]
++- OneRowRelation
 
 
 -- !query
 SELECT vector_l2_distance(NULL, array(1.0F, 2.0F, 3.0F))
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"NULL\"",
-    "inputType" : "\"VOID\"",
-    "paramIndex" : "first",
-    "requiredType" : "\"ARRAY<FLOAT>\"",
-    "sqlExpr" : "\"vector_l2_distance(NULL, array(1.0, 2.0, 3.0))\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 56,
-    "fragment" : "vector_l2_distance(NULL, array(1.0F, 2.0F, 3.0F))"
-  } ]
-}
+Project [vector_l2_distance(cast(null as array<float>), array(1.0, 2.0, 3.0)) AS vector_l2_distance(NULL, array(1.0, 2.0, 3.0))#x]
++- OneRowRelation
 
 
 -- !query
 SELECT vector_l2_distance(array(1.0F, 2.0F, 3.0F), NULL)
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"NULL\"",
-    "inputType" : "\"VOID\"",
-    "paramIndex" : "second",
-    "requiredType" : "\"ARRAY<FLOAT>\"",
-    "sqlExpr" : "\"vector_l2_distance(array(1.0, 2.0, 3.0), NULL)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 56,
-    "fragment" : "vector_l2_distance(array(1.0F, 2.0F, 3.0F), NULL)"
-  } ]
-}
+Project [vector_l2_distance(array(1.0, 2.0, 3.0), cast(null as array<float>)) AS vector_l2_distance(array(1.0, 2.0, 3.0), NULL)#x]
++- OneRowRelation
 
 
 -- !query
@@ -303,169 +184,50 @@ Project [vector_l2_distance(array(1.0, 2.0, 3.0), array(1.0, 2.0)) AS vector_l2_
 -- !query
 SELECT vector_cosine_similarity(array(1.0D, 2.0D, 3.0D), array(4.0D, 5.0D, 6.0D))
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"array(1.0, 2.0, 3.0)\"",
-    "inputType" : "\"ARRAY<DOUBLE>\"",
-    "paramIndex" : "first",
-    "requiredType" : "\"ARRAY<FLOAT>\"",
-    "sqlExpr" : "\"vector_cosine_similarity(array(1.0, 2.0, 3.0), array(4.0, 5.0, 6.0))\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 81,
-    "fragment" : "vector_cosine_similarity(array(1.0D, 2.0D, 3.0D), array(4.0D, 5.0D, 6.0D))"
-  } ]
-}
+Project [vector_cosine_similarity(cast(array(1.0, 2.0, 3.0) as array<float>), cast(array(4.0, 5.0, 6.0) as array<float>)) AS vector_cosine_similarity(array(1.0, 2.0, 3.0), array(4.0, 5.0, 6.0))#x]
++- OneRowRelation
 
 
 -- !query
 SELECT vector_cosine_similarity(array(1, 2, 3), array(4, 5, 6))
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"array(1, 2, 3)\"",
-    "inputType" : "\"ARRAY<INT>\"",
-    "paramIndex" : "first",
-    "requiredType" : "\"ARRAY<FLOAT>\"",
-    "sqlExpr" : "\"vector_cosine_similarity(array(1, 2, 3), array(4, 5, 6))\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 63,
-    "fragment" : "vector_cosine_similarity(array(1, 2, 3), array(4, 5, 6))"
-  } ]
-}
+Project [vector_cosine_similarity(cast(array(1, 2, 3) as array<float>), cast(array(4, 5, 6) as array<float>)) AS vector_cosine_similarity(array(1, 2, 3), array(4, 5, 6))#x]
++- OneRowRelation
 
 
 -- !query
 SELECT vector_inner_product(array(1.0D, 2.0D, 3.0D), array(4.0D, 5.0D, 6.0D))
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"array(1.0, 2.0, 3.0)\"",
-    "inputType" : "\"ARRAY<DOUBLE>\"",
-    "paramIndex" : "first",
-    "requiredType" : "\"ARRAY<FLOAT>\"",
-    "sqlExpr" : "\"vector_inner_product(array(1.0, 2.0, 3.0), array(4.0, 5.0, 6.0))\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 77,
-    "fragment" : "vector_inner_product(array(1.0D, 2.0D, 3.0D), array(4.0D, 5.0D, 6.0D))"
-  } ]
-}
+Project [vector_inner_product(cast(array(1.0, 2.0, 3.0) as array<float>), cast(array(4.0, 5.0, 6.0) as array<float>)) AS vector_inner_product(array(1.0, 2.0, 3.0), array(4.0, 5.0, 6.0))#x]
++- OneRowRelation
 
 
 -- !query
 SELECT vector_inner_product(array(1, 2, 3), array(4, 5, 6))
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"array(1, 2, 3)\"",
-    "inputType" : "\"ARRAY<INT>\"",
-    "paramIndex" : "first",
-    "requiredType" : "\"ARRAY<FLOAT>\"",
-    "sqlExpr" : "\"vector_inner_product(array(1, 2, 3), array(4, 5, 6))\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 59,
-    "fragment" : "vector_inner_product(array(1, 2, 3), array(4, 5, 6))"
-  } ]
-}
+Project [vector_inner_product(cast(array(1, 2, 3) as array<float>), cast(array(4, 5, 6) as array<float>)) AS vector_inner_product(array(1, 2, 3), array(4, 5, 6))#x]
++- OneRowRelation
 
 
 -- !query
 SELECT vector_l2_distance(array(1.0D, 2.0D, 3.0D), array(4.0D, 5.0D, 6.0D))
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"array(1.0, 2.0, 3.0)\"",
-    "inputType" : "\"ARRAY<DOUBLE>\"",
-    "paramIndex" : "first",
-    "requiredType" : "\"ARRAY<FLOAT>\"",
-    "sqlExpr" : "\"vector_l2_distance(array(1.0, 2.0, 3.0), array(4.0, 5.0, 6.0))\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 75,
-    "fragment" : "vector_l2_distance(array(1.0D, 2.0D, 3.0D), array(4.0D, 5.0D, 6.0D))"
-  } ]
-}
+Project [vector_l2_distance(cast(array(1.0, 2.0, 3.0) as array<float>), cast(array(4.0, 5.0, 6.0) as array<float>)) AS vector_l2_distance(array(1.0, 2.0, 3.0), array(4.0, 5.0, 6.0))#x]
++- OneRowRelation
 
 
 -- !query
 SELECT vector_l2_distance(array(1, 2, 3), array(4, 5, 6))
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"array(1, 2, 3)\"",
-    "inputType" : "\"ARRAY<INT>\"",
-    "paramIndex" : "first",
-    "requiredType" : "\"ARRAY<FLOAT>\"",
-    "sqlExpr" : "\"vector_l2_distance(array(1, 2, 3), array(4, 5, 6))\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 57,
-    "fragment" : "vector_l2_distance(array(1, 2, 3), array(4, 5, 6))"
-  } ]
-}
+Project [vector_l2_distance(cast(array(1, 2, 3) as array<float>), cast(array(4, 5, 6) as array<float>)) AS vector_l2_distance(array(1, 2, 3), array(4, 5, 6))#x]
++- OneRowRelation
 
 
 -- !query
 SELECT vector_cosine_similarity(array(1.0F, 2.0F, 3.0F), array(1.0D, 2.0D, 3.0D))
 -- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"array(1.0, 2.0, 3.0)\"",
-    "inputType" : "\"ARRAY<DOUBLE>\"",
-    "paramIndex" : "second",
-    "requiredType" : "\"ARRAY<FLOAT>\"",
-    "sqlExpr" : "\"vector_cosine_similarity(array(1.0, 2.0, 3.0), array(1.0, 2.0, 3.0))\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 81,
-    "fragment" : "vector_cosine_similarity(array(1.0F, 2.0F, 3.0F), array(1.0D, 2.0D, 3.0D))"
-  } ]
-}
+Project [vector_cosine_similarity(array(1.0, 2.0, 3.0), cast(array(1.0, 2.0, 3.0) as array<float>)) AS vector_cosine_similarity(array(1.0, 2.0, 3.0), array(1.0, 2.0, 3.0))#x]
++- OneRowRelation
 
 
 -- !query
