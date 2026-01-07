@@ -25,18 +25,6 @@ class SkipClassTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.testing.tests.test_skip_class import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    try:
-        unittest.main(testRunner=testRunner, verbosity=2)
-    except SystemExit as e:
-        if sys.version_info >= (3, 12):
-            assert e.code == 5, f"status code: {e.code}"
-        else:
-            assert e.code == 0, f"status code: {e.code}"
+    main()

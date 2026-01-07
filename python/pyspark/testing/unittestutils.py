@@ -6,7 +6,7 @@
 # (the "License"); you may not use this file except in compliance with
 # the License.  You may obtain a copy of the License at
 #
-#    http://www.apache.org/licenses/LICENSE-2.0
+# http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,20 +15,14 @@
 # limitations under the License.
 #
 
-from pyspark.pandas.tests.computation.test_apply_func import FrameApplyFunctionMixin
-from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.pandasutils import PandasOnSparkTestUtils
+import unittest
 
 
-class FrameParityApplyFunctionTests(
-    FrameApplyFunctionMixin,
-    PandasOnSparkTestUtils,
-    ReusedConnectTestCase,
-):
-    pass
+def main(module="__main__", output="target/test-reports"):
+    try:
+        import xmlrunner
 
-
-if __name__ == "__main__":
-    from pyspark.testing import main
-
-    main()
+        testRunner = xmlrunner.XMLTestRunner(output=output, verbosity=2)
+    except ImportError:
+        testRunner = None
+    unittest.main(module=module, testRunner=testRunner, verbosity=2)
