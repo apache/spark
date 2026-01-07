@@ -37,11 +37,28 @@ from pyspark.find_spark_home import _find_spark_home
 
 SPARK_HOME = _find_spark_home()
 
+def list_all_files_and_dirs(root_path):
+    """
+    List all files and directories under root_path using os.walk.
+    """
+    for dirpath, dirnames, filenames in os.walk(root_path):
+        # Print current directory
+        level = dirpath.replace(root_path, '').count(os.sep)
+        indent = ' ' * 2 * level
+        print(f'{indent}{os.path.basename(dirpath)}/')
+
+        # Print files in current directory
+        subindent = ' ' * 2 * (level + 1)
+        for filename in sorted(filenames):
+            print(f'{subindent}{filename}')
+
 
 def search_jar(project_relative_path, sbt_jar_name_prefix, mvn_jar_name_prefix):
     # Note that 'sbt_jar_name_prefix' and 'mvn_jar_name_prefix' are used since the prefix can
     # vary for SBT or Maven specifically. See also SPARK-26856
     project_full_path = os.path.join(SPARK_HOME, project_relative_path)
+    print(f'project_full_path: {project_full_path}/')
+    list_all_files_and_dirs(project_full_path)
 
     # We should ignore the following jars
     ignored_jar_suffixes = ("javadoc.jar", "sources.jar", "test-sources.jar", "tests.jar")
@@ -51,6 +68,7 @@ def search_jar(project_relative_path, sbt_jar_name_prefix, mvn_jar_name_prefix):
     sbt_build = glob.glob(
         os.path.join(project_full_path, "target/scala-*/%s*.jar" % sbt_jar_name_prefix)
     )
+
     maven_build = glob.glob(os.path.join(project_full_path, "target/%s*.jar" % mvn_jar_name_prefix))
     jar_paths = sbt_build + maven_build
     jars = [jar for jar in jar_paths if not jar.endswith(ignored_jar_suffixes)]
