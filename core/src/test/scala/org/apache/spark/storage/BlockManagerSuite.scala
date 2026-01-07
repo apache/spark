@@ -2636,24 +2636,24 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with PrivateMethodTe
 
   test("SPARK-53446: Optimize BlockManager remove operations with cached block mappings") {
     val store = makeBlockManager(8000, "executor1")
-    val broadcastId = 0
-    val rddId = 1
-    val sessionId = UUID.randomUUID.toString
+    val broadcastId = BroadcastBlockId(0)
+    val rddId = RDDBlockId(1, 3)
+    val cacheId = CacheId(UUID.randomUUID.toString, "abc")
     val data = new Array[Byte](100)
 
-    store.putSingle(BroadcastBlockId(broadcastId), data, StorageLevel.MEMORY_ONLY)
-    assert(store.blockInfoManager.broadcastBlockIds(broadcastId).nonEmpty)
-    store.putSingle(rdd(rddId, 3), data, StorageLevel.MEMORY_ONLY)
-    assert(store.blockInfoManager.rddBlockIds(rddId).nonEmpty)
-    store.putSingle(CacheId(sessionId, "abc"), data, StorageLevel.MEMORY_ONLY)
-    assert(store.blockInfoManager.sessionBlockIds(sessionId).nonEmpty)
+    store.putSingle(broadcastId, data, StorageLevel.MEMORY_ONLY)
+    assert(store.blockInfoManager.getBlockIdsForGroup(broadcastId).nonEmpty)
+    store.putSingle(rddId, data, StorageLevel.MEMORY_ONLY)
+    assert(store.blockInfoManager.getBlockIdsForGroup(rddId).nonEmpty)
+    store.putSingle(cacheId, data, StorageLevel.MEMORY_ONLY)
+    assert(store.blockInfoManager.getBlockIdsForGroup(cacheId).nonEmpty)
 
-    store.removeBroadcast(broadcastId, false)
-    assert(store.blockInfoManager.broadcastBlockIds(broadcastId).isEmpty)
-    store.removeRdd(rddId)
-    assert(store.blockInfoManager.rddBlockIds(rddId).isEmpty)
-    store.removeCache(sessionId)
-    assert(store.blockInfoManager.sessionBlockIds(sessionId).isEmpty)
+    store.removeBroadcast(broadcastId.broadcastId, false)
+    assert(store.blockInfoManager.getBlockIdsForGroup(broadcastId).isEmpty)
+    store.removeRdd(rddId.rddId)
+    assert(store.blockInfoManager.getBlockIdsForGroup(rddId).isEmpty)
+    store.removeCache(cacheId.sessionUUID)
+    assert(store.blockInfoManager.getBlockIdsForGroup(cacheId).isEmpty)
   }
 
   private def createKryoSerializerWithDiskCorruptedInputStream(): KryoSerializer = {
