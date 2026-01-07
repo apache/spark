@@ -22,6 +22,7 @@ import java.time.Duration
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.datasources.v2.state.{StateDataSourceTestBase, StateSourceOptions, StreamStreamJoinTestUtils}
+import org.apache.spark.sql.execution.streaming.checkpointing.CommitMetadata
 import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorsUtils
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.TimerStateUtils
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryCheckpointMetadata}
@@ -95,11 +96,41 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
       transformFunc = None,
       writeCheckpointMetadata = Some(targetCheckpointMetadata)
     )
-    rewriter.run()
+    val checkpointInfos = rewriter.run()
+    val operatorId = 0L
+    // Build map: partition id -> array of checkpoint IDs (one per store, in order)
+    // checkpointInfos(operatorId) is Seq[Array[StateStoreCheckpointInfo]]
+    // where Seq is stores (in order: store0, store1, ...), Array is partitions
+    // For join operators: 4 stores (left-keyToNumValues, left-keyWithIndexToValue,
+    //                              right-keyToNumValues, right-keyWithIndexToValue)
+    // For regular operators: 1 store
+    val storesSeq: Seq[Array[StateStoreCheckpointInfo]] = checkpointInfos(operatorId)
+    val partitionToCkptIdMap: Map[Long, Array[String]] =
+      if (storesSeq.nonEmpty) {
+        val numPartitions = storesSeq.head.length
+        (0 until numPartitions).map { partitionIdx =>
+          // For this partition, collect checkpoint IDs from all stores (in order)
+          val ckptIds: Array[String] = storesSeq.flatMap { storePartitions =>
+            storePartitions(partitionIdx).stateStoreCkptId
+          }.toArray
+          (partitionIdx.toLong, ckptIds)
+        }.toMap
+      } else {
+        Map.empty
+      }
 
-    // Commit to commitLog
+    // Commit to commitLog with checkpoint IDs
     val latestCommit = targetCheckpointMetadata.commitLog.get(lastBatch).get
-    targetCheckpointMetadata.commitLog.add(writeBatchId, latestCommit)
+    val commitMetadata = if (partitionToCkptIdMap.nonEmpty) {
+      // Include checkpoint IDs in commit metadata
+      CommitMetadata(
+        latestCommit.nextBatchWatermarkMs,
+        Option(Map(operatorId -> partitionToCkptIdMap.values.toArray))
+      )
+    } else {
+      latestCommit
+    }
+    targetCheckpointMetadata.commitLog.add(writeBatchId, commitMetadata)
     val versionToCheck = writeBatchId + 1
 
     storeToColumnFamilies.foreach { case (storeName, columnFamilies) =>
@@ -307,17 +338,6 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
     }
   }
 
-  private def getJoinV3ColumnSchemaMap(): Map[String, StatePartitionWriterColumnFamilyInfo] = {
-    val schemas = StreamStreamJoinTestUtils.getJoinV3ColumnSchemaMapWithMetadata()
-    schemas.map { case (cfName, metadata) =>
-      cfName -> createColFamilyInfo(
-        metadata.keySchema,
-        metadata.valueSchema,
-        metadata.encoderSpec,
-        cfName,
-        metadata.useMultipleValuePerKey)
-    }
-  }
   /**
    * Helper method to test round-trip for stream-stream join with different versions.
    */
@@ -450,8 +470,28 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
       }
     }
 
-    testWithChangelogConfig("SPARK-54420: aggregation state ver 1") {
-      testRoundTripForAggrStateVersion(1)
+    // Run transformWithState tests with enable/disable checkpoint V2
+    Seq(1, 2).foreach { ckptVersion =>
+      def testWithChangelogAndCheckpointId(testName: String)(testFun: => Unit): Unit = {
+        test(s"$testName ($changelogCpTestSuffix, enableCkptId = ${ckptVersion >= 2})") {
+          withSQLConf(
+            "spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled" ->
+              changelogCheckpointingEnabled.toString,
+            SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> ckptVersion.toString) {
+            testFun
+          }
+        }
+      }
+
+      testWithChangelogAndCheckpointId("SPARK-54420: aggregation state ver 1") {
+        testRoundTripForAggrStateVersion(1)
+      }
+
+      Seq(1, 2).foreach { version =>
+        testWithChangelogAndCheckpointId(s"SPARK-54420: stream-stream join state ver $version") {
+          testStreamStreamJoinRoundTrip(version)
+        }
+      }
     }
 
     testWithChangelogConfig("SPARK-54420: aggregation state ver 2") {
@@ -570,12 +610,6 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
     Seq(1, 2).foreach { version =>
       testWithChangelogConfig(s"SPARK-54420: flatMapGroupsWithState state ver $version") {
         testFlatMapGroupsWithStateRoundTrip(version)
-      }
-    }
-
-    Seq(1, 2).foreach { version =>
-      testWithChangelogConfig(s"SPARK-54420: stream-stream join state ver $version") {
-        testStreamStreamJoinRoundTrip(version)
       }
     }
 

@@ -145,10 +145,12 @@ class StatePartitionAllColumnFamiliesWriter(
   // - key_bytes, BinaryType
   // - value_bytes, BinaryType
   // - column_family_name, StringType
-  def write(rows: Iterator[InternalRow]): Unit = {
+  // Returns StateStoreCheckpointInfo containing the checkpoint ID after commit
+  def write(rows: Iterator[InternalRow]): StateStoreCheckpointInfo = {
     try {
       rows.foreach(row => writeRow(row))
       stateStore.commit()
+      stateStore.getStateStoreCheckpointInfo()
     } finally {
       if (!stateStore.hasCommitted) {
         stateStore.abort()

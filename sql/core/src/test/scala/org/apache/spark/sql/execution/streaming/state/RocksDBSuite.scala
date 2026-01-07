@@ -3943,7 +3943,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }}
   }
 
-  test("SPARK-54420: load with createEmpty creates empty store") {
+  testWithStateStoreCheckpointIds("SPARK-54420: load with createEmpty creates empty store") { _ =>
     val remoteDir = Utils.createTempDir().toString
     new File(remoteDir).delete()
 
@@ -4027,13 +4027,13 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         version: Long,
         ckptId: Option[String] = None,
         readOnly: Boolean = false,
-        createEmpty: Boolean = false): RocksDB = {
+        loadEmpty: Boolean = false): RocksDB = {
       // When a ckptId is defined, it means the test is explicitly using v2 semantic
       // When it is not, it is possible that implicitly uses it.
       // So still do a versionToUniqueId.get
       ckptId match {
-        case Some(_) => super.load(version, ckptId, readOnly)
-        case None => super.load(version, versionToUniqueId.get(version), readOnly)
+        case Some(_) => super.load(version, ckptId, readOnly, loadEmpty)
+        case None => super.load(version, versionToUniqueId.get(version), readOnly, loadEmpty)
       }
     }
 
