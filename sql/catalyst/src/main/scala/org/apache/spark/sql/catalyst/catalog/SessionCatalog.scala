@@ -32,6 +32,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder

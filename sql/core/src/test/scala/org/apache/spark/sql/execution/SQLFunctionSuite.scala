@@ -102,7 +102,12 @@ class SQLFunctionSuite extends QueryTest with SharedSparkSession {
           sql("SELECT transform(array('A', 'B', 'C'), x -> test_lower_udf(x))").collect()
         },
         condition = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_SQL_UDF",
-        parameters = Map("funcName" -> "test_lower_udf")
+        parameters = Map("funcName" -> "spark_catalog.default.test_lower_udf"),
+        context = ExpectedContext(
+          fragment = "test_lower_udf(x)",
+          start = 44,
+          stop = 60
+        )
       )
     }
   }
