@@ -88,6 +88,7 @@ class SQLFunctionSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+
   test("SQL UDF in higher-order function should fail with clear error message") {
     withUserDefinedFunction("test_lower_udf" -> false) {
       sql(
@@ -96,14 +97,13 @@ class SQLFunctionSuite extends QueryTest with SharedSparkSession {
           |RETURNS STRING
           |RETURN lower(s)
           |""".stripMargin)
-      val exception = intercept[AnalysisException] {
-        sql("SELECT transform(array('A', 'B', 'C'), x -> test_lower_udf(x))").collect()
-      }
-      assert(exception.getCondition == "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_SQL_UDF",
-        s"Expected UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_SQL_UDF " +
-        s"but got ${exception.getCondition}: ${exception.getMessage}")
-      assert(exception.getMessage.contains("test_lower_udf"),
-        s"Error message should contain function name: ${exception.getMessage}")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT transform(array('A', 'B', 'C'), x -> test_lower_udf(x))").collect()
+        },
+        condition = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_SQL_UDF",
+        parameters = Map("funcName" -> "test_lower_udf")
+      )
     }
   }
 }
