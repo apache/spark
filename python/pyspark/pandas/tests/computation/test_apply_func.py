@@ -16,7 +16,6 @@
 #
 from datetime import datetime
 import sys
-import unittest
 from typing import List
 
 import numpy as np
@@ -285,7 +284,7 @@ class FrameApplyFunctionMixin:
         def identify5(
             x,
         ) -> ps.DataFrame[
-            [("number", int), ("color", str)], [("a", int), ("b", List[int])]  # noqa: F405
+            [("number", int), ("color", str)], [("a", int), ("b", List[int])]  # noqa: F821
         ]:
             return x
 
@@ -566,12 +565,6 @@ class FrameApplyFunctionTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.computation.test_apply_func import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

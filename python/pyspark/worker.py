@@ -1430,33 +1430,15 @@ def wrap_memory_profiler(f, eval_type, result_id):
 def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profiler):
     num_arg = read_int(infile)
 
-    if eval_type in (
-        PythonEvalType.SQL_BATCHED_UDF,
-        PythonEvalType.SQL_ARROW_BATCHED_UDF,
-        PythonEvalType.SQL_SCALAR_PANDAS_UDF,
-        PythonEvalType.SQL_SCALAR_ARROW_UDF,
-        PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
-        PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
-        PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
-        # The below doesn't support named argument, but shares the same protocol.
-        PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
-        PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
-        PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
-        PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
-        PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
-    ):
-        args_offsets = []
-        kwargs_offsets = {}
-        for _ in range(num_arg):
-            offset = read_int(infile)
-            if read_bool(infile):
-                name = utf8_deserializer.loads(infile)
-                kwargs_offsets[name] = offset
-            else:
-                args_offsets.append(offset)
-    else:
-        args_offsets = [read_int(infile) for i in range(num_arg)]
-        kwargs_offsets = {}
+    args_offsets = []
+    kwargs_offsets = {}
+    for _ in range(num_arg):
+        offset = read_int(infile)
+        if read_bool(infile):
+            name = utf8_deserializer.loads(infile)
+            kwargs_offsets[name] = offset
+        else:
+            args_offsets.append(offset)
 
     chained_func = None
     for i in range(read_int(infile)):

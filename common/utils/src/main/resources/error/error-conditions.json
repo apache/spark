@@ -7483,6 +7483,12 @@
     ],
     "sqlState" : "22023"
   },
+  "VECTOR_DIMENSION_MISMATCH" : {
+    "message" : [
+      "Vectors passed to <functionName> must have the same dimension, but got <leftDim> and <rightDim>."
+    ],
+    "sqlState" : "22000"
+  },
   "VIEW_ALREADY_EXISTS" : {
     "message" : [
       "Cannot create view <relationName> because it already exists.",
