@@ -43,16 +43,19 @@ if kafka_sql_jar is None:
     raise RuntimeError(
         "Kafka SQL connector JAR was not found. "
         "To run these tests, you need to build Spark with "
-        "'build/mvn -Pkafka-0-10 package' or 'build/sbt kafka-0-10-sql/package' "
+        "'build/mvn package' or 'build/sbt Test/package' "
         "before running this test."
     )
 
-
-# Read the full classpath including all dependencies
-kafka_classpath = read_classpath("connector/kafka-0-10-sql")
-
-# Combine the main JAR with its dependencies
-all_jars = f"{kafka_sql_jar},{kafka_classpath}"
+# Try to read the full classpath including all dependencies (Maven builds only)
+# SBT builds don't generate classpath.txt, so we just use the main JAR
+try:
+    kafka_classpath = read_classpath("connector/kafka-0-10-sql")
+    all_jars = f"{kafka_sql_jar},{kafka_classpath}"
+except RuntimeError:
+    # SBT build - classpath.txt doesn't exist
+    # Just use the main JAR; SBT's Test/package should have dependencies available
+    all_jars = kafka_sql_jar
 
 # Add Kafka JAR to PYSPARK_SUBMIT_ARGS before SparkSession is created
 existing_args = os.environ.get("PYSPARK_SUBMIT_ARGS", "pyspark-shell")
