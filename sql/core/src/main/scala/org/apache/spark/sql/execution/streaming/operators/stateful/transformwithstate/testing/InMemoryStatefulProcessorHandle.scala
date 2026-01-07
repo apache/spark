@@ -166,7 +166,7 @@ class InMemoryTimers {
 
   def listTimers(): Iterator[Long] = {
     val groupingKey = ImplicitGroupingKeyTracker.getImplicitKeyOption.get
-    timeToKeys.iterator.filter(_._2.contains(groupingKey) ).map(_._1)
+    timeToKeys.iterator.filter(_._2.contains(groupingKey)).map(_._1)
   }
 
   // Lists pairs (expiryTimestampMs, key) for all timers such that expiryTimestampMs<=currentTimeMs.
