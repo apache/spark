@@ -278,22 +278,6 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]]
   }
 
   /**
-   * Runs the given function on this node and then recursively on [[children]],
-   * with pruning support.
-   * @param cond a Lambda expression to prune tree traversals. If `cond.apply` returns false
-   *             on a TreeNode T, skips processing T and its subtree; otherwise, processes
-   *             T and its subtree recursively.
-   * @param f the function to be applied to each node in the tree.
-   */
-  def foreachWithPruning(cond: TreePatternBits => Boolean)(f: BaseType => Unit): Unit = {
-    if (!cond.apply(this)) {
-      return
-    }
-    f(this)
-    children.foreach(_.foreachWithPruning(cond)(f))
-  }
-
-  /**
    * Returns a Seq containing the result of applying the given function to each
    * node in this tree in a preorder traversal.
    * @param f the function to be applied.
