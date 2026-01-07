@@ -151,8 +151,8 @@ case class KllSketchAggBigint(
       updateBuffer.merge(input)
       updateBuffer
     } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchIncompatibleMergeError(prettyName, e.getMessage)
+      case _: Exception =>
+        throw QueryExecutionErrors.kllSketchInvalidSketchBufferError(prettyName)
     }
   }
 
@@ -167,7 +167,7 @@ case class KllSketchAggBigint(
     try {
       KllLongsSketch.heapify(Memory.wrap(buffer))
     } catch {
-      case e: Exception =>
+      case _: Exception =>
         throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   } else {
@@ -287,8 +287,8 @@ case class KllSketchAggFloat(
       updateBuffer.merge(input)
       updateBuffer
     } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchIncompatibleMergeError(prettyName, e.getMessage)
+      case _: Exception =>
+        throw QueryExecutionErrors.kllSketchInvalidSketchBufferError(prettyName)
     }
   }
 
@@ -303,7 +303,7 @@ case class KllSketchAggFloat(
     try {
       KllFloatsSketch.heapify(Memory.wrap(buffer))
     } catch {
-      case e: Exception =>
+      case _: Exception =>
         throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   } else {
@@ -425,8 +425,8 @@ case class KllSketchAggDouble(
       updateBuffer.merge(input)
       updateBuffer
     } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchIncompatibleMergeError(prettyName, e.getMessage)
+      case _: Exception =>
+        throw QueryExecutionErrors.kllSketchInvalidSketchBufferError(prettyName)
     }
   }
 
@@ -441,7 +441,7 @@ case class KllSketchAggDouble(
     try {
       KllDoublesSketch.heapify(Memory.wrap(buffer))
     } catch {
-      case e: Exception =>
+      case _: Exception =>
         throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   } else {

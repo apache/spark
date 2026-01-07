@@ -3199,12 +3199,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "functionName" -> toSQLId(function)))
   }
 
-  def kllSketchIncompatibleMergeError(function: String, reason: String): Throwable = {
+  def kllSketchInvalidSketchBufferError(function: String): Throwable = {
     new SparkRuntimeException(
-      errorClass = "KLL_SKETCH_INCOMPATIBLE_MERGE",
+      errorClass = "KLL_INVALID_INPUT_SKETCH_BUFFER",
       messageParameters = Map(
-        "functionName" -> toSQLId(function),
-        "reason" -> reason))
+        "functionName" -> toSQLId(function)))
   }
 
   def kllSketchKMustBeConstantError(function: String): Throwable = {
