@@ -38,6 +38,7 @@ import org.apache.spark.util.ManualClock
  *  - Timers in ProcessingTime mode (use `setProcessingTime` to fire timers).
  *  - Timers in EventTime mode (use `setWatermark` to manually set the watermark
  *    and fire expired timers).
+ *  - Late event filtering in EventTime mode.
  *
  * '''Not Supported:'''
  *  - '''TTL'''. States persist indefinitely, even if TTLConfig is set.
@@ -46,9 +47,6 @@ import org.apache.spark.util.ManualClock
  *    not simulate this behavior because it processes keys individually rather than in batches.
  *    To test watermark-dependent logic, use `setWatermark()` to manually set the watermark
  *    to the desired value before calling `test()`.
- *  - '''Late event filtering''': Since TwsTester does not track event times or automatically
- *    advance the watermark, it also does not filter late events. All input rows passed to
- *    `test()` will be processed regardless of their event time.
  *
  * '''Use Cases:'''
  *  - '''Primary''': Unit testing business logic in `handleInputRows` implementations.
@@ -59,6 +57,8 @@ import org.apache.spark.util.ManualClock
  * @param initialState initial state for each key as a list of (key, state) tuples.
  * @param timeMode time mode (None, ProcessingTime or EventTime).
  * @param outputMode output mode (Append, Update, or Complete).
+ * @param eventTimeExtractor function to extract event time (in milliseconds) from input rows.
+ *                           Required when using TimeMode.EventTime. Used for late event filtering.
  * @tparam K the type of grouping key.
  * @tparam I the type of input rows.
  * @tparam O the type of output rows.
@@ -68,7 +68,15 @@ class TwsTester[K, I, O](
     processor: StatefulProcessor[K, I, O],
     initialState: List[(K, Any)] = List(),
     timeMode: TimeMode = TimeMode.None,
-    outputMode: OutputMode = OutputMode.Append) {
+    outputMode: OutputMode = OutputMode.Append,
+    eventTimeExtractor: Option[I => Long] = None) {
+
+  if (timeMode == TimeMode.EventTime()) {
+    require(
+      eventTimeExtractor.isDefined,
+      "eventTimeExtractor is required when using TimeMode.EventTime."
+    )
+  }
 
   private val processingTimeClock = new ManualClock(0L)
   private val handle = new InMemoryStatefulProcessorHandle(timeMode, processingTimeClock)
@@ -97,10 +105,11 @@ class TwsTester[K, I, O](
   /**
    * Processes input rows for a single key through the stateful processor.
    *
-   * All input rows are passed directly to `handleInputRows` without filtering. In EventTime
-   * mode, the current watermark value is available to the processor via `TimerValues`, but
-   * the watermark is not automatically advanced based on event times. Use `setWatermark()`
-   * to manually set the watermark if needed.
+   * In EventTime mode, late events (where event time <= current watermark) are filtered out
+   * before reaching the processor, matching the behavior of real Spark streaming.
+   *
+   * The watermark is not automatically advanced based on event times. Use `setWatermark()`
+   * to manually set the watermark before calling `test()`.
    *
    * @param key the grouping key
    * @param values input rows to process
@@ -109,7 +118,17 @@ class TwsTester[K, I, O](
   def test(key: K, values: List[I]): List[O] = {
     ImplicitGroupingKeyTracker.setImplicitKey(key)
     val timerValues = getTimerValues()
-    processor.handleInputRows(key, values.iterator, timerValues).toList
+    val filteredValues = filterLateEvents(values)
+    processor.handleInputRows(key, filteredValues.iterator, timerValues).toList
+  }
+
+  /** Filters out late events based on watermark and eventTimeExtractor. */
+  private def filterLateEvents(values: List[I]): List[I] = {
+    if (timeMode != TimeMode.EventTime()) {
+      values
+    } else {
+      values.filter(eventTimeExtractor.get(_) > currentWatermarkMs)
+    }
   }
 
   /** Sets the value state for a given key. */

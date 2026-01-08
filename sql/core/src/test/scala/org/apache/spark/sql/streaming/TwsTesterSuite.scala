@@ -369,7 +369,8 @@ class TwsTesterSuite extends SparkFunSuite {
   test("TwsTester should support EventTime timers fired by manual watermark advance") {
     val tester = new TwsTester(
       new EventTimeSessionProcessor(),
-      timeMode = TimeMode.EventTime()
+      timeMode = TimeMode.EventTime(),
+      eventTimeExtractor = Some((row: (Long, String)) => row._1)
     )
 
     // Process event at t=10000 for key1 - registers timer at t=15000
@@ -400,24 +401,53 @@ class TwsTesterSuite extends SparkFunSuite {
     assert(tester.peekValueState[Long]("lastEventTime", "key1").isEmpty)
   }
 
-  test("TwsTester should reject timer registration before watermark in EventTime mode") {
+  test("TwsTester should filter late events when eventTimeExtractor is provided") {
+    // EventTimeCountProcessor counts events - we use it to verify late events are filtered
+    val tester = new TwsTester(
+      new EventTimeCountProcessor(),
+      timeMode = TimeMode.EventTime(),
+      eventTimeExtractor = Some((row: (Long, String)) => row._1)
+    )
+
+    // Process some events before setting watermark (watermark starts at 0)
+    val result1 = tester.test("key1", List((5000L, "event1"), (10000L, "event2")))
+    assert(result1 == List(("key1", 2L))) // Both events counted
+
+    // Set watermark to 15 seconds
+    tester.setWatermark(15000)
+
+    // Process mix of late and on-time events
+    // Events at 10000 and 14000 are late (<= watermark 15000), should be filtered
+    // Events at 16000 and 20000 are on-time (> watermark 15000), should be processed
+    val result2 = tester.test(
+      "key1",
+      List((10000L, "late1"), (14000L, "late2"), (16000L, "ontime1"), (20000L, "ontime2"))
+    )
+    // Only 2 new events should be counted (the on-time ones), total = 2 + 2 = 4
+    assert(result2 == List(("key1", 4L)))
+
+    // Verify state reflects the correct count
+    assert(tester.peekValueState[Long]("count", "key1").get == 4L)
+  }
+
+  test("TwsTester with eventTimeExtractor should allow timer registration from on-time events") {
+    // With eventTimeExtractor, late events are filtered BEFORE reaching the processor,
+    // so timers can only be registered from on-time events (no exception)
     val tester = new TwsTester(
       new EventTimeSessionProcessor(),
-      timeMode = TimeMode.EventTime()
+      timeMode = TimeMode.EventTime(),
+      eventTimeExtractor = Some((row: (Long, String)) => row._1)
     )
 
     // Set watermark to 20 seconds
     tester.setWatermark(20000)
 
-    // Try to process a "late" event with eventTime=10000
-    // EventTimeSessionProcessor registers timer at eventTime + 5000 = 15000
-    // Since 15000 <= 20000 (watermark), this should fail
-    val exception = intercept[IllegalArgumentException] {
-      tester.test("key1", List((10000L, "late-event")))
-    }
-    assert(exception.getMessage.contains("Cannot register timer"))
-    assert(exception.getMessage.contains("15000"))
-    assert(exception.getMessage.contains("20000"))
+    // Process a mix of late and on-time events
+    // Late event (10000) is filtered out, on-time event (25000) is processed
+    // Timer registered at 25000 + 5000 = 30000, which is > watermark, so no exception
+    val result = tester.test("key1", List((10000L, "late"), (25000L, "ontime")))
+    // Only the on-time event produces output
+    assert(result == List(("key1", "received:ontime@25000")))
   }
 
   test("TwsTester should support complex case class data types") {
