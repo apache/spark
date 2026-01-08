@@ -1575,6 +1575,12 @@
     ],
     "sqlState" : "42734"
   },
+  "DYNAMIC_PARTITION_WRITE_PARTITION_NUM_LIMIT_EXCEEDED" : {
+    "message" : [
+      "Number of dynamic partitions created is <numWrittenParts>, which is more than <maxDynamicPartitions>. To solve this try to set <maxDynamicPartitionsKey> to at least <numWrittenParts>."
+    ],
+    "sqlState" : "54054"
+  },
   "EMITTING_ROWS_OLDER_THAN_WATERMARK_NOT_ALLOWED" : {
     "message" : [
       "Previous node emitted a row with eventTime=<emittedRowEventTime> which is older than current_watermark_value=<currentWatermark>",
@@ -1766,6 +1772,11 @@
       "DROP_NAMESPACE" : {
         "message" : [
           "Drop the namespace <namespace>."
+        ]
+      },
+      "DROP_TABLE" : {
+        "message" : [
+          "Drop the table <tableName>."
         ]
       },
       "GET_TABLES" : {
@@ -3909,6 +3920,11 @@
           "CREATE TEMPORARY TABLE ... USING ... is a deprecated syntax. To overcome the issue, please use CREATE TEMPORARY VIEW instead."
         ]
       },
+      "EMPTY_IN_PREDICATE" : {
+        "message" : [
+          "IN predicate requires at least one value. Empty IN clauses like 'IN ()' are not allowed. Consider using 'WHERE FALSE' if you need an always-false condition, or provide at least one value in the IN list."
+        ]
+      },
       "EMPTY_PARTITION_VALUE" : {
         "message" : [
           "Partition key <partKey> must set value."
@@ -4274,21 +4290,15 @@
     ],
     "sqlState" : "42K0E"
   },
-  "KLL_SKETCH_INCOMPATIBLE_MERGE" : {
+  "KLL_INVALID_INPUT_SKETCH_BUFFER" : {
     "message" : [
-      "For function <functionName>, cannot merge KLL sketches: <reason>"
-    ],
-    "sqlState" : "22000"
-  },
-  "KLL_SKETCH_INVALID_INPUT" : {
-    "message" : [
-      "For function <functionName>, invalid KLL sketch binary data: <reason>"
+      "Invalid call to <function>; only valid KLL sketch buffers are supported as inputs (such as those produced by the `kll_sketch_agg` function)."
     ],
     "sqlState" : "22000"
   },
   "KLL_SKETCH_INVALID_QUANTILE_RANGE" : {
     "message" : [
-      "For function <functionName>, the quantile value must be between 0.0 and 1.0 (inclusive), but got <quantile>."
+      "For function <functionName>, the quantile value must be between 0.0 and 1.0 (inclusive)."
     ],
     "sqlState" : "22003"
   },
@@ -4425,6 +4435,12 @@
       "Variant binary is malformed. Please check the data source is valid."
     ],
     "sqlState" : "22023"
+  },
+  "MATERIALIZED_VIEW_WITH_MULTIPLE_QUERIES" : {
+    "message" : [
+      "Invalid destination <tableName> with multiple flows: <flows>."
+    ],
+    "sqlState" : "42000"
   },
   "MERGE_CARDINALITY_VIOLATION" : {
     "message" : [
@@ -5069,6 +5085,12 @@
     },
     "sqlState" : "42710"
   },
+  "PIPELINE_GRAPH_NOT_TOPOLOGICALLY_SORTED" : {
+    "message" : [
+      "There is a cycle between <flowName> and <inputName>."
+    ],
+    "sqlState" : "0A000"
+  },
   "PIPELINE_SQL_GRAPH_ELEMENT_REGISTRATION_ERROR" : {
     "message" : [
       "<message>",
@@ -5563,6 +5585,32 @@
       }
     },
     "sqlState" : "42616"
+  },
+  "STATE_REWRITER_INVALID_CHECKPOINT" : {
+    "message" : [
+      "The state rewrite checkpoint location '<checkpointLocation>' is in an invalid state."
+    ],
+    "subClass" : {
+      "MISSING_KEY_ENCODER_SPEC" : {
+        "message" : [
+          "Key state encoder spec is expected for column family '<colFamilyName>' but was not found.",
+          "This is likely a bug, please report it."
+        ]
+      },
+      "MISSING_OPERATOR_METADATA" : {
+        "message" : [
+          "No stateful operator metadata was found for batch <batchId>.",
+          "Ensure that the checkpoint is for a stateful streaming query and the query ran on a Spark version that supports operator metadata (Spark 4.0+)."
+        ]
+      },
+      "UNSUPPORTED_STATE_STORE_METADATA_VERSION" : {
+        "message" : [
+          "Unsupported state store metadata version encountered.",
+          "Only StateStoreMetadataV1 and StateStoreMetadataV2 are supported."
+        ]
+      }
+    },
+    "sqlState" : "55019"
   },
   "STATE_STORE_CANNOT_CREATE_COLUMN_FAMILY_WITH_RESERVED_CHARS" : {
     "message" : [
@@ -6747,6 +6795,11 @@
           "Lambda function with Python UDF <funcName> in a higher order function."
         ]
       },
+      "LAMBDA_FUNCTION_WITH_SQL_UDF" : {
+        "message" : [
+          "Lambda function with SQL UDF <funcName> in a higher order function."
+        ]
+      },
       "LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC" : {
         "message" : [
           "Referencing a lateral column alias <lca> in the aggregate function <aggFunc>."
@@ -7459,6 +7512,12 @@
       "Please avoid large input strings to this expression (for example, add function calls(s) to check the expression size and convert it to NULL first if it is too big)."
     ],
     "sqlState" : "22023"
+  },
+  "VECTOR_DIMENSION_MISMATCH" : {
+    "message" : [
+      "Vectors passed to <functionName> must have the same dimension, but got <leftDim> and <rightDim>."
+    ],
+    "sqlState" : "22000"
   },
   "VIEW_ALREADY_EXISTS" : {
     "message" : [
@@ -9402,11 +9461,6 @@
   "_LEGACY_ERROR_TEMP_2273" : {
     "message" : [
       "<message>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_2277" : {
-    "message" : [
-      "Number of dynamic partitions created is <numWrittenParts>, which is more than <maxDynamicPartitions>. To solve this try to set <maxDynamicPartitionsKey> to at least <numWrittenParts>."
     ]
   },
   "_LEGACY_ERROR_TEMP_2330" : {

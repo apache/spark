@@ -726,4 +726,42 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
         start = 32,
         stop = 58))
   }
+
+  test("INVALID_SQL_SYNTAX.EMPTY_IN_PREDICATE: Empty IN clause") {
+    // Test with single column IN ()
+    // PredicateContext captures "IN ()" starting at position 33
+    checkError(
+      exception = parseException("SELECT * FROM range(10) WHERE id IN ()"),
+      condition = "INVALID_SQL_SYNTAX.EMPTY_IN_PREDICATE",
+      sqlState = "42000",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "IN ()",
+        start = 33,
+        stop = 37))
+
+    // Test with expression IN ()
+    // PredicateContext captures "IN ()" starting at position 39
+    checkError(
+      exception = parseException("SELECT * FROM range(10) WHERE (id + 1) IN ()"),
+      condition = "INVALID_SQL_SYNTAX.EMPTY_IN_PREDICATE",
+      sqlState = "42000",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "IN ()",
+        start = 39,
+        stop = 43))
+
+    // Test with NOT IN ()
+    // PredicateContext captures "NOT IN ()" starting at position 33
+    checkError(
+      exception = parseException("SELECT * FROM range(10) WHERE id NOT IN ()"),
+      condition = "INVALID_SQL_SYNTAX.EMPTY_IN_PREDICATE",
+      sqlState = "42000",
+      parameters = Map.empty,
+      context = ExpectedContext(
+        fragment = "NOT IN ()",
+        start = 33,
+        stop = 41))
+  }
 }
