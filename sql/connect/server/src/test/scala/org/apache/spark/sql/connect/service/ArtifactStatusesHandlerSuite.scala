@@ -42,6 +42,12 @@ class ArtifactStatusesHandlerSuite extends SharedSparkSession with ResourceHelpe
 
   val sessionId = UUID.randomUUID().toString
 
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    SparkConnectService.sessionManager.invalidateAllSessions()
+    SparkConnectService.sessionManager.initializeBaseSession(spark.sparkContext)
+  }
+
   def getStatuses(names: Seq[String], exist: Set[String]): ArtifactStatusesResponse = {
     val promise = Promise[ArtifactStatusesResponse]()
     val handler = new SparkConnectArtifactStatusesHandler(new DummyStreamObserver(promise)) {

@@ -26,7 +26,7 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, DefaultValue, Identifier, InMemoryCatalog}
-import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, ProcedureParameter, UnboundProcedure}
+import org.apache.spark.sql.connector.catalog.procedures.{BoundProcedure, ProcedureParameter, SimpleProcedure, UnboundProcedure}
 import org.apache.spark.sql.connector.catalog.procedures.ProcedureParameter.Mode
 import org.apache.spark.sql.connector.catalog.procedures.ProcedureParameter.Mode.{IN, INOUT, OUT}
 import org.apache.spark.sql.connector.expressions.{Expression, GeneralScalarExpression, LiteralValue}
@@ -486,8 +486,14 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
     checkAnswer(sql("CALL cat.ns.sum(5)"), Row(9) :: Nil)
   }
 
+  test("simple procedure") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "simple_sum"), SimpleSum)
+    checkAnswer(sql("CALL cat.ns.simple_sum(3, 7)"), Row(10) :: Nil)
+    checkAnswer(sql("CALL cat.ns.simple_sum(in2 => 4, in1 => 6)"), Row(10) :: Nil)
+  }
+
   test("SPARK-51780: Implement DESC PROCEDURE") {
-    catalog.createProcedure(Identifier.of(Array("ns"), "foo"), UnboundSum)
+    catalog.createProcedure(Identifier.of(Array("ns"), "foo"), SimpleSum)
     catalog.createProcedure(Identifier.of(Array("ns", "db"), "abc"), UnboundLongSum)
     catalog.createProcedure(Identifier.of(Array(""), "xyz"), UnboundComplexProcedure)
     catalog.createProcedure(Identifier.of(Array(), "xxx"), UnboundStructProcedure)
@@ -511,20 +517,26 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
 
       checkAnswer(
         sql("DESC PROCEDURE cat.ns.foo"),
-        Row("Procedure:   sum") ::
-          Row("Description: sum integers") :: Nil)
+        Row("Procedure:   simple_sum") ::
+          Row("Description: simple sum integers") ::
+          Row("Parameters:  IN in1 INT") ::
+          Row("             IN in2 INT") :: Nil)
 
       checkAnswer(
         // use DESCRIBE instead of DESC
         sql("DESCRIBE PROCEDURE cat.ns.foo"),
-        Row("Procedure:   sum") ::
-          Row("Description: sum integers") :: Nil)
+        Row("Procedure:   simple_sum") ::
+          Row("Description: simple sum integers") ::
+          Row("Parameters:  IN in1 INT") ::
+          Row("             IN in2 INT") :: Nil)
 
       checkAnswer(
         // use default catalog
         sql("DESC PROCEDURE ns.foo"),
-        Row("Procedure:   sum") ::
-          Row("Description: sum integers") :: Nil)
+        Row("Procedure:   simple_sum") ::
+          Row("Description: simple sum integers") ::
+          Row("Parameters:  IN in1 INT") ::
+          Row("             IN in2 INT") :: Nil)
 
       checkAnswer(
         // use multi-part namespace
@@ -553,6 +565,32 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
         sql("DESC PROCEDURE cat2.ns_1.db_1.foo"),
         Row("Procedure:   void") ::
           Row("Description: void procedure") :: Nil)
+    }
+  }
+
+  test("SPARK-51780: DESC PROCEDURE with binding failure") {
+    catalog.createProcedure(Identifier.of(Array("ns"), "bind_fail"), UnboundBindFailProcedure)
+    checkAnswer(
+      sql("DESC PROCEDURE cat.ns.bind_fail"),
+      Row("Procedure:   bind_fail") ::
+      Row("Description: bind fail procedure") :: Nil)
+  }
+
+  test("SPARK-51780: DESC PROCEDURE with zero parameters") {
+    catalog.createProcedure(
+      Identifier.of(Array("ns"), "zero_params"), SimpleZeroParameterProcedure)
+    checkAnswer(
+      sql("DESC PROCEDURE cat.ns.zero_params"),
+      Row("Procedure:   zero_params") ::
+      Row("Description: zero parameter procedure") ::
+      Row("Parameters:  ()") :: Nil)
+  }
+
+  object UnboundBindFailProcedure extends UnboundProcedure {
+    override def name: String = "bind_fail"
+    override def description: String = "bind fail procedure"
+    override def bind(inputType: StructType): BoundProcedure = {
+      throw new UnsupportedOperationException("Cannot bind")
     }
   }
 
@@ -610,7 +648,7 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
   object UnboundNonExecutableSum extends UnboundProcedure {
     override def name: String = "sum"
     override def description: String = "sum integers"
-    override def bind(inputType: StructType): BoundProcedure = Sum
+    override def bind(inputType: StructType): BoundProcedure = NonExecutableSum
   }
 
   object NonExecutableSum extends BoundProcedure {
@@ -633,10 +671,10 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
   object UnboundSum extends UnboundProcedure {
     override def name: String = "sum"
     override def description: String = "sum integers"
-    override def bind(inputType: StructType): BoundProcedure = Sum
+    override def bind(inputType: StructType): BoundProcedure = new Sum
   }
 
-  object Sum extends BoundProcedure {
+  class Sum extends BoundProcedure {
     override def name: String = "sum"
 
     override def description: String = "sum integers"
@@ -896,5 +934,19 @@ class ProcedureSuite extends QueryTest with SharedSparkSession with BeforeAndAft
       dataType: DataType) extends ProcedureParameter {
     override def defaultValue: DefaultValue = null
     override def comment: String = null
+  }
+
+  object SimpleSum extends Sum with SimpleProcedure {
+    override def name: String = "simple_sum"
+
+    override def description: String = "simple sum integers"
+  }
+
+  object SimpleZeroParameterProcedure extends SimpleProcedure {
+    override def name: String = "zero_params"
+    override def description: String = "zero parameter procedure"
+    override def isDeterministic: Boolean = true
+    override def parameters: Array[ProcedureParameter] = Array.empty
+    override def call(input: InternalRow): java.util.Iterator[Scan] = Collections.emptyIterator
   }
 }

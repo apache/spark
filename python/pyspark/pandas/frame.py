@@ -11141,10 +11141,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         return self._result_aggregated(column_labels, applied)
 
-    # TODO(SPARK-46166): axis and **kwargs should be implemented.
     def any(
-        self, axis: Axis = 0, bool_only: Optional[bool] = None, skipna: bool = True
-    ) -> "Series":
+        self,
+        axis: Optional[Axis] = 0,
+        bool_only: Optional[bool] = None,
+        skipna: bool = True,
+    ) -> Union["Series", bool]:
         """
         Return whether any element is True.
 
@@ -11153,11 +11155,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         Parameters
         ----------
-        axis : {0 or 'index'}, default 0
+        axis : {0, 'index', 1, 'columns' or None}, default 0
             Indicate which axis or axes should be reduced.
 
             * 0 / 'index' : reduce the index, return a Series whose index is the
               original column labels.
+            * 1 / 'columns' : reduce the columns, return a Series whose index is the
+              original row index.
+            * None : reduce all dimensions, return a single boolean value.
 
         bool_only : bool, default None
             Include only boolean columns. If None, will attempt to use everything,
@@ -11207,7 +11212,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         >>> df[[]].any()
         Series([], dtype: bool)
         """
-        axis = validate_axis(axis)
+        if axis is not None:
+            axis = validate_axis(axis)
         column_labels = self._internal.column_labels
         if bool_only:
             column_labels = self._bool_column_labels(column_labels)
@@ -11256,21 +11262,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
         else:
             # axis=None case - return single boolean value
-            raise NotImplementedError('axis should be 0, 1, "index", or "columns" currently.')
+            return bool(self.any(axis=1, bool_only=bool_only, skipna=skipna).any())  # type: ignore
 
     def _bool_column_labels(self, column_labels: List[Label]) -> List[Label]:
         """
         Filter column labels of boolean columns (without None).
         """
-        bool_column_labels = []
-        for label in column_labels:
-            psser = self._psser_for(label)
-            if is_bool_dtype(psser):
-                # Rely on dtype rather than spark type because
-                # columns that consist of bools and Nones should be excluded
-                # if bool_only is True
-                bool_column_labels.append(label)
-        return bool_column_labels
+        # Rely on dtype rather than spark type because columns that consist of bools and
+        # Nones should be excluded if bool_only is True
+        return [label for label in column_labels if is_bool_dtype(self._psser_for(label))]
 
     def _result_aggregated(
         self, column_labels: List[Label], scols: Sequence[PySparkColumn]
@@ -11281,15 +11281,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         from pyspark.pandas.series import first_series
 
-        cols = []
         result_scol_name = "value"
-        for label, applied_col in zip(column_labels, scols):
-            cols.append(
-                F.struct(
-                    *[F.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i)) for i, col in enumerate(label)],
-                    *[applied_col.alias(result_scol_name)],
-                )
+        cols = [
+            F.struct(
+                *[F.lit(col).alias(SPARK_INDEX_NAME_FORMAT(i)) for i, col in enumerate(label)],
+                *[applied_col.alias(result_scol_name)],
             )
+            for label, applied_col in zip(column_labels, scols)
+        ]
         # Statements under this comment implement spark frame transformations as below:
         # From:
         # +-------------------------------------------------------------------------------------+
@@ -11434,12 +11433,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         3  4.0
         """
         if numeric_only:
-            numeric_col_names = []
-            for label in self._internal.column_labels:
-                psser = self._psser_for(label)
-                if isinstance(psser.spark.data_type, (NumericType, BooleanType)):
-                    numeric_col_names.append(psser.name)
-
+            numeric_col_names = [
+                self._psser_for(label).name
+                for label in self._internal.column_labels
+                if isinstance(self._psser_for(label).spark.data_type, (NumericType, BooleanType))
+            ]
         psdf = self[numeric_col_names] if numeric_only else self
         return psdf._apply_series_op(
             lambda psser: psser._rank(method=method, ascending=ascending), should_resolve=True
@@ -12530,9 +12528,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     cols_dict[column].append(scol_for(sdf, column)[i].alias(column))
 
             internal_index_column = SPARK_DEFAULT_INDEX_NAME
-            cols = []
-            for i, col in enumerate(zip(*cols_dict.values())):
-                cols.append(F.struct(F.lit(qq[i]).alias(internal_index_column), *col))
+            cols = [
+                F.struct(F.lit(qq[i]).alias(internal_index_column), *col)
+                for i, col in enumerate(zip(*cols_dict.values()))
+            ]
             sdf = sdf.select(F.array(*cols).alias("arrays"))
 
             # And then, explode it and manually set the index.

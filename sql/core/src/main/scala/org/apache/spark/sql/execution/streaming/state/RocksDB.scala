@@ -336,6 +336,14 @@ class RocksDB(
     colFamilyNameToInfoMap.asScala.values.toSeq.count(_.isInternal == isInternal)
   }
 
+  /**
+   * Returns all column family names currently registered in RocksDB.
+   * This includes column families loaded from checkpoint metadata.
+   */
+  def allColumnFamilyNames: scala.collection.immutable.Set[String] = {
+    colFamilyNameToInfoMap.asScala.keySet.toSet
+  }
+
   private val rocksDBFileMapping: RocksDBFileMapping = new RocksDBFileMapping()
 
   // We send snapshots that needs to be uploaded by the maintenance thread to this queue

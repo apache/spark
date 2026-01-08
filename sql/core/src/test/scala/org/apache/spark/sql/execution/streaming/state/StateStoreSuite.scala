@@ -1745,6 +1745,9 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
       put(store, "b", 0, 2)
       put(store, "aa", 0, 3)
       remove(store, _._1.startsWith("a"))
+      if (colFamiliesEnabled) {
+        assert(store.allColumnFamilyNames == Set(StateStore.DEFAULT_COL_FAMILY_NAME))
+      }
       assert(store.commit() === 1)
 
       assert(store.hasCommitted)

@@ -69,4 +69,11 @@ set -- "${new_args[@]}"
 export DEBUGPY_ADAPTER_ENDPOINTS=$VSCODE_DEBUGPY_ADAPTER_ENDPOINTS
 export PYTHONPATH="$FWDIR/conf_vscode:$PYTHONPATH"
 
+# debugpy will leave some debug processes in the system
+# so we need to cleanup all the child processes after exiting
+function cleanup {
+  kill -- -$$
+}
+trap cleanup EXIT INT TERM
+
 exec "$@"

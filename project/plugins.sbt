@@ -46,3 +46,5 @@ addSbtPlugin("com.github.sbt.junit" % "sbt-jupiter-interface" % "0.17.0")
 addSbtPlugin("com.thesamet" % "sbt-protoc" % "1.0.7")
 
 addSbtPlugin("com.here.platform" % "sbt-bom" % "1.0.29")
+
+addSbtPlugin("ch.epfl.scala" % "sbt-bloop" % "2.0.17")

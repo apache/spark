@@ -20,6 +20,7 @@ import struct
 import sys
 import unittest
 import difflib
+import faulthandler
 import functools
 from decimal import Decimal
 from time import time, sleep
@@ -271,7 +272,19 @@ class QuietTest:
         self.log4j.LogManager.getRootLogger().setLevel(self.old_level)
 
 
-class PySparkTestCase(unittest.TestCase):
+class PySparkBaseTestCase(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        if os.environ.get("PYSPARK_TEST_TIMEOUT"):
+            faulthandler.register(signal.SIGTERM, file=sys.__stderr__, all_threads=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        if os.environ.get("PYSPARK_TEST_TIMEOUT"):
+            faulthandler.unregister(signal.SIGTERM)
+
+
+class PySparkTestCase(PySparkBaseTestCase):
     def setUp(self):
         from pyspark import SparkContext
 
@@ -284,7 +297,7 @@ class PySparkTestCase(unittest.TestCase):
         sys.path = self._old_sys_path
 
 
-class ReusedPySparkTestCase(unittest.TestCase):
+class ReusedPySparkTestCase(PySparkBaseTestCase):
     @classmethod
     def conf(cls):
         """
@@ -294,6 +307,8 @@ class ReusedPySparkTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        super().setUpClass()
+
         from pyspark import SparkContext
 
         cls.sc = SparkContext(cls.master(), cls.__name__, conf=cls.conf())
@@ -304,7 +319,10 @@ class ReusedPySparkTestCase(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        cls.sc.stop()
+        try:
+            cls.sc.stop()
+        finally:
+            super().tearDownClass()
 
     def test_assert_classic_mode(self):
         from pyspark.sql import is_remote
