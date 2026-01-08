@@ -3900,6 +3900,23 @@ object functions {
   def xxhash64(cols: Column*): Column = Column.fn("xxhash64", cols: _*)
 
   /**
+   * Calculates the hash code of given columns using the 64-bit variant of the xxHash algorithm,
+   * and returns the result as a long column.
+   *
+   * @param seed
+   *   the seed value for the hash function.
+   * @param cols
+   *   the columns to hash.
+   * @return
+   *   a long column containing the hash value.
+   *
+   * @group hash_funcs
+   * @since 4.0.0
+   */
+  def xxhash64(seed: Long, cols: Column*): Column =
+    Column.internalFn("xxhash64_with_seed", (lit(seed) +: cols): _*)
+
+  /**
    * Returns null if the condition is true, and throws an exception otherwise.
    *
    * @group misc_funcs

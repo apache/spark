@@ -2084,6 +2084,40 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
+  test("xxhash64 function with seed parameter") {
+    val df = Seq("Spark").toDF("col")
+    withTempView("tbl") {
+      df.createOrReplaceTempView("tbl")
+
+      // Test default seed (42) - both SQL and Scala API should produce the same result
+      val defaultSeedResult = df.select(xxhash64($"col")).collect()(0).getLong(0)
+      val sqlDefaultResult = sql("SELECT xxhash64(col) from tbl").collect()(0).getLong(0)
+      assert(defaultSeedResult === sqlDefaultResult)
+
+      // Test named parameter seed => 0
+      val seed0Result = sql("SELECT xxhash64(col, seed => 0) from tbl").collect()(0).getLong(0)
+      assert(seed0Result !== defaultSeedResult, "Different seeds should produce different hashes")
+
+      // Test named parameter seed => 100
+      val seed100Result = sql("SELECT xxhash64(col, seed => 100) from tbl").collect()(0).getLong(0)
+      assert(seed100Result !== defaultSeedResult)
+      assert(seed100Result !== seed0Result)
+
+      // Test Scala API with seed
+      val scalaApiResult = df.select(xxhash64(100L, $"col")).collect()(0).getLong(0)
+      assert(scalaApiResult === seed100Result, "Scala API should match SQL named parameter")
+
+      // Test with multiple columns and seed
+      val df2 = Seq((1, "a")).toDF("i", "j")
+      df2.createOrReplaceTempView("tbl2")
+      val multiColResult = sql(
+        "SELECT xxhash64(i, j, seed => 123) from tbl2").collect()(0).getLong(0)
+      val multiColDefault = sql(
+        "SELECT xxhash64(i, j) from tbl2").collect()(0).getLong(0)
+      assert(multiColResult !== multiColDefault)
+    }
+  }
+
   test("join with using clause") {
     val df1 = Seq(("r1c1", "r1c2", "t1r1c3"),
       ("r2c1", "r2c2", "t1r2c3"), ("r3c1x", "r3c2", "t1r3c3")).toDF("c1", "c2", "c3")

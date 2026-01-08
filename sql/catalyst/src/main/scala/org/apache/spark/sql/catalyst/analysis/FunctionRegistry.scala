@@ -794,7 +794,8 @@ object FunctionRegistry {
     expression[Md5]("md5"),
     expression[Uuid]("uuid"),
     expression[Murmur3Hash]("hash"),
-    expression[XxHash64]("xxhash64"),
+    ("xxhash64", (FunctionRegistryBase.expressionInfo[XxHash64]("xxhash64", Some("3.0.0")),
+      (expressions: Seq[Expression]) => XxHash64ExpressionBuilder.build("xxhash64", expressions))),
     expression[Sha1]("sha", true),
     expression[Sha1]("sha1"),
     expression[Sha2]("sha2"),
@@ -998,6 +999,7 @@ object FunctionRegistry {
   registerInternalExpression[NullIndex]("null_index")
   registerInternalExpression[CastTimestampNTZToLong]("timestamp_ntz_to_long")
   registerInternalExpression[ArrayBinarySearch]("array_binary_search")
+  registerInternalExpression[XxHash64WithSeed]("xxhash64_with_seed")
 
   private def makeExprInfoForVirtualOperator(name: String, usage: String): ExpressionInfo = {
     new ExpressionInfo(

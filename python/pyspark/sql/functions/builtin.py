@@ -13956,19 +13956,24 @@ def hash(*cols: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def xxhash64(*cols: "ColumnOrName") -> Column:
+def xxhash64(*cols: "ColumnOrName", seed: Optional[int] = None) -> Column:
     """Calculates the hash code of given columns using the 64-bit variant of the xxHash algorithm,
-    and returns the result as a long column. The hash computation uses an initial seed of 42.
+    and returns the result as a long column.
 
     .. versionadded:: 3.0.0
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
 
+    .. versionchanged:: 4.0.0
+        Supports optional seed parameter.
+
     Parameters
     ----------
     cols : :class:`~pyspark.sql.Column` or column name
         one or more columns to compute on.
+    seed : int, optional
+        the seed value for the hash function (default: 42).
 
     Returns
     -------
@@ -14003,8 +14008,20 @@ def xxhash64(*cols: "ColumnOrName") -> Column:
     +---+---+-------------------+
     |ABC|DEF|3233247871021311208|
     +---+---+-------------------+
+
+    >>> df.select('*', sf.xxhash64('c1', seed=0)).show()
+    +---+---+--------------------+
+    | c1| c2|        xxhash64(c1)|
+    +---+---+--------------------+
+    |ABC|DEF|-4294468057691064905|
+    +---+---+--------------------+
     """
-    return _invoke_function_over_seq_of_columns("xxhash64", cols)
+    if seed is None:
+        return _invoke_function_over_seq_of_columns("xxhash64", cols)
+    else:
+        return _invoke_function(
+            "xxhash64_with_seed", lit(seed), *[_to_col(c) for c in cols]
+        )
 
 
 @_try_remote_functions
