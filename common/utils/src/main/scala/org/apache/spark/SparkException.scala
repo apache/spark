@@ -40,6 +40,15 @@ class SparkException(
     this(message = message, cause = null)
 
   def this(
+      message: String,
+      cause: Throwable,
+      errorClass: Option[String],
+      messageParameters: Map[String, String],
+      context: Array[QueryContext]
+  ) =
+    this(message, cause, errorClass, messageParameters, context, None)
+
+  def this(
       errorClass: String,
       messageParameters: Map[String, String],
       cause: Throwable,
@@ -67,15 +76,6 @@ class SparkException(
       errorClass = Some(errorClass),
       messageParameters = messageParameters,
       context = context)
-
-  def this(
-      message: String,
-      cause: Throwable,
-      errorClass: Option[String],
-      messageParameters: Map[String, String],
-      context: Array[QueryContext]
-  ) =
-    this(message, cause, errorClass, messageParameters, context, None)
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 
