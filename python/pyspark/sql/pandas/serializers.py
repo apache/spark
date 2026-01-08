@@ -805,6 +805,8 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
         This has performance penalties.
     binary_as_bytes : bool
         If True, binary type will be deserialized as bytes, otherwise as bytearray.
+    coercion_policy : CoercionPolicy
+        The coercion policy for type conversion (PERMISSIVE, WARN, or STRICT).
     """
 
     def __init__(
@@ -814,6 +816,7 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
         input_types,
         int_to_decimal_coercion_enabled,
         binary_as_bytes,
+        coercion_policy,
     ):
         super().__init__(
             timezone=timezone,
@@ -824,6 +827,7 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
         self._input_types = input_types
         self._int_to_decimal_coercion_enabled = int_to_decimal_coercion_enabled
         self._binary_as_bytes = binary_as_bytes
+        self._coercion_policy = coercion_policy
 
     def load_stream(self, stream):
         """
@@ -874,6 +878,9 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
             Result of writing the Arrow stream via ArrowStreamArrowUDFSerializer dump_stream
         """
         import pyarrow as pa
+        from pyspark.sql.types import CoercionPolicy
+
+        coercion_policy = self._coercion_policy
 
         def create_array(results, arrow_type, spark_type):
             conv = LocalDataToArrowConversion._create_converter(
@@ -881,11 +888,20 @@ class ArrowBatchUDFSerializer(ArrowStreamArrowUDFSerializer):
                 none_on_identity=True,
                 int_to_decimal_coercion_enabled=self._int_to_decimal_coercion_enabled,
             )
-            converted = [conv(res) for res in results] if conv is not None else results
+
+            if (
+                coercion_policy == CoercionPolicy.PERMISSIVE
+                or coercion_policy == CoercionPolicy.WARN
+            ) and spark_type.needsCoercion:
+                results = [spark_type.coerce(v, coercion_policy) for v in results]
+
+            if conv is not None:
+                results = [conv(v) for v in results]
+
             try:
-                return pa.array(converted, type=arrow_type)
+                return pa.array(results, type=arrow_type)
             except pa.lib.ArrowInvalid:
-                return pa.array(converted).cast(target_type=arrow_type, safe=self._safecheck)
+                return pa.array(results).cast(target_type=arrow_type, safe=self._safecheck)
 
         def py_to_batch():
             for packed in iterator:

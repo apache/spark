@@ -319,7 +319,6 @@ def wrap_arrow_batch_udf(f, args_offsets, kwargs_offsets, return_type, runner_co
 
 def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, runner_conf):
     from pyspark.sql.pandas.types import to_arrow_type
-    from pyspark.sql.types import CoercionPolicy
 
     func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
 
@@ -332,22 +331,9 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
         return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
     )
 
-    # Get coercion policy from runner config, default to PERMISSIVE for backward compatibility
-    coercion_policy = getattr(runner_conf, "coercion_policy", CoercionPolicy.PERMISSIVE)
-    if isinstance(coercion_policy, str):
-        coercion_policy = CoercionPolicy(coercion_policy.lower())
-
-    # Apply coercion to match pickle behavior when using PERMISSIVE/WARN policy
-    # STRICT policy is a no-op - Arrow handles type conversion natively
-    if coercion_policy == CoercionPolicy.STRICT:
-
-        def coerce_result(result):
-            return result  # no-op, let Arrow handle natively
-
-    else:
-
-        def coerce_result(result):
-            return return_type.coerce(result, coercion_policy)
+    # Coercion is handled in the serializer (ArrowBatchUDFSerializer).
+    # In PERMISSIVE/WARN mode: coerce -> convert -> pa.array
+    # In STRICT mode: convert -> pa.array (no coercion)
 
     if zero_arg_exec:
 
@@ -369,7 +355,7 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
                 Takes list of Python objects and returns tuple of
                 (results, arrow_return_type, return_type).
                 """
-                return list(pool.map(lambda row: coerce_result(func(*row)), get_args(*args)))
+                return list(pool.map(lambda row: func(*row), get_args(*args)))
 
     else:
 
@@ -379,7 +365,7 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
             Takes list of Python objects and returns tuple of
             (results, arrow_return_type, return_type).
             """
-            return [coerce_result(func(*row)) for row in get_args(*args)]
+            return [func(*row) for row in get_args(*args)]
 
     def verify_result_length(result, length):
         if len(result) != length:
@@ -2887,15 +2873,19 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
             eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
             and not runner_conf.use_legacy_pandas_udf_conversion
         ):
+            from pyspark.sql.types import CoercionPolicy
+
             input_types = [
                 f.dataType for f in _parse_datatype_json_string(utf8_deserializer.loads(infile))
             ]
+            coercion_policy = CoercionPolicy(runner_conf.coercion_policy.lower())
             ser = ArrowBatchUDFSerializer(
                 runner_conf.timezone,
                 runner_conf.safecheck,
                 input_types,
                 runner_conf.int_to_decimal_coercion_enabled,
                 runner_conf.binary_as_bytes,
+                coercion_policy,
             )
         else:
             # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
