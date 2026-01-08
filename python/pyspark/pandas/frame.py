@@ -1726,7 +1726,7 @@ class DataFrame(Frame, Generic[T]):
                 SPARK_DEFAULT_INDEX_NAME,
                 F.get(F.lit(numeric_col_names), F.col(index_1_col_name)),
             )
-            index_col_names: List[str] = [SPARK_DEFAULT_INDEX_NAME]
+            index_col_names = [SPARK_DEFAULT_INDEX_NAME]
 
         sdf = sdf.select(*index_col_names, *numeric_col_names)
 
