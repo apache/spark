@@ -561,6 +561,174 @@ class PyArrowTypeCoercionTests(unittest.TestCase):
         a = pa.array(ts_data, type=pa.timestamp("us", tz="UTC"))
         self.assertEqual(a.type, pa.timestamp("us", tz="UTC"))
 
+    def test_timezone_aware_datetime_coercion(self):
+        """Test timezone-aware datetime.datetime coercion."""
+        import pyarrow as pa
+        from zoneinfo import ZoneInfo
+
+        # UTC timezone
+        utc_tz = ZoneInfo("UTC")
+        ts_utc = [
+            datetime.datetime(2024, 1, 1, 12, 0, 0, tzinfo=utc_tz),
+            datetime.datetime(2024, 1, 2, 12, 0, 0, tzinfo=utc_tz),
+        ]
+
+        # datetime with UTC -> timestamp with UTC
+        a = pa.array(ts_utc, type=pa.timestamp("us", tz="UTC"))
+        self.assertEqual(a.type, pa.timestamp("us", tz="UTC"))
+        self.assertEqual(len(a), 2)
+
+        # Non-UTC timezone: Asia/Singapore (UTC+8)
+        sg_tz = ZoneInfo("Asia/Singapore")
+        ts_sg = [
+            datetime.datetime(2024, 1, 1, 20, 0, 0, tzinfo=sg_tz),  # 12:00 UTC
+            datetime.datetime(2024, 1, 2, 20, 0, 0, tzinfo=sg_tz),  # 12:00 UTC
+        ]
+
+        # datetime with Asia/Singapore -> timestamp with Asia/Singapore
+        a = pa.array(ts_sg, type=pa.timestamp("us", tz="Asia/Singapore"))
+        self.assertEqual(a.type, pa.timestamp("us", tz="Asia/Singapore"))
+        self.assertEqual(len(a), 2)
+
+        # datetime with Asia/Singapore -> timestamp with UTC (converts timezone)
+        a = pa.array(ts_sg, type=pa.timestamp("us", tz="UTC"))
+        self.assertEqual(a.type, pa.timestamp("us", tz="UTC"))
+
+        # US/Pacific timezone (UTC-8 or UTC-7 depending on DST)
+        la_tz = ZoneInfo("America/Los_Angeles")
+        ts_la = [
+            datetime.datetime(2024, 1, 1, 4, 0, 0, tzinfo=la_tz),  # 12:00 UTC
+            datetime.datetime(2024, 7, 1, 5, 0, 0, tzinfo=la_tz),  # 12:00 UTC (DST)
+        ]
+
+        a = pa.array(ts_la, type=pa.timestamp("us", tz="America/Los_Angeles"))
+        self.assertEqual(a.type, pa.timestamp("us", tz="America/Los_Angeles"))
+
+        # Naive datetime -> timestamp with timezone
+        ts_naive = [
+            datetime.datetime(2024, 1, 1, 12, 0, 0),
+            datetime.datetime(2024, 1, 2, 12, 0, 0),
+        ]
+        a = pa.array(ts_naive, type=pa.timestamp("us", tz="Asia/Singapore"))
+        self.assertEqual(a.type, pa.timestamp("us", tz="Asia/Singapore"))
+
+    @unittest.skipIf(not have_pandas, pandas_requirement_message)
+    def test_pandas_timestamp_timezone_coercion(self):
+        """Test pd.Timestamp with timezone coercion."""
+        import pyarrow as pa
+        import pandas as pd
+        from zoneinfo import ZoneInfo
+
+        # pd.Timestamp with UTC
+        ts_utc = [
+            pd.Timestamp("2024-01-01 12:00:00", tz="UTC"),
+            pd.Timestamp("2024-01-02 12:00:00", tz="UTC"),
+        ]
+
+        a = pa.array(ts_utc, type=pa.timestamp("us", tz="UTC"))
+        self.assertEqual(a.type, pa.timestamp("us", tz="UTC"))
+        self.assertEqual(len(a), 2)
+
+        # pd.Timestamp with Asia/Singapore
+        ts_sg = [
+            pd.Timestamp("2024-01-01 20:00:00", tz="Asia/Singapore"),
+            pd.Timestamp("2024-01-02 20:00:00", tz="Asia/Singapore"),
+        ]
+
+        a = pa.array(ts_sg, type=pa.timestamp("us", tz="Asia/Singapore"))
+        self.assertEqual(a.type, pa.timestamp("us", tz="Asia/Singapore"))
+
+        # pd.Timestamp with America/Los_Angeles
+        ts_la = [
+            pd.Timestamp("2024-01-01 04:00:00", tz="America/Los_Angeles"),
+            pd.Timestamp("2024-07-01 05:00:00", tz="America/Los_Angeles"),
+        ]
+
+        a = pa.array(ts_la, type=pa.timestamp("us", tz="America/Los_Angeles"))
+        self.assertEqual(a.type, pa.timestamp("us", tz="America/Los_Angeles"))
+
+        # pd.Timestamp with timezone -> different timezone (converts)
+        a = pa.array(ts_sg, type=pa.timestamp("us", tz="UTC"))
+        self.assertEqual(a.type, pa.timestamp("us", tz="UTC"))
+
+        # Timezone-aware pd.Series
+        s = pd.Series(ts_sg)
+        a = pa.array(s, type=pa.timestamp("us", tz="Asia/Singapore"))
+        self.assertEqual(a.type, pa.timestamp("us", tz="Asia/Singapore"))
+
+        # pd.Series with DatetimeTZDtype
+        s = pd.Series(
+            pd.to_datetime(["2024-01-01", "2024-01-02"]).tz_localize("Asia/Singapore")
+        )
+        a = pa.array(s)
+        self.assertEqual(str(a.type.tz), "Asia/Singapore")
+
+        # ArrowDtype with timezone
+        s = pd.Series(
+            [pd.Timestamp("2024-01-01 12:00:00"), pd.Timestamp("2024-01-02 12:00:00")],
+            dtype=pd.ArrowDtype(pa.timestamp("us", tz="Asia/Singapore")),
+        )
+        a = pa.array(s)
+        self.assertEqual(a.type, pa.timestamp("us", tz="Asia/Singapore"))
+
+    def test_timezone_coercion_between_timezones(self):
+        """Test coercion between different timezones."""
+        import pyarrow as pa
+        import pyarrow.compute as pc
+        from zoneinfo import ZoneInfo
+
+        # Create array with Asia/Singapore timezone
+        sg_tz = ZoneInfo("Asia/Singapore")
+        ts_sg = [
+            datetime.datetime(2024, 1, 1, 20, 0, 0, tzinfo=sg_tz),
+        ]
+
+        a_sg = pa.array(ts_sg, type=pa.timestamp("us", tz="Asia/Singapore"))
+        self.assertEqual(a_sg.type.tz, "Asia/Singapore")
+
+        # Convert to UTC using pc.cast (preserves instant, changes representation)
+        # Note: This changes the timezone but keeps the same instant
+        # Explicit timezone conversion is needed via assume_timezone or similar
+
+        # Create naive timestamp and localize to different timezones
+        ts_naive = pa.array(
+            [datetime.datetime(2024, 1, 1, 12, 0, 0)],
+            type=pa.timestamp("us"),
+        )
+
+        # Assume timezone (treats naive as if it were in that timezone)
+        ts_sg_assumed = pc.assume_timezone(ts_naive, "Asia/Singapore")
+        self.assertEqual(ts_sg_assumed.type.tz, "Asia/Singapore")
+
+        ts_utc_assumed = pc.assume_timezone(ts_naive, "UTC")
+        self.assertEqual(ts_utc_assumed.type.tz, "UTC")
+
+        ts_la_assumed = pc.assume_timezone(ts_naive, "America/Los_Angeles")
+        self.assertEqual(ts_la_assumed.type.tz, "America/Los_Angeles")
+
+    def test_mixed_timezone_handling(self):
+        """Test handling of mixed timezone data."""
+        import pyarrow as pa
+        from zoneinfo import ZoneInfo
+
+        utc_tz = ZoneInfo("UTC")
+        sg_tz = ZoneInfo("Asia/Singapore")
+
+        # Mixed timezones in input - behavior depends on PyArrow version
+        ts_mixed = [
+            datetime.datetime(2024, 1, 1, 12, 0, 0, tzinfo=utc_tz),
+            datetime.datetime(2024, 1, 1, 20, 0, 0, tzinfo=sg_tz),  # Same instant
+        ]
+
+        # When specifying target timezone, values are converted
+        a = pa.array(ts_mixed, type=pa.timestamp("us", tz="UTC"))
+        self.assertEqual(a.type, pa.timestamp("us", tz="UTC"))
+        self.assertEqual(len(a), 2)
+
+        # Both should represent the same instant when converted to UTC
+        values = a.to_pylist()
+        self.assertEqual(values[0], values[1])
+
     def test_date_coercion(self):
         """Test date type coercion."""
         import pyarrow as pa
