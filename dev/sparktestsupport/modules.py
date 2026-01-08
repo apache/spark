@@ -489,6 +489,8 @@ pyspark_core = Module(
         "pyspark.tests.test_util",
         "pyspark.tests.test_worker",
         "pyspark.tests.test_stage_sched",
+        # unittests for upstream projects
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_ignore_timezone",
     ],
 )
 

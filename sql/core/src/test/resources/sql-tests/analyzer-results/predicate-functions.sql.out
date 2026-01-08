@@ -518,6 +518,40 @@ Project [NOT cast(null as int) IN (cast(1 as int),cast(2 as int),cast(null as in
 
 
 -- !query
+select 1 in ()
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_SQL_SYNTAX.EMPTY_IN_PREDICATE",
+  "sqlState" : "42000",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 14,
+    "fragment" : "in ()"
+  } ]
+}
+
+
+-- !query
+select 1 not in ()
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_SQL_SYNTAX.EMPTY_IN_PREDICATE",
+  "sqlState" : "42000",
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 18,
+    "fragment" : "not in ()"
+  } ]
+}
+
+
+-- !query
 select 1 between 0 and 2
 -- !query analysis
 Project [between(1, 0, 2) AS between(1, 0, 2)#x]

@@ -14,8 +14,3 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-from pyspark.testing.unittestutils import main
-from pyspark.testing.utils import assertDataFrameEqual, assertSchemaEqual
-
-__all__ = ["assertDataFrameEqual", "assertSchemaEqual", "main"]

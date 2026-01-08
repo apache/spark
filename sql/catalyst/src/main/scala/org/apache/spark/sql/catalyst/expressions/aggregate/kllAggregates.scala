@@ -151,8 +151,8 @@ case class KllSketchAggBigint(
       updateBuffer.merge(input)
       updateBuffer
     } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchIncompatibleMergeError(prettyName, e.getMessage)
+      case _: Exception =>
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   }
 
@@ -167,8 +167,8 @@ case class KllSketchAggBigint(
     try {
       KllLongsSketch.heapify(Memory.wrap(buffer))
     } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+      case _: Exception =>
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   } else {
     this.createAggregationBuffer()
@@ -287,8 +287,8 @@ case class KllSketchAggFloat(
       updateBuffer.merge(input)
       updateBuffer
     } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchIncompatibleMergeError(prettyName, e.getMessage)
+      case _: Exception =>
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   }
 
@@ -303,8 +303,8 @@ case class KllSketchAggFloat(
     try {
       KllFloatsSketch.heapify(Memory.wrap(buffer))
     } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+      case _: Exception =>
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   } else {
     this.createAggregationBuffer()
@@ -425,8 +425,8 @@ case class KllSketchAggDouble(
       updateBuffer.merge(input)
       updateBuffer
     } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchIncompatibleMergeError(prettyName, e.getMessage)
+      case _: Exception =>
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   }
 
@@ -441,8 +441,8 @@ case class KllSketchAggDouble(
     try {
       KllDoublesSketch.heapify(Memory.wrap(buffer))
     } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+      case _: Exception =>
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   } else {
     this.createAggregationBuffer()
