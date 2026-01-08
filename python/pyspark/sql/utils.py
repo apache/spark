@@ -495,11 +495,11 @@ def remote_only(func: property) -> property:
 
 
 @overload
-def remote_only(func: Callable[..., Any]) -> Callable[..., Any]:
+def remote_only(func: FuncT) -> FuncT:
     ...
 
 
-def remote_only(func: Union[Callable[..., Any], property]) -> Union[Callable[..., Any], property]:
+def remote_only(func: Union[FuncT, property]) -> Union[FuncT, property]:
     """
     Decorator to mark a function or method as only available in Spark Connect.
 

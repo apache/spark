@@ -389,15 +389,17 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
 
     >>> Thread(target=inheritable_thread_target(session)(target_func)).start()  # doctest: +SKIP
     """
-    from pyspark.sql import is_remote
+    from pyspark.sql import is_remote, SparkSession
 
     # Spark Connect
     if is_remote():
         session = f
-        assert session is not None, "Spark Connect session must be provided."
 
         def outer(ff: Callable) -> Callable:
-            thread_local = session.client.thread_local  # type: ignore[union-attr, operator]
+            assert isinstance(
+                session, SparkSession
+            ), "f is expected to be SparkSession for spark connect"
+            thread_local = session.client.thread_local
             session_client_thread_local_attrs = [
                 (attr, copy.deepcopy(value))
                 for (
@@ -411,13 +413,17 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
                 # Propagates the active remote spark session to the current thread.
                 from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
 
+                assert isinstance(
+                    session, SparkSession
+                ), "f is expected to be SparkSession for spark connect"
+
                 RemoteSparkSession._set_default_and_active_session(
                     session  # type: ignore[arg-type]
                 )
                 # Set thread locals in child thread.
                 for attr, value in session_client_thread_local_attrs:
                     setattr(
-                        session.client.thread_local,  # type: ignore[union-attr, operator]
+                        session.client.thread_local,
                         attr,
                         value,
                     )
@@ -428,7 +434,6 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
         return outer
 
     # Non Spark Connect with SparkSession or Callable
-    from pyspark.sql import SparkSession
     from pyspark import SparkContext
     from py4j.clientserver import ClientServer
 
@@ -561,7 +566,8 @@ class InheritableThread(threading.Thread):
             def copy_local_properties(*a: Any, **k: Any) -> Any:
                 # Set tags in child thread.
                 assert hasattr(self, "_tags")
-                thread_local = session.client.thread_local  # type: ignore[union-attr, operator]
+                assert session is not None
+                thread_local = session.client.thread_local
                 thread_local.tags = self._tags  # type: ignore[has-type]
                 return target(*a, **k)
 
@@ -596,7 +602,7 @@ class InheritableThread(threading.Thread):
         if is_remote():
             # Spark Connect
             assert hasattr(self, "_session")
-            thread_local = self._session.client.thread_local  # type: ignore[union-attr, operator]
+            thread_local = self._session.client.thread_local
             if not hasattr(thread_local, "tags"):
                 thread_local.tags = set()
             self._tags = set(thread_local.tags)
