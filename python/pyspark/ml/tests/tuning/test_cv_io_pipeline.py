@@ -130,10 +130,12 @@ class CrossValidatorIOPipelineTests(SparkSessionTestCase, ValidatorTestUtilsMixi
 
     def test_save_load_pipeline_estimator(self):
         with ThreadPoolExecutor(max_workers=2) as executor:
-            list(executor.map(
-                self._run_test_save_load_pipeline_estimator,
-                [LogisticRegression, DummyLogisticRegression],
-            ))
+            list(
+                executor.map(
+                    self._run_test_save_load_pipeline_estimator,
+                    [LogisticRegression, DummyLogisticRegression],
+                )
+            )
 
 
 if __name__ == "__main__":
