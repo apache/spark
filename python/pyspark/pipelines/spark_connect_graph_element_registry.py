@@ -124,9 +124,7 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
         try:
             df = self._execute_query_function(flow.name, flow.func)
         except PySparkException as e:
-            print("pizza: exception while executing query function")
             if e.getCondition() == "ATTEMPT_ANALYSIS_IN_PIPELINE_QUERY_FUNCTION":
-                print("pizza: exception is an analysis exception")
                 df = None
             else:
                 raise e
@@ -187,7 +185,6 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
 
             signal = result["pipeline_query_function_execution_signal"]
             flow_names = signal.flow_names
-            print("pizza: received signal with flow names: ", flow_names)
             for flow_name in flow_names:
                 func = self._query_funcs_by_flow_name[flow_name]
                 df = self._execute_query_function(flow_name, func)

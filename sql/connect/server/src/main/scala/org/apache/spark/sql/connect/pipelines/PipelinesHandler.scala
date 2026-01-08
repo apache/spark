@@ -326,7 +326,6 @@ private[connect] object PipelinesHandler extends Logging {
       flow: proto.PipelineCommand.DefineFlow,
       transformRelationFunc: Relation => LogicalPlan,
       sessionHolder: SessionHolder): TableIdentifier = {
-    logInfo("pizza defining flow")
     if (flow.hasOnce) {
       throw new AnalysisException(
         "DEFINE_FLOW_ONCE_OPTION_NOT_SUPPORTED",
@@ -451,19 +450,11 @@ private[connect] object PipelinesHandler extends Logging {
         cmd.getStorage)
       sessionHolder.cachePipelineExecution(dataflowGraphId, pipelineUpdateContext)
 
-      // scalastyle:off println
-      println(s"INSTRUMENTATION: Starting pipeline execution, dry=${cmd.getDry}")
-      // scalastyle:on println
-
       if (cmd.getDry) {
         pipelineUpdateContext.pipelineExecution.dryRunPipeline()
       } else {
         pipelineUpdateContext.pipelineExecution.runPipeline()
       }
-
-      // scalastyle:off println
-      println(s"INSTRUMENTATION: Pipeline execution completed")
-      // scalastyle:on println
 
       // Rethrow any exceptions that caused the pipeline run to fail so that the exception is
       // propagated back to the SC client / CLI.
@@ -598,10 +589,6 @@ private[connect] object PipelinesHandler extends Logging {
       var signalAttempts = 0
       val maxSignalAttempts = 600
 
-      // scalastyle:off println
-      println(s"INSTRUMENTATION: Starting signal loop")
-      // scalastyle:on println
-
       while (execution.resolvedGraph.isEmpty && signalAttempts < maxSignalAttempts) {
         val signal = proto.PipelineQueryFunctionExecutionSignal.newBuilder()
 
@@ -611,9 +598,6 @@ private[connect] object PipelinesHandler extends Logging {
         }
 
         if (signal.getFlowNamesCount > 0) {
-          // scalastyle:off println
-          println(s"INSTRUMENTATION: Sending signal for ${signal.getFlowNamesCount} flows")
-          // scalastyle:on println
           logInfo(s"Sending execution signal for ${signal.getFlowNamesCount} flows")
 
           val response = ExecutePlanResponse.newBuilder()
@@ -621,22 +605,13 @@ private[connect] object PipelinesHandler extends Logging {
             .build()
 
           responseObserver.onNext(response)
-          // scalastyle:off println
-          println(s"INSTRUMENTATION: Signal sent successfully")
-          // scalastyle:on println
         } else {
-          // scalastyle:off println
-          println(s"INSTRUMENTATION: No signals, attempt $signalAttempts")
           // scalastyle:on println
         }
 
         Thread.sleep(100)
         signalAttempts += 1
       }
-
-      // scalastyle:off println
-      println(s"INSTRUMENTATION: Exited signal loop, attempts=$signalAttempts")
-      // scalastyle:on println
 
       responseObserver.onCompleted()
       streamCompleted = true
@@ -685,9 +660,6 @@ private[connect] object PipelinesHandler extends Logging {
       case Some(pipelineUpdateContext) =>
         // TODO: what if we haven't yet started analysis?
         val graphAnalysisContext = pipelineUpdateContext.pipelineExecution.graphAnalysisContext
-        // scalastyle:off println
-        println(s"INSTRUMENTATION: markFlowPlanRegistered called for flow $flowIdentifier")
-        // scalastyle:on println
         graphAnalysisContext.markFlowPlanRegistered(flowIdentifier)
       case None =>
     }

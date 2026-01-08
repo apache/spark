@@ -78,22 +78,12 @@ class GraphAnalysisContext {
   }
 
   def markFlowPlanRegistered(flowIdentifier: TableIdentifier): Unit = {
-    // scalastyle:off println
-    println(s"INSTRUMENTATION: markFlowPlanRegistered - looking for flow $flowIdentifier")
-    println(s"INSTRUMENTATION: failedUnregisteredFlows size: ${failedUnregisteredFlows.size()}")
-    // scalastyle:on println
     val flow = failedUnregisteredFlows.remove(flowIdentifier)
     // Flow could be null if it failed on the client side and we never tried to execute the flow
     // function on the server side.
     if (flow != null) {
-      // scalastyle:off println
-      println(s"INSTRUMENTATION: Found flow $flowIdentifier, adding to toBeResolvedFlows queue")
-      // scalastyle:on println
       toBeResolvedFlows.addFirst(flow)
     } else {
-      // scalastyle:off println
-      println(s"INSTRUMENTATION: Flow $flowIdentifier not found in failedUnregisteredFlows")
-      // scalastyle:on println
     }
   }
 
