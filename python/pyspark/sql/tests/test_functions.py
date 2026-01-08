@@ -2349,16 +2349,17 @@ class FunctionsTestsMixin:
     def test_kll_merge_agg_with_nulls(self):
         """Test kll_merge_agg with null values"""
         df1 = self.spark.createDataFrame([1, 2, 3], "INT")
-        df_null = self.spark.createDataFrame([(None,)], ["value"])
+        df2 = self.spark.createDataFrame([4, None, 6], "INT")
 
         sketch1 = df1.agg(F.kll_sketch_agg_bigint("value").alias("sketch"))
-        sketch_null = df_null.agg(F.kll_sketch_agg_bigint("value").alias("sketch"))
+        sketch2 = df2.agg(F.kll_sketch_agg_bigint("value").alias("sketch"))
 
-        # Merge sketch with null - null should be ignored
-        merged = sketch1.union(sketch_null).agg(F.kll_merge_agg_bigint("sketch").alias("merged"))
+        # Merge sketches - null values should be ignored
+        merged = sketch1.union(sketch2).agg(F.kll_merge_agg_bigint("sketch").alias("merged"))
 
         n = merged.select(F.kll_sketch_get_n_bigint("merged")).first()[0]
-        self.assertEqual(n, 3)
+        # Should have 5 values (1,2,3,4,6 - null is ignored)
+        self.assertEqual(n, 5)
 
     def test_datetime_functions(self):
         df = self.spark.range(1).selectExpr("'2017-01-22' as dateCol")
