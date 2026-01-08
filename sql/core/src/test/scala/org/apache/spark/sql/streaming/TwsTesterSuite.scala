@@ -400,6 +400,26 @@ class TwsTesterSuite extends SparkFunSuite {
     assert(tester.peekValueState[Long]("lastEventTime", "key1").isEmpty)
   }
 
+  test("TwsTester should reject timer registration before watermark in EventTime mode") {
+    val tester = new TwsTester(
+      new EventTimeSessionProcessor(),
+      timeMode = TimeMode.EventTime()
+    )
+
+    // Set watermark to 20 seconds
+    tester.setWatermark(20000)
+
+    // Try to process a "late" event with eventTime=10000
+    // EventTimeSessionProcessor registers timer at eventTime + 5000 = 15000
+    // Since 15000 <= 20000 (watermark), this should fail
+    val exception = intercept[IllegalArgumentException] {
+      tester.test("key1", List((10000L, "late-event")))
+    }
+    assert(exception.getMessage.contains("Cannot register timer"))
+    assert(exception.getMessage.contains("15000"))
+    assert(exception.getMessage.contains("20000"))
+  }
+
   test("TwsTester should support complex case class data types") {
     val tester = new TwsTester(new UserProfileProcessor())
 

@@ -209,6 +209,12 @@ class InMemoryStatefulProcessorHandle(timeMode: TimeMode, clock: Clock)
   val timers = new InMemoryTimers()
   private val states = mutable.Map[String, Any]()
   private val queryInfo = new QueryInfoImpl(UUID.randomUUID(), UUID.randomUUID(), 0L)
+  private var currentWatermarkMs: Long = 0L
+
+  /** Updates the current watermark. Used by TwsTester to sync watermark state. */
+  def setWatermark(watermarkMs: Long): Unit = {
+    currentWatermarkMs = watermarkMs
+  }
 
   override def getValueState[T](
       stateName: String,
@@ -253,6 +259,13 @@ class InMemoryStatefulProcessorHandle(timeMode: TimeMode, clock: Clock)
 
   override def registerTimer(expiryTimestampMs: Long): Unit = {
     require(timeMode != TimeMode.None, "Timers are not supported with TimeMode.None.")
+    if (timeMode == TimeMode.EventTime()) {
+      require(
+        expiryTimestampMs > currentWatermarkMs,
+        s"Cannot register timer with expiry $expiryTimestampMs ms " +
+          s"which is not later than the current watermark $currentWatermarkMs ms."
+      )
+    }
     timers.registerTimer(expiryTimestampMs)
   }
 

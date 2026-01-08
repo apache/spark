@@ -222,6 +222,7 @@ class TwsTester[K, I, O](
     )
     require(currentWatermarkMs > this.currentWatermarkMs, "Watermark must move forward.")
     this.currentWatermarkMs = currentWatermarkMs
+    handle.setWatermark(currentWatermarkMs)
     handleExpiredTimers()
   }
 
