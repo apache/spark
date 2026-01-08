@@ -262,7 +262,7 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
                         return False
                     events[event_name] = pyspark.cloudpickle.loads(table[0][0])
                     return True
-                    
+
                 load_event("start_event", "listener_start_events")
                 load_event("progress_event", "listener_progress_events")
                 load_event("terminated_event", "listener_terminated_events")
