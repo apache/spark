@@ -389,15 +389,17 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
 
     >>> Thread(target=inheritable_thread_target(session)(target_func)).start()  # doctest: +SKIP
     """
-    from pyspark.sql import is_remote, SparkSession
+    from pyspark.sql import is_remote
 
     # Spark Connect
     if is_remote():
+        from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
+
         session = f
 
         def outer(ff: Callable) -> Callable:
             assert isinstance(
-                session, SparkSession
+                session, RemoteSparkSession
             ), "f is expected to be SparkSession for spark connect"
             thread_local = session.client.thread_local
             session_client_thread_local_attrs = [
@@ -411,15 +413,11 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
             @functools.wraps(ff)
             def inner(*args: Any, **kwargs: Any) -> Any:
                 # Propagates the active remote spark session to the current thread.
-                from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
-
                 assert isinstance(
-                    session, SparkSession
+                    session, RemoteSparkSession
                 ), "f is expected to be SparkSession for spark connect"
 
-                RemoteSparkSession._set_default_and_active_session(
-                    session  # type: ignore[arg-type]
-                )
+                RemoteSparkSession._set_default_and_active_session(session)
                 # Set thread locals in child thread.
                 for attr, value in session_client_thread_local_attrs:
                     setattr(
@@ -434,6 +432,7 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
         return outer
 
     # Non Spark Connect with SparkSession or Callable
+    from pyspark.sql import SparkSession
     from pyspark import SparkContext
     from py4j.clientserver import ClientServer
 
@@ -442,7 +441,6 @@ def inheritable_thread_target(f: Optional[Union[Callable, "SparkSession"]] = Non
 
         if isinstance(f, SparkSession):
             session = f
-            assert session is not None
             tags = set(session.getTags())
             # Local properties are copied when wrapping the function.
             assert SparkContext._active_spark_context is not None
