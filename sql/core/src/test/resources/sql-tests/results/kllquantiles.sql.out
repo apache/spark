@@ -1306,11 +1306,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "KLL_SKETCH_INVALID_INPUT",
+  "errorClass" : "KLL_INVALID_INPUT_SKETCH_BUFFER",
   "sqlState" : "22000",
   "messageParameters" : {
-    "functionName" : "`kll_merge_agg_bigint`",
-    "reason" : "Error combination of PreInts and SerVer: PreInts: 110, SerVer: 111"
+    "function" : "`kll_merge_agg_bigint`"
   }
 }
 
@@ -1325,11 +1324,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "KLL_SKETCH_INVALID_INPUT",
+  "errorClass" : "KLL_INVALID_INPUT_SKETCH_BUFFER",
   "sqlState" : "22000",
   "messageParameters" : {
-    "functionName" : "`kll_merge_agg_float`",
-    "reason" : "A sketch memory image must be at least 8 bytes. 4"
+    "function" : "`kll_merge_agg_float`"
   }
 }
 
@@ -1344,11 +1342,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "KLL_SKETCH_INVALID_INPUT",
+  "errorClass" : "KLL_INVALID_INPUT_SKETCH_BUFFER",
   "sqlState" : "22000",
   "messageParameters" : {
-    "functionName" : "`kll_merge_agg_double`",
-    "reason" : "A sketch memory image must be at least 8 bytes. 4"
+    "function" : "`kll_merge_agg_double`"
   }
 }
 
