@@ -18,7 +18,8 @@ package org.apache.spark.sql.classic
 
 import org.apache.spark.sql
 import org.apache.spark.sql.{Column, Row}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedTableValuedFunction
+import org.apache.spark.sql.catalyst.analysis.{LazyExpression, UnresolvedAttribute, UnresolvedTableValuedFunction}
+import org.apache.spark.sql.catalyst.expressions.Expression
 
 class TableValuedFunction(sparkSession: SparkSession)
   extends sql.TableValuedFunction {
@@ -45,9 +46,27 @@ class TableValuedFunction(sparkSession: SparkSession)
   }
 
   private def fn(name: String, args: Seq[Column]): Dataset[Row] = {
+    // Only defer analysis for expressions that need outer scope (e.g., unresolved column
+    // refs in lateral join). Let literal/constructor expressions (array/map/struct/lit, etc.)
+    // and already-resolved ones pass through so they can resolve and constant-fold normally.
+    val expressions: Seq[Expression] = args.map(sparkSession.expression)
+    val functionArgs: Seq[Expression] = expressions.map {
+      case lazyExpr @ LazyExpression(_) => lazyExpr
+      case e if e.resolved => e
+      case e =>
+        val needsLazy = e.exists {
+          case _: UnresolvedAttribute => true
+          case _ => false
+        }
+        if (needsLazy) {
+          LazyExpression(e)
+        } else {
+          e
+        }
+    }
     Dataset.ofRows(
       sparkSession,
-      UnresolvedTableValuedFunction(name, args.map(sparkSession.expression)))
+      UnresolvedTableValuedFunction(name, functionArgs))
   }
 
   /** @inheritdoc */

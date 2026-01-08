@@ -644,6 +644,30 @@ class TVFTestsMixin:
                 ),
             )
 
+    def test_explode_lateral_join_without_outer(self):
+        # Test that TVF with column reference works in lateralJoin without .outer()
+        with self.temp_view("test_data"):
+            sample_data = [
+                (1, [10, 20, 30]),
+                (2, [15, 25, 35]),
+                (3, [12, 22, 32]),
+            ]
+            df = self.spark.createDataFrame(sample_data, ["c1", "c2"])
+            df.createOrReplaceTempView("test_data")
+
+            # This should work without .outer() - the column reference should be resolved
+            # when the TVF is used in lateral join context
+            actual = df.lateralJoin(self.spark.tvf.explode(sf.col("c2")))
+
+            expected = self.spark.sql(
+                """
+                SELECT * FROM test_data
+                LATERAL VIEW explode(c2) exploded AS col
+                """
+            )
+
+            assertDataFrameEqual(actual, expected)
+
 
 class TVFTests(TVFTestsMixin, ReusedSQLTestCase):
     pass
