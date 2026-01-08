@@ -190,6 +190,11 @@ def _clear_coercion_warnings() -> None:
     _issued_coercion_warnings.clear()
 
 
+def _is_row_object(value: Any) -> bool:
+    """Check if value is a Row object. Row causes pickle to error on most type conversions."""
+    return hasattr(value, "__class__") and value.__class__.__name__ == "Row"
+
+
 class DataType:
     """Base class for data types."""
 
@@ -237,6 +242,16 @@ class DataType:
         Converts an internal SQL object into a native Python object.
         """
         return obj
+
+    @property
+    def needsCoercion(self) -> bool:
+        """
+        Whether this type needs coercion logic applied.
+
+        Returns False for types where coerce() is a no-op (just returns value unchanged).
+        This allows container types to skip recursion when element types don't need coercion.
+        """
+        return False
 
     def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
         """Coerce a Python value to this data type. Base implementation is a no-op."""
@@ -351,12 +366,25 @@ class NumericType(AtomicType):
 class IntegralType(NumericType, metaclass=DataTypeSingleton):
     """Integral data types."""
 
+    @property
+    def needsCoercion(self) -> bool:
+        return True
+
     def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
+        # Fast path: check most common case first (int that's not bool)
+        if type(value) is int:
+            return value
         if value is None:
             return None
-        # int (non-bool) -> int: exact match
+        # int subclass (non-bool) -> int: exact match
         if isinstance(value, int) and not isinstance(value, bool):
             return value
+        # Row -> int: pickle raises
+        if _is_row_object(value):
+            raise PySparkTypeError(
+                errorClass="CANNOT_CONVERT_TYPE",
+                messageParameters={"from_type": "Row", "to_type": "IntegerType"},
+            )
         # Other types: pickle returns None
         if policy == CoercionPolicy.WARN and isinstance(value, (bool, float, decimal.Decimal)):
             _warn_coercion_once(
@@ -369,12 +397,25 @@ class IntegralType(NumericType, metaclass=DataTypeSingleton):
 class FractionalType(NumericType):
     """Fractional data types."""
 
+    @property
+    def needsCoercion(self) -> bool:
+        return True
+
     def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
+        # Fast path: check most common case first
+        if type(value) is float:
+            return value
         if value is None:
             return None
-        # float -> float: exact match
+        # float subclass -> float: exact match
         if isinstance(value, float):
             return value
+        # Row -> float: pickle raises
+        if _is_row_object(value):
+            raise PySparkTypeError(
+                errorClass="CANNOT_CONVERT_TYPE",
+                messageParameters={"from_type": "Row", "to_type": "FloatType"},
+            )
         # Other types: pickle returns None
         if policy == CoercionPolicy.WARN and isinstance(value, (bool, int, decimal.Decimal)):
             _warn_coercion_once(
@@ -424,9 +465,25 @@ class StringType(AtomicType):
     def isUTF8BinaryCollation(self) -> bool:
         return self.collation == "UTF8_BINARY"
 
+    @property
+    def needsCoercion(self) -> bool:
+        return True
+
     def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
-        if value is None or isinstance(value, str):
+        # Fast path: check most common case first
+        if type(value) is str:
             return value
+        if value is None:
+            return None
+        # str subclass -> str
+        if isinstance(value, str):
+            return value
+        # Row -> string: pickle raises
+        if _is_row_object(value):
+            raise PySparkTypeError(
+                errorClass="CANNOT_CONVERT_TYPE",
+                messageParameters={"from_type": "Row", "to_type": "StringType"},
+            )
         # bool -> string: pickle gives 'true'/'false' (Java toString)
         if isinstance(value, bool):
             return "true" if value else "false"
@@ -481,6 +538,10 @@ class VarcharType(AtomicType):
 class BinaryType(AtomicType, metaclass=DataTypeSingleton):
     """Binary (byte array) data type."""
 
+    @property
+    def needsCoercion(self) -> bool:
+        return True
+
     def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
         if value is None:
             return None
@@ -497,6 +558,12 @@ class BinaryType(AtomicType, metaclass=DataTypeSingleton):
                     "Coercing str to binary encodes in pickle mode but raises in Arrow mode"
                 )
             return value.encode("utf-8")
+        # Row -> binary: pickle raises
+        if _is_row_object(value):
+            raise PySparkTypeError(
+                errorClass="CANNOT_CONVERT_TYPE",
+                messageParameters={"from_type": "Row", "to_type": "BinaryType"},
+            )
         # Other types: return None
         return None
 
@@ -504,12 +571,25 @@ class BinaryType(AtomicType, metaclass=DataTypeSingleton):
 class BooleanType(AtomicType, metaclass=DataTypeSingleton):
     """Boolean data type."""
 
+    @property
+    def needsCoercion(self) -> bool:
+        return True
+
     def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
+        # Fast path: check most common case first
+        if type(value) is bool:
+            return value
         if value is None:
             return None
-        # bool -> boolean: exact match
+        # bool subclass -> boolean: exact match
         if isinstance(value, bool):
             return value
+        # Row -> boolean: pickle raises
+        if _is_row_object(value):
+            raise PySparkTypeError(
+                errorClass="CANNOT_CONVERT_TYPE",
+                messageParameters={"from_type": "Row", "to_type": "BooleanType"},
+            )
         # Other types: pickle returns None
         if policy == CoercionPolicy.WARN and isinstance(value, (int, float)):
             _warn_coercion_once(
@@ -542,6 +622,10 @@ class DateType(DatetimeType, metaclass=DataTypeSingleton):
     def _days_to_date(self, days: int) -> datetime.date:
         """Convert days since epoch to date."""
         return datetime.date.fromordinal(days + self.EPOCH_ORDINAL)
+
+    @property
+    def needsCoercion(self) -> bool:
+        return True
 
     def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
         if value is None:
@@ -645,6 +729,10 @@ class TimestampType(DatetimeType, metaclass=DataTypeSingleton):
                 microsecond=ts % 1000000, tzinfo=None
             )
 
+    @property
+    def needsCoercion(self) -> bool:
+        return True
+
     def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
         # datetime -> timestamp: exact match
         if value is None or isinstance(value, datetime.datetime):
@@ -713,12 +801,22 @@ class DecimalType(FractionalType):
     def __repr__(self) -> str:
         return "DecimalType(%d,%d)" % (self.precision, self.scale)
 
+    @property
+    def needsCoercion(self) -> bool:
+        return True
+
     def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
         if value is None:
             return None
         # Decimal -> decimal: exact match
         if isinstance(value, decimal.Decimal):
             return value
+        # Row -> decimal: pickle raises
+        if _is_row_object(value):
+            raise PySparkTypeError(
+                errorClass="CANNOT_CONVERT_TYPE",
+                messageParameters={"from_type": "Row", "to_type": "DecimalType"},
+            )
         # Other types: pickle returns None
         if (
             policy == CoercionPolicy.WARN
@@ -1180,6 +1278,8 @@ class ArrayType(DataType):
         )
         self.elementType = elementType
         self.containsNull = containsNull
+        # Cache whether element type needs coercion for fast path in coerce()
+        self._elementNeedsCoercion = elementType.needsCoercion
 
     def simpleString(self) -> str:
         return "array<%s>" % self.elementType.simpleString()
@@ -1256,25 +1356,40 @@ class ArrayType(DataType):
             return obj
         return obj and [self.elementType.fromInternal(v) for v in obj]
 
+    @property
+    def needsCoercion(self) -> bool:
+        # ArrayType needs coercion if element type needs coercion,
+        # or if we need to handle tuple/array/bytearray -> list conversion
+        return True
+
     def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
+        # Fast path: check most common case first (list)
+        if type(value) is list:
+            if self._elementNeedsCoercion:
+                # Cache attribute access for inner loop
+                elem_coerce = self.elementType.coerce
+                return [elem_coerce(v, policy) for v in value]
+            return value
         if value is None:
             return None
-        # list -> array: exact match, recursively coerce elements
-        if isinstance(value, list):
-            return [self.elementType.coerce(v, policy) for v in value]
-        # tuple -> array: both paths convert, recursively coerce elements
-        if isinstance(value, tuple) or isinstance(value, array) or isinstance(value, bytearray):
-            return [self.elementType.coerce(v, policy) for v in value]
-        # Row -> array: pickle raises
-        if hasattr(value, "__class__") and value.__class__.__name__ == "Row":
-            if policy == CoercionPolicy.WARN:
-                _warn_coercion_once(
-                    "Coercing Row to array raises in pickle mode but converts in Arrow mode"
-                )
+        # Row -> array: pickle raises (check BEFORE tuple since Row is a tuple subclass)
+        if _is_row_object(value):
             raise PySparkTypeError(
                 errorClass="CANNOT_CONVERT_TYPE",
                 messageParameters={"from_type": "Row", "to_type": "ArrayType"},
             )
+        # tuple -> array: both paths convert, recursively coerce elements only if needed
+        if isinstance(value, (tuple, array, bytearray)):
+            if self._elementNeedsCoercion:
+                elem_coerce = self.elementType.coerce
+                return [elem_coerce(v, policy) for v in value]
+            return list(value)
+        # list subclass
+        if isinstance(value, list):
+            if self._elementNeedsCoercion:
+                elem_coerce = self.elementType.coerce
+                return [elem_coerce(v, policy) for v in value]
+            return value
         # Other types: return None
         return None
 
@@ -1340,6 +1455,9 @@ class MapType(DataType):
         self.keyType = keyType
         self.valueType = valueType
         self.valueContainsNull = valueContainsNull
+        # Cache whether key/value types need coercion for fast path in coerce()
+        self._keyNeedsCoercion = keyType.needsCoercion
+        self._valueNeedsCoercion = valueType.needsCoercion
 
     def simpleString(self) -> str:
         return "map<%s,%s>" % (self.keyType.simpleString(), self.valueType.simpleString())
@@ -1429,15 +1547,53 @@ class MapType(DataType):
             (self.keyType.fromInternal(k), self.valueType.fromInternal(v)) for k, v in obj.items()
         )
 
+    @property
+    def needsCoercion(self) -> bool:
+        return True
+
     def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
+        # Fast path: check most common case first (dict)
+        if type(value) is dict:
+            # Use cached values to avoid property access per call
+            key_needs = self._keyNeedsCoercion
+            val_needs = self._valueNeedsCoercion
+            if not key_needs and not val_needs:
+                return value
+            elif key_needs and val_needs:
+                # Cache method lookups for inner loop
+                key_coerce = self.keyType.coerce
+                val_coerce = self.valueType.coerce
+                return {key_coerce(k, policy): val_coerce(v, policy) for k, v in value.items()}
+            elif key_needs:
+                key_coerce = self.keyType.coerce
+                return {key_coerce(k, policy): v for k, v in value.items()}
+            else:
+                val_coerce = self.valueType.coerce
+                return {k: val_coerce(v, policy) for k, v in value.items()}
         if value is None:
             return None
-        # dict -> map: exact match, recursively coerce keys and values
+        # dict subclass -> map
         if isinstance(value, dict):
-            return {
-                self.keyType.coerce(k, policy): self.valueType.coerce(v, policy)
-                for k, v in value.items()
-            }
+            key_needs = self._keyNeedsCoercion
+            val_needs = self._valueNeedsCoercion
+            if not key_needs and not val_needs:
+                return value
+            elif key_needs and val_needs:
+                key_coerce = self.keyType.coerce
+                val_coerce = self.valueType.coerce
+                return {key_coerce(k, policy): val_coerce(v, policy) for k, v in value.items()}
+            elif key_needs:
+                key_coerce = self.keyType.coerce
+                return {key_coerce(k, policy): v for k, v in value.items()}
+            else:
+                val_coerce = self.valueType.coerce
+                return {k: val_coerce(v, policy) for k, v in value.items()}
+        # Row -> map: pickle raises
+        if _is_row_object(value):
+            raise PySparkTypeError(
+                errorClass="CANNOT_CONVERT_TYPE",
+                messageParameters={"from_type": "Row", "to_type": "MapType"},
+            )
         # Other types: pickle returns None
         return None
 
@@ -1724,6 +1880,11 @@ class StructType(DataType):
         # Precalculated list of fields that need conversion with fromInternal/toInternal functions
         self._needConversion = [f.needConversion() for f in self]
         self._needSerializeAnyField = any(self._needConversion)
+        # Cache which fields need coercion for fast path in coerce()
+        self._fieldsNeedCoercion = [f.dataType.needsCoercion for f in self.fields]
+        self._anyFieldNeedsCoercion = any(self._fieldsNeedCoercion)
+        # Cache field coerce methods for inner loop optimization
+        self._fieldCoerceMethods = [f.dataType.coerce for f in self.fields]
 
     @overload
     def add(
@@ -1809,6 +1970,10 @@ class StructType(DataType):
         # Precalculated list of fields that need conversion with fromInternal/toInternal functions
         self._needConversion = [f.needConversion() for f in self]
         self._needSerializeAnyField = any(self._needConversion)
+        # Update coercion cache
+        self._fieldsNeedCoercion = [f.dataType.needsCoercion for f in self.fields]
+        self._anyFieldNeedsCoercion = any(self._fieldsNeedCoercion)
+        self._fieldCoerceMethods = [f.dataType.coerce for f in self.fields]
         return self
 
     def __iter__(self) -> Iterator[StructField]:
@@ -2073,37 +2238,63 @@ class StructType(DataType):
             values = obj
         return _create_row(self.names, values)
 
+    @property
+    def needsCoercion(self) -> bool:
+        return True
+
     def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
         if value is None:
             return None
-        # Row -> struct: exact match, recursively coerce fields
+        # Use cached values to avoid recomputing on every call
+        needs_list = self._fieldsNeedCoercion
+        any_needs = self._anyFieldNeedsCoercion
+        coerce_methods = self._fieldCoerceMethods
+
+        # Row -> struct: exact match, recursively coerce fields only if needed
         if isinstance(value, Row):
-            coerced_values = [
-                field.dataType.coerce(value[i], policy) for i, field in enumerate(self.fields)
-            ]
-            return _create_row(self.names, coerced_values)
-        # tuple -> struct: both paths convert, recursively coerce fields
+            if any_needs:
+                coerced_values = [
+                    coerce_methods[i](value[i], policy) if needs_list[i] else value[i]
+                    for i in range(len(self.fields))
+                ]
+                return _create_row(self.names, coerced_values)
+            return value
+        # tuple -> struct: both paths convert, recursively coerce fields only if needed
         if isinstance(value, tuple):
-            coerced_values = [
-                field.dataType.coerce(value[i], policy) for i, field in enumerate(self.fields)
-            ]
+            if any_needs:
+                coerced_values = [
+                    coerce_methods[i](value[i], policy) if needs_list[i] else value[i]
+                    for i in range(len(self.fields))
+                ]
+            else:
+                coerced_values = list(value)
             return _create_row(self.names, coerced_values)
-        # dict -> struct: both paths convert (field matching), recursively coerce fields
+        # dict -> struct: both paths convert (field matching), recursively coerce fields only if needed
         if isinstance(value, dict):
-            coerced_values = [
-                field.dataType.coerce(value.get(n), policy)
-                for n, field in zip(self.names, self.fields)
-            ]
-            return _create_row(self.names, coerced_values)
-        # list -> struct: pickle converts, recursively coerce fields
+            names = self.names
+            if any_needs:
+                coerced_values = [
+                    coerce_methods[i](value.get(names[i]), policy)
+                    if needs_list[i]
+                    else value.get(names[i])
+                    for i in range(len(self.fields))
+                ]
+            else:
+                coerced_values = [value.get(n) for n in names]
+            return _create_row(names, coerced_values)
+        # list -> struct: pickle converts, recursively coerce fields only if needed
         if isinstance(value, list):
             if policy == CoercionPolicy.WARN:
                 _warn_coercion_once(
                     "Coercing list to struct works in pickle mode but raises in Arrow mode"
                 )
-            coerced_values = [
-                field.dataType.coerce(value[i], policy) for i, field in enumerate(self.fields)
-            ]
+            if any_needs:
+                coerced_values = [
+                    coerce_methods[i](value[i], policy) if needs_list[i] else value[i]
+                    for i in range(len(self.fields))
+                ]
+            else:
+                coerced_values = value
             return _create_row(self.names, coerced_values)
         # Other types: raise
         raise PySparkTypeError(
