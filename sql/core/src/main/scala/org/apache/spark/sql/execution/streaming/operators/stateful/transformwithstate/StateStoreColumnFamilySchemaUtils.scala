@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateKeyValueRowSchemaUtils._
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateVariableUtils.{getRowCounterCFName, getStateNameFromRowCounterCFName, isRowCounterCFName}
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.TimerStateUtils
-import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, RangeKeyScanStateEncoderSpec, StateStoreColFamilySchema}
+import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, RangeKeyScanStateEncoderSpec, StateStoreColFamilySchema, StateStoreErrors}
 import org.apache.spark.sql.types._
 
 object StateStoreColumnFamilySchemaUtils {
@@ -124,7 +124,7 @@ object StateStoreColumnFamilySchemaUtils {
    * @return The base state variable name
    * @throws IllegalArgumentException if the column family name is not a recognized internal type
    */
-  def getStateNameForInternalCF(colFamilyName: String): String = {
+  private def getStateNameForInternalCF(colFamilyName: String): String = {
     if (isTtlColFamilyName(colFamilyName)) {
       getStateNameFromTtlColFamily(colFamilyName)
     } else if (isMinExpiryIndexCFName(colFamilyName)) {
@@ -143,8 +143,7 @@ object StateStoreColumnFamilySchemaUtils {
         colFamilyName
       }
     } else {
-      throw new IllegalArgumentException(
-        s"Unknown internal column family: $colFamilyName")
+      throw StateStoreErrors.unknownInternalColumnFamily(colFamilyName)
     }
   }
 

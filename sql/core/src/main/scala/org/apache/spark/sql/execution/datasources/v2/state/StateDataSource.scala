@@ -134,7 +134,8 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
   override def supportsExternalMetadata(): Boolean = false
 
   /**
-   * Return the state format version for SYMMETRIC_HASH_JOIN operators.
+   * Return the state format version for SYMMETRIC_HASH_JOIN operators,
+   * otherwise None for non-join operators.
    * This currently only supports join operators because this function is only used to
    * create a PartitionKeyExtractor through PartitionKeyExtractorFactory where only join operators
    * require state format version
@@ -142,8 +143,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
   private def getStateFormatVersion(
       storeMetadata: Array[StateMetadataTableEntry],
       checkpointLocation: String,
-      batchId: Long
-    ): Option[Int] = {
+      batchId: Long): Option[Int] = {
     if (storeMetadata.nonEmpty &&
       storeMetadata.head.operatorName == StatefulOperatorsUtils.SYMMETRIC_HASH_JOIN_EXEC_OP_NAME) {
       new StreamingQueryCheckpointMetadata(session, checkpointLocation).offsetLog

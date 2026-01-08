@@ -5638,6 +5638,13 @@
     ],
     "sqlState" : "42802"
   },
+  "STATE_STORE_UNKNOWN_INTERNAL_COLUMN_FAMILY" : {
+    "message" : [
+      "Unknown internal column family: <colFamilyName>.",
+      "This internal column family is not recognized by the StateStoreColumnFamilySchemaUtils."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STATE_STORE_COMMIT_VALIDATION_FAILED" : {
     "message" : [
       "State store commit validation failed for batch <batchId>.",
