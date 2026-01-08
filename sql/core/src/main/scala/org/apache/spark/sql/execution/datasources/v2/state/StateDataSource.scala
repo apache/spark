@@ -141,13 +141,14 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
    */
   private def getStateFormatVersion(
       storeMetadata: Array[StateMetadataTableEntry],
-      checkpointLocation: String
+      checkpointLocation: String,
+      batchId: Long
     ): Option[Int] = {
     if (storeMetadata.nonEmpty &&
       storeMetadata.head.operatorName == StatefulOperatorsUtils.SYMMETRIC_HASH_JOIN_EXEC_OP_NAME) {
       new StreamingQueryCheckpointMetadata(session, checkpointLocation).offsetLog
-        .getLatest()
-        .flatMap(_._2.metadataOpt)
+        .get(batchId)
+        .flatMap(_.metadataOpt)
         .flatMap(_.conf.get(SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key))
         .map(_.toInt)
     } else {
@@ -319,7 +320,8 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
 
           if (sourceOptions.readRegisteredTimers) {
             stateVarName = TimerStateUtils.getTimerStateVarNames(timeMode)._1
-          } else if (sourceOptions.internalOnlyReadAllColumnFamilies) {
+          }
+          if (sourceOptions.internalOnlyReadAllColumnFamilies) {
             // When reading all column families (for repartitioning) for TWS operator,
             // we will just choose a random state as placeholder for default column family,
             // because we need to use matching stateVariableInfo and stateStoreColFamilySchemaOpt
@@ -333,8 +335,8 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
           if (!TimerStateUtils.isTimerCFName(stateVarName) &&
               StateStoreColumnFamilySchemaUtils.isTestingInternalColFamily(stateVarName)) {
             // pass this dummy TWSStateVariableInfo for TWS internal column family during testing,
-            // because internalColumns are not register in operatorProperties.stateVariables,
-            // thus stateVarInfoList will be empty.
+            // because internal column families are not registered in
+            // operatorProperties.stateVariables, thus stateVarInfoList will be empty.
             stateVarInfoList = List(TransformWithStateVariableInfo(
               stateVarName, StateVariableType.ValueState, false
             ))
@@ -399,11 +401,16 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       }
     }
 
-    val operatorName = if (storeMetadata.nonEmpty) storeMetadata.head.operatorName else ""
-    val stateFormatVersion = getStateFormatVersion(storeMetadata, sourceOptions.resolvedCpLocation)
     val allColFamilyReaderInfoOpt: Option[AllColumnFamiliesReaderInfo] =
       if (sourceOptions.internalOnlyReadAllColumnFamilies) {
-        Option(AllColumnFamiliesReaderInfo(
+        assert(storeMetadata.nonEmpty, "storeMetadata shouldn't be empty")
+        val operatorName = storeMetadata.head.operatorName
+        val stateFormatVersion = getStateFormatVersion(
+          storeMetadata,
+          sourceOptions.resolvedCpLocation,
+          sourceOptions.batchId
+        )
+        Some(AllColumnFamiliesReaderInfo(
           stateStoreColFamilySchemas, stateVariableInfos, operatorName, stateFormatVersion))
       } else {
         None

@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.datasources.v2.state.{StateDataSourceError
 import org.apache.spark.sql.execution.streaming.operators.stateful.StatePartitionKeyExtractorFactory
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.{StateVariableType, TransformWithStateVariableInfo}
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.StateVariableType._
-import org.apache.spark.sql.execution.streaming.state.{ReadStateStore, StatePartitionKeyExtractor, StateStore, StateStoreColFamilySchema, UnsafeRowPair}
+import org.apache.spark.sql.execution.streaming.state.{ReadStateStore, StatePartitionKeyExtractor, StateStoreColFamilySchema, UnsafeRowPair}
 import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, IntegerType, LongType, MapType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
@@ -56,8 +56,7 @@ object SchemaUtil {
     if (sourceOptions.internalOnlyReadAllColumnFamilies) {
       require(stateStoreColFamilySchemaOpt.isDefined)
       require(operatorName.isDefined)
-      val colFamilyName: String = stateStoreColFamilySchemaOpt.map(_.colFamilyName)
-        .getOrElse(StateStore.DEFAULT_COL_FAMILY_NAME)
+      val colFamilyName: String = stateStoreColFamilySchemaOpt.get.colFamilyName
       val extractor = StatePartitionKeyExtractorFactory.create(
         operatorName.get,
         keySchema,

@@ -134,6 +134,9 @@ object StateStoreColumnFamilySchemaUtils {
     } else if (isRowCounterCFName(colFamilyName)) {
       getStateNameFromRowCounterCFName(colFamilyName)
     } else if (TimerStateUtils.isTimerCFName(colFamilyName)) {
+      // Return the primary index for timer secondary index column family
+      // because we only store the primary index column family in the
+      // StateMetadataTableEntry.operatorProperies.stateVariables
       if (TimerStateUtils.isTimerSecondaryIndexCF(colFamilyName)) {
         TimerStateUtils.getPrimaryIndexFromSecondaryIndexCF(colFamilyName)
       } else {

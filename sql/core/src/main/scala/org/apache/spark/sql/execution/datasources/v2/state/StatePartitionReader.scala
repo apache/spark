@@ -40,7 +40,7 @@ import org.apache.spark.util.{NextIterator, SerializableConfiguration}
 case class AllColumnFamiliesReaderInfo(
     colFamilySchemas: Set[StateStoreColFamilySchema] = Set.empty,
     stateVariableInfos: List[TransformWithStateVariableInfo] = List.empty,
-    operatorName: String = "",
+    operatorName: String,
     stateFormatVersion: Option[Int] = None)
 
 /**
