@@ -37,7 +37,8 @@ public final class SparkOutOfMemoryError extends OutOfMemoryError implements Spa
         this(errorClass, messageParameters, null);
     }
 
-    public SparkOutOfMemoryError(String errorClass, Map<String, String> messageParameters, String sqlState) {
+    public SparkOutOfMemoryError(String errorClass, Map<String, String> messageParameters,
+        String sqlState) {
         super(SparkThrowableHelper.getMessage(errorClass, messageParameters));
         this.errorClass = errorClass;
         this.messageParameters = messageParameters;
