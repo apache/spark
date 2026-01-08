@@ -205,7 +205,23 @@ class DataType:
         return hash(str(self))
 
     def __eq__(self, other: Any) -> bool:
-        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
+        if not isinstance(other, self.__class__):
+            return False
+        # Exclude internal cached attributes for coercion optimization from equality comparison
+        # These are implementation details that don't affect the logical type definition
+        _CACHED_ATTRS = frozenset(
+            {
+                "_elementNeedsCoercion",  # ArrayType
+                "_keyNeedsCoercion",  # MapType
+                "_valueNeedsCoercion",  # MapType
+                "_fieldsNeedCoercion",  # StructType
+                "_anyFieldNeedsCoercion",  # StructType
+                "_fieldCoerceMethods",  # StructType
+            }
+        )
+        self_dict = {k: v for k, v in self.__dict__.items() if k not in _CACHED_ATTRS}
+        other_dict = {k: v for k, v in other.__dict__.items() if k not in _CACHED_ATTRS}
+        return self_dict == other_dict
 
     def __ne__(self, other: Any) -> bool:
         return not self.__eq__(other)
