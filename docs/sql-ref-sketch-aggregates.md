@@ -513,7 +513,7 @@ FROM (
   SELECT kll_sketch_agg_bigint(col) as sketch
   FROM VALUES (4), (5), (6) tab(col)
 );
--- Result: approximately 3 or 4 (median of 1-6)
+-- Result: 3
 
 -- Get the total count from merged sketches
 SELECT kll_sketch_get_n_bigint(kll_merge_agg_bigint(sketch))
