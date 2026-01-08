@@ -29,9 +29,7 @@ import org.apache.spark.util.Clock
 private[spark] object ExecutorPodsBackoffController {
   sealed trait State
 
-  case class NormalState(
-    // startup failures within the sliding time window (timestamp, executorId)
-    startupFailuresInInterval: mutable.Queue[(Long, Long)] = mutable.Queue.empty) extends State
+  case object NormalState extends State
 
   case class BackoffState(
     requestedExecutors: mutable.HashSet[Long] = mutable.HashSet.empty,
@@ -45,8 +43,8 @@ private[spark] object ExecutorPodsBackoffController {
  * reducing load on the Kubernetes infrastructure (control plane, Istio, etc).
  *
  * Operates as a state machine with two states:
- *  - Normal: No extra delay is introduced. Tracks startup failures in a sliding time window.
- *    Transitions to Backoff when failure count exceeds threshold.
+ *  - Normal: No extra delay is introduced.
+ *    Transitions to Backoff when startup failures count in a sliding time window exceeds threshold.
  *  - Backoff: Applies exponential backoff delays between requests.
  *    Transitions back to Normal when an executor requested during Backoff is seen started.
  *
@@ -69,10 +67,13 @@ private[spark] class ExecutorPodsBackoffController(
     conf.get(KUBERNETES_ALLOCATION_EXECUTOR_BACKOFF_INITIAL_DELAY)
   private val maxBackoffDelayMs = conf.get(KUBERNETES_ALLOCATION_EXECUTOR_BACKOFF_MAX_DELAY)
 
-  private var currentState: State = NormalState()
+  private var currentState: State = NormalState
 
   // executors that were requested to launch but haven't been confirmed as started yet
   private val executorsAwaitingStartedConfirmation = mutable.HashSet.empty[Long]
+
+  // startup failures within the sliding time window (timestamp, executorId)
+  private val startupFailuresInInterval: mutable.Queue[(Long, Long)] = mutable.Queue.empty
 
   val metricsSource = new ExecutorPodsBackoffControllerSource()
 
@@ -109,16 +110,16 @@ private[spark] class ExecutorPodsBackoffController(
       executorsAwaitingStartedConfirmation.remove(executorId)
       metricsSource.startupFailureCounter.inc()
 
+      // add failure to the sliding time window and remove expired ones
+      startupFailuresInInterval.enqueue((currentTime, executorId))
+      evictExpiredFailures(startupFailuresInInterval)
+
       currentState match {
-        case normal: NormalState =>
-          // add failure to the sliding time window and remove expired ones
-          val startupFailures = normal.startupFailuresInInterval
-          startupFailures.enqueue((currentTime, executorId))
-          evictExpiredFailures(startupFailures)
-          if (startupFailures.size >= failureThreshold) {
-            logWarning(s"Executor startup failure threshold reached ${startupFailures.size}" +
-              s" failures in ${failureIntervalMs / 1000}s. Transitioning to Backoff state. " +
-              s"Recent failed executors IDs: ${startupFailures.map(_._2).mkString(", ")}")
+        case NormalState =>
+          if (startupFailuresInInterval.size >= failureThreshold) {
+            logWarning(s"Executor startup failures reached ${startupFailuresInInterval.size} " +
+              s"in ${failureIntervalMs / 1000}s. Transitioning to Backoff state. " +
+              s"Recent failed executors IDs: ${startupFailuresInInterval.map(_._2).mkString(", ")}")
             currentState = BackoffState(delayReferenceTime = currentTime)
             metricsSource.backoffEntryCounter.inc()
           }
@@ -149,7 +150,7 @@ private[spark] class ExecutorPodsBackoffController(
       case backoff: BackoffState if backoff.requestedExecutors.contains(executorId) =>
         logInfo(s"Executor $executorId successfully started in Backoff. " +
           s"Transitioning to Normal state.")
-        currentState = NormalState()
+        currentState = NormalState
         metricsSource.backoffExitCounter.inc()
       case _ =>
     }
@@ -172,7 +173,7 @@ private[spark] class ExecutorPodsBackoffController(
    */
   def canRequestNow(): Boolean = synchronized {
     currentState match {
-      case _: NormalState => true
+      case NormalState => true
       case backoff: BackoffState =>
         val currentTime = clock.getTimeMillis()
         val requiredDelay = calculateBackoffDelay(backoff)
@@ -189,16 +190,16 @@ private[spark] class ExecutorPodsBackoffController(
 
   def isNormalState(): Boolean = synchronized {
     currentState match {
-      case _: NormalState => true
+      case NormalState => true
       case _ => false
     }
   }
 
   def currentStateDescription(): String = synchronized {
     currentState match {
-      case normal: NormalState =>
+      case NormalState =>
         s"Normal (recent startup failures: " +
-          s"${evictExpiredFailures(normal.startupFailuresInInterval)})"
+          s"${evictExpiredFailures(startupFailuresInInterval)})"
       case backoff: BackoffState =>
         s"Backoff (attempts in backoff: ${backoff.requestedExecutors.size}, " +
           s"current delay: ${calculateBackoffDelay(backoff) / 1000}s)"
@@ -225,10 +226,7 @@ private[spark] class ExecutorPodsBackoffController(
 
   // for tests only
   def startupFailureCountInWindow(): Int = synchronized {
-    currentState match {
-      case normal: NormalState => evictExpiredFailures(normal.startupFailuresInInterval)
-      case _: BackoffState => 0
-    }
+    evictExpiredFailures(startupFailuresInInterval)
   }
 }
 

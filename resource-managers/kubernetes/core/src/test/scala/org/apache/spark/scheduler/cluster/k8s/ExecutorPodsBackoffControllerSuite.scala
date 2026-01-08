@@ -189,7 +189,7 @@ class ExecutorPodsBackoffControllerSuite extends SparkFunSuite {
     controller.recordExecutorStarted(100L)
 
     assert(controller.isNormalState())
-    assert(controller.startupFailureCountInWindow() == 0)
+    assert(controller.startupFailureCountInWindow() == FAILURE_THRESHOLD)
     assert(controller.canRequestNow())
     assert(metrics.backoffEntryCounter.getCount == 1)
     assert(metrics.backoffExitCounter.getCount == 1)
@@ -256,21 +256,18 @@ class ExecutorPodsBackoffControllerSuite extends SparkFunSuite {
     // request 3 executors while in backoff
     controller.recordPodRequest(10L)
     controller.recordPodRequest(11L)
-    controller.recordPodRequest(12L)
     assert(controller.isBackoffState())
 
     // first executor succeeds - should exit backoff
     controller.recordExecutorStarted(10L)
     assert(controller.isNormalState())
-    assert(controller.startupFailureCountInWindow() == 0)
+    assert(controller.startupFailureCountInWindow() == FAILURE_THRESHOLD)
 
-    // two other executors fail - should accumulate failures and re-enter backoff
+    // another executor fails - should re-enter backoff
     controller.recordFailure(11L)
-    assert(controller.isNormalState())
-    assert(controller.startupFailureCountInWindow() == 1)
-
-    controller.recordFailure(12L)
     assert(controller.isBackoffState())
+    assert(controller.startupFailureCountInWindow() == FAILURE_THRESHOLD + 1)
+
     assert(metrics.backoffEntryCounter.getCount == 2)
     assert(metrics.backoffExitCounter.getCount == 1)
   }
