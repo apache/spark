@@ -35,7 +35,7 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase, search_jar, read_classpa
 # This follows the same pattern as streamingutils.py for Kinesis
 kafka_sql_jar = search_jar(
     "connector/kafka-0-10-sql",
-    "spark-sql-kafka-0-10-",
+    "spark-sql-kafka-0-10_",
     "spark-sql-kafka-0-10_",
 )
 
