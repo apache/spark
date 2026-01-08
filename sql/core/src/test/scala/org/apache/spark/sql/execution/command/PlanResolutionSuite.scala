@@ -1249,7 +1249,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       case InsertIntoStatement(
         _, _, _,
         UnresolvedInlineTable(_, Seq(Seq(UnresolvedAttribute(Seq("DEFAULT"))))),
-        _, _, _) =>
+        _, _, _, _) =>
 
       case _ => fail("Expect UpdateTable, but got:\n" + parsed1.treeString)
     }
@@ -1257,7 +1257,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       case InsertIntoStatement(
         _, _, _,
         Project(Seq(UnresolvedAttribute(Seq("DEFAULT"))), _),
-        _, _, _) =>
+        _, _, _, _) =>
 
       case _ => fail("Expect UpdateTable, but got:\n" + parsed1.treeString)
     }
@@ -1321,6 +1321,51 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
           assert(isByName)
         case _ =>
           fail("Expected OverwriteByExpression, but got:\n" + dynamicOverwriteParsed.treeString)
+      }
+    }
+  }
+
+  for {
+    insertOp <- Seq("INTO", "OVERWRITE", "REPLACE WHERE")
+    withSchemaEvolution <- Seq(true, false)
+    isByName <- Seq(true, false)
+    dpoMode <- if (insertOp == "OVERWRITE") {
+      PartitionOverwriteMode.values.toSeq
+    } else {
+      Seq(PartitionOverwriteMode.STATIC)
+    }
+  } {
+    val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION " else ""
+    val byNameClause = if (isByName) "BY NAME " else ""
+    val testMsg = s"insertOp=$insertOp, withSchemaEvolution=$withSchemaEvolution, " +
+      s"isByName=$isByName, dpoMode=$dpoMode"
+    test("Write option 'mergeSchema' is only passed to INSERT's logical plan nodes " +
+        "if WITH SCHEMA EVOLUTION is specified" + testMsg) {
+      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> dpoMode.toString) {
+        val table = "testcat.tab"
+        val insertSQLStmt = insertOp match {
+          case "INTO" =>
+            s"INSERT ${schemaEvolutionClause}INTO $table ${byNameClause}"
+          case "OVERWRITE" =>
+            s"INSERT ${schemaEvolutionClause}OVERWRITE $table ${byNameClause}"
+          case "REPLACE WHERE" =>
+            s"INSERT ${schemaEvolutionClause}INTO $table ${byNameClause}REPLACE WHERE i = 1"
+        }
+
+        val writeOptions = parseAndResolve(s"$insertSQLStmt SELECT * FROM v2Table") match {
+          case appendData: AppendData =>
+            assert(insertOp === "INTO")
+            appendData.writeOptions
+          case overwriteByExpression: OverwriteByExpression =>
+            assert(insertOp === "REPLACE WHERE" ||
+              (insertOp === "OVERWRITE" && dpoMode === PartitionOverwriteMode.STATIC))
+            overwriteByExpression.writeOptions
+          case overwritePartitionsDynamic: OverwritePartitionsDynamic =>
+            assert(insertOp === "OVERWRITE" && dpoMode === PartitionOverwriteMode.DYNAMIC)
+            overwritePartitionsDynamic.writeOptions
+        }
+        assert(writeOptions.get("mergeSchema") ===
+          (if (withSchemaEvolution) Some("true") else None))
       }
     }
   }
