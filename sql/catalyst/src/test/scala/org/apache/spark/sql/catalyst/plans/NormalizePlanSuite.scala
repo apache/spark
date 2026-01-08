@@ -269,7 +269,7 @@ class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
         recursion = UnionLoopRef(loopId = 200L, output = Seq(col2), accumulated = false),
         outputAttrIds = Seq(ExprId(1), ExprId(2))
       ),
-      id = 100L
+      id = 200L
     )
 
     // Before normalization, plans are different
