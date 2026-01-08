@@ -234,23 +234,23 @@ case class AlterTableAddColumnsCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val catalogTable = verifyAlterTableAddColumn(sparkSession.sessionState.conf, catalog, table)
-    val colsWithProcessedDefaults =
-      constantFoldCurrentDefaultsToExistDefaults(sparkSession, catalogTable.provider)
+    ResolveDefaultColumns.validateTableProviderForDefaultValue(
+      StructType(colsToAdd), catalogTable.provider, "ALTER TABLE ADD COLUMNS", true)
 
     CommandUtils.uncacheTableOrView(sparkSession, table)
     catalog.refreshTable(table)
 
     SchemaUtils.checkColumnNameDuplication(
-      (colsWithProcessedDefaults ++ catalogTable.schema).map(_.name),
+      (colsToAdd ++ catalogTable.schema).map(_.name),
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
     if (!conf.allowCollationsInMapKeys) {
       colsToAdd.foreach(col => SchemaUtils.checkNoCollationsInMapKeys(col.dataType))
     }
-    DDLUtils.checkTableColumns(catalogTable, StructType(colsWithProcessedDefaults))
+    DDLUtils.checkTableColumns(catalogTable, StructType(colsToAdd))
 
     val existingDataSchema = CharVarcharUtils.getRawSchema(catalogTable.dataSchema)
     catalog.alterTableSchema(table,
-      StructType(existingDataSchema ++ colsWithProcessedDefaults ++ catalogTable.partitionSchema))
+      StructType(existingDataSchema ++ colsToAdd ++ catalogTable.partitionSchema))
     Seq.empty[Row]
   }
 
@@ -285,27 +285,6 @@ case class AlterTableAddColumnsCommand(
       }
     }
     catalogTable
-  }
-
-  /**
-   * ALTER TABLE ADD COLUMNS commands may optionally specify a DEFAULT expression for any column.
-   * In that case, this method evaluates its originally specified value and then stores the result
-   * in a separate column metadata entry, then returns the updated column definitions.
-   */
-  private def constantFoldCurrentDefaultsToExistDefaults(
-      sparkSession: SparkSession, tableProvider: Option[String]): Seq[StructField] = {
-    colsToAdd.map { col: StructField =>
-      if (col.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
-        val schema = StructType(Array(col))
-        ResolveDefaultColumns.validateTableProviderForDefaultValue(
-          schema, tableProvider, "ALTER TABLE ADD COLUMNS", true)
-        val foldedStructType = ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
-          schema, "ALTER TABLE ADD COLUMNS")
-        foldedStructType.fields(0)
-      } else {
-        col
-      }
-    }
   }
 }
 

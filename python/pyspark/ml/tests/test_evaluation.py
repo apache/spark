@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 import tempfile
-import unittest
 
 import numpy as np
 
@@ -380,12 +379,6 @@ class EvaluatorTests(EvaluatorTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_evaluation import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

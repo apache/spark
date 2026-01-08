@@ -421,6 +421,9 @@
 | org.apache.spark.sql.catalyst.expressions.UrlEncode | url_encode | SELECT url_encode('https://spark.apache.org') | struct<url_encode(https://spark.apache.org):string> |
 | org.apache.spark.sql.catalyst.expressions.Uuid | uuid | SELECT uuid() | struct<uuid():string> |
 | org.apache.spark.sql.catalyst.expressions.ValidateUTF8 | validate_utf8 | SELECT validate_utf8('Spark') | struct<validate_utf8(Spark):string> |
+| org.apache.spark.sql.catalyst.expressions.VectorCosineSimilarity | vector_cosine_similarity | SELECT vector_cosine_similarity(array(1.0F, 2.0F, 3.0F), array(4.0F, 5.0F, 6.0F)) | struct<vector_cosine_similarity(array(1.0, 2.0, 3.0), array(4.0, 5.0, 6.0)):float> |
+| org.apache.spark.sql.catalyst.expressions.VectorInnerProduct | vector_inner_product | SELECT vector_inner_product(array(1.0F, 2.0F, 3.0F), array(4.0F, 5.0F, 6.0F)) | struct<vector_inner_product(array(1.0, 2.0, 3.0), array(4.0, 5.0, 6.0)):float> |
+| org.apache.spark.sql.catalyst.expressions.VectorL2Distance | vector_l2_distance | SELECT vector_l2_distance(array(1.0F, 2.0F, 3.0F), array(4.0F, 5.0F, 6.0F)) | struct<vector_l2_distance(array(1.0, 2.0, 3.0), array(4.0, 5.0, 6.0)):float> |
 | org.apache.spark.sql.catalyst.expressions.WeekDay | weekday | SELECT weekday('2009-07-30') | struct<weekday(2009-07-30):int> |
 | org.apache.spark.sql.catalyst.expressions.WeekOfYear | weekofyear | SELECT weekofyear('2008-02-20') | struct<weekofyear(2008-02-20):int> |
 | org.apache.spark.sql.catalyst.expressions.WidthBucket | width_bucket | SELECT width_bucket(5.3, 0.2, 10.6, 5) | struct<width_bucket(5.3, 0.2, 10.6, 5):bigint> |

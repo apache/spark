@@ -141,6 +141,13 @@ case class QualifiedColType(
   def getV2Default(statement: String): ColumnDefaultValue =
     default.map(_.toV2(statement, colName)).orNull
 
+  /**
+   * Returns true if the default value's type has been coerced to match this column's dataType.
+   */
+  def isDefaultValueTypeCoerced: Boolean = default.forall { d =>
+    ColumnDefinition.isDefaultValueTypeMatched(d.child.dataType, dataType)
+  }
+
   override def children: Seq[Expression] = default.toSeq
 
   override protected def withNewChildrenInternal(

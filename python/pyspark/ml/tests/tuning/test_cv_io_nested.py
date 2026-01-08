@@ -16,7 +16,6 @@
 #
 
 import tempfile
-import unittest
 
 from pyspark.ml.classification import LogisticRegression, OneVsRest
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator
@@ -86,12 +85,6 @@ class CrossValidatorIONestedTests(SparkSessionTestCase, ValidatorTestUtilsMixin)
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.tuning.test_cv_io_nested import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

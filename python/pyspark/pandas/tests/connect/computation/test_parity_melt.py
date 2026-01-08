@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 
 from pyspark.pandas.tests.computation.test_melt import FrameMeltMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
@@ -30,12 +29,6 @@ class FrameParityMeltTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.computation.test_parity_melt import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

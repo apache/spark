@@ -51,7 +51,7 @@ class StatePartitionAllColumnFamiliesWriter(
     hadoopConf: Configuration,
     partitionId: Int,
     targetCpLocation: String,
-    operatorId: Int,
+    operatorId: Long,
     storeName: String,
     currentBatchId: Long,
     colFamilyToWriterInfoMap: Map[String, StatePartitionWriterColumnFamilyInfo],
@@ -153,6 +153,7 @@ class StatePartitionAllColumnFamiliesWriter(
       if (!stateStore.hasCommitted) {
         stateStore.abort()
       }
+      provider.close()
     }
   }
 

@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import unittest
 
 from pyspark.pandas.tests.diff_frames_ops.test_cov import DiffFramesCovMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
@@ -31,12 +30,6 @@ class DiffFramesParityCovTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.connect.diff_frames_ops.test_parity_cov import *  # noqa
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

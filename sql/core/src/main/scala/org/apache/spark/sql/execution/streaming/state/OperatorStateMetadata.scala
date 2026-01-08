@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.streaming.state
 import java.io.{BufferedReader, InputStreamReader}
 import java.nio.charset.StandardCharsets
 
+import scala.collection.immutable.ArraySeq
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration
@@ -80,12 +81,17 @@ trait OperatorStateMetadata {
   def version: Int
 
   def operatorInfo: OperatorInfo
+
+  def stateStoresMetadata: Seq[StateStoreMetadata]
 }
 
 case class OperatorStateMetadataV1(
     operatorInfo: OperatorInfoV1,
     stateStoreInfo: Array[StateStoreMetadataV1]) extends OperatorStateMetadata {
   override def version: Int = 1
+
+  override def stateStoresMetadata: Seq[StateStoreMetadata] =
+    ArraySeq.unsafeWrapArray(stateStoreInfo)
 }
 
 case class OperatorStateMetadataV2(
@@ -93,6 +99,9 @@ case class OperatorStateMetadataV2(
     stateStoreInfo: Array[StateStoreMetadataV2],
     operatorPropertiesJson: String) extends OperatorStateMetadata {
   override def version: Int = 2
+
+  override def stateStoresMetadata: Seq[StateStoreMetadata] =
+    ArraySeq.unsafeWrapArray(stateStoreInfo)
 }
 
 object OperatorStateMetadataUtils extends Logging {

@@ -666,7 +666,7 @@ object SessionWindowTestUtils {
  */
 object StreamStreamJoinTestUtils {
   // All state store names from SymmetricHashJoinStateManager
-  private val allStoreNames: Seq[String] =
+  val allStoreNames: Seq[String] =
     SymmetricHashJoinStateManager.allStateStoreNames(LeftSide, RightSide)
 
   // Column family names for keyToNumValues stores (derived from allStateStoreNames)

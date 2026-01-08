@@ -197,6 +197,9 @@
   <profiles>
     <profile>
       <id>volcano</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+      </activation>
       <dependencies>
         <dependency>
           <groupId>io.fabric8</groupId>
