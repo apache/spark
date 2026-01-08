@@ -18,8 +18,9 @@ package org.apache.spark.sql.classic
 
 import java.util.concurrent.ConcurrentHashMap
 
-import org.apache.spark.sql.Observation
+import org.apache.spark.sql.{Observation, Row}
 import org.apache.spark.sql.catalyst.plans.logical.CollectMetrics
+import org.apache.spark.sql.catalyst.trees.TreePattern
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.util.QueryExecutionListener
 
@@ -54,12 +55,25 @@ private[sql] class ObservationManager(session: SparkSession) {
 
   private def tryComplete(qe: QueryExecution): Unit = {
     val allMetrics = qe.observedMetrics
-    qe.logical.foreach {
+    qe.logical.foreachWithSubqueriesAndPruning(
+      _.containsPattern(TreePattern.COLLECT_METRICS)) {
       case c: CollectMetrics =>
-        allMetrics.get(c.name).foreach { metrics =>
+        val keyExists = observations.containsKey((c.name, c.dataframeId))
+        val metrics = allMetrics.get(c.name)
+        if (keyExists && metrics.isEmpty) {
+          // If the key exists but no metrics were collected, it means for some reason the metrics
+          // could not be collected. This can happen e.g., if the CollectMetricsExec was optimized
+          // away.
           val observation = observations.remove((c.name, c.dataframeId))
           if (observation != null) {
-            observation.setMetricsAndNotify(metrics)
+            observation.setMetricsAndNotify(Row.empty)
+          }
+        } else {
+          metrics.foreach { metrics =>
+            val observation = observations.remove((c.name, c.dataframeId))
+            if (observation != null) {
+              observation.setMetricsAndNotify(metrics)
+            }
           }
         }
       case _ =>

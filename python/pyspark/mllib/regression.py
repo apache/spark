@@ -32,7 +32,7 @@ from typing import (
 
 import numpy as np
 
-from pyspark import RDD, since
+from pyspark import since
 from pyspark.streaming.dstream import DStream
 from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py, inherit_doc
 from pyspark.mllib.linalg import _convert_to_vector
@@ -1014,7 +1014,7 @@ class StreamingLinearRegressionWithSGD(StreamingLinearAlgorithm):
         self.miniBatchFraction = miniBatchFraction
         self.convergenceTol = convergenceTol
         self._model: Optional[LinearModel] = None
-        super(StreamingLinearRegressionWithSGD, self).__init__(model=self._model)
+        super().__init__(model=self._model)
 
     @since("1.5.0")
     def setInitialWeights(self, initialWeights: "VectorLike") -> "StreamingLinearRegressionWithSGD":

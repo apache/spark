@@ -34,8 +34,8 @@ import org.apache.spark.sql.types.StructType
 class CSVOptions(
     @transient val parameters: CaseInsensitiveMap[String],
     val columnPruning: Boolean,
-    defaultTimeZoneId: String,
-    defaultColumnNameOfCorruptRecord: String)
+    private val defaultTimeZoneId: String,
+    private val defaultColumnNameOfCorruptRecord: String)
   extends FileSourceOptions(parameters) with Logging {
 
   import CSVOptions._
@@ -61,6 +61,24 @@ class CSVOptions(
         columnPruning,
         defaultTimeZoneId,
         defaultColumnNameOfCorruptRecord)
+  }
+
+  override def equals(obj: Any): Boolean = obj match {
+    case other: CSVOptions =>
+      (parameters == null && other.parameters == null ||
+      parameters != null && parameters == other.parameters) &&
+      columnPruning == other.columnPruning &&
+      defaultTimeZoneId == other.defaultTimeZoneId &&
+      defaultColumnNameOfCorruptRecord == other.defaultColumnNameOfCorruptRecord
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    var result = Option(parameters).map(_.hashCode()).getOrElse(0)
+    result = 31 * result + (if (columnPruning) 1 else 0)
+    result = 31 * result + defaultTimeZoneId.hashCode()
+    result = 31 * result + defaultColumnNameOfCorruptRecord.hashCode()
+    result
   }
 
   private def getChar(paramName: String, default: Char): Char = {

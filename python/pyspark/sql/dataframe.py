@@ -852,7 +852,6 @@ class DataFrame:
 
         Notes
         -----
-        - Unlike `count()`, this method does not trigger any computation.
         - An empty DataFrame has no rows. It may have columns, but no data.
 
         Examples
@@ -1515,6 +1514,8 @@ class DataFrame:
         -----
         The default storage level has changed to `MEMORY_AND_DISK_DESER` to match Scala in 3.0.
 
+        Cached data is shared across all Spark sessions on the cluster.
+
         Returns
         -------
         :class:`DataFrame`
@@ -1550,6 +1551,8 @@ class DataFrame:
         Notes
         -----
         The default storage level has changed to `MEMORY_AND_DISK_DESER` to match Scala in 3.0.
+
+        Cached data is shared across all Spark sessions on the cluster.
 
         Parameters
         ----------
@@ -1620,6 +1623,9 @@ class DataFrame:
         Notes
         -----
         `blocking` default has changed to ``False`` to match Scala in 2.0.
+
+        Cached data is shared across all Spark sessions on the cluster, so unpersisting it
+        affects all sessions.
 
         Parameters
         ----------

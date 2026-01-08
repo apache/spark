@@ -177,6 +177,7 @@ class TransformWithStateStateVariableTestsMixin:
         self.assertEqual(q.name, "this_query")
         self.assertTrue(q.isActive)
         q.processAllAvailable()
+        q.stop()
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
@@ -291,6 +292,7 @@ class TransformWithStateStateVariableTestsMixin:
         self.assertEqual(q.name, "this_query")
         self.assertTrue(q.isActive)
         q.processAllAvailable()
+        q.stop()
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
@@ -514,6 +516,7 @@ class TransformWithStateStateVariableTestsMixin:
         self.assertEqual(q.name, "this_query")
         self.assertTrue(q.isActive)
         q.processAllAvailable()
+        q.stop()
         q.awaitTermination(10)
         self.assertTrue(q.exception() is None)
 
@@ -1009,10 +1012,6 @@ class TransformWithStateInPandasStateVariableTests(
 if __name__ == "__main__":
     from pyspark.sql.tests.pandas.streaming.test_pandas_transform_with_state import *  # noqa: F401
 
-    try:
-        import xmlrunner
+    from pyspark.testing import main
 
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

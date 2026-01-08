@@ -26,7 +26,8 @@ import org.apache.spark.sql.connector.catalog.TableCapability.BATCH_READ
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.sql.util.SchemaValidationMode.PROHIBIT_CHANGES
+import org.apache.spark.sql.util.SchemaValidationMode.{ALLOW_NEW_TOP_LEVEL_FIELDS, PROHIBIT_CHANGES}
+import org.apache.spark.sql.util.SchemaValidationMode
 import org.apache.spark.util.ArrayImplicits.SparkArrayOps
 
 class V2TableUtilSuite extends SparkFunSuite {
@@ -529,6 +530,86 @@ class V2TableUtilSuite extends SparkFunSuite {
     assert(errors.head == "`person`.`attrs`.`value` type has changed from INT to BIGINT")
   }
 
+  test("validateCapturedColumns - ALLOW_NEW_TOP_LEVEL_FIELDS allows top-level additions") {
+    val originCols = Array(
+      col("id", LongType, nullable = false),
+      col("name", StringType, nullable = true))
+    val currentCols = Array(
+      col("id", LongType, nullable = false),
+      col("name", StringType, nullable = true),
+      col("age", IntegerType, nullable = true))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = validateCapturedColumns(table, originCols, ALLOW_NEW_TOP_LEVEL_FIELDS)
+    assert(errors.isEmpty)
+  }
+
+  test("validateCapturedColumns - ALLOW_NEW_TOP_LEVEL_FIELDS prohibits nested additions") {
+    val originAddress = StructType(Seq(
+      StructField("street", StringType),
+      StructField("city", StringType)))
+    val originCols = Array(
+      col("id", LongType, nullable = false),
+      col("address", originAddress, nullable = true))
+    val currentAddress = StructType(Seq(
+      StructField("street", StringType),
+      StructField("city", StringType),
+      StructField("zipCode", StringType)))
+    val currentCols = Array(
+      col("id", LongType, nullable = false),
+      col("address", currentAddress, nullable = true))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = validateCapturedColumns(table, originCols, ALLOW_NEW_TOP_LEVEL_FIELDS)
+    assert(errors.size == 1)
+    assert(errors.head.contains("`address`.`zipCode` STRING has been added"))
+  }
+
+  test("validateCapturedColumns - ALLOW_NEW_TOP_LEVEL_FIELDS fails new nested fields in array") {
+    val originItem = StructType(Seq(
+      StructField("itemId", LongType),
+      StructField("itemName", StringType)))
+    val originCols = Array(
+      col("id", LongType, nullable = false),
+      col("items", ArrayType(originItem), nullable = true))
+    val currentItem = StructType(Seq(
+      StructField("itemId", LongType),
+      StructField("itemName", StringType),
+      StructField("price", IntegerType)))
+    val currentCols = Array(
+      col("id", LongType, nullable = false),
+      col("items", ArrayType(currentItem), nullable = true))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = V2TableUtil.validateCapturedColumns(
+      table,
+      originCols.toImmutableArraySeq,
+      mode = ALLOW_NEW_TOP_LEVEL_FIELDS)
+    assert(errors.size == 1)
+    assert(errors.head.contains("`items`.`element`.`price` INT has been added"))
+  }
+
+  test("validateCapturedColumns - ALLOW_NEW_TOP_LEVEL_FIELDS prohibits nested map additions") {
+    val originValue = StructType(Seq(
+      StructField("count", IntegerType),
+      StructField("status", StringType)))
+    val originCols = Array(
+      col("id", LongType, nullable = false),
+      col("metadata", MapType(StringType, originValue), nullable = true))
+    val currentValue = StructType(Seq(
+      StructField("count", IntegerType),
+      StructField("status", StringType),
+      StructField("timestamp", LongType)))
+    val currentCols = Array(
+      col("id", LongType, nullable = false),
+      col("metadata", MapType(StringType, currentValue), nullable = true))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = validateCapturedColumns(table, originCols, ALLOW_NEW_TOP_LEVEL_FIELDS)
+    assert(errors.size == 1)
+    assert(errors.head.contains("`metadata`.`value`.`timestamp` BIGINT has been added"))
+  }
+
   // simple table without metadata column support
   private case class TestTable(
       override val name: String,
@@ -555,8 +636,11 @@ class V2TableUtilSuite extends SparkFunSuite {
     override def metadataInJSON: String = "{}"
   }
 
-  private def validateCapturedColumns(table: Table, originCols: Array[Column]): Seq[String] = {
-    V2TableUtil.validateCapturedColumns(table, originCols.toImmutableArraySeq)
+  private def validateCapturedColumns(
+      table: Table,
+      originCols: Array[Column],
+      mode: SchemaValidationMode = PROHIBIT_CHANGES): Seq[String] = {
+    V2TableUtil.validateCapturedColumns(table, originCols.toImmutableArraySeq, mode)
   }
 
   private def col(name: String, dataType: DataType, nullable: Boolean): Column = {

@@ -58,7 +58,7 @@ class ApplyInPandasWithStatePythonRunner(
     argOffsets: Array[Array[Int]],
     inputSchema: StructType,
     _timeZoneId: String,
-    initialWorkerConf: Map[String, String],
+    initialRunnerConf: Map[String, String],
     stateEncoder: ExpressionEncoder[Row],
     keySchema: StructType,
     outputSchema: StructType,
@@ -113,9 +113,11 @@ class ApplyInPandasWithStatePythonRunner(
   // applyInPandasWithState has its own mechanism to construct the Arrow RecordBatch instance.
   // Configurations are both applied to executor and Python worker, set them to the worker conf
   // to let Python worker read the config properly.
-  override protected val workerConf: Map[String, String] = initialWorkerConf +
-    (SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> arrowMaxRecordsPerBatch.toString) +
-    (SQLConf.ARROW_EXECUTION_MAX_BYTES_PER_BATCH.key -> arrowMaxBytesPerBatch.toString)
+  override protected def runnerConf: Map[String, String] =
+    super.runnerConf ++ initialRunnerConf ++ Map(
+      SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> arrowMaxRecordsPerBatch.toString,
+      SQLConf.ARROW_EXECUTION_MAX_BYTES_PER_BATCH.key -> arrowMaxBytesPerBatch.toString
+    )
 
   private val stateRowDeserializer = stateEncoder.createDeserializer()
 

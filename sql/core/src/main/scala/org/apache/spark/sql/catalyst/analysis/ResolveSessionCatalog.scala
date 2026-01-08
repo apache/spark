@@ -21,8 +21,9 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.LogKeys.CONFIG
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils, ClusterBySpec, HiveTableRelation}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AliasHelper, Attribute}
+import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, CharVarcharUtils, ResolveDefaultColumns => DefaultCols}
@@ -31,11 +32,11 @@ import org.apache.spark.sql.connector.catalog.{CatalogExtension, CatalogManager,
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1}
+import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.connector.V1Function
-import org.apache.spark.sql.types.{MetadataBuilder, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, MetadataBuilder, StringType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkStringUtils
 
@@ -46,13 +47,14 @@ import org.apache.spark.util.SparkStringUtils
  * again, which may lead to inconsistent behavior if the current database is changed in the middle.
  */
 class ResolveSessionCatalog(val catalogManager: CatalogManager)
-  extends Rule[LogicalPlan] with LookupCatalog {
+  extends Rule[LogicalPlan] with LookupCatalog with AliasHelper {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Util._
   import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-    case AddColumns(ResolvedV1TableIdentifier(ident), cols) =>
+    case a @ AddColumns(ResolvedV1TableIdentifier(ident), cols)
+        if a.resolved && cols.forall(_.isDefaultValueTypeCoerced) =>
       cols.foreach { c =>
         if (c.name.length > 1) {
           throw QueryCompilationErrors.unsupportedTableOperationError(
@@ -62,13 +64,25 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           throw QueryCompilationErrors.addColumnWithV1TableCannotSpecifyNotNullError()
         }
       }
-      AlterTableAddColumnsCommand(ident, cols.map(convertToStructField))
+      // For V1 ALTER TABLE ADD COLUMNS command, the default value expression is hidden in the
+      // StructField metadata, and won't be constant folded by the optimizer. Here we
+      // manually constant fold it, as exist default needs to be a constant.
+      val newCols = cols.map { col =>
+        val builder = new MetadataBuilder
+        col.comment.foreach(builder.putString("comment", _))
+        col.default.foreach { defaultValue =>
+          addDefaultValueMetadata(builder, defaultValue, col.colName, col.dataType,
+            "ALTER TABLE ADD COLUMNS")
+        }
+        StructField(col.name.head, col.dataType, nullable = true, builder.build())
+      }
+      AlterTableAddColumnsCommand(ident, newCols)
 
     case ReplaceColumns(ResolvedV1TableIdentifier(ident), _) =>
       throw QueryCompilationErrors.unsupportedTableOperationError(ident, "REPLACE COLUMNS")
 
-    case AlterColumns(ResolvedTable(catalog, ident, table: V1Table, _), specs)
-        if supportsV1Command(catalog) =>
+    case a @ AlterColumns(ResolvedTable(catalog, ident, table: V1Table, _), specs)
+        if supportsV1Command(catalog) && a.resolved && specs.forall(_.isDefaultValueTypeCoerced) =>
       if (specs.size > 1) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
           catalog, ident, "ALTER COLUMN in bulk")
@@ -88,7 +102,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       }
       val builder = new MetadataBuilder
       // Add comment to metadata
-      s.newComment.map(c => builder.putString("comment", c))
+      s.newComment.foreach(c => builder.putString("comment", c))
       val colName = s.column.name.head
       val dataType = s.newDataType.getOrElse {
         table.schema.findNestedField(Seq(colName), resolver = conf.resolver)
@@ -102,9 +116,16 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
               toSQLId(s.column.name), table.schema.fieldNames)
           }
       }
-      // Add the current default column value string (if any) to the column metadata.
-      s.newDefaultExpression.map { c => builder.putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY,
-        c.originalSQL) }
+      // For V1 ALTER TABLE ALTER COLUMN command, we only set the CURRENT_DEFAULT metadata.
+      // The EXISTS_DEFAULT should be preserved from the original column, as it represents
+      // the default value that was in effect when the column was added (used for backfilling).
+      s.newDefaultExpression.foreach { defaultValue =>
+        // Validate the default value expression
+        constantFoldDefaultValue(defaultValue, colName, dataType, "ALTER TABLE ALTER COLUMN")
+        builder.putExpression(
+          DefaultCols.CURRENT_DEFAULT_COLUMN_METADATA_KEY, defaultValue.originalSQL,
+          Some(defaultValue.child))
+      }
       if (s.dropDefault) {
         // for legacy reasons, "" means clearing default value
         builder.putString(CURRENT_DEFAULT_COLUMN_METADATA_KEY, "")
@@ -127,6 +148,25 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     case DropColumns(ResolvedV1TableIdentifier(ident), _, _) =>
       throw QueryCompilationErrors.unsupportedTableOperationError(ident, "DROP COLUMN")
+
+    // V1 and hive tables do not support constraints
+    case AddConstraint(ResolvedV1TableIdentifier(ident), _) =>
+      throw QueryCompilationErrors.unsupportedTableOperationError(ident, "ADD CONSTRAINT")
+
+    case DropConstraint(ResolvedV1TableIdentifier(ident), _, _, _) =>
+      throw QueryCompilationErrors.unsupportedTableOperationError(ident, "DROP CONSTRAINT")
+
+    case a: AddCheckConstraint
+        if a.child.exists {
+          case _: LogicalRelation => true
+          case _: HiveTableRelation => true
+          case _ => false
+        } =>
+      val tableIdent = a.child.collectFirst {
+        case l: LogicalRelation => l.catalogTable.get.identifier
+        case h: HiveTableRelation => h.tableMeta.identifier
+      }.get
+      throw QueryCompilationErrors.unsupportedTableOperationError(tableIdent, "ADD CONSTRAINT")
 
     case SetTableProperties(ResolvedV1TableIdentifier(ident), props) =>
       AlterTableSetPropertiesCommand(ident, props, isView = false)
@@ -182,12 +222,30 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the
     // session catalog and the table provider is not v2.
     case c @ CreateTable(ResolvedV1Identifier(ident), _, _, tableSpec: TableSpec, _)
-        if c.resolved =>
+        if c.resolved && c.columns.forall(_.isDefaultValueTypeCoerced) =>
       val (storageFormat, provider) = getStorageFormatAndProvider(
         c.tableSpec.provider, tableSpec.options, c.tableSpec.location, c.tableSpec.serde,
         ctas = false)
       if (!isV2Provider(provider)) {
-        constructV1TableCmd(None, c.tableSpec, ident, c.tableSchema, c.partitioning,
+        if (tableSpec.constraints.nonEmpty) {
+          throw QueryCompilationErrors.unsupportedTableOperationError(
+            ident, "CONSTRAINT")
+        }
+        // For V1 CREATE TABLE command, the default value expression is hidden in the
+        // StructField metadata, and won't be constant folded by the optimizer. Here we
+        // manually constant fold it, as exist default needs to be a constant.
+        val fields = c.columns.map { col =>
+          col.defaultValue.map { defaultValue =>
+            val existsDefaultSQL = constantFoldDefaultValue(
+              defaultValue, col.name, col.dataType, "CREATE TABLE")
+            // toV1Column already sets CURRENT_DEFAULT, so just update EXISTS_DEFAULT
+            val field = col.toV1Column
+            val newMetadata = new MetadataBuilder().withMetadata(field.metadata)
+              .putString(DefaultCols.EXISTS_DEFAULT_COLUMN_METADATA_KEY, existsDefaultSQL).build()
+            field.copy(metadata = newMetadata)
+          }.getOrElse(col.toV1Column)
+        }
+        constructV1TableCmd(None, c.tableSpec, ident, StructType(fields), c.partitioning,
           c.ignoreIfExists, storageFormat, provider)
       } else {
         c
@@ -203,6 +261,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         ctas = true)
 
       if (!isV2Provider(provider)) {
+        if (tableSpec.constraints.nonEmpty) {
+          throw QueryCompilationErrors.unsupportedTableOperationError(
+            ident, "CONSTRAINT")
+        }
         constructV1TableCmd(Some(c.query), c.tableSpec, ident, new StructType, c.partitioning,
           c.ignoreIfExists, storageFormat, provider)
       } else {
@@ -456,8 +518,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         if conf.useV1Command =>
       ShowTablePropertiesCommand(ident, propertyKey, output)
 
-    case DescribeFunction(ResolvedNonPersistentFunc(_, V1Function(info)), extended) =>
-      DescribeFunctionCommand(info, extended)
+    case DescribeFunction(ResolvedNonPersistentFunc(_, v1Func: V1Function), extended) =>
+      DescribeFunctionCommand(v1Func.info, extended)
 
     case DescribeFunction(ResolvedPersistentFunc(catalog, _, func), extended) =>
       if (isSessionCatalog(catalog)) {
@@ -698,18 +760,47 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     }
   }
 
-  private def convertToStructField(col: QualifiedColType): StructField = {
-    val builder = new MetadataBuilder
-    col.comment.foreach(builder.putString("comment", _))
-    col.default.map {
-      value: DefaultValueExpression => builder.putString(
-        DefaultCols.CURRENT_DEFAULT_COLUMN_METADATA_KEY, value.originalSQL)
-    }
-    StructField(col.name.head, col.dataType, nullable = true, builder.build())
-  }
-
   private def isV2Provider(provider: String): Boolean = {
     DataSourceV2Utils.getTableProvider(provider, conf).isDefined
+  }
+
+  /**
+   * Validates and constant-folds a column default value expression for V1 tables.
+   * Populates both CURRENT_DEFAULT and EXISTS_DEFAULT in the metadata builder.
+   */
+  private def addDefaultValueMetadata(
+      builder: MetadataBuilder,
+      defaultValue: DefaultValueExpression,
+      colName: String,
+      colType: DataType,
+      statementType: String): Unit = {
+    val existsDefaultSQL = constantFoldDefaultValue(defaultValue, colName, colType, statementType)
+    builder.putExpression(
+      DefaultCols.CURRENT_DEFAULT_COLUMN_METADATA_KEY, defaultValue.originalSQL,
+      Some(defaultValue.child))
+    builder.putString(DefaultCols.EXISTS_DEFAULT_COLUMN_METADATA_KEY, existsDefaultSQL)
+  }
+
+  /**
+   * Validates and constant-folds a column default value expression for V1 tables.
+   * Returns the SQL string of the constant-folded expression for EXISTS_DEFAULT metadata.
+   */
+  private def constantFoldDefaultValue(
+      defaultValue: DefaultValueExpression,
+      colName: String,
+      colType: DataType,
+      statementType: String): String = {
+    validateDefaultValueExpr(defaultValue, statementType, colName, Some(colType))
+    val fakePlan = Project(Seq(Alias(defaultValue.child, colName)()), OneRowRelation())
+    val optimizedPlan = ConstantFolding(DefaultColumnOptimizer.FinishAnalysis(fakePlan))
+    val constantFolded = optimizedPlan.collectFirst {
+      case Project(Seq(expr), OneRowRelation()) => trimAliases(expr)
+    }.get
+    if (!constantFolded.foldable) {
+      throw QueryCompilationErrors.defaultValueNotConstantError(statementType, colName,
+        defaultValue.originalSQL)
+    }
+    constantFolded.sql
   }
 
   private object ResolvedV1Database {

@@ -25,7 +25,7 @@ import org.apache.arrow.vector.{VectorSchemaRoot, VectorUnloader}
 import org.apache.arrow.vector.compression.{CompressionCodec, NoCompressionCodec}
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
-import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions, PythonRDD, PythonWorker}
+import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions, PythonWorker}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow.ArrowWriterWrapper
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -45,7 +45,7 @@ class CoGroupedArrowPythonRunner(
     rightSchema: StructType,
     timeZoneId: String,
     largeVarTypes: Boolean,
-    conf: Map[String, String],
+    pythonRunnerConf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     sessionUUID: Option[String],
@@ -54,6 +54,8 @@ class CoGroupedArrowPythonRunner(
     (Iterator[InternalRow], Iterator[InternalRow]), ColumnarBatch](
     funcs.map(_._1), evalType, argOffsets, jobArtifactUUID, pythonMetrics)
   with BasicPythonArrowOutput {
+
+  override protected def runnerConf: Map[String, String] = super.runnerConf ++ pythonRunnerConf
 
   override val envVars: util.Map[String, String] = {
     val envVars = new util.HashMap(funcs.head._1.funcs.head.envVars)
@@ -119,14 +121,6 @@ class CoGroupedArrowPythonRunner(
       private var rightGroupArrowWriter: ArrowWriterWrapper = null
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
-
-        // Write config for the worker as a number of key -> value pairs of strings
-        dataOut.writeInt(conf.size)
-        for ((k, v) <- conf) {
-          PythonRDD.writeUTF(k, dataOut)
-          PythonRDD.writeUTF(v, dataOut)
-        }
-
         PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets, profiler)
       }
 

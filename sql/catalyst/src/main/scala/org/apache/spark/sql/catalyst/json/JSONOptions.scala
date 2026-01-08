@@ -36,8 +36,8 @@ import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
  */
 class JSONOptions(
     @transient val parameters: CaseInsensitiveMap[String],
-    defaultTimeZoneId: String,
-    defaultColumnNameOfCorruptRecord: String)
+    private val defaultTimeZoneId: String,
+    private val defaultColumnNameOfCorruptRecord: String)
   extends FileSourceOptions(parameters) with Logging  {
 
   import JSONOptions._
@@ -155,6 +155,22 @@ class JSONOptions(
 
   protected def checkedEncoding(enc: String): String =
     CharsetProvider.forName(enc, caller = "JSONOptions").name()
+
+  override def equals(obj: Any): Boolean = obj match {
+    case other: JSONOptions =>
+      (parameters == null && other.parameters == null ||
+      parameters != null && parameters == other.parameters) &&
+      defaultTimeZoneId == other.defaultTimeZoneId &&
+      defaultColumnNameOfCorruptRecord == other.defaultColumnNameOfCorruptRecord
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    var result = Option(parameters).map(_.hashCode()).getOrElse(0)
+    result = 31 * result + defaultTimeZoneId.hashCode()
+    result = 31 * result + defaultColumnNameOfCorruptRecord.hashCode()
+    result
+  }
 
   /**
    * Standard encoding (charset) name. For example UTF-8, UTF-16LE and UTF-32BE.

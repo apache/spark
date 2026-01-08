@@ -367,12 +367,6 @@ class PandasUDFTypeHintsWithFutureAnnotationsTests(ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.pandas.test_pandas_udf_typehints_with_future_annotations import *  # noqa: #401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

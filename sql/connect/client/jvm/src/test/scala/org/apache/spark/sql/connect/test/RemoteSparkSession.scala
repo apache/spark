@@ -77,7 +77,7 @@ object SparkConnectServerUtils {
     command += "--jars" += catalystTestJar
     command += "--conf" += s"spark.connect.grpc.binding.port=$port"
     command ++= testConfigs
-    command ++= debugConfigs
+    command ++= log4jConfigs
     command += connectJar
     val cmds = command.result()
     debug {
@@ -90,15 +90,8 @@ object SparkConnectServerUtils {
     builder.directory(new File(sparkHome))
     val environment = builder.environment()
     environment.remove("SPARK_DIST_CLASSPATH")
-    if (isDebug) {
-      builder.redirectError(Redirect.INHERIT)
-      builder.redirectOutput(Redirect.INHERIT)
-    } else {
-      // If output is not consumed, the stdout/stderr pipe buffers will fill up,
-      // causing the server process to block on write() calls
-      builder.redirectError(Redirect.DISCARD)
-      builder.redirectOutput(Redirect.DISCARD)
-    }
+    builder.redirectError(Redirect.INHERIT)
+    builder.redirectOutput(Redirect.INHERIT)
 
     val process = builder.start()
     consoleOut = process.getOutputStream

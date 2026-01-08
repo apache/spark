@@ -3062,56 +3062,6 @@ def floor(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
 
 
 @_try_remote_functions
-def log(col: "ColumnOrName") -> Column:
-    """
-    Computes the natural logarithm of the given value.
-
-    .. versionadded:: 1.4.0
-
-    .. versionchanged:: 3.4.0
-        Supports Spark Connect.
-
-    Parameters
-    ----------
-    col : :class:`~pyspark.sql.Column` or column name
-        column to calculate natural logarithm for.
-
-    Returns
-    -------
-    :class:`~pyspark.sql.Column`
-        natural logarithm of the given value.
-
-    Examples
-    --------
-    Example 1: Compute the natural logarithm of E
-
-    >>> from pyspark.sql import functions as sf
-    >>> spark.range(1).select(sf.log(sf.e())).show()
-    +-------+
-    |ln(E())|
-    +-------+
-    |    1.0|
-    +-------+
-
-    Example 2: Compute the natural logarithm of invalid values
-
-    >>> from pyspark.sql import functions as sf
-    >>> spark.sql(
-    ...     "SELECT * FROM VALUES (-1), (0), (FLOAT('NAN')), (NULL) AS TAB(value)"
-    ... ).select("*", sf.log("value")).show()
-    +-----+---------+
-    |value|ln(value)|
-    +-----+---------+
-    | -1.0|     NULL|
-    |  0.0|     NULL|
-    |  NaN|      NaN|
-    | NULL|     NULL|
-    +-----+---------+
-    """
-    return _invoke_function_over_columns("log", col)
-
-
-@_try_remote_functions
 def log10(col: "ColumnOrName") -> Column:
     """
     Computes the logarithm of the given value in Base 10.
@@ -8342,7 +8292,7 @@ def when(condition: Column, value: Any) -> Column:
     return _invoke_function("when", condition._jc, v)
 
 
-@overload  # type: ignore[no-redef]
+@overload
 def log(arg1: "ColumnOrName") -> Column:
     ...
 
@@ -27041,7 +26991,7 @@ def kll_sketch_to_string_bigint(col: "ColumnOrName") -> Column:
     >>> df = spark.createDataFrame([1,2,3,4,5], "INT")
     >>> sketch_df = df.agg(sf.kll_sketch_agg_bigint("value").alias("sketch"))
     >>> result = sketch_df.select(sf.kll_sketch_to_string_bigint("sketch")).first()[0]
-    >>> "Kll" in result and "N" in result
+    >>> "kll" in result.lower()
     True
     """
     fn = "kll_sketch_to_string_bigint"
@@ -27071,7 +27021,7 @@ def kll_sketch_to_string_float(col: "ColumnOrName") -> Column:
     >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "FLOAT")
     >>> sketch_df = df.agg(sf.kll_sketch_agg_float("value").alias("sketch"))
     >>> result = sketch_df.select(sf.kll_sketch_to_string_float("sketch")).first()[0]
-    >>> "Kll" in result and "N" in result
+    >>> "kll" in result.lower()
     True
     """
     fn = "kll_sketch_to_string_float"
@@ -27101,7 +27051,7 @@ def kll_sketch_to_string_double(col: "ColumnOrName") -> Column:
     >>> df = spark.createDataFrame([1.0,2.0,3.0,4.0,5.0], "DOUBLE")
     >>> sketch_df = df.agg(sf.kll_sketch_agg_double("value").alias("sketch"))
     >>> result = sketch_df.select(sf.kll_sketch_to_string_double("sketch")).first()[0]
-    >>> "Kll" in result and "N" in result
+    >>> "kll" in result.lower()
     True
     """
     fn = "kll_sketch_to_string_double"
@@ -28977,6 +28927,9 @@ def udf(
     .. versionchanged:: 4.0.0
         Supports keyword-arguments.
 
+    .. versionchanged:: 4.2.0
+        Uses Arrow by default for (de)serialization.
+
     Parameters
     ----------
     f : function, optional
@@ -29078,6 +29031,28 @@ def udf(
     |                               0|
     |                             101|
     +--------------------------------+
+
+    Arrow-optimized Python UDFs (default since Spark 4.2):
+
+    Since Spark 4.2, Arrow is used by default for (de)serialization between the JVM
+    and Python for regular Python UDFs.
+
+    Unlike the vectorized Arrow UDFs above that receive and return ``pyarrow.Array`` objects,
+    Arrow-optimized Python UDFs still process data row-by-row with regular Python types,
+    but use Arrow for more efficient data transfer in the (de)serialization process.
+
+    >>> # Arrow optimization is enabled by default since Spark 4.2
+    >>> @udf(returnType=IntegerType())
+    ... def my_udf(x):
+    ...     return x + 1
+    ...
+    >>> # To explicitly disable Arrow optimization and use pickle-based serialization:
+    >>> @udf(returnType=IntegerType(), useArrow=False)
+    ... def legacy_udf(x):
+    ...     return x + 1
+    ...
+    >>> # To disable Arrow optimization for the entire SparkSession:
+    >>> spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "false")  # doctest: +SKIP
 
     See Also
     --------

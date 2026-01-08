@@ -703,126 +703,145 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
     checkAnswer(df1, Row(3) :: Nil)
   }
 
-  private case object StrLenDefault extends ScalarFunction[Int] {
-    override def inputTypes(): Array[DataType] = Array(StringType)
-    override def resultType(): DataType = IntegerType
-    override def name(): String = "strlen_default"
+  test("simple function") {
+    catalog("testcat").asInstanceOf[SupportsNamespaces].createNamespace(Array("ns"), emptyProps)
+    addFunction(Identifier.of(Array("ns"), "simple_strlen"), SimpleStrLen)
+    checkAnswer(sql("SELECT testcat.ns.simple_strlen('abc')"), Row(3) :: Nil)
+    checkAnswer(sql("SELECT testcat.ns.simple_strlen('hello world')"), Row(11) :: Nil)
+  }
+}
 
-    override def produceResult(input: InternalRow): Int = {
-      val s = input.getString(0)
-      s.length
+case object SimpleStrLen extends SimpleFunction with ScalarFunction[Int] {
+  override def inputTypes(): Array[DataType] = Array(StringType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "simple_strlen"
+  override def description(): String = "simple string length function"
+
+  override def produceResult(input: InternalRow): Int = {
+    val s = input.getString(0)
+    s.length
+  }
+}
+
+case object StrLenDefault extends ScalarFunction[Int] {
+  override def inputTypes(): Array[DataType] = Array(StringType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "strlen_default"
+
+  override def produceResult(input: InternalRow): Int = {
+    val s = input.getString(0)
+    s.length
+  }
+}
+
+case object StrLenMagic extends ScalarFunction[Int] {
+  override def inputTypes(): Array[DataType] = Array(StringType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "strlen_magic"
+
+  def invoke(input: UTF8String): Int = {
+    input.toString.length
+  }
+}
+
+case object StrLenBadMagic extends ScalarFunction[Int] {
+  override def inputTypes(): Array[DataType] = Array(StringType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "strlen_bad_magic"
+
+  def invoke(input: String): Int = {
+    input.length
+  }
+}
+
+case object StrLenBadMagicWithDefault extends ScalarFunction[Int] {
+  override def inputTypes(): Array[DataType] = Array(StringType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "strlen_bad_magic"
+
+  def invoke(input: String): Int = {
+    input.length
+  }
+
+  override def produceResult(input: InternalRow): Int = {
+    val s = input.getString(0)
+    s.length
+  }
+}
+
+case object StrLenNoImpl extends ScalarFunction[Int] {
+  override def inputTypes(): Array[DataType] = Array(StringType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "strlen_noimpl"
+}
+
+// input type doesn't match arguments accepted by `UnboundFunction.bind`
+case object StrLenBadInputTypes extends ScalarFunction[Int] {
+  override def inputTypes(): Array[DataType] = Array(StringType, IntegerType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "strlen_bad_input_types"
+}
+
+case object BadBoundFunction extends BoundFunction {
+  override def inputTypes(): Array[DataType] = Array(StringType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "bad_bound_func"
+}
+
+object UnboundDecimalAverage extends UnboundFunction {
+  override def name(): String = "decimal_avg"
+
+  override def bind(inputType: StructType): BoundFunction = {
+    if (inputType.fields.length > 1) {
+      throw new UnsupportedOperationException("Too many arguments")
+    }
+
+    // put interval type here for testing purpose
+    inputType.fields(0).dataType match {
+      case _: NumericType | _: DayTimeIntervalType => DecimalAverage
+      case dataType =>
+        throw new UnsupportedOperationException(s"Unsupported input type: $dataType")
     }
   }
 
-  case object StrLenMagic extends ScalarFunction[Int] {
-    override def inputTypes(): Array[DataType] = Array(StringType)
-    override def resultType(): DataType = IntegerType
-    override def name(): String = "strlen_magic"
+  override def description(): String =
+    "decimal_avg: produces an average using decimal division"
+}
 
-    def invoke(input: UTF8String): Int = {
-      input.toString.length
-    }
-  }
+object DecimalAverage extends AggregateFunction[(Decimal, Int), Decimal] {
+  override def name(): String = "decimal_avg"
+  override def inputTypes(): Array[DataType] = Array(DecimalType.SYSTEM_DEFAULT)
+  override def resultType(): DataType = DecimalType.SYSTEM_DEFAULT
 
-  case object StrLenBadMagic extends ScalarFunction[Int] {
-    override def inputTypes(): Array[DataType] = Array(StringType)
-    override def resultType(): DataType = IntegerType
-    override def name(): String = "strlen_bad_magic"
+  override def newAggregationState(): (Decimal, Int) = (Decimal.ZERO, 0)
 
-    def invoke(input: String): Int = {
-      input.length
-    }
-  }
-
-  case object StrLenBadMagicWithDefault extends ScalarFunction[Int] {
-    override def inputTypes(): Array[DataType] = Array(StringType)
-    override def resultType(): DataType = IntegerType
-    override def name(): String = "strlen_bad_magic"
-
-    def invoke(input: String): Int = {
-      input.length
-    }
-
-    override def produceResult(input: InternalRow): Int = {
-      val s = input.getString(0)
-      s.length
-    }
-  }
-
-  private case object StrLenNoImpl extends ScalarFunction[Int] {
-    override def inputTypes(): Array[DataType] = Array(StringType)
-    override def resultType(): DataType = IntegerType
-    override def name(): String = "strlen_noimpl"
-  }
-
-  // input type doesn't match arguments accepted by `UnboundFunction.bind`
-  private case object StrLenBadInputTypes extends ScalarFunction[Int] {
-    override def inputTypes(): Array[DataType] = Array(StringType, IntegerType)
-    override def resultType(): DataType = IntegerType
-    override def name(): String = "strlen_bad_input_types"
-  }
-
-  private case object BadBoundFunction extends BoundFunction {
-    override def inputTypes(): Array[DataType] = Array(StringType)
-    override def resultType(): DataType = IntegerType
-    override def name(): String = "bad_bound_func"
-  }
-
-  object UnboundDecimalAverage extends UnboundFunction {
-    override def name(): String = "decimal_avg"
-
-    override def bind(inputType: StructType): BoundFunction = {
-      if (inputType.fields.length > 1) {
-        throw new UnsupportedOperationException("Too many arguments")
+  override def update(state: (Decimal, Int), input: InternalRow): (Decimal, Int) = {
+    if (input.isNullAt(0)) {
+      state
+    } else {
+      val l = input.getDecimal(0, DecimalType.SYSTEM_DEFAULT.precision,
+        DecimalType.SYSTEM_DEFAULT.scale)
+      state match {
+        case (_, d) if d == 0 =>
+          (l, 1)
+        case (total, count) =>
+          (total + l, count + 1)
       }
-
-      // put interval type here for testing purpose
-      inputType.fields(0).dataType match {
-        case _: NumericType | _: DayTimeIntervalType => DecimalAverage
-        case dataType =>
-          throw new UnsupportedOperationException(s"Unsupported input type: $dataType")
-      }
     }
-
-    override def description(): String =
-      "decimal_avg: produces an average using decimal division"
   }
 
-  object DecimalAverage extends AggregateFunction[(Decimal, Int), Decimal] {
-    override def name(): String = "decimal_avg"
-    override def inputTypes(): Array[DataType] = Array(DecimalType.SYSTEM_DEFAULT)
-    override def resultType(): DataType = DecimalType.SYSTEM_DEFAULT
-
-    override def newAggregationState(): (Decimal, Int) = (Decimal.ZERO, 0)
-
-    override def update(state: (Decimal, Int), input: InternalRow): (Decimal, Int) = {
-      if (input.isNullAt(0)) {
-        state
-      } else {
-        val l = input.getDecimal(0, DecimalType.SYSTEM_DEFAULT.precision,
-          DecimalType.SYSTEM_DEFAULT.scale)
-        state match {
-          case (_, d) if d == 0 =>
-            (l, 1)
-          case (total, count) =>
-            (total + l, count + 1)
-        }
-      }
-    }
-
-    override def merge(leftState: (Decimal, Int), rightState: (Decimal, Int)): (Decimal, Int) = {
-      (leftState._1 + rightState._1, leftState._2 + rightState._2)
-    }
-
-    override def produceResult(state: (Decimal, Int)): Decimal = state._1 / Decimal(state._2)
+  override def merge(leftState: (Decimal, Int), rightState: (Decimal, Int)): (Decimal, Int) = {
+    (leftState._1 + rightState._1, leftState._2 + rightState._2)
   }
 
-  object NoImplAverage extends UnboundFunction {
-    override def name(): String = "no_impl_avg"
-    override def description(): String = name()
+  override def produceResult(state: (Decimal, Int)): Decimal = state._1 / Decimal(state._2)
+}
 
-    override def bind(inputType: StructType): BoundFunction = {
-      throw SparkUnsupportedOperationException()
-    }
+object NoImplAverage extends UnboundFunction {
+  override def name(): String = "no_impl_avg"
+  override def description(): String = name()
+
+  override def bind(inputType: StructType): BoundFunction = {
+    throw SparkUnsupportedOperationException()
   }
 }

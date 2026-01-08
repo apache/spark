@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.datasketches.kll.{KllDoublesSketch, KllFloatsSketch, KllLongsSketch}
 import org.apache.datasketches.memory.Memory
 
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.expressions.Cast.{toSQLExpr, toSQLId, toSQLType}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -48,8 +50,8 @@ case class KllSketchToStringBigint(child: Expression) extends KllSketchToStringB
       val sketch = KllLongsSketch.heapify(Memory.wrap(buffer))
       UTF8String.fromString(sketch.toString())
     } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+      case _: Exception =>
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   }
 }
@@ -76,8 +78,8 @@ case class KllSketchToStringFloat(child: Expression) extends KllSketchToStringBa
       val sketch = KllFloatsSketch.heapify(Memory.wrap(buffer))
       UTF8String.fromString(sketch.toString())
     } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+      case _: Exception =>
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   }
 }
@@ -104,8 +106,8 @@ case class KllSketchToStringDouble(child: Expression) extends KllSketchToStringB
       val sketch = KllDoublesSketch.heapify(Memory.wrap(buffer))
       UTF8String.fromString(sketch.toString())
     } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+      case _: Exception =>
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   }
 }
@@ -142,8 +144,8 @@ case class KllSketchGetNBigint(child: Expression) extends KllSketchGetNBase {
       val sketch = KllLongsSketch.heapify(Memory.wrap(buffer))
       sketch.getN()
     } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+      case _: Exception =>
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   }
 }
@@ -170,8 +172,8 @@ case class KllSketchGetNFloat(child: Expression) extends KllSketchGetNBase {
       val sketch = KllFloatsSketch.heapify(Memory.wrap(buffer))
       sketch.getN()
     } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+      case _: Exception =>
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   }
 }
@@ -198,8 +200,8 @@ case class KllSketchGetNDouble(child: Expression) extends KllSketchGetNBase {
       val sketch = KllDoublesSketch.heapify(Memory.wrap(buffer))
       sketch.getN()
     } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+      case _: Exception =>
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   }
 }
@@ -239,8 +241,8 @@ case class KllSketchMergeBigint(left: Expression, right: Expression) extends Kll
       leftSketch.merge(rightSketch)
       leftSketch.toByteArray
     } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchIncompatibleMergeError(prettyName, e.getMessage)
+      case _: Exception =>
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   }
 }
@@ -270,8 +272,8 @@ case class KllSketchMergeFloat(left: Expression, right: Expression) extends KllS
       leftSketch.merge(rightSketch)
       leftSketch.toByteArray
     } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchIncompatibleMergeError(prettyName, e.getMessage)
+      case _: Exception =>
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   }
 }
@@ -301,8 +303,8 @@ case class KllSketchMergeDouble(left: Expression, right: Expression) extends Kll
       leftSketch.merge(rightSketch)
       leftSketch.toByteArray
     } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchIncompatibleMergeError(prettyName, e.getMessage)
+      case _: Exception =>
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   }
 }
@@ -454,17 +456,31 @@ abstract class KllSketchGetQuantileBase
     } catch {
       case e: org.apache.datasketches.common.SketchesArgumentException =>
         if (e.getMessage.contains("normalized rank")) {
-          throw QueryExecutionErrors.kllSketchInvalidQuantileRangeError(prettyName, rankForError)
+          throw QueryExecutionErrors.kllSketchInvalidQuantileRangeError(prettyName)
         } else {
-          throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+          throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
         }
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+      case _: Exception =>
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   }
 
   /** The output data type for a single value (not array) */
   protected def outputDataType: DataType
+
+  // The rank argument must be foldable (compile-time constant).
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (!right.foldable) {
+      TypeCheckResult.DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> toSQLId("rank"),
+          "inputType" -> toSQLType(right.dataType),
+          "inputExpr" -> toSQLExpr(right)))
+    } else {
+      super.checkInputDataTypes()
+    }
+  }
 
   override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[AbstractDataType] =
@@ -485,7 +501,7 @@ abstract class KllSketchGetQuantileBase
     val buffer = leftInput.asInstanceOf[Array[Byte]]
     val memory = Memory.wrap(buffer)
 
-    right.eval() match {
+    rightInput match {
       case null => null
       case num: Double =>
         // Single value case
@@ -601,8 +617,8 @@ abstract class KllSketchGetRankBase
     try {
       operation
     } catch {
-      case e: Exception =>
-        throw QueryExecutionErrors.kllSketchInvalidInputError(prettyName, e.getMessage)
+      case _: Exception =>
+        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
     }
   }
 
@@ -616,6 +632,20 @@ abstract class KllSketchGetRankBase
    * @return The result rank
    */
   protected def kllSketchGetRank(memory: Memory, quantile: Any): Double
+
+  // The quantile argument must be foldable (compile-time constant).
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (!right.foldable) {
+      TypeCheckResult.DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> toSQLId("quantile"),
+          "inputType" -> toSQLType(right.dataType),
+          "inputExpr" -> toSQLExpr(right)))
+    } else {
+      super.checkInputDataTypes()
+    }
+  }
 
   override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[AbstractDataType] = {
@@ -636,7 +666,7 @@ abstract class KllSketchGetRankBase
     val buffer: Array[Byte] = leftInput.asInstanceOf[Array[Byte]]
     val memory: Memory = Memory.wrap(buffer)
 
-    right.eval() match {
+    rightInput match {
       case null => null
       case value if !value.isInstanceOf[ArrayData] =>
         // Single value case
