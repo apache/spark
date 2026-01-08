@@ -155,6 +155,8 @@ object ArrowPythonRunner {
     val timeZoneConf = Seq(SQLConf.SESSION_LOCAL_TIMEZONE.key -> conf.sessionLocalTimeZone)
     val pandasColsByName = Seq(SQLConf.PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME.key ->
       conf.pandasGroupedMapAssignColumnsByName.toString)
+    val pandasBackend = Seq(
+      SQLConf.PANDAS_EXECUTION_BACKEND.key -> conf.pandasExecutionBackend)
     val arrowSafeTypeCheck = Seq(SQLConf.PANDAS_ARROW_SAFE_TYPE_CONVERSION.key ->
       conf.arrowSafeTypeConversion.toString)
     val arrowAyncParallelism = conf.pythonUDFArrowConcurrencyLevel.map(v =>
@@ -174,7 +176,8 @@ object ArrowPythonRunner {
     val binaryAsBytes = Seq(
       SQLConf.PYSPARK_BINARY_AS_BYTES.key ->
       conf.pysparkBinaryAsBytes.toString)
-    Map(timeZoneConf ++ pandasColsByName ++ arrowSafeTypeCheck ++
+    Map(timeZoneConf ++ pandasColsByName ++
+      pandasBackend ++ arrowSafeTypeCheck ++
       arrowAyncParallelism ++ useLargeVarTypes ++
       intToDecimalCoercion ++ binaryAsBytes ++
       legacyPandasConversion ++ legacyPandasConversionUDF: _*)

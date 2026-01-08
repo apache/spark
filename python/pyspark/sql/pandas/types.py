@@ -852,6 +852,7 @@ def _create_converter_to_pandas(
     error_on_duplicated_field_names: bool = True,
     timestamp_utc_localized: bool = True,
     ndarray_as_list: bool = False,
+    pandas_backend: str = "numpy",
 ) -> Callable[["pd.Series"], "pd.Series"]:
     """
     Create a converter of pandas Series that is created from Spark's Python objects,
@@ -880,6 +881,9 @@ def _create_converter_to_pandas(
         whereas the ones from `df.collect()` are localized to the local timezone.
     ndarray_as_list : bool, optional
         Whether `np.ndarray` is converted to a list or not (default ``False``).
+    pandas_backend : str, (default ``numpy``)
+        (Experimental) Back-end data type applied to the pandas DataFrame or Series.
+        Supported options are: numpy and pyarrow.
 
     Returns
     -------
@@ -887,6 +891,15 @@ def _create_converter_to_pandas(
     """
     import numpy as np
     import pandas as pd
+
+    if pandas_backend == "pyarrow":
+
+        def convert_pyarrow(pser: pd.Series) -> pd.Series:
+            # Assert that the result series is PyArrow-backed
+            assert isinstance(pser.dtype, pd.ArrowDtype), pser.dtype
+            return pser
+
+        return convert_pyarrow
 
     pandas_type = _to_corrected_pandas_type(data_type)
 
@@ -1212,6 +1225,7 @@ def _create_converter_from_pandas(
     error_on_duplicated_field_names: bool = True,
     ignore_unexpected_complex_type_values: bool = False,
     int_to_decimal_coercion_enabled: bool = False,
+    pandas_backend: str = "numpy",
 ) -> Callable[["pd.Series"], "pd.Series"]:
     """
     Create a converter of pandas Series to create Spark DataFrame with Arrow optimization.
@@ -1236,12 +1250,25 @@ def _create_converter_from_pandas(
         and raise an AssertionError when the given value is not the expected type.
         If ``True``, just ignore and return the give value.
         (default ``False``)
+    pandas_backend : str, (default ``numpy``)
+        (Experimental) Back-end data type applied to the pandas DataFrame or Series.
+        Supported options are: numpy and pyarrow.
 
     Returns
     -------
     The converter of `pandas.Series`
     """
     import pandas as pd
+
+    if pandas_backend == "pyarrow":
+        arrow_type = to_arrow_type(data_type, error_on_duplicated_field_names)
+
+        def convert_pyarrow(pser: pd.Series) -> pd.Series:
+            arrow_pser = pser.astype(pd.ArrowDtype(arrow_type))
+            assert isinstance(arrow_pser.dtype, pd.ArrowDtype), arrow_pser.dtype
+            return arrow_pser
+
+        return convert_pyarrow
 
     if isinstance(data_type, TimestampType):
         assert timezone is not None
