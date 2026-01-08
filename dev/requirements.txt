@@ -77,6 +77,8 @@ graphviz==0.20.3
 flameprof==0.4
 viztracer
 debugpy
+pystack>=1.5.1; python_version!='3.13' and sys_platform=='linux' # no 3.13t wheels
+psutil
 
 # TorchDistributor dependencies
 torch
