@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 
 import numpy as np
 import pandas as pd
@@ -158,6 +157,11 @@ class FrameAnyAllMixin:
             psdf.any(axis="columns", bool_only=False), pdf.any(axis="columns", bool_only=False)
         )
 
+        # Test axis=None
+        self.assert_eq(psdf.any(axis=None), pdf.any(axis=None))
+        self.assert_eq(psdf.any(axis=None, bool_only=True), pdf.any(axis=None, bool_only=True))
+        self.assert_eq(psdf.any(axis=None, bool_only=False), pdf.any(axis=None, bool_only=False))
+
         columns.names = ["X", "Y"]
         pdf.columns = columns
         psdf.columns = columns
@@ -170,6 +174,11 @@ class FrameAnyAllMixin:
         self.assert_eq(psdf.any(axis=1), pdf.any(axis=1))
         self.assert_eq(psdf.any(axis=1, bool_only=True), pdf.any(axis=1, bool_only=True))
         self.assert_eq(psdf.any(axis=1, bool_only=False), pdf.any(axis=1, bool_only=False))
+
+        # Test axis=None
+        self.assert_eq(psdf.any(axis=None), pdf.any(axis=None))
+        self.assert_eq(psdf.any(axis=None, bool_only=True), pdf.any(axis=None, bool_only=True))
+        self.assert_eq(psdf.any(axis=None, bool_only=False), pdf.any(axis=None, bool_only=False))
 
         # Test skipna parameter
         pdf = pd.DataFrame(
@@ -224,12 +233,6 @@ class FrameAnyAllTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.computation.test_any_all import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

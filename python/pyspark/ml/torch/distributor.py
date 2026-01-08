@@ -18,7 +18,6 @@ import json
 from contextlib import contextmanager
 import collections
 import logging
-import math
 import os
 import random
 import re
@@ -212,8 +211,15 @@ class Distributor:
                 task_gpu_amount = int(_get_conf(self.spark, key, "0"))
                 if task_gpu_amount < 1:
                     raise RuntimeError(f"'{key}' was unset, so gpu usage is unavailable.")
-                # TODO(SPARK-41916): Address situation when spark.task.resource.gpu.amount > 1
-                return math.ceil(self.num_processes / task_gpu_amount)
+
+                if task_gpu_amount > 1:
+                    if not (self.num_processes % task_gpu_amount == 0):
+                        raise RuntimeError(
+                            f"TorchDistributor 'num_processes' value ({self.num_processes}) "
+                            "must be a multiple of 'spark.task.resource.gpu.amount' "
+                            f"({task_gpu_amount}) value."
+                        )
+                return self.num_processes // task_gpu_amount
             else:
                 key = "spark.driver.resource.gpu.amount"
                 if "gpu" not in _get_resources(self.spark):
@@ -421,14 +427,19 @@ class TorchDistributor(Distributor):
 
         master_addr = os.environ["MASTER_ADDR"]
         master_port = os.environ["MASTER_PORT"]
+
+        if cuda_visible_devices := os.environ.get("CUDA_VISIBLE_DEVICES"):
+            processes_per_node = len(cuda_visible_devices.split(","))
+        else:
+            processes_per_node = 1
         node_rank = os.environ["RANK"]
+
         torchrun_args = [
-            f"--nnodes={num_processes}",
+            f"--nnodes={num_processes // processes_per_node}",
             f"--node_rank={node_rank}",
             f"--rdzv_endpoint={master_addr}:{master_port}",
             "--rdzv_id=0",  # TODO: setup random ID that is gleaned from env variables
         ]
-        processes_per_node = 1
         return torchrun_args, processes_per_node
 
     @staticmethod

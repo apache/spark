@@ -461,7 +461,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def computeStatisticsNotExpectedError(ctx: IdentifierContext): Throwable = {
+  def computeStatisticsNotExpectedError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.ANALYZE_TABLE_UNEXPECTED_NOSCAN",
       messageParameters = Map("ctx" -> toSQLStmt(ctx.getText)),
@@ -618,7 +618,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def createViewWithBothIfNotExistsAndReplaceError(ctx: CreateViewContext): Throwable = {
+  def createViewWithBothIfNotExistsAndReplaceError(ctx: ParserRuleContext): Throwable = {
     new ParseException(errorClass = "_LEGACY_ERROR_TEMP_0052", ctx)
   }
 
@@ -774,6 +774,15 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def missingClausesForOperation(
+      ctx: ParserRuleContext,
+      clauses: String,
+      operation: String): Throwable =
+    new ParseException(
+      errorClass = "MISSING_CLAUSES_FOR_OPERATION",
+      messageParameters = Map("clauses" -> clauses, "operation" -> operation),
+      ctx)
+
   def invalidDatetimeUnitError(
       ctx: ParserRuleContext,
       functionName: String,
@@ -818,6 +827,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(
       errorClass = "MULTIPLE_PRIMARY_KEYS",
       messageParameters = Map("columns" -> columns),
+      ctx)
+  }
+
+  def emptyInPredicateError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_SQL_SYNTAX.EMPTY_IN_PREDICATE",
+      messageParameters = Map.empty,
       ctx)
   }
 

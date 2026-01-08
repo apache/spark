@@ -2598,6 +2598,71 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     }
   }
 
+  test("SPARK-46741: Cache Table with CTE should work") {
+    withTempView("t1", "t2") {
+      sql(
+        """
+          |CREATE TEMPORARY VIEW t1
+          |AS
+          |SELECT * FROM VALUES (0, 0), (1, 1), (2, 2) AS t(c1, c2)
+          |""".stripMargin)
+      sql(
+        """
+          |CREATE TEMPORARY VIEW t2 AS
+          |WITH v as (
+          |  SELECT c1 + c1 c3 FROM t1
+          |)
+          |SELECT SUM(c3) s FROM v
+          |""".stripMargin)
+      sql(
+        """
+          |CACHE TABLE cache_nested_cte_table
+          |WITH
+          |v AS (
+          |  SELECT c1 * c2 c3 from t1
+          |)
+          |SELECT SUM(c3) FROM v
+          |EXCEPT
+          |SELECT s FROM t2
+          |""".stripMargin)
+
+      val df = sql("SELECT * FROM cache_nested_cte_table")
+
+      val inMemoryTableScan = collect(df.queryExecution.executedPlan) {
+        case i: InMemoryTableScanExec => i
+      }
+      assert(inMemoryTableScan.size == 1)
+      checkAnswer(df, Row(5) :: Nil)
+
+      sql(
+        """
+          |CACHE TABLE cache_subquery_cte_table
+          |WITH v AS (
+          |  SELECT c1 * c2 c3 from t1
+          |)
+          |SELECT *
+          |FROM v
+          |WHERE EXISTS (
+          |  WITH cte AS (SELECT 1 AS id)
+          |  SELECT 1
+          |  FROM cte
+          |  WHERE cte.id = v.c3
+          |)
+          |""".stripMargin)
+
+      val cteInSubquery = sql(
+        """
+          |SELECT * FROM cache_subquery_cte_table
+          |""".stripMargin)
+
+      val subqueryInMemoryTableScan = collect(cteInSubquery.queryExecution.executedPlan) {
+        case i: InMemoryTableScanExec => i
+      }
+      assert(subqueryInMemoryTableScan.size == 1)
+      checkAnswer(cteInSubquery, Row(1) :: Nil)
+    }
+  }
+
   private def cacheManager = spark.sharedState.cacheManager
 
   private def pinTable(

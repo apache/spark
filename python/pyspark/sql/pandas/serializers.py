@@ -1135,7 +1135,8 @@ class ArrowStreamAggArrowUDFSerializer(ArrowStreamArrowUDFSerializer):
         return "ArrowStreamAggArrowUDFSerializer"
 
 
-# Serializer for SQL_GROUPED_AGG_PANDAS_UDF and SQL_WINDOW_AGG_PANDAS_UDF
+# Serializer for SQL_GROUPED_AGG_PANDAS_UDF, SQL_WINDOW_AGG_PANDAS_UDF,
+# and SQL_GROUPED_AGG_PANDAS_ITER_UDF
 class ArrowStreamAggPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
     def __init__(
         self,
@@ -1158,9 +1159,10 @@ class ArrowStreamAggPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
 
     def load_stream(self, stream):
         """
-        Deserialize Grouped ArrowRecordBatches and yield as a list of pandas.Series.
+        Yield an iterator that produces one tuple of pandas.Series per batch.
+        Each group yields Iterator[Tuple[pd.Series, ...]], allowing UDF to
+        process batches one by one without consuming all batches upfront.
         """
-        import pyarrow as pa
 
         dataframes_in_group = None
 
@@ -1168,16 +1170,16 @@ class ArrowStreamAggPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
             dataframes_in_group = read_int(stream)
 
             if dataframes_in_group == 1:
-                yield (
-                    [
-                        self.arrow_to_pandas(c, i)
-                        for i, c in enumerate(
-                            pa.Table.from_batches(
-                                ArrowStreamSerializer.load_stream(self, stream)
-                            ).itercolumns()
-                        )
-                    ]
+                # Lazily read and convert Arrow batches to pandas Series one at a time
+                # from the stream. This avoids loading all batches into memory for the group
+                batch_iter = (
+                    tuple(self.arrow_to_pandas(c, i) for i, c in enumerate(batch.columns))
+                    for batch in ArrowStreamSerializer.load_stream(self, stream)
                 )
+                yield batch_iter
+                # Make sure the batches are fully iterated before getting the next group
+                for _ in batch_iter:
+                    pass
 
             elif dataframes_in_group != 0:
                 raise PySparkValueError(
@@ -1216,7 +1218,6 @@ class GroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
         Each outer iterator element represents a group, containing an iterator of Series lists
         (one list per batch).
         """
-        import pyarrow as pa
 
         def process_group(batches: "Iterator[pa.RecordBatch]"):
             # Convert each Arrow batch to pandas Series list on-demand, yielding one list per batch
@@ -1379,7 +1380,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         )
 
         self.result_count_pdf_arrow_type = to_arrow_type(
-            self.result_count_df_type, prefers_large_types=prefers_large_var_types
+            self.result_count_df_type, timezone="UTC", prefers_large_types=prefers_large_var_types
         )
 
         self.result_state_df_type = StructType(
@@ -1392,7 +1393,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         )
 
         self.result_state_pdf_arrow_type = to_arrow_type(
-            self.result_state_df_type, prefers_large_types=prefers_large_var_types
+            self.result_state_df_type, timezone="UTC", prefers_large_types=prefers_large_var_types
         )
         self.arrow_max_records_per_batch = (
             arrow_max_records_per_batch if arrow_max_records_per_batch > 0 else 2**31 - 1

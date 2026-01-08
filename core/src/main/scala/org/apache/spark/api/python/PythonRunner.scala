@@ -69,6 +69,7 @@ private[spark] object PythonEvalType {
   val SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF = 214
   val SQL_GROUPED_MAP_ARROW_ITER_UDF = 215
   val SQL_GROUPED_MAP_PANDAS_ITER_UDF = 216
+  val SQL_GROUPED_AGG_PANDAS_ITER_UDF = 217
 
   // Arrow UDFs
   val SQL_SCALAR_ARROW_UDF = 250
@@ -107,6 +108,7 @@ private[spark] object PythonEvalType {
       "SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF"
     case SQL_GROUPED_MAP_ARROW_ITER_UDF => "SQL_GROUPED_MAP_ARROW_ITER_UDF"
     case SQL_GROUPED_MAP_PANDAS_ITER_UDF => "SQL_GROUPED_MAP_PANDAS_ITER_UDF"
+    case SQL_GROUPED_AGG_PANDAS_ITER_UDF => "SQL_GROUPED_AGG_PANDAS_ITER_UDF"
 
     // Arrow UDFs
     case SQL_SCALAR_ARROW_UDF => "SQL_SCALAR_ARROW_UDF"
@@ -212,7 +214,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   protected val hideTraceback: Boolean = false
   protected val simplifiedTraceback: Boolean = false
 
-  protected val runnerConf: Map[String, String] = Map.empty
+  protected def runnerConf: Map[String, String] = Map.empty
 
   // All the Python functions should have the same exec, version and envvars.
   protected val envVars: java.util.Map[String, String] = funcs.head.funcs.head.envVars

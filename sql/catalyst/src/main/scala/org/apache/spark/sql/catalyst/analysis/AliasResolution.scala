@@ -70,7 +70,7 @@ object AliasResolution {
   private def extractOnly(e: Expression): Boolean = e match {
     case _: ExtractValue => e.children.forall(extractOnly)
     case _: Literal => true
-    case attr: Attribute if attr.getTagValue(ResolverTag.SINGLE_PASS_IS_LCA).isEmpty => true
+    case attr: Attribute if !attr.containsTag(ResolverTag.SINGLE_PASS_IS_LCA) => true
     case _ => false
   }
 }

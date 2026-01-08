@@ -177,7 +177,7 @@ class UnifiedUDFTestsMixin:
         result1 = df.withColumn("res", pd_win_max("v").over(w)).collect()
         self.assertEqual(result1, expected)
 
-        with self.tempView("pd_tbl"), self.temp_func("pd_win_max"):
+        with self.temp_view("pd_tbl"), self.temp_func("pd_win_max"):
             df.createOrReplaceTempView("pd_tbl")
             self.spark.udf.register("pd_win_max", pd_win_max)
 
@@ -303,6 +303,29 @@ class UnifiedUDFTestsMixin:
             result2 = self.spark.sql("SELECT pa_max(id) AS res FROM range(0, 10)").collect()
             self.assertEqual(result2, expected)
 
+    def test_grouped_agg_arrow_iter_udf(self):
+        import pyarrow as pa
+
+        @udf(returnType=LongType())
+        def pa_sum_iter(it: Iterator[pa.Array]) -> int:
+            total = 0
+            for arr in it:
+                total += pa.compute.sum(arr).as_py()
+            return total
+
+        self.assertEqual(pa_sum_iter.evalType, PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF)
+
+        df = self.spark.range(0, 10)
+        expected = df.select(sf.sum("id").alias("res")).collect()
+
+        result1 = df.select(pa_sum_iter("id").alias("res")).collect()
+        self.assertEqual(result1, expected)
+
+        with self.temp_func("pa_sum_iter"):
+            self.spark.udf.register("pa_sum_iter", pa_sum_iter)
+            result2 = self.spark.sql("SELECT pa_sum_iter(id) AS res FROM range(0, 10)").collect()
+            self.assertEqual(result2, expected)
+
     def test_window_agg_arrow_udf(self):
         import pyarrow as pa
 
@@ -332,7 +355,7 @@ class UnifiedUDFTestsMixin:
         result1 = df.withColumn("mean_v", pa_win_max("v").over(w)).collect()
         self.assertEqual(result1, expected)
 
-        with self.tempView("pa_tbl"), self.temp_func("pa_win_max"):
+        with self.temp_view("pa_tbl"), self.temp_func("pa_win_max"):
             df.createOrReplaceTempView("pa_tbl")
             self.spark.udf.register("pa_win_max", pa_win_max)
 
@@ -437,12 +460,6 @@ class UnifiedUDFTests(UnifiedUDFTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_unified_udf import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

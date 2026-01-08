@@ -722,6 +722,18 @@ object CatalogTable {
 
   val VIEW_CATALOG_AND_NAMESPACE = VIEW_PREFIX + "catalogAndNamespace.numParts"
   val VIEW_CATALOG_AND_NAMESPACE_PART_PREFIX = VIEW_PREFIX + "catalogAndNamespace.part."
+
+  // Property to indicate that a VIEW is actually a METRIC VIEW
+  val VIEW_WITH_METRICS = VIEW_PREFIX + "viewWithMetrics"
+
+  /**
+   * Check if a CatalogTable is a metric view by looking at its properties.
+   */
+  def isMetricView(table: CatalogTable): Boolean = {
+    table.tableType == CatalogTableType.VIEW &&
+      table.properties.get(VIEW_WITH_METRICS).contains("true")
+  }
+
   // Convert the current catalog and namespace to properties.
   def catalogAndNamespaceToProps(
       currentCatalog: String,
