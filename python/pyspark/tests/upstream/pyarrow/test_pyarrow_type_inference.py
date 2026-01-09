@@ -583,6 +583,7 @@ class PyArrowTypeInferenceTests(unittest.TestCase):
         with self.assertRaises(pa.ArrowTypeError):
             pa.array([[[("a", 1)], [("b", 2)]]])  # list_of_map
 
+
 if __name__ == "__main__":
     from pyspark.testing import main
 
