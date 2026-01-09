@@ -232,7 +232,12 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
   private def checkReturningInsertContext(plan: LogicalPlan): Unit = {
     def isReturningInsert(p: LogicalPlan): Boolean = p match {
       case InsertIntoStatement(_, _, _, _, _, _, _, returning) if returning => true
-      case w: V2WriteCommand => w.returning
+      case w: V2WriteCommand =>
+        try {
+          w.returning
+        } catch {
+          case _: NoSuchMethodError => false // Old V2WriteCommand without returning
+        }
       case _ => false
     }
 
@@ -386,8 +391,14 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
   def checkAnalysis(plan: LogicalPlan): Unit = {
     // Check for NEW TABLE(INSERT ...) restrictions BEFORE inlining CTEs
-    checkReturningInsertContext(plan)
-    checkReturningInsertTableConflicts(plan)
+    // Only run if plan contains returning inserts (quick check to avoid overhead)
+    if (plan.exists {
+      case InsertIntoStatement(_, _, _, _, _, _, _, true) => true
+      case _ => false
+    }) {
+      checkReturningInsertContext(plan)
+      checkReturningInsertTableConflicts(plan)
+    }
 
     // We should inline all CTE relations to restore the original plan shape, as the analysis check
     // may need to match certain plan shapes. For dangling CTE relations, they will still be kept
