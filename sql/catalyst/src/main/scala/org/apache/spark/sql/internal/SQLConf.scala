@@ -2929,7 +2929,7 @@ object SQLConf {
       .createWithDefault(true)
 
   val ENABLE_STREAMING_SOURCE_EVOLUTION =
-    buildConf("spark.sql.streaming.queryEvolution.enableStreamingSourceEvolution")
+    buildConf("spark.sql.streaming.queryEvolution.enableSourceEvolution")
       .internal()
       .doc("When true, enforces that all streaming sources must be explicitly named via " +
         "the .name() API. This enables streaming source evolution, allowing sources to be " +
