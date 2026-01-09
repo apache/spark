@@ -83,19 +83,19 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
     disableAutoSchemaEvolution = true,
     // Without property enabled, new columns are not added even with clause
     expected = Seq(
-      Row(1, 100, "hr"),
-      Row(2, 200, "software"),
-      Row(3, 300, "hr"),
-      Row(4, 150, "finance"),
-      Row(5, 250, "finance"),
-      Row(6, 350, "finance")),
+      (1, 100, "hr"),
+      (2, 200, "software"),
+      (3, 300, "hr"),
+      (4, 150, "finance"),
+      (5, 250, "finance"),
+      (6, 350, "finance")).toDF("pk", "salary", "dep"),
     expectedWithoutEvolution = Seq(
-      Row(1, 100, "hr"),
-      Row(2, 200, "software"),
-      Row(3, 300, "hr"),
-      Row(4, 150, "finance"),
-      Row(5, 250, "finance"),
-      Row(6, 350, "finance"))
+      (1, 100, "hr"),
+      (2, 200, "software"),
+      (3, 300, "hr"),
+      (4, 150, "finance"),
+      (5, 250, "finance"),
+      (6, 350, "finance")).toDF("pk", "salary", "dep")
   )
 
   testEvolution("source has extra and missing column with set all column -" +
@@ -203,13 +203,13 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       insert(values = "(pk, salary, dep, active) VALUES (s.pk, 0, s.dep, s.active)")
     ),
     partitionCols = Seq("dep"),
-    expected = Seq(
-      Row(1, 100, "hr", null),
-      Row(2, 200, "software", null),
-      Row(3, 300, "hr", null),
-      Row(4, 400, "software", true),
-      Row(5, 500, "software", true),
-      Row(6, 0, "dummy", false)),
+    expected = Seq[(Int, Int, String, java.lang.Boolean)](
+      (1, 100, "hr", null),
+      (2, 200, "software", null),
+      (3, 300, "hr", null),
+      (4, 400, "software", true),
+      (5, 500, "software", true),
+      (6, 0, "dummy", false)).toDF("pk", "salary", "dep", "active"),
     expectErrorWithoutEvolutionContains = "A column, variable, or function parameter with name " +
       "`active` cannot be resolved"
   )
@@ -234,13 +234,13 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
         condition = "s.active = true")
     ),
     partitionCols = Seq("dep"),
-    expected = Seq(
-      Row(1, 100, "hr", null),
-      Row(2, 200, "software", null),
-      Row(3, 300, "hr", null),
-      Row(4, 400, "marketing", null),  // pk=4 not updated (salary 450 is not > 450)
-      Row(5, 500, "updated", true),    // pk=5 updated (salary 550 > 450)
-      Row(6, 350, "sales", true)),     // pk=6 inserted (active = true)
+    expected = Seq[(Int, Int, String, java.lang.Boolean)](
+      (1, 100, "hr", null),
+      (2, 200, "software", null),
+      (3, 300, "hr", null),
+      (4, 400, "marketing", null),  // pk=4 not updated (salary 450 is not > 450)
+      (5, 500, "updated", true),    // pk=5 updated (salary 550 > 450)
+      (6, 350, "sales", true)).toDF("pk", "salary", "dep", "active"), // pk=6 inserted
     // pk=7 not inserted (active = false)
     expectErrorWithoutEvolutionContains = "A column, variable, or function parameter with name " +
       "`active` cannot be resolved"
@@ -265,13 +265,13 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       insert(values = "(pk, salary, dep, active) VALUES (s.pk, s.salary, s.dep, s.active)")
     ),
     partitionCols = Seq("dep"),
-    expected = Seq(
-      Row(1, 100, "hr", null),
-      Row(2, 200, "software", null),
-      Row(3, 300, "hr", null),
-      Row(4, 450, "finance", true),   // Updated (t.active was NULL)
-      Row(5, 550, "finance", false),  // Updated (t.active was NULL)
-      Row(6, 350, "sales", true)),    // Inserted
+    expected = Seq[(Int, Int, String, java.lang.Boolean)](
+      (1, 100, "hr", null),
+      (2, 200, "software", null),
+      (3, 300, "hr", null),
+      (4, 450, "finance", true),   // Updated (t.active was NULL)
+      (5, 550, "finance", false),  // Updated (t.active was NULL)
+      (6, 350, "sales", true)).toDF("pk", "salary", "dep", "active"),  // Inserted
     expectErrorWithoutEvolutionContains = "A column, variable, or function parameter with name " +
       "`active` cannot be resolved"
   )
@@ -294,21 +294,21 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       insertAll()
     ),
     partitionCols = Seq("dep"),
-    expected = Seq(
-      Row(1, 100, "hr", null),
-      Row(2, 200, "software", null),
-      Row(3, 300, "hr", null),
-      Row(4, 150, "finance", true),
-      Row(5, 250, "finance", false),
-      Row(6, 350, "finance", true)),
+    expected = Seq[(Int, Int, String, java.lang.Boolean)](
+      (1, 100, "hr", null),
+      (2, 200, "software", null),
+      (3, 300, "hr", null),
+      (4, 150, "finance", true),
+      (5, 250, "finance", false),
+      (6, 350, "finance", true)).toDF("pk", "salary", "dep", "active"),
     // Without schema evolution clause, new columns are not added
     expectedWithoutEvolution = Seq(
-      Row(1, 100, "hr"),
-      Row(2, 200, "software"),
-      Row(3, 300, "hr"),
-      Row(4, 150, "finance"),
-      Row(5, 250, "finance"),
-      Row(6, 350, "finance"))
+      (1, 100, "hr"),
+      (2, 200, "software"),
+      (3, 300, "hr"),
+      (4, 150, "finance"),
+      (5, 250, "finance"),
+      (6, 350, "finance")).toDF("pk", "salary", "dep")
   )
 
   // Source missing 'dep' column that exists in target - replaced with 'active'
@@ -330,13 +330,13 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       insertAll()
     ),
     partitionCols = Seq("dep"),
-    expected = Seq(
-      Row(1, 100, "hr", null),
-      Row(2, 200, "software", null),
-      Row(3, 300, "hr", null),
-      Row(4, 150, "marketing", true),
-      Row(5, 250, "executive", true),
-      Row(6, 350, null, false)),
+    expected = Seq[(Int, Int, String, java.lang.Boolean)](
+      (1, 100, "hr", null),
+      (2, 200, "software", null),
+      (3, 300, "hr", null),
+      (4, 150, "marketing", true),
+      (5, 250, "executive", true),
+      (6, 350, null, false)).toDF("pk", "salary", "dep", "active"),
     expectErrorWithoutEvolutionContains = "A column, variable, or function parameter with name " +
       "`dep` cannot be resolved"
   )
@@ -422,13 +422,13 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
     clauses = Seq(updateAll(), insertAll()),
     partitionCols = Seq("dep"),
     // With evolution: active column added, matched rows keep dep, inserted rows get default
-    expected = Seq(
-      Row(1, 100, "hr", null),
-      Row(2, 200, "software", null),
-      Row(3, 300, "hr", null),
-      Row(4, 150, "marketing", true),
-      Row(5, 250, "executive", true),
-      Row(6, 350, "unknown", false)),
+    expected = Seq[(Int, Int, String, java.lang.Boolean)](
+      (1, 100, "hr", null),
+      (2, 200, "software", null),
+      (3, 300, "hr", null),
+      (4, 150, "marketing", true),
+      (5, 250, "executive", true),
+      (6, 350, "unknown", false)).toDF("pk", "salary", "dep", "active"),
     expectErrorWithoutEvolutionContains = "A column, variable, or function parameter with name " +
       "`dep` cannot be resolved"
   )
@@ -451,13 +451,13 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       insert(values = "(pk, salary, dep, active) VALUES (s.pk, s.salary, 'finance', s.active)")
     ),
     partitionCols = Seq("dep"),
-    expected = Seq(
-      Row(1, 100, "hr", null),
-      Row(2, 200, "software", null),
-      Row(3, 300, "hr", null),
-      Row(4, 400, "finance", true),
-      Row(5, 500, "finance", true),
-      Row(6, 350, "finance", false)),
+    expected = Seq[(Int, Int, String, java.lang.Boolean)](
+      (1, 100, "hr", null),
+      (2, 200, "software", null),
+      (3, 300, "hr", null),
+      (4, 400, "finance", true),
+      (5, 500, "finance", true),
+      (6, 350, "finance", false)).toDF("pk", "salary", "dep", "active"),
     expectErrorWithoutEvolutionContains = "A column, variable, or function parameter with name " +
       "`active` cannot be resolved"
   )
@@ -487,11 +487,11 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
     ),
     partitionCols = Seq("dep"),
     expected = Seq(
-      Row(1, 50000, "hr"),
-      Row(2, 200, "finance"),
-      Row(3, 300, "engineering"),
-      Row(4, 40000, "sales"),
-      Row(5, 500, "marketing")),
+      (1, 50000, "hr"),
+      (2, 200, "finance"),
+      (3, 300, "engineering"),
+      (4, 40000, "sales"),
+      (5, 500, "marketing")).toDF("pk", "salary", "dep"),
     expectedSchema = StructType(Seq(
       StructField("pk", IntegerType, nullable = false),
       StructField("salary", IntegerType),
@@ -674,9 +674,10 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
     ),
     partitionCols = Seq("dep"),
     expected = Seq(
-      Row(1, 5000000000L, 485, "premium", "high", "west"),
-      Row(2, 85L, 38, "standard", null, null),
-      Row(3, 7500000000L, 495, "enterprise", "critical", "east")),
+      (1, 5000000000L, 485, "premium", "high", "west"),
+      (2, 85L, 38, "standard", null, null),
+      (3, 7500000000L, 495, "enterprise", "critical", "east"))
+      .toDF("pk", "score", "rating", "dep", "priority", "region"),
     expectedSchema = StructType(Seq(
       StructField("pk", IntegerType, nullable = false),
       StructField("score", LongType),
@@ -1051,10 +1052,10 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
     clauses = Seq(updateAll(), insertAll()),
     partitionCols = Seq("dep"),
     expected = Seq(
-      Row(0, Map(Row(10, null) -> Row("c", null)), "hr"),
-      Row(1, Map(Row(10, true) -> Row("y", false)), "sales"),
-      Row(2, Map(Row(20, false) -> Row("z", true)), "engineering")
-    ),
+      (0, Map((10, null: java.lang.Boolean) -> ("c", null: java.lang.Boolean)), "hr"),
+      (1, Map((10, true: java.lang.Boolean) -> ("y", false: java.lang.Boolean)), "sales"),
+      (2, Map((20, false: java.lang.Boolean) -> ("z", true: java.lang.Boolean)), "engineering")
+    ).toDF("pk", "m", "dep"),
     expectErrorWithoutEvolutionContains = "Cannot write extra fields"
   )
 
@@ -1086,9 +1087,13 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
     clauses = Seq(updateAll(), insertAll()),
     partitionCols = Seq("dep"),
     expected = Seq(
-      Row(0, Map(Row(10, 10, null) -> Row("c", "c", null)), "hr"),
-      Row(1, Map(Row(10, null, true) -> Row("y", null, false)), "sales"),
-      Row(2, Map(Row(20, null, false) -> Row("z", null, true)), "engineering")),
+      (0, Map((10, 10: java.lang.Integer, null: java.lang.Boolean) ->
+        ("c", "c", null: java.lang.Boolean)), "hr"),
+      (1, Map((10, null: java.lang.Integer, true: java.lang.Boolean) ->
+        ("y", null: String, false: java.lang.Boolean)), "sales"),
+      (2, Map((20, null: java.lang.Integer, false: java.lang.Boolean) ->
+        ("z", null: String, true: java.lang.Boolean)), "engineering")
+    ).toDF("pk", "m", "dep"),
     expectErrorWithoutEvolutionContains = "Cannot find data for the output column",
     requiresNestedTypeCoercion = true
   )
@@ -1123,9 +1128,13 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       insert("(pk, m, dep) VALUES (s.pk, s.m, 'my_new_dep')")),
     partitionCols = Seq("dep"),
     expected = Seq(
-      Row(0, Map(Row(10, 10, null) -> Row("c", "c", null)), "hr"),
-      Row(1, Map(Row(10, null, true) -> Row("y", null, false)), "my_old_dep"),
-      Row(2, Map(Row(20, null, false) -> Row("z", null, true)), "my_new_dep")),
+      (0, Map((10, 10: java.lang.Integer, null: java.lang.Boolean) ->
+        ("c", "c", null: java.lang.Boolean)), "hr"),
+      (1, Map((10, null: java.lang.Integer, true: java.lang.Boolean) ->
+        ("y", null: String, false: java.lang.Boolean)), "my_old_dep"),
+      (2, Map((20, null: java.lang.Integer, false: java.lang.Boolean) ->
+        ("z", null: String, true: java.lang.Boolean)), "my_new_dep")
+    ).toDF("pk", "m", "dep"),
     expectErrorWithoutEvolutionContains = "Cannot find data for the output column",
     requiresNestedTypeCoercion = true
   )
@@ -1235,13 +1244,13 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
     clauses = Seq(insertAll()),
     partitionCols = Seq("dep"),
     expected = Seq(
-      Row(1, 100, "hr", true),
-      Row(2, 200, "finance", false),
-      Row(3, 300, "hr", true)),
+      (1, 100, "hr", true),
+      (2, 200, "finance", false),
+      (3, 300, "hr", true)).toDF("pk", "salary", "dep", "active"),
     expectedWithoutEvolution = Seq(
-      Row(1, 100, "hr"),
-      Row(2, 200, "finance"),
-      Row(3, 300, "hr"))
+      (1, 100, "hr"),
+      (2, 200, "finance"),
+      (3, 300, "hr")).toDF("pk", "salary", "dep")
   )
 
   // Schema evolution should not evolve when referencing new column via transform (e.g., substring)
@@ -1281,11 +1290,11 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
     ),
     partitionCols = Seq("dep"),
     expected = Seq(
-      Row(1, 100, "hr"),
-      Row(2, 200, "software")),
+      (1, 100, "hr"),
+      (2, 200, "software")).toDF("pk", "salary", "dep"),
     expectedWithoutEvolution = Seq(
-      Row(1, 100, "hr"),
-      Row(2, 200, "software"))
+      (1, 100, "hr"),
+      (2, 200, "software")).toDF("pk", "salary", "dep")
   )
 
   // Schema should not evolve when insert doesn't reference new columns directly
@@ -1304,13 +1313,13 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
     ),
     partitionCols = Seq("dep"),
     expected = Seq(
-      Row(1, 100, "hr"),
-      Row(2, 200, "software"),
-      Row(3, 250, "newdep")),
+      (1, 100, "hr"),
+      (2, 200, "software"),
+      (3, 250, "newdep")).toDF("pk", "salary", "dep"),
     expectedWithoutEvolution = Seq(
-      Row(1, 100, "hr"),
-      Row(2, 200, "software"),
-      Row(3, 250, "newdep"))
+      (1, 100, "hr"),
+      (2, 200, "software"),
+      (3, 250, "newdep")).toDF("pk", "salary", "dep")
   )
 
   // Schema should not evolve when neither update nor insert reference new columns directly
@@ -1330,13 +1339,13 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
     ),
     partitionCols = Seq("dep"),
     expected = Seq(
-      Row(1, 100, "hr"),
-      Row(2, 200, "software"),
-      Row(3, 250, "newdep")),
+      (1, 100, "hr"),
+      (2, 200, "software"),
+      (3, 250, "newdep")).toDF("pk", "salary", "dep"),
     expectedWithoutEvolution = Seq(
-      Row(1, 100, "hr"),
-      Row(2, 200, "software"),
-      Row(3, 250, "newdep"))
+      (1, 100, "hr"),
+      (2, 200, "software"),
+      (3, 250, "newdep")).toDF("pk", "salary", "dep")
   )
 
   // Schema should not evolve when using qualified column name (t.extra instead of just extra)
@@ -1376,10 +1385,10 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       insert(values = "(pk, salary, dep, bonus) VALUES (s.pk, s.salary, 'newdep', s.bonus)")
     ),
     partitionCols = Seq("dep"),
-    expected = Seq(
-      Row(1, 100, "hr", null),
-      Row(2, 150, "software", 50),
-      Row(3, 250, "newdep", 75)),
+    expected = Seq[(Int, Int, String, java.lang.Integer)](
+      (1, 100, "hr", null),
+      (2, 150, "software", 50),
+      (3, 250, "newdep", 75)).toDF("pk", "salary", "dep", "bonus"),
     expectErrorWithoutEvolutionContains = "A column, variable, or function parameter with name " +
       "`bonus` cannot be resolved"
   )
@@ -1453,13 +1462,13 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
     ),
     partitionCols = Seq("dep"),
     expected = Seq(
-      Row(1, 100, "hr"),
-      Row(2, 50, "software"),
-      Row(3, 75, "newdep")),
+      (1, 100, "hr"),
+      (2, 50, "software"),
+      (3, 75, "newdep")).toDF("pk", "salary", "dep"),
     expectedWithoutEvolution = Seq(
-      Row(1, 100, "hr"),
-      Row(2, 50, "software"),
-      Row(3, 75, "newdep"))
+      (1, 100, "hr"),
+      (2, 50, "software"),
+      (3, 75, "newdep")).toDF("pk", "salary", "dep")
   )
 
   // No evolution when using named_struct to construct value without referencing new field
@@ -1859,10 +1868,10 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
     partitionCols = Seq("dep"),
     expected = Seq(
       // Missing field c2 filled with null
-      Row(0, Map(Row(10, true) -> Row("x")), "hr"),
-      Row(1, Map(Row(10, null) -> Row("z")), "sales"),
-      Row(2, Map(Row(20, null) -> Row("w")), "engineering")
-    ),
+      (0, Map((10, true: java.lang.Boolean) -> Tuple1("x")), "hr"),
+      (1, Map((10, null: java.lang.Boolean) -> Tuple1("z")), "sales"),
+      (2, Map((20, null: java.lang.Boolean) -> Tuple1("w")), "engineering")
+    ).toDF("pk", "m", "dep"),
     expectErrorWithoutEvolutionContains = "Cannot find data for the output column",
     requiresNestedTypeCoercion = true
   )
@@ -1896,10 +1905,10 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
     clauses = Seq(updateAll(), insertAll()),
     expected = Seq(
       // Missing field c2 filled with null
-      Row(0, Map(Row(10) -> Row("x", true)), "hr"),
-      Row(1, Map(Row(10) -> Row("z", null)), "sales"),
-      Row(2, Map(Row(20) -> Row("w", null)), "engineering")
-    ),
+      (0, Map(Tuple1(10) -> ("x", true: java.lang.Boolean)), "hr"),
+      (1, Map(Tuple1(10) -> ("z", null: java.lang.Boolean)), "sales"),
+      (2, Map(Tuple1(20) -> ("w", null: java.lang.Boolean)), "engineering")
+    ).toDF("pk", "m", "dep"),
     expectErrorWithoutEvolutionContains = "Cannot find data for the output column",
     requiresNestedTypeCoercion = true
   )
@@ -1961,10 +1970,10 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
     ).toDF("pk", "dep"),
     clauses = Seq(updateAll(), insertAll()),
     partitionCols = Seq("dep"),
-    expected = Seq(
-      Row(0, 100, "sales"),
-      Row(1, 200, "engineering"),
-      Row(2, null, "finance")),
+    expected = Seq[(Int, java.lang.Integer, String)](
+      (0, 100, "sales"),
+      (1, 200, "engineering"),
+      (2, null, "finance")).toDF("pk", "salary", "dep"),
     expectErrorWithoutEvolutionContains = "A column, variable, or function parameter with name " +
       "`salary` cannot be resolved"
   )
@@ -2123,13 +2132,15 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
     partitionCols = Seq("dep"),
     // When inserting without specifying the struct column, default should be used
     expected = Seq(
-      Row(0, Row(1, Row(10, "x")), "sales"),
-      Row(1, Row(2, Row(20, "y")), "engineering"),
-      Row(2, Row(999, Row(999, "default")), "finance")),
+      (0, (1, (10, "x")), "sales"),
+      (1, (2, (20, "y")), "engineering"),
+      (2, (999, (999, "default")), "finance")
+    ).toDF("pk", "s", "dep"),
     expectedWithoutEvolution = Seq(
-      Row(0, Row(1, Row(10, "x")), "sales"),
-      Row(1, Row(2, Row(20, "y")), "engineering"),
-      Row(2, Row(999, Row(999, "default")), "finance"))
+      (0, (1, (10, "x")), "sales"),
+      (1, (2, (20, "y")), "engineering"),
+      (2, (999, (999, "default")), "finance")
+    ).toDF("pk", "s", "dep")
   )
 
   testNestedStructsEvolution("source has missing nested struct fields")(
@@ -2525,10 +2536,11 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       spark.createDataFrame(spark.sparkContext.parallelize(data), sourceSchema)
     },
     clauses = Seq(updateAll(), insertAll()),
-    expected = Seq(
-      Row(0, Row(1, Row(10, "x")), "sales"),
-      Row(1, Row(null, Row(null, "y")), "engineering"),
-      Row(2, null, "finance")),
+    expected = Seq[(Int, (java.lang.Integer, (java.lang.Integer, String)), String)](
+      (0, (1, (10, "x")), "sales"),
+      (1, (null, (null, "y")), "engineering"),
+      (2, null, "finance")
+    ).toDF("pk", "s", "dep"),
     expectErrorWithoutEvolutionContains = "Cannot find data for the output column",
     requiresNestedTypeCoercion = true
   )

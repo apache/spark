@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector
 
 import java.util.Locale
 
-import org.apache.spark.sql.{Column => ColumnV1, DataFrame, Row}
+import org.apache.spark.sql.{Column => ColumnV1, DataFrame}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, TableInfo}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.{identity, reference}
 import org.apache.spark.sql.connector.expressions.Transform
@@ -141,12 +141,12 @@ trait MergeIntoSchemaEvolutionSuiteBase extends RowLevelOperationSuiteBase {
    */
   // scalastyle:off argcount
   protected def testEvolution(name: String)(
-      targetData: => org.apache.spark.sql.DataFrame,
-      sourceData: => org.apache.spark.sql.DataFrame,
+      targetData: => DataFrame,
+      sourceData: => DataFrame,
       cond: String = "t.pk = s.pk",
       clauses: Seq[MergeClause] = Seq.empty,
-      expected: => Seq[Row] = null,
-      expectedWithoutEvolution: => Seq[Row] = null,
+      expected: => DataFrame = null,
+      expectedWithoutEvolution: => DataFrame = null,
       expectedSchema: StructType = null,
       expectedSchemaWithoutEvolution: StructType = null,
       expectErrorContains: String = null,
@@ -158,7 +158,7 @@ trait MergeIntoSchemaEvolutionSuiteBase extends RowLevelOperationSuiteBase {
 
     def executeMergeAndAssert(
         withSchemaEvolution: Boolean,
-        expectedRows: Seq[Row],
+        expectedDf: DataFrame,
         schema: StructType,
         errorSubstring: String): Unit = {
       withTable(tableNameAsString) {
@@ -190,7 +190,7 @@ trait MergeIntoSchemaEvolutionSuiteBase extends RowLevelOperationSuiteBase {
               s"Expected error containing '$errorSubstring' but got: ${ex.getMessage}")
           } else {
             executeMerge(withSchemaEvolution, tableNameAsString, "source", cond, clauses)
-            checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), expectedRows)
+            checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), expectedDf.collect().toSeq)
 
             if (schema != null) {
               assert(sql(s"SELECT * FROM $tableNameAsString").schema === schema,
@@ -292,7 +292,7 @@ trait MergeIntoSchemaEvolutionSuiteBase extends RowLevelOperationSuiteBase {
       expected =
         if (result != null) {
           val schema = if (resultSchema != null) resultSchema else targetSchema
-          readJson(result, schema).collect().toSeq
+          readJson(result, schema)
         } else {
           null
         },
@@ -300,7 +300,7 @@ trait MergeIntoSchemaEvolutionSuiteBase extends RowLevelOperationSuiteBase {
       expectErrorContains = expectErrorContains,
       expectedWithoutEvolution =
         if (resultWithoutEvolution != null) {
-          readJson(resultWithoutEvolution, targetSchema).collect().toSeq
+          readJson(resultWithoutEvolution, targetSchema)
         } else {
           null
         },
