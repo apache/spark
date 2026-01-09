@@ -3185,7 +3185,7 @@ class DataFrame:
         ascending = kwargs.get("ascending", True)
         if isinstance(ascending, (bool, int)):
             if not ascending:
-                _cols = [_get_col(c).desc() for c in _cols]
+                _cols = [c.desc() for c in _cols]
         elif isinstance(ascending, list):
             _cols = [c if asc else c.desc() for asc, c in zip(ascending, _cols)]
         else:
