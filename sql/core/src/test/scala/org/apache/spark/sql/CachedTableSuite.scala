@@ -2781,6 +2781,37 @@ class CachedTableSuite extends QueryTest
     }
   }
 
+  test("SPARK-54812: SHOW FUNCTIONS cached result should continue to reflect state at cache time" +
+    "for legacy reasons.") {
+    val f1 = "show_functions_test_f1"
+    val f2 = "show_functions_test_f2"
+    withUserDefinedFunction(f1 -> true, f2 -> true) {
+      // Create initial function
+      spark.udf.register(f1, (id: Int) => id + 1)
+
+      // Run SHOW FUNCTIONS and save to a DataFrame
+      val showFunctionsDf = sql("SHOW FUNCTIONS")
+
+      // Add another function after creating the DataFrame
+      spark.udf.register(f2, (id: Int) => id + 2)
+
+      // Cache the DataFrame - this should reflect the latest state
+      showFunctionsDf.cache()
+
+      // Verify cached result reflects the latest state (includes f2)
+      val cachedFunctions = showFunctionsDf.select("function").collect().map(_.getString(0)).toSet
+      assert(cachedFunctions.contains(f1))
+      assert(cachedFunctions.contains(f2))
+
+      // A fresh SHOW FUNCTIONS call should also show both functions
+      val freshShowFunctionsDf = sql("SHOW FUNCTIONS")
+      val freshFunctions = freshShowFunctionsDf.select("function").collect()
+        .map(_.getString(0)).toSet
+      assert(freshFunctions.contains(f1))
+      assert(freshFunctions.contains(f2))
+    }
+  }
+
   private def cacheManager = spark.sharedState.cacheManager
 
   private def pinTable(
