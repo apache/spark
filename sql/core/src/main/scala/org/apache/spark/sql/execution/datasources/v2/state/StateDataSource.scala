@@ -44,6 +44,7 @@ import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryCheckpoint
 import org.apache.spark.sql.execution.streaming.state.{InMemoryStateSchemaProvider, KeyStateEncoderSpec, NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, RocksDBStateStoreProvider, StateSchemaCompatibilityChecker, StateSchemaMetadata, StateSchemaProvider, StateStore, StateStoreColFamilySchema, StateStoreConf, StateStoreId, StateStoreProviderId}
 import org.apache.spark.sql.execution.streaming.state.OfflineStateRepartitionErrors
 import org.apache.spark.sql.execution.streaming.utils.StreamingUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.streaming.TimeMode
 import org.apache.spark.sql.types.StructType
@@ -66,7 +67,9 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       properties: util.Map[String, String]): Table = {
     val sourceOptions = StateSourceOptions.modifySourceOptions(hadoopConf,
       StateSourceOptions.apply(session, hadoopConf, properties))
-    val stateConf = buildStateStoreConf(sourceOptions.resolvedCpLocation, sourceOptions.batchId)
+    // Build the confs for the batch we are reading using confs in the offsetlog
+    val (stateConf, batchSqlConf) =
+      buildConfsForBatch(sourceOptions.resolvedCpLocation, sourceOptions.batchId)
     // We only support RocksDB because the repartition work that this option
     // is built for only supports RocksDB
     if (sourceOptions.internalOnlyReadAllColumnFamilies
@@ -86,7 +89,8 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       NoPrefixKeyStateEncoderSpec(keySchema)
     }
 
-    new StateTable(session, schema, sourceOptions, stateConf, keyStateEncoderSpec,
+    new StateTable(session, schema, sourceOptions, stateConf,
+      batchSqlConf.getConf(SQLConf.STATEFUL_SHUFFLE_PARTITIONS_INTERNAL).get, keyStateEncoderSpec,
       stateStoreReaderInfo.transformWithStateVariableInfoOpt,
       stateStoreReaderInfo.stateStoreColFamilySchemaOpt,
       stateStoreReaderInfo.stateSchemaProviderOpt,
@@ -147,7 +151,8 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
         sourceOptions.operatorId)
   }
 
-  private def buildStateStoreConf(checkpointLocation: String, batchId: Long): StateStoreConf = {
+  private def buildConfsForBatch(
+      checkpointLocation: String, batchId: Long): (StateStoreConf, SQLConf) = {
     val offsetLog = new StreamingQueryCheckpointMetadata(session, checkpointLocation).offsetLog
     offsetLog.get(batchId) match {
       case Some(value) =>
@@ -157,7 +162,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
 
         val clonedSqlConf = session.sessionState.conf.clone()
         OffsetSeqMetadata.setSessionConf(metadata, clonedSqlConf)
-        StateStoreConf(clonedSqlConf)
+        (StateStoreConf(clonedSqlConf), clonedSqlConf)
 
       case _ =>
         throw StateDataSourceErrors.offsetLogUnavailable(batchId, checkpointLocation)
