@@ -109,7 +109,8 @@ class OfflineStateRepartitionSuite extends StreamTest
   test("Repartition: success, failure, retry") {
     withTempDir { dir =>
       val originalPartitions = 3
-      val batchId = runSimpleStreamQuery(originalPartitions, dir.getAbsolutePath)
+      val input = MemoryStream[Int]
+      val batchId = runSimpleStreamQuery(originalPartitions, dir.getAbsolutePath, input)
       val checkpointMetadata = new StreamingQueryCheckpointMetadata(spark, dir.getAbsolutePath)
       // Shouldn't be seen as a repartition batch
       assert(!isRepartitionBatch(batchId, checkpointMetadata.offsetLog, dir.getAbsolutePath))
@@ -167,6 +168,9 @@ class OfflineStateRepartitionSuite extends StreamTest
       verifyRepartitionBatch(
         repartitionBatchId + 1, checkpointMetadata, hadoopConf,
         dir.getAbsolutePath, morePartitions)
+
+      // Restart the query to make sure it can start after repartitioning
+      runSimpleStreamQuery(morePartitions, dir.getAbsolutePath, input)
     }
   }
 
@@ -215,7 +219,8 @@ class OfflineStateRepartitionSuite extends StreamTest
   test("Consecutive repartition") {
     withTempDir { dir =>
       val originalPartitions = 3
-      val batchId = runSimpleStreamQuery(originalPartitions, dir.getAbsolutePath)
+      val input = MemoryStream[Int]
+      val batchId = runSimpleStreamQuery(originalPartitions, dir.getAbsolutePath, input)
 
       val checkpointMetadata = new StreamingQueryCheckpointMetadata(spark, dir.getAbsolutePath)
       val hadoopConf = spark.sessionState.newHadoopConf()
@@ -239,6 +244,9 @@ class OfflineStateRepartitionSuite extends StreamTest
         dir.getAbsolutePath,
         originalPartitions + 1
       )
+
+      // Restart the query to make sure it can start after repartitioning
+      runSimpleStreamQuery(originalPartitions + 1, dir.getAbsolutePath, input)
     }
   }
 
