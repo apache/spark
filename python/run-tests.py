@@ -219,6 +219,8 @@ class TestRunner:
         )
         if p.returncode == 0:
             LOGGER.error(f"Thread dump:\n{p.stdout.decode('utf-8')}")
+        else:
+            LOGGER.error(f"Failed to get thread dump, exit code {p.returncode}:\n{p.stdout.decode('utf-8')}")
 
 
 def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_output):
