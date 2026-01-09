@@ -15,8 +15,6 @@
 # limitations under the License.
 #
 
-import time
-
 from pyspark.sql import Row, Observation, functions as F
 from pyspark.sql.types import StructType, LongType
 from pyspark.errors import (
