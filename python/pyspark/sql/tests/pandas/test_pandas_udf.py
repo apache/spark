@@ -460,6 +460,24 @@ class PandasUDFTestsMixin:
         result = empty_df.select(add1("id"))
         self.assertEqual(result.collect(), [])
 
+    def test_pandas_udf_nullable_large_integers(self):
+        import pandas as pd
+
+        @pandas_udf("long")
+        def identity(s: pd.Series) -> pd.Series:
+            return s
+
+        query = """
+            SELECT * FROM VALUES
+            (9223372036854775707, 1), (NULL, 2)
+            AS tab(a, b)
+            """
+
+        df = self.spark.sql(query).repartition(1).sortWithinPartitions("b")
+        expected = df.select("a").collect()
+        results = df.select(identity("a").alias("a")).collect()
+        self.assertEqual(results, expected)
+
 
 class PandasUDFTests(PandasUDFTestsMixin, ReusedSQLTestCase):
     pass
