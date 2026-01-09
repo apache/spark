@@ -253,7 +253,7 @@ class CteIdNormalizer {
 
   def normalizeDef(cteRelationDef: CTERelationDef): CTERelationDef = {
     try {
-      if (oldToNewIdMapping.containsKey(cteRelationDef)) {
+      if (oldToNewIdMapping.containsKey(cteRelationDef.id)) {
         cteRelationDef.copy(id = oldToNewIdMapping.get(cteRelationDef.id))
       } else {
         oldToNewIdMapping.put(cteRelationDef.id, cteIdCounter)
