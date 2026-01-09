@@ -227,8 +227,11 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
     // For constructing the app ID, we can't use the Spark application name, as the app ID is going
     // to be added as a label to group resources belonging to the same application. Label values are
     // considerably restrictive, e.g. must be no longer than 63 characters in length. So we generate
-    // a unique app ID (captured by spark.app.id) in the format below.
-    val kubernetesAppId = KubernetesConf.getKubernetesAppId()
+    // a unique app ID (captured by spark.app.id) in the format below, unless a custom
+    // spark.app.id is provided in the SparkConf.
+    val kubernetesAppId = sparkConf.getOption("spark.app.id")
+      .filter(_.nonEmpty)
+      .getOrElse(KubernetesConf.getKubernetesAppId())
     val kubernetesConf = KubernetesConf.createDriverConf(
       sparkConf,
       kubernetesAppId,
