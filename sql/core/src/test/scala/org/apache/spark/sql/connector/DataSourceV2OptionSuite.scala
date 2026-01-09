@@ -102,7 +102,8 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       val df = sql(s"INSERT INTO $t1 WITH (`write.split-size` = 10) VALUES (1, 'a'), (2, 'b')")
 
       var collected = df.queryExecution.optimizedPlan.collect {
-        case CommandResult(_, AppendData(relation: DataSourceV2Relation, _, _, _, _, _), _, _) =>
+        case CommandResult(_,
+            AppendData(relation: DataSourceV2Relation, _, _, _, _, _, _, _), _, _) =>
           assert(relation.options.get("write.split-size") == "10")
       }
       assert (collected.size == 1)
@@ -135,7 +136,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       assert(captured.size === 1)
       val qe = captured.head
       var collected = qe.optimizedPlan.collect {
-        case AppendData(_: DataSourceV2Relation, _, writeOptions, _, _, _) =>
+        case AppendData(_: DataSourceV2Relation, _, writeOptions, _, _, _, _, _) =>
           assert(writeOptions("write.split-size") == "10")
       }
       assert (collected.size == 1)
@@ -162,7 +163,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       assert(captured.size === 1)
       val qe = captured.head
       var collected = qe.optimizedPlan.collect {
-        case AppendData(_: DataSourceV2Relation, _, writeOptions, _, _, _) =>
+        case AppendData(_: DataSourceV2Relation, _, writeOptions, _, _, _, _, _) =>
           assert(writeOptions("write.split-size") == "10")
       }
       assert (collected.size == 1)
@@ -186,7 +187,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
         s"VALUES (3, 'c'), (4, 'd')")
       var collected = df.queryExecution.optimizedPlan.collect {
         case CommandResult(_,
-          OverwriteByExpression(relation: DataSourceV2Relation, _, _, _, _, _, _),
+          OverwriteByExpression(relation: DataSourceV2Relation, _, _, _, _, _, _, _, _),
           _, _) =>
           assert(relation.options.get("write.split-size") === "10")
       }
@@ -221,7 +222,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       assert(captured.size === 1)
       val qe = captured.head
       var collected = qe.optimizedPlan.collect {
-        case OverwritePartitionsDynamic(_: DataSourceV2Relation, _, writeOptions, _, _) =>
+        case OverwritePartitionsDynamic(_: DataSourceV2Relation, _, writeOptions, _, _, _, _) =>
           assert(writeOptions("write.split-size") === "10")
       }
       assert (collected.size == 1)
@@ -246,7 +247,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
         s"VALUES (3, 'c'), (4, 'd')")
       var collected = df.queryExecution.optimizedPlan.collect {
         case CommandResult(_,
-          OverwriteByExpression(relation: DataSourceV2Relation, _, _, _, _, _, _),
+          OverwriteByExpression(relation: DataSourceV2Relation, _, _, _, _, _, _, _, _),
           _, _) =>
           assert(relation.options.get("write.split-size") == "10")
       }
@@ -281,7 +282,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
 
       val qe = captured.head
       var collected = qe.optimizedPlan.collect {
-        case OverwriteByExpression(_: DataSourceV2Relation, _, _, writeOptions, _, _, _) =>
+        case OverwriteByExpression(_: DataSourceV2Relation, _, _, writeOptions, _, _, _, _, _) =>
           assert(writeOptions("write.split-size") === "10")
       }
       assert (collected.size == 1)
@@ -311,7 +312,7 @@ class DataSourceV2OptionSuite extends DatasourceV2SQLBase {
       val qe = captured.head
 
       var collected = qe.optimizedPlan.collect {
-        case OverwriteByExpression(_: DataSourceV2Relation, _, _, writeOptions, _, _, _) =>
+        case OverwriteByExpression(_: DataSourceV2Relation, _, _, writeOptions, _, _, _, _, _) =>
           assert(writeOptions("write.split-size") === "10")
       }
       assert (collected.size == 1)
