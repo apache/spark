@@ -720,6 +720,25 @@ class AstBuilder extends DataTypeAstBuilder
     query.optionalMap(ctx.ctes)(withCTE)
   }
 
+  /**
+   * Create a NEW TABLE(INSERT ...) query specification.
+   * This returns an InsertIntoStatement with returning=true.
+   */
+  override def visitNewTableQuerySpecification(
+      ctx: NewTableQuerySpecificationContext): LogicalPlan = withOrigin(ctx) {
+    val query = visitQuery(ctx.query)
+    val insertStmt = withInsertInto(ctx.insertInto, query)
+
+    // Mark this insert as returning by creating a new InsertIntoStatement with returning=true
+    insertStmt match {
+      case i: InsertIntoStatement =>
+        i.copy(returning = true)
+      case other =>
+        // This shouldn't happen, but handle gracefully
+        other
+    }
+  }
+
   override def visitDmlStatement(ctx: DmlStatementContext): AnyRef = withOrigin(ctx) {
     val dmlStmt = plan(ctx.dmlStatementNoWith)
     // Apply CTEs
