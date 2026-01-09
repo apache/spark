@@ -1253,22 +1253,40 @@ class Analyzer(
           isByName)
 
         if (!i.overwrite) {
-          if (isByName) {
+          val append = if (isByName) {
             AppendData.byName(r, query)
           } else {
             AppendData.byPosition(r, query)
           }
+          // If this is a returning insert, add returning parameters
+          if (i.returning) {
+            append.copy(returning = true, returningOutput = r.output)
+          } else {
+            append
+          }
         } else if (conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC) {
-          if (isByName) {
+          val overwrite = if (isByName) {
             OverwritePartitionsDynamic.byName(r, query)
           } else {
             OverwritePartitionsDynamic.byPosition(r, query)
           }
+          // If this is a returning insert, add returning parameters
+          if (i.returning) {
+            overwrite.copy(returning = true, returningOutput = r.output)
+          } else {
+            overwrite
+          }
         } else {
-          if (isByName) {
+          val overwrite = if (isByName) {
             OverwriteByExpression.byName(r, query, staticDeleteExpression(r, staticPartitions))
           } else {
             OverwriteByExpression.byPosition(r, query, staticDeleteExpression(r, staticPartitions))
+          }
+          // If this is a returning insert, add returning parameters
+          if (i.returning) {
+            overwrite.copy(returning = true, returningOutput = r.output)
+          } else {
+            overwrite
           }
         }
     }
