@@ -154,6 +154,7 @@ class DataFrameObservationTestsMixin:
             self.assertGreaterEqual(row.cnt, 0)
             self.assertGreaterEqual(row.sum, 0)
             return True
+
         check_observed_metrics()
 
         q.stop()
