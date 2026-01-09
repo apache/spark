@@ -3559,7 +3559,7 @@ class DataFrameAggregateSuite extends QueryTest
 
   test("kll_merge_agg with null values") {
     val df1 = Seq(1, 2, 3).toDF("value")
-    val dfNull = Seq(None).toDF("value")
+    val dfNull = Seq(Some(4), None, Some(6)).toDF("value")
 
     val sketch1 = df1.agg(kll_sketch_agg_bigint($"value").alias("sketch"))
     val sketchNull = dfNull.agg(kll_sketch_agg_bigint($"value").alias("sketch"))
@@ -3569,7 +3569,7 @@ class DataFrameAggregateSuite extends QueryTest
       .agg(kll_merge_agg_bigint($"sketch").alias("merged_sketch"))
 
     val n = merged.select(kll_sketch_get_n_bigint($"merged_sketch")).collect()(0)(0)
-    assert(n == 3L)
+    assert(n == 5L)
   }
 }
 
