@@ -7119,7 +7119,7 @@
   },
   "UNSUPPORTED_INSERT_WITH_SCHEMA_EVOLUTION" : {
     "message" : [
-      "INSERT WITH SCHEMA EVOLUTION ... is unsupported for this table relation."
+      "INSERT WITH SCHEMA EVOLUTION ... is unsupported for this table format."
     ],
     "sqlState" : "0A000"
   },
