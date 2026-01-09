@@ -11150,8 +11150,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     *[
                         F.coalesce(
                             self._internal.spark_column_for(label).cast("boolean"),
-                            # When skipna=True, nulls count as True and vice versa
-                            F.lit(skipna),
+                            # pandas treats all NA values as True in `all()`
+                            F.lit(True),
                         )
                         for label in column_labels
                     ],
