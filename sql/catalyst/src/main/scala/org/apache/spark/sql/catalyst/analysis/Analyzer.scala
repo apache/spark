@@ -4232,6 +4232,158 @@ object RemoveTempResolvedColumn extends Rule[LogicalPlan] {
 }
 
 /**
+ * Validates that NEW TABLE(INSERT ...) (returning inserts) are only used in valid contexts:
+ * - At the top level of a query
+ * - As CTERelationDef definitions
+ * - NOT in subqueries, set operations (UNION/INTERSECT/EXCEPT), or nested contexts
+ *
+ * Also validates that the target table of a returning insert is not referenced elsewhere.
+ * This runs early before resolution to catch structural issues.
+ */
+object ValidateReturningInsertInCheckAnalysis {
+  // Helper to detect returning inserts (works on unresolved plans)
+  def isReturningInsert(p: LogicalPlan): Boolean = p match {
+    case InsertIntoStatement(_, _, _, _, _, _, _, true) => true
+    case w: V2WriteCommand =>
+      try {
+        w.returning
+      } catch {
+        case _: NoSuchMethodError => false
+      }
+    case _ => false
+  }
+
+  // Helper to collect table names from returning inserts
+  def getReturningInsertTableName(p: LogicalPlan): Option[Seq[String]] = p match {
+    case InsertIntoStatement(UnresolvedRelation(nameParts, _, _), _, _, _, _, _, _, true) =>
+      Some(nameParts)
+    case InsertIntoStatement(r: NamedRelation, _, _, _, _, _, _, true) =>
+      Some(Seq(r.name))
+    case w: V2WriteCommand if isReturningInsert(w) =>
+      w.table match {
+        case UnresolvedRelation(nameParts, _, _) => Some(nameParts)
+        case r: NamedRelation => Some(Seq(r.name))
+        case _ => None
+      }
+    case _ => None
+  }
+
+  // Check 1: Context validation - returning inserts must be at top level or in CTE defs
+  def checkContext(p: LogicalPlan, context: String): Unit = {
+    // First check expressions for subqueries BEFORE checking if this is a returning insert
+    // Use foreachUp to recursively traverse expression trees
+    p.expressions.foreach { expr =>
+      expr.foreachUp {
+        case s: SubqueryExpression =>
+          if (s.plan.exists(isReturningInsert)) {
+            throw new AnalysisException(
+              errorClass = "UNSUPPORTED_FEATURE.NESTED_RETURNING_INSERT",
+              messageParameters = Map("context" -> "subquery"),
+              origin = p.origin)
+          }
+        case _ =>
+      }
+    }
+
+    p match {
+      // Top-level returning insert is OK
+      case _ if isReturningInsert(p) => // OK, this is a top-level returning insert
+
+      // CTE definitions can contain returning inserts at their top level
+      case WithCTE(child, cteDefs) =>
+        checkContext(child, "main query")
+        cteDefs.foreach(cte => checkContext(cte.child, "CTE definition"))
+
+      case CTERelationDef(child, _, _, _, _) =>
+        checkContext(child, "CTE definition")
+
+      // Set operations - check that branches don't contain returning inserts
+      case u: SetOperation =>
+        u.children.foreach { child =>
+          if (child.exists(isReturningInsert)) {
+            throw new AnalysisException(
+              errorClass = "UNSUPPORTED_FEATURE.NESTED_RETURNING_INSERT",
+              messageParameters = Map("context" -> s"${u.nodeName} branch"),
+              origin = child.origin)
+          }
+        }
+
+      // Union operations - check that branches don't contain returning inserts
+      case u: Union =>
+        u.children.foreach { child =>
+          if (child.exists(isReturningInsert)) {
+            throw new AnalysisException(
+              errorClass = "UNSUPPORTED_FEATURE.NESTED_RETURNING_INSERT",
+              messageParameters = Map("context" -> "UNION branch"),
+              origin = child.origin)
+          }
+        }
+
+      // Check all other operators
+      case _ =>
+        // Recurse into children (but not into CTE defs which are handled separately)
+        p.children.foreach {
+          case _: CTERelationDef => // Skip, handled by WithCTE
+          case child => checkContext(child, context)
+        }
+    }
+  }
+
+  // Check 2: Table conflict validation - target table can't appear elsewhere
+  def checkTableConflicts(p: LogicalPlan): Unit = {
+    // Collect all returning insert target tables
+    val returningInsertTables = p.collect {
+      case ri if isReturningInsert(ri) => getReturningInsertTableName(ri)
+    }.flatten
+
+    if (returningInsertTables.nonEmpty) {
+      // Check for same table being target of multiple returning inserts
+      val duplicates = returningInsertTables.groupBy(identity).filter(_._2.size > 1).keys
+      if (duplicates.nonEmpty) {
+        throw new AnalysisException(
+          errorClass = "UNSUPPORTED_FEATURE.RETURNING_INSERT_TABLE_CONFLICT",
+          messageParameters = Map(
+            "tableName" -> duplicates.head.mkString("."),
+            "conflictType" -> "target of multiple NEW TABLE(...) inserts"),
+          origin = p.origin)
+      }
+
+      // Check for target table being referenced elsewhere in the plan
+      // Only check resolved relations - if unresolved, other errors will be thrown first
+      def checkNode(node: LogicalPlan, insideReturningInsert: Boolean): Unit = {
+        node match {
+          case ri if isReturningInsert(ri) =>
+            // Entering a returning insert, check its query
+            checkNode(ri.children.head, insideReturningInsert = true)
+
+          case r: NamedRelation if insideReturningInsert =>
+            // Only check resolved relations
+            val tableName = Seq(r.name)
+            if (returningInsertTables.exists(target => target == tableName)) {
+              throw new AnalysisException(
+                errorClass = "UNSUPPORTED_FEATURE.RETURNING_INSERT_TABLE_CONFLICT",
+                messageParameters = Map(
+                  "tableName" -> r.name,
+                  "conflictType" -> "source in the same query"),
+                origin = node.origin)
+            }
+
+          case _ =>
+            node.children.foreach(child => checkNode(child, insideReturningInsert))
+        }
+      }
+
+      checkNode(p, insideReturningInsert = false)
+    }
+  }
+
+  def validate(plan: LogicalPlan): Unit = {
+    checkContext(plan, "top level")
+    checkTableConflicts(plan)
+  }
+}
+
+/**
  * Rule that's used to handle `UnresolvedHaving` nodes with resolved `condition` and `child`.
  * It's placed outside the main batch to avoid conflicts with other rules that resolve
  * `UnresolvedHaving` in the main batch.

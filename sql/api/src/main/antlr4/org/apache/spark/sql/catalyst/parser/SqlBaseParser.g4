@@ -2040,6 +2040,7 @@ ansiNonReserved
     | NAMESPACES
     | NANOSECOND
     | NANOSECONDS
+    | NEW
     | NO
     | NONE
     | NORELY

@@ -300,6 +300,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
+  def nestedReturningInsertError(context: String, location: String): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.NESTED_RETURNING_INSERT",
+      messageParameters = Map("context" -> context, "location" -> location))
+  }
+
+  def returningInsertTableConflictError(tableName: String, conflictType: String): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.RETURNING_INSERT_TABLE_CONFLICT",
+      messageParameters = Map("tableName" -> tableName, "conflictType" -> conflictType))
+  }
+
   def unsupportedSetOperationOnMapType(mapCol: Attribute, origin: Origin): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",
