@@ -51,6 +51,7 @@ class ParquetV2SchemaPruningSuite extends ParquetSchemaPruningSuite {
     super
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
+      .set(SQLConf.OPTIMIZER_V2_PENDING_SCAN_ENABLED.key, "true")
 
   override def checkScanSchemata(df: DataFrame, expectedSchemaCatalogStrings: String*): Unit = {
     val fileSourceScanSchemata =
