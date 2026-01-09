@@ -164,7 +164,6 @@ function mypy_data_test {
     fi
 
     PYTEST_REPORT=$( (MYPYPATH=python $PYTEST_BUILD \
-      -c dev/pyproject.toml \
       --rootdir python \
       --mypy-only-local-stub \
       --mypy-ini-file python/mypy.ini \
@@ -299,7 +298,7 @@ ruff checks failed."
     fi
 
     echo "starting $RUFF_BUILD test..."
-    RUFF_REPORT=$( ($RUFF_BUILD check --config dev/pyproject.toml) 2>&1)
+    RUFF_REPORT=$( ($RUFF_BUILD check) 2>&1)
     RUFF_STATUS=$?
 
     if [ "$RUFF_STATUS" -ne 0 ]; then
@@ -327,7 +326,7 @@ function black_test {
     fi
 
     echo "starting black test..."
-    BLACK_REPORT=$( ($BLACK_BUILD  --config dev/pyproject.toml --check python/pyspark dev python/packaging) 2>&1)
+    BLACK_REPORT=$( ($BLACK_BUILD --check python/pyspark dev python/packaging) 2>&1)
     BLACK_STATUS=$?
 
     if [ "$BLACK_STATUS" -ne 0 ]; then

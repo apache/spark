@@ -36,7 +36,11 @@ object MimaExcludes {
   // Exclude rules for 4.2.x from 4.1.0
   lazy val v42excludes = v41excludes ++ Seq(
     // Add DEBUG format to ErrorMessageFormat enum
-    ProblemFilters.exclude[Problem]("org.apache.spark.ErrorMessageFormat*")
+    ProblemFilters.exclude[Problem]("org.apache.spark.ErrorMessageFormat*"),
+    // [SPARK-47086][BUILD][CORE][WEBUI] Upgrade Jetty to 12.1.4
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ui.ProxyRedirectHandler$ResponseWrapper"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ui.ProxyRedirectHandler#ResponseWrapper.sendRedirect"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ui.ProxyRedirectHandler#ResponseWrapper.this")
   )
 
   // Exclude rules for 4.1.x from 4.0.0

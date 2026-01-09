@@ -88,13 +88,22 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
   /**
    * Compares normal read data with bytes read data for a specific column family.
    * Converts normal rows to bytes then compares with bytes read.
+   *
+   * @param normalDf Normal read data with columns (partition_id, key, value)
+   * @param bytesDf Bytes read data with columns (partition_key, key_bytes, value_bytes, cf_name)
+   * @param columnFamily The column family name to filter on
+   * @param keySchema Schema of the full key
+   * @param valueSchema Schema of the value
+   * @param partitionKeyExtractor Function to extract partition key from full key Row.
+   *                              If None, assumes partition key equals the full key.
    */
   private def compareNormalAndBytesData(
       normalDf: Array[Row],
       bytesDf: Array[Row],
       columnFamily: String,
       keySchema: StructType,
-      valueSchema: StructType): Unit = {
+      valueSchema: StructType,
+      partitionKeyExtractor: Option[Row => Row] = None): Unit = {
 
     // Filter bytes data for the specified column family and extract raw bytes directly
     val filteredBytesData = bytesDf.filter { row =>
@@ -114,12 +123,17 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
     val keyConverter = CatalystTypeConverters.createToCatalystConverter(keySchema)
     val valueConverter = CatalystTypeConverters.createToCatalystConverter(valueSchema)
 
-    // Convert normal data to bytes
-    val normalAsBytes = normalDf.toSeq.map { row =>
+    // Convert normal data to (partitionKeyStruct, keyBytes, valueBytes)
+    val normalData = normalDf.toSeq.map { row =>
       val key = row.getStruct(1)
       val value = if (row.isNullAt(2)) null else row.getStruct(2)
 
-      // Convert key to InternalRow, then to UnsafeRow, then get bytes
+      // Extract partition key - use extractor if provided, otherwise use full key
+      val partitionKey: Row = partitionKeyExtractor match {
+        case Some(extractor) => extractor(key)
+        case None => key
+      }
+      // Convert key to bytes
       val keyInternalRow = keyConverter(key).asInstanceOf[InternalRow]
       val keyUnsafeRow = keyProjection(keyInternalRow)
       // IMPORTANT: Must clone the bytes array since getBytes() returns a reference
@@ -137,26 +151,29 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
         valueUnsafeRow.getBytes.clone()
       }
 
-      (keyBytes, valueBytes)
+      (keyBytes, valueBytes, partitionKey)
     }
 
-    // Extract raw bytes from bytes read data (no deserialization/reserialization)
-    val bytesAsBytes = filteredBytesData.map { row =>
+    // Extract (partitionKeyStruct, keyBytes, valueBytes) from bytes read data
+    val bytesData = filteredBytesData.map { row =>
+      val partitionKey = row.getStruct(0)
       val keyBytes = row.getAs[Array[Byte]](1)
       val valueBytes = row.getAs[Array[Byte]](2)
-      (keyBytes, valueBytes)
+      (keyBytes, valueBytes, partitionKey)
     }
 
-    // Sort both for comparison (since Set equality doesn't work well with byte arrays)
-    val normalSorted = normalAsBytes.sortBy(x => (x._1.mkString(","), x._2.mkString(",")))
-    val bytesSorted = bytesAsBytes.sortBy(x => (x._1.mkString(","), x._2.mkString(",")))
+    // Sort both for comparison by key and value bytes
+    val normalSorted = normalData.sortBy(x => (x._1.mkString(","), x._2.mkString(",")))
+    val bytesSorted = bytesData.sortBy(x => (x._1.mkString(","), x._2.mkString(",")))
 
     assert(normalSorted.length == bytesSorted.length,
       s"Size mismatch: normal has ${normalSorted.length}, bytes has ${bytesSorted.length}")
 
-    // Compare each pair
+    // Compare each tuple (partitionKeyStruct, keyBytes, valueBytes)
     normalSorted.zip(bytesSorted).zipWithIndex.foreach {
-      case (((normalKey, normalValue), (bytesKey, bytesValue)), idx) =>
+      case (((normalKey, normalValue, normalPartitionKey),
+             (bytesKey, bytesValue, bytesPartitionKey)), idx) =>
+        assert(normalPartitionKey == bytesPartitionKey)
         assert(Arrays.equals(normalKey, bytesKey),
           s"Key mismatch at index $idx:\n" +
             s"  Normal: ${normalKey.mkString("[", ",", "]")}\n" +
@@ -179,7 +196,8 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
       keySchema: StructType,
       valueSchema: StructType,
       extraOptions: Map[String, String] = Map.empty,
-      selectExprs: Seq[String] = Seq("partition_id", "key", "value")): Unit = {
+      selectExprs: Seq[String] = Seq("partition_id", "key", "value"),
+      partitionKeyExtractor: Option[Row => Row] = None): Unit = {
     var reader = spark.read
       .format("statestore")
       .option(StateSourceOptions.PATH, checkpointDir)
@@ -194,7 +212,8 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
       allBytesData,
       stateVarName,
       keySchema,
-      valueSchema)
+      valueSchema,
+      partitionKeyExtractor)
   }
 
   /**
@@ -252,7 +271,8 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
       allBytesData,
       s"$$${timerPrefix}Timers_keyToTimestamp",
       keyToTimestampSchema,
-      dummySchema)
+      dummySchema,
+      partitionKeyExtractor = Some(compositeKey => compositeKey.getStruct(0)))
 
     val timestampToKeyNormalDf = timerBaseDf.selectExpr(
       TimerTestUtils.getTimerSelectExpressions(s"$$${timerPrefix}Timers_timestampToKey"): _*)
@@ -261,7 +281,8 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
       allBytesData,
       s"$$${timerPrefix}Timers_timestampToKey",
       timestampToKeySchema,
-      dummySchema)
+      dummySchema,
+      partitionKeyExtractor = Some(compositeKey => compositeKey.getStruct(1)))
   }
 
   /**
@@ -278,7 +299,8 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
       tempDir: String,
       keySchema: StructType,
       valueSchema: StructType,
-      storeName: Option[String] = None): Unit = {
+      storeName: Option[String] = None,
+      partitionKeyExtractor: Option[Row => Row] = None): Unit = {
     val normalDf = getNormalReadDf(tempDir, storeName)
     val bytesDf = getBytesReadDf(tempDir, storeName)
 
@@ -288,7 +310,8 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
       bytesDf.collect(),
       StateStore.DEFAULT_COL_FAMILY_NAME,
       keySchema,
-      valueSchema)
+      valueSchema,
+      partitionKeyExtractor)
   }
 
   /**
@@ -307,7 +330,8 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
       colFamilyName: String,
       sharedBytesDf: DataFrame,
       keySchema: StructType,
-      valueSchema: StructType): Unit = {
+      valueSchema: StructType,
+      partitionKeyExtractor: Option[Row => Row] = None): Unit = {
     val normalDf = getNormalReadDf(tempDir, Option(colFamilyName))
 
     compareNormalAndBytesData(
@@ -315,7 +339,8 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
       sharedBytesDf.collect(),
       colFamilyName,
       keySchema,
-      valueSchema)
+      valueSchema,
+      partitionKeyExtractor)
   }
 
   // Run all tests with both changelog checkpointing enabled and disabled
@@ -399,7 +424,8 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
 
         val (keySchema, valueSchema) = SessionWindowTestUtils.getSchemas()
 
-        validateStateStore(tempDir.getAbsolutePath, keySchema, valueSchema)
+        validateStateStore(tempDir.getAbsolutePath, keySchema, valueSchema,
+          partitionKeyExtractor = Some(row => Row(row.getString(0))))
       }
     }
 
@@ -414,13 +440,12 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
             val normalData = getNormalReadDf(tempDir.getAbsolutePath).collect()
             val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
 
-            validateBytesReadDfSchema(bytesDf)
-            compareNormalAndBytesData(
-              normalData, bytesDf.collect(), "default", keySchema, valueSchema)
-          }
+          validateBytesReadDfSchema(bytesDf)
+          compareNormalAndBytesData(
+            normalData, bytesDf.collect(), "default", keySchema, valueSchema)
         }
       }
-    )
+    })
 
     Seq(1, 2).foreach(version =>
       testWithChangelogConfig(s"stream-stream join, state ver $version") {
@@ -448,7 +473,9 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
                 tempDir.getAbsolutePath,
                 keyWithIndexKeySchema,
                 keyWithIndexValueSchema,
-                Some(storeName))
+                Some(storeName),
+                partitionKeyExtractor = Some(compositeKey =>
+                  Row(compositeKey.getInt(0))))
             }
           }
         }
@@ -514,7 +541,8 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
           tempDir.getAbsolutePath, allBytesData,
           MultiStateVarProcessorTestUtils.ITEMS_MAP, mapKeySchema, mapValueSchema,
           selectExprs = MultiStateVarProcessorTestUtils.getSelectExpressions(
-            MultiStateVarProcessorTestUtils.ITEMS_MAP))
+            MultiStateVarProcessorTestUtils.ITEMS_MAP),
+          partitionKeyExtractor = Some(compositeKey => compositeKey.getStruct(0)))
       }
     }
 
@@ -616,13 +644,18 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
         val (ttlIndexKeySchema, ttlValueSchema) = schemas(TTLProcessorUtils.LIST_STATE_TTL_INDEX)
         val (_, minExpiryValueSchema) = schemas(TTLProcessorUtils.LIST_STATE_MIN)
         val (_, countValueSchema) = schemas(TTLProcessorUtils.LIST_STATE_COUNT)
+        val ttlColFamilyPartitionKeyExtractor: Option[Row => Row] =
+          Some(compositeKey => compositeKey.getStruct(1))
         val columnFamilyAndKeyValueSchema = Seq(
-          (TTLProcessorUtils.LIST_STATE_TTL_INDEX, ttlIndexKeySchema, ttlValueSchema),
-          (TTLProcessorUtils.LIST_STATE_MIN, groupByKeySchema, minExpiryValueSchema),
-          (TTLProcessorUtils.LIST_STATE_COUNT, groupByKeySchema, countValueSchema)
+          (TTLProcessorUtils.LIST_STATE_TTL_INDEX,
+            ttlIndexKeySchema, ttlValueSchema,
+            ttlColFamilyPartitionKeyExtractor),
+          (TTLProcessorUtils.LIST_STATE_MIN, groupByKeySchema, minExpiryValueSchema, None),
+          (TTLProcessorUtils.LIST_STATE_COUNT, groupByKeySchema, countValueSchema, None)
         )
         columnFamilyAndKeyValueSchema.foreach(pair => {
-          validateColumnFamily(tempDir.getAbsolutePath, pair._1, bytesDf, pair._2, pair._3)
+          validateColumnFamily(
+            tempDir.getAbsolutePath, pair._1, bytesDf, pair._2, pair._3, pair._4)
         })
       }
     }
@@ -665,12 +698,14 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
         readAndValidateStateVar(
           tempDir.getAbsolutePath, allBytesData,
           stateVarName = TTLProcessorUtils.MAP_STATE, compositeKeySchema, mapStateValueSchema,
-          selectExprs = TTLProcessorUtils.getTTLSelectExpressions(TTLProcessorUtils.MAP_STATE))
+          selectExprs = TTLProcessorUtils.getTTLSelectExpressions(TTLProcessorUtils.MAP_STATE),
+          partitionKeyExtractor = Some(compositeKey => compositeKey.getStruct(0)))
 
         // Validate $ttl_mapState column family
         readAndValidateStateVar(
           tempDir.getAbsolutePath, allBytesData,
-          stateVarName = TTLProcessorUtils.MAP_STATE_TTL_INDEX, ttlIndexKeySchema, dummyValueSchema)
+          stateVarName = TTLProcessorUtils.MAP_STATE_TTL_INDEX, ttlIndexKeySchema, dummyValueSchema,
+          partitionKeyExtractor = Some(ttlKey => ttlKey.getStruct(1).getStruct(0)))
       }
     }
 
@@ -728,7 +763,8 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
           allBytesData,
           TTLProcessorUtils.VALUE_STATE_TTL_INDEX,
           ttlIndexKeySchema,
-          dummyValueSchema)
+          dummyValueSchema,
+          partitionKeyExtractor = Some(ttlKey => ttlKey.getStruct(1)))
       }
     }
 
@@ -762,7 +798,9 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
               colFamilyName,
               stateBytesDf,
               keyWithIndexKeySchema,
-              keyWithIndexValueSchema)
+              keyWithIndexValueSchema,
+              partitionKeyExtractor = Some(compositeKey =>
+                Row(compositeKey.getInt(0))))
           }
         }
       }

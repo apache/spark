@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, LocalRelation, LogicalPlan, UnionLoop, UnionLoopRef}
 import org.apache.spark.sql.types.BooleanType
 
 class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
@@ -192,6 +192,91 @@ class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
 
     assert(baselinePlan != testPlan)
     assert(NormalizePlan(baselinePlan) == NormalizePlan(testPlan))
+  }
+
+  test("Normalize UnionLoopRef IDs") {
+    val col1 = $"col1".int
+    val col2 = col1.newInstance()
+
+    // Create two UnionLoopRefs with different loopIds
+    val baselineLoopRef = UnionLoopRef(
+      loopId = 100L,
+      output = Seq(col2),
+      accumulated = false
+    )
+
+    val testLoopRef = UnionLoopRef(
+      loopId = 200L,
+      output = Seq(col2),
+      accumulated = false
+    )
+
+    // Before normalization, plans are different
+    assert(baselineLoopRef != testLoopRef)
+
+    // After normalization, they should be equal (loopIds normalized)
+    assert(NormalizePlan(baselineLoopRef) == NormalizePlan(testLoopRef))
+  }
+
+  test("Normalize UnionLoop IDs and outputAttrIds and UnionLoopRefIds") {
+    val col1 = $"col1".int
+    val col2 = col1.newInstance()
+    val anchor = LocalRelation(col1)
+
+    // Create two UnionLoops with different IDs and different outputAttrIds
+    val unionLoop1 = UnionLoop(
+      id = 100L,
+      anchor = anchor,
+      recursion = UnionLoopRef(loopId = 100L, output = Seq(col2), accumulated = false),
+      outputAttrIds = Seq(ExprId(1), ExprId(2))
+    )
+
+    val unionLoop2 = UnionLoop(
+      id = 200L,
+      anchor = anchor,
+      recursion = UnionLoopRef(loopId = 200L, output = Seq(col2), accumulated = false),
+      outputAttrIds = Seq(ExprId(1), ExprId(2))
+    )
+
+    // Before normalization, plans are different
+    assert(unionLoop1 != unionLoop2)
+
+    // After normalization, they should be equal (IDs normalized, outputAttrIds zeroed)
+    assert(NormalizePlan(unionLoop1) == NormalizePlan(unionLoop2))
+  }
+
+  test("Normalize rCTEs") {
+    val col1 = $"col1".int
+    val col2 = col1.newInstance()
+    val anchor = LocalRelation(col1)
+
+    // Create two full recursive CTEs - CTERelationDef with a UnionLoop and UnionLoopRef with the
+    // same id
+    val recursiveCTE1 = CTERelationDef(
+      child = UnionLoop(
+        id = 100L,
+        anchor = anchor,
+        recursion = UnionLoopRef(loopId = 100L, output = Seq(col2), accumulated = false),
+        outputAttrIds = Seq(ExprId(1), ExprId(2))
+      ),
+      id = 100L
+    )
+
+    val recursiveCTE2 = CTERelationDef(
+      child = UnionLoop(
+        id = 200L,
+        anchor = anchor,
+        recursion = UnionLoopRef(loopId = 200L, output = Seq(col2), accumulated = false),
+        outputAttrIds = Seq(ExprId(1), ExprId(2))
+      ),
+      id = 200L
+    )
+
+    // Before normalization, plans are different
+    assert(recursiveCTE1 != recursiveCTE2)
+
+    // After normalization, they should be equal
+    assert(NormalizePlan(recursiveCTE1) == NormalizePlan(recursiveCTE2))
   }
 
   private def setTimezoneForAllExpression(plan: LogicalPlan): LogicalPlan = {

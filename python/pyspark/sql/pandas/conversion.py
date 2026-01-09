@@ -849,7 +849,7 @@ class SparkConversionMixin:
                             StringType(), from_arrow_type(arrow_type, prefer_timestamp_ntz)
                         )
                     else:
-                        spark_type = from_arrow_type(field_type)
+                        spark_type = from_arrow_type(field_type, prefer_timestamp_ntz)
                     struct.add(name, spark_type, nullable=field.nullable)
             else:
                 for name, field in zip(schema, arrow_schema):

@@ -67,6 +67,7 @@ jobs:
       env:
         ASF_USERNAME: ${{ secrets.NEXUS_USER }}
         ASF_PASSWORD: ${{ secrets.NEXUS_PW }}
+        ASF_NEXUS_TOKEN: ${{ secrets.NEXUS_TOKEN }}
         GPG_KEY: "not_used"
         GPG_PASSPHRASE: "not_used"
         GIT_REF: ${{ matrix.branch }}

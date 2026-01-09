@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
@@ -85,6 +85,30 @@ class SQLFunctionSuite extends QueryTest with SharedSparkSession {
           |""".stripMargin)
       checkAnswer(sql("SELECT bar()"), Row(8))
       checkAnswer(sql("SELECT bar(1)"), Row(2))
+    }
+  }
+
+
+  test("SQL UDF in higher-order function should fail with clear error message") {
+    withUserDefinedFunction("test_lower_udf" -> false) {
+      sql(
+        """
+          |CREATE FUNCTION test_lower_udf(s STRING)
+          |RETURNS STRING
+          |RETURN lower(s)
+          |""".stripMargin)
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT transform(array('A', 'B', 'C'), x -> test_lower_udf(x))").collect()
+        },
+        condition = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_SQL_UDF",
+        parameters = Map("funcName" -> "spark_catalog.default.test_lower_udf"),
+        context = ExpectedContext(
+          fragment = "test_lower_udf(x)",
+          start = 44,
+          stop = 60
+        )
+      )
     }
   }
 }

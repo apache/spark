@@ -32,12 +32,15 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.analysis.TableFunctionRegistry.TableFunctionBuilder
 import org.apache.spark.sql.catalyst.catalog.SQLFunction.parseDefault
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Cast, Expression, ExpressionInfo, LateralSubquery, NamedArgumentExpression, NamedExpression, OuterReference, ScalarSubquery, UpCast}
+import org.apache.spark.sql.catalyst.expressions.NamedLambdaVariable
+import org.apache.spark.sql.catalyst.expressions.UnresolvedNamedLambdaVariable
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter, LateralJoin, LogicalPlan, NamedParametersSupport, OneRowRelation, Project, SubqueryAlias, View}
@@ -1633,6 +1636,20 @@ class SessionCatalog(
       throw UserDefinedFunctionErrors.notAScalarFunction(function.name.nameParts)
     }
     (input: Seq[Expression]) => {
+      // Check if any input contains a lambda variable
+      val hasLambdaVar = input.exists { expr =>
+        expr.find {
+          case _: NamedLambdaVariable => true
+          case _: UnresolvedNamedLambdaVariable => true
+          case _ => false
+        }.isDefined
+      }
+      if (hasLambdaVar) {
+        throw new AnalysisException(
+          errorClass = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_SQL_UDF",
+          messageParameters = Map(
+            "funcName" -> function.name.unquotedString))
+      }
       val args = rearrangeArguments(function.inputParam, input, function.name.toString)
       val returnType = function.getScalarFuncReturnType
       SQLFunctionExpression(
@@ -1710,6 +1727,21 @@ class SessionCatalog(
       if (input.size > paramSize) {
         throw QueryCompilationErrors.wrongNumArgsError(
           name, paramSize.toString, input.size)
+      }
+
+      // Check if any input contains a lambda variable
+      val hasLambdaVar = input.exists { expr =>
+        expr.find {
+          case _: NamedLambdaVariable => true
+          case _: UnresolvedNamedLambdaVariable => true
+          case _ => false
+        }.isDefined
+      }
+      if (hasLambdaVar) {
+        throw new AnalysisException(
+          errorClass = "UNSUPPORTED_FEATURE.LAMBDA_FUNCTION_WITH_SQL_UDF",
+          messageParameters = Map(
+            "funcName" -> function.name.unquotedString))
       }
 
       val inputs = inputParam.map { param =>

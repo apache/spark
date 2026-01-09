@@ -3433,6 +3433,8 @@ class SparkConnectPlanner(
         writer.trigger(Trigger.Once())
       case TriggerCase.CONTINUOUS_CHECKPOINT_INTERVAL =>
         writer.trigger(Trigger.Continuous(writeOp.getContinuousCheckpointInterval))
+      case TriggerCase.REAL_TIME_BATCH_DURATION =>
+        writer.trigger(Trigger.RealTime(writeOp.getRealTimeBatchDuration))
       case TriggerCase.TRIGGER_NOT_SET =>
     }
 
