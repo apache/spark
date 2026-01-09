@@ -93,6 +93,11 @@ class MemoryStateStore extends StateStore() {
     throw new UnsupportedOperationException("Doesn't support multiple values per key")
   }
 
+  override def initiateEventTimeAwareStateOperations(
+      columnFamilyName: String): EventTimeAwareStateOperations = {
+    throw new UnsupportedOperationException("Doesn't support event time aware operations")
+  }
+
   override def getStateStoreCheckpointInfo(): StateStoreCheckpointInfo = {
     StateStoreCheckpointInfo(id.partitionId, version + 1, None, None)
   }
