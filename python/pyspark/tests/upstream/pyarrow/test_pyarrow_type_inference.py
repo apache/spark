@@ -22,16 +22,12 @@ This test monitors the behavior of PyArrow's type inference to ensure
 PySpark's assumptions about PyArrow behavior remain valid across versions.
 
 Test cases are organized by input category:
-1. Nullable data - None value handling
-2. Python list - Plain Python lists
-3. Python tuple - Plain Python tuples
-4. Python dict - Plain Python dicts (inferred as struct)
-5. Pandas Series (numpy-backed)
-6. Pandas nullable extension types
-7. Pandas ArrowDtype
-8. NumPy array
-9. Nested list types
-10. Explicit type specification
+1. Nullable data - with None values
+2. Plain Python instances - list, tuple, dict (struct)
+3. Pandas instances - numpy-backed Series, nullable extension types, ArrowDtype
+4. NumPy array - all numeric dtypes, datetime64, timedelta64
+5. Nested types - list of list, struct, map
+6. Explicit type specification - large_list, fixed_size_list, map_, large_string, large_binary
 """
 
 import datetime
@@ -98,8 +94,10 @@ class PyArrowTypeInferenceTests(unittest.TestCase):
         self._run_inference_tests(cases)
 
     # =========================================================================
-    # 2. PYTHON LIST - Type inference from Python lists
+    # 2. PLAIN PYTHON INSTANCES - list, tuple, dict
     # =========================================================================
+    # 2a. Python list
+    # -------------------------------------------------------------------------
     def test_plain_python_list(self):
         """Test type inference from Python lists."""
         import math
@@ -200,9 +198,9 @@ class PyArrowTypeInferenceTests(unittest.TestCase):
         with self.assertRaises(OverflowError):
             pa.array([2**63])  # Just over int64 max
 
-    # =========================================================================
-    # 3. PYTHON TUPLE - Type inference from Python tuples
-    # =========================================================================
+    # -------------------------------------------------------------------------
+    # 2b. Python tuple
+    # -------------------------------------------------------------------------
     def test_plain_python_tuple(self):
         """Test type inference from Python tuples."""
         import pyarrow as pa
@@ -226,9 +224,9 @@ class PyArrowTypeInferenceTests(unittest.TestCase):
         ]
         self._run_inference_tests(cases)
 
-    # =========================================================================
-    # 4. PYTHON DICT - Type inference from Python dicts (struct)
-    # =========================================================================
+    # -------------------------------------------------------------------------
+    # 2c. Python dict (struct)
+    # -------------------------------------------------------------------------
     def test_plain_python_dict(self):
         """Test type inference from Python dicts (inferred as struct)."""
         import pyarrow as pa
@@ -265,8 +263,10 @@ class PyArrowTypeInferenceTests(unittest.TestCase):
         self._run_inference_tests(cases)
 
     # =========================================================================
-    # 5. PANDAS SERIES (numpy-backed) - Default pandas Series
+    # 3. PANDAS INSTANCES - Series with various dtypes
     # =========================================================================
+    # 3a. Pandas Series (numpy-backed)
+    # -------------------------------------------------------------------------
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_pandas_series_numpy_backed(self):
         """Test type inference from numpy-backed pandas Series."""
@@ -329,9 +329,9 @@ class PyArrowTypeInferenceTests(unittest.TestCase):
         ]
         self._run_inference_tests(cases)
 
-    # =========================================================================
-    # 6. PANDAS NULLABLE EXTENSION TYPES
-    # =========================================================================
+    # -------------------------------------------------------------------------
+    # 3b. Pandas nullable extension types
+    # -------------------------------------------------------------------------
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_pandas_series_nullable_extension(self):
         """Test type inference from pandas nullable extension types."""
@@ -376,9 +376,9 @@ class PyArrowTypeInferenceTests(unittest.TestCase):
         ]
         self._run_inference_tests(cases)
 
-    # =========================================================================
-    # 7. PANDAS ARROWDTYPE
-    # =========================================================================
+    # -------------------------------------------------------------------------
+    # 3c. Pandas ArrowDtype
+    # -------------------------------------------------------------------------
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_pandas_series_arrow_dtype(self):
         """Test type inference from PyArrow-backed pandas Series (ArrowDtype)."""
@@ -421,7 +421,7 @@ class PyArrowTypeInferenceTests(unittest.TestCase):
         self._run_inference_tests(cases)
 
     # =========================================================================
-    # 8. NUMPY ARRAY
+    # 4. NUMPY ARRAY - all numeric dtypes, datetime64, timedelta64
     # =========================================================================
     def test_numpy_array(self):
         """Test type inference from numpy arrays."""
@@ -508,7 +508,7 @@ class PyArrowTypeInferenceTests(unittest.TestCase):
         self.assertEqual(pa.array([np.timedelta64("NaT", "ns")]).null_count, 1)
 
     # =========================================================================
-    # 9. NESTED LIST TYPES
+    # 5. NESTED TYPES - list of list, struct, map
     # =========================================================================
     def test_nested_list_types(self):
         """Test type inference for nested list types."""
@@ -517,6 +517,7 @@ class PyArrowTypeInferenceTests(unittest.TestCase):
         # (name, data, expected_type)
         # fmt: off
         cases = [
+            # ---- List types ----
             ("list_int64",           [[1, 2], [3, 4, 5]],                               pa.list_(pa.int64())),
             ("list_float64",         [[1.0, 2.0], [3.0]],                               pa.list_(pa.float64())),
             ("list_string",          [["a", "b"], ["c"]],                               pa.list_(pa.string())),
@@ -525,29 +526,62 @@ class PyArrowTypeInferenceTests(unittest.TestCase):
             ("nested_list_2d",       [[[1, 2], [3]], [[4, 5]]],                         pa.list_(pa.list_(pa.int64()))),
             ("nested_list_3d",       [[[[1]]]],                                         pa.list_(pa.list_(pa.list_(pa.int64())))),
             ("list_mixed_int_float", [[1, 2.0], [3, 4.0]],                              pa.list_(pa.float64())),
+
+            # ---- Struct types ----
+            ("struct_of_list",       [{"items": [1, 2, 3]}],                            pa.struct([("items", pa.list_(pa.int64()))])),
+            ("struct_of_struct",     [{"outer": {"inner": 1}}],                         pa.struct([("outer", pa.struct([("inner", pa.int64())]))])),
+            ("complex_struct",       [{"items": [1, 2], "nested": {"val": "a"}}],       pa.struct([("items", pa.list_(pa.int64())), ("nested", pa.struct([("val", pa.string())]))])),
+
+            # ---- List of struct ----
+            ("list_of_struct",       [[{"x": 1}, {"x": 2}]],                            pa.list_(pa.struct([("x", pa.int64())]))),
+            ("list_list_struct",     [[[{"x": 1}]]],                                    pa.list_(pa.list_(pa.struct([("x", pa.int64())])))),
             # fmt: on
         ]
         self._run_inference_tests(cases)
 
     # =========================================================================
-    # 10. EXPLICIT TYPE SPECIFICATION
+    # 6. EXPLICIT TYPE SPECIFICATION - large_list, fixed_size_list, map_, etc.
     # =========================================================================
     def test_explicit_type_specification(self):
-        """Test that pa.array uses explicit type when specified."""
+        """Test types that require explicit specification.
+
+        - Large types (large_list, large_string, large_binary) are NEVER auto-inferred.
+        - Map types cannot be inferred without explicit type.
+        """
         import pyarrow as pa
 
         # (name, data, explicit_type & expected_type)
         # fmt: off
         cases = [
+            # ---- Large types ----
             ("large_list",          [[1, 2], [3, 4]],                                   pa.large_list(pa.int64())),
-            ("fixed_size_list",     [[1, 2, 3], [4, 5, 6]],                             pa.list_(pa.int64(), 3)),
-            ("map_str_int",         [[("a", 1), ("b", 2)]],                             pa.map_(pa.string(), pa.int64())),
             ("large_string",        ["hello", "world"],                                 pa.large_string()),
             ("large_binary",        [b"hello", b"world"],                               pa.large_binary()),
+
+            # ---- Fixed size types ----
+            ("fixed_size_list",     [[1, 2, 3], [4, 5, 6]],                             pa.list_(pa.int64(), 3)),
+
+            # ---- Map types (cannot be inferred, require explicit type) ----
+            ("map_str_int",         [[("a", 1), ("b", 2)]],                             pa.map_(pa.string(), pa.int64())),
+            ("map_int_str",         [[(1, "a"), (2, "b")]],                             pa.map_(pa.int64(), pa.string())),
+            ("map_of_list",         [[("k", [1, 2, 3])]],                               pa.map_(pa.string(), pa.list_(pa.int64()))),
+            ("map_of_struct",       [[("k", {"x": 1})]],                                pa.map_(pa.string(), pa.struct([("x", pa.int64())]))),
+            ("list_of_map",         [[[("a", 1)], [("b", 2)]]],                         pa.list_(pa.map_(pa.string(), pa.int64()))),
             # fmt: on
         ]
         self._run_inference_tests(cases, use_expected_as_explicit=True)
 
+        # Map types cannot be inferred without explicit type - raises error
+        with self.assertRaises(pa.ArrowTypeError):
+            pa.array([[("a", 1), ("b", 2)]])  # map_str_int
+        with self.assertRaises(pa.ArrowInvalid):
+            pa.array([[(1, "a"), (2, "b")]])  # map_int_str
+        with self.assertRaises(pa.ArrowTypeError):
+            pa.array([[("k", [1, 2, 3])]])  # map_of_list
+        with self.assertRaises(pa.ArrowTypeError):
+            pa.array([[("k", {"x": 1})]])  # map_of_struct
+        with self.assertRaises(pa.ArrowTypeError):
+            pa.array([[[("a", 1)], [("b", 2)]]])  # list_of_map
 
 if __name__ == "__main__":
     from pyspark.testing import main
