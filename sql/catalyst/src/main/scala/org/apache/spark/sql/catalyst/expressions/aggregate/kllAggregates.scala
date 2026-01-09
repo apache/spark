@@ -108,9 +108,10 @@ case class KllSketchAggBigint(
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
     if (defaultCheck.isFailure) {
-      return defaultCheck
+      defaultCheck
+    } else {
+      checkKInputDataTypes()
     }
-    checkKInputDataTypes()
   }
 
   override def createAggregationBuffer(): KllLongsSketch =
@@ -123,26 +124,25 @@ case class KllSketchAggBigint(
    * Note, null values are ignored.
    */
   override def update(sketch: KllLongsSketch, input: InternalRow): KllLongsSketch = {
-    // Return early for null values.
     val v = child.eval(input)
     if (v == null) {
-      return sketch
+      sketch
+    } else {
+      // Handle the different data types for sketch updates.
+      child.dataType match {
+        case ByteType =>
+          sketch.update(v.asInstanceOf[Byte].toLong)
+        case IntegerType =>
+          sketch.update(v.asInstanceOf[Int].toLong)
+        case LongType =>
+          sketch.update(v.asInstanceOf[Long])
+        case ShortType =>
+          sketch.update(v.asInstanceOf[Short].toLong)
+        case _ =>
+          throw unexpectedInputDataTypeError(child)
+      }
+      sketch
     }
-    // Handle the different data types for sketch updates.
-    child.dataType match {
-      case ByteType =>
-        sketch.update(v.asInstanceOf[Byte].toLong)
-      case IntegerType =>
-        sketch.update(v.asInstanceOf[Int].toLong)
-      case LongType =>
-        sketch.update(v.asInstanceOf[Long])
-      case ShortType =>
-        sketch.update(v.asInstanceOf[Short].toLong)
-      case _ =>
-        throw unexpectedInputDataTypeError(child)
-    }
-
-    sketch
   }
 
   /** Merges an input sketch into the current aggregation buffer. */
@@ -250,9 +250,10 @@ case class KllSketchAggFloat(
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
     if (defaultCheck.isFailure) {
-      return defaultCheck
+      defaultCheck
+    } else {
+      checkKInputDataTypes()
     }
-    checkKInputDataTypes()
   }
 
   override def createAggregationBuffer(): KllFloatsSketch =
@@ -265,20 +266,19 @@ case class KllSketchAggFloat(
    * Note, Null values are ignored.
    */
   override def update(sketch: KllFloatsSketch, input: InternalRow): KllFloatsSketch = {
-    // Return early for null values.
     val v = child.eval(input)
     if (v == null) {
-      return sketch
+      sketch
+    } else {
+      // Handle the different data types for sketch updates.
+      child.dataType match {
+        case FloatType =>
+          sketch.update(v.asInstanceOf[Float])
+        case _ =>
+          throw unexpectedInputDataTypeError(child)
+      }
+      sketch
     }
-    // Handle the different data types for sketch updates.
-    child.dataType match {
-      case FloatType =>
-        sketch.update(v.asInstanceOf[Float])
-      case _ =>
-        throw unexpectedInputDataTypeError(child)
-    }
-
-    sketch
   }
 
   /** Merges an input sketch into the current aggregation buffer. */
@@ -386,9 +386,10 @@ case class KllSketchAggDouble(
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
     if (defaultCheck.isFailure) {
-      return defaultCheck
+      defaultCheck
+    } else {
+      checkKInputDataTypes()
     }
-    checkKInputDataTypes()
   }
 
   override def createAggregationBuffer(): KllDoublesSketch =
@@ -401,22 +402,21 @@ case class KllSketchAggDouble(
    * Note, Null values are ignored.
    */
   override def update(sketch: KllDoublesSketch, input: InternalRow): KllDoublesSketch = {
-    // Return early for null values.
     val v = child.eval(input)
     if (v == null) {
-      return sketch
+      sketch
+    } else {
+      // Handle the different data types for sketch updates.
+      child.dataType match {
+        case DoubleType =>
+          sketch.update(v.asInstanceOf[Double])
+        case FloatType =>
+          sketch.update(v.asInstanceOf[Float].toDouble)
+        case _ =>
+          throw unexpectedInputDataTypeError(child)
+      }
+      sketch
     }
-    // Handle the different data types for sketch updates.
-    child.dataType match {
-      case DoubleType =>
-        sketch.update(v.asInstanceOf[Double])
-      case FloatType =>
-        sketch.update(v.asInstanceOf[Float].toDouble)
-      case _ =>
-        throw unexpectedInputDataTypeError(child)
-    }
-
-    sketch
   }
 
   /** Merges an input sketch into the current aggregation buffer. */
@@ -702,9 +702,10 @@ abstract class KllMergeAggBase[T <: KllSketch]
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
     if (defaultCheck.isFailure) {
-      return defaultCheck
+      defaultCheck
+    } else {
+      checkKInputDataTypes()
     }
-    checkKInputDataTypes()
   }
 
   /**
@@ -727,21 +728,20 @@ abstract class KllMergeAggBase[T <: KllSketch]
    * Note, null values are ignored.
    */
   override def update(sketchOption: Option[T], input: InternalRow): Option[T] = {
-    // Return early for null values.
     val v = child.eval(input)
     if (v == null) {
-      return sketchOption
-    }
-
-    try {
-      val sketchBytes = v.asInstanceOf[Array[Byte]]
-      val inputSketch = wrapSketch(sketchBytes)
-      val sketch = sketchOption.getOrElse(newHeapInstance(inputSketch.getK()))
-      sketch.merge(inputSketch)
-      Some(sketch)
-    } catch {
-      case _: Exception =>
-        throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
+      sketchOption
+    } else {
+      try {
+        val sketchBytes = v.asInstanceOf[Array[Byte]]
+        val inputSketch = wrapSketch(sketchBytes)
+        val sketch = sketchOption.getOrElse(newHeapInstance(inputSketch.getK()))
+        sketch.merge(inputSketch)
+        Some(sketch)
+      } catch {
+        case _: Exception =>
+          throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
+      }
     }
   }
 

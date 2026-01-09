@@ -327,6 +327,76 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT
+  parity,
+  kll_sketch_get_n_bigint(kll_merge_agg_bigint(sketch_col)) AS total_count
+FROM (
+  SELECT
+    col1 % 2 AS parity,
+    kll_sketch_agg_bigint(col1) AS sketch_col
+  FROM t_int_1_5_through_7_11
+  GROUP BY col1 % 2
+) grouped_sketches
+GROUP BY parity
+HAVING kll_sketch_get_n_bigint(kll_merge_agg_bigint(sketch_col)) > 3
+-- !query analysis
+Filter (total_count#xL > cast(3 as bigint))
++- Aggregate [parity#x], [parity#x, kll_sketch_get_n_bigint(kll_merge_agg_bigint(sketch_col#x, None, 0, 0)) AS total_count#xL]
+   +- SubqueryAlias grouped_sketches
+      +- Aggregate [(col1#x % 2)], [(col1#x % 2) AS parity#x, kll_sketch_agg_bigint(col1#x, None, 0, 0) AS sketch_col#x]
+         +- SubqueryAlias spark_catalog.default.t_int_1_5_through_7_11
+            +- Relation spark_catalog.default.t_int_1_5_through_7_11[col1#x,col2#x] parquet
+
+
+-- !query
+SELECT kll_sketch_get_n_bigint(kll_merge_agg_bigint(sketch_col)) AS empty_merge_n
+FROM (
+  SELECT kll_sketch_agg_bigint(col1) AS sketch_col
+  FROM t_int_1_5_through_7_11
+  WHERE col1 > 1000
+) empty_sketches
+-- !query analysis
+Aggregate [kll_sketch_get_n_bigint(kll_merge_agg_bigint(sketch_col#x, None, 0, 0)) AS empty_merge_n#xL]
++- SubqueryAlias empty_sketches
+   +- Aggregate [kll_sketch_agg_bigint(col1#x, None, 0, 0) AS sketch_col#x]
+      +- Filter (col1#x > 1000)
+         +- SubqueryAlias spark_catalog.default.t_int_1_5_through_7_11
+            +- Relation spark_catalog.default.t_int_1_5_through_7_11[col1#x,col2#x] parquet
+
+
+-- !query
+SELECT kll_sketch_get_n_float(kll_merge_agg_float(sketch_col)) AS empty_merge_n
+FROM (
+  SELECT kll_sketch_agg_float(col1) AS sketch_col
+  FROM t_float_1_5_through_7_11
+  WHERE col1 > 1000.0
+) empty_sketches
+-- !query analysis
+Aggregate [kll_sketch_get_n_float(kll_merge_agg_float(sketch_col#x, None, 0, 0)) AS empty_merge_n#xL]
++- SubqueryAlias empty_sketches
+   +- Aggregate [kll_sketch_agg_float(col1#x, None, 0, 0) AS sketch_col#x]
+      +- Filter (cast(col1#x as double) > cast(1000.0 as double))
+         +- SubqueryAlias spark_catalog.default.t_float_1_5_through_7_11
+            +- Relation spark_catalog.default.t_float_1_5_through_7_11[col1#x,col2#x] parquet
+
+
+-- !query
+SELECT kll_sketch_get_n_double(kll_merge_agg_double(sketch_col)) AS empty_merge_n
+FROM (
+  SELECT kll_sketch_agg_double(col1) AS sketch_col
+  FROM t_double_1_5_through_7_11
+  WHERE col1 > 1000.0
+) empty_sketches
+-- !query analysis
+Aggregate [kll_sketch_get_n_double(kll_merge_agg_double(sketch_col#x, None, 0, 0)) AS empty_merge_n#xL]
++- SubqueryAlias empty_sketches
+   +- Aggregate [kll_sketch_agg_double(col1#x, None, 0, 0) AS sketch_col#x]
+      +- Filter (col1#x > cast(1000.0 as double))
+         +- SubqueryAlias spark_catalog.default.t_double_1_5_through_7_11
+            +- Relation spark_catalog.default.t_double_1_5_through_7_11[col1#x,col2#x] parquet
+
+
+-- !query
 SELECT lower(kll_sketch_to_string_bigint(agg)) LIKE '%kll%' AS str_contains_kll,
        abs(kll_sketch_get_quantile_bigint(agg, 0.5) - 4) < 1 AS median_close_to_4,
        abs(kll_sketch_get_rank_bigint(agg, 3) - 0.4) < 0.1 AS rank3_close_to_0_4
@@ -1238,6 +1308,20 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "kll_sketch_agg_bigint(col1, '100')"
   } ]
 }
+
+
+-- !query
+SELECT kll_merge_agg_bigint(sketch_col) AS wrong_type_merge
+FROM (
+  SELECT kll_sketch_agg_float(col1) AS sketch_col
+  FROM t_float_1_5_through_7_11
+) float_sketches
+-- !query analysis
+Aggregate [kll_merge_agg_bigint(sketch_col#x, None, 0, 0) AS wrong_type_merge#x]
++- SubqueryAlias float_sketches
+   +- Aggregate [kll_sketch_agg_float(col1#x, None, 0, 0) AS sketch_col#x]
+      +- SubqueryAlias spark_catalog.default.t_float_1_5_through_7_11
+         +- Relation spark_catalog.default.t_float_1_5_through_7_11[col1#x,col2#x] parquet
 
 
 -- !query

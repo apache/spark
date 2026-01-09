@@ -483,7 +483,7 @@ FROM VALUES (1), (2), (3), (4), (5), (6), (7) tab(col);
 
 ### kll_merge_agg_*
 
-Aggregates multiple KLL sketches of the same type by merging them together. This is useful for combining sketches created in separate aggregations (e.g., from different partitions or time windows).
+Aggregates multiple KLL sketches of the same type by merging them together. This is useful for combining sketches created in separate aggregations (e.g., from different partitions or time windows). These are aggregate functions.
 
 **Syntax:**
 ```sql
@@ -531,7 +531,7 @@ FROM (
 - When `k` is not specified, the merged sketch adopts the k value from the first input sketch.
 - The merge operation can handle input sketches with different k values.
 - NULL values are ignored during aggregation.
-- Use this function when you need to merge multiple sketches in an aggregation context. For merging exactly two sketches, use the scalar `kll_sketch_merge_*` function instead.
+- Use this function when you need to merge multiple sketches in an aggregation context. For merging exactly two sketches, use the scalar `kll_sketch_merge_*` functions instead.
 
 ---
 
@@ -582,7 +582,7 @@ FROM VALUES (1), (2), (3), (4), (5), (6), (7) tab(col);
 
 ### kll_sketch_merge_*
 
-Merges two KLL sketches of the same type.
+Merges two KLL sketches of the same type. These are scalar functions.
 
 **Syntax:**
 ```sql
@@ -611,6 +611,10 @@ FROM VALUES (1, 6), (2, 7), (3, 8), (4, 9), (5, 10) tab(col1, col2);
 
 **Errors:**
 - Throws an error if sketches are of incompatible types or formats.
+
+**Notes:**
+- The merge operation can handle input sketches with different k values.
+- Use this function when you need to merge exactly two sketches in an scalar context. For merging multiple sketches in an aggregation context, use the aggregate `kll_merge_agg_*` functions instead.
 
 ---
 

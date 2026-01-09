@@ -163,6 +163,44 @@ FROM t_byte_1_5_through_7_11;
 -- Tests for KllMergeAgg* aggregate functions
 -- These functions merge multiple binary sketch representations
 
+-- Test GROUP BY with kll_merge_agg_bigint and HAVING clause
+SELECT
+  parity,
+  kll_sketch_get_n_bigint(kll_merge_agg_bigint(sketch_col)) AS total_count
+FROM (
+  SELECT
+    col1 % 2 AS parity,
+    kll_sketch_agg_bigint(col1) AS sketch_col
+  FROM t_int_1_5_through_7_11
+  GROUP BY col1 % 2
+) grouped_sketches
+GROUP BY parity
+HAVING kll_sketch_get_n_bigint(kll_merge_agg_bigint(sketch_col)) > 3;
+
+-- Test empty aggregation: zero rows input for kll_merge_agg_bigint
+SELECT kll_sketch_get_n_bigint(kll_merge_agg_bigint(sketch_col)) AS empty_merge_n
+FROM (
+  SELECT kll_sketch_agg_bigint(col1) AS sketch_col
+  FROM t_int_1_5_through_7_11
+  WHERE col1 > 1000
+) empty_sketches;
+
+-- Test empty aggregation: zero rows input for kll_merge_agg_float
+SELECT kll_sketch_get_n_float(kll_merge_agg_float(sketch_col)) AS empty_merge_n
+FROM (
+  SELECT kll_sketch_agg_float(col1) AS sketch_col
+  FROM t_float_1_5_through_7_11
+  WHERE col1 > 1000.0
+) empty_sketches;
+
+-- Test empty aggregation: zero rows input for kll_merge_agg_double
+SELECT kll_sketch_get_n_double(kll_merge_agg_double(sketch_col)) AS empty_merge_n
+FROM (
+  SELECT kll_sketch_agg_double(col1) AS sketch_col
+  FROM t_double_1_5_through_7_11
+  WHERE col1 > 1000.0
+) empty_sketches;
+
 -- Test kll_merge_agg_bigint: merge bigint sketches from multiple rows
 SELECT lower(kll_sketch_to_string_bigint(agg)) LIKE '%kll%' AS str_contains_kll,
        abs(kll_sketch_get_quantile_bigint(agg, 0.5) - 4) < 1 AS median_close_to_4,
@@ -505,6 +543,13 @@ SELECT kll_sketch_agg_bigint(col1, '100') AS k_wrong_type
 FROM t_long_1_5_through_7_11;
 
 -- Negative tests for kll_merge_agg functions
+
+-- Test wrong sketch type: float sketch passed to kll_merge_agg_bigint (should fail)
+SELECT kll_merge_agg_bigint(sketch_col) AS wrong_type_merge
+FROM (
+  SELECT kll_sketch_agg_float(col1) AS sketch_col
+  FROM t_float_1_5_through_7_11
+) float_sketches;
 
 -- Type mismatch: kll_merge_agg_bigint does not accept integer columns (needs binary)
 SELECT kll_merge_agg_bigint(col1) AS merge_wrong_type
