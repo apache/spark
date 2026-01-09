@@ -6748,6 +6748,11 @@
           "INSERT INTO <tableName> with IF NOT EXISTS in the PARTITION spec."
         ]
       },
+      "RETURNING_CLAUSE_IN_V1_TABLE" : {
+        "message" : [
+          "The RETURNING clause (NEW TABLE syntax) is not supported for V1 data sources. Please use a V2 data source or remove the RETURNING clause."
+        ]
+      },
       "INTERRUPT_TYPE" : {
         "message" : [
           "Unsupported interrupt type: <interruptType>."

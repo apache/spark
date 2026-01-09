@@ -294,6 +294,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("tableName" -> toSQLId(tableName)))
   }
 
+  def returningClauseUnsupportedForV1TablesError(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.RETURNING_CLAUSE_IN_V1_TABLE",
+      messageParameters = Map.empty)
+  }
+
   def unsupportedSetOperationOnMapType(mapCol: Attribute, origin: Origin): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.SET_OPERATION_ON_MAP_TYPE",

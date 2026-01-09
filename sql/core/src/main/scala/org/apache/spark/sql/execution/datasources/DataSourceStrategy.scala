@@ -166,7 +166,10 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
       CreateDataSourceTableAsSelectCommand(tableDesc, mode, query, query.output.map(_.name))
 
     case InsertIntoStatement(l @ LogicalRelationWithTable(_: InsertableRelation, _),
-        parts, _, query, overwrite, false, _, _) if parts.isEmpty =>
+        parts, _, query, overwrite, false, _, returning) if parts.isEmpty =>
+      if (returning) {
+        throw QueryCompilationErrors.returningClauseUnsupportedForV1TablesError()
+      }
       InsertIntoDataSourceCommand(l, query, overwrite)
 
     case InsertIntoDir(_, storage, provider, query, overwrite)
@@ -179,8 +182,13 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
 
     case i @ InsertIntoStatement(
         l @ LogicalRelationWithTable(t: HadoopFsRelation, table),
-        parts, _, query, overwrite, _, _, _)
+        parts, _, query, overwrite, _, _, returning)
         if query.resolved =>
+      // Returning clause is not supported for V1 data sources
+      if (returning) {
+        throw QueryCompilationErrors.returningClauseUnsupportedForV1TablesError()
+      }
+
       // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
       // the user has specified static partitions, we add a Project operator on top of the query
       // to include those constant column values in the query result.
