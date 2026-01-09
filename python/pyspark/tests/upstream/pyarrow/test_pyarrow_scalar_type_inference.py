@@ -114,9 +114,7 @@ class PyArrowScalarTypeInferenceTests(unittest.TestCase):
         import pyarrow as pa
 
         for value in [2**63, -(2**63) - 1]:
-            with self.assertRaises(
-                OverflowError, msg=f"Expected OverflowError for {value}"
-            ):
+            with self.assertRaises(OverflowError):
                 pa.scalar(value)
 
     def test_decimal_types(self):
@@ -317,6 +315,24 @@ class PyArrowScalarTypeInferenceTests(unittest.TestCase):
                 expected_type,
                 f"Type mismatch for {type(np_val).__name__}: "
                 f"expected {expected_type}, got {scalar.type}",
+            )
+
+        # Float NaN - needs special comparison
+        nan_cases = [
+            (np.float32("nan"), pa.float32()),
+            (np.float64("nan"), pa.float64()),
+        ]
+        for np_val, expected_type in nan_cases:
+            scalar = pa.scalar(np_val)
+            self.assertEqual(
+                scalar.type,
+                expected_type,
+                f"Type mismatch for {type(np_val).__name__} NaN: "
+                f"expected {expected_type}, got {scalar.type}",
+            )
+            self.assertTrue(
+                math.isnan(scalar.as_py()),
+                f"NaN roundtrip failed for {type(np_val).__name__}",
             )
 
     @unittest.skipIf(not have_numpy, numpy_requirement_message)
