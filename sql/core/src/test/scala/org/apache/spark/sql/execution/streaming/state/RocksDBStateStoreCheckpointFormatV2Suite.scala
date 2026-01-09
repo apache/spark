@@ -166,6 +166,11 @@ case class CkptIdCollectingStateStoreWrapper(innerStore: StateStore) extends Sta
     ret
   }
   override def hasCommitted: Boolean = innerStore.hasCommitted
+
+  override def initiateEventTimeAwareStateOperations(
+      columnFamilyName: String): EventTimeAwareStateOperations = {
+    innerStore.initiateEventTimeAwareStateOperations(columnFamilyName)
+  }
 }
 
 class CkptIdCollectingStateStoreProviderWrapper extends StateStoreProvider {
