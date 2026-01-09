@@ -1396,7 +1396,11 @@ class SparkConnectClient(object):
         except Exception as error:
             self._handle_error(error)
 
-    def _execute(self, req: pb2.ExecutePlanRequest) -> None:
+    def _execute(
+        self,
+        req: pb2.ExecutePlanRequest,
+        reattachable: Optional[bool] = None,
+    ) -> None:
         """
         Execute the passed request `req` and drop all results.
 
@@ -1404,6 +1408,9 @@ class SparkConnectClient(object):
         ----------
         req : pb2.ExecutePlanRequest
             Proto representation of the plan.
+        reattachable : bool, option
+            Whether to enable reattachable execution for this specific request.
+            If None, fallback to 'self._use_reattachable_execute'.
 
         """
         logger.debug("Execute")
@@ -1414,8 +1421,11 @@ class SparkConnectClient(object):
         def handle_response(b: pb2.ExecutePlanResponse) -> None:
             self._verify_response_integrity(b)
 
+        if reattachable is None:
+            reattachable = self._use_reattachable_execute
+
         try:
-            if self._use_reattachable_execute:
+            if reattachable:
                 # Don't use retryHandler - own retry handling is inside.
                 generator = ExecutePlanResponseReattachableIterator(
                     req, self._stub, self._retrying, self._builder.metadata()
@@ -2138,7 +2148,7 @@ class SparkConnectClient(object):
                 req = self._execute_plan_request_with_metadata()
                 req.plan.command.CopyFrom(command)
 
-                self._stub.ExecutePlan(req, metadata=self._builder.metadata(), timeout=3)
+                self._execute(req, reattachable=False)
             except Exception:
                 pass
 
