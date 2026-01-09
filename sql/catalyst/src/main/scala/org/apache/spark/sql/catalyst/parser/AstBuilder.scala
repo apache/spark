@@ -726,17 +726,47 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitNewTableQuerySpecification(
       ctx: NewTableQuerySpecificationContext): LogicalPlan = withOrigin(ctx) {
-    val query = visitQuery(ctx.query)
-    val insertStmt = withInsertInto(ctx.insertInto, query)
+    // Build the source query
+    val sourceQuery = visitQuery(ctx.query())
 
-    // Mark this insert as returning by creating a new InsertIntoStatement with returning=true
-    insertStmt match {
-      case i: InsertIntoStatement =>
-        i.copy(returning = true)
+    // Build INSERT statement with returning=true flag
+    val insertStatement = withInsertInto(ctx.insertInto(), sourceQuery) match {
+      case insert: InsertIntoStatement =>
+        // Mark this INSERT as returning data
+        insert.copy(returning = true)
       case other =>
-        // This shouldn't happen, but handle gracefully
+        // For other insert types, use as-is
+        // These will fail in analysis as they're not supported with NEW TABLE
         other
     }
+
+    // Wrap in a SubqueryAlias if table alias is provided
+    val relation = Option(ctx.tableAlias())
+      .filter(_.strictIdentifier() != null).map { aliasCtx =>
+      val aliasName = getIdentifierText(aliasCtx.strictIdentifier())
+      val subquery = if (aliasCtx.identifierList() != null) {
+        // Column aliases provided
+        UnresolvedSubqueryColumnAliases(
+          visitIdentifierList(aliasCtx.identifierList()),
+          insertStatement)
+      } else {
+        insertStatement
+      }
+      SubqueryAlias(aliasName, subquery)
+    }.getOrElse(insertStatement)
+
+    // Apply WHERE, GROUP BY, HAVING, WINDOW clauses
+    withSelectQuerySpecification(
+      ctx,
+      ctx.selectClause,
+      java.util.Collections.emptyList(), // no lateral views
+      ctx.whereClause,
+      ctx.aggregationClause,
+      ctx.havingClause,
+      ctx.windowClause,
+      relation,
+      isPipeOperatorSelect = false
+    )
   }
 
   override def visitDmlStatement(ctx: DmlStatementContext): AnyRef = withOrigin(ctx) {
