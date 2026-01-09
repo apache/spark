@@ -53,7 +53,7 @@ class TestSparkArrowCStreamer(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_interchange import *  # noqa: F401
+    from pyspark.sql.tests.arrow.test_arrow_c_stream import *  # noqa: F401
 
     try:
         import xmlrunner  # type: ignore
