@@ -763,6 +763,7 @@ queryPrimary
     | TABLE identifierReference                                             #table
     | inlineTable                                                           #inlineTableDefault1
     | LEFT_PAREN query RIGHT_PAREN                                          #subquery
+    | FROM NEW TABLE LEFT_PAREN insertInto query RIGHT_PAREN                #newTableQuerySpecification
     ;
 
 sortItem
@@ -1273,6 +1274,7 @@ primaryExpression
     | col=primaryExpression COLON path=semiStructuredExtractionPath                            #semiStructuredExtract
     | LEFT_PAREN namedExpression (COMMA namedExpression)+ RIGHT_PAREN                          #rowConstructor
     | LEFT_PAREN query RIGHT_PAREN                                                             #subqueryExpression
+    | LEFT_PAREN NEW TABLE LEFT_PAREN insertInto query RIGHT_PAREN RIGHT_PAREN                #newTableExpression
     | functionName LEFT_PAREN (setQuantifier? argument+=functionArgument
        (COMMA argument+=functionArgument)*)? RIGHT_PAREN
        (WITHIN GROUP LEFT_PAREN ORDER BY sortItem (COMMA sortItem)* RIGHT_PAREN)?
@@ -2426,6 +2428,7 @@ nonReserved
     | NAMESPACES
     | NANOSECOND
     | NANOSECONDS
+    | NEW
     | NO
     | NONE
     | NORELY
