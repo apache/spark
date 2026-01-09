@@ -95,12 +95,14 @@ class OfflineStateRepartitionRunner(
           transformFunc = Some(stateRepartitionFunc),
           writeCheckpointMetadata = Some(checkpointMetadata)
         )
-        rewriter.run()
+        val operatorToCkptIds = rewriter.run()
 
         updateNumPartitionsInOperatorMetadata(newBatchId, readBatchId = lastCommittedBatchId)
 
         // Commit the repartition batch
-        commitBatch(newBatchId, lastCommittedBatchId)
+        val enableCheckpointId = sparkSession.conf.get(
+          SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key).toInt >= 2
+        commitBatch(newBatchId, lastCommittedBatchId, operatorToCkptIds, enableCheckpointId)
         newBatchId
       }
 
@@ -289,12 +291,32 @@ class OfflineStateRepartitionRunner(
     }
   }
 
-  private def commitBatch(newBatchId: Long, lastCommittedBatchId: Long): Unit = {
+  private def commitBatch(
+      newBatchId: Long,
+      lastCommittedBatchId: Long,
+      opIdToStateStoreCkptInfo: Option[Map[Long, Array[Array[StateStoreCheckpointInfo]]]]): Unit = {
     val latestCommit = checkpointMetadata.commitLog.get(lastCommittedBatchId).get
+    val commitMetadata = opIdToStateStoreCkptInfo.map {originalInfoMap =>
+      // opIdToStateStoreCkptInfo is Map[operatorId, Array[stateStore -> Array[partition -> info]]]
+      // we change it to Map[operatorId, Array[partitionId -> Array[store -> info]]]
+      val opIdToPartitionCkptInfo: Map[Long, Array[Array[String]]] =
+        originalInfoMap.map {
+          case(operator, storesSeq) =>
+            val numPartitions = storesSeq.head.length
+            operator -> (0 until numPartitions).map { partitionIdx =>
+              storesSeq.flatMap { storePartitions =>
+                storePartitions(partitionIdx).stateStoreCkptId
+            }
+          }.toArray
+        }
+      // Include checkpoint IDs in commit metadata
+      CommitMetadata(
+        latestCommit.nextBatchWatermarkMs,
+        Option(opIdToPartitionCkptInfo)
+      )
+    }.getOrElse(latestCommit)
 
-    // todo: For checkpoint v2, we need to update the stateUniqueIds based on the
-    //  newly created state commit. Will be done in subsequent PR.
-    if (!checkpointMetadata.commitLog.add(newBatchId, latestCommit)) {
+    if (!checkpointMetadata.commitLog.add(newBatchId, commitMetadata)) {
       throw QueryExecutionErrors.concurrentStreamLogUpdate(newBatchId)
     }
   }

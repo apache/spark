@@ -82,7 +82,8 @@ class StateRewriter(
   private val stateRootLocation = new Path(
     resolvedCheckpointLocation, StreamingCheckpointConstants.DIR_NAME_STATE).toString
 
-  def run(): Map[Long, Seq[Array[StateStoreCheckpointInfo]]] = {
+  // return a Map[operator id, Array[stateStore -> Array[partition -> StateStoreCheckpointInfo]]]
+  def run(): Map[Long, Array[Array[StateStoreCheckpointInfo]]] = {
     logInfo(log"Starting state rewrite for " +
       log"checkpointLocation=${MDC(CHECKPOINT_LOCATION, resolvedCheckpointLocation)}, " +
       log"readCheckpointLocation=" +
@@ -99,9 +100,7 @@ class StateRewriter(
     checkpointInfos
   }
 
-  // return a map where key is operator id, value is a nested list of checkpoint info. The first
-  // dimension is a list of state stores, and the second dimension is partition.
-  private def runInternal(): Map[Long, Seq[Array[StateStoreCheckpointInfo]]] = {
+  private def runInternal(): Map[Long, Array[Array[StateStoreCheckpointInfo]]] = {
     try {
       val stateMetadataReader = new StateMetadataPartitionReader(
         resolvedCheckpointLocation,
@@ -138,7 +137,6 @@ class StateRewriter(
 
         // Rewrite each state store of the operator
         opMetadata.operatorInfo.operatorId -> stateStoresMetadata.map { stateStoreMetadata =>
-          println("stateStore name", stateStoreMetadata.storeName)
           rewriteStore(
             opMetadata,
             stateStoreMetadata,
@@ -148,7 +146,7 @@ class StateRewriter(
             stateVarsIfTws,
             sqlConfEntries
           )
-        }
+        }.toArray
       }.toMap
     } catch {
       case e: Throwable =>

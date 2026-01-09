@@ -97,35 +97,29 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
       writeCheckpointMetadata = Some(targetCheckpointMetadata)
     )
     val checkpointInfos = rewriter.run()
-    val operatorId = 0L
-    // Build map: partition id -> array of checkpoint IDs (one per store, in order)
-    // checkpointInfos(operatorId) is Seq[Array[StateStoreCheckpointInfo]]
-    // where Seq is stores (in order: store0, store1, ...), Array is partitions
-    // For join operators: 4 stores (left-keyToNumValues, left-keyWithIndexToValue,
-    //                              right-keyToNumValues, right-keyWithIndexToValue)
-    // For regular operators: 1 store
-    val storesSeq: Seq[Array[StateStoreCheckpointInfo]] = checkpointInfos(operatorId)
-    val partitionToCkptIdMap: Map[Long, Array[String]] =
-      if (storesSeq.nonEmpty) {
-        val numPartitions = storesSeq.head.length
-        (0 until numPartitions).map { partitionIdx =>
-          // For this partition, collect checkpoint IDs from all stores (in order)
-          val ckptIds: Array[String] = storesSeq.flatMap { storePartitions =>
-            storePartitions(partitionIdx).stateStoreCkptId
-          }.toArray
-          (partitionIdx.toLong, ckptIds)
-        }.toMap
-      } else {
-        Map.empty
-      }
 
     // Commit to commitLog with checkpoint IDs
     val latestCommit = targetCheckpointMetadata.commitLog.get(lastBatch).get
-    val commitMetadata = if (partitionToCkptIdMap.nonEmpty) {
+    val operatorId = 0L
+    val storesSeq: Array[Array[StateStoreCheckpointInfo]] = checkpointInfos(operatorId)
+    val commitMetadata = if (StateStoreConf(conf).enableStateStoreCheckpointIds) {
+      // Build map: partition id -> array of checkpoint IDs (one per store, in order)
+      // checkpointInfos(operatorId) is Seq[Array[StateStoreCheckpointInfo]]
+      // where Seq is stores (in order: store0, store1, ...), Array is partitions
+      // For join operators: 4 stores (left-keyToNumValues, left-keyWithIndexToValue,
+      //                              right-keyToNumValues, right-keyWithIndexToValue)
+      // For regular operators: 1 store
+      val numPartitions = storesSeq.head.length
+      val ckptIds: Array[Array[String]] = (0 until numPartitions).map { partitionIdx =>
+          // For this partition, collect checkpoint IDs from all stores (in order)
+          storesSeq.flatMap { storePartitions =>
+            storePartitions(partitionIdx).stateStoreCkptId
+          }
+        }.toArray
       // Include checkpoint IDs in commit metadata
       CommitMetadata(
         latestCommit.nextBatchWatermarkMs,
-        Option(Map(operatorId -> partitionToCkptIdMap.values.toArray))
+        Option(Map(operatorId -> ckptIds))
       )
     } else {
       latestCommit
