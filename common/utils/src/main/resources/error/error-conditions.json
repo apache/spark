@@ -6753,6 +6753,18 @@
           "The RETURNING clause (NEW TABLE syntax) is not supported for V1 data sources. Please use a V2 data source or remove the RETURNING clause."
         ]
       },
+      "NESTED_RETURNING_INSERT" : {
+        "message" : [
+          "NEW TABLE(INSERT ...) can only be used at the top level of a SELECT statement. It cannot be used in <context>."
+        ],
+        "sqlState" : "42903"
+      },
+      "RETURNING_INSERT_TABLE_CONFLICT" : {
+        "message" : [
+          "Table <tableName> is the target of a NEW TABLE(INSERT ...) and cannot be referenced elsewhere in the same query. Found <conflictType>."
+        ],
+        "sqlState" : "42621"
+      },
       "INTERRUPT_TYPE" : {
         "message" : [
           "Unsupported interrupt type: <interruptType>."

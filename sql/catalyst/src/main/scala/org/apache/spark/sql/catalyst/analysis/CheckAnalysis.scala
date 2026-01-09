@@ -225,7 +225,170 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     }
   }
 
+  /**
+   * Checks that NEW TABLE(INSERT ...) (returning inserts) are only used at the top level
+   * of a SELECT statement, not in subqueries, CTEs (except as top-level), UNION branches, etc.
+   */
+  private def checkReturningInsertContext(plan: LogicalPlan): Unit = {
+    def isReturningInsert(p: LogicalPlan): Boolean = p match {
+      case InsertIntoStatement(_, _, _, _, _, _, _, returning) if returning => true
+      case w: V2WriteCommand => w.returning
+      case _ => false
+    }
+
+    def checkContext(p: LogicalPlan, context: String, isTopLevel: Boolean): Unit = {
+      p match {
+        // Top-level bare returning insert is invalid
+        case _ if isTopLevel && isReturningInsert(p) =>
+          p.failAnalysis(
+            errorClass = "NESTED_RETURNING_INSERT",
+            messageParameters = Map("context" -> "bare INSERT without SELECT"))
+
+        // Set operations: NEW TABLE not allowed in any branch
+        case u: Union =>
+          u.children.foreach(checkContext(_, "UNION branch", isTopLevel = false))
+
+        case i: Intersect =>
+          checkContext(i.left, "INTERSECT branch", isTopLevel = false)
+          checkContext(i.right, "INTERSECT branch", isTopLevel = false)
+
+        case e: Except =>
+          checkContext(e.left, "EXCEPT branch", isTopLevel = false)
+          checkContext(e.right, "EXCEPT branch", isTopLevel = false)
+
+        // Top-level with returning insert: check inside the INSERT's query
+        case _ if isTopLevel && p.exists(isReturningInsert) =>
+          p.foreach {
+            case InsertIntoStatement(_, _, _, query, _, _, _, true) =>
+              checkContext(query, "INSERT query", isTopLevel = false)
+            case w: V2WriteCommand if w.returning =>
+              checkContext(w.query, "INSERT query", isTopLevel = false)
+            case _ =>
+          }
+
+        // CTE: each definition is top-level
+        case WithCTE(child, cteDefs) =>
+          checkContext(child, "main query", isTopLevel)
+          cteDefs.foreach(cteDef => checkContext(cteDef.child, "CTE definition", isTopLevel = true))
+
+        case _: CTERelationDef => // Skip, handled by WithCTE
+
+        // Check subqueries in expressions
+        case operator: LogicalPlan =>
+          operator.expressions.foreach { expr =>
+            expr.foreachUp {
+              case s: SubqueryExpression =>
+                checkContext(s.plan, "subquery", isTopLevel = false)
+              case _ =>
+            }
+          }
+
+          // Returning insert in non-top-level context is invalid
+          if (!isTopLevel && isReturningInsert(operator)) {
+            operator.failAnalysis(
+              errorClass = "NESTED_RETURNING_INSERT",
+              messageParameters = Map("context" -> context))
+          }
+
+          // Recurse to children
+          operator.children.foreach {
+            case _: CTERelationDef => // Skip
+            case child => checkContext(child, context, isTopLevel = false)
+          }
+      }
+    }
+
+    checkContext(plan, "nested context", isTopLevel = true)
+  }
+
+  /**
+   * Checks that tables targeted by NEW TABLE(INSERT ...) are not referenced elsewhere.
+   */
+  private def checkReturningInsertTableConflicts(plan: LogicalPlan): Unit = {
+    val returningInsertTargets = scala.collection.mutable.Map[Seq[String], LogicalPlan]()
+
+    // Collect returning insert targets
+    plan.foreach {
+      case ins @ InsertIntoStatement(table, _, _, _, _, _, _, returning) if returning =>
+        table.foreach {
+          case u: UnresolvedRelation =>
+            returningInsertTargets(u.multipartIdentifier) = ins
+          case _ =>
+        }
+      case w: V2WriteCommand if w.returning =>
+        w.table.foreach {
+          case u: UnresolvedRelation =>
+            returningInsertTargets(u.multipartIdentifier) = w
+          case _ =>
+        }
+      case _ =>
+    }
+
+    if (returningInsertTargets.nonEmpty) {
+      // Check for conflicts
+      plan.foreach {
+        case ins @ InsertIntoStatement(table, _, _, query, _, _, _, returning) =>
+          table.foreach {
+            case u: UnresolvedRelation =>
+              val tableId = u.multipartIdentifier
+              // Check if this is a different INSERT targeting same table
+              if (!returning && returningInsertTargets.contains(tableId)) {
+                val originalIns = returningInsertTargets(tableId)
+                originalIns.failAnalysis(
+                  errorClass = "RETURNING_INSERT_TABLE_CONFLICT",
+                  messageParameters = Map(
+                    "tableName" -> tableId.mkString("."),
+                    "conflictType" -> "another INSERT targeting the same table"))
+              }
+              // Check if table is referenced in the query
+              if (returning) {
+                query.foreach {
+                  case u2: UnresolvedRelation if u2.multipartIdentifier == tableId =>
+                    ins.failAnalysis(
+                      errorClass = "RETURNING_INSERT_TABLE_CONFLICT",
+                      messageParameters = Map(
+                        "tableName" -> tableId.mkString("."),
+                        "conflictType" -> "table referenced in INSERT query"))
+                  case _ =>
+                }
+              }
+            case _ =>
+          }
+        case w: V2WriteCommand =>
+          w.table.foreach {
+            case u: UnresolvedRelation =>
+              val tableId = u.multipartIdentifier
+              if (!w.returning && returningInsertTargets.contains(tableId)) {
+                val originalWrite = returningInsertTargets(tableId)
+                originalWrite.failAnalysis(
+                  errorClass = "RETURNING_INSERT_TABLE_CONFLICT",
+                  messageParameters = Map(
+                    "tableName" -> tableId.mkString("."),
+                    "conflictType" -> "another INSERT targeting the same table"))
+              }
+              if (w.returning) {
+                w.query.foreach {
+                  case u2: UnresolvedRelation if u2.multipartIdentifier == tableId =>
+                    w.failAnalysis(
+                      errorClass = "RETURNING_INSERT_TABLE_CONFLICT",
+                      messageParameters = Map(
+                        "tableName" -> tableId.mkString("."),
+                        "conflictType" -> "table referenced in INSERT query"))
+                  case _ =>
+                }
+              }
+            case _ =>
+          }
+        case _ =>
+      }
+    }
+  }
+
   def checkAnalysis(plan: LogicalPlan): Unit = {
+    // Check for NEW TABLE(INSERT ...) restrictions BEFORE inlining CTEs
+    checkReturningInsertContext(plan)
+    checkReturningInsertTableConflicts(plan)
+
     // We should inline all CTE relations to restore the original plan shape, as the analysis check
     // may need to match certain plan shapes. For dangling CTE relations, they will still be kept
     // in the original `WithCTE` node, as we need to perform analysis check for them as well.
