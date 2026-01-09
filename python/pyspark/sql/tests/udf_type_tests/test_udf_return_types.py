@@ -128,6 +128,7 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
             np.arange(1, 3).astype("float16"),
             np.arange(1, 3).astype("float32"),
             np.arange(1, 3).astype("float64"),
+            np.arange(1, 3).astype("float128"),
             np.arange(1, 3).astype("complex64"),
             np.arange(1, 3).astype("complex128"),
             list("ab"),
@@ -246,14 +247,14 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
 
         test_name = "Pandas UDF type coercion"
 
-        # Use STRICT policy to preserve original Arrow behavior for golden file comparison
-        with self.sql_conf({"spark.sql.execution.pythonUDF.coercion.policy": "strict"}):
-            results = self._generate_pandas_udf_type_coercion_results()
-            header = ["SQL Type \\ Pandas Value(Type)"] + [
-                f"{str(v).replace(chr(10), ' ')}({type(v).__name__})" for v in self.pandas_test_data
-            ]
-            actual_output = format_type_table(results, header)
-            self._compare_or_create_golden_file(actual_output, golden_file, test_name)
+        # Note: coercion.policy config only affects ArrowBatchUDFSerializer (regular Arrow UDFs),
+        # not ArrowStreamPandasUDFSerializer (Pandas UDFs), so we don't set it here.
+        results = self._generate_pandas_udf_type_coercion_results()
+        header = ["SQL Type \\ Pandas Value(Type)"] + [
+            f"{str(v).replace(chr(10), ' ')}({type(v).__name__})" for v in self.pandas_test_data
+        ]
+        actual_output = format_type_table(results, header)
+        self._compare_or_create_golden_file(actual_output, golden_file, test_name)
 
     def _generate_pandas_udf_type_coercion_results(self):
         def work(spark_type):
