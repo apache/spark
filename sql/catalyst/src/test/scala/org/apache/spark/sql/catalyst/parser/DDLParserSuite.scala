@@ -1791,14 +1791,8 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   for {
-    insertOp <- Seq("INTO", "OVERWRITE")
     isByName <- Seq(true, false)
-    dpoMode <- if (insertOp == "OVERWRITE") {
-      SQLConf.PartitionOverwriteMode.values.toSeq
-    } else {
-      Seq(SQLConf.PartitionOverwriteMode.STATIC)
-    }
-    userSpecifiedCols <- if (insertOp == "INTO" && !isByName) {
+    userSpecifiedCols <- if (!isByName) {
       Seq(Seq("a", "b"), Seq.empty)
     } else {
       Seq(Seq.empty)
@@ -1808,27 +1802,70 @@ class DDLParserSuite extends AnalysisTest {
     val sourceQuery = "SELECT * FROM source"
     val userSpecifiedColsClause =
       if (userSpecifiedCols.isEmpty) "" else userSpecifiedCols.mkString("(", ", ", ")")
-    val testMsg = s"insertOp=$insertOp, isByName=$isByName, dpoMode=$dpoMode, " +
-      s"userSpecifiedColsClause=$userSpecifiedColsClause"
-    test("InsertIntoStatement and WITH SCHEMA EVOLUTION" + testMsg) {
-      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> dpoMode.toString) {
+    val testMsg = s"isByName=$isByName, userSpecifiedColsClause=$userSpecifiedColsClause"
+
+    test(s"INSERT INTO with WITH SCHEMA EVOLUTION - $testMsg") {
+      val table = "testcat.ns1.ns2.tbl"
+      val insertSQLStmt = s"INSERT WITH SCHEMA EVOLUTION INTO $table " +
+        s"${userSpecifiedColsClause}${byNameClause}${sourceQuery}"
+
+      parseCompare(
+        sql = insertSQLStmt,
+        expected = InsertIntoStatement(
+          table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+          partitionSpec = Map.empty,
+          userSpecifiedCols = userSpecifiedCols,
+          query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+          overwrite = false,
+          ifPartitionNotExists = false,
+          byName = isByName,
+          withSchemaEvolution = true)
+      )
+    }
+
+    test(s"INSERT OVERWRITE (static) with WITH SCHEMA EVOLUTION - $testMsg") {
+      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key ->
+        SQLConf.PartitionOverwriteMode.STATIC.toString) {
         val table = "testcat.ns1.ns2.tbl"
-        val insertSQLStmt = insertOp match {
-          case "INTO" =>
-            s"INSERT WITH SCHEMA EVOLUTION INTO $table " +
-              s"${userSpecifiedColsClause}${byNameClause}${sourceQuery}"
-          case "OVERWRITE" =>
-            s"INSERT WITH SCHEMA EVOLUTION OVERWRITE $table ${byNameClause}${sourceQuery}"
-        }
+        val insertSQLStmt = s"INSERT WITH SCHEMA EVOLUTION OVERWRITE $table " +
+          s"${userSpecifiedColsClause}${byNameClause}${sourceQuery}"
 
         parseCompare(
           sql = insertSQLStmt,
           expected = InsertIntoStatement(
             table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
             partitionSpec = Map.empty,
-            userSpecifiedCols = userSpecifiedCols,
+            userSpecifiedCols = Seq.empty,
             query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
-            overwrite = (insertOp == "OVERWRITE"),
+            overwrite = true,
+            ifPartitionNotExists = false,
+            byName = isByName,
+            withSchemaEvolution = true)
+        )
+      }
+    }
+  }
+
+  for (isByName <- Seq(true, false)) {
+    val byNameClause = if (isByName) "BY NAME " else ""
+    val sourceQuery = "SELECT * FROM source"
+    val testMsg = s"isByName=$isByName"
+
+    test(s"INSERT OVERWRITE (dynamic) with WITH SCHEMA EVOLUTION - $testMsg") {
+      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key ->
+        SQLConf.PartitionOverwriteMode.DYNAMIC.toString) {
+        val table = "testcat.ns1.ns2.tbl"
+        val insertSQLStmt = s"INSERT WITH SCHEMA EVOLUTION OVERWRITE $table " +
+          s"${byNameClause}${sourceQuery}"
+
+        parseCompare(
+          sql = insertSQLStmt,
+          expected = InsertIntoStatement(
+            table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
+            partitionSpec = Map.empty,
+            userSpecifiedCols = Seq.empty,
+            query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
+            overwrite = true,
             ifPartitionNotExists = false,
             byName = isByName,
             withSchemaEvolution = true)

@@ -174,8 +174,8 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
 
       InsertIntoDataSourceDirCommand(storage, provider.get, query, overwrite)
 
-    case i @ InsertIntoStatement(
-        l @ LogicalRelationWithTable(t: HadoopFsRelation, table), parts, _, query, overwrite, _, _, withSchemaEvolution)
+    case i @ InsertIntoStatement(l @ LogicalRelationWithTable(t: HadoopFsRelation, table),
+        parts, _, query, overwrite, _, _, withSchemaEvolution)
         if query.resolved && !withSchemaEvolution =>
       // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
       // the user has specified static partitions, we add a Project operator on top of the query

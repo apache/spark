@@ -451,6 +451,23 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       }
   }
 
+  testPartitionedTable("SPARK-54971: INSERT WITH SCHEMA EVOLUTION does not work yet") {
+    tableName =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT WITH SCHEMA EVOLUTION INTO TABLE $tableName SELECT 25, 28, 26, 28, 29")
+        },
+        condition = "UNSUPPORTED_INSERT_WITH_SCHEMA_EVOLUTION"
+      )
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT WITH SCHEMA EVOLUTION INTO TABLE $tableName SELECT 25, 28, 26, (28, 29)")
+        },
+        condition = "UNSUPPORTED_INSERT_WITH_SCHEMA_EVOLUTION"
+      )
+  }
+
   testPartitionedTable("insertInto() should match columns by position and ignore column names") {
     tableName =>
       withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {

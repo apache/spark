@@ -1326,47 +1326,75 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
   }
 
   for {
-    insertOp <- Seq("INTO", "OVERWRITE", "REPLACE WHERE")
     withSchemaEvolution <- Seq(true, false)
     isByName <- Seq(true, false)
-    dpoMode <- if (insertOp == "OVERWRITE") {
-      PartitionOverwriteMode.values.toSeq
-    } else {
-      Seq(PartitionOverwriteMode.STATIC)
-    }
   } {
     val schemaEvolutionClause = if (withSchemaEvolution) "WITH SCHEMA EVOLUTION " else ""
     val byNameClause = if (isByName) "BY NAME " else ""
-    val testMsg = s"insertOp=$insertOp, withSchemaEvolution=$withSchemaEvolution, " +
-      s"isByName=$isByName, dpoMode=$dpoMode"
-    test("Write option 'mergeSchema' is only passed to INSERT's logical plan nodes " +
-        "if WITH SCHEMA EVOLUTION is specified" + testMsg) {
-      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> dpoMode.toString) {
+    val testMsg = s"withSchemaEvolution=$withSchemaEvolution, isByName=$isByName"
+
+    test(s"INSERT INTO: mergeSchema write option with WITH SCHEMA EVOLUTION - $testMsg") {
+      val table = "testcat.tab"
+      val insertSQLStmt = s"INSERT ${schemaEvolutionClause}INTO $table ${byNameClause}"
+
+      val writeOptions = parseAndResolve(s"$insertSQLStmt SELECT * FROM v2Table") match {
+        case appendData: AppendData =>
+          appendData.writeOptions
+        case other =>
+          fail(s"Expected AppendData, but got: ${other.getClass.getSimpleName}")
+      }
+      assert(writeOptions.get("mergeSchema") ===
+        (if (withSchemaEvolution) Some("true") else None))
+    }
+
+    test(s"INSERT OVERWRITE (static): mergeSchema write option with WITH SCHEMA EVOLUTION - " +
+        testMsg) {
+      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.STATIC.toString) {
         val table = "testcat.tab"
-        val insertSQLStmt = insertOp match {
-          case "INTO" =>
-            s"INSERT ${schemaEvolutionClause}INTO $table ${byNameClause}"
-          case "OVERWRITE" =>
-            s"INSERT ${schemaEvolutionClause}OVERWRITE $table ${byNameClause}"
-          case "REPLACE WHERE" =>
-            s"INSERT ${schemaEvolutionClause}INTO $table ${byNameClause}REPLACE WHERE i = 1"
-        }
+        val insertSQLStmt = s"INSERT ${schemaEvolutionClause}OVERWRITE $table ${byNameClause}"
 
         val writeOptions = parseAndResolve(s"$insertSQLStmt SELECT * FROM v2Table") match {
-          case appendData: AppendData =>
-            assert(insertOp === "INTO")
-            appendData.writeOptions
           case overwriteByExpression: OverwriteByExpression =>
-            assert(insertOp === "REPLACE WHERE" ||
-              (insertOp === "OVERWRITE" && dpoMode === PartitionOverwriteMode.STATIC))
             overwriteByExpression.writeOptions
-          case overwritePartitionsDynamic: OverwritePartitionsDynamic =>
-            assert(insertOp === "OVERWRITE" && dpoMode === PartitionOverwriteMode.DYNAMIC)
-            overwritePartitionsDynamic.writeOptions
+          case other =>
+            fail(s"Expected OverwriteByExpression, but got: ${other.getClass.getSimpleName}")
         }
         assert(writeOptions.get("mergeSchema") ===
           (if (withSchemaEvolution) Some("true") else None))
       }
+    }
+
+    test(s"INSERT OVERWRITE (dynamic): mergeSchema write option with WITH SCHEMA EVOLUTION - " +
+        testMsg) {
+      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key ->
+        PartitionOverwriteMode.DYNAMIC.toString) {
+        val table = "testcat.tab"
+        val insertSQLStmt = s"INSERT ${schemaEvolutionClause}OVERWRITE $table ${byNameClause}"
+
+        val writeOptions = parseAndResolve(s"$insertSQLStmt SELECT * FROM v2Table") match {
+          case overwritePartitionsDynamic: OverwritePartitionsDynamic =>
+            overwritePartitionsDynamic.writeOptions
+          case other =>
+            fail(s"Expected OverwritePartitionsDynamic, but got: ${other.getClass.getSimpleName}")
+        }
+        assert(writeOptions.get("mergeSchema") ===
+          (if (withSchemaEvolution) Some("true") else None))
+      }
+    }
+
+    test(s"REPLACE WHERE: mergeSchema write option with WITH SCHEMA EVOLUTION - $testMsg") {
+      val table = "testcat.tab"
+      val insertSQLStmt =
+        s"INSERT ${schemaEvolutionClause}INTO $table ${byNameClause}REPLACE WHERE i = 1"
+
+      val writeOptions = parseAndResolve(s"$insertSQLStmt SELECT * FROM v2Table") match {
+        case overwriteByExpression: OverwriteByExpression =>
+          overwriteByExpression.writeOptions
+        case other =>
+          fail(s"Expected OverwriteByExpression, but got: ${other.getClass.getSimpleName}")
+      }
+      assert(writeOptions.get("mergeSchema") ===
+        (if (withSchemaEvolution) Some("true") else None))
     }
   }
 
