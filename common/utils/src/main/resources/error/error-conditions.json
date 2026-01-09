@@ -6796,8 +6796,7 @@
       "NESTED_RETURNING_INSERT" : {
         "message" : [
           "NEW TABLE(INSERT ...) can only be used at the top level of a SELECT statement. It cannot be used in <context>."
-        ],
-        "sqlState" : "42903"
+        ]
       },
       "RETURNING_CLAUSE_IN_V1_TABLE" : {
         "message" : [
@@ -6807,8 +6806,7 @@
       "RETURNING_INSERT_TABLE_CONFLICT" : {
         "message" : [
           "Table <tableName> is the target of a NEW TABLE(INSERT ...) and cannot be referenced elsewhere in the same query. Found <conflictType>."
-        ],
-        "sqlState" : "42621"
+        ]
       },
       "MULTIPLE_BUCKET_TRANSFORMS" : {
         "message" : [
