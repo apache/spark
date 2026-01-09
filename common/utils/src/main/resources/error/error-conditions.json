@@ -5970,6 +5970,19 @@
     ],
     "sqlState" : "XXKST"
   },
+  "STREAMING_QUERY_EVOLUTION_ERROR" : {
+    "message" : [
+      "Streaming query evolution error:"
+    ],
+    "subClass" : {
+      "UNNAMED_STREAMING_SOURCES_WITH_ENFORCEMENT" : {
+        "message" : [
+          "All streaming sources must be named when spark.sql.streaming.queryEvolution.enableSourceEvolution is enabled. Unnamed sources found: <sourceInfo>. Use the name() method to assign names to all streaming sources."
+        ]
+      }
+    },
+    "sqlState" : "42KDE"
+  },
   "STREAMING_REAL_TIME_MODE" : {
     "message" : [
       "Streaming real-time mode has the following limitation:"
