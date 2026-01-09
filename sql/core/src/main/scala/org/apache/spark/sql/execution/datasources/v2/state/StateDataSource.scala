@@ -67,9 +67,10 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
       properties: util.Map[String, String]): Table = {
     val sourceOptions = StateSourceOptions.modifySourceOptions(hadoopConf,
       StateSourceOptions.apply(session, hadoopConf, properties))
-    // Build the confs for the batch we are reading using confs in the offsetlog
-    val (stateConf, batchSqlConf) =
-      buildConfsForBatch(sourceOptions.resolvedCpLocation, sourceOptions.batchId)
+    // Build the sql conf for the batch we are reading using confs in the offsetlog
+    val batchSqlConf =
+      buildSqlConfForBatch(sourceOptions.resolvedCpLocation, sourceOptions.batchId)
+    val stateConf = StateStoreConf(batchSqlConf)
     // We only support RocksDB because the repartition work that this option
     // is built for only supports RocksDB
     if (sourceOptions.internalOnlyReadAllColumnFamilies
@@ -151,8 +152,9 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
         sourceOptions.operatorId)
   }
 
-  private def buildConfsForBatch(
-      checkpointLocation: String, batchId: Long): (StateStoreConf, SQLConf) = {
+  private def buildSqlConfForBatch(
+      checkpointLocation: String,
+      batchId: Long): SQLConf = {
     val offsetLog = new StreamingQueryCheckpointMetadata(session, checkpointLocation).offsetLog
     offsetLog.get(batchId) match {
       case Some(value) =>
@@ -162,7 +164,7 @@ class StateDataSource extends TableProvider with DataSourceRegister with Logging
 
         val clonedSqlConf = session.sessionState.conf.clone()
         OffsetSeqMetadata.setSessionConf(metadata, clonedSqlConf)
-        (StateStoreConf(clonedSqlConf), clonedSqlConf)
+        clonedSqlConf
 
       case _ =>
         throw StateDataSourceErrors.offsetLogUnavailable(batchId, checkpointLocation)

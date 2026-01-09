@@ -218,7 +218,7 @@ class OfflineStateRepartitionSuite extends StreamTest
 
   test("Consecutive repartition") {
     withTempDir { dir =>
-      val originalPartitions = 3
+      val originalPartitions = 5
       val input = MemoryStream[Int]
       val batchId = runSimpleStreamQuery(originalPartitions, dir.getAbsolutePath, input)
 
@@ -226,13 +226,13 @@ class OfflineStateRepartitionSuite extends StreamTest
       val hadoopConf = spark.sessionState.newHadoopConf()
 
       // decrease
-      spark.streamingCheckpointManager.repartition(dir.getAbsolutePath, originalPartitions - 1)
+      spark.streamingCheckpointManager.repartition(dir.getAbsolutePath, originalPartitions - 3)
       verifyRepartitionBatch(
         batchId + 1,
         checkpointMetadata,
         hadoopConf,
         dir.getAbsolutePath,
-        originalPartitions - 1
+        originalPartitions - 3
       )
 
       // increase
@@ -355,19 +355,20 @@ object OfflineStateRepartitionTestUtils {
 
   // verify number of partition dirs in state dir
   private def verifyPartitionDirs(
-      checkpointLocation: String, expectedShufflePartitions: Int): Unit = {
+      checkpointLocation: String,
+      expectedShufflePartitions: Int): Unit = {
     val stateDir = new java.io.File(checkpointLocation, "state")
 
-    def numDir(file: java.io.File): Int = {
+    def numDirs(file: java.io.File): Int = {
       file.listFiles()
         .filter(d => d.isDirectory && Try(d.getName.toInt).isSuccess)
         .length
     }
 
-    val numOperators = numDir(stateDir)
+    val numOperators = numDirs(stateDir)
     for (op <- 0 until numOperators) {
       val partitionsDir = new java.io.File(stateDir, s"$op")
-      val numPartitions = numDir(partitionsDir)
+      val numPartitions = numDirs(partitionsDir)
       // Doing <= in case of reduced number of partitions
       assert(expectedShufflePartitions <= numPartitions,
         s"Expected atleast $expectedShufflePartitions partition dirs for operator $op," +

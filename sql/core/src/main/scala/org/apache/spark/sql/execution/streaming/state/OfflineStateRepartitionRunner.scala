@@ -247,7 +247,8 @@ class OfflineStateRepartitionRunner(
   }
 
   private def updateNumPartitionsInOperatorMetadata(
-      newBatchId: Long, readBatchId: Long): Unit = {
+      newBatchId: Long,
+      readBatchId: Long): Unit = {
     val stateMetadataReader = new StateMetadataPartitionReader(
       resolvedCpLocation,
       new SerializableConfiguration(hadoopConf),
