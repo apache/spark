@@ -226,7 +226,7 @@ private[spark] class UnifiedMemoryManager(
 
     if (numBytes > effectiveMaxMemory) {
       // Fail fast if the block simply won't fit
-      logInfo(log"Will not store ${MDC(BLOCK_ID, blockId)} as the required space" +
+      logWarning(log"Will not store ${MDC(BLOCK_ID, blockId)} as the required space" +
         log" (${MDC(NUM_BYTES, numBytes)} bytes) exceeds our" +
         log" memory limit (${MDC(NUM_BYTES_MAX, effectiveMaxMemory)} bytes)" +
         (if (unmanagedMemory > 0) {
