@@ -578,7 +578,6 @@ private[sql] class RocksDBStateStoreProvider
         new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
       }
 
-      // FIXME: probably not a good name since it's only to iterate keys sorted with event time
       override def iterator(): StateStoreIterator[UnsafeRowPairWithEventTime] = {
         validateAndTransitionState(UPDATE)
         // Note this verify function only verify on the colFamilyName being valid,
@@ -589,8 +588,6 @@ private[sql] class RocksDBStateStoreProvider
 
         require(keyEncoder.supportEventTime,
           "iterator requires encoder supporting event time!")
-        // FIXME: should we have a marker to denote that keyEncoder supports range scan
-        //  with event time?
 
         val rowPair = new UnsafeRowPairWithEventTime()
         val rocksDbIter = rocksDB.iterator(columnFamilyName)
@@ -624,8 +621,6 @@ private[sql] class RocksDBStateStoreProvider
         require(useColumnFamilies, "iteratorWithMultiValues requires using " +
           "column families!")
 
-        // FIXME: should we have a marker to denote that keyEncoder supports range scan
-        //  with event time?
         val rowPair = new UnsafeRowPairWithEventTime()
         val rocksDbIter = rocksDB.iterator(columnFamilyName)
 

@@ -331,10 +331,37 @@ trait DataEncoder {
    */
   def encodePrefixKeyForRangeScan(row: UnsafeRow): Array[Byte]
 
-  // FIXME: doc!
+  /**
+   * Encodes key and event time, ensuring prefix scan with key and also proper sort order with
+   * event time within the same key in RocksDB.
+   *
+   * This method handles the encoding as follows:
+   * - Encodes the key columns normally and put them first
+   * - Appends the event time Long value in big-endian order as the last 8 bytes
+   *
+   * @param row An UnsafeRow denoting a key
+   * @param eventTime Long value representing the event time
+   * @return Serialized bytes that will maintain prefix scan with key and sort order with
+   *         event time
+   * @throws UnsupportedOperationException if called on an encoder that doesn't support event time
+   *                                       as postfix.
+   */
   def encodeKeyForEventTimeAsPostfix(row: UnsafeRow, eventTime: Long): Array[Byte]
 
-  // FIXME: doc!
+  /**
+   * Encodes key and event time, ensuring proper sort order with event time across keys in
+   * RocksDB.
+   *
+   * This method handles the encoding done as follows:
+   * - Encodes the event time Long value in big-endian order and put them first
+   * - Appends the encoded key columns as the remaining bytes
+   *
+   * @param row An UnsafeRow denoting a key
+   * @param eventTime Long value representing the event time
+   * @return Serialized bytes that will maintain sort order with event time across keys
+   * @throws UnsupportedOperationException if called on an encoder that doesn't support event time
+   *                                       as prefix.
+   */
   def encodeKeyForEventTimeAsPrefix(row: UnsafeRow, eventTime: Long): Array[Byte]
 
   /**
@@ -383,10 +410,34 @@ trait DataEncoder {
    */
   def decodePrefixKeyForRangeScan(bytes: Array[Byte]): UnsafeRow
 
-  // FIXME: doc!
+  /**
+   * Decodes key bytes containing key and event time appended as postfix back into an UnsafeRow
+   * and event time.
+   *
+   * This method reverses the encoding done by encodeKeyForEventTimeAsPostfix:
+   * - Read the bytes excluding the last 8 bytes as the key UnsafeRow
+   * - Read the last 8 bytes as the event time Long value
+   *
+   * @param bytes Serialized byte array containing the encoded key and event time
+   * @return UnsafeRow containing the decoded key columns and the event time Long value
+   * @throws UnsupportedOperationException if called on an encoder that doesn't support event time
+   *                                       as postfix.
+   */
   def decodeKeyForEventTimeAsPostfix(bytes: Array[Byte]): (UnsafeRow, Long)
 
-  // FIXME: doc!
+  /**
+   * Decodes key bytes containing event time appended as prefix and key back into an UnsafeRow
+   * and event time.
+   *
+   * This method reverses the encoding done by encodeKeyForEventTimeAsPrefix:
+   * - Read the 8 bytes as the event time Long value
+   * - Read the remaining bytes as the key UnsafeRow
+   *
+   * @param bytes Serialized byte array containing the encoded key and event time
+   * @return UnsafeRow containing the decoded key columns and the event time Long value
+   * @throws UnsupportedOperationException if called on an encoder that doesn't support event time
+   *                                       as prefix.
+   */
   def decodeKeyForEventTimeAsPrefix(bytes: Array[Byte]): (UnsafeRow, Long)
 
   /**

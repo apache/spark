@@ -351,9 +351,6 @@ trait StateStore extends ReadStateStore {
       columnFamilyName: String): EventTimeAwareStateOperations
 }
 
-// FIXME: Should we make this to control the lifecycle of the state store as well, or just limit
-//  to the operations? We may name this a bit differently if we want to make this also control
-//  the lifecycle.
 trait EventTimeAwareStateOperations {
   def columnFamilyName: String
 
