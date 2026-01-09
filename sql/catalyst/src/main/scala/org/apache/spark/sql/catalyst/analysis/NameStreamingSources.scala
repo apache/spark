@@ -41,7 +41,7 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  * - Flow-assigned names (from DLT context) are preserved
  * - Unassigned sources remain unassigned and will be auto-numbered later in MicroBatchExecution
  *
- * When `spark.sql.streaming.queryEvolution.enableStreamingSourceEvolution` is enabled,
+ * When `spark.sql.streaming.queryEvolution.enableSourceEvolution` is enabled,
  * all sources must be explicitly named (throws error if any Unassigned sources found).
  */
 object NameStreamingSources extends Rule[LogicalPlan] {
