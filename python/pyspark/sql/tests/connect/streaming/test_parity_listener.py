@@ -45,6 +45,9 @@ class TestListenerSpark(StreamingQueryListener):
         df = self.spark.createDataFrame(data=[(e,)])
         df.write.mode("append").saveAsTable("listener_terminated_events")
 
+    def onQueryExecutionStart(self, event) -> None:
+        pass
+
 
 # V1: Initial interface of StreamingQueryListener containing methods `onQueryStarted`,
 # `onQueryProgress`, `onQueryTerminated`. It is prior to Spark 3.5.
@@ -81,6 +84,9 @@ class TestListenerLocalV2(StreamingQueryListener):
 
     def onQueryTerminated(self, event):
         self.terminated.append(event)
+
+    def onQueryExecutionStart(self, event) -> None:
+        pass
 
 
 class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTestCase):

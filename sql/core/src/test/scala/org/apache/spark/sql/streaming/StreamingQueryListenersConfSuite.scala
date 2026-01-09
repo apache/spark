@@ -25,7 +25,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.STREAMING_QUERY_LISTENERS
 import org.apache.spark.sql.streaming.StreamingQueryListener._
 
-
 class StreamingQueryListenersConfSuite extends StreamTest with BeforeAndAfter {
 
   import testImplicits._
@@ -69,8 +68,9 @@ class TestListener(sparkConf: SparkConf) extends StreamingQueryListener {
   override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {
     TestListener.queryTerminatedEvent = event
   }
-}
 
+  override def onQueryExecutionStart(event: QueryExecutionStartEvent): Unit = {}
+}
 
 class TestSQLConfStreamingQueryListener extends StreamingQueryListener {
 
@@ -85,4 +85,6 @@ class TestSQLConfStreamingQueryListener extends StreamingQueryListener {
   override def onQueryIdle(event: QueryIdleEvent): Unit = {}
 
   override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {}
+
+  override def onQueryExecutionStart(event: QueryExecutionStartEvent): Unit = {}
 }

@@ -60,6 +60,10 @@ class StreamingQueryListener(ABC):
     ...        # Do something with event.
     ...        pass
     ...
+    ...    def onQueryExecutionStart(self, event: QueryExecutionStartEvent) -> None:
+    ...        # Do something with event.
+    ...        pass
+    ...
     >>> spark.streams.addListener(MyListener())
     """
 
@@ -127,6 +131,14 @@ class StreamingQueryListener(ABC):
         """
         pass
 
+    # NOTE: Do not mark this as abstract method, we are following the same pattern as
+    # onQueryIdle to avoid breaking existing implementations.
+    def onQueryExecutionStart(self, event: "QueryExecutionStartEvent") -> None:
+        """
+        Called when a query trigger is started.
+        """
+        pass
+
     @property
     def _jlistener(self) -> "JavaObject":
         from pyspark import SparkContext
@@ -161,6 +173,9 @@ class JStreamingQueryListener:
 
     def onQueryTerminated(self, jevent: "JavaObject") -> None:
         self.pylistener.onQueryTerminated(QueryTerminatedEvent.fromJObject(jevent))
+
+    def onQueryExecutionStart(self, jevent: "JavaObject") -> None:
+        self.pylistener.onQueryExecutionStart(QueryExecutionStartEvent.fromJObject(jevent))
 
     class Java:
         implements = ["org.apache.spark.sql.streaming.PythonStreamingQueryListener"]
@@ -417,6 +432,78 @@ class QueryTerminatedEvent:
         .. versionadded:: 3.5.0
         """
         return self._errorClassOnException
+
+
+class QueryExecutionStartEvent:
+    """
+    Event representing the start of a query trigger.
+
+    .. versionadded:: 4.2.0
+
+    Notes
+    -----
+    This API is evolving.
+    """
+
+    def __init__(
+        self,
+        id: uuid.UUID,
+        runId: uuid.UUID,
+        name: Optional[str],
+        timestamp: str,
+    ) -> None:
+        self._id: uuid.UUID = id
+        self._runId: uuid.UUID = runId
+        self._name: Optional[str] = name
+        self._timestamp: str = timestamp
+
+    @classmethod
+    def fromJObject(cls, jevent: "JavaObject") -> "QueryExecutionStartEvent":
+        return cls(
+            id=uuid.UUID(jevent.id().toString()),
+            runId=uuid.UUID(jevent.runId().toString()),
+            name=jevent.name(),
+            timestamp=jevent.timestamp(),
+        )
+
+    @classmethod
+    def fromJson(cls, j: Dict[str, Any]) -> "QueryExecutionStartEvent":
+        return cls(
+            id=uuid.UUID(j["id"]),
+            runId=uuid.UUID(j["runId"]),
+            name=j["name"],
+            timestamp=j["timestamp"],
+        )
+
+    @property
+    def id(self) -> uuid.UUID:
+        """
+        A unique query id that persists across restarts. See
+        py:meth:`~pyspark.sql.streaming.StreamingQuery.id`.
+        """
+        return self._id
+
+    @property
+    def runId(self) -> uuid.UUID:
+        """
+        A query id that is unique for every start/restart. See
+        py:meth:`~pyspark.sql.streaming.StreamingQuery.runId`.
+        """
+        return self._runId
+
+    @property
+    def name(self) -> Optional[str]:
+        """
+        User-specified name of the query, `None` if not specified.
+        """
+        return self._name
+
+    @property
+    def timestamp(self) -> str:
+        """
+        The timestamp of when the trigger started.
+        """
+        return self._timestamp
 
 
 class StreamingQueryProgress(dict):

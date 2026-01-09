@@ -217,6 +217,9 @@ class StreamingListenerTestsMixin:
             def onQueryTerminated(self, event):
                 pass
 
+            def onQueryExecutionStart(self, event):
+                pass
+
         try:
             error_listener = MyErrorListener()
             self.spark.streams.addListener(error_listener)
@@ -359,6 +362,26 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
                 nonlocal terminated_event
                 terminated_event = event
 
+        # V3: The interface after the method `onQueryExecutionStart` is added. It is Spark 4.1+.
+        class TestListenerV3(StreamingQueryListener):
+            def onQueryStarted(self, event):
+                nonlocal start_event
+                start_event = event
+
+            def onQueryProgress(self, event):
+                nonlocal progress_event
+                progress_event = event
+
+            def onQueryIdle(self, event):
+                pass
+
+            def onQueryTerminated(self, event):
+                nonlocal terminated_event
+                terminated_event = event
+
+            def onQueryExecutionStart(self, event):
+                pass
+
         def verify(test_listener):
             nonlocal start_event
             nonlocal progress_event
@@ -420,6 +443,7 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
 
         verify(TestListenerV1())
         verify(TestListenerV2())
+        verify(TestListenerV3())
 
     def test_remove_listener(self):
         # SPARK-38804: Test StreamingQueryManager.removeListener
@@ -449,6 +473,23 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
             def onQueryTerminated(self, event):
                 pass
 
+        # V3: The interface after the method `onQueryExecutionStart` is added. It is Spark 4.1+.
+        class TestListenerV3(StreamingQueryListener):
+            def onQueryStarted(self, event):
+                pass
+
+            def onQueryProgress(self, event):
+                pass
+
+            def onQueryIdle(self, event):
+                pass
+
+            def onQueryTerminated(self, event):
+                pass
+
+            def onQueryExecutionStart(self, event):
+                pass
+
         def verify(test_listener):
             num_listeners = len(self.spark.streams._jsqm.listListeners())
             self.spark.streams.addListener(test_listener)
@@ -458,6 +499,7 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
 
         verify(TestListenerV1())
         verify(TestListenerV2())
+        verify(TestListenerV3())
 
     def test_query_started_event_fromJson(self):
         start_event_old = """
