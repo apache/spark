@@ -101,9 +101,6 @@ grpc_requirement_message = None if have_grpc else "No module named 'grpc'"
 have_grpc_status = have_package("grpc_status")
 grpc_status_requirement_message = None if have_grpc_status else "No module named 'grpc_status'"
 
-have_duckdb = have_package("duckdb")
-duckdb_requirement_message = None if have_duckdb else "No module named 'duckdb'"
-
 
 googleapis_common_protos_requirement_message = None
 

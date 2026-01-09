@@ -14,26 +14,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import ctypes
 import unittest
 import pyarrow as pa
 import pandas as pd
 import pyspark.pandas as ps
-from pyspark.testing.utils import have_duckdb
-
-if have_duckdb:
-    import duckdb
 
 
-@unittest.skipIf(not have_duckdb, "duckdb is not installed")
 class TestSparkArrowCStreamer(unittest.TestCase):
-    def _create_arrow_c_stream(self):
+    def test_spark_arrow_c_streamer_arrow_consumer(self):
         pdf = pd.DataFrame([[1, "a"], [2, "b"], [3, "c"], [4, "d"]], columns=["id", "value"])
         psdf = ps.from_pandas(pdf)
-        stream = pa.RecordBatchReader.from_stream(psdf)
-        return stream
 
-    def test_spark_arrow_c_streamer_arrow_consumer(self):
-        stream = self._create_arrow_c_stream()
+        capsule = psdf.__arrow_c_stream__()
+        assert (
+            ctypes.pythonapi.PyCapsule_IsValid(ctypes.py_object(capsule), b"arrow_array_stream")
+            == 1
+        )
+
+        stream = pa.RecordBatchReader.from_stream(psdf)
         assert isinstance(stream, pa.RecordBatchReader)
         result = pa.Table.from_batches(stream)
         schema = pa.schema(
@@ -50,14 +49,6 @@ class TestSparkArrowCStreamer(unittest.TestCase):
             ),
             schema=schema,
         )
-        self.assertEqual(result, expected)
-
-    def test_spark_arrow_c_streamer_duckdb_consumer(self):
-        stream = self._create_arrow_c_stream()
-        assert isinstance(stream, pa.RecordBatchReader)
-        # Verify the contents of the DuckDB relation
-        result = duckdb.execute("SELECT id, value from stream").fetchall()
-        expected = [(1, "a"), (2, "b"), (3, "c"), (4, "d")]
         self.assertEqual(result, expected)
 
 
