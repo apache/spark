@@ -36,7 +36,7 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase, search_jar, read_classpa
 kafka_sql_jar = search_jar(
     "connector/kafka-0-10-sql",
     "spark-sql-kafka-0-10_",
-    "spark-sql-kafka-0-10_",
+    "dfadfa",
 )
 
 if kafka_sql_jar is None:
@@ -47,15 +47,10 @@ if kafka_sql_jar is None:
         "before running this test."
     )
 
-# Try to read the full classpath including all dependencies (Maven builds only)
-# SBT builds don't generate classpath.txt, so we just use the main JAR
-try:
-    kafka_classpath = read_classpath("connector/kafka-0-10-sql")
-    all_jars = f"{kafka_sql_jar},{kafka_classpath}"
-except RuntimeError:
-    # SBT build - classpath.txt doesn't exist
-    # Just use the main JAR; SBT's Test/package should have dependencies available
-    all_jars = kafka_sql_jar
+# Read the full classpath including all dependencies
+# This works for both Maven builds (reads classpath.txt) and SBT builds (queries SBT)
+kafka_classpath = read_classpath("connector/kafka-0-10-sql")
+all_jars = f"{kafka_sql_jar},{kafka_classpath}"
 
 # Add Kafka JAR to PYSPARK_SUBMIT_ARGS before SparkSession is created
 existing_args = os.environ.get("PYSPARK_SUBMIT_ARGS", "pyspark-shell")
