@@ -510,6 +510,9 @@ jobs:
     timeout-minutes: 120
     container:
       image: ${{ needs.precondition.outputs.image_pyspark_url_link }}
+      options: >-
+        --cap-add=SYS_PTRACE
+        --security-opt seccomp=unconfined
     strategy:
       fail-fast: false
       matrix:
