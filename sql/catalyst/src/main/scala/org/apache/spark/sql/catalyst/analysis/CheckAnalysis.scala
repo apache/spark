@@ -250,11 +250,14 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
   }
 
   def checkAnalysis0(plan: LogicalPlan): Unit = {
+    // Check NEW TABLE(INSERT ...) restrictions FIRST before other validations
+    ValidateReturningInsertInCheckAnalysis.validate(plan)
+
     // The target table is not a child plan of the insert command. We should report errors for table
     // not found first, instead of errors in the input query of the insert command, by doing a
     // top-down traversal.
     plan.foreach {
-      case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _, _) =>
+      case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _, _, _) =>
         u.tableNotFound(u.multipartIdentifier)
 
       // TODO (SPARK-27484): handle streaming write commands when we have them.

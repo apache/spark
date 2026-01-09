@@ -493,7 +493,7 @@ class PlanParserSuite extends AnalysisTest {
     checkError(
       exception = parseException(sql1),
       condition = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'b'", "hint" -> ": extra input 'b'"))
+      parameters = Map("error" -> "'b'", "hint" -> ""))
   }
 
   test("limit") {

@@ -44,7 +44,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
   import DataSourceV2Implicits._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
-    case a @ AppendData(r: DataSourceV2Relation, query, options, _, None, _) =>
+    case a @ AppendData(r: DataSourceV2Relation, query, options, _, None, _, _, _) =>
       val writeOptions = mergeOptions(options, r.options.asCaseSensitiveMap.asScala.toMap)
       val writeBuilder = newWriteBuilder(r.table, writeOptions, query.schema)
       val write = writeBuilder.build()
@@ -52,7 +52,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       a.copy(write = Some(write), query = newQuery)
 
     case o @ OverwriteByExpression(
-        r: DataSourceV2Relation, deleteExpr, query, options, _, None, _) =>
+        r: DataSourceV2Relation, deleteExpr, query, options, _, None, _, _, _) =>
       // fail if any filter cannot be converted. correctness depends on removing all matching data.
       val predicates = splitConjunctivePredicates(deleteExpr).flatMap { pred =>
         val predicate = DataSourceV2Strategy.translateFilterV2(pred)
@@ -77,7 +77,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, r.funCatalog)
       o.copy(write = Some(write), query = newQuery)
 
-    case o @ OverwritePartitionsDynamic(r: DataSourceV2Relation, query, options, _, None) =>
+    case o @ OverwritePartitionsDynamic(r: DataSourceV2Relation, query, options, _, None, _, _) =>
       val table = r.table
       val writeOptions = mergeOptions(options, r.options.asCaseSensitiveMap.asScala.toMap)
       val writeBuilder = newWriteBuilder(table, writeOptions, query.schema)

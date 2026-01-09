@@ -292,7 +292,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
     case AppendData(r @ ExtractV2Table(v1: SupportsWrite), _, _,
-        _, Some(write), analyzedQuery) if v1.supports(TableCapability.V1_BATCH_WRITE) =>
+        _, Some(write), analyzedQuery, _, _) if v1.supports(TableCapability.V1_BATCH_WRITE) =>
       write match {
         case v1Write: V1Write =>
           assert(analyzedQuery.isDefined)
@@ -302,11 +302,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             v1, v2Write.getClass.getName, classOf[V1Write].getName)
       }
 
-    case AppendData(r: DataSourceV2Relation, query, _, _, Some(write), _) =>
+    case AppendData(r: DataSourceV2Relation, query, _, _, Some(write), _, _, _) =>
       AppendDataExec(planLater(query), refreshCache(r), write) :: Nil
 
     case OverwriteByExpression(r @ ExtractV2Table(v1: SupportsWrite), _, _,
-        _, _, Some(write), analyzedQuery) if v1.supports(TableCapability.V1_BATCH_WRITE) =>
+        _, _, Some(write), analyzedQuery, _, _) if v1.supports(TableCapability.V1_BATCH_WRITE) =>
       write match {
         case v1Write: V1Write =>
           assert(analyzedQuery.isDefined)
@@ -317,10 +317,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
     case OverwriteByExpression(
-        r: DataSourceV2Relation, _, query, _, _, Some(write), _) =>
+        r: DataSourceV2Relation, _, query, _, _, Some(write), _, _, _) =>
       OverwriteByExpressionExec(planLater(query), refreshCache(r), write) :: Nil
 
-    case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, _, _, Some(write)) =>
+    case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, _, _, Some(write), _, _) =>
       OverwritePartitionsDynamicExec(planLater(query), refreshCache(r), write) :: Nil
 
     case DeleteFromTableWithFilters(r: DataSourceV2Relation, filters) =>

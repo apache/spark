@@ -230,6 +230,7 @@ NAMESPACES	false
 NANOSECOND	false
 NANOSECONDS	false
 NATURAL	true
+NEW	false
 NO	false
 NONE	false
 NORELY	false

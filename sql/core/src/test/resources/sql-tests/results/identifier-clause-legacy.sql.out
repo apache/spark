@@ -722,7 +722,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'1'",
-    "hint" : ": extra input '1'"
+    "hint" : ""
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2373,7 +2373,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "':'",
-    "hint" : ": extra input ':'"
+    "hint" : ""
   },
   "queryContext" : [ {
     "objectType" : "EXECUTE IMMEDIATE",
@@ -2555,7 +2555,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "':'",
-    "hint" : ": extra input ':'"
+    "hint" : ""
   },
   "queryContext" : [ {
     "objectType" : "EXECUTE IMMEDIATE",

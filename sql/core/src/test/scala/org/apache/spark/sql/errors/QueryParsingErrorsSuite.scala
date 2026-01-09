@@ -680,7 +680,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       exception = parseException("SELECT CAST(struct(1,2,3) AS STRUCT<INT>)"),
       condition = "PARSE_SYNTAX_ERROR",
       sqlState = "42601",
-      parameters = Map("error" -> "'<'", "hint" -> ": missing ')'"))
+      parameters = Map("error" -> "'>'", "hint" -> ""))
     // Create column of struct type without specifying field type in lowercase
     checkError(
       exception = parseException("CREATE TABLE tbl_120691 (col1 struct)"),
@@ -707,7 +707,7 @@ class QueryParsingErrorsSuite extends QueryTest with SharedSparkSession with SQL
       exception = parseException("SELECT CAST(map('1',2) AS MAP<STRING>)"),
       condition = "PARSE_SYNTAX_ERROR",
       sqlState = "42601",
-      parameters = Map("error" -> "'<'", "hint" -> ": missing ')'"))
+      parameters = Map("error" -> "'>'", "hint" -> ""))
     // Create column of map type without specifying key/value types in lowercase
     checkError(
       exception = parseException("SELECT CAST(map('1',2) AS map)"),

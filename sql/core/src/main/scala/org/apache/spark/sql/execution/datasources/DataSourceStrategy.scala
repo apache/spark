@@ -162,7 +162,10 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
       CreateDataSourceTableAsSelectCommand(tableDesc, mode, query, query.output.map(_.name))
 
     case InsertIntoStatement(l @ LogicalRelationWithTable(_: InsertableRelation, _),
-        parts, _, query, overwrite, false, _) if parts.isEmpty =>
+        parts, _, query, overwrite, false, _, returning) if parts.isEmpty =>
+      if (returning) {
+        throw QueryCompilationErrors.returningClauseUnsupportedForV1TablesError()
+      }
       InsertIntoDataSourceCommand(l, query, overwrite)
 
     case InsertIntoDir(_, storage, provider, query, overwrite)
@@ -174,8 +177,14 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
       InsertIntoDataSourceDirCommand(storage, provider.get, query, overwrite)
 
     case i @ InsertIntoStatement(
-        l @ LogicalRelationWithTable(t: HadoopFsRelation, table), parts, _, query, overwrite, _, _)
+        l @ LogicalRelationWithTable(t: HadoopFsRelation, table),
+        parts, _, query, overwrite, _, _, returning)
         if query.resolved =>
+      // Returning clause is not supported for V1 data sources
+      if (returning) {
+        throw QueryCompilationErrors.returningClauseUnsupportedForV1TablesError()
+      }
+
       // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
       // the user has specified static partitions, we add a Project operator on top of the query
       // to include those constant column values in the query result.
@@ -307,15 +316,15 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, options, false),
-        _, _, _, _, _, _) if DDLUtils.isDatasourceTable(tableMeta) =>
+        _, _, _, _, _, _, _) if DDLUtils.isDatasourceTable(tableMeta) =>
       i.copy(table = readDataSourceTable(tableMeta, options))
 
     case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, _, false),
-        _, _, _, _, _, _) =>
+        _, _, _, _, _, _, _) =>
       i.copy(table = DDLUtils.readHiveTable(tableMeta))
 
     case append @ AppendData(
-        ExtractV2Table(V1Table(table: CatalogTable)), _, _, _, _, _) if !append.isByName =>
+        ExtractV2Table(V1Table(table: CatalogTable)), _, _, _, _, _, _, _) if !append.isByName =>
       InsertIntoStatement(UnresolvedCatalogRelation(table),
         table.partitionColumnNames.map(name => name -> None).toMap,
         Seq.empty, append.query, false, append.isByName)

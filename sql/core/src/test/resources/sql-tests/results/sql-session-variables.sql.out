@@ -2375,7 +2375,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
-    "error" : "'('",
+    "error" : "'c1'",
     "hint" : ""
   }
 }
@@ -2516,4 +2516,3 @@ DROP TEMPORARY VARIABLE var1
 -- !query schema
 struct<>
 -- !query output
-
