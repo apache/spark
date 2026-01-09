@@ -6753,23 +6753,6 @@
           "Unsupported interrupt type: <interruptType>."
         ]
       },
-      "NESTED_RETURNING_INSERT" : {
-        "message" : [
-          "NEW TABLE(INSERT ...) can only be used at the top level of a SELECT statement. It cannot be used in <context>."
-        ],
-        "sqlState" : "42903"
-      },
-      "RETURNING_CLAUSE_IN_V1_TABLE" : {
-        "message" : [
-          "The RETURNING clause (NEW TABLE syntax) is not supported for V1 data sources. Please use a V2 data source or remove the RETURNING clause."
-        ]
-      },
-      "RETURNING_INSERT_TABLE_CONFLICT" : {
-        "message" : [
-          "Table <tableName> is the target of a NEW TABLE(INSERT ...) and cannot be referenced elsewhere in the same query. Found <conflictType>."
-        ],
-        "sqlState" : "42621"
-      },
       "LAMBDA_FUNCTION_WITH_PYTHON_UDF" : {
         "message" : [
           "Lambda function with Python UDF <funcName> in a higher order function."
@@ -6809,6 +6792,23 @@
         "message" : [
           "Literal for '<value>' of <type>."
         ]
+      },
+      "NESTED_RETURNING_INSERT" : {
+        "message" : [
+          "NEW TABLE(INSERT ...) can only be used at the top level of a SELECT statement. It cannot be used in <context>."
+        ],
+        "sqlState" : "42903"
+      },
+      "RETURNING_CLAUSE_IN_V1_TABLE" : {
+        "message" : [
+          "The RETURNING clause (NEW TABLE syntax) is not supported for V1 data sources. Please use a V2 data source or remove the RETURNING clause."
+        ]
+      },
+      "RETURNING_INSERT_TABLE_CONFLICT" : {
+        "message" : [
+          "Table <tableName> is the target of a NEW TABLE(INSERT ...) and cannot be referenced elsewhere in the same query. Found <conflictType>."
+        ],
+        "sqlState" : "42621"
       },
       "MULTIPLE_BUCKET_TRANSFORMS" : {
         "message" : [
