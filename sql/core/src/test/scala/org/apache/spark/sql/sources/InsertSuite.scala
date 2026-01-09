@@ -983,7 +983,14 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       sql("INSERT INTO TABLE test_table SELECT 1, 'a'")
       checkError(
         exception = intercept[AnalysisException] {
-          sql(s"INSERT WITH SCHEMA EVOLUTION INTO TABLE $tableName SELECT 1, 'a', 2")
+          sql(s"INSERT WITH SCHEMA EVOLUTION INTO TABLE test_table SELECT 1, 'a'")
+        },
+        condition = "UNSUPPORTED_INSERT_WITH_SCHEMA_EVOLUTION"
+      )
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"INSERT WITH SCHEMA EVOLUTION INTO TABLE test_table SELECT 1, 'a', 2")
         },
         condition = "UNSUPPORTED_INSERT_WITH_SCHEMA_EVOLUTION"
       )
