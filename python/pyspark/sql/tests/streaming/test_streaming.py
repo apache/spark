@@ -147,6 +147,28 @@ class StreamingTestsMixin:
         except TypeError:
             pass
 
+    def test_stream_real_time_trigger(self):
+        df = self.spark.readStream.format("text").load("python/test_support/sql/streaming")
+        tmpPath = tempfile.mkdtemp()
+        shutil.rmtree(tmpPath)
+        self.assertTrue(df.isStreaming)
+        out = os.path.join(tmpPath, "out")
+        chk = os.path.join(tmpPath, "chk")
+        try:
+            q = (
+                df.writeStream.format("console")
+                .trigger(realTime="5 seconds")
+                .option("checkpointLocation", chk)
+                .outputMode("update")
+                .start(out)
+            )
+            q.processAllAvailable()
+        except Exception as e:
+            # This error is expected
+            self._assert_exception_tree_contains_msg(
+                e, "STREAMING_REAL_TIME_MODE.INPUT_STREAM_NOT_SUPPORTED"
+            )
+
     def test_stream_read_options(self):
         schema = StructType([StructField("data", StringType(), False)])
         df = (
