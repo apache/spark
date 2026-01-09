@@ -71,7 +71,8 @@ trait V2WriteCommand
 
   override def child: LogicalPlan = query
 
-  override def output: Seq[Attribute] = if (returning) returningOutput else Nil
+  // Use lazy to avoid initialization order issues
+  override lazy val output: Seq[Attribute] = if (returning) returningOutput else Nil
 
   override lazy val resolved: Boolean = table.resolved && query.resolved && outputResolved
 

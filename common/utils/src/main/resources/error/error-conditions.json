@@ -6748,9 +6748,9 @@
           "INSERT INTO <tableName> with IF NOT EXISTS in the PARTITION spec."
         ]
       },
-      "RETURNING_CLAUSE_IN_V1_TABLE" : {
+      "INTERRUPT_TYPE" : {
         "message" : [
-          "The RETURNING clause (NEW TABLE syntax) is not supported for V1 data sources. Please use a V2 data source or remove the RETURNING clause."
+          "Unsupported interrupt type: <interruptType>."
         ]
       },
       "NESTED_RETURNING_INSERT" : {
@@ -6759,16 +6759,16 @@
         ],
         "sqlState" : "42903"
       },
+      "RETURNING_CLAUSE_IN_V1_TABLE" : {
+        "message" : [
+          "The RETURNING clause (NEW TABLE syntax) is not supported for V1 data sources. Please use a V2 data source or remove the RETURNING clause."
+        ]
+      },
       "RETURNING_INSERT_TABLE_CONFLICT" : {
         "message" : [
           "Table <tableName> is the target of a NEW TABLE(INSERT ...) and cannot be referenced elsewhere in the same query. Found <conflictType>."
         ],
         "sqlState" : "42621"
-      },
-      "INTERRUPT_TYPE" : {
-        "message" : [
-          "Unsupported interrupt type: <interruptType>."
-        ]
       },
       "LAMBDA_FUNCTION_WITH_PYTHON_UDF" : {
         "message" : [

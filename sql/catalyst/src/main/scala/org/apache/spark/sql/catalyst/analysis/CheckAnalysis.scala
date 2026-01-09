@@ -230,15 +230,16 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
    * of a SELECT statement, not in subqueries, CTEs (except as top-level), UNION branches, etc.
    */
   private def checkReturningInsertContext(plan: LogicalPlan): Unit = {
-    def isReturningInsert(p: LogicalPlan): Boolean = p match {
-      case InsertIntoStatement(_, _, _, _, _, _, _, returning) if returning => true
-      case w: V2WriteCommand =>
-        try {
-          w.returning
-        } catch {
-          case _: NoSuchMethodError => false // Old V2WriteCommand without returning
+    def isReturningInsert(p: LogicalPlan): Boolean = {
+      try {
+        p match {
+          case InsertIntoStatement(_, _, _, _, _, _, _, returning) if returning => true
+          case w: V2WriteCommand if w.returning => true
+          case _ => false
         }
-      case _ => false
+      } catch {
+        case _: Throwable => false // Safely handle any initialization issues
+      }
     }
 
     def checkContext(p: LogicalPlan, context: String, isTopLevel: Boolean): Unit = {
