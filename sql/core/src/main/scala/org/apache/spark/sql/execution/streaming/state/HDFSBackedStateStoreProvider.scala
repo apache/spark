@@ -323,6 +323,12 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
         key: UnsafeRow, values: Array[UnsafeRow], colFamilyName: String): Unit = {
       throw StateStoreErrors.unsupportedOperationException("mergeList", providerName)
     }
+
+    override def initiateEventTimeAwareStateOperations(
+        columnFamilyName: String): EventTimeAwareStateOperations = {
+      throw StateStoreErrors.unsupportedOperationException(
+        "initiateEventTimeAwareStateOperations", providerName)
+    }
   }
 
   def getMetricsForProvider(): Map[String, Long] = synchronized {

@@ -346,6 +346,39 @@ trait StateStore extends ReadStateStore {
    * Whether all updates have been committed
    */
   def hasCommitted: Boolean
+
+  def initiateEventTimeAwareStateOperations(
+      columnFamilyName: String): EventTimeAwareStateOperations
+}
+
+// FIXME: Should we make this to control the lifecycle of the state store as well, or just limit
+//  to the operations? We may name this a bit differently if we want to make this also control
+//  the lifecycle.
+trait EventTimeAwareStateOperations {
+  def columnFamilyName: String
+
+  def get(key: UnsafeRow, eventTime: Long): UnsafeRow
+
+  def valuesIterator(key: UnsafeRow, eventTime: Long): Iterator[UnsafeRow]
+
+  def prefixScan(prefixKey: UnsafeRow): StateStoreIterator[UnsafeRowPairWithEventTime]
+
+  def prefixScanWithMultiValues(
+      prefixKey: UnsafeRow): StateStoreIterator[UnsafeRowPairWithEventTime]
+
+  def iterator(): StateStoreIterator[UnsafeRowPairWithEventTime]
+
+  def iteratorWithMultiValues(): StateStoreIterator[UnsafeRowPairWithEventTime]
+
+  def put(key: UnsafeRow, eventTime: Long, value: UnsafeRow): Unit
+
+  def putList(key: UnsafeRow, eventTime: Long, values: Array[UnsafeRow]): Unit
+
+  def remove(key: UnsafeRow, eventTime: Long): Unit
+
+  def merge(key: UnsafeRow, eventTime: Long, value: UnsafeRow): Unit
+
+  def mergeList(key: UnsafeRow, eventTime: Long, values: Array[UnsafeRow]): Unit
 }
 
 /** Wraps the instance of StateStore to make the instance read-only. */
@@ -635,6 +668,30 @@ case class RangeKeyScanStateEncoderSpec(
   override def jsonValue: JValue = {
     ("keyStateEncoderType" -> JString("RangeKeyScanStateEncoderSpec")) ~
       ("orderingOrdinals" -> orderingOrdinals.map(JInt(_)))
+  }
+}
+
+case class EventTimeAsPrefixStateEncoderSpec(keySchema: StructType) extends KeyStateEncoderSpec {
+  override def toEncoder(
+      dataEncoder: RocksDBDataEncoder,
+      useColumnFamilies: Boolean): RocksDBKeyStateEncoder = {
+    new EventTimeAsPrefixStateEncoder(dataEncoder, keySchema, useColumnFamilies)
+  }
+
+  override def jsonValue: JValue = {
+    "keyStateEncoderType" -> JString("EventTimeAsPrefixStateEncoderSpec")
+  }
+}
+
+case class EventTimeAsPostfixStateEncoderSpec(keySchema: StructType) extends KeyStateEncoderSpec {
+  override def toEncoder(
+      dataEncoder: RocksDBDataEncoder,
+      useColumnFamilies: Boolean): RocksDBKeyStateEncoder = {
+    new EventTimeAsPostfixStateEncoder(dataEncoder, keySchema, useColumnFamilies)
+  }
+
+  override def jsonValue: JValue = {
+    "keyStateEncoderType" -> JString("EventTimeAsPostfixStateEncoderSpec")
   }
 }
 
@@ -1081,6 +1138,17 @@ class UnsafeRowPair(var key: UnsafeRow = null, var value: UnsafeRow = null) {
   }
 }
 
+class UnsafeRowPairWithEventTime(
+    var key: UnsafeRow = null,
+    var eventTime: Long = -1L,
+    var value: UnsafeRow = null) {
+  def withRows(key: UnsafeRow, eventTime: Long, value: UnsafeRow): UnsafeRowPairWithEventTime = {
+    this.key = key
+    this.eventTime = eventTime
+    this.value = value
+    this
+  }
+}
 
 /**
  * Companion object to [[StateStore]] that provides helper methods to create and retrieve stores
