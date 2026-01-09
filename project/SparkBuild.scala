@@ -307,6 +307,7 @@ object SparkBuild extends PomBuild {
       "jitpack" at "https://jitpack.io",
       DefaultMavenRepository,
       Resolver.mavenLocal,
+      "orc" at "https://repository.apache.org/content/repositories/orgapacheorc-1109/",
       Resolver.file("ivyLocal", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns)
     ),
     externalResolvers := resolvers.value,
