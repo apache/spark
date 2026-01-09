@@ -449,6 +449,265 @@ private[sql] class RocksDBStateStoreProvider
       new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
     }
 
+    class RocksDBEventTimeAwareStateOperations(cfName: String)
+      extends EventTimeAwareStateOperations {
+
+      override val columnFamilyName: String = cfName
+
+      verifyColFamilyOperations("doEventTimeAwareStateOperations", columnFamilyName)
+
+      private val kvEncoder = keyValueEncoderMap.get(columnFamilyName)
+      private val keyEncoder = kvEncoder._1
+      private val valueEncoder = kvEncoder._2
+
+      require(keyEncoder.supportEventTime,
+        "EventTimeAwareStateOperations requires encoder supporting event time!")
+
+      override def get(key: UnsafeRow, eventTime: Long): UnsafeRow = {
+        validateAndTransitionState(UPDATE)
+        verifyColFamilyOperations("get", columnFamilyName)
+
+        val value = valueEncoder.decodeValue(
+          rocksDB.get(keyEncoder.encodeKeyWithEventTime(key, eventTime), columnFamilyName))
+
+        if (!isValidated && value != null && !useColumnFamilies) {
+          StateStoreProvider.validateStateRowFormat(
+            key, keySchema, value, valueSchema, stateStoreId, storeConf)
+          isValidated = true
+        }
+        value
+      }
+
+      override def valuesIterator(key: UnsafeRow, eventTime: Long): Iterator[UnsafeRow] = {
+        validateAndTransitionState(UPDATE)
+        verify(key != null, "Key cannot be null")
+        verifyColFamilyOperations("valuesIterator", columnFamilyName)
+
+        verify(valueEncoder.supportsMultipleValuesPerKey, "valuesIterator requires a encoder " +
+          "that supports multiple values for a single key.")
+
+        if (storeConf.rowChecksumEnabled) {
+          // multiGet provides better perf for row checksum, since it avoids copying values
+          val encodedValuesIterator = rocksDB.multiGet(
+            keyEncoder.encodeKeyWithEventTime(key, eventTime), columnFamilyName)
+          valueEncoder.decodeValues(encodedValuesIterator)
+        } else {
+          val encodedValues = rocksDB.get(
+            keyEncoder.encodeKeyWithEventTime(key, eventTime), columnFamilyName)
+          valueEncoder.decodeValues(encodedValues)
+        }
+      }
+
+      override def prefixScan(
+          prefixKey: UnsafeRow): StateStoreIterator[UnsafeRowPairWithEventTime] = {
+        validateAndTransitionState(UPDATE)
+        verifyColFamilyOperations("prefixScan", columnFamilyName)
+
+        require(keyEncoder.supportPrefixKeyScan,
+          "prefixScan requires encoder supporting prefix scan!")
+
+        val rowPair = new UnsafeRowPairWithEventTime()
+        val prefix = keyEncoder.encodeKey(prefixKey)
+
+        val rocksDbIter = rocksDB.prefixScan(prefix, columnFamilyName)
+        val iter = rocksDbIter.map { kv =>
+          val keyWithEventTime = keyEncoder.decodeKeyWithEventTime(kv.key)
+          val keyRow = keyWithEventTime._1
+          val ts = keyWithEventTime._2
+          val valueRow = valueEncoder.decodeValue(kv.value)
+          rowPair.withRows(keyRow, ts, valueRow)
+          rowPair
+        }
+
+        new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
+      }
+
+      override def prefixScanWithMultiValues(
+          prefixKey: UnsafeRow): StateStoreIterator[UnsafeRowPairWithEventTime] = {
+        validateAndTransitionState(UPDATE)
+        verifyColFamilyOperations("prefixScanWithMultiValues", columnFamilyName)
+
+        require(keyEncoder.supportPrefixKeyScan,
+          "prefixScanWithMultiValues requires encoder supporting prefix scan!")
+
+        val prefix = keyEncoder.encodePrefixKey(prefixKey)
+
+        val rocksDbIter = rocksDB.prefixScan(prefix, columnFamilyName)
+
+        val rowPair = new UnsafeRowPairWithEventTime()
+        val iter = rocksDbIter.flatMap { kv =>
+          val (keyRow, ts) = keyEncoder.decodeKeyWithEventTime(kv.key)
+          valueEncoder.decodeValues(kv.value).map { valueRow =>
+            rowPair.withRows(keyRow, ts, valueRow)
+            rowPair
+          }
+        }
+
+        new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
+      }
+
+      // FIXME: probably not a good name since it's only to iterate keys sorted with event time
+      override def iterator(): StateStoreIterator[UnsafeRowPairWithEventTime] = {
+        validateAndTransitionState(UPDATE)
+        // Note this verify function only verify on the colFamilyName being valid,
+        // we are actually doing prefix when useColumnFamilies,
+        // but pass "iterator" to throw correct error message
+        verifyColFamilyOperations("iterator", columnFamilyName)
+        require(useColumnFamilies, "iterator requires using column families!")
+
+        require(keyEncoder.supportEventTime,
+          "iterator requires encoder supporting event time!")
+        // FIXME: should we have a marker to denote that keyEncoder supports range scan
+        //  with event time?
+
+        val rowPair = new UnsafeRowPairWithEventTime()
+        val rocksDbIter = rocksDB.iterator(columnFamilyName)
+
+        val iter = rocksDbIter.map { kv =>
+          val keyWithEventTime = keyEncoder.decodeKeyWithEventTime(kv.key)
+          val keyRow = keyWithEventTime._1
+          val ts = keyWithEventTime._2
+          val valueRow = valueEncoder.decodeValue(kv.value)
+
+          rowPair.withRows(keyRow, ts, valueRow)
+
+          if (!isValidated && rowPair.value != null && !useColumnFamilies) {
+            StateStoreProvider.validateStateRowFormat(
+              keyRow, keySchema, rowPair.value, valueSchema, stateStoreId, storeConf)
+            isValidated = true
+          }
+          rowPair
+        }
+
+        new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
+      }
+
+      override def iteratorWithMultiValues(): StateStoreIterator[UnsafeRowPairWithEventTime] = {
+        validateAndTransitionState(UPDATE)
+        // Note this verify function only verify on the colFamilyName being valid,
+        // we are actually doing prefix when useColumnFamilies,
+        // but pass "iteratorWithMultiValues" to throw correct error message
+        verifyColFamilyOperations("iteratorWithMultiValues", columnFamilyName)
+
+        require(useColumnFamilies, "iteratorWithMultiValues requires using " +
+          "column families!")
+
+        // FIXME: should we have a marker to denote that keyEncoder supports range scan
+        //  with event time?
+        val rowPair = new UnsafeRowPairWithEventTime()
+        val rocksDbIter = rocksDB.iterator(columnFamilyName)
+
+        val iter = rocksDbIter.flatMap { kv =>
+          val keyWithEventTime = keyEncoder.decodeKeyWithEventTime(kv.key)
+          val keyRow = keyWithEventTime._1
+          val ts = keyWithEventTime._2
+          val valueRows = valueEncoder.decodeValues(kv.value)
+          valueRows.map { valueRow =>
+            rowPair.withRows(keyRow, ts, valueRow)
+            if (!isValidated && rowPair.value != null && !useColumnFamilies) {
+              StateStoreProvider.validateStateRowFormat(
+                keyRow, keySchema, rowPair.value, valueSchema, stateStoreId, storeConf)
+              isValidated = true
+            }
+            rowPair
+          }
+        }
+
+        new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
+      }
+
+      override def put(
+          key: UnsafeRow,
+          eventTime: Long,
+          value: UnsafeRow): Unit = {
+        validateAndTransitionState(UPDATE)
+        verify(state == UPDATING, "Cannot put after already committed or aborted")
+        verify(key != null, "Key cannot be null")
+        require(value != null, "Cannot put a null value")
+        verifyColFamilyOperations("put", columnFamilyName)
+
+        rocksDB.put(
+          keyEncoder.encodeKeyWithEventTime(key, eventTime),
+          valueEncoder.encodeValue(value),
+          columnFamilyName)
+      }
+
+      override def putList(
+          key: UnsafeRow,
+          eventTime: Long,
+          values: Array[UnsafeRow]): Unit = {
+        validateAndTransitionState(UPDATE)
+        verify(state == UPDATING, "Cannot put after already committed or aborted")
+        verify(key != null, "Key cannot be null")
+        require(values != null, "Cannot put a null value")
+        verifyColFamilyOperations("putList", columnFamilyName)
+
+        verify(
+          valueEncoder.supportsMultipleValuesPerKey,
+          "Multi-value put operation requires an encoder" +
+            " which supports multiple values for a single key")
+
+        rocksDB.putList(
+          keyEncoder.encodeKeyWithEventTime(key, eventTime),
+          values.map(valueEncoder.encodeValue).toList,
+          columnFamilyName)
+      }
+
+      override def remove(key: UnsafeRow, eventTime: Long): Unit = {
+        validateAndTransitionState(UPDATE)
+        verify(state == UPDATING, "Cannot remove after already committed or aborted")
+        verify(key != null, "Key cannot be null")
+        verifyColFamilyOperations("remove", columnFamilyName)
+
+        rocksDB.remove(
+          keyEncoder.encodeKeyWithEventTime(key, eventTime),
+          columnFamilyName)
+      }
+
+      override def merge(
+          key: UnsafeRow,
+          eventTime: Long,
+          value: UnsafeRow): Unit = {
+        validateAndTransitionState(UPDATE)
+        verify(state == UPDATING, "Cannot merge after already committed or aborted")
+        verify(key != null, "Key cannot be null")
+        require(value != null, "Cannot put a null value")
+        verifyColFamilyOperations("merge", columnFamilyName)
+
+        verify(valueEncoder.supportsMultipleValuesPerKey, "Merge operation requires an encoder" +
+          " which supports multiple values for a single key")
+
+        rocksDB.merge(
+          keyEncoder.encodeKeyWithEventTime(key, eventTime),
+          valueEncoder.encodeValue(value),
+          columnFamilyName)
+      }
+
+      override def mergeList(
+          key: UnsafeRow,
+          eventTime: Long,
+          values: Array[UnsafeRow]): Unit = {
+        validateAndTransitionState(UPDATE)
+        verify(state == UPDATING, "Cannot merge after already committed or aborted")
+        verify(key != null, "Key cannot be null")
+        require(values != null, "Cannot put a null value")
+        verifyColFamilyOperations("mergeList", columnFamilyName)
+
+        verify(valueEncoder.supportsMultipleValuesPerKey, "Merge operation requires an encoder" +
+          " which supports multiple values for a single key")
+
+        rocksDB.mergeList(
+          keyEncoder.encodeKeyWithEventTime(key, eventTime),
+          values.map(valueEncoder.encodeValue).toList,
+          columnFamilyName)
+      }
+    }
+
+    override def initiateEventTimeAwareStateOperations(
+        columnFamilyName: String): EventTimeAwareStateOperations = {
+      new RocksDBEventTimeAwareStateOperations(columnFamilyName)
+    }
+
     var checkpointInfo: Option[StateStoreCheckpointInfo] = None
     private var storedMetrics: Option[RocksDBMetrics] = None
 
