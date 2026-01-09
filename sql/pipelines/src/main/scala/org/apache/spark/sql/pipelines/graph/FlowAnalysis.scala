@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.pipelines.graph
 
-import scala.util.Try
+import scala.util.{Failure, Try}
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
@@ -58,16 +58,76 @@ object FlowAnalysis {
       } finally {
         ctx.restoreOriginalConf()
       }
-      FlowFunctionResult(
-        requestedInputs = ctx.requestedInputs.toSet,
-        batchInputs = ctx.batchInputs.toSet,
-        streamingInputs = ctx.streamingInputs.toSet,
-        usedExternalInputs = ctx.externalInputs.toSet,
-        dataFrame = df,
-        sqlConf = confs,
-        analysisWarnings = ctx.analysisWarnings.toList
-      )
+      FlowFunctionResult.fromFlowAnalysisContext(ctx, df, confs)
     }
+  }
+
+  /**
+   * Creates a [[FlowFunction]] that looks up the LogicalPlan from the GraphRegistrationContext
+   * for the given flow name and analyzes it.
+   *
+   * @param flowIdentifier The ID of the flow to look up in the context.
+   * @param context The GraphRegistrationContext containing query function results.
+   * @return A FlowFunction that analyzes the stored LogicalPlan for the flow.
+   */
+  def createQueryFunctionResultPollingFlowFunction(
+      flowIdentifier: TableIdentifier,
+      context: GraphRegistrationContext): FlowFunction = {
+    (allInputs: Set[TableIdentifier],
+      availableInputs: Seq[Input],
+      confs: Map[String, String],
+      queryContext: QueryContext,
+      queryOrigin: QueryOrigin) => {
+      context.getQueryFunctionResult(flowIdentifier) match {
+        case Some(result: QueryFunctionSuccess) =>
+          val flowFunc = createFlowFunctionFromLogicalPlan(result.plan)
+          flowFunc.call(allInputs, availableInputs, confs, queryContext, queryOrigin)
+        case Some(QueryFunctionTerminalFailure) =>
+          FlowFunctionResult(
+            requestedInputs = Set.empty,
+            batchInputs = Set.empty,
+            streamingInputs = Set.empty,
+            usedExternalInputs = Set.empty,
+            dataFrame = Failure(QueryFunctionTerminalFailureException()),
+            sqlConf = confs,
+            analysisWarnings = Seq.empty
+          )
+        case None =>
+          FlowFunctionResult(
+            requestedInputs = Set.empty,
+            batchInputs = Set.empty,
+            streamingInputs = Set.empty,
+            usedExternalInputs = Set.empty,
+            dataFrame = Failure(QueryFunctionResultNotAvailableException()),
+            sqlConf = confs,
+            analysisWarnings = Seq.empty
+          )
+      }
+    }
+  }
+
+  /**
+   * Public wrapper method for flow analysis from Spark Connect.
+   * Creates FlowAnalysisContext internally and calls the analyze method.
+   */
+  def analyze(
+      allInputs: Set[TableIdentifier],
+      availableInputs: Seq[Input],
+      currentCatalog: String,
+      currentDatabase: String,
+      spark: SparkSession,
+      plan: LogicalPlan
+  ): DataFrame = {
+    val context = FlowAnalysisContext(
+      allInputs = allInputs,
+      availableInputs = availableInputs,
+      queryContext = QueryContext(
+        currentCatalog = Some(currentCatalog),
+        currentDatabase = Some(currentDatabase)
+      ),
+      spark = spark
+    )
+    analyze(context, plan)
   }
 
   /**
@@ -81,7 +141,7 @@ object FlowAnalysis {
    * @param plan     The [[LogicalPlan]] defining a flow.
    * @return An analyzed [[DataFrame]].
    */
-  private def analyze(
+  def analyze(
       context: FlowAnalysisContext,
       plan: LogicalPlan
   ): DataFrame = {
