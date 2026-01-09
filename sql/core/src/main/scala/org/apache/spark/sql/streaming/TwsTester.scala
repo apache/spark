@@ -105,7 +105,7 @@ class TwsTester[K, I, O](
   /**
    * Processes input rows for a single key through the stateful processor.
    *
-   * In EventTime mode, late events (where event time <= current watermark) are filtered out
+   * In EventTime mode, late events (where event time &lt;= current watermark) are filtered out
    * before reaching the processor, matching the behavior of real Spark streaming.
    *
    * The watermark is not automatically advanced based on event times. Use `setWatermark()`
@@ -204,7 +204,7 @@ class TwsTester[K, I, O](
    * Sets the simulated processing time and fires all expired timers.
    *
    * Call this after `test()` to simulate time passage and trigger any timers registered
-   * with `registerTimer()`. Timers with expiry time <= current processing time will fire,
+   * with `registerTimer()`. Timers with expiry time &lt;= current processing time will fire,
    * invoking `handleExpiredTimer` for each. This mirrors Spark's behavior where timers
    * are processed after input data within a microbatch.
    *
@@ -229,7 +229,7 @@ class TwsTester[K, I, O](
    *
    * Use this in EventTime mode to manually set the watermark. This is the only way to
    * set the watermark in TwsTester, as automatic watermark propagation based on event
-   * times is not supported. Timers with expiry time <= new watermark will fire.
+   * times is not supported. Timers with expiry time &lt;= new watermark will fire.
    *
    * @param currentWatermarkMs the watermark to set in milliseconds
    * @return output rows emitted by `handleExpiredTimer` for all fired timers
