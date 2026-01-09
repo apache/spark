@@ -451,7 +451,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       }
   }
 
-  testPartitionedTable("SPARK-54971: INSERT WITH SCHEMA EVOLUTION does not work yet") {
+  testPartitionedTable("SPARK-54971: INSERT WITH SCHEMA EVOLUTION is currently unsupported") {
     tableName =>
       checkError(
         exception = intercept[AnalysisException] {

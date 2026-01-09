@@ -960,7 +960,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-54971: INSERT WITH SCHEMA EVOLUTION does not work yet") {
+  test("SPARK-54971: INSERT WITH SCHEMA EVOLUTION is currently unsupported") {
     withTable("test_table") {
       val schema = new StructType()
         .add("i", LongType, false)
