@@ -24,7 +24,7 @@ import org.apache.datasketches.tuple.aninteger.{IntegerSummary, IntegerSummaryFa
 import org.apache.spark.sql.catalyst.analysis.ExpressionBuilder
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
-import org.apache.spark.sql.catalyst.util.ThetaSketchUtils
+import org.apache.spark.sql.catalyst.util.{ThetaSketchUtils, TupleSummaryMode}
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, DoubleType, IntegerType, LongType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -123,7 +123,7 @@ case class TupleSketchSummaryDouble(left: Expression, right: Expression)
     with ExpectsInputTypes {
 
   def this(child: Expression) = {
-    this(child, Literal(ThetaSketchUtils.MODE_SUM))
+    this(child, Literal(TupleSummaryMode.Sum.toString))
   }
 
   override def nullIntolerant: Boolean = true
@@ -142,9 +142,10 @@ case class TupleSketchSummaryDouble(left: Expression, right: Expression)
 
   override def nullSafeEval(input: Any, modeInput: Any): Any = {
     val buffer = input.asInstanceOf[Array[Byte]]
-    val mode = modeInput.asInstanceOf[UTF8String].toString
+    val modeStr = modeInput.asInstanceOf[UTF8String].toString
 
-    ThetaSketchUtils.checkMode(mode, prettyName)
+    // Parse and validate mode in one step
+    val mode = TupleSummaryMode.fromString(modeStr, prettyName)
 
     val sketch = ThetaSketchUtils.heapifyDoubleTupleSketch(buffer, prettyName)
 
@@ -175,7 +176,7 @@ case class TupleSketchSummaryInteger(left: Expression, right: Expression)
     with ExpectsInputTypes {
 
   def this(child: Expression) = {
-    this(child, Literal(ThetaSketchUtils.MODE_SUM))
+    this(child, Literal(TupleSummaryMode.Sum.toString))
   }
 
   override def nullIntolerant: Boolean = true
@@ -194,9 +195,10 @@ case class TupleSketchSummaryInteger(left: Expression, right: Expression)
 
   override def nullSafeEval(input: Any, modeInput: Any): Any = {
     val buffer = input.asInstanceOf[Array[Byte]]
-    val mode = modeInput.asInstanceOf[UTF8String].toString
+    val modeStr = modeInput.asInstanceOf[UTF8String].toString
 
-    ThetaSketchUtils.checkMode(mode, prettyName)
+    // Parse and validate mode in one step
+    val mode = TupleSummaryMode.fromString(modeStr, prettyName)
 
     val sketch = ThetaSketchUtils.heapifyIntegerTupleSketch(buffer, prettyName)
 
@@ -219,11 +221,11 @@ case class TupleUnionDouble(
       first,
       second,
       Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS),
-      Literal(ThetaSketchUtils.MODE_SUM))
+      Literal(TupleSummaryMode.Sum.toString))
   }
 
   def this(first: Expression, second: Expression, third: Expression) = {
-    this(first, second, third, Literal(ThetaSketchUtils.MODE_SUM))
+    this(first, second, third, Literal(TupleSummaryMode.Sum.toString))
   }
 
   override def withNewChildrenInternal(
@@ -235,8 +237,8 @@ case class TupleUnionDouble(
 
   override def prettyName: String = "tuple_union_double"
 
-  override protected def getModeFromString(modeString: String): DoubleSummary.Mode =
-    ThetaSketchUtils.getDoubleSummaryMode(modeString)
+  override protected def convertMode(tupleSummaryMode: TupleSummaryMode): DoubleSummary.Mode =
+    tupleSummaryMode.toDoubleSummaryMode
 
   override protected def createSummarySetOperations(
       mode: DoubleSummary.Mode): SummarySetOperations[DoubleSummary] =
@@ -267,11 +269,11 @@ case class TupleUnionThetaDouble(
       first,
       second,
       Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS),
-      Literal(ThetaSketchUtils.MODE_SUM))
+      Literal(TupleSummaryMode.Sum.toString))
   }
 
   def this(first: Expression, second: Expression, third: Expression) = {
-    this(first, second, third, Literal(ThetaSketchUtils.MODE_SUM))
+    this(first, second, third, Literal(TupleSummaryMode.Sum.toString))
   }
 
   override def withNewChildrenInternal(
@@ -283,8 +285,8 @@ case class TupleUnionThetaDouble(
 
   override def prettyName: String = "tuple_union_theta_double"
 
-  override protected def getModeFromString(modeString: String): DoubleSummary.Mode =
-    ThetaSketchUtils.getDoubleSummaryMode(modeString)
+  override protected def convertMode(tupleSummaryMode: TupleSummaryMode): DoubleSummary.Mode =
+    tupleSummaryMode.toDoubleSummaryMode
 
   override protected def createSummarySetOperations(
       mode: DoubleSummary.Mode): SummarySetOperations[DoubleSummary] =
@@ -317,11 +319,11 @@ case class TupleUnionInteger(
       first,
       second,
       Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS),
-      Literal(ThetaSketchUtils.MODE_SUM))
+      Literal(TupleSummaryMode.Sum.toString))
   }
 
   def this(first: Expression, second: Expression, third: Expression) = {
-    this(first, second, third, Literal(ThetaSketchUtils.MODE_SUM))
+    this(first, second, third, Literal(TupleSummaryMode.Sum.toString))
   }
 
   override def withNewChildrenInternal(
@@ -333,8 +335,8 @@ case class TupleUnionInteger(
 
   override def prettyName: String = "tuple_union_integer"
 
-  override protected def getModeFromString(modeString: String): IntegerSummary.Mode =
-    ThetaSketchUtils.getIntegerSummaryMode(modeString)
+  override protected def convertMode(tupleSummaryMode: TupleSummaryMode): IntegerSummary.Mode =
+    tupleSummaryMode.toIntegerSummaryMode
 
   override protected def createSummarySetOperations(
       mode: IntegerSummary.Mode): SummarySetOperations[IntegerSummary] =
@@ -365,11 +367,11 @@ case class TupleUnionThetaInteger(
       first,
       second,
       Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS),
-      Literal(ThetaSketchUtils.MODE_SUM))
+      Literal(TupleSummaryMode.Sum.toString))
   }
 
   def this(first: Expression, second: Expression, third: Expression) = {
-    this(first, second, third, Literal(ThetaSketchUtils.MODE_SUM))
+    this(first, second, third, Literal(TupleSummaryMode.Sum.toString))
   }
 
   override def withNewChildrenInternal(
@@ -381,8 +383,8 @@ case class TupleUnionThetaInteger(
 
   override def prettyName: String = "tuple_union_theta_integer"
 
-  override protected def getModeFromString(modeString: String): IntegerSummary.Mode =
-    ThetaSketchUtils.getIntegerSummaryMode(modeString)
+  override protected def convertMode(tupleSummaryMode: TupleSummaryMode): IntegerSummary.Mode =
+    tupleSummaryMode.toIntegerSummaryMode
 
   override protected def createSummarySetOperations(
       mode: IntegerSummary.Mode): SummarySetOperations[IntegerSummary] =
@@ -419,7 +421,7 @@ abstract class TupleUnionBase[S <: Summary, M]
 
   override def dataType: DataType = BinaryType
 
-  protected def getModeFromString(modeString: String): M
+  protected def convertMode(tupleSummaryMode: TupleSummaryMode): M
 
   protected def createSummarySetOperations(mode: M): SummarySetOperations[S]
 
@@ -438,10 +440,11 @@ abstract class TupleUnionBase[S <: Summary, M]
     val logNominalEntries = lgNomEntries.asInstanceOf[Int]
     ThetaSketchUtils.checkLgNomLongs(logNominalEntries, prettyName)
 
-    val modeString = modeInput.asInstanceOf[UTF8String].toString
-    ThetaSketchUtils.checkMode(modeString, prettyName)
+    val modeStr = modeInput.asInstanceOf[UTF8String].toString
+    // Parse and validate mode in one step
+    val tupleSummaryMode = TupleSummaryMode.fromString(modeStr, prettyName)
+    val mode = convertMode(tupleSummaryMode)
 
-    val mode = getModeFromString(modeString)
     val sketch1Bytes = sketch1Binary.asInstanceOf[Array[Byte]]
     val sketch2Bytes = sketch2Binary.asInstanceOf[Array[Byte]]
 
@@ -510,7 +513,7 @@ case class TupleIntersectionDouble(first: Expression, second: Expression, third:
     extends TupleIntersectionBase[DoubleSummary, DoubleSummary.Mode] {
 
   def this(first: Expression, second: Expression) = {
-    this(first, second, Literal(ThetaSketchUtils.MODE_SUM))
+    this(first, second, Literal(TupleSummaryMode.Sum.toString))
   }
 
   override def withNewChildrenInternal(
@@ -521,8 +524,8 @@ case class TupleIntersectionDouble(first: Expression, second: Expression, third:
 
   override def prettyName: String = "tuple_intersection_double"
 
-  override protected def getModeFromString(modeString: String): DoubleSummary.Mode =
-    ThetaSketchUtils.getDoubleSummaryMode(modeString)
+  override protected def convertMode(tupleSummaryMode: TupleSummaryMode): DoubleSummary.Mode =
+    tupleSummaryMode.toDoubleSummaryMode
 
   override protected def createSummarySetOperations(
       mode: DoubleSummary.Mode): SummarySetOperations[DoubleSummary] =
@@ -561,7 +564,7 @@ case class TupleIntersectionThetaDouble(first: Expression, second: Expression, t
     extends TupleIntersectionBase[DoubleSummary, DoubleSummary.Mode] {
 
   def this(first: Expression, second: Expression) = {
-    this(first, second, Literal(ThetaSketchUtils.MODE_SUM))
+    this(first, second, Literal(TupleSummaryMode.Sum.toString))
   }
 
   override def withNewChildrenInternal(
@@ -572,8 +575,8 @@ case class TupleIntersectionThetaDouble(first: Expression, second: Expression, t
 
   override def prettyName: String = "tuple_intersection_theta_double"
 
-  override protected def getModeFromString(modeString: String): DoubleSummary.Mode =
-    ThetaSketchUtils.getDoubleSummaryMode(modeString)
+  override protected def convertMode(tupleSummaryMode: TupleSummaryMode): DoubleSummary.Mode =
+    tupleSummaryMode.toDoubleSummaryMode
 
   override protected def createSummarySetOperations(
       mode: DoubleSummary.Mode): SummarySetOperations[DoubleSummary] =
@@ -612,7 +615,7 @@ case class TupleIntersectionInteger(first: Expression, second: Expression, third
     extends TupleIntersectionBase[IntegerSummary, IntegerSummary.Mode] {
 
   def this(first: Expression, second: Expression) = {
-    this(first, second, Literal(ThetaSketchUtils.MODE_SUM))
+    this(first, second, Literal(TupleSummaryMode.Sum.toString))
   }
 
   override def withNewChildrenInternal(
@@ -623,8 +626,8 @@ case class TupleIntersectionInteger(first: Expression, second: Expression, third
 
   override def prettyName: String = "tuple_intersection_integer"
 
-  override protected def getModeFromString(modeString: String): IntegerSummary.Mode =
-    ThetaSketchUtils.getIntegerSummaryMode(modeString)
+  override protected def convertMode(tupleSummaryMode: TupleSummaryMode): IntegerSummary.Mode =
+    tupleSummaryMode.toIntegerSummaryMode
 
   override protected def createSummarySetOperations(
       mode: IntegerSummary.Mode): SummarySetOperations[IntegerSummary] =
@@ -663,7 +666,7 @@ case class TupleIntersectionThetaInteger(first: Expression, second: Expression, 
     extends TupleIntersectionBase[IntegerSummary, IntegerSummary.Mode] {
 
   def this(first: Expression, second: Expression) = {
-    this(first, second, Literal(ThetaSketchUtils.MODE_SUM))
+    this(first, second, Literal(TupleSummaryMode.Sum.toString))
   }
 
   override def withNewChildrenInternal(
@@ -674,8 +677,8 @@ case class TupleIntersectionThetaInteger(first: Expression, second: Expression, 
 
   override def prettyName: String = "tuple_intersection_theta_integer"
 
-  override protected def getModeFromString(modeString: String): IntegerSummary.Mode =
-    ThetaSketchUtils.getIntegerSummaryMode(modeString)
+  override protected def convertMode(tupleSummaryMode: TupleSummaryMode): IntegerSummary.Mode =
+    tupleSummaryMode.toIntegerSummaryMode
 
   override protected def createSummarySetOperations(
       mode: IntegerSummary.Mode): SummarySetOperations[IntegerSummary] =
@@ -708,7 +711,7 @@ abstract class TupleIntersectionBase[S <: Summary, M]
 
   override def dataType: DataType = BinaryType
 
-  protected def getModeFromString(modeString: String): M
+  protected def convertMode(tupleSummaryMode: TupleSummaryMode): M
 
   protected def createSummarySetOperations(mode: M): SummarySetOperations[S]
 
@@ -720,10 +723,11 @@ abstract class TupleIntersectionBase[S <: Summary, M]
 
   override def nullSafeEval(sketch1Binary: Any, sketch2Binary: Any, modeInput: Any): Any = {
 
-    val modeString = modeInput.asInstanceOf[UTF8String].toString
-    ThetaSketchUtils.checkMode(modeString, prettyName)
+    val modeStr = modeInput.asInstanceOf[UTF8String].toString
+    // Parse and validate mode in one step
+    val tupleSummaryMode = TupleSummaryMode.fromString(modeStr, prettyName)
+    val mode = convertMode(tupleSummaryMode)
 
-    val mode = getModeFromString(modeString)
     val sketch1Bytes = sketch1Binary.asInstanceOf[Array[Byte]]
     val sketch2Bytes = sketch2Binary.asInstanceOf[Array[Byte]]
 
@@ -963,7 +967,7 @@ object TupleUnionDoubleExpressionBuilder extends ExpressionBuilder {
     InputParameter("first"),
     InputParameter("second"),
     InputParameter("lgNomEntries", Some(Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))),
-    InputParameter("mode", Some(Literal(ThetaSketchUtils.MODE_SUM)))
+    InputParameter("mode", Some(Literal(TupleSummaryMode.Sum.toString)))
   ))
   override def functionSignature: Option[FunctionSignature] = Some(defaultFunctionSignature)
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
@@ -994,7 +998,7 @@ object TupleUnionThetaDoubleExpressionBuilder extends ExpressionBuilder {
     InputParameter("first"),
     InputParameter("second"),
     InputParameter("lgNomEntries", Some(Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))),
-    InputParameter("mode", Some(Literal(ThetaSketchUtils.MODE_SUM)))
+    InputParameter("mode", Some(Literal(TupleSummaryMode.Sum.toString)))
   ))
   override def functionSignature: Option[FunctionSignature] = Some(defaultFunctionSignature)
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
@@ -1024,7 +1028,7 @@ object TupleUnionIntegerExpressionBuilder extends ExpressionBuilder {
     InputParameter("first"),
     InputParameter("second"),
     InputParameter("lgNomEntries", Some(Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))),
-    InputParameter("mode", Some(Literal(ThetaSketchUtils.MODE_SUM)))
+    InputParameter("mode", Some(Literal(TupleSummaryMode.Sum.toString)))
   ))
   override def functionSignature: Option[FunctionSignature] = Some(defaultFunctionSignature)
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
@@ -1055,7 +1059,7 @@ object TupleUnionThetaIntegerExpressionBuilder extends ExpressionBuilder {
     InputParameter("first"),
     InputParameter("second"),
     InputParameter("lgNomEntries", Some(Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS))),
-    InputParameter("mode", Some(Literal(ThetaSketchUtils.MODE_SUM)))
+    InputParameter("mode", Some(Literal(TupleSummaryMode.Sum.toString)))
   ))
   override def functionSignature: Option[FunctionSignature] = Some(defaultFunctionSignature)
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {

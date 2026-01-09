@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.util.Locale
+
 import org.apache.datasketches.common.SketchesArgumentException
 import org.apache.datasketches.memory.{Memory, MemoryBoundsException}
 import org.apache.datasketches.theta.CompactSketch
@@ -25,6 +27,70 @@ import org.apache.datasketches.tuple.adouble.{DoubleSummary, DoubleSummaryDeseri
 import org.apache.datasketches.tuple.aninteger.{IntegerSummary, IntegerSummaryDeserializer}
 
 import org.apache.spark.sql.errors.QueryExecutionErrors
+
+/**
+ * Sealed trait representing valid summary modes for tuple sketches. This provides type-safe
+ * mode handling with compile-time exhaustiveness checking and prevents invalid modes from
+ * being created.
+ */
+sealed trait TupleSummaryMode {
+  def toDoubleSummaryMode: DoubleSummary.Mode
+
+  def toIntegerSummaryMode: IntegerSummary.Mode
+
+  def toString: String
+}
+
+object TupleSummaryMode {
+  case object Sum extends TupleSummaryMode {
+    def toDoubleSummaryMode: DoubleSummary.Mode = DoubleSummary.Mode.Sum
+    def toIntegerSummaryMode: IntegerSummary.Mode = IntegerSummary.Mode.Sum
+    override def toString: String = "sum"
+  }
+
+  case object Min extends TupleSummaryMode {
+    def toDoubleSummaryMode: DoubleSummary.Mode = DoubleSummary.Mode.Min
+    def toIntegerSummaryMode: IntegerSummary.Mode = IntegerSummary.Mode.Min
+    override def toString: String = "min"
+  }
+
+  case object Max extends TupleSummaryMode {
+    def toDoubleSummaryMode: DoubleSummary.Mode = DoubleSummary.Mode.Max
+    def toIntegerSummaryMode: IntegerSummary.Mode = IntegerSummary.Mode.Max
+    override def toString: String = "max"
+  }
+
+  case object AlwaysOne extends TupleSummaryMode {
+    def toDoubleSummaryMode: DoubleSummary.Mode = DoubleSummary.Mode.AlwaysOne
+    def toIntegerSummaryMode: IntegerSummary.Mode = IntegerSummary.Mode.AlwaysOne
+    override def toString: String = "alwaysone"
+  }
+
+  /** All valid modes */
+  val validModes: Seq[TupleSummaryMode] = Seq(Sum, Min, Max, AlwaysOne)
+
+  /** String representations of valid modes for error messages */
+  val validModeStrings: Seq[String] = validModes.map(_.toString)
+
+  /**
+   * Parses a string into a TupleSummaryMode. This is the single entry point for string-to-mode
+   * conversion, ensuring validation happens once.
+   *
+   * @param s The mode string to parse
+   * @param functionName The display name of the function/expression for error messages
+   * @return The corresponding TupleSummaryMode
+   * @throws QueryExecutionErrors.tupleInvalidMode if the mode string is invalid
+   */
+  def fromString(s: String, functionName: String): TupleSummaryMode = {
+    s.toLowerCase(Locale.ROOT) match {
+      case "sum" => Sum
+      case "min" => Min
+      case "max" => Max
+      case "alwaysone" => AlwaysOne
+      case _ => throw QueryExecutionErrors.tupleInvalidMode(functionName, s, validModeStrings)
+    }
+  }
+}
 
 object ThetaSketchUtils {
   /*
@@ -38,14 +104,6 @@ object ThetaSketchUtils {
   final val MIN_LG_NOM_LONGS = 4
   final val MAX_LG_NOM_LONGS = 26
   final val DEFAULT_LG_NOM_LONGS = 12
-
-  // Mode constants
-  final val MODE_SUM = "sum"
-  final val MODE_MIN = "min"
-  final val MODE_MAX = "max"
-  final val MODE_ALWAYSONE = "alwaysone"
-
-  final val VALID_MODES: Seq[String] = Seq(MODE_SUM, MODE_MIN, MODE_MAX, MODE_ALWAYSONE)
 
   /**
    * Validates the lgNomLongs parameter for Theta/Tuple sketch size. Throws a Spark SQL exception
@@ -67,69 +125,39 @@ object ThetaSketchUtils {
   }
 
   /**
-   * Validates the mode parameter. Throws a Spark SQL exception if the mode is invalid.
+   * Aggregates numeric summaries from a tuple sketch iterator based on the specified mode.
+   * This method provides compile-time exhaustiveness checking through pattern matching on
+   * the sealed TupleSummaryMode trait.
    *
+   * @param iterator
+   *   The tuple sketch iterator to aggregate
    * @param mode
-   *   The mode string to validate
-   * @param prettyName
-   *   The display name of the function/expression for error messages
-   */
-  def checkMode(mode: String, prettyName: String): Unit = {
-    if (!VALID_MODES.contains(mode)) {
-      throw QueryExecutionErrors.tupleInvalidMode(prettyName, mode, VALID_MODES)
-    }
-  }
-
-  /**
-   * Converts the mode string input to DoubleSummary.Mode enum. Used for double summary type
-   * operations.
-   *
-   * @param modeInput
-   *   The mode string to convert
+   *   The aggregation mode (Sum, Min, Max, or AlwaysOne)
+   * @param getValue
+   *   Function to extract the numeric value from the iterator
+   * @param num
+   *   Implicit Numeric instance for the value type
+   * @tparam S
+   *   The summary type
+   * @tparam V
+   *   The value type
    * @return
-   *   The corresponding DoubleSummary.Mode enum value
+   *   The aggregated value
    */
-  def getDoubleSummaryMode(modeInput: String): DoubleSummary.Mode = {
-    modeInput match {
-      case MODE_SUM => DoubleSummary.Mode.Sum
-      case MODE_MIN => DoubleSummary.Mode.Min
-      case MODE_MAX => DoubleSummary.Mode.Max
-      case MODE_ALWAYSONE => DoubleSummary.Mode.AlwaysOne
-    }
-  }
-
-  /**
-   * Converts the mode string input to IntegerSummary.Mode enum. Used for integer summary type
-   * operations.
-   *
-   * @param modeInput
-   *   The mode string to convert
-   * @return
-   *   The corresponding IntegerSummary.Mode enum value
-   */
-  def getIntegerSummaryMode(modeInput: String): IntegerSummary.Mode = {
-    modeInput match {
-      case MODE_SUM => IntegerSummary.Mode.Sum
-      case MODE_MIN => IntegerSummary.Mode.Min
-      case MODE_MAX => IntegerSummary.Mode.Max
-      case MODE_ALWAYSONE => IntegerSummary.Mode.AlwaysOne
-    }
-  }
-
   def aggregateNumericSummaries[S <: Summary, V](
       iterator: TupleSketchIterator[S],
-      mode: String,
+      mode: TupleSummaryMode,
       getValue: TupleSketchIterator[S] => V)(implicit num: Numeric[V]): V = {
 
     mode match {
-      case MODE_SUM =>
+      case TupleSummaryMode.Sum =>
         var sum = num.zero
         while (iterator.next()) {
           sum = num.plus(sum, getValue(iterator))
         }
         sum
 
-      case MODE_MIN =>
+      case TupleSummaryMode.Min =>
         var min: Option[V] = None
         while (iterator.next()) {
           val value = getValue(iterator)
@@ -140,7 +168,7 @@ object ThetaSketchUtils {
         }
         min.getOrElse(num.zero)
 
-      case MODE_MAX =>
+      case TupleSummaryMode.Max =>
         var max: Option[V] = None
         while (iterator.next()) {
           val value = getValue(iterator)
@@ -151,7 +179,7 @@ object ThetaSketchUtils {
         }
         max.getOrElse(num.zero)
 
-      case MODE_ALWAYSONE =>
+      case TupleSummaryMode.AlwaysOne =>
         var count = num.zero
         while (iterator.next()) {
           count = num.plus(count, num.one)

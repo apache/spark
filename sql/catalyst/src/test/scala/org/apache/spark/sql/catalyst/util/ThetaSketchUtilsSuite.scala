@@ -113,30 +113,35 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
       parameters = Map("function" -> "`test_function`"))
   }
 
-  test("checkMode: accepts valid modes") {
-    val validModes = Seq(
-      ThetaSketchUtils.MODE_SUM,
-      ThetaSketchUtils.MODE_MIN,
-      ThetaSketchUtils.MODE_MAX,
-      ThetaSketchUtils.MODE_ALWAYSONE)
+  test("TupleSummaryMode.fromString: accepts valid modes") {
+    val validModes = Seq("sum", "min", "max", "alwaysone")
     validModes.foreach { mode =>
       // Should not throw any exception
-      ThetaSketchUtils.checkMode(mode, "test_function")
+      val result = TupleSummaryMode.fromString(mode, "test_function")
+      assert(result != null)
+      assert(result.toString == mode)
     }
   }
 
-  test("checkMode: throws exception for invalid modes") {
+  test("TupleSummaryMode.fromString: case insensitive") {
+    assert(TupleSummaryMode.fromString("SUM", "test_function") == TupleSummaryMode.Sum)
+    assert(TupleSummaryMode.fromString("Min", "test_function") == TupleSummaryMode.Min)
+    assert(TupleSummaryMode.fromString("MAX", "test_function") == TupleSummaryMode.Max)
+    assert(TupleSummaryMode.fromString("AlwaysOne", "test_function") == TupleSummaryMode.AlwaysOne)
+  }
+
+  test("TupleSummaryMode.fromString: throws exception for invalid modes") {
     val invalidModes = Seq("invalid", "average", "count", "multiply", "")
     invalidModes.foreach { mode =>
       checkError(
         exception = intercept[SparkRuntimeException] {
-          ThetaSketchUtils.checkMode(mode, "test_function")
+          TupleSummaryMode.fromString(mode, "test_function")
         },
         condition = "TUPLE_INVALID_SKETCH_MODE",
         parameters = Map(
           "function" -> "`test_function`",
           "mode" -> mode,
-          "validModes" -> ThetaSketchUtils.VALID_MODES.mkString(", ")))
+          "validModes" -> TupleSummaryMode.validModeStrings.mkString(", ")))
     }
   }
 
@@ -171,18 +176,18 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
       parameters = Map("function" -> "`test_function`"))
   }
 
-  test("getDoubleSummaryMode: returns correct mode for valid strings") {
-    assert(ThetaSketchUtils.getDoubleSummaryMode("sum") == DoubleSummary.Mode.Sum)
-    assert(ThetaSketchUtils.getDoubleSummaryMode("min") == DoubleSummary.Mode.Min)
-    assert(ThetaSketchUtils.getDoubleSummaryMode("max") == DoubleSummary.Mode.Max)
-    assert(ThetaSketchUtils.getDoubleSummaryMode("alwaysone") == DoubleSummary.Mode.AlwaysOne)
+  test("TupleSummaryMode: converts to DoubleSummary.Mode correctly") {
+    assert(TupleSummaryMode.Sum.toDoubleSummaryMode == DoubleSummary.Mode.Sum)
+    assert(TupleSummaryMode.Min.toDoubleSummaryMode == DoubleSummary.Mode.Min)
+    assert(TupleSummaryMode.Max.toDoubleSummaryMode == DoubleSummary.Mode.Max)
+    assert(TupleSummaryMode.AlwaysOne.toDoubleSummaryMode == DoubleSummary.Mode.AlwaysOne)
   }
 
-  test("getIntegerSummaryMode: returns correct mode for valid strings") {
-    assert(ThetaSketchUtils.getIntegerSummaryMode("sum") == IntegerSummary.Mode.Sum)
-    assert(ThetaSketchUtils.getIntegerSummaryMode("min") == IntegerSummary.Mode.Min)
-    assert(ThetaSketchUtils.getIntegerSummaryMode("max") == IntegerSummary.Mode.Max)
-    assert(ThetaSketchUtils.getIntegerSummaryMode("alwaysone") == IntegerSummary.Mode.AlwaysOne)
+  test("TupleSummaryMode: converts to IntegerSummary.Mode correctly") {
+    assert(TupleSummaryMode.Sum.toIntegerSummaryMode == IntegerSummary.Mode.Sum)
+    assert(TupleSummaryMode.Min.toIntegerSummaryMode == IntegerSummary.Mode.Min)
+    assert(TupleSummaryMode.Max.toIntegerSummaryMode == IntegerSummary.Mode.Max)
+    assert(TupleSummaryMode.AlwaysOne.toIntegerSummaryMode == IntegerSummary.Mode.AlwaysOne)
   }
 
   test("heapifyIntegerTupleSketch: successfully deserializes valid tuple sketch bytes") {
@@ -229,7 +234,7 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
     val compactSketch = updateSketch.compact()
     val result = ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
       compactSketch.iterator(),
-      "sum",
+      TupleSummaryMode.Sum,
       it => it.getSummary.getValue)
 
     assert(result == 6.0)
@@ -247,7 +252,7 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
     val compactSketch = updateSketch.compact()
     val result = ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
       compactSketch.iterator(),
-      "min",
+      TupleSummaryMode.Min,
       it => it.getSummary.getValue)
 
     assert(result == 2.0)
@@ -265,7 +270,7 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
     val compactSketch = updateSketch.compact()
     val result = ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
       compactSketch.iterator(),
-      "max",
+      TupleSummaryMode.Max,
       it => it.getSummary.getValue)
 
     assert(result == 8.0)
@@ -283,7 +288,7 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
     val compactSketch = updateSketch.compact()
     val result = ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
       compactSketch.iterator(),
-      "alwaysone",
+      TupleSummaryMode.AlwaysOne,
       it => it.getSummary.getValue)
 
     assert(result == 3.0)
@@ -302,7 +307,7 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
     val compactSketch = updateSketch.compact()
     val result = ThetaSketchUtils.aggregateNumericSummaries[IntegerSummary, Long](
       compactSketch.iterator(),
-      "sum",
+      TupleSummaryMode.Sum,
       it => it.getSummary.getValue.toLong)
 
     assert(result == 60L)
@@ -321,7 +326,7 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
     val compactSketch = updateSketch.compact()
     val result = ThetaSketchUtils.aggregateNumericSummaries[IntegerSummary, Long](
       compactSketch.iterator(),
-      "min",
+      TupleSummaryMode.Min,
       it => it.getSummary.getValue.toLong)
 
     assert(result == 20L)
@@ -340,7 +345,7 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
     val compactSketch = updateSketch.compact()
     val result = ThetaSketchUtils.aggregateNumericSummaries[IntegerSummary, Long](
       compactSketch.iterator(),
-      "max",
+      TupleSummaryMode.Max,
       it => it.getSummary.getValue.toLong)
 
     assert(result == 80L)
@@ -359,7 +364,7 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
     val compactSketch = updateSketch.compact()
     val result = ThetaSketchUtils.aggregateNumericSummaries[IntegerSummary, Long](
       compactSketch.iterator(),
-      "alwaysone",
+      TupleSummaryMode.AlwaysOne,
       it => it.getSummary.getValue.toLong)
 
     assert(result == 3L)
@@ -373,7 +378,7 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
     val compactSketch = updateSketch.compact()
     val result = ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
       compactSketch.iterator(),
-      "sum",
+      TupleSummaryMode.Sum,
       it => it.getSummary.getValue)
 
     assert(result == 0.0)
@@ -387,7 +392,7 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
     val compactSketch = updateSketch.compact()
     val result = ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
       compactSketch.iterator(),
-      "min",
+      TupleSummaryMode.Min,
       it => it.getSummary.getValue)
 
     assert(result == 0.0)
@@ -401,7 +406,7 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
     val compactSketch = updateSketch.compact()
     val result = ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
       compactSketch.iterator(),
-      "max",
+      TupleSummaryMode.Max,
       it => it.getSummary.getValue)
 
     assert(result == 0.0)
@@ -415,7 +420,7 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
     val compactSketch = updateSketch.compact()
     val result = ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
       compactSketch.iterator(),
-      "alwaysone",
+      TupleSummaryMode.AlwaysOne,
       it => it.getSummary.getValue)
 
     assert(result == 0.0)
@@ -431,16 +436,16 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
     val compactSketch = updateSketch.compact()
 
     assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(), "sum", it => it.getSummary.getValue) == 42.0)
+      compactSketch.iterator(), TupleSummaryMode.Sum, it => it.getSummary.getValue) == 42.0)
 
     assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(), "min", it => it.getSummary.getValue) == 42.0)
+      compactSketch.iterator(), TupleSummaryMode.Min, it => it.getSummary.getValue) == 42.0)
 
     assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(), "max", it => it.getSummary.getValue) == 42.0)
+      compactSketch.iterator(), TupleSummaryMode.Max, it => it.getSummary.getValue) == 42.0)
 
     assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(), "alwaysone", it => it.getSummary.getValue) == 1.0)
+      compactSketch.iterator(), TupleSummaryMode.AlwaysOne, it => it.getSummary.getValue) == 1.0)
   }
 
   test("aggregateNumericSummaries: negative values for sum mode") {
@@ -455,7 +460,7 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
     val compactSketch = updateSketch.compact()
     val result = ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
       compactSketch.iterator(),
-      "sum",
+      TupleSummaryMode.Sum,
       it => it.getSummary.getValue)
 
     assert(result == -15.0)
@@ -473,7 +478,7 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
     val compactSketch = updateSketch.compact()
     val result = ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
       compactSketch.iterator(),
-      "min",
+      TupleSummaryMode.Min,
       it => it.getSummary.getValue)
 
     assert(result == -8.0)
@@ -491,7 +496,7 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
     val compactSketch = updateSketch.compact()
     val result = ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
       compactSketch.iterator(),
-      "max",
+      TupleSummaryMode.Max,
       it => it.getSummary.getValue)
 
     assert(result == -2.0)
@@ -510,13 +515,13 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
     val compactSketch = updateSketch.compact()
 
     assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(), "sum", it => it.getSummary.getValue) == 9.0)
+      compactSketch.iterator(), TupleSummaryMode.Sum, it => it.getSummary.getValue) == 9.0)
 
     assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(), "min", it => it.getSummary.getValue) == -5.0)
+      compactSketch.iterator(), TupleSummaryMode.Min, it => it.getSummary.getValue) == -5.0)
 
     assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(), "max", it => it.getSummary.getValue) == 10.0)
+      compactSketch.iterator(), TupleSummaryMode.Max, it => it.getSummary.getValue) == 10.0)
   }
 
   test("aggregateNumericSummaries: zero values") {
@@ -531,16 +536,16 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
     val compactSketch = updateSketch.compact()
 
     assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(), "sum", it => it.getSummary.getValue) == 0.0)
+      compactSketch.iterator(), TupleSummaryMode.Sum, it => it.getSummary.getValue) == 0.0)
 
     assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(), "min", it => it.getSummary.getValue) == 0.0)
+      compactSketch.iterator(), TupleSummaryMode.Min, it => it.getSummary.getValue) == 0.0)
 
     assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(), "max", it => it.getSummary.getValue) == 0.0)
+      compactSketch.iterator(), TupleSummaryMode.Max, it => it.getSummary.getValue) == 0.0)
 
     assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(), "alwaysone", it => it.getSummary.getValue) == 3.0)
+      compactSketch.iterator(), TupleSummaryMode.AlwaysOne, it => it.getSummary.getValue) == 3.0)
   }
 
   test("aggregateNumericSummaries: special Double values - Infinity") {
@@ -555,13 +560,17 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
     val compactSketch = updateSketch.compact()
 
     assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(), "sum", it => it.getSummary.getValue) == Double.PositiveInfinity)
+      compactSketch.iterator(),
+      TupleSummaryMode.Sum, it => it.getSummary.getValue) == Double.PositiveInfinity
+    )
 
     assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(), "max", it => it.getSummary.getValue) == Double.PositiveInfinity)
+      compactSketch.iterator(),
+      TupleSummaryMode.Max, it => it.getSummary.getValue) == Double.PositiveInfinity
+    )
 
     assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(), "min", it => it.getSummary.getValue) == 5.0)
+      compactSketch.iterator(), TupleSummaryMode.Min, it => it.getSummary.getValue) == 5.0)
   }
 
   test("aggregateNumericSummaries: special Double values - NegativeInfinity") {
@@ -576,12 +585,16 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
     val compactSketch = updateSketch.compact()
 
     assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(), "sum", it => it.getSummary.getValue) == Double.NegativeInfinity)
+      compactSketch.iterator(),
+      TupleSummaryMode.Sum, it => it.getSummary.getValue) == Double.NegativeInfinity
+    )
 
     assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(), "min", it => it.getSummary.getValue) == Double.NegativeInfinity)
+      compactSketch.iterator(),
+      TupleSummaryMode.Min, it => it.getSummary.getValue) == Double.NegativeInfinity
+    )
 
     assert(ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
-      compactSketch.iterator(), "max", it => it.getSummary.getValue) == 10.0)
+      compactSketch.iterator(), TupleSummaryMode.Max, it => it.getSummary.getValue) == 10.0)
   }
 }
