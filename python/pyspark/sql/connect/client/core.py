@@ -823,7 +823,7 @@ class SparkConnectClient(object):
         Return list of currently used policies
         """
         return list(self._retry_policies)
-    
+
     @classmethod
     def _retrieve_stack_frames(cls) -> List[CallSite]:
         """

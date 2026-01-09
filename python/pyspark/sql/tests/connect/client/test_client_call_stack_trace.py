@@ -134,6 +134,7 @@ class CallStackTraceTestCase(unittest.TestCase):
                 len(error.stack_trace), 0, "Expected > 0 call stack frames when env var is set"
             )
 
+
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class CallStackTraceIntegrationTestCase(unittest.TestCase):
     """Integration tests for call stack trace in client request methods."""
@@ -152,7 +153,6 @@ class CallStackTraceIntegrationTestCase(unittest.TestCase):
     def tearDown(self):
         # Restore the original PYSPARK_ROOT
         core.PYSPARK_ROOT = self.original_pyspark_root
-
 
     def test_execute_plan_request_includes_call_stack(self):
         """Test that _execute_plan_request_with_metadata includes call stack with env var."""
@@ -219,7 +219,6 @@ class CallStackTraceIntegrationTestCase(unittest.TestCase):
             self.assertTrue(
                 __file__ in files, f"Expected user function names not found in: {files}"
             )
-
 
     def test_config_request_includes_call_stack_with_env_var(self):
         """Test that _config_request_with_metadata includes call stack with env var."""
