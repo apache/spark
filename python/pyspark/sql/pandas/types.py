@@ -848,21 +848,21 @@ def _to_corrected_pandas_ext_type(dt: DataType) -> Optional[Any]:
     """
     import pandas as pd
 
-    if type(dt) == ByteType:
+    if isinstance(dt, ByteType):
         return pd.Int8Dtype()
-    elif type(dt) == ShortType:
+    elif isinstance(dt, ShortType):
         return pd.Int16Dtype()
-    elif type(dt) == IntegerType:
+    elif isinstance(dt, IntegerType):
         return pd.Int32Dtype()
-    elif type(dt) == LongType:
+    elif isinstance(dt, LongType):
         return pd.Int64Dtype()
-    elif type(dt) == FloatType:
+    elif isinstance(dt, FloatType):
         return pd.Float32Dtype()
-    elif type(dt) == DoubleType:
+    elif isinstance(dt, DoubleType):
         return pd.Float64Dtype()
-    elif type(dt) == BooleanType:
+    elif isinstance(dt, BooleanType):
         return pd.BooleanDtype()
-    elif type(dt) == StringType:
+    elif isinstance(dt, StringType):
         return pd.StringDtype()
     else:
         return None
