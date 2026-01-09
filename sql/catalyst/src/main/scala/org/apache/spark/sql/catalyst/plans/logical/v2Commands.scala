@@ -66,8 +66,12 @@ trait V2WriteCommand
   def table: NamedRelation
   def query: LogicalPlan
   def isByName: Boolean
+  def returning: Boolean = false
+  def returningOutput: Seq[Attribute] = Seq.empty
 
   override def child: LogicalPlan = query
+
+  override def output: Seq[Attribute] = if (returning) returningOutput else Nil
 
   override lazy val resolved: Boolean = table.resolved && query.resolved && outputResolved
 
@@ -109,7 +113,9 @@ case class AppendData(
     writeOptions: Map[String, String],
     isByName: Boolean,
     write: Option[Write] = None,
-    analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand {
+    analyzedQuery: Option[LogicalPlan] = None,
+    override val returning: Boolean = false,
+    override val returningOutput: Seq[Attribute] = Seq.empty) extends V2WriteCommand {
   override def withNewQuery(newQuery: LogicalPlan): AppendData = copy(query = newQuery)
   override def withNewTable(newTable: NamedRelation): AppendData = copy(table = newTable)
   override def storeAnalyzedQuery(): Command = copy(analyzedQuery = Some(query))
@@ -143,7 +149,9 @@ case class OverwriteByExpression(
     writeOptions: Map[String, String],
     isByName: Boolean,
     write: Option[Write] = None,
-    analyzedQuery: Option[LogicalPlan] = None) extends V2WriteCommand {
+    analyzedQuery: Option[LogicalPlan] = None,
+    override val returning: Boolean = false,
+    override val returningOutput: Seq[Attribute] = Seq.empty) extends V2WriteCommand {
   override lazy val resolved: Boolean = {
     table.resolved && query.resolved && outputResolved && deleteExpr.resolved
   }
@@ -186,7 +194,9 @@ case class OverwritePartitionsDynamic(
     query: LogicalPlan,
     writeOptions: Map[String, String],
     isByName: Boolean,
-    write: Option[Write] = None) extends V2WriteCommand {
+    write: Option[Write] = None,
+    override val returning: Boolean = false,
+    override val returningOutput: Seq[Attribute] = Seq.empty) extends V2WriteCommand {
   override def withNewQuery(newQuery: LogicalPlan): OverwritePartitionsDynamic = {
     copy(query = newQuery)
   }
