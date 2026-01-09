@@ -27,6 +27,44 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
 
   import testImplicits._
 
+  import org.apache.spark.sql.DataFrame
+  import org.apache.spark.sql.types.StructType
+
+  // scalastyle:off argcount
+  override protected def testEvolution(name: String)(
+      targetData: => DataFrame,
+      sourceData: => DataFrame,
+      cond: String = "t.pk = s.pk",
+      clauses: Seq[MergeClause] = Seq.empty,
+      expected: => DataFrame = null,
+      expectedWithoutEvolution: => DataFrame = null,
+      expectedSchema: StructType = null,
+      expectedSchemaWithoutEvolution: StructType = null,
+      expectErrorContains: String = null,
+      expectErrorWithoutEvolutionContains: String = null,
+      confs: Seq[(String, String)] = Seq.empty,
+      partitionCols: Seq[String] = Seq("dep"),
+      disableAutoSchemaEvolution: Boolean = false,
+      requiresNestedTypeCoercion: Boolean = false,
+      allColumnsNullable: Boolean = false): Unit = {
+    super.testEvolution(name)(
+      targetData = targetData,
+      sourceData = sourceData,
+      cond = cond,
+      clauses = clauses,
+      expected = expected,
+      expectedWithoutEvolution = expectedWithoutEvolution,
+      expectedSchema = expectedSchema,
+      expectedSchemaWithoutEvolution = expectedSchemaWithoutEvolution,
+      expectErrorContains = expectErrorContains,
+      expectErrorWithoutEvolutionContains = expectErrorWithoutEvolutionContains,
+      confs = confs,
+      partitionCols = partitionCols,
+      disableAutoSchemaEvolution = disableAutoSchemaEvolution,
+      requiresNestedTypeCoercion = requiresNestedTypeCoercion,
+      allColumnsNullable = allColumnsNullable
+    )
+  }
   // scalastyle:on argcount
 
   // ---------------------------------------------------------------------------
@@ -53,7 +91,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       update(set = "dep='software', active=s.active"),
       insert(values = "(pk, salary, dep, active) VALUES (s.pk, 0, s.dep, s.active)")
     ),
-    partitionCols = Seq("dep"),
     disableAutoSchemaEvolution = true,
     expectErrorContains = "A column, variable, or function parameter with name " +
       "`active` cannot be resolved",
@@ -79,7 +116,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       updateAll(),
       insertAll()
     ),
-    partitionCols = Seq("dep"),
     disableAutoSchemaEvolution = true,
     // Without property enabled, new columns are not added even with clause
     expected = Seq(
@@ -116,7 +152,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       updateAll(),
       insertAll()
     ),
-    partitionCols = Seq("dep"),
     disableAutoSchemaEvolution = true,
     expectErrorContains = "A column, variable, or function parameter with name " +
       "`dep` cannot be resolved",
@@ -142,7 +177,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       update(set = "dep = 'finance', active = s.active"),
       insert(values = "(pk, salary, dep, active) VALUES (s.pk, s.salary, 'finance', s.active)")
     ),
-    partitionCols = Seq("dep"),
     disableAutoSchemaEvolution = true,
     expectErrorContains = "A column, variable, or function parameter with name " +
       "`active` cannot be resolved",
@@ -172,7 +206,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       update(set = "salary = s.salary"),
       insert(values = "(pk, salary, dep) VALUES (s.pk, s.salary, s.dep)")
     ),
-    partitionCols = Seq("dep"),
     disableAutoSchemaEvolution = true,
     expectErrorContains = "Fail to assign a value of \"INT\" type to the \"SMALLINT\" " +
       "type column or variable `salary` due to an overflow",
@@ -202,7 +235,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       update(set = "dep='software', active=s.active"),
       insert(values = "(pk, salary, dep, active) VALUES (s.pk, 0, s.dep, s.active)")
     ),
-    partitionCols = Seq("dep"),
     expected = Seq[(Int, Int, String, java.lang.Boolean)](
       (1, 100, "hr", null),
       (2, 200, "software", null),
@@ -233,7 +265,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       insert(values = "(pk, salary, dep, active) VALUES (s.pk, s.salary, s.dep, s.active)",
         condition = "s.active = true")
     ),
-    partitionCols = Seq("dep"),
     expected = Seq[(Int, Int, String, java.lang.Boolean)](
       (1, 100, "hr", null),
       (2, 200, "software", null),
@@ -264,7 +295,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       update(set = "salary=s.salary, dep=s.dep, active=s.active", condition = "t.active IS NULL"),
       insert(values = "(pk, salary, dep, active) VALUES (s.pk, s.salary, s.dep, s.active)")
     ),
-    partitionCols = Seq("dep"),
     expected = Seq[(Int, Int, String, java.lang.Boolean)](
       (1, 100, "hr", null),
       (2, 200, "software", null),
@@ -293,7 +323,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       updateAll(),
       insertAll()
     ),
-    partitionCols = Seq("dep"),
     expected = Seq[(Int, Int, String, java.lang.Boolean)](
       (1, 100, "hr", null),
       (2, 200, "software", null),
@@ -329,7 +358,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       updateAll(),
       insertAll()
     ),
-    partitionCols = Seq("dep"),
     expected = Seq[(Int, Int, String, java.lang.Boolean)](
       (1, 100, "hr", null),
       (2, 200, "software", null),
@@ -375,7 +403,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       StructField("dep", StringType)
     )),
     clauses = Seq(updateAll(), insertAll()),
-    partitionCols = Seq("dep"),
     result = Seq(
       """{ "pk": 1, "s": { "c1": 10, "c2": { "a": [3,4], "m": { "c": "d" }, "c3": false } },
         | "dep": "sales" }""".stripMargin.replace("\n", ""),
@@ -420,7 +447,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       (6, 350, false)
     ).toDF("pk", "salary", "active"),
     clauses = Seq(updateAll(), insertAll()),
-    partitionCols = Seq("dep"),
     // With evolution: active column added, matched rows keep dep, inserted rows get default
     expected = Seq[(Int, Int, String, java.lang.Boolean)](
       (1, 100, "hr", null),
@@ -450,7 +476,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       update(set = "dep = 'finance', active = s.active"),
       insert(values = "(pk, salary, dep, active) VALUES (s.pk, s.salary, 'finance', s.active)")
     ),
-    partitionCols = Seq("dep"),
     expected = Seq[(Int, Int, String, java.lang.Boolean)](
       (1, 100, "hr", null),
       (2, 200, "software", null),
@@ -485,7 +510,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       update(set = "salary = s.salary"),
       insert(values = "(pk, salary, dep) VALUES (s.pk, s.salary, s.dep)")
     ),
-    partitionCols = Seq("dep"),
     expected = Seq(
       (1, 50000, "hr"),
       (2, 200, "finance"),
@@ -539,7 +563,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       StructField("dep", StringType)
     )),
     clauses = Seq(updateAll(), insert("(pk, employee, dep) VALUES (s.pk, s.employee, s.dep)")),
-    partitionCols = Seq("dep"),
     result = Seq(
       """{ "pk": 1, "employee": { "salary": 75000, "details": { "bonus": 3000000000, "years": 5 } },
         | "dep": "hr" }""".stripMargin.replace("\n", ""),
@@ -585,7 +608,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       StructField("dep", StringType)
     )),
     clauses = Seq(updateAll(), insert("(pk, scores, dep) VALUES (s.pk, s.scores, s.dep)")),
-    partitionCols = Seq("dep"),
     result = Seq(
       """{ "pk": 1, "scores": [3000000000, 4000000000], "dep": "hr" }""",
       """{ "pk": 2, "scores": [4000, 5000, 6000], "dep": "finance" }""",
@@ -623,7 +645,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       StructField("dep", StringType)
     )),
     clauses = Seq(updateAll(), insert("(pk, metrics, dep) VALUES (s.pk, s.metrics, s.dep)")),
-    partitionCols = Seq("dep"),
     result = Seq(
       """{ "pk": 1, "metrics": {"revenue": 3000000000, "profit": 1500000000}, "dep": "hr" }""",
       """{ "pk": 2, "metrics": {"revenue": 200000, "profit": 80000}, "dep": "finance" }""",
@@ -672,7 +693,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       updateAll(),
       insertAll()
     ),
-    partitionCols = Seq("dep"),
     expected = Seq(
       (1, 5000000000L, 485, "premium", "high", "west"),
       (2, 85L, 38, "standard", null, null),
@@ -715,7 +735,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       StructField("dep", StringType)
     )),
     clauses = Seq(updateAll(), insertAll()),
-    partitionCols = Seq("dep"),
     // Both cases fail with different errors
     expectErrorContains = "Failed to merge incompatible schemas",
     expectErrorWithoutEvolutionContains = "Cannot write incompatible data for the table"
@@ -761,7 +780,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
         |named_struct('c1', s.s.c1, 'c2', named_struct('a', s.s.c2.a, 'm', map('g', 'h'),
         |'c3', true)), s.dep)""".stripMargin.replace("\n", " "))
     ),
-    partitionCols = Seq("dep"),
     result = Seq(
       """{ "pk": 1, "s": { "c1": -1, "c2": { "a": [-1], "m": { "k": "v" }, "c3": false } },
         | "dep": "hr" }""".stripMargin.replace("\n", ""),
@@ -824,7 +842,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
         |named_struct('c1', s.s.c1, 'c2', named_struct('a', array(-2), 'm', map('g', 'h'),
         |'c3', true)), s.dep)""".stripMargin.replace("\n", " "))
     ),
-    partitionCols = Seq("dep"),
     result = Seq(
       """{ "pk": 1, "s": { "c1": -1, "c2": { "a": [-1], "m": { "k": "v" }, "c3": false } },
         | "dep": "hr" }""".stripMargin.replace("\n", ""),
@@ -882,7 +899,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       StructField("dep", StringType)
     )),
     clauses = Seq(updateAll(), insertAll()),
-    partitionCols = Seq("dep"),
     result = Seq(
       // Matched row: 'a' is preserved from target, other fields from source
       """{ "pk": 1, "s": { "c1": 10, "c2": { "a": [1,2], "m": { "c": "d" }, "c3": false } },
@@ -944,7 +960,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       StructField("dep", StringType)
     )),
     clauses = Seq(update(set = "s = s.s"), insertAll()),
-    partitionCols = Seq("dep"),
     result = Seq(
       // Matched row: 'a' is null since we're setting whole struct from source
       """{ "pk": 1, "s": { "c1": 10, "c2": { "a": null, "m": { "c": "d" }, "c3": false } },
@@ -1002,7 +1017,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
     )),
     cond = "t.pk = s.pk",
     clauses = Seq(updateAll(), insertAll()),
-    partitionCols = Seq("dep"),
     result = Seq(
       """{ "pk": 0, "a": [{ "c1": 1, "c2": "a", "c3": null },
         | { "c1": 2, "c2": "b", "c3": null }], "dep": "sales" }""".stripMargin.replace("\n", ""),
@@ -1050,7 +1064,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       )), schema)
     },
     clauses = Seq(updateAll(), insertAll()),
-    partitionCols = Seq("dep"),
     expected = Seq(
       (0, Map((10, null: java.lang.Boolean) -> ("c", null: java.lang.Boolean)), "hr"),
       (1, Map((10, true: java.lang.Boolean) -> ("y", false: java.lang.Boolean)), "sales"),
@@ -1085,7 +1098,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       spark.createDataFrame(spark.sparkContext.parallelize(sourceData), sourceSchema)
     },
     clauses = Seq(updateAll(), insertAll()),
-    partitionCols = Seq("dep"),
     expected = Seq(
       (0, Map((10, 10: java.lang.Integer, null: java.lang.Boolean) ->
         ("c", "c", null: java.lang.Boolean)), "hr"),
@@ -1126,7 +1138,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
     clauses = Seq(
       update("m = s.m, dep = 'my_old_dep'"),
       insert("(pk, m, dep) VALUES (s.pk, s.m, 'my_new_dep')")),
-    partitionCols = Seq("dep"),
     expected = Seq(
       (0, Map((10, 10: java.lang.Integer, null: java.lang.Boolean) ->
         ("c", "c", null: java.lang.Boolean)), "hr"),
@@ -1163,7 +1174,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       StructField("dep", StringType)
     )),
     clauses = Seq(updateAll(), insertAll()),
-    partitionCols = Seq("dep"),
     result = Seq(
       // Unmatched target row: c3 added as null
       """{ "pk": 0, "a": [{ "c1": 10, "c2": 10, "c3": null }], "dep": "hr" }""",
@@ -1212,7 +1222,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       update(set = "a = s.a, dep = 'my_old_dep'"),
       insert(values = "(pk, a, dep) VALUES (s.pk, s.a, 'my_new_dep')")
     ),
-    partitionCols = Seq("dep"),
     result = Seq(
       // Unmatched target row: c3 added as null
       """{ "pk": 0, "a": [{ "c1": 10, "c2": 10, "c3": null }], "dep": "hr" }""",
@@ -1242,7 +1251,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       (3, 300, "hr", true)
     ).toDF("pk", "salary", "dep", "active"),
     clauses = Seq(insertAll()),
-    partitionCols = Seq("dep"),
     expected = Seq(
       (1, 100, "hr", true),
       (2, 200, "finance", false),
@@ -1267,7 +1275,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
     clauses = Seq(
       update(set = "extra=substring(s.extra, 1, 2)")
     ),
-    partitionCols = Seq("dep"),
     expectErrorContains = "A column, variable, or function parameter with name " +
       "`extra` cannot be resolved",
     expectErrorWithoutEvolutionContains = "A column, variable, or function parameter with name " +
@@ -1288,7 +1295,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
     clauses = Seq(
       update(set = "dep='software'")
     ),
-    partitionCols = Seq("dep"),
     expected = Seq(
       (1, 100, "hr"),
       (2, 200, "software")).toDF("pk", "salary", "dep"),
@@ -1311,7 +1317,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
     clauses = Seq(
       insert(values = "(pk, salary, dep) VALUES (s.pk, s.salary, 'newdep')")
     ),
-    partitionCols = Seq("dep"),
     expected = Seq(
       (1, 100, "hr"),
       (2, 200, "software"),
@@ -1337,7 +1342,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       update(set = "dep='software'"),
       insert(values = "(pk, salary, dep) VALUES (s.pk, s.salary, 'newdep')")
     ),
-    partitionCols = Seq("dep"),
     expected = Seq(
       (1, 100, "hr"),
       (2, 200, "software"),
@@ -1362,7 +1366,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
     clauses = Seq(
       update(set = "t.extra = s.extra")
     ),
-    partitionCols = Seq("dep"),
     expectErrorContains = "A column, variable, or function parameter with name " +
       "`t`.`extra` cannot be resolved",
     expectErrorWithoutEvolutionContains = "A column, variable, or function parameter with name " +
@@ -1384,7 +1387,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       update(set = "salary = s.salary, bonus = s.bonus"),
       insert(values = "(pk, salary, dep, bonus) VALUES (s.pk, s.salary, 'newdep', s.bonus)")
     ),
-    partitionCols = Seq("dep"),
     expected = Seq[(Int, Int, String, java.lang.Integer)](
       (1, 100, "hr", null),
       (2, 150, "software", 50),
@@ -1427,7 +1429,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
     )),
     // Only update the bonus field - should only add 'bonus', not 'extra'
     clauses = Seq(update("info.bonus = s.info.bonus")),
-    partitionCols = Seq("dep"),
     result = Seq(
       """{ "pk": 1, "info": { "salary": 100, "status": "active", "bonus": null }, "dep": "hr" }""",
       """{ "pk": 2, "info": { "salary": 200, "status": "inactive", "bonus": 50 },
@@ -1460,7 +1461,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       update(set = "salary = s.bonus"),
       insert(values = "(pk, salary, dep) VALUES (s.pk, s.bonus, 'newdep')")
     ),
-    partitionCols = Seq("dep"),
     expected = Seq(
       (1, 100, "hr"),
       (2, 50, "software"),
@@ -1504,7 +1504,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
     clauses = Seq(insert(
       "(pk, info, dep) VALUES (s.pk, named_struct('salary', s.info.salary, 'status', 'active'), " +
         "'marketing')")),
-    partitionCols = Seq("dep"),
     // Same result for both - no schema evolution because new field not directly referenced
     result = Seq(
       """{ "pk": 1, "info": { "salary": 100, "status": "active" }, "dep": "hr" }""",
@@ -1548,7 +1547,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       StructField("dep", StringType)
     )),
     clauses = Seq(update("info.status = 'inactive'")),
-    partitionCols = Seq("dep"),
     // Same result for both - no schema evolution because new field not directly assigned
     result = Seq(
       """{ "pk": 1, "info": { "salary": 100, "status": "active" }, "dep": "hr" }""",
@@ -1589,7 +1587,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       StructField("dep", StringType)
     )),
     clauses = Seq(update("info = s.info")),
-    partitionCols = Seq("dep"),
     result = Seq(
       // Schema evolves - bonus field added, null for non-matched row
       """{ "pk": 1, "info": { "salary": 100, "status": "active", "bonus": null }, "dep": "hr" }""",
@@ -1637,7 +1634,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       StructField("dep", StringType)
     )),
     clauses = Seq(insert("(pk, info, dep) VALUES (s.pk, s.info, s.dep)")),
-    partitionCols = Seq("dep"),
     result = Seq(
       // Schema evolves - bonus field added, null for existing rows
       """{ "pk": 1, "info": { "salary": 100, "status": "active", "bonus": null }, "dep": "hr" }""",
@@ -1697,7 +1693,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       StructField("dep", StringType)
     )),
     clauses = Seq(update("employee.details.status = 'inactive'")),
-    partitionCols = Seq("dep"),
     // Same result for both - no schema evolution because new field not directly assigned
     result = Seq(
       """{ "pk": 1, "employee": { "name": "Alice", "details": { "salary": 100, "status": "active" }
@@ -1728,7 +1723,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
     clauses = Seq(
       update(set = "extra=s.dep")
     ),
-    partitionCols = Seq("dep"),
     expectErrorContains = "A column, variable, or function parameter with name " +
       "`extra` cannot be resolved",
     expectErrorWithoutEvolutionContains = "A column, variable, or function parameter with name " +
@@ -1770,7 +1764,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
     )),
     cond = "t.pk = s.pk",
     clauses = Seq(updateAll(), insertAll()),
-    partitionCols = Seq("dep"),
     result = Seq(
       // Unmatched target row: 'c' added as null
       """{ "pk": 0, "s": { "c1": 1, "c2": { "a": 10, "b": "x", "c": null } }, "dep": "sales" }""",
@@ -1824,7 +1817,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
           StructField("c2", StringType))))), // missing c3 field
       StructField("dep", StringType)
     )),
-    partitionCols = Seq("dep"),
     clauses = Seq(updateAll(), insertAll()),
     result = Seq(
       // Unmatched target row unchanged
@@ -1865,7 +1857,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       )), schema)
     },
     clauses = Seq(updateAll(), insertAll()),
-    partitionCols = Seq("dep"),
     expected = Seq(
       // Missing field c2 filled with null
       (0, Map((10, true: java.lang.Boolean) -> Tuple1("x")), "hr"),
@@ -1940,7 +1931,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       StructField("dep", StringType)
     )),
     clauses = Seq(updateAll(), insertAll()),
-    partitionCols = Seq("dep"),
     result = Seq(
       """{ "pk": 0, "s": { "c1": 1, "c2": "a", "c3": true }, "dep": "sales" }""",
       // Missing c3 filled with null
@@ -1969,7 +1959,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       (2, "finance")
     ).toDF("pk", "dep"),
     clauses = Seq(updateAll(), insertAll()),
-    partitionCols = Seq("dep"),
     expected = Seq[(Int, java.lang.Integer, String)](
       (0, 100, "sales"),
       (1, 200, "engineering"),
@@ -2007,7 +1996,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       StructField("dep", StringType)
     )),
     clauses = Seq(updateAll(), insertAll()),
-    partitionCols = Seq("dep"),
     result = Seq(
       """{ "pk": 0, "s": { "c1": 1, "c2": "a", "c3": 10 }, "dep": "sales" }""",
       // Struct of null values preserved, c3 preserved from target
@@ -2047,7 +2035,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       StructField("dep", StringType)
     )),
     clauses = Seq(updateAll(), insertAll()),
-    partitionCols = Seq("dep"),
     result = Seq(
       """{ "pk": 0, "s": { "c1": 1, "c2": "a", "c3": 10 }, "dep": "sales" }""",
       // Struct of null values preserved, c3 preserved from target (which was null)
@@ -2090,7 +2077,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       StructField("dep", StringType)
     )),
     clauses = Seq(updateAll(), insertAll()),
-    partitionCols = Seq("dep"),
     result = Seq(
       """{ "pk": 0, "s": { "c1": 1, "c2": { "a": 10, "b": "x" } }, "dep": "sales" }""",
       // Matched: null struct coerced, c2.b preserved from target
@@ -2129,7 +2115,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
     clauses = Seq(
       update("dep = s.dep"),
       insert("(pk, dep) VALUES (s.pk, s.dep)")),
-    partitionCols = Seq("dep"),
     // When inserting without specifying the struct column, default should be used
     expected = Seq(
       (0, (1, (10, "x")), "sales"),
@@ -2177,7 +2162,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       StructField("dep", StringType)
     )),
     clauses = Seq(updateAll(), insertAll()),
-    partitionCols = Seq("dep"),
     result = Seq(
       // Missing field 'b' preserved from target
       """{ "pk": 1, "s": { "c1": 10, "c2": { "a": 20, "b": true } }, "dep": "sales" }""",
@@ -2217,7 +2201,6 @@ trait MergeIntoSchemaEvolutionTests extends MergeIntoSchemaEvolutionSuiteBase {
       update(set = "s = named_struct('c1', s.s.c1), dep = s.dep"),
       insert(values = "(pk, s, dep) VALUES (s.pk, named_struct('c1', 1), s.dep)")
     ),
-    partitionCols = Seq("dep"),
     expectErrorContains = "Cannot find data for the output column `s`.`c2`",
     expectErrorWithoutEvolutionContains = "Cannot find data for the output column `s`.`c2`"
   )

@@ -138,6 +138,8 @@ trait MergeIntoSchemaEvolutionSuiteBase extends RowLevelOperationSuiteBase {
    *                                            to false
    * @param requiresNestedTypeCoercion          If true, enables coercion for main tests and adds
    *                                            coercion-disabled tests that expect failure
+   * @param allColumnsNullable                  If true, makes all columns in the created table
+   *                                            nullable regardless of the source schema
    */
   // scalastyle:off argcount
   protected def testEvolution(name: String)(
@@ -154,7 +156,8 @@ trait MergeIntoSchemaEvolutionSuiteBase extends RowLevelOperationSuiteBase {
       confs: Seq[(String, String)] = Seq.empty,
       partitionCols: Seq[String] = Seq.empty,
       disableAutoSchemaEvolution: Boolean = false,
-      requiresNestedTypeCoercion: Boolean = false): Unit = {
+      requiresNestedTypeCoercion: Boolean = false,
+      allColumnsNullable: Boolean = false): Unit = {
 
     def executeMergeAndAssert(
         withSchemaEvolution: Boolean,
@@ -165,7 +168,12 @@ trait MergeIntoSchemaEvolutionSuiteBase extends RowLevelOperationSuiteBase {
         withTempView("source") {
           // Set up target table - infer schema from DataFrame
           val targetDf = targetData
-          val columns = CatalogV2Util.structTypeToV2Columns(targetDf.schema)
+          val baseColumns = CatalogV2Util.structTypeToV2Columns(targetDf.schema)
+          val columns = if (allColumnsNullable) {
+            baseColumns.map(c => Column.create(c.name(), c.dataType(), true))
+          } else {
+            baseColumns
+          }
           createTable(columns, partitionCols)
           if (!targetDf.isEmpty) {
             targetDf.writeTo(tableNameAsString).append()
