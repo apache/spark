@@ -80,6 +80,7 @@ U = TypeVar("U")
 
 __all__ = [
     "CoercionPolicy",
+    "CoercionWarning",
     "DataType",
     "NullType",
     "CharType",
@@ -174,25 +175,35 @@ class CoercionPolicy(str, Enum):
     """
 
 
-# Set to track which coercion warnings have been issued (to avoid duplicates)
-_issued_coercion_warnings: set = set()
+class CoercionWarning(UserWarning):
+    """Warning issued when type coercion behavior differs between pickle and Arrow modes."""
+
+    pass
+
+
+# Configure default filter to show each unique CoercionWarning only once
+warnings.filterwarnings("once", category=CoercionWarning)
 
 
 def _warn_coercion_once(message: str) -> None:
-    """Issue a coercion warning only once per unique message."""
-    if message not in _issued_coercion_warnings:
-        _issued_coercion_warnings.add(message)
-        warnings.warn(message, UserWarning)
+    """Issue a coercion warning only once per unique message.
+
+    Uses Python's warnings module with 'once' filter.
+    The stacklevel=3 accounts for: _warn_coercion_once -> coerce() -> caller.
+    """
+    warnings.warn(message, CoercionWarning, stacklevel=3)
 
 
-def _clear_coercion_warnings() -> None:
-    """Clear the set of issued coercion warnings. Used for testing."""
-    _issued_coercion_warnings.clear()
+def _reset_coercion_warnings() -> None:
+    """Reset coercion warnings so they can be shown again. Used for testing."""
+    warnings.filterwarnings("once", category=CoercionWarning)
 
 
 def _is_row_object(value: Any) -> bool:
     """Check if value is a Row object. Row causes pickle to error on most type conversions."""
-    return hasattr(value, "__class__") and value.__class__.__name__ == "Row"
+    # Check if it's a tuple subclass with Row-specific attributes
+    # We can't use isinstance(value, Row) here because Row is defined later in this file
+    return isinstance(value, tuple) and hasattr(value, "__fields__") and hasattr(value, "asDict")
 
 
 class DataType:
@@ -205,23 +216,7 @@ class DataType:
         return hash(str(self))
 
     def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, self.__class__):
-            return False
-        # Exclude internal cached attributes for coercion optimization from equality comparison
-        # These are implementation details that don't affect the logical type definition
-        _CACHED_ATTRS = frozenset(
-            {
-                "_elementNeedsCoercion",  # ArrayType
-                "_keyNeedsCoercion",  # MapType
-                "_valueNeedsCoercion",  # MapType
-                "_fieldsNeedCoercion",  # StructType
-                "_anyFieldNeedsCoercion",  # StructType
-                "_fieldCoerceMethods",  # StructType
-            }
-        )
-        self_dict = {k: v for k, v in self.__dict__.items() if k not in _CACHED_ATTRS}
-        other_dict = {k: v for k, v in other.__dict__.items() if k not in _CACHED_ATTRS}
-        return self_dict == other_dict
+        return isinstance(other, self.__class__) and self.__dict__ == other.__dict__
 
     def __ne__(self, other: Any) -> bool:
         return not self.__eq__(other)
@@ -1294,8 +1289,6 @@ class ArrayType(DataType):
         )
         self.elementType = elementType
         self.containsNull = containsNull
-        # Cache whether element type needs coercion for fast path in coerce()
-        self._elementNeedsCoercion = elementType.needsCoercion
 
     def simpleString(self) -> str:
         return "array<%s>" % self.elementType.simpleString()
@@ -1381,7 +1374,7 @@ class ArrayType(DataType):
     def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
         # Fast path: check most common case first (list)
         if type(value) is list:
-            if self._elementNeedsCoercion:
+            if self.elementType.needsCoercion:
                 # Cache attribute access for inner loop
                 elem_coerce = self.elementType.coerce
                 return [elem_coerce(v, policy) for v in value]
@@ -1396,13 +1389,13 @@ class ArrayType(DataType):
             )
         # tuple -> array: both paths convert, recursively coerce elements only if needed
         if isinstance(value, (tuple, array, bytearray)):
-            if self._elementNeedsCoercion:
+            if self.elementType.needsCoercion:
                 elem_coerce = self.elementType.coerce
                 return [elem_coerce(v, policy) for v in value]
             return list(value)
         # list subclass
         if isinstance(value, list):
-            if self._elementNeedsCoercion:
+            if self.elementType.needsCoercion:
                 elem_coerce = self.elementType.coerce
                 return [elem_coerce(v, policy) for v in value]
             return value
@@ -1471,9 +1464,6 @@ class MapType(DataType):
         self.keyType = keyType
         self.valueType = valueType
         self.valueContainsNull = valueContainsNull
-        # Cache whether key/value types need coercion for fast path in coerce()
-        self._keyNeedsCoercion = keyType.needsCoercion
-        self._valueNeedsCoercion = valueType.needsCoercion
 
     def simpleString(self) -> str:
         return "map<%s,%s>" % (self.keyType.simpleString(), self.valueType.simpleString())
@@ -1568,33 +1558,16 @@ class MapType(DataType):
         return True
 
     def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
-        # Fast path: check most common case first (dict)
-        if type(value) is dict:
-            # Use cached values to avoid property access per call
-            key_needs = self._keyNeedsCoercion
-            val_needs = self._valueNeedsCoercion
+        if value is None:
+            return None
+        # dict or dict subclass -> map
+        if isinstance(value, dict):
+            key_needs = self.keyType.needsCoercion
+            val_needs = self.valueType.needsCoercion
             if not key_needs and not val_needs:
                 return value
             elif key_needs and val_needs:
                 # Cache method lookups for inner loop
-                key_coerce = self.keyType.coerce
-                val_coerce = self.valueType.coerce
-                return {key_coerce(k, policy): val_coerce(v, policy) for k, v in value.items()}
-            elif key_needs:
-                key_coerce = self.keyType.coerce
-                return {key_coerce(k, policy): v for k, v in value.items()}
-            else:
-                val_coerce = self.valueType.coerce
-                return {k: val_coerce(v, policy) for k, v in value.items()}
-        if value is None:
-            return None
-        # dict subclass -> map
-        if isinstance(value, dict):
-            key_needs = self._keyNeedsCoercion
-            val_needs = self._valueNeedsCoercion
-            if not key_needs and not val_needs:
-                return value
-            elif key_needs and val_needs:
                 key_coerce = self.keyType.coerce
                 val_coerce = self.valueType.coerce
                 return {key_coerce(k, policy): val_coerce(v, policy) for k, v in value.items()}
@@ -1896,11 +1869,6 @@ class StructType(DataType):
         # Precalculated list of fields that need conversion with fromInternal/toInternal functions
         self._needConversion = [f.needConversion() for f in self]
         self._needSerializeAnyField = any(self._needConversion)
-        # Cache which fields need coercion for fast path in coerce()
-        self._fieldsNeedCoercion = [f.dataType.needsCoercion for f in self.fields]
-        self._anyFieldNeedsCoercion = any(self._fieldsNeedCoercion)
-        # Cache field coerce methods for inner loop optimization
-        self._fieldCoerceMethods = [f.dataType.coerce for f in self.fields]
 
     @overload
     def add(
@@ -1986,10 +1954,6 @@ class StructType(DataType):
         # Precalculated list of fields that need conversion with fromInternal/toInternal functions
         self._needConversion = [f.needConversion() for f in self]
         self._needSerializeAnyField = any(self._needConversion)
-        # Update coercion cache
-        self._fieldsNeedCoercion = [f.dataType.needsCoercion for f in self.fields]
-        self._anyFieldNeedsCoercion = any(self._fieldsNeedCoercion)
-        self._fieldCoerceMethods = [f.dataType.coerce for f in self.fields]
         return self
 
     def __iter__(self) -> Iterator[StructField]:
@@ -2261,42 +2225,32 @@ class StructType(DataType):
     def coerce(self, value: Any, policy: "CoercionPolicy" = CoercionPolicy.PERMISSIVE) -> Any:
         if value is None:
             return None
-        # Use cached values to avoid recomputing on every call
-        needs_list = self._fieldsNeedCoercion
-        any_needs = self._anyFieldNeedsCoercion
-        coerce_methods = self._fieldCoerceMethods
+
+        fields = self.fields
+        names = self.names
 
         # Row -> struct: exact match, recursively coerce fields only if needed
         if isinstance(value, Row):
-            if any_needs:
-                coerced_values = [
-                    coerce_methods[i](value[i], policy) if needs_list[i] else value[i]
-                    for i in range(len(self.fields))
-                ]
-                return _create_row(self.names, coerced_values)
-            return value
+            coerced_values = [
+                f.dataType.coerce(value[i], policy) if f.dataType.needsCoercion else value[i]
+                for i, f in enumerate(fields)
+            ]
+            return _create_row(names, coerced_values)
         # tuple -> struct: both paths convert, recursively coerce fields only if needed
         if isinstance(value, tuple):
-            if any_needs:
-                coerced_values = [
-                    coerce_methods[i](value[i], policy) if needs_list[i] else value[i]
-                    for i in range(len(self.fields))
-                ]
-            else:
-                coerced_values = list(value)
-            return _create_row(self.names, coerced_values)
+            coerced_values = [
+                f.dataType.coerce(value[i], policy) if f.dataType.needsCoercion else value[i]
+                for i, f in enumerate(fields)
+            ]
+            return _create_row(names, coerced_values)
         # dict -> struct: both paths convert (field matching), recursively coerce fields only if needed
         if isinstance(value, dict):
-            names = self.names
-            if any_needs:
-                coerced_values = [
-                    coerce_methods[i](value.get(names[i]), policy)
-                    if needs_list[i]
-                    else value.get(names[i])
-                    for i in range(len(self.fields))
-                ]
-            else:
-                coerced_values = [value.get(n) for n in names]
+            coerced_values = [
+                f.dataType.coerce(value.get(names[i]), policy)
+                if f.dataType.needsCoercion
+                else value.get(names[i])
+                for i, f in enumerate(fields)
+            ]
             return _create_row(names, coerced_values)
         # list -> struct: pickle converts, recursively coerce fields only if needed
         if isinstance(value, list):
@@ -2304,14 +2258,11 @@ class StructType(DataType):
                 _warn_coercion_once(
                     "Coercing list to struct works in pickle mode but raises in Arrow mode"
                 )
-            if any_needs:
-                coerced_values = [
-                    coerce_methods[i](value[i], policy) if needs_list[i] else value[i]
-                    for i in range(len(self.fields))
-                ]
-            else:
-                coerced_values = value
-            return _create_row(self.names, coerced_values)
+            coerced_values = [
+                f.dataType.coerce(value[i], policy) if f.dataType.needsCoercion else value[i]
+                for i, f in enumerate(fields)
+            ]
+            return _create_row(names, coerced_values)
         # Other types: raise
         raise PySparkTypeError(
             errorClass="CANNOT_CONVERT_TYPE",
