@@ -173,6 +173,7 @@ case class QualifiedColType(
  *                             Only valid for static partitions.
  * @param byName               If true, reorder the data columns to match the column names of the
  *                             target table.
+ * @param withSchemaEvolution  If true, enables automatic schema evolution for the operation.
  */
 case class InsertIntoStatement(
     table: LogicalPlan,
@@ -181,7 +182,8 @@ case class InsertIntoStatement(
     query: LogicalPlan,
     overwrite: Boolean,
     ifPartitionNotExists: Boolean,
-    byName: Boolean = false) extends UnaryParsedStatement {
+    byName: Boolean = false,
+    withSchemaEvolution: Boolean = false) extends UnaryParsedStatement {
 
   require(overwrite || !ifPartitionNotExists,
     "IF NOT EXISTS is only valid in INSERT OVERWRITE")
