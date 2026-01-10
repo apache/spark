@@ -4450,8 +4450,11 @@ def hash(*cols: "ColumnOrName") -> Column:
 hash.__doc__ = pysparkfuncs.hash.__doc__
 
 
-def xxhash64(*cols: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("xxhash64", *cols)
+def xxhash64(*cols: "ColumnOrName", seed: Optional[int] = None) -> Column:
+    if seed is None:
+        return _invoke_function_over_columns("xxhash64", *cols)
+    else:
+        return _invoke_function("xxhash64_with_seed", lit(seed), *[_to_col(c) for c in cols])
 
 
 xxhash64.__doc__ = pysparkfuncs.xxhash64.__doc__
