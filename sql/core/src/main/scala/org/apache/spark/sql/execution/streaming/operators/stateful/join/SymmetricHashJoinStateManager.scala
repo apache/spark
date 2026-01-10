@@ -147,6 +147,8 @@ abstract class SymmetricHashJoinStateManager(
     val numValues = keyToNumValues.get(key)
     keyWithIndexToValue.getAll(key, numValues).filterNot { keyIdxToValue =>
       excludeRowsAlreadyMatched && keyIdxToValue.matched
+    }.filter { keyIdxToValue =>
+      keyIdxToValue.value != null
     }.map { keyIdxToValue =>
       val joinedRow = generateJoinedRow(keyIdxToValue.value)
       if (predicate(joinedRow)) {
@@ -714,9 +716,13 @@ SnapshotOptions
     }
 
     override def convertToValueRow(value: UnsafeRow, matched: Boolean): UnsafeRow = {
-      val row = valueWithMatchedRowGenerator(value)
-      row.setBoolean(indexOrdinalInValueWithMatchedRow, matched)
-      row
+      if (value == null) {
+        null
+      } else {
+        val row = valueWithMatchedRowGenerator(value)
+        row.setBoolean(indexOrdinalInValueWithMatchedRow, matched)
+        row
+      }
     }
   }
 
