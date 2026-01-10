@@ -46,16 +46,16 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
     val dataType = CatalystSqlParser.parseDataType(dt)
     checkColType(df.schema(1), dataType)
     dataType match {
-      case CharType(len) =>
+      case c: CharType =>
         // char value will be padded if (<= len) or trimmed if (> len)
         val fixLenStr = if (insertVal != null) {
-          insertVal.take(len).padTo(len, " ").mkString
+          insertVal.take(c.length).padTo(c.length, " ").mkString
         } else null
         checkAnswer(df, Row("1", fixLenStr))
-      case VarcharType(len) =>
+      case v: VarcharType =>
         // varchar value will be remained if (<= len) or trimmed if (> len)
         val varLenStrWithUpperBound = if (insertVal != null) {
-          insertVal.take(len)
+          insertVal.take(v.length)
         } else null
         checkAnswer(df, Row("1", varLenStrWithUpperBound))
     }

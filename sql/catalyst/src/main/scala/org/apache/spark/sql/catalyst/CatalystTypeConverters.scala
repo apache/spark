@@ -67,8 +67,8 @@ object CatalystTypeConverters {
       case arrayType: ArrayType => ArrayConverter(arrayType.elementType)
       case mapType: MapType => MapConverter(mapType.keyType, mapType.valueType)
       case structType: StructType => StructConverter(structType)
-      case CharType(length) => new CharConverter(length)
-      case VarcharType(length) => new VarcharConverter(length)
+      case c: CharType => new CharConverter(c.length)
+      case v: VarcharType => new VarcharConverter(v.length)
       case _: StringType => StringConverter
       case g: GeographyType =>
         new GeographyConverter(g)
