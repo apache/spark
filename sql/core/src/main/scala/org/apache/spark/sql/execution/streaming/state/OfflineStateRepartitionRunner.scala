@@ -102,7 +102,8 @@ class OfflineStateRepartitionRunner(
         // Commit the repartition batch
         val enableCheckpointId = sparkSession.conf.get(
           SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key).toInt >= 2
-        commitBatch(newBatchId, lastCommittedBatchId, operatorToCkptIds, enableCheckpointId)
+        commitBatch(newBatchId, lastCommittedBatchId,
+          if (enableCheckpointId) Option(operatorToCkptIds) else None)
         newBatchId
       }
 
