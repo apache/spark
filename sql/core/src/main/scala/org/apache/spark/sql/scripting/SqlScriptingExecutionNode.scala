@@ -585,6 +585,8 @@ class WhileStatementExec(
 
   override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
 
+  override protected[scripting] def isInCondition: Boolean = state == WhileState.Condition
+
   override def reset(): Unit = {
     state = WhileState.Condition
     curr = Some(condition)
