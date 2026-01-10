@@ -18,7 +18,12 @@
 package org.apache.spark.network.server;
 
 import java.net.SocketAddress;
+import java.util.HashMap;
+import java.util.Map;
 
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.Metric;
+import com.codahale.metrics.MetricSet;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
@@ -59,16 +64,19 @@ public class ChunkFetchRequestHandler extends SimpleChannelInboundHandler<ChunkF
   /** The max number of chunks being transferred and not finished yet. */
   private final long maxChunksBeingTransferred;
   private final boolean syncModeEnabled;
+  private final ChunkFetchMetrics chunkFetchMetrics;
 
   public ChunkFetchRequestHandler(
       TransportClient client,
       StreamManager streamManager,
       Long maxChunksBeingTransferred,
-      boolean syncModeEnabled) {
+      boolean syncModeEnabled,
+      ChunkFetchMetrics chunkFetchMetrics) {
     this.client = client;
     this.streamManager = streamManager;
     this.maxChunksBeingTransferred = maxChunksBeingTransferred;
     this.syncModeEnabled = syncModeEnabled;
+    this.chunkFetchMetrics = chunkFetchMetrics;
   }
 
   @Override
@@ -151,6 +159,7 @@ public class ChunkFetchRequestHandler extends SimpleChannelInboundHandler<ChunkF
       if (future.isSuccess()) {
         logger.trace("Sent result {} to client {}", result, remoteAddress);
       } else {
+        chunkFetchMetrics.failedChunks.inc();
         logger.error("Error sending result {} to {}; closing connection",
           future.cause(),
           MDC.of(LogKeys.RESULT, result),
@@ -158,5 +167,20 @@ public class ChunkFetchRequestHandler extends SimpleChannelInboundHandler<ChunkF
         channel.close();
       }
     });
+  }
+
+  public static class ChunkFetchMetrics implements MetricSet {
+    private final Map<String, Metric> allMetrics;
+    private final Counter failedChunks = new Counter();
+
+    public ChunkFetchMetrics() {
+      allMetrics = new HashMap<>();
+      allMetrics.put("failedChunks", failedChunks);
+    }
+
+    @Override
+    public Map<String, Metric> getMetrics() {
+      return allMetrics;
+    }
   }
 }
