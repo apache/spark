@@ -41,12 +41,14 @@ class StreamRelationSuite extends SharedSparkSession with AnalysisTest {
     catalog.createDatabase(
       CatalogDatabase("default", "", new URI("loc"), Map.empty),
       ignoreIfExists = false)
-    createTempView(catalog, "table", TestRelations.testRelation, overrideIfExists = true)
-    createTempView(catalog, "table2", TestRelations.testRelation2, overrideIfExists = true)
+    createTempView(catalog, "table", TestRelations.testRelation,
+      ignoreIfExists = false, overrideIfExists = true)
+    createTempView(catalog, "table2", TestRelations.testRelation2,
+      ignoreIfExists = false, overrideIfExists = true)
     createTempView(catalog, "streamingTable", TestRelations.streamingRelation,
-      overrideIfExists = true)
+      ignoreIfExists = false, overrideIfExists = true)
     createTempView(catalog, "streamingTable2", TestRelations.streamingRelation,
-      overrideIfExists = true)
+      ignoreIfExists = false, overrideIfExists = true)
     new Analyzer(catalog) {
       override val extendedResolutionRules = extendedAnalysisRules
     }
