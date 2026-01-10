@@ -3920,6 +3920,11 @@
           "CREATE TEMPORARY TABLE ... USING ... is a deprecated syntax. To overcome the issue, please use CREATE TEMPORARY VIEW instead."
         ]
       },
+      "EMPTY_IN_PREDICATE" : {
+        "message" : [
+          "IN predicate requires at least one value. Empty IN clauses like 'IN ()' are not allowed. Consider using 'WHERE FALSE' if you need an always-false condition, or provide at least one value in the IN list."
+        ]
+      },
       "EMPTY_PARTITION_VALUE" : {
         "message" : [
           "Partition key <partKey> must set value."
@@ -5766,6 +5771,13 @@
     ],
     "sqlState" : "XXKST"
   },
+  "STATE_STORE_UNKNOWN_INTERNAL_COLUMN_FAMILY" : {
+    "message" : [
+      "Unknown internal column family: <colFamilyName>.",
+      "This internal column family is not recognized by the StateStoreColumnFamilySchemaUtils."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STATE_STORE_UNSUPPORTED_OPERATION" : {
     "message" : [
       "<operationType> operation not supported with <entity>"
@@ -5957,6 +5969,19 @@
       "Streaming Runner initialization failed. Socket connection timeout. Cause: <msg>"
     ],
     "sqlState" : "XXKST"
+  },
+  "STREAMING_QUERY_EVOLUTION_ERROR" : {
+    "message" : [
+      "Streaming query evolution error:"
+    ],
+    "subClass" : {
+      "UNNAMED_STREAMING_SOURCES_WITH_ENFORCEMENT" : {
+        "message" : [
+          "All streaming sources must be named when spark.sql.streaming.queryEvolution.enableSourceEvolution is enabled. Unnamed sources found: <sourceInfo>. Use the name() method to assign names to all streaming sources."
+        ]
+      }
+    },
+    "sqlState" : "42KDE"
   },
   "STREAMING_REAL_TIME_MODE" : {
     "message" : [
@@ -6788,6 +6813,11 @@
       "LAMBDA_FUNCTION_WITH_PYTHON_UDF" : {
         "message" : [
           "Lambda function with Python UDF <funcName> in a higher order function."
+        ]
+      },
+      "LAMBDA_FUNCTION_WITH_SQL_UDF" : {
+        "message" : [
+          "Lambda function with SQL UDF <funcName> in a higher order function."
         ]
       },
       "LATERAL_COLUMN_ALIAS_IN_AGGREGATE_FUNC" : {

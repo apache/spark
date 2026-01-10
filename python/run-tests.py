@@ -113,7 +113,7 @@ class TestRunner:
         try:
             asyncio.run(self.handle_inout())
         except subprocess.TimeoutExpired:
-            LOGGER.error(f"Test {self.test_name} timed out")
+            LOGGER.error(f"Test {self.test_name} timed out after {self.timeout} seconds")
         try:
             return self.p.wait(timeout=30)
         except subprocess.TimeoutExpired:
@@ -204,8 +204,21 @@ class TestRunner:
             # We don't want to kill the process if it's in pdb mode
             return
         if self.p.poll() is None:
+            if sys.platform == "linux":
+                self.thread_dump(self.p.pid)
             self.p.terminate()
             raise subprocess.TimeoutExpired(self.cmd, self.timeout)
+
+    def thread_dump(self, pid):
+        pyspark_python = self.env['PYSPARK_PYTHON']
+        p = subprocess.run(
+            [pyspark_python, "-m", "pyspark.threaddump", "-p", str(pid)],
+            env={**self.env, "PYTHONPATH": f"{os.path.join(SPARK_HOME, 'python')}:{os.environ.get('PYTHONPATH', '')}"},
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        if p.returncode == 0:
+            LOGGER.error(f"Thread dump:\n{p.stdout.decode('utf-8')}")
 
 
 def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_output):

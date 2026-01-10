@@ -1395,7 +1395,7 @@ class PlanParserSuite extends AnalysisTest {
     checkError(
       exception = parseException(sql2),
       condition = "PARSE_SYNTAX_ERROR",
-      parameters = Map("error" -> "'IN'", "hint" -> ""))
+      parameters = Map("error" -> "'INTO'", "hint" -> ""))
   }
 
   test("relation in v2 catalog") {
