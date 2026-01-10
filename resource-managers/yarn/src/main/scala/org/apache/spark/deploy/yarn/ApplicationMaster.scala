@@ -224,7 +224,7 @@ private[spark] class ApplicationMaster(
       val stagingDirFs = stagingDirPath.getFileSystem(yarnConf)
       // This shutdown hook should run *after* the SparkContext is shut down.
       val priority = ShutdownHookManager.SPARK_CONTEXT_SHUTDOWN_PRIORITY - 1
-      ShutdownHookManager.addShutdownHook(priority) { () =>
+      ShutdownHookManager.addShutdownHook(priority, "ApplicationMasterShutdownHook") { () =>
         try {
           val maxAppAttempts = client.getMaxRegAttempts(sparkConf, yarnConf)
           val isLastAttempt = appAttemptId.getAttemptId() >= maxAppAttempts

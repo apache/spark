@@ -706,7 +706,7 @@ class SparkContext(config: SparkConf) extends Logging {
     // is killed, though.
     logDebug("Adding shutdown hook") // force eager creation of logger
     _shutdownHookRef = ShutdownHookManager.addShutdownHook(
-      ShutdownHookManager.SPARK_CONTEXT_SHUTDOWN_PRIORITY) { () =>
+      ShutdownHookManager.SPARK_CONTEXT_SHUTDOWN_PRIORITY, "SparkContextShutdownHook") { () =>
       logInfo("Invoking stop() from shutdown hook")
       try {
         stop()
