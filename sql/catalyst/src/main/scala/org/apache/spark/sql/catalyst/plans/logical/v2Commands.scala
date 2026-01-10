@@ -1928,6 +1928,55 @@ case class SetVariable(
 }
 
 /**
+ * The logical plan of the DECLARE CURSOR statement.
+ *
+ * The queryText is stored to support both parameterized and non-parameterized cursors.
+ * The query is parsed and analyzed when the cursor is declared at execution time.
+ *
+ * @param cursorName Name of the cursor
+ * @param queryText The original SQL text of the query (preserves parameter markers)
+ * @param asensitive Whether the cursor is ASENSITIVE or INSENSITIVE
+ */
+case class DeclareCursor(
+    cursorName: String,
+    queryText: String,
+    asensitive: Boolean = true) extends LeafCommand
+
+/**
+ * The logical plan of the OPEN cursor command.
+ *
+ * @param nameParts Cursor name parts (unqualified: Seq(name) or qualified: Seq(label, name))
+ * @param args Parameter expressions from USING clause
+ * @param paramNames Names for each parameter (empty string "" for positional parameters)
+ */
+case class OpenCursor(
+    nameParts: Seq[String],
+    args: Seq[Expression] = Seq.empty,
+    paramNames: Seq[String] = Seq.empty) extends LeafCommand {
+  override lazy val resolved: Boolean = args.forall(_.resolved)
+}
+
+/**
+ * The logical plan of the FETCH cursor command.
+ *
+ * @param nameParts Cursor name parts (unqualified: Seq(name) or qualified: Seq(label, name))
+ * @param targetVariables Target variables to fetch into
+ */
+case class FetchCursor(
+    nameParts: Seq[String],
+    targetVariables: Seq[Expression]) extends LeafCommand {
+  override lazy val resolved: Boolean = targetVariables.forall(_.resolved)
+}
+
+/**
+ * The logical plan of the CLOSE cursor command.
+ *
+ * @param nameParts Cursor name parts (unqualified: Seq(name) or qualified: Seq(label, name))
+ */
+case class CloseCursor(
+    nameParts: Seq[String]) extends LeafCommand
+
+/**
  * The logical plan of the CALL statement.
  */
 case class Call(

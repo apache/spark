@@ -367,6 +367,8 @@ class AstBuilder extends DataTypeAstBuilder
           statement match {
             case SingleStatement(createVariable: CreateVariable) =>
               compoundBodyParserContext.variable(createVariable, isScope)
+            case SingleStatement(_: DeclareCursor) =>
+              compoundBodyParserContext.cursor()
             case _ => compoundBodyParserContext.statement()
           }
           buff += statement
@@ -6579,6 +6581,110 @@ class AstBuilder extends DataTypeAstBuilder
       withIdentClause(ctx.identifierReference(), UnresolvedIdentifier(_)),
       ctx.EXISTS() != null
     )
+  }
+
+  /**
+   * Create a [[DeclareCursor]] command wrapped in SingleStatement.
+   *
+   * For example:
+   * {{{
+   *   DECLARE cursor_name CURSOR FOR SELECT * FROM table;
+   * }}}
+   */
+  override def visitDeclareCursorStatement(
+      ctx: DeclareCursorStatementContext): LogicalPlan = withOrigin(ctx) {
+    if (!conf.getConf(SQLConf.SQL_SCRIPTING_CURSOR_ENABLED)) {
+      throw SqlScriptingErrors.cursorNotSupported(CurrentOrigin.get)
+    }
+
+    val cursorName = getIdentifierText(ctx.name)
+    // Extract original SQL text to preserve parameter markers
+    val queryText = getOriginalText(ctx.query())
+
+    val asensitive = ctx.ASENSITIVE() != null || ctx.INSENSITIVE() != null
+    SingleStatement(DeclareCursor(cursorName, queryText, asensitive))
+  }
+
+  /**
+   * Create an [[OpenCursor]] command wrapped in SingleStatement.
+   *
+   * For example:
+   * {{{
+   *   OPEN cursor_name;
+   *   OPEN cursor_name USING expr1, expr2;
+   *   OPEN cursor_name USING (expr1 AS param1, expr2 AS param2);
+   * }}}
+   */
+  override def visitOpenCursorStatement(
+      ctx: OpenCursorStatementContext): LogicalPlan = withOrigin(ctx) {
+    if (!conf.getConf(SQLConf.SQL_SCRIPTING_CURSOR_ENABLED)) {
+      throw SqlScriptingErrors.cursorNotSupported(CurrentOrigin.get)
+    }
+
+    // Use visitMultipartIdentifier to properly handle IDENTIFIER('name')
+    val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier())
+
+    // Parse optional USING clause parameters
+    // Extract both expressions and their names (if aliased)
+    val (args, paramNames) = Option(ctx.params).map { params =>
+      params.namedExpression().asScala.toSeq.map(visitNamedExpression).map {
+        case alias: Alias => (alias.child, alias.name)
+        case expr => (expr, "")  // Empty string for positional parameter
+      }.unzip
+    }.getOrElse((Seq.empty, Seq.empty))
+
+    SingleStatement(OpenCursor(nameParts, args, paramNames))
+  }
+
+  /**
+   * Create a [[FetchCursor]] command wrapped in SingleStatement.
+   *
+   * For example:
+   * {{{
+   *   FETCH cursor_name INTO var1, var2;
+   * }}}
+   */
+  override def visitFetchCursorStatement(
+      ctx: FetchCursorStatementContext): LogicalPlan = withOrigin(ctx) {
+    if (!conf.getConf(SQLConf.SQL_SCRIPTING_CURSOR_ENABLED)) {
+      throw SqlScriptingErrors.cursorNotSupported(CurrentOrigin.get)
+    }
+
+    // Use visitMultipartIdentifier to properly handle IDENTIFIER('name')
+    val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier())
+
+    val targetVariables = ctx.identifierReference().asScala.map { varIdent =>
+      val varName = if (varIdent.expression() != null) {
+        // IDENTIFIER(expression) case - not supported for variables
+        throw new ParseException(
+          errorClass = "INVALID_SQL_SYNTAX.IDENTIFIER_CLAUSE_NOT_ALLOWED",
+          messageParameters = Map.empty,
+          varIdent)
+      } else {
+        visitMultipartIdentifier(varIdent.multipartIdentifier())
+      }
+      UnresolvedAttribute(varName)
+    }.toSeq
+    SingleStatement(FetchCursor(nameParts, targetVariables))
+  }
+
+  /**
+   * Create a [[CloseCursor]] command wrapped in SingleStatement.
+   *
+   * For example:
+   * {{{
+   *   CLOSE cursor_name;
+   * }}}
+   */
+  override def visitCloseCursorStatement(
+      ctx: CloseCursorStatementContext): LogicalPlan = withOrigin(ctx) {
+    if (!conf.getConf(SQLConf.SQL_SCRIPTING_CURSOR_ENABLED)) {
+      throw SqlScriptingErrors.cursorNotSupported(CurrentOrigin.get)
+    }
+
+    // Use visitMultipartIdentifier to properly handle IDENTIFIER('name')
+    val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier())
+    SingleStatement(CloseCursor(nameParts))
   }
 
   private def visitSetVariableImpl(

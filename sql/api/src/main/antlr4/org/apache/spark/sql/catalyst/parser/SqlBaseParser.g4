@@ -71,11 +71,11 @@ options { tokenVocab = SqlBaseLexer; }
       return false;
     }
     int la = _input.LA(2); // Look ahead 2 tokens (current is PIPE, check what follows)
-    return la == SELECT || la == EXTEND || la == SET || la == DROP || 
+    return la == SELECT || la == EXTEND || la == SET || la == DROP ||
            la == AS || la == WHERE || la == PIVOT || la == UNPIVOT ||
            la == TABLESAMPLE || la == INNER || la == CROSS || la == LEFT ||
-           la == RIGHT || la == FULL || la == NATURAL || la == SEMI || 
-           la == ANTI || la == JOIN || la == UNION || la == EXCEPT || 
+           la == RIGHT || la == FULL || la == NATURAL || la == SEMI ||
+           la == ANTI || la == JOIN || la == UNION || la == EXCEPT ||
            la == SETMINUS || la == INTERSECT || la == ORDER || la == CLUSTER ||
            la == DISTRIBUTE || la == SORT || la == LIMIT || la == OFFSET ||
            la == AGGREGATE || la == WINDOW || la == LATERAL;
@@ -101,6 +101,7 @@ compoundBody
 
 compoundStatement
     : declareConditionStatement
+    | declareCursorStatement
     | statement
     | setStatementInsideSqlScript
     | beginEndCompoundBlock
@@ -113,6 +114,9 @@ compoundStatement
     | iterateStatement
     | loopStatement
     | forStatement
+    | openCursorStatement
+    | fetchCursorStatement
+    | closeCursorStatement
     ;
 
 setStatementInsideSqlScript
@@ -142,6 +146,22 @@ conditionValues
 
 declareHandlerStatement
     : DECLARE (CONTINUE | EXIT) HANDLER FOR conditionValues (beginEndCompoundBlock | statement | setStatementInsideSqlScript)
+    ;
+
+declareCursorStatement
+    : DECLARE name=errorCapturingIdentifier (ASENSITIVE | INSENSITIVE)? CURSOR FOR query (FOR READ ONLY)?
+    ;
+
+openCursorStatement
+    : OPEN multipartIdentifier (USING (LEFT_PAREN params=namedExpressionSeq RIGHT_PAREN | params=namedExpressionSeq))?
+    ;
+
+fetchCursorStatement
+    : FETCH ((NEXT FROM) | FROM | NEXT)? multipartIdentifier INTO identifierReference (COMMA identifierReference)*
+    ;
+
+closeCursorStatement
+    : CLOSE multipartIdentifier
     ;
 
 whileStatement
@@ -1865,6 +1885,7 @@ ansiNonReserved
     | ARCHIVE
     | ARRAY
     | ASC
+    | ASENSITIVE
     | AT
     | ATOMIC
     | BEGIN
@@ -1887,6 +1908,7 @@ ansiNonReserved
     | CHAR
     | CHARACTER
     | CLEAR
+    | CLOSE
     | CLUSTER
     | CLUSTERED
     | CODEGEN
@@ -1903,6 +1925,7 @@ ansiNonReserved
     | CONTAINS
     | CONTINUE
     | COST
+    | CURSOR
     | CUBE
     | CURRENT
     | DATA
@@ -1984,6 +2007,7 @@ ansiNonReserved
     | INPUT
     | INPUTFORMAT
     | INSERT
+    | INSENSITIVE
     | INT
     | INTEGER
     | INTERVAL
@@ -2034,12 +2058,14 @@ ansiNonReserved
     | NAMESPACES
     | NANOSECOND
     | NANOSECONDS
+    | NEXT
     | NO
     | NONE
     | NORELY
     | NULLS
     | NUMERIC
     | OF
+    | OPEN
     | OPTION
     | OPTIONS
     | OUT
@@ -2063,6 +2089,7 @@ ansiNonReserved
     | QUARTER
     | QUERY
     | RANGE
+    | READ
     | READS
     | REAL
     | RECORDREADER
@@ -2223,6 +2250,7 @@ nonReserved
     | ARRAY
     | AS
     | ASC
+    | ASENSITIVE
     | AT
     | ATOMIC
     | AUTHORIZATION
@@ -2251,6 +2279,7 @@ nonReserved
     | CHARACTER
     | CHECK
     | CLEAR
+    | CLOSE
     | CLUSTER
     | CLUSTERED
     | CODEGEN
@@ -2274,6 +2303,7 @@ nonReserved
     | CREATE
     | CUBE
     | CURRENT
+    | CURSOR
     | CURRENT_DATE
     | CURRENT_TIME
     | CURRENT_TIMESTAMP
@@ -2372,6 +2402,7 @@ nonReserved
     | INPUT
     | INPUTFORMAT
     | INSERT
+    | INSENSITIVE
     | INT
     | INTEGER
     | INTERVAL
@@ -2426,6 +2457,7 @@ nonReserved
     | NAMESPACES
     | NANOSECOND
     | NANOSECONDS
+    | NEXT
     | NO
     | NONE
     | NORELY
@@ -2436,6 +2468,7 @@ nonReserved
     | OF
     | OFFSET
     | ONLY
+    | OPEN
     | OPTION
     | OPTIONS
     | OR
@@ -2464,6 +2497,7 @@ nonReserved
     | QUARTER
     | QUERY
     | RANGE
+    | READ
     | READS
     | REAL
     | RECORDREADER
