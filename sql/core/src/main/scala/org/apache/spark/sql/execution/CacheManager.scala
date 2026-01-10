@@ -25,7 +25,6 @@ import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.analysis.Resolver
-import org.apache.spark.sql.catalyst.analysis.V2TableReference
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
@@ -260,9 +259,6 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       case DataSourceV2Relation(_, _, Some(catalog), Some(v2Ident), _, timeTravelSpec) =>
         val nameInCache = v2Ident.toQualifiedNameParts(catalog)
         isSameName(name, nameInCache, resolver) && (includeTimeTravel || timeTravelSpec.isEmpty)
-
-      case r: V2TableReference =>
-        isSameName(name, r.identifier.toQualifiedNameParts(r.catalog), resolver)
 
       case v: View =>
         isSameName(name, v.desc.identifier.nameParts, resolver)
