@@ -108,6 +108,7 @@ private[protobuf] class StageDataWrapperSerializer extends ProtobufSerDe[StageDa
       stageDataBuilder.setDescription(d)
     }
     stageData.rddIds.foreach(id => stageDataBuilder.addRddIds(id.toLong))
+    stageData.parentIds.foreach(id => stageDataBuilder.addParentIds(id.toLong))
     stageData.accumulatorUpdates.foreach { update =>
       stageDataBuilder.addAccumulatorUpdates(
         AccumulableInfoSerializer.serialize(update))
@@ -470,6 +471,7 @@ private[protobuf] class StageDataWrapperSerializer extends ProtobufSerDe[StageDa
       details = getStringField(binary.hasDetails, () => binary.getDetails),
       schedulingPool = getStringField(binary.hasSchedulingPool, () => binary.getSchedulingPool),
       rddIds = binary.getRddIdsList.asScala.map(_.toInt),
+      parentIds = binary.getParentIdsList.asScala.map(_.toInt),
       accumulatorUpdates = accumulatorUpdates,
       tasks = tasks,
       executorSummary = executorSummary,
