@@ -461,51 +461,162 @@ class PyArrowTypeCoercionTests(unittest.TestCase):
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
     def test_pandas_instances_coercion(self):
-        """Test type coercion from pandas Series with numeric and temporal types."""
+        """Test type coercion from pandas Series with various backend types."""
+        import numpy as np
         import pandas as pd
         import pyarrow as pa
+        from zoneinfo import ZoneInfo
+
+        # Constants
+        int8_min, int8_max = np.iinfo(np.int8).min, np.iinfo(np.int8).max
+        int16_min, int16_max = np.iinfo(np.int16).min, np.iinfo(np.int16).max
+        int32_min, int32_max = np.iinfo(np.int32).min, np.iinfo(np.int32).max
+        int64_min, int64_max = np.iinfo(np.int64).min, np.iinfo(np.int64).max
+        nan, inf, neg_inf = float("nan"), float("inf"), float("-inf")
+        utc_tz, sg_tz = ZoneInfo("UTC"), ZoneInfo("Asia/Singapore")
 
         # ==== 3.1 Numpy-backed Series ====
-
         # (name, data, target_type, expected_values)
         # fmt: off
         numpy_cases = [
-            ("pd_int_to_float", pd.Series([1, 2, 3]),         pa.float64(), [1.0, 2.0, 3.0]),
-            ("pd_float_to_int", pd.Series([1.0, 2.0, 3.0]),   pa.int64(),   [1, 2, 3]),
-            ("pd_int_to_int8",  pd.Series([1, 2, 3]),         pa.int8(),    [1, 2, 3]),
-            ("pd_empty",        pd.Series([], dtype="int64"), pa.float64(), []),
+            # Int types → float
+            ("np_int8_to_float",   pd.Series([1, 2, 3], dtype="int8"),   pa.float64(), [1.0, 2.0, 3.0]),
+            ("np_int16_to_float",  pd.Series([1, 2, 3], dtype="int16"),  pa.float64(), [1.0, 2.0, 3.0]),
+            ("np_int32_to_float",  pd.Series([1, 2, 3], dtype="int32"),  pa.float64(), [1.0, 2.0, 3.0]),
+            ("np_int64_to_float",  pd.Series([1, 2, 3], dtype="int64"),  pa.float64(), [1.0, 2.0, 3.0]),
+            ("np_uint8_to_float",  pd.Series([1, 2, 3], dtype="uint8"),  pa.float64(), [1.0, 2.0, 3.0]),
+            ("np_uint16_to_float", pd.Series([1, 2, 3], dtype="uint16"), pa.float64(), [1.0, 2.0, 3.0]),
+            ("np_uint32_to_float", pd.Series([1, 2, 3], dtype="uint32"), pa.float64(), [1.0, 2.0, 3.0]),
+            ("np_uint64_to_float", pd.Series([1, 2, 3], dtype="uint64"), pa.float64(), [1.0, 2.0, 3.0]),
+            # Float types → int
+            ("np_float32_to_int",  pd.Series([1.0, 2.0, 3.0], dtype="float32"), pa.int64(), [1, 2, 3]),
+            ("np_float64_to_int",  pd.Series([1.0, 2.0, 3.0], dtype="float64"), pa.int64(), [1, 2, 3]),
+            # Float ↔ float
+            ("np_float32_to_f64",  pd.Series([1.0, 2.0], dtype="float32"), pa.float64(), [1.0, 2.0]),
+            ("np_float64_to_f32",  pd.Series([1.0, 2.0], dtype="float64"), pa.float32(), [1.0, 2.0]),
+            # Narrowing
+            ("np_int64_to_int8",   pd.Series([1, 2, 3], dtype="int64"), pa.int8(),  [1, 2, 3]),
+            ("np_int64_to_int16",  pd.Series([1, 2, 3], dtype="int64"), pa.int16(), [1, 2, 3]),
+            ("np_int64_to_int32",  pd.Series([1, 2, 3], dtype="int64"), pa.int32(), [1, 2, 3]),
+            # Bool, string
+            ("np_bool",            pd.Series([True, False], dtype="bool"),   pa.bool_(),       [True, False]),
+            ("np_object_str",      pd.Series(["a", "b"], dtype="object"),    pa.string(),      ["a", "b"]),
+            ("np_object_large",    pd.Series(["a", "b"], dtype="object"),    pa.large_string(), ["a", "b"]),
+            # Empty
+            ("np_empty_int",       pd.Series([], dtype="int64"),   pa.float64(), []),
+            ("np_empty_float",     pd.Series([], dtype="float64"), pa.int64(),   []),
+            # Boundary values
+            ("np_int8_minmax",     pd.Series([int8_min, int8_max], dtype="int8"),     pa.float64(), [float(int8_min), float(int8_max)]),
+            ("np_int16_minmax",    pd.Series([int16_min, int16_max], dtype="int16"),  pa.float64(), [float(int16_min), float(int16_max)]),
+            ("np_int32_minmax",    pd.Series([int32_min, int32_max], dtype="int32"),  pa.float64(), [float(int32_min), float(int32_max)]),
+            ("np_int64_minmax",    pd.Series([int64_min, int64_max], dtype="int64"),  pa.int64(),   [int64_min, int64_max]),
+            ("np_int8_widen",      pd.Series([int8_min, 0, int8_max], dtype="int8"),  pa.int64(),   [int8_min, 0, int8_max]),
+            # NaN to int → None (pandas-specific behavior)
+            ("np_nan_to_int",      pd.Series([nan, 1.0], dtype="float64"), pa.int64(), [None, 1]),
         ]
         # fmt: on
         self._run_coercion_tests_with_values(numpy_cases)
 
-        # int64 → decimal128 does NOT work for numpy-backed
+        # Special float values (NaN/Inf) - type only
+        for name, data, target in [
+            ("np_nan",     pd.Series([nan, 1.0], dtype="float64"), pa.float64()),
+            ("np_inf",     pd.Series([inf, neg_inf], dtype="float64"), pa.float64()),
+            ("np_nan_f32", pd.Series([nan], dtype="float64"), pa.float32()),
+        ]:
+            with self.subTest(name=name):
+                self.assertEqual(pa.array(data, type=target).type, target)
+
+        # numpy int → decimal128 does NOT work
         with self.assertRaises(pa.ArrowInvalid):
-            pa.array(pd.Series([1, 2, 3]), type=pa.decimal128(10, 0))
+            pa.array(pd.Series([1, 2, 3], dtype="int64"), type=pa.decimal128(10, 0))
 
         # ==== 3.2 Nullable Extension Types ====
-
         # (name, data, target_type, expected_values)
         # fmt: off
         nullable_cases = [
-            ("Int64_to_float",    pd.Series([1, 2, 3], dtype=pd.Int64Dtype()),         pa.float64(), [1.0, 2.0, 3.0]),
-            ("Int64_na_to_float", pd.Series([1, pd.NA, 3], dtype=pd.Int64Dtype()),     pa.float64(), [1.0, None, 3.0]),
-            ("Float64_to_int",    pd.Series([1.0, 2.0, 3.0], dtype=pd.Float64Dtype()), pa.int64(),   [1, 2, 3]),
+            # Int types → float
+            ("Int8_to_float",      pd.Series([1, 2, 3], dtype=pd.Int8Dtype()),   pa.float64(), [1.0, 2.0, 3.0]),
+            ("Int16_to_float",     pd.Series([1, 2, 3], dtype=pd.Int16Dtype()),  pa.float64(), [1.0, 2.0, 3.0]),
+            ("Int32_to_float",     pd.Series([1, 2, 3], dtype=pd.Int32Dtype()),  pa.float64(), [1.0, 2.0, 3.0]),
+            ("Int64_to_float",     pd.Series([1, 2, 3], dtype=pd.Int64Dtype()),  pa.float64(), [1.0, 2.0, 3.0]),
+            ("UInt8_to_float",     pd.Series([1, 2, 3], dtype=pd.UInt8Dtype()),  pa.float64(), [1.0, 2.0, 3.0]),
+            ("UInt16_to_float",    pd.Series([1, 2, 3], dtype=pd.UInt16Dtype()), pa.float64(), [1.0, 2.0, 3.0]),
+            ("UInt32_to_float",    pd.Series([1, 2, 3], dtype=pd.UInt32Dtype()), pa.float64(), [1.0, 2.0, 3.0]),
+            ("UInt64_to_float",    pd.Series([1, 2, 3], dtype=pd.UInt64Dtype()), pa.float64(), [1.0, 2.0, 3.0]),
+            # Float types
+            ("Float32_to_int",     pd.Series([1.0, 2.0, 3.0], dtype=pd.Float32Dtype()), pa.int64(),   [1, 2, 3]),
+            ("Float64_to_int",     pd.Series([1.0, 2.0, 3.0], dtype=pd.Float64Dtype()), pa.int64(),   [1, 2, 3]),
+            ("Float64_to_f32",     pd.Series([1.0, 2.0], dtype=pd.Float64Dtype()),      pa.float32(), [1.0, 2.0]),
+            # String, bool
+            ("StringDtype",        pd.Series(["a", "b"], dtype=pd.StringDtype()),       pa.string(),       ["a", "b"]),
+            ("StringDtype_large",  pd.Series(["a", "b"], dtype=pd.StringDtype()),       pa.large_string(), ["a", "b"]),
+            ("BooleanDtype",       pd.Series([True, False], dtype=pd.BooleanDtype()),   pa.bool_(),        [True, False]),
+            # With NA
+            ("Int64_na",           pd.Series([1, pd.NA, 3], dtype=pd.Int64Dtype()),     pa.float64(), [1.0, None, 3.0]),
+            ("Int64_na_to_int32",  pd.Series([1, pd.NA, 3], dtype=pd.Int64Dtype()),     pa.int32(),   [1, None, 3]),
+            ("Float64_na",         pd.Series([1.0, pd.NA, 3.0], dtype=pd.Float64Dtype()), pa.int64(), [1, None, 3]),
+            ("StringDtype_na",     pd.Series(["a", pd.NA, "c"], dtype=pd.StringDtype()), pa.string(), ["a", None, "c"]),
+            ("BooleanDtype_na",    pd.Series([True, pd.NA, False], dtype=pd.BooleanDtype()), pa.bool_(), [True, None, False]),
+            # Boundary with NA
+            ("Int8_minmax_na",     pd.Series([int8_min, pd.NA, int8_max], dtype=pd.Int8Dtype()),   pa.int8(),  [int8_min, None, int8_max]),
+            ("Int16_minmax_na",    pd.Series([int16_min, pd.NA, int16_max], dtype=pd.Int16Dtype()), pa.int16(), [int16_min, None, int16_max]),
+            ("Int32_minmax_na",    pd.Series([int32_min, pd.NA, int32_max], dtype=pd.Int32Dtype()), pa.int32(), [int32_min, None, int32_max]),
+            ("Int64_minmax_na",    pd.Series([int64_min, pd.NA, int64_max], dtype=pd.Int64Dtype()), pa.int64(), [int64_min, None, int64_max]),
+            ("Int8_widen_na",      pd.Series([int8_min, pd.NA, int8_max], dtype=pd.Int8Dtype()),   pa.int64(), [int8_min, None, int8_max]),
+            ("Int64_all_na",       pd.Series([pd.NA, pd.NA, pd.NA], dtype=pd.Int64Dtype()),        pa.int64(), [None, None, None]),
         ]
         # fmt: on
         self._run_coercion_tests_with_values(nullable_cases)
 
         # ==== 3.3 ArrowDtype-backed Series ====
-
         # (name, data, target_type, expected_values)
         # fmt: off
         arrow_cases = [
-            ("arrow_int_to_float", pd.Series([1, 2, 3], dtype=pd.ArrowDtype(pa.int64())),         pa.float64(), [1.0, 2.0, 3.0]),
-            ("arrow_float_to_int", pd.Series([1.0, 2.0, 3.0], dtype=pd.ArrowDtype(pa.float64())), pa.int64(),   [1, 2, 3]),
+            # Int types → float
+            ("arrow_int8_to_float",   pd.Series([1, 2, 3], dtype=pd.ArrowDtype(pa.int8())),   pa.float64(), [1.0, 2.0, 3.0]),
+            ("arrow_int16_to_float",  pd.Series([1, 2, 3], dtype=pd.ArrowDtype(pa.int16())),  pa.float64(), [1.0, 2.0, 3.0]),
+            ("arrow_int32_to_float",  pd.Series([1, 2, 3], dtype=pd.ArrowDtype(pa.int32())),  pa.float64(), [1.0, 2.0, 3.0]),
+            ("arrow_int64_to_float",  pd.Series([1, 2, 3], dtype=pd.ArrowDtype(pa.int64())),  pa.float64(), [1.0, 2.0, 3.0]),
+            ("arrow_uint8_to_float",  pd.Series([1, 2, 3], dtype=pd.ArrowDtype(pa.uint8())),  pa.float64(), [1.0, 2.0, 3.0]),
+            ("arrow_uint16_to_float", pd.Series([1, 2, 3], dtype=pd.ArrowDtype(pa.uint16())), pa.float64(), [1.0, 2.0, 3.0]),
+            ("arrow_uint32_to_float", pd.Series([1, 2, 3], dtype=pd.ArrowDtype(pa.uint32())), pa.float64(), [1.0, 2.0, 3.0]),
+            ("arrow_uint64_to_float", pd.Series([1, 2, 3], dtype=pd.ArrowDtype(pa.uint64())), pa.float64(), [1.0, 2.0, 3.0]),
+            # Float types
+            ("arrow_float32_to_int",  pd.Series([1.0, 2.0], dtype=pd.ArrowDtype(pa.float32())), pa.int64(),   [1, 2]),
+            ("arrow_float64_to_int",  pd.Series([1.0, 2.0], dtype=pd.ArrowDtype(pa.float64())), pa.int64(),   [1, 2]),
+            ("arrow_float32_to_f64",  pd.Series([1.0, 2.0], dtype=pd.ArrowDtype(pa.float32())), pa.float64(), [1.0, 2.0]),
+            ("arrow_float64_to_f32",  pd.Series([1.0, 2.0], dtype=pd.ArrowDtype(pa.float64())), pa.float32(), [1.0, 2.0]),
+            # Narrowing
+            ("arrow_int64_to_int8",   pd.Series([1, 2, 3], dtype=pd.ArrowDtype(pa.int64())), pa.int8(),  [1, 2, 3]),
+            ("arrow_int64_to_int16",  pd.Series([1, 2, 3], dtype=pd.ArrowDtype(pa.int64())), pa.int16(), [1, 2, 3]),
+            # String, binary, bool
+            ("arrow_str",             pd.Series(["a", "b"], dtype=pd.ArrowDtype(pa.string())),  pa.string(),       ["a", "b"]),
+            ("arrow_str_to_large",    pd.Series(["a", "b"], dtype=pd.ArrowDtype(pa.string())),  pa.large_string(), ["a", "b"]),
+            ("arrow_str_to_binary",   pd.Series(["a", "b"], dtype=pd.ArrowDtype(pa.string())),  pa.binary(),       [b"a", b"b"]),
+            ("arrow_bin_to_str",      pd.Series([b"a", b"b"], dtype=pd.ArrowDtype(pa.binary())), pa.string(),      ["a", "b"]),
+            ("arrow_bin_to_large",    pd.Series([b"a", b"b"], dtype=pd.ArrowDtype(pa.binary())), pa.large_binary(), [b"a", b"b"]),
+            ("arrow_bool",            pd.Series([True, False], dtype=pd.ArrowDtype(pa.bool_())), pa.bool_(),       [True, False]),
+            # Boundary values
+            ("arrow_int8_minmax",     pd.Series([int8_min, int8_max], dtype=pd.ArrowDtype(pa.int8())),   pa.int8(),  [int8_min, int8_max]),
+            ("arrow_int16_minmax",    pd.Series([int16_min, int16_max], dtype=pd.ArrowDtype(pa.int16())), pa.int16(), [int16_min, int16_max]),
+            ("arrow_int32_minmax",    pd.Series([int32_min, int32_max], dtype=pd.ArrowDtype(pa.int32())), pa.int32(), [int32_min, int32_max]),
+            ("arrow_int64_minmax",    pd.Series([int64_min, int64_max], dtype=pd.ArrowDtype(pa.int64())), pa.int64(), [int64_min, int64_max]),
+            ("arrow_int8_widen",      pd.Series([int8_min, int8_max], dtype=pd.ArrowDtype(pa.int8())),   pa.int64(), [int8_min, int8_max]),
+            ("arrow_int64_null",      pd.Series([int64_min, None, int64_max], dtype=pd.ArrowDtype(pa.int64())), pa.int64(), [int64_min, None, int64_max]),
         ]
         # fmt: on
         self._run_coercion_tests_with_values(arrow_cases)
 
-        # ArrowDtype int64 → decimal128 requires sufficient precision
+        # Special float values (NaN/Inf) - type only
+        for name, data, target in [
+            ("arrow_nan",     pd.Series([nan, 1.0], dtype=pd.ArrowDtype(pa.float64())), pa.float64()),
+            ("arrow_inf",     pd.Series([inf, neg_inf], dtype=pd.ArrowDtype(pa.float64())), pa.float64()),
+            ("arrow_nan_f32", pd.Series([nan], dtype=pd.ArrowDtype(pa.float32())), pa.float32()),
+        ]:
+            with self.subTest(name=name):
+                self.assertEqual(pa.array(data, type=target).type, target)
+
+        # ArrowDtype int64 → decimal128 requires sufficient precision (19 digits)
         s = pd.Series([1, 2, 3], dtype=pd.ArrowDtype(pa.int64()))
         self.assertEqual(
             pa.array(s, type=pa.decimal128(19, 0)).to_pylist(),
@@ -514,22 +625,33 @@ class PyArrowTypeCoercionTests(unittest.TestCase):
         with self.assertRaises(pa.ArrowInvalid):
             pa.array(s, type=pa.decimal128(10, 0))
 
-        # ==== 3.4 Pandas Timestamp with Timezone ====
-
-        from zoneinfo import ZoneInfo
-
-        utc_tz = ZoneInfo("UTC")
-        sg_tz = ZoneInfo("Asia/Singapore")
-
+        # ==== 3.4 Datetime Types ====
         # (name, data, target_type, expected_values)
         # fmt: off
-        pd_ts_cases = [
-            ("pd_utc_to_utc", [pd.Timestamp("2024-01-01 12:00:00", tz="UTC")],            pa.timestamp("us", tz="UTC"),            [datetime.datetime(2024, 1, 1, 12, 0, tzinfo=utc_tz)]),
-            ("pd_sg_to_sg",   [pd.Timestamp("2024-01-01 20:00:00", tz="Asia/Singapore")], pa.timestamp("us", tz="Asia/Singapore"), [datetime.datetime(2024, 1, 1, 20, 0, tzinfo=sg_tz)]),
-            ("pd_sg_to_utc",  [pd.Timestamp("2024-01-01 20:00:00", tz="Asia/Singapore")], pa.timestamp("us", tz="UTC"),            [datetime.datetime(2024, 1, 1, 12, 0, tzinfo=utc_tz)]),
+        datetime_cases = [
+            # datetime64[ns] (numpy-backed) → various resolutions
+            ("datetime64_us", pd.Series(pd.to_datetime(["2024-01-01", "2024-01-02"])), pa.timestamp("us"), [datetime.datetime(2024, 1, 1), datetime.datetime(2024, 1, 2)]),
+            ("datetime64_ns", pd.Series(pd.to_datetime(["2024-01-01", "2024-01-02"])), pa.timestamp("ns"), [datetime.datetime(2024, 1, 1), datetime.datetime(2024, 1, 2)]),
+            ("datetime64_ms", pd.Series(pd.to_datetime(["2024-01-01", "2024-01-02"])), pa.timestamp("ms"), [datetime.datetime(2024, 1, 1), datetime.datetime(2024, 1, 2)]),
+            # datetime64[ns, tz] (timezone-aware)
+            ("datetime64_utc",       pd.Series(pd.to_datetime(["2024-01-01 12:00"]).tz_localize("UTC")),            pa.timestamp("us", tz="UTC"),            [datetime.datetime(2024, 1, 1, 12, 0, tzinfo=utc_tz)]),
+            ("datetime64_sg",        pd.Series(pd.to_datetime(["2024-01-01 20:00"]).tz_localize("Asia/Singapore")), pa.timestamp("us", tz="Asia/Singapore"), [datetime.datetime(2024, 1, 1, 20, 0, tzinfo=sg_tz)]),
+            ("datetime64_sg_to_utc", pd.Series(pd.to_datetime(["2024-01-01 20:00"]).tz_localize("Asia/Singapore")), pa.timestamp("us", tz="UTC"),            [datetime.datetime(2024, 1, 1, 12, 0, tzinfo=utc_tz)]),
+            # pd.Timestamp list
+            ("pd_ts_utc",     [pd.Timestamp("2024-01-01 12:00:00", tz="UTC")],            pa.timestamp("us", tz="UTC"),            [datetime.datetime(2024, 1, 1, 12, 0, tzinfo=utc_tz)]),
+            ("pd_ts_sg",      [pd.Timestamp("2024-01-01 20:00:00", tz="Asia/Singapore")], pa.timestamp("us", tz="Asia/Singapore"), [datetime.datetime(2024, 1, 1, 20, 0, tzinfo=sg_tz)]),
+            ("pd_ts_sg_utc",  [pd.Timestamp("2024-01-01 20:00:00", tz="Asia/Singapore")], pa.timestamp("us", tz="UTC"),            [datetime.datetime(2024, 1, 1, 12, 0, tzinfo=utc_tz)]),
+            # ArrowDtype temporal
+            ("arrow_ts_us_ns",    pd.Series([datetime.datetime(2024, 1, 1)], dtype=pd.ArrowDtype(pa.timestamp("us"))), pa.timestamp("ns"),    [datetime.datetime(2024, 1, 1)]),
+            ("arrow_ts_ns_us",    pd.Series([datetime.datetime(2024, 1, 1)], dtype=pd.ArrowDtype(pa.timestamp("ns"))), pa.timestamp("us"),    [datetime.datetime(2024, 1, 1)]),
+            ("arrow_date32",      pd.Series([datetime.date(2024, 1, 1)], dtype=pd.ArrowDtype(pa.date32())),            pa.date32(),           [datetime.date(2024, 1, 1)]),
+            ("arrow_date64",      pd.Series([datetime.date(2024, 1, 1)], dtype=pd.ArrowDtype(pa.date64())),            pa.date64(),           [datetime.date(2024, 1, 1)]),
+            ("arrow_time64",      pd.Series([datetime.time(12, 30)], dtype=pd.ArrowDtype(pa.time64("us"))),            pa.time64("us"),       [datetime.time(12, 30)]),
+            ("arrow_time32",      pd.Series([datetime.time(12, 30)], dtype=pd.ArrowDtype(pa.time32("ms"))),            pa.time32("ms"),       [datetime.time(12, 30)]),
+            ("arrow_duration",    pd.Series([datetime.timedelta(days=1)], dtype=pd.ArrowDtype(pa.duration("us"))),    pa.duration("us"),     [datetime.timedelta(days=1)]),
         ]
         # fmt: on
-        self._run_coercion_tests_with_values(pd_ts_cases)
+        self._run_coercion_tests_with_values(datetime_cases)
 
     # =========================================================================
     # SECTION 4: NumPy Array Coercion
@@ -540,29 +662,18 @@ class PyArrowTypeCoercionTests(unittest.TestCase):
         import numpy as np
         import pyarrow as pa
 
-        # ==== 4.1 Numeric Arrays ====
+        # Constants
+        int8_min, int8_max = np.iinfo(np.int8).min, np.iinfo(np.int8).max
+        int16_min, int16_max = np.iinfo(np.int16).min, np.iinfo(np.int16).max
+        int32_min, int32_max = np.iinfo(np.int32).min, np.iinfo(np.int32).max
+        int64_min, int64_max = np.iinfo(np.int64).min, np.iinfo(np.int64).max
+        nan, inf, neg_inf = float("nan"), float("inf"), float("-inf")
 
+        # ==== 4.1 All Int/Float Types ====
         # (name, data, target_type, expected_values)
         # fmt: off
         numeric_cases = [
-            ("np_int_to_float",   np.array([1, 2, 3], dtype=np.int64),         pa.float64(), [1.0, 2.0, 3.0]),
-            ("np_float_to_int",   np.array([1.0, 2.0, 3.0], dtype=np.float64), pa.int64(),   [1, 2, 3]),
-            ("np_int32_to_int64", np.array([1, 2, 3], dtype=np.int32),         pa.int64(),   [1, 2, 3]),
-            ("np_int64_to_int8",  np.array([1, 2, 3], dtype=np.int64),         pa.int8(),    [1, 2, 3]),
-            ("np_empty",          np.array([], dtype=np.int64),                pa.float64(), []),
-        ]
-        # fmt: on
-        self._run_coercion_tests_with_values(numeric_cases)
-
-        # numpy int64 → decimal128 does NOT work
-        with self.assertRaises(pa.ArrowInvalid):
-            pa.array(np.array([1, 2, 3], dtype=np.int64), type=pa.decimal128(10, 0))
-
-        # ==== 4.2 All Int Types → Float ====
-
-        # (name, data, target_type, expected_values)
-        # fmt: off
-        int_to_float_cases = [
+            # Int types → float64
             ("np_int8_to_float",   np.array([1, 2, 3], dtype=np.int8),   pa.float64(), [1.0, 2.0, 3.0]),
             ("np_int16_to_float",  np.array([1, 2, 3], dtype=np.int16),  pa.float64(), [1.0, 2.0, 3.0]),
             ("np_int32_to_float",  np.array([1, 2, 3], dtype=np.int32),  pa.float64(), [1.0, 2.0, 3.0]),
@@ -571,41 +682,113 @@ class PyArrowTypeCoercionTests(unittest.TestCase):
             ("np_uint16_to_float", np.array([1, 2, 3], dtype=np.uint16), pa.float64(), [1.0, 2.0, 3.0]),
             ("np_uint32_to_float", np.array([1, 2, 3], dtype=np.uint32), pa.float64(), [1.0, 2.0, 3.0]),
             ("np_uint64_to_float", np.array([1, 2, 3], dtype=np.uint64), pa.float64(), [1.0, 2.0, 3.0]),
+            # Float types → int64
+            ("np_float16_to_int",  np.array([1.0, 2.0, 3.0], dtype=np.float16), pa.int64(), [1, 2, 3]),
+            ("np_float32_to_int",  np.array([1.0, 2.0, 3.0], dtype=np.float32), pa.int64(), [1, 2, 3]),
+            ("np_float64_to_int",  np.array([1.0, 2.0, 3.0], dtype=np.float64), pa.int64(), [1, 2, 3]),
+            # Float ↔ float
+            ("np_float32_to_f64",  np.array([1.0, 2.0], dtype=np.float32), pa.float64(), [1.0, 2.0]),
+            ("np_float64_to_f32",  np.array([1.0, 2.0], dtype=np.float64), pa.float32(), [1.0, 2.0]),
+            # Widening
+            ("np_int8_to_int64",   np.array([1, 2, 3], dtype=np.int8),  pa.int64(), [1, 2, 3]),
+            ("np_int16_to_int64",  np.array([1, 2, 3], dtype=np.int16), pa.int64(), [1, 2, 3]),
+            ("np_int32_to_int64",  np.array([1, 2, 3], dtype=np.int32), pa.int64(), [1, 2, 3]),
+            # Narrowing
+            ("np_int64_to_int8",   np.array([1, 2, 3], dtype=np.int64), pa.int8(),  [1, 2, 3]),
+            ("np_int64_to_int16",  np.array([1, 2, 3], dtype=np.int64), pa.int16(), [1, 2, 3]),
+            ("np_int64_to_int32",  np.array([1, 2, 3], dtype=np.int64), pa.int32(), [1, 2, 3]),
+            # Bool
+            ("np_bool",            np.array([True, False, True], dtype=np.bool_), pa.bool_(), [True, False, True]),
+            # Empty
+            ("np_empty_int",       np.array([], dtype=np.int64),   pa.float64(), []),
+            ("np_empty_float",     np.array([], dtype=np.float64), pa.int64(),   []),
+            ("np_empty_bool",      np.array([], dtype=np.bool_),   pa.bool_(),   []),
         ]
         # fmt: on
-        self._run_coercion_tests_with_values(int_to_float_cases)
+        self._run_coercion_tests_with_values(numeric_cases)
 
-        # ==== 4.3 All Float Types → Int ====
+        # numpy int64 → decimal128 does NOT work
+        with self.assertRaises(pa.ArrowInvalid):
+            pa.array(np.array([1, 2, 3], dtype=np.int64), type=pa.decimal128(10, 0))
 
+        # ==== 4.2 Boundary Values ====
         # (name, data, target_type, expected_values)
         # fmt: off
-        float_to_int_cases = [
-            ("np_float16_to_int", np.array([1.0, 2.0, 3.0], dtype=np.float16), pa.int64(), [1, 2, 3]),
-            ("np_float32_to_int", np.array([1.0, 2.0, 3.0], dtype=np.float32), pa.int64(), [1, 2, 3]),
-            ("np_float64_to_int", np.array([1.0, 2.0, 3.0], dtype=np.float64), pa.int64(), [1, 2, 3]),
+        boundary_cases = [
+            # Int min/max → same type
+            ("np_int8_minmax",     np.array([int8_min, int8_max], dtype=np.int8),     pa.int8(),    [int8_min, int8_max]),
+            ("np_int16_minmax",    np.array([int16_min, int16_max], dtype=np.int16),  pa.int16(),   [int16_min, int16_max]),
+            ("np_int32_minmax",    np.array([int32_min, int32_max], dtype=np.int32),  pa.int32(),   [int32_min, int32_max]),
+            ("np_int64_minmax",    np.array([int64_min, int64_max], dtype=np.int64),  pa.int64(),   [int64_min, int64_max]),
+            # Int min/max → float64 (exact for smaller types)
+            ("np_int8_to_f64",     np.array([int8_min, int8_max], dtype=np.int8),     pa.float64(), [float(int8_min), float(int8_max)]),
+            ("np_int16_to_f64",    np.array([int16_min, int16_max], dtype=np.int16),  pa.float64(), [float(int16_min), float(int16_max)]),
+            ("np_int32_to_f64",    np.array([int32_min, int32_max], dtype=np.int32),  pa.float64(), [float(int32_min), float(int32_max)]),
+            # Widening with boundary
+            ("np_int8_widen",      np.array([int8_min, 0, int8_max], dtype=np.int8),  pa.int64(),   [int8_min, 0, int8_max]),
+            ("np_int16_widen",     np.array([int16_min, int16_max], dtype=np.int16),  pa.int32(),   [int16_min, int16_max]),
         ]
         # fmt: on
-        self._run_coercion_tests_with_values(float_to_int_cases)
+        self._run_coercion_tests_with_values(boundary_cases)
+
+        # ==== 4.3 Special Float Values ====
+        # NaN/Inf → float (type check only, NaN equality is tricky)
+        for name, data, target in [
+            ("np_nan",         np.array([nan, 1.0, nan], dtype=np.float64), pa.float64()),
+            ("np_inf",         np.array([inf, neg_inf], dtype=np.float64), pa.float64()),
+            ("np_nan_to_f32",  np.array([nan, 1.0], dtype=np.float64), pa.float32()),
+            ("np_inf_to_f32",  np.array([inf, neg_inf], dtype=np.float64), pa.float32()),
+        ]:
+            with self.subTest(name=name):
+                self.assertEqual(pa.array(data, type=target).type, target)
+
+        # NaN to int fails for numpy array (unlike pandas Series)
+        with self.assertRaises(pa.ArrowInvalid):
+            pa.array(np.array([nan, 1.0], dtype=np.float64), type=pa.int64())
 
         # ==== 4.4 Datetime Arrays ====
-
         arr_d = np.array(["2024-01-01", "2024-01-02"], dtype="datetime64[D]")
         arr_ns = np.array(["2024-01-01T12:00:00", "2024-01-02T12:00:00"], dtype="datetime64[ns]")
+        arr_us = np.array(["2024-01-01T12:00:00", "2024-01-02T12:00:00"], dtype="datetime64[us]")
+        arr_ms = np.array(["2024-01-01T12:00:00", "2024-01-02T12:00:00"], dtype="datetime64[ms]")
         expected_dates = [datetime.date(2024, 1, 1), datetime.date(2024, 1, 2)]
         expected_ts = [datetime.datetime(2024, 1, 1, 12, 0), datetime.datetime(2024, 1, 2, 12, 0)]
 
         # (name, data, target_type, expected_values)
         # fmt: off
         datetime_cases = [
-            ("np_date_to_date32", arr_d,  pa.date32(),       expected_dates),
-            ("np_date_to_date64", arr_d,  pa.date64(),       expected_dates),
-            ("np_ts_to_s",        arr_ns, pa.timestamp("s"),  expected_ts),
-            ("np_ts_to_ms",       arr_ns, pa.timestamp("ms"), expected_ts),
-            ("np_ts_to_us",       arr_ns, pa.timestamp("us"), expected_ts),
-            ("np_ts_to_ns",       arr_ns, pa.timestamp("ns"), expected_ts),
+            # Date arrays
+            ("np_date_to_date32",  arr_d,  pa.date32(), expected_dates),
+            ("np_date_to_date64",  arr_d,  pa.date64(), expected_dates),
+            # Timestamp arrays - various source resolutions
+            ("np_ts_ns_to_s",      arr_ns, pa.timestamp("s"),  expected_ts),
+            ("np_ts_ns_to_ms",     arr_ns, pa.timestamp("ms"), expected_ts),
+            ("np_ts_ns_to_us",     arr_ns, pa.timestamp("us"), expected_ts),
+            ("np_ts_ns_to_ns",     arr_ns, pa.timestamp("ns"), expected_ts),
+            ("np_ts_us_to_us",     arr_us, pa.timestamp("us"), expected_ts),
+            ("np_ts_ms_to_ms",     arr_ms, pa.timestamp("ms"), expected_ts),
+            # Empty datetime
+            ("np_empty_date",      np.array([], dtype="datetime64[D]"),  pa.date32(),       []),
+            ("np_empty_ts",        np.array([], dtype="datetime64[ns]"), pa.timestamp("us"), []),
         ]
         # fmt: on
         self._run_coercion_tests_with_values(datetime_cases)
+
+        # ==== 4.5 Timedelta Arrays ====
+        arr_td_ns = np.array([86400000000000, 7200000000000], dtype="timedelta64[ns]")  # 1 day, 2 hours
+        arr_td_us = np.array([86400000000, 7200000000], dtype="timedelta64[us]")
+        expected_td = [datetime.timedelta(days=1), datetime.timedelta(hours=2)]
+
+        # (name, data, target_type, expected_values)
+        # fmt: off
+        timedelta_cases = [
+            ("np_td_ns_to_us", arr_td_ns, pa.duration("us"), expected_td),
+            ("np_td_ns_to_ns", arr_td_ns, pa.duration("ns"), expected_td),
+            ("np_td_us_to_us", arr_td_us, pa.duration("us"), expected_td),
+            ("np_empty_td",    np.array([], dtype="timedelta64[ns]"), pa.duration("us"), []),
+        ]
+        # fmt: on
+        self._run_coercion_tests_with_values(timedelta_cases)
 
     # =========================================================================
     # SECTION 5: Nested Types Coercion
