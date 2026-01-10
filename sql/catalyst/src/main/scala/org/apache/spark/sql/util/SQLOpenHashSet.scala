@@ -24,7 +24,8 @@ import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types.{DataType, DoubleType, FloatType}
 import org.apache.spark.util.collection.OpenHashSet
 
-// A wrap of OpenHashSet that can handle null, Double.NaN and Float.NaN w.r.t. the SQL semantic.
+// A wrap of OpenHashSet that can handle null, Double.NaN and Float.NaN and negative zero
+// w.r.t. the SQL semantic.
 @Private
 class SQLOpenHashSet[@specialized(Long, Int, Double, Float) T: ClassTag](
     initialCapacity: Int,
@@ -160,5 +161,29 @@ object SQLOpenHashSet {
          |}
        """.stripMargin
     }.getOrElse(handleNotNaN)
+  }
+
+  /**
+   * Normalizes negative zero to positive zero.
+   * IEEE 754 defines -0.0 == 0.0, but they have different binary representations
+   * and thus different hash codes, causing issues in hash-based collections used in SQL operations.
+   */
+  def normalizeZero(value: Any): Any = value match {
+    case d: java.lang.Double if d == -0.0d => 0.0d
+    case f: java.lang.Float if f == -0.0f => 0.0f
+    case _ => value
+  }
+
+  /**
+   * Generates code to normalize negative zero to positive zero.
+   */
+  def normalizeZeroCode(dataType: DataType, valueName: String): String = {
+    dataType match {
+      case DoubleType =>
+        s"($valueName == -0.0d ? 0.0d : $valueName)"
+      case FloatType =>
+        s"($valueName == -0.0f ? 0.0f : $valueName)"
+      case _ => valueName
+    }
   }
 }
