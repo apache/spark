@@ -319,8 +319,23 @@ def is_geography(at: "pa.DataType") -> bool:
     ) and any(field.name == "srid" for field in at)
 
 
-def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> DataType:
-    """Convert pyarrow type to Spark data type."""
+def from_arrow_type(
+    at: "pa.DataType",
+    prefer_timestamp_ntz: bool = True,
+) -> DataType:
+    """Convert pyarrow type to Spark data type.
+
+    Parameters
+    ----------
+    at : :class:`pyarrow.DataType`
+        pyarrow data type
+    prefer_timestamp_ntz: bool, default True
+        When the input timezone is None, whether to convert it to timezone-aware TimestampType.
+        By default, the to_arrow_type convert timezone-naive TimestampNTZType to pa.timestamp
+        without timezone. So it only make sense to set it in case like creating dataframe
+        from arrow/pandas data according to config `spark.sql.timestampType`.
+    """
+
     import pyarrow.types as types
 
     spark_type: DataType
@@ -354,10 +369,11 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
         spark_type = DateType()
     elif types.is_time64(at):
         spark_type = TimeType()
-    elif types.is_timestamp(at) and prefer_timestamp_ntz and at.tz is None:
-        spark_type = TimestampNTZType()
     elif types.is_timestamp(at):
-        spark_type = TimestampType()
+        if at.tz is None and prefer_timestamp_ntz:
+            spark_type = TimestampNTZType()
+        else:
+            spark_type = TimestampType()
     elif types.is_duration(at):
         spark_type = DayTimeIntervalType()
     elif types.is_list(at):
@@ -418,7 +434,10 @@ def from_arrow_type(at: "pa.DataType", prefer_timestamp_ntz: bool = False) -> Da
     return spark_type
 
 
-def from_arrow_schema(arrow_schema: "pa.Schema", prefer_timestamp_ntz: bool = False) -> StructType:
+def from_arrow_schema(
+    arrow_schema: "pa.Schema",
+    prefer_timestamp_ntz: bool = True,
+) -> StructType:
     """Convert schema from Arrow to Spark."""
     return StructType(
         [
