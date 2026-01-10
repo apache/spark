@@ -2270,6 +2270,97 @@ class FunctionsTestsMixin:
         # Should only count non-null values
         self.assertEqual(n, 3)
 
+    def test_kll_merge_agg_bigint(self):
+        """Test kll_merge_agg_bigint function"""
+        df1 = self.spark.createDataFrame([1, 2, 3], "INT")
+        df2 = self.spark.createDataFrame([4, 5, 6], "INT")
+
+        sketch1 = df1.agg(F.kll_sketch_agg_bigint("value").alias("sketch"))
+        sketch2 = df2.agg(F.kll_sketch_agg_bigint("value").alias("sketch"))
+
+        # Union and merge sketches
+        merged = sketch1.union(sketch2).agg(F.kll_merge_agg_bigint("sketch").alias("merged"))
+
+        # Verify the merged sketch contains all values
+        n = merged.select(F.kll_sketch_get_n_bigint("merged")).first()[0]
+        self.assertEqual(n, 6)
+
+        # Test with explicit k parameter
+        merged_with_k = sketch1.union(sketch2).agg(
+            F.kll_merge_agg_bigint("sketch", 400).alias("merged")
+        )
+        self.assertIsNotNone(merged_with_k.first()[0])
+
+    def test_kll_merge_agg_float(self):
+        """Test kll_merge_agg_float function"""
+        df1 = self.spark.createDataFrame([1.0, 2.0, 3.0], "FLOAT")
+        df2 = self.spark.createDataFrame([4.0, 5.0, 6.0], "FLOAT")
+
+        sketch1 = df1.agg(F.kll_sketch_agg_float("value").alias("sketch"))
+        sketch2 = df2.agg(F.kll_sketch_agg_float("value").alias("sketch"))
+
+        # Union and merge sketches
+        merged = sketch1.union(sketch2).agg(F.kll_merge_agg_float("sketch").alias("merged"))
+
+        # Verify the merged sketch contains all values
+        n = merged.select(F.kll_sketch_get_n_float("merged")).first()[0]
+        self.assertEqual(n, 6)
+
+        # Test with explicit k parameter
+        merged_with_k = sketch1.union(sketch2).agg(
+            F.kll_merge_agg_float("sketch", 300).alias("merged")
+        )
+        self.assertIsNotNone(merged_with_k.first()[0])
+
+    def test_kll_merge_agg_double(self):
+        """Test kll_merge_agg_double function"""
+        df1 = self.spark.createDataFrame([1.0, 2.0, 3.0], "DOUBLE")
+        df2 = self.spark.createDataFrame([4.0, 5.0, 6.0], "DOUBLE")
+
+        sketch1 = df1.agg(F.kll_sketch_agg_double("value").alias("sketch"))
+        sketch2 = df2.agg(F.kll_sketch_agg_double("value").alias("sketch"))
+
+        # Union and merge sketches
+        merged = sketch1.union(sketch2).agg(F.kll_merge_agg_double("sketch").alias("merged"))
+
+        # Verify the merged sketch contains all values
+        n = merged.select(F.kll_sketch_get_n_double("merged")).first()[0]
+        self.assertEqual(n, 6)
+
+        # Test quantile on merged sketch
+        quantile = merged.select(F.kll_sketch_get_quantile_double("merged", F.lit(0.5))).first()[0]
+        self.assertIsNotNone(quantile)
+
+    def test_kll_merge_agg_with_different_k(self):
+        """Test kll_merge_agg with different k values"""
+        df1 = self.spark.createDataFrame([1, 2, 3], "INT")
+        df2 = self.spark.createDataFrame([4, 5, 6], "INT")
+
+        # Create sketches with different k values
+        sketch1 = df1.agg(F.kll_sketch_agg_bigint("value", 200).alias("sketch"))
+        sketch2 = df2.agg(F.kll_sketch_agg_bigint("value", 400).alias("sketch"))
+
+        # Merge sketches with different k values (should adopt from first sketch)
+        merged = sketch1.union(sketch2).agg(F.kll_merge_agg_bigint("sketch").alias("merged"))
+
+        n = merged.select(F.kll_sketch_get_n_bigint("merged")).first()[0]
+        self.assertEqual(n, 6)
+
+    def test_kll_merge_agg_with_nulls(self):
+        """Test kll_merge_agg with null values"""
+        df1 = self.spark.createDataFrame([1, 2, 3], "INT")
+        df2 = self.spark.createDataFrame([4, None, 6], "INT")
+
+        sketch1 = df1.agg(F.kll_sketch_agg_bigint("value").alias("sketch"))
+        sketch2 = df2.agg(F.kll_sketch_agg_bigint("value").alias("sketch"))
+
+        # Merge sketches - null values should be ignored
+        merged = sketch1.union(sketch2).agg(F.kll_merge_agg_bigint("sketch").alias("merged"))
+
+        n = merged.select(F.kll_sketch_get_n_bigint("merged")).first()[0]
+        # Should have 5 values (1,2,3,4,6 - null is ignored)
+        self.assertEqual(n, 5)
+
     def test_datetime_functions(self):
         df = self.spark.range(1).selectExpr("'2017-01-22' as dateCol")
         parse_result = df.select(F.to_date(F.col("dateCol"))).first()
