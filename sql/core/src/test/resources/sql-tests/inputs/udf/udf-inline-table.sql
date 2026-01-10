@@ -32,7 +32,7 @@ select udf(a), b from values ("one", array(0, 1)), ("two", array(2, 3)) as data(
 -- decimal and double coercion
 select udf(a), b from values ("one", 2.0), ("two", 3.0D) as data(a, b);
 
--- error reporting: nondeterministic function rand
+-- nondeterministic function rand - should now work
 select udf(a), b from values ("one", rand(5)), ("two", 3.0D) as data(a, b);
 
 -- error reporting: different number of columns
