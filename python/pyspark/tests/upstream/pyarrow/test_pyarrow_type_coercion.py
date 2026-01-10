@@ -15,10 +15,25 @@
 # limitations under the License.
 #
 
+"""
+Test pa.array type coercion behavior when creating arrays with explicit type parameter.
+
+This test monitors the behavior of PyArrow's type coercion to ensure PySpark's assumptions
+about PyArrow behavior remain valid across versions.
+
+Test categories (each tests multiple types: numeric, temporal, string, etc.):
+1. Nullable data - with None values, NaN handling for various types
+2. Plain Python instances - list, tuple, generator with all data types
+3. Pandas instances - numpy-backed Series, nullable extension types, ArrowDtype
+4. NumPy array - all numeric dtypes, datetime64, timedelta64
+5. Nested types - list element coercion, struct field coercion, map
+"""
+
 import datetime
 from decimal import Decimal
 import math
 import unittest
+from typing import Any, List, Tuple
 
 from pyspark.testing.utils import (
     have_pandas,
@@ -28,1157 +43,722 @@ from pyspark.testing.utils import (
 )
 
 
-# Test pa.array type coercion behavior when creating arrays with explicit type parameter.
-# This test monitors the behavior of PyArrow's type coercion to ensure PySpark's assumptions
-# about PyArrow behavior remain valid across versions.
-#
-# Key findings:
-# 1. Numeric coercion (int <-> float, int size narrowing/widening) works via safe casting
-# 2. String coercion (int -> string) requires explicit pc.cast(), not implicit via type param
-# 3. Decimal coercion (int -> decimal) works directly
-# 4. Boolean coercion (int -> bool) does NOT work implicitly, requires explicit casting
-#
-# Test coverage includes:
-# - Missing values (None, NaN, NaT)
-# - Empty datasets
-# - Invalid values and error handling
-# - All Spark/PyArrow/Pandas datatypes
-# - Python, Pandas, and NumPy input types
-# - PySpark pandas_options for to_pandas()
-
-
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
 class PyArrowTypeCoercionTests(unittest.TestCase):
     """Test PyArrow's type coercion behavior for pa.array with explicit type parameter."""
 
-    # ============================================================
-    # SECTION 1: Missing Values Tests (None, NaN, NaT)
-    # ============================================================
+    # =========================================================================
+    # Helper methods
+    # =========================================================================
 
-    def test_none_values_in_coercion(self):
-        """Test that None values are preserved during type coercion."""
-        import pyarrow as pa
-        import pyarrow.compute as pc
-
-        # int with None -> float64
-        a = pa.array([1, None, 3], type=pa.float64())
-        self.assertEqual(a.type, pa.float64())
-        self.assertEqual(a.to_pylist(), [1.0, None, 3.0])
-        self.assertEqual(a.null_count, 1)
-
-        # int with None -> decimal128
-        a = pa.array([1, None, 3], type=pa.decimal128(10, 0))
-        self.assertEqual(a.type, pa.decimal128(10, 0))
-        self.assertEqual(a.to_pylist(), [Decimal("1"), None, Decimal("3")])
-        self.assertEqual(a.null_count, 1)
-
-        # int with None -> int32 (narrowing)
-        a = pa.array([1, None, 3], type=pa.int32())
-        self.assertEqual(a.type, pa.int32())
-        self.assertEqual(a.to_pylist(), [1, None, 3])
-        self.assertEqual(a.null_count, 1)
-
-        # explicit cast to string with None
-        int_arr = pa.array([1, None, 3])
-        str_arr = pc.cast(int_arr, pa.string())
-        self.assertEqual(str_arr.to_pylist(), ["1", None, "3"])
-        self.assertEqual(str_arr.null_count, 1)
-
-        # float with None -> int64
-        a = pa.array([1.0, None, 3.0], type=pa.int64())
-        self.assertEqual(a.type, pa.int64())
-        self.assertEqual(a.to_pylist(), [1, None, 3])
-
-        # All None values
-        a = pa.array([None, None, None], type=pa.float64())
-        self.assertEqual(a.type, pa.float64())
-        self.assertEqual(a.to_pylist(), [None, None, None])
-        self.assertEqual(a.null_count, 3)
-
-    def test_nan_values_in_coercion(self):
-        """Test NaN handling in type coercion."""
+    def _run_coercion_tests(self, cases: List[Tuple[str, Any, Any]]) -> None:
+        """Run coercion tests: (name, data, target_type)."""
         import pyarrow as pa
 
-        # float NaN preserved
-        a = pa.array([1.0, float("nan"), 3.0])
-        self.assertEqual(a.type, pa.float64())
-        self.assertTrue(math.isnan(a[1].as_py()))
+        for name, data, target_type in cases:
+            with self.subTest(name=name):
+                arr = pa.array(data, type=target_type)
+                self.assertEqual(arr.type, target_type)
 
-        # float with NaN -> decimal128 fails (NaN not representable in decimal)
-        with self.assertRaises((pa.ArrowInvalid, pa.ArrowTypeError)):
-            pa.array([1.0, float("nan"), 3.0], type=pa.decimal128(10, 2))
+    def _run_coercion_tests_with_values(self, cases: List[Tuple[str, Any, Any, Any]]) -> None:
+        """Run coercion tests with value verification: (name, data, target_type, expected)."""
+        import pyarrow as pa
 
-        # NaN -> int fails (NaN not representable in int)
-        with self.assertRaises(pa.ArrowInvalid):
-            pa.array([1.0, float("nan"), 3.0], type=pa.int64())
+        for name, data, target_type, expected in cases:
+            with self.subTest(name=name):
+                arr = pa.array(data, type=target_type)
+                self.assertEqual(arr.type, target_type)
+                self.assertEqual(arr.to_pylist(), expected)
+
+    def _run_error_tests(self, cases: List[Tuple[str, Any, Any]], error_type) -> None:
+        """Run tests expecting errors: (name, data, target_type)."""
+        import pyarrow as pa
+
+        for name, data, target_type in cases:
+            with self.subTest(name=name):
+                with self.assertRaises(error_type):
+                    pa.array(data, type=target_type)
+
+    # =========================================================================
+    # SECTION 1: Nullable Data Coercion
+    # =========================================================================
+
+    def test_nullable_data_coercion(self):
+        """Test type coercion with None, NaN for numeric and temporal types."""
+        import pyarrow as pa
+
+        nan, inf, neg_inf = float("nan"), float("inf"), float("-inf")
+
+        # ---- None values ----
+        # (name, data, target_type, expected_values)
+        # fmt: off
+        none_cases = [
+            # Numeric
+            ("int_none_to_float64", [1, None, 3],       pa.float64(),         [1.0, None, 3.0]),
+            ("int_none_to_decimal", [1, None, 3],       pa.decimal128(10, 0), [Decimal("1"), None, Decimal("3")]),
+            ("int_none_to_int32",   [1, None, 3],       pa.int32(),           [1, None, 3]),
+            ("float_none_to_int64", [1.0, None, 3.0],   pa.int64(),           [1, None, 3]),
+            ("all_none_to_float64", [None, None, None], pa.float64(),         [None, None, None]),
+            ("all_none_to_int64",   [None, None, None], pa.int64(),           [None, None, None]),
+            # String
+            ("all_none_to_string",  [None, None],       pa.string(),          [None, None]),
+            # Temporal
+            ("date_none", [datetime.date(2024, 1, 1), None], pa.date32(),     [datetime.date(2024, 1, 1), None]),
+            ("time_none", [datetime.time(12, 0), None],      pa.time64("us"), [datetime.time(12, 0), None]),
+        ]
+        # fmt: on
+        self._run_coercion_tests_with_values(none_cases)
+
+        # Verify null counts
+        self.assertEqual(pa.array([1, None, 3], type=pa.float64()).null_count, 1)
+        self.assertEqual(pa.array([None, None, None], type=pa.float64()).null_count, 3)
+
+        # ---- NaN/Inf in float ----
+        # (name, data, target_type)
+        # fmt: off
+        nan_cases = [
+            ("nan_to_float64",     [nan],               pa.float64()),
+            ("inf_to_float64",     [inf],               pa.float64()),
+            ("neg_inf_to_float64", [neg_inf],           pa.float64()),
+            ("all_special",        [nan, inf, neg_inf], pa.float64()),
+            ("mixed_nan",          [1.0, nan, 3.0],     pa.float64()),
+            ("nan_to_float32",     [nan],               pa.float32()),
+            ("inf_to_float32",     [inf],               pa.float32()),
+        ]
+        # fmt: on
+        self._run_coercion_tests(nan_cases)
+
+        # Verify NaN/Inf values
+        self.assertTrue(math.isnan(pa.array([nan], type=pa.float64()).to_pylist()[0]))
+        self.assertEqual(pa.array([inf], type=pa.float64()).to_pylist()[0], inf)
+
+        # ---- NaN/Inf to non-float fails ----
+        # (name, data, target_type)
+        # fmt: off
+        nan_error_cases = [
+            ("nan_to_decimal", [nan], pa.decimal128(10, 2)),
+            ("nan_to_int64",   [nan], pa.int64()),
+            ("inf_to_int64",   [inf], pa.int64()),
+        ]
+        # fmt: on
+        self._run_error_tests(nan_error_cases, (pa.ArrowInvalid, pa.ArrowTypeError))
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
-    def test_nat_values_in_coercion(self):
-        """Test pd.NaT (Not a Time) handling in type coercion."""
-        import pyarrow as pa
+    def test_pandas_na_coercion(self):
+        """Test pd.NA handling during type coercion."""
         import pandas as pd
-        import numpy as np
-
-        # pd.NaT in timestamp
-        s = pd.Series([pd.Timestamp("2024-01-01"), pd.NaT, pd.Timestamp("2024-01-03")])
-        a = pa.array(s)
-        self.assertEqual(a.type, pa.timestamp("ns"))
-        self.assertEqual(a.null_count, 1)
-
-        # pd.NaT in timedelta
-        s = pd.Series([pd.Timedelta(days=1), pd.NaT, pd.Timedelta(hours=2)])
-        a = pa.array(s)
-        self.assertEqual(a.type, pa.duration("ns"))
-        self.assertEqual(a.null_count, 1)
-
-        # np.datetime64('NaT')
-        arr = np.array(["2024-01-01", "NaT", "2024-01-03"], dtype="datetime64[D]")
-        a = pa.array(arr)
-        self.assertEqual(a.type, pa.date32())
-        self.assertEqual(a.null_count, 1)
-
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)
-    def test_pandas_na_in_coercion(self):
-        """Test pd.NA handling in type coercion with nullable dtypes."""
-        import pyarrow as pa
-        import pandas as pd
-
-        # pd.NA in nullable Int64
-        s = pd.Series([1, pd.NA, 3], dtype=pd.Int64Dtype())
-        a = pa.array(s)
-        self.assertEqual(a.type, pa.int64())
-        self.assertEqual(a.to_pylist(), [1, None, 3])
-        self.assertEqual(a.null_count, 1)
-
-        # pd.NA coerced to float64
-        s = pd.Series([1, pd.NA, 3], dtype=pd.Int64Dtype())
-        a = pa.array(s, type=pa.float64())
-        self.assertEqual(a.type, pa.float64())
-        self.assertEqual(a.to_pylist(), [1.0, None, 3.0])
-
-        # pd.NA in nullable Float64
-        s = pd.Series([1.0, pd.NA, 3.0], dtype=pd.Float64Dtype())
-        a = pa.array(s)
-        self.assertEqual(a.type, pa.float64())
-        self.assertEqual(a.null_count, 1)
-
-        # pd.NA in nullable String
-        s = pd.Series(["a", pd.NA, "c"], dtype=pd.StringDtype())
-        a = pa.array(s)
-        self.assertEqual(a.type, pa.string())
-        self.assertEqual(a.to_pylist(), ["a", None, "c"])
-
-        # pd.NA in nullable Boolean
-        s = pd.Series([True, pd.NA, False], dtype=pd.BooleanDtype())
-        a = pa.array(s)
-        self.assertEqual(a.type, pa.bool_())
-        self.assertEqual(a.to_pylist(), [True, None, False])
-
-    # ============================================================
-    # SECTION 2: Empty Dataset Tests
-    # ============================================================
-
-    def test_empty_list_coercion(self):
-        """Test type coercion with empty lists."""
         import pyarrow as pa
 
-        # Empty list with explicit type
-        a = pa.array([], type=pa.int64())
-        self.assertEqual(a.type, pa.int64())
-        self.assertEqual(len(a), 0)
-        self.assertEqual(a.to_pylist(), [])
+        # (name, data, target_type, expected_values)
+        # fmt: off
+        cases = [
+            ("Int64_na_to_float",  pd.Series([1, pd.NA, 3], dtype=pd.Int64Dtype()),     pa.float64(), [1.0, None, 3.0]),
+            ("Float64_na_to_int",  pd.Series([1.0, pd.NA, 3.0], dtype=pd.Float64Dtype()), pa.int64(), [1, None, 3]),
+        ]
+        # fmt: on
+        self._run_coercion_tests_with_values(cases)
 
-        a = pa.array([], type=pa.float64())
-        self.assertEqual(a.type, pa.float64())
-        self.assertEqual(len(a), 0)
+    # =========================================================================
+    # SECTION 2: Plain Python Instances Coercion
+    # =========================================================================
 
-        a = pa.array([], type=pa.string())
-        self.assertEqual(a.type, pa.string())
-        self.assertEqual(len(a), 0)
-
-        a = pa.array([], type=pa.decimal128(10, 2))
-        self.assertEqual(a.type, pa.decimal128(10, 2))
-        self.assertEqual(len(a), 0)
-
-        a = pa.array([], type=pa.bool_())
-        self.assertEqual(a.type, pa.bool_())
-        self.assertEqual(len(a), 0)
-
-        a = pa.array([], type=pa.timestamp("us"))
-        self.assertEqual(a.type, pa.timestamp("us"))
-        self.assertEqual(len(a), 0)
-
-        # Empty list without type -> null type
-        a = pa.array([])
-        self.assertEqual(a.type, pa.null())
-        self.assertEqual(len(a), 0)
-
-    def test_empty_nested_list_coercion(self):
-        """Test type coercion with empty nested lists."""
+    def test_python_instances_coercion(self):
+        """Test type coercion from Python list, tuple, generator with all data types."""
         import pyarrow as pa
+        from zoneinfo import ZoneInfo
 
-        # Empty list of lists
-        a = pa.array([], type=pa.list_(pa.int64()))
-        self.assertEqual(a.type, pa.list_(pa.int64()))
-        self.assertEqual(len(a), 0)
+        # ==== 2.1 Numeric Types ====
 
-        # List containing empty list
-        a = pa.array([[]], type=pa.list_(pa.int64()))
-        self.assertEqual(a.type, pa.list_(pa.int64()))
-        self.assertEqual(len(a), 1)
-        self.assertEqual(a.to_pylist(), [[]])
+        # (name, data, target_type, expected_values)
+        # fmt: off
+        numeric_cases = [
+            # Int <-> Float
+            ("int_to_float64",  [1, 2, 3],       pa.float64(), [1.0, 2.0, 3.0]),
+            ("int_to_float32",  [1, 2, 3],       pa.float32(), [1.0, 2.0, 3.0]),
+            ("float_to_int64",  [1.0, 2.0, 3.0], pa.int64(),   [1, 2, 3]),
+            ("tuple_to_float",  (1, 2, 3),       pa.float64(), [1.0, 2.0, 3.0]),
+            # Int narrowing/widening
+            ("int_to_int8",     [1, 2, 3], pa.int8(),   [1, 2, 3]),
+            ("int_to_int16",    [1, 2, 3], pa.int16(),  [1, 2, 3]),
+            ("int_to_int32",    [1, 2, 3], pa.int32(),  [1, 2, 3]),
+            ("int_to_uint8",    [1, 2, 3], pa.uint8(),  [1, 2, 3]),
+            ("int_to_uint16",   [1, 2, 3], pa.uint16(), [1, 2, 3]),
+            ("int_to_uint32",   [1, 2, 3], pa.uint32(), [1, 2, 3]),
+            ("int_to_uint64",   [1, 2, 3], pa.uint64(), [1, 2, 3]),
+            # Decimal
+            ("int_to_decimal",  [1, 2, 3], pa.decimal128(10, 2), [Decimal("1.00"), Decimal("2.00"), Decimal("3.00")]),
+            # Empty
+            ("empty_to_int64",  [], pa.int64(),   []),
+            ("empty_to_float",  [], pa.float64(), []),
+        ]
+        # fmt: on
+        self._run_coercion_tests_with_values(numeric_cases)
 
-        # Empty struct
-        a = pa.array([], type=pa.struct([("x", pa.int64()), ("y", pa.string())]))
-        self.assertEqual(a.type, pa.struct([("x", pa.int64()), ("y", pa.string())]))
-        self.assertEqual(len(a), 0)
+        # Generator
+        self.assertEqual(
+            pa.array((x for x in [1, 2, 3]), type=pa.float64()).to_pylist(),
+            [1.0, 2.0, 3.0],
+        )
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)
-    def test_empty_pandas_series_coercion(self):
-        """Test type coercion with empty pandas Series."""
-        import pyarrow as pa
-        import pandas as pd
+        # ==== 2.2 Int Boundary Values ====
 
-        # Empty numpy-backed series
-        s = pd.Series([], dtype="int64")
-        a = pa.array(s)
-        self.assertEqual(a.type, pa.int64())
-        self.assertEqual(len(a), 0)
+        int8_min, int8_max = -128, 127
+        int16_min, int16_max = -32768, 32767
+        int32_min, int32_max = -(2**31), 2**31 - 1
+        int64_min, int64_max = -(2**63), 2**63 - 1
 
-        # Empty series coerced to different type
-        s = pd.Series([], dtype="int64")
-        a = pa.array(s, type=pa.float64())
-        self.assertEqual(a.type, pa.float64())
-        self.assertEqual(len(a), 0)
+        # (name, data, target_type, expected_values)
+        # fmt: off
+        boundary_cases = [
+            ("int8_range",  [int8_min, 0, int8_max],   pa.int8(),  [int8_min, 0, int8_max]),
+            ("int16_range", [int16_min, int16_max],    pa.int16(), [int16_min, int16_max]),
+            ("int32_range", [int32_min, int32_max],    pa.int32(), [int32_min, int32_max]),
+            ("int64_range", [int64_min, 0, int64_max], pa.int64(), [int64_min, 0, int64_max]),
+            # Widening
+            ("int8_to_int64",  [int8_min, int8_max],   pa.int64(), [int8_min, int8_max]),
+            ("int16_to_int32", [int16_min, int16_max], pa.int32(), [int16_min, int16_max]),
+        ]
+        # fmt: on
+        self._run_coercion_tests_with_values(boundary_cases)
 
-        # Empty nullable series
-        s = pd.Series([], dtype=pd.Int64Dtype())
-        a = pa.array(s)
-        self.assertEqual(a.type, pa.int64())
-        self.assertEqual(len(a), 0)
+        # ==== 2.3 Int Overflow (Error) ====
 
-        # Empty ArrowDtype series
-        s = pd.Series([], dtype=pd.ArrowDtype(pa.int64()))
-        a = pa.array(s)
-        self.assertEqual(a.type, pa.int64())
-        self.assertEqual(len(a), 0)
+        # (name, data, target_type)
+        # fmt: off
+        overflow_cases = [
+            ("int8_overflow",   [128],          pa.int8()),
+            ("int8_underflow",  [-129],         pa.int8()),
+            ("int16_overflow",  [32768],        pa.int16()),
+            ("int32_overflow",  [2**31],        pa.int32()),
+            ("uint8_overflow",  [256],          pa.uint8()),
+            ("uint16_overflow", [65536],        pa.uint16()),
+            ("uint32_overflow", [2**32],        pa.uint32()),
+        ]
+        # fmt: on
+        self._run_error_tests(overflow_cases, pa.ArrowInvalid)
 
-    def test_empty_numpy_array_coercion(self):
-        """Test type coercion with empty numpy arrays."""
-        import pyarrow as pa
-        import numpy as np
-
-        # Empty numpy array
-        arr = np.array([], dtype=np.int64)
-        a = pa.array(arr)
-        self.assertEqual(a.type, pa.int64())
-        self.assertEqual(len(a), 0)
-
-        # Empty numpy array coerced
-        arr = np.array([], dtype=np.int64)
-        a = pa.array(arr, type=pa.float64())
-        self.assertEqual(a.type, pa.float64())
-        self.assertEqual(len(a), 0)
-
-    # ============================================================
-    # SECTION 3: Invalid Values and Error Handling
-    # ============================================================
-
-    def test_overflow_in_narrowing(self):
-        """Test overflow detection when narrowing integer types."""
-        import pyarrow as pa
-
-        # Value too large for int8 (range: -128 to 127)
-        with self.assertRaises(pa.ArrowInvalid):
-            pa.array([128], type=pa.int8())
-
-        with self.assertRaises(pa.ArrowInvalid):
-            pa.array([-129], type=pa.int8())
-
-        # Value too large for uint8 (range: 0 to 255)
-        with self.assertRaises(pa.ArrowInvalid):
-            pa.array([256], type=pa.uint8())
-
-        # Negative value to unsigned raises OverflowError
+        # Negative to unsigned
         with self.assertRaises(OverflowError):
             pa.array([-1], type=pa.uint8())
 
-        # Value too large for int16
-        with self.assertRaises(pa.ArrowInvalid):
-            pa.array([32768], type=pa.int16())
+        # ==== 2.4 String Types ====
 
-    def test_precision_loss_in_float_to_int(self):
-        """Test precision handling when converting float to int."""
-        import pyarrow as pa
-
-        # PyArrow allows float -> int conversion (truncates fractional part)
-        # This is notable behavior that PySpark should be aware of
-        a = pa.array([1.5], type=pa.int64())
-        # Truncated to 1
-        self.assertEqual(a.to_pylist(), [1])
-
-        a = pa.array([1.9, 2.1], type=pa.int64())
-        # Truncated
-        self.assertEqual(a.to_pylist(), [1, 2])
-
-        # Integer-valued float -> int works cleanly
-        a = pa.array([1.0, 2.0], type=pa.int64())
-        self.assertEqual(a.to_pylist(), [1, 2])
-
-    def test_invalid_string_to_numeric(self):
-        """Test invalid string to numeric conversion."""
-        import pyarrow as pa
-        import pyarrow.compute as pc
-
-        # Non-numeric string -> int fails
-        str_arr = pa.array(["abc", "def"])
-        with self.assertRaises(pa.ArrowInvalid):
-            pc.cast(str_arr, pa.int64())
-
-        # Mixed numeric/non-numeric string -> int fails
-        str_arr = pa.array(["1", "abc", "3"])
-        with self.assertRaises(pa.ArrowInvalid):
-            pc.cast(str_arr, pa.int64())
-
-        # Valid numeric strings work
-        str_arr = pa.array(["1", "2", "3"])
-        int_arr = pc.cast(str_arr, pa.int64())
-        self.assertEqual(int_arr.to_pylist(), [1, 2, 3])
-
-    def test_incompatible_type_coercion(self):
-        """Test that incompatible type coercions raise errors."""
-        import pyarrow as pa
-
-        # Binary -> int fails
-        with self.assertRaises((pa.ArrowInvalid, pa.ArrowTypeError)):
-            pa.array([b"hello"], type=pa.int64())
-
-        # Datetime -> int fails (without explicit cast)
-        with self.assertRaises((pa.ArrowInvalid, pa.ArrowTypeError)):
-            pa.array([datetime.datetime.now()], type=pa.int64())
-
-        # List -> scalar type fails
-        with self.assertRaises((pa.ArrowInvalid, pa.ArrowTypeError)):
-            pa.array([[1, 2, 3]], type=pa.int64())
-
-    def test_decimal_precision_overflow(self):
-        """Test decimal precision and scale limits."""
-        import pyarrow as pa
-
-        # Value exceeds precision
-        with self.assertRaises(pa.ArrowInvalid):
-            pa.array([1234567890], type=pa.decimal128(5, 0))
-
-        # Value within precision works
-        a = pa.array([12345], type=pa.decimal128(5, 0))
-        self.assertEqual(a.to_pylist(), [Decimal("12345")])
-
-    # ============================================================
-    # SECTION 4: Numeric Type Coercion (All Spark/PyArrow types)
-    # ============================================================
-
-    def test_int_to_all_float_types(self):
-        """Test int coercion to all float types."""
-        import pyarrow as pa
-
-        # int -> float16
-        a = pa.array([1, 2, 3], type=pa.float16())
-        self.assertEqual(a.type, pa.float16())
-
-        # int -> float32
-        a = pa.array([1, 2, 3], type=pa.float32())
-        self.assertEqual(a.type, pa.float32())
-        values = a.to_pylist()
-        self.assertAlmostEqual(values[0], 1.0, places=5)
-
-        # int -> float64
-        a = pa.array([1, 2, 3], type=pa.float64())
-        self.assertEqual(a.type, pa.float64())
-        self.assertEqual(a.to_pylist(), [1.0, 2.0, 3.0])
-        for v in a.to_pylist():
-            self.assertIsInstance(v, float)
-
-    def test_int_to_all_int_types(self):
-        """Test int coercion to all integer types (narrowing/widening)."""
-        import pyarrow as pa
-
-        # Signed integers
-        for int_type in [pa.int8(), pa.int16(), pa.int32(), pa.int64()]:
-            a = pa.array([1, 2, 3], type=int_type)
-            self.assertEqual(a.type, int_type)
-            self.assertEqual(a.to_pylist(), [1, 2, 3])
-
-        # Unsigned integers
-        for uint_type in [pa.uint8(), pa.uint16(), pa.uint32(), pa.uint64()]:
-            a = pa.array([1, 2, 3], type=uint_type)
-            self.assertEqual(a.type, uint_type)
-            self.assertEqual(a.to_pylist(), [1, 2, 3])
-
-    def test_float_to_int_coercion(self):
-        """Test that floats can be coerced to integer types (whole numbers only)."""
-        import pyarrow as pa
-
-        for int_type in [pa.int8(), pa.int16(), pa.int32(), pa.int64()]:
-            a = pa.array([1.0, 2.0, 3.0], type=int_type)
-            self.assertEqual(a.type, int_type)
-            self.assertEqual(a.to_pylist(), [1, 2, 3])
-
-    def test_int_to_decimal_all_scales(self):
-        """Test int to decimal coercion with various precisions and scales."""
-        import pyarrow as pa
-
-        # decimal128 with different precisions
-        for precision in [5, 10, 18, 38]:
-            a = pa.array([1, 2, 3], type=pa.decimal128(precision, 0))
-            self.assertEqual(a.type, pa.decimal128(precision, 0))
-            self.assertEqual(a.to_pylist(), [Decimal("1"), Decimal("2"), Decimal("3")])
-
-        # decimal128 with different scales
-        a = pa.array([1, 2, 3], type=pa.decimal128(10, 2))
-        self.assertEqual(
-            a.to_pylist(), [Decimal("1.00"), Decimal("2.00"), Decimal("3.00")]
-        )
-
-        a = pa.array([1, 2, 3], type=pa.decimal128(10, 4))
-        self.assertEqual(
-            a.to_pylist(),
-            [Decimal("1.0000"), Decimal("2.0000"), Decimal("3.0000")],
-        )
-
-        # decimal256
-        a = pa.array([1, 2, 3], type=pa.decimal256(50, 0))
-        self.assertEqual(a.type, pa.decimal256(50, 0))
-
-    def test_int_to_string_requires_explicit_cast(self):
-        """Test that integers cannot be implicitly coerced to string types."""
-        import pyarrow as pa
-        import pyarrow.compute as pc
-
-        # int -> string does NOT work implicitly
-        with self.assertRaises(pa.ArrowTypeError):
-            pa.array([1, 2, 3], type=pa.string())
-
-        # int -> large_string does NOT work implicitly
-        with self.assertRaises(pa.ArrowTypeError):
-            pa.array([1, 2, 3], type=pa.large_string())
-
-        # int -> string_view does NOT work implicitly (if available)
-        if hasattr(pa, "string_view"):
-            with self.assertRaises(pa.ArrowTypeError):
-                pa.array([1, 2, 3], type=pa.string_view())
-
-        # Explicit casting via pc.cast works
-        int_arr = pa.array([1, 2, 3])
-        str_arr = pc.cast(int_arr, pa.string())
-        self.assertEqual(str_arr.type, pa.string())
-        self.assertEqual(str_arr.to_pylist(), ["1", "2", "3"])
-
-        large_str_arr = pc.cast(int_arr, pa.large_string())
-        self.assertEqual(large_str_arr.type, pa.large_string())
-
-    def test_int_to_bool_requires_explicit_cast(self):
-        """Test that integers cannot be implicitly coerced to boolean."""
-        import pyarrow as pa
-        import pyarrow.compute as pc
-
-        # int -> bool does NOT work implicitly
-        with self.assertRaises(pa.ArrowInvalid):
-            pa.array([0, 1, 2], type=pa.bool_())
-
-        # Explicit casting via pc.cast works
-        int_arr = pa.array([0, 1, 2])
-        bool_arr = pc.cast(int_arr, pa.bool_())
-        self.assertEqual(bool_arr.type, pa.bool_())
-        self.assertEqual(bool_arr.to_pylist(), [False, True, True])
-
-    def test_decimal_to_float_requires_explicit_cast(self):
-        """Test that Python Decimal cannot be implicitly coerced to float types."""
-        import pyarrow as pa
-        import pyarrow.compute as pc
-
-        # Decimal -> float64 does NOT work implicitly
-        with self.assertRaises(pa.ArrowInvalid):
-            pa.array([Decimal("1.5"), Decimal("2.5")], type=pa.float64())
-
-        # Explicit casting works
-        dec_arr = pa.array([Decimal("1.5"), Decimal("2.5")])
-        float_arr = pc.cast(dec_arr, pa.float64())
-        self.assertEqual(float_arr.type, pa.float64())
-        self.assertEqual(float_arr.to_pylist(), [1.5, 2.5])
-
-    def test_float_to_decimal_requires_explicit_cast(self):
-        """Test that floats cannot be implicitly coerced to decimal types."""
-        import pyarrow as pa
-        import pyarrow.compute as pc
-
-        # float -> decimal128 does NOT work implicitly
-        with self.assertRaises(pa.ArrowTypeError):
-            pa.array([1.5, 2.5], type=pa.decimal128(10, 2))
-
-        # Explicit casting works
-        float_arr = pa.array([1.5, 2.5])
-        dec_arr = pc.cast(float_arr, pa.decimal128(10, 2))
-        self.assertEqual(dec_arr.type, pa.decimal128(10, 2))
-
-    def test_string_to_numeric_requires_explicit_cast(self):
-        """Test that strings cannot be implicitly coerced to numeric types."""
-        import pyarrow as pa
-        import pyarrow.compute as pc
-
-        # string -> int does NOT work implicitly
-        with self.assertRaises((pa.ArrowInvalid, pa.ArrowTypeError)):
-            pa.array(["1", "2", "3"], type=pa.int64())
-
-        # string -> float does NOT work implicitly
-        with self.assertRaises((pa.ArrowInvalid, pa.ArrowTypeError)):
-            pa.array(["1.0", "2.0"], type=pa.float64())
-
-        # Explicit casting works
-        str_arr = pa.array(["1", "2", "3"])
-        int_arr = pc.cast(str_arr, pa.int64())
-        self.assertEqual(int_arr.to_pylist(), [1, 2, 3])
-
-    # ============================================================
-    # SECTION 5: Temporal Type Coercion
-    # ============================================================
-
-    def test_timestamp_coercion(self):
-        """Test timestamp type coercion between resolutions."""
-        import pyarrow as pa
-
-        ts_data = [
-            datetime.datetime(2024, 1, 1, 12, 0, 0),
-            datetime.datetime(2024, 1, 2, 12, 0, 0),
+        # (name, data, target_type, expected_values)
+        # fmt: off
+        string_cases = [
+            # Basic
+            ("ascii",            ["hello", "world"],     pa.string(),       ["hello", "world"]),
+            ("empty_str",        ["", "a", ""],          pa.string(),       ["", "a", ""]),
+            ("whitespace",       ["  ", "\t", "\n"],     pa.string(),       ["  ", "\t", "\n"]),
+            ("string_with_none", ["a", None, "b"],       pa.string(),       ["a", None, "b"]),
+            # Non-English
+            ("chinese",          ["你好", "世界"],        pa.string(),       ["你好", "世界"]),
+            ("japanese",         ["こんにちは"],          pa.string(),       ["こんにちは"]),
+            ("korean",           ["안녕하세요"],            pa.string(),       ["안녕하세요"]),
+            ("emoji",            ["😀", "🎉", "🚀"],    pa.string(),       ["😀", "🎉", "🚀"]),
+            ("arabic",           ["مرحبا"],             pa.string(),       ["مرحبا"]),
+            ("cyrillic",         ["Привет"],            pa.string(),       ["Привет"]),
+            # Large string
+            ("to_large_string",  ["hello", "world"],     pa.large_string(), ["hello", "world"]),
+            ("large_str_none",   ["a", None, "b"],       pa.large_string(), ["a", None, "b"]),
         ]
+        # fmt: on
+        self._run_coercion_tests_with_values(string_cases)
 
-        # Coerce to different resolutions
-        for unit in ["s", "ms", "us", "ns"]:
-            a = pa.array(ts_data, type=pa.timestamp(unit))
-            self.assertEqual(a.type, pa.timestamp(unit))
-            self.assertEqual(len(a), 2)
+        # ==== 2.5 Binary Types ====
 
-        # Coerce to timestamp with timezone
-        a = pa.array(ts_data, type=pa.timestamp("us", tz="UTC"))
-        self.assertEqual(a.type, pa.timestamp("us", tz="UTC"))
-
-    def test_timezone_aware_datetime_coercion(self):
-        """Test timezone-aware datetime.datetime coercion."""
-        import pyarrow as pa
-        from zoneinfo import ZoneInfo
-
-        # UTC timezone
-        utc_tz = ZoneInfo("UTC")
-        ts_utc = [
-            datetime.datetime(2024, 1, 1, 12, 0, 0, tzinfo=utc_tz),
-            datetime.datetime(2024, 1, 2, 12, 0, 0, tzinfo=utc_tz),
+        # (name, data, target_type, expected_values)
+        # fmt: off
+        binary_cases = [
+            ("bytes_to_binary",     [b"hello", b"world"], pa.binary(),       [b"hello", b"world"]),
+            ("bytes_to_large_bin",  [b"hello", b"world"], pa.large_binary(), [b"hello", b"world"]),
+            ("binary_with_none",    [b"a", None, b"b"],   pa.binary(),       [b"a", None, b"b"]),
+            ("bytearray_to_bin",    [bytearray(b"hi")],   pa.binary(),       [b"hi"]),
+            # Fixed size binary
+            ("fixed_bin_4",         [b"abcd", b"efgh"],   pa.binary(4),      [b"abcd", b"efgh"]),
+            ("fixed_bin_1",         [b"a", b"b", b"c"],   pa.binary(1),      [b"a", b"b", b"c"]),
         ]
+        # fmt: on
+        self._run_coercion_tests_with_values(binary_cases)
 
-        # datetime with UTC -> timestamp with UTC
-        a = pa.array(ts_utc, type=pa.timestamp("us", tz="UTC"))
-        self.assertEqual(a.type, pa.timestamp("us", tz="UTC"))
-        self.assertEqual(len(a), 2)
+        # ==== 2.6 Temporal Types ====
 
-        # Non-UTC timezone: Asia/Singapore (UTC+8)
-        sg_tz = ZoneInfo("Asia/Singapore")
-        ts_sg = [
-            datetime.datetime(2024, 1, 1, 20, 0, 0, tzinfo=sg_tz),  # 12:00 UTC
-            datetime.datetime(2024, 1, 2, 20, 0, 0, tzinfo=sg_tz),  # 12:00 UTC
-        ]
-
-        # datetime with Asia/Singapore -> timestamp with Asia/Singapore
-        a = pa.array(ts_sg, type=pa.timestamp("us", tz="Asia/Singapore"))
-        self.assertEqual(a.type, pa.timestamp("us", tz="Asia/Singapore"))
-        self.assertEqual(len(a), 2)
-
-        # datetime with Asia/Singapore -> timestamp with UTC (converts timezone)
-        a = pa.array(ts_sg, type=pa.timestamp("us", tz="UTC"))
-        self.assertEqual(a.type, pa.timestamp("us", tz="UTC"))
-
-        # US/Pacific timezone (UTC-8 or UTC-7 depending on DST)
-        la_tz = ZoneInfo("America/Los_Angeles")
-        ts_la = [
-            datetime.datetime(2024, 1, 1, 4, 0, 0, tzinfo=la_tz),  # 12:00 UTC
-            datetime.datetime(2024, 7, 1, 5, 0, 0, tzinfo=la_tz),  # 12:00 UTC (DST)
-        ]
-
-        a = pa.array(ts_la, type=pa.timestamp("us", tz="America/Los_Angeles"))
-        self.assertEqual(a.type, pa.timestamp("us", tz="America/Los_Angeles"))
-
-        # Naive datetime -> timestamp with timezone
-        ts_naive = [
-            datetime.datetime(2024, 1, 1, 12, 0, 0),
-            datetime.datetime(2024, 1, 2, 12, 0, 0),
-        ]
-        a = pa.array(ts_naive, type=pa.timestamp("us", tz="Asia/Singapore"))
-        self.assertEqual(a.type, pa.timestamp("us", tz="Asia/Singapore"))
-
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)
-    def test_pandas_timestamp_timezone_coercion(self):
-        """Test pd.Timestamp with timezone coercion."""
-        import pyarrow as pa
-        import pandas as pd
-        from zoneinfo import ZoneInfo
-
-        # pd.Timestamp with UTC
-        ts_utc = [
-            pd.Timestamp("2024-01-01 12:00:00", tz="UTC"),
-            pd.Timestamp("2024-01-02 12:00:00", tz="UTC"),
-        ]
-
-        a = pa.array(ts_utc, type=pa.timestamp("us", tz="UTC"))
-        self.assertEqual(a.type, pa.timestamp("us", tz="UTC"))
-        self.assertEqual(len(a), 2)
-
-        # pd.Timestamp with Asia/Singapore
-        ts_sg = [
-            pd.Timestamp("2024-01-01 20:00:00", tz="Asia/Singapore"),
-            pd.Timestamp("2024-01-02 20:00:00", tz="Asia/Singapore"),
-        ]
-
-        a = pa.array(ts_sg, type=pa.timestamp("us", tz="Asia/Singapore"))
-        self.assertEqual(a.type, pa.timestamp("us", tz="Asia/Singapore"))
-
-        # pd.Timestamp with America/Los_Angeles
-        ts_la = [
-            pd.Timestamp("2024-01-01 04:00:00", tz="America/Los_Angeles"),
-            pd.Timestamp("2024-07-01 05:00:00", tz="America/Los_Angeles"),
-        ]
-
-        a = pa.array(ts_la, type=pa.timestamp("us", tz="America/Los_Angeles"))
-        self.assertEqual(a.type, pa.timestamp("us", tz="America/Los_Angeles"))
-
-        # pd.Timestamp with timezone -> different timezone (converts)
-        a = pa.array(ts_sg, type=pa.timestamp("us", tz="UTC"))
-        self.assertEqual(a.type, pa.timestamp("us", tz="UTC"))
-
-        # Timezone-aware pd.Series
-        s = pd.Series(ts_sg)
-        a = pa.array(s, type=pa.timestamp("us", tz="Asia/Singapore"))
-        self.assertEqual(a.type, pa.timestamp("us", tz="Asia/Singapore"))
-
-        # pd.Series with DatetimeTZDtype
-        s = pd.Series(
-            pd.to_datetime(["2024-01-01", "2024-01-02"]).tz_localize("Asia/Singapore")
-        )
-        a = pa.array(s)
-        self.assertEqual(str(a.type.tz), "Asia/Singapore")
-
-        # ArrowDtype with timezone
-        s = pd.Series(
-            [pd.Timestamp("2024-01-01 12:00:00"), pd.Timestamp("2024-01-02 12:00:00")],
-            dtype=pd.ArrowDtype(pa.timestamp("us", tz="Asia/Singapore")),
-        )
-        a = pa.array(s)
-        self.assertEqual(a.type, pa.timestamp("us", tz="Asia/Singapore"))
-
-    def test_timezone_coercion_between_timezones(self):
-        """Test coercion between different timezones."""
-        import pyarrow as pa
-        import pyarrow.compute as pc
-        from zoneinfo import ZoneInfo
-
-        # Create array with Asia/Singapore timezone
-        sg_tz = ZoneInfo("Asia/Singapore")
-        ts_sg = [
-            datetime.datetime(2024, 1, 1, 20, 0, 0, tzinfo=sg_tz),
-        ]
-
-        a_sg = pa.array(ts_sg, type=pa.timestamp("us", tz="Asia/Singapore"))
-        self.assertEqual(a_sg.type.tz, "Asia/Singapore")
-
-        # Convert to UTC using pc.cast (preserves instant, changes representation)
-        # Note: This changes the timezone but keeps the same instant
-        # Explicit timezone conversion is needed via assume_timezone or similar
-
-        # Create naive timestamp and localize to different timezones
-        ts_naive = pa.array(
-            [datetime.datetime(2024, 1, 1, 12, 0, 0)],
-            type=pa.timestamp("us"),
-        )
-
-        # Assume timezone (treats naive as if it were in that timezone)
-        ts_sg_assumed = pc.assume_timezone(ts_naive, "Asia/Singapore")
-        self.assertEqual(ts_sg_assumed.type.tz, "Asia/Singapore")
-
-        ts_utc_assumed = pc.assume_timezone(ts_naive, "UTC")
-        self.assertEqual(ts_utc_assumed.type.tz, "UTC")
-
-        ts_la_assumed = pc.assume_timezone(ts_naive, "America/Los_Angeles")
-        self.assertEqual(ts_la_assumed.type.tz, "America/Los_Angeles")
-
-    def test_mixed_timezone_handling(self):
-        """Test handling of mixed timezone data."""
-        import pyarrow as pa
-        from zoneinfo import ZoneInfo
-
-        utc_tz = ZoneInfo("UTC")
-        sg_tz = ZoneInfo("Asia/Singapore")
-
-        # Mixed timezones in input - behavior depends on PyArrow version
-        ts_mixed = [
-            datetime.datetime(2024, 1, 1, 12, 0, 0, tzinfo=utc_tz),
-            datetime.datetime(2024, 1, 1, 20, 0, 0, tzinfo=sg_tz),  # Same instant
-        ]
-
-        # When specifying target timezone, values are converted
-        a = pa.array(ts_mixed, type=pa.timestamp("us", tz="UTC"))
-        self.assertEqual(a.type, pa.timestamp("us", tz="UTC"))
-        self.assertEqual(len(a), 2)
-
-        # Both should represent the same instant when converted to UTC
-        values = a.to_pylist()
-        self.assertEqual(values[0], values[1])
-
-    def test_date_coercion(self):
-        """Test date type coercion."""
-        import pyarrow as pa
-
+        ts_data = [datetime.datetime(2024, 1, 1, 12, 0), datetime.datetime(2024, 1, 2, 12, 0)]
         date_data = [datetime.date(2024, 1, 1), datetime.date(2024, 1, 2)]
-
-        # date32
-        a = pa.array(date_data, type=pa.date32())
-        self.assertEqual(a.type, pa.date32())
-
-        # date64
-        a = pa.array(date_data, type=pa.date64())
-        self.assertEqual(a.type, pa.date64())
-
-    def test_time_coercion(self):
-        """Test time type coercion."""
-        import pyarrow as pa
-
-        time_data = [datetime.time(12, 30, 0), datetime.time(13, 45, 0)]
-
-        # time32
-        a = pa.array(time_data, type=pa.time32("s"))
-        self.assertEqual(a.type, pa.time32("s"))
-
-        a = pa.array(time_data, type=pa.time32("ms"))
-        self.assertEqual(a.type, pa.time32("ms"))
-
-        # time64
-        a = pa.array(time_data, type=pa.time64("us"))
-        self.assertEqual(a.type, pa.time64("us"))
-
-        a = pa.array(time_data, type=pa.time64("ns"))
-        self.assertEqual(a.type, pa.time64("ns"))
-
-    def test_duration_coercion(self):
-        """Test duration type coercion."""
-        import pyarrow as pa
-
+        time_data = [datetime.time(12, 30), datetime.time(13, 45)]
         dur_data = [datetime.timedelta(days=1), datetime.timedelta(hours=2)]
 
-        for unit in ["s", "ms", "us", "ns"]:
-            a = pa.array(dur_data, type=pa.duration(unit))
-            self.assertEqual(a.type, pa.duration(unit))
+        # (name, data, target_type, expected_values)
+        # fmt: off
+        temporal_cases = [
+            # Timestamp resolutions (microseconds truncated for lower resolutions)
+            ("timestamp_s",  ts_data, pa.timestamp("s"),  ts_data),
+            ("timestamp_ms", ts_data, pa.timestamp("ms"), ts_data),
+            ("timestamp_us", ts_data, pa.timestamp("us"), ts_data),
+            ("timestamp_ns", ts_data, pa.timestamp("ns"), ts_data),
+            # Date
+            ("date32", date_data, pa.date32(), date_data),
+            ("date64", date_data, pa.date64(), date_data),
+            # Time (seconds truncated for lower resolutions)
+            ("time32_s",  time_data, pa.time32("s"),  [datetime.time(12, 30), datetime.time(13, 45)]),
+            ("time32_ms", time_data, pa.time32("ms"), time_data),
+            ("time64_us", time_data, pa.time64("us"), time_data),
+            ("time64_ns", time_data, pa.time64("ns"), time_data),
+            # Duration
+            ("duration_s",  dur_data, pa.duration("s"),  dur_data),
+            ("duration_ms", dur_data, pa.duration("ms"), dur_data),
+            ("duration_us", dur_data, pa.duration("us"), dur_data),
+            ("duration_ns", dur_data, pa.duration("ns"), dur_data),
+            # Boundary values
+            ("epoch_date",   [datetime.date(1970, 1, 1)],         pa.date32(),      [datetime.date(1970, 1, 1)]),
+            ("date_min",     [datetime.date(1, 1, 1)],            pa.date32(),      [datetime.date(1, 1, 1)]),
+            ("date_max",     [datetime.date(9999, 12, 31)],       pa.date32(),      [datetime.date(9999, 12, 31)]),
+            ("time_min",     [datetime.time(0, 0, 0, 0)],         pa.time64("us"),  [datetime.time(0, 0, 0, 0)]),
+            ("time_max",     [datetime.time(23, 59, 59, 999999)], pa.time64("us"),  [datetime.time(23, 59, 59, 999999)]),
+            ("duration_neg", [datetime.timedelta(days=-1)],       pa.duration("us"), [datetime.timedelta(days=-1)]),
+        ]
+        # fmt: on
+        self._run_coercion_tests_with_values(temporal_cases)
 
-    # ============================================================
-    # SECTION 6: Binary/String Type Coercion
-    # ============================================================
+        # ==== 2.7 Timezone Coercion ====
 
-    def test_string_to_binary_coercion(self):
-        """Test string to binary type coercion."""
-        import pyarrow as pa
-        import pyarrow.compute as pc
+        utc_tz = ZoneInfo("UTC")
+        sg_tz = ZoneInfo("Asia/Singapore")
+        la_tz = ZoneInfo("America/Los_Angeles")
+        tokyo_tz = ZoneInfo("Asia/Tokyo")
+        ny_tz = ZoneInfo("America/New_York")
 
-        # string -> binary requires explicit cast
-        str_arr = pa.array(["hello", "world"])
-        bin_arr = pc.cast(str_arr, pa.binary())
-        self.assertEqual(bin_arr.type, pa.binary())
-        self.assertEqual(bin_arr.to_pylist(), [b"hello", b"world"])
+        # (name, data, target_type, expected_values)
+        # Note: PyArrow returns tz-aware datetime with the target timezone
+        # fmt: off
+        tz_cases = [
+            # Same timezone
+            ("utc_to_utc", [datetime.datetime(2024, 1, 1, 12, 0, tzinfo=utc_tz)], pa.timestamp("us", tz="UTC"),            [datetime.datetime(2024, 1, 1, 12, 0, tzinfo=utc_tz)]),
+            ("sg_to_sg",   [datetime.datetime(2024, 1, 1, 20, 0, tzinfo=sg_tz)],  pa.timestamp("us", tz="Asia/Singapore"), [datetime.datetime(2024, 1, 1, 20, 0, tzinfo=sg_tz)]),
+            # Cross timezone conversion (SG +8 → UTC, so 20:00 SG = 12:00 UTC)
+            ("sg_to_utc",  [datetime.datetime(2024, 1, 1, 20, 0, tzinfo=sg_tz)],  pa.timestamp("us", tz="UTC"),            [datetime.datetime(2024, 1, 1, 12, 0, tzinfo=utc_tz)]),
+            # LA -8 → UTC, so 4:00 LA = 12:00 UTC
+            ("la_to_utc",  [datetime.datetime(2024, 1, 1, 4, 0, tzinfo=la_tz)],   pa.timestamp("us", tz="UTC"),            [datetime.datetime(2024, 1, 1, 12, 0, tzinfo=utc_tz)]),
+            # Naive to tz-aware (treated as UTC)
+            ("naive_to_utc", [datetime.datetime(2024, 1, 1, 12, 0)], pa.timestamp("us", tz="UTC"), [datetime.datetime(2024, 1, 1, 12, 0, tzinfo=utc_tz)]),
+            # Tz-aware to tz-naive (returns naive datetime)
+            ("aware_to_naive", [datetime.datetime(2024, 1, 1, 12, 0, tzinfo=utc_tz)], pa.timestamp("us"), [datetime.datetime(2024, 1, 1, 12, 0)]),
+        ]
+        # fmt: on
+        self._run_coercion_tests_with_values(tz_cases)
 
-        # binary -> string
-        bin_arr = pa.array([b"hello", b"world"])
-        str_arr = pc.cast(bin_arr, pa.string())
-        self.assertEqual(str_arr.to_pylist(), ["hello", "world"])
+        # Mixed timezones → same instant
+        ts_mixed = [
+            datetime.datetime(2024, 1, 1, 12, 0, 0, tzinfo=utc_tz),
+            datetime.datetime(2024, 1, 1, 20, 0, 0, tzinfo=sg_tz),
+            datetime.datetime(2024, 1, 1, 4, 0, 0, tzinfo=la_tz),
+        ]
+        values = pa.array(ts_mixed, type=pa.timestamp("us", tz="UTC")).to_pylist()
+        self.assertEqual(values[0], values[1])
+        self.assertEqual(values[1], values[2])
 
-    def test_string_size_variants(self):
-        """Test string/binary size variant coercion."""
-        import pyarrow as pa
-        import pyarrow.compute as pc
+        # Positive/negative UTC offsets → same instant
+        ts_tokyo = pa.array(
+            [datetime.datetime(2024, 1, 1, 21, 0, tzinfo=tokyo_tz)],
+            type=pa.timestamp("us", tz="UTC"),
+        )
+        ts_ny = pa.array(
+            [datetime.datetime(2024, 1, 1, 7, 0, tzinfo=ny_tz)],
+            type=pa.timestamp("us", tz="UTC"),
+        )
+        self.assertEqual(ts_tokyo.to_pylist()[0], ts_ny.to_pylist()[0])
 
-        str_arr = pa.array(["hello", "world"])
+        # ==== 2.8 Cross-Type Coercion (Success) ====
 
-        # string -> large_string
-        large_arr = pc.cast(str_arr, pa.large_string())
-        self.assertEqual(large_arr.type, pa.large_string())
+        # (name, data, target_type, expected_values)
+        # fmt: off
+        cross_type_ok_with_values = [
+            # int → date (epoch days)
+            ("int_to_date32",    [19723],              pa.date32(), [datetime.date(2024, 1, 1)]),
+            # binary ↔ string (UTF-8)
+            ("binary_to_string", [b"hello", b"world"], pa.string(), ["hello", "world"]),
+            ("string_to_binary", ["hello", "world"],   pa.binary(), [b"hello", b"world"]),
+        ]
+        # fmt: on
+        self._run_coercion_tests_with_values(cross_type_ok_with_values)
 
-        # large_string -> string
-        back_arr = pc.cast(large_arr, pa.string())
-        self.assertEqual(back_arr.type, pa.string())
+        # (name, data, target_type, expected_values)
+        # fmt: off
+        cross_type_ok = [
+            # int → timestamp (epoch seconds: 1704067200 = 2024-01-01 00:00:00 UTC)
+            ("int_to_timestamp_s", [1704067200], pa.timestamp("s"), [datetime.datetime(2024, 1, 1, 0, 0, 0)]),
+        ]
+        # fmt: on
+        self._run_coercion_tests_with_values(cross_type_ok)
 
-    # ============================================================
-    # SECTION 7: Nested Type Coercion
-    # ============================================================
+        # ==== 2.9 Cross-Type Coercion (Fails - Requires Explicit Cast) ====
 
-    def test_list_element_type_coercion(self):
-        """Test type coercion for nested list element types."""
-        import pyarrow as pa
+        # (name, data, target_type)
+        # fmt: off
+        cross_type_fail = [
+            # numeric → string
+            ("int_to_string",      [1, 2, 3],       pa.string()),
+            ("float_to_string",    [1.5, 2.5],      pa.string()),
+            ("bool_to_string",     [True, False],   pa.string()),
+            # string → numeric
+            ("string_to_int",      ["1", "2"],      pa.int64()),
+            ("string_to_float",    ["1.5", "2.5"],  pa.float64()),
+            ("string_to_bool",     ["true"],        pa.bool_()),
+            # bool ↔ int
+            ("bool_to_int",        [True, False],   pa.int64()),
+            ("int_to_bool",        [1, 0, 1],       pa.bool_()),
+            # temporal → numeric
+            ("date_to_int",        [datetime.date(2024, 1, 1)],     pa.int64()),
+            ("datetime_to_int",    [datetime.datetime(2024, 1, 1)], pa.int64()),
+            ("time_to_int",        [datetime.time(12, 0)],          pa.int64()),
+            ("duration_to_int",    [datetime.timedelta(days=1)],    pa.int64()),
+            # date → timestamp
+            ("date_to_timestamp",  [datetime.date(2024, 1, 1)], pa.timestamp("us")),
+            # binary → numeric
+            ("binary_to_int",      [b"hello"], pa.int64()),
+            # nested → scalar
+            ("list_to_scalar",     [[1, 2, 3]], pa.int64()),
+            ("dict_to_scalar",     [{"a": 1}],  pa.int64()),
+        ]
+        # fmt: on
+        self._run_error_tests(
+            cross_type_fail, (pa.ArrowInvalid, pa.ArrowTypeError, pa.ArrowNotImplementedError)
+        )
 
-        # list of int -> list of float
-        a = pa.array([[1, 2], [3, 4]], type=pa.list_(pa.float64()))
-        self.assertEqual(a.type, pa.list_(pa.float64()))
-        self.assertEqual(a.to_pylist(), [[1.0, 2.0], [3.0, 4.0]])
+        # ==== 2.10 Precision Loss (Silent) ====
 
-        # list of int -> large_list
-        a = pa.array([[1, 2], [3, 4]], type=pa.large_list(pa.int64()))
-        self.assertEqual(a.type, pa.large_list(pa.int64()))
+        # (name, data, target_type, expected_values)
+        # fmt: off
+        precision_loss = [
+            # float → int (truncation, not rounding)
+            ("float_truncate",     [1.9, 2.1, 3.7], pa.int64(), [1, 2, 3]),
+            ("float_neg_truncate", [-1.9, -2.1],    pa.int64(), [-1, -2]),
+            # decimal → int (truncation)
+            ("decimal_truncate",   [Decimal("1.9"), Decimal("2.1")], pa.int64(), [1, 2]),
+        ]
+        # fmt: on
+        self._run_coercion_tests_with_values(precision_loss)
 
-        # list of int -> fixed_size_list
-        a = pa.array([[1, 2], [3, 4]], type=pa.list_(pa.int64(), 2))
-        self.assertEqual(a.type, pa.list_(pa.int64(), 2))
+        # Timestamp resolution loss
+        ts = datetime.datetime(2024, 1, 1, 12, 30, 45, 123456)
+        self.assertEqual(pa.array([ts], type=pa.timestamp("us")).to_pylist()[0].microsecond, 123456)
+        self.assertEqual(pa.array([ts], type=pa.timestamp("ms")).to_pylist()[0].microsecond, 123000)
+        self.assertEqual(pa.array([ts], type=pa.timestamp("s")).to_pylist()[0].microsecond, 0)
 
-    def test_struct_field_type_coercion(self):
-        """Test type coercion for struct field types."""
-        import pyarrow as pa
+        # Time resolution loss
+        t = datetime.time(12, 30, 45, 123456)
+        self.assertEqual(pa.array([t], type=pa.time32("ms")).to_pylist()[0].microsecond, 123000)
+        self.assertEqual(pa.array([t], type=pa.time32("s")).to_pylist()[0].microsecond, 0)
 
-        data = [{"x": 1, "y": 2}, {"x": 3, "y": 4}]
+        # float64 → float32 precision loss
+        large_float = 1.23456789012345678
+        result = pa.array([large_float], type=pa.float32()).to_pylist()[0]
+        self.assertNotEqual(result, large_float)
 
-        # Coerce field types
-        struct_type = pa.struct([("x", pa.float64()), ("y", pa.float64())])
-        a = pa.array(data, type=struct_type)
-        self.assertEqual(a.type, struct_type)
-
-    def test_map_type_coercion(self):
-        """Test type coercion for map types."""
-        import pyarrow as pa
-
-        # Map type requires explicit type specification
-        map_type = pa.map_(pa.string(), pa.int64())
-        a = pa.array([[("a", 1), ("b", 2)], [("c", 3)]], type=map_type)
-        self.assertEqual(a.type, map_type)
-
-        # Map with different value type
-        map_type_float = pa.map_(pa.string(), pa.float64())
-        a = pa.array([[("a", 1), ("b", 2)]], type=map_type_float)
-        self.assertEqual(a.type, map_type_float)
-
-    # ============================================================
-    # SECTION 8: Python Instance Input Types
-    # ============================================================
-
-    def test_python_list_coercion(self):
-        """Test type coercion from Python lists."""
-        import pyarrow as pa
-
-        # List of ints
-        a = pa.array([1, 2, 3], type=pa.float64())
-        self.assertEqual(a.type, pa.float64())
-
-        # List of floats
-        a = pa.array([1.0, 2.0, 3.0], type=pa.int64())
-        self.assertEqual(a.type, pa.int64())
-
-        # Nested list
-        a = pa.array([[1, 2], [3, 4]], type=pa.list_(pa.float64()))
-        self.assertEqual(a.type, pa.list_(pa.float64()))
-
-    def test_python_tuple_coercion(self):
-        """Test type coercion from Python tuples."""
-        import pyarrow as pa
-
-        # Tuple of ints
-        a = pa.array((1, 2, 3), type=pa.float64())
-        self.assertEqual(a.type, pa.float64())
-        self.assertEqual(a.to_pylist(), [1.0, 2.0, 3.0])
-
-        # Tuple of floats
-        a = pa.array((1.0, 2.0, 3.0), type=pa.int64())
-        self.assertEqual(a.type, pa.int64())
-        self.assertEqual(a.to_pylist(), [1, 2, 3])
-
-    def test_python_generator_coercion(self):
-        """Test type coercion from Python generators."""
-        import pyarrow as pa
-
-        # Generator expression
-        gen = (x for x in [1, 2, 3])
-        a = pa.array(gen, type=pa.float64())
-        self.assertEqual(a.type, pa.float64())
-        self.assertEqual(a.to_pylist(), [1.0, 2.0, 3.0])
-
-    # ============================================================
-    # SECTION 9: Pandas Instance Input Types
-    # ============================================================
+    # =========================================================================
+    # SECTION 3: Pandas Instances Coercion
+    # =========================================================================
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)
-    def test_pandas_numpy_backed_series_coercion(self):
-        """Test type coercion from numpy-backed pandas Series."""
-        import pyarrow as pa
+    def test_pandas_instances_coercion(self):
+        """Test type coercion from pandas Series with numeric and temporal types."""
         import pandas as pd
+        import pyarrow as pa
 
-        # int64 -> float64
-        s = pd.Series([1, 2, 3])
-        a = pa.array(s, type=pa.float64())
-        self.assertEqual(a.type, pa.float64())
-        self.assertEqual(a.to_pylist(), [1.0, 2.0, 3.0])
+        # ==== 3.1 Numpy-backed Series ====
 
-        # float64 -> int64
-        s = pd.Series([1.0, 2.0, 3.0])
-        a = pa.array(s, type=pa.int64())
-        self.assertEqual(a.type, pa.int64())
-        self.assertEqual(a.to_pylist(), [1, 2, 3])
+        # (name, data, target_type, expected_values)
+        # fmt: off
+        numpy_cases = [
+            ("pd_int_to_float", pd.Series([1, 2, 3]),         pa.float64(), [1.0, 2.0, 3.0]),
+            ("pd_float_to_int", pd.Series([1.0, 2.0, 3.0]),   pa.int64(),   [1, 2, 3]),
+            ("pd_int_to_int8",  pd.Series([1, 2, 3]),         pa.int8(),    [1, 2, 3]),
+            ("pd_empty",        pd.Series([], dtype="int64"), pa.float64(), []),
+        ]
+        # fmt: on
+        self._run_coercion_tests_with_values(numpy_cases)
 
-        # int64 -> int8 (narrowing)
-        s = pd.Series([1, 2, 3])
-        a = pa.array(s, type=pa.int8())
-        self.assertEqual(a.type, pa.int8())
+        # int64 → decimal128 does NOT work for numpy-backed
+        with self.assertRaises(pa.ArrowInvalid):
+            pa.array(pd.Series([1, 2, 3]), type=pa.decimal128(10, 0))
 
-        # int64 -> decimal128 does NOT work (numpy-backed)
-        s = pd.Series([1, 2, 3])
+        # ==== 3.2 Nullable Extension Types ====
+
+        # (name, data, target_type, expected_values)
+        # fmt: off
+        nullable_cases = [
+            ("Int64_to_float",    pd.Series([1, 2, 3], dtype=pd.Int64Dtype()),         pa.float64(), [1.0, 2.0, 3.0]),
+            ("Int64_na_to_float", pd.Series([1, pd.NA, 3], dtype=pd.Int64Dtype()),     pa.float64(), [1.0, None, 3.0]),
+            ("Float64_to_int",    pd.Series([1.0, 2.0, 3.0], dtype=pd.Float64Dtype()), pa.int64(),   [1, 2, 3]),
+        ]
+        # fmt: on
+        self._run_coercion_tests_with_values(nullable_cases)
+
+        # ==== 3.3 ArrowDtype-backed Series ====
+
+        # (name, data, target_type, expected_values)
+        # fmt: off
+        arrow_cases = [
+            ("arrow_int_to_float", pd.Series([1, 2, 3], dtype=pd.ArrowDtype(pa.int64())),         pa.float64(), [1.0, 2.0, 3.0]),
+            ("arrow_float_to_int", pd.Series([1.0, 2.0, 3.0], dtype=pd.ArrowDtype(pa.float64())), pa.int64(),   [1, 2, 3]),
+        ]
+        # fmt: on
+        self._run_coercion_tests_with_values(arrow_cases)
+
+        # ArrowDtype int64 → decimal128 requires sufficient precision
+        s = pd.Series([1, 2, 3], dtype=pd.ArrowDtype(pa.int64()))
+        self.assertEqual(
+            pa.array(s, type=pa.decimal128(19, 0)).to_pylist(),
+            [Decimal("1"), Decimal("2"), Decimal("3")],
+        )
         with self.assertRaises(pa.ArrowInvalid):
             pa.array(s, type=pa.decimal128(10, 0))
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)
-    def test_pandas_nullable_series_coercion(self):
-        """Test type coercion from pandas nullable extension series."""
-        import pyarrow as pa
-        import pandas as pd
+        # ==== 3.4 Pandas Timestamp with Timezone ====
 
-        # Int64 -> float64
-        s = pd.Series([1, 2, 3], dtype=pd.Int64Dtype())
-        a = pa.array(s, type=pa.float64())
-        self.assertEqual(a.type, pa.float64())
+        from zoneinfo import ZoneInfo
 
-        # Int64 with NA -> float64
-        s = pd.Series([1, pd.NA, 3], dtype=pd.Int64Dtype())
-        a = pa.array(s, type=pa.float64())
-        self.assertEqual(a.to_pylist(), [1.0, None, 3.0])
+        utc_tz = ZoneInfo("UTC")
+        sg_tz = ZoneInfo("Asia/Singapore")
 
-        # Float64 -> int64
-        s = pd.Series([1.0, 2.0, 3.0], dtype=pd.Float64Dtype())
-        a = pa.array(s, type=pa.int64())
-        self.assertEqual(a.type, pa.int64())
+        # (name, data, target_type, expected_values)
+        # fmt: off
+        pd_ts_cases = [
+            ("pd_utc_to_utc", [pd.Timestamp("2024-01-01 12:00:00", tz="UTC")],            pa.timestamp("us", tz="UTC"),            [datetime.datetime(2024, 1, 1, 12, 0, tzinfo=utc_tz)]),
+            ("pd_sg_to_sg",   [pd.Timestamp("2024-01-01 20:00:00", tz="Asia/Singapore")], pa.timestamp("us", tz="Asia/Singapore"), [datetime.datetime(2024, 1, 1, 20, 0, tzinfo=sg_tz)]),
+            ("pd_sg_to_utc",  [pd.Timestamp("2024-01-01 20:00:00", tz="Asia/Singapore")], pa.timestamp("us", tz="UTC"),            [datetime.datetime(2024, 1, 1, 12, 0, tzinfo=utc_tz)]),
+        ]
+        # fmt: on
+        self._run_coercion_tests_with_values(pd_ts_cases)
 
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)
-    def test_pandas_arrow_backed_series_coercion(self):
-        """Test type coercion from ArrowDtype-backed pandas Series."""
-        import pyarrow as pa
-        import pandas as pd
-
-        # ArrowDtype int64 -> float64
-        s = pd.Series([1, 2, 3], dtype=pd.ArrowDtype(pa.int64()))
-        a = pa.array(s, type=pa.float64())
-        self.assertEqual(a.type, pa.float64())
-
-        # ArrowDtype float64 -> int64
-        s = pd.Series([1.0, 2.0, 3.0], dtype=pd.ArrowDtype(pa.float64()))
-        a = pa.array(s, type=pa.int64())
-        self.assertEqual(a.type, pa.int64())
-
-        # ArrowDtype int64 -> decimal128 requires sufficient precision (at least 19)
-        s = pd.Series([1, 2, 3], dtype=pd.ArrowDtype(pa.int64()))
-        a = pa.array(s, type=pa.decimal128(19, 0))
-        self.assertEqual(a.type, pa.decimal128(19, 0))
-        self.assertEqual(a.to_pylist(), [Decimal("1"), Decimal("2"), Decimal("3")])
-
-        # Insufficient precision fails
-        s = pd.Series([1, 2, 3], dtype=pd.ArrowDtype(pa.int64()))
-        with self.assertRaises(pa.ArrowInvalid):
-            pa.array(s, type=pa.decimal128(10, 0))
-
-    @unittest.skipIf(not have_pandas, pandas_requirement_message)
-    def test_all_pandas_dtypes_coercion(self):
-        """Test coercion from all pandas dtype variants for float."""
-        import pyarrow as pa
-        import pandas as pd
-        import numpy as np
-
-        # numpy-backed float64
-        s = pd.Series([1.0, 2.0, 3.0], dtype=np.float64)
-        a = pa.array(s, type=pa.int64())
-        self.assertEqual(a.type, pa.int64())
-
-        # pandas nullable Float64
-        s = pd.Series([1.0, 2.0, 3.0], dtype=pd.Float64Dtype())
-        a = pa.array(s, type=pa.int64())
-        self.assertEqual(a.type, pa.int64())
-
-        # ArrowDtype float64
-        s = pd.Series([1.0, 2.0, 3.0], dtype=pd.ArrowDtype(pa.float64()))
-        a = pa.array(s, type=pa.int64())
-        self.assertEqual(a.type, pa.int64())
-
-    # ============================================================
-    # SECTION 10: NumPy Instance Input Types
-    # ============================================================
+    # =========================================================================
+    # SECTION 4: NumPy Array Coercion
+    # =========================================================================
 
     def test_numpy_array_coercion(self):
-        """Test type coercion from numpy arrays."""
-        import pyarrow as pa
+        """Test type coercion from numpy arrays with numeric and temporal types."""
         import numpy as np
+        import pyarrow as pa
 
-        # numpy int64 -> float64
-        a = pa.array(np.array([1, 2, 3], dtype=np.int64), type=pa.float64())
-        self.assertEqual(a.type, pa.float64())
-        self.assertEqual(a.to_pylist(), [1.0, 2.0, 3.0])
+        # ==== 4.1 Numeric Arrays ====
 
-        # numpy float64 -> int64
-        a = pa.array(np.array([1.0, 2.0, 3.0], dtype=np.float64), type=pa.int64())
-        self.assertEqual(a.type, pa.int64())
-        self.assertEqual(a.to_pylist(), [1, 2, 3])
+        # (name, data, target_type, expected_values)
+        # fmt: off
+        numeric_cases = [
+            ("np_int_to_float",   np.array([1, 2, 3], dtype=np.int64),         pa.float64(), [1.0, 2.0, 3.0]),
+            ("np_float_to_int",   np.array([1.0, 2.0, 3.0], dtype=np.float64), pa.int64(),   [1, 2, 3]),
+            ("np_int32_to_int64", np.array([1, 2, 3], dtype=np.int32),         pa.int64(),   [1, 2, 3]),
+            ("np_int64_to_int8",  np.array([1, 2, 3], dtype=np.int64),         pa.int8(),    [1, 2, 3]),
+            ("np_empty",          np.array([], dtype=np.int64),                pa.float64(), []),
+        ]
+        # fmt: on
+        self._run_coercion_tests_with_values(numeric_cases)
 
-        # numpy int32 -> int64 (widening)
-        a = pa.array(np.array([1, 2, 3], dtype=np.int32), type=pa.int64())
-        self.assertEqual(a.type, pa.int64())
-
-        # numpy int64 -> int8 (narrowing)
-        a = pa.array(np.array([1, 2, 3], dtype=np.int64), type=pa.int8())
-        self.assertEqual(a.type, pa.int8())
-
-        # numpy int64 -> decimal128 does NOT work
+        # numpy int64 → decimal128 does NOT work
         with self.assertRaises(pa.ArrowInvalid):
             pa.array(np.array([1, 2, 3], dtype=np.int64), type=pa.decimal128(10, 0))
 
-    def test_numpy_all_int_types_coercion(self):
-        """Test coercion from all numpy integer types."""
-        import pyarrow as pa
-        import numpy as np
+        # ==== 4.2 All Int Types → Float ====
 
-        for np_type in [np.int8, np.int16, np.int32, np.int64]:
-            arr = np.array([1, 2, 3], dtype=np_type)
-            a = pa.array(arr, type=pa.float64())
-            self.assertEqual(a.type, pa.float64())
+        # (name, data, target_type, expected_values)
+        # fmt: off
+        int_to_float_cases = [
+            ("np_int8_to_float",   np.array([1, 2, 3], dtype=np.int8),   pa.float64(), [1.0, 2.0, 3.0]),
+            ("np_int16_to_float",  np.array([1, 2, 3], dtype=np.int16),  pa.float64(), [1.0, 2.0, 3.0]),
+            ("np_int32_to_float",  np.array([1, 2, 3], dtype=np.int32),  pa.float64(), [1.0, 2.0, 3.0]),
+            ("np_int64_to_float",  np.array([1, 2, 3], dtype=np.int64),  pa.float64(), [1.0, 2.0, 3.0]),
+            ("np_uint8_to_float",  np.array([1, 2, 3], dtype=np.uint8),  pa.float64(), [1.0, 2.0, 3.0]),
+            ("np_uint16_to_float", np.array([1, 2, 3], dtype=np.uint16), pa.float64(), [1.0, 2.0, 3.0]),
+            ("np_uint32_to_float", np.array([1, 2, 3], dtype=np.uint32), pa.float64(), [1.0, 2.0, 3.0]),
+            ("np_uint64_to_float", np.array([1, 2, 3], dtype=np.uint64), pa.float64(), [1.0, 2.0, 3.0]),
+        ]
+        # fmt: on
+        self._run_coercion_tests_with_values(int_to_float_cases)
 
-        for np_type in [np.uint8, np.uint16, np.uint32, np.uint64]:
-            arr = np.array([1, 2, 3], dtype=np_type)
-            a = pa.array(arr, type=pa.float64())
-            self.assertEqual(a.type, pa.float64())
+        # ==== 4.3 All Float Types → Int ====
 
-    def test_numpy_all_float_types_coercion(self):
-        """Test coercion from all numpy float types."""
-        import pyarrow as pa
-        import numpy as np
+        # (name, data, target_type, expected_values)
+        # fmt: off
+        float_to_int_cases = [
+            ("np_float16_to_int", np.array([1.0, 2.0, 3.0], dtype=np.float16), pa.int64(), [1, 2, 3]),
+            ("np_float32_to_int", np.array([1.0, 2.0, 3.0], dtype=np.float32), pa.int64(), [1, 2, 3]),
+            ("np_float64_to_int", np.array([1.0, 2.0, 3.0], dtype=np.float64), pa.int64(), [1, 2, 3]),
+        ]
+        # fmt: on
+        self._run_coercion_tests_with_values(float_to_int_cases)
 
-        for np_type in [np.float16, np.float32, np.float64]:
-            arr = np.array([1.0, 2.0, 3.0], dtype=np_type)
-            a = pa.array(arr, type=pa.int64())
-            self.assertEqual(a.type, pa.int64())
+        # ==== 4.4 Datetime Arrays ====
 
-    def test_numpy_datetime_coercion(self):
-        """Test coercion from numpy datetime types."""
-        import pyarrow as pa
-        import numpy as np
+        arr_d = np.array(["2024-01-01", "2024-01-02"], dtype="datetime64[D]")
+        arr_ns = np.array(["2024-01-01T12:00:00", "2024-01-02T12:00:00"], dtype="datetime64[ns]")
+        expected_dates = [datetime.date(2024, 1, 1), datetime.date(2024, 1, 2)]
+        expected_ts = [datetime.datetime(2024, 1, 1, 12, 0), datetime.datetime(2024, 1, 2, 12, 0)]
 
-        # datetime64[D] -> different resolutions
-        arr = np.array(["2024-01-01", "2024-01-02"], dtype="datetime64[D]")
+        # (name, data, target_type, expected_values)
+        # fmt: off
+        datetime_cases = [
+            ("np_date_to_date32", arr_d,  pa.date32(),       expected_dates),
+            ("np_date_to_date64", arr_d,  pa.date64(),       expected_dates),
+            ("np_ts_to_s",        arr_ns, pa.timestamp("s"),  expected_ts),
+            ("np_ts_to_ms",       arr_ns, pa.timestamp("ms"), expected_ts),
+            ("np_ts_to_us",       arr_ns, pa.timestamp("us"), expected_ts),
+            ("np_ts_to_ns",       arr_ns, pa.timestamp("ns"), expected_ts),
+        ]
+        # fmt: on
+        self._run_coercion_tests_with_values(datetime_cases)
 
-        a = pa.array(arr, type=pa.date32())
-        self.assertEqual(a.type, pa.date32())
+    # =========================================================================
+    # SECTION 5: Nested Types Coercion
+    # =========================================================================
 
-        a = pa.array(arr, type=pa.date64())
-        self.assertEqual(a.type, pa.date64())
-
-        # datetime64[ns] -> different resolutions
-        arr = np.array(["2024-01-01T12:00:00", "2024-01-02T12:00:00"], dtype="datetime64[ns]")
-
-        for unit in ["s", "ms", "us", "ns"]:
-            a = pa.array(arr, type=pa.timestamp(unit))
-            self.assertEqual(a.type, pa.timestamp(unit))
-
-    # ============================================================
-    # SECTION 11: Spark DataType Mapping Coverage
-    # ============================================================
-
-    def test_spark_numeric_types_coercion(self):
-        """Test coercion for all Spark numeric types."""
-        import pyarrow as pa
-
-        # Spark ByteType -> int8
-        a = pa.array([1, 2, 3], type=pa.int8())
-        self.assertEqual(a.type, pa.int8())
-
-        # Spark ShortType -> int16
-        a = pa.array([1, 2, 3], type=pa.int16())
-        self.assertEqual(a.type, pa.int16())
-
-        # Spark IntegerType -> int32
-        a = pa.array([1, 2, 3], type=pa.int32())
-        self.assertEqual(a.type, pa.int32())
-
-        # Spark LongType -> int64
-        a = pa.array([1, 2, 3], type=pa.int64())
-        self.assertEqual(a.type, pa.int64())
-
-        # Spark FloatType -> float32
-        a = pa.array([1.0, 2.0, 3.0], type=pa.float32())
-        self.assertEqual(a.type, pa.float32())
-
-        # Spark DoubleType -> float64
-        a = pa.array([1.0, 2.0, 3.0], type=pa.float64())
-        self.assertEqual(a.type, pa.float64())
-
-    def test_spark_decimal_types_coercion(self):
-        """Test coercion for Spark DecimalType."""
+    def test_nested_types_coercion(self):
+        """Test type coercion for nested types: list, struct, map."""
         import pyarrow as pa
 
-        # Various precision/scale combinations
-        for precision, scale in [(10, 0), (10, 2), (18, 6), (38, 10)]:
-            a = pa.array([1, 2, 3], type=pa.decimal128(precision, scale))
-            self.assertEqual(a.type, pa.decimal128(precision, scale))
+        # ==== 5.1 List Types ====
 
-    def test_spark_temporal_types_coercion(self):
-        """Test coercion for all Spark temporal types."""
-        import pyarrow as pa
+        # (name, data, target_type, expected_values)
+        # fmt: off
+        list_cases = [
+            # Element type coercion
+            ("list_int_to_float32", [[1, 2], [3, 4]],    pa.list_(pa.float32()),    [[1.0, 2.0], [3.0, 4.0]]),
+            ("list_int_to_float64", [[1, 2], [3, 4]],    pa.list_(pa.float64()),    [[1.0, 2.0], [3.0, 4.0]]),
+            ("list_int_to_int8",    [[1, 2], [3, 4]],    pa.list_(pa.int8()),       [[1, 2], [3, 4]]),
+            ("list_float_to_int64", [[1.0, 2.0], [3.0]], pa.list_(pa.int64()),      [[1, 2], [3]]),
+            # Empty
+            ("list_empty_outer",    [],                  pa.list_(pa.int64()),      []),
+            ("list_empty_inner",    [[]],                pa.list_(pa.int64()),      [[]]),
+            ("list_mixed_empty",    [[1, 2], []],        pa.list_(pa.float64()),    [[1.0, 2.0], []]),
+            # None
+            ("list_none_elem",      [[1, None, 3]],      pa.list_(pa.int64()),      [[1, None, 3]]),
+            ("list_none_outer",     [None, [1, 2]],      pa.list_(pa.int64()),      [None, [1, 2]]),
+        ]
+        # fmt: on
+        self._run_coercion_tests_with_values(list_cases)
 
-        # DateType -> date32
-        a = pa.array(
-            [datetime.date(2024, 1, 1), datetime.date(2024, 1, 2)], type=pa.date32()
-        )
-        self.assertEqual(a.type, pa.date32())
+        # ==== 5.2 Large List ====
 
-        # TimestampType -> timestamp (microseconds)
-        a = pa.array(
-            [datetime.datetime(2024, 1, 1), datetime.datetime(2024, 1, 2)],
-            type=pa.timestamp("us"),
-        )
-        self.assertEqual(a.type, pa.timestamp("us"))
+        # (name, data, target_type, expected_values)
+        # fmt: off
+        large_list_cases = [
+            ("large_list_int",        [[1, 2], [3, 4]],    pa.large_list(pa.int64()),   [[1, 2], [3, 4]]),
+            ("large_list_int_to_flt", [[1, 2], [3, 4]],    pa.large_list(pa.float64()), [[1.0, 2.0], [3.0, 4.0]]),
+            ("large_list_str",        [["a", "b"], ["c"]], pa.large_list(pa.string()),  [["a", "b"], ["c"]]),
+            ("large_list_none",       [None, [1, 2]],      pa.large_list(pa.int64()),   [None, [1, 2]]),
+        ]
+        # fmt: on
+        self._run_coercion_tests_with_values(large_list_cases)
 
-        # TimestampNTZType -> timestamp without timezone
-        a = pa.array(
-            [datetime.datetime(2024, 1, 1), datetime.datetime(2024, 1, 2)],
-            type=pa.timestamp("us"),
-        )
-        self.assertEqual(a.type, pa.timestamp("us"))
+        # ==== 5.3 Fixed Size List ====
 
-        # DayTimeIntervalType -> duration
-        a = pa.array(
-            [datetime.timedelta(days=1), datetime.timedelta(hours=2)],
-            type=pa.duration("us"),
-        )
-        self.assertEqual(a.type, pa.duration("us"))
+        # (name, data, target_type, expected_values)
+        # fmt: off
+        fixed_list_cases = [
+            ("fixed_list_int",        [[1, 2], [3, 4]], pa.list_(pa.int64(), 2),   [[1, 2], [3, 4]]),
+            ("fixed_list_int_to_flt", [[1, 2], [3, 4]], pa.list_(pa.float64(), 2), [[1.0, 2.0], [3.0, 4.0]]),
+            ("fixed_list_str",        [["a", "b"]],    pa.list_(pa.string(), 2),  [["a", "b"]]),
+            ("fixed_list_none",       [None, [1, 2]],  pa.list_(pa.int64(), 2),   [None, [1, 2]]),
+        ]
+        # fmt: on
+        self._run_coercion_tests_with_values(fixed_list_cases)
 
-    def test_spark_string_binary_types_coercion(self):
-        """Test coercion for Spark string/binary types."""
-        import pyarrow as pa
+        # ==== 5.4 List with Temporal Elements ====
 
-        # StringType -> string
-        a = pa.array(["hello", "world"], type=pa.string())
-        self.assertEqual(a.type, pa.string())
+        # (name, data, target_type, expected_values)
+        # fmt: off
+        list_temporal_cases = [
+            ("list_date32",    [[datetime.date(2024, 1, 1)]],            pa.list_(pa.date32()),       [[datetime.date(2024, 1, 1)]]),
+            ("list_timestamp", [[datetime.datetime(2024, 1, 1, 12, 0)]], pa.list_(pa.timestamp("us")), [[datetime.datetime(2024, 1, 1, 12, 0)]]),
+            ("list_time",      [[datetime.time(12, 30)]],                pa.list_(pa.time64("us")),   [[datetime.time(12, 30)]]),
+        ]
+        # fmt: on
+        self._run_coercion_tests_with_values(list_temporal_cases)
 
-        # BinaryType -> binary
-        a = pa.array([b"hello", b"world"], type=pa.binary())
-        self.assertEqual(a.type, pa.binary())
+        # ==== 5.5 Struct Types ====
 
-    def test_spark_complex_types_coercion(self):
-        """Test coercion for Spark complex types."""
-        import pyarrow as pa
+        # (name, data, target_type, expected_values)
+        # fmt: off
+        struct_cases = [
+            # Field type coercion (int → float)
+            ("struct_int_to_float", [{"x": 1, "y": 2}, {"x": 3, "y": 4}], pa.struct([("x", pa.float64()), ("y", pa.float64())]), [{"x": 1.0, "y": 2.0}, {"x": 3.0, "y": 4.0}]),
+            # Struct with None
+            ("struct_with_none",    [{"x": 1, "y": "a"}, None, {"x": 3, "y": None}], pa.struct([("x", pa.int64()), ("y", pa.string())]), [{"x": 1, "y": "a"}, None, {"x": 3, "y": None}]),
+            # Empty struct
+            ("struct_empty",        [], pa.struct([("x", pa.int64()), ("y", pa.string())]), []),
+        ]
+        # fmt: on
+        self._run_coercion_tests_with_values(struct_cases)
 
-        # ArrayType -> list
-        a = pa.array([[1, 2], [3, 4]], type=pa.list_(pa.int64()))
-        self.assertEqual(a.type, pa.list_(pa.int64()))
+        # (name, data, target_type, expected_values)
+        # fmt: off
+        struct_type_only = [
+            # Mixed field types
+            ("struct_mixed",     [{"id": 1, "name": "Alice", "date": datetime.date(2024, 1, 1)}], pa.struct([("id", pa.int64()), ("name", pa.string()), ("date", pa.date32())]), [{"id": 1, "name": "Alice", "date": datetime.date(2024, 1, 1)}]),
+            # Struct with large_string
+            ("struct_large_str", [{"id": 1, "name": "hi"}], pa.struct([("id", pa.int64()), ("name", pa.large_string())]), [{"id": 1, "name": "hi"}]),
+            # Struct with binary
+            ("struct_binary",    [{"id": 1, "data": b"hi"}], pa.struct([("id", pa.int64()), ("data", pa.binary())]), [{"id": 1, "data": b"hi"}]),
+        ]
+        # fmt: on
+        self._run_coercion_tests_with_values(struct_type_only)
 
-        # MapType -> map
-        a = pa.array(
-            [[("a", 1), ("b", 2)]], type=pa.map_(pa.string(), pa.int64())
-        )
-        self.assertEqual(a.type, pa.map_(pa.string(), pa.int64()))
+        # ==== 5.6 Map Types ====
 
-        # StructType -> struct
-        struct_type = pa.struct([("x", pa.int64()), ("y", pa.string())])
-        a = pa.array([{"x": 1, "y": "a"}, {"x": 2, "y": "b"}], type=struct_type)
-        self.assertEqual(a.type, struct_type)
+        # (name, data, target_type, expected_values)
+        # Note: map to_pylist() returns list of list of tuples
+        # fmt: off
+        map_cases = [
+            # Value coercion
+            ("map_str_int_to_flt", [[("a", 1), ("b", 2)]],     pa.map_(pa.string(), pa.float64()),     [[("a", 1.0), ("b", 2.0)]]),
+            ("map_str_int8",       [[("a", 1), ("b", 2)]],     pa.map_(pa.string(), pa.int8()),        [[("a", 1), ("b", 2)]]),
+            ("map_str_large_str",  [[("a", "x"), ("b", "y")]], pa.map_(pa.string(), pa.large_string()), [[("a", "x"), ("b", "y")]]),
+            # Key types
+            ("map_int_str",        [[(1, "a"), (2, "b")]],     pa.map_(pa.int64(), pa.string()),       [[(1, "a"), (2, "b")]]),
+            ("map_int32_str",      [[(1, "a"), (2, "b")]],     pa.map_(pa.int32(), pa.string()),       [[(1, "a"), (2, "b")]]),
+            ("map_int_float",      [[(1, 10), (2, 20)]],       pa.map_(pa.int64(), pa.float64()),      [[(1, 10.0), (2, 20.0)]]),
+            # Empty
+            ("map_empty_outer",    [],                         pa.map_(pa.string(), pa.int64()),       []),
+            ("map_empty_inner",    [[]],                       pa.map_(pa.string(), pa.int64()),       [[]]),
+            # None
+            ("map_none_outer",     [None, [("a", 1)]],         pa.map_(pa.string(), pa.int64()),       [None, [("a", 1)]]),
+            ("map_none_value",     [[("a", 1), ("b", None)]],  pa.map_(pa.string(), pa.int64()),       [[("a", 1), ("b", None)]]),
+        ]
+        # fmt: on
+        self._run_coercion_tests_with_values(map_cases)
+
+        # ==== 5.7 Deeply Nested Types ====
+
+        # (name, data, target_type, expected_values)
+        # fmt: off
+        deeply_nested_cases = [
+            # List of lists
+            ("list_of_list",       [[[1, 2], [3]], [[4, 5, 6]]], pa.list_(pa.list_(pa.float64())), [[[1.0, 2.0], [3.0]], [[4.0, 5.0, 6.0]]]),
+            # List of structs
+            ("list_of_struct",     [[{"x": 1}, {"x": 2}]],       pa.list_(pa.struct([("x", pa.float64())])), [[{"x": 1.0}, {"x": 2.0}]]),
+            # Struct containing list
+            ("struct_with_list",   [{"id": 1, "values": [1, 2, 3]}], pa.struct([("id", pa.int64()), ("values", pa.list_(pa.float64()))]), [{"id": 1, "values": [1.0, 2.0, 3.0]}]),
+            # Triple nested
+            ("triple_nested",      [[[[1, 2]], [[3]]]],          pa.list_(pa.list_(pa.list_(pa.int64()))), [[[[1, 2]], [[3]]]]),
+        ]
+        # fmt: on
+        self._run_coercion_tests_with_values(deeply_nested_cases)
+
+        # (name, data, target_type, expected_values)
+        # fmt: off
+        deeply_nested_type_only = [
+            # Struct containing map
+            ("struct_with_map",   [{"id": 1, "meta": [("a", 1)]}],      pa.struct([("id", pa.int64()), ("meta", pa.map_(pa.string(), pa.int64()))]), [{"id": 1, "meta": [("a", 1)]}]),
+            # Map with list values
+            ("map_with_list",     [[("a", [1, 2]), ("b", [3])]],        pa.map_(pa.string(), pa.list_(pa.int64())),                                  [[("a", [1, 2]), ("b", [3])]]),
+            # Map with struct values
+            ("map_with_struct",   [[("a", {"x": 1}), ("b", {"x": 2})]], pa.map_(pa.string(), pa.struct([("x", pa.int64())])),                        [[("a", {"x": 1}), ("b", {"x": 2})]]),
+            # List of maps
+            ("list_of_map",       [[[("a", 1)], [("b", 2)]]],           pa.list_(pa.map_(pa.string(), pa.int64())),                                  [[[("a", 1)], [("b", 2)]]]),
+            # Large nested types
+            ("large_list_struct", [[{"x": 1}, {"x": 2}]],               pa.large_list(pa.struct([("x", pa.int64())])),                               [[{"x": 1}, {"x": 2}]]),
+        ]
+        # fmt: on
+        self._run_coercion_tests_with_values(deeply_nested_type_only)
 
 
 if __name__ == "__main__":
