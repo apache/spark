@@ -364,6 +364,7 @@ object CommandUtils extends Logging {
     case _: IntegralType => true
     case _: DecimalType => true
     case DoubleType | FloatType => true
+    case _: TimeType => false  // TimeType doesn't support histogram
     case _: DatetimeType => true
     case _ => false
   }
