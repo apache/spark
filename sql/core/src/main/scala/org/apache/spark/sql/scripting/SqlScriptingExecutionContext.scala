@@ -105,6 +105,10 @@ class SqlScriptingExecutionFrame(
   // List of scopes that are currently active.
   private[scripting] val scopes: ListBuffer[SqlScriptingExecutionScope] = ListBuffer.empty
 
+  // Tracks whether a LEAVE statement has been injected into this frame by a handler.
+  // Used to prevent inner handlers from overriding LEAVE statements injected by outer handler.
+  private[scripting] var leaveStatementInjected: Boolean = false
+
   override def hasNext: Boolean = executionPlan.getTreeIterator.hasNext
 
   override def next(): CompoundStatementExec = {

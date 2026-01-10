@@ -87,6 +87,22 @@ class SqlScriptingExecution(
   }
 
   /**
+   * Helper method to inject leave statement from an exiting handler into a frame.
+   * Checks the leaveStatementInjected flag to prevent overwriting LEAVE statements that were
+   * already injected by outer handlers that exited earlier.
+   * @param frame Frame to inject leave statement into.
+   * @param label Label of the leave statement.
+   */
+  private def injectLeaveStatementFromHandler(
+      frame: SqlScriptingExecutionFrame,
+      label: String): Unit = {
+    if (!frame.leaveStatementInjected) {
+      injectLeaveStatement(frame.executionPlan, label)
+      frame.leaveStatementInjected = true
+    }
+  }
+
+  /**
    * Helper method to execute interrupts to ConditionalStatements.
    * This method should only interrupt when the statement that throws is a conditional statement.
    * @param executionPlan Execution plan.
@@ -133,7 +149,7 @@ class SqlScriptingExecution(
         }
 
         // Inject leave statement into the execution plan of the last frame.
-        injectLeaveStatement(context.frames.last.executionPlan, lastFrame.scopeLabel.get)
+        injectLeaveStatementFromHandler(context.frames.last, lastFrame.scopeLabel.get)
       }
 
       // If the last frame is a CONTINUE handler, leave the handler without injecting anything, but

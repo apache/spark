@@ -1406,6 +1406,163 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScript, expected)
   }
 
+  test("nested exit handlers - outer handler triggered by inner handler") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE VARIABLE flag INT = -1;
+        |  l1: BEGIN
+        |    DECLARE EXIT HANDLER FOR UNRESOLVED_COLUMN.WITHOUT_SUGGESTION
+        |    BEGIN
+        |      SELECT flag;
+        |      SET flag = 2;
+        |    END;
+        |    l2: BEGIN
+        |      DECLARE EXIT HANDLER FOR DIVIDE_BY_ZERO
+        |      BEGIN
+        |        SELECT flag;
+        |        SET flag = 1;
+        |        SELECT X; -- select non existing variable
+        |        SELECT 2;
+        |      END;
+        |      SELECT 5;
+        |      SELECT 1/0; -- divide by zero
+        |      SELECT 6;
+        |    END l2;
+        |    SELECT 3, flag;
+        |  END l1;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(5)),   // SELECT 5 before divide by zero
+      Seq(Row(-1)),  // SELECT flag from inner handler (flag is still -1)
+      Seq(Row(1))    // SELECT flag from outer handler (flag was set to 1)
+      // SELECT 3, flag should NOT be reached
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("three levels of nested exit handlers") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE VARIABLE flag INT = 0;
+        |  l1: BEGIN
+        |    DECLARE EXIT HANDLER FOR UNRESOLVED_COLUMN.WITHOUT_SUGGESTION
+        |    BEGIN
+        |      SELECT 'Handler L1';
+        |      SET flag = flag + 100;
+        |    END;
+        |    l2: BEGIN
+        |      DECLARE EXIT HANDLER FOR DIVIDE_BY_ZERO
+        |      BEGIN
+        |        SELECT 'Handler L2';
+        |        SET flag = flag + 10;
+        |        SELECT X; -- triggers UNRESOLVED_COLUMN
+        |        SELECT 'After X'; -- should not execute
+        |      END;
+        |      l3: BEGIN
+        |        DECLARE EXIT HANDLER FOR CAST_INVALID_INPUT
+        |        BEGIN
+        |          SELECT 'Handler L3';
+        |          SET flag = flag + 1;
+        |          SELECT 1/0; -- triggers DIVIDE_BY_ZERO
+        |          SELECT 'After 1/0'; -- should not execute
+        |        END;
+        |        SELECT CAST('invalid' AS INT); -- triggers CAST_INVALID_INPUT
+        |        SELECT 'After L3'; -- should not execute
+        |      END l3;
+        |      SELECT 'After L2'; -- should not execute
+        |    END l2;
+        |    SELECT 'After L1', flag; -- should not execute
+        |  END l1;
+        |  SELECT flag; -- should show 111
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row("Handler L3")),  // L3 handler catches CAST_INVALID_INPUT
+      Seq(Row("Handler L2")),  // L2 handler catches DIVIDE_BY_ZERO from L3
+      Seq(Row("Handler L1")),  // L1 handler catches UNRESOLVED_COLUMN from L2
+      Seq(Row(111))            // flag = 100 + 10 + 1
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("nested exit handlers with multiple handlers at same level") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE VARIABLE result STRING = '';
+        |  l1: BEGIN
+        |    DECLARE EXIT HANDLER FOR UNRESOLVED_COLUMN.WITHOUT_SUGGESTION
+        |    BEGIN
+        |      SET result = CONCAT(result, 'H1');
+        |    END;
+        |    DECLARE EXIT HANDLER FOR DIVIDE_BY_ZERO
+        |    BEGIN
+        |      SET result = CONCAT(result, 'H2');
+        |    END;
+        |    l2: BEGIN
+        |      DECLARE EXIT HANDLER FOR CAST_INVALID_INPUT
+        |      BEGIN
+        |        SET result = CONCAT(result, 'H3');
+        |        SELECT X; -- triggers UNRESOLVED_COLUMN
+        |      END;
+        |      SELECT CAST('invalid' AS INT); -- triggers CAST_INVALID_INPUT
+        |    END l2;
+        |    SELECT 'After L2'; -- should not execute
+        |  END l1;
+        |  SELECT result;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row("H3H1"))  // H3 handles CAST_INVALID_INPUT, then H1 handles unresolved column
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
+  test("deeply nested exit handlers - four levels") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE depth INT = 0;
+        |  l1: BEGIN
+        |    DECLARE EXIT HANDLER FOR UNRESOLVED_COLUMN.WITHOUT_SUGGESTION
+        |    BEGIN
+        |      SET depth = 1;
+        |    END;
+        |    l2: BEGIN
+        |      DECLARE EXIT HANDLER FOR DIVIDE_BY_ZERO
+        |      BEGIN
+        |        SET depth = 2;
+        |        SELECT X; -- triggers UNRESOLVED_COLUMN
+        |      END;
+        |      l3: BEGIN
+        |        DECLARE EXIT HANDLER FOR CAST_INVALID_INPUT
+        |        BEGIN
+        |          SET depth = 3;
+        |          SELECT 1/0; -- triggers DIVIDE_BY_ZERO
+        |        END;
+        |        l4: BEGIN
+        |          DECLARE EXIT HANDLER FOR SQLEXCEPTION
+        |          BEGIN
+        |            SET depth = 4;
+        |            SELECT CAST('invalid' AS INT); -- triggers CAST_INVALID_INPUT
+        |          END;
+        |          SELECT 1 / (1 - 1); -- triggers DIVIDE_BY_ZERO (caught by SQLEXCEPTION)
+        |        END l4;
+        |      END l3;
+        |    END l2;
+        |  END l1;
+        |  SELECT depth;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(1))  // Should propagate all the way to L1 handler
+    )
+    verifySqlScriptResult(sqlScript, expected)
+  }
+
   // Tests
   test("multi statement - simple") {
     withTable("t") {
