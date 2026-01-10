@@ -69,7 +69,7 @@ if have_numpy:
     pandas_requirement_message
     or pyarrow_requirement_message
     or numpy_requirement_message
-    or "float128 not supported on macos",
+    or "float128 not supported on macOS",
 )
 class UDFReturnTypeTests(ReusedSQLTestCase):
     @classmethod
@@ -177,14 +177,17 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
         )
 
     def _run_udf_return_type_coercion_test(self, use_arrow, legacy_pandas, golden_file, test_name):
-        with self.sql_conf(
-            {
-                "spark.sql.execution.pythonUDF.arrow.enabled": str(use_arrow).lower(),
-                "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": str(
-                    legacy_pandas
-                ).lower(),
-            }
-        ):
+        conf = {
+            "spark.sql.execution.pythonUDF.arrow.enabled": str(use_arrow).lower(),
+            "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": str(
+                legacy_pandas
+            ).lower(),
+        }
+        # Use STRICT policy for Arrow tests to preserve original Arrow behavior
+        # (PERMISSIVE coercion would make Arrow behave like pickle)
+        if use_arrow:
+            conf["spark.sql.execution.pythonUDF.coercion.policy"] = "strict"
+        with self.sql_conf(conf):
             results = self._generate_udf_return_type_coercion_results(use_arrow)
             header = ["SQL Type \\ Python Value(Type)"] + [
                 f"{str(v)}({type(v).__name__})" for v in self.test_data
@@ -244,6 +247,8 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
 
         test_name = "Pandas UDF type coercion"
 
+        # Note: coercion.policy config only affects ArrowBatchUDFSerializer (regular Arrow UDFs),
+        # not ArrowStreamPandasUDFSerializer (Pandas UDFs), so we don't set it here.
         results = self._generate_pandas_udf_type_coercion_results()
         header = ["SQL Type \\ Pandas Value(Type)"] + [
             f"{str(v).replace(chr(10), ' ')}({type(v).__name__})" for v in self.pandas_test_data

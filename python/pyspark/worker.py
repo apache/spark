@@ -197,6 +197,10 @@ class RunnerConf:
     def arrow_concurrency_level(self) -> int:
         return int(self.get("spark.sql.execution.pythonUDF.arrow.concurrency.level", -1))
 
+    @property
+    def coercion_policy(self) -> str:
+        return self.get("spark.sql.execution.pythonUDF.coercion.policy", "permissive")
+
 
 def report_times(outfile, boot, init, finish):
     write_int(SpecialLengths.TIMING_DATA, outfile)
@@ -322,6 +326,10 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
     arrow_return_type = to_arrow_type(
         return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
     )
+
+    # Coercion is handled in the serializer (ArrowBatchUDFSerializer).
+    # In PERMISSIVE/WARN mode: coerce -> convert -> pa.array
+    # In STRICT mode: convert -> pa.array (no coercion)
 
     if zero_arg_exec:
 
@@ -2863,15 +2871,19 @@ def read_udfs(pickleSer, infile, eval_type, runner_conf):
             eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
             and not runner_conf.use_legacy_pandas_udf_conversion
         ):
+            from pyspark.sql.types import CoercionPolicy
+
             input_types = [
                 f.dataType for f in _parse_datatype_json_string(utf8_deserializer.loads(infile))
             ]
+            coercion_policy = CoercionPolicy(runner_conf.coercion_policy.lower())
             ser = ArrowBatchUDFSerializer(
                 runner_conf.timezone,
                 runner_conf.safecheck,
                 input_types,
                 runner_conf.int_to_decimal_coercion_enabled,
                 runner_conf.binary_as_bytes,
+                coercion_policy,
             )
         else:
             # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
