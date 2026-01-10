@@ -20,6 +20,7 @@ import sys
 from typing import (
     Iterator,
     NamedTuple,
+    Optional,
 )
 import unittest
 from pyspark.errors import PySparkRuntimeError
@@ -34,6 +35,7 @@ from pyspark.sql.types import (
     LongType,
     BooleanType,
     FloatType,
+    DoubleType,
     ArrayType,
     MapType,
 )
@@ -51,6 +53,9 @@ class StatefulProcessorFactory:
     @abstractmethod
     def row(self):
         ...
+
+    def get(self, use_pandas: bool = False):
+        return self.pandas() if use_pandas else self.row()
 
 
 # StatefulProcessor factory implementations
@@ -264,6 +269,48 @@ class LargeValueStatefulProcessorFactory(StatefulProcessorFactory):
 
     def row(self):
         return RowLargeValueStatefulProcessor()
+
+
+class RunningCountStatefulProcessorFactory(StatefulProcessorFactory):
+    def __init__(self, ttl_duration_ms: Optional[int] = None):
+        self.ttl_duration_ms = ttl_duration_ms
+
+    def pandas(self):
+        return RunningCountStatefulProcessor(use_pandas=True, ttl_duration_ms=self.ttl_duration_ms)
+
+    def row(self):
+        return RunningCountStatefulProcessor(use_pandas=False, ttl_duration_ms=self.ttl_duration_ms)
+
+
+class TopKProcessorFactory(StatefulProcessorFactory):
+    def __init__(self, k: int = 2, ttl_duration_ms: Optional[int] = None):
+        self.k = k
+        self.ttl_duration_ms = ttl_duration_ms
+
+    def pandas(self):
+        return TopKProcessor(self.k, use_pandas=True, ttl_duration_ms=self.ttl_duration_ms)
+
+    def row(self):
+        return TopKProcessor(self.k, use_pandas=False, ttl_duration_ms=self.ttl_duration_ms)
+
+
+class WordFrequencyProcessorFactory(StatefulProcessorFactory):
+    def __init__(self, ttl_duration_ms: Optional[int] = None):
+        self.ttl_duration_ms = ttl_duration_ms
+
+    def pandas(self):
+        return PandasWordFrequencyProcessor(ttl_duration_ms=self.ttl_duration_ms)
+
+    def row(self):
+        return RowWordFrequencyProcessor(ttl_duration_ms=self.ttl_duration_ms)
+
+
+class AllMethodsTestProcessorFactory(StatefulProcessorFactory):
+    def pandas(self):
+        return AllMethodsTestProcessor(use_pandas=True)
+
+    def row(self):
+        return AllMethodsTestProcessor(use_pandas=False)
 
 
 # StatefulProcessor implementations
@@ -2172,3 +2219,376 @@ class RowLargeValueStatefulProcessor(StatefulProcessor):
 
     def close(self) -> None:
         pass
+
+
+# Simple processor to keep running count of rows with the same value of key column.
+class RunningCountStatefulProcessor(StatefulProcessor):
+    state_schema = StructType([StructField("value", IntegerType(), True)])
+
+    def __init__(self, use_pandas=True, ttl_duration_ms: Optional[int] = None):
+        self.use_pandas = use_pandas
+        self.ttl_duration_ms = ttl_duration_ms
+
+    def init(self, handle) -> None:
+        self.handle = handle
+        self.count = handle.getValueState("count", self.state_schema, self.ttl_duration_ms)
+
+    def handleInitialState(self, key, initialState, timerValues) -> None:
+        if self.use_pandas:
+            self.count.update((initialState.at[0, "initial_count"],))
+        else:
+            self.count.update((initialState.initial_count,))
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame | Row]:
+        count = self.count.get()[0] if self.count.exists() else 0
+        if self.use_pandas:
+            count += sum(1 for row_df in rows for row in row_df.iterrows())
+            self.count.update((count,))
+            yield pd.DataFrame({"key": [key[0]], "count": [count]})
+        else:
+            count += sum(1 for row in rows)
+            self.count.update((count,))
+            yield Row(key=key[0], count=count)
+
+
+# Processor to keep track of K highest scores per each key.
+class TopKProcessor(StatefulProcessor):
+    state_schema = StructType([StructField("score", DoubleType(), True)])
+
+    def __init__(self, k: int, use_pandas: bool = False, ttl_duration_ms: Optional[int] = None):
+        self.k = k
+        self.use_pandas = use_pandas
+        self.ttl_duration_ms = ttl_duration_ms
+
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        self.topk = handle.getListState("topK", self.state_schema, self.ttl_duration_ms)
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame | Row]:
+        scores = [score_tuple[0] for score_tuple in self.topk.get()]
+        if self.use_pandas:
+            scores.extend([row.score for row_df in rows for _, row in row_df.iterrows()])
+        else:
+            scores.extend([row.score for row in rows])
+
+        top_k_scores = sorted(scores, reverse=True)[: self.k]
+        self.topk.put([(score,) for score in top_k_scores])
+        if self.use_pandas:
+            yield pd.DataFrame({"key": [key[0]] * len(top_k_scores), "score": top_k_scores})
+        else:
+            for score in top_k_scores:
+                yield Row(key=key[0], score=score)
+
+
+# Processor to keep track of word frequencies per each key.
+class RowWordFrequencyProcessor(StatefulProcessor):
+    def __init__(self, ttl_duration_ms: Optional[int] = None):
+        self.ttl_duration_ms = ttl_duration_ms
+
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        self.freq_state = handle.getMapState(
+            "frequencies", "key string", "value long", self.ttl_duration_ms
+        )
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[Row]:
+        for row in rows:
+            word = row.word
+            current_count = (
+                self.freq_state.getValue((word,))[0] if self.freq_state.containsKey((word,)) else 0
+            )
+            updated_count = current_count + 1
+            self.freq_state.updateValue((word,), (updated_count,))
+            yield Row(key=key[0], word=word, count=updated_count)
+
+
+# Processor to keep track of word frequencies per each key.
+class PandasWordFrequencyProcessor(StatefulProcessor):
+    def __init__(self, ttl_duration_ms: Optional[int] = None):
+        self.ttl_duration_ms = ttl_duration_ms
+
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        self.freq_state = handle.getMapState(
+            "frequencies", "key string", "value long", self.ttl_duration_ms
+        )
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
+        results = []
+        for row_df in rows:
+            for _, row in row_df.iterrows():
+                word = row.word
+                current_count = (
+                    self.freq_state.getValue((word,))[0]
+                    if self.freq_state.containsKey((word,))
+                    else 0
+                )
+                updated_count = current_count + 1
+                self.freq_state.updateValue((word,), (updated_count,))
+                results.append({"key": key[0], "word": word, "count": updated_count})
+        if results:
+            yield pd.DataFrame(results)
+
+
+# Test processor that exercises all state methods for coverage testing.
+class AllMethodsTestProcessor(StatefulProcessor):
+    ALL_METHODS: list[str] = [
+        "value-exists",
+        "value-set",
+        "value-clear",
+        "list-exists",
+        "list-append",
+        "list-append-array",
+        "list-get",
+        "map-exists",
+        "map-add",
+        "map-keys",
+        "map-values",
+        "map-iterator",
+        "map-remove",
+        "map-clear",
+    ]
+
+    def __init__(self, use_pandas: bool = False):
+        self.use_pandas = use_pandas
+
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        state_schema = StructType([StructField("value", IntegerType(), True)])
+        self.value_state = handle.getValueState("value", state_schema)
+        list_element_schema = StructType([StructField("value", StringType(), True)])
+        self.list_state = handle.getListState("list", list_element_schema)
+        self.map_state = handle.getMapState("map", "key string", "value long")
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator:
+        if self.use_pandas:
+            results = []
+            for row_df in rows:
+                for _, row in row_df.iterrows():
+                    results.append(self._process_command(key[0], row.cmd))
+            if results:
+                yield pd.DataFrame(results)
+        else:
+            for row in rows:
+                yield self._process_command(key[0], row.cmd)
+
+    def _process_command(self, key: str, cmd: str) -> Row | dict[str, str]:
+        """Process a single command and return result."""
+        if cmd == "value-exists":
+            result_str = f"value-exists:{self.value_state.exists()}"
+            return self._make_result(key, result_str)
+        elif cmd == "value-set":
+            self.value_state.update((42,))
+            return self._make_result(key, "value-set:done")
+        elif cmd == "value-clear":
+            self.value_state.clear()
+            return self._make_result(key, "value-clear:done")
+        elif cmd == "list-exists":
+            result_str = f"list-exists:{self.list_state.exists()}"
+            return self._make_result(key, result_str)
+        elif cmd == "list-append":
+            self.list_state.appendValue(("a",))
+            self.list_state.appendValue(("b",))
+            return self._make_result(key, "list-append:done")
+        elif cmd == "list-append-array":
+            self.list_state.appendList([("c",), ("d",)])
+            return self._make_result(key, "list-append-array:done")
+        elif cmd == "list-get":
+            items = ",".join([item[0] for item in self.list_state.get()])
+            result_str = f"list-get:{items}"
+            return self._make_result(key, result_str)
+        elif cmd == "map-exists":
+            result_str = f"map-exists:{self.map_state.exists()}"
+            return self._make_result(key, result_str)
+        elif cmd == "map-add":
+            self.map_state.updateValue(("x",), (1,))
+            self.map_state.updateValue(("y",), (2,))
+            self.map_state.updateValue(("z",), (3,))
+            return self._make_result(key, "map-add:done")
+        elif cmd == "map-keys":
+            keys = sorted([k[0] for k in self.map_state.keys()])
+            result_str = f"map-keys:{','.join(keys)}"
+            return self._make_result(key, result_str)
+        elif cmd == "map-values":
+            values = sorted([v[0] for v in self.map_state.values()])
+            result_str = f"map-values:{','.join(map(str, values))}"
+            return self._make_result(key, result_str)
+        elif cmd == "map-iterator":
+            pairs = sorted([(k[0], v[0]) for k, v in self.map_state.iterator()], key=lambda x: x[0])
+            result_str = f"map-iterator:{','.join([f'{k}={v}' for k, v in pairs])}"
+            return self._make_result(key, result_str)
+        elif cmd == "map-remove":
+            self.map_state.removeKey(("y",))
+            return self._make_result(key, "map-remove:done")
+        elif cmd == "map-clear":
+            self.map_state.clear()
+            return self._make_result(key, "map-clear:done")
+        assert False, f"Unknown command {cmd}"
+
+    def _make_result(self, key: str, result: str) -> Row | dict[str, str]:
+        """Create result in appropriate format (dict for pandas, Row for non-pandas)."""
+        if self.use_pandas:
+            return {"key": key, "result": result}
+        else:
+            return Row(key=key, result=result)
+
+
+class SessionTimeoutProcessorFactory(StatefulProcessorFactory):
+    def pandas(self):
+        return SessionTimeoutProcessor(use_pandas=True)
+
+    def row(self):
+        return SessionTimeoutProcessor(use_pandas=False)
+
+
+class EventTimeSessionProcessorFactory(StatefulProcessorFactory):
+    def pandas(self):
+        return EventTimeSessionProcessor(use_pandas=True)
+
+    def row(self):
+        return EventTimeSessionProcessor(use_pandas=False)
+
+
+class EventTimeCountProcessorFactory(StatefulProcessorFactory):
+    def pandas(self):
+        return EventTimeCountProcessor(use_pandas=True)
+
+    def row(self):
+        return EventTimeCountProcessor(use_pandas=False)
+
+
+class SessionTimeoutProcessor(StatefulProcessor):
+    """
+    Processor that registers a processing time timer on first input and emits a message on expiry.
+    Uses a 10-second timeout.
+    """
+
+    def __init__(self, use_pandas: bool = False):
+        self.use_pandas = use_pandas
+
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        state_schema = StructType([StructField("lastSeen", LongType(), True)])
+        self.handle = handle
+        self.last_seen_state = handle.getValueState("lastSeen", state_schema)
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator:
+        current_time = timerValues.getCurrentProcessingTimeInMs()
+
+        # Clear any existing timer if we have previous state
+        if self.last_seen_state.exists():
+            old_timer_time = (
+                self.last_seen_state.get()[0] + 10000
+            )  # old timeout was 10s after last seen
+            self.handle.deleteTimer(old_timer_time)
+
+        # Update last seen time and register new timer
+        self.last_seen_state.update((current_time,))
+        self.handle.registerTimer(current_time + 10000)  # 10 second timeout
+
+        if self.use_pandas:
+            results = []
+            for row_df in rows:
+                for _, row in row_df.iterrows():
+                    results.append({"key": key[0], "result": f"received:{row.value}"})
+            if results:
+                yield pd.DataFrame(results)
+        else:
+            for row in rows:
+                yield Row(key=key[0], result=f"received:{row.value}")
+
+    def handleExpiredTimer(self, key, timerValues, expiredTimerInfo) -> Iterator:
+        self.last_seen_state.clear()
+        if self.use_pandas:
+            yield pd.DataFrame({"key": [key[0]], "result": ["session-expired"]})
+        else:
+            yield Row(key=key[0], result="session-expired")
+
+
+class EventTimeSessionProcessor(StatefulProcessor):
+    """
+    Processor that registers an event time timer based on watermark.
+    Input: Row(event_time_ms=..., value=...)
+    Registers a timer at eventTime + 5000ms. Timer fires when watermark passes that time.
+    """
+
+    def __init__(self, use_pandas: bool = False):
+        self.use_pandas = use_pandas
+
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        state_schema = StructType([StructField("lastEventTime", LongType(), True)])
+        self.handle = handle
+        self.last_event_time_state = handle.getValueState("lastEventTime", state_schema)
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator:
+        if self.use_pandas:
+            results = []
+            for row_df in rows:
+                for _, row in row_df.iterrows():
+                    event_time_ms = int(row.event_time_ms)
+                    value = row.value
+
+                    # Clear any existing timer if we have previous state
+                    if self.last_event_time_state.exists():
+                        old_timer_time = self.last_event_time_state.get()[0] + 5000
+                        self.handle.deleteTimer(old_timer_time)
+
+                    # Update last event time and register new timer
+                    self.last_event_time_state.update((event_time_ms,))
+                    self.handle.registerTimer(event_time_ms + 5000)  # 5 second timeout
+
+                    results.append({"key": key[0], "result": f"received:{value}@{event_time_ms}"})
+            if results:
+                yield pd.DataFrame(results)
+        else:
+            for row in rows:
+                event_time_ms = row.event_time_ms
+                value = row.value
+
+                # Clear any existing timer if we have previous state
+                if self.last_event_time_state.exists():
+                    old_timer_time = self.last_event_time_state.get()[0] + 5000
+                    self.handle.deleteTimer(old_timer_time)
+
+                # Update last event time and register new timer
+                self.last_event_time_state.update((event_time_ms,))
+                self.handle.registerTimer(event_time_ms + 5000)
+
+                yield Row(key=key[0], result=f"received:{value}@{event_time_ms}")
+
+    def handleExpiredTimer(self, key, timerValues, expiredTimerInfo) -> Iterator:
+        watermark = timerValues.getCurrentWatermarkInMs()
+        self.last_event_time_state.clear()
+        if self.use_pandas:
+            yield pd.DataFrame(
+                {"key": [key[0]], "result": [f"session-expired@watermark={watermark}"]}
+            )
+        else:
+            yield Row(key=key[0], result=f"session-expired@watermark={watermark}")
+
+
+class EventTimeCountProcessor(StatefulProcessor):
+    """
+    Processor that counts events in EventTime mode.
+    Input: Row(event_time_ms=..., value=...)
+    Output: (key, count) for current count after processing input
+    Used to test late event filtering - late events should not increment the count.
+    """
+
+    def __init__(self, use_pandas: bool = False):
+        self.use_pandas = use_pandas
+
+    def init(self, handle: StatefulProcessorHandle) -> None:
+        state_schema = StructType([StructField("count", LongType(), True)])
+        self.count_state = handle.getValueState("count", state_schema)
+
+    def handleInputRows(self, key, rows, timerValues) -> Iterator:
+        current = self.count_state.get()[0] if self.count_state.exists() else 0
+
+        if self.use_pandas:
+            incoming = sum(len(row_df) for row_df in rows)
+        else:
+            incoming = sum(1 for _ in rows)
+
+        updated = current + incoming
+        self.count_state.update((updated,))
+
+        if self.use_pandas:
+            yield pd.DataFrame({"key": [key[0]], "count": [updated]})
+        else:
+            yield Row(key=key[0], count=updated)
