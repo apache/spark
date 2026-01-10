@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, TernaryLike, UnaryLike}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXPRESSION_WITH_RANDOM_SEED, RUNTIME_REPLACEABLE, TreePattern}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.random.XORShiftRandom
 
@@ -286,7 +287,9 @@ case class Uniform(min: Expression, max: Expression, seedExpression: Expression,
     if (Seq(min, max, seedExpression).exists(_.dataType == NullType)) {
       Literal(null)
     } else {
-      def cast(e: Expression, to: DataType): Expression = if (e.dataType == to) e else Cast(e, to)
+      def cast(e: Expression, to: DataType): Expression = {
+        if (e.dataType == to) e else Cast(e, to, Option(SQLConf.get.sessionLocalTimeZone))
+      }
       cast(Add(
         cast(min, DoubleType),
         Multiply(
