@@ -28,6 +28,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadata
@@ -81,7 +82,8 @@ class StateRewriter(
   private val stateRootLocation = new Path(
     resolvedCheckpointLocation, StreamingCheckpointConstants.DIR_NAME_STATE).toString
 
-  def run(): Unit = {
+  // return a Map[operator id, Array[stateStore -> Array[partition -> StateStoreCheckpointInfo]]]
+  def run(): Map[Long, Array[Array[StateStoreCheckpointInfo]]] = {
     logInfo(log"Starting state rewrite for " +
       log"checkpointLocation=${MDC(CHECKPOINT_LOCATION, resolvedCheckpointLocation)}, " +
       log"readCheckpointLocation=" +
@@ -89,15 +91,16 @@ class StateRewriter(
       log"readBatchId=${MDC(BATCH_ID, readBatchId)}, " +
       log"writeBatchId=${MDC(BATCH_ID, writeBatchId)}")
 
-    val (_, timeTakenMs) = Utils.timeTakenMs {
+    val (checkpointInfos, timeTakenMs) = Utils.timeTakenMs {
       runInternal()
     }
 
     logInfo(log"State rewrite completed in ${MDC(DURATION, timeTakenMs)} ms for " +
       log"checkpointLocation=${MDC(CHECKPOINT_LOCATION, resolvedCheckpointLocation)}")
+    checkpointInfos
   }
 
-  private def runInternal(): Unit = {
+  private def runInternal(): Map[Long, Array[Array[StateStoreCheckpointInfo]]] = {
     try {
       val stateMetadataReader = new StateMetadataPartitionReader(
         resolvedCheckpointLocation,
@@ -124,7 +127,7 @@ class StateRewriter(
 
       // Do rewrite for each operator
       // We can potentially parallelize this, but for now, do sequentially
-      allOperatorsMetadata.foreach { opMetadata =>
+      allOperatorsMetadata.map { opMetadata =>
         val stateStoresMetadata = opMetadata.stateStoresMetadata
         assert(!stateStoresMetadata.isEmpty,
           s"Operator ${opMetadata.operatorInfo.operatorName} has no state stores")
@@ -133,7 +136,7 @@ class StateRewriter(
         val stateVarsIfTws = getStateVariablesIfTWS(opMetadata)
 
         // Rewrite each state store of the operator
-        stateStoresMetadata.foreach { stateStoreMetadata =>
+        opMetadata.operatorInfo.operatorId -> stateStoresMetadata.map { stateStoreMetadata =>
           rewriteStore(
             opMetadata,
             stateStoreMetadata,
@@ -143,8 +146,8 @@ class StateRewriter(
             stateVarsIfTws,
             sqlConfEntries
           )
-        }
-      }
+        }.toArray
+      }.toMap
     } catch {
       case e: Throwable =>
         logError(log"State rewrite failed for " +
@@ -163,7 +166,7 @@ class StateRewriter(
       storeSchemaFiles: List[Path],
       stateVarsIfTws: Map[String, TransformWithStateVariableInfo],
       sqlConfEntries: Map[String, String]
-  ): Unit = {
+  ): Array[StateStoreCheckpointInfo] = {
     // Read state
     val stateDf = sparkSession.read
       .format("statestore")
@@ -206,7 +209,7 @@ class StateRewriter(
     // to avoid serializing the entire Rewriter object per partition.
     val targetCheckpointLocation = resolvedCheckpointLocation
     val currentBatchId = writeBatchId
-    updatedStateDf.queryExecution.toRdd.foreachPartition { partitionIter =>
+    updatedStateDf.queryExecution.toRdd.mapPartitions { partitionIter: Iterator[InternalRow] =>
       // Recreate SQLConf on executor from serialized entries
       val executorSqlConf = new SQLConf()
       sqlConfEntries.foreach { case (k, v) => executorSqlConf.setConfString(k, v) }
@@ -225,8 +228,8 @@ class StateRewriter(
         executorSqlConf
       )
 
-      partitionWriter.write(partitionIter)
-    }
+      Iterator(partitionWriter.write(partitionIter))
+    }.collect()
   }
 
   /** Create the store and sql confs from the conf written in the offset log */
