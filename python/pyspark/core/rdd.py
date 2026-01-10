@@ -1660,8 +1660,12 @@ class RDD(Generic[T_co]):
 
         def func(it: Iterable[T]) -> Iterable[Any]:
             r = f(it)
+            if r is None:
+                # This is the officially supported case
+                return iter([])
             try:
-                return iter(r)  # type: ignore[call-overload]
+                # We need to support generators because we used to
+                return iter(r)
             except TypeError:
                 return iter([])
 
