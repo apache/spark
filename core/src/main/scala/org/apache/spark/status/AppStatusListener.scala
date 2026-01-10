@@ -961,6 +961,10 @@ private[spark] class AppStatusListener(
     event.executorUpdates.foreach { case (key, peakUpdates) =>
       liveExecutors.get(event.execId).foreach { exec =>
         if (exec.peakExecutorMetrics.compareAndUpdatePeakValues(peakUpdates)) {
+          if (exec.executorId == "driver") {
+            exec.totalGcTime = exec.peakExecutorMetrics.getMetricValue("MinorGCTime") +
+              exec.peakExecutorMetrics.getMetricValue("MajorGCTime")
+          }
           update(exec, now)
         }
       }
