@@ -45,6 +45,7 @@ from pyspark.sql.types import (
     StructType,
 )
 from pyspark.errors import PySparkValueError, PySparkAssertionError
+from pyspark.errors.exceptions.base import IllegalArgumentException
 from pyspark.testing.sqlutils import (
     ReusedSQLTestCase,
     have_pandas,
@@ -102,7 +103,7 @@ class TwsTesterTests(ReusedSQLTestCase):
     def test_direct_access_to_value_state(self):
         processor = RunningCountStatefulProcessorFactory().row()
         tester = TwsTester(processor)
-        tester.setValueState("count", "foo", (5,))
+        tester.updateValueState("count", "foo", (5,))
         tester.test("foo", [Row(value="q")])
         self.assertEqual(tester.peekValueState("count", "foo"), (6,))
 
@@ -154,8 +155,8 @@ class TwsTesterTests(ReusedSQLTestCase):
         processor = TopKProcessorFactory(k=2).row()
         tester = TwsTester(processor)
 
-        tester.setListState("topK", "a", [(6.0,), (5.0,)])
-        tester.setListState("topK", "b", [(8.0,), (7.0,)])
+        tester.updateListState("topK", "a", [(6.0,), (5.0,)])
+        tester.updateListState("topK", "b", [(8.0,), (7.0,)])
         tester.test("a", [Row(score=10.0)])
         tester.test("b", [Row(score=7.5)])
         tester.test("c", [Row(score=1.0)])
@@ -263,8 +264,8 @@ class TwsTesterTests(ReusedSQLTestCase):
         processor = WordFrequencyProcessorFactory().row()
         tester = TwsTester(processor)
 
-        tester.setMapState("frequencies", "user1", {("hello",): (5,), ("world",): (3,)})
-        tester.setMapState("frequencies", "user2", {("spark",): (10,)})
+        tester.updateMapState("frequencies", "user1", {("hello",): (5,), ("world",): (3,)})
+        tester.updateMapState("frequencies", "user2", {("spark",): (10,)})
 
         tester.test("user1", [Row(word="hello"), Row(word="goodbye")])
         tester.test("user2", [Row(word="spark")])
@@ -286,26 +287,13 @@ class TwsTesterTests(ReusedSQLTestCase):
         # Example of helper function using TwsTester to inspect how processing a single row changes
         # state.
         def step_function(key: str, input_row: str, state_in: int) -> int:
-            tester.setValueState("count", key, (state_in,))
+            tester.updateValueState("count", key, (state_in,))
             tester.test(key, [Row(value=input_row)])
             return tester.peekValueState("count", key)[0]
 
         self.assertEqual(step_function("key1", "a", 10), 11)
 
-    def test_real_time_mode(self):
-        processor = RunningCountStatefulProcessorFactory().row()
-        tester = TwsTester(processor, realTimeMode=True)
-        ans = tester.test("key1", [Row(value="a"), Row(value="b")])
-        self.assertEqual(ans, [Row(key="key1", count=1), Row(key="key1", count=2)])
-
-    def test_real_time_mode_pandas(self):
-        processor = RunningCountStatefulProcessorFactory().pandas()
-        tester = TwsTester(processor, realTimeMode=True)
-        ans = tester.testInPandas("key1", pd.DataFrame({"value": ["a", "a"]}))
-        expected = pd.DataFrame({"key": ["key1", "key1"], "count": [1, 2]})
-        pdt.assert_frame_equal(ans, expected, check_like=True)
-
-    # Example of how TwsTester can be used to simulate real-time mode.
+    # Example of how TwsTester can be used to simulate real-time mode (row by row processing).
     def test_row_by_row(self):
         processor = RunningCountStatefulProcessorFactory().row()
         tester = TwsTester(processor)
@@ -510,11 +498,11 @@ class TwsTesterTests(ReusedSQLTestCase):
         result = tester.peekValueState("count", "nonexistent_key")
         self.assertIsNone(result)
 
-    def test_set_nonexistent_state(self):
+    def test_update_nonexistent_state(self):
         processor = RunningCountStatefulProcessorFactory().row()
         tester = TwsTester(processor)
         with self.assertRaises(AssertionError):
-            tester.setValueState("nonexistent_state", "key1", (5,))
+            tester.updateValueState("nonexistent_state", "key1", (5,))
 
     def test_peek_state_before_initialization(self):
         processor = RunningCountStatefulProcessorFactory().row()
@@ -768,8 +756,8 @@ class TwsTesterTests(ReusedSQLTestCase):
         processor = RunningCountStatefulProcessorFactory().row()
         tester = TwsTester(processor)
 
-        tester.setValueState("count", "key1", (10,))
-        tester.setValueState("count", "key2", (20,))
+        tester.updateValueState("count", "key1", (10,))
+        tester.updateValueState("count", "key2", (20,))
         self.assertEqual(tester.peekValueState("count", "key1"), (10,))
 
         tester.deleteState("count", "key1")
@@ -781,8 +769,8 @@ class TwsTesterTests(ReusedSQLTestCase):
         processor = TopKProcessorFactory(k=3).row()
         tester = TwsTester(processor)
 
-        tester.setListState("topK", "key1", [(1.0,), (2.0,), (3.0,)])
-        tester.setListState("topK", "key2", [(4.0,), (5.0,)])
+        tester.updateListState("topK", "key1", [(1.0,), (2.0,), (3.0,)])
+        tester.updateListState("topK", "key2", [(4.0,), (5.0,)])
         self.assertEqual(tester.peekListState("topK", "key1"), [(1.0,), (2.0,), (3.0,)])
 
         tester.deleteState("topK", "key1")
@@ -794,8 +782,8 @@ class TwsTesterTests(ReusedSQLTestCase):
         processor = WordFrequencyProcessorFactory().row()
         tester = TwsTester(processor)
 
-        tester.setMapState("frequencies", "user1", {("hello",): (5,), ("world",): (3,)})
-        tester.setMapState("frequencies", "user2", {("spark",): (10,)})
+        tester.updateMapState("frequencies", "user1", {("hello",): (5,), ("world",): (3,)})
+        tester.updateMapState("frequencies", "user2", {("spark",): (10,)})
         self.assertEqual(
             tester.peekMapState("frequencies", "user1"),
             {("hello",): (5,), ("world",): (3,)},
@@ -824,20 +812,20 @@ class TwsTesterTests(ReusedSQLTestCase):
         result1 = tester.test("key1", [Row(value="hello")])
         self.assertEqual(result1, [Row(key="key1", result="received:hello")])
 
-        # Advance time by 5 seconds - timer should NOT fire yet
-        expired1 = tester.advanceProcessingTime(5000)
+        # Set processing time to 5000 - timer should NOT fire yet
+        expired1 = tester.setProcessingTime(5000)
         self.assertEqual(expired1, [])
 
         # Process input for key2 at t=5000 - should register timer at t=15000
         result2 = tester.test("key2", [Row(value="world")])
         self.assertEqual(result2, [Row(key="key2", result="received:world")])
 
-        # Advance time by 6 seconds (total t=11000) - key1's timer should fire
-        expired2 = tester.advanceProcessingTime(6000)
+        # Set processing time to 11000 - key1's timer should fire
+        expired2 = tester.setProcessingTime(11000)
         self.assertEqual(expired2, [Row(key="key1", result="session-expired")])
 
-        # Advance time by 5 seconds (total t=16000) - key2's timer should fire
-        expired3 = tester.advanceProcessingTime(5000)
+        # Set processing time to 16000 - key2's timer should fire
+        expired3 = tester.setProcessingTime(16000)
         self.assertEqual(expired3, [Row(key="key2", result="session-expired")])
 
         # Verify state is cleared after session expiry
@@ -854,75 +842,46 @@ class TwsTesterTests(ReusedSQLTestCase):
         expected1 = pd.DataFrame({"key": ["key1"], "result": ["received:hello"]})
         pdt.assert_frame_equal(result1, expected1, check_like=True)
 
-        # Advance time by 5 seconds - timer should NOT fire yet
-        expired1 = tester.advanceProcessingTime(5000)
+        # Set processing time to 5000 - timer should NOT fire yet
+        expired1 = tester.setProcessingTime(5000)
         self.assertEqual(len(expired1), 0)
 
-        # Advance time by 6 seconds (total t=11000) - timer should fire
-        expired2 = tester.advanceProcessingTime(6000)
+        # Set processing time to 11000 - timer should fire
+        expired2 = tester.setProcessingTime(11000)
         expected2 = pd.DataFrame({"key": ["key1"], "result": ["session-expired"]})
         pdt.assert_frame_equal(expired2, expected2, check_like=True)
 
-    def test_event_time_timers_data_driven_watermark(self):
-        """Test that TwsTester supports EventTime timers fired by data-driven watermark."""
-        processor = EventTimeSessionProcessorFactory().row()
-
-        tester = TwsTester(
-            processor,
-            timeMode="EventTime",
-            eventTimeColumnName="event_time_ms",
-            watermarkDelayMs=2000,  # 2 second watermark delay
-        )
-
-        # Process event at t=10000 for key1 - registers timer at t=15000
-        # Watermark becomes: 10000 - 2000 = 8000 (timer at 15000 won't fire)
-        result1 = tester.test("key1", [Row(event_time_ms=10000, value="hello")])
-        self.assertEqual(result1, [Row(key="key1", result="received:hello@10000")])
-
-        # Process event at t=12000 for key2 - registers timer at t=17000
-        # Watermark becomes: 12000 - 2000 = 10000 (still not enough for key1's timer at 15000)
-        result2 = tester.test("key2", [Row(event_time_ms=12000, value="world")])
-        self.assertEqual(result2, [Row(key="key2", result="received:world@12000")])
-
-        # Process event at t=20000 for key3 - watermark becomes 18000
-        # This should fire key1's timer at 15000 and key2's timer at 17000
-        result3 = tester.test("key3", [Row(event_time_ms=20000, value="new")])
-        self.assertIn(Row(key="key3", result="received:new@20000"), result3)
-        # Both key1 and key2 timers should have fired
-        timer_results = [r for r in result3 if "session-expired" in r.result]
-        self.assertEqual(len(timer_results), 2)
-
-        # Verify state is cleared for key1 and key2 after timer expiry
-        self.assertIsNone(tester.peekValueState("lastEventTime", "key1"))
-        self.assertIsNone(tester.peekValueState("lastEventTime", "key2"))
-        # key3 should still have state (timer at 25000 hasn't fired yet)
-        self.assertIsNotNone(tester.peekValueState("lastEventTime", "key3"))
-
-    def test_event_time_timers_manual_watermark_advance(self):
+    
+    def test_event_time_timers_manual_watermark(self):
         """Test that TwsTester supports EventTime timers fired by manual watermark advance."""
         processor = EventTimeSessionProcessorFactory().row()
 
+        def event_time_extractor(row: Row) -> int:
+            return row.event_time_ms
+
         tester = TwsTester(
             processor,
             timeMode="EventTime",
-            eventTimeColumnName="event_time_ms",
-            watermarkDelayMs=2000,
+            eventTimeExtractor=event_time_extractor,
         )
 
         # Process event at t=10000 for key1 - registers timer at t=15000
-        # Watermark: 10000 - 2000 = 8000
         result1 = tester.test("key1", [Row(event_time_ms=10000, value="hello")])
         self.assertEqual(result1, [Row(key="key1", result="received:hello@10000")])
 
         # Process event at t=11000 for key2 - registers timer at t=16000
-        # Watermark: 11000 - 2000 = 9000
         result2 = tester.test("key2", [Row(event_time_ms=11000, value="world")])
         self.assertEqual(result2, [Row(key="key2", result="received:world@11000")])
 
-        # Manually advance watermark by 7000ms (from 9000 to 16000)
-        # This should fire key1's timer (15000) and key2's timer (16000)
-        expired = tester.advanceWatermark(7000)
-        self.assertEqual(len(expired), 2)
+        # Set watermark to 15000 - key1's timer should fire
+        expired1 = tester.setWatermark(15000)
+        self.assertEqual(len(expired1), 1)
+        self.assertEqual(expired1[0], Row(key="key1", result="session-expired@watermark=15000"))
+
+        # Set watermark to 16000 - key2's timer should fire
+        expired2 = tester.setWatermark(16000)
+        self.assertEqual(len(expired2), 1)
+        self.assertEqual(expired2[0], Row(key="key2", result="session-expired@watermark=16000"))
 
         # Verify state is cleared
         self.assertIsNone(tester.peekValueState("lastEventTime", "key1"))
@@ -932,15 +891,16 @@ class TwsTesterTests(ReusedSQLTestCase):
         """Test that TwsTester filters late events in EventTime mode."""
         processor = EventTimeCountProcessorFactory().row()
 
+        def event_time_extractor(row: Row) -> int:
+            return row.event_time_ms
+
         tester = TwsTester(
             processor,
             timeMode="EventTime",
-            eventTimeColumnName="event_time_ms",
-            watermarkDelayMs=1000,  # 1 second watermark delay
+            eventTimeExtractor=event_time_extractor,
         )
 
         # Initially watermark is 0, so all events should be processed
-        # Process events at t=5000, t=6000, t=7000 - watermark becomes 7000 - 1000 = 6000
         result1 = tester.test(
             "key1",
             [
@@ -952,38 +912,46 @@ class TwsTesterTests(ReusedSQLTestCase):
         self.assertEqual(result1, [Row(key="key1", count=3)])
         self.assertEqual(tester.peekValueState("count", "key1"), (3,))
 
+        # Set watermark to 6000
+        tester.setWatermark(6000)
+
         # Now watermark is 6000. Send events with mixed event times:
-        # - (4000, "late1") -> event time 4000 < watermark 6000, should be FILTERED
-        # - (5000, "late2") -> event time 5000 < watermark 6000, should be FILTERED
-        # - (6000, "ontime1") -> event time 6000 >= watermark 6000, should be PROCESSED
-        # - (8000, "ontime2") -> event time 8000 >= watermark 6000, should be PROCESSED
+        # - (4000, "late1") -> event time 4000 <= watermark 6000, should be FILTERED
+        # - (5000, "late2") -> event time 5000 <= watermark 6000, should be FILTERED
+        # - (6000, "late3") -> event time 6000 <= watermark 6000, should be FILTERED
+        # - (8000, "ontime") -> event time 8000 > watermark 6000, should be PROCESSED
         result2 = tester.test(
             "key1",
             [
                 Row(event_time_ms=4000, value="late1"),
                 Row(event_time_ms=5000, value="late2"),
-                Row(event_time_ms=6000, value="ontime1"),
-                Row(event_time_ms=8000, value="ontime2"),
+                Row(event_time_ms=6000, value="late3"),
+                Row(event_time_ms=8000, value="ontime"),
             ],
         )
-        # Only 2 events should be processed (the on-time ones)
-        self.assertEqual(result2, [Row(key="key1", count=5)])  # 3 + 2 = 5
-        self.assertEqual(tester.peekValueState("count", "key1"), (5,))
+        # Only 1 event should be processed (the on-time one)
+        self.assertEqual(result2, [Row(key="key1", count=4)])  # 3 + 1 = 4
+        self.assertEqual(tester.peekValueState("count", "key1"), (4,))
 
     def test_all_late_events_filtered(self):
         """Test that all late events are filtered when all are older than watermark."""
         processor = EventTimeCountProcessorFactory().row()
 
+        def event_time_extractor(row: Row) -> int:
+            return row.event_time_ms
+
         tester = TwsTester(
             processor,
             timeMode="EventTime",
-            eventTimeColumnName="event_time_ms",
-            watermarkDelayMs=0,  # No delay for simplicity
+            eventTimeExtractor=event_time_extractor,
         )
 
-        # Process events to advance watermark to 10000
+        # Process events to get initial count
         tester.test("key1", [Row(event_time_ms=10000, value="a")])
         self.assertEqual(tester.peekValueState("count", "key1"), (1,))
+
+        # Set watermark to 10000
+        tester.setWatermark(10000)
 
         # Now send only late events - all should be filtered, count unchanged
         result = tester.test(
@@ -992,6 +960,7 @@ class TwsTesterTests(ReusedSQLTestCase):
                 Row(event_time_ms=1000, value="late1"),
                 Row(event_time_ms=5000, value="late2"),
                 Row(event_time_ms=9999, value="late3"),
+                Row(event_time_ms=10000, value="late4"),  # exactly at watermark, also filtered
             ],
         )
         # No events processed - handleInputRows is called with empty list
@@ -1006,147 +975,97 @@ class TwsTesterTests(ReusedSQLTestCase):
         with self.assertRaisesRegex(PySparkValueError, "UNSUPPORTED_OPERATION"):
             tester.handle.registerTimer(12345)
 
-    def test_advance_processing_time_in_wrong_mode_raises_error(self):
-        """Test that advanceProcessingTime raises error in non-ProcessingTime mode."""
+    def test_set_processing_time_in_wrong_mode_raises_error(self):
+        """Test that setProcessingTime raises error in non-ProcessingTime mode."""
         processor = RunningCountStatefulProcessorFactory().row()
 
         # Test in None mode
         tester_none = TwsTester(processor, timeMode="None")
         with self.assertRaisesRegex(PySparkValueError, "UNSUPPORTED_OPERATION"):
-            tester_none.advanceProcessingTime(1000)
+            tester_none.setProcessingTime(1000)
 
-    def test_advance_watermark_in_wrong_mode_raises_error(self):
-        """Test that advanceWatermark raises error in non-EventTime mode."""
+    def test_set_watermark_in_wrong_mode_raises_error(self):
+        """Test that setWatermark raises error in non-EventTime mode."""
         processor = RunningCountStatefulProcessorFactory().row()
 
         # Test in None mode
         tester_none = TwsTester(processor, timeMode="None")
         with self.assertRaisesRegex(PySparkValueError, "UNSUPPORTED_OPERATION"):
-            tester_none.advanceWatermark(1000)
+            tester_none.setWatermark(1000)
 
         # Test in ProcessingTime mode
         tester_pt = TwsTester(processor, timeMode="ProcessingTime")
         with self.assertRaisesRegex(PySparkValueError, "UNSUPPORTED_OPERATION"):
-            tester_pt.advanceWatermark(1000)
+            tester_pt.setWatermark(1000)
 
-    def test_eventtime_mode_requires_column_name(self):
-        """Test that EventTime mode requires eventTimeColumnName."""
+    def test_eventtime_mode_requires_extractor(self):
+        """Test that EventTime mode requires eventTimeExtractor."""
         processor = RunningCountStatefulProcessorFactory().row()
 
         with self.assertRaisesRegex(PySparkValueError, "ARGUMENT_REQUIRED"):
             TwsTester(processor, timeMode="EventTime")
 
-    # TTL tests
-
-    def test_ttl_value_state_expiry(self):
-        """Test that TwsTester expires ValueState after TTL."""
-        processor = RunningCountStatefulProcessorFactory(ttl_duration_ms=5000).row()
+    def test_processing_time_must_move_forward(self):
+        """Test that setProcessingTime requires time to move forward."""
+        processor = RunningCountStatefulProcessorFactory().row()
         tester = TwsTester(processor, timeMode="ProcessingTime")
 
-        # Process input for key1 - state should be set
-        tester.test("key1", [Row(value="a")])
-        self.assertEqual(tester.peekValueState("count", "key1"), (1,))
+        tester.setProcessingTime(1000)
 
-        # Advance time by 3 seconds - state should still exist
-        tester.advanceProcessingTime(3000)
-        self.assertEqual(tester.peekValueState("count", "key1"), (1,))
+        # Same time should raise error
+        with self.assertRaises(IllegalArgumentException):
+            tester.setProcessingTime(1000)
 
-        # Advance time by 3 more seconds (total 6s) - state should be expired
-        tester.advanceProcessingTime(3000)
-        self.assertIsNone(tester.peekValueState("count", "key1"))
+        # Earlier time should raise error
+        with self.assertRaises(IllegalArgumentException):
+            tester.setProcessingTime(500)
 
-    def test_ttl_list_state_expiry(self):
-        """Test that TwsTester expires ListState after TTL."""
-        processor = TopKProcessorFactory(k=3, ttl_duration_ms=5000).row()
-        tester = TwsTester(processor, timeMode="ProcessingTime")
+    def test_watermark_must_move_forward(self):
+        """Test that setWatermark requires watermark to move forward."""
+        processor = RunningCountStatefulProcessorFactory().row()
 
-        # Process input for key1 - state should be set
-        tester.test("key1", [Row(score=1.0), Row(score=2.0), Row(score=3.0)])
-        self.assertEqual(tester.peekListState("topK", "key1"), [(3.0,), (2.0,), (1.0,)])
+        def event_time_extractor(row: Row) -> int:
+            return row.event_time_ms
 
-        # Advance time by 3 seconds - state should still exist
-        tester.advanceProcessingTime(3000)
-        self.assertEqual(tester.peekListState("topK", "key1"), [(3.0,), (2.0,), (1.0,)])
-
-        # Advance time by 3 more seconds (total 6s) - state should be expired
-        tester.advanceProcessingTime(3000)
-        self.assertEqual(tester.peekListState("topK", "key1"), [])
-
-    def test_ttl_map_state_expiry(self):
-        """Test that TwsTester expires MapState after TTL."""
-        processor = WordFrequencyProcessorFactory(ttl_duration_ms=5000).row()
-        tester = TwsTester(processor, timeMode="ProcessingTime")
-
-        # Process input for user1 - state should be set
-        tester.test("user1", [Row(word="hello"), Row(word="world")])
-        self.assertEqual(
-            tester.peekMapState("frequencies", "user1"),
-            {("hello",): (1,), ("world",): (1,)},
+        tester = TwsTester(
+            processor,
+            timeMode="EventTime",
+            eventTimeExtractor=event_time_extractor,
         )
 
-        # Advance time by 3 seconds - state should still exist
-        tester.advanceProcessingTime(3000)
-        self.assertEqual(
-            tester.peekMapState("frequencies", "user1"),
-            {("hello",): (1,), ("world",): (1,)},
+        tester.setWatermark(1000)
+
+        # Same watermark should raise error
+        with self.assertRaises(IllegalArgumentException):
+            tester.setWatermark(1000)
+
+        # Earlier watermark should raise error
+        with self.assertRaises(IllegalArgumentException):
+            tester.setWatermark(500)
+
+    def test_timer_cannot_be_registered_in_past(self):
+        """Test that timer cannot be registered at or before current watermark in EventTime mode."""
+        processor = EventTimeSessionProcessorFactory().row()
+
+        def event_time_extractor(row: Row) -> int:
+            return row.event_time_ms
+
+        tester = TwsTester(
+            processor,
+            timeMode="EventTime",
+            eventTimeExtractor=event_time_extractor,
         )
 
-        # Advance time by 3 more seconds (total 6s) - state should be expired
-        tester.advanceProcessingTime(3000)
-        self.assertEqual(tester.peekMapState("frequencies", "user1"), {})
+        # Set watermark to 10000
+        tester.setWatermark(10000)
 
-    def test_ttl_state_update_resets_expiry(self):
-        """Test that updating state resets the TTL expiry time."""
-        processor = RunningCountStatefulProcessorFactory(ttl_duration_ms=5000).row()
-        tester = TwsTester(processor, timeMode="ProcessingTime")
+        # Try to register a timer at or before watermark - should raise error
+        tester.handle.setGroupingKey("key1")
+        with self.assertRaises(IllegalArgumentException):
+            tester.handle.registerTimer(10000)  # exactly at watermark
 
-        # Process input for key1 at t=0
-        tester.test("key1", [Row(value="a")])
-        self.assertEqual(tester.peekValueState("count", "key1"), (1,))
-
-        # Advance time by 4 seconds (t=4000) - state should still exist
-        tester.advanceProcessingTime(4000)
-        self.assertEqual(tester.peekValueState("count", "key1"), (1,))
-
-        # Process more input for key1 at t=4000 - this should reset the TTL
-        tester.test("key1", [Row(value="b")])
-        self.assertEqual(tester.peekValueState("count", "key1"), (2,))
-
-        # Advance time by 4 more seconds (t=8000) - state should still exist
-        # because TTL was reset at t=4000
-        tester.advanceProcessingTime(4000)
-        self.assertEqual(tester.peekValueState("count", "key1"), (2,))
-
-        # Advance time by 2 more seconds (t=10000) - now state should be expired
-        # (5000ms after the last update at t=4000)
-        tester.advanceProcessingTime(2000)
-        self.assertIsNone(tester.peekValueState("count", "key1"))
-
-    def test_ttl_different_keys_expire_independently(self):
-        """Test that TTL expiry is tracked per-key."""
-        processor = RunningCountStatefulProcessorFactory(ttl_duration_ms=5000).row()
-        tester = TwsTester(processor, timeMode="ProcessingTime")
-
-        # Process input for key1 at t=0
-        tester.test("key1", [Row(value="a")])
-        self.assertEqual(tester.peekValueState("count", "key1"), (1,))
-
-        # Advance time to t=3000
-        tester.advanceProcessingTime(3000)
-
-        # Process input for key2 at t=3000
-        tester.test("key2", [Row(value="b")])
-        self.assertEqual(tester.peekValueState("count", "key2"), (1,))
-
-        # Advance time by 3 seconds (t=6000) - key1 should be expired, key2 should exist
-        tester.advanceProcessingTime(3000)
-        self.assertIsNone(tester.peekValueState("count", "key1"))
-        self.assertEqual(tester.peekValueState("count", "key2"), (1,))
-
-        # Advance time by 3 more seconds (t=9000) - both should be expired
-        tester.advanceProcessingTime(3000)
-        self.assertIsNone(tester.peekValueState("count", "key1"))
-        self.assertIsNone(tester.peekValueState("count", "key2"))
+        with self.assertRaises(IllegalArgumentException):
+            tester.handle.registerTimer(5000)  # before watermark
 
 
 @unittest.skipIf(
