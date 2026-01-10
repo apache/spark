@@ -14,10 +14,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.util
+package org.apache.spark.util;
 
-import java.io.{IOException, ObjectInputStream}
-import java.util.concurrent.atomic.AtomicReference
+import scala.Function0;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.Serializable;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.VarHandle;
 
 /**
  * A lock-free implementation of a lazily-initialized variable.
@@ -43,27 +47,38 @@ import java.util.concurrent.atomic.AtomicReference
  *   href="https://docs.scala-lang.org/scala3/reference/changed-features/lazy-vals-init.html">Lazy
  *   Vals Initialization</a> for more details.
  */
-private[spark] class TransientBestEffortLazyVal[T <: AnyRef](
-    private[this] val compute: () => T) extends Serializable {
+public class TransientBestEffortLazyVal<T> implements Serializable {
+  private volatile Function0<T> compute;
+  protected transient volatile T cached;
 
-  @transient
-  private[this] var cached: AtomicReference[T] = new AtomicReference(null.asInstanceOf[T])
-
-  def apply(): T = {
-    val value = cached.get()
-    if (value != null) {
-      value
-    } else {
-      val newValue = compute()
-      assert(newValue != null, "compute function cannot return null.")
-      cached.compareAndSet(null.asInstanceOf[T], newValue)
-      cached.get()
-    }
+  private static final VarHandle HANDLE;
+  static {
+      try {
+          HANDLE = MethodHandles.lookup()
+              .in(TransientBestEffortLazyVal.class)
+              .findVarHandle(TransientBestEffortLazyVal.class, "cached", Object.class);
+      } catch (ReflectiveOperationException e) {
+          throw new IllegalStateException("Failed to initialize VarHandle", e);
+      }
   }
 
-  @throws(classOf[IOException])
-  private def readObject(ois: ObjectInputStream): Unit = Utils.tryOrIOException {
-    ois.defaultReadObject()
-    cached = new AtomicReference(null.asInstanceOf[T])
+  public TransientBestEffortLazyVal(Function0<T> compute) {
+      this.compute = compute;
+  }
+
+  public T apply() {
+      T value = cached;
+      if (value != null) {
+          return value;
+      }
+      T newValue = compute.apply();
+      assert newValue != null: "compute function cannot return null.";
+      HANDLE.compareAndSet(this, null, newValue);
+      return cached;
+  }
+
+  private void readObject(ObjectInputStream ois) throws IOException, ClassNotFoundException {
+    ois.defaultReadObject();
+    cached = null;
   }
 }
