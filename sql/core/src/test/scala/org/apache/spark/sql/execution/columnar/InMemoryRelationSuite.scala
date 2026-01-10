@@ -17,15 +17,13 @@
 
 package org.apache.spark.sql.execution.columnar
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions.expr
-import org.apache.spark.sql.test.SharedSparkSessionBase
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.storage.StorageLevel
 
-class InMemoryRelationSuite extends SparkFunSuite
-  with SharedSparkSessionBase with AdaptiveSparkPlanHelper {
+class InMemoryRelationSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
   test("SPARK-46779: InMemoryRelations with the same cached plan are semantically equivalent") {
     val d = spark.range(1)

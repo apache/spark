@@ -19,9 +19,8 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io.File
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.io.CompressionCodec
-import org.apache.spark.sql.catalyst.plans.PlanTestBase
+import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Update
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions.count
@@ -58,7 +57,7 @@ class StateStoreCompatibilitySuite extends StreamTest with StateStoreCodecsTest 
    }
 }
 
-trait StateStoreCodecsTest extends SparkFunSuite with PlanTestBase {
+trait StateStoreCodecsTest extends PlanTest {
   protected val codecsInShortName =
     CompressionCodec.ALL_COMPRESSION_CODECS.map { c => CompressionCodec.getShortName(c) }
 
