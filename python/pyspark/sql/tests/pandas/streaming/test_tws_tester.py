@@ -198,7 +198,7 @@ class TwsTesterTests(ReusedSQLTestCase):
             ],
         )
 
-        # Check state using peekMapState
+        # Check state using peekMapState.
         self.assertEqual(
             tester.peekMapState("frequencies", "user1"),
             {("hello",): (2,), ("world",): (2,)},
@@ -209,7 +209,7 @@ class TwsTesterTests(ReusedSQLTestCase):
         )
         self.assertEqual(tester.peekMapState("frequencies", "user3"), {})
 
-        # Process more data for user1
+        # Process more data for user1.
         ans3 = tester.test("user1", [Row(word="hello"), Row(word="test")])
         self.assertEqual(
             ans3,
@@ -801,34 +801,34 @@ class TwsTesterTests(ReusedSQLTestCase):
         with self.assertRaisesRegex(PySparkAssertionError, "STATE_NOT_EXISTS"):
             tester.deleteState("nonexistent_state", "key1")
 
-    # Timer tests
+    # Timer tests.
 
     def test_processing_time_timers(self):
         """Test that TwsTester supports ProcessingTime timers."""
         processor = SessionTimeoutProcessorFactory().row()
         tester = TwsTester(processor, timeMode="ProcessingTime")
 
-        # Process input for key1 - should register a timer at t=10000
+        # Process input for key1 - should register a timer at t=10000.
         result1 = tester.test("key1", [Row(value="hello")])
         self.assertEqual(result1, [Row(key="key1", result="received:hello")])
 
-        # Set processing time to 5000 - timer should NOT fire yet
+        # Set processing time to 5000 - timer should NOT fire yet.
         expired1 = tester.setProcessingTime(5000)
         self.assertEqual(expired1, [])
 
-        # Process input for key2 at t=5000 - should register timer at t=15000
+        # Process input for key2 at t=5000 - should register timer at t=15000.
         result2 = tester.test("key2", [Row(value="world")])
         self.assertEqual(result2, [Row(key="key2", result="received:world")])
 
-        # Set processing time to 11000 - key1's timer should fire
+        # Set processing time to 11000 - key1's timer should fire.
         expired2 = tester.setProcessingTime(11000)
         self.assertEqual(expired2, [Row(key="key1", result="session-expired")])
 
-        # Set processing time to 16000 - key2's timer should fire
+        # Set processing time to 16000 - key2's timer should fire.
         expired3 = tester.setProcessingTime(16000)
         self.assertEqual(expired3, [Row(key="key2", result="session-expired")])
 
-        # Verify state is cleared after session expiry
+        # Verify state is cleared after session expiry.
         self.assertIsNone(tester.peekValueState("lastSeen", "key1"))
         self.assertIsNone(tester.peekValueState("lastSeen", "key2"))
 
@@ -837,21 +837,20 @@ class TwsTesterTests(ReusedSQLTestCase):
         processor = SessionTimeoutProcessorFactory().pandas()
         tester = TwsTester(processor, timeMode="ProcessingTime")
 
-        # Process input for key1 - should register a timer at t=10000
+        # Process input for key1 - should register a timer at t=10000.
         result1 = tester.testInPandas("key1", pd.DataFrame({"value": ["hello"]}))
         expected1 = pd.DataFrame({"key": ["key1"], "result": ["received:hello"]})
         pdt.assert_frame_equal(result1, expected1, check_like=True)
 
-        # Set processing time to 5000 - timer should NOT fire yet
+        # Set processing time to 5000 - timer should NOT fire yet.
         expired1 = tester.setProcessingTime(5000)
         self.assertEqual(len(expired1), 0)
 
-        # Set processing time to 11000 - timer should fire
+        # Set processing time to 11000 - timer should fire.
         expired2 = tester.setProcessingTime(11000)
         expected2 = pd.DataFrame({"key": ["key1"], "result": ["session-expired"]})
         pdt.assert_frame_equal(expired2, expected2, check_like=True)
 
-    
     def test_event_time_timers_manual_watermark(self):
         """Test that TwsTester supports EventTime timers fired by manual watermark advance."""
         processor = EventTimeSessionProcessorFactory().row()
@@ -865,25 +864,25 @@ class TwsTesterTests(ReusedSQLTestCase):
             eventTimeExtractor=event_time_extractor,
         )
 
-        # Process event at t=10000 for key1 - registers timer at t=15000
+        # Process event at t=10000 for key1 - registers timer at t=15000.
         result1 = tester.test("key1", [Row(event_time_ms=10000, value="hello")])
         self.assertEqual(result1, [Row(key="key1", result="received:hello@10000")])
 
-        # Process event at t=11000 for key2 - registers timer at t=16000
+        # Process event at t=11000 for key2 - registers timer at t=16000.
         result2 = tester.test("key2", [Row(event_time_ms=11000, value="world")])
         self.assertEqual(result2, [Row(key="key2", result="received:world@11000")])
 
-        # Set watermark to 15000 - key1's timer should fire
+        # Set watermark to 15000 - key1's timer should fire.
         expired1 = tester.setWatermark(15000)
         self.assertEqual(len(expired1), 1)
         self.assertEqual(expired1[0], Row(key="key1", result="session-expired@watermark=15000"))
 
-        # Set watermark to 16000 - key2's timer should fire
+        # Set watermark to 16000 - key2's timer should fire.
         expired2 = tester.setWatermark(16000)
         self.assertEqual(len(expired2), 1)
         self.assertEqual(expired2[0], Row(key="key2", result="session-expired@watermark=16000"))
 
-        # Verify state is cleared
+        # Verify state is cleared.
         self.assertIsNone(tester.peekValueState("lastEventTime", "key1"))
         self.assertIsNone(tester.peekValueState("lastEventTime", "key2"))
 
@@ -900,7 +899,7 @@ class TwsTesterTests(ReusedSQLTestCase):
             eventTimeExtractor=event_time_extractor,
         )
 
-        # Initially watermark is 0, so all events should be processed
+        # Initially watermark is 0, so all events should be processed.
         result1 = tester.test(
             "key1",
             [
@@ -912,14 +911,14 @@ class TwsTesterTests(ReusedSQLTestCase):
         self.assertEqual(result1, [Row(key="key1", count=3)])
         self.assertEqual(tester.peekValueState("count", "key1"), (3,))
 
-        # Set watermark to 6000
+        # Set watermark to 6000.
         tester.setWatermark(6000)
 
         # Now watermark is 6000. Send events with mixed event times:
-        # - (4000, "late1") -> event time 4000 <= watermark 6000, should be FILTERED
-        # - (5000, "late2") -> event time 5000 <= watermark 6000, should be FILTERED
-        # - (6000, "late3") -> event time 6000 <= watermark 6000, should be FILTERED
-        # - (8000, "ontime") -> event time 8000 > watermark 6000, should be PROCESSED
+        # - (4000, "late1") -> event time 4000 <= watermark 6000, should be FILTERED.
+        # - (5000, "late2") -> event time 5000 <= watermark 6000, should be FILTERED.
+        # - (6000, "late3") -> event time 6000 <= watermark 6000, should be FILTERED.
+        # - (8000, "ontime") -> event time 8000 > watermark 6000, should be PROCESSED.
         result2 = tester.test(
             "key1",
             [
@@ -946,14 +945,14 @@ class TwsTesterTests(ReusedSQLTestCase):
             eventTimeExtractor=event_time_extractor,
         )
 
-        # Process events to get initial count
+        # Process events to get initial count.
         tester.test("key1", [Row(event_time_ms=10000, value="a")])
         self.assertEqual(tester.peekValueState("count", "key1"), (1,))
 
-        # Set watermark to 10000
+        # Set watermark to 10000.
         tester.setWatermark(10000)
 
-        # Now send only late events - all should be filtered, count unchanged
+        # Now send only late events - all should be filtered, count unchanged.
         result = tester.test(
             "key1",
             [
@@ -963,7 +962,7 @@ class TwsTesterTests(ReusedSQLTestCase):
                 Row(event_time_ms=10000, value="late4"),  # exactly at watermark, also filtered
             ],
         )
-        # No events processed - handleInputRows is called with empty list
+        # No events processed - handleInputRows is called with empty list.
         self.assertEqual(result, [Row(key="key1", count=1)])  # Count still 1
         self.assertEqual(tester.peekValueState("count", "key1"), (1,))
 
@@ -979,7 +978,7 @@ class TwsTesterTests(ReusedSQLTestCase):
         """Test that setProcessingTime raises error in non-ProcessingTime mode."""
         processor = RunningCountStatefulProcessorFactory().row()
 
-        # Test in None mode
+        # Test in None mode.
         tester_none = TwsTester(processor, timeMode="None")
         with self.assertRaisesRegex(PySparkValueError, "UNSUPPORTED_OPERATION"):
             tester_none.setProcessingTime(1000)
@@ -988,12 +987,12 @@ class TwsTesterTests(ReusedSQLTestCase):
         """Test that setWatermark raises error in non-EventTime mode."""
         processor = RunningCountStatefulProcessorFactory().row()
 
-        # Test in None mode
+        # Test in None mode.
         tester_none = TwsTester(processor, timeMode="None")
         with self.assertRaisesRegex(PySparkValueError, "UNSUPPORTED_OPERATION"):
             tester_none.setWatermark(1000)
 
-        # Test in ProcessingTime mode
+        # Test in ProcessingTime mode.
         tester_pt = TwsTester(processor, timeMode="ProcessingTime")
         with self.assertRaisesRegex(PySparkValueError, "UNSUPPORTED_OPERATION"):
             tester_pt.setWatermark(1000)
@@ -1012,11 +1011,11 @@ class TwsTesterTests(ReusedSQLTestCase):
 
         tester.setProcessingTime(1000)
 
-        # Same time should raise error
+        # Same time should raise error.
         with self.assertRaises(IllegalArgumentException):
             tester.setProcessingTime(1000)
 
-        # Earlier time should raise error
+        # Earlier time should raise error.
         with self.assertRaises(IllegalArgumentException):
             tester.setProcessingTime(500)
 
@@ -1035,11 +1034,11 @@ class TwsTesterTests(ReusedSQLTestCase):
 
         tester.setWatermark(1000)
 
-        # Same watermark should raise error
+        # Same watermark should raise error.
         with self.assertRaises(IllegalArgumentException):
             tester.setWatermark(1000)
 
-        # Earlier watermark should raise error
+        # Earlier watermark should raise error.
         with self.assertRaises(IllegalArgumentException):
             tester.setWatermark(500)
 
@@ -1056,10 +1055,10 @@ class TwsTesterTests(ReusedSQLTestCase):
             eventTimeExtractor=event_time_extractor,
         )
 
-        # Set watermark to 10000
+        # Set watermark to 10000.
         tester.setWatermark(10000)
 
-        # Try to register a timer at or before watermark - should raise error
+        # Try to register a timer at or before watermark - should raise error.
         tester.handle.setGroupingKey("key1")
         with self.assertRaises(IllegalArgumentException):
             tester.handle.registerTimer(10000)  # exactly at watermark
@@ -1109,7 +1108,7 @@ class TwsTesterFuzzTests(ReusedSQLTestCase):
         tester = TwsTester(processor)
 
         def _run_tester(batch: list[tuple]) -> list[Row]:
-            # Group batch by key
+            # Group batch by key.
             grouped = {}
             for row in batch:
                 key = row[0]

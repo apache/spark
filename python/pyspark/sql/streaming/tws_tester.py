@@ -37,10 +37,9 @@ __all__ = ["TwsTester"]
 
 
 class _InMemoryTimers:
-    """In-memory implementation of timers for testing."""
+    """In-memory implementation of timers."""
 
     def __init__(self) -> None:
-        # Maps grouping key -> sorted set of timer expiry timestamps.
         self._key_to_timers: dict[Any, set[int]] = {}
 
     def registerTimer(self, grouping_key: Any, expiryTimestampMs: int) -> None:
@@ -64,7 +63,7 @@ class _InMemoryTimers:
 
 
 class _InMemoryValueState(ValueState):
-    """In-memory implementation of ValueState for testing."""
+    """In-memory implementation of ValueState."""
 
     def __init__(
         self,
@@ -93,7 +92,7 @@ class _InMemoryValueState(ValueState):
 
 
 class _InMemoryListState(ListState):
-    """In-memory implementation of ListState for testing."""
+    """In-memory implementation of ListState."""
 
     def __init__(
         self,
@@ -135,7 +134,7 @@ class _InMemoryListState(ListState):
 
 
 class _InMemoryMapState(MapState):
-    """In-memory implementation of MapState for testing."""
+    """In-memory implementation of MapState."""
 
     def __init__(
         self,
@@ -198,7 +197,7 @@ class _InMemoryMapState(MapState):
 
 
 class _InMemoryStatefulProcessorHandle(StatefulProcessorHandle):
-    """In-memory implementation of StatefulProcessorHandle for testing."""
+    """In-memory implementation of StatefulProcessorHandle."""
 
     def __init__(self, timeMode: str = "None") -> None:
         self.grouping_key = None
@@ -286,7 +285,6 @@ class _InMemoryStatefulProcessorHandle(StatefulProcessorHandle):
             del self.map_states[stateName]
 
     def deleteState(self, stateName: str) -> None:
-        """Clears the state for the current grouping key."""
         if stateName in self.value_states:
             self.value_states[stateName].clear()
         elif stateName in self.list_states:
@@ -401,7 +399,7 @@ class TwsTester:
     >>> tester.peekValueState("count", "key1")
     >>> # Returns: (6,)
 
-    .. versionadded:: 4.0.2
+    .. versionadded:: 4.2.0
     """
 
     def __init__(
@@ -517,7 +515,7 @@ class TwsTester:
             return pd.DataFrame()
 
     def updateValueState(self, stateName: str, key: Any, value: tuple) -> None:
-        """Directly set a value state for a given key."""
+        """Sets the value state for a given key."""
         assert stateName in self.handle.value_states, f"State {stateName} has not been initialized."
         self.handle.value_states[stateName].state[key] = value
 
@@ -532,7 +530,7 @@ class TwsTester:
         return self.handle.value_states[stateName].get()
 
     def updateListState(self, stateName: str, key: Any, value: list[tuple]) -> None:
-        """Directly set a list state for a given key."""
+        """Sets the list state for a given key."""
         assert stateName in self.handle.list_states, f"State {stateName} has not been initialized."
         self.handle.list_states[stateName].state[key] = value
 
@@ -547,7 +545,7 @@ class TwsTester:
         return list(self.handle.list_states[stateName].get())
 
     def updateMapState(self, stateName: str, key: Any, value: dict) -> None:
-        """Directly set a map state for a given key."""
+        """Sets the map state for a given key."""
         assert stateName in self.handle.map_states, f"State {stateName} has not been initialized."
         self.handle.map_states[stateName].state[key] = dict(value)
 
@@ -566,10 +564,8 @@ class TwsTester:
         self.handle.setGroupingKey(key)
         self.handle.deleteState(stateName)
 
-    # Timer-related helper methods
-
     def _getTimerValues(self) -> TimerValues:
-        """Create TimerValues based on current time state."""
+        """Creates TimerValues based on current time state."""
         if self._timeMode == "none":
             return TimerValues(-1, -1)
         elif self._timeMode == "processingtime":
@@ -578,7 +574,7 @@ class TwsTester:
             return TimerValues(self._currentProcessingTimeMs, self._currentWatermarkMs)
 
     def _handleExpiredTimers(self) -> list[Row] | pd.DataFrame:
-        """Handle expired timers and return emitted rows."""
+        """Handles expired timers and returns emitted rows."""
         if self._timeMode == "none":
             return []
 
@@ -608,16 +604,18 @@ class TwsTester:
             return _as_row_list(result)
 
     def _filterLateEventsRow(self, values: list[Row]) -> list[Row]:
-        """Filter out late events based on the current watermark, in EventTime mode."""
+        """Filters out late events based on watermark and eventTimeExtractor."""
         if self._timeMode != "eventtime" or self._eventTimeExtractor is None:
             return values
         return [v for v in values if self._eventTimeExtractor(v) > self._currentWatermarkMs]
 
     def _filterLateEventsPandas(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Filter out late events from DataFrame based on current watermark."""
+        """Filters out late events based on watermark and eventTimeExtractor."""
         if self._timeMode != "eventtime" or self._eventTimeExtractor is None:
             return df
-        mask = df.apply(lambda row: self._eventTimeExtractor(row) > self._currentWatermarkMs, axis=1)
+        mask = df.apply(
+            lambda row: self._eventTimeExtractor(row) > self._currentWatermarkMs, axis=1
+        )
         return df[mask].reset_index(drop=True)
 
     def setProcessingTime(self, currentTimeMs: int) -> list[Row] | pd.DataFrame:
@@ -675,9 +673,7 @@ class TwsTester:
         if self._timeMode != "eventtime":
             raise PySparkValueError(
                 errorClass="UNSUPPORTED_OPERATION",
-                messageParameters={
-                    "operation": "setWatermark with TimeMode other than EventTime"
-                },
+                messageParameters={"operation": "setWatermark with TimeMode other than EventTime"},
             )
         if currentWatermarkMs <= self._currentWatermarkMs:
             raise IllegalArgumentException(
