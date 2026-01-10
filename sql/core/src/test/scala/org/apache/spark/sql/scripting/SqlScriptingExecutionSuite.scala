@@ -1323,6 +1323,363 @@ class SqlScriptingExecutionSuite extends QueryTest with SharedSparkSession {
     verifySqlScriptResult(sqlScript, expected = expected)
   }
 
+  test("continue handler - should continue loop after handling error inside WHILE body") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE x, y = 1;
+        |
+        |  DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO
+        |  BEGIN
+        |    SET y = -1;
+        |  END;
+        |
+        |  WHILE x < 5 DO
+        |    SET x = x + 1;
+        |    SET y = y / (x - 3);
+        |    SELECT x, y;
+        |  END WHILE;
+        |
+        |  SELECT x, y;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(2, -1)),
+      Seq(Row(3, -1)),
+      Seq(Row(4, -1)),
+      Seq(Row(5, 0)),
+      Seq(Row(5, 0))
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("continue handler - should continue loop after handling error inside REPEAT body") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE x, y = 1;
+        |
+        |  DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO
+        |  BEGIN
+        |    SET y = -1;
+        |  END;
+        |
+        |  REPEAT
+        |    SET x = x + 1;
+        |    SET y = y / (x - 3);
+        |    SELECT x, y;
+        |  UNTIL
+        |    x >= 5
+        |  END REPEAT;
+        |
+        |  SELECT x AS final_x, y AS final_y;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(2, -1)),  // iteration 1: y = 1 / -1 = -1
+      Seq(Row(3, -1)),  // iteration 2: y = -1 / 0 handler sets y = -1
+      Seq(Row(4, -1)),  // iteration 3: y = -1 / 1 = -1
+      Seq(Row(5, 0)),   // iteration 4: y = -1 / 2 = 0
+      Seq(Row(5, 0))    // final select
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("continue handler - should continue loop after handling error inside FOR body") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE y = 1;
+        |
+        |  DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO
+        |  BEGIN
+        |    SET y = -1;
+        |  END;
+        |
+        |  FOR iter AS SELECT 1 AS val UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4
+        |               UNION ALL SELECT 5 DO
+        |    SET y = y / (iter.val - 3);
+        |    SELECT iter.val, y;
+        |  END FOR;
+        |
+        |  SELECT y AS final_y;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(1, 0)),   // iteration 1: y = 1 / -2 = 0
+      Seq(Row(2, 0)),   // iteration 2: y = 0 / -1 = 0
+      Seq(Row(3, -1)),  // iteration 3: y = 0 / 0 handler sets y = -1
+      Seq(Row(4, -1)),  // iteration 4: y = -1 / 1 = -1
+      Seq(Row(5, 0)),   // iteration 5: y = -1 / 2 = 0
+      Seq(Row(0))       // final select
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("continue handler - should continue after handling error inside IF body") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE x = 1;
+        |  DECLARE handled = 0;
+        |
+        |  DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO
+        |  BEGIN
+        |    SET handled = 1;
+        |  END;
+        |
+        |  IF x = 1 THEN
+        |    SELECT 1 / 0;  -- This will throw divide by zero
+        |    SELECT 999;     -- This should execute after handler
+        |  END IF;
+        |
+        |  SELECT handled;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(999)),  // SELECT 999 executed after handler
+      Seq(Row(1))     // handled = 1
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("continue handler - should continue after handling error inside ELSEIF body") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE x = 2;
+        |  DECLARE handled = 0;
+        |
+        |  DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO
+        |  BEGIN
+        |    SET handled = 1;
+        |  END;
+        |
+        |  IF x = 1 THEN
+        |    SELECT 100;
+        |  ELSEIF x = 2 THEN
+        |    SELECT 1 / 0;  -- This will throw divide by zero
+        |    SELECT 888;     -- This should execute after handler
+        |  ELSE
+        |    SELECT 200;
+        |  END IF;
+        |
+        |  SELECT handled;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(888)),  // SELECT 888 executed after handler
+      Seq(Row(1))     // handled = 1
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("continue handler - should continue after handling error inside ELSE body") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE x = 3;
+        |  DECLARE handled = 0;
+        |
+        |  DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO
+        |  BEGIN
+        |    SET handled = 1;
+        |  END;
+        |
+        |  IF x = 1 THEN
+        |    SELECT 100;
+        |  ELSEIF x = 2 THEN
+        |    SELECT 200;
+        |  ELSE
+        |    SELECT 1 / 0;  -- This will throw divide by zero
+        |    SELECT 777;     -- This should execute after handler
+        |  END IF;
+        |
+        |  SELECT handled;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(777)),  // SELECT 777 executed after handler
+      Seq(Row(1))     // handled = 1
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("continue handler - should continue after handling error inside SEARCHED CASE body") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE x = 2;
+        |  DECLARE handled = 0;
+        |
+        |  DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO
+        |  BEGIN
+        |    SET handled = 1;
+        |  END;
+        |
+        |  CASE
+        |    WHEN x = 1 THEN SELECT 100;
+        |    WHEN x = 2 THEN
+        |      SELECT 1 / 0;  -- This will throw divide by zero
+        |      SELECT 666;     -- This should execute after handler
+        |    ELSE SELECT 200;
+        |  END CASE;
+        |
+        |  SELECT handled;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(666)),  // SELECT 666 executed after handler
+      Seq(Row(1))     // handled = 1
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("continue handler - should continue after handling error inside SIMPLE CASE body") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE x = 2;
+        |  DECLARE handled = 0;
+        |
+        |  DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO
+        |  BEGIN
+        |    SET handled = 1;
+        |  END;
+        |
+        |  CASE x
+        |    WHEN 1 THEN SELECT 100;
+        |    WHEN 2 THEN
+        |      SELECT 1 / 0;  -- This will throw divide by zero
+        |      SELECT 555;     -- This should execute after handler
+        |    ELSE SELECT 200;
+        |  END CASE;
+        |
+        |  SELECT handled;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(555)),  // SELECT 555 executed after handler
+      Seq(Row(1))     // handled = 1
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("continue handler - nested WHILE loops with error in inner loop") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE outer = 0;
+        |  DECLARE inner = 0;
+        |  DECLARE handled = 0;
+        |
+        |  DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO
+        |  BEGIN
+        |    SET handled = handled + 1;
+        |  END;
+        |
+        |  WHILE outer < 2 DO
+        |    SET outer = outer + 1;
+        |    SET inner = 0;
+        |    WHILE inner < 3 DO
+        |      SET inner = inner + 1;
+        |      IF outer = 1 AND inner = 2 THEN
+        |        SELECT 1 / 0;  -- Error in inner loop, iteration 2
+        |      END IF;
+        |      SELECT outer, inner, handled;
+        |    END WHILE;
+        |  END WHILE;
+        |
+        |  SELECT outer AS final_outer, handled AS final_handled;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(1, 1, 0)),  // outer=1, inner=1, no error yet
+      Seq(Row(1, 2, 1)),  // outer=1, inner=2, error handled
+      Seq(Row(1, 3, 1)),  // outer=1, inner=3, continuing
+      Seq(Row(2, 1, 1)),  // outer=2, inner=1
+      Seq(Row(2, 2, 1)),  // outer=2, inner=2, no error this time
+      Seq(Row(2, 3, 1)),  // outer=2, inner=3
+      Seq(Row(2, 1))      // final select
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("continue handler - nested REPEAT loops with error in inner loop") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE outer = 0;
+        |  DECLARE inner = 0;
+        |  DECLARE handled = 0;
+        |
+        |  DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO
+        |  BEGIN
+        |    SET handled = handled + 1;
+        |  END;
+        |
+        |  REPEAT
+        |    SET outer = outer + 1;
+        |    SET inner = 0;
+        |    REPEAT
+        |      SET inner = inner + 1;
+        |      IF outer = 2 AND inner = 1 THEN
+        |        SELECT 1 / 0;  -- Error in inner loop
+        |      END IF;
+        |      SELECT outer, inner, handled;
+        |    UNTIL inner >= 2
+        |    END REPEAT;
+        |  UNTIL outer >= 2
+        |  END REPEAT;
+        |
+        |  SELECT outer AS final_outer, handled AS final_handled;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(1, 1, 0)),  // outer=1, inner=1
+      Seq(Row(1, 2, 0)),  // outer=1, inner=2
+      Seq(Row(2, 1, 1)),  // outer=2, inner=1, error handled
+      Seq(Row(2, 2, 1)),  // outer=2, inner=2
+      Seq(Row(2, 1))      // final select
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
+  test("continue handler - nested FOR loops with error in inner loop") {
+    val sqlScript =
+      """
+        |BEGIN
+        |  DECLARE handled = 0;
+        |
+        |  DECLARE CONTINUE HANDLER FOR DIVIDE_BY_ZERO
+        |  BEGIN
+        |    SET handled = handled + 1;
+        |  END;
+        |
+        |  FOR o AS SELECT 1 AS val UNION ALL SELECT 2 DO
+        |    FOR i AS SELECT 1 AS val UNION ALL SELECT 2 UNION ALL SELECT 3 DO
+        |      IF o.val = 1 AND i.val = 3 THEN
+        |        SELECT 1 / 0;  -- Error in inner loop
+        |      END IF;
+        |      SELECT o.val AS outer, i.val AS inner, handled;
+        |    END FOR;
+        |  END FOR;
+        |
+        |  SELECT handled AS final_handled;
+        |END
+        |""".stripMargin
+    val expected = Seq(
+      Seq(Row(1, 1, 0)),  // o=1, i=1
+      Seq(Row(1, 2, 0)),  // o=1, i=2
+      Seq(Row(1, 3, 1)),  // o=1, i=3, error handled
+      Seq(Row(2, 1, 1)),  // o=2, i=1
+      Seq(Row(2, 2, 1)),  // o=2, i=2
+      Seq(Row(2, 3, 1)),  // o=2, i=3
+      Seq(Row(1))         // final select
+    )
+    verifySqlScriptResult(sqlScript, expected = expected)
+  }
+
   test("exit handler body without BEGIN-END propagates error properly") {
     val sqlScript =
       """
