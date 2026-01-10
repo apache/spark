@@ -174,7 +174,7 @@ class AdaptiveQueryExecSuite
 
   private def findReusedExchange(plan: SparkPlan): Seq[ReusedExchangeExec] = {
     collectWithSubqueries(plan) {
-      case ShuffleQueryStageExec(_, e: ReusedExchangeExec, _) => e
+      case ShuffleQueryStageExec(_, e: ReusedExchangeExec, _, _) => e
       case BroadcastQueryStageExec(_, e: ReusedExchangeExec, _) => e
     }
   }
@@ -3442,6 +3442,44 @@ class AdaptiveQueryExecSuite
               numPartition = if (combineUnionEnabled) 1 + 1 + 2 else 1 + 2)
 
             checkAnswer(sql(query), correctResults)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-53298: Make an isolation to control Shuffle partitionSizeInBytes " +
+    "converted from `REBALANCE` hint") {
+    withTempView("tmp_view") {
+      withSQLConf(
+        SQLConf.ADAPTIVE_OPTIMIZE_SKEWS_IN_REBALANCE_PARTITIONS_ENABLED.key -> "true",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "3") {
+        // block sizes array is [291, 72, 0]
+        spark.sparkContext.parallelize(
+            (1 to 10).map(i => TestData(if (i > 3) 3 else i, i.toString)), 3)
+          .toDF("c1", "c2").createOrReplaceTempView("tmp_view")
+
+        def checkAQEShuffleReadExists(query: String, expectNum: Int): Unit = {
+          val (_, adaptive) = runAdaptiveAndVerifyResult(query)
+          val actualPartialReducerPartitionNum: Seq[Int] = collect(adaptive) {
+            case read: AQEShuffleReadExec =>
+              read.partitionSpecs.count(_.isInstanceOf[PartialReducerPartitionSpec])
+          }
+          assert(actualPartialReducerPartitionNum(0) == expectNum)
+        }
+
+        withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "200") {
+          withSQLConf(SQLConf.REBALANCE_ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "200") {
+            // block sizes array change: [291, 72, 0] -> [291 (88 + 97 + 106), 72] -> [291 (185 + 106), 72]
+            checkAQEShuffleReadExists("SELECT /*+ REBALANCE(c1) */ * FROM tmp_view", 2)
+          }
+          withSQLConf(SQLConf.REBALANCE_ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "30") {
+            // block sizes array change: [291, 72, 0] -> [291 (88 + 97 + 106), 72] -> [291 (88 + 97 + 106), 72]
+            checkAQEShuffleReadExists("SELECT /*+ REBALANCE(c1) */ * FROM tmp_view", 3)
+          }
+          withSQLConf(SQLConf.REBALANCE_ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "500") {
+            // block sizes array change: [291, 72, 0] -> [291, 72]
+            checkAQEShuffleReadExists("SELECT /*+ REBALANCE(c1) */ * FROM tmp_view", 0)
           }
         }
       }
