@@ -178,6 +178,44 @@ class SparkSqlAstBuilder extends AstBuilder {
   private val configValueDef = """([^;]*);*""".r
   private val strLiteralDef = """(".*?[^\\]"|'.*?[^\\]'|[^ \n\r\t"']+)""".r
 
+  /**
+   * Check if a name could be a temporary view name with system.session or session qualification.
+   * Temporary views live in system.session namespace and can be qualified or unqualified.
+   * Valid forms:
+   * - viewName (1 part)
+   * - session.viewName (2 parts)
+   * - system.session.viewName (3 parts)
+   */
+  private def maybeTempViewName(nameParts: Seq[String]): Boolean = {
+    import org.apache.spark.sql.connector.catalog.CatalogManager
+    nameParts.length == 1 || {
+      if (nameParts.length == 2) {
+        nameParts.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
+      } else if (nameParts.length == 3) {
+        nameParts(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
+        nameParts(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
+      } else {
+        false
+      }
+    }
+  }
+
+  /**
+   * Extract the unqualified view name from a potentially qualified temporary view name.
+   * Strips system.session or session qualifiers if present.
+   * Throws an error if the qualification is invalid.
+   */
+  private def extractTempViewName(
+      nameParts: Seq[String],
+      ctx: CreateViewContext): String = {
+    if (maybeTempViewName(nameParts)) {
+      nameParts.last
+    } else {
+      // Invalid qualification
+      throw QueryParsingErrors.notAllowedToAddDBPrefixForTempViewError(nameParts, ctx)
+    }
+  }
+
   private def withCatalogIdentClause(
       ctx: CatalogIdentifierReferenceContext,
       builder: Seq[String] => LogicalPlan): LogicalPlan = {
@@ -703,12 +741,9 @@ class SparkSqlAstBuilder extends AstBuilder {
       }
 
       withIdentClause(ctx.identifierReference(), Seq(qPlan), (ident, otherPlans) => {
-        val tableIdentifier = ident.asTableIdentifier
-        if (tableIdentifier.database.isDefined) {
-          // Temporary view names should NOT contain database prefix like "database.table"
-          throw QueryParsingErrors
-            .notAllowedToAddDBPrefixForTempViewError(tableIdentifier.nameParts, ctx)
-        }
+        // Extract the unqualified view name, allowing system.session or session qualifiers
+        val viewName = extractTempViewName(ident, ctx)
+        val tableIdentifier = TableIdentifier(viewName)
 
         CreateViewCommand(
           tableIdentifier,
