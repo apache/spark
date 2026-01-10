@@ -553,8 +553,16 @@ case class Cast(
   def this(child: Expression, dataType: DataType, timeZoneId: Option[String]) =
     this(child, dataType, timeZoneId, evalMode = EvalMode.fromSQLConf(SQLConf.get))
 
-  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
-    copy(timeZoneId = Option(timeZoneId))
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression = {
+    // Only apply timezone if children are resolved AND timezone is actually needed.
+    // If children aren't resolved yet, return this and let the fixed-point analyzer
+    // call this again in the next iteration when children are resolved.
+    if (childrenResolved && needsTimeZone) {
+      copy(timeZoneId = Option(timeZoneId))
+    } else {
+      this
+    }
+  }
 
   override protected def withNewChildInternal(newChild: Expression): Cast = copy(child = newChild)
 
