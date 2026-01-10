@@ -2830,6 +2830,177 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("COMMENT ON COLUMN") {
+    // use the default v2 session catalog.
+    spark.conf.set(V2_SESSION_CATALOG_IMPLEMENTATION, "builtin")
+    // Session catalog is used.
+    withTable("t") {
+      sql("CREATE TABLE t(k int COMMENT 'original comment', v string) USING json")
+
+      // Verify original comment
+      val originalComment = sql("DESCRIBE t").filter("col_name = 'k'")
+        .select("comment").first().getString(0)
+      assert(originalComment === "original comment",
+        "Expected original comment to be set")
+
+      // Set a new comment
+      checkColumnComment("t", "k", "new comment")
+
+      // Verify comment is updated
+      val newComment = sql("DESCRIBE t").filter("col_name = 'k'")
+        .select("comment").first().getString(0)
+      assert(newComment === "new comment",
+        "Expected comment to be updated to 'new comment'")
+
+      // Remove comment by setting to NULL
+      checkColumnComment("t", "k", null)
+
+      // Verify comment is removed
+      val removedComment = sql("DESCRIBE t").filter("col_name = 'k'")
+        .select("comment").first().getString(0)
+      assert(removedComment.isEmpty,
+        "Expected comment to be removed")
+
+      // Set comment to literal "NULL" string
+      checkColumnComment("t", "k", "NULL")
+      val nullStringComment = sql("DESCRIBE t").filter("col_name = 'k'")
+        .select("comment").first().getString(0)
+      assert(nullStringComment === "NULL",
+        "Expected comment to be set to 'NULL' string")
+
+      // Set comment to empty string
+      checkColumnComment("t", "k", "")
+      val emptyComment = sql("DESCRIBE t").filter("col_name = 'k'")
+        .select("comment").first().getString(0)
+      assert(emptyComment === "",
+        "Expected comment to be set to empty string (not removed)")
+
+      // Add comment to column that didn't have one
+      checkColumnComment("t", "v", "new column comment")
+      val vComment = sql("DESCRIBE t").filter("col_name = 'v'")
+        .select("comment").first().getString(0)
+      assert(vComment === "new column comment",
+        "Expected comment to be set on column v")
+
+      // Remove comment from column v using COMMENT ON COLUMN IS NULL
+      checkColumnComment("t", "v", null)
+      val removedVComment = sql("DESCRIBE t").filter("col_name = 'v'")
+        .select("comment").first().getString(0)
+      assert(removedVComment.isEmpty,
+        "Expected comment to be removed using COMMENT ON COLUMN IS NULL")
+    }
+
+    // V2 non-session catalog is used.
+    withTable("testcat.ns1.ns2.t") {
+      sql("CREATE TABLE testcat.ns1.ns2.t(k int COMMENT 'original', v string) USING foo")
+
+      // Verify original comment
+      val originalComment = sql("DESCRIBE testcat.ns1.ns2.t").filter("col_name = 'k'")
+        .select("comment").first().getString(0)
+      assert(originalComment === "original",
+        "Expected original comment for testcat table")
+
+      // Set a comment
+      checkColumnComment("testcat.ns1.ns2.t", "k", "updated comment")
+
+      // Verify comment is set
+      val updatedComment = sql("DESCRIBE testcat.ns1.ns2.t").filter("col_name = 'k'")
+        .select("comment").first().getString(0)
+      assert(updatedComment === "updated comment",
+        "Expected comment to be updated for testcat table")
+
+      // Remove comment by setting to NULL
+      checkColumnComment("testcat.ns1.ns2.t", "k", null)
+
+      // Verify comment is removed
+      val removedComment = sql("DESCRIBE testcat.ns1.ns2.t").filter("col_name = 'k'")
+        .select("comment").first().getString(0)
+      assert(removedComment === null || removedComment.isEmpty,
+        "Expected comment to be removed from testcat table")
+
+      // Set comment to empty string
+      checkColumnComment("testcat.ns1.ns2.t", "k", "")
+      val emptyComment = sql("DESCRIBE testcat.ns1.ns2.t").filter("col_name = 'k'")
+        .select("comment").first().getString(0)
+      assert(emptyComment === "",
+        "Expected comment to be set to empty string for testcat table")
+
+      // Set a comment on column v and then remove it using COMMENT ON COLUMN IS NULL
+      sql("COMMENT ON COLUMN testcat.ns1.ns2.t.v IS 'temp comment'")
+      val tempComment = sql("DESCRIBE testcat.ns1.ns2.t").filter("col_name = 'v'")
+        .select("comment").first().getString(0)
+      assert(tempComment === "temp comment",
+        "Expected temp comment to be set")
+
+      checkColumnComment("testcat.ns1.ns2.t", "v", null)
+      val droppedVComment = sql("DESCRIBE testcat.ns1.ns2.t").filter("col_name = 'v'")
+        .select("comment").first().getString(0)
+      assert(droppedVComment === null || droppedVComment.isEmpty,
+        "Expected comment to be removed using COMMENT ON COLUMN IS NULL in testcat")
+    }
+
+    // Test error case: column not found
+    withTable("t2") {
+      sql("CREATE TABLE t2(k int) USING json")
+      val sql1 = "COMMENT ON COLUMN t2.nonexistent IS 'test'"
+      checkError(
+        exception = analysisException(sql1),
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map(
+          "objectName" -> "`nonexistent`",
+          "proposal" -> "`k`"),
+        context = ExpectedContext(
+          fragment = sql1,
+          start = 0,
+          stop = 41))
+    }
+
+    // Test with different qualification levels
+    withDatabase("test_db") {
+      sql("CREATE DATABASE test_db")
+      sql("USE test_db")
+      withTable("test_db.qualified_test") {
+        sql("CREATE TABLE qualified_test(x int, y string) USING json")
+
+        // Test with just table.column (uses current database)
+        sql("COMMENT ON COLUMN qualified_test.x IS 'test with table.column'")
+        val comment1 = sql("DESCRIBE qualified_test").filter("col_name = 'x'")
+          .select("comment").first().getString(0)
+        assert(comment1 === "test with table.column",
+          "Expected comment to be set using table.column format")
+
+        // Test with database.table.column
+        sql("COMMENT ON COLUMN test_db.qualified_test.y IS 'test with database.table.column'")
+        val comment2 = sql("DESCRIBE qualified_test").filter("col_name = 'y'")
+          .select("comment").first().getString(0)
+        assert(comment2 === "test with database.table.column",
+          "Expected comment to be set using database.table.column format")
+
+        // Test removing comment with just table.column
+        sql("COMMENT ON COLUMN qualified_test.x IS NULL")
+        val removedComment = sql("DESCRIBE qualified_test").filter("col_name = 'x'")
+          .select("comment").first().getString(0)
+        assert(removedComment === null || removedComment.isEmpty,
+          "Expected comment to be removed using table.column format")
+      }
+    }
+  }
+
+  private def checkColumnComment(tableName: String, columnName: String, comment: String): Unit = {
+    sql(s"COMMENT ON COLUMN $tableName.$columnName IS " +
+      Option(comment).map("'" + _ + "'").getOrElse("NULL"))
+    val commentValue = sql(s"DESCRIBE $tableName").filter(s"col_name = '$columnName'")
+      .select("comment").first().getString(0)
+    if (comment == null) {
+      // When comment is NULL, the comment should be removed
+      assert(commentValue.isEmpty,
+        s"Expected comment to be removed for column $columnName")
+    } else {
+      assert(commentValue === comment,
+        s"Expected comment to be '$comment' for column $columnName, but got '$commentValue'")
+    }
+  }
+
   private def checkTableComment(tableName: String, comment: String): Unit = {
     sql(s"COMMENT ON TABLE $tableName IS " + Option(comment).map("'" + _ + "'").getOrElse("NULL"))
     if (comment == null) {
