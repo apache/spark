@@ -184,6 +184,8 @@ def eventually(
     timeout=30.0,
     catch_assertions=False,
     catch_timeout=False,
+    quiet=True,
+    interval=0.1,
 ):
     """
     Wait a given amount of time for a condition to pass, else fail with an error.
@@ -209,10 +211,17 @@ def eventually(
         If False (default), do not catch TimeoutError.
         If True, catch TimeoutError; continue, but save
         error to throw upon timeout.
+    quiet : bool
+        If True (default), do not print any output.
+        If False, print output.
+    interval : float
+        Number of seconds to wait between attempts.  Default 0.1 seconds.
     """
     assert timeout > 0
     assert isinstance(catch_assertions, bool)
     assert isinstance(catch_timeout, bool)
+    assert isinstance(quiet, bool)
+    assert isinstance(interval, float)
 
     def decorator(condition: Callable) -> Callable:
         assert isinstance(condition, Callable)
@@ -241,8 +250,9 @@ def eventually(
                 if lastValue is True or lastValue is None:
                     return
 
-                print(f"\nAttempt #{numTries} failed!\n{lastValue}")
-                sleep(0.01)
+                if not quiet:
+                    print(f"\nAttempt #{numTries} failed!\n{lastValue}")
+                sleep(interval)
 
             if isinstance(lastValue, (AssertionError, TimeoutError)):
                 raise lastValue
