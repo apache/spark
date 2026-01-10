@@ -31,6 +31,8 @@ private[sql] object SqlApiConfHelper {
   val LEGACY_TIME_PARSER_POLICY_KEY: String = "spark.sql.legacy.timeParserPolicy"
   val CASE_SENSITIVE_KEY: String = "spark.sql.caseSensitive"
   val SESSION_LOCAL_TIMEZONE_KEY: String = "spark.sql.session.timeZone"
+  val SESSION_ENFORCE_TIMEZONE_MATCH_KEY: String =
+    "spark.sql.session.enforceTimeZoneMatch"
   val LOCAL_RELATION_CACHE_THRESHOLD_KEY: String = "spark.sql.session.localRelationCacheThreshold"
   val LOCAL_RELATION_CHUNK_SIZE_ROWS_KEY: String = "spark.sql.session.localRelationChunkSizeRows"
   val LOCAL_RELATION_CHUNK_SIZE_BYTES_KEY: String =
