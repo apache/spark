@@ -1835,7 +1835,7 @@ class DDLParserSuite extends AnalysisTest {
           expected = InsertIntoStatement(
             table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
             partitionSpec = Map.empty,
-            userSpecifiedCols = Seq.empty,
+            userSpecifiedCols = userSpecifiedCols,
             query = Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("source"))),
             overwrite = true,
             ifPartitionNotExists = false,
