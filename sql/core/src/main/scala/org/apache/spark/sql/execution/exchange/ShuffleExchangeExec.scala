@@ -495,7 +495,7 @@ object ShuffleExchangeExec {
         serializer,
         shuffleWriterProcessor = createShuffleWriteProcessor(writeMetrics),
         rowBasedChecksums = UnsafeRowChecksum.createUnsafeRowChecksums(checksumSize),
-        checksumMismatchFullRetryEnabled = SQLConf.get.shuffleChecksumMismatchFullRetryEnabled)
+        _checksumMismatchFullRetryEnabled = SQLConf.get.shuffleChecksumMismatchFullRetryEnabled)
 
     dependency
   }
