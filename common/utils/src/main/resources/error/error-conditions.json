@@ -4479,7 +4479,7 @@
         ]
       }
     },
-    "sqlState" : "XX000"
+    "sqlState" : "42704"
   },
   "MISSING_CATALOG_ABILITY" : {
     "message" : [
