@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
@@ -25,13 +26,37 @@ import org.apache.spark.sql.types._
 
 class RewritePythonAggregatorUDAFSuite extends PlanTest {
 
+  /**
+   * Create a mock PythonUDF for testing.
+   * The func parameter is null because we only test plan structure, not execution.
+   */
+  private def createMockPythonUDF(
+      name: String,
+      returnType: DataType,
+      children: Seq[Expression]): PythonUDF = {
+    PythonUDF(
+      name = name,
+      func = null,
+      dataType = returnType,
+      children = children,
+      evalType = PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
+      udfDeterministic = true)
+  }
+
   test("rewrite ungrouped aggregation") {
     val child = LocalRelation($"a".int, $"b".int)
 
-    // Create mock UDF expressions (using Literal as placeholder)
-    val partialReduceUDF = Literal("partial_reduce_udf")
-    val mergeUDF = Literal("merge_udf")
-    val finalMergeUDF = Literal("final_merge_udf")
+    // Create mock PythonUDF expressions with null func for testing
+    val outputSchema = StructType(Seq(
+      StructField("key", LongType, nullable = false),
+      StructField("buffer", BinaryType, nullable = true)
+    ))
+    val partialReduceUDF = createMockPythonUDF(
+      "partial_reduce", outputSchema, child.output)
+    val mergeUDF = createMockPythonUDF(
+      "merge", StructType(Seq(StructField("buffer", BinaryType, nullable = true))), Seq.empty)
+    val finalMergeUDF = createMockPythonUDF(
+      "final_merge", StructType(Seq(StructField("result", LongType, nullable = true))), Seq.empty)
     val resultAttr = AttributeReference("result", LongType)()
 
     val query = PythonAggregatorUDAF(
@@ -60,10 +85,17 @@ class RewritePythonAggregatorUDAFSuite extends PlanTest {
     val child = LocalRelation($"a".int, $"b".int, $"c".int)
     val groupingAttr = child.output.head
 
-    // Create mock UDF expressions (using Literal as placeholder)
-    val partialReduceUDF = Literal("partial_reduce_udf")
-    val mergeUDF = Literal("merge_udf")
-    val finalMergeUDF = Literal("final_merge_udf")
+    // Create mock PythonUDF expressions with null func for testing
+    val outputSchema = StructType(Seq(
+      StructField("key", LongType, nullable = false),
+      StructField("buffer", BinaryType, nullable = true)
+    ))
+    val partialReduceUDF = createMockPythonUDF(
+      "partial_reduce", outputSchema, child.output)
+    val mergeUDF = createMockPythonUDF(
+      "merge", StructType(Seq(StructField("buffer", BinaryType, nullable = true))), Seq.empty)
+    val finalMergeUDF = createMockPythonUDF(
+      "final_merge", StructType(Seq(StructField("result", LongType, nullable = true))), Seq.empty)
     val resultAttr = AttributeReference("result", LongType)()
 
     val query = PythonAggregatorUDAF(
@@ -102,4 +134,3 @@ class RewritePythonAggregatorUDAFSuite extends PlanTest {
     assert(rewritten eq child, "Plan without PythonAggregatorUDAF should be unchanged")
   }
 }
-
