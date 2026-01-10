@@ -937,7 +937,7 @@ class AstBuilder extends DataTypeAstBuilder
             Seq(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE), isStreaming = false)
           val deleteExpr = expression(ctx.whereClause().booleanExpression())
           val isByName = ctx.NAME() != null
-          val schemaEvolutionWriteOption =
+          val schemaEvolutionWriteOption: Map[String, String] =
             if (ctx.EVOLUTION() != null) Map("mergeSchema" -> "true") else Map.empty
           if (isByName) {
             OverwriteByExpression.byName(
