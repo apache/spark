@@ -812,6 +812,38 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Row(null, null, 6, "F") :: Nil)
   }
 
+  test("LATERAL VIEW explode with column reference") {
+    withTempView("test_data") {
+      sql("""
+        CREATE TEMPORARY VIEW test_data AS
+        SELECT 1 as c1, array(10, 20, 30) as c2
+        UNION ALL SELECT 2, array(15, 25, 35)
+        UNION ALL SELECT 3, array(12, 22, 32)
+      """)
+
+      val result = sql("""
+        SELECT c1, c2, col
+        FROM test_data
+        LATERAL VIEW explode(c2) AS col
+      """)
+
+      checkAnswer(
+        result,
+        Seq(
+          Row(1, Seq(10, 20, 30), 10),
+          Row(1, Seq(10, 20, 30), 20),
+          Row(1, Seq(10, 20, 30), 30),
+          Row(2, Seq(15, 25, 35), 15),
+          Row(2, Seq(15, 25, 35), 25),
+          Row(2, Seq(15, 25, 35), 35),
+          Row(3, Seq(12, 22, 32), 12),
+          Row(3, Seq(12, 22, 32), 22),
+          Row(3, Seq(12, 22, 32), 32)
+        )
+      )
+    }
+  }
+
   test("SPARK-11111 null-safe join should not use cartesian product") {
     val df = sql("select count(*) from testData a join testData b on (a.key <=> b.key)")
     val cp = df.queryExecution.sparkPlan.collect {

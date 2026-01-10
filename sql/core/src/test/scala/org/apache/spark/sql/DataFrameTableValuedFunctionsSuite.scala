@@ -544,4 +544,38 @@ class DataFrameTableValuedFunctionsSuite extends QueryTest with SharedSparkSessi
       }
     }
   }
+
+  test("lateral join without outer() on column") {
+    withView("test_data") {
+      val df = Seq(
+        (1, Seq(10, 20, 30)),
+        (2, Seq(15, 25, 35)),
+        (3, Seq(12, 22, 32))
+      ).toDF("c1", "c2")
+      df.createOrReplaceTempView("test_data")
+
+      // This should work without .outer() - the column reference should be resolved
+      // when the TVF is used in lateral join context
+      checkAnswer(
+        df.lateralJoin(spark.tvf.explode($"c2")),
+        sql("SELECT * FROM test_data LATERAL VIEW explode(c2) AS col")
+      )
+    }
+  }
+
+  test("lateral join with mixed literals and column references in TVF args") {
+    withView("test_data") {
+      val df = Seq(
+        (1, 10),
+        (2, 20),
+        (3, 30)
+      ).toDF("c1", "c2")
+      df.createOrReplaceTempView("test_data")
+
+      checkAnswer(
+        df.lateralJoin(spark.tvf.explode(array(lit(1), $"c2"))),
+        sql("SELECT * FROM test_data LATERAL VIEW explode(array(1, c2)) AS col")
+      )
+    }
+  }
 }
