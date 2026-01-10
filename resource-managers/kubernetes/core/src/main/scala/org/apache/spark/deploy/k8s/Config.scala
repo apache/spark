@@ -815,6 +815,50 @@ private[spark] object Config extends Logging {
       .booleanConf
       .createWithDefault(false)
 
+  val KUBERNETES_ALLOCATION_EXECUTOR_BACKOFF_ENABLED =
+    ConfigBuilder("spark.kubernetes.allocation.executor.backoff.enabled")
+      .doc("Enables a backoff mechanism for executor allocation failures. When enabled, " +
+        "executor pod requests are delayed exponentially if pods repeatedly fail to start. " +
+        "This helps reduce load on Kubernetes infrastructure (control plane, Istio, etc)")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val KUBERNETES_ALLOCATION_EXECUTOR_BACKOFF_FAILURE_THRESHOLD =
+    ConfigBuilder("spark.kubernetes.allocation.executor.backoff.failureThreshold")
+      .doc("Number of executor startup failures to trigger Backoff state. " +
+        "Only counts failures within the configured failure interval.")
+      .version("4.2.0")
+      .intConf
+      .checkValue(value => value > 0, "Failure threshold should be a positive integer")
+      .createWithDefault(2)
+
+  val KUBERNETES_ALLOCATION_EXECUTOR_BACKOFF_FAILURE_INTERVAL =
+    ConfigBuilder("spark.kubernetes.allocation.executor.backoff.failureInterval")
+      .doc("Time window for counting executor startup failures. Failures older than " +
+        "this interval are not counted towards the failure threshold.")
+      .version("4.2.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(interval => interval > 0, "Failure interval must be a positive time value")
+      .createWithDefaultString("10m")
+
+  val KUBERNETES_ALLOCATION_EXECUTOR_BACKOFF_INITIAL_DELAY =
+    ConfigBuilder("spark.kubernetes.allocation.executor.backoff.initialDelay")
+      .doc("Starting delay for exponential backoff when in Backoff state. " +
+        "The delay doubles with each request made while in Backoff state.")
+      .version("4.2.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(delay => delay > 0, "Initial backoff delay must be a positive time value")
+      .createWithDefaultString("30s")
+
+  val KUBERNETES_ALLOCATION_EXECUTOR_BACKOFF_MAX_DELAY =
+    ConfigBuilder("spark.kubernetes.allocation.executor.backoff.maxBackoffDelay")
+      .doc("Maximum backoff delay. The delay will not exceed this value.")
+      .version("4.2.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(delay => delay > 0, "Max backoff delay must be a positive time value")
+      .createWithDefaultString("5m")
+
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."
   val KUBERNETES_DRIVER_SERVICE_LABEL_PREFIX = "spark.kubernetes.driver.service.label."

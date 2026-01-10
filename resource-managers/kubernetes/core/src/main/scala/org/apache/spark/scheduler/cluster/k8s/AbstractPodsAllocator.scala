@@ -19,6 +19,7 @@ package org.apache.spark.scheduler.cluster.k8s
 import io.fabric8.kubernetes.api.model.Pod
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.metrics.source.Source
 import org.apache.spark.resource.ResourceProfile
 
 
@@ -55,4 +56,14 @@ abstract class AbstractPodsAllocator {
    * Stop hook
    */
   def stop(applicationId: String): Unit
+
+  /**
+   * Called when driver receives RegisterExecutor message from executor
+   */
+  def onRegisterExecutorMsgReceived(executorId: String): Unit = {}
+
+  /**
+   * Metrics sources for this allocator.
+   */
+  def metricsSources: Seq[Source] = Seq.empty
 }
