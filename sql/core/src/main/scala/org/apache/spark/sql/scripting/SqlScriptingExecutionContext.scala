@@ -106,16 +106,6 @@ class SqlScriptingExecutionFrame(
   private[scripting] val scopes: ListBuffer[SqlScriptingExecutionScope] = ListBuffer.empty
 
   /**
-   * Find a cursor by name in the scope hierarchy, searching from innermost to outermost.
-   *
-   * @param cursorName The cursor name to find
-   * @return The cursor definition if found
-   */
-  def findCursor(cursorName: String): Option[CursorDefinition] = {
-    findCursorByNameParts(Seq(cursorName))
-  }
-
-  /**
    * Find a cursor by its normalized name in the current scope and parent scopes.
    * Used by cursor commands after name resolution.
    *
@@ -136,36 +126,6 @@ class SqlScriptingExecutionFrame(
    */
   def findCursorInScope(scopeLabel: String, normalizedName: String): Option[CursorDefinition] = {
     scopes.reverseIterator.find(_.label == scopeLabel).flatMap(_.cursors.get(normalizedName))
-  }
-
-  /**
-   * Find a cursor by name parts (label and name) in the scope hierarchy.
-   * Supports both unqualified (Seq(name)) and qualified (Seq(label, name)) cursor references.
-   *
-   * @param nameParts The cursor name parts (either Seq(name) or Seq(label, name))
-   * @return The cursor definition if found
-   */
-  def findCursorByNameParts(nameParts: Seq[String]): Option[CursorDefinition] = {
-    def isScopeOfCursor(
-        nameParts: Seq[String],
-        scope: SqlScriptingExecutionScope
-    ): Boolean = nameParts match {
-      case Seq(name) => scope.cursors.contains(name)
-      // Qualified case.
-      case Seq(label, _) => scope.label == label
-      case _ =>
-        throw SparkException.internalError("Expected 1 or 2 nameParts for cursor lookup.")
-    }
-
-    scopes.reverseIterator.foreach { scope =>
-      if (isScopeOfCursor(nameParts, scope)) {
-        val cursorOpt = scope.cursors.get(nameParts.last)
-        if (cursorOpt.isDefined) {
-          return cursorOpt
-        }
-      }
-    }
-    None
   }
 
   override def hasNext: Boolean = executionPlan.getTreeIterator.hasNext

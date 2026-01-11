@@ -25,11 +25,14 @@ import org.apache.spark.sql.scripting.{CursorDeclared, CursorDefinition}
 
 /**
  * Physical plan node for declaring cursors.
- * Creates a cursor definition in the current scope and parses its query from SQL text.
+ *
+ * Creates a cursor definition and initializes it in the Declared state.
+ * The cursor query is parsed but not analyzed/executed until OPEN.
  *
  * @param cursorName Name of the cursor
  * @param queryText Original SQL text of the cursor query
- * @param asensitive Whether the cursor is ASENSITIVE (currently all cursors are INSENSITIVE)
+ * @param asensitive Whether the cursor is ASENSITIVE (sensitivity to underlying data changes,
+ *                   not case sensitivity). Currently all cursors are effectively INSENSITIVE.
  */
 case class DeclareCursorExec(
     cursorName: String,

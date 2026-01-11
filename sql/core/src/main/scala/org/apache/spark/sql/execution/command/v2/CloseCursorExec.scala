@@ -25,7 +25,9 @@ import org.apache.spark.sql.scripting.CursorClosed
 
 /**
  * Physical plan node for closing cursors.
- * Releases cursor resources and resets its state to closed.
+ *
+ * Transitions cursor from Opened or Fetching state to Closed state, releasing resources.
+ * Closing an already closed cursor or a declared-but-not-opened cursor raises an error.
  *
  * @param cursor CursorReference resolved during analysis phase
  */
@@ -43,20 +45,7 @@ case class CloseCursorExec(cursor: Expression) extends LeafV2CommandExec {
     val scriptingContext = scriptingContextManager.getContext
       .asInstanceOf[org.apache.spark.sql.scripting.SqlScriptingExecutionContext]
 
-    // Find cursor using normalized name from CursorReference
-    val cursorDefOpt: Option[org.apache.spark.sql.scripting.CursorDefinition] =
-      if (cursorRef.scopePath.nonEmpty) {
-        scriptingContext.currentFrame.findCursorInScope(
-          cursorRef.scopePath.head, cursorRef.normalizedName)
-      } else {
-        scriptingContext.currentFrame.findCursorByName(cursorRef.normalizedName)
-      }.asInstanceOf[Option[org.apache.spark.sql.scripting.CursorDefinition]]
-    val cursorDef = cursorDefOpt.getOrElse(
-      throw new AnalysisException(
-        errorClass = "CURSOR_NOT_FOUND",
-        messageParameters = Map("cursorName" -> cursorRef.sql)))
-
-    // Get current cursor state
+    // Get current cursor state and validate it exists
     val currentState = scriptingContext.currentScope.cursorStates.getOrElse(
       cursorRef.normalizedName,
       throw new AnalysisException(

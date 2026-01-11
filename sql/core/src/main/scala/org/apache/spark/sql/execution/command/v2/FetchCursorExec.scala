@@ -30,6 +30,10 @@ import org.apache.spark.sql.scripting.{CursorFetching, CursorOpened}
 /**
  * Physical plan node for fetching from cursors.
  *
+ * Transitions cursor from Opened to Fetching state on first fetch (creating result iterator),
+ * then fetches rows from the iterator on subsequent calls. Assigns fetched values to target
+ * variables with ANSI store assignment rules.
+ *
  * @param cursor CursorReference resolved during analysis phase
  * @param targetVariables Variables to fetch into
  */
@@ -48,19 +52,6 @@ case class FetchCursorExec(
 
     val scriptingContext = scriptingContextManager.getContext
       .asInstanceOf[org.apache.spark.sql.scripting.SqlScriptingExecutionContext]
-
-    // Find cursor using normalized name from CursorReference
-    val cursorDefOpt: Option[org.apache.spark.sql.scripting.CursorDefinition] =
-      if (cursorRef.scopePath.nonEmpty) {
-        scriptingContext.currentFrame.findCursorInScope(
-          cursorRef.scopePath.head, cursorRef.normalizedName)
-      } else {
-        scriptingContext.currentFrame.findCursorByName(cursorRef.normalizedName)
-      }.asInstanceOf[Option[org.apache.spark.sql.scripting.CursorDefinition]]
-    val cursorDef = cursorDefOpt.getOrElse(
-      throw new AnalysisException(
-        errorClass = "CURSOR_NOT_FOUND",
-        messageParameters = Map("cursorName" -> cursorRef.sql)))
 
     // Get current cursor state
     val currentState = scriptingContext.currentScope.cursorStates.getOrElse(
