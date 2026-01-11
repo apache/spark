@@ -394,6 +394,101 @@ END;
 --QUERY-DELIMITER-END
 
 
+-- Test 7a: USING clause - various data types (matching EXECUTE IMMEDIATE behavior)
+-- EXPECTED: Success - test that USING clause handles various types correctly
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE int_val INT;
+  DECLARE str_val STRING;
+  DECLARE date_val DATE;
+  DECLARE bool_val BOOLEAN;
+
+  -- Integer type
+  DECLARE cur_int CURSOR FOR SELECT typeof(:p) as type, :p as val;
+  OPEN cur_int USING 42 AS p;
+  FETCH cur_int INTO str_val, int_val;
+  CLOSE cur_int;
+  VALUES ('INT', int_val);
+
+  -- String type
+  DECLARE cur_str CURSOR FOR SELECT typeof(:p) as type, :p as val;
+  OPEN cur_str USING 'hello' AS p;
+  FETCH cur_str INTO str_val, str_val;
+  CLOSE cur_str;
+  VALUES ('STRING', str_val);
+
+  -- Date type
+  DECLARE cur_date CURSOR FOR SELECT typeof(:p) as type, :p as val;
+  OPEN cur_date USING DATE '2023-12-25' AS p;
+  FETCH cur_date INTO str_val, date_val;
+  CLOSE cur_date;
+  VALUES ('DATE', date_val);
+
+  -- Boolean type
+  DECLARE cur_bool CURSOR FOR SELECT typeof(:p) as type, :p as val;
+  OPEN cur_bool USING true AS p;
+  FETCH cur_bool INTO str_val, bool_val;
+  CLOSE cur_bool;
+  VALUES ('BOOLEAN', bool_val);
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 7b: USING clause - positional vs named parameters
+-- EXPECTED: Success - verify positional and named parameter binding work correctly
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE result INT;
+
+  -- Positional parameters (no aliases)
+  DECLARE cur_pos CURSOR FOR SELECT ? + ? AS sum;
+  OPEN cur_pos USING 10, 20;
+  FETCH cur_pos INTO result;
+  CLOSE cur_pos;
+  VALUES ('positional', result); -- Should be 30
+
+  -- Named parameters (with aliases)
+  DECLARE cur_named CURSOR FOR SELECT :a + :b AS sum;
+  OPEN cur_named USING 15 AS a, 25 AS b;
+  FETCH cur_named INTO result;
+  CLOSE cur_named;
+  VALUES ('named', result); -- Should be 40
+
+  -- Mixed: variable reference without alias (positional)
+  DECLARE x INT DEFAULT 100;
+  DECLARE cur_var CURSOR FOR SELECT ? + 1 AS val;
+  OPEN cur_var USING x;
+  FETCH cur_var INTO result;
+  CLOSE cur_var;
+  VALUES ('variable', result); -- Should be 101
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 7c: USING clause - expressions (matching EXECUTE IMMEDIATE)
+-- EXPECTED: Success - test constant expressions in USING clause
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE result INT;
+  DECLARE base INT DEFAULT 5;
+
+  -- Arithmetic expression
+  DECLARE cur1 CURSOR FOR SELECT :p AS val;
+  OPEN cur1 USING 5 + 10 AS p;
+  FETCH cur1 INTO result;
+  CLOSE cur1;
+  VALUES ('arithmetic', result); -- Should be 15
+
+  -- Variable reference with expression
+  DECLARE cur2 CURSOR FOR SELECT :p AS val;
+  OPEN cur2 USING base * 2 AS p;
+  FETCH cur2 INTO result;
+  CLOSE cur2;
+  VALUES ('variable_expr', result); -- Should be 10
+END;
+--QUERY-DELIMITER-END
+
+
 -- Test 8: Label-qualified cursor - basic case
 -- EXPECTED: Success - cursor qualified with label
 --QUERY-DELIMITER-START
@@ -860,6 +955,35 @@ BEGIN
   FETCH IDENTIFIER('MixedCase') INTO result;
   CLOSE IDENTIFIER('MixedCase');
   VALUES (result); -- Should return 42
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 37a: IDENTIFIER() clause in FETCH INTO statement
+-- EXPECTED: Success - IDENTIFIER() works for variable names in FETCH INTO
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE IDENTIFIER('my_result') INT;
+  DECLARE my_cursor CURSOR FOR SELECT 123 AS val;
+  OPEN my_cursor;
+  FETCH my_cursor INTO IDENTIFIER('my_result');
+  CLOSE my_cursor;
+  VALUES (IDENTIFIER('my_result')); -- Should return 123
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 37b: IDENTIFIER() in FETCH INTO with multiple variables
+-- EXPECTED: Success - IDENTIFIER() works with multiple target variables
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE IDENTIFIER('val1') INT;
+  DECLARE IDENTIFIER('val2') STRING;
+  DECLARE cur CURSOR FOR SELECT 42, 'test';
+  OPEN cur;
+  FETCH cur INTO IDENTIFIER('val1'), IDENTIFIER('val2');
+  CLOSE cur;
+  VALUES (IDENTIFIER('val1'), IDENTIFIER('val2')); -- Should return 42, 'test'
 END;
 --QUERY-DELIMITER-END
 

@@ -1952,9 +1952,7 @@ case class DeclareCursor(
 case class OpenCursor(
     nameParts: Seq[String],
     args: Seq[Expression] = Seq.empty,
-    paramNames: Seq[String] = Seq.empty) extends LeafCommand {
-  override lazy val resolved: Boolean = args.forall(_.resolved)
-}
+    paramNames: Seq[String] = Seq.empty) extends LeafCommand
 
 /**
  * The logical plan of the FETCH cursor command.
@@ -1964,9 +1962,7 @@ case class OpenCursor(
  */
 case class FetchCursor(
     nameParts: Seq[String],
-    targetVariables: Seq[Expression]) extends LeafCommand {
-  override lazy val resolved: Boolean = targetVariables.forall(_.resolved)
-}
+    targetVariables: Seq[Expression]) extends LeafCommand
 
 /**
  * The logical plan of the CLOSE cursor command.

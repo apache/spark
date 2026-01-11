@@ -120,8 +120,7 @@ case class OpenCursorExec(
 
   /**
    * Builds parameter arrays for the session.sql() API.
-   * This mirrors the logic in EXECUTE IMMEDIATE and uses pre-extracted parameter names
-   * to avoid issues with alias resolution during analysis.
+   * This mirrors the exact logic in EXECUTE IMMEDIATE to ensure identical behavior.
    *
    * @param args Parameter expressions from the USING clause
    * @return Tuple of (parameter values, parameter names)
@@ -142,15 +141,14 @@ case class OpenCursorExec(
 
   /**
    * Evaluates a parameter expression and returns its value as a Literal.
-   * This matches the behavior of EXECUTE IMMEDIATE to preserve type information.
+   * This matches the exact behavior of EXECUTE IMMEDIATE to preserve type information.
    *
    * @param expr The expression to evaluate
    * @return Literal with evaluated value and type
    */
   private def evaluateParameterExpression(expr: Expression): Any = {
     import org.apache.spark.sql.catalyst.InternalRow
-    import org.apache.spark.sql.catalyst.expressions.{Alias, Literal, VariableReference}
-    import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
+    import org.apache.spark.sql.catalyst.expressions.{Literal, VariableReference}
 
     expr match {
       case varRef: VariableReference =>
@@ -162,13 +160,9 @@ case class OpenCursorExec(
         // This ensures DATE '2023-12-25' remains a DateType literal, not just an Int.
         Literal.create(foldable.eval(InternalRow.empty), foldable.dataType)
       case other =>
-        // For non-foldable expressions, use a projection to evaluate
-        val namedExpr = Alias(other, "param")()
-        val project = Project(Seq(namedExpr), LocalRelation())
-        val queryExecution = session.sessionState.executePlan(project)
-        val row = queryExecution.executedPlan.executeCollect().head
-        val value = row.get(0, other.dataType)
-        Literal.create(value, other.dataType)
+        // Expression is not foldable - not supported for parameters
+        throw org.apache.spark.sql.errors.QueryCompilationErrors
+          .unsupportedParameterExpression(other)
     }
   }
 

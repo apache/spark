@@ -4495,7 +4495,7 @@ object SQLConf {
       .internal()
       .doc("SQL Scripting CURSOR feature enables declarative cursors with " +
         "DECLARE CURSOR, OPEN, FETCH, and CLOSE statements.")
-      .version("4.1.0")
+      .version("4.2.0")
       .booleanConf
       .createWithDefault(false)
 

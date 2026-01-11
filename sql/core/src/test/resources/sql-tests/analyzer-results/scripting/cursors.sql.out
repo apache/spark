@@ -80,9 +80,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 87,
+    "startIndex" : 100,
     "stopIndex" : 100,
-    "fragment" : "FETCH x INTO x"
+    "fragment" : "x"
   } ]
 }
 
@@ -131,9 +131,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 171,
+    "startIndex" : 185,
     "stopIndex" : 185,
-    "fragment" : "FETCH c1 INTO x"
+    "fragment" : "x"
   } ]
 }
 
@@ -179,9 +179,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 78,
+    "startIndex" : 92,
     "stopIndex" : 92,
-    "fragment" : "FETCH c1 INTO x"
+    "fragment" : "x"
   } ]
 }
 
@@ -237,9 +237,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 67,
+    "startIndex" : 81,
     "stopIndex" : 81,
-    "fragment" : "FETCH c1 INTO x"
+    "fragment" : "x"
   } ]
 }
 
@@ -264,9 +264,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 78,
+    "startIndex" : 92,
     "stopIndex" : 92,
-    "fragment" : "FETCH c1 INTO x"
+    "fragment" : "x"
   } ]
 }
 
@@ -295,9 +295,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 128,
+    "startIndex" : 142,
     "stopIndex" : 142,
-    "fragment" : "FETCH c1 INTO x"
+    "fragment" : "x"
   } ]
 }
 
@@ -330,9 +330,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 203,
+    "startIndex" : 217,
     "stopIndex" : 217,
-    "fragment" : "FETCH c1 INTO y"
+    "fragment" : "y"
   } ]
 }
 
@@ -403,9 +403,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 523,
+    "startIndex" : 538,
     "stopIndex" : 562,
-    "fragment" : "FETCH cur INTO fetched_id, fetched_value"
+    "fragment" : "fetched_id, fetched_value"
   } ]
 }
 
@@ -451,9 +451,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 466,
+    "startIndex" : 481,
     "stopIndex" : 505,
-    "fragment" : "FETCH cur INTO fetched_id, fetched_value"
+    "fragment" : "fetched_id, fetched_value"
   } ]
 }
 
@@ -491,9 +491,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 453,
+    "startIndex" : 468,
     "stopIndex" : 492,
-    "fragment" : "FETCH cur INTO fetched_id, fetched_value"
+    "fragment" : "fetched_id, fetched_value"
   } ]
 }
 
@@ -539,9 +539,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 348,
+    "startIndex" : 363,
     "stopIndex" : 372,
-    "fragment" : "FETCH cur INTO fetched_id"
+    "fragment" : "fetched_id"
   } ]
 }
 
@@ -578,10 +578,105 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 340,
+    "startIndex" : 355,
     "stopIndex" : 364,
-    "fragment" : "FETCH cur INTO fetched_id"
+    "fragment" : "fetched_id"
   } ]
+}
+
+
+-- !query
+BEGIN
+  DECLARE int_val INT;
+  DECLARE str_val STRING;
+  DECLARE date_val DATE;
+  DECLARE bool_val BOOLEAN;
+  
+  DECLARE cur_int CURSOR FOR SELECT typeof(:p) as type, :p as val;
+  OPEN cur_int USING 42 AS p;
+  FETCH cur_int INTO str_val, int_val;
+  CLOSE cur_int;
+  VALUES ('INT', int_val);
+  
+  DECLARE cur_str CURSOR FOR SELECT typeof(:p) as type, :p as val;
+  OPEN cur_str USING 'hello' AS p;
+  FETCH cur_str INTO str_val, str_val;
+  CLOSE cur_str;
+  VALUES ('STRING', str_val);
+  
+  DECLARE cur_date CURSOR FOR SELECT typeof(:p) as type, :p as val;
+  OPEN cur_date USING DATE '2023-12-25' AS p;
+  FETCH cur_date INTO str_val, date_val;
+  CLOSE cur_date;
+  VALUES ('DATE', date_val);
+  
+  DECLARE cur_bool CURSOR FOR SELECT typeof(:p) as type, :p as val;
+  OPEN cur_bool USING true AS p;
+  FETCH cur_bool INTO str_val, bool_val;
+  CLOSE cur_bool;
+  VALUES ('BOOLEAN', bool_val);
+END
+-- !query analysis
+org.apache.spark.sql.exceptions.SqlScriptingException
+{
+  "errorClass" : "INVALID_CURSOR_DECLARATION",
+  "sqlState" : "42601"
+}
+
+
+-- !query
+BEGIN
+  DECLARE result INT;
+  
+  DECLARE cur_pos CURSOR FOR SELECT ? + ? AS sum;
+  OPEN cur_pos USING 10, 20;
+  FETCH cur_pos INTO result;
+  CLOSE cur_pos;
+  VALUES ('positional', result); -- Should be 30
+  
+  DECLARE cur_named CURSOR FOR SELECT :a + :b AS sum;
+  OPEN cur_named USING 15 AS a, 25 AS b;
+  FETCH cur_named INTO result;
+  CLOSE cur_named;
+  VALUES ('named', result); -- Should be 40
+  
+  DECLARE x INT DEFAULT 100;
+  DECLARE cur_var CURSOR FOR SELECT ? + 1 AS val;
+  OPEN cur_var USING x;
+  FETCH cur_var INTO result;
+  CLOSE cur_var;
+  VALUES ('variable', result); -- Should be 101
+END
+-- !query analysis
+org.apache.spark.sql.exceptions.SqlScriptingException
+{
+  "errorClass" : "INVALID_CURSOR_DECLARATION",
+  "sqlState" : "42601"
+}
+
+
+-- !query
+BEGIN
+  DECLARE result INT;
+  DECLARE base INT DEFAULT 5;
+  
+  DECLARE cur1 CURSOR FOR SELECT :p AS val;
+  OPEN cur1 USING 5 + 10 AS p;
+  FETCH cur1 INTO result;
+  CLOSE cur1;
+  VALUES ('arithmetic', result); -- Should be 15
+  
+  DECLARE cur2 CURSOR FOR SELECT :p AS val;
+  OPEN cur2 USING base * 2 AS p;
+  FETCH cur2 INTO result;
+  CLOSE cur2;
+  VALUES ('variable_expr', result); -- Should be 10
+END
+-- !query analysis
+org.apache.spark.sql.exceptions.SqlScriptingException
+{
+  "errorClass" : "INVALID_CURSOR_DECLARATION",
+  "sqlState" : "42601"
 }
 
 
@@ -607,9 +702,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 108,
+    "startIndex" : 128,
     "stopIndex" : 128,
-    "fragment" : "FETCH outer.c1 INTO x"
+    "fragment" : "x"
   } ]
 }
 
@@ -649,9 +744,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 266,
+    "startIndex" : 281,
     "stopIndex" : 281,
-    "fragment" : "FETCH cur INTO x"
+    "fragment" : "x"
   } ]
 }
 
@@ -687,9 +782,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 311,
+    "startIndex" : 330,
     "stopIndex" : 339,
-    "fragment" : "FETCH lbl.cur INTO fetched_id"
+    "fragment" : "fetched_id"
   } ]
 }
 
@@ -712,9 +807,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 89,
+    "startIndex" : 104,
     "stopIndex" : 107,
-    "fragment" : "FETCH cur INTO x, x"
+    "fragment" : "x, x"
   } ]
 }
 
@@ -742,9 +837,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 139,
+    "startIndex" : 154,
     "stopIndex" : 169,
-    "fragment" : "FETCH cur INTO int_var, str_var"
+    "fragment" : "int_var, str_var"
   } ]
 }
 
@@ -767,9 +862,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 79,
+    "startIndex" : 94,
     "stopIndex" : 94,
-    "fragment" : "FETCH cur INTO x"
+    "fragment" : "x"
   } ]
 }
 
@@ -792,9 +887,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 85,
+    "startIndex" : 100,
     "stopIndex" : 109,
-    "fragment" : "FETCH cur INTO x, y, z, w"
+    "fragment" : "x, y, z, w"
   } ]
 }
 
@@ -819,9 +914,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 93,
+    "startIndex" : 108,
     "stopIndex" : 108,
-    "fragment" : "FETCH cur INTO x"
+    "fragment" : "x"
   } ]
 }
 
@@ -846,9 +941,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 92,
+    "startIndex" : 107,
     "stopIndex" : 107,
-    "fragment" : "FETCH cur INTO y"
+    "fragment" : "y"
   } ]
 }
 
@@ -873,9 +968,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 95,
+    "startIndex" : 110,
     "stopIndex" : 110,
-    "fragment" : "FETCH cur INTO z"
+    "fragment" : "z"
   } ]
 }
 
@@ -900,9 +995,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 108,
+    "startIndex" : 123,
     "stopIndex" : 123,
-    "fragment" : "FETCH cur INTO w"
+    "fragment" : "w"
   } ]
 }
 
@@ -927,9 +1022,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 81,
+    "startIndex" : 101,
     "stopIndex" : 101,
-    "fragment" : "FETCH NEXT cur INTO a"
+    "fragment" : "a"
   } ]
 }
 
@@ -954,9 +1049,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 81,
+    "startIndex" : 101,
     "stopIndex" : 101,
-    "fragment" : "FETCH FROM cur INTO b"
+    "fragment" : "b"
   } ]
 }
 
@@ -981,9 +1076,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 81,
+    "startIndex" : 106,
     "stopIndex" : 106,
-    "fragment" : "FETCH NEXT FROM cur INTO c"
+    "fragment" : "c"
   } ]
 }
 
@@ -1008,9 +1103,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 135,
+    "startIndex" : 150,
     "stopIndex" : 162,
-    "fragment" : "FETCH cur INTO person_record"
+    "fragment" : "person_record"
   } ]
 }
 
@@ -1035,9 +1130,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 130,
+    "startIndex" : 145,
     "stopIndex" : 154,
-    "fragment" : "FETCH cur INTO record_var"
+    "fragment" : "record_var"
   } ]
 }
 
@@ -1060,9 +1155,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 105,
+    "startIndex" : 120,
     "stopIndex" : 129,
-    "fragment" : "FETCH cur INTO record_var"
+    "fragment" : "record_var"
   } ]
 }
 
@@ -1085,9 +1180,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 76,
+    "startIndex" : 91,
     "stopIndex" : 91,
-    "fragment" : "FETCH cur INTO x"
+    "fragment" : "x"
   } ]
 }
 
@@ -1112,9 +1207,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 166,
+    "startIndex" : 181,
     "stopIndex" : 194,
-    "fragment" : "FETCH cur INTO complex_record"
+    "fragment" : "complex_record"
   } ]
 }
 
@@ -1290,9 +1385,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 104,
+    "startIndex" : 119,
     "stopIndex" : 119,
-    "fragment" : "FETCH cur INTO y"
+    "fragment" : "y"
   } ]
 }
 
@@ -1325,9 +1420,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 128,
+    "startIndex" : 143,
     "stopIndex" : 143,
-    "fragment" : "FETCH cur INTO x"
+    "fragment" : "x"
   } ]
 }
 
@@ -1376,9 +1471,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 121,
+    "startIndex" : 156,
     "stopIndex" : 156,
-    "fragment" : "FETCH IDENTIFIER('my_cursor') INTO x"
+    "fragment" : "x"
   } ]
 }
 
@@ -1403,9 +1498,64 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 119,
+    "startIndex" : 154,
     "stopIndex" : 159,
-    "fragment" : "FETCH IDENTIFIER('MixedCase') INTO result"
+    "fragment" : "result"
+  } ]
+}
+
+
+-- !query
+BEGIN
+  DECLARE IDENTIFIER('my_result') INT;
+  DECLARE my_cursor CURSOR FOR SELECT 123 AS val;
+  OPEN my_cursor;
+  FETCH my_cursor INTO IDENTIFIER('my_result');
+  CLOSE my_cursor;
+  VALUES (IDENTIFIER('my_result')); -- Should return 123
+END
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`my_result`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 137,
+    "stopIndex" : 159,
+    "fragment" : "IDENTIFIER('my_result')"
+  } ]
+}
+
+
+-- !query
+BEGIN
+  DECLARE IDENTIFIER('val1') INT;
+  DECLARE IDENTIFIER('val2') STRING;
+  DECLARE cur CURSOR FOR SELECT 42, 'test';
+  OPEN cur;
+  FETCH cur INTO IDENTIFIER('val1'), IDENTIFIER('val2');
+  CLOSE cur;
+  VALUES (IDENTIFIER('val1'), IDENTIFIER('val2')); -- Should return 42, 'test'
+END
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`val1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 151,
+    "stopIndex" : 188,
+    "fragment" : "IDENTIFIER('val1'), IDENTIFIER('val2')"
   } ]
 }
 
@@ -1446,9 +1596,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 355,
+    "startIndex" : 370,
     "stopIndex" : 370,
-    "fragment" : "FETCH cur INTO n"
+    "fragment" : "n"
   } ]
 }
 
@@ -1582,9 +1732,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 161,
+    "startIndex" : 176,
     "stopIndex" : 181,
-    "fragment" : "FETCH cur INTO result"
+    "fragment" : "result"
   } ]
 }
 
@@ -1715,9 +1865,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 173,
+    "startIndex" : 188,
     "stopIndex" : 193,
-    "fragment" : "FETCH cur INTO result"
+    "fragment" : "result"
   } ]
 }
 
@@ -1745,9 +1895,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 189,
+    "startIndex" : 204,
     "stopIndex" : 209,
-    "fragment" : "FETCH cur INTO result"
+    "fragment" : "result"
   } ]
 }
 
@@ -1776,9 +1926,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 213,
+    "startIndex" : 228,
     "stopIndex" : 233,
-    "fragment" : "FETCH cur INTO result"
+    "fragment" : "result"
   } ]
 }
 
@@ -1810,9 +1960,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 123,
+    "startIndex" : 138,
     "stopIndex" : 144,
-    "fragment" : "FETCH cur INTO result1"
+    "fragment" : "result1"
   } ]
 }
 
@@ -1844,9 +1994,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 141,
+    "startIndex" : 156,
     "stopIndex" : 162,
-    "fragment" : "FETCH cur INTO result1"
+    "fragment" : "result1"
   } ]
 }
 
@@ -1896,9 +2046,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 230,
+    "startIndex" : 245,
     "stopIndex" : 250,
-    "fragment" : "FETCH cur INTO result"
+    "fragment" : "result"
   } ]
 }
 
@@ -1923,9 +2073,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 98,
+    "startIndex" : 119,
     "stopIndex" : 124,
-    "fragment" : "FETCH MY_CURSOR INTO result"
+    "fragment" : "result"
   } ]
 }
 
@@ -1950,9 +2100,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 96,
+    "startIndex" : 116,
     "stopIndex" : 121,
-    "fragment" : "FETCH mycursor INTO result"
+    "fragment" : "result"
   } ]
 }
 
@@ -2001,8 +2151,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 178,
+    "startIndex" : 210,
     "stopIndex" : 215,
-    "fragment" : "FETCH IDENTIFIER('MYCASE') INTO result"
+    "fragment" : "result"
   } ]
 }

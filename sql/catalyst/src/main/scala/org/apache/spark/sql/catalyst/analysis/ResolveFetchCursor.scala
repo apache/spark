@@ -28,9 +28,12 @@ import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableErro
 
 /**
  * Resolves the target SQL variables in FetchCursor command.
+ * Variables can be either scripting local variables or session variables.
  */
 class ResolveFetchCursor(val catalogManager: CatalogManager) extends Rule[LogicalPlan]
   with ColumnResolutionHelper {
+  // VariableResolution looks up both scripting local variables (via SqlScriptingContextManager)
+  // and session variables (via tempVariableManager), checking local variables first.
   private val variableResolution = new VariableResolution(catalogManager.tempVariableManager)
 
   /**

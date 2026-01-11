@@ -6601,7 +6601,7 @@ class AstBuilder extends DataTypeAstBuilder
     // Extract original SQL text to preserve parameter markers
     val queryText = getOriginalText(ctx.query())
 
-    val asensitive = ctx.ASENSITIVE() != null || ctx.INSENSITIVE() != null
+    val asensitive = if (ctx.INSENSITIVE() != null) false else true
     SingleStatement(DeclareCursor(cursorName, queryText, asensitive))
   }
 
@@ -6625,11 +6625,14 @@ class AstBuilder extends DataTypeAstBuilder
     val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier())
 
     // Parse optional USING clause parameters
-    // Extract both expressions and their names (if aliased)
+    // Note: Parameter name inference from attributes (e.g., USING p where p is a variable)
+    // happens during analysis, not during parsing. At parse time, we extract:
+    // - For aliased expressions (expr AS name): extract name from Alias
+    // - For non-aliased expressions: use empty string as placeholder
     val (args, paramNames) = Option(ctx.params).map { params =>
       params.namedExpression().asScala.toSeq.map(visitNamedExpression).map {
         case alias: Alias => (alias.child, alias.name)
-        case expr => (expr, "")  // Empty string for positional parameter
+        case expr => (expr, "")  // Empty string for positional/inferred parameter
       }.unzip
     }.getOrElse((Seq.empty, Seq.empty))
 
@@ -6651,20 +6654,9 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
     // Use visitMultipartIdentifier to properly handle IDENTIFIER('name')
-    val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier())
+    val nameParts = visitMultipartIdentifier(ctx.cursorName)
 
-    val targetVariables = ctx.identifierReference().asScala.map { varIdent =>
-      val varName = if (varIdent.expression() != null) {
-        // IDENTIFIER(expression) case - not supported for variables
-        throw new ParseException(
-          errorClass = "INVALID_SQL_SYNTAX.IDENTIFIER_CLAUSE_NOT_ALLOWED",
-          messageParameters = Map.empty,
-          varIdent)
-      } else {
-        visitMultipartIdentifier(varIdent.multipartIdentifier())
-      }
-      UnresolvedAttribute(varName)
-    }.toSeq
+    val targetVariables = visitMultipartIdentifierList(ctx.targets)
     SingleStatement(FetchCursor(nameParts, targetVariables))
   }
 
