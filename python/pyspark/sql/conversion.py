@@ -510,6 +510,7 @@ class LocalDataToArrowConversion:
                         for field in schema.fields
                     ]
                 ),
+                timezone="UTC",
                 prefers_large_types=use_large_var_types,
             )
 

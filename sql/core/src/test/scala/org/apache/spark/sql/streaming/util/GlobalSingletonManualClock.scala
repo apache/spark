@@ -115,7 +115,7 @@ class GlobalSyncClockClient(driverEndpointName: String)
     SparkEnv.get.rpcEnv)
 
   override def getTimeMillis(): Long = {
-    val result = endpoint.askSync[Long]()
+    val result = endpoint.askSync[Long](())
     result
   }
 

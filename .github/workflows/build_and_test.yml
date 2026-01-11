@@ -53,6 +53,9 @@ on:
       codecov_token:
         description: The upload token of codecov.
         required: false
+concurrency:
+  group: build-test-${{ github.workflow }}-${{ github.repository == 'apache/spark' && github.run_id || github.ref }}
+  cancel-in-progress: true
 jobs:
   precondition:
     name: Check changes
@@ -563,6 +566,7 @@ jobs:
       SKIP_PACKAGING: true
       METASPACE_SIZE: 1g
       BRANCH: ${{ inputs.branch }}
+      PYSPARK_TEST_TIMEOUT: 450
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v4
@@ -649,6 +653,15 @@ jobs:
         flags: unittests
         name: PySpark
         verbose: true
+    - name: Upload test results to Codecov
+      if: (!cancelled()) && fromJSON(inputs.envs).PYSPARK_CODECOV_TEST == 'true'
+      uses: codecov/codecov-action@v5
+      with:
+        report_type: 'test_results'
+        files: '**/target/test-reports/*.xml'
+        flags: unittests
+        name: PySpark-Test-Results
+        token: ${{ secrets.codecov_token }}
     - name: Upload test results to report
       env: ${{ fromJSON(inputs.envs) }}
       if: always()
@@ -1370,7 +1383,7 @@ jobs:
           elif [[ "${{ inputs.branch }}" == 'branch-4.0' ]]; then
             kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.11.0/installer/volcano-development.yaml || true
           else
-            kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.13.0/installer/volcano-development.yaml || true
+            kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.13.1/installer/volcano-development.yaml || true
           fi
           eval $(minikube docker-env)
           build/sbt -Phadoop-3 -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"

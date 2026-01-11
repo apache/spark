@@ -497,7 +497,7 @@ case class ThetaUnionAgg(
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr, lgNomEntries) - Returns the ThetaSketch's Compact binary representation
+    _FUNC_(expr) - Returns the ThetaSketch's Compact binary representation
       by intersecting all the Theta sketches in the input column.""",
   examples = """
     Examples:

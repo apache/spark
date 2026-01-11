@@ -120,7 +120,7 @@
     <java.version>17</java.version>
     <java.minimum.version>17.0.11</java.minimum.version>
     <maven.compiler.release>${java.version}</maven.compiler.release>
-    <maven.version>3.9.11</maven.version>
+    <maven.version>3.9.12</maven.version>
     <exec-maven-plugin.version>3.6.1</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
     <asm.version>9.9</asm.version>
@@ -144,8 +144,8 @@
     <parquet.version>1.16.0</parquet.version>
     <orc.version>2.2.1</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
-    <jetty.version>11.0.26</jetty.version>
-    <jakartaservlet.version>5.0.0</jakartaservlet.version>
+    <jetty.version>12.1.5</jetty.version>
+    <jakartaservlet.version>6.0.0</jakartaservlet.version>
     <!-- SPARK-46938: Required by Hive / LibThrift libs -->
     <javaxservlet.version>4.0.1</javaxservlet.version>
     <chill.version>0.10.0</chill.version>
@@ -159,14 +159,13 @@
     <codahale.metrics.version>4.2.37</codahale.metrics.version>
     <!-- Should be consistent with SparkBuild.scala and docs -->
     <avro.version>1.12.1</avro.version>
-    <aws.kinesis.client.version>1.15.3</aws.kinesis.client.version>
+    <aws.kinesis.client.version>2.7.2</aws.kinesis.client.version>
     <!-- Should be consistent with Kinesis client dependency -->
-    <aws.java.sdk.version>1.12.681</aws.java.sdk.version>
     <aws.java.sdk.v2.version>2.35.4</aws.java.sdk.v2.version>
     <!-- the producer is used in tests -->
-    <aws.kinesis.producer.version>1.0.5</aws.kinesis.producer.version>
+    <aws.kinesis.producer.version>1.0.6</aws.kinesis.producer.version>
     <!-- Do not use 3.0.0: https://github.com/GoogleCloudDataproc/hadoop-connectors/issues/1114 -->
-    <gcs-connector.version>hadoop3-2.2.29</gcs-connector.version>
+    <gcs-connector.version>hadoop3-2.2.31</gcs-connector.version>
     <analyticsaccelerator-s3.version>1.3.0</analyticsaccelerator-s3.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.14</commons.httpclient.version>
@@ -196,13 +195,13 @@
     <!-- org.apache.commons/commons-lang3/-->
     <commons-lang3.version>3.20.0</commons-lang3.version>
     <!-- org.apache.commons/commons-pool2/-->
-    <commons-pool2.version>2.12.1</commons-pool2.version>
+    <commons-pool2.version>2.13.1</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <guava.version>33.4.8-jre</guava.version>
     <guava.failureaccess.version>1.0.3</guava.failureaccess.version>
     <gson.version>2.13.2</gson.version>
     <janino.version>3.1.9</janino.version>
-    <jersey.version>3.0.18</jersey.version>
+    <jersey.version>3.1.11</jersey.version>
     <joda.version>2.14.0</joda.version>
     <jsr305.version>3.0.0</jsr305.version>
     <jaxb.version>2.2.11</jaxb.version>
@@ -214,7 +213,7 @@
     <maven-antrun.version>3.1.0</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.10.0</commons-cli.version>
-    <bouncycastle.version>1.82</bouncycastle.version>
+    <bouncycastle.version>1.83</bouncycastle.version>
     <tink.version>1.19.0</tink.version>
     <datasketches.version>6.2.0</datasketches.version>
     <netty.version>4.2.9.Final</netty.version>
@@ -561,20 +560,20 @@
         <scope>provided</scope>
       </dependency>
       <dependency>
-        <groupId>org.eclipse.jetty</groupId>
-        <artifactId>jetty-servlet</artifactId>
+        <groupId>org.eclipse.jetty.ee10</groupId>
+        <artifactId>jetty-ee10-servlet</artifactId>
         <version>${jetty.version}</version>
         <scope>provided</scope>
       </dependency>
       <dependency>
-        <groupId>org.eclipse.jetty</groupId>
-        <artifactId>jetty-servlets</artifactId>
+        <groupId>org.eclipse.jetty.ee10</groupId>
+        <artifactId>jetty-ee10-servlets</artifactId>
         <version>${jetty.version}</version>
         <scope>provided</scope>
       </dependency>
       <dependency>
-        <groupId>org.eclipse.jetty</groupId>
-        <artifactId>jetty-proxy</artifactId>
+        <groupId>org.eclipse.jetty.ee10</groupId>
+        <artifactId>jetty-ee10-proxy</artifactId>
         <version>${jetty.version}</version>
         <scope>provided</scope>
       </dependency>
@@ -597,8 +596,8 @@
         <scope>provided</scope>
       </dependency>
       <dependency>
-        <groupId>org.eclipse.jetty</groupId>
-        <artifactId>jetty-plus</artifactId>
+        <groupId>org.eclipse.jetty.ee10</groupId>
+        <artifactId>jetty-ee10-plus</artifactId>
         <version>${jetty.version}</version>
         <scope>provided</scope>
       </dependency>
@@ -609,8 +608,8 @@
         <scope>provided</scope>
       </dependency>
       <dependency>
-        <groupId>org.eclipse.jetty</groupId>
-        <artifactId>jetty-webapp</artifactId>
+        <groupId>org.eclipse.jetty.ee10</groupId>
+        <artifactId>jetty-ee10-webapp</artifactId>
         <version>${jetty.version}</version>
         <scope>provided</scope>
       </dependency>
@@ -683,7 +682,7 @@
       <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-text</artifactId>
-        <version>1.14.0</version>
+        <version>1.15.0</version>
       </dependency>
       <dependency>
         <groupId>commons-lang</groupId>

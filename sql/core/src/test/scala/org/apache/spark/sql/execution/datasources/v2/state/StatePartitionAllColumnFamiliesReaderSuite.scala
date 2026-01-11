@@ -21,7 +21,7 @@ import java.sql.Timestamp
 import java.time.Duration
 import java.util.Arrays
 
-import org.apache.spark.sql.{DataFrame, Encoders, Row}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
@@ -29,9 +29,10 @@ import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, RocksDBStateStoreProvider, StateRepartitionUnsupportedProviderError, StateStore}
 import org.apache.spark.sql.functions.{col, count, sum, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.{InputEvent, ListState, ListStateTTLProcessor, MapInputEvent, MapState, MapStateTTLProcessor, OutputMode, RunningCountStatefulProcessorWithProcTimeTimer, SimpleMapValue, StatefulProcessor, TimeMode, TimerValues, Trigger, TTLConfig, ValueState, ValueStateTTLProcessor}
-import org.apache.spark.sql.streaming.util.StreamManualClock
-import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, LongType, NullType, StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.streaming.{InputEvent, ListStateTTLProcessor, MapInputEvent, MapStateTTLProcessor, OutputMode, RunningCountStatefulProcessorWithProcTimeTimer, TimeMode, Trigger, TTLConfig, ValueStateTTLProcessor}
+import org.apache.spark.sql.streaming.util.{StreamManualClock, TTLProcessorUtils}
+import org.apache.spark.sql.streaming.util.{EventTimeTimerProcessor, MultiStateVarProcessor, MultiStateVarProcessorTestUtils, TimerTestUtils}
+import org.apache.spark.sql.types.{DataType, NullType, StructField, StructType}
 
 /**
  * Note: This extends StateDataSourceTestBase to access
@@ -87,13 +88,22 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
   /**
    * Compares normal read data with bytes read data for a specific column family.
    * Converts normal rows to bytes then compares with bytes read.
+   *
+   * @param normalDf Normal read data with columns (partition_id, key, value)
+   * @param bytesDf Bytes read data with columns (partition_key, key_bytes, value_bytes, cf_name)
+   * @param columnFamily The column family name to filter on
+   * @param keySchema Schema of the full key
+   * @param valueSchema Schema of the value
+   * @param partitionKeyExtractor Function to extract partition key from full key Row.
+   *                              If None, assumes partition key equals the full key.
    */
   private def compareNormalAndBytesData(
       normalDf: Array[Row],
       bytesDf: Array[Row],
       columnFamily: String,
       keySchema: StructType,
-      valueSchema: StructType): Unit = {
+      valueSchema: StructType,
+      partitionKeyExtractor: Option[Row => Row] = None): Unit = {
 
     // Filter bytes data for the specified column family and extract raw bytes directly
     val filteredBytesData = bytesDf.filter { row =>
@@ -113,12 +123,17 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
     val keyConverter = CatalystTypeConverters.createToCatalystConverter(keySchema)
     val valueConverter = CatalystTypeConverters.createToCatalystConverter(valueSchema)
 
-    // Convert normal data to bytes
-    val normalAsBytes = normalDf.toSeq.map { row =>
+    // Convert normal data to (partitionKeyStruct, keyBytes, valueBytes)
+    val normalData = normalDf.toSeq.map { row =>
       val key = row.getStruct(1)
       val value = if (row.isNullAt(2)) null else row.getStruct(2)
 
-      // Convert key to InternalRow, then to UnsafeRow, then get bytes
+      // Extract partition key - use extractor if provided, otherwise use full key
+      val partitionKey: Row = partitionKeyExtractor match {
+        case Some(extractor) => extractor(key)
+        case None => key
+      }
+      // Convert key to bytes
       val keyInternalRow = keyConverter(key).asInstanceOf[InternalRow]
       val keyUnsafeRow = keyProjection(keyInternalRow)
       // IMPORTANT: Must clone the bytes array since getBytes() returns a reference
@@ -136,26 +151,29 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
         valueUnsafeRow.getBytes.clone()
       }
 
-      (keyBytes, valueBytes)
+      (keyBytes, valueBytes, partitionKey)
     }
 
-    // Extract raw bytes from bytes read data (no deserialization/reserialization)
-    val bytesAsBytes = filteredBytesData.map { row =>
+    // Extract (partitionKeyStruct, keyBytes, valueBytes) from bytes read data
+    val bytesData = filteredBytesData.map { row =>
+      val partitionKey = row.getStruct(0)
       val keyBytes = row.getAs[Array[Byte]](1)
       val valueBytes = row.getAs[Array[Byte]](2)
-      (keyBytes, valueBytes)
+      (keyBytes, valueBytes, partitionKey)
     }
 
-    // Sort both for comparison (since Set equality doesn't work well with byte arrays)
-    val normalSorted = normalAsBytes.sortBy(x => (x._1.mkString(","), x._2.mkString(",")))
-    val bytesSorted = bytesAsBytes.sortBy(x => (x._1.mkString(","), x._2.mkString(",")))
+    // Sort both for comparison by key and value bytes
+    val normalSorted = normalData.sortBy(x => (x._1.mkString(","), x._2.mkString(",")))
+    val bytesSorted = bytesData.sortBy(x => (x._1.mkString(","), x._2.mkString(",")))
 
     assert(normalSorted.length == bytesSorted.length,
       s"Size mismatch: normal has ${normalSorted.length}, bytes has ${bytesSorted.length}")
 
-    // Compare each pair
+    // Compare each tuple (partitionKeyStruct, keyBytes, valueBytes)
     normalSorted.zip(bytesSorted).zipWithIndex.foreach {
-      case (((normalKey, normalValue), (bytesKey, bytesValue)), idx) =>
+      case (((normalKey, normalValue, normalPartitionKey),
+             (bytesKey, bytesValue, bytesPartitionKey)), idx) =>
+        assert(normalPartitionKey == bytesPartitionKey)
         assert(Arrays.equals(normalKey, bytesKey),
           s"Key mismatch at index $idx:\n" +
             s"  Normal: ${normalKey.mkString("[", ",", "]")}\n" +
@@ -178,7 +196,8 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
       keySchema: StructType,
       valueSchema: StructType,
       extraOptions: Map[String, String] = Map.empty,
-      selectExprs: Seq[String] = Seq("partition_id", "key", "value")): Unit = {
+      selectExprs: Seq[String] = Seq("partition_id", "key", "value"),
+      partitionKeyExtractor: Option[Row => Row] = None): Unit = {
     var reader = spark.read
       .format("statestore")
       .option(StateSourceOptions.PATH, checkpointDir)
@@ -193,7 +212,8 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
       allBytesData,
       stateVarName,
       keySchema,
-      valueSchema)
+      valueSchema,
+      partitionKeyExtractor)
   }
 
   /**
@@ -218,12 +238,7 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
       Set(s"$$${timerPrefix}Timers_keyToTimestamp",
         s"$$${timerPrefix}Timers_timestampToKey", "countState"))
 
-    val groupByKeySchema = StructType(Array(
-      StructField("key", StringType, nullable = true)
-    ))
-    val stateValueSchema = StructType(Array(
-      StructField("value", LongType, nullable = true)
-    ))
+    val (groupByKeySchema, stateValueSchema) = TimerTestUtils.getCountStateSchemas()
     val stateNormalDf = spark.read
       .format("statestore")
       .option(StateSourceOptions.PATH, checkpointDir)
@@ -238,11 +253,9 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
       groupByKeySchema,
       stateValueSchema)
 
-    val keyToTimestampSchema = StructType(Array(
-      StructField("key", groupByKeySchema),
-      StructField("expiryTimestampMs", LongType, nullable = false)
-    ))
     val dummySchema = StructType(Array(StructField("__dummy__", NullType)))
+    val (keyToTimestampSchema, timestampToKeySchema) =
+      TimerTestUtils.getTimerKeySchemas(groupByKeySchema)
 
     // Read timer DataFrame ONCE and reuse for both comparisons
     val timerBaseDf = spark.read
@@ -252,30 +265,24 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
       .load()
 
     val keyToTimestampNormalDf = timerBaseDf.selectExpr(
-      "partition_id",
-      "STRUCT(key AS groupingKey, expiration_timestamp_ms AS key)",
-      "NULL AS value")
+      TimerTestUtils.getTimerSelectExpressions(s"$$${timerPrefix}Timers_keyToTimestamp"): _*)
     compareNormalAndBytesData(
       keyToTimestampNormalDf.collect(),
       allBytesData,
       s"$$${timerPrefix}Timers_keyToTimestamp",
       keyToTimestampSchema,
-      dummySchema)
+      dummySchema,
+      partitionKeyExtractor = Some(compositeKey => compositeKey.getStruct(0)))
 
-    val timestampToKeySchema = StructType(Array(
-      StructField("expiryTimestampMs", LongType, nullable = false),
-      StructField("key", groupByKeySchema)
-    ))
     val timestampToKeyNormalDf = timerBaseDf.selectExpr(
-      "partition_id",
-      "STRUCT(expiration_timestamp_ms AS key, key AS groupingKey)",
-      "NULL AS value")
+      TimerTestUtils.getTimerSelectExpressions(s"$$${timerPrefix}Timers_timestampToKey"): _*)
     compareNormalAndBytesData(
       timestampToKeyNormalDf.collect(),
       allBytesData,
       s"$$${timerPrefix}Timers_timestampToKey",
       timestampToKeySchema,
-      dummySchema)
+      dummySchema,
+      partitionKeyExtractor = Some(compositeKey => compositeKey.getStruct(1)))
   }
 
   /**
@@ -292,7 +299,8 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
       tempDir: String,
       keySchema: StructType,
       valueSchema: StructType,
-      storeName: Option[String] = None): Unit = {
+      storeName: Option[String] = None,
+      partitionKeyExtractor: Option[Row => Row] = None): Unit = {
     val normalDf = getNormalReadDf(tempDir, storeName)
     val bytesDf = getBytesReadDf(tempDir, storeName)
 
@@ -302,7 +310,8 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
       bytesDf.collect(),
       StateStore.DEFAULT_COL_FAMILY_NAME,
       keySchema,
-      valueSchema)
+      valueSchema,
+      partitionKeyExtractor)
   }
 
   /**
@@ -321,7 +330,8 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
       colFamilyName: String,
       sharedBytesDf: DataFrame,
       keySchema: StructType,
-      valueSchema: StructType): Unit = {
+      valueSchema: StructType,
+      partitionKeyExtractor: Option[Row => Row] = None): Unit = {
     val normalDf = getNormalReadDf(tempDir, Option(colFamilyName))
 
     compareNormalAndBytesData(
@@ -329,7 +339,8 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
       sharedBytesDf.collect(),
       colFamilyName,
       keySchema,
-      valueSchema)
+      valueSchema,
+      partitionKeyExtractor)
   }
 
   // Run all tests with both changelog checkpointing enabled and disabled
@@ -350,100 +361,37 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
       }
     }
 
-    testWithChangelogConfig("SPARK-54388: simple aggregation state ver 1") {
-      withSQLConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION.key -> "1") {
-      withTempDir { tempDir =>
-        runLargeDataStreamingAggregationQuery(tempDir.getAbsolutePath)
+    Seq(1, 2).foreach(version =>
+      testWithChangelogConfig(s"SPARK-54388: simple aggregation state ver $version") {
+        withSQLConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION.key -> s"$version") {
+          withTempDir { tempDir =>
+            runLargeDataStreamingAggregationQuery(tempDir.getAbsolutePath)
 
-        val keySchema = StructType(Array(StructField("groupKey", IntegerType, nullable = false)))
-        // State version 1 includes key columns in the value
-        val valueSchema = StructType(Array(
-          StructField("groupKey", IntegerType, nullable = false),
-          StructField("count", LongType, nullable = false),
-          StructField("sum", LongType, nullable = false),
-          StructField("max", IntegerType, nullable = false),
-          StructField("min", IntegerType, nullable = false)
-        ))
+            val (keySchema, valueSchema) = SimpleAggregationTestUtils.getSchemas(version)
 
-        validateStateStore(tempDir.getAbsolutePath, keySchema, valueSchema)
-      }
-      }
-    }
+            validateStateStore(tempDir.getAbsolutePath, keySchema, valueSchema)
+          }
+        }
+    })
 
-    testWithChangelogConfig("SPARK-54388: simple aggregation state ver 2") {
-      withSQLConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION.key -> "2") {
-      withTempDir { tempDir =>
-        runLargeDataStreamingAggregationQuery(tempDir.getAbsolutePath)
+    Seq(1, 2).foreach(version =>
+      testWithChangelogConfig(s"SPARK-54388: composite key aggregation state ver $version") {
+        withSQLConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION.key -> s"$version") {
+          withTempDir { tempDir =>
+            runCompositeKeyStreamingAggregationQuery(tempDir.getAbsolutePath)
 
-        val keySchema = StructType(Array(StructField("groupKey", IntegerType, nullable = false)))
-        val valueSchema = StructType(Array(
-          StructField("count", LongType, nullable = false),
-          StructField("sum", LongType, nullable = false),
-          StructField("max", IntegerType, nullable = false),
-          StructField("min", IntegerType, nullable = false)
-        ))
+            val (keySchema, valueSchema) = CompositeKeyAggregationTestUtils.getSchemas(version)
 
-        validateStateStore(tempDir.getAbsolutePath, keySchema, valueSchema)
-      }
-      }
-    }
-
-    testWithChangelogConfig("SPARK-54388: composite key aggregation state ver 1") {
-      withSQLConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION.key -> "1") {
-      withTempDir { tempDir =>
-        runCompositeKeyStreamingAggregationQuery(tempDir.getAbsolutePath)
-
-        val keySchema = StructType(Array(
-          StructField("groupKey", IntegerType, nullable = false),
-          StructField("fruit", StringType, nullable = true)
-        ))
-        // State version 1 includes key columns in the value
-        val valueSchema = StructType(Array(
-          StructField("groupKey", IntegerType, nullable = false),
-          StructField("fruit", StringType, nullable = true),
-          StructField("count", LongType, nullable = false),
-          StructField("sum", LongType, nullable = false),
-          StructField("max", IntegerType, nullable = false),
-          StructField("min", IntegerType, nullable = false)
-        ))
-
-        validateStateStore(tempDir.getAbsolutePath, keySchema, valueSchema)
-      }
-      }
-    }
-
-    testWithChangelogConfig("SPARK-54388: composite key aggregation state ver 2") {
-      withSQLConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION.key -> "2") {
-      withTempDir { tempDir =>
-        runCompositeKeyStreamingAggregationQuery(tempDir.getAbsolutePath)
-
-        val keySchema = StructType(Array(
-          StructField("groupKey", IntegerType, nullable = false),
-          StructField("fruit", StringType, nullable = true)
-        ))
-        val valueSchema = StructType(Array(
-          StructField("count", LongType, nullable = false),
-          StructField("sum", LongType, nullable = false),
-          StructField("max", IntegerType, nullable = false),
-          StructField("min", IntegerType, nullable = false)
-        ))
-
-        validateStateStore(tempDir.getAbsolutePath, keySchema, valueSchema)
-      }
-      }
-    }
+            validateStateStore(tempDir.getAbsolutePath, keySchema, valueSchema)
+          }
+        }
+    })
 
     testWithChangelogConfig("SPARK-54388: dropDuplicates validation") {
       withTempDir { tempDir =>
         runDropDuplicatesQuery(tempDir.getAbsolutePath)
 
-        val keySchema = StructType(Array(
-          StructField("value", IntegerType, nullable = false),
-          StructField("eventTime", org.apache.spark.sql.types.TimestampType)
-        ))
-        val valueSchema = StructType(Array(
-          StructField("__dummy__", NullType, nullable = true)
-        ))
+        val (keySchema, valueSchema) = DropDuplicatesTestUtils.getDropDuplicatesSchemas()
 
         validateStateStore(tempDir.getAbsolutePath, keySchema, valueSchema)
       }
@@ -453,12 +401,7 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
       withTempDir { tempDir =>
         runDropDuplicatesQueryWithColumnSpecified(tempDir.getAbsolutePath)
 
-        val keySchema = StructType(Array(
-          StructField("col1", StringType, nullable = true)
-        ))
-        val valueSchema = StructType(Array(
-          StructField("__dummy__", NullType, nullable = true)
-        ))
+        val (keySchema, valueSchema) = DropDuplicatesTestUtils.getDropDuplicatesWithColumnSchemas()
 
         validateStateStore(tempDir.getAbsolutePath, keySchema, valueSchema)
       }
@@ -468,12 +411,8 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
       withTempDir { tempDir =>
         runDropDuplicatesWithinWatermarkQuery(tempDir.getAbsolutePath)
 
-        val keySchema = StructType(Array(
-          StructField("_1", StringType, nullable = true)
-        ))
-        val valueSchema = StructType(Array(
-          StructField("expiresAtMicros", LongType, nullable = false)
-        ))
+        val (keySchema, valueSchema) =
+          DropDuplicatesTestUtils.getDropDuplicatesWithinWatermarkSchemas()
 
         validateStateStore(tempDir.getAbsolutePath, keySchema, valueSchema)
       }
@@ -483,148 +422,64 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
       withTempDir { tempDir =>
         runSessionWindowAggregationQuery(tempDir.getAbsolutePath)
 
-        val keySchema = StructType(Array(
-          StructField("sessionId", StringType, nullable = false),
-          StructField("sessionStartTime",
-            org.apache.spark.sql.types.TimestampType, nullable = false)
-        ))
-        val valueSchema = StructType(Array(
-          StructField("session_window", org.apache.spark.sql.types.StructType(Array(
-            StructField("start", org.apache.spark.sql.types.TimestampType),
-            StructField("end", org.apache.spark.sql.types.TimestampType)
-          )), nullable = false),
-          StructField("sessionId", StringType, nullable = false),
-          StructField("count", LongType, nullable = false)
-        ))
+        val (keySchema, valueSchema) = SessionWindowTestUtils.getSchemas()
 
-        validateStateStore(tempDir.getAbsolutePath, keySchema, valueSchema)
+        validateStateStore(tempDir.getAbsolutePath, keySchema, valueSchema,
+          partitionKeyExtractor = Some(row => Row(row.getString(0))))
       }
     }
 
-    testWithChangelogConfig("SPARK-54388: flatMapGroupsWithState, state ver 1") {
-      // Skip this test on big endian platforms
-      assume(java.nio.ByteOrder.nativeOrder().equals(java.nio.ByteOrder.LITTLE_ENDIAN))
-      withSQLConf(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION.key -> "1") {
-        withTempDir { tempDir =>
-          assume(ByteOrder.nativeOrder().equals(ByteOrder.LITTLE_ENDIAN))
-          runFlatMapGroupsWithStateQuery(tempDir.getAbsolutePath)
-
-          val keySchema = StructType(Array(
-            StructField("value", StringType, nullable = true)
-          ))
-          val valueSchema = StructType(Array(
-            StructField("numEvents", IntegerType, nullable = false),
-            StructField("startTimestampMs", LongType, nullable = false),
-            StructField("endTimestampMs", LongType, nullable = false),
-            StructField("timeoutTimestamp", IntegerType, nullable = false)
-          ))
-
-          val normalData = getNormalReadDf(tempDir.getAbsolutePath).collect()
-          val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
+    Seq(1, 2).foreach(version =>
+      testWithChangelogConfig(s"SPARK-54388: flatMapGroupsWithState, state ver $version") {
+        // Skip this test on big endian platforms and is V1
+        assume(version == 2 || ByteOrder.nativeOrder().equals(ByteOrder.LITTLE_ENDIAN))
+        withSQLConf(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION.key -> s"$version") {
+          withTempDir { tempDir =>
+            runFlatMapGroupsWithStateQuery(tempDir.getAbsolutePath)
+            val (keySchema, valueSchema) = FlatMapGroupsWithStateTestUtils.getSchemas(version)
+            val normalData = getNormalReadDf(tempDir.getAbsolutePath).collect()
+            val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
 
           validateBytesReadDfSchema(bytesDf)
           compareNormalAndBytesData(
             normalData, bytesDf.collect(), "default", keySchema, valueSchema)
         }
       }
-    }
+    })
 
-    testWithChangelogConfig("SPARK-54388: flatMapGroupsWithState, state ver 2") {
-      withSQLConf(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION.key -> "2") {
-        withTempDir { tempDir =>
-          runFlatMapGroupsWithStateQuery(tempDir.getAbsolutePath)
+    Seq(1, 2).foreach(version =>
+      testWithChangelogConfig(s"stream-stream join, state ver $version") {
+        withSQLConf(
+          SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> version.toString) {
+          withTempDir { tempDir =>
+            runStreamStreamJoinQuery(tempDir.getAbsolutePath)
 
-          val keySchema = StructType(Array(
-            StructField("value", StringType, nullable = true)
-          ))
-          val valueSchema = StructType(Array(
-            StructField("groupState", org.apache.spark.sql.types.StructType(Array(
-              StructField("numEvents", IntegerType, nullable = false),
-              StructField("startTimestampMs", LongType, nullable = false),
-              StructField("endTimestampMs", LongType, nullable = false)
-            )), nullable = false),
-            StructField("timeoutTimestamp", LongType, nullable = false)
-          ))
+            // Validate keyToNumValues stores
+            val (keyToNumValuesKeySchema, keyToNumValueValueSchema) =
+              StreamStreamJoinTestUtils.getKeyToNumValuesSchemas()
+            StreamStreamJoinTestUtils.KEY_TO_NUM_VALUES_ALL.foreach { storeName =>
+              validateStateStore(
+                tempDir.getAbsolutePath,
+                keyToNumValuesKeySchema,
+                keyToNumValueValueSchema,
+                Some(storeName))
+            }
 
-          val normalData = getNormalReadDf(tempDir.getAbsolutePath).collect()
-          val bytesDf = getBytesReadDf(tempDir.getAbsolutePath)
-
-          validateBytesReadDfSchema(bytesDf)
-          compareNormalAndBytesData(
-            normalData, bytesDf.collect(), "default", keySchema, valueSchema)
-        }
-      }
-    }
-
-    def getKeyToNumValuesSchemas(): (StructType, StructType) = {
-      val keySchema = StructType(Array(
-        StructField("key", IntegerType)
-      ))
-      val valueSchema = StructType(Array(
-        StructField("value", LongType)
-      ))
-      (keySchema, valueSchema)
-    }
-
-    def getKeyWithIndexToValueSchemas(
-        includeMatchedField: Boolean): (StructType, StructType) = {
-      val keySchema = StructType(Array(
-        StructField("key", IntegerType, nullable = false),
-        StructField("index", LongType)
-      ))
-
-      val baseValueFields = Array(
-        StructField("value", IntegerType, nullable = false),
-        StructField("time", TimestampType, nullable = false)
-      )
-      val valueSchema = if (includeMatchedField) {
-        StructType(baseValueFields :+ StructField("matched", BooleanType))
-      } else {
-        StructType(baseValueFields)
-      }
-
-      (keySchema, valueSchema)
-    }
-
-    def testStreamStreamJoinV1AndV2(stateVersion: Int): Unit = {
-      assert(stateVersion <= 2, s"stateVersion must be <= 2, but got $stateVersion")
-      withSQLConf(
-        SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> stateVersion.toString) {
-        withTempDir { tempDir =>
-          runStreamStreamJoinQuery(tempDir.getAbsolutePath)
-
-          // Validate keyToNumValues stores
-          val (keyToNumValuesKeySchema, keyToNumValueValueSchema) = getKeyToNumValuesSchemas()
-          Seq("right-keyToNumValues", "left-keyToNumValues").foreach { storeName =>
-            validateStateStore(
-              tempDir.getAbsolutePath,
-              keyToNumValuesKeySchema,
-              keyToNumValueValueSchema,
-              Some(storeName))
-          }
-
-          // Validate keyWithIndexToValue stores
-          val hasMatchedField = stateVersion == 2
-          val (keyWithIndexKeySchema, keyWithIndexValueSchema) =
-            getKeyWithIndexToValueSchemas(hasMatchedField)
-          Seq("right-keyWithIndexToValue", "left-keyWithIndexToValue").foreach { storeName =>
-            validateStateStore(
-              tempDir.getAbsolutePath,
-              keyWithIndexKeySchema,
-              keyWithIndexValueSchema,
-              Some(storeName))
+            // Validate keyWithIndexToValue stores
+            val (keyWithIndexKeySchema, keyWithIndexValueSchema) =
+              StreamStreamJoinTestUtils.getKeyWithIndexToValueSchemas(version)
+            StreamStreamJoinTestUtils.KEY_WITH_INDEX_ALL.foreach { storeName =>
+              validateStateStore(
+                tempDir.getAbsolutePath,
+                keyWithIndexKeySchema,
+                keyWithIndexValueSchema,
+                Some(storeName),
+                partitionKeyExtractor = Some(compositeKey =>
+                  Row(compositeKey.getInt(0))))
+            }
           }
         }
-      }
-    }
-
-    testWithChangelogConfig("stream-stream join, state ver 1") {
-      testStreamStreamJoinV1AndV2(1)
-    }
-
-    testWithChangelogConfig("stream-stream join, state ver 2") {
-      testStreamStreamJoinV1AndV2(2)
-    }
+    })
 
     testWithChangelogConfig("SPARK-54419: transformWithState with multiple column families") {
       withTempDir { tempDir =>
@@ -652,54 +507,42 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
         val columnFamilies = allBytesData.map(_.getString(3)).distinct.sorted
 
         // Verify countState column family exists
-        assert(columnFamilies.toSet ==
-          Set("countState", "itemsList", "$rowCounter_itemsList", "itemsMap"))
+        assert(columnFamilies.toSet == MultiStateVarProcessorTestUtils.ALL_COLUMN_FAMILIES)
 
-        // Define schemas for each column family based on provided schema info
-        val groupByKeySchema = StructType(Array(
-          StructField("value", StringType, nullable = true)
-        ))
-        val countStateValueSchema = StructType(Array(
-          StructField("value", LongType, nullable = false)
-        ))
-        val itemsListValueSchema = StructType(Array(
-          StructField("value", StringType, nullable = true)
-        ))
-        val rowCounterValueSchema = StructType(Array(
-          StructField("count", LongType, nullable = true)
-        ))
-        val itemsMapKeySchema = StructType(Array(
-          StructField("key", groupByKeySchema),
-          StructField("user_map_key", groupByKeySchema, nullable = true)
-        ))
-        val itemsMapValueSchema = StructType(Array(
-          StructField("user_map_value", IntegerType, nullable = true)
-        ))
+        // Define schemas for each column family.
+        // count_state, items_list and row_counter all share the same key schema
+        val schemas = MultiStateVarProcessorTestUtils.getSchemas()
+        val (keySchema, countStateValueSchema, _) =
+          schemas(MultiStateVarProcessorTestUtils.COUNT_STATE)
+        val (_, itemsListValueSchema, _) = schemas(MultiStateVarProcessorTestUtils.ITEMS_LIST)
+        val (_, rowCounterValueSchema, _) = schemas(MultiStateVarProcessorTestUtils.ROW_COUNTER)
+        val (mapKeySchema, mapValueSchema, _) = schemas(MultiStateVarProcessorTestUtils.ITEMS_MAP)
 
         // Validate countState
         readAndValidateStateVar(
           tempDir.getAbsolutePath, allBytesData,
-          stateVarName = "countState", groupByKeySchema, countStateValueSchema)
+          MultiStateVarProcessorTestUtils.COUNT_STATE, keySchema, countStateValueSchema)
 
         // Validate itemsList
         readAndValidateStateVar(
           tempDir.getAbsolutePath, allBytesData,
-          stateVarName = "itemsList", groupByKeySchema, itemsListValueSchema,
+          MultiStateVarProcessorTestUtils.ITEMS_LIST, keySchema, itemsListValueSchema,
           extraOptions = Map(StateSourceOptions.FLATTEN_COLLECTION_TYPES -> "true"),
-          selectExprs = Seq("partition_id", "key", "list_element"))
+          selectExprs = MultiStateVarProcessorTestUtils.getSelectExpressions(
+            MultiStateVarProcessorTestUtils.ITEMS_LIST))
 
         // Validate $rowCounter_itemsList
         readAndValidateStateVar(
           tempDir.getAbsolutePath, allBytesData,
-          stateVarName = "$rowCounter_itemsList", groupByKeySchema, rowCounterValueSchema
-        )
+          MultiStateVarProcessorTestUtils.ROW_COUNTER, keySchema, rowCounterValueSchema)
 
         // Validate itemsMap
         readAndValidateStateVar(
           tempDir.getAbsolutePath, allBytesData,
-          stateVarName = "itemsMap", itemsMapKeySchema, itemsMapValueSchema,
-          selectExprs = Seq("partition_id", "STRUCT(key, user_map_key) AS KEY",
-            "user_map_value AS value"))
+          MultiStateVarProcessorTestUtils.ITEMS_MAP, mapKeySchema, mapValueSchema,
+          selectExprs = MultiStateVarProcessorTestUtils.getSelectExpressions(
+            MultiStateVarProcessorTestUtils.ITEMS_MAP),
+          partitionKeyExtractor = Some(compositeKey => compositeKey.getStruct(0)))
       }
     }
 
@@ -778,19 +621,11 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
         val allBytesData = bytesDf.collect()
         val columnFamilies = allBytesData.map(_.getString(3)).distinct.sorted
 
-        assert(columnFamilies.toSet ==
-          Set("listState", "$ttl_listState", "$min_listState", "$count_listState"))
+        assert(columnFamilies.toSet == TTLProcessorUtils.LIST_STATE_ALL)
 
         // Define schemas for list state with TTL column families
-        val groupByKeySchema = StructType(Array(
-          StructField("value", StringType, nullable = true)
-        ))
-        val listStateValueSchema = StructType(Array(
-          StructField("value", StructType(Array(
-            StructField("value", IntegerType, nullable = true)
-          )), nullable = false),
-          StructField("ttlExpirationMs", LongType, nullable = false)
-        ))
+        val schemas = TTLProcessorUtils.getListStateTTLSchemas()
+        val (groupByKeySchema, listStateValueSchema) = schemas(TTLProcessorUtils.LIST_STATE)
 
         val listStateNormalDf = spark.read
           .format("statestore")
@@ -798,32 +633,29 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
           .option(StateSourceOptions.STATE_VAR_NAME, "listState")
           .option(StateSourceOptions.FLATTEN_COLLECTION_TYPES, "true")
           .load()
-          .selectExpr("partition_id", "key", "list_element")
+          .selectExpr(TTLProcessorUtils.getTTLSelectExpressions(TTLProcessorUtils.LIST_STATE): _*)
 
         compareNormalAndBytesData(
           listStateNormalDf.collect(),
           allBytesData,
-          "listState",
+          TTLProcessorUtils.LIST_STATE,
           groupByKeySchema,
           listStateValueSchema)
-        val dummyValueSchema = StructType(Array(StructField("__dummy__", NullType)))
-        val ttlIndexKeySchema = StructType(Array(
-          StructField("expirationMs", LongType, nullable = false),
-          StructField("elementKey", groupByKeySchema)
-        ))
-        val minExpiryValueSchema = StructType(Array(
-          StructField("minExpiry", LongType)
-        ))
-        val countValueSchema = StructType(Array(
-          StructField("count", LongType)
-        ))
+        val (ttlIndexKeySchema, ttlValueSchema) = schemas(TTLProcessorUtils.LIST_STATE_TTL_INDEX)
+        val (_, minExpiryValueSchema) = schemas(TTLProcessorUtils.LIST_STATE_MIN)
+        val (_, countValueSchema) = schemas(TTLProcessorUtils.LIST_STATE_COUNT)
+        val ttlColFamilyPartitionKeyExtractor: Option[Row => Row] =
+          Some(compositeKey => compositeKey.getStruct(1))
         val columnFamilyAndKeyValueSchema = Seq(
-          ("$ttl_listState", ttlIndexKeySchema, dummyValueSchema),
-          ("$min_listState", groupByKeySchema, minExpiryValueSchema),
-          ("$count_listState", groupByKeySchema, countValueSchema)
+          (TTLProcessorUtils.LIST_STATE_TTL_INDEX,
+            ttlIndexKeySchema, ttlValueSchema,
+            ttlColFamilyPartitionKeyExtractor),
+          (TTLProcessorUtils.LIST_STATE_MIN, groupByKeySchema, minExpiryValueSchema, None),
+          (TTLProcessorUtils.LIST_STATE_COUNT, groupByKeySchema, countValueSchema, None)
         )
         columnFamilyAndKeyValueSchema.foreach(pair => {
-          validateColumnFamily(tempDir.getAbsolutePath, pair._1, bytesDf, pair._2, pair._3)
+          validateColumnFamily(
+            tempDir.getAbsolutePath, pair._1, bytesDf, pair._2, pair._3, pair._4)
         })
       }
     }
@@ -856,42 +688,24 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
         val columnFamilies = allBytesData.map(_.getString(3)).distinct.sorted
 
         // Map state with TTL should have: mapState (main) and $ttl_mapState (TTL index)
-        assert(columnFamilies.toSet == Set("mapState", "$ttl_mapState"))
+        assert(columnFamilies.toSet == TTLProcessorUtils.MAP_STATE_ALL)
 
         // Define schemas for map state with TTL column families
-        val groupByKeySchema = StructType(Array(
-          StructField("value", StringType, nullable = true)
-        ))
-        val userKeySchema = StructType(Array(
-          StructField("value", StringType, nullable = true)
-        ))
-        val compositeKeySchema = StructType(Array(
-          StructField("key", groupByKeySchema),
-          StructField("userKey", userKeySchema)
-        ))
-        val mapStateValueSchema = StructType(Array(
-          StructField("value", StructType(Array(
-            StructField("value", IntegerType, nullable = true)
-          )), nullable = false),
-          StructField("ttlExpirationMs", LongType, nullable = false)
-        ))
+        val schemas = TTLProcessorUtils.getMapStateTTLSchemas()
+        val (compositeKeySchema, mapStateValueSchema) = schemas(TTLProcessorUtils.MAP_STATE)
+        val (ttlIndexKeySchema, dummyValueSchema) = schemas(TTLProcessorUtils.MAP_STATE_TTL_INDEX)
 
         readAndValidateStateVar(
           tempDir.getAbsolutePath, allBytesData,
-          stateVarName = "mapState", compositeKeySchema, mapStateValueSchema,
-          selectExprs = Seq("partition_id", "STRUCT(key, user_map_key) AS KEY",
-            "user_map_value AS value"))
+          stateVarName = TTLProcessorUtils.MAP_STATE, compositeKeySchema, mapStateValueSchema,
+          selectExprs = TTLProcessorUtils.getTTLSelectExpressions(TTLProcessorUtils.MAP_STATE),
+          partitionKeyExtractor = Some(compositeKey => compositeKey.getStruct(0)))
 
         // Validate $ttl_mapState column family
-        val dummyValueSchema = StructType(Array(StructField("__empty__", NullType)))
-        val ttlIndexKeySchema = StructType(Array(
-          StructField("expirationMs", LongType, nullable = false),
-          StructField("elementKey", compositeKeySchema)
-        ))
-
         readAndValidateStateVar(
           tempDir.getAbsolutePath, allBytesData,
-          stateVarName = "$ttl_mapState", ttlIndexKeySchema, dummyValueSchema)
+          stateVarName = TTLProcessorUtils.MAP_STATE_TTL_INDEX, ttlIndexKeySchema, dummyValueSchema,
+          partitionKeyExtractor = Some(ttlKey => ttlKey.getStruct(1).getStruct(0)))
       }
     }
 
@@ -924,43 +738,33 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
         val columnFamilies = allBytesData.map(_.getString(3)).distinct.sorted
 
         // Value state with TTL should have: valueState (main) and $ttl_valueState (TTL index)
-        assert(columnFamilies.toSet == Set("valueState", "$ttl_valueState"))
+        assert(columnFamilies.toSet == TTLProcessorUtils.VALUE_STATE_ALL)
 
         // Define schemas for value state with TTL column families
-        val groupByKeySchema = StructType(Array(
-          StructField("value", StringType, nullable = true)
-        ))
-        val valueStateValueSchema = StructType(Array(
-          StructField("value", StructType(Array(
-            StructField("value", IntegerType, nullable = true)
-          )), nullable = false),
-          StructField("ttlExpirationMs", LongType, nullable = false)
-        ))
+        val schemas = TTLProcessorUtils.getValueStateTTLSchemas()
+        val (groupByKeySchema, valueStateValueSchema) = schemas(TTLProcessorUtils.VALUE_STATE)
+        val (ttlIndexKeySchema, dummyValueSchema) = schemas(TTLProcessorUtils.VALUE_STATE_TTL_INDEX)
 
-        val valueStateNormalDf = getNormalReadDf(tempDir.getAbsolutePath, Option("valueState"))
+        val valueStateNormalDf = getNormalReadDf(tempDir.getAbsolutePath,
+          Option(TTLProcessorUtils.VALUE_STATE))
 
         compareNormalAndBytesData(
           valueStateNormalDf.collect(),
           allBytesData,
-          "valueState",
+          TTLProcessorUtils.VALUE_STATE,
           groupByKeySchema,
           valueStateValueSchema)
 
         // Validate $ttl_valueState column family
-        val dummyValueSchema = StructType(Array(StructField("__empty__", NullType)))
-        val ttlIndexKeySchema = StructType(Array(
-          StructField("expirationMs", LongType, nullable = false),
-          StructField("elementKey", groupByKeySchema)
-        ))
-
         val ttlValueStateNormalDf = getNormalReadDf(
-          tempDir.getAbsolutePath, Option("$ttl_valueState"))
+          tempDir.getAbsolutePath, Option(TTLProcessorUtils.VALUE_STATE_TTL_INDEX))
         compareNormalAndBytesData(
           ttlValueStateNormalDf.collect(),
           allBytesData,
-          "$ttl_valueState",
+          TTLProcessorUtils.VALUE_STATE_TTL_INDEX,
           ttlIndexKeySchema,
-          dummyValueSchema)
+          dummyValueSchema,
+          partitionKeyExtractor = Some(ttlKey => ttlKey.getStruct(1)))
       }
     }
 
@@ -974,8 +778,9 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
           validateBytesReadDfSchema(stateBytesDf)
 
           // Validate keyToNumValues column families
-          val (keyToNumValuesKeySchema, keyToNumValueValueSchema) = getKeyToNumValuesSchemas()
-          Seq("right-keyToNumValues", "left-keyToNumValues").foreach { colFamilyName =>
+          val (keyToNumValuesKeySchema, keyToNumValueValueSchema) =
+            StreamStreamJoinTestUtils.getKeyToNumValuesSchemas()
+          StreamStreamJoinTestUtils.KEY_TO_NUM_VALUES_ALL.foreach { colFamilyName =>
             validateColumnFamily(
               tempDir.getAbsolutePath,
               colFamilyName,
@@ -986,14 +791,16 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
 
           // Validate keyWithIndexToValue column families (V3 always has matched field)
           val (keyWithIndexKeySchema, keyWithIndexValueSchema) =
-            getKeyWithIndexToValueSchemas(includeMatchedField = true)
-          Seq("right-keyWithIndexToValue", "left-keyWithIndexToValue").foreach { colFamilyName =>
+            StreamStreamJoinTestUtils.getKeyWithIndexToValueSchemas(stateVersion = 3)
+          StreamStreamJoinTestUtils.KEY_WITH_INDEX_ALL.foreach { colFamilyName =>
             validateColumnFamily(
               tempDir.getAbsolutePath,
               colFamilyName,
               stateBytesDf,
               keyWithIndexKeySchema,
-              keyWithIndexValueSchema)
+              keyWithIndexValueSchema,
+              partitionKeyExtractor = Some(compositeKey =>
+                Row(compositeKey.getInt(0))))
           }
         }
       }
@@ -1036,68 +843,5 @@ class StatePartitionAllColumnFamiliesReaderSuite extends StateDataSourceTestBase
         )
       }
     }
-  }
-}
-
-/**
- * Stateful processor with multiple state variables (ValueState + ListState)
- * for testing multi-column family reading.
- */
-class MultiStateVarProcessor extends StatefulProcessor[String, String, (String, String)] {
-  @transient private var _countState: ValueState[Long] = _
-  @transient private var _itemsList: ListState[String] = _
-  @transient private var _itemsMap: MapState[String, SimpleMapValue] = _
-
-  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
-    _countState = getHandle.getValueState[Long]("countState", Encoders.scalaLong, TTLConfig.NONE)
-    _itemsList = getHandle.getListState[String]("itemsList", Encoders.STRING, TTLConfig.NONE)
-    _itemsMap = getHandle.getMapState[String, SimpleMapValue](
-      "itemsMap", Encoders.STRING, Encoders.product[SimpleMapValue], TTLConfig.NONE)
-  }
-
-  override def handleInputRows(
-      key: String,
-      inputRows: Iterator[String],
-      timerValues: TimerValues): Iterator[(String, String)] = {
-    val currentCount = Option(_countState.get()).getOrElse(0L)
-    var newCount = currentCount
-    inputRows.foreach { item =>
-      newCount += 1
-      _itemsList.appendValue(item)
-      _itemsMap.updateValue(item, SimpleMapValue(newCount.toInt))
-    }
-    _countState.update(newCount)
-    Iterator((key, newCount.toString))
-  }
-}
-
-class EventTimeTimerProcessor
-  extends StatefulProcessor[String, (String, Timestamp), (String, String)] {
-  @transient var _valueState: ValueState[Long] = _
-
-  override def init(outputMode: OutputMode, timeMode: TimeMode): Unit = {
-    _valueState = getHandle.getValueState("countState", Encoders.scalaLong, TTLConfig.NONE)
-  }
-
-  override def handleInputRows(
-      key: String,
-      rows: Iterator[(String, Timestamp)],
-      timerValues: TimerValues): Iterator[(String, String)] = {
-    var maxTimestamp = 0L
-    var rowCount = 0
-    rows.foreach { case (_, timestamp) =>
-      maxTimestamp = Math.max(maxTimestamp, timestamp.getTime)
-      rowCount += 1
-    }
-
-    val count = Option(_valueState.get()).getOrElse(0L) + rowCount
-    _valueState.update(count)
-
-    // Register an event time timer
-    if (maxTimestamp > 0) {
-      getHandle.registerTimer(maxTimestamp + 5000)
-    }
-
-    Iterator((key, count.toString))
   }
 }
