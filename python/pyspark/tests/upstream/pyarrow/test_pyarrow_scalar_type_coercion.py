@@ -305,9 +305,7 @@ class PyArrowScalarTypeCoercionTests(unittest.TestCase):
         self.assertEqual(scalar.type, pa.timestamp("us", tz="UTC"))
 
         # Timezone-aware datetime
-        dt_aware = datetime.datetime(
-            2024, 1, 15, 12, 30, 45, tzinfo=ZoneInfo("America/New_York")
-        )
+        dt_aware = datetime.datetime(2024, 1, 15, 12, 30, 45, tzinfo=ZoneInfo("America/New_York"))
         scalar = pa.scalar(dt_aware, type=pa.timestamp("us", tz="America/New_York"))
         self.assertEqual(scalar.type.tz, "America/New_York")
 
