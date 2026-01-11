@@ -54,8 +54,9 @@ case class FetchCursorExec(
       .asInstanceOf[org.apache.spark.sql.scripting.SqlScriptingExecutionContext]
 
     // Get current cursor state
-    val currentState = scriptingContext.currentScope.cursorStates.getOrElse(
+    val currentState = scriptingContext.currentFrame.getCursorState(
       cursorRef.normalizedName,
+      cursorRef.scopePath).getOrElse(
       throw new AnalysisException(
         errorClass = "CURSOR_NOT_FOUND",
         messageParameters = Map("cursorName" -> cursorRef.sql)))
@@ -68,8 +69,9 @@ case class FetchCursorExec(
           session.asInstanceOf[org.apache.spark.sql.classic.SparkSession],
           query)
         val iter = df.toLocalIterator()
-        scriptingContext.currentScope.cursorStates.put(
+        scriptingContext.currentFrame.updateCursorState(
           cursorRef.normalizedName,
+          cursorRef.scopePath,
           CursorFetching(query, iter))
         (iter, query)
 

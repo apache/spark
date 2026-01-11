@@ -66,8 +66,9 @@ case class OpenCursorExec(
         messageParameters = Map("cursorName" -> cursorRef.sql)))
 
     // Get current cursor state and validate it's in Declared state
-    val currentState = scriptingContext.currentScope.cursorStates.getOrElse(
+    val currentState = scriptingContext.currentFrame.getCursorState(
       cursorRef.normalizedName,
+      cursorRef.scopePath).getOrElse(
       throw new AnalysisException(
         errorClass = "CURSOR_NOT_FOUND",
         messageParameters = Map("cursorName" -> cursorRef.sql)))
@@ -93,8 +94,9 @@ case class OpenCursorExec(
     }
 
     // Transition cursor state to Opened
-    scriptingContext.currentScope.cursorStates.put(
+    scriptingContext.currentFrame.updateCursorState(
       cursorRef.normalizedName,
+      cursorRef.scopePath,
       CursorOpened(analyzedQuery))
 
     Nil

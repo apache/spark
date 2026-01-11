@@ -46,8 +46,9 @@ case class CloseCursorExec(cursor: Expression) extends LeafV2CommandExec {
       .asInstanceOf[org.apache.spark.sql.scripting.SqlScriptingExecutionContext]
 
     // Get current cursor state and validate it exists
-    val currentState = scriptingContext.currentScope.cursorStates.getOrElse(
+    val currentState = scriptingContext.currentFrame.getCursorState(
       cursorRef.normalizedName,
+      cursorRef.scopePath).getOrElse(
       throw new AnalysisException(
         errorClass = "CURSOR_NOT_FOUND",
         messageParameters = Map("cursorName" -> cursorRef.sql)))
@@ -62,8 +63,9 @@ case class CloseCursorExec(cursor: Expression) extends LeafV2CommandExec {
     }
 
     // Transition cursor state to Closed
-    scriptingContext.currentScope.cursorStates.put(
+    scriptingContext.currentFrame.updateCursorState(
       cursorRef.normalizedName,
+      cursorRef.scopePath,
       CursorClosed)
 
     Nil

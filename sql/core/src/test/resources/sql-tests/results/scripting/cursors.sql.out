@@ -638,25 +638,25 @@ BEGIN
   DECLARE str_val STRING;
   DECLARE date_val DATE;
   DECLARE bool_val BOOLEAN;
-  
+
   DECLARE cur_int CURSOR FOR SELECT typeof(:p) as type, :p as val;
   OPEN cur_int USING 42 AS p;
   FETCH cur_int INTO str_val, int_val;
   CLOSE cur_int;
   VALUES ('INT', int_val);
-  
+
   DECLARE cur_str CURSOR FOR SELECT typeof(:p) as type, :p as val;
   OPEN cur_str USING 'hello' AS p;
   FETCH cur_str INTO str_val, str_val;
   CLOSE cur_str;
   VALUES ('STRING', str_val);
-  
+
   DECLARE cur_date CURSOR FOR SELECT typeof(:p) as type, :p as val;
   OPEN cur_date USING DATE '2023-12-25' AS p;
   FETCH cur_date INTO str_val, date_val;
   CLOSE cur_date;
   VALUES ('DATE', date_val);
-  
+
   DECLARE cur_bool CURSOR FOR SELECT typeof(:p) as type, :p as val;
   OPEN cur_bool USING true AS p;
   FETCH cur_bool INTO str_val, bool_val;
@@ -676,19 +676,19 @@ org.apache.spark.sql.exceptions.SqlScriptingException
 -- !query
 BEGIN
   DECLARE result INT;
-  
+
   DECLARE cur_pos CURSOR FOR SELECT ? + ? AS sum;
   OPEN cur_pos USING 10, 20;
   FETCH cur_pos INTO result;
   CLOSE cur_pos;
   VALUES ('positional', result); -- Should be 30
-  
+
   DECLARE cur_named CURSOR FOR SELECT :a + :b AS sum;
   OPEN cur_named USING 15 AS a, 25 AS b;
   FETCH cur_named INTO result;
   CLOSE cur_named;
   VALUES ('named', result); -- Should be 40
-  
+
   DECLARE x INT DEFAULT 100;
   DECLARE cur_var CURSOR FOR SELECT ? + 1 AS val;
   OPEN cur_var USING x;
@@ -710,13 +710,13 @@ org.apache.spark.sql.exceptions.SqlScriptingException
 BEGIN
   DECLARE result INT;
   DECLARE base INT DEFAULT 5;
-  
+
   DECLARE cur1 CURSOR FOR SELECT :p AS val;
   OPEN cur1 USING 5 + 10 AS p;
   FETCH cur1 INTO result;
   CLOSE cur1;
   VALUES ('arithmetic', result); -- Should be 15
-  
+
   DECLARE cur2 CURSOR FOR SELECT :p AS val;
   OPEN cur2 USING base * 2 AS p;
   FETCH cur2 INTO result;

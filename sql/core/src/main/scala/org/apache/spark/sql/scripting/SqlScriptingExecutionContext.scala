@@ -128,6 +128,57 @@ class SqlScriptingExecutionFrame(
     scopes.reverseIterator.find(_.label == scopeLabel).flatMap(_.cursors.get(normalizedName))
   }
 
+  /**
+   * Find the scope object with the given label.
+   * Used to access scope-specific state (e.g., cursorStates).
+   *
+   * @param scopeLabel The label of the scope to find
+   * @return The scope if found
+   */
+  def findScope(scopeLabel: String): Option[SqlScriptingExecutionScope] = {
+    scopes.reverseIterator.find(_.label == scopeLabel)
+  }
+
+  /**
+   * Get the cursor state for a given cursor, considering scope qualifications.
+   *
+   * @param normalizedName The normalized cursor name
+   * @param scopePath The scope path (e.g., Seq("label") for qualified cursors, empty for
+   *                  unqualified)
+   * @return The cursor state if found
+   */
+  def getCursorState(normalizedName: String, scopePath: Seq[String]): Option[CursorState] = {
+    if (scopePath.nonEmpty) {
+      findScope(scopePath.head).flatMap(_.cursorStates.get(normalizedName))
+    } else {
+      // Search in current scope and parent scopes
+      scopes.reverseIterator.flatMap(_.cursorStates.get(normalizedName)).nextOption()
+    }
+  }
+
+  /**
+   * Update the cursor state for a given cursor, considering scope qualifications.
+   *
+   * @param normalizedName The normalized cursor name
+   * @param scopePath The scope path (e.g., Seq("label") for qualified cursors, empty for
+   *                  unqualified)
+   * @param newState The new cursor state
+   */
+  def updateCursorState(
+      normalizedName: String,
+      scopePath: Seq[String],
+      newState: CursorState): Unit = {
+    val targetScope = if (scopePath.nonEmpty) {
+      findScope(scopePath.head).getOrElse(
+        throw SparkException.internalError(s"Scope ${scopePath.head} not found"))
+    } else {
+      // Find the scope where this cursor is defined
+      scopes.reverseIterator.find(_.cursors.contains(normalizedName)).getOrElse(
+        throw SparkException.internalError(s"Cursor $normalizedName not found in any scope"))
+    }
+    targetScope.cursorStates.put(normalizedName, newState)
+  }
+
   override def hasNext: Boolean = executionPlan.getTreeIterator.hasNext
 
   override def next(): CompoundStatementExec = {
