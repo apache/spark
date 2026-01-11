@@ -77,14 +77,18 @@ if "SPARK_SKIP_CONNECT_COMPAT_TESTS" not in os.environ:
 
 
 class TestRunner:
-    def __init__(self, cmd, env, test_output):
+    def __init__(self, test_name, cmd, env, test_output, timeout=None):
+        self.test_name = test_name
         self.cmd = cmd
         self.env = env
         self.test_output = test_output
+        self.timeout = timeout
+        self.p = None
         self.pdb_mode = False
-        self.loop = asyncio.new_event_loop()
         self.master_fd = None
         self.write_task = None
+        self.read_task = None
+        self.timeout_task = None
 
     def run(self):
         """
@@ -97,7 +101,7 @@ class TestRunner:
         self.master_fd, slave_fd = pty.openpty()
 
         # Start child connected to the PTY
-        p = subprocess.Popen(
+        self.p = subprocess.Popen(
             self.cmd,
             env=self.env,
             stdin=slave_fd,
@@ -106,11 +110,28 @@ class TestRunner:
         )
         os.close(slave_fd)
 
-        self.loop.run_until_complete(self.handle_inout())
-        return p.wait()
+        try:
+            asyncio.run(self.handle_inout())
+        except subprocess.TimeoutExpired:
+            LOGGER.error(f"Test {self.test_name} timed out after {self.timeout} seconds")
+        try:
+            return self.p.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            # If SIGTERM is intercepted, do a hard kill
+            self.p.kill()
+            return self.p.wait()
 
     async def handle_inout(self):
-        await self.read_from_child()
+        tasks = []
+        self.read_task = asyncio.create_task(self.read_from_child())
+        tasks.append(self.read_task)
+        if self.timeout is not None:
+            self.timeout_task = asyncio.create_task(self.check_timeout())
+            tasks.append(self.timeout_task)
+        try:
+            await asyncio.gather(*tasks)
+        except asyncio.CancelledError:
+            pass
 
     def output_line(self, line):
         if self.pdb_mode:
@@ -143,7 +164,7 @@ class TestRunner:
         buffer = b""
         while True:
             try:
-                data = await self.loop.run_in_executor(None, os.read, self.master_fd, 1024)
+                data = await asyncio.to_thread(os.read, self.master_fd, 1024)
             except OSError:
                 break
             if not data:
@@ -151,7 +172,7 @@ class TestRunner:
             buffer += data
             buffer = self.process_buffer(buffer)
             if self.pdb_mode and self.write_task is None:
-                self.write_task = self.loop.create_task(self.write_to_child())
+                self.write_task = asyncio.create_task(self.write_to_child())
         buffer = self.process_buffer(buffer, force_flush=True)
         self.test_output.flush()
 
@@ -164,6 +185,10 @@ class TestRunner:
             self.write_task = None
             self.pdb_mode = False
 
+        if self.timeout_task is not None:
+            self.timeout_task.cancel()
+            self.timeout_task = None
+
     # Writer: forward our stdin to child tty
     async def write_to_child(self):
         while True:
@@ -171,6 +196,29 @@ class TestRunner:
             if not data:
                 break
             os.write(self.master_fd, data)
+
+    # Kill the child process if the timeout is reached
+    async def check_timeout(self):
+        await asyncio.sleep(self.timeout)
+        if self.pdb_mode:
+            # We don't want to kill the process if it's in pdb mode
+            return
+        if self.p.poll() is None:
+            if sys.platform == "linux":
+                self.thread_dump(self.p.pid)
+            self.p.terminate()
+            raise subprocess.TimeoutExpired(self.cmd, self.timeout)
+
+    def thread_dump(self, pid):
+        pyspark_python = self.env['PYSPARK_PYTHON']
+        p = subprocess.run(
+            [pyspark_python, "-m", "pyspark.threaddump", "-p", str(pid)],
+            env={**self.env, "PYTHONPATH": f"{os.path.join(SPARK_HOME, 'python')}:{os.environ.get('PYTHONPATH', '')}"},
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        if p.returncode == 0:
+            LOGGER.error(f"Thread dump:\n{p.stdout.decode('utf-8')}")
 
 
 def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_output):
@@ -196,8 +244,6 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
         'SPARK_PREPEND_CLASSES': '1',
         'PYSPARK_PYTHON': which(pyspark_python),
         'PYSPARK_DRIVER_PYTHON': which(pyspark_python),
-        # Preserve legacy nested timezone behavior for pyarrow>=2, remove after SPARK-32285
-        'PYARROW_IGNORE_TIMEZONE': '1',
     })
 
     if "SPARK_CONNECT_TESTING_REMOTE" in os.environ:
@@ -250,13 +296,8 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
     start_time = time.time()
 
     retcode = None
-    proc = None
     try:
-        if timeout:
-            proc = subprocess.Popen(cmd, stderr=per_test_output, stdout=per_test_output, env=env)
-            retcode = proc.wait(timeout=timeout)
-        else:
-            retcode = TestRunner(cmd, env, per_test_output).run()
+        retcode = TestRunner(test_name, cmd, env, per_test_output, timeout).run()
         if not keep_test_output:
             # There exists a race condition in Python and it causes flakiness in MacOS
             # https://github.com/python/cpython/issues/73885
@@ -264,15 +305,6 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
                 os.system("rm -rf " + tmp_dir)
             else:
                 shutil.rmtree(tmp_dir, ignore_errors=True)
-    except subprocess.TimeoutExpired:
-        if timeout and proc:
-            LOGGER.exception(
-                "Got TimeoutExpired while running %s with %s", test_name, pyspark_python
-            )
-            proc.terminate()
-            proc.communicate(timeout=60)
-        else:
-            raise
     except BaseException:
         LOGGER.exception("Got exception while running %s with %s", test_name, pyspark_python)
         # Here, we use os._exit() instead of sys.exit() in order to force Python to exit even if
@@ -282,16 +314,21 @@ def run_individual_python_test(target_dir, test_name, pyspark_python, keep_test_
     # Exit on the first failure but exclude the code 5 for no test ran, see SPARK-46801.
     if retcode != 0 and retcode != 5:
         try:
+            per_test_output.seek(0)
             with FAILURE_REPORTING_LOCK:
                 with open(LOG_FILE, 'ab') as log_file:
-                    per_test_output.seek(0)
                     log_file.writelines(per_test_output)
-                per_test_output.seek(0)
-                for line in per_test_output:
-                    decoded_line = line.decode("utf-8", "replace")
-                    if not re.match('[0-9]+', decoded_line):
-                        print(decoded_line, end='')
-                per_test_output.close()
+
+            # We don't want the logging lines interleave with the test output, so we read the
+            # full file and output with LOGGER which has internal locking.
+            per_test_output.seek(0)
+            lines = []
+            for line in per_test_output:
+                line = line.decode("utf-8", "replace")
+                if not re.match('[0-9]+', line):
+                    lines.append(line)
+            LOGGER.error(f"{test_name} with {pyspark_python} failed:\n{''.join(lines)}")
+            per_test_output.close()
         except BaseException:
             LOGGER.exception("Got an exception while trying to print failed test output")
         finally:

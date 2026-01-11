@@ -25,7 +25,6 @@ coverage
 ruff==0.14.8
 mypy==1.8.0
 pytest-mypy-plugins==1.9.3
-flake8==3.9.0
 # See SPARK-38680.
 pandas-stubs<1.2.0.54
 scipy-stubs; python_version>='3.10'
@@ -78,6 +77,8 @@ graphviz==0.20.3
 flameprof==0.4
 viztracer
 debugpy
+pystack>=1.5.1; python_version!='3.13' and sys_platform=='linux' # no 3.13t wheels
+psutil
 
 # TorchDistributor dependencies
 torch

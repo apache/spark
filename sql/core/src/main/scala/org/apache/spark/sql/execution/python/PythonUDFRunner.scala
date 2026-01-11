@@ -173,26 +173,7 @@ object PythonUDFRunner {
       funcs: Seq[(ChainedPythonFunctions, Long)],
       argOffsets: Array[Array[Int]],
       profiler: Option[String]): Unit = {
-    profiler match {
-      case Some(p) =>
-        dataOut.writeBoolean(true)
-        PythonWorkerUtils.writeUTF(p, dataOut)
-      case _ => dataOut.writeBoolean(false)
-    }
-    dataOut.writeInt(funcs.length)
-    funcs.zip(argOffsets).foreach { case ((chained, resultId), offsets) =>
-      dataOut.writeInt(offsets.length)
-      offsets.foreach { offset =>
-        dataOut.writeInt(offset)
-      }
-      dataOut.writeInt(chained.funcs.length)
-      chained.funcs.foreach { f =>
-        PythonWorkerUtils.writePythonFunction(f, dataOut)
-      }
-      if (profiler.isDefined) {
-        dataOut.writeLong(resultId)
-      }
-    }
+    writeUDFs(dataOut, funcs, argOffsets.map(_.map(ArgumentMetadata(_, None, false))), profiler)
   }
 
   def writeUDFs(

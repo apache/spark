@@ -493,6 +493,10 @@ class DataStreamWriter:
     def trigger(self, *, availableNow: bool) -> "DataStreamWriter":
         ...
 
+    @overload
+    def trigger(self, *, realTime: str) -> "DataStreamWriter":
+        ...
+
     def trigger(
         self,
         *,
@@ -500,15 +504,16 @@ class DataStreamWriter:
         once: Optional[bool] = None,
         continuous: Optional[str] = None,
         availableNow: Optional[bool] = None,
+        realTime: Optional[str] = None,
     ) -> "DataStreamWriter":
-        params = [processingTime, once, continuous, availableNow]
+        params = [processingTime, once, continuous, availableNow, realTime]
 
-        if params.count(None) == 4:
+        if params.count(None) == 5:
             raise PySparkValueError(
                 errorClass="ONLY_ALLOW_SINGLE_TRIGGER",
                 messageParameters={},
             )
-        elif params.count(None) < 3:
+        elif params.count(None) < 4:
             raise PySparkValueError(
                 errorClass="ONLY_ALLOW_SINGLE_TRIGGER",
                 messageParameters={},
@@ -540,6 +545,14 @@ class DataStreamWriter:
                     messageParameters={"arg_name": "continuous", "arg_value": str(continuous)},
                 )
             self._write_proto.continuous_checkpoint_interval = continuous.strip()
+
+        elif realTime is not None:
+            if type(realTime) != str or len(realTime.strip()) == 0:
+                raise PySparkValueError(
+                    errorClass="VALUE_NOT_NON_EMPTY_STR",
+                    messageParameters={"arg_name": "realTime", "arg_value": str(realTime)},
+                )
+            self._write_proto.real_time_batch_duration = realTime.strip()
 
         else:
             if availableNow is not True:
