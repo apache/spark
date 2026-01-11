@@ -122,6 +122,22 @@ trait ConditionalStatementExec extends NonLeafStatementExec {
    * HANDLER.
    */
   protected[scripting] var interrupted: Boolean = false
+
+  /**
+   * Returns true if the conditional statement is currently evaluating its condition,
+   * false if it's executing its body. This is used by CONTINUE HANDLER to determine
+   * whether to interrupt the conditional statement when an exception occurs.
+   *
+   * For loop statements (WHILE, REPEAT, FOR), this should return true when evaluating
+   * the loop condition and false when executing the loop body. This distinction is
+   * critical because:
+   * - Exception in condition: loop should be skipped (interrupted)
+   * - Exception in body: loop should continue to next iteration (not interrupted)
+   *
+   * For IF/CASE statements, this should return true when evaluating the condition
+   * expression and false when executing any branch body.
+   */
+  protected[scripting] def isInCondition: Boolean
 }
 
 /**
@@ -515,6 +531,8 @@ class IfElseStatementExec(
 
   override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
 
+  override protected[scripting] def isInCondition: Boolean = state == IfElseState.Condition
+
   override def reset(): Unit = {
     state = IfElseState.Condition
     curr = Some(conditions.head)
@@ -600,6 +618,8 @@ class WhileStatementExec(
     }
 
   override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
+
+  override protected[scripting] def isInCondition: Boolean = state == WhileState.Condition
 
   override def reset(): Unit = {
     state = WhileState.Condition
@@ -689,6 +709,8 @@ class SearchedCaseStatementExec(
     }
 
   override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
+
+  override protected[scripting] def isInCondition: Boolean = state == CaseState.Condition
 
   override def reset(): Unit = {
     state = CaseState.Condition
@@ -829,6 +851,8 @@ class SimpleCaseStatementExec(
 
   override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
 
+  override protected[scripting] def isInCondition: Boolean = state == CaseState.Condition
+
   override def reset(): Unit = {
     state = CaseState.Condition
     bodyExec = None
@@ -915,6 +939,8 @@ class RepeatStatementExec(
     }
 
   override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
+
+  override protected[scripting] def isInCondition: Boolean = state == RepeatState.Condition
 
   override def reset(): Unit = {
     state = RepeatState.Body
@@ -1251,6 +1277,8 @@ class ForStatementExec(
   }
 
   override def getTreeIterator: Iterator[CompoundStatementExec] = treeIterator
+
+  override protected[scripting] def isInCondition: Boolean = state == ForState.VariableAssignment
 
   override def reset(): Unit = {
     state = ForState.VariableAssignment
