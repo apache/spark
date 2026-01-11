@@ -927,8 +927,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       case Connection.TRANSACTION_READ_COMMITTED => "READ_COMMITTED"
       case Connection.TRANSACTION_REPEATABLE_READ => "REPEATABLE_READ"
       case Connection.TRANSACTION_SERIALIZABLE => "SERIALIZABLE"
-      case value =>
-        throw QueryExecutionErrors.invalidJdbcTxnIsolationLevelNumberError(value.toString)
+      case value => value.toString
     }
   }
 

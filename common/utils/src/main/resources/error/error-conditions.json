@@ -4279,12 +4279,6 @@
     },
     "sqlState" : "42000"
   },
-  "JDBC_ISOLATION_LEVEL_ERROR" : {
-    "message" : [
-      "Invalid numerical value `<value>` for jdbcTxnIsolationLevel. This can be 0 (NONE), 1 (READ_UNCOMMITTED), 2 (READ_COMMITTED), 4 (REPEATABLE_READ) or 8 (SERIALIZABLE)."
-    ],
-    "sqlState" : "25000"
-  },
   "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE" : {
     "message" : [
       "The join condition <joinCondition> has the invalid type <conditionType>, expected \"BOOLEAN\"."

@@ -1020,12 +1020,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map("value" -> value, "jdbcTxnIsolationLevel" -> jdbcTxnIsolationLevel))
   }
 
-  def invalidJdbcTxnIsolationLevelNumberError(value: String): SparkIllegalArgumentException = {
-    new SparkIllegalArgumentException(
-      errorClass = "JDBC_ISOLATION_LEVEL_ERROR",
-      messageParameters = Map("value" -> value))
-  }
-
   def cannotGetJdbcTypeError(dt: DataType): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException(
       errorClass = "_LEGACY_ERROR_TEMP_2082",
