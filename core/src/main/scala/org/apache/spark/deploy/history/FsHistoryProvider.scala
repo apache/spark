@@ -403,7 +403,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val date = new Date(0)
     val lastUpdate = new Date()
     val info = ApplicationAttemptInfo(
-      attemptId, date, date, lastUpdate, 0, "spark", false, None, "unknown")
+      attemptId, date, date, lastUpdate, 0, "spark", false, "unknown")
     addListing(new ApplicationInfoWrapper(
       ApplicationInfo(appId, appId, None, None, None, None, List.empty),
       List(new AttemptInfoWrapper(info, logPath, 0, Some(1), None, None, None, None))))
@@ -1687,8 +1687,8 @@ private[history] class AppListingListener(
         duration,
         sparkUser,
         completed,
-        exitCode,
-        appSparkVersion)
+        appSparkVersion,
+        exitCode)
       new AttemptInfoWrapper(
         apiInfo,
         logPath,
