@@ -111,8 +111,8 @@ private[protobuf] class ApplicationInfoWrapperSerializer
       duration = info.getDuration,
       sparkUser = getStringField(info.hasSparkUser, () => info.getSparkUser),
       completed = info.getCompleted,
-      exitCode = if (info.hasExitCode) Some(info.getExitCode) else None,
-      appSparkVersion = getStringField(info.hasAppSparkVersion, () => info.getAppSparkVersion)
+      appSparkVersion = getStringField(info.hasAppSparkVersion, () => info.getAppSparkVersion),
+      exitCode = if (info.hasExitCode) Some(info.getExitCode) else None
     )
   }
 }

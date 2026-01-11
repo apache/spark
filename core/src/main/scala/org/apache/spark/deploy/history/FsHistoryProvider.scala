@@ -1930,8 +1930,8 @@ private[history] class AppListingListener(
         duration,
         sparkUser,
         completed,
-        exitCode,
         appSparkVersion,
+        exitCode,
         Some(logSourceName),
         Some(logSourceFullPath))
       new AttemptInfoWrapper(

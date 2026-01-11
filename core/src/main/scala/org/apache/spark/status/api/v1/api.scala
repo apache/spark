@@ -53,8 +53,8 @@ case class ApplicationAttemptInfo private[spark](
     duration: Long,
     sparkUser: String,
     completed: Boolean = false,
-    exitCode: Option[Int],
     appSparkVersion: String,
+    exitCode: Option[Int] = None,
     logSourceName: Option[String] = None,
     logSourceFullPath: Option[String] = None) {
 
