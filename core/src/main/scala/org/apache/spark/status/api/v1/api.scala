@@ -64,22 +64,6 @@ case class ApplicationAttemptInfo private[spark](
 
 }
 
-object ApplicationAttemptInfo {
-  // Old 8-param apply method for binary compatibility
-  def apply(
-      attemptId: Option[String],
-      startTime: Date,
-      endTime: Date,
-      lastUpdated: Date,
-      duration: Long,
-      sparkUser: String,
-      completed: Boolean,
-      appSparkVersion: String): ApplicationAttemptInfo = {
-    new ApplicationAttemptInfo(attemptId, startTime, endTime, lastUpdated,
-      duration, sparkUser, completed, appSparkVersion)
-  }
-}
-
 class ResourceProfileInfo private[spark](
     val id: Int,
     val executorResources: Map[String, ExecutorResourceRequest],
