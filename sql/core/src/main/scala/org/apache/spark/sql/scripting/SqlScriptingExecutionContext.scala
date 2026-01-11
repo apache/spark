@@ -248,16 +248,16 @@ class SqlScriptingExecutionScope(
     val triggerToExceptionHandlerMap: TriggerToExceptionHandlerMap) {
   val variables = new mutable.HashMap[String, VariableDefinition]
   val cursors = new mutable.HashMap[String, CursorDefinition]
+  val cursorStates = new mutable.HashMap[String, CursorState]
 
   /**
    * Cleanup resources when this scope is being removed.
    * Closes all open cursors and releases their result data.
    */
   def cleanup(): Unit = {
-    cursors.values.foreach { cursor =>
-      if (cursor.isOpen) {
-        cursor.close()
-      }
+    // Close all cursors by transitioning them to Closed state
+    cursorStates.keys.foreach { cursorName =>
+      cursorStates.put(cursorName, CursorClosed)
     }
   }
 
@@ -324,34 +324,53 @@ class SqlScriptingExecutionScope(
 }
 
 /**
- * Definition of a cursor in SQL scripting.
+ * Defines a cursor with its name and SQL query text.
+ * This is immutable - lifecycle state is managed separately via CursorState.
  *
  * @param name
  *   Name of the cursor.
- * @param query
- *   The query that defines the cursor (LogicalPlan). For parameterized cursors,
- *   this is updated with the analyzed plan when the cursor is opened.
  * @param queryText
  *   The original SQL text of the query (preserves parameter markers).
- * @param isOpen
- *   Whether the cursor is currently open.
- * @param resultIterator
- *   The iterator over result rows when cursor is open. Uses toLocalIterator()
- *   to avoid loading all data into memory at once.
  */
 case class CursorDefinition(
     name: String,
-    var query: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan,
-    queryText: String,
-    var isOpen: Boolean = false,
-    var resultIterator: Option[java.util.Iterator[org.apache.spark.sql.Row]] = None) {
+    queryText: String)
 
-  /**
-   * Closes the cursor and releases its resources.
-   * Sets isOpen to false and releases the result iterator.
-   */
-  def close(): Unit = {
-    isOpen = false
-    resultIterator = None
-  }
-}
+/**
+ * Sealed trait representing the lifecycle state of a cursor.
+ * State transitions:
+ *   Declared -> Opened -> Fetching -> Closed
+ */
+sealed trait CursorState
+
+/**
+ * Cursor has been declared but not yet opened.
+ * This is the initial state after DECLARE CURSOR.
+ */
+case class CursorDeclared(
+    query: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan) extends CursorState
+
+/**
+ * Cursor has been opened and query has been parsed/analyzed.
+ * For parameterized cursors, the query here has parameters substituted.
+ *
+ * @param analyzedQuery The analyzed logical plan with parameters bound
+ */
+case class CursorOpened(
+    analyzedQuery: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan) extends CursorState
+
+/**
+ * Cursor is being fetched from - result iterator is active.
+ * Uses toLocalIterator() to avoid loading all data into memory at once.
+ *
+ * @param analyzedQuery The analyzed logical plan
+ * @param resultIterator Iterator over result rows
+ */
+case class CursorFetching(
+    analyzedQuery: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan,
+    resultIterator: java.util.Iterator[org.apache.spark.sql.Row]) extends CursorState
+
+/**
+ * Cursor has been closed and resources released.
+ */
+case object CursorClosed extends CursorState
