@@ -6621,8 +6621,9 @@ class AstBuilder extends DataTypeAstBuilder
       throw SqlScriptingErrors.cursorNotSupported(CurrentOrigin.get)
     }
 
-    // Use visitMultipartIdentifier to properly handle IDENTIFIER('name')
+    // Create UnresolvedCursor from the cursor name
     val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier())
+    val cursor = org.apache.spark.sql.scripting.UnresolvedCursor(nameParts)
 
     // Parse optional USING clause parameters
     // Note: Parameter name inference from attributes (e.g., USING p where p is a variable)
@@ -6636,7 +6637,7 @@ class AstBuilder extends DataTypeAstBuilder
       }.unzip
     }.getOrElse((Seq.empty, Seq.empty))
 
-    SingleStatement(OpenCursor(nameParts, args, paramNames))
+    SingleStatement(OpenCursor(cursor, args, paramNames))
   }
 
   /**
@@ -6653,11 +6654,12 @@ class AstBuilder extends DataTypeAstBuilder
       throw SqlScriptingErrors.cursorNotSupported(CurrentOrigin.get)
     }
 
-    // Use visitMultipartIdentifier to properly handle IDENTIFIER('name')
+    // Create UnresolvedCursor from the cursor name
     val nameParts = visitMultipartIdentifier(ctx.cursorName)
+    val cursor = org.apache.spark.sql.scripting.UnresolvedCursor(nameParts)
 
     val targetVariables = visitMultipartIdentifierList(ctx.targets)
-    SingleStatement(FetchCursor(nameParts, targetVariables))
+    SingleStatement(FetchCursor(cursor, targetVariables))
   }
 
   /**
@@ -6674,9 +6676,10 @@ class AstBuilder extends DataTypeAstBuilder
       throw SqlScriptingErrors.cursorNotSupported(CurrentOrigin.get)
     }
 
-    // Use visitMultipartIdentifier to properly handle IDENTIFIER('name')
+    // Create UnresolvedCursor from the cursor name
     val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier())
-    SingleStatement(CloseCursor(nameParts))
+    val cursor = org.apache.spark.sql.scripting.UnresolvedCursor(nameParts)
+    SingleStatement(CloseCursor(cursor))
   }
 
   private def visitSetVariableImpl(

@@ -482,6 +482,7 @@ class Analyzer(
       new ResolveTableConstraints(catalogManager) ::
       new ResolveSetVariable(catalogManager) ::
       new ResolveFetchCursor(catalogManager) ::
+      new ResolveCursors() ::
       ExtractWindowExpressions ::
       GlobalAggregates ::
       ResolveAggregateFunctions ::

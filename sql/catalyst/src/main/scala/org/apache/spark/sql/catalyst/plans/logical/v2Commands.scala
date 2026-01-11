@@ -1945,32 +1945,32 @@ case class DeclareCursor(
 /**
  * The logical plan of the OPEN cursor command.
  *
- * @param nameParts Cursor name parts (unqualified: Seq(name) or qualified: Seq(label, name))
+ * @param cursor Cursor reference (UnresolvedCursor during parsing, CursorReference after analysis)
  * @param args Parameter expressions from USING clause
  * @param paramNames Names for each parameter (empty string "" for positional parameters)
  */
 case class OpenCursor(
-    nameParts: Seq[String],
+    cursor: Expression,
     args: Seq[Expression] = Seq.empty,
     paramNames: Seq[String] = Seq.empty) extends LeafCommand
 
 /**
  * The logical plan of the FETCH cursor command.
  *
- * @param nameParts Cursor name parts (unqualified: Seq(name) or qualified: Seq(label, name))
+ * @param cursor Cursor reference (UnresolvedCursor during parsing, CursorReference after analysis)
  * @param targetVariables Target variables to fetch into
  */
 case class FetchCursor(
-    nameParts: Seq[String],
+    cursor: Expression,
     targetVariables: Seq[Expression]) extends LeafCommand
 
 /**
  * The logical plan of the CLOSE cursor command.
  *
- * @param nameParts Cursor name parts (unqualified: Seq(name) or qualified: Seq(label, name))
+ * @param cursor Cursor reference (UnresolvedCursor during parsing, CursorReference after analysis)
  */
 case class CloseCursor(
-    nameParts: Seq[String]) extends LeafCommand
+    cursor: Expression) extends LeafCommand
 
 /**
  * The logical plan of the CALL statement.

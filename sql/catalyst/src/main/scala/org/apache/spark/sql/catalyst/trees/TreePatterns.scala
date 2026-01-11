@@ -105,6 +105,7 @@ object TreePattern extends Enumeration  {
   val UPPER_OR_LOWER: Value = Value
   val UP_CAST: Value = Value
   val VARIABLE_REFERENCE: Value = Value
+  val CURSOR_REFERENCE: Value = Value
   val DISTRIBUTED_SEQUENCE_ID: Value = Value
 
   // Unresolved expression patterns (Alphabetically ordered)
