@@ -116,6 +116,29 @@ class SqlScriptingExecutionFrame(
   }
 
   /**
+   * Find a cursor by its normalized name in the current scope and parent scopes.
+   * Used by cursor commands after name resolution.
+   *
+   * @param normalizedName The normalized cursor name (considering case sensitivity)
+   * @return The cursor definition if found
+   */
+  def findCursorByName(normalizedName: String): Option[CursorDefinition] = {
+    scopes.reverseIterator.flatMap(_.cursors.get(normalizedName)).nextOption()
+  }
+
+  /**
+   * Find a cursor in a specific labeled scope.
+   * Used by qualified cursor references (label.cursor).
+   *
+   * @param scopeLabel The label of the scope to search in
+   * @param normalizedName The normalized cursor name (considering case sensitivity)
+   * @return The cursor definition if found
+   */
+  def findCursorInScope(scopeLabel: String, normalizedName: String): Option[CursorDefinition] = {
+    scopes.reverseIterator.find(_.label == scopeLabel).flatMap(_.cursors.get(normalizedName))
+  }
+
+  /**
    * Find a cursor by name parts (label and name) in the scope hierarchy.
    * Supports both unqualified (Seq(name)) and qualified (Seq(label, name)) cursor references.
    *

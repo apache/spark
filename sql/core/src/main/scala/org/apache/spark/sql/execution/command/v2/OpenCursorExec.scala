@@ -27,39 +27,45 @@ import org.apache.spark.sql.execution.datasources.v2.LeafV2CommandExec
 /**
  * Physical plan node for opening cursors.
  *
- * @param nameParts Cursor name parts (unqualified: Seq(name) or qualified: Seq(label, name))
+ * @param cursor CursorReference resolved during analysis phase
  * @param args Parameter expressions from USING clause (for parameterized cursors)
  * @param paramNames Names for each parameter (empty string for positional parameters)
  */
 case class OpenCursorExec(
-    nameParts: Seq[String],
+    cursor: Expression,
     args: Seq[Expression] = Seq.empty,
     paramNames: Seq[String] = Seq.empty) extends LeafV2CommandExec {
 
   override protected def run(): Seq[InternalRow] = {
+    // Extract CursorReference from the resolved cursor expression
+    val cursorRef = cursor.asInstanceOf[org.apache.spark.sql.catalyst.expressions.CursorReference]
+
     val scriptingContextManager = SqlScriptingContextManager.get()
       .getOrElse(throw new AnalysisException(
         errorClass = "CURSOR_OUTSIDE_SCRIPT",
-        messageParameters = Map("cursorName" -> nameParts.mkString("."))))
+        messageParameters = Map("cursorName" -> cursorRef.sql)))
 
     val scriptingContext = scriptingContextManager.getContext
       .asInstanceOf[org.apache.spark.sql.scripting.SqlScriptingExecutionContext]
 
-    // Normalize cursor name parts for case sensitivity
-    val normalizedParts = normalizeCursorNameParts(nameParts)
-
-    // Find cursor in scope hierarchy
-    val cursorDef = scriptingContext.currentFrame.findCursorByNameParts(normalizedParts)
-      .getOrElse(
-        throw new AnalysisException(
-          errorClass = "CURSOR_NOT_FOUND",
-          messageParameters = Map("cursorName" -> nameParts.mkString("."))))
+    // Find cursor using normalized name from CursorReference
+    val cursorDefOpt: Option[org.apache.spark.sql.scripting.CursorDefinition] =
+      if (cursorRef.scopePath.nonEmpty) {
+        scriptingContext.currentFrame.findCursorInScope(
+          cursorRef.scopePath.head, cursorRef.normalizedName)
+      } else {
+        scriptingContext.currentFrame.findCursorByName(cursorRef.normalizedName)
+      }.asInstanceOf[Option[org.apache.spark.sql.scripting.CursorDefinition]]
+    val cursorDef = cursorDefOpt.getOrElse(
+      throw new AnalysisException(
+        errorClass = "CURSOR_NOT_FOUND",
+        messageParameters = Map("cursorName" -> cursorRef.sql)))
 
     // Validate cursor is not already open
     if (cursorDef.isOpen) {
       throw new AnalysisException(
         errorClass = "CURSOR_ALREADY_OPEN",
-        messageParameters = Map("cursorName" -> nameParts.mkString(".")))
+        messageParameters = Map("cursorName" -> cursorRef.sql))
     }
 
     // Execute the query and get iterator over results
@@ -82,19 +88,6 @@ case class OpenCursorExec(
     cursorDef.resultIterator = Some(resultIterator)
 
     Nil
-  }
-
-  /**
-   * Normalizes cursor name parts based on case sensitivity configuration.
-   */
-  private def normalizeCursorNameParts(parts: Seq[String]): Seq[String] = {
-    parts.map { part =>
-      if (session.sessionState.conf.caseSensitiveAnalysis) {
-        part
-      } else {
-        part.toLowerCase(java.util.Locale.ROOT)
-      }
-    }
   }
 
   /**

@@ -6623,7 +6623,7 @@ class AstBuilder extends DataTypeAstBuilder
 
     // Create UnresolvedCursor from the cursor name
     val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier())
-    val cursor = org.apache.spark.sql.scripting.UnresolvedCursor(nameParts)
+    val cursor = UnresolvedCursor(nameParts)
 
     // Parse optional USING clause parameters
     // Note: Parameter name inference from attributes (e.g., USING p where p is a variable)
@@ -6656,7 +6656,7 @@ class AstBuilder extends DataTypeAstBuilder
 
     // Create UnresolvedCursor from the cursor name
     val nameParts = visitMultipartIdentifier(ctx.cursorName)
-    val cursor = org.apache.spark.sql.scripting.UnresolvedCursor(nameParts)
+    val cursor = UnresolvedCursor(nameParts)
 
     val targetVariables = visitMultipartIdentifierList(ctx.targets)
     SingleStatement(FetchCursor(cursor, targetVariables))
@@ -6678,7 +6678,7 @@ class AstBuilder extends DataTypeAstBuilder
 
     // Create UnresolvedCursor from the cursor name
     val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier())
-    val cursor = org.apache.spark.sql.scripting.UnresolvedCursor(nameParts)
+    val cursor = UnresolvedCursor(nameParts)
     SingleStatement(CloseCursor(cursor))
   }
 
