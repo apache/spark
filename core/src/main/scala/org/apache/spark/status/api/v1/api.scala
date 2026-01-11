@@ -76,7 +76,7 @@ object ApplicationAttemptInfo {
       completed: Boolean,
       appSparkVersion: String): ApplicationAttemptInfo = {
     new ApplicationAttemptInfo(attemptId, startTime, endTime, lastUpdated,
-      duration, sparkUser, completed, appSparkVersion, None)
+      duration, sparkUser, completed, appSparkVersion)
   }
 }
 
