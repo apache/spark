@@ -490,6 +490,7 @@ pyspark_core = Module(
         "pyspark.tests.test_worker",
         "pyspark.tests.test_stage_sched",
         # unittests for upstream projects
+        "pyspark.tests.upstream.pyarrow.test_pyarrow_array_to_pandas",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_array_type_inference",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_ignore_timezone",
         "pyspark.tests.upstream.pyarrow.test_pyarrow_scalar_type_inference",
