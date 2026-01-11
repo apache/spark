@@ -1952,7 +1952,11 @@ case class DeclareCursor(
 case class OpenCursor(
     cursor: Expression,
     args: Seq[Expression] = Seq.empty,
-    paramNames: Seq[String] = Seq.empty) extends LeafCommand
+    paramNames: Seq[String] = Seq.empty) extends LeafCommand {
+
+  assert(args.length == paramNames.length,
+    s"args.length (${args.length}) must equal paramNames.length (${paramNames.length})")
+}
 
 /**
  * The logical plan of the FETCH cursor command.
