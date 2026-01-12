@@ -303,12 +303,21 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper {
       $"a" > $"b" && $"a" < $"b"
     )
 
-    // check simplify Not((expr1 OR expr2) AND (expr3 OR expr4)) in single pass
+    // check simplify Not((expr1 OR expr2) OR (expr3 AND expr4)) in single pass
     executeRuleOnce(
       Not(($"a" <= $"b" || $"c" > $"a" + 4) || ($"a" >= $"b" && $"c" < $"a")),
       And(
         And($"a" > $"b", $"c" <= $"a" + 4),
         Or($"a" < $"b", $"c" >= $"a")
+      )
+    )
+
+    // check simplify Not((expr1 OR expr2) AND (expr3 OR expr4)) in single pass
+    executeRuleOnce(
+      Not(($"a" <= $"b" || $"c" > $"a" + 4) && ($"a" >= $"b" || $"c" < $"a")),
+      Or(
+        And($"a" > $"b", $"c" <= $"a" + 4),
+        And($"a" < $"b", $"c" >= $"a")
       )
     )
   }
