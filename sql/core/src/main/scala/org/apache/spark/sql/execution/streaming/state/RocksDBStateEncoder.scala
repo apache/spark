@@ -1148,6 +1148,18 @@ class AvroStateEncoder(
           StateSchemaIdRow(currentKeySchemaId, avroRow))
       case PrefixKeyScanStateEncoderSpec(_, _) =>
         encodeUnsafeRowToAvro(row, avroEncoder.keySerializer, prefixKeyAvroType, out)
+      case EventTimeAsPostfixStateEncoderSpec(_) =>
+        val avroRow =
+          encodeUnsafeRowToAvro(row, avroEncoder.keySerializer, keyAvroType, out)
+        // prepend stateSchemaId to the Avro-encoded key portion for EventTimeAsPostfix keys
+        encodeWithStateSchemaId(
+          StateSchemaIdRow(currentKeySchemaId, avroRow))
+      case EventTimeAsPrefixStateEncoderSpec(_) =>
+        val avroRow =
+          encodeUnsafeRowToAvro(row, avroEncoder.keySerializer, keyAvroType, out)
+        // prepend stateSchemaId to the Avro-encoded key portion for EventTimeAsPrefix keys
+        encodeWithStateSchemaId(
+          StateSchemaIdRow(currentKeySchemaId, avroRow))
       case _ => throw unsupportedOperationForKeyStateEncoder("encodeKey")
     }
     prependVersionByte(keyBytes)

@@ -142,7 +142,7 @@ class RocksDBEventTimeAwareStateOperationsSuite extends SharedSparkSession
 
             // Test valuesIterator
             val retrievedValues =
-              operations.valuesIterator(key1, eventTime1).toList
+              operations.valuesIterator(key1, eventTime1).map(_.copy()).toList
             assert(retrievedValues.length === 3)
             assert(
               retrievedValues.map(_.getInt(0)).sorted === Array(
@@ -181,7 +181,7 @@ class RocksDBEventTimeAwareStateOperationsSuite extends SharedSparkSession
             operations.merge(key1, eventTime1, value2)
 
             val retrievedValues =
-              operations.valuesIterator(key1, eventTime1).toList
+              operations.valuesIterator(key1, eventTime1).map(_.copy()).toList
             assert(retrievedValues.length === 2)
             assert(retrievedValues.map(_.getInt(0)).toSet === Set(100, 200))
 
@@ -189,7 +189,7 @@ class RocksDBEventTimeAwareStateOperationsSuite extends SharedSparkSession
             val additionalValues = Array(valueToRow(300), valueToRow(400))
             operations.mergeList(key1, eventTime1, additionalValues)
 
-            val allValues = operations.valuesIterator(key1, eventTime1).toList
+            val allValues = operations.valuesIterator(key1, eventTime1).map(_.copy()).toList
             assert(allValues.length === 4)
             assert(allValues.map(_.getInt(0)).toSet === Set(100, 200, 300, 400))
           } finally {
@@ -558,6 +558,13 @@ class RocksDBEventTimeAwareStateOperationsSuite extends SharedSparkSession
     val conf = new Configuration
     conf.set(StreamExecution.RUN_ID_KEY, UUID.randomUUID().toString)
 
+    val testProvider = new TestStateSchemaProvider()
+    testProvider.captureSchema(
+      testColFamily,
+      keySchema,
+      valueSchema
+    )
+
     val storeConf = new StateStoreConf(sqlConf)
     provider.init(
       stateStoreId,
@@ -567,7 +574,8 @@ class RocksDBEventTimeAwareStateOperationsSuite extends SharedSparkSession
       useColumnFamilies,
       storeConf,
       conf,
-      useMultipleValuesPerKey)
+      useMultipleValuesPerKey,
+    Some(testProvider))
 
     provider
   }

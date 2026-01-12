@@ -498,6 +498,7 @@ private[sql] class RocksDBStateStoreProvider
       override def get(key: UnsafeRow, eventTime: Long): UnsafeRow = {
         validateAndTransitionState(UPDATE)
         verifyColFamilyOperations("get", columnFamilyName)
+        verify(key != null, "Key cannot be null")
 
         val value = valueEncoder.decodeValue(
           rocksDB.get(keyEncoder.encodeKeyWithEventTime(key, eventTime), columnFamilyName))
@@ -539,7 +540,7 @@ private[sql] class RocksDBStateStoreProvider
           "prefixScan requires encoder supporting prefix scan!")
 
         val rowPair = new UnsafeRowPairWithEventTime()
-        val prefix = keyEncoder.encodeKey(prefixKey)
+        val prefix = keyEncoder.encodePrefixKey(prefixKey)
 
         val rocksDbIter = rocksDB.prefixScan(prefix, columnFamilyName)
         val iter = rocksDbIter.map { kv =>
