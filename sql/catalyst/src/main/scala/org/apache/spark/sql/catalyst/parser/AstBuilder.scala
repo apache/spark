@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.expressions.json.PathInstruction.Named
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.streaming.Unassigned
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -2461,7 +2462,8 @@ class AstBuilder extends DataTypeAstBuilder
       writePrivileges = Seq.empty,
       isStreaming = true)
 
-    val tableWithWatermark = tableStreamingRelation.optionalMap(ctx.watermarkClause)(withWatermark)
+    val namedStreamingRelation = NamedStreamingRelation(tableStreamingRelation, Unassigned)
+    val tableWithWatermark = namedStreamingRelation.optionalMap(ctx.watermarkClause)(withWatermark)
     mayApplyAliasPlan(ctx.tableAlias, tableWithWatermark)
   }
 
