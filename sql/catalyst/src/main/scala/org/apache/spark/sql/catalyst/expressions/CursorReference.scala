@@ -47,7 +47,9 @@ case class UnresolvedCursor(nameParts: Seq[String]) extends LeafExpression with 
  * @param normalizedName The normalized cursor name (for lookups considering case sensitivity)
  * @param scopeLabel Optional label qualifier for scoped cursors (e.g., Some("label") for
  *                   "label.cursor", None for unqualified cursors)
- * @param definition The cursor definition looked up during analysis
+ * @param definition The cursor definition looked up during analysis. Type is Any to avoid
+ *                   circular dependency (catalyst cannot import sql/core classes). At runtime,
+ *                   this will be cast to CursorDefinition.
  */
 case class CursorReference(
     nameParts: Seq[String],

@@ -63,30 +63,30 @@ class ResolveCursors extends Rule[LogicalPlan] {
       cursorName.toLowerCase(Locale.ROOT)
     }
 
-    // Look up cursor definition from scripting context
-    // This will be None if we're not in a scripting context (e.g., during EXPLAIN)
+    // Look up cursor definition from scripting context using reflection
+    // Reflection is needed because SqlScriptingExecutionContext is in sql/core
+    // which would create a circular dependency if imported into catalyst
     val contextOpt = SqlScriptingContextManager.get().map(_.getContext)
 
     val cursorDefOpt = contextOpt.flatMap { context =>
-      // Use reflection to call methods since SqlScriptingExecutionContext is in sql/core
+      // Get the current frame using reflection
       val currentFrame = context.getClass.getMethod("currentFrame").invoke(context)
-      val findMethod = scopeLabel match {
-        case Some(_) => "findCursorInScope"
-        case None => "findCursorByName"
-      }
 
+      // Call the appropriate lookup method based on whether cursor is qualified
       val result = scopeLabel match {
         case Some(label) =>
+          // Qualified cursor: look up in specific labeled scope
           currentFrame.getClass
-            .getMethod(findMethod, classOf[String], classOf[String])
+            .getMethod("findCursorInScope", classOf[String], classOf[String])
             .invoke(currentFrame, label, normalizedName)
         case None =>
+          // Unqualified cursor: search current and parent scopes
           currentFrame.getClass
-            .getMethod(findMethod, classOf[String])
+            .getMethod("findCursorByName", classOf[String])
             .invoke(currentFrame, normalizedName)
       }
 
-      // Result is Option[CursorDefinition]
+      // Result is Option[CursorDefinition], but type-erased to Option[Any]
       result.asInstanceOf[Option[Any]]
     }
 
@@ -98,7 +98,7 @@ class ResolveCursors extends Rule[LogicalPlan] {
     }
 
     // Create CursorReference with the cursor definition (if found)
-    // Note: cursorDefOpt will be None for EXPLAIN commands where context isn't active
+    // Definition will be null for EXPLAIN commands where scripting context isn't active
     CursorReference(nameParts, normalizedName, scopeLabel, cursorDefOpt.orNull)
   }
 }
