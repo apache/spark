@@ -247,7 +247,7 @@ class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
 
   test("Normalize rCTEs") {
     val col1 = $"col1".int
-    val col2 = col1.newInstance()
+    val col2 = $"col2".int
     val anchor = LocalRelation(col1)
 
     // Create two full recursive CTEs - CTERelationDef with a UnionLoop and UnionLoopRef with the
@@ -272,11 +272,26 @@ class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
       id = 200L
     )
 
+    val normalizedRecursiveCTE = CTERelationDef(
+      child = UnionLoop(
+        id = 0L,
+        anchor = LocalRelation(col1.withExprId(ExprId(0))),
+        recursion = UnionLoopRef(
+          loopId = 0L,
+          output = Seq(col2.withExprId(ExprId(0))),
+          accumulated = false
+        ),
+        outputAttrIds = Seq(ExprId(0), ExprId(0))
+      ),
+      id = 0L
+    )
+
     // Before normalization, plans are different
     assert(recursiveCTE1 != recursiveCTE2)
 
-    // After normalization, they should be equal
-    assert(NormalizePlan(recursiveCTE1) == NormalizePlan(recursiveCTE2))
+    // After normalization, they should be equal to the normalized plan
+    assert(NormalizePlan(recursiveCTE1) == normalizedRecursiveCTE)
+    assert(NormalizePlan(recursiveCTE2) == normalizedRecursiveCTE)
   }
 
   private def setTimezoneForAllExpression(plan: LogicalPlan): LogicalPlan = {
