@@ -379,23 +379,102 @@ DropFunctionCommand abs, false, true
 
 
 -- !query
-CREATE TEMPORARY FUNCTION session_test() RETURNS STRING RETURN 'session-scoped'
+CREATE TEMPORARY FUNCTION scalar_only() RETURNS INT RETURN 42
 -- !query analysis
-CreateSQLFunctionCommand session_test, STRING, 'session-scoped', false, true, false, false
+CreateSQLFunctionCommand scalar_only, INT, 42, false, true, false, false
 
 
 -- !query
-SELECT session_test()
+SELECT scalar_only()
 -- !query analysis
-Project [session_test() AS session_test()#x]
+Project [scalar_only() AS scalar_only()#x]
 +- Project
    +- OneRowRelation
 
 
 -- !query
-DROP TEMPORARY FUNCTION session_test
+SELECT * FROM scalar_only()
 -- !query analysis
-DropFunctionCommand session_test, false, true
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_TABLE_FUNCTION",
+  "sqlState" : "42887",
+  "messageParameters" : {
+    "functionName" : "`scalar_only`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 27,
+    "fragment" : "scalar_only()"
+  } ]
+}
+
+
+-- !query
+DROP TEMPORARY FUNCTION scalar_only
+-- !query analysis
+DropFunctionCommand scalar_only, false, true
+
+
+-- !query
+CREATE TEMPORARY FUNCTION table_only() RETURNS TABLE(val INT) RETURN SELECT 42
+-- !query analysis
+CreateSQLFunctionCommand table_only, val INT, SELECT 42, true, true, false, false
+
+
+-- !query
+SELECT * FROM table_only()
+-- !query analysis
+Project [val#x]
++- SQLFunctionNode table_only
+   +- SubqueryAlias table_only
+      +- Project [cast(42#x as int) AS val#x]
+         +- Project [42 AS 42#x]
+            +- OneRowRelation
+
+
+-- !query
+SELECT table_only()
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_SCALAR_FUNCTION",
+  "sqlState" : "42887",
+  "messageParameters" : {
+    "functionName" : "`table_only`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 19,
+    "fragment" : "table_only()"
+  } ]
+}
+
+
+-- !query
+DROP TEMPORARY FUNCTION table_only
+-- !query analysis
+DropFunctionCommand table_only, false, true
+
+
+-- !query
+SELECT explode(array(1, 2, 3))
+-- !query analysis
+Project [col#x]
++- Generate explode(array(1, 2, 3)), false, [col#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT * FROM explode(array(1, 2, 3))
+-- !query analysis
+Project [col#x]
++- Generate explode(array(1, 2, 3)), false, [col#x]
+   +- OneRowRelation
 
 
 -- !query
@@ -519,3 +598,462 @@ org.apache.spark.sql.catalyst.analysis.NoSuchTempFunctionException
     "routineName" : "`exists_test`"
   }
 }
+
+
+-- !query
+CREATE TEMPORARY FUNCTION add10(x INT) RETURNS INT RETURN x + 10
+-- !query analysis
+CreateSQLFunctionCommand add10, x INT, INT, x + 10, false, true, false, false
+
+
+-- !query
+SELECT builtin.abs(-5), session.add10(5), system.builtin.upper('hello')
+-- !query analysis
+Project [abs(-5) AS abs(-5)#x, add10(x#x) AS add10(5)#x, upper(hello) AS upper(hello)#x]
++- Project [cast(5 as int) AS x#x]
+   +- OneRowRelation
+
+
+-- !query
+DROP TEMPORARY FUNCTION add10
+-- !query analysis
+DropFunctionCommand add10, false, true
+
+
+-- !query
+CREATE TEMPORARY FUNCTION my_avg(x DOUBLE) RETURNS DOUBLE RETURN avg(x)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "USER_DEFINED_FUNCTIONS.CANNOT_CONTAIN_COMPLEX_FUNCTIONS",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "queryText" : "avg(x)"
+  }
+}
+
+
+-- !query
+SELECT session.my_avg(value) FROM VALUES (1.0), (2.0), (3.0) AS t(value)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNRESOLVED_ROUTINE",
+  "sqlState" : "42883",
+  "messageParameters" : {
+    "routineName" : "`session`.`my_avg`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "session.my_avg(value)"
+  } ]
+}
+
+
+-- !query
+DROP TEMPORARY FUNCTION my_avg
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.NoSuchTempFunctionException
+{
+  "errorClass" : "ROUTINE_NOT_FOUND",
+  "sqlState" : "42883",
+  "messageParameters" : {
+    "routineName" : "`my_avg`"
+  }
+}
+
+
+-- !query
+SELECT non_existent_func()
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNRESOLVED_ROUTINE",
+  "sqlState" : "42883",
+  "messageParameters" : {
+    "routineName" : "`non_existent_func`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 26,
+    "fragment" : "non_existent_func()"
+  } ]
+}
+
+
+-- !query
+CREATE TEMPORARY FUNCTION range() RETURNS INT RETURN 999
+-- !query analysis
+CreateSQLFunctionCommand range, INT, 999, false, true, false, false
+
+
+-- !query
+SELECT range()
+-- !query analysis
+Project [range() AS range()#x]
++- Project
+   +- OneRowRelation
+
+
+-- !query
+SELECT * FROM range(5)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_TABLE_FUNCTION",
+  "sqlState" : "42887",
+  "messageParameters" : {
+    "functionName" : "`range`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 22,
+    "fragment" : "range(5)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM builtin.range(5)
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "funcName" : "`builtin`.`range`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 30,
+    "fragment" : "builtin.range(5)"
+  } ]
+}
+
+
+-- !query
+DROP TEMPORARY FUNCTION range
+-- !query analysis
+DropFunctionCommand range, false, true
+
+
+-- !query
+CREATE TEMPORARY FUNCTION abs() RETURNS INT RETURN 888
+-- !query analysis
+CreateSQLFunctionCommand abs, INT, 888, false, true, false, false
+
+
+-- !query
+SELECT abs()
+-- !query analysis
+Project [abs() AS abs()#x]
++- Project
+   +- OneRowRelation
+
+
+-- !query
+SELECT builtin.abs(-42)
+-- !query analysis
+Project [abs(-42) AS abs(-42)#x]
++- OneRowRelation
+
+
+-- !query
+DROP TEMPORARY FUNCTION abs
+-- !query analysis
+DropFunctionCommand abs, false, true
+
+
+-- !query
+CREATE TEMPORARY FUNCTION dup_test() RETURNS INT RETURN 42
+-- !query analysis
+CreateSQLFunctionCommand dup_test, INT, 42, false, true, false, false
+
+
+-- !query
+CREATE TEMPORARY FUNCTION dup_test() RETURNS TABLE(val INT) RETURN SELECT 99
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`dup_test`"
+  }
+}
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY FUNCTION dup_test() RETURNS TABLE(val INT) RETURN SELECT 99
+-- !query analysis
+CreateSQLFunctionCommand dup_test, val INT, SELECT 99, true, true, false, true
+
+
+-- !query
+SELECT * FROM dup_test()
+-- !query analysis
+Project [val#x]
++- SQLFunctionNode dup_test
+   +- SubqueryAlias dup_test
+      +- Project [cast(99#x as int) AS val#x]
+         +- Project [99 AS 99#x]
+            +- OneRowRelation
+
+
+-- !query
+DROP TEMPORARY FUNCTION dup_test
+-- !query analysis
+DropFunctionCommand dup_test, false, true
+
+
+-- !query
+CREATE TEMPORARY FUNCTION view_func() RETURNS STRING RETURN 'from_temp'
+-- !query analysis
+CreateSQLFunctionCommand view_func, STRING, 'from_temp', false, true, false, false
+
+
+-- !query
+CREATE TEMPORARY VIEW temp_view AS SELECT view_func() as result
+-- !query analysis
+CreateViewCommand `temp_view`, SELECT view_func() as result, false, false, LocalTempView, UNSUPPORTED, true, [view_func]
+   +- Project [view_func() AS result#x]
+      +- Project
+         +- OneRowRelation
+
+
+-- !query
+SELECT * FROM temp_view
+-- !query analysis
+Project [result#x]
++- SubqueryAlias temp_view
+   +- View (`temp_view`, [result#x])
+      +- Project [cast(result#x as string) AS result#x]
+         +- Project [view_func() AS result#x]
+            +- Project
+               +- OneRowRelation
+
+
+-- !query
+DROP VIEW temp_view
+-- !query analysis
+DropTempViewCommand temp_view
+
+
+-- !query
+DROP TEMPORARY FUNCTION view_func
+-- !query analysis
+DropFunctionCommand view_func, false, true
+
+
+-- !query
+CREATE TEMPORARY FUNCTION abs() RETURNS INT RETURN 777
+-- !query analysis
+CreateSQLFunctionCommand abs, INT, 777, false, true, false, false
+
+
+-- !query
+CREATE TEMPORARY VIEW shadow_view AS SELECT abs() as result
+-- !query analysis
+CreateViewCommand `shadow_view`, SELECT abs() as result, false, false, LocalTempView, UNSUPPORTED, true, [abs]
+   +- Project [abs() AS result#x]
+      +- Project
+         +- OneRowRelation
+
+
+-- !query
+SELECT * FROM shadow_view
+-- !query analysis
+Project [result#x]
++- SubqueryAlias shadow_view
+   +- View (`shadow_view`, [result#x])
+      +- Project [cast(result#x as int) AS result#x]
+         +- Project [abs() AS result#x]
+            +- Project
+               +- OneRowRelation
+
+
+-- !query
+CREATE TEMPORARY VIEW builtin_view AS SELECT builtin.abs(-10) as result
+-- !query analysis
+CreateViewCommand `builtin_view`, SELECT builtin.abs(-10) as result, false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [abs(-10) AS result#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT * FROM builtin_view
+-- !query analysis
+Project [result#x]
++- SubqueryAlias builtin_view
+   +- View (`builtin_view`, [result#x])
+      +- Project [cast(result#x as int) AS result#x]
+         +- Project [abs(-10) AS result#x]
+            +- OneRowRelation
+
+
+-- !query
+DROP VIEW shadow_view
+-- !query analysis
+DropTempViewCommand shadow_view
+
+
+-- !query
+DROP VIEW builtin_view
+-- !query analysis
+DropTempViewCommand builtin_view
+
+
+-- !query
+DROP TEMPORARY FUNCTION abs
+-- !query analysis
+DropFunctionCommand abs, false, true
+
+
+-- !query
+CREATE TEMPORARY FUNCTION func1() RETURNS INT RETURN 1
+-- !query analysis
+CreateSQLFunctionCommand func1, INT, 1, false, true, false, false
+
+
+-- !query
+CREATE TEMPORARY FUNCTION func2() RETURNS INT RETURN 2
+-- !query analysis
+CreateSQLFunctionCommand func2, INT, 2, false, true, false, false
+
+
+-- !query
+CREATE TEMPORARY VIEW multi_func_view AS SELECT func1() + func2() as sum
+-- !query analysis
+CreateViewCommand `multi_func_view`, SELECT func1() + func2() as sum, false, false, LocalTempView, UNSUPPORTED, true, [func1, func2]
+   +- Project [(func1() + func2()) AS sum#x]
+      +- Project
+         +- OneRowRelation
+
+
+-- !query
+SELECT * FROM multi_func_view
+-- !query analysis
+Project [sum#x]
++- SubqueryAlias multi_func_view
+   +- View (`multi_func_view`, [sum#x])
+      +- Project [cast(sum#x as int) AS sum#x]
+         +- Project [(func1() + func2()) AS sum#x]
+            +- Project
+               +- OneRowRelation
+
+
+-- !query
+DROP VIEW multi_func_view
+-- !query analysis
+DropTempViewCommand multi_func_view
+
+
+-- !query
+DROP TEMPORARY FUNCTION func1
+-- !query analysis
+DropFunctionCommand func1, false, true
+
+
+-- !query
+DROP TEMPORARY FUNCTION func2
+-- !query analysis
+DropFunctionCommand func2, false, true
+
+
+-- !query
+CREATE TEMPORARY FUNCTION nested_func() RETURNS INT RETURN 100
+-- !query analysis
+CreateSQLFunctionCommand nested_func, INT, 100, false, true, false, false
+
+
+-- !query
+CREATE TEMPORARY VIEW inner_view AS SELECT nested_func() as val
+-- !query analysis
+CreateViewCommand `inner_view`, SELECT nested_func() as val, false, false, LocalTempView, UNSUPPORTED, true, [nested_func]
+   +- Project [nested_func() AS val#x]
+      +- Project
+         +- OneRowRelation
+
+
+-- !query
+CREATE TEMPORARY VIEW outer_view AS SELECT val * 2 FROM inner_view
+-- !query analysis
+CreateViewCommand `outer_view`, SELECT val * 2 FROM inner_view, false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [(val#x * 2) AS (val * 2)#x]
+      +- SubqueryAlias inner_view
+         +- View (`inner_view`, [val#x])
+            +- Project [cast(val#x as int) AS val#x]
+               +- Project [nested_func() AS val#x]
+                  +- Project
+                     +- OneRowRelation
+
+
+-- !query
+SELECT * FROM outer_view
+-- !query analysis
+Project [(val * 2)#x]
++- SubqueryAlias outer_view
+   +- View (`outer_view`, [(val * 2)#x])
+      +- Project [cast((val * 2)#x as int) AS (val * 2)#x]
+         +- Project [(val#x * 2) AS (val * 2)#x]
+            +- SubqueryAlias inner_view
+               +- View (`inner_view`, [val#x])
+                  +- Project [cast(val#x as int) AS val#x]
+                     +- Project [nested_func() AS val#x]
+                        +- Project
+                           +- OneRowRelation
+
+
+-- !query
+DROP VIEW outer_view
+-- !query analysis
+DropTempViewCommand outer_view
+
+
+-- !query
+DROP VIEW inner_view
+-- !query analysis
+DropTempViewCommand inner_view
+
+
+-- !query
+DROP TEMPORARY FUNCTION nested_func
+-- !query analysis
+DropFunctionCommand nested_func, false, true
+
+
+-- !query
+CREATE TEMPORARY FUNCTION show_test() RETURNS INT RETURN 1
+-- !query analysis
+CreateSQLFunctionCommand show_test, INT, 1, false, true, false, false
+
+
+-- !query
+SHOW FUNCTIONS LIKE 'show_test'
+-- !query analysis
+ShowFunctionsCommand default, show_test, true, true, [function#x]
+
+
+-- !query
+SHOW FUNCTIONS LIKE 'abs'
+-- !query analysis
+ShowFunctionsCommand default, abs, true, true, [function#x]
+
+
+-- !query
+DROP TEMPORARY FUNCTION show_test
+-- !query analysis
+DropFunctionCommand show_test, false, true

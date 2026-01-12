@@ -265,7 +265,7 @@ struct<function_desc:string>
 -- !query output
 Class: sqlFunction.
 Function: desc_test
-Usage: {"referredTempViewNames":"[]","sqlFunction.returnType":"INT","sqlFunction.isTableFunc":"false","sqlFunction.expression":"100","catalogAndNamespace.numParts":"2","sqlFunction.createTime":"1768243098905","sqlConfig.spark.sql.ansi.enabled":"true","referredTempFunctionsNames":"[]","sqlConfig.spark.sql.session.timeZone":"America/Los_Angeles","catalogAndNamespace.part.0":"spark_catalog","catalogAndNamespace.part.1":"default","sqlFunction.deterministic":"true","sqlConfig.spark.sql.datetime.java8API.enabled":"true","sqlFunction.containsSQL":"true","referredTempVariableNames":"[]","sqlConfig.spark.sql.collation.schemaLevel.enabled":"true","sqlConfig.spark.sql.binaryOutputStyle":"UTF-8"}
+Usage: {"referredTempViewNames":"[]","sqlFunction.returnType":"INT","sqlFunction.isTableFunc":"false","sqlFunction.expression":"100","catalogAndNamespace.numParts":"2","sqlFunction.createTime":"1768243351407","sqlConfig.spark.sql.ansi.enabled":"true","referredTempFunctionsNames":"[]","sqlConfig.spark.sql.session.timeZone":"America/Los_Angeles","catalogAndNamespace.part.0":"spark_catalog","catalogAndNamespace.part.1":"default","sqlFunction.deterministic":"true","sqlConfig.spark.sql.datetime.java8API.enabled":"true","sqlFunction.containsSQL":"true","referredTempVariableNames":"[]","sqlConfig.spark.sql.collation.schemaLevel.enabled":"true","sqlConfig.spark.sql.binaryOutputStyle":"UTF-8"}
 
 
 -- !query
@@ -275,7 +275,7 @@ struct<function_desc:string>
 -- !query output
 Class: sqlFunction.
 Function: desc_test
-Usage: {"referredTempViewNames":"[]","sqlFunction.returnType":"INT","sqlFunction.isTableFunc":"false","sqlFunction.expression":"100","catalogAndNamespace.numParts":"2","sqlFunction.createTime":"1768243098905","sqlConfig.spark.sql.ansi.enabled":"true","referredTempFunctionsNames":"[]","sqlConfig.spark.sql.session.timeZone":"America/Los_Angeles","catalogAndNamespace.part.0":"spark_catalog","catalogAndNamespace.part.1":"default","sqlFunction.deterministic":"true","sqlConfig.spark.sql.datetime.java8API.enabled":"true","sqlFunction.containsSQL":"true","referredTempVariableNames":"[]","sqlConfig.spark.sql.collation.schemaLevel.enabled":"true","sqlConfig.spark.sql.binaryOutputStyle":"UTF-8"}
+Usage: {"referredTempViewNames":"[]","sqlFunction.returnType":"INT","sqlFunction.isTableFunc":"false","sqlFunction.expression":"100","catalogAndNamespace.numParts":"2","sqlFunction.createTime":"1768243351407","sqlConfig.spark.sql.ansi.enabled":"true","referredTempFunctionsNames":"[]","sqlConfig.spark.sql.session.timeZone":"America/Los_Angeles","catalogAndNamespace.part.0":"spark_catalog","catalogAndNamespace.part.1":"default","sqlFunction.deterministic":"true","sqlConfig.spark.sql.datetime.java8API.enabled":"true","sqlFunction.containsSQL":"true","referredTempVariableNames":"[]","sqlConfig.spark.sql.collation.schemaLevel.enabled":"true","sqlConfig.spark.sql.binaryOutputStyle":"UTF-8"}
 
 
 -- !query
@@ -285,7 +285,7 @@ struct<function_desc:string>
 -- !query output
 Class: sqlFunction.
 Function: desc_test
-Usage: {"referredTempViewNames":"[]","sqlFunction.returnType":"INT","sqlFunction.isTableFunc":"false","sqlFunction.expression":"100","catalogAndNamespace.numParts":"2","sqlFunction.createTime":"1768243098905","sqlConfig.spark.sql.ansi.enabled":"true","referredTempFunctionsNames":"[]","sqlConfig.spark.sql.session.timeZone":"America/Los_Angeles","catalogAndNamespace.part.0":"spark_catalog","catalogAndNamespace.part.1":"default","sqlFunction.deterministic":"true","sqlConfig.spark.sql.datetime.java8API.enabled":"true","sqlFunction.containsSQL":"true","referredTempVariableNames":"[]","sqlConfig.spark.sql.collation.schemaLevel.enabled":"true","sqlConfig.spark.sql.binaryOutputStyle":"UTF-8"}
+Usage: {"referredTempViewNames":"[]","sqlFunction.returnType":"INT","sqlFunction.isTableFunc":"false","sqlFunction.expression":"100","catalogAndNamespace.numParts":"2","sqlFunction.createTime":"1768243351407","sqlConfig.spark.sql.ansi.enabled":"true","referredTempFunctionsNames":"[]","sqlConfig.spark.sql.session.timeZone":"America/Los_Angeles","catalogAndNamespace.part.0":"spark_catalog","catalogAndNamespace.part.1":"default","sqlFunction.deterministic":"true","sqlConfig.spark.sql.datetime.java8API.enabled":"true","sqlFunction.containsSQL":"true","referredTempVariableNames":"[]","sqlConfig.spark.sql.collation.schemaLevel.enabled":"true","sqlConfig.spark.sql.binaryOutputStyle":"UTF-8"}
 
 
 -- !query
@@ -441,7 +441,7 @@ struct<>
 
 
 -- !query
-CREATE TEMPORARY FUNCTION session_test() RETURNS STRING RETURN 'session-scoped'
+CREATE TEMPORARY FUNCTION scalar_only() RETURNS INT RETURN 42
 -- !query schema
 struct<>
 -- !query output
@@ -449,19 +449,107 @@ struct<>
 
 
 -- !query
-SELECT session_test()
+SELECT scalar_only()
 -- !query schema
-struct<session_test():string>
+struct<scalar_only():int>
 -- !query output
-session-scoped
+42
 
 
 -- !query
-DROP TEMPORARY FUNCTION session_test
+SELECT * FROM scalar_only()
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_TABLE_FUNCTION",
+  "sqlState" : "42887",
+  "messageParameters" : {
+    "functionName" : "`scalar_only`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 27,
+    "fragment" : "scalar_only()"
+  } ]
+}
+
+
+-- !query
+DROP TEMPORARY FUNCTION scalar_only
 -- !query schema
 struct<>
 -- !query output
 
+
+
+-- !query
+CREATE TEMPORARY FUNCTION table_only() RETURNS TABLE(val INT) RETURN SELECT 42
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM table_only()
+-- !query schema
+struct<val:int>
+-- !query output
+42
+
+
+-- !query
+SELECT table_only()
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_SCALAR_FUNCTION",
+  "sqlState" : "42887",
+  "messageParameters" : {
+    "functionName" : "`table_only`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 19,
+    "fragment" : "table_only()"
+  } ]
+}
+
+
+-- !query
+DROP TEMPORARY FUNCTION table_only
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT explode(array(1, 2, 3))
+-- !query schema
+struct<col:int>
+-- !query output
+1
+2
+3
+
+
+-- !query
+SELECT * FROM explode(array(1, 2, 3))
+-- !query schema
+struct<col:int>
+-- !query output
+1
+2
+3
 
 
 -- !query
@@ -601,3 +689,500 @@ org.apache.spark.sql.catalyst.analysis.NoSuchTempFunctionException
     "routineName" : "`exists_test`"
   }
 }
+
+
+-- !query
+CREATE TEMPORARY FUNCTION add10(x INT) RETURNS INT RETURN x + 10
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT builtin.abs(-5), session.add10(5), system.builtin.upper('hello')
+-- !query schema
+struct<abs(-5):int,add10(5):int,upper(hello):string>
+-- !query output
+5	15	HELLO
+
+
+-- !query
+DROP TEMPORARY FUNCTION add10
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY FUNCTION my_avg(x DOUBLE) RETURNS DOUBLE RETURN avg(x)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "USER_DEFINED_FUNCTIONS.CANNOT_CONTAIN_COMPLEX_FUNCTIONS",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "queryText" : "avg(x)"
+  }
+}
+
+
+-- !query
+SELECT session.my_avg(value) FROM VALUES (1.0), (2.0), (3.0) AS t(value)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNRESOLVED_ROUTINE",
+  "sqlState" : "42883",
+  "messageParameters" : {
+    "routineName" : "`session`.`my_avg`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "session.my_avg(value)"
+  } ]
+}
+
+
+-- !query
+DROP TEMPORARY FUNCTION my_avg
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.analysis.NoSuchTempFunctionException
+{
+  "errorClass" : "ROUTINE_NOT_FOUND",
+  "sqlState" : "42883",
+  "messageParameters" : {
+    "routineName" : "`my_avg`"
+  }
+}
+
+
+-- !query
+SELECT non_existent_func()
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNRESOLVED_ROUTINE",
+  "sqlState" : "42883",
+  "messageParameters" : {
+    "routineName" : "`non_existent_func`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 26,
+    "fragment" : "non_existent_func()"
+  } ]
+}
+
+
+-- !query
+CREATE TEMPORARY FUNCTION range() RETURNS INT RETURN 999
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT range()
+-- !query schema
+struct<range():int>
+-- !query output
+999
+
+
+-- !query
+SELECT * FROM range(5)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_TABLE_FUNCTION",
+  "sqlState" : "42887",
+  "messageParameters" : {
+    "functionName" : "`range`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 22,
+    "fragment" : "range(5)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM builtin.range(5)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "funcName" : "`builtin`.`range`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 30,
+    "fragment" : "builtin.range(5)"
+  } ]
+}
+
+
+-- !query
+DROP TEMPORARY FUNCTION range
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY FUNCTION abs() RETURNS INT RETURN 888
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT abs()
+-- !query schema
+struct<abs():int>
+-- !query output
+888
+
+
+-- !query
+SELECT builtin.abs(-42)
+-- !query schema
+struct<abs(-42):int>
+-- !query output
+42
+
+
+-- !query
+DROP TEMPORARY FUNCTION abs
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY FUNCTION dup_test() RETURNS INT RETURN 42
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY FUNCTION dup_test() RETURNS TABLE(val INT) RETURN SELECT 99
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
+{
+  "errorClass" : "ROUTINE_ALREADY_EXISTS",
+  "sqlState" : "42723",
+  "messageParameters" : {
+    "existingRoutineType" : "routine",
+    "newRoutineType" : "routine",
+    "routineName" : "`dup_test`"
+  }
+}
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY FUNCTION dup_test() RETURNS TABLE(val INT) RETURN SELECT 99
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM dup_test()
+-- !query schema
+struct<val:int>
+-- !query output
+99
+
+
+-- !query
+DROP TEMPORARY FUNCTION dup_test
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY FUNCTION view_func() RETURNS STRING RETURN 'from_temp'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY VIEW temp_view AS SELECT view_func() as result
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM temp_view
+-- !query schema
+struct<result:string>
+-- !query output
+from_temp
+
+
+-- !query
+DROP VIEW temp_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY FUNCTION view_func
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY FUNCTION abs() RETURNS INT RETURN 777
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY VIEW shadow_view AS SELECT abs() as result
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM shadow_view
+-- !query schema
+struct<result:int>
+-- !query output
+777
+
+
+-- !query
+CREATE TEMPORARY VIEW builtin_view AS SELECT builtin.abs(-10) as result
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM builtin_view
+-- !query schema
+struct<result:int>
+-- !query output
+10
+
+
+-- !query
+DROP VIEW shadow_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW builtin_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY FUNCTION abs
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY FUNCTION func1() RETURNS INT RETURN 1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY FUNCTION func2() RETURNS INT RETURN 2
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY VIEW multi_func_view AS SELECT func1() + func2() as sum
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM multi_func_view
+-- !query schema
+struct<sum:int>
+-- !query output
+3
+
+
+-- !query
+DROP VIEW multi_func_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY FUNCTION func1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY FUNCTION func2
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY FUNCTION nested_func() RETURNS INT RETURN 100
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY VIEW inner_view AS SELECT nested_func() as val
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY VIEW outer_view AS SELECT val * 2 FROM inner_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM outer_view
+-- !query schema
+struct<(val * 2):int>
+-- !query output
+200
+
+
+-- !query
+DROP VIEW outer_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW inner_view
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY FUNCTION nested_func
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY FUNCTION show_test() RETURNS INT RETURN 1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SHOW FUNCTIONS LIKE 'show_test'
+-- !query schema
+struct<function:string>
+-- !query output
+show_test
+
+
+-- !query
+SHOW FUNCTIONS LIKE 'abs'
+-- !query schema
+struct<function:string>
+-- !query output
+abs
+
+
+-- !query
+DROP TEMPORARY FUNCTION show_test
+-- !query schema
+struct<>
+-- !query output
+
