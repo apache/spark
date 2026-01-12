@@ -359,7 +359,7 @@ class SQLAppStatusListener(
 
     val exec = getOrCreateExecution(executionId)
     exec.rootExecutionId = rootExecutionId.getOrElse(executionId)
-    exec.queryId = queryId.map(_.toString).orNull
+    exec.queryId = queryId.orNull
     exec.description = description
     exec.details = details
     exec.physicalPlanDescription = physicalPlanDescription
@@ -489,7 +489,7 @@ class SQLAppStatusListener(
 private class LiveExecutionData(val executionId: Long) extends LiveEntity {
 
   var rootExecutionId: Long = _
-  var queryId: String = null
+  var queryId: java.util.UUID = null
   var description: String = null
   var details: String = null
   var physicalPlanDescription: String = null

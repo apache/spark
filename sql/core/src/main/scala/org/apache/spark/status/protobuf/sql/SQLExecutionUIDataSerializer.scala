@@ -17,7 +17,7 @@
 
 package org.apache.spark.status.protobuf.sql
 
-import java.util.Date
+import java.util.{Date, UUID}
 
 import scala.jdk.CollectionConverters._
 
@@ -57,7 +57,9 @@ private[protobuf] class SQLExecutionUIDataSerializer extends ProtobufSerDe[SQLEx
         case (k, v) => builder.putMetricValues(k, v)
       }
     }
-    setStringField(ui.queryId, builder.setQueryId)
+    if (ui.queryId != null) {
+      builder.setQueryId(ui.queryId.toString)
+    }
     builder.build().toByteArray
   }
 
@@ -94,7 +96,7 @@ private[protobuf] class SQLExecutionUIDataSerializer extends ProtobufSerDe[SQLEx
       jobs = jobs,
       stages = ui.getStagesList.asScala.map(_.toInt).toSet,
       metricValues = metricValues,
-      queryId = getStringField(ui.hasQueryId, () => ui.getQueryId)
+      queryId = if (ui.hasQueryId) UUID.fromString(ui.getQueryId) else null
     )
   }
 }

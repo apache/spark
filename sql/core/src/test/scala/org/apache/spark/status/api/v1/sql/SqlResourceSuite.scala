@@ -95,7 +95,7 @@ object SqlResourceSuite {
       stages = Set[Int](),
       metricValues = getMetricValues(),
       errorMessage = None,
-      queryId = "efe98ba7-1532-491e-9b4f-4be621cef37c"
+      queryId = java.util.UUID.fromString("efe98ba7-1532-491e-9b4f-4be621cef37c")
     )
   }
 
