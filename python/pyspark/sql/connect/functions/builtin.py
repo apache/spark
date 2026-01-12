@@ -4183,7 +4183,9 @@ def try_make_timestamp(
                 _ensure_column_or_name(timezone),
             )
         else:
-            return _invoke_function_over_columns("try_make_timestamp", _ensure_column_or_name(date), _ensure_column_or_name(time))
+            return _invoke_function_over_columns(
+                "try_make_timestamp", _ensure_column_or_name(date), _ensure_column_or_name(time)
+            )
 
 
 try_make_timestamp.__doc__ = pysparkfuncs.try_make_timestamp.__doc__
