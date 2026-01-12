@@ -28,7 +28,6 @@ import inspect
 import itertools
 import json
 from concurrent.futures import ThreadPoolExecutor
-from threading import RLock
 from typing import Any, Callable, ClassVar, Iterable, Iterator, Optional, Tuple
 
 from pyspark.accumulators import (
@@ -114,33 +113,34 @@ except Exception:
 
 
 class _ArrowUDFThreadPool:
-    """Singleton ThreadPoolExecutor for Arrow UDF concurrent execution."""
+    """
+    Singleton ThreadPoolExecutor for Arrow UDF concurrent execution.
+
+    This class is NOT thread-safe. Its methods (get_pool, shutdown, map_chunked) should
+    only be called sequentially from a single thread. The worker processes batches
+    sequentially, so concurrent access to this class is not expected.
+    """
 
     _instance: ClassVar[Optional[ThreadPoolExecutor]] = None
-    _lock: ClassVar[RLock] = RLock()
     _max_workers: ClassVar[int] = 0
 
     @classmethod
     def get_pool(cls, max_workers: int) -> ThreadPoolExecutor:
         """Get or create the singleton thread pool with the specified number of workers."""
-        if cls._instance is not None and cls._max_workers == max_workers:
-            return cls._instance
-        with cls._lock:
-            if cls._instance is None or cls._max_workers != max_workers:
-                if cls._instance is not None:
-                    cls._instance.shutdown(wait=False)
-                cls._max_workers = max_workers
-                cls._instance = ThreadPoolExecutor(max_workers=max_workers)
-            return cls._instance
+        if cls._instance is None or cls._max_workers != max_workers:
+            if cls._instance is not None:
+                cls._instance.shutdown(wait=False)
+            cls._max_workers = max_workers
+            cls._instance = ThreadPoolExecutor(max_workers=max_workers)
+        return cls._instance
 
     @classmethod
     def shutdown(cls, wait: bool = True) -> None:
         """Shutdown the thread pool."""
-        with cls._lock:
-            if cls._instance is not None:
-                cls._instance.shutdown(wait=wait)
-                cls._instance = None
-                cls._max_workers = 0
+        if cls._instance is not None:
+            cls._instance.shutdown(wait=wait)
+            cls._instance = None
+            cls._max_workers = 0
 
     @classmethod
     def map_chunked(cls, func: Callable, data: Iterable, max_workers: int) -> list:
