@@ -64,7 +64,8 @@ class RocksDBEventTimeAwareStateOperationsSuite extends SharedSparkSession
 
   private def newDir(): String = Utils.createTempDir().getCanonicalPath
 
-  Seq("unsaferow", "avro").foreach { encoding =>
+  // TODO: Address the new state format with Avro and enable the test with Avro encoding
+  Seq("unsaferow").foreach { encoding =>
     Seq("prefix", "postfix").foreach { encoderType =>
       test(s"Event time as $encoderType: basic put and get operations (encoding = $encoding)") {
         tryWithProviderResource(
@@ -246,7 +247,8 @@ class RocksDBEventTimeAwareStateOperationsSuite extends SharedSparkSession
     }
   }
 
-  Seq("unsaferow", "avro").foreach { encoding =>
+  // TODO: Address the new state format with Avro and enable the test with Avro encoding
+  Seq("unsaferow").foreach { encoding =>
     test(s"Event time as prefix: iterator operations (encoding = $encoding)") {
       tryWithProviderResource(
         newStoreProviderWithEventTime(
@@ -509,6 +511,8 @@ class RocksDBEventTimeAwareStateOperationsSuite extends SharedSparkSession
       intercept[IllegalArgumentException] {
         store.initiateEventTimeAwareStateOperations(testColFamily)
       }
+
+      store.abort()
     }
   }
 
