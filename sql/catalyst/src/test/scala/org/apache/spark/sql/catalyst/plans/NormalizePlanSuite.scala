@@ -275,7 +275,7 @@ class NormalizePlanSuite extends SparkFunSuite with SQLConfHelper {
     val normalizedRecursiveCTE = CTERelationDef(
       child = UnionLoop(
         id = 0L,
-        anchor = anchor,
+        anchor = LocalRelation(col1.withExprId(ExprId(0))),
         recursion = UnionLoopRef(
           loopId = 0L,
           output = Seq(col2.withExprId(ExprId(0))),
