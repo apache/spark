@@ -161,7 +161,7 @@ condition_values
 ## Examples
 
 ```SQL
--- A compound statement with local variables, and exit hanlder and a nested compound.
+-- A compound statement with local variables, an exit handler and a nested compound.
 > BEGIN
     DECLARE a INT DEFAULT 1;
     DECLARE b INT DEFAULT 5;
@@ -174,12 +174,32 @@ condition_values
     VALUES (a);
 END;
 15
+
+-- A compound statement with a cursor and a CONTINUE handler for iteration.
+> BEGIN
+    DECLARE x INT;
+    DECLARE done BOOLEAN DEFAULT false;
+    DECLARE total INT DEFAULT 0;
+    DECLARE my_cursor CURSOR FOR SELECT id FROM range(5);
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = true;
+    
+    OPEN my_cursor;
+    REPEAT
+      FETCH my_cursor INTO x;
+      IF NOT done THEN
+        SET total = total + x;
+      END IF;
+    UNTIL done END REPEAT;
+    CLOSE my_cursor;
+    
+    VALUES (total);
+  END;
+10
 ```
 
 ## Related articles
 
 - [SQL Scripting](../sql-ref-scripting.html)
-- [DECLARE CURSOR Statement](../control-flow/declare-cursor-stmt.html)
 - [OPEN Statement](../control-flow/open-stmt.html)
 - [FETCH Statement](../control-flow/fetch-stmt.html)
 - [CLOSE Statement](../control-flow/close-stmt.html)

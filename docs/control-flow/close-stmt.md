@@ -142,7 +142,6 @@ Closed from outer scope
 ## Related articles
 
 - [Compound Statement](../control-flow/compound-stmt.html)
-- [DECLARE CURSOR Statement](../control-flow/declare-cursor-stmt.html)
 - [OPEN Statement](../control-flow/open-stmt.html)
 - [FETCH Statement](../control-flow/fetch-stmt.html)
 - [SQL Scripting](../sql-ref-scripting.html)

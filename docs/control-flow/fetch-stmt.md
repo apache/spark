@@ -187,7 +187,6 @@ No more rows
 ## Related articles
 
 - [Compound Statement](../control-flow/compound-stmt.html)
-- [DECLARE CURSOR Statement](../control-flow/declare-cursor-stmt.html)
 - [OPEN Statement](../control-flow/open-stmt.html)
 - [CLOSE Statement](../control-flow/close-stmt.html)
 - [WHILE Statement](../control-flow/while-stmt.html)

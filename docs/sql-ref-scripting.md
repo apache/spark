@@ -30,7 +30,7 @@ This is followed by the compound statement body, which consists of:
 - [Queries](sql-ref-syntax-qry-select.html) that return result sets to the invoker of the script.
 - [SET](sql-ref-syntax-aux-set-var.html) statements to set local variables as well as session variables.
 - The [EXECUTE IMMEDIATE](sql-ref-syntax-aux-exec-imm.html) statement.
-- Cursor processing with [DECLARE CURSOR](control-flow/declare-cursor-stmt.html), [OPEN](control-flow/open-stmt.html), [FETCH](control-flow/fetch-stmt.html), and [CLOSE](control-flow/close-stmt.html) statements.
+- Cursor processing with [OPEN](control-flow/open-stmt.html), [FETCH](control-flow/fetch-stmt.html), and [CLOSE](control-flow/close-stmt.html) statements.
 - Nested compound statements, which provide nested scopes for variables, cursors, conditions, and condition handlers.
 
 ## Passing data between the invoker and the compound statement
@@ -96,7 +96,6 @@ The following is a list of supported control flow statements:
 
 The following is a list of cursor statements:
 
-* [DECLARE CURSOR](control-flow/declare-cursor-stmt.html)
 * [OPEN](control-flow/open-stmt.html)
 * [FETCH](control-flow/fetch-stmt.html)
 * [CLOSE](control-flow/close-stmt.html)

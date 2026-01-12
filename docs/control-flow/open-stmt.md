@@ -152,7 +152,6 @@ INT|42
 ## Related articles
 
 - [Compound Statement](../control-flow/compound-stmt.html)
-- [DECLARE CURSOR Statement](../control-flow/declare-cursor-stmt.html)
 - [FETCH Statement](../control-flow/fetch-stmt.html)
 - [CLOSE Statement](../control-flow/close-stmt.html)
 - [EXECUTE IMMEDIATE Statement](../sql-ref-syntax-aux-exec-imm.html)
