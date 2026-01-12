@@ -26,7 +26,9 @@ import time
 import inspect
 import itertools
 import json
-from typing import Any, Callable, Iterable, Iterator, Optional, Tuple
+from concurrent.futures import ThreadPoolExecutor
+from threading import RLock
+from typing import Any, Callable, ClassVar, Iterable, Iterator, Optional, Tuple
 
 from pyspark.accumulators import (
     SpecialAccumulatorIds,
@@ -108,6 +110,53 @@ try:
     has_memory_profiler = True
 except Exception:
     has_memory_profiler = False
+
+
+class _ArrowUDFThreadPool:
+    """Singleton ThreadPoolExecutor for Arrow UDF concurrent execution."""
+
+    _instance: ClassVar[Optional[ThreadPoolExecutor]] = None
+    _lock: ClassVar[RLock] = RLock()
+    _max_workers: ClassVar[int] = 0
+
+    @classmethod
+    def get_pool(cls, max_workers: int) -> ThreadPoolExecutor:
+        """Get or create the singleton thread pool with the specified number of workers."""
+        if cls._instance is not None and cls._max_workers == max_workers:
+            return cls._instance
+        with cls._lock:
+            if cls._instance is None or cls._max_workers != max_workers:
+                if cls._instance is not None:
+                    cls._instance.shutdown(wait=False)
+                cls._max_workers = max_workers
+                cls._instance = ThreadPoolExecutor(max_workers=max_workers)
+            return cls._instance
+
+    @classmethod
+    def shutdown(cls, wait: bool = True) -> None:
+        """Shutdown the thread pool."""
+        with cls._lock:
+            if cls._instance is not None:
+                cls._instance.shutdown(wait=wait)
+                cls._instance = None
+                cls._max_workers = 0
+
+    @classmethod
+    def map_chunked(cls, func: Callable, data: Iterable, max_workers: int) -> list:
+        """Apply func to data using chunked parallel execution (one task per worker)."""
+        data_list = list(data)
+        if not data_list:
+            return []
+
+        chunk_size = (len(data_list) + max_workers - 1) // max_workers
+        chunks = [data_list[i : i + chunk_size] for i in range(0, len(data_list), chunk_size)]
+
+        def process_chunk(chunk):
+            return [func(item) for item in chunk]
+
+        pool = cls.get_pool(max_workers)
+        chunk_results = pool.map(process_chunk, chunks)
+        return list(itertools.chain.from_iterable(chunk_results))
 
 
 class RunnerConf:
@@ -334,16 +383,15 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
             return zip(*args)
 
     if runner_conf.arrow_concurrency_level > 0:
-        from concurrent.futures import ThreadPoolExecutor
 
         @fail_on_stopiteration
         def evaluate(*args):
-            with ThreadPoolExecutor(max_workers=runner_conf.arrow_concurrency_level) as pool:
-                """
-                Takes list of Python objects and returns tuple of
-                (results, arrow_return_type, return_type).
-                """
-                return list(pool.map(lambda row: func(*row), get_args(*args)))
+            """Evaluate UDF with chunked parallel execution."""
+            return _ArrowUDFThreadPool.map_chunked(
+                lambda row: func(*row),
+                get_args(*args),
+                runner_conf.arrow_concurrency_level,
+            )
 
     else:
 
@@ -408,14 +456,16 @@ def wrap_arrow_batch_udf_legacy(f, args_offsets, kwargs_offsets, return_type, ru
             return zip(*args)
 
     if runner_conf.arrow_concurrency_level > 0:
-        from concurrent.futures import ThreadPoolExecutor
 
         @fail_on_stopiteration
         def evaluate(*args: pd.Series) -> pd.Series:
-            with ThreadPoolExecutor(max_workers=runner_conf.arrow_concurrency_level) as pool:
-                return pd.Series(
-                    list(pool.map(lambda row: result_func(func(*row)), get_args(*args)))
-                )
+            """Evaluate UDF with chunked parallel execution."""
+            results = _ArrowUDFThreadPool.map_chunked(
+                lambda row: result_func(func(*row)),
+                get_args(*args),
+                runner_conf.arrow_concurrency_level,
+            )
+            return pd.Series(results)
 
     else:
 
@@ -3520,6 +3570,10 @@ def main(infile, outfile):
     except BaseException as e:
         handle_worker_exception(e, outfile)
         sys.exit(-1)
+    finally:
+        # Shutdown the singleton thread pool used for Arrow UDF concurrent execution.
+        # This ensures threads are cleaned up when the worker exits.
+        _ArrowUDFThreadPool.shutdown(wait=True)
     finish_time = time.time()
     report_times(outfile, boot_time, init_time, finish_time)
     write_long(shuffle.MemoryBytesSpilled, outfile)
