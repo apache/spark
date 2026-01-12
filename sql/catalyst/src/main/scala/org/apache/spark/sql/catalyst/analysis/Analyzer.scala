@@ -2067,7 +2067,7 @@ class Analyzer(
           if (externalFunctionNameSet.contains(fullName)) {
             f
           } else {
-            val isBuiltinOrTemp = functionResolution.validateFunctionExistence(nameParts, f)
+            val isBuiltinOrTemp = functionResolution.isBuiltinOrTemporaryFunction(nameParts, f)
             if (!isBuiltinOrTemp) {
               externalFunctionNameSet.add(fullName)
             }

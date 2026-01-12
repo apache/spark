@@ -100,14 +100,14 @@ class FunctionResolution(
   }
 
   /**
-   * Validates that a function exists and can be used in the given context.
+   * Checks if a function is a builtin or temporary function (as opposed to persistent).
    * This is used by the LookupFunctions analyzer rule for early validation.
    *
    * @param nameParts The function name parts.
    * @param node The UnresolvedFunction node for error reporting.
    * @return true if the function is a builtin or temporary function, false if it's persistent.
    */
-  def validateFunctionExistence(
+  def isBuiltinOrTemporaryFunction(
       nameParts: Seq[String],
       node: UnresolvedFunction): Boolean = {
 
