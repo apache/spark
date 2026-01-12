@@ -3987,7 +3987,7 @@ def time_to_micros(col: "ColumnOrName") -> Column:
 time_to_micros.__doc__ = pysparkfuncs.time_to_micros.__doc__
 
 
-def _ensure_column_or_str(arg: Optional[Any]) -> ColumnOrName:
+def _ensure_column_or_name(arg: Optional[Any]) -> ColumnOrName:
     if not isinstance(arg, (Column, str)):
         raise PySparkTypeError(
             errorClass="NOT_COLUMN_OR_STR",
@@ -4053,23 +4053,23 @@ def make_timestamp(
         if timezone is not None:
             return _invoke_function_over_columns(
                 "make_timestamp",
-                _ensure_column_or_str(years),
-                _ensure_column_or_str(months),
-                _ensure_column_or_str(days),
-                _ensure_column_or_str(hours),
-                _ensure_column_or_str(mins),
-                _ensure_column_or_str(secs),
-                _ensure_column_or_str(timezone),
+                _ensure_column_or_name(years),
+                _ensure_column_or_name(months),
+                _ensure_column_or_name(days),
+                _ensure_column_or_name(hours),
+                _ensure_column_or_name(mins),
+                _ensure_column_or_name(secs),
+                _ensure_column_or_name(timezone),
             )
         else:
             return _invoke_function_over_columns(
                 "make_timestamp",
-                _ensure_column_or_str(years),
-                _ensure_column_or_str(months),
-                _ensure_column_or_str(days),
-                _ensure_column_or_str(hours),
-                _ensure_column_or_str(mins),
-                _ensure_column_or_str(secs),
+                _ensure_column_or_name(years),
+                _ensure_column_or_name(months),
+                _ensure_column_or_name(days),
+                _ensure_column_or_name(hours),
+                _ensure_column_or_name(mins),
+                _ensure_column_or_name(secs),
             )
     else:
         if any(arg is not None for arg in [years, months, days, hours, mins, secs]):
@@ -4080,13 +4080,13 @@ def make_timestamp(
         if timezone is not None:
             return _invoke_function_over_columns(
                 "make_timestamp",
-                _ensure_column_or_str(date),
-                _ensure_column_or_str(time),
-                _ensure_column_or_str(timezone),
+                _ensure_column_or_name(date),
+                _ensure_column_or_name(time),
+                _ensure_column_or_name(timezone),
             )
         else:
             return _invoke_function_over_columns(
-                "make_timestamp", _ensure_column_or_str(date), _ensure_column_or_str(time)
+                "make_timestamp", _ensure_column_or_name(date), _ensure_column_or_name(time)
             )
 
 
@@ -4151,23 +4151,23 @@ def try_make_timestamp(
         if timezone is not None:
             return _invoke_function_over_columns(
                 "try_make_timestamp",
-                _ensure_column_or_str(years),
-                _ensure_column_or_str(months),
-                _ensure_column_or_str(days),
-                _ensure_column_or_str(hours),
-                _ensure_column_or_str(mins),
-                _ensure_column_or_str(secs),
-                _ensure_column_or_str(timezone),
+                _ensure_column_or_name(years),
+                _ensure_column_or_name(months),
+                _ensure_column_or_name(days),
+                _ensure_column_or_name(hours),
+                _ensure_column_or_name(mins),
+                _ensure_column_or_name(secs),
+                _ensure_column_or_name(timezone),
             )
         else:
             return _invoke_function_over_columns(
                 "try_make_timestamp",
-                _ensure_column_or_str(years),
-                _ensure_column_or_str(months),
-                _ensure_column_or_str(days),
-                _ensure_column_or_str(hours),
-                _ensure_column_or_str(mins),
-                _ensure_column_or_str(secs),
+                _ensure_column_or_name(years),
+                _ensure_column_or_name(months),
+                _ensure_column_or_name(days),
+                _ensure_column_or_name(hours),
+                _ensure_column_or_name(mins),
+                _ensure_column_or_name(secs),
             )
     else:
         if any(arg is not None for arg in [years, months, days, hours, mins, secs]):
@@ -4178,12 +4178,12 @@ def try_make_timestamp(
         if timezone is not None:
             return _invoke_function_over_columns(
                 "try_make_timestamp",
-                _ensure_column_or_str(date),
-                _ensure_column_or_str(time),
-                _ensure_column_or_str(timezone),
+                _ensure_column_or_name(date),
+                _ensure_column_or_name(time),
+                _ensure_column_or_name(timezone),
             )
         else:
-            return _invoke_function_over_columns("try_make_timestamp", _ensure_column_or_str(date), _ensure_column_or_str(time))
+            return _invoke_function_over_columns("try_make_timestamp", _ensure_column_or_name(date), _ensure_column_or_name(time))
 
 
 try_make_timestamp.__doc__ = pysparkfuncs.try_make_timestamp.__doc__
@@ -4272,12 +4272,12 @@ def make_timestamp_ntz(
             )
         return _invoke_function_over_columns(
             "make_timestamp_ntz",
-            _ensure_column_or_str(years),
-            _ensure_column_or_str(months),
-            _ensure_column_or_str(days),
-            _ensure_column_or_str(hours),
-            _ensure_column_or_str(mins),
-            _ensure_column_or_str(secs),
+            _ensure_column_or_name(years),
+            _ensure_column_or_name(months),
+            _ensure_column_or_name(days),
+            _ensure_column_or_name(hours),
+            _ensure_column_or_name(mins),
+            _ensure_column_or_name(secs),
         )
     else:
         if any(arg is not None for arg in [years, months, days, hours, mins, secs]):
@@ -4286,7 +4286,7 @@ def make_timestamp_ntz(
                 messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
             )
         return _invoke_function_over_columns(
-            "make_timestamp_ntz", _ensure_column_or_str(date), _ensure_column_or_str(time)
+            "make_timestamp_ntz", _ensure_column_or_name(date), _ensure_column_or_name(time)
         )
 
 
@@ -4332,12 +4332,12 @@ def try_make_timestamp_ntz(
             )
         return _invoke_function_over_columns(
             "try_make_timestamp_ntz",
-            _ensure_column_or_str(years),
-            _ensure_column_or_str(months),
-            _ensure_column_or_str(days),
-            _ensure_column_or_str(hours),
-            _ensure_column_or_str(mins),
-            _ensure_column_or_str(secs),
+            _ensure_column_or_name(years),
+            _ensure_column_or_name(months),
+            _ensure_column_or_name(days),
+            _ensure_column_or_name(hours),
+            _ensure_column_or_name(mins),
+            _ensure_column_or_name(secs),
         )
     else:
         if any(arg is not None for arg in [years, months, days, hours, mins, secs]):
@@ -4346,7 +4346,7 @@ def try_make_timestamp_ntz(
                 messageParameters={"arg_list": "years|months|days|hours|mins|secs and date|time"},
             )
         return _invoke_function_over_columns(
-            "try_make_timestamp_ntz", _ensure_column_or_str(date), _ensure_column_or_str(time)
+            "try_make_timestamp_ntz", _ensure_column_or_name(date), _ensure_column_or_name(time)
         )
 
 
