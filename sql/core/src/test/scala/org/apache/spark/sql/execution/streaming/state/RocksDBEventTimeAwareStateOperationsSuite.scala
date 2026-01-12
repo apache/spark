@@ -236,7 +236,7 @@ class RocksDBEventTimeAwareStateOperationsSuite extends SharedSparkSession
             val eventTime = 1000L
 
             // Test null value should throw exception
-            intercept[IllegalArgumentException] {
+            intercept[IllegalStateException] {
               operations.put(key, eventTime, null)
             }
           } finally {
