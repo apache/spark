@@ -7,7 +7,6 @@ gems:
 # OS/packages wrt encoding. So we hard code this config.
 kramdown:
   entity_output: numeric
-  smart_quotes: ["apos", "apos", "quot", "quot"]
 
 plugins:
   - jekyll-redirect-from

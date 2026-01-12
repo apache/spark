@@ -63,7 +63,7 @@ Condition handlers can be defined to handle three distinct classes of conditions
 
 - A generic `SQLEXCEPTION` handler can catch all conditions falling into the `SQLEXCEPTION` (any `SQLSTATE` which is not `XX***` and not `02***`).
 
-- A `NOT FOUND` handler catches all conditions with SQLSTATE class `02***`, which includes the `CURSOR_NO_MORE_ROWS` condition raised when fetching beyond the end of a cursor's result set.
+- A `NOT FOUND` handler catches all conditions with SQLSTATE class `'02xxx'`, which includes the `CURSOR_NO_MORE_ROWS` condition raised when fetching beyond the end of a cursor's result set.
 
 The following are used to decide which condition handler applies to an exception.
 This condition handler is called the **most appropriate handler**:
