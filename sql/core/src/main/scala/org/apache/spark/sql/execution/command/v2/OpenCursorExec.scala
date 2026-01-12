@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{InternalRow, SqlScriptingContextManager}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.classic.Dataset
@@ -44,13 +44,7 @@ case class OpenCursorExec(
     // Extract CursorReference from the resolved cursor expression
     val cursorRef = cursor.asInstanceOf[org.apache.spark.sql.catalyst.expressions.CursorReference]
 
-    val scriptingContextManager = SqlScriptingContextManager.get()
-      .getOrElse(throw new AnalysisException(
-        errorClass = "CURSOR_OUTSIDE_SCRIPT",
-        messageParameters = Map("cursorName" -> cursorRef.sql)))
-
-    val scriptingContext = scriptingContextManager.getContext
-      .asInstanceOf[org.apache.spark.sql.scripting.SqlScriptingExecutionContext]
+    val scriptingContext = CursorCommandUtils.getScriptingContext(cursorRef.sql)
 
     // Find cursor using normalized name from CursorReference
     val cursorDefOpt: Option[org.apache.spark.sql.scripting.CursorDefinition] =

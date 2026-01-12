@@ -45,13 +45,8 @@ case class FetchCursorExec(
     // Extract CursorReference from the resolved cursor expression
     val cursorRef = cursor.asInstanceOf[org.apache.spark.sql.catalyst.expressions.CursorReference]
 
-    val scriptingContextManager = SqlScriptingContextManager.get()
-      .getOrElse(throw new AnalysisException(
-        errorClass = "CURSOR_OUTSIDE_SCRIPT",
-        messageParameters = Map("cursorName" -> cursorRef.sql)))
-
-    val scriptingContext = scriptingContextManager.getContext
-      .asInstanceOf[org.apache.spark.sql.scripting.SqlScriptingExecutionContext]
+    val scriptingContext = CursorCommandUtils.getScriptingContext(cursorRef.sql)
+    val variableManager = SqlScriptingContextManager.get().get.getVariableManager
 
     // Get current cursor state
     val currentState = scriptingContext.currentFrame.getCursorState(
@@ -93,7 +88,6 @@ case class FetchCursorExec(
     }
 
     val externalRow = iterator.next()
-    val variableManager = scriptingContextManager.getVariableManager
 
     // Convert Row to InternalRow for processing
     val schema = org.apache.spark.sql.catalyst.types.DataTypeUtils

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{InternalRow, SqlScriptingContextManager}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.execution.datasources.v2.LeafV2CommandExec
 import org.apache.spark.sql.scripting.{CursorDeclared, CursorDefinition}
@@ -40,13 +40,7 @@ case class DeclareCursorExec(
     asensitive: Boolean) extends LeafV2CommandExec {
 
   override protected def run(): Seq[InternalRow] = {
-    val scriptingContextManager = SqlScriptingContextManager.get()
-      .getOrElse(throw new AnalysisException(
-        errorClass = "CURSOR_OUTSIDE_SCRIPT",
-        messageParameters = Map("cursorName" -> cursorName)))
-
-    val scriptingContext = scriptingContextManager.getContext
-      .asInstanceOf[org.apache.spark.sql.scripting.SqlScriptingExecutionContext]
+    val scriptingContext = CursorCommandUtils.getScriptingContext(cursorName)
     val currentScope = scriptingContext.currentScope
 
     // Normalize cursor name based on case sensitivity configuration
