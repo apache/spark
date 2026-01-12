@@ -44,12 +44,13 @@ case class UnresolvedCursor(nameParts: Seq[String]) extends LeafExpression with 
  *
  * @param nameParts The original cursor name parts (unnormalized)
  * @param normalizedName The normalized cursor name (for lookups considering case sensitivity)
- * @param scopePath The scope path (e.g., Seq("label") for qualified cursors, empty for unqualified)
+ * @param scopeLabel Optional label qualifier for scoped cursors (e.g., Some("label") for
+ *                   "label.cursor", None for unqualified cursors)
  */
 case class CursorReference(
     nameParts: Seq[String],
     normalizedName: String,
-    scopePath: Seq[String]) extends LeafExpression with Unevaluable {
+    scopeLabel: Option[String]) extends LeafExpression with Unevaluable {
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override def eval(input: InternalRow): Any =

@@ -28,7 +28,7 @@ import org.apache.spark.sql.internal.SQLConf
 /**
  * Resolves [[UnresolvedCursor]] expressions to [[CursorReference]] expressions.
  * This rule normalizes cursor names based on case sensitivity configuration and
- * separates qualified cursor names (label.cursor) into scope path and cursor name.
+ * separates qualified cursor names (label.cursor) into scope label and cursor name.
  */
 class ResolveCursors extends Rule[LogicalPlan] {
 
@@ -42,13 +42,13 @@ class ResolveCursors extends Rule[LogicalPlan] {
     val nameParts = uc.nameParts
     val caseSensitive = SQLConf.get.caseSensitiveAnalysis
 
-    // Split qualified name into scope path and cursor name
-    val (scopePath, cursorName) = if (nameParts.length > 1) {
+    // Split qualified name into scope label and cursor name
+    val (scopeLabel, cursorName) = if (nameParts.length > 1) {
       // Qualified cursor: "label.cursor"
-      (nameParts.dropRight(1), nameParts.last)
+      (Some(nameParts.head), nameParts.last)
     } else {
       // Unqualified cursor: "cursor"
-      (Seq.empty[String], nameParts.head)
+      (None, nameParts.head)
     }
 
     // Normalize cursor name based on case sensitivity
@@ -58,6 +58,6 @@ class ResolveCursors extends Rule[LogicalPlan] {
       cursorName.toLowerCase(Locale.ROOT)
     }
 
-    CursorReference(nameParts, normalizedName, scopePath)
+    CursorReference(nameParts, normalizedName, scopeLabel)
   }
 }

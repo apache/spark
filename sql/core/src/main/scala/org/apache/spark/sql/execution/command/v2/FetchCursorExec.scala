@@ -56,7 +56,7 @@ case class FetchCursorExec(
     // Get current cursor state
     val currentState = scriptingContext.currentFrame.getCursorState(
       cursorRef.normalizedName,
-      cursorRef.scopePath).getOrElse(
+      cursorRef.scopeLabel).getOrElse(
       throw new AnalysisException(
         errorClass = "CURSOR_NOT_FOUND",
         messageParameters = Map("cursorName" -> cursorRef.sql)))
@@ -71,7 +71,7 @@ case class FetchCursorExec(
         val iter = df.toLocalIterator()
         scriptingContext.currentFrame.updateCursorState(
           cursorRef.normalizedName,
-          cursorRef.scopePath,
+          cursorRef.scopeLabel,
           CursorFetching(query, iter))
         (iter, query)
 

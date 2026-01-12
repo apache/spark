@@ -48,7 +48,7 @@ case class CloseCursorExec(cursor: Expression) extends LeafV2CommandExec {
     // Get current cursor state and validate it exists
     val currentState = scriptingContext.currentFrame.getCursorState(
       cursorRef.normalizedName,
-      cursorRef.scopePath).getOrElse(
+      cursorRef.scopeLabel).getOrElse(
       throw new AnalysisException(
         errorClass = "CURSOR_NOT_FOUND",
         messageParameters = Map("cursorName" -> cursorRef.sql)))
@@ -65,7 +65,7 @@ case class CloseCursorExec(cursor: Expression) extends LeafV2CommandExec {
     // Transition cursor state to Closed
     scriptingContext.currentFrame.updateCursorState(
       cursorRef.normalizedName,
-      cursorRef.scopePath,
+      cursorRef.scopeLabel,
       CursorClosed)
 
     Nil

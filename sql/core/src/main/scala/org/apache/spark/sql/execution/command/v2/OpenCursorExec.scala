@@ -54,12 +54,12 @@ case class OpenCursorExec(
 
     // Find cursor using normalized name from CursorReference
     val cursorDefOpt: Option[org.apache.spark.sql.scripting.CursorDefinition] =
-      if (cursorRef.scopePath.nonEmpty) {
-        scriptingContext.currentFrame.findCursorInScope(
-          cursorRef.scopePath.head, cursorRef.normalizedName)
-      } else {
-        scriptingContext.currentFrame.findCursorByName(cursorRef.normalizedName)
-      }.asInstanceOf[Option[org.apache.spark.sql.scripting.CursorDefinition]]
+      (cursorRef.scopeLabel match {
+        case Some(label) =>
+          scriptingContext.currentFrame.findCursorInScope(label, cursorRef.normalizedName)
+        case None =>
+          scriptingContext.currentFrame.findCursorByName(cursorRef.normalizedName)
+      }).asInstanceOf[Option[org.apache.spark.sql.scripting.CursorDefinition]]
     val cursorDef = cursorDefOpt.getOrElse(
       throw new AnalysisException(
         errorClass = "CURSOR_NOT_FOUND",
@@ -68,7 +68,7 @@ case class OpenCursorExec(
     // Get current cursor state and validate it's in Declared state
     val currentState = scriptingContext.currentFrame.getCursorState(
       cursorRef.normalizedName,
-      cursorRef.scopePath).getOrElse(
+      cursorRef.scopeLabel).getOrElse(
       throw new AnalysisException(
         errorClass = "CURSOR_NOT_FOUND",
         messageParameters = Map("cursorName" -> cursorRef.sql)))
@@ -96,7 +96,7 @@ case class OpenCursorExec(
     // Transition cursor state to Opened
     scriptingContext.currentFrame.updateCursorState(
       cursorRef.normalizedName,
-      cursorRef.scopePath,
+      cursorRef.scopeLabel,
       CursorOpened(analyzedQuery))
 
     Nil

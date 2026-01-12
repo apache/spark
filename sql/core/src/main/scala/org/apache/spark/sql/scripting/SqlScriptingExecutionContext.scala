@@ -143,16 +143,17 @@ class SqlScriptingExecutionFrame(
    * Get the cursor state for a given cursor, considering scope qualifications.
    *
    * @param normalizedName The normalized cursor name
-   * @param scopePath The scope path (e.g., Seq("label") for qualified cursors, empty for
-   *                  unqualified)
+   * @param scopeLabel Optional scope label (Some("label") for qualified cursors, None for
+   *                   unqualified)
    * @return The cursor state if found
    */
-  def getCursorState(normalizedName: String, scopePath: Seq[String]): Option[CursorState] = {
-    if (scopePath.nonEmpty) {
-      findScope(scopePath.head).flatMap(_.cursorStates.get(normalizedName))
-    } else {
-      // Search in current scope and parent scopes
-      scopes.reverseIterator.flatMap(_.cursorStates.get(normalizedName)).nextOption()
+  def getCursorState(normalizedName: String, scopeLabel: Option[String]): Option[CursorState] = {
+    scopeLabel match {
+      case Some(label) =>
+        findScope(label).flatMap(_.cursorStates.get(normalizedName))
+      case None =>
+        // Search in current scope and parent scopes
+        scopes.reverseIterator.flatMap(_.cursorStates.get(normalizedName)).nextOption()
     }
   }
 
@@ -160,21 +161,22 @@ class SqlScriptingExecutionFrame(
    * Update the cursor state for a given cursor, considering scope qualifications.
    *
    * @param normalizedName The normalized cursor name
-   * @param scopePath The scope path (e.g., Seq("label") for qualified cursors, empty for
-   *                  unqualified)
+   * @param scopeLabel Optional scope label (Some("label") for qualified cursors, None for
+   *                   unqualified)
    * @param newState The new cursor state
    */
   def updateCursorState(
       normalizedName: String,
-      scopePath: Seq[String],
+      scopeLabel: Option[String],
       newState: CursorState): Unit = {
-    val targetScope = if (scopePath.nonEmpty) {
-      findScope(scopePath.head).getOrElse(
-        throw SparkException.internalError(s"Scope ${scopePath.head} not found"))
-    } else {
-      // Find the scope where this cursor is defined
-      scopes.reverseIterator.find(_.cursors.contains(normalizedName)).getOrElse(
-        throw SparkException.internalError(s"Cursor $normalizedName not found in any scope"))
+    val targetScope = scopeLabel match {
+      case Some(label) =>
+        findScope(label).getOrElse(
+          throw SparkException.internalError(s"Scope $label not found"))
+      case None =>
+        // Find the scope where this cursor is defined
+        scopes.reverseIterator.find(_.cursors.contains(normalizedName)).getOrElse(
+          throw SparkException.internalError(s"Cursor $normalizedName not found in any scope"))
     }
     targetScope.cursorStates.put(normalizedName, newState)
   }
