@@ -182,7 +182,7 @@ END;
     DECLARE total INT DEFAULT 0;
     DECLARE my_cursor CURSOR FOR SELECT id FROM range(5);
     DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = true;
-    
+
     OPEN my_cursor;
     REPEAT
       FETCH my_cursor INTO x;
@@ -191,7 +191,7 @@ END;
       END IF;
     UNTIL done END REPEAT;
     CLOSE my_cursor;
-    
+
     VALUES (total);
   END;
 10

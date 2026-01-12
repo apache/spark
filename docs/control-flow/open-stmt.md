@@ -52,90 +52,94 @@ OPEN cursor_name [ USING { constant_expr [ AS param_name ] } [, ...] ]
 ```SQL
 -- Open a simple cursor without parameters
 > BEGIN
-    DECLARE x INT;
-    DECLARE my_cursor CURSOR FOR SELECT id FROM range(3);
-
+    DECLARE total INT;
+    DECLARE my_cursor CURSOR FOR SELECT sum(id) FROM range(10);
+    
     OPEN my_cursor;
-    FETCH my_cursor INTO x;
-    VALUES (x);
+    FETCH my_cursor INTO total;
+    VALUES (total);
     CLOSE my_cursor;
   END;
-0
+45
 
 -- Open cursor with positional parameters
 > BEGIN
-    DECLARE x INT;
-    DECLARE param_cursor CURSOR FOR
-      SELECT id FROM range(10) WHERE id BETWEEN ? AND ?;
-
-    OPEN param_cursor USING 3, 7;
-    FETCH param_cursor INTO x;
-    VALUES (x);
+    DECLARE total INT;
+    DECLARE param_cursor CURSOR FOR 
+      SELECT sum(id) FROM range(100) WHERE id BETWEEN ? AND ?;
+    
+    OPEN param_cursor USING 10, 20;
+    FETCH param_cursor INTO total;
+    VALUES (total);
     CLOSE param_cursor;
   END;
-3
+165
 
 -- Open cursor with named parameters
 > BEGIN
-    DECLARE result INT;
-    DECLARE named_cursor CURSOR FOR
-      SELECT id FROM range(100) WHERE id >= :min_val AND id <= :max_val;
-
-    OPEN named_cursor USING 10 AS min_val, 20 AS max_val;
-    FETCH named_cursor INTO result;
-    VALUES (result);
+    DECLARE min_val INT;
+    DECLARE named_cursor CURSOR FOR 
+      SELECT min(id) FROM range(100) WHERE id >= :threshold;
+    
+    OPEN named_cursor USING 25 AS threshold;
+    FETCH named_cursor INTO min_val;
+    VALUES (min_val);
     CLOSE named_cursor;
   END;
-10
+25
 
 -- Open cursor using variables as parameters
 > BEGIN
-    DECLARE min_id INT DEFAULT 5;
-    DECLARE max_id INT DEFAULT 8;
+    DECLARE lower INT DEFAULT 5;
+    DECLARE upper INT DEFAULT 15;
     DECLARE result INT;
-    DECLARE var_cursor CURSOR FOR SELECT id FROM range(10) WHERE id BETWEEN ? AND ?;
-
-    OPEN var_cursor USING min_id, max_id;
+    DECLARE var_cursor CURSOR FOR 
+      SELECT count(*) FROM range(100) WHERE id BETWEEN ? AND ?;
+    
+    OPEN var_cursor USING lower, upper;
     FETCH var_cursor INTO result;
     VALUES (result);
     CLOSE var_cursor;
   END;
-5
+11
 
 -- Open cursor with various data types
 > BEGIN
-    DECLARE str_val STRING;
-    DECLARE int_val INT;
-    DECLARE type_cursor CURSOR FOR SELECT typeof(:p) as type, :p as val;
-
-    OPEN type_cursor USING 42 AS p;
-    FETCH type_cursor INTO str_val, int_val;
+    DECLARE type_name STRING;
+    DECLARE value_sum INT;
+    DECLARE type_cursor CURSOR FOR 
+      SELECT typeof(:p) as type, sum(:p + id) FROM range(3);
+    
+    OPEN type_cursor USING 10 AS p;
+    FETCH type_cursor INTO type_name, value_sum;
+    VALUES (type_name, value_sum);
     CLOSE type_cursor;
-
-    VALUES ('INT', int_val);
   END;
-INT|42
+INT|33
 
 -- Qualified cursor name with label
 > BEGIN
     outer_lbl: BEGIN
-      DECLARE outer_cur CURSOR FOR SELECT id FROM range(3);
+      DECLARE outer_cur CURSOR FOR SELECT max(id) FROM range(10);
+      DECLARE max_val INT;
+      
       OPEN outer_cur;
-
+      
       inner_lbl: BEGIN
-        DECLARE inner_cur CURSOR FOR SELECT id * 10 FROM range(2);
-        DECLARE x INT;
-
+        DECLARE inner_cur CURSOR FOR SELECT min(id) FROM range(5);
+        DECLARE min_val INT;
+        
         OPEN inner_cur;
-        FETCH outer_lbl.outer_cur INTO x;
-        VALUES (x);
+        FETCH outer_lbl.outer_cur INTO max_val;
+        FETCH inner_cur INTO min_val;
+        VALUES (max_val, min_val);
         CLOSE inner_cur;
       END;
-
+      
       CLOSE outer_cur;
     END;
   END;
-0
+9|0
 ```
 
 ## Notes
