@@ -504,7 +504,8 @@ class Analyzer(
       Seq(
         ResolveWithCTE,
         ExtractDistributedSequenceID) ++
-      Seq(ResolveUpdateEventTimeWatermarkColumn) ++
+      Seq(ResolveUpdateEventTimeWatermarkColumn,
+        NameStreamingSources) ++
       extendedResolutionRules : _*),
     Batch("Remove TempResolvedColumn", Once, RemoveTempResolvedColumn),
     Batch("Post-Hoc Resolution", Once,
@@ -2095,16 +2096,11 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsAnyPattern(UNRESOLVED_FUNC, UNRESOLVED_FUNCTION, GENERATOR,
         UNRESOLVED_TABLE_VALUED_FUNCTION, UNRESOLVED_TVF_ALIASES), ruleId) {
-      // Resolve functions with concrete relations from v2 catalog.
-      case u @ UnresolvedFunctionName(nameParts, cmd, requirePersistentFunc, mismatchHint, _) =>
+      // Resolve scalar/table functions and get the function metadata for DESCRIBE FUNCTION.
+      case u @ UnresolvedFunctionName(nameParts, _, _) =>
         functionResolution.lookupBuiltinOrTempFunction(nameParts, None)
           .orElse(functionResolution.lookupBuiltinOrTempTableFunction(nameParts)).map { info =>
-          if (requirePersistentFunc) {
-            throw QueryCompilationErrors.expectPersistentFuncError(
-              nameParts.head, cmd, mismatchHint, u)
-          } else {
-            ResolvedNonPersistentFunc(nameParts.head, V1Function.metadataOnly(info))
-          }
+          ResolvedNonPersistentFunc(nameParts.head, V1Function.metadataOnly(info))
         }.getOrElse {
           val CatalogAndIdentifier(catalog, ident) =
             relationResolution.expandIdentifier(nameParts)

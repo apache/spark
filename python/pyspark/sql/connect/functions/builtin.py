@@ -4613,6 +4613,48 @@ def kll_sketch_agg_double(
 kll_sketch_agg_double.__doc__ = pysparkfuncs.kll_sketch_agg_double.__doc__
 
 
+def kll_merge_agg_bigint(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+) -> Column:
+    fn = "kll_merge_agg_bigint"
+    if k is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(k))
+
+
+kll_merge_agg_bigint.__doc__ = pysparkfuncs.kll_merge_agg_bigint.__doc__
+
+
+def kll_merge_agg_float(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+) -> Column:
+    fn = "kll_merge_agg_float"
+    if k is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(k))
+
+
+kll_merge_agg_float.__doc__ = pysparkfuncs.kll_merge_agg_float.__doc__
+
+
+def kll_merge_agg_double(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+) -> Column:
+    fn = "kll_merge_agg_double"
+    if k is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(k))
+
+
+kll_merge_agg_double.__doc__ = pysparkfuncs.kll_merge_agg_double.__doc__
+
+
 def kll_sketch_to_string_bigint(col: "ColumnOrName") -> Column:
     fn = "kll_sketch_to_string_bigint"
     return _invoke_function_over_columns(fn, col)

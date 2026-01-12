@@ -142,10 +142,10 @@
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
     <parquet.version>1.16.0</parquet.version>
-    <orc.version>2.2.1</orc.version>
+    <orc.version>2.2.2</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
-    <jetty.version>11.0.26</jetty.version>
-    <jakartaservlet.version>5.0.0</jakartaservlet.version>
+    <jetty.version>12.1.5</jetty.version>
+    <jakartaservlet.version>6.0.0</jakartaservlet.version>
     <!-- SPARK-46938: Required by Hive / LibThrift libs -->
     <javaxservlet.version>4.0.1</javaxservlet.version>
     <chill.version>0.10.0</chill.version>
@@ -201,7 +201,7 @@
     <guava.failureaccess.version>1.0.3</guava.failureaccess.version>
     <gson.version>2.13.2</gson.version>
     <janino.version>3.1.9</janino.version>
-    <jersey.version>3.0.18</jersey.version>
+    <jersey.version>3.1.11</jersey.version>
     <joda.version>2.14.0</joda.version>
     <jsr305.version>3.0.0</jsr305.version>
     <jaxb.version>2.2.11</jaxb.version>
@@ -560,20 +560,20 @@
         <scope>provided</scope>
       </dependency>
       <dependency>
-        <groupId>org.eclipse.jetty</groupId>
-        <artifactId>jetty-servlet</artifactId>
+        <groupId>org.eclipse.jetty.ee10</groupId>
+        <artifactId>jetty-ee10-servlet</artifactId>
         <version>${jetty.version}</version>
         <scope>provided</scope>
       </dependency>
       <dependency>
-        <groupId>org.eclipse.jetty</groupId>
-        <artifactId>jetty-servlets</artifactId>
+        <groupId>org.eclipse.jetty.ee10</groupId>
+        <artifactId>jetty-ee10-servlets</artifactId>
         <version>${jetty.version}</version>
         <scope>provided</scope>
       </dependency>
       <dependency>
-        <groupId>org.eclipse.jetty</groupId>
-        <artifactId>jetty-proxy</artifactId>
+        <groupId>org.eclipse.jetty.ee10</groupId>
+        <artifactId>jetty-ee10-proxy</artifactId>
         <version>${jetty.version}</version>
         <scope>provided</scope>
       </dependency>
@@ -596,8 +596,8 @@
         <scope>provided</scope>
       </dependency>
       <dependency>
-        <groupId>org.eclipse.jetty</groupId>
-        <artifactId>jetty-plus</artifactId>
+        <groupId>org.eclipse.jetty.ee10</groupId>
+        <artifactId>jetty-ee10-plus</artifactId>
         <version>${jetty.version}</version>
         <scope>provided</scope>
       </dependency>
@@ -608,8 +608,8 @@
         <scope>provided</scope>
       </dependency>
       <dependency>
-        <groupId>org.eclipse.jetty</groupId>
-        <artifactId>jetty-webapp</artifactId>
+        <groupId>org.eclipse.jetty.ee10</groupId>
+        <artifactId>jetty-ee10-webapp</artifactId>
         <version>${jetty.version}</version>
         <scope>provided</scope>
       </dependency>

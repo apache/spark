@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import sys
 import unittest
 
 
@@ -22,7 +23,21 @@ def main(module="__main__", output="target/test-reports"):
     try:
         import xmlrunner
 
-        testRunner = xmlrunner.XMLTestRunner(output=output, verbosity=2)
+        testRunner = xmlrunner.XMLTestRunner(output=output, verbosity=2, outsuffix="")
     except ImportError:
         testRunner = None
-    unittest.main(module=module, testRunner=testRunner, verbosity=2)
+
+    # Python 3.12+ incorrectly exits with status code 5 if setUpClass fails.
+    # We need to check the result and exit with the correct status code.
+    # This is fixed in latest 3.13+ but is not backported to 3.12.
+    # To be safe, we apply this on all 3.12 - 3.14.
+    if sys.version_info >= (3, 12) and sys.version_info < (3, 15):
+        res = unittest.main(module=module, testRunner=testRunner, verbosity=2, exit=False)
+        if not res.result.wasSuccessful():
+            sys.exit(1)
+        elif res.result.testsRun == 0 and len(res.result.skipped) == 0:
+            sys.exit(5)
+        else:
+            sys.exit(0)
+    else:
+        unittest.main(module=module, testRunner=testRunner, verbosity=2)
