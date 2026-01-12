@@ -1383,3 +1383,189 @@ BEGIN
   VALUES (result);  -- Should return 42
 END;
 --QUERY-DELIMITER-END
+
+
+-- Test 57: Unhandled NO DATA condition - should continue silently per SQL Standard
+-- EXPECTED: Success - Script continues after CURSOR_NO_MORE_ROWS without aborting
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE x INT;
+  DECLARE cur CURSOR FOR SELECT 1 AS val;
+
+  OPEN cur;
+  FETCH cur INTO x;  -- Succeeds, x = 1
+  VALUES ('After first fetch', x);
+
+  FETCH cur INTO x;  -- No more rows, raises CURSOR_NO_MORE_ROWS (SQLSTATE 02000)
+                     -- No handler declared, so per SQL Standard this is a completion
+                     -- condition (not exception) and execution continues
+
+  VALUES ('After second fetch - script continued', x);  -- Should execute, x still = 1
+  CLOSE cur;
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 58: CONTINUE HANDLER for specific CURSOR_NO_MORE_ROWS condition
+-- EXPECTED: Success - Handler catches specific error and sets flag
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE x INT;
+  DECLARE no_more_data BOOLEAN DEFAULT false;
+  DECLARE cur CURSOR FOR SELECT 10 AS val;
+
+  -- Handler for specific error condition
+  DECLARE CONTINUE HANDLER FOR CURSOR_NO_MORE_ROWS SET no_more_data = true;
+
+  OPEN cur;
+  FETCH cur INTO x;
+  VALUES ('First fetch', x, no_more_data);  -- Should be (10, false)
+
+  FETCH cur INTO x;  -- Triggers handler
+  VALUES ('After no data', x, no_more_data);  -- Should be (10, true)
+
+  CLOSE cur;
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 59: CONTINUE HANDLER for generic NOT FOUND class
+-- EXPECTED: Success - Handler catches all SQLSTATE 02xxx conditions
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE x INT;
+  DECLARE found BOOLEAN DEFAULT true;
+  DECLARE cur CURSOR FOR SELECT 20 AS val;
+
+  -- Generic NOT FOUND handler catches all SQLSTATE class 02xxx
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET found = false;
+
+  OPEN cur;
+  FETCH cur INTO x;
+  VALUES ('First fetch', x, found);  -- Should be (20, true)
+
+  FETCH cur INTO x;  -- No more rows, triggers NOT FOUND handler
+  VALUES ('After NOT FOUND', x, found);  -- Should be (20, false)
+
+  CLOSE cur;
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 60: EXIT HANDLER for NOT FOUND - exits immediately
+-- EXPECTED: Success - Handler executes and exits, statements after handler don't run
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE x INT DEFAULT 0;
+  DECLARE cur CURSOR FOR SELECT 30 AS val;
+
+  -- EXIT handler runs its body then exits the compound statement
+  DECLARE EXIT HANDLER FOR NOT FOUND
+  BEGIN
+    VALUES ('In EXIT handler', x);
+    CLOSE cur;  -- Clean up in the handler
+  END;
+
+  OPEN cur;
+  FETCH cur INTO x;
+  VALUES ('First fetch', x);  -- Should execute (30)
+
+  FETCH cur INTO x;  -- Triggers EXIT handler, which closes cursor and exits
+
+  VALUES ('After handler');  -- Should NOT execute (handler exits)
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 61: EXIT HANDLER vs CONTINUE HANDLER precedence with loops
+-- EXPECTED: Success - CONTINUE handler keeps loop going, EXIT would exit
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE x INT;
+  DECLARE row_count INT DEFAULT 0;
+  DECLARE done BOOLEAN DEFAULT false;
+  DECLARE cur CURSOR FOR SELECT id FROM VALUES(1), (2), (3) AS t(id);
+
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = true;
+
+  OPEN cur;
+
+  -- Loop through all rows
+  REPEAT
+    FETCH cur INTO x;
+    IF NOT done THEN
+      SET row_count = row_count + 1;
+      VALUES ('Fetched', x, row_count);
+    END IF;
+  UNTIL done END REPEAT;
+
+  VALUES ('Total rows', row_count);  -- Should be 3
+  CLOSE cur;
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 62: Multiple handlers - specific condition takes precedence over generic
+-- EXPECTED: Success - CURSOR_NO_MORE_ROWS handler runs instead of NOT FOUND
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE x INT;
+  DECLARE specific_handler_ran BOOLEAN DEFAULT false;
+  DECLARE generic_handler_ran BOOLEAN DEFAULT false;
+  DECLARE cur CURSOR FOR SELECT 40 AS val;
+
+  -- Specific error condition handler
+  DECLARE CONTINUE HANDLER FOR CURSOR_NO_MORE_ROWS SET specific_handler_ran = true;
+
+  -- Generic NOT FOUND handler (should not run for CURSOR_NO_MORE_ROWS)
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET generic_handler_ran = true;
+
+  OPEN cur;
+  FETCH cur INTO x;
+  FETCH cur INTO x;  -- Should trigger specific handler, not generic
+
+  VALUES ('Specific ran', specific_handler_ran);  -- Should be true
+  VALUES ('Generic ran', generic_handler_ran);    -- Should be false
+
+  CLOSE cur;
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 63: Nested blocks with different NOT FOUND handlers
+-- EXPECTED: Success - Inner handler doesn't affect outer cursor
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE x INT;
+  DECLARE outer_done BOOLEAN DEFAULT false;
+  DECLARE outer_cur CURSOR FOR SELECT 50 AS val;
+
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET outer_done = true;
+
+  OPEN outer_cur;
+  FETCH outer_cur INTO x;
+  VALUES ('Outer fetch 1', x, outer_done);  -- Should be (50, false)
+
+  -- Inner block with its own cursor and handler
+  BEGIN
+    DECLARE y INT;
+    DECLARE inner_done BOOLEAN DEFAULT false;
+    DECLARE inner_cur CURSOR FOR SELECT 60 AS val;
+
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET inner_done = true;
+
+    OPEN inner_cur;
+    FETCH inner_cur INTO y;
+    FETCH inner_cur INTO y;  -- Triggers inner handler only
+
+    VALUES ('Inner', y, inner_done, outer_done);  -- Should be (60, true, false)
+    CLOSE inner_cur;
+  END;
+
+  -- Outer cursor still works normally
+  FETCH outer_cur INTO x;  -- Triggers outer handler
+  VALUES ('Outer fetch 2', x, outer_done);  -- Should be (50, true)
+
+  CLOSE outer_cur;
+END;
+--QUERY-DELIMITER-END
