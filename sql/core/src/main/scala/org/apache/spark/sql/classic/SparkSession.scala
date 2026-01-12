@@ -126,8 +126,14 @@ class SparkSession private(
 
   // If there is no active SparkSession, uses the default SQL conf. Otherwise, use the session's.
   SQLConf.setSQLConfGetter(() => {
-    SparkSession.getActiveSession.filterNot(_.sparkContext.isStopped).map(_.sessionState.conf)
-      .getOrElse(SQLConf.getFallbackConf)
+    SparkSession.getActiveSession.filterNot(_.sparkContext.isStopped).flatMap { session =>
+      // Avoid recursive call during sessionState initialization
+      if (session.isSessionStateInitialized) {
+        Some(session.sessionState.conf)
+      } else {
+        None
+      }
+    }.getOrElse(SQLConf.getFallbackConf)
   })
 
   /** Tag to mark all jobs owned by this session. */
@@ -169,6 +175,13 @@ class SparkSession private(
    |  Session-related state  |
    * ----------------------- */
 
+  /**
+   * Track whether sessionState has been initialized. Used to prevent recursive calls
+   * to sessionState.conf during initialization (e.g., from SQLConf.get).
+   */
+  @transient
+  private var sessionStateInitialized: Boolean = false
+
   /** @inheritdoc */
   @Unstable
   @transient
@@ -180,15 +193,24 @@ class SparkSession private(
   @Unstable
   @transient
   lazy val sessionState: SessionState = {
-    parentSessionState
-      .map(_.clone(this))
-      .getOrElse {
-        val state = SparkSession.instantiateSessionState(
-          SparkSession.sessionStateClassName(sharedState.conf),
-          self)
-        state
-      }
+    try {
+      parentSessionState
+        .map(_.clone(this))
+        .getOrElse {
+          val state = SparkSession.instantiateSessionState(
+            SparkSession.sessionStateClassName(sharedState.conf),
+            self)
+          state
+        }
+    } finally {
+      sessionStateInitialized = true
+    }
   }
+
+  /**
+   * Returns true if sessionState has been fully initialized.
+   */
+  private[sql] def isSessionStateInitialized: Boolean = sessionStateInitialized
 
   /** @inheritdoc */
   @transient

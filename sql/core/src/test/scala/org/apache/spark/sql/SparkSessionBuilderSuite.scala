@@ -598,4 +598,65 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
       .getOrCreate()
     assert(session.sparkContext.appName === "newAppName")
   }
+
+  test("SPARK-55016: isSessionStateInitialized flag should track sessionState initialization") {
+    val session = SparkSession.builder()
+      .master("local")
+      .appName("test-session-state-init")
+      .getOrCreate()
+      .asInstanceOf[classic.SparkSession]
+
+    try {
+      // Before accessing sessionState, the flag should be false
+      assert(!session.isSessionStateInitialized,
+        "sessionState should not be initialized before first access")
+
+      // Access sessionState to trigger initialization
+      val _ = session.sessionState
+
+      // After accessing sessionState, the flag should be true
+      assert(session.isSessionStateInitialized,
+        "sessionState should be marked as initialized after access")
+    } finally {
+      session.stop()
+    }
+  }
+
+  test("SPARK-55016: SQLConf.get should return fallback conf " +
+      "when sessionState is not initialized") {
+    val session = SparkSession.builder()
+      .master("local")
+      .appName("test-sqlconf-fallback")
+      .getOrCreate()
+      .asInstanceOf[classic.SparkSession]
+
+    try {
+      // Before accessing sessionState, SQLConf.get should return fallback conf
+      assert(!session.isSessionStateInitialized,
+        "sessionState should not be initialized before first access")
+
+      val conf = SQLConf.get
+      val fallbackConf = SQLConf.getFallbackConf
+
+      // When sessionState is not initialized, SQLConf.get should equal fallback conf
+      assert(conf == fallbackConf,
+        "SQLConf.get should return fallback conf when sessionState is not initialized")
+
+      // Now access sessionState to trigger initialization
+      val _ = session.sessionState
+      assert(session.isSessionStateInitialized,
+        "sessionState should be initialized after access")
+
+      // After initialization, SQLConf.get should return sessionState.conf
+      val confAfterInit = SQLConf.get
+      assert(confAfterInit == session.sessionState.conf,
+        "SQLConf.get should return sessionState.conf after initialization")
+
+      // Should no longer equal fallback conf
+      assert(confAfterInit != fallbackConf,
+        "SQLConf.get should not return fallback conf after sessionState is initialized")
+    } finally {
+      session.stop()
+    }
+  }
 }
