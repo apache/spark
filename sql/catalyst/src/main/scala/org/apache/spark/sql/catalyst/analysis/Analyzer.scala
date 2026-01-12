@@ -2067,13 +2067,30 @@ class Analyzer(
           if (externalFunctionNameSet.contains(fullName)) {
             f
           } else {
-            // Validate function existence (throws errors if issues found)
-            functionResolution.validateFunctionExistence(nameParts, f)
-            // Cache persistent functions to avoid repeated lookups
-            if (!functionResolution.isBuiltinOrTemporaryFunction(nameParts, Some(f))) {
-              externalFunctionNameSet.add(fullName)
+            // Lookup function type to determine if it exists and where it's located.
+            // Only cache persistent functions to avoid repeated external catalog lookups.
+            val functionType = functionResolution.lookupFunctionType(nameParts, Some(f))
+
+            functionType match {
+              case FunctionType.Builtin | FunctionType.Temporary | FunctionType.Persistent =>
+                // Function exists and can be used in scalar context
+                if (functionType == FunctionType.Persistent) {
+                  externalFunctionNameSet.add(fullName)
+                }
+                f
+
+              case FunctionType.TableOnly =>
+                // Function exists ONLY in table registry - cannot be used in scalar context
+                throw QueryCompilationErrors.notAScalarFunctionError(nameParts.mkString("."), f)
+
+              case FunctionType.NotFound =>
+                // Function doesn't exist anywhere - throw UNRESOLVED_ROUTINE error
+                val catalogPath = (catalog.name +: catalogManager.currentNamespace).mkString(".")
+                throw QueryCompilationErrors.unresolvedRoutineError(
+                  nameParts,
+                  Seq("system.builtin", "system.session", catalogPath),
+                  f.origin)
             }
-            f
           }
       }
     }
