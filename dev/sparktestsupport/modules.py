@@ -551,6 +551,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_job_cancellation",
         "pyspark.sql.tests.arrow.test_arrow",
         "pyspark.sql.tests.arrow.test_arrow_map",
+        "pyspark.sql.tests.arrow.test_arrow_c_stream",
         "pyspark.sql.tests.arrow.test_arrow_cogrouped_map",
         "pyspark.sql.tests.arrow.test_arrow_grouped_map",
         "pyspark.sql.tests.arrow.test_arrow_python_udf",
