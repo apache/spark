@@ -101,22 +101,39 @@ class FunctionResolution(
 
   /**
    * Checks if a function is a builtin or temporary function (as opposed to persistent).
-   * This is used by the LookupFunctions analyzer rule for early validation.
    *
    * @param nameParts The function name parts.
-   * @param node The UnresolvedFunction node for error reporting.
-   * @return true if the function is a builtin or temporary function, false if it's persistent.
+   * @param u Optional UnresolvedFunction for internal function detection.
+   * @return true if the function is a builtin or temporary function, false otherwise.
    */
   def isBuiltinOrTemporaryFunction(
       nameParts: Seq[String],
-      node: UnresolvedFunction): Boolean = {
+      u: Option[UnresolvedFunction]): Boolean = {
+    // Check if exists as scalar function
+    if (lookupBuiltinOrTempFunction(nameParts, u).isDefined) {
+      return true
+    }
+    // Check if exists as table function
+    lookupBuiltinOrTempTableFunction(nameParts).isDefined
+  }
+
+  /**
+   * Validates that a function exists and can be used.
+   * This is used by the LookupFunctions analyzer rule for early validation.
+   * Throws appropriate errors if the function doesn't exist or has type mismatches.
+   *
+   * @param nameParts The function name parts.
+   * @param node The UnresolvedFunction node for error reporting.
+   */
+  def validateFunctionExistence(
+      nameParts: Seq[String],
+      node: UnresolvedFunction): Unit = {
 
     // Check if function exists as scalar function.
     val existsAsScalar = lookupBuiltinOrTempFunction(nameParts, Some(node)).isDefined
 
     if (existsAsScalar) {
-      // Function exists in scalar registry, can be used in scalar context.
-      return true  // It's a builtin or temp function
+      return  // Function exists and can be used
     }
 
     // Check if function exists as table function.
@@ -139,8 +156,7 @@ class FunctionResolution(
         node.origin)
     }
 
-    // Function exists in external catalog - it's persistent.
-    false  // Not a builtin or temp function
+    // Function exists in external catalog - validation successful
   }
 
   def resolveBuiltinOrTempFunction(
