@@ -54,7 +54,7 @@ OPEN cursor_name [ USING { constant_expr [ AS param_name ] } [, ...] ]
 > BEGIN
     DECLARE total INT;
     DECLARE my_cursor CURSOR FOR SELECT sum(id) FROM range(10);
-    
+
     OPEN my_cursor;
     FETCH my_cursor INTO total;
     VALUES (total);
@@ -65,9 +65,9 @@ OPEN cursor_name [ USING { constant_expr [ AS param_name ] } [, ...] ]
 -- Open cursor with positional parameters
 > BEGIN
     DECLARE total INT;
-    DECLARE param_cursor CURSOR FOR 
+    DECLARE param_cursor CURSOR FOR
       SELECT sum(id) FROM range(100) WHERE id BETWEEN ? AND ?;
-    
+
     OPEN param_cursor USING 10, 20;
     FETCH param_cursor INTO total;
     VALUES (total);
@@ -78,9 +78,9 @@ OPEN cursor_name [ USING { constant_expr [ AS param_name ] } [, ...] ]
 -- Open cursor with named parameters
 > BEGIN
     DECLARE min_val INT;
-    DECLARE named_cursor CURSOR FOR 
+    DECLARE named_cursor CURSOR FOR
       SELECT min(id) FROM range(100) WHERE id >= :threshold;
-    
+
     OPEN named_cursor USING 25 AS threshold;
     FETCH named_cursor INTO min_val;
     VALUES (min_val);
@@ -93,9 +93,9 @@ OPEN cursor_name [ USING { constant_expr [ AS param_name ] } [, ...] ]
     DECLARE lower INT DEFAULT 5;
     DECLARE upper INT DEFAULT 15;
     DECLARE result INT;
-    DECLARE var_cursor CURSOR FOR 
+    DECLARE var_cursor CURSOR FOR
       SELECT count(*) FROM range(100) WHERE id BETWEEN ? AND ?;
-    
+
     OPEN var_cursor USING lower, upper;
     FETCH var_cursor INTO result;
     VALUES (result);
@@ -107,9 +107,9 @@ OPEN cursor_name [ USING { constant_expr [ AS param_name ] } [, ...] ]
 > BEGIN
     DECLARE type_name STRING;
     DECLARE value_sum INT;
-    DECLARE type_cursor CURSOR FOR 
+    DECLARE type_cursor CURSOR FOR
       SELECT typeof(:p) as type, sum(:p + id) FROM range(3);
-    
+
     OPEN type_cursor USING 10 AS p;
     FETCH type_cursor INTO type_name, value_sum;
     VALUES (type_name, value_sum);
@@ -122,20 +122,20 @@ INT|33
     outer_lbl: BEGIN
       DECLARE outer_cur CURSOR FOR SELECT max(id) FROM range(10);
       DECLARE max_val INT;
-      
+
       OPEN outer_cur;
-      
+
       inner_lbl: BEGIN
         DECLARE inner_cur CURSOR FOR SELECT min(id) FROM range(5);
         DECLARE min_val INT;
-        
+
         OPEN inner_cur;
         FETCH outer_lbl.outer_cur INTO max_val;
         FETCH inner_cur INTO min_val;
         VALUES (max_val, min_val);
         CLOSE inner_cur;
       END;
-      
+
       CLOSE outer_cur;
     END;
   END;

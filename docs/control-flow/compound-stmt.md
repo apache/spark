@@ -94,7 +94,7 @@ condition_values
 
   - **`sqlstate`**
 
-    A `STRING` literal of 5 alphanumeric characters (case insensitive) consisting of A-Z and 0..9. The SQLSTATE must not start with '00', '01', or 'XX'. Any SQLSTATE starting with '02' will be caught by the predefined NOT FOUND exception as well. If not specified, the SQLSTATE is '45000'.
+    A `STRING` literal of 5 alphanumeric characters (case insensitive) consisting of A-Z and 0..9. The SQLSTATE must not start with '00', '01', or 'XX'. Any SQLSTATE starting with '02' will be caught by the predefined `NOT FOUND` handler as well. If not specified, the SQLSTATE is '45000'.
 
 - **`declare_cursor`**
 
@@ -146,7 +146,7 @@ condition_values
 
   - **`NOT FOUND`**
 
-    Applies to any error condition with a SQLSTATE ‘02’ class.
+    Applies to any condition with a SQLSTATE '02xxx' class. This includes the `CURSOR_NO_MORE_ROWS` condition (SQLSTATE '02000') raised when fetching beyond the end of a cursor's result set.
 
   - **`handler_action`**
 
