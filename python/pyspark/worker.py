@@ -18,6 +18,7 @@
 """
 Worker that receives input from Piped RDD.
 """
+import atexit
 import datetime
 import os
 import sys
@@ -157,6 +158,10 @@ class _ArrowUDFThreadPool:
         pool = cls.get_pool(max_workers)
         chunk_results = pool.map(process_chunk, chunks)
         return list(itertools.chain.from_iterable(chunk_results))
+
+
+# Register shutdown handler to clean up thread pool on process exit
+atexit.register(_ArrowUDFThreadPool.shutdown)
 
 
 class RunnerConf:

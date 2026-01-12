@@ -272,6 +272,59 @@ class WorkerPoolCrashTest(PySparkTestCase):
         rdd.map(lambda x: os.getpid()).collect()
 
 
+class ArrowUDFThreadPoolTests(unittest.TestCase):
+    """Tests for the _ArrowUDFThreadPool singleton class."""
+
+    def setUp(self):
+        from pyspark.worker import _ArrowUDFThreadPool
+
+        self.pool_class = _ArrowUDFThreadPool
+        # Ensure clean state before each test
+        self.pool_class.shutdown(wait=True)
+
+    def tearDown(self):
+        # Clean up after each test
+        self.pool_class.shutdown(wait=True)
+
+    def test_singleton_reuse(self):
+        """Test that the same pool instance is returned for same max_workers."""
+        pool1 = self.pool_class.get_pool(4)
+        pool2 = self.pool_class.get_pool(4)
+        self.assertIs(pool1, pool2)
+
+    def test_pool_recreation_on_worker_change(self):
+        """Test that pool is recreated when max_workers changes."""
+        pool1 = self.pool_class.get_pool(4)
+        pool2 = self.pool_class.get_pool(8)
+        self.assertIsNot(pool1, pool2)
+        # New pool should have correct worker count
+        self.assertEqual(self.pool_class._max_workers, 8)
+
+    def test_shutdown_clears_instance(self):
+        """Test that shutdown clears the singleton instance."""
+        self.pool_class.get_pool(4)
+        self.assertIsNotNone(self.pool_class._instance)
+        self.pool_class.shutdown(wait=True)
+        self.assertIsNone(self.pool_class._instance)
+        self.assertEqual(self.pool_class._max_workers, 0)
+
+    def test_map_chunked_basic(self):
+        """Test basic chunked map functionality."""
+        result = self.pool_class.map_chunked(lambda x: x * 2, [1, 2, 3, 4, 5], 2)
+        self.assertEqual(result, [2, 4, 6, 8, 10])
+
+    def test_map_chunked_empty_data(self):
+        """Test chunked map with empty data."""
+        result = self.pool_class.map_chunked(lambda x: x * 2, [], 4)
+        self.assertEqual(result, [])
+
+    def test_map_chunked_preserves_order(self):
+        """Test that chunked map preserves result order."""
+        data = list(range(100))
+        result = self.pool_class.map_chunked(lambda x: x, data, 4)
+        self.assertEqual(result, data)
+
+
 if __name__ == "__main__":
     from pyspark.testing import main
 
