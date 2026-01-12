@@ -16,6 +16,126 @@ struct<abs(-5):int>
 
 
 -- !query
+SELECT BUILTIN.abs(-5)
+-- !query schema
+struct<abs(-5):int>
+-- !query output
+5
+
+
+-- !query
+SELECT System.Builtin.ABS(-5)
+-- !query schema
+struct<abs(-5):int>
+-- !query output
+5
+
+
+-- !query
+CREATE TEMPORARY FUNCTION my_func() RETURNS INT RETURN 42
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT my_func()
+-- !query schema
+struct<my_func():int>
+-- !query output
+42
+
+
+-- !query
+CREATE TEMPORARY FUNCTION session.my_func2() RETURNS STRING RETURN 'temp'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT my_func2()
+-- !query schema
+struct<my_func2():string>
+-- !query output
+temp
+
+
+-- !query
+SELECT session.my_func2()
+-- !query schema
+struct<my_func2():string>
+-- !query output
+temp
+
+
+-- !query
+CREATE TEMPORARY FUNCTION system.session.my_func3() RETURNS INT RETURN 100
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT my_func3()
+-- !query schema
+struct<my_func3():int>
+-- !query output
+100
+
+
+-- !query
+SELECT system.session.my_func3()
+-- !query schema
+struct<my_func3():int>
+-- !query output
+100
+
+
+-- !query
+SELECT SESSION.my_func()
+-- !query schema
+struct<my_func():int>
+-- !query output
+42
+
+
+-- !query
+SELECT SYSTEM.SESSION.my_func2()
+-- !query schema
+struct<my_func2():string>
+-- !query output
+temp
+
+
+-- !query
+DROP TEMPORARY FUNCTION my_func
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY FUNCTION session.my_func2
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY FUNCTION system.session.my_func3
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 CREATE TEMPORARY FUNCTION abs() RETURNS INT RETURN 999
 -- !query schema
 struct<>
@@ -32,14 +152,6 @@ struct<abs():int>
 
 
 -- !query
-SELECT system.session.abs()
--- !query schema
-struct<abs():int>
--- !query output
-999
-
-
--- !query
 SELECT session.abs()
 -- !query schema
 struct<abs():int>
@@ -48,7 +160,7 @@ struct<abs():int>
 
 
 -- !query
-SELECT system.builtin.abs(-10)
+SELECT builtin.abs(-10)
 -- !query schema
 struct<abs(-10):int>
 -- !query output
@@ -56,7 +168,7 @@ struct<abs(-10):int>
 
 
 -- !query
-SELECT builtin.abs(-10)
+SELECT system.builtin.abs(-10)
 -- !query schema
 struct<abs(-10):int>
 -- !query output
@@ -77,313 +189,6 @@ SELECT abs(-5)
 struct<abs(-5):int>
 -- !query output
 5
-
-
--- !query
-CREATE TEMPORARY FUNCTION session.my_temp() RETURNS STRING RETURN 'temp'
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-SELECT my_temp()
--- !query schema
-struct<my_temp():string>
--- !query output
-temp
-
-
--- !query
-SELECT session.my_temp()
--- !query schema
-struct<my_temp():string>
--- !query output
-temp
-
-
--- !query
-SELECT system.session.my_temp()
--- !query schema
-struct<my_temp():string>
--- !query output
-temp
-
-
--- !query
-CREATE TEMPORARY FUNCTION system.session.my_temp2() RETURNS STRING RETURN 'temp2'
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-SELECT my_temp2()
--- !query schema
-struct<my_temp2():string>
--- !query output
-temp2
-
-
--- !query
-SELECT session.my_temp2()
--- !query schema
-struct<my_temp2():string>
--- !query output
-temp2
-
-
--- !query
-SELECT system.session.my_temp2()
--- !query schema
-struct<my_temp2():string>
--- !query output
-temp2
-
-
--- !query
-DROP TEMPORARY FUNCTION session.my_temp
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-DROP TEMPORARY FUNCTION system.session.my_temp2
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-CREATE TEMPORARY FUNCTION my_func() RETURNS INT RETURN 42
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-SELECT SESSION.my_func()
--- !query schema
-struct<my_func():int>
--- !query output
-42
-
-
--- !query
-SELECT SYSTEM.SESSION.my_func()
--- !query schema
-struct<my_func():int>
--- !query output
-42
-
-
--- !query
-SELECT SyStEm.SeSsIoN.my_func()
--- !query schema
-struct<my_func():int>
--- !query output
-42
-
-
--- !query
-DROP TEMPORARY FUNCTION my_func
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-CREATE TEMPORARY FUNCTION system.builtin.my_builtin() RETURNS INT RETURN 1
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "INVALID_TEMP_OBJ_QUALIFIER",
-  "sqlState" : "42602",
-  "messageParameters" : {
-    "objectName" : "`my_builtin`",
-    "objectType" : "FUNCTION",
-    "qualifier" : "`system`.`builtin`"
-  }
-}
-
-
--- !query
-CREATE TEMPORARY FUNCTION mydb.my_func() RETURNS INT RETURN 1
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "INVALID_TEMP_OBJ_QUALIFIER",
-  "sqlState" : "42602",
-  "messageParameters" : {
-    "objectName" : "`my_func`",
-    "objectType" : "FUNCTION",
-    "qualifier" : "`mydb`"
-  }
-}
-
-
--- !query
-DROP TEMPORARY FUNCTION system.builtin.abs
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "INVALID_TEMP_OBJ_QUALIFIER",
-  "sqlState" : "42602",
-  "messageParameters" : {
-    "objectName" : "`abs`",
-    "objectType" : "FUNCTION",
-    "qualifier" : "`system`.`builtin`"
-  }
-}
-
-
--- !query
-CREATE TEMPORARY FUNCTION desc_test() RETURNS INT RETURN 100
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-DESCRIBE FUNCTION system.session.desc_test
--- !query schema
-struct<function_desc:string>
--- !query output
-Class: sqlFunction.
-Function: desc_test
-Usage: {"referredTempViewNames":"[]","sqlFunction.returnType":"INT","sqlFunction.isTableFunc":"false","sqlFunction.expression":"100","catalogAndNamespace.numParts":"2","sqlFunction.createTime":"1768243351407","sqlConfig.spark.sql.ansi.enabled":"true","referredTempFunctionsNames":"[]","sqlConfig.spark.sql.session.timeZone":"America/Los_Angeles","catalogAndNamespace.part.0":"spark_catalog","catalogAndNamespace.part.1":"default","sqlFunction.deterministic":"true","sqlConfig.spark.sql.datetime.java8API.enabled":"true","sqlFunction.containsSQL":"true","referredTempVariableNames":"[]","sqlConfig.spark.sql.collation.schemaLevel.enabled":"true","sqlConfig.spark.sql.binaryOutputStyle":"UTF-8"}
-
-
--- !query
-DESCRIBE FUNCTION session.desc_test
--- !query schema
-struct<function_desc:string>
--- !query output
-Class: sqlFunction.
-Function: desc_test
-Usage: {"referredTempViewNames":"[]","sqlFunction.returnType":"INT","sqlFunction.isTableFunc":"false","sqlFunction.expression":"100","catalogAndNamespace.numParts":"2","sqlFunction.createTime":"1768243351407","sqlConfig.spark.sql.ansi.enabled":"true","referredTempFunctionsNames":"[]","sqlConfig.spark.sql.session.timeZone":"America/Los_Angeles","catalogAndNamespace.part.0":"spark_catalog","catalogAndNamespace.part.1":"default","sqlFunction.deterministic":"true","sqlConfig.spark.sql.datetime.java8API.enabled":"true","sqlFunction.containsSQL":"true","referredTempVariableNames":"[]","sqlConfig.spark.sql.collation.schemaLevel.enabled":"true","sqlConfig.spark.sql.binaryOutputStyle":"UTF-8"}
-
-
--- !query
-DESCRIBE FUNCTION desc_test
--- !query schema
-struct<function_desc:string>
--- !query output
-Class: sqlFunction.
-Function: desc_test
-Usage: {"referredTempViewNames":"[]","sqlFunction.returnType":"INT","sqlFunction.isTableFunc":"false","sqlFunction.expression":"100","catalogAndNamespace.numParts":"2","sqlFunction.createTime":"1768243351407","sqlConfig.spark.sql.ansi.enabled":"true","referredTempFunctionsNames":"[]","sqlConfig.spark.sql.session.timeZone":"America/Los_Angeles","catalogAndNamespace.part.0":"spark_catalog","catalogAndNamespace.part.1":"default","sqlFunction.deterministic":"true","sqlConfig.spark.sql.datetime.java8API.enabled":"true","sqlFunction.containsSQL":"true","referredTempVariableNames":"[]","sqlConfig.spark.sql.collation.schemaLevel.enabled":"true","sqlConfig.spark.sql.binaryOutputStyle":"UTF-8"}
-
-
--- !query
-DROP TEMPORARY FUNCTION desc_test
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-DESCRIBE FUNCTION system.builtin.abs
--- !query schema
-struct<function_desc:string>
--- !query output
-Class: org.apache.spark.sql.catalyst.expressions.Abs
-Function: abs
-Usage: abs(expr) - Returns the absolute value of the numeric or interval value.
-
-
--- !query
-DESCRIBE FUNCTION builtin.abs
--- !query schema
-struct<function_desc:string>
--- !query output
-Class: org.apache.spark.sql.catalyst.expressions.Abs
-Function: abs
-Usage: abs(expr) - Returns the absolute value of the numeric or interval value.
-
-
--- !query
-CREATE TEMPORARY FUNCTION my_range() RETURNS TABLE(id INT) RETURN SELECT * FROM range(3)
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-SELECT * FROM my_range()
--- !query schema
-struct<id:int>
--- !query output
-0
-1
-2
-
-
--- !query
-SELECT * FROM session.my_range()
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "funcName" : "`session`.`my_range`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 32,
-    "fragment" : "session.my_range()"
-  } ]
-}
-
-
--- !query
-SELECT * FROM system.session.my_range()
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "funcName" : "`system`.`session`.`my_range`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 39,
-    "fragment" : "system.session.my_range()"
-  } ]
-}
-
-
--- !query
-DROP TEMPORARY FUNCTION my_range
--- !query schema
-struct<>
--- !query output
-
 
 
 -- !query
@@ -425,7 +230,7 @@ struct<val:int>
 
 
 -- !query
-SELECT system.builtin.abs(-5)
+SELECT builtin.abs(-5)
 -- !query schema
 struct<abs(-5):int>
 -- !query output
@@ -434,6 +239,74 @@ struct<abs(-5):int>
 
 -- !query
 DROP TEMPORARY FUNCTION abs
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY FUNCTION range() RETURNS INT RETURN 999
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT range()
+-- !query schema
+struct<range():int>
+-- !query output
+999
+
+
+-- !query
+SELECT * FROM range(5)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_TABLE_FUNCTION",
+  "sqlState" : "42887",
+  "messageParameters" : {
+    "functionName" : "`range`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 22,
+    "fragment" : "range(5)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM builtin.range(5)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "funcName" : "`builtin`.`range`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 30,
+    "fragment" : "builtin.range(5)"
+  } ]
+}
+
+
+-- !query
+DROP TEMPORARY FUNCTION range
 -- !query schema
 struct<>
 -- !query output
@@ -553,6 +426,88 @@ struct<col:int>
 
 
 -- !query
+CREATE TEMPORARY FUNCTION desc_test() RETURNS INT RETURN 100
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESCRIBE FUNCTION desc_test
+-- !query schema
+struct<function_desc:string>
+-- !query output
+Class: sqlFunction.
+Function: desc_test
+Usage: {"referredTempViewNames":"[]","sqlFunction.returnType":"INT","sqlFunction.isTableFunc":"false","sqlFunction.expression":"100","catalogAndNamespace.numParts":"2","sqlFunction.createTime":"1768243667453","sqlConfig.spark.sql.ansi.enabled":"true","referredTempFunctionsNames":"[]","sqlConfig.spark.sql.session.timeZone":"America/Los_Angeles","catalogAndNamespace.part.0":"spark_catalog","catalogAndNamespace.part.1":"default","sqlFunction.deterministic":"true","sqlConfig.spark.sql.datetime.java8API.enabled":"true","sqlFunction.containsSQL":"true","referredTempVariableNames":"[]","sqlConfig.spark.sql.collation.schemaLevel.enabled":"true","sqlConfig.spark.sql.binaryOutputStyle":"UTF-8"}
+
+
+-- !query
+DESCRIBE FUNCTION session.desc_test
+-- !query schema
+struct<function_desc:string>
+-- !query output
+Class: sqlFunction.
+Function: desc_test
+Usage: {"referredTempViewNames":"[]","sqlFunction.returnType":"INT","sqlFunction.isTableFunc":"false","sqlFunction.expression":"100","catalogAndNamespace.numParts":"2","sqlFunction.createTime":"1768243667453","sqlConfig.spark.sql.ansi.enabled":"true","referredTempFunctionsNames":"[]","sqlConfig.spark.sql.session.timeZone":"America/Los_Angeles","catalogAndNamespace.part.0":"spark_catalog","catalogAndNamespace.part.1":"default","sqlFunction.deterministic":"true","sqlConfig.spark.sql.datetime.java8API.enabled":"true","sqlFunction.containsSQL":"true","referredTempVariableNames":"[]","sqlConfig.spark.sql.collation.schemaLevel.enabled":"true","sqlConfig.spark.sql.binaryOutputStyle":"UTF-8"}
+
+
+-- !query
+DESCRIBE FUNCTION system.session.desc_test
+-- !query schema
+struct<function_desc:string>
+-- !query output
+Class: sqlFunction.
+Function: desc_test
+Usage: {"referredTempViewNames":"[]","sqlFunction.returnType":"INT","sqlFunction.isTableFunc":"false","sqlFunction.expression":"100","catalogAndNamespace.numParts":"2","sqlFunction.createTime":"1768243667453","sqlConfig.spark.sql.ansi.enabled":"true","referredTempFunctionsNames":"[]","sqlConfig.spark.sql.session.timeZone":"America/Los_Angeles","catalogAndNamespace.part.0":"spark_catalog","catalogAndNamespace.part.1":"default","sqlFunction.deterministic":"true","sqlConfig.spark.sql.datetime.java8API.enabled":"true","sqlFunction.containsSQL":"true","referredTempVariableNames":"[]","sqlConfig.spark.sql.collation.schemaLevel.enabled":"true","sqlConfig.spark.sql.binaryOutputStyle":"UTF-8"}
+
+
+-- !query
+DROP TEMPORARY FUNCTION desc_test
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DESCRIBE FUNCTION builtin.abs
+-- !query schema
+struct<function_desc:string>
+-- !query output
+Class: org.apache.spark.sql.catalyst.expressions.Abs
+Function: abs
+Usage: abs(expr) - Returns the absolute value of the numeric or interval value.
+
+
+-- !query
+DESCRIBE FUNCTION system.builtin.abs
+-- !query schema
+struct<function_desc:string>
+-- !query output
+Class: org.apache.spark.sql.catalyst.expressions.Abs
+Function: abs
+Usage: abs(expr) - Returns the absolute value of the numeric or interval value.
+
+
+-- !query
+CREATE TEMPORARY FUNCTION drop_test() RETURNS INT RETURN 1
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY FUNCTION session.drop_test
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 CREATE TEMPORARY FUNCTION replace_test() RETURNS INT RETURN 1
 -- !query schema
 struct<>
@@ -586,6 +541,46 @@ struct<replace_test():int>
 
 -- !query
 DROP TEMPORARY FUNCTION replace_test
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY FUNCTION type_change() RETURNS INT RETURN 42
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT type_change()
+-- !query schema
+struct<type_change():int>
+-- !query output
+42
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY FUNCTION type_change() RETURNS TABLE(val INT) RETURN SELECT 99
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM type_change()
+-- !query schema
+struct<val:int>
+-- !query output
+99
+
+
+-- !query
+DROP TEMPORARY FUNCTION type_change
 -- !query schema
 struct<>
 -- !query output
@@ -692,7 +687,7 @@ org.apache.spark.sql.catalyst.analysis.NoSuchTempFunctionException
 
 
 -- !query
-CREATE TEMPORARY FUNCTION add10(x INT) RETURNS INT RETURN x + 10
+CREATE TEMPORARY FUNCTION show_test() RETURNS INT RETURN 1
 -- !query schema
 struct<>
 -- !query output
@@ -700,99 +695,23 @@ struct<>
 
 
 -- !query
-SELECT builtin.abs(-5), session.add10(5), system.builtin.upper('hello')
+SHOW FUNCTIONS LIKE 'show_test'
 -- !query schema
-struct<abs(-5):int,add10(5):int,upper(hello):string>
+struct<function:string>
 -- !query output
-5	15	HELLO
+show_test
 
 
 -- !query
-DROP TEMPORARY FUNCTION add10
+SHOW FUNCTIONS LIKE 'abs'
 -- !query schema
-struct<>
+struct<function:string>
 -- !query output
-
+abs
 
 
 -- !query
-CREATE TEMPORARY FUNCTION my_avg(x DOUBLE) RETURNS DOUBLE RETURN avg(x)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "USER_DEFINED_FUNCTIONS.CANNOT_CONTAIN_COMPLEX_FUNCTIONS",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "queryText" : "avg(x)"
-  }
-}
-
-
--- !query
-SELECT session.my_avg(value) FROM VALUES (1.0), (2.0), (3.0) AS t(value)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_ROUTINE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "routineName" : "`session`.`my_avg`",
-    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 28,
-    "fragment" : "session.my_avg(value)"
-  } ]
-}
-
-
--- !query
-DROP TEMPORARY FUNCTION my_avg
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.analysis.NoSuchTempFunctionException
-{
-  "errorClass" : "ROUTINE_NOT_FOUND",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "routineName" : "`my_avg`"
-  }
-}
-
-
--- !query
-SELECT non_existent_func()
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_ROUTINE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "routineName" : "`non_existent_func`",
-    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 26,
-    "fragment" : "non_existent_func()"
-  } ]
-}
-
-
--- !query
-CREATE TEMPORARY FUNCTION range() RETURNS INT RETURN 999
+DROP TEMPORARY FUNCTION show_test
 -- !query schema
 struct<>
 -- !query output
@@ -800,95 +719,54 @@ struct<>
 
 
 -- !query
-SELECT range()
--- !query schema
-struct<range():int>
--- !query output
-999
-
-
--- !query
-SELECT * FROM range(5)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "NOT_A_TABLE_FUNCTION",
-  "sqlState" : "42887",
-  "messageParameters" : {
-    "functionName" : "`range`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 22,
-    "fragment" : "range(5)"
-  } ]
-}
-
-
--- !query
-SELECT * FROM builtin.range(5)
+CREATE TEMPORARY FUNCTION system.builtin.my_builtin() RETURNS INT RETURN 1
 -- !query schema
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
-  "sqlState" : "42000",
+  "errorClass" : "INVALID_TEMP_OBJ_QUALIFIER",
+  "sqlState" : "42602",
   "messageParameters" : {
-    "funcName" : "`builtin`.`range`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 30,
-    "fragment" : "builtin.range(5)"
-  } ]
+    "objectName" : "`my_builtin`",
+    "objectType" : "FUNCTION",
+    "qualifier" : "`system`.`builtin`"
+  }
 }
 
 
 -- !query
-DROP TEMPORARY FUNCTION range
+CREATE TEMPORARY FUNCTION mydb.my_func() RETURNS INT RETURN 1
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_QUALIFIER",
+  "sqlState" : "42602",
+  "messageParameters" : {
+    "objectName" : "`my_func`",
+    "objectType" : "FUNCTION",
+    "qualifier" : "`mydb`"
+  }
+}
 
 
 -- !query
-CREATE TEMPORARY FUNCTION abs() RETURNS INT RETURN 888
+DROP TEMPORARY FUNCTION system.builtin.abs
 -- !query schema
 struct<>
 -- !query output
-
-
-
--- !query
-SELECT abs()
--- !query schema
-struct<abs():int>
--- !query output
-888
-
-
--- !query
-SELECT builtin.abs(-42)
--- !query schema
-struct<abs(-42):int>
--- !query output
-42
-
-
--- !query
-DROP TEMPORARY FUNCTION abs
--- !query schema
-struct<>
--- !query output
-
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_QUALIFIER",
+  "sqlState" : "42602",
+  "messageParameters" : {
+    "objectName" : "`abs`",
+    "objectType" : "FUNCTION",
+    "qualifier" : "`system`.`builtin`"
+  }
+}
 
 
 -- !query
@@ -917,27 +795,34 @@ org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
 
 
 -- !query
-CREATE OR REPLACE TEMPORARY FUNCTION dup_test() RETURNS TABLE(val INT) RETURN SELECT 99
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-SELECT * FROM dup_test()
--- !query schema
-struct<val:int>
--- !query output
-99
-
-
--- !query
 DROP TEMPORARY FUNCTION dup_test
 -- !query schema
 struct<>
 -- !query output
 
+
+
+-- !query
+SELECT non_existent_func()
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNRESOLVED_ROUTINE",
+  "sqlState" : "42883",
+  "messageParameters" : {
+    "routineName" : "`non_existent_func`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 26,
+    "fragment" : "non_existent_func()"
+  } ]
+}
 
 
 -- !query
@@ -1157,7 +1042,7 @@ struct<>
 
 
 -- !query
-CREATE TEMPORARY FUNCTION show_test() RETURNS INT RETURN 1
+CREATE TEMPORARY FUNCTION add10(x INT) RETURNS INT RETURN x + 10
 -- !query schema
 struct<>
 -- !query output
@@ -1165,23 +1050,138 @@ struct<>
 
 
 -- !query
-SHOW FUNCTIONS LIKE 'show_test'
+SELECT builtin.abs(-5), session.add10(5), system.builtin.upper('hello')
 -- !query schema
-struct<function:string>
+struct<abs(-5):int,add10(5):int,upper(hello):string>
 -- !query output
-show_test
+5	15	HELLO
 
 
 -- !query
-SHOW FUNCTIONS LIKE 'abs'
+DROP TEMPORARY FUNCTION add10
 -- !query schema
-struct<function:string>
+struct<>
 -- !query output
-abs
+
 
 
 -- !query
-DROP TEMPORARY FUNCTION show_test
+CREATE TEMPORARY FUNCTION my_avg(x DOUBLE) RETURNS DOUBLE RETURN avg(x)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "USER_DEFINED_FUNCTIONS.CANNOT_CONTAIN_COMPLEX_FUNCTIONS",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "queryText" : "avg(x)"
+  }
+}
+
+
+-- !query
+SELECT session.my_avg(value) FROM VALUES (1.0), (2.0), (3.0) AS t(value)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNRESOLVED_ROUTINE",
+  "sqlState" : "42883",
+  "messageParameters" : {
+    "routineName" : "`session`.`my_avg`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "session.my_avg(value)"
+  } ]
+}
+
+
+-- !query
+DROP TEMPORARY FUNCTION my_avg
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.analysis.NoSuchTempFunctionException
+{
+  "errorClass" : "ROUTINE_NOT_FOUND",
+  "sqlState" : "42883",
+  "messageParameters" : {
+    "routineName" : "`my_avg`"
+  }
+}
+
+
+-- !query
+CREATE TEMPORARY FUNCTION my_range() RETURNS TABLE(id INT) RETURN SELECT * FROM range(3)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT * FROM my_range()
+-- !query schema
+struct<id:int>
+-- !query output
+0
+1
+2
+
+
+-- !query
+SELECT * FROM session.my_range()
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "funcName" : "`session`.`my_range`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 32,
+    "fragment" : "session.my_range()"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM system.session.my_range()
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "funcName" : "`system`.`session`.`my_range`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 39,
+    "fragment" : "system.session.my_range()"
+  } ]
+}
+
+
+-- !query
+DROP TEMPORARY FUNCTION my_range
 -- !query schema
 struct<>
 -- !query output

@@ -14,6 +14,112 @@ Project [abs(-5) AS abs(-5)#x]
 
 
 -- !query
+SELECT BUILTIN.abs(-5)
+-- !query analysis
+Project [abs(-5) AS abs(-5)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT System.Builtin.ABS(-5)
+-- !query analysis
+Project [abs(-5) AS abs(-5)#x]
++- OneRowRelation
+
+
+-- !query
+CREATE TEMPORARY FUNCTION my_func() RETURNS INT RETURN 42
+-- !query analysis
+CreateSQLFunctionCommand my_func, INT, 42, false, true, false, false
+
+
+-- !query
+SELECT my_func()
+-- !query analysis
+Project [my_func() AS my_func()#x]
++- Project
+   +- OneRowRelation
+
+
+-- !query
+CREATE TEMPORARY FUNCTION session.my_func2() RETURNS STRING RETURN 'temp'
+-- !query analysis
+CreateSQLFunctionCommand my_func2, STRING, 'temp', false, true, false, false
+
+
+-- !query
+SELECT my_func2()
+-- !query analysis
+Project [my_func2() AS my_func2()#x]
++- Project
+   +- OneRowRelation
+
+
+-- !query
+SELECT session.my_func2()
+-- !query analysis
+Project [my_func2() AS my_func2()#x]
++- Project
+   +- OneRowRelation
+
+
+-- !query
+CREATE TEMPORARY FUNCTION system.session.my_func3() RETURNS INT RETURN 100
+-- !query analysis
+CreateSQLFunctionCommand my_func3, INT, 100, false, true, false, false
+
+
+-- !query
+SELECT my_func3()
+-- !query analysis
+Project [my_func3() AS my_func3()#x]
++- Project
+   +- OneRowRelation
+
+
+-- !query
+SELECT system.session.my_func3()
+-- !query analysis
+Project [my_func3() AS my_func3()#x]
++- Project
+   +- OneRowRelation
+
+
+-- !query
+SELECT SESSION.my_func()
+-- !query analysis
+Project [my_func() AS my_func()#x]
++- Project
+   +- OneRowRelation
+
+
+-- !query
+SELECT SYSTEM.SESSION.my_func2()
+-- !query analysis
+Project [my_func2() AS my_func2()#x]
++- Project
+   +- OneRowRelation
+
+
+-- !query
+DROP TEMPORARY FUNCTION my_func
+-- !query analysis
+DropFunctionCommand my_func, false, true
+
+
+-- !query
+DROP TEMPORARY FUNCTION session.my_func2
+-- !query analysis
+DropFunctionCommand my_func2, false, true
+
+
+-- !query
+DROP TEMPORARY FUNCTION system.session.my_func3
+-- !query analysis
+DropFunctionCommand my_func3, false, true
+
+
+-- !query
 CREATE TEMPORARY FUNCTION abs() RETURNS INT RETURN 999
 -- !query analysis
 CreateSQLFunctionCommand abs, INT, 999, false, true, false, false
@@ -21,14 +127,6 @@ CreateSQLFunctionCommand abs, INT, 999, false, true, false, false
 
 -- !query
 SELECT abs()
--- !query analysis
-Project [abs() AS abs()#x]
-+- Project
-   +- OneRowRelation
-
-
--- !query
-SELECT system.session.abs()
 -- !query analysis
 Project [abs() AS abs()#x]
 +- Project
@@ -44,14 +142,14 @@ Project [abs() AS abs()#x]
 
 
 -- !query
-SELECT system.builtin.abs(-10)
+SELECT builtin.abs(-10)
 -- !query analysis
 Project [abs(-10) AS abs(-10)#x]
 +- OneRowRelation
 
 
 -- !query
-SELECT builtin.abs(-10)
+SELECT system.builtin.abs(-10)
 -- !query analysis
 Project [abs(-10) AS abs(-10)#x]
 +- OneRowRelation
@@ -68,264 +166,6 @@ SELECT abs(-5)
 -- !query analysis
 Project [abs(-5) AS abs(-5)#x]
 +- OneRowRelation
-
-
--- !query
-CREATE TEMPORARY FUNCTION session.my_temp() RETURNS STRING RETURN 'temp'
--- !query analysis
-CreateSQLFunctionCommand my_temp, STRING, 'temp', false, true, false, false
-
-
--- !query
-SELECT my_temp()
--- !query analysis
-Project [my_temp() AS my_temp()#x]
-+- Project
-   +- OneRowRelation
-
-
--- !query
-SELECT session.my_temp()
--- !query analysis
-Project [my_temp() AS my_temp()#x]
-+- Project
-   +- OneRowRelation
-
-
--- !query
-SELECT system.session.my_temp()
--- !query analysis
-Project [my_temp() AS my_temp()#x]
-+- Project
-   +- OneRowRelation
-
-
--- !query
-CREATE TEMPORARY FUNCTION system.session.my_temp2() RETURNS STRING RETURN 'temp2'
--- !query analysis
-CreateSQLFunctionCommand my_temp2, STRING, 'temp2', false, true, false, false
-
-
--- !query
-SELECT my_temp2()
--- !query analysis
-Project [my_temp2() AS my_temp2()#x]
-+- Project
-   +- OneRowRelation
-
-
--- !query
-SELECT session.my_temp2()
--- !query analysis
-Project [my_temp2() AS my_temp2()#x]
-+- Project
-   +- OneRowRelation
-
-
--- !query
-SELECT system.session.my_temp2()
--- !query analysis
-Project [my_temp2() AS my_temp2()#x]
-+- Project
-   +- OneRowRelation
-
-
--- !query
-DROP TEMPORARY FUNCTION session.my_temp
--- !query analysis
-DropFunctionCommand my_temp, false, true
-
-
--- !query
-DROP TEMPORARY FUNCTION system.session.my_temp2
--- !query analysis
-DropFunctionCommand my_temp2, false, true
-
-
--- !query
-CREATE TEMPORARY FUNCTION my_func() RETURNS INT RETURN 42
--- !query analysis
-CreateSQLFunctionCommand my_func, INT, 42, false, true, false, false
-
-
--- !query
-SELECT SESSION.my_func()
--- !query analysis
-Project [my_func() AS my_func()#x]
-+- Project
-   +- OneRowRelation
-
-
--- !query
-SELECT SYSTEM.SESSION.my_func()
--- !query analysis
-Project [my_func() AS my_func()#x]
-+- Project
-   +- OneRowRelation
-
-
--- !query
-SELECT SyStEm.SeSsIoN.my_func()
--- !query analysis
-Project [my_func() AS my_func()#x]
-+- Project
-   +- OneRowRelation
-
-
--- !query
-DROP TEMPORARY FUNCTION my_func
--- !query analysis
-DropFunctionCommand my_func, false, true
-
-
--- !query
-CREATE TEMPORARY FUNCTION system.builtin.my_builtin() RETURNS INT RETURN 1
--- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "INVALID_TEMP_OBJ_QUALIFIER",
-  "sqlState" : "42602",
-  "messageParameters" : {
-    "objectName" : "`my_builtin`",
-    "objectType" : "FUNCTION",
-    "qualifier" : "`system`.`builtin`"
-  }
-}
-
-
--- !query
-CREATE TEMPORARY FUNCTION mydb.my_func() RETURNS INT RETURN 1
--- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "INVALID_TEMP_OBJ_QUALIFIER",
-  "sqlState" : "42602",
-  "messageParameters" : {
-    "objectName" : "`my_func`",
-    "objectType" : "FUNCTION",
-    "qualifier" : "`mydb`"
-  }
-}
-
-
--- !query
-DROP TEMPORARY FUNCTION system.builtin.abs
--- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "INVALID_TEMP_OBJ_QUALIFIER",
-  "sqlState" : "42602",
-  "messageParameters" : {
-    "objectName" : "`abs`",
-    "objectType" : "FUNCTION",
-    "qualifier" : "`system`.`builtin`"
-  }
-}
-
-
--- !query
-CREATE TEMPORARY FUNCTION desc_test() RETURNS INT RETURN 100
--- !query analysis
-CreateSQLFunctionCommand desc_test, INT, 100, false, true, false, false
-
-
--- !query
-DESCRIBE FUNCTION system.session.desc_test
--- !query analysis
-DescribeFunctionCommand org.apache.spark.sql.catalyst.expressions.ExpressionInfo@xxxxxxxx, false
-
-
--- !query
-DESCRIBE FUNCTION session.desc_test
--- !query analysis
-DescribeFunctionCommand org.apache.spark.sql.catalyst.expressions.ExpressionInfo@xxxxxxxx, false
-
-
--- !query
-DESCRIBE FUNCTION desc_test
--- !query analysis
-DescribeFunctionCommand org.apache.spark.sql.catalyst.expressions.ExpressionInfo@xxxxxxxx, false
-
-
--- !query
-DROP TEMPORARY FUNCTION desc_test
--- !query analysis
-DropFunctionCommand desc_test, false, true
-
-
--- !query
-DESCRIBE FUNCTION system.builtin.abs
--- !query analysis
-DescribeFunctionCommand org.apache.spark.sql.catalyst.expressions.ExpressionInfo@xxxxxxxx, false
-
-
--- !query
-DESCRIBE FUNCTION builtin.abs
--- !query analysis
-DescribeFunctionCommand org.apache.spark.sql.catalyst.expressions.ExpressionInfo@xxxxxxxx, false
-
-
--- !query
-CREATE TEMPORARY FUNCTION my_range() RETURNS TABLE(id INT) RETURN SELECT * FROM range(3)
--- !query analysis
-CreateSQLFunctionCommand my_range, id INT, SELECT * FROM range(3), true, true, false, false
-
-
--- !query
-SELECT * FROM my_range()
--- !query analysis
-Project [id#x]
-+- SQLFunctionNode my_range
-   +- SubqueryAlias my_range
-      +- Project [cast(id#xL as int) AS id#x]
-         +- Project [id#xL]
-            +- Range (0, 3, step=1)
-
-
--- !query
-SELECT * FROM session.my_range()
--- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "funcName" : "`session`.`my_range`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 32,
-    "fragment" : "session.my_range()"
-  } ]
-}
-
-
--- !query
-SELECT * FROM system.session.my_range()
--- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "funcName" : "`system`.`session`.`my_range`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 39,
-    "fragment" : "system.session.my_range()"
-  } ]
-}
-
-
--- !query
-DROP TEMPORARY FUNCTION my_range
--- !query analysis
-DropFunctionCommand my_range, false, true
 
 
 -- !query
@@ -366,7 +206,7 @@ Project [val#x]
 
 
 -- !query
-SELECT system.builtin.abs(-5)
+SELECT builtin.abs(-5)
 -- !query analysis
 Project [abs(-5) AS abs(-5)#x]
 +- OneRowRelation
@@ -376,6 +216,66 @@ Project [abs(-5) AS abs(-5)#x]
 DROP TEMPORARY FUNCTION abs
 -- !query analysis
 DropFunctionCommand abs, false, true
+
+
+-- !query
+CREATE TEMPORARY FUNCTION range() RETURNS INT RETURN 999
+-- !query analysis
+CreateSQLFunctionCommand range, INT, 999, false, true, false, false
+
+
+-- !query
+SELECT range()
+-- !query analysis
+Project [range() AS range()#x]
++- Project
+   +- OneRowRelation
+
+
+-- !query
+SELECT * FROM range(5)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "NOT_A_TABLE_FUNCTION",
+  "sqlState" : "42887",
+  "messageParameters" : {
+    "functionName" : "`range`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 22,
+    "fragment" : "range(5)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM builtin.range(5)
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "funcName" : "`builtin`.`range`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 30,
+    "fragment" : "builtin.range(5)"
+  } ]
+}
+
+
+-- !query
+DROP TEMPORARY FUNCTION range
+-- !query analysis
+DropFunctionCommand range, false, true
 
 
 -- !query
@@ -478,6 +378,60 @@ Project [col#x]
 
 
 -- !query
+CREATE TEMPORARY FUNCTION desc_test() RETURNS INT RETURN 100
+-- !query analysis
+CreateSQLFunctionCommand desc_test, INT, 100, false, true, false, false
+
+
+-- !query
+DESCRIBE FUNCTION desc_test
+-- !query analysis
+DescribeFunctionCommand org.apache.spark.sql.catalyst.expressions.ExpressionInfo@xxxxxxxx, false
+
+
+-- !query
+DESCRIBE FUNCTION session.desc_test
+-- !query analysis
+DescribeFunctionCommand org.apache.spark.sql.catalyst.expressions.ExpressionInfo@xxxxxxxx, false
+
+
+-- !query
+DESCRIBE FUNCTION system.session.desc_test
+-- !query analysis
+DescribeFunctionCommand org.apache.spark.sql.catalyst.expressions.ExpressionInfo@xxxxxxxx, false
+
+
+-- !query
+DROP TEMPORARY FUNCTION desc_test
+-- !query analysis
+DropFunctionCommand desc_test, false, true
+
+
+-- !query
+DESCRIBE FUNCTION builtin.abs
+-- !query analysis
+DescribeFunctionCommand org.apache.spark.sql.catalyst.expressions.ExpressionInfo@xxxxxxxx, false
+
+
+-- !query
+DESCRIBE FUNCTION system.builtin.abs
+-- !query analysis
+DescribeFunctionCommand org.apache.spark.sql.catalyst.expressions.ExpressionInfo@xxxxxxxx, false
+
+
+-- !query
+CREATE TEMPORARY FUNCTION drop_test() RETURNS INT RETURN 1
+-- !query analysis
+CreateSQLFunctionCommand drop_test, INT, 1, false, true, false, false
+
+
+-- !query
+DROP TEMPORARY FUNCTION session.drop_test
+-- !query analysis
+DropFunctionCommand drop_test, false, true
+
+
+-- !query
 CREATE TEMPORARY FUNCTION replace_test() RETURNS INT RETURN 1
 -- !query analysis
 CreateSQLFunctionCommand replace_test, INT, 1, false, true, false, false
@@ -509,6 +463,43 @@ Project [replace_test() AS replace_test()#x]
 DROP TEMPORARY FUNCTION replace_test
 -- !query analysis
 DropFunctionCommand replace_test, false, true
+
+
+-- !query
+CREATE TEMPORARY FUNCTION type_change() RETURNS INT RETURN 42
+-- !query analysis
+CreateSQLFunctionCommand type_change, INT, 42, false, true, false, false
+
+
+-- !query
+SELECT type_change()
+-- !query analysis
+Project [type_change() AS type_change()#x]
++- Project
+   +- OneRowRelation
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY FUNCTION type_change() RETURNS TABLE(val INT) RETURN SELECT 99
+-- !query analysis
+CreateSQLFunctionCommand type_change, val INT, SELECT 99, true, true, false, true
+
+
+-- !query
+SELECT * FROM type_change()
+-- !query analysis
+Project [val#x]
++- SQLFunctionNode type_change
+   +- SubqueryAlias type_change
+      +- Project [cast(99#x as int) AS val#x]
+         +- Project [99 AS 99#x]
+            +- OneRowRelation
+
+
+-- !query
+DROP TEMPORARY FUNCTION type_change
+-- !query analysis
+DropFunctionCommand type_change, false, true
 
 
 -- !query
@@ -601,178 +592,72 @@ org.apache.spark.sql.catalyst.analysis.NoSuchTempFunctionException
 
 
 -- !query
-CREATE TEMPORARY FUNCTION add10(x INT) RETURNS INT RETURN x + 10
+CREATE TEMPORARY FUNCTION show_test() RETURNS INT RETURN 1
 -- !query analysis
-CreateSQLFunctionCommand add10, x INT, INT, x + 10, false, true, false, false
+CreateSQLFunctionCommand show_test, INT, 1, false, true, false, false
 
 
 -- !query
-SELECT builtin.abs(-5), session.add10(5), system.builtin.upper('hello')
+SHOW FUNCTIONS LIKE 'show_test'
 -- !query analysis
-Project [abs(-5) AS abs(-5)#x, add10(x#x) AS add10(5)#x, upper(hello) AS upper(hello)#x]
-+- Project [cast(5 as int) AS x#x]
-   +- OneRowRelation
+ShowFunctionsCommand default, show_test, true, true, [function#x]
 
 
 -- !query
-DROP TEMPORARY FUNCTION add10
+SHOW FUNCTIONS LIKE 'abs'
 -- !query analysis
-DropFunctionCommand add10, false, true
+ShowFunctionsCommand default, abs, true, true, [function#x]
 
 
 -- !query
-CREATE TEMPORARY FUNCTION my_avg(x DOUBLE) RETURNS DOUBLE RETURN avg(x)
+DROP TEMPORARY FUNCTION show_test
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "USER_DEFINED_FUNCTIONS.CANNOT_CONTAIN_COMPLEX_FUNCTIONS",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "queryText" : "avg(x)"
-  }
-}
+DropFunctionCommand show_test, false, true
 
 
 -- !query
-SELECT session.my_avg(value) FROM VALUES (1.0), (2.0), (3.0) AS t(value)
--- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_ROUTINE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "routineName" : "`session`.`my_avg`",
-    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 28,
-    "fragment" : "session.my_avg(value)"
-  } ]
-}
-
-
--- !query
-DROP TEMPORARY FUNCTION my_avg
--- !query analysis
-org.apache.spark.sql.catalyst.analysis.NoSuchTempFunctionException
-{
-  "errorClass" : "ROUTINE_NOT_FOUND",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "routineName" : "`my_avg`"
-  }
-}
-
-
--- !query
-SELECT non_existent_func()
--- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_ROUTINE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "routineName" : "`non_existent_func`",
-    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 26,
-    "fragment" : "non_existent_func()"
-  } ]
-}
-
-
--- !query
-CREATE TEMPORARY FUNCTION range() RETURNS INT RETURN 999
--- !query analysis
-CreateSQLFunctionCommand range, INT, 999, false, true, false, false
-
-
--- !query
-SELECT range()
--- !query analysis
-Project [range() AS range()#x]
-+- Project
-   +- OneRowRelation
-
-
--- !query
-SELECT * FROM range(5)
--- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "NOT_A_TABLE_FUNCTION",
-  "sqlState" : "42887",
-  "messageParameters" : {
-    "functionName" : "`range`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 22,
-    "fragment" : "range(5)"
-  } ]
-}
-
-
--- !query
-SELECT * FROM builtin.range(5)
+CREATE TEMPORARY FUNCTION system.builtin.my_builtin() RETURNS INT RETURN 1
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
-  "sqlState" : "42000",
+  "errorClass" : "INVALID_TEMP_OBJ_QUALIFIER",
+  "sqlState" : "42602",
   "messageParameters" : {
-    "funcName" : "`builtin`.`range`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 15,
-    "stopIndex" : 30,
-    "fragment" : "builtin.range(5)"
-  } ]
+    "objectName" : "`my_builtin`",
+    "objectType" : "FUNCTION",
+    "qualifier" : "`system`.`builtin`"
+  }
 }
 
 
 -- !query
-DROP TEMPORARY FUNCTION range
+CREATE TEMPORARY FUNCTION mydb.my_func() RETURNS INT RETURN 1
 -- !query analysis
-DropFunctionCommand range, false, true
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_QUALIFIER",
+  "sqlState" : "42602",
+  "messageParameters" : {
+    "objectName" : "`my_func`",
+    "objectType" : "FUNCTION",
+    "qualifier" : "`mydb`"
+  }
+}
 
 
 -- !query
-CREATE TEMPORARY FUNCTION abs() RETURNS INT RETURN 888
+DROP TEMPORARY FUNCTION system.builtin.abs
 -- !query analysis
-CreateSQLFunctionCommand abs, INT, 888, false, true, false, false
-
-
--- !query
-SELECT abs()
--- !query analysis
-Project [abs() AS abs()#x]
-+- Project
-   +- OneRowRelation
-
-
--- !query
-SELECT builtin.abs(-42)
--- !query analysis
-Project [abs(-42) AS abs(-42)#x]
-+- OneRowRelation
-
-
--- !query
-DROP TEMPORARY FUNCTION abs
--- !query analysis
-DropFunctionCommand abs, false, true
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_TEMP_OBJ_QUALIFIER",
+  "sqlState" : "42602",
+  "messageParameters" : {
+    "objectName" : "`abs`",
+    "objectType" : "FUNCTION",
+    "qualifier" : "`system`.`builtin`"
+  }
+}
 
 
 -- !query
@@ -797,26 +682,30 @@ org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException
 
 
 -- !query
-CREATE OR REPLACE TEMPORARY FUNCTION dup_test() RETURNS TABLE(val INT) RETURN SELECT 99
--- !query analysis
-CreateSQLFunctionCommand dup_test, val INT, SELECT 99, true, true, false, true
-
-
--- !query
-SELECT * FROM dup_test()
--- !query analysis
-Project [val#x]
-+- SQLFunctionNode dup_test
-   +- SubqueryAlias dup_test
-      +- Project [cast(99#x as int) AS val#x]
-         +- Project [99 AS 99#x]
-            +- OneRowRelation
-
-
--- !query
 DROP TEMPORARY FUNCTION dup_test
 -- !query analysis
 DropFunctionCommand dup_test, false, true
+
+
+-- !query
+SELECT non_existent_func()
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNRESOLVED_ROUTINE",
+  "sqlState" : "42883",
+  "messageParameters" : {
+    "routineName" : "`non_existent_func`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 26,
+    "fragment" : "non_existent_func()"
+  } ]
+}
 
 
 -- !query
@@ -1036,24 +925,130 @@ DropFunctionCommand nested_func, false, true
 
 
 -- !query
-CREATE TEMPORARY FUNCTION show_test() RETURNS INT RETURN 1
+CREATE TEMPORARY FUNCTION add10(x INT) RETURNS INT RETURN x + 10
 -- !query analysis
-CreateSQLFunctionCommand show_test, INT, 1, false, true, false, false
+CreateSQLFunctionCommand add10, x INT, INT, x + 10, false, true, false, false
 
 
 -- !query
-SHOW FUNCTIONS LIKE 'show_test'
+SELECT builtin.abs(-5), session.add10(5), system.builtin.upper('hello')
 -- !query analysis
-ShowFunctionsCommand default, show_test, true, true, [function#x]
+Project [abs(-5) AS abs(-5)#x, add10(x#x) AS add10(5)#x, upper(hello) AS upper(hello)#x]
++- Project [cast(5 as int) AS x#x]
+   +- OneRowRelation
 
 
 -- !query
-SHOW FUNCTIONS LIKE 'abs'
+DROP TEMPORARY FUNCTION add10
 -- !query analysis
-ShowFunctionsCommand default, abs, true, true, [function#x]
+DropFunctionCommand add10, false, true
 
 
 -- !query
-DROP TEMPORARY FUNCTION show_test
+CREATE TEMPORARY FUNCTION my_avg(x DOUBLE) RETURNS DOUBLE RETURN avg(x)
 -- !query analysis
-DropFunctionCommand show_test, false, true
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "USER_DEFINED_FUNCTIONS.CANNOT_CONTAIN_COMPLEX_FUNCTIONS",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "queryText" : "avg(x)"
+  }
+}
+
+
+-- !query
+SELECT session.my_avg(value) FROM VALUES (1.0), (2.0), (3.0) AS t(value)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNRESOLVED_ROUTINE",
+  "sqlState" : "42883",
+  "messageParameters" : {
+    "routineName" : "`session`.`my_avg`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "session.my_avg(value)"
+  } ]
+}
+
+
+-- !query
+DROP TEMPORARY FUNCTION my_avg
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.NoSuchTempFunctionException
+{
+  "errorClass" : "ROUTINE_NOT_FOUND",
+  "sqlState" : "42883",
+  "messageParameters" : {
+    "routineName" : "`my_avg`"
+  }
+}
+
+
+-- !query
+CREATE TEMPORARY FUNCTION my_range() RETURNS TABLE(id INT) RETURN SELECT * FROM range(3)
+-- !query analysis
+CreateSQLFunctionCommand my_range, id INT, SELECT * FROM range(3), true, true, false, false
+
+
+-- !query
+SELECT * FROM my_range()
+-- !query analysis
+Project [id#x]
++- SQLFunctionNode my_range
+   +- SubqueryAlias my_range
+      +- Project [cast(id#xL as int) AS id#x]
+         +- Project [id#xL]
+            +- Range (0, 3, step=1)
+
+
+-- !query
+SELECT * FROM session.my_range()
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "funcName" : "`session`.`my_range`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 32,
+    "fragment" : "session.my_range()"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM system.session.my_range()
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "funcName" : "`system`.`session`.`my_range`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 39,
+    "fragment" : "system.session.my_range()"
+  } ]
+}
+
+
+-- !query
+DROP TEMPORARY FUNCTION my_range
+-- !query analysis
+DropFunctionCommand my_range, false, true
