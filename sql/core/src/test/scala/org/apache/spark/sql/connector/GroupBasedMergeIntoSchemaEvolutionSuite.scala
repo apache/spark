@@ -19,10 +19,12 @@ package org.apache.spark.sql.connector
 
 // SQL-based tests for group-based row-level operations
 class GroupBasedMergeIntoSchemaEvolutionSQLSuite
-  extends MergeIntoSchemaEvolutionSQLSuiteBase {
+  extends MergeIntoSchemaEvolutionSQLSuiteBase
+  with MergeIntoSchemaEvolutionTests {
 }
 
 // Scala/DataFrame API-based tests for group-based row-level operations
 class GroupBasedMergeIntoSchemaEvolutionScalaSuite
-  extends MergeIntoSchemaEvolutionScalaSuiteBase {
+  extends MergeIntoSchemaEvolutionScalaSuiteBase
+  with MergeIntoSchemaEvolutionTests {
 }
