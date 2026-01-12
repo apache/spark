@@ -31,6 +31,7 @@
 # - ASF_NEXUS_TOKEN:
 #     ASF Nexus API token associated with your ASF account.
 #     Can be found in https://repository.apache.org/#profile;User%20Token
+#     It is written in `<password>...</password>` and ignore `User Code`.
 #
 # - GPG_PRIVATE_KEY:
 #     Your GPG private key, exported using:
