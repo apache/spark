@@ -357,6 +357,13 @@ object OptimizeIn extends Rule[LogicalPlan] {
  * 4. Removes `Not` operator.
  */
 object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsAnyPattern(AND, OR, NOT), ruleId) {
+    case q: LogicalPlan => q.transformExpressionsUpWithPruning(
+      _.containsAnyPattern(AND, OR, NOT), ruleId) {
+      actualExprTransformer
+    }
+  }
 
   val actualExprTransformer: PartialFunction[Expression, Expression] = {
     case TrueLiteral And e => e
@@ -499,6 +506,9 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
     case Not(a LessThan b) => GreaterThanOrEqual(a, b)
     case Not(a LessThanOrEqual b) => GreaterThan(a, b)
 
+    // SPARK-54881: push down the NOT operators on children, before attaching the junction Node
+    // to the main tree. This ensures idempotency in an optimal way and avoids an extra rule
+    // iteration.
     case Not(a Or b) =>
       And(Not(a), Not(b)).transformDownWithPruning(_.containsPattern(NOT), ruleId) {
         actualExprTransformer
@@ -512,14 +522,6 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
 
     case Not(IsNull(e)) => IsNotNull(e)
     case Not(IsNotNull(e)) => IsNull(e)
-  }
-
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAnyPattern(AND, OR, NOT), ruleId) {
-    case q: LogicalPlan => q.transformExpressionsUpWithPruning(
-      _.containsAnyPattern(AND, OR, NOT), ruleId) {
-      actualExprTransformer
-    }
   }
 }
 
