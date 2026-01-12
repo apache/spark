@@ -42,7 +42,7 @@ CLOSE cursor_name
 > BEGIN
     DECLARE x INT;
     DECLARE my_cursor CURSOR FOR SELECT id FROM range(3);
-    
+
     OPEN my_cursor;
     FETCH my_cursor INTO x;
     VALUES (x);
@@ -54,13 +54,13 @@ CLOSE cursor_name
 > BEGIN
     DECLARE x INT;
     DECLARE my_cursor CURSOR FOR SELECT id FROM range(2);
-    
+
     DECLARE EXIT HANDLER FOR NOT FOUND
       BEGIN
         CLOSE my_cursor;
         VALUES ('Cursor closed on completion');
       END;
-    
+
     OPEN my_cursor;
     REPEAT
       FETCH my_cursor INTO x;
@@ -72,12 +72,12 @@ Cursor closed on completion
 > BEGIN
     DECLARE x INT;
     DECLARE param_cursor CURSOR FOR SELECT id FROM range(10) WHERE id = ?;
-    
+
     OPEN param_cursor USING 3;
     FETCH param_cursor INTO x;
     VALUES ('First open:', x);
     CLOSE param_cursor;
-    
+
     OPEN param_cursor USING 7;
     FETCH param_cursor INTO x;
     VALUES ('Second open:', x);
@@ -91,14 +91,14 @@ Second open:|7
     outer_lbl: BEGIN
       DECLARE outer_cur CURSOR FOR SELECT id FROM range(3);
       DECLARE x INT;
-      
+
       OPEN outer_cur;
       FETCH outer_cur INTO x;
-      
+
       inner_lbl: BEGIN
         FETCH outer_lbl.outer_cur INTO x;
       END;
-      
+
       CLOSE outer_lbl.outer_cur;
       VALUES ('Closed from outer scope');
     END;
@@ -111,9 +111,9 @@ Closed from outer scope
     DECLARE done BOOLEAN DEFAULT false;
     DECLARE results STRING DEFAULT '';
     DECLARE my_cursor CURSOR FOR SELECT id FROM range(5);
-    
+
     DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = true;
-    
+
     OPEN my_cursor;
     REPEAT
       FETCH my_cursor INTO x;
@@ -122,7 +122,7 @@ Closed from outer scope
       END IF;
     UNTIL done END REPEAT;
     CLOSE my_cursor;
-    
+
     VALUES (results);
   END;
 0,1,2,3,4,

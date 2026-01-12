@@ -54,7 +54,7 @@ OPEN cursor_name [ USING { constant_expr [ AS param_name ] } [, ...] ]
 > BEGIN
     DECLARE x INT;
     DECLARE my_cursor CURSOR FOR SELECT id FROM range(3);
-    
+
     OPEN my_cursor;
     FETCH my_cursor INTO x;
     VALUES (x);
@@ -65,9 +65,9 @@ OPEN cursor_name [ USING { constant_expr [ AS param_name ] } [, ...] ]
 -- Open cursor with positional parameters
 > BEGIN
     DECLARE x INT;
-    DECLARE param_cursor CURSOR FOR 
+    DECLARE param_cursor CURSOR FOR
       SELECT id FROM range(10) WHERE id BETWEEN ? AND ?;
-    
+
     OPEN param_cursor USING 3, 7;
     FETCH param_cursor INTO x;
     VALUES (x);
@@ -78,9 +78,9 @@ OPEN cursor_name [ USING { constant_expr [ AS param_name ] } [, ...] ]
 -- Open cursor with named parameters
 > BEGIN
     DECLARE result INT;
-    DECLARE named_cursor CURSOR FOR 
+    DECLARE named_cursor CURSOR FOR
       SELECT id FROM range(100) WHERE id >= :min_val AND id <= :max_val;
-    
+
     OPEN named_cursor USING 10 AS min_val, 20 AS max_val;
     FETCH named_cursor INTO result;
     VALUES (result);
@@ -94,7 +94,7 @@ OPEN cursor_name [ USING { constant_expr [ AS param_name ] } [, ...] ]
     DECLARE max_id INT DEFAULT 8;
     DECLARE result INT;
     DECLARE var_cursor CURSOR FOR SELECT id FROM range(10) WHERE id BETWEEN ? AND ?;
-    
+
     OPEN var_cursor USING min_id, max_id;
     FETCH var_cursor INTO result;
     VALUES (result);
@@ -107,11 +107,11 @@ OPEN cursor_name [ USING { constant_expr [ AS param_name ] } [, ...] ]
     DECLARE str_val STRING;
     DECLARE int_val INT;
     DECLARE type_cursor CURSOR FOR SELECT typeof(:p) as type, :p as val;
-    
+
     OPEN type_cursor USING 42 AS p;
     FETCH type_cursor INTO str_val, int_val;
     CLOSE type_cursor;
-    
+
     VALUES ('INT', int_val);
   END;
 INT|42
@@ -121,17 +121,17 @@ INT|42
     outer_lbl: BEGIN
       DECLARE outer_cur CURSOR FOR SELECT id FROM range(3);
       OPEN outer_cur;
-      
+
       inner_lbl: BEGIN
         DECLARE inner_cur CURSOR FOR SELECT id * 10 FROM range(2);
         DECLARE x INT;
-        
+
         OPEN inner_cur;
         FETCH outer_lbl.outer_cur INTO x;
         VALUES (x);
         CLOSE inner_cur;
       END;
-      
+
       CLOSE outer_cur;
     END;
   END;

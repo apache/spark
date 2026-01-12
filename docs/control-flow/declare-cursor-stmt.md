@@ -36,7 +36,7 @@ DECLARE cursor_name [ ASENSITIVE | INSENSITIVE ] CURSOR
 
   An unqualified name for the cursor. The name must be unique among all cursors declared in the compound statement. Cursors can be qualified with the compound statement label to disambiguate duplicate names in nested scopes.
 
-- **`ASENSITIVE` | `INSENSITIVE`**
+- **`ASENSITIVE`** or **`INSENSITIVE`**
 
   Optional keywords specifying the cursor's sensitivity to changes in the underlying data. Both specify that once the cursor is opened, the result set is not affected by DML changes. This is the default and currently the only supported behavior.
 
@@ -55,7 +55,7 @@ DECLARE cursor_name [ ASENSITIVE | INSENSITIVE ] CURSOR
 > BEGIN
     DECLARE x INT;
     DECLARE my_cursor CURSOR FOR SELECT id FROM range(5);
-    
+
     OPEN my_cursor;
     FETCH my_cursor INTO x;
     VALUES (x);
@@ -66,9 +66,9 @@ DECLARE cursor_name [ ASENSITIVE | INSENSITIVE ] CURSOR
 -- Cursor with parameter markers
 > BEGIN
     DECLARE x INT;
-    DECLARE filtered_cursor CURSOR FOR 
+    DECLARE filtered_cursor CURSOR FOR
       SELECT id FROM range(10) WHERE id >= ? AND id <= ?;
-    
+
     OPEN filtered_cursor USING 3, 7;
     FETCH filtered_cursor INTO x;
     VALUES (x);
@@ -80,9 +80,9 @@ DECLARE cursor_name [ ASENSITIVE | INSENSITIVE ] CURSOR
 > BEGIN
     DECLARE threshold INT DEFAULT 5;
     DECLARE x INT;
-    DECLARE var_cursor CURSOR FOR 
+    DECLARE var_cursor CURSOR FOR
       SELECT id FROM range(10) WHERE id > threshold;
-    
+
     OPEN var_cursor;
     FETCH var_cursor INTO x;
     VALUES (x);
@@ -96,9 +96,9 @@ DECLARE cursor_name [ ASENSITIVE | INSENSITIVE ] CURSOR
     DECLARE done BOOLEAN DEFAULT false;
     DECLARE total INT DEFAULT 0;
     DECLARE my_cursor CURSOR FOR SELECT id FROM range(5);
-    
+
     DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = true;
-    
+
     OPEN my_cursor;
     REPEAT
       FETCH my_cursor INTO x;
@@ -107,7 +107,7 @@ DECLARE cursor_name [ ASENSITIVE | INSENSITIVE ] CURSOR
       END IF;
     UNTIL done END REPEAT;
     CLOSE my_cursor;
-    
+
     VALUES (total);
   END;
 10

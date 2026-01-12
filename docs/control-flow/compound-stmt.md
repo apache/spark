@@ -104,7 +104,7 @@ condition_values
 
     An unqualified name for the cursor. The name must be unique among all cursors declared in this compound statement. Cursors can be qualified with the compound statement `label` to disambiguate duplicate names.
 
-  - **`ASENSITIVE` | `INSENSITIVE`**
+  - **`ASENSITIVE`** or **`INSENSITIVE`**
 
     Optional keywords specifying that once the cursor is opened, the result set is not affected by DML changes within or outside the session. This is the default and only supported behavior.
 

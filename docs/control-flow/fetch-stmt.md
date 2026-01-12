@@ -53,9 +53,9 @@ FETCH [ [ NEXT ] FROM ] cursor_name INTO variable_name [, ...]
 > BEGIN
     DECLARE x INT;
     DECLARE y STRING;
-    DECLARE my_cursor CURSOR FOR 
+    DECLARE my_cursor CURSOR FOR
       SELECT id, 'row_' || id FROM range(3);
-    
+
     OPEN my_cursor;
     FETCH my_cursor INTO x, y;
     VALUES (x, y);
@@ -69,9 +69,9 @@ FETCH [ [ NEXT ] FROM ] cursor_name INTO variable_name [, ...]
     DECLARE done BOOLEAN DEFAULT false;
     DECLARE total INT DEFAULT 0;
     DECLARE sum_cursor CURSOR FOR SELECT id FROM range(5);
-    
+
     DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = true;
-    
+
     OPEN sum_cursor;
     REPEAT
       FETCH sum_cursor INTO x;
@@ -80,7 +80,7 @@ FETCH [ [ NEXT ] FROM ] cursor_name INTO variable_name [, ...]
       END IF;
     UNTIL done END REPEAT;
     CLOSE sum_cursor;
-    
+
     VALUES (total);
   END;
 10
@@ -88,9 +88,9 @@ FETCH [ [ NEXT ] FROM ] cursor_name INTO variable_name [, ...]
 -- Fetch into a struct variable
 > BEGIN
     DECLARE result STRUCT<id: INT, name: STRING>;
-    DECLARE struct_cursor CURSOR FOR 
+    DECLARE struct_cursor CURSOR FOR
       SELECT id, 'name_' || id FROM range(3);
-    
+
     OPEN struct_cursor;
     FETCH struct_cursor INTO result;
     VALUES (result.id, result.name);
@@ -102,7 +102,7 @@ FETCH [ [ NEXT ] FROM ] cursor_name INTO variable_name [, ...]
 > BEGIN
     DECLARE x INT;
     DECLARE cursor1 CURSOR FOR SELECT id FROM range(3);
-    
+
     OPEN cursor1;
     FETCH NEXT FROM cursor1 INTO x;
     VALUES (x);
@@ -115,14 +115,14 @@ FETCH [ [ NEXT ] FROM ] cursor_name INTO variable_name [, ...]
     outer_lbl: BEGIN
       DECLARE outer_cur CURSOR FOR SELECT id FROM range(5);
       DECLARE x INT;
-      
+
       OPEN outer_cur;
-      
+
       inner_lbl: BEGIN
         FETCH outer_lbl.outer_cur INTO x;
         VALUES (x);
       END;
-      
+
       CLOSE outer_cur;
     END;
   END;
@@ -132,12 +132,12 @@ FETCH [ [ NEXT ] FROM ] cursor_name INTO variable_name [, ...]
 > BEGIN
     DECLARE x INT;
     DECLARE my_cursor CURSOR FOR SELECT id FROM range(2);
-    
-    DECLARE EXIT HANDLER FOR NOT FOUND 
+
+    DECLARE EXIT HANDLER FOR NOT FOUND
       BEGIN
         VALUES ('No more rows');
       END;
-    
+
     OPEN my_cursor;
     FETCH my_cursor INTO x;
     FETCH my_cursor INTO x;
@@ -153,9 +153,9 @@ No more rows
     DECLARE done BOOLEAN DEFAULT false;
     DECLARE count INT DEFAULT 0;
     DECLARE my_cursor CURSOR FOR SELECT id FROM range(3);
-    
+
     DECLARE CONTINUE HANDLER FOR CURSOR_NO_MORE_ROWS SET done = true;
-    
+
     OPEN my_cursor;
     WHILE NOT done DO
       FETCH my_cursor INTO x;
@@ -164,7 +164,7 @@ No more rows
       END IF;
     END WHILE;
     CLOSE my_cursor;
-    
+
     VALUES (count);
   END;
 3
