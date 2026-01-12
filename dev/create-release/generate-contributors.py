@@ -19,7 +19,6 @@
 # This script generates a list of contributors between two release tags.
 
 import os
-import re
 import sys
 
 from github import Github
