@@ -143,16 +143,18 @@ class NameStreamingSourcesSuite extends AnalysisTest {
   }
 
   test("propagates name to StreamingRelationV2") {
-    val streamingV2 = createStreamingRelationV2()
-    val wrapped = NamedStreamingRelation(streamingV2, UserProvided("my_source"))
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+      val streamingV2 = createStreamingRelationV2()
+      val wrapped = NamedStreamingRelation(streamingV2, UserProvided("my_source"))
 
-    val result = NameStreamingSources.apply(wrapped)
+      val result = NameStreamingSources.apply(wrapped)
 
-    result match {
-      case s: StreamingRelationV2 =>
-        assert(s.sourceIdentifyingName == UserProvided("my_source"))
-      case other =>
-        fail(s"Expected StreamingRelationV2 but got ${other.getClass.getSimpleName}")
+      result match {
+        case s: StreamingRelationV2 =>
+          assert(s.sourceIdentifyingName == UserProvided("my_source"))
+        case other =>
+          fail(s"Expected StreamingRelationV2 but got ${other.getClass.getSimpleName}")
+      }
     }
   }
 
@@ -175,31 +177,35 @@ class NameStreamingSourcesSuite extends AnalysisTest {
   }
 
   test("propagates FlowAssigned name to StreamingRelationV2") {
-    val streamingV2 = createStreamingRelationV2()
-    val wrapped = NamedStreamingRelation(streamingV2, FlowAssigned("flow_source"))
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+      val streamingV2 = createStreamingRelationV2()
+      val wrapped = NamedStreamingRelation(streamingV2, FlowAssigned("flow_source"))
 
-    val result = NameStreamingSources.apply(wrapped)
+      val result = NameStreamingSources.apply(wrapped)
 
-    result match {
-      case s: StreamingRelationV2 =>
-        assert(s.sourceIdentifyingName == FlowAssigned("flow_source"))
-      case other =>
-        fail(s"Expected StreamingRelationV2 but got ${other.getClass.getSimpleName}")
+      result match {
+        case s: StreamingRelationV2 =>
+          assert(s.sourceIdentifyingName == FlowAssigned("flow_source"))
+        case other =>
+          fail(s"Expected StreamingRelationV2 but got ${other.getClass.getSimpleName}")
+      }
     }
   }
 
   test("propagates name through SubqueryAlias") {
-    val streamingV2 = createStreamingRelationV2()
-    val aliased = SubqueryAlias("my_alias", streamingV2)
-    val wrapped = NamedStreamingRelation(aliased, UserProvided("aliased_source"))
+    withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+      val streamingV2 = createStreamingRelationV2()
+      val aliased = SubqueryAlias("my_alias", streamingV2)
+      val wrapped = NamedStreamingRelation(aliased, UserProvided("aliased_source"))
 
-    val result = NameStreamingSources.apply(wrapped)
+      val result = NameStreamingSources.apply(wrapped)
 
-    result match {
-      case SubqueryAlias(_, inner: StreamingRelationV2) =>
-        assert(inner.sourceIdentifyingName == UserProvided("aliased_source"))
-      case other =>
-        fail(s"Expected SubqueryAlias wrapping StreamingRelationV2 but got $other")
+      result match {
+        case SubqueryAlias(_, inner: StreamingRelationV2) =>
+          assert(inner.sourceIdentifyingName == UserProvided("aliased_source"))
+        case other =>
+          fail(s"Expected SubqueryAlias wrapping StreamingRelationV2 but got $other")
+      }
     }
   }
 
