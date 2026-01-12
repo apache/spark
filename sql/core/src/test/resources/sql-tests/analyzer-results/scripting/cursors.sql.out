@@ -2162,13 +2162,13 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 BEGIN
   DECLARE x INT;
   DECLARE cur CURSOR FOR SELECT 1 AS val;
-  
+
   OPEN cur;
   FETCH cur INTO x;  -- Succeeds, x = 1
   VALUES ('After first fetch', x);
-  
+
   FETCH cur INTO x;  -- No more rows, raises CURSOR_NO_MORE_ROWS (SQLSTATE 02000)
-  
+
   VALUES ('After second fetch - script continued', x);  -- Should execute, x still = 1
   CLOSE cur;
 END
@@ -2183,8 +2183,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 98,
-    "stopIndex" : 98,
+    "startIndex" : 96,
+    "stopIndex" : 96,
     "fragment" : "x"
   } ]
 }
@@ -2195,16 +2195,16 @@ BEGIN
   DECLARE x INT;
   DECLARE no_more_data BOOLEAN DEFAULT false;
   DECLARE cur CURSOR FOR SELECT 10 AS val;
-  
+
   DECLARE CONTINUE HANDLER FOR CURSOR_NO_MORE_ROWS SET no_more_data = true;
-  
+
   OPEN cur;
   FETCH cur INTO x;
   VALUES ('First fetch', x, no_more_data);  -- Should be (10, false)
-  
+
   FETCH cur INTO x;  -- Triggers handler
   VALUES ('After no data', x, no_more_data);  -- Should be (10, true)
-  
+
   CLOSE cur;
 END
 -- !query analysis
@@ -2218,8 +2218,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 224,
-    "stopIndex" : 224,
+    "startIndex" : 220,
+    "stopIndex" : 220,
     "fragment" : "x"
   } ]
 }
@@ -2230,16 +2230,16 @@ BEGIN
   DECLARE x INT;
   DECLARE found BOOLEAN DEFAULT true;
   DECLARE cur CURSOR FOR SELECT 20 AS val;
-  
+
   DECLARE CONTINUE HANDLER FOR NOT FOUND SET found = false;
-  
+
   OPEN cur;
   FETCH cur INTO x;
   VALUES ('First fetch', x, found);  -- Should be (20, true)
-  
+
   FETCH cur INTO x;  -- No more rows, triggers NOT FOUND handler
   VALUES ('After NOT FOUND', x, found);  -- Should be (20, false)
-  
+
   CLOSE cur;
 END
 -- !query analysis
@@ -2253,8 +2253,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 200,
-    "stopIndex" : 200,
+    "startIndex" : 196,
+    "stopIndex" : 196,
     "fragment" : "x"
   } ]
 }
@@ -2264,19 +2264,19 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 BEGIN
   DECLARE x INT DEFAULT 0;
   DECLARE cur CURSOR FOR SELECT 30 AS val;
-  
+
   DECLARE EXIT HANDLER FOR NOT FOUND
   BEGIN
     VALUES ('In EXIT handler', x);
     CLOSE cur;  -- Clean up in the handler
   END;
-  
+
   OPEN cur;
   FETCH cur INTO x;
   VALUES ('First fetch', x);  -- Should execute (30)
-  
+
   FETCH cur INTO x;  -- Triggers EXIT handler, which closes cursor and exits
-  
+
   VALUES ('After handler');  -- Should NOT execute (handler exits)
 END
 -- !query analysis
@@ -2290,8 +2290,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 242,
-    "stopIndex" : 242,
+    "startIndex" : 238,
+    "stopIndex" : 238,
     "fragment" : "x"
   } ]
 }
@@ -2303,11 +2303,11 @@ BEGIN
   DECLARE row_count INT DEFAULT 0;
   DECLARE done BOOLEAN DEFAULT false;
   DECLARE cur CURSOR FOR SELECT id FROM VALUES(1), (2), (3) AS t(id);
-  
+
   DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = true;
-  
+
   OPEN cur;
-  
+
   REPEAT
     FETCH cur INTO x;
     IF NOT done THEN
@@ -2315,7 +2315,7 @@ BEGIN
       VALUES ('Fetched', x, row_count);
     END IF;
   UNTIL done END REPEAT;
-  
+
   VALUES ('Total rows', row_count);  -- Should be 3
   CLOSE cur;
 END
@@ -2330,8 +2330,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 274,
-    "stopIndex" : 274,
+    "startIndex" : 268,
+    "stopIndex" : 268,
     "fragment" : "x"
   } ]
 }
@@ -2343,18 +2343,18 @@ BEGIN
   DECLARE specific_handler_ran BOOLEAN DEFAULT false;
   DECLARE generic_handler_ran BOOLEAN DEFAULT false;
   DECLARE cur CURSOR FOR SELECT 40 AS val;
-  
+
   DECLARE CONTINUE HANDLER FOR CURSOR_NO_MORE_ROWS SET specific_handler_ran = true;
-  
+
   DECLARE CONTINUE HANDLER FOR NOT FOUND SET generic_handler_ran = true;
-  
+
   OPEN cur;
   FETCH cur INTO x;
   FETCH cur INTO x;  -- Should trigger specific handler, not generic
-  
+
   VALUES ('Specific ran', specific_handler_ran);  -- Should be true
   VALUES ('Generic ran', generic_handler_ran);    -- Should be false
-  
+
   CLOSE cur;
 END
 -- !query analysis
@@ -2368,8 +2368,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 369,
-    "stopIndex" : 369,
+    "startIndex" : 363,
+    "stopIndex" : 363,
     "fragment" : "x"
   } ]
 }
@@ -2380,31 +2380,31 @@ BEGIN
   DECLARE x INT;
   DECLARE outer_done BOOLEAN DEFAULT false;
   DECLARE outer_cur CURSOR FOR SELECT 50 AS val;
-  
+
   DECLARE CONTINUE HANDLER FOR NOT FOUND SET outer_done = true;
-  
+
   OPEN outer_cur;
   FETCH outer_cur INTO x;
   VALUES ('Outer fetch 1', x, outer_done);  -- Should be (50, false)
-  
+
   BEGIN
     DECLARE y INT;
     DECLARE inner_done BOOLEAN DEFAULT false;
     DECLARE inner_cur CURSOR FOR SELECT 60 AS val;
-    
+
     DECLARE CONTINUE HANDLER FOR NOT FOUND SET inner_done = true;
-    
+
     OPEN inner_cur;
     FETCH inner_cur INTO y;
     FETCH inner_cur INTO y;  -- Triggers inner handler only
-    
+
     VALUES ('Inner', y, inner_done, outer_done);  -- Should be (60, true, false)
     CLOSE inner_cur;
   END;
-  
+
   FETCH outer_cur INTO x;  -- Triggers outer handler
   VALUES ('Outer fetch 2', x, outer_done);  -- Should be (50, true)
-  
+
   CLOSE outer_cur;
 END
 -- !query analysis
@@ -2418,8 +2418,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 228,
-    "stopIndex" : 228,
+    "startIndex" : 224,
+    "stopIndex" : 224,
     "fragment" : "x"
   } ]
 }
