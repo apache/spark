@@ -1659,12 +1659,15 @@ class RDD(Generic[T_co]):
         """
 
         def func(it: Iterable[T]) -> Iterable[Any]:
+            # Officially, our type hint suggests that f should be a function
+            # that returns None. However, historically, we supported f as
+            # a generator, so it could return an iterator that we need to
+            # go through. We check the common case first, then deal with
+            # the undocumented behavior.
             r = f(it)
             if r is None:
-                # This is the officially supported case
                 return iter([])
             try:
-                # We need to support generators because we used to
                 return iter(r)
             except TypeError:
                 return iter([])
