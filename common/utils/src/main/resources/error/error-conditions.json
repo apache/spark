@@ -7809,7 +7809,7 @@
   },
   "_LEGACY_ERROR_TEMP_1017" : {
     "message" : [
-      "<name> is a built-in/temporary function. '<cmd>' expects a persistent function.<hintStr>."
+      "<name> is a temporary function. '<cmd>' expects a persistent function.<hintStr>"
     ]
   },
   "_LEGACY_ERROR_TEMP_1018" : {

@@ -29,8 +29,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, GlobalTempView, LocalTempView,
   PersistedView, PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution,
-  UnresolvedAttribute, UnresolvedFunctionName, UnresolvedIdentifier, UnresolvedNamespace,
-  UnresolvedProcedure}
+  UnresolvedAttribute, UnresolvedIdentifier, UnresolvedNamespace, UnresolvedProcedure}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
@@ -1069,26 +1068,22 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitDropFunction(ctx: DropFunctionContext): LogicalPlan = withOrigin(ctx) {
-    withIdentClause(ctx.identifierReference(), functionName => {
-      val isTemp = ctx.TEMPORARY != null
-      if (isTemp) {
+    val isTemp = ctx.TEMPORARY != null
+    val identCtx = ctx.identifierReference()
+    if (isTemp) {
+      withIdentClause(identCtx, functionName => {
         // Extract the actual function name, handling session qualification
         val funcName = extractTempFunctionName(functionName, ctx, forDrop = true)
         DropFunctionCommand(
           identifier = FunctionIdentifier(funcName),
           ifExists = ctx.EXISTS != null,
           isTemp = true)
-      } else {
-        val hintStr = "Please use fully qualified identifier to drop the persistent function."
-        DropFunction(
-          UnresolvedFunctionName(
-            functionName,
-            "DROP FUNCTION",
-            requirePersistent = true,
-            funcTypeMismatchHint = Some(hintStr)),
-          ctx.EXISTS != null)
-      }
-    })
+      })
+    } else {
+      DropFunction(
+        withIdentClause(identCtx, createUnresolvedIdentifier(identCtx, _)),
+        ctx.EXISTS != null)
+    }
   }
 
   private def toStorageFormat(

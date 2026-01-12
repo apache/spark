@@ -3061,16 +3061,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "qualifier" -> toSQLId(qualifier)))
   }
 
-  def cannotRefreshBuiltInFuncError(functionName: String): Throwable = {
+  def cannotRefreshBuiltInFuncError(functionName: String, t: TreeNode[_]): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1256",
-      messageParameters = Map("functionName" -> functionName))
+      messageParameters = Map("functionName" -> functionName),
+      origin = t.origin)
   }
 
-  def cannotRefreshTempFuncError(functionName: String): Throwable = {
+  def cannotRefreshTempFuncError(functionName: String, t: TreeNode[_]): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1257",
-      messageParameters = Map("functionName" -> functionName))
+      messageParameters = Map("functionName" -> functionName),
+      origin = t.origin)
   }
 
   def noSuchFunctionError(identifier: FunctionIdentifier): Throwable = {
