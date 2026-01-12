@@ -77,7 +77,7 @@ def records_to_arrow_batches(
     and append it to the records batch.
     """
 
-    pa_schema = to_arrow_schema(return_type)
+    pa_schema = to_arrow_schema(return_type, timezone="UTC")
     column_names = return_type.fieldNames()
     column_converters = [
         LocalDataToArrowConversion._create_converter(field.dataType) for field in return_type.fields

@@ -264,7 +264,7 @@ case class RelationConversions(
         tableDesc, _, query, overwrite, ifPartitionNotExists, _, _, _, _, _, _)
           if query.resolved && DDLUtils.isHiveTable(tableDesc) &&
             tableDesc.partitionColumnNames.isEmpty && isConvertible(tableDesc) &&
-            conf.getConf(HiveUtils.CONVERT_METASTORE_CTAS) && i.getTagValue(BY_CTAS).isDefined =>
+            conf.getConf(HiveUtils.CONVERT_METASTORE_CTAS) && i.containsTag(BY_CTAS) =>
         // validation is required to be done here before relation conversion.
         DDLUtils.checkTableColumns(tableDesc.copy(schema = query.schema))
         val hiveTable = DDLUtils.readHiveTable(tableDesc)

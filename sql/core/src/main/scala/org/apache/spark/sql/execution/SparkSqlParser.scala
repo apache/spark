@@ -29,7 +29,8 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, GlobalTempView, LocalTempView,
   PersistedView, PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution,
-  UnresolvedAttribute, UnresolvedFunctionName, UnresolvedIdentifier, UnresolvedNamespace}
+  UnresolvedAttribute, UnresolvedFunctionName, UnresolvedIdentifier, UnresolvedNamespace,
+  UnresolvedProcedure}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
@@ -1435,7 +1436,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitDescribeProcedure(
       ctx: DescribeProcedureContext): LogicalPlan = withOrigin(ctx) {
     withIdentClause(ctx.identifierReference(), procIdentifier =>
-      DescribeProcedureCommand(UnresolvedIdentifier(procIdentifier)))
+      DescribeProcedureCommand(UnresolvedProcedure(procIdentifier)))
   }
 
   override def visitCreatePipelineInsertIntoFlow(

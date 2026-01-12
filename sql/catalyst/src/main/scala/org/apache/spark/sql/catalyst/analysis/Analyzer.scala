@@ -504,7 +504,8 @@ class Analyzer(
       Seq(
         ResolveWithCTE,
         ExtractDistributedSequenceID) ++
-      Seq(ResolveUpdateEventTimeWatermarkColumn) ++
+      Seq(ResolveUpdateEventTimeWatermarkColumn,
+        NameStreamingSources) ++
       extendedResolutionRules : _*),
     Batch("Remove TempResolvedColumn", Once, RemoveTempResolvedColumn),
     Batch("Post-Hoc Resolution", Once,
@@ -755,6 +756,7 @@ class Analyzer(
         groupByExprs: Seq[Expression],
         aggregationExprs: Seq[NamedExpression],
         child: LogicalPlan): LogicalPlan = {
+      val aggregationExprsNoAlias = aggregationExprs.map(trimNonTopLevelAliases)
 
       if (groupByExprs.size > GroupingID.dataType.defaultSize * 8) {
         throw QueryCompilationErrors.groupingSizeTooLargeError(GroupingID.dataType.defaultSize * 8)
@@ -775,7 +777,7 @@ class Analyzer(
       val groupingAttrs = expand.output.drop(child.output.length)
 
       val aggregations = constructAggregateExprs(
-        groupByExprs, aggregationExprs, groupByAliases, groupingAttrs, gid)
+        groupByExprs, aggregationExprsNoAlias, groupByAliases, groupingAttrs, gid)
 
       Aggregate(groupingAttrs, aggregations, expand)
     }
@@ -952,32 +954,7 @@ class Analyzer(
       // TypeCoercionBase.UnpivotCoercion determines valueType
       // and casts values once values are set and resolved
       case Unpivot(Some(ids), Some(values), aliases, variableColumnName, valueColumnNames, child) =>
-
-        def toString(values: Seq[NamedExpression]): String =
-          values.map(v => v.name).mkString("_")
-
-        // construct unpivot expressions for Expand
-        val exprs: Seq[Seq[Expression]] =
-          values.zip(aliases.getOrElse(values.map(_ => None))).map {
-            case (vals, Some(alias)) => (ids :+ Literal(alias)) ++ vals
-            case (Seq(value), None) => (ids :+ Literal(value.name)) :+ value
-            // there are more than one value in vals
-            case (vals, None) => (ids :+ Literal(toString(vals))) ++ vals
-          }
-
-        // construct output attributes
-        val variableAttr = AttributeReference(variableColumnName, StringType, nullable = false)()
-        val valueAttrs = valueColumnNames.zipWithIndex.map {
-          case (valueColumnName, idx) =>
-            AttributeReference(
-              valueColumnName,
-              values.head(idx).dataType,
-              values.map(_(idx)).exists(_.nullable))()
-        }
-        val output = (ids.map(_.toAttribute) :+ variableAttr) ++ valueAttrs
-
-        // expand the unpivot expressions
-        Expand(exprs, output, child)
+        UnpivotTransformer(ids, values, aliases, variableColumnName, valueColumnNames, child)
     }
   }
 
@@ -2127,7 +2104,7 @@ class Analyzer(
             throw QueryCompilationErrors.expectPersistentFuncError(
               nameParts.head, cmd, mismatchHint, u)
           } else {
-            ResolvedNonPersistentFunc(nameParts.head, V1Function(info))
+            ResolvedNonPersistentFunc(nameParts.head, V1Function.metadataOnly(info))
           }
         }.getOrElse {
           val CatalogAndIdentifier(catalog, ident) =
@@ -2309,10 +2286,10 @@ class Analyzer(
   object ResolveProcedures extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(UNRESOLVED_PROCEDURE), ruleId) {
-      case Call(UnresolvedProcedure(CatalogAndIdentifier(catalog, ident)), args, execute) =>
+      case UnresolvedProcedure(CatalogAndIdentifier(catalog, ident)) =>
         val procedureCatalog = catalog.asProcedureCatalog
         val procedure = load(procedureCatalog, ident)
-        Call(ResolvedProcedure(procedureCatalog, ident, procedure), args, execute)
+        ResolvedProcedure(procedureCatalog, ident, procedure)
     }
 
     private def load(catalog: ProcedureCatalog, ident: Identifier): UnboundProcedure = {
@@ -3065,13 +3042,6 @@ class Analyzer(
       })
     }
 
-    private def hasUnresolvedGeneratorOrFunction(exprs: Seq[Expression]): Boolean = {
-      exprs.exists(_.exists {
-        case _: UnresolvedFunction | _: UnresolvedGenerator => true
-        case _ => false
-      })
-    }
-
     private def trimAlias(expr: NamedExpression): Expression = expr match {
       case UnresolvedAlias(child, _) => child
       case Alias(child, _) => child
@@ -3163,21 +3133,15 @@ class Analyzer(
         p
 
       // The star will be expanded differently if we insert `Generate` under `Project` too early.
-      // We also wait for all functions and generators to be resolved to ensure left-to-right
-      // generator ordering.
-      case p @ Project(projectList, child)
-          if !projectList.exists(_.exists(_.isInstanceOf[Star])) &&
-             !hasUnresolvedGeneratorOrFunction(projectList) =>
-        var hasSeenGenerator = false
+      case p @ Project(projectList, child) if !projectList.exists(_.exists(_.isInstanceOf[Star])) =>
         val (resolvedGenerator, newProjectList) = projectList
           .map(trimNonTopLevelAliases)
           .foldLeft((None: Option[Generate], Nil: Seq[NamedExpression])) { (res, e) =>
             e match {
               // If there are more than one generator, we only rewrite the first one and wait for
               // the next analyzer iteration to rewrite the next one.
-              case AliasedGenerator(generator, names, outer) if !hasSeenGenerator &&
+              case AliasedGenerator(generator, names, outer) if res._1.isEmpty &&
                   generator.childrenResolved =>
-                hasSeenGenerator = true
                 val g = Generate(
                   generator,
                   unrequiredChildIndex = Nil,
@@ -3187,7 +3151,6 @@ class Analyzer(
                   child)
                 (Some(g), res._2 ++ g.nullableOutput)
               case other =>
-                hasSeenGenerator |= hasGenerator(other)
                 (res._1, res._2 :+ other)
             }
           }

@@ -2417,6 +2417,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("source" -> source))
   }
 
+  def unnamedStreamingSourcesWithEnforcementError(sourceInfo: String): Throwable = {
+    new AnalysisException(
+      errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.UNNAMED_STREAMING_SOURCES_WITH_ENFORCEMENT",
+      messageParameters = Map("sourceInfo" -> sourceInfo))
+  }
+
   def columnNotFoundInExistingColumnsError(
       columnType: String, columnName: String, validColumnNames: Seq[String]): Throwable = {
     new AnalysisException(

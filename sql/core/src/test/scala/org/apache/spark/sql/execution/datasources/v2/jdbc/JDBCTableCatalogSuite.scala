@@ -23,7 +23,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.{SparkConf, SparkIllegalArgumentException}
+import org.apache.spark.{SparkConf, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -121,6 +121,38 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         sql(s"DROP TABLE $table")
       }
       checkErrorTableNotFound(e, expected)
+    }
+  }
+
+  test("drop table with dependent view fails with classified exception") {
+    // Test that classifyException in dropTable properly wraps SQLException
+    // when dropping a table fails due to dependent objects
+    try {
+      withConnection { conn =>
+        // Create a table
+        conn.prepareStatement(
+          """CREATE TABLE "test"."base_table" (id INTEGER, name VARCHAR(50))""").executeUpdate()
+        // Create a view that depends on it
+        conn.prepareStatement(
+            """CREATE VIEW "test"."dependent_view" AS SELECT * FROM "test"."base_table"""")
+          .executeUpdate()
+      }
+
+      // Try to drop the base table while view exists - H2 should prevent this
+      // Verify the exception is properly classified with FAILED_JDBC.DROP_TABLE
+      checkErrorMatchPVals(
+        exception = intercept[SparkRuntimeException] {
+          sql("DROP TABLE h2.test.base_table")
+        },
+        condition = "FAILED_JDBC.DROP_TABLE",
+        parameters = Map(
+          "url" -> "jdbc:.*",
+          "tableName" -> "`test`.`base_table`"))
+    } finally {
+      withConnection { conn =>
+        conn.prepareStatement("""DROP VIEW IF EXISTS "test"."dependent_view"""").executeUpdate()
+        conn.prepareStatement("""DROP TABLE IF EXISTS "test"."base_table"""").executeUpdate()
+      }
     }
   }
 
