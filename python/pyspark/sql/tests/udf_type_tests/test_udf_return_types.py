@@ -281,10 +281,6 @@ class UDFReturnTypeTests(ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    try:
-        import xmlrunner
+    from pyspark.testing import main
 
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

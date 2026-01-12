@@ -547,10 +547,8 @@ class SparkSession:
             "spark.sql.execution.arrow.useLargeVarTypes",
         )
         timezone = configs["spark.sql.session.timeZone"]
-        prefer_timestamp = configs["spark.sql.timestampType"]
-        prefers_large_types: bool = (
-            cast(str, configs["spark.sql.execution.arrow.useLargeVarTypes"]).lower() == "true"
-        )
+        prefer_timestamp_ntz = configs["spark.sql.timestampType"] == "TIMESTAMP_NTZ"
+        prefers_large_types = configs["spark.sql.execution.arrow.useLargeVarTypes"] == "true"
 
         _table: Optional[pa.Table] = None
 
@@ -582,9 +580,12 @@ class SparkSession:
                                     messageParameters={},
                                 )
                             arrow_type = field_type.field(0).type
-                            spark_type = MapType(StringType(), from_arrow_type(arrow_type))
+                            spark_type = MapType(
+                                StringType(),
+                                from_arrow_type(arrow_type, prefer_timestamp_ntz),
+                            )
                         else:
-                            spark_type = from_arrow_type(field_type)
+                            spark_type = from_arrow_type(field_type, prefer_timestamp_ntz)
                         struct.add(field.name, spark_type, nullable=field.nullable)
                     schema = struct
             elif isinstance(schema, (list, tuple)) and cast(int, _num_cols) < len(data.columns):
@@ -600,7 +601,9 @@ class SparkSession:
                 deduped_schema = cast(StructType, _deduplicate_field_names(schema))
                 spark_types = [field.dataType for field in deduped_schema.fields]
                 arrow_schema = to_arrow_schema(
-                    deduped_schema, prefers_large_types=prefers_large_types
+                    deduped_schema,
+                    timezone="UTC",
+                    prefers_large_types=prefers_large_types,
                 )
                 arrow_types = [field.type for field in arrow_schema]
                 _cols = [str(x) if not isinstance(x, str) else x for x in schema.fieldNames()]
@@ -620,7 +623,7 @@ class SparkSession:
                     for t in data.dtypes
                 ]
                 arrow_types = [
-                    to_arrow_type(dt, prefers_large_types=prefers_large_types)
+                    to_arrow_type(dt, timezone="UTC", prefers_large_types=prefers_large_types)
                     if dt is not None
                     else None
                     for dt in spark_types
@@ -657,9 +660,7 @@ class SparkSession:
                 _num_cols = len(_cols)
 
             if not isinstance(schema, StructType):
-                schema = from_arrow_schema(
-                    data.schema, prefer_timestamp_ntz=prefer_timestamp == "TIMESTAMP_NTZ"
-                )
+                schema = from_arrow_schema(data.schema, prefer_timestamp_ntz=prefer_timestamp_ntz)
 
             _table = (
                 _check_arrow_table_timestamps_localize(data, schema, True, timezone)
@@ -667,6 +668,7 @@ class SparkSession:
                     to_arrow_schema(
                         schema,
                         error_on_duplicated_field_names_in_struct=True,
+                        timezone="UTC",
                         prefers_large_types=prefers_large_types,
                     )
                 )

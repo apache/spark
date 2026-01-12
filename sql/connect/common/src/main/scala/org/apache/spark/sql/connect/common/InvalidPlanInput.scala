@@ -26,13 +26,16 @@ import org.apache.spark.{SparkThrowable, SparkThrowableHelper}
 final case class InvalidPlanInput(
     private val errorCondition: String,
     private val messageParameters: Map[String, String],
-    private val causeOpt: Option[Throwable])
+    private val causeOpt: Option[Throwable],
+    private val sqlState: Option[String] = None)
     extends Exception(
       SparkThrowableHelper.getMessage(errorCondition, messageParameters),
       causeOpt.orNull)
     with SparkThrowable {
 
   override def getCondition: String = errorCondition
+
+  override def getSqlState: String = sqlState.getOrElse(super.getSqlState)
 
   override def getMessageParameters: java.util.Map[String, String] = messageParameters.asJava
 }

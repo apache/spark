@@ -40,7 +40,6 @@ import org.apache.spark.{ErrorMessageFormat, SparkConf, SparkThrowable, SparkThr
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.util.SQLKeywordUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl
@@ -452,9 +451,24 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
                 case _ => t.getMessage
               }
               err.println(msg)
-              if (format == ErrorMessageFormat.PRETTY &&
-                !sessionState.getIsSilent &&
-                (!t.isInstanceOf[AnalysisException] || t.getCause != null)) {
+              // Print stack traces based on format and error type:
+              // - DEBUG format: Always print stack traces (for debugging)
+              // - PRETTY format: Only for internal errors (SQLSTATE XX***)
+              // - MINIMAL/STANDARD formats: Never print stack traces (JSON only)
+              val shouldPrintStackTrace = format match {
+                case ErrorMessageFormat.DEBUG => true // Always print in DEBUG mode
+                case ErrorMessageFormat.PRETTY =>
+                  // In PRETTY mode, only print for internal errors
+                  t match {
+                    case st: SparkThrowable =>
+                      val sqlState = st.getSqlState
+                      // Print if: internal error (XX***) OR no SQLSTATE
+                      sqlState == null || sqlState.startsWith("XX")
+                    case _ => true // Non-SparkThrowable exceptions always get stack traces
+                  }
+                case _ => false // MINIMAL and STANDARD never print stack traces
+              }
+              if (shouldPrintStackTrace && !sessionState.getIsSilent) {
                 t.printStackTrace(err)
               }
               driver.close()
@@ -688,4 +702,3 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     ret
   }
 }
-
