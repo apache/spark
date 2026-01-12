@@ -138,8 +138,6 @@ trait MergeIntoSchemaEvolutionSuiteBase extends RowLevelOperationSuiteBase {
    *                                            to false
    * @param requiresNestedTypeCoercion          If true, enables coercion for main tests and adds
    *                                            coercion-disabled tests that expect failure
-   * @param allColumnsNullable                  If true, makes all columns in the created table
-   *                                            nullable regardless of the source schema
    */
   // scalastyle:off argcount
   protected def testEvolution(name: String)(
@@ -156,8 +154,7 @@ trait MergeIntoSchemaEvolutionSuiteBase extends RowLevelOperationSuiteBase {
       confs: Seq[(String, String)] = Seq.empty,
       partitionCols: Seq[String] = Seq.empty,
       disableAutoSchemaEvolution: Boolean = false,
-      requiresNestedTypeCoercion: Boolean = false,
-      allColumnsNullable: Boolean = false): Unit = {
+      requiresNestedTypeCoercion: Boolean = false): Unit = {
 
     def executeMergeAndAssert(
         withSchemaEvolution: Boolean,
@@ -168,12 +165,7 @@ trait MergeIntoSchemaEvolutionSuiteBase extends RowLevelOperationSuiteBase {
         withTempView("source") {
           // Set up target table - infer schema from DataFrame
           val targetDf = targetData
-          val baseColumns = CatalogV2Util.structTypeToV2Columns(targetDf.schema)
-          val columns = if (allColumnsNullable) {
-            baseColumns.map(c => Column.create(c.name(), c.dataType(), true))
-          } else {
-            baseColumns
-          }
+          val columns = CatalogV2Util.structTypeToV2Columns(targetDf.schema)
           createTable(columns, partitionCols)
           if (!targetDf.isEmpty) {
             targetDf.writeTo(tableNameAsString).append()
@@ -376,29 +368,14 @@ trait MergeIntoSchemaEvolutionScalaSuiteBase extends MergeIntoSchemaEvolutionSui
 
     val sourceDf = spark.table(sourceTableName)
 
-    // Convert string condition to Column expression
-    // Replace aliases: t. -> target., s. -> source.
-    // Use regex to only replace when preceded by start of string or non-word, non-dot char.
-    val condExpr = expr(cond
-      .replaceAll("(?<![\\w.])t\\.", targetTableName + ".")
-      .replaceAll("(?<![\\w.])s\\.", sourceTableName + "."))
-
-    val mergeBuilder = sourceDf.mergeInto(targetTableName, condExpr)
-
-    // Helper to convert string expression to Column with alias replacement.
-    // Use regex to only replace s. or t. when they are table aliases
-    // (preceded by start of string or a non-word, non-dot character).
-    def toExpr(str: String): ColumnV1 = {
-      val withTarget = str.replaceAll("(?<![\\w.])t\\.", targetTableName + ".")
-      val withSource = withTarget.replaceAll("(?<![\\w.])s\\.", sourceTableName + ".")
-      expr(withSource)
-    }
+    val mergeBuilder = sourceDf.mergeInto(targetTableName,
+      toExpr(cond, targetTableName, sourceTableName))
 
     // Apply each clause to the merge builder
     clauses.foreach {
       case MatchedClause(condition, action) =>
         val matched = if (condition != null) {
-          mergeBuilder.whenMatched(toExpr(condition))
+          mergeBuilder.whenMatched(toExpr(condition, targetTableName, sourceTableName))
         } else {
           mergeBuilder.whenMatched()
         }
@@ -406,14 +383,16 @@ trait MergeIntoSchemaEvolutionScalaSuiteBase extends MergeIntoSchemaEvolutionSui
           case "UPDATE SET *" => matched.updateAll()
           case "DELETE" => matched.delete()
           case s if s.startsWith("UPDATE SET ") =>
-            val assignments = parseAssignments(s.stripPrefix("UPDATE SET "), toExpr)
+            val assignments = parseAssignments(s.stripPrefix("UPDATE SET "),
+              targetTableName, sourceTableName)
             matched.update(assignments)
           case _ => throw new IllegalArgumentException(s"Unknown matched action: $action")
         }
 
       case NotMatchedClause(condition, action) =>
         val notMatched = if (condition != null) {
-          mergeBuilder.whenNotMatched(toExpr(condition))
+          mergeBuilder.whenNotMatched(
+            toExpr(condition, targetTableName, sourceTableName))
         } else {
           mergeBuilder.whenNotMatched()
         }
@@ -421,21 +400,22 @@ trait MergeIntoSchemaEvolutionScalaSuiteBase extends MergeIntoSchemaEvolutionSui
           case "INSERT *" => notMatched.insertAll()
           case s if s.startsWith("INSERT ") =>
             val insertSpec = s.stripPrefix("INSERT ")
-            val assignments = parseInsertAssignments(insertSpec, toExpr)
+            val assignments = parseInsertAssignments(insertSpec, targetTableName, sourceTableName)
             notMatched.insert(assignments)
           case _ => throw new IllegalArgumentException(s"Unknown not matched action: $action")
         }
 
       case NotMatchedBySourceClause(condition, action) =>
         val notMatchedBySource = if (condition != null) {
-          mergeBuilder.whenNotMatchedBySource(toExpr(condition))
+          mergeBuilder.whenNotMatchedBySource(toExpr(condition, targetTableName, sourceTableName))
         } else {
           mergeBuilder.whenNotMatchedBySource()
         }
         action match {
           case "DELETE" => notMatchedBySource.delete()
           case s if s.startsWith("UPDATE SET ") =>
-            val assignments = parseAssignments(s.stripPrefix("UPDATE SET "), toExpr)
+            val assignments = parseAssignments(s.stripPrefix("UPDATE SET "),
+              targetTableName, sourceTableName)
             notMatchedBySource.update(assignments)
           case _ =>
             throw new IllegalArgumentException(s"Unknown not matched by source action: $action")
@@ -454,7 +434,8 @@ trait MergeIntoSchemaEvolutionScalaSuiteBase extends MergeIntoSchemaEvolutionSui
    */
   private def parseAssignments(
       setClause: String,
-      toExpr: String => ColumnV1): Map[String, ColumnV1] = {
+      targetTableName: String,
+      sourceTableName: String): Map[String, ColumnV1] = {
     // Handle simple cases like "salary = s.salary" or "info.status = 'inactive'"
     // Split on comma, but be careful of nested expressions
     val parts = splitAssignments(setClause)
@@ -465,7 +446,7 @@ trait MergeIntoSchemaEvolutionScalaSuiteBase extends MergeIntoSchemaEvolutionSui
       }
       val col = part.substring(0, eqIdx).trim
       val value = part.substring(eqIdx + 1).trim
-      col -> toExpr(value)
+      col -> toExpr(value, targetTableName, sourceTableName)
     }.toMap
   }
 
@@ -474,7 +455,8 @@ trait MergeIntoSchemaEvolutionScalaSuiteBase extends MergeIntoSchemaEvolutionSui
    */
   private def parseInsertAssignments(
       insertSpec: String,
-      toExpr: String => ColumnV1): Map[String, ColumnV1] = {
+      targetTableName: String,
+      sourceTableName: String): Map[String, ColumnV1] = {
     // Format: "(col1, col2) VALUES (expr1, expr2)"
     val valuesIdx = insertSpec.toUpperCase(Locale.ROOT).indexOf("VALUES")
     if (valuesIdx < 0) {
@@ -493,7 +475,7 @@ trait MergeIntoSchemaEvolutionScalaSuiteBase extends MergeIntoSchemaEvolutionSui
     }
 
     cols.zip(values).map { case (col, value) =>
-      col -> toExpr(value)
+      col -> toExpr(value, targetTableName, sourceTableName)
     }.toMap
   }
 
@@ -525,6 +507,27 @@ trait MergeIntoSchemaEvolutionScalaSuiteBase extends MergeIntoSchemaEvolutionSui
    */
   private def splitValues(str: String): Array[String] = {
     splitAssignments(str).toArray
+  }
+
+  /**
+   * Helper to replace table aliases in string expressions.
+   * t. -> targetTableName., s. -> sourceTableName.
+   * Uses regex to only replace when preceded by start of string or non-word, non-dot char.
+   */
+  protected def replaceAliases(
+      str: String,
+      targetTableName: String,
+      sourceTableName: String): String = {
+    str.replaceAll("(?<![\\w.])t\\.", targetTableName + ".")
+      .replaceAll("(?<![\\w.])s\\.", sourceTableName + ".")
+  }
+
+  /** Helper to convert string expression to Column with alias replacement. */
+  protected def toExpr(
+      str: String,
+      targetTableName: String,
+      sourceTableName: String): ColumnV1 = {
+    expr(replaceAliases(str, targetTableName, sourceTableName))
   }
 }
 
