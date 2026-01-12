@@ -414,7 +414,7 @@ class CategoricalTestsMixin:
 
         pdf, psdf = self.df_pair
 
-        def to_str(pdf) -> 'ps.DataFrame["a":str, "b":str]':  # noqa: F405
+        def to_str(pdf) -> 'ps.DataFrame["a":str, "b":str]':  # noqa: F821
             return pdf.astype(str)
 
         self.assert_eq(
@@ -474,7 +474,7 @@ class CategoricalTestsMixin:
 
         pdf, psdf = self.df_pair
 
-        def to_str(pdf) -> 'ps.DataFrame["a":str, "b":str]':  # noqa: F405
+        def to_str(pdf) -> 'ps.DataFrame["a":str, "b":str]':  # noqa: F821
             return pdf.astype(str)
 
         self.assert_eq(
@@ -670,13 +670,6 @@ class CategoricalTests(
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.pandas.tests.test_categorical import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

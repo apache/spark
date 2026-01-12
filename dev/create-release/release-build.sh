@@ -40,6 +40,7 @@ SPARK_VERSION - (optional) Version of Spark being built (e.g. 2.1.2)
 
 ASF_USERNAME - Username of ASF committer account
 ASF_PASSWORD - Password of ASF committer account
+ASF_NEXUS_TOKEN - API token in ASF Nexus reposiotry
 
 GPG_KEY - GPG key used to sign release artifacts
 GPG_PASSPHRASE - Passphrase for GPG key
@@ -493,15 +494,18 @@ EOF
   echo "KEYS sync'ed"
   rm -rf svn-spark
 
-  # TODO: Test it in the actual release
   # Release artifacts in the Nexus repository
   # Find latest orgapachespark-* repo for this release version
-  REPO_ID=$(curl --retry 10 --retry-all-errors -s -u "$ASF_USERNAME:$ASF_PASSWORD" \
-    https://repository.apache.org/service/local/staging/profile_repositories | \
-    grep -A 13 "<repositoryId>orgapachespark-" | \
-    awk '/<repositoryId>/ { id = $0 } /<description>/ && $0 ~ /Apache Spark '"$RELEASE_VERSION"'/ { print id }' | \
-    grep -oP '(?<=<repositoryId>)orgapachespark-[0-9]+(?=</repositoryId>)' | \
-    sort -V | tail -n 1)
+  REPO_ID=$(
+    curl --retry 10 --retry-all-errors -s -u "$ASF_USERNAME:$ASF_NEXUS_TOKEN" \
+      https://repository.apache.org/service/local/staging/profile_repositories |
+    grep -A 13 "<repositoryId>orgapachespark-" |
+    awk '/<repositoryId>/ { id = $0 }
+         /<description>/ && $0 ~ /Apache Spark '"$RELEASE_VERSION"'/ { print id }' |
+    sed -n 's/.*<repositoryId>\(orgapachespark-[0-9][0-9]*\)<\/repositoryId>.*/\1/p' |
+    sort -V |
+    tail -n 1
+  )
 
   if [[ -z "$REPO_ID" ]]; then
     echo "No matching staging repository found for Apache Spark $RELEASE_VERSION"
@@ -511,7 +515,7 @@ EOF
   echo "Using repository ID: $REPO_ID"
 
   # Release the repository
-  curl --retry 10 --retry-all-errors -s -u "$APACHE_USERNAME:$APACHE_PASSWORD" \
+  curl --retry 10 --retry-all-errors -s -u "$ASF_USERNAME:$ASF_NEXUS_TOKEN" \
     -H "Content-Type: application/json" \
     -X POST https://repository.apache.org/service/local/staging/bulk/promote \
     -d "{\"data\": {\"stagedRepositoryIds\": [\"$REPO_ID\"], \"description\": \"Apache Spark $RELEASE_VERSION\"}}"
@@ -519,9 +523,13 @@ EOF
   # Wait for release to complete
   echo "Waiting for release to complete..."
   while true; do
-    STATUS=$(curl --retry 10 --retry-all-errors -s -u "$APACHE_USERNAME:$APACHE_PASSWORD" \
-      https://repository.apache.org/service/local/staging/repository/$REPO_ID | \
-      grep -oPm1 "(?<=<type>)[^<]+")
+    STATUS=$(
+      curl --retry 10 --retry-all-errors -s -u "$ASF_USERNAME:$ASF_NEXUS_TOKEN" \
+        https://repository.apache.org/service/local/staging/repository/$REPO_ID |
+      sed -n 's:.*<type>\([^<]*\)</type>.*:\1:p' |
+      head -n 1
+    )
+
     echo "Current state: $STATUS"
     if [[ "$STATUS" == "released" ]]; then
       echo "Release complete."
@@ -537,7 +545,7 @@ EOF
   done
 
   # Drop the repository after release
-  curl --retry 10 --retry-all-errors -s -u "$APACHE_USERNAME:$APACHE_PASSWORD" \
+  curl --retry 10 --retry-all-errors -s -u "$ASF_USERNAME:$ASF_NEXUS_TOKEN" \
     -H "Content-Type: application/json" \
     -X POST https://repository.apache.org/service/local/staging/bulk/drop \
     -d "{\"data\": {\"stagedRepositoryIds\": [\"$REPO_ID\"], \"description\": \"Dropped after release\"}}"
@@ -547,7 +555,7 @@ EOF
   # Remove old releases from the mirror
   # Extract major.minor prefix
   RELEASE_SERIES=$(echo "$RELEASE_VERSION" | cut -d. -f1-2)
-  
+
   # Fetch existing dist URLs
   OLD_VERSION=$(svn ls https://dist.apache.org/repos/dist/release/spark/ | \
     grep "^spark-$RELEASE_SERIES" | \
