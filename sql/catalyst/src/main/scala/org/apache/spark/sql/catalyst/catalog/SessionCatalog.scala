@@ -2634,7 +2634,8 @@ class SessionCatalog(
                 funcMetadata,
                 overrideIfExists = false,
                 functionRegistry,
-                makeFunctionBuilder(funcMetadata))
+                makeFunctionBuilder(funcMetadata),
+                useCompositeKey = false)  // Persistent functions don't use composite keys
             }
             functionRegistry.lookupFunctionBuilder(qualifiedIdent).get
           }
