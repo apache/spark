@@ -584,6 +584,40 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
       assert(decodedValue.getBoolean(2) === true)
     }
   }
+
+  test("verify decodeRemainingKey with PrefixKeyScanStateEncoder uses correct numFields") {
+    val keySchema = StructType(Seq(
+      StructField("k1", IntegerType),
+      StructField("k2", LongType),
+      StructField("k3", StringType)
+    ))
+    val valueSchema = StructType(Seq(
+      StructField("v1", IntegerType)
+    ))
+
+    // Create encoder with 2 prefix columns, so remaining key should have 1 column (k3)
+    val prefixKeySpec = PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey = 2)
+    val encoder = new UnsafeRowDataEncoder(prefixKeySpec, valueSchema)
+
+    // Create a remaining key row with just the last column
+    val remainingKeySchema = StructType(Seq(StructField("k3", StringType)))
+    val remainingKeyProj = UnsafeProjection.create(remainingKeySchema)
+    val remainingKeyRow = remainingKeyProj.apply(InternalRow(UTF8String.fromString("test")))
+
+    // Encode the remaining key
+    val encodedRemainingKey = encoder.encodeRemainingKey(remainingKeyRow)
+
+    // Decode the remaining key - this should create a row with 1 field, not 2
+    val decodedRemainingKey = encoder.decodeRemainingKey(encodedRemainingKey)
+
+    // Verify the decoded row has correct number of fields (should be 1, not 2)
+    assert(decodedRemainingKey.numFields === 1,
+      s"Expected 1 field in decoded remaining key, but got ${decodedRemainingKey.numFields}")
+
+    // Verify the value is preserved correctly
+    assert(decodedRemainingKey.getString(0) === "test",
+      "Value not preserved in remaining key encoding/decoding")
+  }
 }
 
 @SlowSQLTest
