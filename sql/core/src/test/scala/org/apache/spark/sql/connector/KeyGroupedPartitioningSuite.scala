@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.connector
 
+import java.sql.Timestamp
 import java.util.Collections
 
 import org.apache.spark.sql.{DataFrame, Row}
@@ -957,7 +958,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
 
   test("[SPARK-53074] partial clustering avoided to meet a non-JOIN required distribution") {
     val items_partitions = Array(identity("id"))
-    createTable(items, itemsColumns, items_partitions)
+    createTable(items, items_schema, items_partitions)
     sql(s"INSERT INTO testcat.ns.$items VALUES " +
       "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
       "(1, 'aa', 40.0, cast('2020-01-01' as timestamp)), " +
@@ -965,7 +966,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
       "(3, 'cc', 15.5, cast('2020-02-01' as timestamp))")
 
     val purchases_partitions = Array(identity("item_id"))
-    createTable(purchases, purchasesColumns, purchases_partitions)
+    createTable(purchases, purchases_schema, purchases_partitions)
     sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
       "(1, 45.0, cast('2020-01-01' as timestamp)), " +
       "(1, 50.0, cast('2020-01-02' as timestamp)), " +
