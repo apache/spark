@@ -783,7 +783,7 @@ class ArrowTestsMixin:
             DateType(),
             TimeType(),
             TimestampType(),
-            # TimestampNTZTydpe(), # from_arrow_type controlled by prefer_timestamp_ntz
+            TimestampNTZType(),
             DayTimeIntervalType(0, 3),
             ArrayType(StringType(), True),
             ArrayType(StringType(), False),
