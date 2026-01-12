@@ -330,12 +330,12 @@ class NameStreamingSourcesSuite extends AnalysisTest {
       val streamingV2 = createStreamingRelationV2()
       val wrapped = NamedStreamingRelation(streamingV2, UserProvided("my_source"))
 
-      val error = intercept[AnalysisException] {
-        NameStreamingSources.apply(wrapped)
-      }
-      assert(error.getErrorClass ==
-        "STREAMING_QUERY_EVOLUTION_ERROR.SOURCE_NAMING_NOT_SUPPORTED")
-      assert(error.getMessage.contains("my_source"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          NameStreamingSources.apply(wrapped)
+        },
+        condition = "STREAMING_QUERY_EVOLUTION_ERROR.SOURCE_NAMING_NOT_SUPPORTED",
+        parameters = Map("name" -> "my_source"))
     }
   }
 
@@ -346,12 +346,12 @@ class NameStreamingSourcesSuite extends AnalysisTest {
       val streamingV2 = createStreamingRelationV2()
       val wrapped = NamedStreamingRelation(streamingV2, FlowAssigned("flow_source"))
 
-      val error = intercept[AnalysisException] {
-        NameStreamingSources.apply(wrapped)
-      }
-      assert(error.getErrorClass ==
-        "STREAMING_QUERY_EVOLUTION_ERROR.SOURCE_NAMING_NOT_SUPPORTED")
-      assert(error.getMessage.contains("flow_source"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          NameStreamingSources.apply(wrapped)
+        },
+        condition = "STREAMING_QUERY_EVOLUTION_ERROR.SOURCE_NAMING_NOT_SUPPORTED",
+        parameters = Map("name" -> "flow_source"))
     }
   }
 
