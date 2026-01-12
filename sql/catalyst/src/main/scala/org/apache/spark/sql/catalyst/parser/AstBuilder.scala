@@ -3832,21 +3832,22 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
-   * Create an [[UnresolvedFunction]] from a multi-part identifier.
+   * Create an [[UnresolvedFunctionName]] from a multi-part identifier with proper origin.
    */
   private def createUnresolvedFunctionName(
       ctx: ParserRuleContext,
       ident: Seq[String],
-      commandName: String,
-      requirePersistent: Boolean = false,
-      funcTypeMismatchHint: Option[String] = None,
-      possibleQualifiedName: Option[Seq[String]] = None): UnresolvedFunctionName = withOrigin(ctx) {
-    UnresolvedFunctionName(
-      ident,
-      commandName,
-      requirePersistent,
-      funcTypeMismatchHint,
-      possibleQualifiedName)
+      commandName: String): UnresolvedFunctionName = withOrigin(ctx) {
+    UnresolvedFunctionName(ident, commandName)
+  }
+
+  /**
+   * Create an [[UnresolvedIdentifier]] from a multi-part identifier with proper origin.
+   */
+  protected def createUnresolvedIdentifier(
+      ctx: ParserRuleContext,
+      ident: Seq[String]): UnresolvedIdentifier = withOrigin(ctx) {
+    UnresolvedIdentifier(ident)
   }
 
   /**
@@ -6326,23 +6327,14 @@ class AstBuilder extends DataTypeAstBuilder
           Seq(describeFuncName.getText)
         }
       DescribeFunction(
-        createUnresolvedFunctionName(
-          ctx.describeFuncName(),
-          functionName,
-          "DESCRIBE FUNCTION",
-          requirePersistent = false,
-          funcTypeMismatchHint = None),
+        createUnresolvedFunctionName(describeFuncName, functionName, "DESCRIBE FUNCTION"),
         EXTENDED != null)
     } else {
       DescribeFunction(
         withIdentClause(
           describeFuncName.identifierReference(),
-          createUnresolvedFunctionName(
-            describeFuncName.identifierReference,
-            _,
-            "DESCRIBE FUNCTION",
-            requirePersistent = false,
-            funcTypeMismatchHint = None)),
+          createUnresolvedFunctionName(describeFuncName.identifierReference, _, "DESCRIBE FUNCTION")
+        ),
         EXTENDED != null)
     }
   }
@@ -6384,15 +6376,9 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   override def visitRefreshFunction(ctx: RefreshFunctionContext): LogicalPlan = withOrigin(ctx) {
+    val identCtx = ctx.identifierReference
     RefreshFunction(
-      withIdentClause(
-        ctx.identifierReference,
-        createUnresolvedFunctionName(
-          ctx.identifierReference,
-          _,
-          "REFRESH FUNCTION",
-          requirePersistent = true,
-          funcTypeMismatchHint = None)))
+      withIdentClause(identCtx, createUnresolvedIdentifier(identCtx, _)))
   }
 
   override def visitCommentNamespace(ctx: CommentNamespaceContext): LogicalPlan = withOrigin(ctx) {

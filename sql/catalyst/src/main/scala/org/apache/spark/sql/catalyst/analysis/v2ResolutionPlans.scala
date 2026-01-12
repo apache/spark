@@ -123,8 +123,6 @@ case class UnresolvedFieldPosition(position: ColumnPosition) extends FieldPositi
 case class UnresolvedFunctionName(
     multipartIdentifier: Seq[String],
     commandName: String,
-    requirePersistent: Boolean,
-    funcTypeMismatchHint: Option[String],
     possibleQualifiedName: Option[Seq[String]] = None) extends UnresolvedLeafNode {
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_FUNC)
 }
