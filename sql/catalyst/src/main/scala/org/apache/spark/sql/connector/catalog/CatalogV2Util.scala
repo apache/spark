@@ -718,7 +718,8 @@ private[sql] object CatalogV2Util {
       val cleanedMetadata = metadataWithKeysRemoved(
         Seq("comment", GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY))
       Column.create(f.name, f.dataType, f.nullable, f.getComment().orNull,
-        GeneratedColumn.getGenerationExpression(f).get, metadataAsJson(cleanedMetadata))
+        new GenerationExpression(GeneratedColumn.getGenerationExpression(f).get),
+        metadataAsJson(cleanedMetadata))
     } else if (isIdentityColumn) {
       val cleanedMetadata = metadataWithKeysRemoved(
         Seq("comment",

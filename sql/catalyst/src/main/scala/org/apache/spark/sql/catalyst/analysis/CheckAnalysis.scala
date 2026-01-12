@@ -457,7 +457,27 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             WindowResolution.validateResolvedWindowExpression(w)
 
           case s: SubqueryExpression =>
-            checkSubqueryExpression(operator, s)
+            // Check if this subquery is inside a generated column expression
+            operator match {
+              case create: V2CreateTablePlan =>
+                create.columns.find { col =>
+                  col.generationExpression.exists(_.child.exists(_ eq s))
+                } match {
+                  case Some(col) =>
+                    throw new AnalysisException(
+                      errorClass = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+                      messageParameters = Map(
+                        "fieldName" -> col.name,
+                        "expressionStr" -> col.generationExpression.get.originalSQL,
+                        "reason" -> "subquery expressions are not allowed for generated columns"
+                      )
+                    )
+                  case None =>
+                    checkSubqueryExpression(operator, s)
+                }
+              case _ =>
+                checkSubqueryExpression(operator, s)
+            }
 
           case e: ExpressionWithRandomSeed if !e.seedExpression.foldable =>
             e.failAnalysis(
@@ -718,6 +738,35 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             create.tableSchema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
             TypeUtils.failUnsupportedDataType(create.tableSchema, SQLConf.get)
             SchemaUtils.checkIndeterminateCollationInSchema(create.tableSchema)
+
+            // Validate generated column expressions
+            create.columns.foreach { col =>
+              col.generationExpression.foreach { genExpr =>
+                def unsupportedExpressionError(reason: String): AnalysisException = {
+                  new AnalysisException(
+                    errorClass = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+                    messageParameters = Map(
+                      "fieldName" -> col.name,
+                      "expressionStr" -> genExpr.originalSQL,
+                      "reason" -> reason
+                    )
+                  )
+                }
+                // Check for user-defined functions - only built-in functions are allowed
+                // in generated columns. Traverse the entire expression tree.
+                genExpr.child.foreach {
+                  case u: UnresolvedFunction =>
+                    val fnName = toSQLId(u.nameParts)
+                    throw unsupportedExpressionError(
+                      s"failed to resolve $fnName to a built-in function")
+                  case udf: UserDefinedExpression =>
+                    throw unsupportedExpressionError(
+                      s"failed to resolve `${udf.name}` to a built-in function")
+                  case _ =>
+                }
+                genExpr.validate(col.name, col.dataType, create.columns)
+              }
+            }
 
           case write: V2WriteCommand if write.resolved =>
             write.query.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))

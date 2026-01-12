@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Add, EqualTo, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.IdentityColumnSpec
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
@@ -2984,7 +2984,8 @@ class DDLParserSuite extends AnalysisTest {
         "b",
         IntegerType,
         nullable = false,
-        generationExpression = Some("a+1")
+        generationExpression = Some(GeneratedColumnExpression(
+          Add(UnresolvedAttribute(Seq("a")), Literal(1)), "a+1"))
       )
     )
     comparePlans(parsePlan(
