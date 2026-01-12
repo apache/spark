@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.Locale
 
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.SqlScriptingContextManager
 import org.apache.spark.sql.catalyst.expressions.{CursorReference, UnresolvedCursor}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -27,8 +29,11 @@ import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Resolves [[UnresolvedCursor]] expressions to [[CursorReference]] expressions.
- * This rule normalizes cursor names based on case sensitivity configuration and
- * separates qualified cursor names (label.cursor) into scope label and cursor name.
+ * This rule:
+ * 1. Normalizes cursor names based on case sensitivity configuration
+ * 2. Separates qualified cursor names (label.cursor) into scope label and cursor name
+ * 3. Looks up the cursor definition from the scripting context
+ * 4. Fails early if cursor is not found
  */
 class ResolveCursors extends Rule[LogicalPlan] {
 
@@ -58,6 +63,42 @@ class ResolveCursors extends Rule[LogicalPlan] {
       cursorName.toLowerCase(Locale.ROOT)
     }
 
-    CursorReference(nameParts, normalizedName, scopeLabel)
+    // Look up cursor definition from scripting context
+    // This will be None if we're not in a scripting context (e.g., during EXPLAIN)
+    val contextOpt = SqlScriptingContextManager.get().map(_.getContext)
+
+    val cursorDefOpt = contextOpt.flatMap { context =>
+      // Use reflection to call methods since SqlScriptingExecutionContext is in sql/core
+      val currentFrame = context.getClass.getMethod("currentFrame").invoke(context)
+      val findMethod = scopeLabel match {
+        case Some(_) => "findCursorInScope"
+        case None => "findCursorByName"
+      }
+
+      val result = scopeLabel match {
+        case Some(label) =>
+          currentFrame.getClass
+            .getMethod(findMethod, classOf[String], classOf[String])
+            .invoke(currentFrame, label, normalizedName)
+        case None =>
+          currentFrame.getClass
+            .getMethod(findMethod, classOf[String])
+            .invoke(currentFrame, normalizedName)
+      }
+
+      // Result is Option[CursorDefinition]
+      result.asInstanceOf[Option[Any]]
+    }
+
+    // If cursor not found and we're in a scripting context, fail immediately
+    if (contextOpt.isDefined && cursorDefOpt.isEmpty) {
+      throw new AnalysisException(
+        errorClass = "CURSOR_NOT_FOUND",
+        messageParameters = Map("cursorName" -> nameParts.mkString(".")))
+    }
+
+    // Create CursorReference with the cursor definition (if found)
+    // Note: cursorDefOpt will be None for EXPLAIN commands where context isn't active
+    CursorReference(nameParts, normalizedName, scopeLabel, cursorDefOpt.orNull)
   }
 }

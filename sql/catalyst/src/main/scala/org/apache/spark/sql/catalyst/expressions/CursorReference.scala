@@ -40,17 +40,20 @@ case class UnresolvedCursor(nameParts: Seq[String]) extends LeafExpression with 
 
 /**
  * A resolved reference to a cursor. This is created by the [[ResolveCursors]] analyzer rule
- * after normalizing the cursor name parts and checking case sensitivity.
+ * after normalizing the cursor name parts, checking case sensitivity, and looking up the
+ * cursor definition from the scripting context.
  *
  * @param nameParts The original cursor name parts (unnormalized)
  * @param normalizedName The normalized cursor name (for lookups considering case sensitivity)
  * @param scopeLabel Optional label qualifier for scoped cursors (e.g., Some("label") for
  *                   "label.cursor", None for unqualified cursors)
+ * @param definition The cursor definition looked up during analysis
  */
 case class CursorReference(
     nameParts: Seq[String],
     normalizedName: String,
-    scopeLabel: Option[String]) extends LeafExpression with Unevaluable {
+    scopeLabel: Option[String],
+    definition: Any) extends LeafExpression with Unevaluable {
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override def eval(input: InternalRow): Any =

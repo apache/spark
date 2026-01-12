@@ -46,18 +46,9 @@ case class OpenCursorExec(
 
     val scriptingContext = CursorCommandUtils.getScriptingContext(cursorRef.sql)
 
-    // Find cursor using normalized name from CursorReference
-    val cursorDefOpt: Option[org.apache.spark.sql.scripting.CursorDefinition] =
-      (cursorRef.scopeLabel match {
-        case Some(label) =>
-          scriptingContext.currentFrame.findCursorInScope(label, cursorRef.normalizedName)
-        case None =>
-          scriptingContext.currentFrame.findCursorByName(cursorRef.normalizedName)
-      }).asInstanceOf[Option[org.apache.spark.sql.scripting.CursorDefinition]]
-    val cursorDef = cursorDefOpt.getOrElse(
-      throw new AnalysisException(
-        errorClass = "CURSOR_NOT_FOUND",
-        messageParameters = Map("cursorName" -> cursorRef.sql)))
+    // Get cursor definition from CursorReference (looked up during analysis)
+    val cursorDef = cursorRef.definition
+      .asInstanceOf[org.apache.spark.sql.scripting.CursorDefinition]
 
     // Get current cursor state and validate it's in Declared state
     val currentState = scriptingContext.currentFrame.getCursorState(
