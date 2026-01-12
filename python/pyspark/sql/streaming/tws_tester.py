@@ -613,9 +613,8 @@ class TwsTester:
         """Filters out late events based on watermark and eventTimeExtractor."""
         if self._timeMode != "eventtime" or self._eventTimeExtractor is None:
             return df
-        mask = df.apply(
-            lambda row: self._eventTimeExtractor(row) > self._currentWatermarkMs, axis=1
-        )
+        extractor = self._eventTimeExtractor
+        mask = df.apply(lambda row: extractor(row) > self._currentWatermarkMs, axis=1)
         return df[mask].reset_index(drop=True)
 
     def setProcessingTime(self, currentTimeMs: int) -> list[Row] | pd.DataFrame:
