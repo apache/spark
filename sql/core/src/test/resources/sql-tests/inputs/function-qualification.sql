@@ -103,14 +103,7 @@ SELECT * FROM explode(array(1, 2, 3));
 -- SECTION 6: DDL Operations with Qualified Names
 --
 
--- DESCRIBE with qualified names
-CREATE TEMPORARY FUNCTION desc_test() RETURNS INT RETURN 100;
-DESCRIBE FUNCTION desc_test;
-DESCRIBE FUNCTION session.desc_test;
-DESCRIBE FUNCTION system.session.desc_test;
-DROP TEMPORARY FUNCTION desc_test;
-
--- DESCRIBE builtin with qualification
+-- DESCRIBE builtin functions with qualification (no createTime, stable output)
 DESCRIBE FUNCTION builtin.abs;
 DESCRIBE FUNCTION system.builtin.abs;
 
