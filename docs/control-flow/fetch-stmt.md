@@ -176,7 +176,7 @@ No more rows
 - Each `FETCH` advances the cursor position by one row.
 - When no more rows are available, `FETCH` raises the `CURSOR_NO_MORE_ROWS` condition:
   - SQLSTATE: `'02000'`
-  - Error class: `CURSOR_NO_MORE_ROWS`
+  - Error condition: `CURSOR_NO_MORE_ROWS`
   - This is caught by `NOT FOUND` handlers (which catch all SQLSTATE `'02xxx'` conditions)
 - If no `CONTINUE HANDLER` or `EXIT HANDLER` is declared for `NOT FOUND`, the completion condition is silently ignored and execution continues. This allows scripts to continue after exhausting a cursor.
 - Type compatibility follows store assignment rules:
