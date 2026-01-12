@@ -147,10 +147,8 @@ class CoercionPolicy(str, Enum):
     >>> int_type.coerce(1.5, CoercionPolicy.PERMISSIVE) is None
     True
 
-    STRICT policy skips coercion (Arrow handles natively):
-
-    >>> int_type.coerce(1.5, CoercionPolicy.STRICT)
-    1.5
+    Note: In STRICT mode, the serializer skips calling coerce() entirely,
+    letting Arrow handle type conversion natively.
     """
 
     PERMISSIVE = "permissive"
