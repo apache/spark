@@ -2043,8 +2043,13 @@ class Analyzer(
    * only performs simple existence check according to the function identifier to quickly identify
    * undefined functions without triggering relation resolution, which may incur potentially
    * expensive partition/schema discovery process in some cases.
-   * In order to avoid duplicate external functions lookup, the external function identifier will
-   * store in the local hash set externalFunctionNameSet.
+   *
+   * To avoid duplicate external catalog lookups, this rule maintains a per-plan cache of
+   * persistent function names (externalFunctionNameSet). Builtin and temporary functions are
+   * validated on every occurrence since they're fast in-memory lookups, but persistent functions
+   * are cached after the first validation to avoid repeated external catalog calls for the same
+   * function within a single plan.
+   *
    * @see [[ResolveFunctions]]
    * @see https://issues.apache.org/jira/browse/SPARK-19737
    */
@@ -2054,21 +2059,15 @@ class Analyzer(
 
       plan.resolveExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
         case f @ UnresolvedFunction(nameParts, _, _, _, _, _, _) =>
-          // Check cache first for persistent functions to avoid repeated external catalog lookups.
           val CatalogAndIdentifier(catalog, ident) =
             relationResolution.expandIdentifier(nameParts)
           val fullName = normalizeFuncName(
             (catalog.name +: ident.namespace :+ ident.name).toImmutableArraySeq)
 
           if (externalFunctionNameSet.contains(fullName)) {
-            // Already validated this persistent function - skip validation.
             f
           } else {
-            // Not in cache - validate the function.
-            // Returns true if builtin/temp, false if persistent.
             val isBuiltinOrTemp = functionResolution.validateFunctionExistence(nameParts, f)
-
-            // If it's a persistent function, add to cache.
             if (!isBuiltinOrTemp) {
               externalFunctionNameSet.add(fullName)
             }
