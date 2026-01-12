@@ -214,7 +214,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   protected val hideTraceback: Boolean = false
   protected val simplifiedTraceback: Boolean = false
 
-  protected val runnerConf: Map[String, String] = Map.empty
+  protected def runnerConf: Map[String, String] = Map.empty
 
   // All the Python functions should have the same exec, version and envvars.
   protected val envVars: java.util.Map[String, String] = funcs.head.funcs.head.envVars

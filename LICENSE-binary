@@ -265,6 +265,8 @@ io.fabric8:kubernetes-model-rbac
 io.fabric8:kubernetes-model-resource
 io.fabric8:kubernetes-model-scheduling
 io.fabric8:kubernetes-model-storageclass
+io.fabric8:volcano-client
+io.fabric8:volcano-model
 io.fabric8:zjsonpatch
 io.github.java-diff-utils:java-diff-utils
 io.jsonwebtoken:jjwt-api

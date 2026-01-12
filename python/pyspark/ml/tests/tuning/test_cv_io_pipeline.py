@@ -16,7 +16,7 @@
 #
 
 import tempfile
-import unittest
+from concurrent.futures import ThreadPoolExecutor
 
 from pyspark.ml.feature import HashingTF, Tokenizer
 from pyspark.ml import Pipeline
@@ -55,7 +55,7 @@ class CrossValidatorIOPipelineTests(SparkSessionTestCase, ValidatorTestUtilsMixi
         tokenizer = Tokenizer(inputCol="text", outputCol="words")
         hashingTF = HashingTF(inputCol=tokenizer.getOutputCol(), outputCol="features")
 
-        ova = OneVsRest(classifier=LogisticRegressionCls())
+        ova = OneVsRest(classifier=LogisticRegressionCls(), parallelism=2)
         lr1 = LogisticRegressionCls().setMaxIter(5)
         lr2 = LogisticRegressionCls().setMaxIter(10)
 
@@ -73,6 +73,7 @@ class CrossValidatorIOPipelineTests(SparkSessionTestCase, ValidatorTestUtilsMixi
             estimatorParamMaps=paramGrid,
             evaluator=MulticlassClassificationEvaluator(),
             numFolds=2,
+            parallelism=4,
         )  # use 3+ folds in practice
         cvPath = temp_path + "/cv"
         crossval.save(cvPath)
@@ -101,6 +102,7 @@ class CrossValidatorIOPipelineTests(SparkSessionTestCase, ValidatorTestUtilsMixi
             estimatorParamMaps=paramGrid,
             evaluator=MulticlassClassificationEvaluator(),
             numFolds=2,
+            parallelism=4,
         )  # use 3+ folds in practice
         cv2Path = temp_path + "/cv2"
         crossval2.save(cv2Path)
@@ -127,17 +129,16 @@ class CrossValidatorIOPipelineTests(SparkSessionTestCase, ValidatorTestUtilsMixi
             self.assertEqual(loadedStage.uid, originalStage.uid)
 
     def test_save_load_pipeline_estimator(self):
-        self._run_test_save_load_pipeline_estimator(LogisticRegression)
-        self._run_test_save_load_pipeline_estimator(DummyLogisticRegression)
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            list(
+                executor.map(
+                    self._run_test_save_load_pipeline_estimator,
+                    [LogisticRegression, DummyLogisticRegression],
+                )
+            )
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.tuning.test_cv_io_pipeline import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

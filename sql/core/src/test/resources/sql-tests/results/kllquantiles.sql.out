@@ -837,8 +837,7 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "KLL_SKETCH_INVALID_QUANTILE_RANGE",
   "sqlState" : "22003",
   "messageParameters" : {
-    "functionName" : "`kll_sketch_get_quantile_bigint`",
-    "quantile" : "-0.5D"
+    "functionName" : "`kll_sketch_get_quantile_bigint`"
   }
 }
 
@@ -857,8 +856,7 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "KLL_SKETCH_INVALID_QUANTILE_RANGE",
   "sqlState" : "22003",
   "messageParameters" : {
-    "functionName" : "`kll_sketch_get_quantile_bigint`",
-    "quantile" : "1.5D"
+    "functionName" : "`kll_sketch_get_quantile_bigint`"
   }
 }
 
@@ -877,8 +875,7 @@ org.apache.spark.SparkRuntimeException
   "errorClass" : "KLL_SKETCH_INVALID_QUANTILE_RANGE",
   "sqlState" : "22003",
   "messageParameters" : {
-    "functionName" : "`kll_sketch_get_quantile_float`",
-    "quantile" : "-0.1D"
+    "functionName" : "`kll_sketch_get_quantile_float`"
   }
 }
 
@@ -894,11 +891,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "KLL_SKETCH_INVALID_INPUT",
+  "errorClass" : "KLL_INVALID_INPUT_SKETCH_BUFFER",
   "sqlState" : "22000",
   "messageParameters" : {
-    "functionName" : "`kll_sketch_get_rank_bigint`",
-    "reason" : "reqOffset: 40, reqLength: 56, (reqOff + reqLen): 96, allocSize: 60"
+    "function" : "`kll_sketch_get_rank_bigint`"
   }
 }
 
@@ -915,11 +911,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "KLL_SKETCH_INCOMPATIBLE_MERGE",
+  "errorClass" : "KLL_INVALID_INPUT_SKETCH_BUFFER",
   "sqlState" : "22000",
   "messageParameters" : {
-    "functionName" : "`kll_sketch_merge_bigint`",
-    "reason" : "reqOffset: 40, reqLength: 56, (reqOff + reqLen): 96, allocSize: 60"
+    "function" : "`kll_sketch_merge_bigint`"
   }
 }
 
@@ -931,11 +926,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "KLL_SKETCH_INVALID_INPUT",
+  "errorClass" : "KLL_INVALID_INPUT_SKETCH_BUFFER",
   "sqlState" : "22000",
   "messageParameters" : {
-    "functionName" : "`kll_sketch_get_quantile_bigint`",
-    "reason" : "Error combination of PreInts and SerVer: PreInts: 110, SerVer: 111"
+    "function" : "`kll_sketch_get_quantile_bigint`"
   }
 }
 
@@ -1098,11 +1092,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "KLL_SKETCH_INVALID_INPUT",
+  "errorClass" : "KLL_INVALID_INPUT_SKETCH_BUFFER",
   "sqlState" : "22000",
   "messageParameters" : {
-    "functionName" : "`kll_sketch_get_n_bigint`",
-    "reason" : "A sketch memory image must be at least 8 bytes. 4"
+    "function" : "`kll_sketch_get_n_bigint`"
   }
 }
 
@@ -1114,11 +1107,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "KLL_SKETCH_INVALID_INPUT",
+  "errorClass" : "KLL_INVALID_INPUT_SKETCH_BUFFER",
   "sqlState" : "22000",
   "messageParameters" : {
-    "functionName" : "`kll_sketch_get_n_float`",
-    "reason" : "A sketch memory image must be at least 8 bytes. 4"
+    "function" : "`kll_sketch_get_n_float`"
   }
 }
 
@@ -1130,11 +1122,10 @@ struct<>
 -- !query output
 org.apache.spark.SparkRuntimeException
 {
-  "errorClass" : "KLL_SKETCH_INVALID_INPUT",
+  "errorClass" : "KLL_INVALID_INPUT_SKETCH_BUFFER",
   "sqlState" : "22000",
   "messageParameters" : {
-    "functionName" : "`kll_sketch_get_n_double`",
-    "reason" : "A sketch memory image must be at least 8 bytes. 4"
+    "function" : "`kll_sketch_get_n_double`"
   }
 }
 

@@ -928,11 +928,15 @@ class AstBuilder extends DataTypeAstBuilder
       case ctx: InsertIntoReplaceWhereContext =>
         val options = Option(ctx.optionsClause())
         withIdentClause(ctx.identifierReference, Seq(query), (ident, otherPlans) => {
-          OverwriteByExpression.byPosition(
-            createUnresolvedRelation(ctx.identifierReference, ident, options,
-              Seq(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE), isStreaming = false),
-            otherPlans.head,
-            expression(ctx.whereClause().booleanExpression()))
+          val table = createUnresolvedRelation(ctx.identifierReference, ident, options,
+            Seq(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE), isStreaming = false)
+          val deleteExpr = expression(ctx.whereClause().booleanExpression())
+          val isByName = ctx.NAME() != null
+          if (isByName) {
+            OverwriteByExpression.byName(table, otherPlans.head, deleteExpr)
+          } else {
+            OverwriteByExpression.byPosition(table, otherPlans.head, deleteExpr)
+          }
         })
       case dir: InsertOverwriteDirContext =>
         val (isLocal, storage, provider) = visitInsertOverwriteDir(dir)
@@ -2837,6 +2841,10 @@ class AstBuilder extends DataTypeAstBuilder
       case SqlBaseParser.IN if ctx.query != null =>
         invertIfNotDefined(InSubquery(getValueExpressions(e), ListQuery(plan(ctx.query))))
       case SqlBaseParser.IN =>
+        // Validate that IN clause is not empty
+        if (ctx.expression.isEmpty) {
+          throw QueryParsingErrors.emptyInPredicateError(ctx)
+        }
         invertIfNotDefined(In(e, ctx.expression.asScala.map(expression).toSeq))
       case SqlBaseParser.LIKE | SqlBaseParser.ILIKE =>
         Option(ctx.quantifier).map(_.getType) match {
@@ -3824,21 +3832,22 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
-   * Create an [[UnresolvedFunction]] from a multi-part identifier.
+   * Create an [[UnresolvedFunctionName]] from a multi-part identifier with proper origin.
    */
   private def createUnresolvedFunctionName(
       ctx: ParserRuleContext,
       ident: Seq[String],
-      commandName: String,
-      requirePersistent: Boolean = false,
-      funcTypeMismatchHint: Option[String] = None,
-      possibleQualifiedName: Option[Seq[String]] = None): UnresolvedFunctionName = withOrigin(ctx) {
-    UnresolvedFunctionName(
-      ident,
-      commandName,
-      requirePersistent,
-      funcTypeMismatchHint,
-      possibleQualifiedName)
+      commandName: String): UnresolvedFunctionName = withOrigin(ctx) {
+    UnresolvedFunctionName(ident, commandName)
+  }
+
+  /**
+   * Create an [[UnresolvedIdentifier]] from a multi-part identifier with proper origin.
+   */
+  protected def createUnresolvedIdentifier(
+      ctx: ParserRuleContext,
+      ident: Seq[String]): UnresolvedIdentifier = withOrigin(ctx) {
+    UnresolvedIdentifier(ident)
   }
 
   /**
@@ -6318,23 +6327,14 @@ class AstBuilder extends DataTypeAstBuilder
           Seq(describeFuncName.getText)
         }
       DescribeFunction(
-        createUnresolvedFunctionName(
-          ctx.describeFuncName(),
-          functionName,
-          "DESCRIBE FUNCTION",
-          requirePersistent = false,
-          funcTypeMismatchHint = None),
+        createUnresolvedFunctionName(describeFuncName, functionName, "DESCRIBE FUNCTION"),
         EXTENDED != null)
     } else {
       DescribeFunction(
         withIdentClause(
           describeFuncName.identifierReference(),
-          createUnresolvedFunctionName(
-            describeFuncName.identifierReference,
-            _,
-            "DESCRIBE FUNCTION",
-            requirePersistent = false,
-            funcTypeMismatchHint = None)),
+          createUnresolvedFunctionName(describeFuncName.identifierReference, _, "DESCRIBE FUNCTION")
+        ),
         EXTENDED != null)
     }
   }
@@ -6376,15 +6376,9 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   override def visitRefreshFunction(ctx: RefreshFunctionContext): LogicalPlan = withOrigin(ctx) {
+    val identCtx = ctx.identifierReference
     RefreshFunction(
-      withIdentClause(
-        ctx.identifierReference,
-        createUnresolvedFunctionName(
-          ctx.identifierReference,
-          _,
-          "REFRESH FUNCTION",
-          requirePersistent = true,
-          funcTypeMismatchHint = None)))
+      withIdentClause(identCtx, createUnresolvedIdentifier(identCtx, _)))
   }
 
   override def visitCommentNamespace(ctx: CommentNamespaceContext): LogicalPlan = withOrigin(ctx) {

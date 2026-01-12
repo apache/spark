@@ -29,7 +29,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace, GlobalTempView, LocalTempView,
   PersistedView, PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution,
-  UnresolvedAttribute, UnresolvedFunctionName, UnresolvedIdentifier, UnresolvedNamespace}
+  UnresolvedAttribute, UnresolvedIdentifier, UnresolvedNamespace, UnresolvedProcedure}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
@@ -1031,9 +1031,10 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitDropFunction(ctx: DropFunctionContext): LogicalPlan = withOrigin(ctx) {
-    withIdentClause(ctx.identifierReference(), functionName => {
-      val isTemp = ctx.TEMPORARY != null
-      if (isTemp) {
+    val isTemp = ctx.TEMPORARY != null
+    val identCtx = ctx.identifierReference()
+    if (isTemp) {
+      withIdentClause(identCtx, functionName => {
         if (functionName.length > 1) {
           throw QueryParsingErrors.invalidNameForDropTempFunc(functionName, ctx)
         }
@@ -1041,17 +1042,12 @@ class SparkSqlAstBuilder extends AstBuilder {
           identifier = FunctionIdentifier(functionName.head),
           ifExists = ctx.EXISTS != null,
           isTemp = true)
-      } else {
-        val hintStr = "Please use fully qualified identifier to drop the persistent function."
-        DropFunction(
-          UnresolvedFunctionName(
-            functionName,
-            "DROP FUNCTION",
-            requirePersistent = true,
-            funcTypeMismatchHint = Some(hintStr)),
-          ctx.EXISTS != null)
-      }
-    })
+      })
+    } else {
+      DropFunction(
+        withIdentClause(identCtx, createUnresolvedIdentifier(identCtx, _)),
+        ctx.EXISTS != null)
+    }
   }
 
   private def toStorageFormat(
@@ -1399,7 +1395,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitDescribeProcedure(
       ctx: DescribeProcedureContext): LogicalPlan = withOrigin(ctx) {
     withIdentClause(ctx.identifierReference(), procIdentifier =>
-      DescribeProcedureCommand(UnresolvedIdentifier(procIdentifier)))
+      DescribeProcedureCommand(UnresolvedProcedure(procIdentifier)))
   }
 
   override def visitCreatePipelineInsertIntoFlow(
