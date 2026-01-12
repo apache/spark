@@ -2152,7 +2152,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         val result = if (expensiveWithUsed.isEmpty) {
           topProjection
         } else {
-          // Finally add any filters which could not be pushed or split
+          // Finally add any filters which could not be pushed
           val remainingConditions = expensiveWithUsed.map(_._1).toSeq
           Filter(remainingConditions.reduce(And), topProjection)
         }
