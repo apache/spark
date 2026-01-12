@@ -57,6 +57,7 @@ private[protobuf] class SQLExecutionUIDataSerializer extends ProtobufSerDe[SQLEx
         case (k, v) => builder.putMetricValues(k, v)
       }
     }
+    setStringField(ui.queryId, builder.setQueryId)
     builder.build().toByteArray
   }
 
@@ -92,7 +93,8 @@ private[protobuf] class SQLExecutionUIDataSerializer extends ProtobufSerDe[SQLEx
       errorMessage = errorMessage,
       jobs = jobs,
       stages = ui.getStagesList.asScala.map(_.toInt).toSet,
-      metricValues = metricValues
+      metricValues = metricValues,
+      queryId = getStringField(ui.hasQueryId, () => ui.getQueryId)
     )
   }
 }
