@@ -378,36 +378,6 @@ Project [col#x]
 
 
 -- !query
-CREATE TEMPORARY FUNCTION desc_test() RETURNS INT RETURN 100
--- !query analysis
-CreateSQLFunctionCommand desc_test, INT, 100, false, true, false, false
-
-
--- !query
-DESCRIBE FUNCTION desc_test
--- !query analysis
-DescribeFunctionCommand org.apache.spark.sql.catalyst.expressions.ExpressionInfo@xxxxxxxx, false
-
-
--- !query
-DESCRIBE FUNCTION session.desc_test
--- !query analysis
-DescribeFunctionCommand org.apache.spark.sql.catalyst.expressions.ExpressionInfo@xxxxxxxx, false
-
-
--- !query
-DESCRIBE FUNCTION system.session.desc_test
--- !query analysis
-DescribeFunctionCommand org.apache.spark.sql.catalyst.expressions.ExpressionInfo@xxxxxxxx, false
-
-
--- !query
-DROP TEMPORARY FUNCTION desc_test
--- !query analysis
-DropFunctionCommand desc_test, false, true
-
-
--- !query
 DESCRIBE FUNCTION builtin.abs
 -- !query analysis
 DescribeFunctionCommand org.apache.spark.sql.catalyst.expressions.ExpressionInfo@xxxxxxxx, false
