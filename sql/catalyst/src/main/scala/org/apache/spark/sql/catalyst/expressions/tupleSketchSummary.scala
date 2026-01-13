@@ -22,7 +22,7 @@ import org.apache.datasketches.tuple.adouble.DoubleSummary
 import org.apache.datasketches.tuple.aninteger.IntegerSummary
 
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.util.{ThetaSketchUtils, TupleSummaryMode}
+import org.apache.spark.sql.catalyst.util.{TupleSketchUtils, TupleSummaryMode}
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, DoubleType, LongType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -71,9 +71,9 @@ case class TupleSketchSummaryDouble(left: Expression, right: Expression)
     // Parse and validate mode in one step
     val mode = TupleSummaryMode.fromString(modeStr, prettyName)
 
-    val sketch = ThetaSketchUtils.heapifyDoubleTupleSketch(buffer, prettyName)
+    val sketch = TupleSketchUtils.heapifyDoubleSketch(buffer, prettyName)
 
-    ThetaSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
+    TupleSketchUtils.aggregateNumericSummaries[DoubleSummary, Double](
       sketch.iterator(),
       mode,
       (it: TupleSketchIterator[DoubleSummary]) => it.getSummary.getValue)
@@ -124,9 +124,9 @@ case class TupleSketchSummaryInteger(left: Expression, right: Expression)
     // Parse and validate mode in one step
     val mode = TupleSummaryMode.fromString(modeStr, prettyName)
 
-    val sketch = ThetaSketchUtils.heapifyIntegerTupleSketch(buffer, prettyName)
+    val sketch = TupleSketchUtils.heapifyIntegerSketch(buffer, prettyName)
 
-    ThetaSketchUtils.aggregateNumericSummaries[IntegerSummary, Long](
+    TupleSketchUtils.aggregateNumericSummaries[IntegerSummary, Long](
       sketch.iterator(),
       mode,
       (it: TupleSketchIterator[IntegerSummary]) => it.getSummary.getValue.toLong)

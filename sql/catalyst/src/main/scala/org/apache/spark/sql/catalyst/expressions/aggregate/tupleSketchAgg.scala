@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResul
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
 import org.apache.spark.sql.catalyst.trees.QuaternaryLike
-import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, SketchSize, SummaryAggregateMode, ThetaSketchUtils, TupleSummaryMode}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, SketchSize, SummaryAggregateMode, ThetaSketchUtils, TupleSketchUtils, TupleSummaryMode}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, ArrayType, BinaryType, DataType, DoubleType, FloatType, IntegerType, LongType, StringType, TypeCollection}
@@ -165,7 +165,7 @@ case class TupleSketchAggDouble(
   override def deserialize(buffer: Array[Byte]): TupleSketchState[DoubleSummary] = {
     if (buffer.nonEmpty) {
       FinalizedTupleSketch(
-        ThetaSketchUtils.heapifyDoubleTupleSketch(buffer, prettyName))
+        TupleSketchUtils.heapifyDoubleSketch(buffer, prettyName))
     } else {
       createAggregationBuffer()
     }
@@ -306,7 +306,7 @@ case class TupleSketchAggInteger(
   override def deserialize(buffer: Array[Byte]): TupleSketchState[IntegerSummary] = {
     if (buffer.nonEmpty) {
       FinalizedTupleSketch(
-        ThetaSketchUtils.heapifyIntegerTupleSketch(buffer, prettyName))
+        TupleSketchUtils.heapifyIntegerSketch(buffer, prettyName))
     } else {
       createAggregationBuffer()
     }

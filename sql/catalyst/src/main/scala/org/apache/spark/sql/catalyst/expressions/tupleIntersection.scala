@@ -22,7 +22,7 @@ import org.apache.datasketches.tuple.adouble.{DoubleSummary, DoubleSummaryFactor
 import org.apache.datasketches.tuple.aninteger.{IntegerSummary, IntegerSummaryFactory, IntegerSummarySetOperations}
 
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.util.{ThetaSketchUtils, TupleSummaryMode}
+import org.apache.spark.sql.catalyst.util.{ThetaSketchUtils, TupleSketchUtils, TupleSummaryMode}
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -68,8 +68,8 @@ case class TupleIntersectionDouble(first: Expression, second: Expression, third:
       sketch2Bytes: Array[Byte],
       intersection: Intersection[DoubleSummary],
       mode: DoubleSummary.Mode): Unit = {
-    val tupleSketch1 = ThetaSketchUtils.heapifyDoubleTupleSketch(sketch1Bytes, prettyName)
-    val tupleSketch2 = ThetaSketchUtils.heapifyDoubleTupleSketch(sketch2Bytes, prettyName)
+    val tupleSketch1 = TupleSketchUtils.heapifyDoubleSketch(sketch1Bytes, prettyName)
+    val tupleSketch2 = TupleSketchUtils.heapifyDoubleSketch(sketch2Bytes, prettyName)
 
     intersection.intersect(tupleSketch1)
     intersection.intersect(tupleSketch2)
@@ -119,7 +119,7 @@ case class TupleIntersectionThetaDouble(first: Expression, second: Expression, t
       sketch2Bytes: Array[Byte],
       intersection: Intersection[DoubleSummary],
       mode: DoubleSummary.Mode): Unit = {
-    val tupleSketch = ThetaSketchUtils.heapifyDoubleTupleSketch(sketch1Bytes, prettyName)
+    val tupleSketch = TupleSketchUtils.heapifyDoubleSketch(sketch1Bytes, prettyName)
     val thetaSketch = ThetaSketchUtils.wrapCompactSketch(sketch2Bytes, prettyName)
 
     val defaultSummary = new DoubleSummaryFactory(mode).newSummary()
@@ -170,8 +170,8 @@ case class TupleIntersectionInteger(first: Expression, second: Expression, third
       sketch2Bytes: Array[Byte],
       intersection: Intersection[IntegerSummary],
       mode: IntegerSummary.Mode): Unit = {
-    val tupleSketch1 = ThetaSketchUtils.heapifyIntegerTupleSketch(sketch1Bytes, prettyName)
-    val tupleSketch2 = ThetaSketchUtils.heapifyIntegerTupleSketch(sketch2Bytes, prettyName)
+    val tupleSketch1 = TupleSketchUtils.heapifyIntegerSketch(sketch1Bytes, prettyName)
+    val tupleSketch2 = TupleSketchUtils.heapifyIntegerSketch(sketch2Bytes, prettyName)
 
     intersection.intersect(tupleSketch1)
     intersection.intersect(tupleSketch2)
@@ -221,7 +221,7 @@ case class TupleIntersectionThetaInteger(first: Expression, second: Expression, 
       sketch2Bytes: Array[Byte],
       intersection: Intersection[IntegerSummary],
       mode: IntegerSummary.Mode): Unit = {
-    val tupleSketch = ThetaSketchUtils.heapifyIntegerTupleSketch(sketch1Bytes, prettyName)
+    val tupleSketch = TupleSketchUtils.heapifyIntegerSketch(sketch1Bytes, prettyName)
     val thetaSketch = ThetaSketchUtils.wrapCompactSketch(sketch2Bytes, prettyName)
 
     val defaultSummary = new IntegerSummaryFactory(mode).newSummary()

@@ -22,7 +22,7 @@ import org.apache.datasketches.tuple.adouble.DoubleSummary
 import org.apache.datasketches.tuple.aninteger.IntegerSummary
 
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.util.ThetaSketchUtils
+import org.apache.spark.sql.catalyst.util.{ThetaSketchUtils, TupleSketchUtils}
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType}
 
 // scalastyle:off line.size.limit
@@ -53,8 +53,8 @@ case class TupleDifferenceDouble(left: Expression, right: Expression)
       sketch1Bytes: Array[Byte],
       sketch2Bytes: Array[Byte],
       aNotB: AnotB[DoubleSummary]): Unit = {
-    val tupleSketch1 = ThetaSketchUtils.heapifyDoubleTupleSketch(sketch1Bytes, prettyName)
-    val tupleSketch2 = ThetaSketchUtils.heapifyDoubleTupleSketch(sketch2Bytes, prettyName)
+    val tupleSketch1 = TupleSketchUtils.heapifyDoubleSketch(sketch1Bytes, prettyName)
+    val tupleSketch2 = TupleSketchUtils.heapifyDoubleSketch(sketch2Bytes, prettyName)
 
     aNotB.setA(tupleSketch1)
     aNotB.notB(tupleSketch2)
@@ -89,7 +89,7 @@ case class TupleDifferenceThetaDouble(left: Expression, right: Expression)
       sketch1Bytes: Array[Byte],
       sketch2Bytes: Array[Byte],
       aNotB: AnotB[DoubleSummary]): Unit = {
-    val tupleSketch = ThetaSketchUtils.heapifyDoubleTupleSketch(sketch1Bytes, prettyName)
+    val tupleSketch = TupleSketchUtils.heapifyDoubleSketch(sketch1Bytes, prettyName)
     val thetaSketch = ThetaSketchUtils.wrapCompactSketch(sketch2Bytes, prettyName)
 
     aNotB.setA(tupleSketch)
@@ -125,8 +125,8 @@ case class TupleDifferenceInteger(left: Expression, right: Expression)
       sketch1Bytes: Array[Byte],
       sketch2Bytes: Array[Byte],
       aNotB: AnotB[IntegerSummary]): Unit = {
-    val tupleSketch1 = ThetaSketchUtils.heapifyIntegerTupleSketch(sketch1Bytes, prettyName)
-    val tupleSketch2 = ThetaSketchUtils.heapifyIntegerTupleSketch(sketch2Bytes, prettyName)
+    val tupleSketch1 = TupleSketchUtils.heapifyIntegerSketch(sketch1Bytes, prettyName)
+    val tupleSketch2 = TupleSketchUtils.heapifyIntegerSketch(sketch2Bytes, prettyName)
 
     aNotB.setA(tupleSketch1)
     aNotB.notB(tupleSketch2)
@@ -161,7 +161,7 @@ case class TupleDifferenceThetaInteger(left: Expression, right: Expression)
       sketch1Bytes: Array[Byte],
       sketch2Bytes: Array[Byte],
       aNotB: AnotB[IntegerSummary]): Unit = {
-    val tupleSketch = ThetaSketchUtils.heapifyIntegerTupleSketch(sketch1Bytes, prettyName)
+    val tupleSketch = TupleSketchUtils.heapifyIntegerSketch(sketch1Bytes, prettyName)
     val thetaSketch = ThetaSketchUtils.wrapCompactSketch(sketch2Bytes, prettyName)
 
     aNotB.setA(tupleSketch)

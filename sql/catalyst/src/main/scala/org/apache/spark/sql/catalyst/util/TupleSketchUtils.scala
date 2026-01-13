@@ -19,8 +19,10 @@ package org.apache.spark.sql.catalyst.util
 
 import java.util.Locale
 
-import org.apache.datasketches.tuple.adouble.DoubleSummary
-import org.apache.datasketches.tuple.aninteger.IntegerSummary
+import org.apache.datasketches.memory.{Memory, MemoryBoundsException}
+import org.apache.datasketches.tuple.{Sketch, Sketches, Summary, TupleSketchIterator}
+import org.apache.datasketches.tuple.adouble.{DoubleSummary, DoubleSummaryDeserializer}
+import org.apache.datasketches.tuple.aninteger.{IntegerSummary, IntegerSummaryDeserializer}
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -194,6 +196,137 @@ trait SummaryAggregateMode extends AggregateFunction {
         case e: Exception =>
           TypeCheckResult.TypeCheckFailure(e.getMessage)
       }
+    }
+  }
+}
+
+object TupleSketchUtils {
+  /**
+   * Deserializes a binary tuple sketch representation into a Sketch with the
+   * appropriate summary type.
+   *
+   * @param bytes
+   *   The binary sketch data to deserialize
+   * @param deserializer
+   *   The summary deserializer for the target summary type
+   * @param prettyName
+   *   The display name of the function/expression for error messages
+   * @tparam U
+   *   The summary type, inferred from the deserializer
+   * @return
+   *   A deserialized sketch with summary type U
+   */
+  def heapifySketch[U <: Summary](
+      bytes: Array[Byte],
+      deserializer: org.apache.datasketches.tuple.SummaryDeserializer[U],
+      prettyName: String): Sketch[U] = {
+    val memory =
+      try {
+        Memory.wrap(bytes)
+      } catch {
+        case _: NullPointerException | _: MemoryBoundsException =>
+          throw QueryExecutionErrors.thetaInvalidInputSketchBuffer(prettyName)
+      }
+
+    try {
+      Sketches.heapifySketch(memory, deserializer)
+    } catch {
+      case _: Exception =>
+        throw QueryExecutionErrors.tupleInvalidInputSketchBuffer(prettyName)
+    }
+  }
+
+  /**
+   * Deserializes a Double summary type binary tuple sketch representation into a Sketch.
+   *
+   * @param bytes
+   *   The binary sketch data to deserialize
+   * @param prettyName
+   *   The display name of the function/expression for error messages
+   * @return
+   *   A deserialized sketch
+   */
+  def heapifyDoubleSketch(bytes: Array[Byte], prettyName: String): Sketch[DoubleSummary] = {
+    heapifySketch(bytes, new DoubleSummaryDeserializer(), prettyName)
+  }
+
+  /**
+   * Deserializes an Integer summary type binary tuple sketch representation into a Sketch.
+   *
+   * @param bytes
+   *   The binary sketch data to deserialize
+   * @param prettyName
+   *   The display name of the function/expression for error messages
+   * @return
+   *   A deserialized sketch
+   */
+  def heapifyIntegerSketch(
+      bytes: Array[Byte],
+      prettyName: String): Sketch[IntegerSummary] = {
+    heapifySketch(bytes, new IntegerSummaryDeserializer(), prettyName)
+  }
+
+  /**
+   * Aggregates numeric summaries from a tuple sketch iterator based on the specified mode.
+   * This method provides compile-time exhaustiveness checking through pattern matching on
+   * the sealed TupleSummaryMode trait.
+   *
+   * @param iterator
+   *   The tuple sketch iterator to aggregate
+   * @param mode
+   *   The aggregation mode (Sum, Min, Max, or AlwaysOne)
+   * @param getValue
+   *   Function to extract the numeric value from the iterator
+   * @param num
+   *   Implicit Numeric instance for the value type
+   * @tparam S
+   *   The summary type
+   * @tparam V
+   *   The value type
+   * @return
+   *   The aggregated value
+   */
+  def aggregateNumericSummaries[S <: Summary, V](
+      iterator: TupleSketchIterator[S],
+      mode: TupleSummaryMode,
+      getValue: TupleSketchIterator[S] => V)(implicit num: Numeric[V]): V = {
+
+    mode match {
+      case TupleSummaryMode.Sum =>
+        var sum = num.zero
+        while (iterator.next()) {
+          sum = num.plus(sum, getValue(iterator))
+        }
+        sum
+
+      case TupleSummaryMode.Min =>
+        var min: Option[V] = None
+        while (iterator.next()) {
+          val value = getValue(iterator)
+          min = min match {
+            case Some(m) => Some(num.min(m, value))
+            case None => Some(value)
+          }
+        }
+        min.getOrElse(num.zero)
+
+      case TupleSummaryMode.Max =>
+        var max: Option[V] = None
+        while (iterator.next()) {
+          val value = getValue(iterator)
+          max = max match {
+            case Some(m) => Some(num.max(m, value))
+            case None => Some(value)
+          }
+        }
+        max.getOrElse(num.zero)
+
+      case TupleSummaryMode.AlwaysOne =>
+        var count = num.zero
+        while (iterator.next()) {
+          count = num.plus(count, num.one)
+        }
+        count
     }
   }
 }

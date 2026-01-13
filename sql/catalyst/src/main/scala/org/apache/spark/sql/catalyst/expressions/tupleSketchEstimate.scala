@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.util.ThetaSketchUtils
+import org.apache.spark.sql.catalyst.util.TupleSketchUtils
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, DoubleType}
 
 // scalastyle:off line.size.limit
@@ -53,7 +53,7 @@ case class TupleSketchEstimateDouble(child: Expression)
 
   override def nullSafeEval(input: Any): Any = {
     val buffer = input.asInstanceOf[Array[Byte]]
-    val sketch = ThetaSketchUtils.heapifyDoubleTupleSketch(buffer, prettyName)
+    val sketch = TupleSketchUtils.heapifyDoubleSketch(buffer, prettyName)
     sketch.getEstimate()
   }
 }
@@ -90,7 +90,7 @@ case class TupleSketchEstimateInteger(child: Expression)
 
   override def nullSafeEval(input: Any): Any = {
     val buffer = input.asInstanceOf[Array[Byte]]
-    val sketch = ThetaSketchUtils.heapifyIntegerTupleSketch(buffer, prettyName)
+    val sketch = TupleSketchUtils.heapifyIntegerSketch(buffer, prettyName)
     sketch.getEstimate()
   }
 }

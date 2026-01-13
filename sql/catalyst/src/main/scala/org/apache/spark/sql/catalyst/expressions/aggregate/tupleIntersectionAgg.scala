@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes, Literal}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
-import org.apache.spark.sql.catalyst.util.{SummaryAggregateMode, ThetaSketchUtils, TupleSummaryMode}
+import org.apache.spark.sql.catalyst.util.{SummaryAggregateMode, TupleSketchUtils, TupleSummaryMode}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType}
@@ -134,7 +134,7 @@ case class TupleIntersectionAggDouble(
    *   a Sketch[DoubleSummary] instance
    */
   override protected def heapifySketch(buffer: Array[Byte]): Sketch[DoubleSummary] = {
-    ThetaSketchUtils.heapifyDoubleTupleSketch(buffer, prettyName)
+    TupleSketchUtils.heapifyDoubleSketch(buffer, prettyName)
   }
 
   /**
@@ -259,7 +259,7 @@ case class TupleIntersectionAggInteger(
    *   a Sketch[IntegerSummary] instance
    */
   override protected def heapifySketch(buffer: Array[Byte]): Sketch[IntegerSummary] = {
-    ThetaSketchUtils.heapifyIntegerTupleSketch(buffer, prettyName)
+    TupleSketchUtils.heapifyIntegerSketch(buffer, prettyName)
   }
 
   /**

@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResul
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
 import org.apache.spark.sql.catalyst.trees.TernaryLike
-import org.apache.spark.sql.catalyst.util.{SketchSize, SummaryAggregateMode, ThetaSketchUtils, TupleSummaryMode}
+import org.apache.spark.sql.catalyst.util.{SketchSize, SummaryAggregateMode, ThetaSketchUtils, TupleSketchUtils, TupleSummaryMode}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, IntegerType}
@@ -135,7 +135,7 @@ case class TupleUnionAggDouble(
    *   a Sketch[DoubleSummary] instance
    */
   override protected def heapifySketch(buffer: Array[Byte]): Sketch[DoubleSummary] = {
-    ThetaSketchUtils.heapifyDoubleTupleSketch(buffer, prettyName)
+    TupleSketchUtils.heapifyDoubleSketch(buffer, prettyName)
   }
 
   /**
@@ -260,7 +260,7 @@ case class TupleUnionAggInteger(
    *   a Sketch[IntegerSummary] instance
    */
   override protected def heapifySketch(buffer: Array[Byte]): Sketch[IntegerSummary] = {
-    ThetaSketchUtils.heapifyIntegerTupleSketch(buffer, prettyName)
+    TupleSketchUtils.heapifyIntegerSketch(buffer, prettyName)
   }
 
   /**
