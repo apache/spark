@@ -44,7 +44,7 @@ from pyspark.testing.utils import (
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
-class PyArrowTypeInferenceTests(unittest.TestCase):
+class PyArrowArrayTypeInferenceTests(unittest.TestCase):
     """Test PyArrow's type inference behavior for pa.array."""
 
     # =========================================================================
