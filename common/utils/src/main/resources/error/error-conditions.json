@@ -6865,6 +6865,11 @@
           "The target JDBC server hosting table <tableName> does not support ALTER TABLE with multiple actions. Split the ALTER TABLE up into individual actions to avoid this error."
         ]
       },
+      "NESTED_RETURNING_INSERT" : {
+        "message" : [
+          "NEW TABLE(INSERT ...) can only be used at the top level of a SELECT statement. It cannot be used in <context>."
+        ]
+      },
       "OBJECT_LEVEL_COLLATIONS" : {
         "message" : [
           "Default collation for the specified object."
@@ -6950,6 +6955,16 @@
       "REPLACE_NESTED_COLUMN" : {
         "message" : [
           "The replace function does not support nested column <colName>."
+        ]
+      },
+      "RETURNING_CLAUSE_IN_V1_TABLE" : {
+        "message" : [
+          "The RETURNING clause (NEW TABLE syntax) is not supported for V1 data sources. Please use a V2 data source or remove the RETURNING clause."
+        ]
+      },
+      "RETURNING_INSERT_TABLE_CONFLICT" : {
+        "message" : [
+          "Table <tableName> is the target of a NEW TABLE(INSERT ...) and cannot be referenced elsewhere in the same query. Found <conflictType>."
         ]
       },
       "SCHEMA_LEVEL_COLLATIONS" : {

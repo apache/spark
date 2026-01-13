@@ -42,7 +42,7 @@ org.apache.spark.sql.AnalysisException
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'InvalidType'",
-    "hint" : ": extra input 'InvalidType'"
+    "hint" : ""
   },
   "queryContext" : [ {
     "objectType" : "",

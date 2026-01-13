@@ -3240,7 +3240,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
-    "error" : "'foo3_1b'",
+    "error" : "'THEN'",
     "hint" : ""
   }
 }
@@ -5762,4 +5762,3 @@ DROP TEMPORARY FUNCTION IF EXISTS foo3_5c
 -- !query schema
 struct<>
 -- !query output
-

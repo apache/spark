@@ -813,7 +813,7 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "sqlState" : "42601",
   "messageParameters" : {
     "error" : "'abc'",
-    "hint" : ": extra input 'abc'"
+    "hint" : ""
   },
   "queryContext" : [ {
     "objectType" : "EXECUTE IMMEDIATE",
