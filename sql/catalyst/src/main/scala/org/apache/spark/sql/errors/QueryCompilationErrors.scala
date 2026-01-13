@@ -576,6 +576,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       origin = t.origin)
   }
 
+  def unsupportedInsertWithSchemaEvolution(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_INSERT_WITH_SCHEMA_EVOLUTION",
+      messageParameters = Map.empty)
+  }
+
   def writeIntoViewNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
     new AnalysisException(
       errorClass = "VIEW_WRITE_NOT_ALLOWED",
@@ -2406,6 +2412,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.UNNAMED_STREAMING_SOURCES_WITH_ENFORCEMENT",
       messageParameters = Map("sourceInfo" -> sourceInfo))
+  }
+
+  def streamingSourceNamingNotSupportedError(name: String): Throwable = {
+    new AnalysisException(
+      errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.SOURCE_NAMING_NOT_SUPPORTED",
+      messageParameters = Map("name" -> name))
   }
 
   def columnNotFoundInExistingColumnsError(
