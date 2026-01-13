@@ -375,7 +375,9 @@ class StateRewriter(
     val latestCommitLog = commitLog.getLatest()
     assert(latestCommitLog.isDefined)
     if (latestCommitLog.get._2.stateUniqueIds.isDefined) {
-      // hard checkpoint version to 2 if previous commit log has checkpoint id
+      // Hard code checkpoint version to 2 if previous commit log has checkpoint id.
+      // This prevents StateRewriter from crashing in case client forget to set correct
+      // STATE_STORE_CHECKPOINT_FORMAT_VERSION in SQLConf
       sparkSession.conf.set(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key, "2")
     }
   }
