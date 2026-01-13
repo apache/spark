@@ -27,7 +27,11 @@ import org.apache.spark.sql.scripting.{CursorDeclared, CursorOpened}
 /**
  * Physical plan node for opening cursors.
  *
- * Transitions cursor from Declared to Opened state by analyzing the query and binding parameters.
+ * Transitions cursor from Declared to Opened state by:
+ * 1. Parsing the cursor's SQL query text to a LogicalPlan
+ * 2. Binding parameters (if USING clause is provided)
+ * 3. Analyzing the query (semantic analysis, resolution, type checking)
+ *
  * Does not execute the query or create result iterator - that happens on first FETCH.
  *
  * @param cursor CursorReference resolved during analysis phase
@@ -86,7 +90,7 @@ case class OpenCursorExec(
   }
 
   /**
-   * Executes a parameterized query by re-parsing the SQL text with bound parameters.
+   * Executes a parameterized query by parsing the SQL text with bound parameters.
    * This uses the same parameter binding mechanism as EXECUTE IMMEDIATE.
    *
    * @param queryText The SQL query text with parameter markers (? or :name)
