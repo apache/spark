@@ -92,6 +92,7 @@ class SQLAppStatusListener(
           val sqlStoreData = kvstore.read(classOf[SQLExecutionUIData], executionId)
           val executionData = new LiveExecutionData(executionId)
           executionData.rootExecutionId = sqlStoreData.rootExecutionId
+          executionData.queryId = sqlStoreData.queryId
           executionData.description = sqlStoreData.description
           executionData.details = sqlStoreData.details
           executionData.physicalPlanDescription = sqlStoreData.physicalPlanDescription
@@ -343,7 +344,7 @@ class SQLAppStatusListener(
 
   private def onExecutionStart(event: SparkListenerSQLExecutionStart): Unit = {
     val SparkListenerSQLExecutionStart(executionId, rootExecutionId, description, details,
-      physicalPlanDescription, sparkPlanInfo, time, modifiedConfigs, _, _, _) = event
+      physicalPlanDescription, sparkPlanInfo, time, modifiedConfigs, _, _, queryId) = event
 
     val planGraph = SparkPlanGraph(sparkPlanInfo)
     val sqlPlanMetrics = planGraph.allNodes.flatMap { node =>
@@ -358,6 +359,7 @@ class SQLAppStatusListener(
 
     val exec = getOrCreateExecution(executionId)
     exec.rootExecutionId = rootExecutionId.getOrElse(executionId)
+    exec.queryId = queryId.orNull
     exec.description = description
     exec.details = details
     exec.physicalPlanDescription = physicalPlanDescription
@@ -487,6 +489,7 @@ class SQLAppStatusListener(
 private class LiveExecutionData(val executionId: Long) extends LiveEntity {
 
   var rootExecutionId: Long = _
+  var queryId: java.util.UUID = null
   var description: String = null
   var details: String = null
   var physicalPlanDescription: String = null
@@ -525,7 +528,8 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
       errorMessage,
       jobs,
       stages,
-      metricsValues)
+      metricsValues,
+      queryId)
   }
 
   def addMetrics(newMetrics: collection.Seq[SQLPlanMetric]): Unit = {

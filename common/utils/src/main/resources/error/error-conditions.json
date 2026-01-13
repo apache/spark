@@ -7137,6 +7137,12 @@
     },
     "sqlState" : "42809"
   },
+  "UNSUPPORTED_INSERT_WITH_SCHEMA_EVOLUTION" : {
+    "message" : [
+      "INSERT WITH SCHEMA EVOLUTION ... is unsupported for this table format."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_JOIN_TYPE" : {
     "message" : [
       "Unsupported join type '<typ>'. Supported join types include: <supported>."
@@ -7803,7 +7809,7 @@
   },
   "_LEGACY_ERROR_TEMP_1017" : {
     "message" : [
-      "<name> is a built-in/temporary function. '<cmd>' expects a persistent function.<hintStr>."
+      "<name> is a temporary function. '<cmd>' expects a persistent function.<hintStr>"
     ]
   },
   "_LEGACY_ERROR_TEMP_1018" : {
