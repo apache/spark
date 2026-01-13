@@ -28,8 +28,10 @@ import org.apache.spark.sql.connect.ColumnNodeToProtoConverter
 /**
  * The basic testsuite the client tests should extend from.
  */
-trait ConnectFunSuite extends AnyFunSuite // scalastyle:ignore funsuite
-  with BeforeAndAfterAll with BeforeAndAfterEach {
+trait ConnectFunSuite
+    extends AnyFunSuite // scalastyle:ignore funsuite
+    with BeforeAndAfterAll
+    with BeforeAndAfterEach {
 
   // Borrowed from SparkFunSuite
   protected def getWorkspaceFilePath(first: String, more: String*): Path = {

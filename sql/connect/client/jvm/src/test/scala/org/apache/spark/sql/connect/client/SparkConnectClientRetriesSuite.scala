@@ -26,9 +26,7 @@ import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.sql.connect.test.ConnectFunSuite
 
-class SparkConnectClientRetriesSuite
-    extends ConnectFunSuite
-    with Eventually {
+class SparkConnectClientRetriesSuite extends ConnectFunSuite with Eventually {
 
   private class DummyFn(e: => Throwable, numFails: Int = 3) {
     var counter = 0

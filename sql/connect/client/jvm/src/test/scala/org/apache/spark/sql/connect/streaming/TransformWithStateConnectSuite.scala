@@ -284,10 +284,7 @@ class TTLTestStatefulProcessor
   }
 }
 
-class TransformWithStateConnectSuite
-    extends QueryTest
-    with RemoteSparkSession
-    with Logging {
+class TransformWithStateConnectSuite extends QueryTest with RemoteSparkSession with Logging {
   val testData: Seq[(String, String)] = Seq(("a", "1"), ("b", "1"), ("a", "2"))
   val twsAdditionalSQLConf = Seq(
     "spark.sql.streaming.stateStore.providerClass" ->

@@ -76,9 +76,7 @@ import org.apache.spark.util.SparkFileUtils
  * `sql/connect/server` module
  */
 // scalastyle:on
-class PlanGenerationTestSuite
-    extends ConnectFunSuite
-    with Logging {
+class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
 
   // Borrowed from SparkFunSuite
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
