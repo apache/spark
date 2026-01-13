@@ -80,7 +80,14 @@ import unittest
 import math
 from datetime import datetime, date
 
-from pyspark.testing.utils import have_pandas, have_numpy, have_pyarrow, pandas_requirement_message, numpy_requirement_message, pyarrow_requirement_message
+from pyspark.testing.utils import (
+    have_pandas,
+    have_numpy,
+    have_pyarrow,
+    pandas_requirement_message,
+    numpy_requirement_message,
+    pyarrow_requirement_message,
+)
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -158,7 +165,11 @@ class PyArrowArrayCastTests(unittest.TestCase):
             (pa.uint64(), [1, 2, 3, None], "uint64"),
         ]
 
-        float_types = [(pa.float16(), "float16"), (pa.float32(), "float32"), (pa.float64(), "float64")]
+        float_types = [
+            (pa.float16(), "float16"),
+            (pa.float32(), "float32"),
+            (pa.float64(), "float64"),
+        ]
 
         for source_type, source_values, source_name in int_types:
             source_arr = pa.array(source_values, type=source_type)
@@ -310,8 +321,18 @@ class PyArrowArrayCastTests(unittest.TestCase):
             (pa.string(), ["hello", "world", None], pa.large_string(), ["hello", "world", None]),
             (pa.large_string(), ["hello", "world", None], pa.string(), ["hello", "world", None]),
             # binary <-> large_binary
-            (pa.binary(), [b"hello", b"world", None], pa.large_binary(), [b"hello", b"world", None]),
-            (pa.large_binary(), [b"hello", b"world", None], pa.binary(), [b"hello", b"world", None]),
+            (
+                pa.binary(),
+                [b"hello", b"world", None],
+                pa.large_binary(),
+                [b"hello", b"world", None],
+            ),
+            (
+                pa.large_binary(),
+                [b"hello", b"world", None],
+                pa.binary(),
+                [b"hello", b"world", None],
+            ),
             # string <-> large_binary
             (pa.string(), ["hello", "world", None], pa.large_binary(), [b"hello", b"world", None]),
             (pa.large_string(), ["hello", "world", None], pa.binary(), [b"hello", b"world", None]),
@@ -331,14 +352,44 @@ class PyArrowArrayCastTests(unittest.TestCase):
 
         test_cases = [
             # date32 <-> date64
-            (pa.date32(), [date(2024, 1, 1), date(2024, 12, 31), None], pa.date64(), [date(2024, 1, 1), date(2024, 12, 31), None]),
-            (pa.date64(), [date(2024, 1, 1), date(2024, 12, 31), None], pa.date32(), [date(2024, 1, 1), date(2024, 12, 31), None]),
+            (
+                pa.date32(),
+                [date(2024, 1, 1), date(2024, 12, 31), None],
+                pa.date64(),
+                [date(2024, 1, 1), date(2024, 12, 31), None],
+            ),
+            (
+                pa.date64(),
+                [date(2024, 1, 1), date(2024, 12, 31), None],
+                pa.date32(),
+                [date(2024, 1, 1), date(2024, 12, 31), None],
+            ),
             # date -> string
-            (pa.date32(), [date(2024, 1, 1), date(2024, 12, 31), None], pa.string(), ["2024-01-01", "2024-12-31", None]),
-            (pa.date64(), [date(2024, 1, 1), date(2024, 12, 31), None], pa.string(), ["2024-01-01", "2024-12-31", None]),
+            (
+                pa.date32(),
+                [date(2024, 1, 1), date(2024, 12, 31), None],
+                pa.string(),
+                ["2024-01-01", "2024-12-31", None],
+            ),
+            (
+                pa.date64(),
+                [date(2024, 1, 1), date(2024, 12, 31), None],
+                pa.string(),
+                ["2024-01-01", "2024-12-31", None],
+            ),
             # date -> timestamp
-            (pa.date32(), [date(2024, 1, 1), None], pa.timestamp("s"), [datetime(2024, 1, 1), None]),
-            (pa.date64(), [date(2024, 1, 1), None], pa.timestamp("ms"), [datetime(2024, 1, 1), None]),
+            (
+                pa.date32(),
+                [date(2024, 1, 1), None],
+                pa.timestamp("s"),
+                [datetime(2024, 1, 1), None],
+            ),
+            (
+                pa.date64(),
+                [date(2024, 1, 1), None],
+                pa.timestamp("ms"),
+                [datetime(2024, 1, 1), None],
+            ),
         ]
 
         for source_type, source_values, target_type, expected_values in test_cases:
@@ -432,14 +483,44 @@ class PyArrowArrayCastTests(unittest.TestCase):
 
         test_cases = [
             # Element type casts
-            (pa.list_(pa.int32()), [[1, 2, 3], [4, 5], None], pa.list_(pa.int64()), [[1, 2, 3], [4, 5], None]),
-            (pa.list_(pa.int32()), [[1, 2, 3], [4, 5], None], pa.list_(pa.float64()), [[1.0, 2.0, 3.0], [4.0, 5.0], None]),
-            (pa.list_(pa.float32()), [[1.0, 2.0], None], pa.list_(pa.float64()), [[1.0, 2.0], None]),
+            (
+                pa.list_(pa.int32()),
+                [[1, 2, 3], [4, 5], None],
+                pa.list_(pa.int64()),
+                [[1, 2, 3], [4, 5], None],
+            ),
+            (
+                pa.list_(pa.int32()),
+                [[1, 2, 3], [4, 5], None],
+                pa.list_(pa.float64()),
+                [[1.0, 2.0, 3.0], [4.0, 5.0], None],
+            ),
+            (
+                pa.list_(pa.float32()),
+                [[1.0, 2.0], None],
+                pa.list_(pa.float64()),
+                [[1.0, 2.0], None],
+            ),
             # list <-> large_list
-            (pa.list_(pa.int32()), [[1, 2, 3], [4, 5], None], pa.large_list(pa.int32()), [[1, 2, 3], [4, 5], None]),
-            (pa.large_list(pa.int32()), [[1, 2, 3], [4, 5], None], pa.list_(pa.int32()), [[1, 2, 3], [4, 5], None]),
+            (
+                pa.list_(pa.int32()),
+                [[1, 2, 3], [4, 5], None],
+                pa.large_list(pa.int32()),
+                [[1, 2, 3], [4, 5], None],
+            ),
+            (
+                pa.large_list(pa.int32()),
+                [[1, 2, 3], [4, 5], None],
+                pa.list_(pa.int32()),
+                [[1, 2, 3], [4, 5], None],
+            ),
             # list -> fixed_size_list
-            (pa.list_(pa.int32()), [[1, 2, 3], [4, 5, 6], None], pa.list_(pa.int32(), 3), [[1, 2, 3], [4, 5, 6], None]),
+            (
+                pa.list_(pa.int32()),
+                [[1, 2, 3], [4, 5, 6], None],
+                pa.list_(pa.int32(), 3),
+                [[1, 2, 3], [4, 5, 6], None],
+            ),
         ]
 
         for source_type, source_values, target_type, expected_values in test_cases:
@@ -603,12 +684,27 @@ class PyArrowArrayCastTests(unittest.TestCase):
 
         test_cases = [
             # float with special values -> string
-            (pa.float32(), [1.0, float("nan"), float("inf"), float("-inf"), None], pa.string(), ["1", "nan", "inf", "-inf", None]),
-            (pa.float64(), [1.0, float("nan"), float("inf"), float("-inf"), None], pa.string(), ["1", "nan", "inf", "-inf", None]),
+            (
+                pa.float32(),
+                [1.0, float("nan"), float("inf"), float("-inf"), None],
+                pa.string(),
+                ["1", "nan", "inf", "-inf", None],
+            ),
+            (
+                pa.float64(),
+                [1.0, float("nan"), float("inf"), float("-inf"), None],
+                pa.string(),
+                ["1", "nan", "inf", "-inf", None],
+            ),
             # float16 -> float64 with special values
             (pa.float16(), [1.0, float("inf"), None], pa.float64(), None),  # Checked manually
             # float32 -> float64 with special values
-            (pa.float32(), [1.0, float("nan"), float("inf"), None], pa.float64(), None),  # Checked manually
+            (
+                pa.float32(),
+                [1.0, float("nan"), float("inf"), None],
+                pa.float64(),
+                None,
+            ),  # Checked manually
         ]
 
         for source_type, source_values, target_type, expected_values in test_cases:
@@ -675,10 +771,25 @@ class PyArrowArrayCastTests(unittest.TestCase):
             # int16 boundaries
             (pa.int16(), [32767, -32768, None], pa.int32(), [32767, -32768, None]),
             # int32 boundaries
-            (pa.int32(), [2147483647, -2147483648, None], pa.int64(), [2147483647, -2147483648, None]),
-            (pa.int32(), [2147483647, -2147483648, None], pa.float64(), [2147483647.0, -2147483648.0, None]),
+            (
+                pa.int32(),
+                [2147483647, -2147483648, None],
+                pa.int64(),
+                [2147483647, -2147483648, None],
+            ),
+            (
+                pa.int32(),
+                [2147483647, -2147483648, None],
+                pa.float64(),
+                [2147483647.0, -2147483648.0, None],
+            ),
             # int64 to float64 (within safe range)
-            (pa.int64(), [9007199254740992, -9007199254740992, None], pa.float64(), [9007199254740992.0, -9007199254740992.0, None]),
+            (
+                pa.int64(),
+                [9007199254740992, -9007199254740992, None],
+                pa.float64(),
+                [9007199254740992.0, -9007199254740992.0, None],
+            ),
             # uint boundaries
             (pa.uint8(), [255, 0, None], pa.uint16(), [255, 0, None]),
             (pa.uint16(), [65535, 0, None], pa.uint32(), [65535, 0, None]),
@@ -692,7 +803,9 @@ class PyArrowArrayCastTests(unittest.TestCase):
                 self.assertEqual(result[i].as_py(), expected_values[i])
             self.assertIsNone(result[len(expected_values) - 1].as_py())
 
-    @unittest.skipIf(not have_pandas or not have_numpy, pandas_requirement_message or numpy_requirement_message)
+    @unittest.skipIf(
+        not have_pandas or not have_numpy, pandas_requirement_message or numpy_requirement_message
+    )
     def test_numpy_pandas_dtypes_to_pyarrow(self):
         """Test casting arrays created from NumPy and Pandas dtypes."""
         import pyarrow as pa
