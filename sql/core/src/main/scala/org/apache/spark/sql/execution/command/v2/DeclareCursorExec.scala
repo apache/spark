@@ -19,9 +19,9 @@ package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, CursorDefinition}
 import org.apache.spark.sql.execution.datasources.v2.LeafV2CommandExec
-import org.apache.spark.sql.scripting.{CursorDeclared, CursorDefinition}
+import org.apache.spark.sql.scripting.CursorDeclared
 
 /**
  * Physical plan node for declaring cursors.
@@ -57,18 +57,15 @@ case class DeclareCursorExec(
         messageParameters = Map("cursorName" -> cursorName))
     }
 
-    // Parse the query from SQL text to create a LogicalPlan
-    // This ensures parameter markers are preserved and not prematurely resolved
-    val parsedQuery = session.sessionState.sqlParser.parsePlan(queryText)
-
     // Create immutable cursor definition with name and SQL text
+    // Query parsing and analysis is deferred until OPEN time
     val cursorDef = CursorDefinition(
       name = cursorName,
       queryText = queryText)
 
     // Store cursor definition and initial state
     currentScope.cursors.put(normalizedName, cursorDef)
-    currentScope.cursorStates.put(normalizedName, CursorDeclared(parsedQuery))
+    currentScope.cursorStates.put(normalizedName, CursorDeclared)
 
     Nil
   }

@@ -21,7 +21,6 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.execution.datasources.v2.LeafV2CommandExec
 import org.apache.spark.sql.scripting.{CursorDeclared, CursorOpened}
 
@@ -48,7 +47,6 @@ case class OpenCursorExec(
 
     // Get cursor definition from CursorReference (looked up during analysis)
     val cursorDef = cursorRef.definition
-      .asInstanceOf[org.apache.spark.sql.scripting.CursorDefinition]
 
     // Get current cursor state and validate it's in Declared state
     val currentState = scriptingContext.currentFrame.getCursorState(
@@ -58,23 +56,23 @@ case class OpenCursorExec(
         errorClass = "CURSOR_NOT_FOUND",
         messageParameters = Map("cursorName" -> cursorRef.sql)))
 
-    val query = currentState match {
-      case CursorDeclared(q) => q
+    currentState match {
+      case CursorDeclared => // Expected state
       case _ =>
         throw new AnalysisException(
           errorClass = "CURSOR_ALREADY_OPEN",
           messageParameters = Map("cursorName" -> cursorRef.sql))
     }
 
-    // Execute the query and get the analyzed plan
+    // Parse and analyze the query from the stored SQL text
+    // For both parameterized and non-parameterized cursors, we parse at OPEN time
     val analyzedQuery = if (args.nonEmpty) {
-      // Parameterized cursor: re-parse query text with bound parameters
+      // Parameterized cursor: parse with bound parameters
       executeParameterizedQuery(cursorDef.queryText, args)
     } else {
-      // Non-parameterized cursor: analyze the declared query
-      val df = Dataset.ofRows(
-        session.asInstanceOf[org.apache.spark.sql.classic.SparkSession],
-        query)
+      // Non-parameterized cursor: parse without parameters
+      val df = session.asInstanceOf[org.apache.spark.sql.classic.SparkSession]
+        .sql(cursorDef.queryText)
       df.queryExecution.analyzed
     }
 

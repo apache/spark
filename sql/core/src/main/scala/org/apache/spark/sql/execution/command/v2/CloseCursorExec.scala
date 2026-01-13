@@ -49,7 +49,7 @@ case class CloseCursorExec(cursor: Expression) extends LeafV2CommandExec {
 
     // Validate cursor is in an open state (Opened or Fetching)
     currentState match {
-      case CursorClosed | _: org.apache.spark.sql.scripting.CursorDeclared =>
+      case CursorClosed | org.apache.spark.sql.scripting.CursorDeclared =>
         throw new AnalysisException(
           errorClass = "CURSOR_NOT_OPEN",
           messageParameters = Map("cursorName" -> cursorRef.sql))

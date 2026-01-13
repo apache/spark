@@ -23,6 +23,17 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{CURSOR_REFERENCE, TreePa
 import org.apache.spark.sql.types.DataType
 
 /**
+ * Immutable cursor definition containing the cursor's name and SQL query text.
+ * This is stored in the scripting context and referenced by CursorReference during analysis.
+ *
+ * @param name The cursor name as declared
+ * @param queryText The SQL query text defining the cursor result set
+ */
+case class CursorDefinition(
+    name: String,
+    queryText: String)
+
+/**
  * An unresolved reference to a cursor. This is used during parsing and will be resolved
  * to a [[CursorReference]] by the [[ResolveCursors]] analyzer rule.
  *
@@ -47,15 +58,13 @@ case class UnresolvedCursor(nameParts: Seq[String]) extends LeafExpression with 
  * @param normalizedName The normalized cursor name (for lookups considering case sensitivity)
  * @param scopeLabel Optional label qualifier for scoped cursors (e.g., Some("label") for
  *                   "label.cursor", None for unqualified cursors)
- * @param definition The cursor definition looked up during analysis. Type is Any to avoid
- *                   circular dependency (catalyst cannot import sql/core classes). At runtime,
- *                   this will be cast to CursorDefinition.
+ * @param definition The cursor definition (CursorDefinition) looked up during analysis.
  */
 case class CursorReference(
     nameParts: Seq[String],
     normalizedName: String,
     scopeLabel: Option[String],
-    definition: Any) extends LeafExpression with Unevaluable {
+    definition: CursorDefinition) extends LeafExpression with Unevaluable {
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override def eval(input: InternalRow): Any =

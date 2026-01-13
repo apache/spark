@@ -24,6 +24,7 @@ import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.catalog.{SqlScriptingExecutionContextExtension, VariableDefinition}
+import org.apache.spark.sql.catalyst.expressions.CursorDefinition
 import org.apache.spark.sql.scripting.SqlScriptingFrameType.SqlScriptingFrameType
 
 /**
@@ -345,10 +346,6 @@ class SqlScriptingExecutionScope(
  * @param queryText
  *   The original SQL text of the query (preserves parameter markers).
  */
-case class CursorDefinition(
-    name: String,
-    queryText: String)
-
 /**
  * Sealed trait representing the lifecycle state of a cursor.
  * State transitions:
@@ -359,9 +356,9 @@ sealed trait CursorState
 /**
  * Cursor has been declared but not yet opened.
  * This is the initial state after DECLARE CURSOR.
+ * The query is not parsed or analyzed until OPEN time.
  */
-case class CursorDeclared(
-    query: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan) extends CursorState
+case object CursorDeclared extends CursorState
 
 /**
  * Cursor has been opened and query has been parsed/analyzed.
