@@ -249,6 +249,13 @@ class PyArrowArrayToPandasTests(unittest.TestCase):
         self.assertEqual(series.dtype, object)
         self.assertEqual(series.tolist(), decimals)
 
+        # Decimal256
+        arr = pa.array(decimals, type=pa.decimal256(40, 2))
+        series = arr.to_pandas()
+        self.assertIsInstance(series, pd.Series)
+        self.assertEqual(series.dtype, object)
+        self.assertEqual(series.tolist(), decimals)
+
         # Null type
         arr = pa.array([None, None, None], type=pa.null())
         series = arr.to_pandas()
@@ -386,12 +393,12 @@ class PyArrowArrayToPandasTests(unittest.TestCase):
         import pyarrow as pa
 
         value_struct = pa.struct([("x", pa.int64()), ("y", pa.float64())])
-        map_type = pa.map_(pa.string(), pa.int64())
+        simple_map = pa.map_(pa.string(), pa.int64())
 
         # (data, arrow_type, expected_length)
         test_cases = [
             # Simple map
-            ([[("a", 1), ("b", 2)], [("c", 3)]], pa.map_(pa.string(), pa.int64()), 2),
+            ([[("a", 1), ("b", 2)], [("c", 3)]], simple_map, 2),
             # Map with struct values
             (
                 [[("key1", {"x": 1, "y": 1.5}), ("key2", {"x": 2, "y": 2.5})]],
@@ -399,7 +406,7 @@ class PyArrowArrayToPandasTests(unittest.TestCase):
                 1,
             ),
             # List of maps
-            ([[[("a", 1)], [("b", 2)]], [[("c", 3)]]], pa.list_(map_type), 2),
+            ([[[("a", 1)], [("b", 2)]], [[("c", 3)]]], pa.list_(simple_map), 2),
         ]
         for data, arrow_type, expected_len in test_cases:
             with self.subTest(arrow_type=arrow_type):
@@ -408,6 +415,52 @@ class PyArrowArrayToPandasTests(unittest.TestCase):
                 self.assertIsInstance(series, pd.Series)
                 self.assertEqual(series.dtype, object)
                 self.assertEqual(len(series), expected_len)
+
+    def test_dictionary_type(self):
+        """Test conversion of dictionary-encoded arrays to pandas."""
+        import pandas as pd
+        import pyarrow as pa
+
+        # Dictionary-encoded string array
+        arr = pa.array(["a", "b", "a", "c", "b", "a"]).dictionary_encode()
+        series = arr.to_pandas()
+        self.assertIsInstance(series, pd.Series)
+        # Dictionary arrays become categorical by default
+        self.assertEqual(series.dtype.name, "category")
+        self.assertEqual(series.tolist(), ["a", "b", "a", "c", "b", "a"])
+
+        # Dictionary-encoded with nulls
+        arr = pa.array(["a", None, "a", "b", None]).dictionary_encode()
+        series = arr.to_pandas()
+        self.assertIsInstance(series, pd.Series)
+        self.assertEqual(series.dtype.name, "category")
+        self.assertEqual(len(series), 5)
+
+    def test_union_types(self):
+        """Test conversion of union arrays to pandas."""
+        import pandas as pd
+        import pyarrow as pa
+
+        # Sparse union
+        xs = pa.array([1, 2, 3], type=pa.int64())
+        ys = pa.array(["a", "b", "c"], type=pa.string())
+        types = pa.array([0, 1, 0], type=pa.int8())
+        arr = pa.UnionArray.from_sparse(types, [xs, ys])
+        series = arr.to_pandas()
+        self.assertIsInstance(series, pd.Series)
+        self.assertEqual(series.dtype, object)
+        self.assertEqual(len(series), 3)
+
+        # Dense union
+        xs = pa.array([1, 2], type=pa.int64())
+        ys = pa.array(["a"], type=pa.string())
+        types = pa.array([0, 1, 0], type=pa.int8())
+        offsets = pa.array([0, 0, 1], type=pa.int32())
+        arr = pa.UnionArray.from_dense(types, offsets, [xs, ys])
+        series = arr.to_pandas()
+        self.assertIsInstance(series, pd.Series)
+        self.assertEqual(series.dtype, object)
+        self.assertEqual(len(series), 3)
 
 
 if __name__ == "__main__":
