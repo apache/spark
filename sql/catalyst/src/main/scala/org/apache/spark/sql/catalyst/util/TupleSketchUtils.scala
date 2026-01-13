@@ -123,9 +123,8 @@ trait SketchSize extends AggregateFunction {
         errorSubClass = "UNEXPECTED_NULL",
         messageParameters = Map("exprName" -> "lgNomEntries"))
     } else {
-      val lgNomEntriesVal = lgNomEntries.eval().asInstanceOf[Int]
       try {
-        ThetaSketchUtils.checkLgNomLongs(lgNomEntriesVal, prettyName)
+        ThetaSketchUtils.checkLgNomLongs(lgNomEntriesInput, prettyName)
         TypeCheckResult.TypeCheckSuccess
       } catch {
         case e: Exception =>
