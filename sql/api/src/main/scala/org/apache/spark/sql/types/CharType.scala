@@ -62,4 +62,10 @@ object CharType {
 
   def apply(length: Int, collationId: Int): CharType =
     new CharType(length, Some(collationId))
+
+  /**
+   * Extractor for pattern matching that extracts the length.
+   * This maintains backward compatibility with code using `case CharType(length)`.
+   */
+  def unapply(charType: CharType): Option[Int] = Some(charType.length)
 }

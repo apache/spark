@@ -61,4 +61,10 @@ object VarcharType {
 
   def apply(length: Int, collationId: Int): VarcharType =
     new VarcharType(length, Some(collationId))
+
+  /**
+   * Extractor for pattern matching that extracts the length.
+   * This maintains backward compatibility with code using `case VarcharType(length)`.
+   */
+  def unapply(varcharType: VarcharType): Option[Int] = Some(varcharType.length)
 }
