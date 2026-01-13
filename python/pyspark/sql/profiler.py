@@ -83,7 +83,7 @@ class WorkerPerfProfiler:
     """
 
     def __init__(self, accumulator: Accumulator["ProfileResults"], result_id: int) -> None:
-        self.accumulator = accumulator
+        self._accumulator = accumulator
         self._profiler = cProfile.Profile()
         self._result_id = result_id
 
@@ -97,7 +97,7 @@ class WorkerPerfProfiler:
         st = pstats.Stats(self._profiler)
         st.stream = None  # make it picklable
         st.strip_dirs()
-        self.accumulator.add({self._result_id: (st, None)})
+        self._accumulator.add({self._result_id: (st, None)})
 
     def __enter__(self) -> "WorkerPerfProfiler":
         self.start()
@@ -123,7 +123,7 @@ class WorkerMemoryProfiler:
     ) -> None:
         from pyspark.profiler import UDFLineProfilerV2
 
-        self.accumulator = accumulator
+        self._accumulator = accumulator
         self._profiler = UDFLineProfilerV2()
         self._profiler.add_function(func)
         self._result_id = result_id
@@ -139,7 +139,7 @@ class WorkerMemoryProfiler:
             filename: list(line_iterator)
             for filename, line_iterator in self._profiler.code_map.items()
         }
-        self.accumulator.add({self._result_id: (None, codemap_dict)})
+        self._accumulator.add({self._result_id: (None, codemap_dict)})
 
     def __enter__(self) -> "WorkerMemoryProfiler":
         self.start()
