@@ -381,6 +381,26 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("SPARK-55019: view can be dropped using DROP TABLE") {
+    val viewName = "v"
+    withView(viewName) {
+      sql(s"DROP VIEW IF EXISTS $viewName")
+      // First, create a simple view.
+      sql(s"CREATE VIEW $viewName AS SELECT 1 AS a")
+      checkAnswer(sql(s"SELECT * FROM $viewName"), Row(1))
+      // Then, drop the view using DROP TABLE.
+      sql(s"DROP TABLE $viewName")
+      // Finally, verify that the view is dropped.
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SELECT * FROM $viewName")
+        },
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" -> s"`$viewName`"),
+        ExpectedContext(s"$viewName", 14, 13 + viewName.length))
+    }
+  }
+
   test("SPARK-34719: view query with duplicated output column names") {
     Seq(true, false).foreach { caseSensitive =>
       withSQLConf(CASE_SENSITIVE.key -> caseSensitive.toString) {
