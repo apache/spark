@@ -270,36 +270,3 @@ abstract class TupleIntersectionBase[S <: Summary, M]
     intersection.getResult.toByteArray
   }
 }
-
-abstract class TupleIntersectionNoModeBase[S <: Summary]
-    extends BinaryExpression
-    with CodegenFallback
-    with ExpectsInputTypes {
-
-  override def nullIntolerant: Boolean = true
-
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(BinaryType, BinaryType)
-
-  override def dataType: DataType = BinaryType
-
-  protected def intersectSketches(
-      sketch1Bytes: Array[Byte],
-      sketch2Bytes: Array[Byte],
-      intersection: Intersection[S]): Unit
-
-  protected def createSummarySetOperations(): SummarySetOperations[S]
-
-  override def nullSafeEval(sketch1Binary: Any, sketch2Binary: Any): Any = {
-
-    val sketch1Bytes = sketch1Binary.asInstanceOf[Array[Byte]]
-    val sketch2Bytes = sketch2Binary.asInstanceOf[Array[Byte]]
-
-    val summarySetOps = createSummarySetOperations()
-    val intersection = new Intersection(summarySetOps)
-
-    intersectSketches(sketch1Bytes, sketch2Bytes, intersection)
-
-    intersection.getResult.toByteArray
-  }
-}

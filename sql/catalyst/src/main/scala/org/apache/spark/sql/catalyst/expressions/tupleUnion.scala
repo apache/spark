@@ -364,43 +364,6 @@ abstract class TupleUnionBase[S <: Summary, M]
   }
 }
 
-abstract class TupleUnionNoModeBase[S <: Summary]
-    extends TernaryExpression
-    with CodegenFallback
-    with ExpectsInputTypes {
-
-  override def nullIntolerant: Boolean = true
-
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(BinaryType, BinaryType, IntegerType)
-
-  override def dataType: DataType = BinaryType
-
-  protected def createSummarySetOperations(): SummarySetOperations[S]
-
-  protected def unionSketches(
-      sketch1Bytes: Array[Byte],
-      sketch2Bytes: Array[Byte],
-      union: Union[S]): Unit
-
-  override def nullSafeEval(sketch1Binary: Any, sketch2Binary: Any, lgNomEntries: Any): Any = {
-
-    val logNominalEntries = lgNomEntries.asInstanceOf[Int]
-    ThetaSketchUtils.checkLgNomLongs(logNominalEntries, prettyName)
-
-    val sketch1Bytes = sketch1Binary.asInstanceOf[Array[Byte]]
-    val sketch2Bytes = sketch2Binary.asInstanceOf[Array[Byte]]
-
-    val nominalEntries = 1 << logNominalEntries
-    val summarySetOps = createSummarySetOperations()
-    val union = new Union(nominalEntries, summarySetOps)
-
-    unionSketches(sketch1Bytes, sketch2Bytes, union)
-
-    union.getResult.toByteArray
-  }
-}
-
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
