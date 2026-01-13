@@ -28,7 +28,6 @@ import com.google.protobuf
 import com.google.protobuf.util.JsonFormat
 import com.google.protobuf.util.JsonFormat.TypeRegistry
 import io.grpc.inprocess.InProcessChannelBuilder
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.StorageLevel
@@ -79,8 +78,6 @@ import org.apache.spark.util.SparkFileUtils
 // scalastyle:on
 class PlanGenerationTestSuite
     extends ConnectFunSuite
-    with BeforeAndAfterAll
-    with BeforeAndAfterEach
     with Logging {
 
   // Borrowed from SparkFunSuite

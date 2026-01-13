@@ -21,7 +21,6 @@ import java.io.{BufferedWriter, File, FileWriter}
 import java.nio.file.Paths
 import java.sql.Timestamp
 
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.concurrent.Futures.timeout
 import org.scalatest.time.SpanSugar._
@@ -288,8 +287,7 @@ class TTLTestStatefulProcessor
 class TransformWithStateConnectSuite
     extends QueryTest
     with RemoteSparkSession
-    with Logging
-    with BeforeAndAfterEach {
+    with Logging {
   val testData: Seq[(String, String)] = Seq(("a", "1"), ("b", "1"), ("a", "2"))
   val twsAdditionalSQLConf = Seq(
     "spark.sql.streaming.stateStore.providerClass" ->

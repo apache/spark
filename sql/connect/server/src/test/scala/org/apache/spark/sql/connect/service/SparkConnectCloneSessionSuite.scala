@@ -19,12 +19,10 @@ package org.apache.spark.sql.connect.service
 
 import java.util.UUID
 
-import org.scalatest.BeforeAndAfterEach
-
 import org.apache.spark.SparkSQLException
 import org.apache.spark.sql.test.SharedSparkSession
 
-class SparkConnectCloneSessionSuite extends SharedSparkSession with BeforeAndAfterEach {
+class SparkConnectCloneSessionSuite extends SharedSparkSession {
 
   override def beforeEach(): Unit = {
     super.beforeEach()
