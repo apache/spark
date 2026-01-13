@@ -89,30 +89,6 @@ case class TupleSketchAggDouble(
     this(key, summary, lgNomEntries, mode, 0, 0)
   }
 
-  /**
-   * Override inputTypes to specify key, summary (double/float), lgNomEntries (int), and mode
-   * (string) parameters.
-   */
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(
-      keyInputTypes,
-      summaryInputType,
-      IntegerType,
-      StringTypeWithCollation(supportsTrimCollation = true))
-
-  /**
-   * Override checkInputDataTypes to validate base inputs (key, summary, lgNomEntries) and mode
-   * parameter.
-   */
-  override def checkInputDataTypes(): TypeCheckResult = {
-    val defaultCheck = checkBaseInputDataTypes()
-    if (defaultCheck.isFailure) {
-      defaultCheck
-    } else {
-      checkModeParameter()
-    }
-  }
-
   // Copy constructors required by ImperativeAggregate
   override def withNewMutableAggBufferOffset(
       newMutableAggBufferOffset: Int): TupleSketchAggDouble =
@@ -133,7 +109,7 @@ case class TupleSketchAggDouble(
   override def third: Expression = lgNomEntries
   override def fourth: Expression = mode
 
-  // Overrides for TypedImperativeAggregate
+  // Override for TypedImperativeAggregate
   override def prettyName: String = "tuple_sketch_agg_double"
 
   /** Specifies accepted summary input types (double). */
@@ -153,22 +129,16 @@ case class TupleSketchAggDouble(
     new DoubleSummarySetOperations(modeEnum.toDoubleSummaryMode)
   }
 
-
   /**
-   * Heapify a CompactSketch from the sketch byte array.
+   * Heapify a sketch from a byte array.
    *
    * @param buffer
-   *   A serialized sketch byte array
+   *   the serialized sketch byte array
    * @return
-   *   A CompactSketch instance wrapped with FinalizedTupleSketch
+   *   a Sketch[DoubleSummary] instance
    */
-  override def deserialize(buffer: Array[Byte]): TupleSketchState[DoubleSummary] = {
-    if (buffer.nonEmpty) {
-      FinalizedTupleSketch(
-        TupleSketchUtils.heapifyDoubleSketch(buffer, prettyName))
-    } else {
-      createAggregationBuffer()
-    }
+  override protected def heapifySketch(buffer: Array[Byte]): Sketch[DoubleSummary] = {
+    TupleSketchUtils.heapifyDoubleSketch(buffer, prettyName)
   }
 }
 
@@ -228,30 +198,6 @@ case class TupleSketchAggInteger(
     this(key, summary, lgNomEntries, mode, 0, 0)
   }
 
-  /**
-   * Override inputTypes to specify key, summary (integer), lgNomEntries (int), and mode (string)
-   * parameters.
-   */
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(
-      keyInputTypes,
-      summaryInputType,
-      IntegerType,
-      StringTypeWithCollation(supportsTrimCollation = true))
-
-  /**
-   * Override checkInputDataTypes to validate base inputs (key, summary, lgNomEntries) and mode
-   * parameter.
-   */
-  override def checkInputDataTypes(): TypeCheckResult = {
-    val defaultCheck = checkBaseInputDataTypes()
-    if (defaultCheck.isFailure) {
-      defaultCheck
-    } else {
-      checkModeParameter()
-    }
-  }
-
   // Copy constructors required by ImperativeAggregate
   override def withNewMutableAggBufferOffset(
       newMutableAggBufferOffset: Int): TupleSketchAggInteger =
@@ -272,7 +218,7 @@ case class TupleSketchAggInteger(
   override def third: Expression = lgNomEntries
   override def fourth: Expression = mode
 
-  // Overrides for TypedImperativeAggregate
+  // Override for TypedImperativeAggregate
   override def prettyName: String = "tuple_sketch_agg_integer"
 
   /** Specifies accepted summary input types (integer). */
@@ -294,22 +240,16 @@ case class TupleSketchAggInteger(
     new IntegerSummarySetOperations(mode, mode)
   }
 
-
   /**
-   * Heapify a CompactSketch from the sketch byte array.
+   * Heapify a sketch from a byte array.
    *
    * @param buffer
-   *   A serialized sketch byte array
+   *   the serialized sketch byte array
    * @return
-   *   A CompactSketch instance wrapped with FinalizedTupleSketch
+   *   a Sketch[IntegerSummary] instance
    */
-  override def deserialize(buffer: Array[Byte]): TupleSketchState[IntegerSummary] = {
-    if (buffer.nonEmpty) {
-      FinalizedTupleSketch(
-        TupleSketchUtils.heapifyIntegerSketch(buffer, prettyName))
-    } else {
-      createAggregationBuffer()
-    }
+  override protected def heapifySketch(buffer: Array[Byte]): Sketch[IntegerSummary] = {
+    TupleSketchUtils.heapifyIntegerSketch(buffer, prettyName)
   }
 }
 
@@ -322,11 +262,13 @@ abstract class TupleSketchAggBase[U, S <: UpdatableSummary[U]]
   protected def summaryInputType: AbstractDataType
   protected def createSummaryFactory(): SummaryFactory[S]
   protected def createSummarySetOperations(): SummarySetOperations[S]
+  protected def heapifySketch(buffer: Array[Byte]): Sketch[S]
 
   // Abstract members that subclasses must implement
   protected def key: Expression
   protected def summary: Expression
 
+  // Type and input validation overrides
   protected final val keyInputTypes: AbstractDataType =
     TypeCollection(
       ArrayType(IntegerType),
@@ -341,12 +283,23 @@ abstract class TupleSketchAggBase[U, S <: UpdatableSummary[U]]
   override def dataType: DataType = BinaryType
   override def nullable: Boolean = false
 
-  protected def checkBaseInputDataTypes(): TypeCheckResult = {
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(
+      keyInputTypes,
+      summaryInputType,
+      IntegerType,
+      StringTypeWithCollation(supportsTrimCollation = true))
+
+  override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
+    val lgCheck = checkLgNomEntriesParameter()
+
     if (defaultCheck.isFailure) {
       defaultCheck
+    } else if (lgCheck.isFailure) {
+      lgCheck
     } else {
-      checkLgNomEntriesParameter()
+      checkModeParameter()
     }
   }
 
@@ -388,45 +341,44 @@ abstract class TupleSketchAggBase[U, S <: UpdatableSummary[U]]
     if (keyValue == null || summaryValue == null) {
       updateBuffer
     } else {
+      // Type checking is already done by ImplicitCastInputTypes.
+      val normalizedSummary = summaryValue.asInstanceOf[U]
 
-    // Type checking is already done by ImplicitCastInputTypes.
-    val normalizedSummary = summaryValue.asInstanceOf[U]
+      // Initialized buffer should be UpdatableTupleSketchBuffer, else error out.
+      val sketch = updateBuffer match {
+        case UpdatableTupleSketchBuffer(s) => s
+        case _ => throw QueryExecutionErrors.tupleInvalidInputSketchBuffer(prettyName)
+      }
 
-    // Initialized buffer should be UpdatableTupleSketchBuffer, else error out.
-    val sketch = updateBuffer match {
-      case UpdatableTupleSketchBuffer(s) => s
-      case _ => throw QueryExecutionErrors.tupleInvalidInputSketchBuffer(prettyName)
-    }
-
-    key.dataType match {
-      case ArrayType(IntegerType, _) =>
-        val arr = keyValue.asInstanceOf[ArrayData].toIntArray()
-        sketch.update(arr, normalizedSummary)
-      case ArrayType(LongType, _) =>
-        val arr = keyValue.asInstanceOf[ArrayData].toLongArray()
-        sketch.update(arr, normalizedSummary)
-      case BinaryType =>
-        val bytes = keyValue.asInstanceOf[Array[Byte]]
-        sketch.update(bytes, normalizedSummary)
-      case DoubleType =>
-        sketch.update(keyValue.asInstanceOf[Double], normalizedSummary)
-      case FloatType =>
-        sketch.update(keyValue.asInstanceOf[Float].toDouble, normalizedSummary)
-      case IntegerType =>
-        sketch.update(keyValue.asInstanceOf[Int].toLong, normalizedSummary)
-      case LongType =>
-        sketch.update(keyValue.asInstanceOf[Long], normalizedSummary)
-      case st: StringType =>
-        val collation = CollationFactory.fetchCollation(st.collationId)
-        val str = keyValue.asInstanceOf[UTF8String]
-        if (!collation.equalsFunction(str, UTF8String.EMPTY_UTF8)) {
-          sketch.update(collation.sortKeyFunction.apply(str), normalizedSummary)
-        }
-      case _ =>
-        throw new SparkUnsupportedOperationException(
-          errorClass = "_LEGACY_ERROR_TEMP_3121",
-          messageParameters = Map("dataType" -> key.dataType.toString))
-    }
+      key.dataType match {
+        case ArrayType(IntegerType, _) =>
+          val arr = keyValue.asInstanceOf[ArrayData].toIntArray()
+          sketch.update(arr, normalizedSummary)
+        case ArrayType(LongType, _) =>
+          val arr = keyValue.asInstanceOf[ArrayData].toLongArray()
+          sketch.update(arr, normalizedSummary)
+        case BinaryType =>
+          val bytes = keyValue.asInstanceOf[Array[Byte]]
+          sketch.update(bytes, normalizedSummary)
+        case DoubleType =>
+          sketch.update(keyValue.asInstanceOf[Double], normalizedSummary)
+        case FloatType =>
+          sketch.update(keyValue.asInstanceOf[Float].toDouble, normalizedSummary)
+        case IntegerType =>
+          sketch.update(keyValue.asInstanceOf[Int].toLong, normalizedSummary)
+        case LongType =>
+          sketch.update(keyValue.asInstanceOf[Long], normalizedSummary)
+        case st: StringType =>
+          val collation = CollationFactory.fetchCollation(st.collationId)
+          val str = keyValue.asInstanceOf[UTF8String]
+          if (!collation.equalsFunction(str, UTF8String.EMPTY_UTF8)) {
+            sketch.update(collation.sortKeyFunction.apply(str), normalizedSummary)
+          }
+        case _ =>
+          throw new SparkUnsupportedOperationException(
+            errorClass = "_LEGACY_ERROR_TEMP_3121",
+            messageParameters = Map("dataType" -> key.dataType.toString))
+      }
 
       updateBuffer
     }
@@ -500,6 +452,22 @@ abstract class TupleSketchAggBase[U, S <: UpdatableSummary[U]]
    */
   override def serialize(sketchState: TupleSketchState[S]): Array[Byte] =
     sketchState.serialize()
+
+  /**
+   * Heapify a CompactSketch from the sketch byte array.
+   *
+   * @param buffer
+   *   A serialized sketch byte array
+   * @return
+   *   A CompactSketch instance wrapped with FinalizedTupleSketch
+   */
+  override def deserialize(buffer: Array[Byte]): TupleSketchState[S] = {
+    if (buffer.nonEmpty) {
+      FinalizedTupleSketch(heapifySketch(buffer))
+    } else {
+      createAggregationBuffer()
+    }
+  }
 }
 
 // scalastyle:off line.size.limit

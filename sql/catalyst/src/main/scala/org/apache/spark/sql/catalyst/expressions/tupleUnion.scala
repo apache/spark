@@ -55,7 +55,7 @@ case class TupleUnionDouble(
     second: Expression,
     third: Expression,
     fourth: Expression)
-    extends TupleUnionBase[DoubleSummary, DoubleSummary.Mode] {
+    extends TupleUnionBase[DoubleSummary] {
 
   def this(first: Expression, second: Expression) = {
     this(
@@ -78,18 +78,15 @@ case class TupleUnionDouble(
 
   override def prettyName: String = "tuple_union_double"
 
-  override protected def convertMode(tupleSummaryMode: TupleSummaryMode): DoubleSummary.Mode =
-    tupleSummaryMode.toDoubleSummaryMode
-
   override protected def createSummarySetOperations(
-      mode: DoubleSummary.Mode): SummarySetOperations[DoubleSummary] =
-    new DoubleSummarySetOperations(mode)
+      mode: TupleSummaryMode): SummarySetOperations[DoubleSummary] =
+    new DoubleSummarySetOperations(mode.toDoubleSummaryMode)
 
   override protected def unionSketches(
       sketch1Bytes: Array[Byte],
       sketch2Bytes: Array[Byte],
       union: Union[DoubleSummary],
-      mode: DoubleSummary.Mode): Unit = {
+      mode: TupleSummaryMode): Unit = {
     val tupleSketch1 = TupleSketchUtils.heapifyDoubleSketch(sketch1Bytes, prettyName)
     val tupleSketch2 = TupleSketchUtils.heapifyDoubleSketch(sketch2Bytes, prettyName)
 
@@ -125,7 +122,7 @@ case class TupleUnionThetaDouble(
     second: Expression,
     third: Expression,
     fourth: Expression)
-    extends TupleUnionBase[DoubleSummary, DoubleSummary.Mode] {
+    extends TupleUnionBase[DoubleSummary] {
 
   def this(first: Expression, second: Expression) = {
     this(
@@ -148,22 +145,19 @@ case class TupleUnionThetaDouble(
 
   override def prettyName: String = "tuple_union_theta_double"
 
-  override protected def convertMode(tupleSummaryMode: TupleSummaryMode): DoubleSummary.Mode =
-    tupleSummaryMode.toDoubleSummaryMode
-
   override protected def createSummarySetOperations(
-      mode: DoubleSummary.Mode): SummarySetOperations[DoubleSummary] =
-    new DoubleSummarySetOperations(mode)
+      mode: TupleSummaryMode): SummarySetOperations[DoubleSummary] =
+    new DoubleSummarySetOperations(mode.toDoubleSummaryMode)
 
   override protected def unionSketches(
       sketch1Bytes: Array[Byte],
       sketch2Bytes: Array[Byte],
       union: Union[DoubleSummary],
-      mode: DoubleSummary.Mode): Unit = {
+      mode: TupleSummaryMode): Unit = {
     val tupleSketch = TupleSketchUtils.heapifyDoubleSketch(sketch1Bytes, prettyName)
     val thetaSketch = ThetaSketchUtils.wrapCompactSketch(sketch2Bytes, prettyName)
 
-    val defaultSummary = new DoubleSummaryFactory(mode).newSummary()
+    val defaultSummary = new DoubleSummaryFactory(mode.toDoubleSummaryMode).newSummary()
 
     union.union(tupleSketch)
     union.union(thetaSketch, defaultSummary)
@@ -196,7 +190,7 @@ case class TupleUnionInteger(
     second: Expression,
     third: Expression,
     fourth: Expression)
-    extends TupleUnionBase[IntegerSummary, IntegerSummary.Mode] {
+    extends TupleUnionBase[IntegerSummary] {
 
   def this(first: Expression, second: Expression) = {
     this(
@@ -219,18 +213,17 @@ case class TupleUnionInteger(
 
   override def prettyName: String = "tuple_union_integer"
 
-  override protected def convertMode(tupleSummaryMode: TupleSummaryMode): IntegerSummary.Mode =
-    tupleSummaryMode.toIntegerSummaryMode
-
   override protected def createSummarySetOperations(
-      mode: IntegerSummary.Mode): SummarySetOperations[IntegerSummary] =
-    new IntegerSummarySetOperations(mode, mode)
+      mode: TupleSummaryMode): SummarySetOperations[IntegerSummary] = {
+    val integerMode = mode.toIntegerSummaryMode
+    new IntegerSummarySetOperations(integerMode, integerMode)
+  }
 
   override protected def unionSketches(
       sketch1Bytes: Array[Byte],
       sketch2Bytes: Array[Byte],
       union: Union[IntegerSummary],
-      mode: IntegerSummary.Mode): Unit = {
+      mode: TupleSummaryMode): Unit = {
     val tupleSketch1 = TupleSketchUtils.heapifyIntegerSketch(sketch1Bytes, prettyName)
     val tupleSketch2 = TupleSketchUtils.heapifyIntegerSketch(sketch2Bytes, prettyName)
 
@@ -266,7 +259,7 @@ case class TupleUnionThetaInteger(
     second: Expression,
     third: Expression,
     fourth: Expression)
-    extends TupleUnionBase[IntegerSummary, IntegerSummary.Mode] {
+    extends TupleUnionBase[IntegerSummary] {
 
   def this(first: Expression, second: Expression) = {
     this(
@@ -289,29 +282,28 @@ case class TupleUnionThetaInteger(
 
   override def prettyName: String = "tuple_union_theta_integer"
 
-  override protected def convertMode(tupleSummaryMode: TupleSummaryMode): IntegerSummary.Mode =
-    tupleSummaryMode.toIntegerSummaryMode
-
   override protected def createSummarySetOperations(
-      mode: IntegerSummary.Mode): SummarySetOperations[IntegerSummary] =
-    new IntegerSummarySetOperations(mode, mode)
+      mode: TupleSummaryMode): SummarySetOperations[IntegerSummary] = {
+    val integerMode = mode.toIntegerSummaryMode
+    new IntegerSummarySetOperations(integerMode, integerMode)
+  }
 
   override protected def unionSketches(
       sketch1Bytes: Array[Byte],
       sketch2Bytes: Array[Byte],
       union: Union[IntegerSummary],
-      mode: IntegerSummary.Mode): Unit = {
+      mode: TupleSummaryMode): Unit = {
     val tupleSketch = TupleSketchUtils.heapifyIntegerSketch(sketch1Bytes, prettyName)
     val thetaSketch = ThetaSketchUtils.wrapCompactSketch(sketch2Bytes, prettyName)
 
-    val defaultSummary = new IntegerSummaryFactory(mode).newSummary()
+    val defaultSummary = new IntegerSummaryFactory(mode.toIntegerSummaryMode).newSummary()
 
     union.union(tupleSketch)
     union.union(thetaSketch, defaultSummary)
   }
 }
 
-abstract class TupleUnionBase[S <: Summary, M]
+abstract class TupleUnionBase[S <: Summary]
     extends QuaternaryExpression
     with CodegenFallback
     with ExpectsInputTypes {
@@ -327,15 +319,13 @@ abstract class TupleUnionBase[S <: Summary, M]
 
   override def dataType: DataType = BinaryType
 
-  protected def convertMode(tupleSummaryMode: TupleSummaryMode): M
-
-  protected def createSummarySetOperations(mode: M): SummarySetOperations[S]
+  protected def createSummarySetOperations(mode: TupleSummaryMode): SummarySetOperations[S]
 
   protected def unionSketches(
       sketch1Bytes: Array[Byte],
       sketch2Bytes: Array[Byte],
       union: Union[S],
-      mode: M): Unit
+      mode: TupleSummaryMode): Unit
 
   override def nullSafeEval(
       sketch1Binary: Any,
@@ -347,18 +337,16 @@ abstract class TupleUnionBase[S <: Summary, M]
     ThetaSketchUtils.checkLgNomLongs(logNominalEntries, prettyName)
 
     val modeStr = modeInput.asInstanceOf[UTF8String].toString
-    // Parse and validate mode in one step
     val tupleSummaryMode = TupleSummaryMode.fromString(modeStr, prettyName)
-    val mode = convertMode(tupleSummaryMode)
 
     val sketch1Bytes = sketch1Binary.asInstanceOf[Array[Byte]]
     val sketch2Bytes = sketch2Binary.asInstanceOf[Array[Byte]]
 
     val nominalEntries = 1 << logNominalEntries
-    val summarySetOps = createSummarySetOperations(mode)
+    val summarySetOps = createSummarySetOperations(tupleSummaryMode)
     val union = new Union(nominalEntries, summarySetOps)
 
-    unionSketches(sketch1Bytes, sketch2Bytes, union, mode)
+    unionSketches(sketch1Bytes, sketch2Bytes, union, tupleSummaryMode)
 
     union.getResult.toByteArray
   }

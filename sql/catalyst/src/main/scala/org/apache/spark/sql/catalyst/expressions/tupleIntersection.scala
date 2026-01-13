@@ -42,7 +42,7 @@ import org.apache.spark.unsafe.types.UTF8String
   since = "4.2.0")
 // scalastyle:on line.size.limit
 case class TupleIntersectionDouble(first: Expression, second: Expression, third: Expression)
-    extends TupleIntersectionBase[DoubleSummary, DoubleSummary.Mode] {
+    extends TupleIntersectionBase[DoubleSummary] {
 
   def this(first: Expression, second: Expression) = {
     this(first, second, Literal(TupleSummaryMode.Sum.toString))
@@ -56,18 +56,15 @@ case class TupleIntersectionDouble(first: Expression, second: Expression, third:
 
   override def prettyName: String = "tuple_intersection_double"
 
-  override protected def convertMode(tupleSummaryMode: TupleSummaryMode): DoubleSummary.Mode =
-    tupleSummaryMode.toDoubleSummaryMode
-
   override protected def createSummarySetOperations(
-      mode: DoubleSummary.Mode): SummarySetOperations[DoubleSummary] =
-    new DoubleSummarySetOperations(mode)
+      mode: TupleSummaryMode): SummarySetOperations[DoubleSummary] =
+    new DoubleSummarySetOperations(mode.toDoubleSummaryMode)
 
   override protected def intersectSketches(
       sketch1Bytes: Array[Byte],
       sketch2Bytes: Array[Byte],
       intersection: Intersection[DoubleSummary],
-      mode: DoubleSummary.Mode): Unit = {
+      mode: TupleSummaryMode): Unit = {
     val tupleSketch1 = TupleSketchUtils.heapifyDoubleSketch(sketch1Bytes, prettyName)
     val tupleSketch2 = TupleSketchUtils.heapifyDoubleSketch(sketch2Bytes, prettyName)
 
@@ -93,7 +90,7 @@ case class TupleIntersectionDouble(first: Expression, second: Expression, third:
   since = "4.2.0")
 // scalastyle:on line.size.limit
 case class TupleIntersectionThetaDouble(first: Expression, second: Expression, third: Expression)
-    extends TupleIntersectionBase[DoubleSummary, DoubleSummary.Mode] {
+    extends TupleIntersectionBase[DoubleSummary] {
 
   def this(first: Expression, second: Expression) = {
     this(first, second, Literal(TupleSummaryMode.Sum.toString))
@@ -107,22 +104,19 @@ case class TupleIntersectionThetaDouble(first: Expression, second: Expression, t
 
   override def prettyName: String = "tuple_intersection_theta_double"
 
-  override protected def convertMode(tupleSummaryMode: TupleSummaryMode): DoubleSummary.Mode =
-    tupleSummaryMode.toDoubleSummaryMode
-
   override protected def createSummarySetOperations(
-      mode: DoubleSummary.Mode): SummarySetOperations[DoubleSummary] =
-    new DoubleSummarySetOperations(mode)
+      mode: TupleSummaryMode): SummarySetOperations[DoubleSummary] =
+    new DoubleSummarySetOperations(mode.toDoubleSummaryMode)
 
   override protected def intersectSketches(
       sketch1Bytes: Array[Byte],
       sketch2Bytes: Array[Byte],
       intersection: Intersection[DoubleSummary],
-      mode: DoubleSummary.Mode): Unit = {
+      mode: TupleSummaryMode): Unit = {
     val tupleSketch = TupleSketchUtils.heapifyDoubleSketch(sketch1Bytes, prettyName)
     val thetaSketch = ThetaSketchUtils.wrapCompactSketch(sketch2Bytes, prettyName)
 
-    val defaultSummary = new DoubleSummaryFactory(mode).newSummary()
+    val defaultSummary = new DoubleSummaryFactory(mode.toDoubleSummaryMode).newSummary()
 
     intersection.intersect(tupleSketch)
     intersection.intersect(thetaSketch, defaultSummary)
@@ -144,7 +138,7 @@ case class TupleIntersectionThetaDouble(first: Expression, second: Expression, t
   since = "4.2.0")
 // scalastyle:on line.size.limit
 case class TupleIntersectionInteger(first: Expression, second: Expression, third: Expression)
-    extends TupleIntersectionBase[IntegerSummary, IntegerSummary.Mode] {
+    extends TupleIntersectionBase[IntegerSummary] {
 
   def this(first: Expression, second: Expression) = {
     this(first, second, Literal(TupleSummaryMode.Sum.toString))
@@ -158,18 +152,17 @@ case class TupleIntersectionInteger(first: Expression, second: Expression, third
 
   override def prettyName: String = "tuple_intersection_integer"
 
-  override protected def convertMode(tupleSummaryMode: TupleSummaryMode): IntegerSummary.Mode =
-    tupleSummaryMode.toIntegerSummaryMode
-
   override protected def createSummarySetOperations(
-      mode: IntegerSummary.Mode): SummarySetOperations[IntegerSummary] =
-    new IntegerSummarySetOperations(mode, mode)
+      mode: TupleSummaryMode): SummarySetOperations[IntegerSummary] = {
+    val integerMode = mode.toIntegerSummaryMode
+    new IntegerSummarySetOperations(integerMode, integerMode)
+  }
 
   override protected def intersectSketches(
       sketch1Bytes: Array[Byte],
       sketch2Bytes: Array[Byte],
       intersection: Intersection[IntegerSummary],
-      mode: IntegerSummary.Mode): Unit = {
+      mode: TupleSummaryMode): Unit = {
     val tupleSketch1 = TupleSketchUtils.heapifyIntegerSketch(sketch1Bytes, prettyName)
     val tupleSketch2 = TupleSketchUtils.heapifyIntegerSketch(sketch2Bytes, prettyName)
 
@@ -195,7 +188,7 @@ case class TupleIntersectionInteger(first: Expression, second: Expression, third
   since = "4.2.0")
 // scalastyle:on line.size.limit
 case class TupleIntersectionThetaInteger(first: Expression, second: Expression, third: Expression)
-    extends TupleIntersectionBase[IntegerSummary, IntegerSummary.Mode] {
+    extends TupleIntersectionBase[IntegerSummary] {
 
   def this(first: Expression, second: Expression) = {
     this(first, second, Literal(TupleSummaryMode.Sum.toString))
@@ -209,29 +202,28 @@ case class TupleIntersectionThetaInteger(first: Expression, second: Expression, 
 
   override def prettyName: String = "tuple_intersection_theta_integer"
 
-  override protected def convertMode(tupleSummaryMode: TupleSummaryMode): IntegerSummary.Mode =
-    tupleSummaryMode.toIntegerSummaryMode
-
   override protected def createSummarySetOperations(
-      mode: IntegerSummary.Mode): SummarySetOperations[IntegerSummary] =
-    new IntegerSummarySetOperations(mode, mode)
+      mode: TupleSummaryMode): SummarySetOperations[IntegerSummary] = {
+    val integerMode = mode.toIntegerSummaryMode
+    new IntegerSummarySetOperations(integerMode, integerMode)
+  }
 
   override protected def intersectSketches(
       sketch1Bytes: Array[Byte],
       sketch2Bytes: Array[Byte],
       intersection: Intersection[IntegerSummary],
-      mode: IntegerSummary.Mode): Unit = {
+      mode: TupleSummaryMode): Unit = {
     val tupleSketch = TupleSketchUtils.heapifyIntegerSketch(sketch1Bytes, prettyName)
     val thetaSketch = ThetaSketchUtils.wrapCompactSketch(sketch2Bytes, prettyName)
 
-    val defaultSummary = new IntegerSummaryFactory(mode).newSummary()
+    val defaultSummary = new IntegerSummaryFactory(mode.toIntegerSummaryMode).newSummary()
 
     intersection.intersect(tupleSketch)
     intersection.intersect(thetaSketch, defaultSummary)
   }
 }
 
-abstract class TupleIntersectionBase[S <: Summary, M]
+abstract class TupleIntersectionBase[S <: Summary]
     extends TernaryExpression
     with CodegenFallback
     with ExpectsInputTypes {
@@ -243,29 +235,26 @@ abstract class TupleIntersectionBase[S <: Summary, M]
 
   override def dataType: DataType = BinaryType
 
-  protected def convertMode(tupleSummaryMode: TupleSummaryMode): M
-
-  protected def createSummarySetOperations(mode: M): SummarySetOperations[S]
+  protected def createSummarySetOperations(mode: TupleSummaryMode): SummarySetOperations[S]
 
   protected def intersectSketches(
       sketch1Bytes: Array[Byte],
       sketch2Bytes: Array[Byte],
       intersection: Intersection[S],
-      mode: M): Unit
+      mode: TupleSummaryMode): Unit
 
   override def nullSafeEval(sketch1Binary: Any, sketch2Binary: Any, modeInput: Any): Any = {
 
     val modeStr = modeInput.asInstanceOf[UTF8String].toString
     val tupleSummaryMode = TupleSummaryMode.fromString(modeStr, prettyName)
-    val mode = convertMode(tupleSummaryMode)
 
     val sketch1Bytes = sketch1Binary.asInstanceOf[Array[Byte]]
     val sketch2Bytes = sketch2Binary.asInstanceOf[Array[Byte]]
 
-    val summarySetOps = createSummarySetOperations(mode)
+    val summarySetOps = createSummarySetOperations(tupleSummaryMode)
     val intersection = new Intersection(summarySetOps)
 
-    intersectSketches(sketch1Bytes, sketch2Bytes, intersection, mode)
+    intersectSketches(sketch1Bytes, sketch2Bytes, intersection, tupleSummaryMode)
 
     intersection.getResult.toByteArray
   }

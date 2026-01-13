@@ -80,24 +80,6 @@ case class TupleIntersectionAggDouble(
     this(child, mode, 0, 0)
   }
 
-  /**
-   * Override inputTypes to specify sketch binary (BinaryType) and mode (string) parameters.
-   */
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(BinaryType, StringTypeWithCollation(supportsTrimCollation = true))
-
-  /**
-   * Override checkInputDataTypes to validate sketch binary input and mode parameter.
-   */
-  override def checkInputDataTypes(): TypeCheckResult = {
-    val defaultCheck = super.checkInputDataTypes()
-    if (defaultCheck.isFailure) {
-      defaultCheck
-    } else {
-      checkModeParameter()
-    }
-  }
-
   // Copy constructors required by ImperativeAggregate
   override def withNewMutableAggBufferOffset(
       newMutableAggBufferOffset: Int): TupleIntersectionAggDouble =
@@ -115,7 +97,7 @@ case class TupleIntersectionAggDouble(
   override def left: Expression = child
   override def right: Expression = mode
 
-  // Overrides for TypedImperativeAggregate
+  // Override for TypedImperativeAggregate
   override def prettyName: String = "tuple_intersection_agg_double"
 
   /**
@@ -135,22 +117,6 @@ case class TupleIntersectionAggDouble(
    */
   override protected def heapifySketch(buffer: Array[Byte]): Sketch[DoubleSummary] = {
     TupleSketchUtils.heapifyDoubleSketch(buffer, prettyName)
-  }
-
-  /**
-   * Heapify a CompactSketch from the sketch byte array.
-   *
-   * @param buffer
-   *   A serialized sketch byte array
-   * @return
-   *   A CompactSketch instance wrapped with FinalizedTupleSketch
-   */
-  override def deserialize(buffer: Array[Byte]): TupleSketchState[DoubleSummary] = {
-    if (buffer.nonEmpty) {
-      FinalizedTupleSketch(heapifySketch(buffer))
-    } else {
-      createAggregationBuffer()
-    }
   }
 }
 
@@ -204,24 +170,6 @@ case class TupleIntersectionAggInteger(
     this(child, mode, 0, 0)
   }
 
-  /**
-   * Override inputTypes to specify sketch binary (BinaryType) and mode (string) parameters.
-   */
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(BinaryType, StringTypeWithCollation(supportsTrimCollation = true))
-
-  /**
-   * Override checkInputDataTypes to validate sketch binary input and mode parameter.
-   */
-  override def checkInputDataTypes(): TypeCheckResult = {
-    val defaultCheck = super.checkInputDataTypes()
-    if (defaultCheck.isFailure) {
-      defaultCheck
-    } else {
-      checkModeParameter()
-    }
-  }
-
   // Copy constructors required by ImperativeAggregate
   override def withNewMutableAggBufferOffset(
       newMutableAggBufferOffset: Int): TupleIntersectionAggInteger =
@@ -239,7 +187,7 @@ case class TupleIntersectionAggInteger(
   override def left: Expression = child
   override def right: Expression = mode
 
-  // Overrides for TypedImperativeAggregate
+  // Override for TypedImperativeAggregate
   override def prettyName: String = "tuple_intersection_agg_integer"
 
   /**
@@ -261,22 +209,6 @@ case class TupleIntersectionAggInteger(
   override protected def heapifySketch(buffer: Array[Byte]): Sketch[IntegerSummary] = {
     TupleSketchUtils.heapifyIntegerSketch(buffer, prettyName)
   }
-
-  /**
-   * Heapify a CompactSketch from the sketch byte array.
-   *
-   * @param buffer
-   *   A serialized sketch byte array
-   * @return
-   *   A CompactSketch instance wrapped with FinalizedTupleSketch
-   */
-  override def deserialize(buffer: Array[Byte]): TupleSketchState[IntegerSummary] = {
-    if (buffer.nonEmpty) {
-      FinalizedTupleSketch(heapifySketch(buffer))
-    } else {
-      createAggregationBuffer()
-    }
-  }
 }
 
 abstract class TupleIntersectionAggBase[S <: Summary]
@@ -290,8 +222,21 @@ abstract class TupleIntersectionAggBase[S <: Summary]
   // Abstract members that subclasses must implement
   protected def child: Expression
 
+  // Type and input validation overrides
   override def dataType: DataType = BinaryType
   override def nullable: Boolean = false
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(BinaryType, StringTypeWithCollation(supportsTrimCollation = true))
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      defaultCheck
+    } else {
+      checkModeParameter()
+    }
+  }
 
   /**
    * Instantiate an Intersection instance using the summary set operations.
@@ -326,14 +271,13 @@ abstract class TupleIntersectionAggBase[S <: Summary]
     if (sketchBytes == null) {
       intersectionBuffer
     } else {
+      val bytes = sketchBytes.asInstanceOf[Array[Byte]]
+      val inputSketch = heapifySketch(bytes)
 
-    val bytes = sketchBytes.asInstanceOf[Array[Byte]]
-    val inputSketch = heapifySketch(bytes)
-
-    val intersection = intersectionBuffer match {
-      case IntersectionTupleAggregationBuffer(existingIntersection) => existingIntersection
-      case _ => throw QueryExecutionErrors.tupleInvalidInputSketchBuffer(prettyName)
-    }
+      val intersection = intersectionBuffer match {
+        case IntersectionTupleAggregationBuffer(existingIntersection) => existingIntersection
+        case _ => throw QueryExecutionErrors.tupleInvalidInputSketchBuffer(prettyName)
+      }
 
       // Merge it with the buffer
       intersection.intersect(inputSketch)
@@ -389,4 +333,20 @@ abstract class TupleIntersectionAggBase[S <: Summary]
    */
   override def serialize(sketchState: TupleSketchState[S]): Array[Byte] =
     sketchState.serialize()
+
+  /**
+   * Heapify a CompactSketch from the sketch byte array.
+   *
+   * @param buffer
+   *   A serialized sketch byte array
+   * @return
+   *   A CompactSketch instance wrapped with FinalizedTupleSketch
+   */
+  override def deserialize(buffer: Array[Byte]): TupleSketchState[S] = {
+    if (buffer.nonEmpty) {
+      FinalizedTupleSketch(heapifySketch(buffer))
+    } else {
+      createAggregationBuffer()
+    }
+  }
 }

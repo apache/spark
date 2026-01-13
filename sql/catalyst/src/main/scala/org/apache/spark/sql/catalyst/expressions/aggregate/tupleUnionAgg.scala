@@ -78,26 +78,6 @@ case class TupleUnionAggDouble(
     this(child, lgNomEntries, mode, 0, 0)
   }
 
-  /**
-   * Override inputTypes to specify sketch binary (BinaryType), lgNomEntries (int), and mode
-   * (string) parameters.
-   */
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(BinaryType, IntegerType, StringTypeWithCollation(supportsTrimCollation = true))
-
-  /**
-   * Override checkInputDataTypes to validate base inputs (sketch binary, lgNomEntries) and mode
-   * parameter.
-   */
-  override def checkInputDataTypes(): TypeCheckResult = {
-    val defaultCheck = checkBaseInputDataTypes()
-    if (defaultCheck.isFailure) {
-      defaultCheck
-    } else {
-      checkModeParameter()
-    }
-  }
-
   // Copy constructors required by ImperativeAggregate
   override def withNewMutableAggBufferOffset(
       newMutableAggBufferOffset: Int): TupleUnionAggDouble =
@@ -116,7 +96,7 @@ case class TupleUnionAggDouble(
   override def second: Expression = lgNomEntries
   override def third: Expression = mode
 
-  // Overrides for TypedImperativeAggregate
+  // Override for TypedImperativeAggregate
   override def prettyName: String = "tuple_union_agg_double"
 
   /**
@@ -136,22 +116,6 @@ case class TupleUnionAggDouble(
    */
   override protected def heapifySketch(buffer: Array[Byte]): Sketch[DoubleSummary] = {
     TupleSketchUtils.heapifyDoubleSketch(buffer, prettyName)
-  }
-
-  /**
-   * Heapify a CompactSketch from the sketch byte array.
-   *
-   * @param buffer
-   *   A serialized sketch byte array
-   * @return
-   *   A CompactSketch instance wrapped with FinalizedTupleSketch
-   */
-  override def deserialize(buffer: Array[Byte]): TupleSketchState[DoubleSummary] = {
-    if (buffer.nonEmpty) {
-      FinalizedTupleSketch(heapifySketch(buffer))
-    } else {
-      createAggregationBuffer()
-    }
   }
 }
 
@@ -202,26 +166,6 @@ case class TupleUnionAggInteger(
     this(child, lgNomEntries, mode, 0, 0)
   }
 
-  /**
-   * Override inputTypes to specify sketch binary (BinaryType), lgNomEntries (int), and mode
-   * (string) parameters.
-   */
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(BinaryType, IntegerType, StringTypeWithCollation(supportsTrimCollation = true))
-
-  /**
-   * Override checkInputDataTypes to validate base inputs (sketch binary, lgNomEntries) and mode
-   * parameter.
-   */
-  override def checkInputDataTypes(): TypeCheckResult = {
-    val defaultCheck = checkBaseInputDataTypes()
-    if (defaultCheck.isFailure) {
-      defaultCheck
-    } else {
-      checkModeParameter()
-    }
-  }
-
   // Copy constructors required by ImperativeAggregate
   override def withNewMutableAggBufferOffset(
       newMutableAggBufferOffset: Int): TupleUnionAggInteger =
@@ -240,7 +184,7 @@ case class TupleUnionAggInteger(
   override def second: Expression = lgNomEntries
   override def third: Expression = mode
 
-  // Overrides for TypedImperativeAggregate
+  // Override for TypedImperativeAggregate
   override def prettyName: String = "tuple_union_agg_integer"
 
   /**
@@ -262,22 +206,6 @@ case class TupleUnionAggInteger(
   override protected def heapifySketch(buffer: Array[Byte]): Sketch[IntegerSummary] = {
     TupleSketchUtils.heapifyIntegerSketch(buffer, prettyName)
   }
-
-  /**
-   * Heapify a CompactSketch from the sketch byte array.
-   *
-   * @param buffer
-   *   A serialized sketch byte array
-   * @return
-   *   A CompactSketch instance wrapped with FinalizedTupleSketch
-   */
-  override def deserialize(buffer: Array[Byte]): TupleSketchState[IntegerSummary] = {
-    if (buffer.nonEmpty) {
-      FinalizedTupleSketch(heapifySketch(buffer))
-    } else {
-      createAggregationBuffer()
-    }
-  }
 }
 
 abstract class TupleUnionAggBase[S <: Summary]
@@ -292,15 +220,23 @@ abstract class TupleUnionAggBase[S <: Summary]
   // Abstract members that subclasses must implement
   protected def child: Expression
 
+  // Type and input validation overrides
   override def dataType: DataType = BinaryType
   override def nullable: Boolean = false
 
-  protected def checkBaseInputDataTypes(): TypeCheckResult = {
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(BinaryType, IntegerType, StringTypeWithCollation(supportsTrimCollation = true))
+
+  override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
+    val lgCheck = checkLgNomEntriesParameter()
+
     if (defaultCheck.isFailure) {
       defaultCheck
+    } else if (lgCheck.isFailure) {
+      lgCheck
     } else {
-      checkLgNomEntriesParameter()
+      checkModeParameter()
     }
   }
 
@@ -337,14 +273,13 @@ abstract class TupleUnionAggBase[S <: Summary]
     if (sketchBytes == null) {
       unionBuffer
     } else {
+      val bytes = sketchBytes.asInstanceOf[Array[Byte]]
+      val inputSketch = heapifySketch(bytes)
 
-    val bytes = sketchBytes.asInstanceOf[Array[Byte]]
-    val inputSketch = heapifySketch(bytes)
-
-    val union = unionBuffer match {
-      case UnionTupleAggregationBuffer(existingUnion) => existingUnion
-      case _ => throw QueryExecutionErrors.tupleInvalidInputSketchBuffer(prettyName)
-    }
+      val union = unionBuffer match {
+        case UnionTupleAggregationBuffer(existingUnion) => existingUnion
+        case _ => throw QueryExecutionErrors.tupleInvalidInputSketchBuffer(prettyName)
+      }
 
       // Merge it with the buffer
       union.union(inputSketch)
@@ -396,6 +331,22 @@ abstract class TupleUnionAggBase[S <: Summary]
    */
   override def serialize(sketchState: TupleSketchState[S]): Array[Byte] =
     sketchState.serialize()
+
+  /**
+   * Heapify a CompactSketch from the sketch byte array.
+   *
+   * @param buffer
+   *   A serialized sketch byte array
+   * @return
+   *   A CompactSketch instance wrapped with FinalizedTupleSketch
+   */
+  override def deserialize(buffer: Array[Byte]): TupleSketchState[S] = {
+    if (buffer.nonEmpty) {
+      FinalizedTupleSketch(heapifySketch(buffer))
+    } else {
+      createAggregationBuffer()
+    }
+  }
 }
 
 // scalastyle:off line.size.limit
