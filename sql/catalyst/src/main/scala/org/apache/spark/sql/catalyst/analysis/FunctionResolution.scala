@@ -146,23 +146,27 @@ class FunctionResolution(
       nameParts: Seq[String],
       node: Option[UnresolvedFunction] = None): FunctionType = {
 
-    // Check if it's explicitly qualified as builtin or temp and exists as a scalar function
+    // Check if it's explicitly qualified as builtin or temp
     if (maybeBuiltinFunctionName(nameParts)) {
+      // Explicitly qualified as builtin (e.g., builtin.abs or system.builtin.abs)
       if (lookupBuiltinOrTempFunction(nameParts, node).isDefined) {
         return FunctionType.Builtin
       }
     } else if (maybeTempFunctionName(nameParts)) {
+      // Explicitly qualified as temp (e.g., session.func or system.session.func)
       if (lookupBuiltinOrTempFunction(nameParts, node).isDefined) {
         return FunctionType.Temporary
       }
     } else {
-      // Unqualified or qualified with a catalog - check scalar functions
-      lookupBuiltinOrTempFunction(nameParts, node) match {
-        case Some(_) =>
-          // For unqualified names, we need to determine if it resolved to builtin or temp
-          // by checking temp first (since temp shadows builtin)
-          val funcName = nameParts.last
-          if (v1SessionCatalog.isTemporaryFunction(FunctionIdentifier(funcName))) {
+      // Unqualified or qualified with a catalog
+      // Use lookupBuiltin OrTempFunction which does a single lookup with shadowing logic
+      val funcName = nameParts.last
+      val funcInfoOpt = v1SessionCatalog.lookupBuiltinOrTempFunction(funcName)
+      funcInfoOpt match {
+        case Some(info) =>
+          // Determine if it's temp or builtin from the ExpressionInfo
+          // Temp functions have database set to SESSION_NAMESPACE (used as temp DB marker)
+          if (info.getDb == CatalogManager.SESSION_NAMESPACE) {
             return FunctionType.Temporary
           } else {
             return FunctionType.Builtin
