@@ -67,8 +67,7 @@ case class TupleSketchAggDouble(
     override val mutableAggBufferOffset: Int,
     override val inputAggBufferOffset: Int)
     extends TupleSketchAggBase[java.lang.Double, DoubleSummary]
-    with QuaternaryLike[Expression]
-    with SummaryAggregateMode {
+    with QuaternaryLike[Expression] {
 
   // Constructors
   def this(key: Expression, summary: Expression) = {
@@ -176,8 +175,7 @@ case class TupleSketchAggInteger(
     override val mutableAggBufferOffset: Int,
     override val inputAggBufferOffset: Int)
     extends TupleSketchAggBase[Integer, IntegerSummary]
-    with QuaternaryLike[Expression]
-    with SummaryAggregateMode {
+    with QuaternaryLike[Expression] {
 
   // Constructors
   def this(key: Expression, summary: Expression) = {
@@ -256,6 +254,7 @@ case class TupleSketchAggInteger(
 abstract class TupleSketchAggBase[U, S <: UpdatableSummary[U]]
     extends TypedImperativeAggregate[TupleSketchState[S]]
     with SketchSize
+    with SummaryAggregateMode
     with ImplicitCastInputTypes {
 
   // Abstract methods that subclasses must implement

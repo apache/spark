@@ -68,8 +68,7 @@ case class TupleIntersectionAggDouble(
     override val mutableAggBufferOffset: Int,
     override val inputAggBufferOffset: Int)
     extends TupleIntersectionAggBase[DoubleSummary]
-    with BinaryLike[Expression]
-    with SummaryAggregateMode {
+    with BinaryLike[Expression] {
 
   // Constructors
   def this(child: Expression) = {
@@ -158,8 +157,7 @@ case class TupleIntersectionAggInteger(
     override val mutableAggBufferOffset: Int,
     override val inputAggBufferOffset: Int)
     extends TupleIntersectionAggBase[IntegerSummary]
-    with BinaryLike[Expression]
-    with SummaryAggregateMode {
+    with BinaryLike[Expression] {
 
   // Constructors
   def this(child: Expression) = {
@@ -213,6 +211,7 @@ case class TupleIntersectionAggInteger(
 
 abstract class TupleIntersectionAggBase[S <: Summary]
     extends TypedImperativeAggregate[TupleSketchState[S]]
+    with SummaryAggregateMode
     with ImplicitCastInputTypes {
 
   // Abstract methods that subclasses must implement

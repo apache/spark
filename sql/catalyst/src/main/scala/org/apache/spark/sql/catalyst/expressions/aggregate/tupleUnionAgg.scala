@@ -57,8 +57,7 @@ case class TupleUnionAggDouble(
     override val mutableAggBufferOffset: Int,
     override val inputAggBufferOffset: Int)
     extends TupleUnionAggBase[DoubleSummary]
-    with TernaryLike[Expression]
-    with SummaryAggregateMode {
+    with TernaryLike[Expression] {
 
   // Constructors
   def this(child: Expression) = {
@@ -145,8 +144,7 @@ case class TupleUnionAggInteger(
     override val mutableAggBufferOffset: Int,
     override val inputAggBufferOffset: Int)
     extends TupleUnionAggBase[IntegerSummary]
-    with TernaryLike[Expression]
-    with SummaryAggregateMode {
+    with TernaryLike[Expression] {
 
   // Constructors
   def this(child: Expression) = {
@@ -211,6 +209,7 @@ case class TupleUnionAggInteger(
 abstract class TupleUnionAggBase[S <: Summary]
     extends TypedImperativeAggregate[TupleSketchState[S]]
     with SketchSize
+    with SummaryAggregateMode
     with ImplicitCastInputTypes {
 
   // Abstract methods that subclasses must implement
