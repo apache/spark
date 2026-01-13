@@ -166,6 +166,22 @@ FROM t_int_double_1_5_through_7_11;
 SELECT tuple_sketch_summary_integer(tuple_sketch_agg_integer(key1, val1, 12, 'sum'), 'sum')
 FROM t_int_int_1_5_through_7_11;
 
+-- Test tuple_sketch_theta_double to get theta value from double sketch
+SELECT tuple_sketch_theta_double(tuple_sketch_agg_double(key1, val1))
+FROM t_int_double_1_5_through_7_11;
+
+-- Test tuple_sketch_theta_double with LongType key
+SELECT tuple_sketch_theta_double(tuple_sketch_agg_double(key1, val1))
+FROM t_long_double_1_5_through_7_11;
+
+-- Test tuple_sketch_theta_double with StringType key
+SELECT tuple_sketch_theta_double(tuple_sketch_agg_double(key1, val1))
+FROM t_string_double_a_d_through_e_h;
+
+-- Test tuple_sketch_theta_integer to get theta value from integer sketch
+SELECT tuple_sketch_theta_integer(tuple_sketch_agg_integer(key1, val1, 12))
+FROM t_int_int_1_5_through_7_11;
+
 -- Test tuple_union_double function with IntegerType key sketches
 SELECT tuple_sketch_estimate_double(
   tuple_union_double(
@@ -951,6 +967,16 @@ FROM VALUES (1, 'invalid'), (2, 'invalid') AS tab(col1, col2);
 -- Test tuple_sketch_estimate_integer with wrong sketch type (integer estimate on double sketch)
 SELECT tuple_sketch_estimate_integer(tuple_sketch_agg_double(key1, val1, 12, 'sum'))
 FROM t_int_double_1_5_through_7_11;
+
+-- Test tuple_sketch_theta_double with invalid binary data ('abc') that is not a valid tuple sketch - should fail
+SELECT tuple_sketch_theta_double(CAST('abc' AS BINARY));
+
+-- Test tuple_sketch_theta_integer with wrong sketch type (integer theta on double sketch) - should fail
+SELECT tuple_sketch_theta_integer(tuple_sketch_agg_double(key1, val1, 12, 'sum'))
+FROM t_int_double_1_5_through_7_11;
+
+-- Test tuple_sketch_theta_double with integer input instead of binary - should fail
+SELECT tuple_sketch_theta_double(123);
 
 -- Clean up
 DROP TABLE IF EXISTS t_int_double_1_5_through_7_11;

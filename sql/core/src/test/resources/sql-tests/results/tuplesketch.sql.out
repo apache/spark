@@ -391,6 +391,42 @@ struct<tuple_sketch_summary_integer(tuple_sketch_agg_integer(key1, val1, 12, sum
 
 
 -- !query
+SELECT tuple_sketch_theta_double(tuple_sketch_agg_double(key1, val1))
+FROM t_int_double_1_5_through_7_11
+-- !query schema
+struct<tuple_sketch_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum)):double>
+-- !query output
+1.0
+
+
+-- !query
+SELECT tuple_sketch_theta_double(tuple_sketch_agg_double(key1, val1))
+FROM t_long_double_1_5_through_7_11
+-- !query schema
+struct<tuple_sketch_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum)):double>
+-- !query output
+1.0
+
+
+-- !query
+SELECT tuple_sketch_theta_double(tuple_sketch_agg_double(key1, val1))
+FROM t_string_double_a_d_through_e_h
+-- !query schema
+struct<tuple_sketch_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum)):double>
+-- !query output
+1.0
+
+
+-- !query
+SELECT tuple_sketch_theta_integer(tuple_sketch_agg_integer(key1, val1, 12))
+FROM t_int_int_1_5_through_7_11
+-- !query schema
+struct<tuple_sketch_theta_integer(tuple_sketch_agg_integer(key1, val1, 12, sum)):double>
+-- !query output
+1.0
+
+
+-- !query
 SELECT tuple_sketch_estimate_double(
   tuple_union_double(
     tuple_sketch_agg_double(key1, val1),
@@ -2256,6 +2292,63 @@ org.apache.spark.SparkRuntimeException
   "messageParameters" : {
     "function" : "`tuple_sketch_estimate_integer`"
   }
+}
+
+
+-- !query
+SELECT tuple_sketch_theta_double(CAST('abc' AS BINARY))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
+  "sqlState" : "22000",
+  "messageParameters" : {
+    "function" : "`tuple_sketch_theta_double`"
+  }
+}
+
+
+-- !query
+SELECT tuple_sketch_theta_integer(tuple_sketch_agg_double(key1, val1, 12, 'sum'))
+FROM t_int_double_1_5_through_7_11
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
+  "sqlState" : "22000",
+  "messageParameters" : {
+    "function" : "`tuple_sketch_theta_integer`"
+  }
+}
+
+
+-- !query
+SELECT tuple_sketch_theta_double(123)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"123\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"BINARY\"",
+    "sqlExpr" : "\"tuple_sketch_theta_double(123)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 37,
+    "fragment" : "tuple_sketch_theta_double(123)"
+  } ]
 }
 
 

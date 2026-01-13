@@ -383,6 +383,42 @@ Aggregate [tuple_sketch_summary_integer(tuple_sketch_agg_integer(key1#x, val1#x,
 
 
 -- !query
+SELECT tuple_sketch_theta_double(tuple_sketch_agg_double(key1, val1))
+FROM t_int_double_1_5_through_7_11
+-- !query analysis
+Aggregate [tuple_sketch_theta_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0)) AS tuple_sketch_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum))#x]
++- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
+   +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
+
+
+-- !query
+SELECT tuple_sketch_theta_double(tuple_sketch_agg_double(key1, val1))
+FROM t_long_double_1_5_through_7_11
+-- !query analysis
+Aggregate [tuple_sketch_theta_double(tuple_sketch_agg_double(key1#xL, val1#x, 12, sum, 0, 0)) AS tuple_sketch_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum))#x]
++- SubqueryAlias spark_catalog.default.t_long_double_1_5_through_7_11
+   +- Relation spark_catalog.default.t_long_double_1_5_through_7_11[key1#xL,val1#x,key2#xL,val2#x] parquet
+
+
+-- !query
+SELECT tuple_sketch_theta_double(tuple_sketch_agg_double(key1, val1))
+FROM t_string_double_a_d_through_e_h
+-- !query analysis
+Aggregate [tuple_sketch_theta_double(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0)) AS tuple_sketch_theta_double(tuple_sketch_agg_double(key1, val1, 12, sum))#x]
++- SubqueryAlias spark_catalog.default.t_string_double_a_d_through_e_h
+   +- Relation spark_catalog.default.t_string_double_a_d_through_e_h[key1#x,val1#x,key2#x,val2#x] parquet
+
+
+-- !query
+SELECT tuple_sketch_theta_integer(tuple_sketch_agg_integer(key1, val1, 12))
+FROM t_int_int_1_5_through_7_11
+-- !query analysis
+Aggregate [tuple_sketch_theta_integer(tuple_sketch_agg_integer(key1#x, val1#x, 12, sum, 0, 0)) AS tuple_sketch_theta_integer(tuple_sketch_agg_integer(key1, val1, 12, sum))#x]
++- SubqueryAlias spark_catalog.default.t_int_int_1_5_through_7_11
+   +- Relation spark_catalog.default.t_int_int_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
+
+
+-- !query
 SELECT tuple_sketch_estimate_double(
   tuple_union_double(
     tuple_sketch_agg_double(key1, val1),
@@ -2268,6 +2304,46 @@ FROM t_int_double_1_5_through_7_11
 Aggregate [tuple_sketch_estimate_integer(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0)) AS tuple_sketch_estimate_integer(tuple_sketch_agg_double(key1, val1, 12, sum))#x]
 +- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
    +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
+
+
+-- !query
+SELECT tuple_sketch_theta_double(CAST('abc' AS BINARY))
+-- !query analysis
+Project [tuple_sketch_theta_double(cast(abc as binary)) AS tuple_sketch_theta_double(CAST(abc AS BINARY))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT tuple_sketch_theta_integer(tuple_sketch_agg_double(key1, val1, 12, 'sum'))
+FROM t_int_double_1_5_through_7_11
+-- !query analysis
+Aggregate [tuple_sketch_theta_integer(tuple_sketch_agg_double(key1#x, val1#x, 12, sum, 0, 0)) AS tuple_sketch_theta_integer(tuple_sketch_agg_double(key1, val1, 12, sum))#x]
++- SubqueryAlias spark_catalog.default.t_int_double_1_5_through_7_11
+   +- Relation spark_catalog.default.t_int_double_1_5_through_7_11[key1#x,val1#x,key2#x,val2#x] parquet
+
+
+-- !query
+SELECT tuple_sketch_theta_double(123)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"123\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"BINARY\"",
+    "sqlExpr" : "\"tuple_sketch_theta_double(123)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 37,
+    "fragment" : "tuple_sketch_theta_double(123)"
+  } ]
+}
 
 
 -- !query

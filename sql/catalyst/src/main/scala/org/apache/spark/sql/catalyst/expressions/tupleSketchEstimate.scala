@@ -94,3 +94,77 @@ case class TupleSketchEstimateInteger(child: Expression)
     sketch.getEstimate()
   }
 }
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(child) - Returns the theta value (sampling rate) from a Datasketches TupleSketch.
+    The theta value represents the effective sampling rate of the sketch, between 0.0 and 1.0.
+    The sketch's summary type must be a double. """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(tuple_sketch_agg_double(key, summary)) FROM VALUES (1, 1.0D), (2, 2.0D), (3, 3.0D) tab(key, summary);
+       1.0
+  """,
+  group = "misc_funcs",
+  since = "4.2.0")
+// scalastyle:on line.size.limit
+case class TupleSketchThetaDouble(child: Expression)
+    extends UnaryExpression
+    with CodegenFallback
+    with ExpectsInputTypes {
+
+  override def nullIntolerant: Boolean = true
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
+
+  override def dataType: DataType = DoubleType
+
+  override def prettyName: String = "tuple_sketch_theta_double"
+
+  override protected def withNewChildInternal(newChild: Expression): TupleSketchThetaDouble =
+    copy(child = newChild)
+
+  override def nullSafeEval(input: Any): Any = {
+    val buffer = input.asInstanceOf[Array[Byte]]
+    val sketch = TupleSketchUtils.heapifyDoubleSketch(buffer, prettyName)
+    sketch.getTheta()
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(child) - Returns the theta value (sampling rate) from a Datasketches TupleSketch.
+    The theta value represents the effective sampling rate of the sketch, between 0.0 and 1.0.
+    The sketch's summary type must be an integer. """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(tuple_sketch_agg_integer(key, summary)) FROM VALUES (1, 1), (2, 2), (3, 3) tab(key, summary);
+       1.0
+  """,
+  group = "misc_funcs",
+  since = "4.2.0")
+// scalastyle:on line.size.limit
+case class TupleSketchThetaInteger(child: Expression)
+    extends UnaryExpression
+    with CodegenFallback
+    with ExpectsInputTypes {
+
+  override def nullIntolerant: Boolean = true
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
+
+  override def dataType: DataType = DoubleType
+
+  override def prettyName: String = "tuple_sketch_theta_integer"
+
+  override protected def withNewChildInternal(newChild: Expression): TupleSketchThetaInteger =
+    copy(child = newChild)
+
+  override def nullSafeEval(input: Any): Any = {
+    val buffer = input.asInstanceOf[Array[Byte]]
+    val sketch = TupleSketchUtils.heapifyIntegerSketch(buffer, prettyName)
+    sketch.getTheta()
+  }
+}

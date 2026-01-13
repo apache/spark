@@ -824,6 +824,8 @@ object FunctionRegistry {
     expression[ApproxTopKEstimate]("approx_top_k_estimate"),
     expression[TupleSketchEstimateDouble]("tuple_sketch_estimate_double"),
     expression[TupleSketchEstimateInteger]("tuple_sketch_estimate_integer"),
+    expression[TupleSketchThetaDouble]("tuple_sketch_theta_double"),
+    expression[TupleSketchThetaInteger]("tuple_sketch_theta_integer"),
     expression[TupleSketchSummaryDouble]("tuple_sketch_summary_double"),
     expression[TupleSketchSummaryInteger]("tuple_sketch_summary_integer"),
     expressionBuilder("tuple_union_double", TupleUnionDoubleExpressionBuilder),
