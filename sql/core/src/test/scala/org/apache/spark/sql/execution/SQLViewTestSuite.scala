@@ -382,11 +382,9 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
   }
 
   test("SPARK-55019: view can be dropped using DROP TABLE") {
-    val viewName = "v"
-    withView(viewName) {
-      sql(s"DROP VIEW IF EXISTS $viewName")
+    withView("v") {
       // First, create a simple view.
-      sql(s"CREATE VIEW $viewName AS SELECT 1 AS a")
+      val viewName = createView("v", "SELECT 1 AS a")
       checkAnswer(sql(s"SELECT * FROM $viewName"), Row(1))
       // Then, drop the view using DROP TABLE.
       sql(s"DROP TABLE $viewName")
@@ -396,7 +394,7 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
           sql(s"SELECT * FROM $viewName")
         },
         condition = "TABLE_OR_VIEW_NOT_FOUND",
-        parameters = Map("relationName" -> s"`$viewName`"),
+        parameters = Map("relationName" -> toSQLId(viewName.split("\\.").toSeq)),
         ExpectedContext(s"$viewName", 14, 13 + viewName.length))
     }
   }
