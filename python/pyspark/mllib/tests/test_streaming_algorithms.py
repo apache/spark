@@ -238,7 +238,12 @@ class StreamingLogisticRegressionWithSGDTests(MLLibStreamingTestCase):
         slr = StreamingLogisticRegressionWithSGD(stepSize=0.2, numIterations=25)
         slr.setInitialWeights([0.0])
         slr.trainOn(input_stream)
-        input_stream.foreachRDD(lambda x: models.append(slr.latestModel().weights[0]))
+
+        def update_models(x):
+            if not x.isEmpty():
+                models.append(slr.latestModel().weights[0])
+
+        input_stream.foreachRDD(update_models)
 
         self.ssc.start()
 
@@ -247,7 +252,7 @@ class StreamingLogisticRegressionWithSGDTests(MLLibStreamingTestCase):
             return True
 
         # We want all batches to finish for this test.
-        eventually(timeout=120, catch_assertions=True)(condition)()
+        eventually(timeout=120, catch_assertions=True, interval=12.0)(condition)()
 
         t_models = array(models)
         diff = t_models[1:] - t_models[:-1]
