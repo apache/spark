@@ -3987,7 +3987,7 @@ def time_to_micros(col: "ColumnOrName") -> Column:
 time_to_micros.__doc__ = pysparkfuncs.time_to_micros.__doc__
 
 
-def _ensure_column_or_name(arg: Optional[Any]) -> ColumnOrName:
+def _ensure_column_or_name(arg: Optional[Any]) -> "ColumnOrName":
     if not isinstance(arg, (Column, str)):
         raise PySparkTypeError(
             errorClass="NOT_COLUMN_OR_STR",
