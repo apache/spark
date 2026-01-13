@@ -159,15 +159,20 @@ class FunctionResolution(
       }
     } else {
       // Unqualified or qualified with a catalog
-      // Use lookupBuiltin OrTempFunction which does a single lookup with shadowing logic
-      val funcName = nameParts.last
-      val funcInfoOpt = v1SessionCatalog.lookupBuiltinOrTempFunction(funcName)
+      // Use lookupBuiltinOrTempFunction which handles internal functions correctly
+      val funcInfoOpt = lookupBuiltinOrTempFunction(nameParts, node)
       funcInfoOpt match {
         case Some(info) =>
           // Determine if it's temp or builtin from the ExpressionInfo
-          // Temp functions have database set to SESSION_NAMESPACE (used as temp DB marker)
+          // Internal and temp functions have database set to SESSION_NAMESPACE
+          // Note: Internal functions also use SESSION_NAMESPACE but are from internal registry
           if (info.getDb == CatalogManager.SESSION_NAMESPACE) {
-            return FunctionType.Temporary
+            // Could be temp or internal - check if it's in the internal registry
+            if (nameParts.size == 1 && node.exists(_.isInternal)) {
+              return FunctionType.Builtin  // Internal functions are treated as builtins
+            } else {
+              return FunctionType.Temporary
+            }
           } else {
             return FunctionType.Builtin
           }
