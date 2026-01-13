@@ -154,9 +154,7 @@ private[spark] object PythonWorkerUtils extends Logging {
   }
 
   /**
-   * Writes runner configuration to the stream connected to the Python worker.
-   *
-   * It will be read and used by `worker_util.read_runner_conf`.
+   * Write configuration in the form of key-value pairs.
    */
   def writeConf(conf: Map[String, String], dataOut: DataOutputStream): Unit = {
     dataOut.writeInt(conf.size)
