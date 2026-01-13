@@ -474,7 +474,7 @@ class Analyzer(
       ResolveAliases ::
       ResolveSubquery ::
       ResolveSubqueryColumnAliases ::
-      ApplyDefaultCollationToStringType ::
+      ApplyDefaultCollation ::
       ResolveWindowOrder ::
       ResolveWindowFrame ::
       ResolveNaturalAndUsingJoin ::
@@ -1097,7 +1097,7 @@ class Analyzer(
 
     def apply(plan: LogicalPlan)
         : LogicalPlan = plan.resolveOperatorsUpWithPruning(AlwaysProcess.fn, ruleId) {
-      case i @ InsertIntoStatement(table, _, _, _, _, _, _) =>
+      case i @ InsertIntoStatement(table, _, _, _, _, _, _, _) =>
         val relation = table match {
           case u: UnresolvedRelation if !u.isStreaming =>
             resolveRelation(u).getOrElse(u)
@@ -1232,7 +1232,7 @@ class Analyzer(
   object ResolveInsertInto extends ResolveInsertionBase {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       AlwaysProcess.fn, ruleId) {
-      case i @ InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _, _, _)
+      case i @ InsertIntoStatement(r: DataSourceV2Relation, _, _, _, _, _, _, _)
           if i.query.resolved =>
         // ifPartitionNotExists is append with validation, but validation is not supported
         if (i.ifPartitionNotExists) {
@@ -1250,27 +1250,50 @@ class Analyzer(
         val partCols = partitionColumnNames(r.table)
         validatePartitionSpec(partCols, i.partitionSpec)
 
+        val schemaEvolutionWriteOption: Map[String, String] =
+          if (i.withSchemaEvolution) Map("mergeSchema" -> "true") else Map.empty
+
         val staticPartitions = i.partitionSpec.filter(_._2.isDefined).transform((_, v) => v.get)
         val query = addStaticPartitionColumns(r, projectByName.getOrElse(i.query), staticPartitions,
           isByName)
 
         if (!i.overwrite) {
           if (isByName) {
-            AppendData.byName(r, query)
+            AppendData.byName(
+              r,
+              query,
+              writeOptions = schemaEvolutionWriteOption)
           } else {
-            AppendData.byPosition(r, query)
+            AppendData.byPosition(
+              r,
+              query,
+              writeOptions = schemaEvolutionWriteOption)
           }
         } else if (conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC) {
           if (isByName) {
-            OverwritePartitionsDynamic.byName(r, query)
+            OverwritePartitionsDynamic.byName(
+              r,
+              query,
+              writeOptions = schemaEvolutionWriteOption)
           } else {
-            OverwritePartitionsDynamic.byPosition(r, query)
+            OverwritePartitionsDynamic.byPosition(
+              r,
+              query,
+              writeOptions = schemaEvolutionWriteOption)
           }
         } else {
           if (isByName) {
-            OverwriteByExpression.byName(r, query, staticDeleteExpression(r, staticPartitions))
+            OverwriteByExpression.byName(
+              table = r,
+              df = query,
+              deleteExpr = staticDeleteExpression(r, staticPartitions),
+              writeOptions = schemaEvolutionWriteOption)
           } else {
-            OverwriteByExpression.byPosition(r, query, staticDeleteExpression(r, staticPartitions))
+            OverwriteByExpression.byPosition(
+              table = r,
+              query = query,
+              deleteExpr = staticDeleteExpression(r, staticPartitions),
+              writeOptions = schemaEvolutionWriteOption)
           }
         }
     }
