@@ -113,38 +113,6 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
       parameters = Map("function" -> "`test_function`"))
   }
 
-  test("TupleSummaryMode.fromString: accepts valid modes") {
-    val validModes = Seq("sum", "min", "max", "alwaysone")
-    validModes.foreach { mode =>
-      // Should not throw any exception
-      val result = TupleSummaryMode.fromString(mode, "test_function")
-      assert(result != null)
-      assert(result.toString == mode)
-    }
-  }
-
-  test("TupleSummaryMode.fromString: case insensitive") {
-    assert(TupleSummaryMode.fromString("SUM", "test_function") == TupleSummaryMode.Sum)
-    assert(TupleSummaryMode.fromString("Min", "test_function") == TupleSummaryMode.Min)
-    assert(TupleSummaryMode.fromString("MAX", "test_function") == TupleSummaryMode.Max)
-    assert(TupleSummaryMode.fromString("AlwaysOne", "test_function") == TupleSummaryMode.AlwaysOne)
-  }
-
-  test("TupleSummaryMode.fromString: throws exception for invalid modes") {
-    val invalidModes = Seq("invalid", "average", "count", "multiply", "")
-    invalidModes.foreach { mode =>
-      checkError(
-        exception = intercept[SparkRuntimeException] {
-          TupleSummaryMode.fromString(mode, "test_function")
-        },
-        condition = "TUPLE_INVALID_SKETCH_MODE",
-        parameters = Map(
-          "function" -> "`test_function`",
-          "mode" -> mode,
-          "validModes" -> TupleSummaryMode.validModeStrings.mkString(", ")))
-    }
-  }
-
   test("heapifyDoubleTupleSketch: successfully deserializes valid tuple sketch bytes") {
     // Create a valid tuple sketch and get its bytes
     val summaryFactory = new DoubleSummaryFactory(DoubleSummary.Mode.Sum)
@@ -174,20 +142,6 @@ class ThetaSketchUtilsSuite extends SparkFunSuite with SQLHelper {
       },
       condition = "TUPLE_INVALID_INPUT_SKETCH_BUFFER",
       parameters = Map("function" -> "`test_function`"))
-  }
-
-  test("TupleSummaryMode: converts to DoubleSummary.Mode correctly") {
-    assert(TupleSummaryMode.Sum.toDoubleSummaryMode == DoubleSummary.Mode.Sum)
-    assert(TupleSummaryMode.Min.toDoubleSummaryMode == DoubleSummary.Mode.Min)
-    assert(TupleSummaryMode.Max.toDoubleSummaryMode == DoubleSummary.Mode.Max)
-    assert(TupleSummaryMode.AlwaysOne.toDoubleSummaryMode == DoubleSummary.Mode.AlwaysOne)
-  }
-
-  test("TupleSummaryMode: converts to IntegerSummary.Mode correctly") {
-    assert(TupleSummaryMode.Sum.toIntegerSummaryMode == IntegerSummary.Mode.Sum)
-    assert(TupleSummaryMode.Min.toIntegerSummaryMode == IntegerSummary.Mode.Min)
-    assert(TupleSummaryMode.Max.toIntegerSummaryMode == IntegerSummary.Mode.Max)
-    assert(TupleSummaryMode.AlwaysOne.toIntegerSummaryMode == IntegerSummary.Mode.AlwaysOne)
   }
 
   test("heapifyIntegerTupleSketch: successfully deserializes valid tuple sketch bytes") {

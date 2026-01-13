@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.util.Locale
-
 import org.apache.datasketches.common.SketchesArgumentException
 import org.apache.datasketches.memory.{Memory, MemoryBoundsException}
 import org.apache.datasketches.theta.CompactSketch
@@ -27,70 +25,6 @@ import org.apache.datasketches.tuple.adouble.{DoubleSummary, DoubleSummaryDeseri
 import org.apache.datasketches.tuple.aninteger.{IntegerSummary, IntegerSummaryDeserializer}
 
 import org.apache.spark.sql.errors.QueryExecutionErrors
-
-/**
- * Sealed trait representing valid summary modes for tuple sketches. This provides type-safe
- * mode handling with compile-time exhaustiveness checking and prevents invalid modes from
- * being created.
- */
-sealed trait TupleSummaryMode {
-  def toDoubleSummaryMode: DoubleSummary.Mode
-
-  def toIntegerSummaryMode: IntegerSummary.Mode
-
-  def toString: String
-}
-
-object TupleSummaryMode {
-  case object Sum extends TupleSummaryMode {
-    def toDoubleSummaryMode: DoubleSummary.Mode = DoubleSummary.Mode.Sum
-    def toIntegerSummaryMode: IntegerSummary.Mode = IntegerSummary.Mode.Sum
-    override def toString: String = "sum"
-  }
-
-  case object Min extends TupleSummaryMode {
-    def toDoubleSummaryMode: DoubleSummary.Mode = DoubleSummary.Mode.Min
-    def toIntegerSummaryMode: IntegerSummary.Mode = IntegerSummary.Mode.Min
-    override def toString: String = "min"
-  }
-
-  case object Max extends TupleSummaryMode {
-    def toDoubleSummaryMode: DoubleSummary.Mode = DoubleSummary.Mode.Max
-    def toIntegerSummaryMode: IntegerSummary.Mode = IntegerSummary.Mode.Max
-    override def toString: String = "max"
-  }
-
-  case object AlwaysOne extends TupleSummaryMode {
-    def toDoubleSummaryMode: DoubleSummary.Mode = DoubleSummary.Mode.AlwaysOne
-    def toIntegerSummaryMode: IntegerSummary.Mode = IntegerSummary.Mode.AlwaysOne
-    override def toString: String = "alwaysone"
-  }
-
-  /** All valid modes */
-  val validModes: Seq[TupleSummaryMode] = Seq(Sum, Min, Max, AlwaysOne)
-
-  /** String representations of valid modes for error messages */
-  val validModeStrings: Seq[String] = validModes.map(_.toString)
-
-  /**
-   * Parses a string into a TupleSummaryMode. This is the single entry point for string-to-mode
-   * conversion, ensuring validation happens once.
-   *
-   * @param s The mode string to parse
-   * @param functionName The display name of the function/expression for error messages
-   * @return The corresponding TupleSummaryMode
-   * @throws QueryExecutionErrors.tupleInvalidMode if the mode string is invalid
-   */
-  def fromString(s: String, functionName: String): TupleSummaryMode = {
-    s.toLowerCase(Locale.ROOT) match {
-      case "sum" => Sum
-      case "min" => Min
-      case "max" => Max
-      case "alwaysone" => AlwaysOne
-      case _ => throw QueryExecutionErrors.tupleInvalidMode(functionName, s, validModeStrings)
-    }
-  }
-}
 
 object ThetaSketchUtils {
   /*
