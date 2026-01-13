@@ -453,6 +453,8 @@ class RocksDB(
         stateStoreCkptId.get != loadedStateStoreCkptId.get) {
         closeDB(ignoreException = false)
         if (loadEmpty) {
+          require(stateStoreCkptId.isEmpty,
+            "stateStoeCkptId should be empty when loadEmpty is true")
           loadEmptyStore(version)
           lineageManager.clear()
         } else {
@@ -535,9 +537,13 @@ class RocksDB(
       if (conf.resetStatsOnLoad) {
         nativeStats.reset
       }
-
-      logInfo(log"Loaded ${MDC(LogKeys.VERSION_NUM, version)} " +
-        log"with uniqueId ${MDC(LogKeys.UUID, stateStoreCkptId)}")
+      if (loadEmpty) {
+        logInfo(log"Loaded empty store at version ${MDC(LogKeys.VERSION_NUM, version)} " +
+          log"without uniqueId")
+      } else {
+        logInfo(log"Loaded ${MDC(LogKeys.VERSION_NUM, version)} " +
+          log"with uniqueId ${MDC(LogKeys.UUID, stateStoreCkptId)}")
+      }
     } catch {
       case t: Throwable =>
         loadedVersion = -1  // invalidate loaded data
@@ -548,11 +554,14 @@ class RocksDB(
         lineageManager.clear()
         throw t
     }
+    // Checking conf.enableChangelogCheckpointing instead of enableChangelogCheckpointing.
+    // enableChangelogCheckpointing is set to false when loadEmpty is true, but we still want
+    // to abort previous used changelogWriter if there is any
     if (conf.enableChangelogCheckpointing && !readOnly) {
       // Make sure we don't leak resource.
       changelogWriter.foreach(_.abort())
       if (loadEmpty) {
-        // No changelog writer for empty stores
+        // We don't want to write changelog file when loadEmpty is true
         changelogWriter = None
       } else {
         // Initialize the changelog writer with lineage info

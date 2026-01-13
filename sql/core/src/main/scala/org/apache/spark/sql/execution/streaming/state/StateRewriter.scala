@@ -82,7 +82,7 @@ class StateRewriter(
   private val stateRootLocation = new Path(
     resolvedCheckpointLocation, StreamingCheckpointConstants.DIR_NAME_STATE).toString
 
-  // return a Map[operator id, Array[stateStore -> Array[partition -> StateStoreCheckpointInfo]]]
+  // return a Map[operator id, Array[partition -> Array[stateStore -> StateStoreCheckpointInfo]]]
   def run(): Map[Long, Array[Array[StateStoreCheckpointInfo]]] = {
     logInfo(log"Starting state rewrite for " +
       log"checkpointLocation=${MDC(CHECKPOINT_LOCATION, resolvedCheckpointLocation)}, " +
@@ -95,13 +95,33 @@ class StateRewriter(
       runInternal()
     }
 
+    val allCheckpointInfos = checkpointInfos.values.flatMap { checkpointInfos =>
+      checkpointInfos.flatten.toSeq
+    }.toSeq
     logInfo(log"State rewrite completed in ${MDC(DURATION, timeTakenMs)} ms for " +
-      log"checkpointLocation=${MDC(CHECKPOINT_LOCATION, resolvedCheckpointLocation)}")
-    checkpointInfos
+      log"checkpointLocation=${MDC(CHECKPOINT_LOCATION, resolvedCheckpointLocation)} " +
+      log"checkpointInfos=${MDC(LAST_COMMITTED_CHECKPOINT_ID, allCheckpointInfos)}"
+    )
+    checkpointInfos.map {
+      case(operator, storesSeq) =>
+        val numPartitions = storesSeq.head.length
+        operator -> (0 until numPartitions).map { partitionIdx =>
+          storesSeq.map { storePartitions =>
+            val checkpointInfoPerPartition = storePartitions(partitionIdx)
+            assert(checkpointInfoPerPartition.partitionId == partitionIdx)
+            assert(checkpointInfoPerPartition.batchVersion == writeBatchId + 1)
+            // expect baseStateStoreCkptId empty because we didn't load
+            // any previous stores when doing the rewrite
+            assert(checkpointInfoPerPartition.baseStateStoreCkptId.isEmpty)
+            checkpointInfoPerPartition
+          }
+        }.toArray
+    }
   }
 
   private def runInternal(): Map[Long, Array[Array[StateStoreCheckpointInfo]]] = {
     try {
+      setCheckpointVersion()
       val stateMetadataReader = new StateMetadataPartitionReader(
         resolvedCheckpointLocation,
         new SerializableConfiguration(hadoopConf),
@@ -136,7 +156,7 @@ class StateRewriter(
         val stateVarsIfTws = getStateVariablesIfTWS(opMetadata)
 
         // Rewrite each state store of the operator
-        opMetadata.operatorInfo.operatorId -> stateStoresMetadata.map { stateStoreMetadata =>
+        val checkpointInfo = stateStoresMetadata.map { stateStoreMetadata =>
           rewriteStore(
             opMetadata,
             stateStoreMetadata,
@@ -147,6 +167,7 @@ class StateRewriter(
             sqlConfEntries
           )
         }.toArray
+        opMetadata.operatorInfo.operatorId -> checkpointInfo
       }.toMap
     } catch {
       case e: Throwable =>
@@ -343,6 +364,19 @@ class StateRewriter(
       Some(new InMemoryStateSchemaProvider(schemaMetadata))
     } else {
       None
+    }
+  }
+
+  private def setCheckpointVersion(): Unit = {
+    // Setting checkpoint version in sqlConf based on previous commitLog in case user forgot to
+    // set STATE_STORE_CHECKPOINT_FORMAT_VERSION and crash rewriter.
+    val commitLog = writeCheckpointMetadata.getOrElse(
+      new StreamingQueryCheckpointMetadata(sparkSession, resolvedCheckpointLocation)).commitLog
+    val latestCommitLog = commitLog.getLatest()
+    assert(latestCommitLog.isDefined)
+    if (latestCommitLog.get._2.stateUniqueIds.isDefined) {
+      // hard checkpoint version to 2 if previous commit log has checkpoint id
+      sparkSession.conf.set(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key, "2")
     }
   }
 }

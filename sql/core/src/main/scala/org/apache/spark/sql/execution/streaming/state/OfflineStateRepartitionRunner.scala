@@ -25,6 +25,7 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.streaming.checkpointing.{CommitMetadata, OffsetMap, OffsetSeq, OffsetSeqLog, OffsetSeqMetadata, OffsetSeqMetadataBase}
+import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.runtime.{StreamingCheckpointConstants, StreamingQueryCheckpointMetadata}
 import org.apache.spark.sql.execution.streaming.utils.StreamingUtils
 import org.apache.spark.sql.functions.col
@@ -100,10 +101,7 @@ class OfflineStateRepartitionRunner(
         updateNumPartitionsInOperatorMetadata(newBatchId, readBatchId = lastCommittedBatchId)
 
         // Commit the repartition batch
-        val enableCheckpointId = sparkSession.conf.get(
-          SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key).toInt >= 2
-        commitBatch(newBatchId, lastCommittedBatchId,
-          if (enableCheckpointId) Option(operatorToCkptIds) else None)
+        commitBatch(newBatchId, lastCommittedBatchId, operatorToCkptIds)
         newBatchId
       }
 
@@ -295,27 +293,22 @@ class OfflineStateRepartitionRunner(
   private def commitBatch(
       newBatchId: Long,
       lastCommittedBatchId: Long,
-      opIdToStateStoreCkptInfo: Option[Map[Long, Array[Array[StateStoreCheckpointInfo]]]]): Unit = {
+      opIdToStateStoreCkptInfo: Map[Long, Array[Array[StateStoreCheckpointInfo]]]): Unit = {
+    val enableCheckpointId = StatefulOperatorStateInfo.
+      enableStateStoreCheckpointIds(sparkSession.sessionState.conf)
     val latestCommit = checkpointMetadata.commitLog.get(lastCommittedBatchId).get
-    val commitMetadata = opIdToStateStoreCkptInfo.map {originalInfoMap =>
-      // opIdToStateStoreCkptInfo is Map[operatorId, Array[stateStore -> Array[partition -> info]]]
-      // we change it to Map[operatorId, Array[partitionId -> Array[store -> info]]]
+    val commitMetadata = if (enableCheckpointId) {
       val opIdToPartitionCkptInfo: Map[Long, Array[Array[String]]] =
-        originalInfoMap.map {
-          case(operator, storesSeq) =>
-            val numPartitions = storesSeq.head.length
-            operator -> (0 until numPartitions).map { partitionIdx =>
-              storesSeq.flatMap { storePartitions =>
-                storePartitions(partitionIdx).stateStoreCkptId
-            }
-          }.toArray
+        opIdToStateStoreCkptInfo.map {
+          case (operator, partitionSeq) =>
+            operator -> partitionSeq.map(storeSeq =>
+              storeSeq.flatMap(info => info.stateStoreCkptId))
         }
       // Include checkpoint IDs in commit metadata
-      CommitMetadata(
-        latestCommit.nextBatchWatermarkMs,
-        Option(opIdToPartitionCkptInfo)
-      )
-    }.getOrElse(latestCommit)
+      latestCommit.copy(stateUniqueIds = Option(opIdToPartitionCkptInfo))
+    } else {
+      latestCommit
+    }
 
     if (!checkpointMetadata.commitLog.add(newBatchId, commitMetadata)) {
       throw QueryExecutionErrors.concurrentStreamLogUpdate(newBatchId)

@@ -22,7 +22,6 @@ import java.time.Duration
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.datasources.v2.state.{StateDataSourceTestBase, StateSourceOptions, StreamStreamJoinTestUtils}
-import org.apache.spark.sql.execution.streaming.checkpointing.CommitMetadata
 import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorsUtils
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.TimerStateUtils
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryCheckpointMetadata}
@@ -86,6 +85,12 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
     val writeBatchId = lastBatch + 1
     targetCheckpointMetadata.offsetLog.add(writeBatchId, targetOffsetSeq)
 
+    // Forced set STATE_STORE_CHECKPOINT_FORMAT_VERSION to 1 to mimic when user forgot to update
+    // checkpoint version to 2 in sqlConfig when running stateRewriter on checkpointV2 query.
+    // StateRewriter shouldn't crash but instead set the correct checkpoint version itself
+    // automatically by looking at previous commit log checkpoint
+    val previousCkptVersion = spark.conf.get(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key)
+    spark.conf.unset(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key)
     val rewriter = new StateRewriter(
       spark,
       readBatchId,
@@ -97,30 +102,24 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
       writeCheckpointMetadata = Some(targetCheckpointMetadata)
     )
     val checkpointInfos = rewriter.run()
+    assert(spark.conf.get(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key) == previousCkptVersion)
 
     // Commit to commitLog with checkpoint IDs
     val latestCommit = targetCheckpointMetadata.commitLog.get(lastBatch).get
     val operatorId = 0L
-    val storesSeq: Array[Array[StateStoreCheckpointInfo]] = checkpointInfos(operatorId)
+    val partitionSeq: Array[Array[StateStoreCheckpointInfo]] = checkpointInfos(operatorId)
     val commitMetadata = if (StateStoreConf(conf).enableStateStoreCheckpointIds) {
-      // Build map: partition id -> array of checkpoint IDs (one per store, in order)
-      // checkpointInfos(operatorId) is Seq[Array[StateStoreCheckpointInfo]]
-      // where Seq is stores (in order: store0, store1, ...), Array is partitions
       // For join operators: 4 stores (left-keyToNumValues, left-keyWithIndexToValue,
       //                              right-keyToNumValues, right-keyWithIndexToValue)
       // For regular operators: 1 store
-      val numPartitions = storesSeq.head.length
-      val ckptIds: Array[Array[String]] = (0 until numPartitions).map { partitionIdx =>
+      val ckptIds: Array[Array[String]] = partitionSeq.map { storesSeq =>
           // For this partition, collect checkpoint IDs from all stores (in order)
-          storesSeq.flatMap { storePartitions =>
-            storePartitions(partitionIdx).stateStoreCkptId
+          storesSeq.flatMap { storeCkptInfo =>
+            storeCkptInfo.stateStoreCkptId
           }
-        }.toArray
+        }
       // Include checkpoint IDs in commit metadata
-      CommitMetadata(
-        latestCommit.nextBatchWatermarkMs,
-        Option(Map(operatorId -> ckptIds))
-      )
+      latestCommit.copy(stateUniqueIds = Option(Map(operatorId -> ckptIds)))
     } else {
       latestCommit
     }
@@ -467,11 +466,8 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
     // Run transformWithState tests with enable/disable checkpoint V2
     Seq(1, 2).foreach { ckptVersion =>
       def testWithChangelogAndCheckpointId(testName: String)(testFun: => Unit): Unit = {
-        test(s"$testName ($changelogCpTestSuffix, enableCkptId = ${ckptVersion >= 2})") {
-          withSQLConf(
-            "spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled" ->
-              changelogCheckpointingEnabled.toString,
-            SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> ckptVersion.toString) {
+        testWithChangelogConfig(s"$testName (enableCkptId = ${ckptVersion >= 2})") {
+          withSQLConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> ckptVersion.toString) {
             testFun
           }
         }
@@ -486,6 +482,356 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
           testStreamStreamJoinRoundTrip(version)
         }
       }
+      // Run transformWithState tests with different encoding formats
+      Seq("unsaferow", "avro").foreach { encodingFormat =>
+        def testWithChangelogAndEncodingConfig(testName: String)(testFun: => Unit): Unit = {
+          testWithChangelogAndCheckpointId(
+            s"$testName (encoding = $encodingFormat)") {
+            withSQLConf(
+              SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> encodingFormat) {
+              testFun
+            }
+          }
+        }
+
+        testWithChangelogAndEncodingConfig(
+          "SPARK-54411: transformWithState with multiple column families") {
+          withTempDir { sourceDir =>
+            withTempDir { targetDir =>
+              val inputData = MemoryStream[String]
+              val query = inputData.toDS()
+                .groupByKey(x => x)
+                .transformWithState(new MultiStateVarProcessor(),
+                  TimeMode.None(),
+                  OutputMode.Update())
+              def runQuery(checkpointLocation: String, roundsOfData: Int): Unit = {
+                val dataActions = (1 to roundsOfData).flatMap { _ =>
+                  Seq(
+                    AddData(inputData, "a", "b", "a"),
+                    ProcessAllAvailable()
+                  )
+                }
+                testStream(query)(
+                  Seq(StartStream(checkpointLocation = checkpointLocation)) ++
+                    dataActions ++
+                    Seq(StopStream): _*
+                )
+              }
+
+              runQuery(sourceDir.getAbsolutePath, 2)
+              runQuery(targetDir.getAbsolutePath, 1)
+
+              val schemas = MultiStateVarProcessorTestUtils.getSchemasWithMetadata()
+              val columnFamilyToSelectExprs = MultiStateVarProcessorTestUtils
+                .getColumnFamilyToSelectExprs()
+
+              val columnFamilyToStateSourceOptions = schemas.keys.map { cfName =>
+                val base = Map(
+                  StateSourceOptions.STATE_VAR_NAME -> cfName
+                )
+
+                val withFlatten =
+                  if (cfName == MultiStateVarProcessorTestUtils.ITEMS_LIST) {
+                    base + (StateSourceOptions.FLATTEN_COLLECTION_TYPES -> "true")
+                  } else {
+                    base
+                  }
+
+                cfName -> withFlatten
+              }.toMap
+
+              performRoundTripTest(
+                sourceDir.getAbsolutePath,
+                targetDir.getAbsolutePath,
+                storeToColumnFamilies = Map(StateStoreId.DEFAULT_STORE_NAME -> schemas.keys.toList),
+                storeToColumnFamilyToSelectExprs =
+                  Map(StateStoreId.DEFAULT_STORE_NAME -> columnFamilyToSelectExprs),
+                storeToColumnFamilyToStateSourceOptions =
+                  Map(StateStoreId.DEFAULT_STORE_NAME -> columnFamilyToStateSourceOptions),
+                operatorName = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME
+              )
+            }
+          }
+        }
+
+        testWithChangelogAndEncodingConfig(
+          "SPARK-54411: transformWithState with eventTime timers") {
+          withTempDir { sourceDir =>
+            withTempDir { targetDir =>
+              val inputData = MemoryStream[(String, Long)]
+              val result = inputData.toDS()
+                .select(col("_1").as("key"), timestamp_seconds(col("_2")).as("eventTime"))
+                .withWatermark("eventTime", "10 seconds")
+                .as[(String, Timestamp)]
+                .groupByKey(_._1)
+                .transformWithState(
+                  new EventTimeTimerProcessor(),
+                  TimeMode.EventTime(),
+                  OutputMode.Update())
+
+              testStream(result, OutputMode.Update())(
+                StartStream(checkpointLocation = sourceDir.getAbsolutePath),
+                AddData(inputData, ("a", 1L), ("b", 2L), ("c", 3L)),
+                ProcessAllAvailable(),
+                StopStream
+              )
+
+              testStream(result, OutputMode.Update())(
+                StartStream(checkpointLocation = targetDir.getAbsolutePath),
+                AddData(inputData, ("x", 1L)),
+                ProcessAllAvailable(),
+                StopStream
+              )
+
+              val (schemaMap, selectExprs, stateSourceOptions) =
+                getTimerStateConfigsForCountState(TimeMode.EventTime())
+
+              performRoundTripTest(
+                sourceDir.getAbsolutePath,
+                targetDir.getAbsolutePath,
+                storeToColumnFamilies =
+                  Map(StateStoreId.DEFAULT_STORE_NAME -> schemaMap.keys.toList),
+                storeToColumnFamilyToSelectExprs =
+                  Map(StateStoreId.DEFAULT_STORE_NAME -> selectExprs),
+                storeToColumnFamilyToStateSourceOptions =
+                  Map(StateStoreId.DEFAULT_STORE_NAME -> stateSourceOptions),
+                operatorName = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME
+              )
+            }
+          }
+        }
+
+        testWithChangelogAndEncodingConfig(
+          "SPARK-54411: transformWithState with processing time timers") {
+          withTempDir { sourceDir =>
+            withTempDir { targetDir =>
+              val clock = new StreamManualClock
+              val inputData = MemoryStream[String]
+              val result = inputData.toDS()
+                .groupByKey(x => x)
+                .transformWithState(new RunningCountStatefulProcessorWithProcTimeTimer(),
+                  TimeMode.ProcessingTime(),
+                  OutputMode.Update())
+
+              testStream(result, OutputMode.Update())(
+                StartStream(checkpointLocation = sourceDir.getAbsolutePath,
+                  trigger = Trigger.ProcessingTime("1 second"),
+                  triggerClock = clock),
+                AddData(inputData, "a"),
+                AdvanceManualClock(1 * 1000),
+                CheckNewAnswer(("a", "1")),
+                StopStream
+              )
+
+              val clock2 = new StreamManualClock
+              testStream(result, OutputMode.Update())(
+                StartStream(checkpointLocation = targetDir.getAbsolutePath,
+                  trigger = Trigger.ProcessingTime("1 second"),
+                  triggerClock = clock2),
+                AddData(inputData, "x"),
+                AdvanceManualClock(1 * 1000),
+                CheckNewAnswer(("a", "1"), ("x", "1")),
+                StopStream
+              )
+
+              val (schemaMap, selectExprs, sourceOptions) =
+                getTimerStateConfigsForCountState(TimeMode.ProcessingTime())
+
+              performRoundTripTest(
+                sourceDir.getAbsolutePath,
+                targetDir.getAbsolutePath,
+                storeToColumnFamilies =
+                  Map(StateStoreId.DEFAULT_STORE_NAME -> schemaMap.keys.toList),
+                storeToColumnFamilyToSelectExprs =
+                  Map(StateStoreId.DEFAULT_STORE_NAME -> selectExprs),
+                storeToColumnFamilyToStateSourceOptions =
+                  Map(StateStoreId.DEFAULT_STORE_NAME -> sourceOptions),
+                operatorName = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME
+              )
+            }
+          }
+        }
+
+        testWithChangelogAndEncodingConfig("SPARK-54411: transformWithState with list and TTL") {
+          withTempDir { sourceDir =>
+            withTempDir { targetDir =>
+              val clock = new StreamManualClock
+              val inputData = MemoryStream[InputEvent]
+              val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
+              val result = inputData.toDS()
+                .groupByKey(x => x.key)
+                .transformWithState(new ListStateTTLProcessor(ttlConfig),
+                  TimeMode.ProcessingTime(),
+                  OutputMode.Update())
+
+              testStream(result, OutputMode.Update())(
+                StartStream(checkpointLocation = sourceDir.getAbsolutePath,
+                  trigger = Trigger.ProcessingTime("1 second"),
+                  triggerClock = clock),
+                AddData(inputData, InputEvent("k1", "put", 1)),
+                AdvanceManualClock(1 * 1000),
+                CheckNewAnswer(),
+                StopStream
+              )
+
+              val clock2 = new StreamManualClock
+              testStream(result, OutputMode.Update())(
+                StartStream(checkpointLocation = targetDir.getAbsolutePath,
+                  trigger = Trigger.ProcessingTime("1 second"),
+                  triggerClock = clock2),
+                AddData(inputData, InputEvent("k1", "append", 1)),
+                AdvanceManualClock(1 * 1000),
+                CheckNewAnswer(),
+                StopStream
+              )
+
+              val schemas = TTLProcessorUtils.getListStateTTLSchemasWithMetadata()
+
+              val columnFamilyToSelectExprs = Map(
+                TTLProcessorUtils.LIST_STATE -> TTLProcessorUtils.getTTLSelectExpressions(
+                  TTLProcessorUtils.LIST_STATE
+                ))
+
+              val columnFamilyToStateSourceOptions = schemas.keys.map { cfName =>
+                val base = Map(StateSourceOptions.STATE_VAR_NAME -> cfName)
+
+                val withFlatten =
+                  if (cfName == TTLProcessorUtils.LIST_STATE) {
+                    base + (StateSourceOptions.FLATTEN_COLLECTION_TYPES -> "true")
+                  } else {
+                    base
+                  }
+
+                cfName -> withFlatten
+              }.toMap
+
+              performRoundTripTest(
+                sourceDir.getAbsolutePath,
+                targetDir.getAbsolutePath,
+                storeToColumnFamilies =
+                  Map(StateStoreId.DEFAULT_STORE_NAME -> schemas.keys.toList),
+                storeToColumnFamilyToSelectExprs =
+                  Map(StateStoreId.DEFAULT_STORE_NAME -> columnFamilyToSelectExprs),
+                storeToColumnFamilyToStateSourceOptions =
+                  Map(StateStoreId.DEFAULT_STORE_NAME -> columnFamilyToStateSourceOptions),
+                operatorName = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME
+              )
+            }
+          }
+        }
+
+        testWithChangelogAndEncodingConfig("SPARK-54411: transformWithState with map and TTL") {
+          withTempDir { sourceDir =>
+            withTempDir { targetDir =>
+              val clock = new StreamManualClock
+              val inputData = MemoryStream[MapInputEvent]
+              val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
+              val result = inputData.toDS()
+                .groupByKey(x => x.key)
+                .transformWithState(new MapStateTTLProcessor(ttlConfig),
+                  TimeMode.ProcessingTime(),
+                  OutputMode.Update())
+
+              testStream(result)(
+                StartStream(checkpointLocation = sourceDir.getAbsolutePath,
+                  trigger = Trigger.ProcessingTime("1 second"),
+                  triggerClock = clock),
+                AddData(inputData, MapInputEvent("a", "key1", "put", 1)),
+                AdvanceManualClock(1 * 1000),
+                CheckNewAnswer(),
+                StopStream
+              )
+
+              val clock2 = new StreamManualClock
+              testStream(result)(
+                StartStream(checkpointLocation = targetDir.getAbsolutePath,
+                  trigger = Trigger.ProcessingTime("1 second"),
+                  triggerClock = clock2),
+                AddData(inputData, MapInputEvent("x", "key1", "put", 1)),
+                AdvanceManualClock(1 * 1000),
+                CheckNewAnswer(),
+                StopStream
+              )
+
+              val schemas = TTLProcessorUtils.getMapStateTTLSchemasWithMetadata()
+
+              val columnFamilyToSelectExprs = Map(
+                TTLProcessorUtils.MAP_STATE -> TTLProcessorUtils.getTTLSelectExpressions(
+                  TTLProcessorUtils.MAP_STATE
+                ))
+
+              val columnFamilyToStateSourceOptions = schemas.keys.map { cfName =>
+                cfName -> Map(StateSourceOptions.STATE_VAR_NAME -> cfName)
+              }.toMap
+
+              performRoundTripTest(
+                sourceDir.getAbsolutePath,
+                targetDir.getAbsolutePath,
+                storeToColumnFamilies =
+                  Map(StateStoreId.DEFAULT_STORE_NAME -> schemas.keys.toList),
+                storeToColumnFamilyToSelectExprs =
+                  Map(StateStoreId.DEFAULT_STORE_NAME -> columnFamilyToSelectExprs),
+                storeToColumnFamilyToStateSourceOptions =
+                  Map(StateStoreId.DEFAULT_STORE_NAME -> columnFamilyToStateSourceOptions),
+                operatorName = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME
+              )
+            }
+          }
+        }
+
+        testWithChangelogAndEncodingConfig("SPARK-54411: transformWithState with value and TTL") {
+          withTempDir { sourceDir =>
+            withTempDir { targetDir =>
+              val clock = new StreamManualClock
+              val inputData = MemoryStream[InputEvent]
+              val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
+              val result = inputData.toDS()
+                .groupByKey(x => x.key)
+                .transformWithState(new ValueStateTTLProcessor(ttlConfig),
+                  TimeMode.ProcessingTime(),
+                  OutputMode.Update())
+
+              testStream(result)(
+                StartStream(checkpointLocation = sourceDir.getAbsolutePath,
+                  trigger = Trigger.ProcessingTime("1 second"),
+                  triggerClock = clock),
+                AddData(inputData, InputEvent("k1", "put", 1)),
+                AddData(inputData, InputEvent("k2", "put", 2)),
+                AdvanceManualClock(1 * 1000),
+                CheckNewAnswer(),
+                StopStream
+              )
+
+              val clock2 = new StreamManualClock
+              testStream(result)(
+                StartStream(checkpointLocation = targetDir.getAbsolutePath,
+                  trigger = Trigger.ProcessingTime("1 second"),
+                  triggerClock = clock2),
+                AddData(inputData, InputEvent("x", "put", 1)),
+                AdvanceManualClock(1 * 1000),
+                CheckNewAnswer(),
+                StopStream
+              )
+
+              val schemas = TTLProcessorUtils.getValueStateTTLSchemasWithMetadata()
+
+              val columnFamilyToStateSourceOptions = schemas.keys.map { cfName =>
+                cfName -> Map(StateSourceOptions.STATE_VAR_NAME -> cfName)
+              }.toMap
+
+              performRoundTripTest(
+                sourceDir.getAbsolutePath,
+                targetDir.getAbsolutePath,
+                storeToColumnFamilies =
+                  Map(StateStoreId.DEFAULT_STORE_NAME -> schemas.keys.toList),
+                storeToColumnFamilyToStateSourceOptions =
+                  Map(StateStoreId.DEFAULT_STORE_NAME -> columnFamilyToStateSourceOptions),
+                operatorName = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME
+              )
+            }
+          }
+        }
+      } // End of foreach loop for encoding format (transformWithState tests only)
     }
 
     testWithChangelogConfig("SPARK-54420: aggregation state ver 2") {
@@ -648,357 +994,6 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
         }
       }
     }
-
-    // Run transformWithState tests with different encoding formats
-    Seq("unsaferow", "avro").foreach { encodingFormat =>
-      def testWithChangelogAndEncodingConfig(testName: String)(testFun: => Unit): Unit = {
-        test(s"$testName ($changelogCpTestSuffix, encoding = $encodingFormat)") {
-          withSQLConf(
-            "spark.sql.streaming.stateStore.rocksdb.changelogCheckpointing.enabled" ->
-              changelogCheckpointingEnabled.toString,
-            SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> encodingFormat) {
-            testFun
-          }
-        }
-      }
-
-      testWithChangelogAndEncodingConfig(
-          "SPARK-54411: transformWithState with multiple column families") {
-        withTempDir { sourceDir =>
-          withTempDir { targetDir =>
-            val inputData = MemoryStream[String]
-            val query = inputData.toDS()
-              .groupByKey(x => x)
-              .transformWithState(new MultiStateVarProcessor(),
-                TimeMode.None(),
-                OutputMode.Update())
-            def runQuery(checkpointLocation: String, roundsOfData: Int): Unit = {
-              val dataActions = (1 to roundsOfData).flatMap { _ =>
-                Seq(
-                  AddData(inputData, "a", "b", "a"),
-                  ProcessAllAvailable()
-                )
-              }
-              testStream(query)(
-                Seq(StartStream(checkpointLocation = checkpointLocation)) ++
-                  dataActions ++
-                  Seq(StopStream): _*
-              )
-            }
-
-            runQuery(sourceDir.getAbsolutePath, 2)
-            runQuery(targetDir.getAbsolutePath, 1)
-
-            val schemas = MultiStateVarProcessorTestUtils.getSchemasWithMetadata()
-            val columnFamilyToSelectExprs = MultiStateVarProcessorTestUtils
-              .getColumnFamilyToSelectExprs()
-
-            val columnFamilyToStateSourceOptions = schemas.keys.map { cfName =>
-              val base = Map(
-                StateSourceOptions.STATE_VAR_NAME -> cfName
-              )
-
-              val withFlatten =
-                if (cfName == MultiStateVarProcessorTestUtils.ITEMS_LIST) {
-                  base + (StateSourceOptions.FLATTEN_COLLECTION_TYPES -> "true")
-                } else {
-                  base
-                }
-
-              cfName -> withFlatten
-            }.toMap
-
-            performRoundTripTest(
-              sourceDir.getAbsolutePath,
-              targetDir.getAbsolutePath,
-              storeToColumnFamilies = Map(StateStoreId.DEFAULT_STORE_NAME -> schemas.keys.toList),
-              storeToColumnFamilyToSelectExprs =
-                Map(StateStoreId.DEFAULT_STORE_NAME -> columnFamilyToSelectExprs),
-              storeToColumnFamilyToStateSourceOptions =
-                Map(StateStoreId.DEFAULT_STORE_NAME -> columnFamilyToStateSourceOptions),
-              operatorName = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME
-            )
-          }
-        }
-      }
-
-      testWithChangelogAndEncodingConfig("SPARK-54411: transformWithState with eventTime timers") {
-        withTempDir { sourceDir =>
-          withTempDir { targetDir =>
-            val inputData = MemoryStream[(String, Long)]
-            val result = inputData.toDS()
-              .select(col("_1").as("key"), timestamp_seconds(col("_2")).as("eventTime"))
-              .withWatermark("eventTime", "10 seconds")
-              .as[(String, Timestamp)]
-              .groupByKey(_._1)
-              .transformWithState(
-                new EventTimeTimerProcessor(),
-                TimeMode.EventTime(),
-                OutputMode.Update())
-
-            testStream(result, OutputMode.Update())(
-              StartStream(checkpointLocation = sourceDir.getAbsolutePath),
-              AddData(inputData, ("a", 1L), ("b", 2L), ("c", 3L)),
-              ProcessAllAvailable(),
-              StopStream
-            )
-
-            testStream(result, OutputMode.Update())(
-              StartStream(checkpointLocation = targetDir.getAbsolutePath),
-              AddData(inputData, ("x", 1L)),
-              ProcessAllAvailable(),
-              StopStream
-            )
-
-            val (schemaMap, selectExprs, stateSourceOptions) =
-              getTimerStateConfigsForCountState(TimeMode.EventTime())
-
-            performRoundTripTest(
-              sourceDir.getAbsolutePath,
-              targetDir.getAbsolutePath,
-              storeToColumnFamilies =
-                Map(StateStoreId.DEFAULT_STORE_NAME -> schemaMap.keys.toList),
-              storeToColumnFamilyToSelectExprs =
-                Map(StateStoreId.DEFAULT_STORE_NAME -> selectExprs),
-              storeToColumnFamilyToStateSourceOptions =
-                Map(StateStoreId.DEFAULT_STORE_NAME -> stateSourceOptions),
-              operatorName = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME
-            )
-          }
-        }
-      }
-
-      testWithChangelogAndEncodingConfig(
-        "SPARK-54411: transformWithState with processing time timers") {
-        withTempDir { sourceDir =>
-          withTempDir { targetDir =>
-            val clock = new StreamManualClock
-            val inputData = MemoryStream[String]
-            val result = inputData.toDS()
-              .groupByKey(x => x)
-              .transformWithState(new RunningCountStatefulProcessorWithProcTimeTimer(),
-                TimeMode.ProcessingTime(),
-                OutputMode.Update())
-
-            testStream(result, OutputMode.Update())(
-              StartStream(checkpointLocation = sourceDir.getAbsolutePath,
-                trigger = Trigger.ProcessingTime("1 second"),
-                triggerClock = clock),
-              AddData(inputData, "a"),
-              AdvanceManualClock(1 * 1000),
-              CheckNewAnswer(("a", "1")),
-              StopStream
-            )
-
-            val clock2 = new StreamManualClock
-            testStream(result, OutputMode.Update())(
-              StartStream(checkpointLocation = targetDir.getAbsolutePath,
-                trigger = Trigger.ProcessingTime("1 second"),
-                triggerClock = clock2),
-              AddData(inputData, "x"),
-              AdvanceManualClock(1 * 1000),
-              CheckNewAnswer(("a", "1"), ("x", "1")),
-              StopStream
-            )
-
-            val (schemaMap, selectExprs, sourceOptions) =
-              getTimerStateConfigsForCountState(TimeMode.ProcessingTime())
-
-            performRoundTripTest(
-              sourceDir.getAbsolutePath,
-              targetDir.getAbsolutePath,
-              storeToColumnFamilies =
-                Map(StateStoreId.DEFAULT_STORE_NAME -> schemaMap.keys.toList),
-              storeToColumnFamilyToSelectExprs =
-                Map(StateStoreId.DEFAULT_STORE_NAME -> selectExprs),
-              storeToColumnFamilyToStateSourceOptions =
-                Map(StateStoreId.DEFAULT_STORE_NAME -> sourceOptions),
-              operatorName = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME
-            )
-          }
-        }
-      }
-
-      testWithChangelogAndEncodingConfig("SPARK-54411: transformWithState with list and TTL") {
-        withTempDir { sourceDir =>
-          withTempDir { targetDir =>
-            val clock = new StreamManualClock
-            val inputData = MemoryStream[InputEvent]
-            val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
-            val result = inputData.toDS()
-              .groupByKey(x => x.key)
-              .transformWithState(new ListStateTTLProcessor(ttlConfig),
-                TimeMode.ProcessingTime(),
-                OutputMode.Update())
-
-            testStream(result, OutputMode.Update())(
-              StartStream(checkpointLocation = sourceDir.getAbsolutePath,
-                trigger = Trigger.ProcessingTime("1 second"),
-                triggerClock = clock),
-              AddData(inputData, InputEvent("k1", "put", 1)),
-              AdvanceManualClock(1 * 1000),
-              CheckNewAnswer(),
-              StopStream
-            )
-
-            val clock2 = new StreamManualClock
-            testStream(result, OutputMode.Update())(
-              StartStream(checkpointLocation = targetDir.getAbsolutePath,
-                trigger = Trigger.ProcessingTime("1 second"),
-                triggerClock = clock2),
-              AddData(inputData, InputEvent("k1", "append", 1)),
-              AdvanceManualClock(1 * 1000),
-              CheckNewAnswer(),
-              StopStream
-            )
-
-            val schemas = TTLProcessorUtils.getListStateTTLSchemasWithMetadata()
-
-            val columnFamilyToSelectExprs = Map(
-              TTLProcessorUtils.LIST_STATE -> TTLProcessorUtils.getTTLSelectExpressions(
-                TTLProcessorUtils.LIST_STATE
-            ))
-
-            val columnFamilyToStateSourceOptions = schemas.keys.map { cfName =>
-              val base = Map(StateSourceOptions.STATE_VAR_NAME -> cfName)
-
-              val withFlatten =
-                if (cfName == TTLProcessorUtils.LIST_STATE) {
-                  base + (StateSourceOptions.FLATTEN_COLLECTION_TYPES -> "true")
-                } else {
-                  base
-                }
-
-              cfName -> withFlatten
-            }.toMap
-
-            performRoundTripTest(
-              sourceDir.getAbsolutePath,
-              targetDir.getAbsolutePath,
-              storeToColumnFamilies =
-                Map(StateStoreId.DEFAULT_STORE_NAME -> schemas.keys.toList),
-              storeToColumnFamilyToSelectExprs =
-                Map(StateStoreId.DEFAULT_STORE_NAME -> columnFamilyToSelectExprs),
-              storeToColumnFamilyToStateSourceOptions =
-                Map(StateStoreId.DEFAULT_STORE_NAME -> columnFamilyToStateSourceOptions),
-              operatorName = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME
-            )
-          }
-        }
-      }
-
-      testWithChangelogAndEncodingConfig("SPARK-54411: transformWithState with map and TTL") {
-        withTempDir { sourceDir =>
-          withTempDir { targetDir =>
-            val clock = new StreamManualClock
-            val inputData = MemoryStream[MapInputEvent]
-            val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
-            val result = inputData.toDS()
-              .groupByKey(x => x.key)
-              .transformWithState(new MapStateTTLProcessor(ttlConfig),
-                TimeMode.ProcessingTime(),
-                OutputMode.Update())
-
-            testStream(result)(
-              StartStream(checkpointLocation = sourceDir.getAbsolutePath,
-                trigger = Trigger.ProcessingTime("1 second"),
-                triggerClock = clock),
-              AddData(inputData, MapInputEvent("a", "key1", "put", 1)),
-              AdvanceManualClock(1 * 1000),
-              CheckNewAnswer(),
-              StopStream
-            )
-
-            val clock2 = new StreamManualClock
-            testStream(result)(
-              StartStream(checkpointLocation = targetDir.getAbsolutePath,
-                trigger = Trigger.ProcessingTime("1 second"),
-                triggerClock = clock2),
-              AddData(inputData, MapInputEvent("x", "key1", "put", 1)),
-              AdvanceManualClock(1 * 1000),
-              CheckNewAnswer(),
-              StopStream
-            )
-
-            val schemas = TTLProcessorUtils.getMapStateTTLSchemasWithMetadata()
-
-            val columnFamilyToSelectExprs = Map(
-              TTLProcessorUtils.MAP_STATE -> TTLProcessorUtils.getTTLSelectExpressions(
-                TTLProcessorUtils.MAP_STATE
-            ))
-
-            val columnFamilyToStateSourceOptions = schemas.keys.map { cfName =>
-              cfName -> Map(StateSourceOptions.STATE_VAR_NAME -> cfName)
-            }.toMap
-
-            performRoundTripTest(
-              sourceDir.getAbsolutePath,
-              targetDir.getAbsolutePath,
-              storeToColumnFamilies =
-                Map(StateStoreId.DEFAULT_STORE_NAME -> schemas.keys.toList),
-              storeToColumnFamilyToSelectExprs =
-                Map(StateStoreId.DEFAULT_STORE_NAME -> columnFamilyToSelectExprs),
-              storeToColumnFamilyToStateSourceOptions =
-                Map(StateStoreId.DEFAULT_STORE_NAME -> columnFamilyToStateSourceOptions),
-              operatorName = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME
-            )
-          }
-        }
-      }
-
-      testWithChangelogAndEncodingConfig("SPARK-54411: transformWithState with value and TTL") {
-        withTempDir { sourceDir =>
-          withTempDir { targetDir =>
-            val clock = new StreamManualClock
-            val inputData = MemoryStream[InputEvent]
-            val ttlConfig = TTLConfig(ttlDuration = Duration.ofMinutes(1))
-            val result = inputData.toDS()
-              .groupByKey(x => x.key)
-              .transformWithState(new ValueStateTTLProcessor(ttlConfig),
-                TimeMode.ProcessingTime(),
-                OutputMode.Update())
-
-            testStream(result)(
-              StartStream(checkpointLocation = sourceDir.getAbsolutePath,
-                trigger = Trigger.ProcessingTime("1 second"),
-                triggerClock = clock),
-              AddData(inputData, InputEvent("k1", "put", 1)),
-              AddData(inputData, InputEvent("k2", "put", 2)),
-              AdvanceManualClock(1 * 1000),
-              CheckNewAnswer(),
-              StopStream
-            )
-
-            val clock2 = new StreamManualClock
-            testStream(result)(
-              StartStream(checkpointLocation = targetDir.getAbsolutePath,
-                trigger = Trigger.ProcessingTime("1 second"),
-                triggerClock = clock2),
-              AddData(inputData, InputEvent("x", "put", 1)),
-              AdvanceManualClock(1 * 1000),
-              CheckNewAnswer(),
-              StopStream
-            )
-
-            val schemas = TTLProcessorUtils.getValueStateTTLSchemasWithMetadata()
-
-            val columnFamilyToStateSourceOptions = schemas.keys.map { cfName =>
-              cfName -> Map(StateSourceOptions.STATE_VAR_NAME -> cfName)
-            }.toMap
-
-            performRoundTripTest(
-              sourceDir.getAbsolutePath,
-              targetDir.getAbsolutePath,
-              storeToColumnFamilies =
-                Map(StateStoreId.DEFAULT_STORE_NAME -> schemas.keys.toList),
-              storeToColumnFamilyToStateSourceOptions =
-                Map(StateStoreId.DEFAULT_STORE_NAME -> columnFamilyToStateSourceOptions),
-              operatorName = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME
-            )
-          }
-        }
-      }
-    } // End of foreach loop for encoding format (transformWithState tests only)
   } // End of foreach loop for changelog checkpointing dimension
 
   test("SPARK-54411: Non-JoinV3 operator requires default column family in schema") {
