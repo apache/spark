@@ -611,7 +611,7 @@ class SparkSession(SparkConversionMixin):
     # SPARK-47544: Explicitly declaring this as an identifier instead of a method.
     # If changing, make sure this bug is not reintroduced.
     @classproperty
-    def builder(cls) -> "Builder":
+    def builder(cls: Type["SparkSession"]) -> "Builder":  # type: ignore[misc]
         """Creates a :class:`Builder` for constructing a :class:`SparkSession`.
 
         .. versionchanged:: 3.4.0
