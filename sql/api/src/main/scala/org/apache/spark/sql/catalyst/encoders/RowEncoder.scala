@@ -81,10 +81,10 @@ object RowEncoder extends DataTypeErrorsBase {
       case DoubleType => BoxedDoubleEncoder
       case dt: DecimalType => JavaDecimalEncoder(dt, lenientSerialization = true)
       case BinaryType => BinaryEncoder
-      case CharType(length) if SqlApiConf.get.preserveCharVarcharTypeInfo =>
-        CharEncoder(length)
-      case VarcharType(length) if SqlApiConf.get.preserveCharVarcharTypeInfo =>
-        VarcharEncoder(length)
+      case c: CharType if SqlApiConf.get.preserveCharVarcharTypeInfo =>
+        CharEncoder(c.length)
+      case v: VarcharType if SqlApiConf.get.preserveCharVarcharTypeInfo =>
+        VarcharEncoder(v.length)
       case s: StringType if StringHelper.isPlainString(s) => StringEncoder
       case TimestampType if SqlApiConf.get.datetimeJava8ApiEnabled => InstantEncoder(lenient)
       case TimestampType => TimestampEncoder(lenient)
