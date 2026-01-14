@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, CursorReference, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.datasources.v2.LeafV2CommandExec
 import org.apache.spark.sql.scripting.{CursorDeclared, CursorOpened}
@@ -45,7 +45,7 @@ case class OpenCursorExec(
 
   override protected def run(): Seq[InternalRow] = {
     // Extract CursorReference from the resolved cursor expression
-    val cursorRef = cursor.asInstanceOf[org.apache.spark.sql.catalyst.expressions.CursorReference]
+    val cursorRef = cursor.asInstanceOf[CursorReference]
 
     val scriptingContext = CursorCommandUtils.getScriptingContext(cursorRef.sql)
 

@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{InternalRow, SqlScriptingContextManager}
 import org.apache.spark.sql.catalyst.catalog.VariableDefinition
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Literal, VariableReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, CursorReference, Expression, Literal, VariableReference}
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.execution.datasources.v2.LeafV2CommandExec
 import org.apache.spark.sql.scripting.{CursorFetching, CursorOpened}
@@ -43,7 +43,7 @@ case class FetchCursorExec(
 
   override protected def run(): Seq[InternalRow] = {
     // Extract CursorReference from the resolved cursor expression
-    val cursorRef = cursor.asInstanceOf[org.apache.spark.sql.catalyst.expressions.CursorReference]
+    val cursorRef = cursor.asInstanceOf[CursorReference]
 
     val scriptingContext = CursorCommandUtils.getScriptingContext(cursorRef.sql)
     val variableManager = SqlScriptingContextManager.get().get.getVariableManager
