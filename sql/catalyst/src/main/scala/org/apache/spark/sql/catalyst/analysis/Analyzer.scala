@@ -1471,6 +1471,8 @@ class Analyzer(
       case s: SetVariable => resolveColumnDefaultInCommandInputQuery(s)
 
       // Skip FetchCursor - let ResolveFetchCursor handle variable resolution
+      // This prevents ResolveReferences from trying to resolve target variables as columns
+      case s: SingleStatement if s.parsedPlan.isInstanceOf[FetchCursor] => s
       case f: FetchCursor => f
 
       // Wait for other rules to resolve child plans first

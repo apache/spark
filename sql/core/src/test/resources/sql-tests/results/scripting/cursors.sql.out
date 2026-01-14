@@ -82,23 +82,9 @@ BEGIN
   CLOSE x;
 END
 -- !query schema
-struct<>
+struct<col1:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`x`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 100,
-    "stopIndex" : 100,
-    "fragment" : "x"
-  } ]
-}
+1
 
 
 -- !query
@@ -137,23 +123,9 @@ BEGIN
   CLOSE c1;
 END
 -- !query schema
-struct<>
+struct<col1:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`x`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 185,
-    "stopIndex" : 185,
-    "fragment" : "x"
-  } ]
-}
+1
 
 
 -- !query
@@ -191,20 +163,13 @@ END
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
+  "errorClass" : "CURSOR_ALREADY_OPEN",
+  "sqlState" : "24502",
   "messageParameters" : {
-    "objectName" : "`x`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 92,
-    "stopIndex" : 92,
-    "fragment" : "x"
-  } ]
+    "cursorName" : "c1"
+  }
 }
 
 
@@ -255,20 +220,13 @@ END
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
+  "errorClass" : "CURSOR_NOT_OPEN",
+  "sqlState" : "24501",
   "messageParameters" : {
-    "objectName" : "`x`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 81,
-    "stopIndex" : 81,
-    "fragment" : "x"
-  } ]
+    "cursorName" : "c1"
+  }
 }
 
 
@@ -284,20 +242,13 @@ END
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
+  "errorClass" : "CURSOR_NOT_OPEN",
+  "sqlState" : "24501",
   "messageParameters" : {
-    "objectName" : "`x`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 92,
-    "stopIndex" : 92,
-    "fragment" : "x"
-  } ]
+    "cursorName" : "c1"
+  }
 }
 
 
@@ -315,23 +266,9 @@ BEGIN
   VALUES(step);
 END
 -- !query schema
-struct<>
+struct<col1:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`x`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 142,
-    "stopIndex" : 142,
-    "fragment" : "x"
-  } ]
-}
+10
 
 
 -- !query
@@ -352,23 +289,9 @@ BEGIN
   CLOSE c1;
 END
 -- !query schema
-struct<>
+struct<col1:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`y`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 217,
-    "stopIndex" : 217,
-    "fragment" : "y"
-  } ]
-}
+1
 
 
 -- !query
@@ -431,20 +354,13 @@ END
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.SparkException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
   "messageParameters" : {
-    "objectName" : "`fetched_id`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 538,
-    "stopIndex" : 562,
-    "fragment" : "fetched_id, fetched_value"
-  } ]
+    "message" : "No more elements to iterate through in the current SQL compound statement."
+  }
 }
 
 
@@ -482,20 +398,13 @@ END
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.SparkException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
   "messageParameters" : {
-    "objectName" : "`fetched_id`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 481,
-    "stopIndex" : 505,
-    "fragment" : "fetched_id, fetched_value"
-  } ]
+    "message" : "No more elements to iterate through in the current SQL compound statement."
+  }
 }
 
 
@@ -524,20 +433,13 @@ END
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.SparkException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
   "messageParameters" : {
-    "objectName" : "`fetched_id`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 468,
-    "stopIndex" : 492,
-    "fragment" : "fetched_id, fetched_value"
-  } ]
+    "message" : "No more elements to iterate through in the current SQL compound statement."
+  }
 }
 
 
@@ -574,20 +476,13 @@ END
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.SparkException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
   "messageParameters" : {
-    "objectName" : "`fetched_id`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 363,
-    "stopIndex" : 372,
-    "fragment" : "fetched_id"
-  } ]
+    "message" : "No more elements to iterate through in the current SQL compound statement."
+  }
 }
 
 
@@ -615,20 +510,13 @@ END
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.SparkException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
   "messageParameters" : {
-    "objectName" : "`fetched_id`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 355,
-    "stopIndex" : 364,
-    "fragment" : "fetched_id"
-  } ]
+    "message" : "No more elements to iterate through in the current SQL compound statement."
+  }
 }
 
 
@@ -745,23 +633,9 @@ BEGIN
   END;
 END
 -- !query schema
-struct<>
+struct<col1:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`x`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 128,
-    "stopIndex" : 128,
-    "fragment" : "x"
-  } ]
-}
+42
 
 
 -- !query
@@ -789,23 +663,9 @@ BEGIN
   END;
 END
 -- !query schema
-struct<>
+struct<col1:int,col2:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`x`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 281,
-    "stopIndex" : 281,
-    "fragment" : "x"
-  } ]
-}
+2	1
 
 
 -- !query
@@ -829,23 +689,9 @@ BEGIN
   END;
 END
 -- !query schema
-struct<>
+struct<col1:string>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`fetched_id`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 330,
-    "stopIndex" : 339,
-    "fragment" : "fetched_id"
-  } ]
-}
+34
 
 
 -- !query
@@ -858,20 +704,13 @@ END
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
+  "errorClass" : "DUPLICATE_ASSIGNMENTS",
+  "sqlState" : "42701",
   "messageParameters" : {
-    "objectName" : "`x`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 104,
-    "stopIndex" : 107,
-    "fragment" : "x, x"
-  } ]
+    "nameList" : "`x`"
+  }
 }
 
 
@@ -888,23 +727,9 @@ BEGIN
   VALUES (int_var, str_var);  -- Should be (100, '42') with ANSI rounding
 END
 -- !query schema
-struct<>
+struct<col1:int,col2:string>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`int_var`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 154,
-    "stopIndex" : 169,
-    "fragment" : "int_var, str_var"
-  } ]
-}
+100	42
 
 
 -- !query
@@ -917,20 +742,14 @@ END
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
+  "errorClass" : "ASSIGNMENT_ARITY_MISMATCH",
+  "sqlState" : "42802",
   "messageParameters" : {
-    "objectName" : "`x`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 94,
-    "stopIndex" : 94,
-    "fragment" : "x"
-  } ]
+    "numExpr" : "3",
+    "numTarget" : "1"
+  }
 }
 
 
@@ -944,20 +763,14 @@ END
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
+  "errorClass" : "ASSIGNMENT_ARITY_MISMATCH",
+  "sqlState" : "42802",
   "messageParameters" : {
-    "objectName" : "`x`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 100,
-    "stopIndex" : 109,
-    "fragment" : "x, y, z, w"
-  } ]
+    "numExpr" : "2",
+    "numTarget" : "4"
+  }
 }
 
 
@@ -971,23 +784,9 @@ BEGIN
   VALUES (x); -- Should return 42
 END
 -- !query schema
-struct<>
+struct<col1:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`x`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 108,
-    "stopIndex" : 108,
-    "fragment" : "x"
-  } ]
-}
+42
 
 
 -- !query
@@ -1000,23 +799,9 @@ BEGIN
   VALUES (y); -- Should return 99
 END
 -- !query schema
-struct<>
+struct<col1:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`y`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 107,
-    "stopIndex" : 107,
-    "fragment" : "y"
-  } ]
-}
+99
 
 
 -- !query
@@ -1029,23 +814,9 @@ BEGIN
   VALUES (z); -- Should return 77
 END
 -- !query schema
-struct<>
+struct<col1:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`z`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 110,
-    "stopIndex" : 110,
-    "fragment" : "z"
-  } ]
-}
+77
 
 
 -- !query
@@ -1058,23 +829,9 @@ BEGIN
   VALUES (w); -- Should return 123
 END
 -- !query schema
-struct<>
+struct<col1:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`w`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 123,
-    "stopIndex" : 123,
-    "fragment" : "w"
-  } ]
-}
+123
 
 
 -- !query
@@ -1087,23 +844,9 @@ BEGIN
   VALUES (a); -- Should return 55
 END
 -- !query schema
-struct<>
+struct<col1:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`a`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 101,
-    "stopIndex" : 101,
-    "fragment" : "a"
-  } ]
-}
+55
 
 
 -- !query
@@ -1116,23 +859,9 @@ BEGIN
   VALUES (b); -- Should return 66
 END
 -- !query schema
-struct<>
+struct<col1:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`b`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 101,
-    "stopIndex" : 101,
-    "fragment" : "b"
-  } ]
-}
+66
 
 
 -- !query
@@ -1145,23 +874,9 @@ BEGIN
   VALUES (c); -- Should return 88
 END
 -- !query schema
-struct<>
+struct<col1:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`c`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 106,
-    "stopIndex" : 106,
-    "fragment" : "c"
-  } ]
-}
+88
 
 
 -- !query
@@ -1174,23 +889,9 @@ BEGIN
   VALUES (person_record.name, person_record.age); -- Should return 'Alice', 30
 END
 -- !query schema
-struct<>
+struct<col1:string,col2:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`person_record`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 150,
-    "stopIndex" : 162,
-    "fragment" : "person_record"
-  } ]
-}
+Alice	30
 
 
 -- !query
@@ -1203,23 +904,9 @@ BEGIN
   VALUES (record_var.id, record_var.value); -- Should return 42, '100' (with casting)
 END
 -- !query schema
-struct<>
+struct<col1:int,col2:string>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`record_var`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 145,
-    "stopIndex" : 154,
-    "fragment" : "record_var"
-  } ]
-}
+42	100
 
 
 -- !query
@@ -1232,20 +919,14 @@ END
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
+  "errorClass" : "ASSIGNMENT_ARITY_MISMATCH",
+  "sqlState" : "42802",
   "messageParameters" : {
-    "objectName" : "`record_var`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 120,
-    "stopIndex" : 129,
-    "fragment" : "record_var"
-  } ]
+    "numExpr" : "3",
+    "numTarget" : "2"
+  }
 }
 
 
@@ -1259,20 +940,14 @@ END
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
+  "errorClass" : "ASSIGNMENT_ARITY_MISMATCH",
+  "sqlState" : "42802",
   "messageParameters" : {
-    "objectName" : "`x`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 91,
-    "stopIndex" : 91,
-    "fragment" : "x"
-  } ]
+    "numExpr" : "2",
+    "numTarget" : "1"
+  }
 }
 
 
@@ -1286,23 +961,9 @@ BEGIN
   VALUES (complex_record); -- Should return struct(100, 'test', 99.5)
 END
 -- !query schema
-struct<>
+struct<col1:struct<id:bigint,name:string,value:double>>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`complex_record`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 181,
-    "stopIndex" : 194,
-    "fragment" : "complex_record"
-  } ]
-}
+{"id":100,"name":"test","value":99.5}
 
 
 -- !query
@@ -1480,20 +1141,13 @@ END
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
+  "errorClass" : "CURSOR_NOT_FOUND",
+  "sqlState" : "42883",
   "messageParameters" : {
-    "objectName" : "`y`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 119,
-    "stopIndex" : 119,
-    "fragment" : "y"
-  } ]
+    "cursorName" : "cur"
+  }
 }
 
 
@@ -1515,23 +1169,9 @@ BEGIN
   VALUES (result);  -- Should return '42-after-fetch', proving execution continued
 END
 -- !query schema
-struct<>
+struct<col1:string>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`x`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 143,
-    "stopIndex" : 143,
-    "fragment" : "x"
-  } ]
-}
+42-after-fetch
 
 
 -- !query
@@ -1570,23 +1210,9 @@ BEGIN
   VALUES (x); -- Should return 99
 END
 -- !query schema
-struct<>
+struct<col1:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`x`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 156,
-    "stopIndex" : 156,
-    "fragment" : "x"
-  } ]
-}
+99
 
 
 -- !query
@@ -1599,23 +1225,9 @@ BEGIN
   VALUES (result); -- Should return 42
 END
 -- !query schema
-struct<>
+struct<col1:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`result`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 154,
-    "stopIndex" : 159,
-    "fragment" : "result"
-  } ]
-}
+42
 
 
 -- !query
@@ -1628,23 +1240,9 @@ BEGIN
   VALUES (IDENTIFIER('my_result')); -- Should return 123
 END
 -- !query schema
-struct<>
+struct<col1:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`my_result`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 137,
-    "stopIndex" : 159,
-    "fragment" : "IDENTIFIER('my_result')"
-  } ]
-}
+123
 
 
 -- !query
@@ -1658,23 +1256,9 @@ BEGIN
   VALUES (IDENTIFIER('val1'), IDENTIFIER('val2')); -- Should return 42, 'test'
 END
 -- !query schema
-struct<>
+struct<col1:int,col2:string>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`val1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 151,
-    "stopIndex" : 188,
-    "fragment" : "IDENTIFIER('val1'), IDENTIFIER('val2')"
-  } ]
-}
+42	test
 
 
 -- !query
@@ -1705,20 +1289,13 @@ END
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.SparkException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
   "messageParameters" : {
-    "objectName" : "`n`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 370,
-    "stopIndex" : 370,
-    "fragment" : "n"
-  } ]
+    "message" : "No more elements to iterate through in the current SQL compound statement."
+  }
 }
 
 
@@ -1845,23 +1422,9 @@ BEGIN
   VALUES (result);  -- Should return 15 (5 + 10)
 END
 -- !query schema
-struct<>
+struct<col1:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`result`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 176,
-    "stopIndex" : 181,
-    "fragment" : "result"
-  } ]
-}
+15
 
 
 -- !query
@@ -1988,23 +1551,9 @@ BEGIN
   VALUES (result);  -- Should return 300 (100 + 200)
 END
 -- !query schema
-struct<>
+struct<col1:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`result`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 188,
-    "stopIndex" : 193,
-    "fragment" : "result"
-  } ]
-}
+300
 
 
 -- !query
@@ -2020,23 +1569,9 @@ BEGIN
   VALUES (result);  -- Should return 300 (20 * 15)
 END
 -- !query schema
-struct<>
+struct<col1:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`result`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 204,
-    "stopIndex" : 209,
-    "fragment" : "result"
-  } ]
-}
+300
 
 
 -- !query
@@ -2053,23 +1588,9 @@ BEGIN
   VALUES (result);  -- Should return 50
 END
 -- !query schema
-struct<>
+struct<col1:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`result`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 228,
-    "stopIndex" : 233,
-    "fragment" : "result"
-  } ]
-}
+50
 
 
 -- !query
@@ -2091,20 +1612,13 @@ END
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
+  "errorClass" : "CURSOR_ALREADY_OPEN",
+  "sqlState" : "24502",
   "messageParameters" : {
-    "objectName" : "`result1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 138,
-    "stopIndex" : 144,
-    "fragment" : "result1"
-  } ]
+    "cursorName" : "cur"
+  }
 }
 
 
@@ -2127,20 +1641,13 @@ END
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
+  "errorClass" : "CURSOR_ALREADY_OPEN",
+  "sqlState" : "24502",
   "messageParameters" : {
-    "objectName" : "`result1`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 156,
-    "stopIndex" : 162,
-    "fragment" : "result1"
-  } ]
+    "cursorName" : "cur"
+  }
 }
 
 
@@ -2181,23 +1688,9 @@ BEGIN
   VALUES (result);  -- Should return 46 (4 * 10 + 6)
 END
 -- !query schema
-struct<>
+struct<col1:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`result`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 245,
-    "stopIndex" : 250,
-    "fragment" : "result"
-  } ]
-}
+46
 
 
 -- !query
@@ -2210,23 +1703,9 @@ BEGIN
   VALUES (result);  -- Should return 42
 END
 -- !query schema
-struct<>
+struct<col1:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`result`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 119,
-    "stopIndex" : 124,
-    "fragment" : "result"
-  } ]
-}
+42
 
 
 -- !query
@@ -2239,23 +1718,9 @@ BEGIN
   VALUES (result);  -- Should return 99
 END
 -- !query schema
-struct<>
+struct<col1:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`result`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 116,
-    "stopIndex" : 121,
-    "fragment" : "result"
-  } ]
-}
+99
 
 
 -- !query
@@ -2294,23 +1759,9 @@ BEGIN
   VALUES (result);  -- Should return 42
 END
 -- !query schema
-struct<>
+struct<col1:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`result`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 210,
-    "stopIndex" : 215,
-    "fragment" : "result"
-  } ]
-}
+42
 
 
 -- !query
@@ -2328,23 +1779,9 @@ BEGIN
   CLOSE cur;
 END
 -- !query schema
-struct<>
+struct<col1:string,col2:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`x`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 96,
-    "stopIndex" : 96,
-    "fragment" : "x"
-  } ]
-}
+After second fetch - script continued	1
 
 
 -- !query
@@ -2365,23 +1802,9 @@ BEGIN
   CLOSE cur;
 END
 -- !query schema
-struct<>
+struct<col1:string,col2:int,col3:boolean>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`x`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 220,
-    "stopIndex" : 220,
-    "fragment" : "x"
-  } ]
-}
+After no data	10	true
 
 
 -- !query
@@ -2402,23 +1825,9 @@ BEGIN
   CLOSE cur;
 END
 -- !query schema
-struct<>
+struct<col1:string,col2:int,col3:boolean>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`x`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 196,
-    "stopIndex" : 196,
-    "fragment" : "x"
-  } ]
-}
+After NOT FOUND	20	false
 
 
 -- !query
@@ -2441,23 +1850,9 @@ BEGIN
   VALUES ('After handler');  -- Should NOT execute (handler exits)
 END
 -- !query schema
-struct<>
+struct<col1:string,col2:int>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`x`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 238,
-    "stopIndex" : 238,
-    "fragment" : "x"
-  } ]
-}
+In EXIT handler	30
 
 
 -- !query
@@ -2485,20 +1880,13 @@ END
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.SparkException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
   "messageParameters" : {
-    "objectName" : "`x`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 268,
-    "stopIndex" : 268,
-    "fragment" : "x"
-  } ]
+    "message" : "No more elements to iterate through in the current SQL compound statement."
+  }
 }
 
 
@@ -2523,23 +1911,9 @@ BEGIN
   CLOSE cur;
 END
 -- !query schema
-struct<>
+struct<col1:string,col2:boolean>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`x`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 363,
-    "stopIndex" : 363,
-    "fragment" : "x"
-  } ]
-}
+Generic ran	false
 
 
 -- !query
@@ -2575,23 +1949,9 @@ BEGIN
   CLOSE outer_cur;
 END
 -- !query schema
-struct<>
+struct<col1:string,col2:int,col3:boolean>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`x`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 224,
-    "stopIndex" : 224,
-    "fragment" : "x"
-  } ]
-}
+Outer fetch 2	50	true
 
 
 -- !query
@@ -2637,20 +1997,13 @@ END
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
+  "errorClass" : "CURSOR_NOT_OPEN",
+  "sqlState" : "24501",
   "messageParameters" : {
-    "objectName" : "`x`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 263,
-    "stopIndex" : 263,
-    "fragment" : "x"
-  } ]
+    "cursorName" : "cur"
+  }
 }
 
 
@@ -2678,18 +2031,11 @@ END
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
+  "errorClass" : "CURSOR_NOT_OPEN",
+  "sqlState" : "24501",
   "messageParameters" : {
-    "objectName" : "`x`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 346,
-    "stopIndex" : 346,
-    "fragment" : "x"
-  } ]
+    "cursorName" : "cur"
+  }
 }
