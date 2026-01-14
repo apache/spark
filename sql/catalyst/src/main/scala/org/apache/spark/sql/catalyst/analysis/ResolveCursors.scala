@@ -78,31 +78,19 @@ class ResolveCursors extends Rule[LogicalPlan] {
       }
     }
 
-    // Look up cursor definition from scripting context using reflection
-    // Reflection is needed because SqlScriptingExecutionContext is in sql/core
-    // which would create a circular dependency if imported into catalyst
+    // Look up cursor definition from scripting context using the extension API
     val contextOpt = SqlScriptingContextManager.get().map(_.getContext)
 
     val cursorDefOpt = contextOpt.flatMap { context =>
-      // Get the current frame using reflection
-      val currentFrame = context.getClass.getMethod("currentFrame").invoke(context)
-
-      // Call the appropriate lookup method based on whether cursor is qualified
-      val result = normalizedScopeLabel match {
+      // Use the SqlScriptingExecutionContextExtension API for cursor lookup
+      normalizedScopeLabel match {
         case Some(label) =>
           // Qualified cursor: look up in specific labeled scope
-          currentFrame.getClass
-            .getMethod("findCursorInScope", classOf[String], classOf[String])
-            .invoke(currentFrame, label, normalizedName)
+          context.findCursorInScope(label, normalizedName)
         case None =>
           // Unqualified cursor: search current and parent scopes
-          currentFrame.getClass
-            .getMethod("findCursorByName", classOf[String])
-            .invoke(currentFrame, normalizedName)
+          context.findCursorByName(normalizedName)
       }
-
-      // Result is Option[CursorDefinition], but type-erased to Option[Any]
-      result.asInstanceOf[Option[Any]]
     }
 
     // If cursor not found and we're in a scripting context, fail immediately
@@ -113,8 +101,6 @@ class ResolveCursors extends Rule[LogicalPlan] {
     }
 
     // Create CursorReference with the cursor definition
-    // Cast needed because reflection returns Any
-    val cursorDef = cursorDefOpt.get.asInstanceOf[CursorDefinition]
-    CursorReference(nameParts, normalizedName, normalizedScopeLabel, cursorDef)
+    CursorReference(nameParts, normalizedName, normalizedScopeLabel, cursorDefOpt.get)
   }
 }

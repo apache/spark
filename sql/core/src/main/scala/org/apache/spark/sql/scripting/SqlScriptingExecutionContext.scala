@@ -54,6 +54,32 @@ class SqlScriptingExecutionContext extends SqlScriptingExecutionContextExtension
   def currentFrame: SqlScriptingExecutionFrame = frames.last
   def currentScope: SqlScriptingExecutionScope = currentFrame.currentScope
 
+  /**
+   * Find a cursor by its normalized name in the current scope and parent scopes.
+   * Implementation of SqlScriptingExecutionContextExtension API.
+   */
+  override def findCursorByName(normalizedName: String): Option[CursorDefinition] = {
+    if (frames.isEmpty) {
+      None
+    } else {
+      currentFrame.findCursorByName(normalizedName)
+    }
+  }
+
+  /**
+   * Find a cursor in a specific labeled scope.
+   * Implementation of SqlScriptingExecutionContextExtension API.
+   */
+  override def findCursorInScope(
+      normalizedScopeLabel: String,
+      normalizedName: String): Option[CursorDefinition] = {
+    if (frames.isEmpty) {
+      None
+    } else {
+      currentFrame.findCursorInScope(normalizedScopeLabel, normalizedName)
+    }
+  }
+
   def findHandler(condition: String, sqlState: String): Option[ExceptionHandlerExec] = {
     if (frames.isEmpty) {
       throw SparkException.internalError(s"Cannot find handler: no frames.")
