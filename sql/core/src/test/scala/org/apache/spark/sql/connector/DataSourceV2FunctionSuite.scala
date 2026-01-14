@@ -201,8 +201,10 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       exception = intercept[AnalysisException] {
         sql("DROP FUNCTION default.ns1.ns2.fun")
       },
-      condition = "IDENTIFIER_TOO_MANY_NAME_PARTS",
-      parameters = Map("identifier" -> "`default`.`ns1`.`ns2`.`fun`", "limit" -> "2")
+      condition = "REQUIRES_SINGLE_PART_NAMESPACE",
+      parameters = Map(
+        "sessionCatalog" -> "spark_catalog",
+        "namespace" -> "`default`.`ns1`.`ns2`")
     )
   }
 
@@ -230,8 +232,10 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       exception = intercept[AnalysisException] {
         sql("REFRESH FUNCTION default.ns1.ns2.fun")
       },
-      condition = "IDENTIFIER_TOO_MANY_NAME_PARTS",
-      parameters = Map("identifier" -> "`default`.`ns1`.`ns2`.`fun`", "limit" -> "2")
+      condition = "REQUIRES_SINGLE_PART_NAMESPACE",
+      parameters = Map(
+        "sessionCatalog" -> "spark_catalog",
+        "namespace" -> "`default`.`ns1`.`ns2`")
     )
   }
 
