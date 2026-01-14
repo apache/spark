@@ -1073,6 +1073,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "CURSOR_REFERENCE_INVALID_QUALIFIER" : {
+    "message" : [
+      "Cursor reference <cursorName> is invalid. Cursor references can only have at most one qualifier (e.g., label.cursor)."
+    ],
+    "sqlState" : "42601"
+  },
   "CYCLIC_FUNCTION_REFERENCE" : {
     "message" : [
       "Cyclic function reference detected: <path>."
