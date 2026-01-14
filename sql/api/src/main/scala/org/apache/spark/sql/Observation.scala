@@ -20,10 +20,9 @@ package org.apache.spark.sql
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 
-import scala.concurrent.{Future, Promise}
-import scala.concurrent.duration.{Duration, DurationInt}
+import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters.MapHasAsJava
-import scala.util.Try
 
 import org.apache.spark.util.SparkThreadUtils
 
@@ -58,12 +57,15 @@ class Observation(val name: String) {
 
   private val isRegistered = new AtomicBoolean()
 
-  private val promise = Promise[Row]()
+  private val promise = Promise[() => Row]()
+
+  private val lazyMetricsFuture: Future[() => Row] = promise.future
 
   /**
-   * Future holding the (yet to be completed) observation.
+   * Future holding the (yet to be completed) observation. Lazy to avoid collecting the metrics
+   * until it is needed.
    */
-  val future: Future[Row] = promise.future
+  lazy val future: Future[Row] = lazyMetricsFuture.map(_())(ExecutionContext.global)
 
   /**
    * (Scala-specific) Get the observed metrics. This waits for the observed dataset to finish its
@@ -119,8 +121,8 @@ class Observation(val name: String) {
    * @return
    *   `true` if all waiting threads were notified, `false` if otherwise.
    */
-  private[sql] def setMetricsAndNotify(metrics: Row): Boolean = {
-    promise.trySuccess(metrics)
+  private[sql] def setMetricsAndNotify(lazyMetrics: () => Row): Boolean = {
+    promise.trySuccess(lazyMetrics)
   }
 
   /**
@@ -130,7 +132,7 @@ class Observation(val name: String) {
    *   the observed metrics as a `Row`, or None if the metrics are not available.
    */
   private[sql] def getRowOrEmpty: Option[Row] = {
-    Try(SparkThreadUtils.awaitResult(future, 100.millis)).toOption
+    lazyMetricsFuture.value.flatMap(_.map(_()).toOption)
   }
 
   /**
@@ -140,7 +142,8 @@ class Observation(val name: String) {
    *   the observed metrics as a `Row`.
    */
   private[sql] def getRow: Row = {
-    SparkThreadUtils.awaitResult(future, Duration.Inf)
+    val lazyMetrics = SparkThreadUtils.awaitResult(lazyMetricsFuture, Duration.Inf)
+    lazyMetrics()
   }
 }
 

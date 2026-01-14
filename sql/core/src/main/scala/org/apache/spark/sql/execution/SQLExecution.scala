@@ -239,6 +239,8 @@ object SQLExecution extends Logging {
               event.qe = queryExecution
               event.executionFailure = ex
               sc.listenerBus.post(event)
+
+              sparkSession.observationManager.tryComplete(queryExecution)
             }
           }
         }
