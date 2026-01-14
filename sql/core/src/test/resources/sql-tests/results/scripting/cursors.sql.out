@@ -1726,8 +1726,8 @@ struct<col1:int>
 -- !query
 BEGIN
   outer_lbl: BEGIN
-    DECLARE cur CURSOR FOR SELECT 123 AS val;
     DECLARE result INT;
+    DECLARE cur CURSOR FOR SELECT 123 AS val;
 
     OPEN OUTER_LBL.cur;  -- Label in different case
     FETCH OUTER_LBL.CUR INTO result;  -- Both in different case
@@ -1737,16 +1737,9 @@ BEGIN
   END;
 END
 -- !query schema
-struct<>
+struct<col1:int>
 -- !query output
-org.apache.spark.SparkException
-{
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
-  "messageParameters" : {
-    "message" : "Invalid state transition from CURSOR to VARIABLE"
-  }
-}
+123
 
 
 -- !query
@@ -2038,4 +2031,38 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "cursorName" : "cur"
   }
+}
+
+
+-- !query
+BEGIN
+  DECLARE cur CURSOR FOR SELECT 123 AS val;
+  DECLARE result INT;  -- Invalid: variable after cursor
+END
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.exceptions.SqlScriptingException
+{
+  "errorClass" : "INVALID_VARIABLE_DECLARATION.ONLY_AT_BEGINNING",
+  "sqlState" : "42K0M",
+  "messageParameters" : {
+    "varName" : "`result`"
+  }
+}
+
+
+-- !query
+BEGIN
+  DECLARE result INT;
+  DECLARE CONTINUE HANDLER FOR SQLSTATE '02000' BEGIN END;
+  DECLARE cur CURSOR FOR SELECT 123 AS val;  -- Invalid: cursor after handler
+END
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.exceptions.SqlScriptingException
+{
+  "errorClass" : "INVALID_CURSOR_DECLARATION",
+  "sqlState" : "42601"
 }

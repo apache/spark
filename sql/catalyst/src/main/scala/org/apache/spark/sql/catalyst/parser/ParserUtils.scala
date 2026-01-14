@@ -256,6 +256,11 @@ class CompoundBodyParsingContext {
       // INVALID TRANSITIONS
 
       // Invalid transitions to VARIABLE state.
+      case (State.CURSOR, State.VARIABLE) =>
+        throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
+          createVariable.get.origin,
+          createVariable.get.names(0).asInstanceOf[UnresolvedIdentifier].nameParts)
+
       case (State.STATEMENT, State.VARIABLE) =>
         throw SqlScriptingErrors.variableDeclarationOnlyAtBeginning(
           createVariable.get.origin,

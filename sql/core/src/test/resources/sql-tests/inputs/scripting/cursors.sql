@@ -1358,8 +1358,8 @@ END;
 --QUERY-DELIMITER-START
 BEGIN
   outer_lbl: BEGIN
-    DECLARE cur CURSOR FOR SELECT 123 AS val;
     DECLARE result INT;
+    DECLARE cur CURSOR FOR SELECT 123 AS val;
 
     OPEN OUTER_LBL.cur;  -- Label in different case
     FETCH OUTER_LBL.CUR INTO result;  -- Both in different case
@@ -1645,3 +1645,25 @@ BEGIN
   FETCH cur INTO x;
 END;
 --QUERY-DELIMITER-END
+
+
+-- Test 67: Invalid declaration order - cursor before variable
+-- EXPECTED: Error - variables must be declared before cursors
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE cur CURSOR FOR SELECT 123 AS val;
+  DECLARE result INT;  -- Invalid: variable after cursor
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 68: Invalid declaration order - cursor after handler
+-- EXPECTED: Error - cursors must be declared before handlers
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE result INT;
+  DECLARE CONTINUE HANDLER FOR SQLSTATE '02000' BEGIN END;
+  DECLARE cur CURSOR FOR SELECT 123 AS val;  -- Invalid: cursor after handler
+END;
+--QUERY-DELIMITER-END
+
