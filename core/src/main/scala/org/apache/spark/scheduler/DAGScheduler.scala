@@ -1925,7 +1925,7 @@ private[spark] class DAGScheduler(
           // for the current attempt to avoid rolling back the same stage attempt multiple times.
           val alreadyRollingBack =
             sms.maxAttemptIdToIgnore.contains(sms.latestInfo.attemptNumber())
-          if (!alreadyRollingBack) {
+          if (sms.getNextAttemptId > 0 && !alreadyRollingBack) {
             rollbackShuffleMapStage(sms, "rolling back due to indeterminate " +
               s"output of shuffle map stage $mapStage")
             sms.markAsRollingBack()
@@ -2531,9 +2531,7 @@ private[spark] class DAGScheduler(
     val rollingBackStages = HashSet[Stage]()
     stagesToRollback.foreach {
       case mapStage: ShuffleMapStage =>
-        // Abort the indeterminate shuffle map stage if succeeding staged ever executed
-        // and SHUFFLE_USE_OLD_FETCH_PROTOCOL is true
-        if (mapStage.numAvailableOutputs > 0 || mapStage.getNextAttemptId > 0) {
+        if (mapStage.numAvailableOutputs > 0) {
           if (sc.conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)) {
             val reason = "A shuffle map stage with indeterminate output was failed " +
               "and retried. However, Spark can only do this while using the new " +
