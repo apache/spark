@@ -23,7 +23,6 @@ import java.util.concurrent.atomic.AtomicLong
 
 import io.grpc.inprocess.InProcessChannelBuilder
 import org.apache.arrow.memory.RootAllocator
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.{Column, Encoder, SaveMode}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.agnosticEncoderFor
@@ -35,7 +34,7 @@ import org.apache.spark.util.SparkSystemUtils
 /**
  * Test suite for SQL implicits.
  */
-class SQLImplicitsTestSuite extends ConnectFunSuite with BeforeAndAfterAll {
+class SQLImplicitsTestSuite extends ConnectFunSuite {
   private var session: SparkSession = _
 
   override protected def beforeAll(): Unit = {

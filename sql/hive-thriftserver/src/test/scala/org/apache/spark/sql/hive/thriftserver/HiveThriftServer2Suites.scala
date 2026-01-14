@@ -40,7 +40,6 @@ import org.apache.hive.service.rpc.thrift.TCLIService.Client
 import org.apache.hive.service.rpc.thrift.TRowSet
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.{SparkException, SparkFunSuite}
@@ -1181,7 +1180,7 @@ object ServerMode extends Enumeration {
   val binary, http = Value
 }
 
-abstract class HiveThriftServer2TestBase extends SparkFunSuite with BeforeAndAfterAll with Logging {
+abstract class HiveThriftServer2TestBase extends SparkFunSuite with Logging {
   def mode: ServerMode.Value
 
   private val CLASS_NAME = HiveThriftServer2.getClass.getCanonicalName.stripSuffix("$")
