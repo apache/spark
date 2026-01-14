@@ -424,10 +424,11 @@ createPipelineDatasetHeader
     ;
 
 streamRelationPrimary
-    : STREAM multipartIdentifier optionsClause? watermarkClause?
-      tableAlias                                                       #streamTableName
+    : STREAM multipartIdentifier optionsClause?
+      identifiedByClause? watermarkClause? tableAlias                  #streamTableName
     | STREAM LEFT_PAREN multipartIdentifier RIGHT_PAREN
-      optionsClause? watermarkClause? tableAlias                       #streamTableName
+      optionsClause? identifiedByClause?
+      watermarkClause? tableAlias                                      #streamTableName
     ;
 
 setResetStatement
@@ -1072,6 +1073,11 @@ relationPrimary
 
 optionsClause
     : WITH options=propertyList
+    ;
+
+// Clause for naming streaming sources with IDENTIFIED BY
+identifiedByClause
+    : IDENTIFIED BY sourceName=errorCapturingIdentifier
     ;
 
 // Unlike all other types of expression for relation, we do not support watermarkClause for
@@ -1971,6 +1977,7 @@ ansiNonReserved
     | HOUR
     | HOURS
     | IDENTIFIER_KW
+    | IDENTIFIED
     | IDENTITY
     | IF
     | IGNORE
@@ -2358,6 +2365,7 @@ nonReserved
     | HOUR
     | HOURS
     | IDENTIFIER_KW
+    | IDENTIFIED
     | IDENTITY
     | IF
     | IGNORE
