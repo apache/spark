@@ -1569,3 +1569,61 @@ BEGIN
   CLOSE outer_cur;
 END;
 --QUERY-DELIMITER-END
+
+
+-- Test 64: FETCH in CONTINUE handler (cross-frame cursor access)
+-- EXPECTED: Success - Cursor opened in script body can be fetched in handler body
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE x INT DEFAULT 0;
+  DECLARE fetch_count INT DEFAULT 0;
+  DECLARE cur CURSOR FOR SELECT id FROM VALUES(10), (20), (30) AS t(id);
+  
+  -- Handler that fetches from cursor declared in outer frame
+  DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
+  BEGIN
+    FETCH cur INTO x;
+    SET fetch_count = fetch_count + 1;
+    VALUES ('Fetched in handler', x, fetch_count);
+  END;
+  
+  OPEN cur;
+  
+  -- Trigger handler with division by zero
+  SELECT 1 / 0;
+  
+  -- Continue after handler - cursor is still open
+  VALUES ('After handler', x, fetch_count);
+  
+  CLOSE cur;
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 65: CLOSE in CONTINUE handler (cross-frame cursor access)
+-- EXPECTED: Success - Cursor opened in script body can be closed in handler body
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE x INT DEFAULT 0;
+  DECLARE handler_ran BOOLEAN DEFAULT false;
+  DECLARE cur CURSOR FOR SELECT 99 AS val;
+  
+  DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
+  BEGIN
+    CLOSE cur;  -- Close cursor from outer scope
+    SET handler_ran = true;
+    VALUES ('Closed cursor in handler');
+  END;
+  
+  OPEN cur;
+  FETCH cur INTO x;
+  VALUES ('Before handler', x);
+  
+  -- Trigger handler
+  SELECT 1 / 0;
+  
+  VALUES ('After handler', handler_ran);
+  -- Cursor is now closed by handler
+END;
+--QUERY-DELIMITER-END
+
