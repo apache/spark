@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.CursorDefinition
  * circular dependencies between catalyst and core modules.
  */
 trait SqlScriptingExecutionContextExtension {
-  
+
   /**
    * Find a cursor by its normalized name in the current scope and parent scopes.
    * Used for unqualified cursor references (e.g., `cursor`).
@@ -47,4 +47,3 @@ trait SqlScriptingExecutionContextExtension {
       normalizedScopeLabel: String,
       normalizedName: String): Option[CursorDefinition]
 }
-

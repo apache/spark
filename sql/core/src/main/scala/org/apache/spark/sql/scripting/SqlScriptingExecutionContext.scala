@@ -362,4 +362,3 @@ class SqlScriptingExecutionScope(
     errorHandler
   }
 }
-

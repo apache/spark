@@ -21,7 +21,7 @@ import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SqlScriptingContextManager
-import org.apache.spark.sql.catalyst.expressions.{CursorDefinition, CursorReference, UnresolvedCursor}
+import org.apache.spark.sql.catalyst.expressions.{CursorReference, UnresolvedCursor}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_CURSOR
@@ -47,7 +47,8 @@ class ResolveCursors extends Rule[LogicalPlan] {
     val nameParts = uc.nameParts
     val caseSensitive = SQLConf.get.caseSensitiveAnalysis
 
-    // Validate name parts: only support unqualified (cursor) or single-label qualified (label.cursor)
+    // Validate name parts: only support unqualified (cursor) or
+    // single-label qualified (label.cursor)
     if (nameParts.length > 2) {
       throw new AnalysisException(
         errorClass = "CURSOR_REFERENCE_INVALID_QUALIFIER",
