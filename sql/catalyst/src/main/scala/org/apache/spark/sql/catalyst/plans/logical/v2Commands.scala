@@ -1973,8 +1973,8 @@ case class FetchCursor(
  *
  * @param cursor Cursor reference (UnresolvedCursor during parsing, CursorReference after analysis)
  */
-case class CloseCursor(
-    cursor: Expression) extends LeafCommand
+case class CloseCursor(cursor: Expression) extends LeafCommand
+
 
 /**
  * The logical plan of the CALL statement.
