@@ -77,6 +77,14 @@ private[spark] class ExecutorPodsLifecycleManager(
 
   protected[spark] def getNumExecutorsFailed: Int = failureTracker.numFailedExecutors
 
+  /**
+   * Register a pod creation failure. This increments the global executor failure count
+   * which is checked against spark.executor.maxNumFailures.
+   */
+  protected[spark] def registerPodCreationFailure(): Unit = {
+    failureTracker.registerExecutorFailure()
+  }
+
   def start(schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
     val eventProcessingInterval = conf.get(KUBERNETES_EXECUTOR_EVENT_PROCESSING_INTERVAL)
     snapshotsStore.addSubscriber(eventProcessingInterval) { executorPodsSnapshot =>
