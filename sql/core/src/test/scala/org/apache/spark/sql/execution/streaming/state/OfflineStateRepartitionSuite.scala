@@ -421,9 +421,9 @@ object OfflineStateRepartitionTestUtils {
       serializableConf: SerializableConfiguration,
       batchId: Long
     ): Array[OperatorStateMetadata] = {
-    val repartitionMetadataReader = new StateMetadataPartitionReader(
+    val metadataPartitionReader = new StateMetadataPartitionReader(
       checkpointLocation, serializableConf, batchId)
-    repartitionMetadataReader.allOperatorStateMetadata
+    metadataPartitionReader.allOperatorStateMetadata
   }
 
   private def verifyOperatorMetadata(

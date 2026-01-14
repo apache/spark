@@ -454,7 +454,7 @@ class RocksDB(
         closeDB(ignoreException = false)
         if (loadEmpty) {
           require(stateStoreCkptId.isEmpty,
-            "stateStoeCkptId should be empty when loadEmpty is true")
+            "stateStoreCkptId should be empty when loadEmpty is true")
           loadEmptyStore(version)
           lineageManager.clear()
         } else {
@@ -539,7 +539,7 @@ class RocksDB(
       }
       if (loadEmpty) {
         logInfo(log"Loaded empty store at version ${MDC(LogKeys.VERSION_NUM, version)} " +
-          log"without uniqueId")
+          log"with uniqueId")
       } else {
         logInfo(log"Loaded ${MDC(LogKeys.VERSION_NUM, version)} " +
           log"with uniqueId ${MDC(LogKeys.UUID, stateStoreCkptId)}")

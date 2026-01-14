@@ -3947,6 +3947,8 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     "SPARK-54420: load with createEmpty creates empty store") { enableCkptId =>
       val remoteDir = Utils.createTempDir().toString
       new File(remoteDir).delete()
+      var lastVersion = 0L
+      var lastCheckpointInfo: Option[StateStoreCheckpointInfo] = None
 
       withDB(remoteDir, enableStateStoreCheckpointIds = enableCkptId) { db =>
         // loading batch 0 with loadEmpty = true
@@ -3976,23 +3978,31 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         // load 2 empty store in a row
         db.load(version3, loadEmpty = true)
         db.put("d", "4")
-        val (version4, checkpointInfoV4) = db.commit()
+        val (version4, checkpointV4) = db.commit()
         assert(db.get("c") === null)
         assert(toStr(db.get("d")) === "4")
-        assert(version4 === version3 + 1)
-
-        db.load(version4, checkpointInfoV4.stateStoreCkptId)
+        lastVersion = version4
+        lastCheckpointInfo = Option(checkpointV4)
+        assert(lastVersion === version3 + 1)
+      }
+      withDB(remoteDir, enableStateStoreCheckpointIds = enableCkptId) { db =>
+        db.load(lastVersion, lastCheckpointInfo.map(_.stateStoreCkptId).orNull)
         db.put("e", "5")
         db.commit()
         assert(db.iterator().map(toStr).toSet === Set(("d", "4"), ("e", "5")))
+      }
 
-        if (enableCkptId) {
+      if (enableCkptId) {
+        withDB(remoteDir, enableStateStoreCheckpointIds = enableCkptId) { db =>
           val ex = intercept[IllegalArgumentException] {
-            db.load(version4, checkpointInfoV4.stateStoreCkptId, loadEmpty = true)
+            db.load(
+              lastVersion,
+              lastCheckpointInfo.map(_.stateStoreCkptId).orNull,
+              loadEmpty = true)
           }
-          assert(ex.getMessage.contains("stateStoeCkptId should be empty when loadEmpty is true"))
+          assert(ex.getMessage.contains("stateStoreCkptId should be empty when loadEmpty is true"))
         }
-    }
+      }
   }
 
   test("SPARK-44639: Use Java tmp dir instead of configured local dirs on Yarn") {

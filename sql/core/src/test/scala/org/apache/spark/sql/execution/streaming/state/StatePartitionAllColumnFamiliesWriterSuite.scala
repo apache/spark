@@ -106,23 +106,7 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
 
     // Commit to commitLog with checkpoint IDs
     val latestCommit = targetCheckpointMetadata.commitLog.get(lastBatch).get
-    val operatorId = 0L
-    val partitionSeq: Array[Array[StateStoreCheckpointInfo]] = checkpointInfos(operatorId)
-    val commitMetadata = if (StateStoreConf(conf).enableStateStoreCheckpointIds) {
-      // For join operators: 4 stores (left-keyToNumValues, left-keyWithIndexToValue,
-      //                              right-keyToNumValues, right-keyWithIndexToValue)
-      // For regular operators: 1 store
-      val ckptIds: Array[Array[String]] = partitionSeq.map { storesSeq =>
-          // For this partition, collect checkpoint IDs from all stores (in order)
-          storesSeq.flatMap { storeCkptInfo =>
-            storeCkptInfo.stateStoreCkptId
-          }
-        }
-      // Include checkpoint IDs in commit metadata
-      latestCommit.copy(stateUniqueIds = Option(Map(operatorId -> ckptIds)))
-    } else {
-      latestCommit
-    }
+    val commitMetadata = latestCommit.copy(stateUniqueIds = checkpointInfos)
     targetCheckpointMetadata.commitLog.add(writeBatchId, commitMetadata)
     val versionToCheck = writeBatchId + 1
 
@@ -237,20 +221,6 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
         keyStateEncoderSpec = Some(keyStateEncoderSpec)
       ),
       useMultipleValuePerKey)
-  }
-
-  /**
-   * Helper method to create a single-entry column family schema map.
-   * This simplifies the common case where only the default column family is used.
-   */
-  private def createSingleColumnFamilySchemaMap(
-      keySchema: StructType,
-      valueSchema: StructType,
-      keyStateEncoderSpec: KeyStateEncoderSpec,
-      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME
-  ): Map[String, StatePartitionWriterColumnFamilyInfo] = {
-    Map(colFamilyName -> createColFamilyInfo(keySchema, valueSchema,
-      keyStateEncoderSpec, colFamilyName))
   }
 
   /**
