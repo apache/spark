@@ -3275,8 +3275,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   test("SPARK-25341: abort stage while using old fetch protocol") {
     conf.set(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL.key, "true")
     // Construct the scenario of indeterminate stage fetch failed.
-    constructChecksumMismatchStageFetchFailed(
-      checksumMismatchFullRetryEnabled = false)
+    constructIndeterminateStageFetchFailed()
     // The job should fail because Spark can't rollback the shuffle map stage while
     // using old protocol.
     assert(failure != null && failure.getMessage.contains(
@@ -3289,10 +3288,10 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // Check status for all failedStages
     val failedStages = scheduler.failedStages.toSeq
     assert(failedStages.map(_.id) == Seq(1, 2))
-    // Shuffle blocks of "hostC" is lost, so first task of the `shuffleMapRdd2` needs to retry.
+    // Shuffle blocks of "hostC" is lost, rollback to do a fully-retry.
     assert(failedStages.collect {
       case stage: ShuffleMapStage if stage.shuffleDep.shuffleId == shuffleId2 => stage
-    }.head.findMissingPartitions() == Seq(0))
+    }.head.findMissingPartitions() == Seq(0, 1))
     // The result stage is still waiting for its 2 tasks to complete
     assert(failedStages.collect {
       case stage: ResultStage => stage
@@ -3314,7 +3313,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // First shuffle map stage resubmitted and reran all tasks.
     assert(taskSets(4).stageId == 0)
     assert(taskSets(4).stageAttemptId == 1)
-    assert(taskSets(4).tasks.length == 1)
+    assert(taskSets(4).tasks.length == 2)
 
     // Finish all stage.
     completeShuffleMapStageSuccessfully(0, 1, 2)
@@ -3471,8 +3470,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     scheduler.resubmitFailedStages()
 
     // Check all indeterminate stage roll back.
-    checkAndCompleteRetryStage(3, 0, shuffleId1, numTasks = 1)
-    checkAndCompleteRetryStage(4, 1, shuffleId2, numTasks = 1)
+    checkAndCompleteRetryStage(3, 0, shuffleId1)
+    checkAndCompleteRetryStage(4, 1, shuffleId2)
     checkAndCompleteRetryStage(5, 2, shuffleId3)
 
     // Result stage success, all job ended.
@@ -3483,14 +3482,13 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
   }
 
   // Construct the scenario of stages with checksum mismatches and FetchFailed.
-  private def constructChecksumMismatchStageFetchFailed(
-      checksumMismatchFullRetryEnabled: Boolean = true): (Int, Int) = {
-    val shuffleMapRdd1 = new MyRDD(sc, 2, Nil, indeterminate = true)
+  private def constructChecksumMismatchStageFetchFailed(): (Int, Int) = {
+    val shuffleMapRdd1 = new MyRDD(sc, 2, Nil)
 
     val shuffleDep1 = new ShuffleDependency(
       shuffleMapRdd1,
       new HashPartitioner(2),
-      _checksumMismatchFullRetryEnabled = checksumMismatchFullRetryEnabled
+      _checksumMismatchFullRetryEnabled = true
     )
     val shuffleId1 = shuffleDep1.shuffleId
     val shuffleMapRdd2 = new MyRDD(sc, 2, List(shuffleDep1), tracker = mapOutputTracker)
@@ -3498,7 +3496,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val shuffleDep2 = new ShuffleDependency(
       shuffleMapRdd2,
       new HashPartitioner(2),
-      _checksumMismatchFullRetryEnabled = checksumMismatchFullRetryEnabled
+      _checksumMismatchFullRetryEnabled = true
     )
     val shuffleId2 = shuffleDep2.shuffleId
     val finalRdd = new MyRDD(sc, 2, List(shuffleDep2), tracker = mapOutputTracker)
@@ -4634,7 +4632,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // Check status for all failedStages
     val failedStages = scheduler.failedStages.toSeq
     assert(failedStages.map(_.id) == Seq(1, 2))
-    // Shuffle blocks of "hostC" is lost, so first task of the `shuffleMapRdd2` needs to retry.
+    // Shuffle blocks of "hostC" is lost, rollback to do a fully-retry.
     assert(failedStages.collect {
       case stage: ShuffleMapStage if stage.shuffleDep.shuffleId == shuffleId2 => stage
     }.head.findMissingPartitions() == Seq(0, 1))
@@ -4645,7 +4643,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // shuffleMergeId for indeterminate stages would start from 1
     assert(failedStages.collect {
       case stage: ShuffleMapStage => stage.shuffleDep.shuffleMergeId
-    }.forall(x => x == 2))
+    }.forall(x => x == 1))
     scheduler.resubmitFailedStages()
 
     // The first task of the `shuffleMapRdd2` failed with fetch failure
@@ -4656,10 +4654,11 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     val newFailedStages = scheduler.failedStages.toSeq
     assert(newFailedStages.map(_.id) == Seq(0, 1))
-    // shuffleMergeId for indeterminate failed stages should be 2
-    assert(failedStages.collect {
-      case stage: ShuffleMapStage => stage.shuffleDep.shuffleMergeId
-    }.forall(x => x == 2))
+    // shuffleMergeId for indeterminate failed stages should be increased
+    assert(newFailedStages.filter(_.id == 0)
+      .exists(_.asInstanceOf[ShuffleMapStage].shuffleDep.shuffleMergeId == 1))
+    assert(newFailedStages.filter(_.id == 1)
+      .exists(_.asInstanceOf[ShuffleMapStage].shuffleDep.shuffleMergeId == 2))
     scheduler.resubmitFailedStages()
 
     // First shuffle map stage resubmitted and reran all tasks.
@@ -4670,16 +4669,16 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // Finish all stage.
     completeShuffleMapStageSuccessfully(0, 1, 2)
     assert(mapOutputTracker.findMissingPartitions(shuffleId1) === Some(Seq.empty))
-    // shuffleMergeId should be 2 for the attempt number 1 for stage 0
+    // shuffleMergeId should be 1 for the attempt number 1 for stage 0
     assert(mapOutputTracker.shuffleStatuses.get(shuffleId1).forall(
-      _.mergeStatuses.forall(x => x.shuffleMergeId == 2)))
+      _.mergeStatuses.forall(x => x.shuffleMergeId == 1)))
     assert(mapOutputTracker.getNumAvailableMergeResults(shuffleId1) == 2)
 
     completeShuffleMapStageSuccessfully(1, 2, 2, Seq("hostC", "hostD"))
     assert(mapOutputTracker.findMissingPartitions(shuffleId2) === Some(Seq.empty))
     // shuffleMergeId should be 2 for the attempt number 2 for stage 1
     assert(mapOutputTracker.shuffleStatuses.get(shuffleId2).forall(
-      _.mergeStatuses.forall(x => x.shuffleMergeId == 3)))
+      _.mergeStatuses.forall(x => x.shuffleMergeId == 2)))
     assert(mapOutputTracker.getNumAvailableMergeResults(shuffleId2) == 2)
 
     complete(taskSets(6), Seq((Success, 11), (Success, 12)))
@@ -5117,7 +5116,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         (Success, makeMapStatus("host" + idx, parts))
     }.toSeq)
 
-    assert(shuffleStage1.shuffleDep.shuffleMergeId == 2)
+    assert(shuffleStage1.shuffleDep.shuffleMergeId == 1)
     assert(shuffleStage1.shuffleDep.isShuffleMergeFinalizedMarked)
     val newMergerLocs =
       scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage].shuffleDep.getMergerLocs

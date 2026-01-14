@@ -1906,7 +1906,7 @@ private[spark] class DAGScheduler(
     } else {
       collectSucceedingStages(mapStage).filterNot(_ == mapStage)
     }
-    val stagesCanRollback = filterAndAbortUnrollbackableStages(mapStage, stagesToRollback)
+    val stagesCanRollback = filterAndAbortUnrollbackableStages(stagesToRollback)
     // stages which cannot be rolled back were aborted which leads to removing the
     // the dependant job(s) from the active jobs set, there could be no active jobs
     // left depending on the indeterminate stage and hence no need to roll back any stages.
@@ -2514,12 +2514,11 @@ private[spark] class DAGScheduler(
   /**
    * Abort stages where roll back is requested but cannot be completed.
    *
-   * @param sms the shuffle map stage with indeterminate output
    * @param stagesToRollback stages to roll back
    * @return Shuffle map stages which need and can be rolled back
    */
   private def filterAndAbortUnrollbackableStages(
-      sms: ShuffleMapStage, stagesToRollback: HashSet[Stage]): HashSet[Stage] = {
+      stagesToRollback: HashSet[Stage]): HashSet[Stage] = {
 
     def generateErrorMessage(stage: Stage): String = {
       "A shuffle map stage with indeterminate output was failed and retried. " +
