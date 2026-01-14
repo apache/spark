@@ -2596,50 +2596,43 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 -- !query
 BEGIN
-  DECLARE x INT DEFAULT 0;
-  DECLARE cur CURSOR FOR SELECT id FROM VALUES(10), (20), (30) AS t(id);
-  
-  DECLARE CONTINUE HANDLER FOR SQLSTATE '22012' FETCH cur INTO x;
-  
-  OPEN cur;
-  
+  DECLARE x INT DEFAULT 10;
+
+  DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
+  BEGIN
+    SET x = x + 1;  -- Read x and write x from outer scope
+  END;
+
+  SELECT x AS before_handler;  -- Should be 10
+
   SELECT 1 / 0;
-  
-  SELECT 'After handler' as msg, x;
-  
-  CLOSE cur;
+
+  SELECT x AS after_handler;  -- Should be 11 (handler incremented it)
 END
 -- !query schema
-struct<>
+struct<after_handler:int>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'cur'",
-    "hint" : ""
-  }
-}
+11
 
 
 -- !query
 BEGIN
   DECLARE x INT DEFAULT 0;
+  DECLARE handler_ran BOOLEAN DEFAULT false;
   DECLARE cur CURSOR FOR SELECT 99 AS val;
   
   DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
   BEGIN
-    FETCH cur INTO x;
     CLOSE cur;
-    SELECT 'Handler closed cursor after fetching' as msg, x;
+    SET handler_ran = true;
   END;
   
   OPEN cur;
+  FETCH cur INTO x;
   
   SELECT 1 / 0;
   
-  SELECT 'After handler' as msg, x;
+  FETCH cur INTO x;
 END
 -- !query schema
 struct<>
@@ -2654,8 +2647,49 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 155,
-    "stopIndex" : 155,
+    "startIndex" : 263,
+    "stopIndex" : 263,
+    "fragment" : "x"
+  } ]
+}
+
+
+-- !query
+BEGIN
+  DECLARE x INT DEFAULT 0;
+  DECLARE y INT DEFAULT 0;
+  DECLARE handler_ran BOOLEAN DEFAULT false;
+  DECLARE cur CURSOR FOR SELECT 99 AS val;
+  
+  DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
+  BEGIN
+    FETCH cur INTO y;  -- Fetch into different variable
+    CLOSE cur;
+    SET handler_ran = true;
+  END;
+  
+  OPEN cur;
+  FETCH cur INTO x;  -- First fetch into x
+  
+  SELECT 1 / 0;
+  
+  FETCH cur INTO x;
+END
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`x`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 346,
+    "stopIndex" : 346,
     "fragment" : "x"
   } ]
 }

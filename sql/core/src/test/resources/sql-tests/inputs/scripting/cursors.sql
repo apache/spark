@@ -1571,51 +1571,77 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 64: CLOSE cursor in CONTINUE handler (cross-frame cursor access)
--- EXPECTED: Success - Cursor opened in script body can be closed in handler
+-- Test 64: Variable access in CONTINUE handler BEGIN...END (no cursors)
+-- EXPECTED: Handler should be able to read and write outer scope variable
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE x INT DEFAULT 10;
+
+  DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
+  BEGIN
+    SET x = x + 1;  -- Read x and write x from outer scope
+  END;
+
+  SELECT x AS before_handler;  -- Should be 10
+
+  -- Trigger handler
+  SELECT 1 / 0;
+
+  SELECT x AS after_handler;  -- Should be 11 (handler incremented it)
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 65: CLOSE cursor in CONTINUE handler (cross-frame cursor access)
+-- EXPECTED: Handler closes cursor, subsequent FETCH fails
 --QUERY-DELIMITER-START
 BEGIN
   DECLARE x INT DEFAULT 0;
+  DECLARE handler_ran BOOLEAN DEFAULT false;
   DECLARE cur CURSOR FOR SELECT 99 AS val;
-
+  
   -- Handler that closes cursor from outer scope
-  DECLARE CONTINUE HANDLER FOR SQLSTATE '22012' CLOSE cur;
-
+  DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
+  BEGIN
+    CLOSE cur;
+    SET handler_ran = true;
+  END;
+  
   OPEN cur;
   FETCH cur INTO x;
-
+  
   -- Trigger handler - it will close the cursor
   SELECT 1 / 0;
-
-  -- After handler, cursor should be closed
-  -- Trying to fetch should fail with CURSOR_NOT_OPEN
+  
+  -- After handler, try to fetch from closed cursor (should fail with CURSOR_NOT_OPEN)
   FETCH cur INTO x;
 END;
 --QUERY-DELIMITER-END
 
 
--- Test 65: FETCH and CLOSE in handler BEGIN block (cross-frame cursor access)
--- EXPECTED: Success - Handler BEGIN block can access cursor from outer scope
+-- Test 66: FETCH and CLOSE in handler BEGIN block (cross-frame cursor access)
+-- EXPECTED: Handler fetches and closes cursor, subsequent FETCH fails
 --QUERY-DELIMITER-START
 BEGIN
   DECLARE x INT DEFAULT 0;
   DECLARE y INT DEFAULT 0;
+  DECLARE handler_ran BOOLEAN DEFAULT false;
   DECLARE cur CURSOR FOR SELECT 99 AS val;
-
+  
   DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
   BEGIN
     FETCH cur INTO y;  -- Fetch into different variable
     CLOSE cur;
+    SET handler_ran = true;
   END;
-
+  
   OPEN cur;
   FETCH cur INTO x;  -- First fetch into x
-
+  
   -- Trigger handler - it will fetch into y and close cursor
   SELECT 1 / 0;
-
-  -- After handler, cursor should be closed
-  -- Trying to fetch should fail with CURSOR_NOT_OPEN
+  
+  -- After handler, try to fetch from closed cursor (should fail with CURSOR_NOT_OPEN)
   FETCH cur INTO x;
 END;
 --QUERY-DELIMITER-END
