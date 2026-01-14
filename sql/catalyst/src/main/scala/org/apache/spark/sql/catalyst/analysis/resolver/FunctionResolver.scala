@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import java.util.Locale
-
 import scala.util.Random
 
 import org.apache.spark.sql.AnalysisException
@@ -172,11 +170,11 @@ class FunctionResolver(
 
   /**
    * Method used to determine whether the given function should be replaced with another one.
+   * Handles qualified function names (e.g., "count", "builtin.count", "system.builtin.count").
    */
   private def isCount(unresolvedFunction: UnresolvedFunction): Boolean = {
     !unresolvedFunction.isDistinct &&
-    unresolvedFunction.nameParts.length == 1 &&
-    unresolvedFunction.nameParts.head.toLowerCase(Locale.ROOT) == "count"
+    unresolvedFunction.nameParts.lastOption.exists(_.equalsIgnoreCase("count"))
   }
 
   /**
@@ -188,7 +186,6 @@ class FunctionResolver(
   private def normalizeCountExpression(
       unresolvedFunction: UnresolvedFunction): UnresolvedFunction = {
     unresolvedFunction.copy(
-      nameParts = Seq("count"),
       arguments = Seq(Literal(1)),
       filter = unresolvedFunction.filter
     )

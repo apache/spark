@@ -1135,7 +1135,113 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
-DROP TEMPORARY FUNCTION my_range
+DROP TEMPORARY FUNCTION my_range()
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+SELECT count(*) FROM VALUES (1), (2), (3) AS t(a)
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+3
+
+
+-- !query
+SELECT builtin.count(*) FROM VALUES (1), (2), (3) AS t(a)
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+3
+
+
+-- !query
+SELECT system.builtin.count(*) FROM VALUES (1), (2), (3) AS t(a)
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+3
+
+
+-- !query
+SELECT BUILTIN.COUNT(*) FROM VALUES (1), (2), (3) AS t(a)
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+3
+
+
+-- !query
+SELECT System.Builtin.Count(*) FROM VALUES (1), (2), (3) AS t(a)
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+3
+
+
+-- !query
+CREATE TEMPORARY VIEW count_test_view AS SELECT 1 AS a, 2 AS b
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT count(count_test_view.*) FROM count_test_view
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1021",
+  "messageParameters" : {
+    "targetString" : "count_test_view"
+  }
+}
+
+
+-- !query
+SELECT builtin.count(count_test_view.*) FROM count_test_view
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1021",
+  "messageParameters" : {
+    "targetString" : "count_test_view"
+  }
+}
+
+
+-- !query
+SELECT system.builtin.count(count_test_view.*) FROM count_test_view
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1021",
+  "messageParameters" : {
+    "targetString" : "count_test_view"
+  }
+}
+
+
+-- !query
+DROP VIEW count_test_view
 -- !query schema
 struct<>
 -- !query output

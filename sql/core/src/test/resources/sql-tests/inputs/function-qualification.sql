@@ -219,4 +219,34 @@ CREATE TEMPORARY FUNCTION my_range() RETURNS TABLE(id INT) RETURN SELECT * FROM 
 SELECT * FROM my_range();
 SELECT * FROM session.my_range();
 SELECT * FROM system.session.my_range();
-DROP TEMPORARY FUNCTION my_range;
+DROP TEMPORARY FUNCTION my_range();
+
+--
+-- SECTION 10: Qualified Function Names with Special Syntax (COUNT(*))
+--
+
+-- Test COUNT(*) expansion with qualified names
+-- Unqualified count(*)
+SELECT count(*) FROM VALUES (1), (2), (3) AS t(a);
+
+-- Qualified as builtin.count(*)
+SELECT builtin.count(*) FROM VALUES (1), (2), (3) AS t(a);
+
+-- Qualified as system.builtin.count(*)
+SELECT system.builtin.count(*) FROM VALUES (1), (2), (3) AS t(a);
+
+-- Case insensitive qualified count(*)
+SELECT BUILTIN.COUNT(*) FROM VALUES (1), (2), (3) AS t(a);
+SELECT System.Builtin.Count(*) FROM VALUES (1), (2), (3) AS t(a);
+
+-- Test count(tbl.*) blocking with qualified names
+CREATE TEMPORARY VIEW count_test_view AS SELECT 1 AS a, 2 AS b;
+
+-- Unqualified count with table.*
+SELECT count(count_test_view.*) FROM count_test_view;
+
+-- Qualified count with table.*
+SELECT builtin.count(count_test_view.*) FROM count_test_view;
+SELECT system.builtin.count(count_test_view.*) FROM count_test_view;
+
+DROP VIEW count_test_view;

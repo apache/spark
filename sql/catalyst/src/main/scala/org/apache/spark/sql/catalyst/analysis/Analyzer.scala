@@ -1880,22 +1880,32 @@ class Analyzer(
     }
 
     /**
+     * Checks if the given function name parts match the expected unqualified function name,
+     * regardless of whether it's qualified or not.
+     * Handles: "count", "builtin.count", "system.builtin.count", "session.count", etc.
+     */
+    private def matchesFunctionName(nameParts: Seq[String], expectedName: String): Boolean = {
+      nameParts.lastOption.exists(_.equalsIgnoreCase(expectedName))
+    }
+
+    /**
      * Expands the matching attribute.*'s in `child`'s output.
      */
     def expandStarExpression(expr: Expression, child: LogicalPlan): Expression = {
       expr.transformUp {
         case f0: UnresolvedFunction if !f0.isDistinct &&
-          f0.nameParts.map(_.toLowerCase(Locale.ROOT)) == Seq("count") &&
+          matchesFunctionName(f0.nameParts, "count") &&
           isCountStarExpansionAllowed(f0.arguments) =>
           // Transform COUNT(*) into COUNT(1).
-          f0.copy(nameParts = Seq("count"), arguments = Seq(Literal(1)))
+          // Preserve the original qualification (if any) in the transformed node.
+          f0.copy(arguments = Seq(Literal(1)))
         case f1: UnresolvedFunction if containsStar(f1.arguments) =>
           // SPECIAL CASE: We want to block count(tblName.*) because in spark, count(tblName.*) will
           // be expanded while count(*) will be converted to count(1). They will produce different
           // results and confuse users if there are any null values. For count(t1.*, t2.*), it is
           // still allowed, since it's well-defined in spark.
           if (!conf.allowStarWithSingleTableIdentifierInCount &&
-              f1.nameParts == Seq("count") &&
+              matchesFunctionName(f1.nameParts, "count") &&
               f1.arguments.length == 1) {
             f1.arguments.foreach {
               case u: UnresolvedStar if u.isQualifiedByTable(child.output, resolver) =>

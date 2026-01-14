@@ -1019,6 +1019,104 @@ org.apache.spark.sql.catalyst.parser.ParseException
 
 
 -- !query
-DROP TEMPORARY FUNCTION my_range
+DROP TEMPORARY FUNCTION my_range()
 -- !query analysis
-DropFunctionCommand my_range, false, true
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "'('",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+SELECT count(*) FROM VALUES (1), (2), (3) AS t(a)
+-- !query analysis
+Aggregate [count(1) AS count(1)#xL]
++- SubqueryAlias t
+   +- LocalRelation [a#x]
+
+
+-- !query
+SELECT builtin.count(*) FROM VALUES (1), (2), (3) AS t(a)
+-- !query analysis
+Aggregate [count(1) AS count(1)#xL]
++- SubqueryAlias t
+   +- LocalRelation [a#x]
+
+
+-- !query
+SELECT system.builtin.count(*) FROM VALUES (1), (2), (3) AS t(a)
+-- !query analysis
+Aggregate [count(1) AS count(1)#xL]
++- SubqueryAlias t
+   +- LocalRelation [a#x]
+
+
+-- !query
+SELECT BUILTIN.COUNT(*) FROM VALUES (1), (2), (3) AS t(a)
+-- !query analysis
+Aggregate [count(1) AS count(1)#xL]
++- SubqueryAlias t
+   +- LocalRelation [a#x]
+
+
+-- !query
+SELECT System.Builtin.Count(*) FROM VALUES (1), (2), (3) AS t(a)
+-- !query analysis
+Aggregate [count(1) AS count(1)#xL]
++- SubqueryAlias t
+   +- LocalRelation [a#x]
+
+
+-- !query
+CREATE TEMPORARY VIEW count_test_view AS SELECT 1 AS a, 2 AS b
+-- !query analysis
+CreateViewCommand `count_test_view`, SELECT 1 AS a, 2 AS b, false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [1 AS a#x, 2 AS b#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT count(count_test_view.*) FROM count_test_view
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1021",
+  "messageParameters" : {
+    "targetString" : "count_test_view"
+  }
+}
+
+
+-- !query
+SELECT builtin.count(count_test_view.*) FROM count_test_view
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1021",
+  "messageParameters" : {
+    "targetString" : "count_test_view"
+  }
+}
+
+
+-- !query
+SELECT system.builtin.count(count_test_view.*) FROM count_test_view
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1021",
+  "messageParameters" : {
+    "targetString" : "count_test_view"
+  }
+}
+
+
+-- !query
+DROP VIEW count_test_view
+-- !query analysis
+DropTempViewCommand count_test_view
