@@ -722,6 +722,7 @@ private[spark] class AppStatusStore(
         details = stage.details,
         schedulingPool = stage.schedulingPool,
         rddIds = stage.rddIds,
+        parentIds = stage.parentIds,
         accumulatorUpdates = stage.accumulatorUpdates,
         tasks = tasks,
         executorSummary = executorSummaries,
