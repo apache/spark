@@ -679,7 +679,7 @@ class DataFrameTestsMixin:
     def test_cache_table(self):
         spark = self.spark
         tables = ["tab1", "tab2", "tab3"]
-        with self.tempView(*tables):
+        with self.temp_view(*tables):
             for i, tab in enumerate(tables):
                 spark.createDataFrame([(2, i), (3, i)]).createOrReplaceTempView(tab)
                 self.assertFalse(spark.catalog.isCached(tab))
@@ -1183,8 +1183,6 @@ class DataFrameTestsMixin:
             [Row(dt="08/01/2017", month_y=i) for i in range(12)],
         )
 
-
-class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
     def test_query_execution_unsupported_in_classic(self):
         with self.assertRaises(PySparkValueError) as pe:
             self.spark.range(1).executionInfo
@@ -1196,13 +1194,11 @@ class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
         )
 
 
+class DataFrameTests(DataFrameTestsMixin, ReusedSQLTestCase):
+    pass
+
+
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_dataframe import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

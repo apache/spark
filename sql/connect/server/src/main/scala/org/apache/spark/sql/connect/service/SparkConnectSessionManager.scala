@@ -27,7 +27,7 @@ import scala.util.control.NonFatal
 
 import com.google.common.cache.CacheBuilder
 
-import org.apache.spark.{SparkEnv, SparkSQLException}
+import org.apache.spark.{SparkContext, SparkEnv, SparkSQLException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{INTERVAL, SESSION_HOLD_INFO}
 import org.apache.spark.sql.classic.SparkSession
@@ -39,6 +39,9 @@ import org.apache.spark.util.ThreadUtils
  */
 class SparkConnectSessionManager extends Logging {
 
+  // Base SparkSession created from the SparkContext, used to create new isolated sessions
+  @volatile private var baseSession: Option[SparkSession] = None
+
   private val sessionStore: ConcurrentMap[SessionKey, SessionHolder] =
     new ConcurrentHashMap[SessionKey, SessionHolder]()
 
@@ -47,6 +50,16 @@ class SparkConnectSessionManager extends Logging {
       .newBuilder()
       .maximumSize(SparkEnv.get.conf.get(CONNECT_SESSION_MANAGER_CLOSED_SESSIONS_TOMBSTONES_SIZE))
       .build[SessionKey, SessionHolderInfo]()
+
+  /**
+   * Initialize the base SparkSession from the provided SparkContext. This should be called once
+   * during SparkConnectService startup.
+   */
+  def initializeBaseSession(sc: SparkContext): Unit = {
+    if (baseSession.isEmpty) {
+      baseSession = Some(SparkSession.builder().sparkContext(sc).getOrCreate().newSession())
+    }
+  }
 
   /** Executor for the periodic maintenance */
   private val scheduledExecutor: AtomicReference[ScheduledExecutorService] =
@@ -333,12 +346,12 @@ class SparkConnectSessionManager extends Logging {
   }
 
   private def newIsolatedSession(): SparkSession = {
-    val active = SparkSession.active
-    if (active.sparkContext.isStopped) {
+    val session = baseSession.get
+    if (session.sparkContext.isStopped) {
       assert(SparkSession.getDefaultSession.nonEmpty)
       SparkSession.getDefaultSession.get.newSession()
     } else {
-      active.newSession()
+      session.newSession()
     }
   }
 

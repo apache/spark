@@ -1673,7 +1673,7 @@ case class CreateView(
 }
 
 /**
- * Used to apply ApplyDefaultCollationToStringType to CreateViewCommand
+ * Used to apply ApplyDefaultCollation to CreateViewCommand
  */
 trait CreateTempView {
   val collation: Option[String]
@@ -1742,7 +1742,8 @@ case class CacheTableAsSelect(
     isLazy: Boolean,
     options: Map[String, String],
     isAnalyzed: Boolean = false,
-    referredTempFunctions: Seq[String] = Seq.empty) extends AnalysisOnlyCommand {
+    referredTempFunctions: Seq[String] = Seq.empty)
+  extends AnalysisOnlyCommand with CTEInChildren {
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): CacheTableAsSelect = {
     assert(!isAnalyzed)
@@ -1756,6 +1757,10 @@ case class CacheTableAsSelect(
       isAnalyzed = true,
       // Collect the referred temporary functions from AnalysisContext
       referredTempFunctions = ac.referredTempFunctionNames.toSeq)
+  }
+
+  override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
+    copy(plan = WithCTE(plan, cteDefs))
   }
 }
 

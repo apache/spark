@@ -365,6 +365,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         pandas_options = {
             "date_as_object": True,
             "coerce_temporal_nanoseconds": True,
+            "integer_object_nulls": True,
         }
         s = arrow_column.to_pandas(**pandas_options)
 
@@ -375,6 +376,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             struct_in_pandas=struct_in_pandas,
             error_on_duplicated_field_names=True,
             ndarray_as_list=ndarray_as_list,
+            integer_object_nulls=True,
         )
         return converter(s)
 
@@ -1380,7 +1382,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         )
 
         self.result_count_pdf_arrow_type = to_arrow_type(
-            self.result_count_df_type, prefers_large_types=prefers_large_var_types
+            self.result_count_df_type, timezone="UTC", prefers_large_types=prefers_large_var_types
         )
 
         self.result_state_df_type = StructType(
@@ -1393,7 +1395,7 @@ class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
         )
 
         self.result_state_pdf_arrow_type = to_arrow_type(
-            self.result_state_df_type, prefers_large_types=prefers_large_var_types
+            self.result_state_df_type, timezone="UTC", prefers_large_types=prefers_large_var_types
         )
         self.arrow_max_records_per_batch = (
             arrow_max_records_per_batch if arrow_max_records_per_batch > 0 else 2**31 - 1

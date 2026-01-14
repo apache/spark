@@ -2250,23 +2250,15 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
       exception = intercept[AnalysisException] {
         sql("REFRESH FUNCTION md5")
       },
-      condition = "_LEGACY_ERROR_TEMP_1017",
-      parameters = Map(
-        "name" -> "md5",
-        "cmd" -> "REFRESH FUNCTION", "hintStr" -> ""),
+      condition = "_LEGACY_ERROR_TEMP_1256",
+      parameters = Map("functionName" -> "md5"),
       context = ExpectedContext(fragment = "md5", start = 17, stop = 19))
     checkError(
       exception = intercept[AnalysisException] {
         sql("REFRESH FUNCTION default.md5")
       },
-      condition = "UNRESOLVED_ROUTINE",
-      parameters = Map(
-        "routineName" -> "`default`.`md5`",
-        "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
-      context = ExpectedContext(
-        fragment = "default.md5",
-        start = 17,
-        stop = 27))
+      condition = "ROUTINE_NOT_FOUND",
+      parameters = Map("routineName" -> "`default`.`md5`"))
 
     withUserDefinedFunction("func1" -> true) {
       sql("CREATE TEMPORARY FUNCTION func1 AS 'test.org.apache.spark.sql.MyDoubleAvg'")
@@ -2274,8 +2266,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         exception = intercept[AnalysisException] {
           sql("REFRESH FUNCTION func1")
         },
-        condition = "_LEGACY_ERROR_TEMP_1017",
-        parameters = Map("name" -> "func1", "cmd" -> "REFRESH FUNCTION", "hintStr" -> ""),
+        condition = "_LEGACY_ERROR_TEMP_1257",
+        parameters = Map("functionName" -> "func1"),
         context = ExpectedContext(
           fragment = "func1",
           start = 17,
@@ -2290,11 +2282,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         exception = intercept[AnalysisException] {
           sql("REFRESH FUNCTION func1")
         },
-        condition = "UNRESOLVED_ROUTINE",
-        parameters = Map(
-          "routineName" -> "`func1`",
-          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
-        context = ExpectedContext(fragment = "func1", start = 17, stop = 21)
+        condition = "ROUTINE_NOT_FOUND",
+        parameters = Map("routineName" -> "`default`.`func1`")
       )
       assert(!spark.sessionState.catalog.isRegisteredFunction(func))
 
@@ -2306,14 +2295,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         exception = intercept[AnalysisException] {
           sql("REFRESH FUNCTION func2")
         },
-        condition = "UNRESOLVED_ROUTINE",
-        parameters = Map(
-          "routineName" -> "`func2`",
-          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
-        context = ExpectedContext(
-          fragment = "func2",
-          start = 17,
-          stop = 21))
+        condition = "ROUTINE_NOT_FOUND",
+        parameters = Map("routineName" -> "`default`.`func2`"))
       assert(spark.sessionState.catalog.isRegisteredFunction(func))
 
       spark.sessionState.catalog.externalCatalog.dropFunction("default", "func1")
@@ -2354,8 +2337,8 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         exception = intercept[AnalysisException] {
           sql("REFRESH FUNCTION rand")
         },
-        condition = "_LEGACY_ERROR_TEMP_1017",
-        parameters = Map("name" -> "rand", "cmd" -> "REFRESH FUNCTION", "hintStr" -> ""),
+        condition = "_LEGACY_ERROR_TEMP_1256",
+        parameters = Map("functionName" -> "rand"),
         context = ExpectedContext(fragment = "rand", start = 17, stop = 20)
       )
       assert(!spark.sessionState.catalog.isRegisteredFunction(rand))

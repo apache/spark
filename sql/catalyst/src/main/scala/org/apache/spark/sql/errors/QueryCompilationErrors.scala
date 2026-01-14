@@ -576,6 +576,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       origin = t.origin)
   }
 
+  def unsupportedInsertWithSchemaEvolution(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_INSERT_WITH_SCHEMA_EVOLUTION",
+      messageParameters = Map.empty)
+  }
+
   def writeIntoViewNotAllowedError(identifier: TableIdentifier, t: TreeNode[_]): Throwable = {
     new AnalysisException(
       errorClass = "VIEW_WRITE_NOT_ALLOWED",
@@ -2402,6 +2408,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("source" -> source))
   }
 
+  def unnamedStreamingSourcesWithEnforcementError(sourceInfo: String): Throwable = {
+    new AnalysisException(
+      errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.UNNAMED_STREAMING_SOURCES_WITH_ENFORCEMENT",
+      messageParameters = Map("sourceInfo" -> sourceInfo))
+  }
+
+  def streamingSourceNamingNotSupportedError(name: String): Throwable = {
+    new AnalysisException(
+      errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.SOURCE_NAMING_NOT_SUPPORTED",
+      messageParameters = Map("name" -> name))
+  }
+
   def columnNotFoundInExistingColumnsError(
       columnType: String, columnName: String, validColumnNames: Seq[String]): Throwable = {
     new AnalysisException(
@@ -3028,16 +3046,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("functionName" -> functionName))
   }
 
-  def cannotRefreshBuiltInFuncError(functionName: String): Throwable = {
+  def cannotRefreshBuiltInFuncError(functionName: String, t: TreeNode[_]): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1256",
-      messageParameters = Map("functionName" -> functionName))
+      messageParameters = Map("functionName" -> functionName),
+      origin = t.origin)
   }
 
-  def cannotRefreshTempFuncError(functionName: String): Throwable = {
+  def cannotRefreshTempFuncError(functionName: String, t: TreeNode[_]): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1257",
-      messageParameters = Map("functionName" -> functionName))
+      messageParameters = Map("functionName" -> functionName),
+      origin = t.origin)
   }
 
   def noSuchFunctionError(identifier: FunctionIdentifier): Throwable = {

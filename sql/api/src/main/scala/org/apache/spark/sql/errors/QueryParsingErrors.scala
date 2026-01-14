@@ -461,7 +461,7 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
-  def computeStatisticsNotExpectedError(ctx: IdentifierContext): Throwable = {
+  def computeStatisticsNotExpectedError(ctx: ParserRuleContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_SQL_SYNTAX.ANALYZE_TABLE_UNEXPECTED_NOSCAN",
       messageParameters = Map("ctx" -> toSQLStmt(ctx.getText)),
@@ -827,6 +827,13 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
     new ParseException(
       errorClass = "MULTIPLE_PRIMARY_KEYS",
       messageParameters = Map("columns" -> columns),
+      ctx)
+  }
+
+  def emptyInPredicateError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_SQL_SYNTAX.EMPTY_IN_PREDICATE",
+      messageParameters = Map.empty,
       ctx)
   }
 

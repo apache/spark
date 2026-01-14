@@ -102,7 +102,12 @@ class SqlScriptingExecution(
 
     currExecPlan match {
       case exec: ConditionalStatementExec =>
-        exec.interrupted = true
+        // Only interrupt if the conditional statement is currently evaluating its condition.
+        // For loop statements, this means we should skip the loop when an exception occurs
+        // during condition evaluation, but NOT when an exception occurs in the loop body.
+        if (exec.isInCondition) {
+          exec.interrupted = true
+        }
       case _ =>
     }
   }

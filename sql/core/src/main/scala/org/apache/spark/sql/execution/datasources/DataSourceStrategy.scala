@@ -144,29 +144,26 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
     case CreateTable(tableDesc, mode, None) if DDLUtils.isDatasourceTable(tableDesc) =>
       ResolveDefaultColumns.validateTableProviderForDefaultValue(
         tableDesc.schema, tableDesc.provider, "CREATE TABLE", false)
-      val newSchema: StructType =
-        ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
-          tableDesc.schema, "CREATE TABLE")
 
-      if (GeneratedColumn.hasGeneratedColumns(newSchema)) {
+      if (GeneratedColumn.hasGeneratedColumns(tableDesc.schema)) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
           tableDesc.identifier, "generated columns")
       }
 
-      if (IdentityColumn.hasIdentityColumns(newSchema)) {
+      if (IdentityColumn.hasIdentityColumns(tableDesc.schema)) {
         throw QueryCompilationErrors.unsupportedTableOperationError(
           tableDesc.identifier, "identity columns")
       }
 
-      val newTableDesc = tableDesc.copy(schema = newSchema)
-      CreateDataSourceTableCommand(newTableDesc, ignoreIfExists = mode == SaveMode.Ignore)
+      CreateDataSourceTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
 
     case CreateTable(tableDesc, mode, Some(query))
         if query.resolved && DDLUtils.isDatasourceTable(tableDesc) =>
       CreateDataSourceTableAsSelectCommand(tableDesc, mode, query, query.output.map(_.name))
 
     case InsertIntoStatement(l @ LogicalRelationWithTable(_: InsertableRelation, _),
-        parts, _, query, overwrite, false, _) if parts.isEmpty =>
+        parts, _, query, overwrite, false, _, _)
+        if parts.isEmpty =>
       InsertIntoDataSourceCommand(l, query, overwrite)
 
     case InsertIntoDir(_, storage, provider, query, overwrite)
@@ -177,8 +174,8 @@ object DataSourceAnalysis extends Rule[LogicalPlan] {
 
       InsertIntoDataSourceDirCommand(storage, provider.get, query, overwrite)
 
-    case i @ InsertIntoStatement(
-        l @ LogicalRelationWithTable(t: HadoopFsRelation, table), parts, _, query, overwrite, _, _)
+    case i @ InsertIntoStatement(l @ LogicalRelationWithTable(t: HadoopFsRelation, table),
+        parts, _, query, overwrite, _, _, _)
         if query.resolved =>
       // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
       // the user has specified static partitions, we add a Project operator on top of the query
@@ -311,11 +308,11 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, options, false),
-        _, _, _, _, _, _) if DDLUtils.isDatasourceTable(tableMeta) =>
+        _, _, _, _, _, _, _) if DDLUtils.isDatasourceTable(tableMeta) =>
       i.copy(table = readDataSourceTable(tableMeta, options))
 
     case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, _, false),
-        _, _, _, _, _, _) =>
+        _, _, _, _, _, _, _) =>
       i.copy(table = DDLUtils.readHiveTable(tableMeta))
 
     case append @ AppendData(
@@ -335,7 +332,8 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
       result
 
     case s @ StreamingRelationV2(
-        _, _, table, extraOptions, _, _, _, Some(UnresolvedCatalogRelation(tableMeta, _, true))) =>
+        _, _, table, extraOptions, _, _, _,
+        Some(UnresolvedCatalogRelation(tableMeta, _, true)), _) =>
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
       val v1Relation = getStreamingRelation(tableMeta, extraOptions)
       if (table.isInstanceOf[SupportsRead]

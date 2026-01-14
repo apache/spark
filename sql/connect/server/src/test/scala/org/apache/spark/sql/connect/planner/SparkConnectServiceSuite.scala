@@ -65,6 +65,12 @@ class SparkConnectServiceSuite
     with Logging
     with SparkConnectPlanTest {
 
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    SparkConnectService.sessionManager.invalidateAllSessions()
+    SparkConnectService.sessionManager.initializeBaseSession(spark.sparkContext)
+  }
+
   private def sparkSessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
   private def DEFAULT_UUID = UUID.fromString("89ea6117-1f45-4c03-ae27-f47c6aded093")
 

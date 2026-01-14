@@ -1256,11 +1256,11 @@ object SymmetricHashJoinStateManager {
 
   private[streaming] sealed trait StateStoreType
 
-  private[streaming] case object KeyToNumValuesType extends StateStoreType {
+  private[sql] case object KeyToNumValuesType extends StateStoreType {
     override def toString(): String = "keyToNumValues"
   }
 
-  private[streaming] case object KeyWithIndexToValueType extends StateStoreType {
+  private[sql] case object KeyWithIndexToValueType extends StateStoreType {
     override def toString(): String = "keyWithIndexToValue"
   }
 

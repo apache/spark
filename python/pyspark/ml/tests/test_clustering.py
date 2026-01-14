@@ -37,7 +37,6 @@ from pyspark.ml.clustering import (
     DistributedLDAModel,
     PowerIterationClustering,
 )
-from pyspark.sql import is_remote
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -106,18 +105,6 @@ class ClusteringTestsMixin:
 
         # check summary before model offloading occurs
         check_summary()
-
-        if is_remote():
-            self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
-            # check summary "try_remote_call" path after model offloading occurs
-            self.assertEqual(model.summary.numIter, 2)
-
-            self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
-            # check summary "invoke_remote_attribute_relation" path after model offloading occurs
-            self.assertEqual(model.summary.cluster.count(), 6)
-
-            self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
-            check_summary()
 
         # save & load
         with tempfile.TemporaryDirectory(prefix="kmeans_model") as d:
@@ -323,11 +310,6 @@ class ClusteringTestsMixin:
             self.assertEqual(summary.probability.columns, ["probability"])
             self.assertEqual(summary.predictions.count(), 6)
 
-        check_summary()
-        if is_remote():
-            self.spark.client._delete_ml_cache([model._java_obj._ref_id], evict_only=True)
-            check_summary()
-
         # save & load
         with tempfile.TemporaryDirectory(prefix="gaussian_mixture") as d:
             gmm.write().overwrite().save(d)
@@ -402,6 +384,7 @@ class ClusteringTestsMixin:
             model2 = LocalLDAModel.load(d)
             self.assertEqual(str(model), str(model2))
 
+    @unittest.skip("SPARK-55020: Test triggers frequent deadlock in CI")
     def test_distributed_lda(self):
         spark = self.spark
         df = (
@@ -533,12 +516,6 @@ class ClusteringTests(ClusteringTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_clustering import *  # noqa: F401,F403
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

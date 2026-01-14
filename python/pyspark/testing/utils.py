@@ -20,6 +20,7 @@ import struct
 import sys
 import unittest
 import difflib
+import faulthandler
 import functools
 from decimal import Decimal
 from time import time, sleep
@@ -183,6 +184,8 @@ def eventually(
     timeout=30.0,
     catch_assertions=False,
     catch_timeout=False,
+    quiet=True,
+    interval=0.1,
 ):
     """
     Wait a given amount of time for a condition to pass, else fail with an error.
@@ -208,10 +211,17 @@ def eventually(
         If False (default), do not catch TimeoutError.
         If True, catch TimeoutError; continue, but save
         error to throw upon timeout.
+    quiet : bool
+        If True (default), do not print any output.
+        If False, print output.
+    interval : float
+        Number of seconds to wait between attempts.  Default 0.1 seconds.
     """
     assert timeout > 0
     assert isinstance(catch_assertions, bool)
     assert isinstance(catch_timeout, bool)
+    assert isinstance(quiet, bool)
+    assert isinstance(interval, float)
 
     def decorator(condition: Callable) -> Callable:
         assert isinstance(condition, Callable)
@@ -240,8 +250,9 @@ def eventually(
                 if lastValue is True or lastValue is None:
                     return
 
-                print(f"\nAttempt #{numTries} failed!\n{lastValue}")
-                sleep(0.01)
+                if not quiet:
+                    print(f"\nAttempt #{numTries} failed!\n{lastValue}")
+                sleep(interval)
 
             if isinstance(lastValue, (AssertionError, TimeoutError)):
                 raise lastValue
@@ -268,7 +279,19 @@ class QuietTest:
         self.log4j.LogManager.getRootLogger().setLevel(self.old_level)
 
 
-class PySparkTestCase(unittest.TestCase):
+class PySparkBaseTestCase(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        if os.environ.get("PYSPARK_TEST_TIMEOUT"):
+            faulthandler.register(signal.SIGTERM, file=sys.__stderr__, all_threads=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        if os.environ.get("PYSPARK_TEST_TIMEOUT"):
+            faulthandler.unregister(signal.SIGTERM)
+
+
+class PySparkTestCase(PySparkBaseTestCase):
     def setUp(self):
         from pyspark import SparkContext
 
@@ -281,7 +304,7 @@ class PySparkTestCase(unittest.TestCase):
         sys.path = self._old_sys_path
 
 
-class ReusedPySparkTestCase(unittest.TestCase):
+class ReusedPySparkTestCase(PySparkBaseTestCase):
     @classmethod
     def conf(cls):
         """
@@ -291,6 +314,8 @@ class ReusedPySparkTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        super().setUpClass()
+
         from pyspark import SparkContext
 
         cls.sc = SparkContext(cls.master(), cls.__name__, conf=cls.conf())
@@ -301,7 +326,10 @@ class ReusedPySparkTestCase(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        cls.sc.stop()
+        try:
+            cls.sc.stop()
+        finally:
+            super().tearDownClass()
 
     def test_assert_classic_mode(self):
         from pyspark.sql import is_remote

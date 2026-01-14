@@ -3534,6 +3534,106 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("Selective Overwrite: REPLACE WHERE with BY NAME - column reordering") {
+    val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
+    df.createOrReplaceTempView("source")
+    val df2 = spark.createDataFrame(Seq(("d", 4L), ("e", 5L), ("f", 6L))).toDF("data", "id")
+    df2.createOrReplaceTempView("source2_reordered")
+
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(
+        s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      spark.sql(s"INSERT INTO TABLE $t SELECT * FROM source")
+
+      checkAnswer(
+        spark.table(s"$t"),
+        Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+
+      spark.sql(s"INSERT INTO $t BY NAME REPLACE WHERE id = 3 SELECT * FROM source2_reordered")
+      checkAnswer(
+        spark.table(s"$t"),
+        Seq(Row(1L, "a"), Row(2L, "b"), Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
+    }
+  }
+
+  test("Overwrite: REPLACE WHERE without BY NAME - positional matching") {
+    val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
+    df.createOrReplaceTempView("source")
+    val df2 = spark.createDataFrame(Seq((4L, "d"), (5L, "e"), (6L, "f"))).toDF("data", "id")
+    df2.createOrReplaceTempView("source2_names_reordered")
+
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(
+        s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      spark.sql(s"INSERT INTO TABLE $t SELECT * FROM source")
+
+      checkAnswer(
+        spark.table(s"$t"),
+        Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+
+      spark.sql(s"INSERT INTO $t REPLACE WHERE id = 3 SELECT * FROM source2_names_reordered")
+      checkAnswer(
+        spark.table(s"$t"),
+        Seq(Row(1L, "a"), Row(2L, "b"), Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
+    }
+  }
+
+  test("Overwrite: REPLACE WHERE without BY NAME - different column order between 2 tables, " +
+    "compatible types") {
+    val df = spark.createDataFrame(Seq((1L, 11L), (2L, 12L), (3L, 13L))).toDF("id", "data")
+    df.createOrReplaceTempView("source")
+    val df2 = spark.createDataFrame(Seq((14L, 4L), (15L, 5L), (16L, 6L))).toDF("data", "id")
+    df2.createOrReplaceTempView("source2_reordered")
+
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(
+        s"CREATE TABLE $t (id bigint, data bigint) USING foo PARTITIONED BY (id)")
+      spark.sql(s"INSERT INTO TABLE $t SELECT * FROM source")
+
+      checkAnswer(
+        spark.table(s"$t"),
+        Seq(Row(1L, 11L), Row(2L, 12L), Row(3L, 13L)))
+
+      spark.sql(s"INSERT INTO $t REPLACE WHERE id = 3 SELECT * FROM source2_reordered")
+      checkAnswer(
+        spark.table(s"$t"),
+        Seq(Row(1L, 11L), Row(2L, 12L), Row(14L, 4L), Row(15L, 5L), Row(16L, 6L)))
+    }
+  }
+
+  test("Overwrite: REPLACE WHERE without BY NAME - incompatible types") {
+    val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
+    df.createOrReplaceTempView("source")
+    val df2 = spark.createDataFrame(Seq(("d", 4L), ("e", 5L), ("f", 6L))).toDF("data", "id")
+    df2.createOrReplaceTempView("source2_reordered")
+
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(
+        s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      spark.sql(s"INSERT INTO TABLE $t SELECT * FROM source")
+
+      checkAnswer(
+        spark.table(s"$t"),
+        Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.sql(s"INSERT INTO $t REPLACE WHERE id = 3 SELECT * FROM source2_reordered")
+        },
+        condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+        parameters = Map(
+          "tableName" -> "`testcat`.`tbl`",
+          "colName" -> "`id`",
+          "srcType" -> "\"STRING\"",
+          "targetType" -> "\"BIGINT\"")
+      )
+    }
+  }
+
   test("SPARK-46144: Fail overwrite statement if the condition contains subquery") {
     val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
     df.createOrReplaceTempView("source")
@@ -3682,12 +3782,12 @@ class DataSourceV2SQLSuiteV1Filter
   test("CREATE TABLE with invalid default value") {
     withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Format, ") {
       withTable("t") {
-        // The default value fails to analyze.
+        // The default value references a non-existing column, which is not a constant.
         checkError(
           exception = intercept[AnalysisException] {
             sql(s"create table t(s int default badvalue) using $v2Format")
           },
-          condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+          condition = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
           parameters = Map(
             "statement" -> "CREATE TABLE",
             "colName" -> "`s`",
@@ -3700,13 +3800,12 @@ class DataSourceV2SQLSuiteV1Filter
     withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> s"$v2Format, ") {
       withTable("t") {
         sql(s"create table t(i boolean) using $v2Format")
-
-        // The default value fails to analyze.
+        // The default value references a non-existing column, which is not a constant.
         checkError(
           exception = intercept[AnalysisException] {
             sql(s"replace table t(s int default badvalue) using $v2Format")
           },
-          condition = "INVALID_DEFAULT_VALUE.UNRESOLVED_EXPRESSION",
+          condition = "INVALID_DEFAULT_VALUE.NOT_CONSTANT",
           parameters = Map(
             "statement" -> "REPLACE TABLE",
             "colName" -> "`s`",

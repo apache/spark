@@ -30,7 +30,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{Command, WriteStreamOperationStart}
 import org.apache.spark.sql.{Dataset => DS, ForeachWriter}
 import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, ForeachWriterPacket}
-import org.apache.spark.sql.execution.streaming.{AvailableNowTrigger, ContinuousTrigger, OneTimeTrigger, ProcessingTimeTrigger}
+import org.apache.spark.sql.execution.streaming.{AvailableNowTrigger, ContinuousTrigger, OneTimeTrigger, ProcessingTimeTrigger, RealTimeTrigger}
 import org.apache.spark.sql.streaming
 import org.apache.spark.sql.streaming.{OutputMode, Trigger}
 import org.apache.spark.sql.streaming.StreamingQueryListener.QueryStartedEvent
@@ -70,6 +70,8 @@ final class DataStreamWriter[T] private[sql] (ds: Dataset[T])
         sinkBuilder.setOnce(true)
       case ContinuousTrigger(intervalMs) =>
         sinkBuilder.setContinuousCheckpointInterval(s"$intervalMs milliseconds")
+      case RealTimeTrigger(batchDurationMs) =>
+        sinkBuilder.setRealTimeBatchDuration(s"$batchDurationMs milliseconds")
     }
     this
   }

@@ -390,6 +390,23 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     assert(response.contains(SPARK_VERSION))
   }
 
+  test("SPARK-54857: XSS prevention in application and user names") {
+    implicit val formats = org.json4s.DefaultFormats
+
+    val appId = "local-1766844910796"
+    val response = getUrl(s"applications/$appId")
+    val app = JsonMethods.parse(response)
+
+    // Verify that malicious content is present in JSON (not escaped at API level)
+    (app \ "name").extract[String] should be ("<script>alert('XSS')</script>")
+    val attempt = (app \ "attempts")(0)
+    (attempt \ "sparkUser").extract[String] should be ("<script>alert('XSS')</script>")
+
+    // Verify that the history page HTML properly escapes the content
+    val historyPage = HistoryServerSuite.getUrl(buildPageAttemptUrl(appId, None))
+    historyPage should not include "<script>alert('XSS')</script>"
+  }
+
   /**
    * Verify that the security manager needed for the history server can be instantiated
    * when `spark.authenticate` is `true`, rather than raise an `IllegalArgumentException`.
@@ -654,17 +671,22 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     val multiAttemptAppid = "local-1430917381535"
     val lastAttemptId = Some(2)
     val lastAttemptUrl = buildPageAttemptUrl(multiAttemptAppid, lastAttemptId)
-    Seq(None, Some(1), Some(2)).foreach { attemptId =>
-      val url = buildPageAttemptUrl(multiAttemptAppid, attemptId)
-      val (code, location) = getRedirectUrl(url)
-      assert(code === 302, s"Unexpected status code $code for $url")
-      attemptId match {
-        case None =>
-          assert(location.stripSuffix("/") === lastAttemptUrl.toString)
-        case _ =>
-          assert(location.stripSuffix("/") === url.toString)
-      }
-      HistoryServerSuite.getUrl(new URI(location).toURL)
+    // If an application has multiple attempts, the path ends with the last attempt ID is the root
+    // of the context path of the application.
+    Seq((None, 302), (Some(1), 302), (Some(2), 301)).foreach {
+      case (attemptId, expectedCode) =>
+        val url = buildPageAttemptUrl(multiAttemptAppid, attemptId)
+        val (code, location) = getRedirectUrl(url)
+        assert(
+          code === expectedCode, s"Unexpected status code $code for $url")
+        attemptId match {
+          case None =>
+            assert(location.stripSuffix("/") === lastAttemptUrl.getPath)
+          case _ =>
+            assert(location.stripSuffix("/") === url.getPath)
+        }
+        HistoryServerSuite.getUrl(
+          new URI(url.getProtocol, url.getAuthority, location, null, null).toURL)
     }
   }
 
@@ -674,13 +696,13 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
 
     val url = buildPageAttemptUrl(oneAttemptAppId, None)
     val (code, location) = getRedirectUrl(url)
-    assert(code === 302, s"Unexpected status code $code for $url")
-    assert(location === url.toString + "/")
+    assert(code === 301, s"Unexpected status code $code for $url")
+    assert(location === url.getPath + "/")
 
     val url2 = buildPageAttemptUrl(multiAttemptAppid, None)
     val (code2, location2) = getRedirectUrl(url2)
     assert(code2 === 302, s"Unexpected status code $code2 for $url2")
-    assert(location2 === url2.toString + "/2/")
+    assert(location2 === url2.getPath + "/2/")
   }
 
   def getRedirectUrl(url: URL): (Int, String) = {
@@ -738,7 +760,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     conn.setInstanceFollowRedirects(false)
     conn.connect()
     assert(conn.getResponseCode === 302)
-    assert(conn.getHeaderField("Location") === s"http://$localhost:$port/")
+    assert(conn.getHeaderField("Location") === "/")
   }
 }
 

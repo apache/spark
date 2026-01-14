@@ -22,6 +22,7 @@ import org.scalatest.funsuite.AnyFunSuite
 
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.functions.{max, sum}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 /**
  * Test suite for SparkSession implementation binding.
@@ -69,5 +70,18 @@ trait SparkSessionBuilderImplementationBindingSuite
     import ctx.implicits._
     val df = ctx.createDataset(1 to 11).select(max("value").as[Long])
     assert(df.head() == 11)
+  }
+
+  test("emptyDataFrame with Schema") {
+    val session = SparkSession.builder().getOrCreate()
+    val schema =
+      new StructType(Array(StructField("a", IntegerType), StructField("b", StringType)))
+    val df = session.emptyDataFrame(schema)
+    assert(df.schema == schema)
+    assert(df.isEmpty)
+    val derivedSchema = new StructType(Array(StructField("a", IntegerType)))
+    val derivedDf = df.select("a")
+    assert(derivedDf.schema == derivedSchema)
+    assert(derivedDf.isEmpty)
   }
 }
