@@ -525,6 +525,42 @@ private[spark] object Config extends Logging {
       .checkValue(value => value > 0, "Allocation executor timeout must be a positive time value.")
       .createWithDefaultString("600s")
 
+  val KUBERNETES_ALLOCATION_POD_CREATION_RETRIES =
+    ConfigBuilder("spark.kubernetes.allocation.pod.creation.retries")
+      .doc("Number of times to retry pod creation when it fails before giving up. " +
+        "Each retry uses exponential backoff.")
+      .version("4.2.0")
+      .intConf
+      .checkValue(value => value >= 0, "Retries must be non-negative")
+      .createWithDefault(3)
+
+  val KUBERNETES_ALLOCATION_POD_CREATION_RETRY_BACKOFF_BASE =
+    ConfigBuilder("spark.kubernetes.allocation.pod.creation.retryBackoffBase")
+      .doc("Base delay in milliseconds for exponential backoff between pod creation retries. " +
+        "Actual delay = base * (2 ^ retryAttempt)")
+      .version("4.2.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(value => value > 0, "Backoff base must be positive")
+      .createWithDefaultString("100ms")
+
+  val KUBERNETES_ALLOCATION_POD_CREATION_RETRY_BACKOFF_MAX =
+    ConfigBuilder("spark.kubernetes.allocation.pod.creation.retryBackoffMax")
+      .doc("Maximum delay in milliseconds for exponential backoff between pod creation retries.")
+      .version("4.2.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(value => value > 0, "Max backoff must be positive")
+      .createWithDefaultString("10s")
+
+  val KUBERNETES_ALLOCATION_POD_CREATION_FAILURE_THRESHOLD_MULTIPLIER =
+    ConfigBuilder("spark.kubernetes.allocation.pod.creation.failureThresholdMultiplier")
+      .doc("If the total number of failed pod creations exceeds this multiplier times the " +
+        "target number of executors, fail the application startup. Set to 0 to disable " +
+        "application failure on repeated pod creation failures.")
+      .version("4.2.0")
+      .intConf
+      .checkValue(value => value >= 0, "Failure threshold multiplier must be non-negative")
+      .createWithDefault(3)
+
   val WAIT_FOR_APP_COMPLETION =
     ConfigBuilder("spark.kubernetes.submission.waitAppCompletion")
       .doc("In cluster mode, whether to wait for the application to finish before exiting the " +
