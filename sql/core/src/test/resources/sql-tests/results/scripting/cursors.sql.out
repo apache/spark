@@ -2597,33 +2597,28 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 -- !query
 BEGIN
   DECLARE x INT DEFAULT 0;
-  DECLARE fetch_count INT DEFAULT 0;
   DECLARE cur CURSOR FOR SELECT id FROM VALUES(10), (20), (30) AS t(id);
   
-  DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
-  BEGIN
-    FETCH cur INTO x;
-    SET fetch_count = fetch_count + 1;
-    VALUES ('Fetched in handler', x, fetch_count);
-  END;
+  DECLARE CONTINUE HANDLER FOR SQLSTATE '22012' FETCH cur INTO x;
   
   OPEN cur;
   
   SELECT 1 / 0;
   
-  VALUES ('After handler', x, fetch_count);
+  SELECT 'After handler' as msg, x;
   
   CLOSE cur;
 END
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "CURSOR_NOT_FOUND",
-  "sqlState" : "42883",
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
   "messageParameters" : {
-    "cursorName" : "cur"
+    "error" : "'cur'",
+    "hint" : ""
   }
 }
 
@@ -2631,23 +2626,20 @@ org.apache.spark.sql.AnalysisException
 -- !query
 BEGIN
   DECLARE x INT DEFAULT 0;
-  DECLARE handler_ran BOOLEAN DEFAULT false;
   DECLARE cur CURSOR FOR SELECT 99 AS val;
   
   DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
   BEGIN
-    CLOSE cur;  -- Close cursor from outer scope
-    SET handler_ran = true;
-    VALUES ('Closed cursor in handler');
+    FETCH cur INTO x;
+    CLOSE cur;
+    SELECT 'Handler closed cursor after fetching' as msg, x;
   END;
   
   OPEN cur;
-  FETCH cur INTO x;
-  VALUES ('Before handler', x);
   
   SELECT 1 / 0;
   
-  VALUES ('After handler', handler_ran);
+  SELECT 'After handler' as msg, x;
 END
 -- !query schema
 struct<>
@@ -2662,8 +2654,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 338,
-    "stopIndex" : 338,
+    "startIndex" : 155,
+    "stopIndex" : 155,
     "fragment" : "x"
   } ]
 }

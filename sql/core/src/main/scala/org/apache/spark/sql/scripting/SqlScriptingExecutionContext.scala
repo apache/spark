@@ -57,18 +57,26 @@ class SqlScriptingExecutionContext extends SqlScriptingExecutionContextExtension
   /**
    * Find a cursor by its normalized name in the current scope and parent scopes.
    * Implementation of SqlScriptingExecutionContextExtension API.
+   *
+   * Searches across all frames (script frame first, then handler frames) to support
+   * cursor access from exception handlers.
    */
   override def findCursorByName(normalizedName: String): Option[CursorDefinition] = {
     if (frames.isEmpty) {
       None
     } else {
-      currentFrame.findCursorByName(normalizedName)
+      // Search in script frame first (frames.head), then current frame
+      // This allows handlers to access cursors declared in the main script
+      frames.head.findCursorByName(normalizedName)
+        .orElse(if (frames.size > 1) currentFrame.findCursorByName(normalizedName) else None)
     }
   }
 
   /**
    * Find a cursor in a specific labeled scope.
    * Implementation of SqlScriptingExecutionContextExtension API.
+   *
+   * Searches across all frames to support cursor access from exception handlers.
    */
   override def findCursorInScope(
       normalizedScopeLabel: String,
@@ -76,7 +84,59 @@ class SqlScriptingExecutionContext extends SqlScriptingExecutionContextExtension
     if (frames.isEmpty) {
       None
     } else {
-      currentFrame.findCursorInScope(normalizedScopeLabel, normalizedName)
+      // Search in script frame first, then current frame
+      frames.head.findCursorInScope(normalizedScopeLabel, normalizedName)
+        .orElse(if (frames.size > 1) {
+          currentFrame.findCursorInScope(normalizedScopeLabel, normalizedName)
+        } else None)
+    }
+  }
+
+  /**
+   * Get cursor state across all frames.
+   * Searches script frame first to support handlers accessing cursors from main script.
+   */
+  def getCursorState(normalizedName: String, scopeLabel: Option[String]): Option[CursorState] = {
+    if (frames.isEmpty) {
+      None
+    } else {
+      // Try script frame first (frames.head)
+      val scriptFrameState = frames.head.getCursorState(normalizedName, scopeLabel)
+      if (scriptFrameState.isDefined) {
+        scriptFrameState
+      } else if (frames.size > 1) {
+        // Try current frame (handler frame)
+        currentFrame.getCursorState(normalizedName, scopeLabel)
+      } else {
+        None
+      }
+    }
+  }
+
+  /**
+   * Update cursor state across all frames.
+   * Updates in the frame where the cursor is actually defined.
+   */
+  def updateCursorState(
+      normalizedName: String,
+      scopeLabel: Option[String],
+      newState: CursorState): Unit = {
+    if (frames.isEmpty) {
+      throw SparkException.internalError("Cannot update cursor state: no frames.")
+    }
+
+    // Try to update in script frame first
+    val scriptFrameHasCursor = frames.head.findCursorByName(normalizedName).isDefined ||
+      (scopeLabel.isDefined &&
+        frames.head.findCursorInScope(scopeLabel.get, normalizedName).isDefined)
+
+    if (scriptFrameHasCursor) {
+      frames.head.updateCursorState(normalizedName, scopeLabel, newState)
+    } else if (frames.size > 1) {
+      // Update in current frame (handler frame)
+      currentFrame.updateCursorState(normalizedName, scopeLabel, newState)
+    } else {
+      throw SparkException.internalError(s"Cursor $normalizedName not found in any frame")
     }
   }
 

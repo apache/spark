@@ -53,7 +53,7 @@ case class OpenCursorExec(
     val cursorDef = cursorRef.definition
 
     // Get current cursor state and validate it's in Declared state
-    val currentState = scriptingContext.currentFrame.getCursorState(
+    val currentState = scriptingContext.getCursorState(
       cursorRef.normalizedName,
       cursorRef.scopeLabel).getOrElse(
       throw new AnalysisException(
@@ -81,7 +81,7 @@ case class OpenCursorExec(
     }
 
     // Transition cursor state to Opened
-    scriptingContext.currentFrame.updateCursorState(
+    scriptingContext.updateCursorState(
       cursorRef.normalizedName,
       cursorRef.scopeLabel,
       CursorOpened(analyzedQuery))

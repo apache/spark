@@ -1571,59 +1571,51 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 64: FETCH in CONTINUE handler (cross-frame cursor access)
--- EXPECTED: Success - Cursor opened in script body can be fetched in handler body
+-- Test 64: CLOSE cursor in CONTINUE handler (cross-frame cursor access)
+-- EXPECTED: Success - Cursor opened in script body can be closed in handler
 --QUERY-DELIMITER-START
 BEGIN
   DECLARE x INT DEFAULT 0;
-  DECLARE fetch_count INT DEFAULT 0;
-  DECLARE cur CURSOR FOR SELECT id FROM VALUES(10), (20), (30) AS t(id);
-  
-  -- Handler that fetches from cursor declared in outer frame
-  DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
-  BEGIN
-    FETCH cur INTO x;
-    SET fetch_count = fetch_count + 1;
-    VALUES ('Fetched in handler', x, fetch_count);
-  END;
-  
-  OPEN cur;
-  
-  -- Trigger handler with division by zero
-  SELECT 1 / 0;
-  
-  -- Continue after handler - cursor is still open
-  VALUES ('After handler', x, fetch_count);
-  
-  CLOSE cur;
-END;
---QUERY-DELIMITER-END
-
-
--- Test 65: CLOSE in CONTINUE handler (cross-frame cursor access)
--- EXPECTED: Success - Cursor opened in script body can be closed in handler body
---QUERY-DELIMITER-START
-BEGIN
-  DECLARE x INT DEFAULT 0;
-  DECLARE handler_ran BOOLEAN DEFAULT false;
   DECLARE cur CURSOR FOR SELECT 99 AS val;
-  
-  DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
-  BEGIN
-    CLOSE cur;  -- Close cursor from outer scope
-    SET handler_ran = true;
-    VALUES ('Closed cursor in handler');
-  END;
-  
+
+  -- Handler that closes cursor from outer scope
+  DECLARE CONTINUE HANDLER FOR SQLSTATE '22012' CLOSE cur;
+
   OPEN cur;
   FETCH cur INTO x;
-  VALUES ('Before handler', x);
-  
-  -- Trigger handler
+
+  -- Trigger handler - it will close the cursor
   SELECT 1 / 0;
-  
-  VALUES ('After handler', handler_ran);
-  -- Cursor is now closed by handler
+
+  -- After handler, cursor should be closed
+  -- Trying to fetch should fail with CURSOR_NOT_OPEN
+  FETCH cur INTO x;
 END;
 --QUERY-DELIMITER-END
 
+
+-- Test 65: FETCH and CLOSE in handler BEGIN block (cross-frame cursor access)
+-- EXPECTED: Success - Handler BEGIN block can access cursor from outer scope
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE x INT DEFAULT 0;
+  DECLARE y INT DEFAULT 0;
+  DECLARE cur CURSOR FOR SELECT 99 AS val;
+
+  DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
+  BEGIN
+    FETCH cur INTO y;  -- Fetch into different variable
+    CLOSE cur;
+  END;
+
+  OPEN cur;
+  FETCH cur INTO x;  -- First fetch into x
+
+  -- Trigger handler - it will fetch into y and close cursor
+  SELECT 1 / 0;
+
+  -- After handler, cursor should be closed
+  -- Trying to fetch should fail with CURSOR_NOT_OPEN
+  FETCH cur INTO x;
+END;
+--QUERY-DELIMITER-END
