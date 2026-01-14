@@ -6606,6 +6606,21 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
+   * Helper method to create an UnresolvedCursor with validation.
+   * Validates that cursor references have at most one qualifier (label.cursor).
+   *
+   * @param nameParts The cursor name parts from multipartIdentifier
+   * @return UnresolvedCursor instance
+   * @throws ParseException if more than two name parts are provided
+   */
+  private def createUnresolvedCursor(nameParts: Seq[String]): UnresolvedCursor = {
+    if (nameParts.length > 2) {
+      throw QueryParsingErrors.cursorInvalidQualifierError(nameParts.mkString("."))
+    }
+    UnresolvedCursor(nameParts)
+  }
+
+  /**
    * Create an [[OpenCursor]] command wrapped in SingleStatement.
    *
    * For example:
@@ -6623,7 +6638,7 @@ class AstBuilder extends DataTypeAstBuilder
 
     // Create UnresolvedCursor from the cursor name
     val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier())
-    val cursor = UnresolvedCursor(nameParts)
+    val cursor = createUnresolvedCursor(nameParts)
 
     // Parse optional USING clause parameters
     // Note: Parameter name inference from attributes (e.g., USING p where p is a variable)
@@ -6656,7 +6671,7 @@ class AstBuilder extends DataTypeAstBuilder
 
     // Create UnresolvedCursor from the cursor name
     val nameParts = visitMultipartIdentifier(ctx.cursorName)
-    val cursor = UnresolvedCursor(nameParts)
+    val cursor = createUnresolvedCursor(nameParts)
 
     val targetVariables = visitMultipartIdentifierList(ctx.targets)
     SingleStatement(FetchCursor(cursor, targetVariables))
@@ -6678,7 +6693,7 @@ class AstBuilder extends DataTypeAstBuilder
 
     // Create UnresolvedCursor from the cursor name
     val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier())
-    val cursor = UnresolvedCursor(nameParts)
+    val cursor = createUnresolvedCursor(nameParts)
     SingleStatement(CloseCursor(cursor))
   }
 

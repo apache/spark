@@ -852,4 +852,21 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       messageParameters = Map("parameterMarker" -> ctx.getText),
       ctx = ctx)
   }
+
+  /**
+   * Throws an exception when a cursor reference has more than one qualifier.
+   * Valid: cursor or label.cursor
+   * Invalid: a.b.cursor
+   *
+   * @param cursorName
+   *   The fully qualified cursor name with multiple qualifiers
+   * @throws ParseException
+   *   Always throws this exception
+   */
+  def cursorInvalidQualifierError(cursorName: String): Nothing = {
+    throw new ParseException(
+      errorClass = "CURSOR_REFERENCE_INVALID_QUALIFIER",
+      messageParameters = Map("cursorName" -> cursorName),
+      ctx = null)
+  }
 }

@@ -69,7 +69,7 @@ class ResolveCursors extends Rule[LogicalPlan] {
     } else {
       cursorName.toLowerCase(Locale.ROOT)
     }
-    
+
     val normalizedScopeLabel = scopeLabel.map { label =>
       if (caseSensitive) {
         label
