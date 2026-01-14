@@ -2431,26 +2431,27 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
-   * Create a table-valued function call with arguments, e.g. range(1000)
+   * Build an UnresolvedTableValuedFunction from a tableFunctionCall context.
+   * Used by both visitTableValuedFunction and stream TVF visitors.
    */
-  override def visitTableValuedFunction(ctx: TableValuedFunctionContext)
-      : LogicalPlan = withOrigin(ctx) {
-    val func = ctx.functionTable
-    val aliases = if (func.tableAlias.identifierList != null) {
-      visitIdentifierList(func.tableAlias.identifierList)
+  private def buildTvfFromTableFunctionCall(
+      funcCallCtx: TableFunctionCallContext,
+      tableAliasCtx: TableAliasContext,
+      watermarkClauseCtx: WatermarkClauseContext): LogicalPlan = {
+    val aliases = if (tableAliasCtx != null && tableAliasCtx.identifierList != null) {
+      visitIdentifierList(tableAliasCtx.identifierList)
     } else {
       Seq.empty
     }
-
     withFuncIdentClause(
-      func.functionName,
+      funcCallCtx.funcName,
       Nil,
       (ident, _) => {
         if (ident.length > 1) {
-          throw QueryParsingErrors.invalidTableValuedFunctionNameError(ident, ctx)
+          throw QueryParsingErrors.invalidTableValuedFunctionNameError(ident, funcCallCtx)
         }
-        val funcName = func.functionName.getText
-        val args = func.functionTableArgument.asScala.map { e =>
+        val funcName = funcCallCtx.funcName.getText
+        val args = funcCallCtx.functionTableArgument.asScala.map { e =>
           Option(e.functionArgument).map(extractNamedArgument(_, funcName))
             .getOrElse {
               extractFunctionTableNamedArgument(e.functionTableReferenceArgument, funcName)
@@ -2460,11 +2461,27 @@ class AstBuilder extends DataTypeAstBuilder
         val tvf = UnresolvedTableValuedFunction(ident, args)
 
         val tvfAliases = if (aliases.nonEmpty) UnresolvedTVFAliases(ident, tvf, aliases) else tvf
+        val tvfWithWatermark = tvfAliases.optionalMap(watermarkClauseCtx)(withWatermark)
+        Option(tableAliasCtx).map { c =>
+          tvfWithWatermark.optionalMap(c.strictIdentifier)(aliasPlan)
+        }.getOrElse {
+          tvfWithWatermark
+        }
+      }
+    )
+  }
 
-        val watermarkClause = func.watermarkClause()
-        val tvfWithWatermark = tvfAliases.optionalMap(watermarkClause)(withWatermark)
-        tvfWithWatermark.optionalMap(func.tableAlias.strictIdentifier)(aliasPlan)
-      })
+  /**
+   * Create a table-valued function call with arguments, e.g. range(1000)
+   */
+  override def visitTableValuedFunction(ctx: TableValuedFunctionContext)
+      : LogicalPlan = withOrigin(ctx) {
+    // IDENTIFIED BY is only valid for streaming TVFs
+    if (ctx.functionTable.identifiedByClause != null) {
+      operationNotAllowed("IDENTIFIED BY clause is only supported for streaming sources", ctx)
+    }
+    val func = ctx.functionTable
+    buildTvfFromTableFunctionCall(func.tableFunctionCall, func.tableAlias, func.watermarkClause)
   }
 
   /**
@@ -2492,6 +2509,34 @@ class AstBuilder extends DataTypeAstBuilder
           r.copy(isStreaming = true), sourceNameOpt)
     }
   }
+
+  /**
+   * Create a logical plan for a stream TVF.
+   * Handles two forms:
+   * 1. STREAM functionTable - clauses are inside functionTable
+   * 2. STREAM(tableFunctionCall) clauses - clauses are outside STREAM() for consistency with
+   *    table names
+   */
+  override def visitStreamTableValuedFunction(ctx: StreamTableValuedFunctionContext): LogicalPlan =
+    withOrigin(ctx) {
+      Option(ctx.functionTable).map { funcTable =>
+        // Form: STREAM functionTable
+        val sourceName = extractSourceName(funcTable.identifiedByClause)
+        buildTvfFromTableFunctionCall(
+          funcTable.tableFunctionCall, funcTable.tableAlias, funcTable.watermarkClause).transformUp {
+          case tvf: UnresolvedTableValuedFunction =>
+            NamedStreamingRelation.withUserProvidedName(tvf.copy(isStreaming = true), sourceName)
+        }
+      }.getOrElse {
+        // Form: STREAM(tableFunctionCall) identifiedByClause? watermarkClause? tableAlias
+        val sourceName = extractSourceName(ctx.identifiedByClause)
+        buildTvfFromTableFunctionCall(
+          ctx.tableFunctionCall, ctx.tableAlias, ctx.watermarkClause).transformUp {
+          case tvf: UnresolvedTableValuedFunction =>
+            NamedStreamingRelation.withUserProvidedName(tvf.copy(isStreaming = true), sourceName)
+        }
+      }
+    }
 
   /**
    * Create an inline table (a virtual table in Hive parlance).

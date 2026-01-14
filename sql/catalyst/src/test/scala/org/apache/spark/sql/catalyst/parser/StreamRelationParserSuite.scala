@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.parser
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.AliasIdentifier
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, NamedStreamingRelation, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, NamedStreamingRelation, UnresolvedRelation, UnresolvedStar, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.plans.logical.{Project, SubqueryAlias}
 import org.apache.spark.sql.catalyst.streaming.{Unassigned, UserProvided}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -322,5 +322,78 @@ class StreamRelationParserSuite extends AnalysisTest {
     }
     assert(namedStreamingRelations.size == 1)
     assert(namedStreamingRelations.head.sourceIdentifyingName == UserProvided("my-source-name"))
+  }
+
+  // ===================================
+  // IDENTIFIED BY syntax tests for TVFs
+  // ===================================
+
+  test("STREAM TVF non-parenthesized form with various clause combinations") {
+    // Non-parenthesized form: STREAM tvf() clauses
+    val wm = "WATERMARK col DELAY OF INTERVAL 1 MINUTE"
+    val testCases = Seq(
+      // (query, expectedSourceName)
+      ("SELECT * FROM STREAM range(10) AS src", Unassigned),
+      ("SELECT * FROM STREAM range(10) IDENTIFIED BY src1", UserProvided("src1")),
+      ("SELECT * FROM STREAM range(10) IDENTIFIED BY src1 AS t", UserProvided("src1")),
+      (s"SELECT * FROM STREAM range(10) $wm", Unassigned),
+      (s"SELECT * FROM STREAM range(10) $wm AS t", Unassigned),
+      (s"SELECT * FROM STREAM range(10) IDENTIFIED BY src1 $wm", UserProvided("src1")),
+      (s"SELECT * FROM STREAM range(10) IDENTIFIED BY src1 $wm AS t", UserProvided("src1"))
+    )
+
+    testCases.foreach { case (query, expectedSourceName) =>
+      val plan = parsePlan(query)
+      val namedStreamingRelations = plan.collect {
+        case n: NamedStreamingRelation => n
+      }
+      assert(namedStreamingRelations.size == 1,
+        s"Expected 1 NamedStreamingRelation node in: $query")
+      assert(namedStreamingRelations.head.sourceIdentifyingName == expectedSourceName,
+        s"Expected source name $expectedSourceName in: $query")
+    }
+
+    // Also verify the underlying TVF is streaming
+    val plan = parsePlan("SELECT * FROM STREAM range(10) IDENTIFIED BY src1")
+    plan.collectFirst { case n: NamedStreamingRelation => n }.get.child match {
+      case u: UnresolvedTableValuedFunction =>
+        assert(u.isStreaming, "TVF should be marked as streaming")
+      case _ => fail("Expected UnresolvedTableValuedFunction as child")
+    }
+  }
+
+  test("STREAM TVF parenthesized form with various clause combinations") {
+    // Parenthesized form: STREAM(tvf()) clauses - clauses OUTSIDE parentheses
+    // This is consistent with table syntax: STREAM(table) IDENTIFIED BY ...
+    val wm = "WATERMARK col DELAY OF INTERVAL 1 MINUTE"
+    val testCases = Seq(
+      // (query, expectedSourceName)
+      ("SELECT * FROM STREAM(range(10)) AS src", Unassigned),
+      ("SELECT * FROM STREAM(range(10)) IDENTIFIED BY src1", UserProvided("src1")),
+      ("SELECT * FROM STREAM(range(10)) IDENTIFIED BY src1 AS t", UserProvided("src1")),
+      (s"SELECT * FROM STREAM(range(10)) $wm", Unassigned),
+      (s"SELECT * FROM STREAM(range(10)) $wm AS t", Unassigned),
+      (s"SELECT * FROM STREAM(range(10)) IDENTIFIED BY src1 $wm", UserProvided("src1")),
+      (s"SELECT * FROM STREAM(range(10)) IDENTIFIED BY src1 $wm AS t", UserProvided("src1"))
+    )
+
+    testCases.foreach { case (query, expectedSourceName) =>
+      val plan = parsePlan(query)
+      val namedStreamingRelations = plan.collect {
+        case n: NamedStreamingRelation => n
+      }
+      assert(namedStreamingRelations.size == 1,
+        s"Expected 1 NamedStreamingRelation node in: $query")
+      assert(namedStreamingRelations.head.sourceIdentifyingName == expectedSourceName,
+        s"Expected source name $expectedSourceName in: $query")
+    }
+  }
+
+  test("IDENTIFIED BY is not allowed for non-streaming TVFs") {
+    val sql = "SELECT * FROM range(10) IDENTIFIED BY my_source"
+    val e = intercept[ParseException] {
+      parsePlan(sql)
+    }
+    assert(e.getMessage.contains("IDENTIFIED BY clause is only supported for streaming sources"))
   }
 }

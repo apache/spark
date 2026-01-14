@@ -429,6 +429,9 @@ streamRelationPrimary
     | STREAM LEFT_PAREN multipartIdentifier RIGHT_PAREN
       optionsClause? identifiedByClause?
       watermarkClause? tableAlias                                      #streamTableName
+    | STREAM functionTable                                             #streamTableValuedFunction
+    | STREAM LEFT_PAREN tableFunctionCall RIGHT_PAREN
+      identifiedByClause? watermarkClause? tableAlias                  #streamTableValuedFunction
     ;
 
 setResetStatement
@@ -1121,10 +1124,20 @@ functionTableArgument
 // This is only used in relationPrimary where having watermarkClause makes sense. If this becomes
 // referred by other clause, please check wheter watermarkClause makes sense to the clause.
 // If not, consider separate this rule.
+// The identifiedByClause is optional and only valid for streaming TVFs. For non-streaming TVFs,
+// the AST builder will reject it with an error. The clause must come before watermarkClause
+// and tableAlias to avoid ambiguity (since IDENTIFIED is a nonReserved keyword).
 functionTable
+    : tableFunctionCall identifiedByClause? watermarkClause? tableAlias
+    ;
+
+// A table function call without trailing clauses (identifiedByClause, watermarkClause, tableAlias).
+// This is used by stream TVF rules to ensure consistent syntax with stream table names, where
+// the clauses appear OUTSIDE the STREAM() parentheses.
+tableFunctionCall
     : funcName=functionName LEFT_PAREN
       (functionTableArgument (COMMA functionTableArgument)*)?
-      RIGHT_PAREN watermarkClause? tableAlias
+      RIGHT_PAREN
     ;
 
 tableAlias
