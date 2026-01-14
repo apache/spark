@@ -53,9 +53,7 @@ case class OpenCursorExec(
     val cursorDef = cursorRef.definition
 
     // Get current cursor state and validate it's in Declared state
-    val currentState = scriptingContext.getCursorState(
-      cursorRef.normalizedName,
-      cursorRef.scopeLabel).getOrElse(
+    val currentState = scriptingContext.getCursorState(cursorRef).getOrElse(
       throw new AnalysisException(
         errorClass = "CURSOR_NOT_FOUND",
         messageParameters = Map("cursorName" -> cursorRef.sql)))

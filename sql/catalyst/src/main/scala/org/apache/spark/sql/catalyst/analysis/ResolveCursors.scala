@@ -47,13 +47,9 @@ class ResolveCursors extends Rule[LogicalPlan] {
     val nameParts = uc.nameParts
     val caseSensitive = SQLConf.get.caseSensitiveAnalysis
 
-    // Validate name parts: only support unqualified (cursor) or
-    // single-label qualified (label.cursor)
-    if (nameParts.length > 2) {
-      throw new AnalysisException(
-        errorClass = "CURSOR_REFERENCE_INVALID_QUALIFIER",
-        messageParameters = Map("cursorName" -> nameParts.mkString(".")))
-    }
+    // Parser already validates this, so we can assert
+    assert(nameParts.length <= 2,
+      s"Cursor reference has too many parts: ${nameParts.mkString(".")}")
 
     // Split qualified name into scope label and cursor name
     val (scopeLabel, cursorName) = if (nameParts.length == 2) {

@@ -114,6 +114,15 @@ class SqlScriptingExecutionContext extends SqlScriptingExecutionContextExtension
   }
 
   /**
+   * Get cursor state for a resolved CursorReference.
+   * This is a convenience method that avoids repeating the same pattern in cursor commands.
+   */
+  def getCursorState(cursorRef: org.apache.spark.sql.catalyst.expressions.CursorReference):
+      Option[CursorState] = {
+    getCursorState(cursorRef.normalizedName, cursorRef.scopeLabel)
+  }
+
+  /**
    * Update cursor state across all frames.
    * Updates in the frame where the cursor is actually defined.
    */

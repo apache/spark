@@ -21,7 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, CursorReference, Expression}
 import org.apache.spark.sql.execution.datasources.v2.LeafV2CommandExec
-import org.apache.spark.sql.scripting.CursorClosed
+import org.apache.spark.sql.scripting.{CursorClosed, CursorDeclared}
 
 /**
  * Physical plan node for closing cursors.
@@ -40,16 +40,14 @@ case class CloseCursorExec(cursor: Expression) extends LeafV2CommandExec {
     val scriptingContext = CursorCommandUtils.getScriptingContext(cursorRef.sql)
 
     // Get current cursor state and validate it exists
-    val currentState = scriptingContext.getCursorState(
-      cursorRef.normalizedName,
-      cursorRef.scopeLabel).getOrElse(
+    val currentState = scriptingContext.getCursorState(cursorRef).getOrElse(
       throw new AnalysisException(
         errorClass = "CURSOR_NOT_FOUND",
         messageParameters = Map("cursorName" -> cursorRef.sql)))
 
     // Validate cursor is in an open state (Opened or Fetching)
     currentState match {
-      case CursorClosed | org.apache.spark.sql.scripting.CursorDeclared =>
+      case CursorClosed | CursorDeclared =>
         throw new AnalysisException(
           errorClass = "CURSOR_NOT_OPEN",
           messageParameters = Map("cursorName" -> cursorRef.sql))

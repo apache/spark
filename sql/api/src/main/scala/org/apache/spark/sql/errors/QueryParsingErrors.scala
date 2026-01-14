@@ -863,8 +863,8 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
    * @throws ParseException
    *   Always throws this exception
    */
-  def cursorInvalidQualifierError(cursorName: String): Nothing = {
-    throw new ParseException(
+  def cursorInvalidQualifierError(cursorName: String): Throwable = {
+    new ParseException(
       errorClass = "CURSOR_REFERENCE_INVALID_QUALIFIER",
       messageParameters = Map("cursorName" -> toSQLId(cursorName)),
       ctx = null)

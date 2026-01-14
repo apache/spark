@@ -49,9 +49,7 @@ case class FetchCursorExec(
     val variableManager = SqlScriptingContextManager.get().get.getVariableManager
 
     // Get current cursor state
-    val currentState = scriptingContext.getCursorState(
-      cursorRef.normalizedName,
-      cursorRef.scopeLabel).getOrElse(
+    val currentState = scriptingContext.getCursorState(cursorRef).getOrElse(
       throw new AnalysisException(
         errorClass = "CURSOR_NOT_FOUND",
         messageParameters = Map("cursorName" -> cursorRef.sql)))
