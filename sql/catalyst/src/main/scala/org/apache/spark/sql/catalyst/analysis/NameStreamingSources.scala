@@ -127,8 +127,10 @@ object NameStreamingSources extends Rule[LogicalPlan] {
     } else {
       // Feature disabled - unwrap NamedStreamingRelation nodes without propagating names.
       // Error if any source has an explicitly assigned name since the feature is disabled.
+      // Only unwrap when child is resolved - this allows FindDataSourceTable to resolve
+      // UnresolvedCatalogRelation to StreamingRelation before we unwrap.
       plan.resolveOperatorsWithPruning(_.containsPattern(NAMED_STREAMING_RELATION)) {
-        case NamedStreamingRelation(child, Unassigned) =>
+        case NamedStreamingRelation(child, Unassigned) if child.resolved =>
           child
         case NamedStreamingRelation(_, UserProvided(name)) =>
           throw QueryCompilationErrors.streamingSourceNamingNotSupportedError(name)
