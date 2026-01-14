@@ -130,7 +130,7 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
    * which means the system default collation `UTF8_BINARY` will be used and the plan will not be
    * changed.
    * This function applies to DDL commands. An object's default collation is persisted at the moment
-   * of its creation, and altering the schema collation or catalog will not affect existing objects.
+   * of its creation, and altering the schema or catalog collation will not affect existing objects.
    */
   def resolveDefaultCollation(plan: LogicalPlan): LogicalPlan = {
     try {
