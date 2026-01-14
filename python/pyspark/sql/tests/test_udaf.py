@@ -601,7 +601,6 @@ class UDAFTests(UDAFTestsMixin, ReusedSQLTestCase):
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.testing.utils import have_pandas, have_pyarrow
 
     try:
         import xmlrunner
