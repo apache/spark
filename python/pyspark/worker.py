@@ -201,6 +201,7 @@ class RunnerConf:
     def profiler(self) -> Optional[str]:
         return self.get("spark.sql.pyspark.udf.profiler", None)
 
+
 def report_times(outfile, boot, init, finish):
     write_int(SpecialLengths.TIMING_DATA, outfile)
     write_long(int(1000 * boot), outfile)
