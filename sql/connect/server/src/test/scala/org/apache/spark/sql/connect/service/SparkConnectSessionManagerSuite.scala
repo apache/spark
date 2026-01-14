@@ -19,7 +19,6 @@ package org.apache.spark.sql.connect.service
 
 import java.util.UUID
 
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkSQLException
@@ -28,7 +27,7 @@ import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContex
 import org.apache.spark.sql.pipelines.logging.PipelineEvent
 import org.apache.spark.sql.test.SharedSparkSession
 
-class SparkConnectSessionManagerSuite extends SharedSparkSession with BeforeAndAfterEach {
+class SparkConnectSessionManagerSuite extends SharedSparkSession {
 
   override def beforeEach(): Unit = {
     super.beforeEach()
