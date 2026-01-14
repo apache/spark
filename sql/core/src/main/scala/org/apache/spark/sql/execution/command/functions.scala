@@ -142,9 +142,9 @@ case class DropFunctionCommand(
     if (isTemp) {
       // Extract the function name, handling qualified names like "system.session.func"
       val funcName = if (identifier.database.isDefined) {
-        // Qualified name - validate it's a valid temporary function namespace
+        // Qualified name - validate it's a valid temporary function namespace (case-insensitive)
         val db = identifier.database.get
-        if (db != "session" && db != CatalogManager.SESSION_NAMESPACE) {
+        if (!db.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
           throw QueryExecutionErrors.invalidNamespaceNameError(
             Array(CatalogManager.SYSTEM_CATALOG_NAME, db))
         }
