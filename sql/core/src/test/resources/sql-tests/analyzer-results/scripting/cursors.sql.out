@@ -316,12 +316,12 @@ BEGIN
   CLOSE cur;
 END
 -- !query analysis
-org.apache.spark.SparkException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
+  "errorClass" : "CURSOR_ALREADY_OPEN",
+  "sqlState" : "24502",
   "messageParameters" : {
-    "message" : "No more elements to iterate through in the current SQL compound statement."
+    "cursorName" : "cur"
   }
 }
 
@@ -357,14 +357,7 @@ BEGIN
   VALUES (result);
 END
 -- !query analysis
-org.apache.spark.SparkException
-{
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
-  "messageParameters" : {
-    "message" : "No more elements to iterate through in the current SQL compound statement."
-  }
-}
+LocalRelation [col1#x]
 
 
 -- !query
@@ -390,14 +383,7 @@ BEGIN
   VALUES (id_sum);
 END
 -- !query analysis
-org.apache.spark.SparkException
-{
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
-  "messageParameters" : {
-    "message" : "No more elements to iterate through in the current SQL compound statement."
-  }
-}
+LocalRelation [col1#x]
 
 
 -- !query
@@ -431,12 +417,12 @@ BEGIN
   VALUES (count1, count2);
 END
 -- !query analysis
-org.apache.spark.SparkException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
+  "errorClass" : "CURSOR_ALREADY_OPEN",
+  "sqlState" : "24502",
   "messageParameters" : {
-    "message" : "No more elements to iterate through in the current SQL compound statement."
+    "cursorName" : "cur"
   }
 }
 
@@ -463,14 +449,7 @@ BEGIN
   VALUES (sum); -- Should be 20 + 25 = 45
 END
 -- !query analysis
-org.apache.spark.SparkException
-{
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
-  "messageParameters" : {
-    "message" : "No more elements to iterate through in the current SQL compound statement."
-  }
-}
+LocalRelation [col1#x]
 
 
 -- !query
@@ -1170,14 +1149,7 @@ BEGIN
   VALUES (sum_result); -- Should return 15 (1+2+3+4+5)
 END
 -- !query analysis
-org.apache.spark.SparkException
-{
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
-  "messageParameters" : {
-    "message" : "No more elements to iterate through in the current SQL compound statement."
-  }
-}
+LocalRelation [col1#x]
 
 
 -- !query
@@ -1708,14 +1680,7 @@ BEGIN
   CLOSE cur;
 END
 -- !query analysis
-org.apache.spark.SparkException
-{
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
-  "messageParameters" : {
-    "message" : "No more elements to iterate through in the current SQL compound statement."
-  }
-}
+LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -1802,18 +1767,18 @@ BEGIN
   DECLARE x INT DEFAULT 0;
   DECLARE handler_ran BOOLEAN DEFAULT false;
   DECLARE cur CURSOR FOR SELECT 99 AS val;
-  
+
   DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
   BEGIN
     CLOSE cur;
     SET handler_ran = true;
   END;
-  
+
   OPEN cur;
   FETCH cur INTO x;
-  
+
   SELECT 1 / 0;
-  
+
   FETCH cur INTO x;
 END
 -- !query analysis
@@ -1833,19 +1798,19 @@ BEGIN
   DECLARE y INT DEFAULT 0;
   DECLARE handler_ran BOOLEAN DEFAULT false;
   DECLARE cur CURSOR FOR SELECT 99 AS val;
-  
+
   DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
   BEGIN
     FETCH cur INTO y;  -- Fetch into different variable
     CLOSE cur;
     SET handler_ran = true;
   END;
-  
+
   OPEN cur;
   FETCH cur INTO x;  -- First fetch into x
-  
+
   SELECT 1 / 0;
-  
+
   FETCH cur INTO x;
 END
 -- !query analysis

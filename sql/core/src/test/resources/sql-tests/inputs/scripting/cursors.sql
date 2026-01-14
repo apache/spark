@@ -1599,20 +1599,20 @@ BEGIN
   DECLARE x INT DEFAULT 0;
   DECLARE handler_ran BOOLEAN DEFAULT false;
   DECLARE cur CURSOR FOR SELECT 99 AS val;
-  
+
   -- Handler that closes cursor from outer scope
   DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
   BEGIN
     CLOSE cur;
     SET handler_ran = true;
   END;
-  
+
   OPEN cur;
   FETCH cur INTO x;
-  
+
   -- Trigger handler - it will close the cursor
   SELECT 1 / 0;
-  
+
   -- After handler, try to fetch from closed cursor (should fail with CURSOR_NOT_OPEN)
   FETCH cur INTO x;
 END;
@@ -1627,20 +1627,20 @@ BEGIN
   DECLARE y INT DEFAULT 0;
   DECLARE handler_ran BOOLEAN DEFAULT false;
   DECLARE cur CURSOR FOR SELECT 99 AS val;
-  
+
   DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
   BEGIN
     FETCH cur INTO y;  -- Fetch into different variable
     CLOSE cur;
     SET handler_ran = true;
   END;
-  
+
   OPEN cur;
   FETCH cur INTO x;  -- First fetch into x
-  
+
   -- Trigger handler - it will fetch into y and close cursor
   SELECT 1 / 0;
-  
+
   -- After handler, try to fetch from closed cursor (should fail with CURSOR_NOT_OPEN)
   FETCH cur INTO x;
 END;
@@ -1666,4 +1666,3 @@ BEGIN
   DECLARE cur CURSOR FOR SELECT 123 AS val;  -- Invalid: cursor after handler
 END;
 --QUERY-DELIMITER-END
-
