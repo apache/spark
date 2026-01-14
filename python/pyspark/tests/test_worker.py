@@ -272,13 +272,13 @@ class WorkerPoolCrashTest(PySparkTestCase):
         rdd.map(lambda x: os.getpid()).collect()
 
 
-class ArrowUDFThreadPoolTests(unittest.TestCase):
-    """Tests for the _ArrowUDFThreadPool singleton class."""
+class ArrowBatchedUDFThreadPoolTests(unittest.TestCase):
+    """Tests for the ArrowBatchedUDFThreadPool singleton class."""
 
     def setUp(self):
-        from pyspark.worker import _ArrowUDFThreadPool
+        from pyspark.worker import ArrowBatchedUDFThreadPool
 
-        self.pool_class = _ArrowUDFThreadPool
+        self.pool_class = ArrowBatchedUDFThreadPool
         # Ensure clean state before each test
         self.pool_class.shutdown(wait=True)
 
