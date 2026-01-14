@@ -28,6 +28,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadataPartitionReader
 import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadata
@@ -80,15 +81,10 @@ class StateRewriter(
     readResolvedCheckpointLocation.getOrElse(resolvedCheckpointLocation)
   private val stateRootLocation = new Path(
     resolvedCheckpointLocation, StreamingCheckpointConstants.DIR_NAME_STATE).toString
-  private lazy val writeCheckpoint =
-    new StreamingQueryCheckpointMetadata(sparkSession, resolvedCheckpointLocation)
-  private lazy val readCheckpoint = if (readResolvedCheckpointLocation.isDefined) {
-    new StreamingQueryCheckpointMetadata(sparkSession, readResolvedCheckpointLocation.get)
-  } else { // Same checkpoint for read & write
-    writeCheckpoint
-  }
-  // return a Map[operator id, Array[partition -> Array[stateStore -> StateStoreCheckpointInfo]]]
-  // if checkpoint id is enabled
+
+  // If checkpoint id is enabled, return
+  // Map[operatorId, Array[partition -> Array[stateStore -> StateStoreCheckpointId]]].
+  // Otherwise, return None
   def run(): Option[Map[Long, Array[Array[String]]]] = {
     logInfo(log"Starting state rewrite for " +
       log"checkpointLocation=${MDC(CHECKPOINT_LOCATION, resolvedCheckpointLocation)}, " +
@@ -116,6 +112,8 @@ class StateRewriter(
     if (!enableCheckpointId) {
       return None
     }
+    // convert Map[operatorId, Array[stateStore -> Array[partition -> StateStoreCheckpointInfo]]]
+    // to Map[operatorId, Array[partition -> Array[stateStore -> StateStoreCheckpointId]]].
     Option(checkpointInfos.map {
       case(operator, storesSeq) =>
         val numPartitions = storesSeq.head.length
@@ -135,7 +133,7 @@ class StateRewriter(
 
   private def runInternal(): Option[Map[Long, Array[Array[String]]]] = {
     try {
-      setCorrectCheckpointVersion()
+      verifyCheckpointVersion()
       val stateMetadataReader = new StateMetadataPartitionReader(
         resolvedCheckpointLocation,
         new SerializableConfiguration(hadoopConf),
@@ -245,7 +243,7 @@ class StateRewriter(
     // to avoid serializing the entire Rewriter object per partition.
     val targetCheckpointLocation = resolvedCheckpointLocation
     val currentBatchId = writeBatchId
-    updatedStateDf.queryExecution.toRdd.mapPartitionsWithIndex { case (pid, partitionIter) =>
+    updatedStateDf.queryExecution.toRdd.mapPartitions { partitionIter: Iterator[InternalRow] =>
       // Recreate SQLConf on executor from serialized entries
       val executorSqlConf = new SQLConf()
       sqlConfEntries.foreach { case (k, v) => executorSqlConf.setConfString(k, v) }
@@ -263,9 +261,8 @@ class StateRewriter(
         schemaProvider,
         executorSqlConf
       )
-
-      Iterator.single((pid, partitionWriter.write(partitionIter)))
-    }.sortByKey().map(_._2).collect()
+      Iterator(partitionWriter.write(partitionIter))
+    }.sortBy(_.partitionId).collect()
   }
 
   /** Create the store and sql confs from the conf written in the offset log */
@@ -382,23 +379,35 @@ class StateRewriter(
     }
   }
 
-  private def setCorrectCheckpointVersion(): Unit = {
-    // Setting checkpoint version in sqlConf based on previous commitLog in case user forgot to
-    // set STATE_STORE_CHECKPOINT_FORMAT_VERSION and crash rewriter.
-    // Using read batch commit since the latest commit could be a skipped batch
-    // If SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION is wrong,
-    // readCheckpoint.commitLog will throw an exception.
+  private def verifyCheckpointVersion(): Unit = {
+    // Verify checkpoint version in sqlConf based on commitLog for readCheckpoint
+    // in case user forgot to set STATE_STORE_CHECKPOINT_FORMAT_VERSION.
+    // Using read batch commit since the latest commit could be a skipped batch.
+    // If SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION is wrong, readCheckpoint.commitLog
+    // will throw an exception, and we will propagate this exception upstream.
     // This prevents the StateRewriter from failing to write the correct state files
     try {
+      val writeCheckpoint =
+        new StreamingQueryCheckpointMetadata(sparkSession, resolvedCheckpointLocation)
+      val readCheckpoint = if (readResolvedCheckpointLocation.isDefined) {
+        new StreamingQueryCheckpointMetadata(sparkSession, readResolvedCheckpointLocation.get)
+      } else {
+        // Same checkpoint for read & write
+        writeCheckpoint
+      }
       readCheckpoint.commitLog.get(readBatchId)
     } catch {
-      case e: IllegalStateException =>
-        val sparkThrowable = e.getCause.asInstanceOf[SparkThrowable]
-        if (sparkThrowable.getCondition == "INVALID_LOG_VERSION.EXACT_MATCH_VERSION") {
-          sparkSession.conf.set(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key,
-            sparkThrowable.getMessageParameters.get("version"))
-        }
-    }
+        case e: IllegalStateException =>
+          val sparkThrowable = e.getCause.asInstanceOf[SparkThrowable]
+          if (sparkThrowable.getCondition == "INVALID_LOG_VERSION.EXACT_MATCH_VERSION") {
+            val params = sparkThrowable.getMessageParameters
+            val expectedVersion = params.get("version")
+            val actualVersion = params.get("matchVersion")
+            throw StateRewriterErrors.checkpointVersionMismatchError(
+              checkpointLocationForRead, expectedVersion, actualVersion)
+          }
+          throw e
+      }
   }
 }
 
@@ -421,6 +430,14 @@ private[state] object StateRewriterErrors {
   def unsupportedStateStoreMetadataVersionError(
       checkpointLocation: String): StateRewriterInvalidCheckpointError = {
     new StateRewriterUnsupportedStoreMetadataVersionError(checkpointLocation)
+  }
+
+  def checkpointVersionMismatchError(
+      checkpointLocation: String,
+      expectedVersion: String,
+      actualVersion: String): StateRewriterInvalidCheckpointError = {
+    new StateRewriterCheckpointVersionMismatchError(
+      checkpointLocation, expectedVersion, actualVersion)
   }
 }
 
@@ -460,3 +477,15 @@ private[state] class StateRewriterUnsupportedStoreMetadataVersionError(
     checkpointLocation,
     subClass = "UNSUPPORTED_STATE_STORE_METADATA_VERSION",
     messageParameters = Map.empty)
+
+private[state] class StateRewriterCheckpointVersionMismatchError(
+    checkpointLocation: String,
+    expectedVersion: String,
+    actualVersion: String)
+  extends StateRewriterInvalidCheckpointError(
+    checkpointLocation,
+    subClass = "CHECKPOINT_VERSION_MISMATCH",
+    messageParameters = Map(
+      "expectedVersion" -> expectedVersion,
+      "actualVersion" -> actualVersion,
+      "sqlConfKey" -> SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key))

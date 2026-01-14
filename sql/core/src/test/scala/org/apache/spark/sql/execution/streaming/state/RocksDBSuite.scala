@@ -3978,6 +3978,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         // load 2 empty store in a row
         db.load(version3, loadEmpty = true)
         db.put("d", "4")
+
         val (version4, checkpointV4) = db.commit()
         assert(db.get("c") === null)
         assert(toStr(db.get("d")) === "4")
@@ -3985,6 +3986,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
         lastCheckpointInfo = Option(checkpointV4)
         assert(lastVersion === version3 + 1)
       }
+
       withDB(remoteDir, enableStateStoreCheckpointIds = enableCkptId) { db =>
         db.load(lastVersion, lastCheckpointInfo.map(_.stateStoreCkptId).orNull)
         db.put("e", "5")

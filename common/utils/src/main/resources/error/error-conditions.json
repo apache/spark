@@ -5608,6 +5608,13 @@
           "Unsupported state store metadata version encountered.",
           "Only StateStoreMetadataV1 and StateStoreMetadataV2 are supported."
         ]
+      },
+      "CHECKPOINT_VERSION_MISMATCH" : {
+        "message" : [
+          "The checkpoint format version in SQLConf does not match the checkpoint version in the commit log.",
+          "Expected version v<expectedVersion>, but found v<actualVersion>.",
+          "Please set '<sqlConfKey>' to <expectedVersion> in your SQLConf before running StateRewriter."
+        ]
       }
     },
     "sqlState" : "55019"

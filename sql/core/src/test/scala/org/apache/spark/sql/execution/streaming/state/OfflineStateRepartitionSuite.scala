@@ -332,11 +332,11 @@ object OfflineStateRepartitionTestUtils {
     verifyOperatorMetadata(
       baseOperatorsMetadata, repartitionOperatorsMetadata, expectedShufflePartitions)
     if (StatefulOperatorStateInfo.enableStateStoreCheckpointIds(spark.sessionState.conf)) {
-      val expectedStoreCnt: Int = baseOperatorsMetadata.head match {
-        case metadataV2: OperatorStateMetadataV2 => metadataV2.stateStoreInfo.length
-        case metadataV1: OperatorStateMetadataV1 => metadataV1.stateStoreInfo.length
-      }
-      verifyCheckpointIds(batchId, checkpointMetadata, expectedShufflePartitions, expectedStoreCnt)
+      verifyCheckpointIds(
+        batchId,
+        checkpointMetadata,
+        expectedShufflePartitions,
+        baseOperatorsMetadata)
     }
   }
 
@@ -496,7 +496,13 @@ object OfflineStateRepartitionTestUtils {
       repartitionBatchId: Long,
       checkpointMetadata: StreamingQueryCheckpointMetadata,
       expectedShufflePartitions: Int,
-      expectedStoreCount: Int): Unit = {
+      baseOperatorsMetadata: Array[OperatorStateMetadata]): Unit = {
+    val expectedStoreCnts: Map[Long, Int] = baseOperatorsMetadata.map {
+      case metadataV2: OperatorStateMetadataV2 =>
+        metadataV2.operatorInfo.operatorId -> metadataV2.stateStoreInfo.length
+      case metadataV1: OperatorStateMetadataV1 =>
+        metadataV1.operatorInfo.operatorId -> metadataV1.stateStoreInfo.length
+    }.toMap
     // Verify commit log has the repartition batch with checkpoint IDs
     val commitOpt = checkpointMetadata.commitLog.get(repartitionBatchId)
     assert(commitOpt.isDefined, s"Commit for batch $repartitionBatchId should exist")
@@ -519,9 +525,9 @@ object OfflineStateRepartitionTestUtils {
           s"but found ${partitionToCkptIds.length}")
       // Each partition should have checkpoint IDs (at least one per store)
       partitionToCkptIds.zipWithIndex.foreach { case (ckptIds, partitionId) =>
-        assert(ckptIds.length == expectedStoreCount,
+        assert(ckptIds.length == expectedStoreCnts(operatorId),
             s"Operator $operatorId, partition $partitionId should" +
-            s"has $expectedStoreCount checkpoint Ids")
+            s"has ${expectedStoreCnts(operatorId)} checkpoint Ids")
       }
     }
   }

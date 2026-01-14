@@ -85,12 +85,6 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
     val writeBatchId = lastBatch + 1
     targetCheckpointMetadata.offsetLog.add(writeBatchId, targetOffsetSeq)
 
-    // Forced set STATE_STORE_CHECKPOINT_FORMAT_VERSION to 1 to mimic when user forgot to update
-    // checkpoint version to 2 in sqlConfig when running stateRewriter on checkpointV2 query.
-    // StateRewriter shouldn't crash but instead set the correct checkpoint version itself
-    // automatically by looking at previous commit log checkpoint
-    val previousCkptVersion = spark.conf.get(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key)
-    spark.conf.unset(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key)
     val rewriter = new StateRewriter(
       spark,
       readBatchId,
@@ -102,7 +96,6 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
       writeCheckpointMetadata = Some(targetCheckpointMetadata)
     )
     val checkpointInfos = rewriter.run()
-    assert(spark.conf.get(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key) == previousCkptVersion)
 
     // Commit to commitLog with checkpoint IDs
     val latestCommit = targetCheckpointMetadata.commitLog.get(lastBatch).get
@@ -965,6 +958,41 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
       }
     }
   } // End of foreach loop for changelog checkpointing dimension
+
+  test("SPARK-54590: Rewriter throw exception if checkpoint version is not set correct") {
+    withSQLConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2") {
+      withTempDir { sourceDir =>
+        withTempDir { targetDir =>
+          // Step 1: Create state by running a streaming aggregation
+          runDropDuplicatesQuery(sourceDir.getAbsolutePath)
+          val sourceCheckpointMetadata = new StreamingQueryCheckpointMetadata(
+            spark, sourceDir.getAbsolutePath)
+          val readBatchId = sourceCheckpointMetadata.commitLog.getLatestBatchId().get
+          // Forced set STATE_STORE_CHECKPOINT_FORMAT_VERSION to 1 to mimic when user forgot to
+          // update checkpoint version to 2 in sqlConfig when running stateRewriter
+          // on checkpointV2 query.
+          spark.conf.unset(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key)
+          val rewriter = new StateRewriter(
+            spark,
+            readBatchId,
+            readBatchId + 1,
+            sourceDir.getAbsolutePath,
+            spark.sessionState.newHadoopConf()
+          )
+          val ex = intercept[StateRewriterInvalidCheckpointError] {
+            rewriter.run()
+          }
+
+          assert(ex.getCondition == "STATE_REWRITER_INVALID_CHECKPOINT.CHECKPOINT_VERSION_MISMATCH")
+          val params = ex.getMessageParameters
+          assert(params.get("expectedVersion") == "2")
+          assert(params.get("actualVersion") == "1")
+          assert(params.get("sqlConfKey") == SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key)
+          assert(ex.getMessage.contains("spark.sql.streaming.stateStore.checkpointFormatVersion"))
+        }
+      }
+    }
+  }
 
   test("SPARK-54411: Non-JoinV3 operator requires default column family in schema") {
     withTempDir { targetDir =>
