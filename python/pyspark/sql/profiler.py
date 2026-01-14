@@ -94,8 +94,9 @@ class WorkerPerfProfiler:
         self._profiler.disable()
 
     def save(self) -> None:
-        st = pstats.Stats(self._profiler)
-        st.stream = None  # make it picklable
+        st = pstats.Stats(self._profiler, stream=None)
+        # make it picklable
+        st.stream = None  # type: ignore[attr-defined]
         st.strip_dirs()
         self._accumulator.add({self._result_id: (st, None)})
 
