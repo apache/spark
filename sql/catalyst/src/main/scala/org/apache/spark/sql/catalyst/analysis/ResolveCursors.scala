@@ -39,7 +39,7 @@ class ResolveCursors extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsWithPruning(
     _.containsPattern(UNRESOLVED_CURSOR)) {
-    case uc: UnresolvedCursor if !uc.resolved =>
+    case uc: UnresolvedCursor =>
       resolveCursor(uc)
   }
 
