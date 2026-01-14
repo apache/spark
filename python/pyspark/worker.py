@@ -161,7 +161,7 @@ class ArrowBatchedUDFThreadPool:
 
 
 # Register shutdown handler to clean up thread pool on process exit
-atexit.register(_ArrowUDFThreadPool.shutdown)
+atexit.register(ArrowBatchedUDFThreadPool.shutdown)
 
 
 class RunnerConf:
@@ -392,7 +392,7 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
         @fail_on_stopiteration
         def evaluate(*args):
             """Evaluate UDF with chunked parallel execution."""
-            return _ArrowUDFThreadPool.map_chunked(
+            return ArrowBatchedUDFThreadPool.map_chunked(
                 lambda row: func(*row),
                 get_args(*args),
                 runner_conf.arrow_concurrency_level,
@@ -465,7 +465,7 @@ def wrap_arrow_batch_udf_legacy(f, args_offsets, kwargs_offsets, return_type, ru
         @fail_on_stopiteration
         def evaluate(*args: pd.Series) -> pd.Series:
             """Evaluate UDF with chunked parallel execution."""
-            results = _ArrowUDFThreadPool.map_chunked(
+            results = ArrowBatchedUDFThreadPool.map_chunked(
                 lambda row: result_func(func(*row)),
                 get_args(*args),
                 runner_conf.arrow_concurrency_level,
@@ -3575,7 +3575,7 @@ def main(infile, outfile):
     finally:
         # Shutdown the singleton thread pool used for Arrow UDF concurrent execution.
         # This ensures threads are cleaned up when the worker exits.
-        _ArrowUDFThreadPool.shutdown(wait=True)
+        ArrowBatchedUDFThreadPool.shutdown(wait=True)
     finish_time = time.time()
     report_times(outfile, boot_time, init_time, finish_time)
     write_long(shuffle.MemoryBytesSpilled, outfile)
