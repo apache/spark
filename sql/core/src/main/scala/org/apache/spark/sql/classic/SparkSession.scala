@@ -128,7 +128,7 @@ class SparkSession private(
   SQLConf.setSQLConfGetter(() => {
     SparkSession.getActiveSession.filterNot(_.sparkContext.isStopped).flatMap { session =>
       // Avoid recursive call during sessionState initialization
-      if (session.isSessionStateInitialized) {
+      if (!session.isSessionStateInitializing) {
         Some(session.sessionState.conf)
       } else {
         None
@@ -176,11 +176,11 @@ class SparkSession private(
    * ----------------------- */
 
   /**
-   * Track whether sessionState has been initialized. Used to prevent recursive calls
+   * Track whether sessionState is currently being initialized. Used to prevent recursive calls
    * to sessionState.conf during initialization (e.g., from SQLConf.get).
    */
   @transient
-  private var sessionStateInitialized: Boolean = false
+  private var sessionStateInitializing: Boolean = false
 
   /** @inheritdoc */
   @Unstable
@@ -193,6 +193,7 @@ class SparkSession private(
   @Unstable
   @transient
   lazy val sessionState: SessionState = {
+    sessionStateInitializing = true
     try {
       parentSessionState
         .map(_.clone(this))
@@ -203,14 +204,14 @@ class SparkSession private(
           state
         }
     } finally {
-      sessionStateInitialized = true
+      sessionStateInitializing = false
     }
   }
 
   /**
-   * Returns true if sessionState has been fully initialized.
+   * Returns true if sessionState is currently being initialized.
    */
-  private[sql] def isSessionStateInitialized: Boolean = sessionStateInitialized
+  private[sql] def isSessionStateInitializing: Boolean = sessionStateInitializing
 
   /** @inheritdoc */
   @transient
