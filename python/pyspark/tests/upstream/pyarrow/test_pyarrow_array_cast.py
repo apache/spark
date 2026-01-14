@@ -18,24 +18,12 @@
 """
 Tests for PyArrow's pa.Array.cast() method with default parameters only.
 
-This test suite is part of SPARK-54936 to monitor upstream PyArrow behavior.
-
-**Scope**: Only tests pa.Array.cast(target_type) with default parameters (safe=True).
-Does NOT test with safe=False or other options.
-
 ## Numerical Type Conversion Matrix (pa.Array.cast with default safe=True)
 
 ### Covered Types:
 - **Signed Integers**: int8, int16, int32, int64
 - **Unsigned Integers**: uint8, uint16, uint32, uint64
 - **Floats**: float16, float32, float64
-
-### Conversion Rules:
-- Integer widening (int8->int16->int32->int64) always succeeds
-- Integer narrowing may fail if value exceeds target range
-- Signed to unsigned fails for negative values
-- Float to integer requires whole numbers (1.0 ok, 1.5 fails)
-- Large integers may exceed float's exact range (float16: ~2048, float32: ~16M, float64: ~9e15)
 """
 
 import unittest
@@ -52,6 +40,21 @@ class PyArrowNumericalCastTests(unittest.TestCase):
     Each test case is a tuple: (source_array, expected_result_or_exception)
     """
 
+    # Source types (numerical only)
+    SOURCE_TYPES = [
+        "int8",
+        "int16",
+        "int32",
+        "int64",
+        "uint8",
+        "uint16",
+        "uint32",
+        "uint64",
+        "float16",
+        "float32",
+        "float64",
+    ]
+
     # Class-level storage for test results
     _cast_results = {}
 
@@ -66,96 +69,24 @@ class PyArrowNumericalCastTests(unittest.TestCase):
         if not cls._cast_results:
             return
 
-        # All target types in order
-        target_types = [
-            "int8",
-            "int16",
-            "int32",
-            "int64",
-            "uint8",
-            "uint16",
-            "uint32",
-            "uint64",
-            "float16",
-            "float32",
-            "float64",
-            "bool",
-            "string",
-            "large_string",
-            "binary",
-            "large_binary",
-            "fixed_size_binary_16",
-            "decimal128",
-            "decimal256",
-            "date32",
-            "date64",
-            "timestamp_s",
-            "timestamp_ms",
-            "timestamp_us",
-            "timestamp_ns",
-            "timestamp_s_tz",
-            "timestamp_ms_tz",
-            "timestamp_us_tz",
-            "timestamp_ns_tz",
-            "timestamp_s_tz_ny",
-            "timestamp_s_tz_shanghai",
-            "duration_s",
-            "duration_ms",
-            "duration_us",
-            "duration_ns",
-            "time32_s",
-            "time32_ms",
-            "time64_us",
-            "time64_ns",
-        ]
-        source_types = [
-            "int8",
-            "int16",
-            "int32",
-            "int64",
-            "uint8",
-            "uint16",
-            "uint32",
-            "uint64",
-            "float16",
-            "float32",
-            "float64",
-        ]
+        # Get target types from first source's results (all sources test same targets)
+        target_types = list(cls._cast_results.get(cls.SOURCE_TYPES[0], {}).keys())
+        if not target_types:
+            return
 
         print("\n" + "=" * 80)
         print("PyArrow Cast Matrix (Y=lossless, L=lossy, N=not supported)")
         print("=" * 80)
 
-        # Print header (shortened)
-        short_names = {
-            "timestamp_s": "ts_s",
-            "timestamp_ms": "ts_ms",
-            "timestamp_us": "ts_us",
-            "timestamp_ns": "ts_ns",
-            "timestamp_s_tz": "ts_s_tz",
-            "timestamp_ms_tz": "ts_ms_tz",
-            "timestamp_us_tz": "ts_us_tz",
-            "timestamp_ns_tz": "ts_ns_tz",
-            "timestamp_s_tz_ny": "ts_ny",
-            "timestamp_s_tz_shanghai": "ts_sh",
-            "duration_s": "dur_s",
-            "duration_ms": "dur_ms",
-            "duration_us": "dur_us",
-            "duration_ns": "dur_ns",
-            "fixed_size_binary_16": "fsb16",
-            "large_string": "lg_str",
-            "large_binary": "lg_bin",
-        }
-        header = "src\\tgt |" + "|".join(f"{short_names.get(t, t):>6}" for t in target_types)
+        header = "src\\tgt," + ",".join(target_types)
         print(header)
-        print("-" * len(header))
 
-        # Print rows
-        for src in source_types:
-            row = f"{src:>8}|"
-            for tgt in target_types:
-                result = cls._cast_results.get(src, {}).get(tgt, "-")
-                row += f"{result:>6}|"
+        for src in cls.SOURCE_TYPES:
+            row = (
+                src
+                + ","
+                + ",".join(cls._cast_results.get(src, {}).get(tgt, "-") for tgt in target_types)
+            )
             print(row)
 
         print("=" * 80)
@@ -241,15 +172,6 @@ class PyArrowNumericalCastTests(unittest.TestCase):
             "time32_ms": pa.time32("ms"),
             "time64_us": pa.time64("us"),
             "time64_ns": pa.time64("ns"),
-        }
-
-        # All nested types (for reference, not used in current tests)
-        ALL_NESTED_TYPES = {
-            "list_int64": pa.list_(pa.int64()),
-            "list_string": pa.list_(pa.string()),
-            "large_list_int64": pa.large_list(pa.int64()),
-            "struct": pa.struct([("a", pa.int64()), ("b", pa.string())]),
-            "map": pa.map_(pa.string(), pa.int64()),
         }
 
         type_map = ALL_SCALAR_TYPES
@@ -2032,7 +1954,6 @@ class PyArrowNumericalCastTests(unittest.TestCase):
         - Subnormal min: ~1.4e-45
         """
         import pyarrow as pa
-        import struct
         from decimal import Decimal
 
         # float32 special values
