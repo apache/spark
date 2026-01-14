@@ -185,9 +185,6 @@ def _validate_aggregator_methods(aggregator: Aggregator) -> None:
                 },
             )
 
-        # Get the method from the class definition (not the instance)
-        class_attr = getattr(aggregator_class, method_name)
-
         # Check if it's a staticmethod by looking at the class __dict__
         # (methods bound to instances lose their staticmethod wrapper)
         if method_name in aggregator_class.__dict__:
@@ -197,7 +194,7 @@ def _validate_aggregator_methods(aggregator: Aggregator) -> None:
                     errorClass="NOT_CALLABLE",
                     messageParameters={
                         "arg_name": f"aggregator.{method_name}",
-                        "arg_type": f"non-static method (must use @staticmethod decorator)",
+                        "arg_type": "non-static method (must use @staticmethod decorator)",
                     },
                 )
 
