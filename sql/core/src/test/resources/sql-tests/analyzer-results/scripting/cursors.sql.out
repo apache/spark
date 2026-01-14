@@ -141,14 +141,7 @@ BEGIN
   CLOSE c1;
 END
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "CURSOR_ALREADY_OPEN",
-  "sqlState" : "24502",
-  "messageParameters" : {
-    "cursorName" : "c1"
-  }
-}
+LocalRelation [col1#x]
 
 
 -- !query
@@ -316,14 +309,7 @@ BEGIN
   CLOSE cur;
 END
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "CURSOR_ALREADY_OPEN",
-  "sqlState" : "24502",
-  "messageParameters" : {
-    "cursorName" : "cur"
-  }
-}
+LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -417,14 +403,7 @@ BEGIN
   VALUES (count1, count2);
 END
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "CURSOR_ALREADY_OPEN",
-  "sqlState" : "24502",
-  "messageParameters" : {
-    "cursorName" : "cur"
-  }
-}
+LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -1443,14 +1422,7 @@ BEGIN
   VALUES (result1, result2);  -- Should return (50, 80)
 END
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "CURSOR_ALREADY_OPEN",
-  "sqlState" : "24502",
-  "messageParameters" : {
-    "cursorName" : "cur"
-  }
-}
+LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -1470,14 +1442,7 @@ BEGIN
   VALUES (result1, result2);  -- Should return (30, 70)
 END
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "CURSOR_ALREADY_OPEN",
-  "sqlState" : "24502",
-  "messageParameters" : {
-    "cursorName" : "cur"
-  }
-}
+LocalRelation [col1#x, col2#x]
 
 
 -- !query

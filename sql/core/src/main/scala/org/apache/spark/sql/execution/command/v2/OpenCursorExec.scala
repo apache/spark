@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, CursorReference, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.datasources.v2.LeafV2CommandExec
-import org.apache.spark.sql.scripting.{CursorDeclared, CursorOpened}
+import org.apache.spark.sql.scripting.{CursorClosed, CursorDeclared, CursorOpened}
 
 /**
  * Physical plan node for opening cursors.
@@ -59,7 +59,7 @@ case class OpenCursorExec(
         messageParameters = Map("cursorName" -> cursorRef.sql)))
 
     currentState match {
-      case CursorDeclared => // Expected state
+      case CursorDeclared | CursorClosed => // Expected states - new or closed cursor
       case _ =>
         throw new AnalysisException(
           errorClass = "CURSOR_ALREADY_OPEN",

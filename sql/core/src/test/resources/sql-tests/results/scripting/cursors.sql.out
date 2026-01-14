@@ -161,16 +161,9 @@ BEGIN
   CLOSE c1;
 END
 -- !query schema
-struct<>
+struct<col1:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "CURSOR_ALREADY_OPEN",
-  "sqlState" : "24502",
-  "messageParameters" : {
-    "cursorName" : "c1"
-  }
-}
+1
 
 
 -- !query
@@ -352,16 +345,9 @@ BEGIN
   CLOSE cur;
 END
 -- !query schema
-struct<>
+struct<col1:int,col2:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "CURSOR_ALREADY_OPEN",
-  "sqlState" : "24502",
-  "messageParameters" : {
-    "cursorName" : "cur"
-  }
-}
+6	6
 
 
 -- !query
@@ -460,16 +446,9 @@ BEGIN
   VALUES (count1, count2);
 END
 -- !query schema
-struct<>
+struct<col1:int,col2:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "CURSOR_ALREADY_OPEN",
-  "sqlState" : "24502",
-  "messageParameters" : {
-    "cursorName" : "cur"
-  }
-}
+2	5
 
 
 -- !query
@@ -1582,16 +1561,9 @@ BEGIN
   VALUES (result1, result2);  -- Should return (50, 80)
 END
 -- !query schema
-struct<>
+struct<col1:int,col2:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "CURSOR_ALREADY_OPEN",
-  "sqlState" : "24502",
-  "messageParameters" : {
-    "cursorName" : "cur"
-  }
-}
+50	80
 
 
 -- !query
@@ -1611,16 +1583,9 @@ BEGIN
   VALUES (result1, result2);  -- Should return (30, 70)
 END
 -- !query schema
-struct<>
+struct<col1:int,col2:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "CURSOR_ALREADY_OPEN",
-  "sqlState" : "24502",
-  "messageParameters" : {
-    "cursorName" : "cur"
-  }
-}
+30	70
 
 
 -- !query
