@@ -185,7 +185,8 @@ class MicroBatchExecution(
 
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
     val _logicalPlan = analyzedPlan.transform {
-      case streamingRelation @ StreamingRelation(dataSourceV1, sourceName, output) =>
+      case streamingRelation @ StreamingRelation(
+          dataSourceV1, sourceName, output, sourceIdentifyingName) =>
         toExecutionRelationMap.getOrElseUpdate(streamingRelation, {
           // Materialize source to avoid creating it in every batch
           val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
@@ -194,11 +195,12 @@ class MicroBatchExecution(
           logInfo(log"Using Source [${MDC(LogKeys.STREAMING_SOURCE, source)}] " +
             log"from DataSourceV1 named '${MDC(LogKeys.STREAMING_DATA_SOURCE_NAME, sourceName)}' " +
             log"[${MDC(LogKeys.STREAMING_DATA_SOURCE_DESCRIPTION, dataSourceV1)}]")
-          StreamingExecutionRelation(source, output, dataSourceV1.catalogTable)(sparkSession)
+          StreamingExecutionRelation(
+            source, output, dataSourceV1.catalogTable, sourceIdentifyingName)(sparkSession)
         })
 
       case s @ StreamingRelationV2(src, srcName, table: SupportsRead, options, output,
-        catalog, identifier, v1, _) =>
+        catalog, identifier, v1, sourceIdentifyingName) =>
         val dsStr = if (src.nonEmpty) s"[${src.get}]" else ""
         val v2Disabled = disabledSources.contains(src.getOrElse(None).getClass.getCanonicalName)
         if (!v2Disabled && table.supports(TableCapability.MICRO_BATCH_READ)) {
@@ -241,7 +243,7 @@ class MicroBatchExecution(
               log"${MDC(LogKeys.STREAMING_DATA_SOURCE_DESCRIPTION, dsStr)}")
             // We don't have a catalog table but may have a table identifier. Given this is about
             // v1 fallback path, we just give up and set the catalog table as None.
-            StreamingExecutionRelation(source, output, None)(sparkSession)
+            StreamingExecutionRelation(source, output, None, sourceIdentifyingName)(sparkSession)
           })
         }
     }
@@ -969,7 +971,7 @@ class MicroBatchExecution(
     // Replace sources in the logical plan with data that has arrived since the last batch.
     val newBatchesPlan = logicalPlan transform {
       // For v1 sources.
-      case StreamingExecutionRelation(source, output, catalogTable) =>
+      case StreamingExecutionRelation(source, output, catalogTable, _) =>
         mutableNewData.get(source).map { dataPlan =>
           val hasFileMetadata = output.exists {
             case FileSourceMetadataAttribute(_) => true
