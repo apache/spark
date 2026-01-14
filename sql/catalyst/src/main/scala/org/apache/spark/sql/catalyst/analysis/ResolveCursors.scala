@@ -63,11 +63,19 @@ class ResolveCursors extends Rule[LogicalPlan] {
       (None, nameParts.head)
     }
 
-    // Normalize cursor name based on case sensitivity
+    // Normalize cursor name and scope label based on case sensitivity
     val normalizedName = if (caseSensitive) {
       cursorName
     } else {
       cursorName.toLowerCase(Locale.ROOT)
+    }
+    
+    val normalizedScopeLabel = scopeLabel.map { label =>
+      if (caseSensitive) {
+        label
+      } else {
+        label.toLowerCase(Locale.ROOT)
+      }
     }
 
     // Look up cursor definition from scripting context using reflection
@@ -80,7 +88,7 @@ class ResolveCursors extends Rule[LogicalPlan] {
       val currentFrame = context.getClass.getMethod("currentFrame").invoke(context)
 
       // Call the appropriate lookup method based on whether cursor is qualified
-      val result = scopeLabel match {
+      val result = normalizedScopeLabel match {
         case Some(label) =>
           // Qualified cursor: look up in specific labeled scope
           currentFrame.getClass
@@ -107,6 +115,6 @@ class ResolveCursors extends Rule[LogicalPlan] {
     // Create CursorReference with the cursor definition
     // Cast needed because reflection returns Any
     val cursorDef = cursorDefOpt.get.asInstanceOf[CursorDefinition]
-    CursorReference(nameParts, normalizedName, scopeLabel, cursorDef)
+    CursorReference(nameParts, normalizedName, normalizedScopeLabel, cursorDef)
   }
 }
