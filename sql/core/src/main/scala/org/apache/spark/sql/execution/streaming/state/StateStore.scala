@@ -115,8 +115,17 @@ trait ReadStateStore {
       key: UnsafeRow,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow
 
+  /**
+   * Get the values for multiple keys in a single batch operation.
+   * Default implementation throws UnsupportedOperationException.
+   * Providers that support batch retrieval should override this method.
+   *
+   * @param keys          Array of keys to look up
+   * @param colFamilyName The column family name
+   * @return Iterator of values corresponding to the keys (null for keys that don't exist)
+   */
   def multiGet(keys: Array[UnsafeRow], colFamilyName: String): Iterator[UnsafeRow] = {
-    keys.iterator.map(key => get(key, colFamilyName))
+    throw new UnsupportedOperationException("multiGet is not supported by this StateStore")
   }
 
   /**
@@ -348,6 +357,10 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
   override def get(key: UnsafeRow,
     colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): UnsafeRow = store.get(key,
     colFamilyName)
+
+  override def multiGet(keys: Array[UnsafeRow], colFamilyName: String): Iterator[UnsafeRow] = {
+    store.multiGet(keys, colFamilyName)
+  }
 
   override def keyExists(
       key: UnsafeRow,

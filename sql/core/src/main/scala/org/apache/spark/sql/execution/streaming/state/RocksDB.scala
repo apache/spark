@@ -25,7 +25,7 @@ import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong}
 
 import scala.collection.{mutable, Map}
-import scala.jdk.CollectionConverters.ConcurrentMapHasAsScala
+import scala.jdk.CollectionConverters.{ConcurrentMapHasAsScala, ListHasAsScala}
 import scala.util.Try
 import scala.util.control.NonFatal
 
@@ -1032,7 +1032,7 @@ class RocksDB(
    */
   def multiGet(
       keys: Array[Array[Byte]],
-      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Array[Array[Byte]] = {
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[Array[Byte]] = {
     updateMemoryUsageIfNeeded()
     // Prepare keys
     val finalKeys =
@@ -1044,11 +1044,8 @@ class RocksDB(
 
     val keysList = java.util.Arrays.asList(finalKeys: _*)
 
-    // Call RocksDB multiGet
-    val valuesList = db.multiGetAsList(readOptions, keysList)
-
-    // Convert to Array[Array[Byte]] in one line
-    valuesList.toArray(new Array[Array[Byte]](valuesList.size()))
+    // Call RocksDB multiGetAsList and return iterator directly
+    db.multiGetAsList(readOptions, keysList).asScala.iterator
   }
 
   /**

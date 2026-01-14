@@ -268,7 +268,7 @@ private[sql] class RocksDBStateStoreProvider
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
       val encodedKeys = keys.map(kvEncoder._1.encodeKey)
       val encodedValues = rocksDB.multiGet(encodedKeys, colFamilyName)
-      encodedValues.iterator.map(kvEncoder._2.decodeValue)
+      encodedValues.map(kvEncoder._2.decodeValue)
     }
 
     override def keyExists(key: UnsafeRow, colFamilyName: String): Boolean = {
@@ -409,6 +409,8 @@ private[sql] class RocksDBStateStoreProvider
       verifyColFamilyOperations("deleteRange", colFamilyName)
 
       val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      verify(kvEncoder._1.supportsDeleteRange,
+        "deleteRange requires a RangeKeyScanStateEncoderSpec for ordered key encoding")
       val encodedBeginKey = kvEncoder._1.encodeKey(beginKey)
       val encodedEndKey = kvEncoder._1.encodeKey(endKey)
       rocksDB.deleteRange(encodedBeginKey, encodedEndKey, colFamilyName)
