@@ -854,9 +854,8 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
   }
 
   /**
-   * Throws an exception when a cursor reference has more than one qualifier.
-   * Valid: cursor or label.cursor
-   * Invalid: a.b.cursor
+   * Throws an exception when a cursor reference has more than one qualifier. Valid: cursor or
+   * label.cursor Invalid: a.b.cursor
    *
    * @param cursorName
    *   The fully qualified cursor name with multiple qualifiers
