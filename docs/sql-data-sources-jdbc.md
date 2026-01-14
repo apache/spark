@@ -392,7 +392,7 @@ Before using <code>keytab</code> and <code>principal</code> configuration option
 There are built-in connection providers for the following databases:
 * Databricks
 * DB2
-* Derby
+* Derby (deprecated)
 * H2
 * MariaDB and MySQL
 * Microsoft SQL Server

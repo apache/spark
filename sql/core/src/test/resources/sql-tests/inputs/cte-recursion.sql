@@ -1,5 +1,6 @@
 --SET spark.sql.cteRecursionLevelLimit=25
 --SET spark.sql.cteRecursionRowLimit=50
+--SET spark.sql.analyzer.singlePassResolver.dualRunWithLegacy=true
 
 -- fails due to recursion isn't allowed without RECURSIVE keyword
 WITH r(level) AS (
@@ -248,7 +249,6 @@ WITH
     SELECT * FROM t1
   )
 SELECT * FROM t2;
-SET spark.sql.legacy.ctePrecedencePolicy=EXCEPTION;
 
 -- recursive reference can't be used multiple times in a recursive term
 WITH RECURSIVE r(level, data) AS (

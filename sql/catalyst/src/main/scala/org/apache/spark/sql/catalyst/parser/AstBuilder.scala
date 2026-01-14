@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.expressions.json.PathInstruction.Named
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.streaming.Unassigned
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -875,9 +876,12 @@ class AstBuilder extends DataTypeAstBuilder
   /**
    * Add an
    * {{{
-   *   INSERT OVERWRITE TABLE tableIdentifier [partitionSpec [IF NOT EXISTS]]? [identifierList]
-   *   INSERT INTO [TABLE] tableIdentifier [partitionSpec] ([BY NAME] | [identifierList])
-   *   INSERT INTO [TABLE] tableIdentifier REPLACE whereClause
+   *   INSERT [WITH SCHEMA EVOLUTION] OVERWRITE
+   *     TABLE tableIdentifier [partitionSpec [IF NOT EXISTS]]? [identifierList]
+   *   INSERT [WITH SCHEMA EVOLUTION] INTO
+   *     [TABLE] tableIdentifier [partitionSpec] ([BY NAME] | [identifierList])
+   *   INSERT [WITH SCHEMA EVOLUTION] INTO
+   *     [TABLE] tableIdentifier REPLACE whereClause
    *   INSERT OVERWRITE [LOCAL] DIRECTORY STRING [rowFormat] [createFileFormat]
    *   INSERT OVERWRITE [LOCAL] DIRECTORY [STRING] tableProvider [OPTIONS tablePropertyList]
    * }}}
@@ -906,7 +910,8 @@ class AstBuilder extends DataTypeAstBuilder
             query = otherPlans.head,
             overwrite = false,
             ifPartitionNotExists = insertParams.ifPartitionNotExists,
-            byName = insertParams.byName)
+            byName = insertParams.byName,
+            withSchemaEvolution = table.EVOLUTION() != null)
         })
       case table: InsertOverwriteTableContext =>
         val insertParams = visitInsertOverwriteTable(table)
@@ -923,7 +928,8 @@ class AstBuilder extends DataTypeAstBuilder
             query = otherPlans.head,
             overwrite = true,
             ifPartitionNotExists = insertParams.ifPartitionNotExists,
-            byName = insertParams.byName)
+            byName = insertParams.byName,
+            withSchemaEvolution = table.EVOLUTION() != null)
         })
       case ctx: InsertIntoReplaceWhereContext =>
         val options = Option(ctx.optionsClause())
@@ -932,10 +938,20 @@ class AstBuilder extends DataTypeAstBuilder
             Seq(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE), isStreaming = false)
           val deleteExpr = expression(ctx.whereClause().booleanExpression())
           val isByName = ctx.NAME() != null
+          val schemaEvolutionWriteOption: Map[String, String] =
+            if (ctx.EVOLUTION() != null) Map("mergeSchema" -> "true") else Map.empty
           if (isByName) {
-            OverwriteByExpression.byName(table, otherPlans.head, deleteExpr)
+            OverwriteByExpression.byName(
+              table,
+              df = otherPlans.head,
+              deleteExpr,
+              writeOptions = schemaEvolutionWriteOption)
           } else {
-            OverwriteByExpression.byPosition(table, otherPlans.head, deleteExpr)
+            OverwriteByExpression.byPosition(
+              table,
+              query = otherPlans.head,
+              deleteExpr,
+              writeOptions = schemaEvolutionWriteOption)
           }
         })
       case dir: InsertOverwriteDirContext =>
@@ -2461,7 +2477,8 @@ class AstBuilder extends DataTypeAstBuilder
       writePrivileges = Seq.empty,
       isStreaming = true)
 
-    val tableWithWatermark = tableStreamingRelation.optionalMap(ctx.watermarkClause)(withWatermark)
+    val namedStreamingRelation = NamedStreamingRelation(tableStreamingRelation, Unassigned)
+    val tableWithWatermark = namedStreamingRelation.optionalMap(ctx.watermarkClause)(withWatermark)
     mayApplyAliasPlan(ctx.tableAlias, tableWithWatermark)
   }
 
@@ -3832,21 +3849,22 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
-   * Create an [[UnresolvedFunction]] from a multi-part identifier.
+   * Create an [[UnresolvedFunctionName]] from a multi-part identifier with proper origin.
    */
   private def createUnresolvedFunctionName(
       ctx: ParserRuleContext,
       ident: Seq[String],
-      commandName: String,
-      requirePersistent: Boolean = false,
-      funcTypeMismatchHint: Option[String] = None,
-      possibleQualifiedName: Option[Seq[String]] = None): UnresolvedFunctionName = withOrigin(ctx) {
-    UnresolvedFunctionName(
-      ident,
-      commandName,
-      requirePersistent,
-      funcTypeMismatchHint,
-      possibleQualifiedName)
+      commandName: String): UnresolvedFunctionName = withOrigin(ctx) {
+    UnresolvedFunctionName(ident, commandName)
+  }
+
+  /**
+   * Create an [[UnresolvedIdentifier]] from a multi-part identifier with proper origin.
+   */
+  protected def createUnresolvedIdentifier(
+      ctx: ParserRuleContext,
+      ident: Seq[String]): UnresolvedIdentifier = withOrigin(ctx) {
+    UnresolvedIdentifier(ident)
   }
 
   /**
@@ -6326,23 +6344,14 @@ class AstBuilder extends DataTypeAstBuilder
           Seq(describeFuncName.getText)
         }
       DescribeFunction(
-        createUnresolvedFunctionName(
-          ctx.describeFuncName(),
-          functionName,
-          "DESCRIBE FUNCTION",
-          requirePersistent = false,
-          funcTypeMismatchHint = None),
+        createUnresolvedFunctionName(describeFuncName, functionName, "DESCRIBE FUNCTION"),
         EXTENDED != null)
     } else {
       DescribeFunction(
         withIdentClause(
           describeFuncName.identifierReference(),
-          createUnresolvedFunctionName(
-            describeFuncName.identifierReference,
-            _,
-            "DESCRIBE FUNCTION",
-            requirePersistent = false,
-            funcTypeMismatchHint = None)),
+          createUnresolvedFunctionName(describeFuncName.identifierReference, _, "DESCRIBE FUNCTION")
+        ),
         EXTENDED != null)
     }
   }
@@ -6384,15 +6393,9 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   override def visitRefreshFunction(ctx: RefreshFunctionContext): LogicalPlan = withOrigin(ctx) {
+    val identCtx = ctx.identifierReference
     RefreshFunction(
-      withIdentClause(
-        ctx.identifierReference,
-        createUnresolvedFunctionName(
-          ctx.identifierReference,
-          _,
-          "REFRESH FUNCTION",
-          requirePersistent = true,
-          funcTypeMismatchHint = None)))
+      withIdentClause(identCtx, createUnresolvedIdentifier(identCtx, _)))
   }
 
   override def visitCommentNamespace(ctx: CommentNamespaceContext): LogicalPlan = withOrigin(ctx) {
