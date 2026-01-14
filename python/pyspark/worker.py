@@ -112,7 +112,7 @@ except Exception:
     has_memory_profiler = False
 
 
-class _ArrowUDFThreadPool:
+class ArrowBatchedUDFThreadPool:
     """
     Singleton ThreadPoolExecutor for Arrow UDF concurrent execution.
 
