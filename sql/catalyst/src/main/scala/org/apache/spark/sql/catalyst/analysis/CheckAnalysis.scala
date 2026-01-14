@@ -254,7 +254,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     // not found first, instead of errors in the input query of the insert command, by doing a
     // top-down traversal.
     plan.foreach {
-      case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _, _) =>
+      case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _, _, _) =>
         u.tableNotFound(u.multipartIdentifier)
 
       // TODO (SPARK-27484): handle streaming write commands when we have them.
@@ -1071,9 +1071,9 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
               // We don't need to handle nested types here which shall fail before.
               def canAlterColumnType(from: DataType, to: DataType): Boolean = (from, to) match {
-                case (CharType(l1), CharType(l2)) => l1 == l2
-                case (CharType(l1), VarcharType(l2)) => l1 <= l2
-                case (VarcharType(l1), VarcharType(l2)) => l1 <= l2
+                case (c1: CharType, c2: CharType) => c1.length == c2.length
+                case (c: CharType, v: VarcharType) => c.length <= v.length
+                case (v1: VarcharType, v2: VarcharType) => v1.length <= v2.length
                 case _ => Cast.canUpCast(from, to)
               }
               if (!canAlterColumnType(field.dataType, newDataType)) {

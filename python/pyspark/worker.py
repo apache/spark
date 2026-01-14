@@ -1503,14 +1503,11 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index, profil
         else:
             chained_func = chain(chained_func, f)
 
+    result_id = read_long(infile)
+
     if profiler == "perf":
-        result_id = read_long(infile)
-
         profiling_func = wrap_perf_profiler(chained_func, eval_type, result_id)
-
     elif profiler == "memory":
-        result_id = read_long(infile)
-
         profiling_func = wrap_memory_profiler(chained_func, eval_type, result_id)
     else:
         profiling_func = chained_func
