@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import ClassVar, Type, TypeVar, Dict, List, Optional, Union, cast, TYPE_CHECKING
+from typing import ClassVar, Type, TypeVar, Dict, List, Optional, Union, cast
 
 from pyspark.util import local_connect_and_auth
 from pyspark.serializers import read_int, write_int, write_with_length, UTF8Deserializer
@@ -144,22 +144,16 @@ class TaskContext:
 
     def __init__(
         self,
-        *,
-        stageId: Optional[int] = None,
-        partitionId: Optional[int] = None,
-        attemptNumber: Optional[int] = None,
-        taskAttemptId: Optional[int] = None,
-        cpus: Optional[int] = None,
-        resources: Optional[Dict[str, "ResourceInformation"]] = None,
-        localProperties: Optional[Dict[str, str]] = None,
+        **kwargs: Dict,
     ) -> None:
-        self._stageId = stageId
-        self._partitionId = partitionId
-        self._attemptNumber = attemptNumber
-        self._taskAttemptId = taskAttemptId
-        self._cpus = cpus
-        self._resources = resources
-        self._localProperties = localProperties
+        # Set attributes only if they are passed in and not None
+        # The kwargs are auto-mapped to the private attributes of TaskContext
+        # e.g., stageId -> _stageId
+        for key, val in kwargs.items():
+            if not hasattr(self, f"_{key}"):
+                raise TypeError(f"__init__() got an unexpected keyword argument '{key}'")
+            if val is not None:
+                setattr(self, f"_{key}", val)
 
     @classmethod
     def _getOrCreate(cls: Type["TaskContext"]) -> "TaskContext":
