@@ -24,11 +24,11 @@ from pyspark.testing.utils import (
     pyarrow_requirement_message,
 )
 
-if have_pyarrow:
-    import pyarrow as pa
-
 if have_pandas:
     import pandas as pd
+
+if have_pyarrow:
+    import pyarrow as pa
 
 
 @unittest.skipIf(
