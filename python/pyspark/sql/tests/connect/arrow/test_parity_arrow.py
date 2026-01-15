@@ -28,9 +28,9 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
     def thisSetUpClass(cls):
         super().thisSetUpClass()
 
-        # set the local relations size limit to 100MB for
+        # set the local relations size limit to 80MB for
         # test_large_local_relation_size_limit_exceeded
-        cls.spark.conf.set("spark.sql.session.localRelationSizeLimit", str(100 * 1024 * 1024))
+        cls.spark.conf.set("spark.sql.session.localRelationSizeLimit", str(80 * 1024 * 1024))
 
     @unittest.skip("Spark Connect does not support fallback.")
     def test_createDataFrame_fallback_disabled(self):
@@ -106,7 +106,7 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
         data = [(i, str_value) for i in range(row_count)]
 
         with self.assertRaisesRegex(
-            AnalysisException, f"LOCAL_RELATION_SIZE_LIMIT_EXCEEDED.*{100 * 1024 * 1024}"
+            AnalysisException, f"LOCAL_RELATION_SIZE_LIMIT_EXCEEDED.*{80 * 1024 * 1024}"
         ):
             df = self.spark.createDataFrame(data, ["col1", "col2"])
             df.count()
