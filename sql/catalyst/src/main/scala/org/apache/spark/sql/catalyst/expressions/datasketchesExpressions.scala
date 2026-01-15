@@ -108,13 +108,15 @@ case class HllUnion(first: Expression, second: Expression, third: Expression)
     val sketch1 = try {
       HllSketch.heapify(Memory.wrap(value1.asInstanceOf[Array[Byte]]))
     } catch {
-      case _: SketchesArgumentException | _: java.lang.Error =>
+      case _: SketchesArgumentException | _: java.lang.Error
+           | _: ArrayIndexOutOfBoundsException =>
         throw QueryExecutionErrors.hllInvalidInputSketchBuffer(prettyName)
     }
     val sketch2 = try {
       HllSketch.heapify(Memory.wrap(value2.asInstanceOf[Array[Byte]]))
     } catch {
-      case _: SketchesArgumentException | _: java.lang.Error =>
+      case _: SketchesArgumentException | _: java.lang.Error
+           | _: ArrayIndexOutOfBoundsException =>
         throw QueryExecutionErrors.hllInvalidInputSketchBuffer(prettyName)
     }
     val allowDifferentLgConfigK = value3.asInstanceOf[Boolean]
