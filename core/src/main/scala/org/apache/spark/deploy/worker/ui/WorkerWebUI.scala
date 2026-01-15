@@ -39,8 +39,6 @@ class WorkerWebUI(
     requestedPort, worker.conf, name = "WorkerUI")
   with Logging {
 
-  private[ui] val timeout = RpcUtils.askRpcTimeout(worker.conf)
-
   initialize()
 
   /** Initialize all components of the server. */
