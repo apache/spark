@@ -4357,6 +4357,12 @@
     ],
     "sqlState" : "42601"
   },
+  "LOCAL_RELATION_SIZE_LIMIT_EXCEEDED" : {
+    "message" : [
+      "Local relation size (<actualSize> bytes) exceeds the limit (<sizeLimit> bytes)."
+    ],
+    "sqlState" : "54000"
+  },
   "LOCATION_ALREADY_EXISTS" : {
     "message" : [
       "Cannot name the managed table as <identifier>, as its associated location <location> already exists. Please pick a different table name, or remove the existing location first."

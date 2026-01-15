@@ -17,12 +17,21 @@
 
 import unittest
 
+from pyspark.errors import AnalysisException
 from pyspark.sql.tests.arrow.test_arrow import ArrowTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTestUtils):
+    @classmethod
+    def thisSetUpClass(cls):
+        super().thisSetUpClass()
+
+        # set the local relations size limit to 100MB for
+        # test_large_local_relation_size_limit_exceeded
+        cls.spark.conf.set("spark.sql.session.localRelationSizeLimit", str(100 * 1024 * 1024))
+
     @unittest.skip("Spark Connect does not support fallback.")
     def test_createDataFrame_fallback_disabled(self):
         super().test_createDataFrame_fallback_disabled()
@@ -83,6 +92,24 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
 
     def test_large_cached_local_relation_same_values(self):
         self.check_large_cached_local_relation_same_values()
+
+    def test_large_local_relation_size_limit_exceeded(self):
+        import random
+        import string
+
+        row_size = 1000
+        row_count = 128 * 1000
+        suffix = "abcdef"
+        str_value = (
+            "".join(random.choices(string.ascii_letters + string.digits, k=row_size)) + suffix
+        )
+        data = [(i, str_value) for i in range(row_count)]
+
+        with self.assertRaisesRegex(
+            AnalysisException, f"LOCAL_RELATION_SIZE_LIMIT_EXCEEDED.*{100 * 1024 * 1024}"
+        ):
+            df = self.spark.createDataFrame(data, ["col1", "col2"])
+            df.count()
 
     def test_toPandas_with_array_type(self):
         self.check_toPandas_with_array_type(True)
