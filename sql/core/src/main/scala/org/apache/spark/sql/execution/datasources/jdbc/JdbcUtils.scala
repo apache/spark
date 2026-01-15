@@ -814,13 +814,13 @@ object JdbcUtils extends Logging with SQLConfHelper {
             finalIsolationLevel = isolationLevel
           } else {
             logWarning(log"Requested isolation level " +
-              log"${MDC(ISOLATION_LEVEL, isolationLevelSting(isolationLevel))} " +
+              log"${MDC(ISOLATION_LEVEL, isolationLevelString(isolationLevel))} " +
               log"is not supported; falling back to default isolation level " +
-              log"${MDC(DEFAULT_ISOLATION_LEVEL, isolationLevelSting(defaultIsolation))}")
+              log"${MDC(DEFAULT_ISOLATION_LEVEL, isolationLevelString(defaultIsolation))}")
           }
         } else {
           logWarning(log"Requested isolation level " +
-            log"${MDC(ISOLATION_LEVEL, isolationLevelSting(isolationLevel))}, " +
+            log"${MDC(ISOLATION_LEVEL, isolationLevelString(isolationLevel))}, " +
             log"but transactions are unsupported")
         }
       } catch {
@@ -920,7 +920,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
   /**
    * Convert the value of isolation level to string.
    */
-  def isolationLevelSting(isolationLevel: Int): String = {
+  private def isolationLevelString(isolationLevel: Int): String = {
     isolationLevel match {
       case Connection.TRANSACTION_NONE => "NONE"
       case Connection.TRANSACTION_READ_UNCOMMITTED => "READ_UNCOMMITTED"
