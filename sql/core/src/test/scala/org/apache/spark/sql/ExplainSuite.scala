@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.physical.RoundRobinPartitioning
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
+import org.apache.spark.sql.execution.adaptive.{AQEPropagateEmptyRelation, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.datasources.SaveIntoDataSourceCommand
 import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
@@ -940,6 +940,104 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
                           |""".stripMargin
     results = results.replaceAll("#\\d+", "#x").replaceAll("plan_id=\\d+", "plan_id=x")
     assert(results == expectedTree)
+  }
+
+  test("SPARK-55052: Verify exposed AQEShuffleRead properties (coalesced and coalesced-skewed) " +
+    "in Physical Plan Tree") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "100",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+      withTempView("view1", "skewDataView2") {
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("id % 10 as key1")
+          .createOrReplaceTempView("view1")
+        spark
+          .range(0, 200, 1, 10)
+          .selectExpr("id % 1 as key2")
+          .createOrReplaceTempView("skewDataView2")
+
+        val df = spark.sql("SELECT key1 FROM view1 JOIN skewDataView2 ON key1 = key2")
+        df.collect()
+
+        // Verify expected FinalPlan substring including AQEShuffleRead properties
+        checkKeywordsExistsInExplain(
+          df = df,
+          mode = ExplainMode.fromString("FORMATTED"),
+          keywords = getExpectedFinalPlanWithCoalescedAndSkewedAQEShuffleRead)
+      }
+    }
+  }
+
+  test("SPARK-55052: Verify exposed AQEShuffleRead properties (local) in Physical Plan Tree") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key -> AQEPropagateEmptyRelation.ruleName,
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1"
+    ) {
+      val df1 = spark.range(10).withColumn("a", $"id")
+      val df2 = spark.range(10).withColumn("b", $"id")
+
+      val joinedDF = df1.where($"a" > 10)
+        .join(df2.where($"b" > 10), Seq("id"), "left_outer")
+      checkAnswer(joinedDF, Seq())
+      joinedDF.collect()
+
+      // Verify expected FinalPlan substring including AQEShuffleRead properties
+      checkKeywordsExistsInExplain(
+        df = joinedDF,
+        mode = ExplainMode.fromString("FORMATTED"),
+        keywords = getExpectedFinalPlanWithLocalAQEShuffleRead)
+    }
+  }
+
+  private def getExpectedFinalPlanWithCoalescedAndSkewedAQEShuffleRead: String = {
+    """== Physical Plan ==
+      |AdaptiveSparkPlan (24)
+      |+- == Final Plan ==
+      |   ResultQueryStage (17)
+      |   +- * Project (16)
+      |      +- * SortMergeJoin(skew=true) Inner (15)
+      |         :- * Sort (7)
+      |         :  +- AQEShuffleRead (6), coalesced
+      |         :     +- ShuffleQueryStage (5), Statistics(sizeInBytes=15.6 KiB, rowCount=1.00E+3)
+      |         :        +- Exchange (4)
+      |         :           +- * Project (3)
+      |         :              +- * Filter (2)
+      |         :                 +- * Range (1)
+      |         +- * Sort (14)
+      |            +- AQEShuffleRead (13), coalesced and skewed
+      |               +- ShuffleQueryStage (12), Statistics(sizeInBytes=3.1 KiB, rowCount=200)
+      |                  +- Exchange (11)
+      |                     +- * Project (10)
+      |                        +- * Filter (9)
+      |                           +- * Range (8)
+      |""".stripMargin
+  }
+
+  private def getExpectedFinalPlanWithLocalAQEShuffleRead: String = {
+    """== Physical Plan ==
+      |AdaptiveSparkPlan (24)
+      |+- == Final Plan ==
+      |   ResultQueryStage (14)
+      |   +- * Project (13)
+      |      +- * BroadcastHashJoin LeftOuter BuildRight (12)
+      |         :- AQEShuffleRead (6), local
+      |         :  +- ShuffleQueryStage (5), Statistics(sizeInBytes=0.0 B, rowCount=0)
+      |         :     +- Exchange (4)
+      |         :        +- * Project (3)
+      |         :           +- * Filter (2)
+      |         :              +- * Range (1)
+      |         +- BroadcastQueryStage (11), Statistics(sizeInBytes=0.0 B, rowCount=0)
+      |            +- BroadcastExchange (10)
+      |               +- AQEShuffleRead (9), local
+      |                  +- ShuffleQueryStage (8), Statistics(sizeInBytes=0.0 B, rowCount=0)
+      |                     +- ReusedExchange (7)
+      |""".stripMargin
   }
 }
 
