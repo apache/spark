@@ -252,7 +252,7 @@ class StreamingLogisticRegressionWithSGDTests(MLLibStreamingTestCase):
             return True
 
         # We want all batches to finish for this test.
-        eventually(timeout=120, catch_assertions=True, interval=12.0)(condition)()
+        eventually(timeout=120, catch_assertions=True)(condition)()
 
         t_models = array(models)
         diff = t_models[1:] - t_models[:-1]
