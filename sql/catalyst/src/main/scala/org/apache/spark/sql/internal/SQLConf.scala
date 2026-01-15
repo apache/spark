@@ -4338,7 +4338,7 @@ object SQLConf {
     buildConf("spark.sql.execution.pythonUDF.arrow.concurrency.batchSize")
       .doc("The number of rows to process per batch when executing Arrow-optimized Python UDF " +
         "with concurrency enabled. Larger values may improve throughput but use more memory.")
-      .version("4.0.0")
+      .version("4.2.0")
       .intConf
       .checkValue(_ > 0,
         "The value of spark.sql.execution.pythonUDF.arrow.concurrency.batchSize" +
