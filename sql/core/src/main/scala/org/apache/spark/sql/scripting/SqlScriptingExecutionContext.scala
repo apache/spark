@@ -59,17 +59,22 @@ class SqlScriptingExecutionContext extends SqlScriptingExecutionContextExtension
    * Find a cursor by its normalized name in the current scope and parent scopes.
    * Implementation of SqlScriptingExecutionContextExtension API.
    *
-   * Searches across all frames (script frame first, then handler frames) to support
-   * cursor access from exception handlers.
+   * Searches current frame first (respects shadowing), then script frame (for cross-frame access).
+   * This ensures cursors declared in handlers shadow cursors with the same name in the script.
    */
   override def findCursorByName(normalizedName: String): Option[CursorDefinition] = {
     if (frames.isEmpty) {
       None
     } else {
-      // Search in script frame first (frames.head), then current frame
-      // This allows handlers to access cursors declared in the main script
-      frames.head.findCursorByName(normalizedName)
-        .orElse(if (frames.size > 1) currentFrame.findCursorByName(normalizedName) else None)
+      // Search in current frame first (respects shadowing), then script frame (cross-frame access)
+      if (frames.size > 1) {
+        // Handler frame: search current frame first, then script frame
+        currentFrame.findCursorByName(normalizedName)
+          .orElse(frames.head.findCursorByName(normalizedName))
+      } else {
+        // Script frame only: just search in it
+        frames.head.findCursorByName(normalizedName)
+      }
     }
   }
 
@@ -77,7 +82,7 @@ class SqlScriptingExecutionContext extends SqlScriptingExecutionContextExtension
    * Find a cursor in a specific labeled scope.
    * Implementation of SqlScriptingExecutionContextExtension API.
    *
-   * Searches across all frames to support cursor access from exception handlers.
+   * Searches current frame first (respects shadowing), then script frame (for cross-frame access).
    */
   override def findCursorInScope(
       normalizedScopeLabel: String,
@@ -85,11 +90,13 @@ class SqlScriptingExecutionContext extends SqlScriptingExecutionContextExtension
     if (frames.isEmpty) {
       None
     } else {
-      // Search in script frame first, then current frame
-      frames.head.findCursorInScope(normalizedScopeLabel, normalizedName)
-        .orElse(if (frames.size > 1) {
-          currentFrame.findCursorInScope(normalizedScopeLabel, normalizedName)
-        } else None)
+      // Search in current frame first (respects shadowing), then script frame
+      if (frames.size > 1) {
+        currentFrame.findCursorInScope(normalizedScopeLabel, normalizedName)
+          .orElse(frames.head.findCursorInScope(normalizedScopeLabel, normalizedName))
+      } else {
+        frames.head.findCursorInScope(normalizedScopeLabel, normalizedName)
+      }
     }
   }
 

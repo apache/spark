@@ -1817,3 +1817,24 @@ org.apache.spark.sql.exceptions.SqlScriptingException
   "errorClass" : "INVALID_CURSOR_DECLARATION",
   "sqlState" : "42601"
 }
+
+
+-- !query
+BEGIN
+  DECLARE x INT DEFAULT 0;
+  DECLARE cur CURSOR FOR SELECT 42 AS val;  -- Script cursor
+
+  DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
+  BEGIN
+    DECLARE cur CURSOR FOR SELECT 999 AS val;  -- Handler cursor shadows script's
+    OPEN cur;
+    FETCH cur INTO x;
+    CLOSE cur;
+  END;
+
+  SELECT 1 / 0;
+
+  VALUES (x);  -- Should return 999 (from handler's cursor, not script's)
+END
+-- !query analysis
+LocalRelation [col1#x]

@@ -1666,3 +1666,26 @@ BEGIN
   DECLARE cur CURSOR FOR SELECT 123 AS val;  -- Invalid: cursor after handler
 END;
 --QUERY-DELIMITER-END
+
+
+-- Test 69: Cursor shadowing in handler - handler's cursor should shadow script's cursor
+-- EXPECTED: Success - handler's cursor (returns 999) shadows script's cursor (returns 42)
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE x INT DEFAULT 0;
+  DECLARE cur CURSOR FOR SELECT 42 AS val;  -- Script cursor
+
+  DECLARE CONTINUE HANDLER FOR SQLSTATE '22012'
+  BEGIN
+    DECLARE cur CURSOR FOR SELECT 999 AS val;  -- Handler cursor shadows script's
+    OPEN cur;
+    FETCH cur INTO x;
+    CLOSE cur;
+  END;
+
+  -- Trigger handler
+  SELECT 1 / 0;
+
+  VALUES (x);  -- Should return 999 (from handler's cursor, not script's)
+END;
+--QUERY-DELIMITER-END
