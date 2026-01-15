@@ -56,7 +56,8 @@ case class HllSketchEstimate(child: Expression)
     try {
       Math.round(HllSketch.heapify(Memory.wrap(buffer)).getEstimate)
     } catch {
-      case _: SketchesArgumentException | _: java.lang.Error =>
+      case _: SketchesArgumentException | _: java.lang.Error
+           | _: ArrayIndexOutOfBoundsException =>
         throw QueryExecutionErrors.hllInvalidInputSketchBuffer(prettyName)
     }
   }
