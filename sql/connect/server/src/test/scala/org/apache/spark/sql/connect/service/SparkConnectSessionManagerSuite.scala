@@ -33,7 +33,7 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession with BeforeAndA
   override def beforeEach(): Unit = {
     super.beforeEach()
     SparkConnectService.sessionManager.invalidateAllSessions()
-    SparkConnectService.sessionManager.initializeBaseSession(spark.sparkContext)
+    SparkConnectService.sessionManager.initializeBaseSession(() => spark.newSession())
   }
 
   test("sessionId needs to be an UUID") {
@@ -179,7 +179,7 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession with BeforeAndA
     val sessionManager = new SparkConnectSessionManager()
 
     // Initialize the base session with the test SparkContext
-    sessionManager.initializeBaseSession(spark.sparkContext)
+    sessionManager.initializeBaseSession(() => spark.newSession())
 
     // Clear the default and active sessions to simulate the scenario where
     // SparkSession.active or SparkSession.getDefaultSession would fail
@@ -203,13 +203,13 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession with BeforeAndA
     val sessionManager = new SparkConnectSessionManager()
 
     // Initialize the base session multiple times
-    sessionManager.initializeBaseSession(spark.sparkContext)
+    sessionManager.initializeBaseSession(() => spark.newSession())
     val key1 = SessionKey("user1", UUID.randomUUID().toString)
     val sessionHolder1 = sessionManager.getOrCreateIsolatedSession(key1, None)
     val baseSessionUUID1 = sessionHolder1.session.sessionUUID
 
     // Initialize again - should not change the base session
-    sessionManager.initializeBaseSession(spark.sparkContext)
+    sessionManager.initializeBaseSession(() => spark.newSession())
     val key2 = SessionKey("user2", UUID.randomUUID().toString)
     val sessionHolder2 = sessionManager.getOrCreateIsolatedSession(key2, None)
 
