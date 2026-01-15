@@ -136,7 +136,7 @@ properties to Maven.  For example:
 
     mvn integration-test -am -pl :spark-kubernetes-integration-tests_2.13 \
                             -Pkubernetes -Pkubernetes-integration-tests \
-                            -Phadoop-3 -Dhadoop.version=3.4.3 \
+                            -Phadoop-3 -Dhadoop.version=3.5.0 \
                             -Dspark.kubernetes.test.sparkTgz=spark-4.2.0-SNAPSHOT-bin-example.tgz \
                             -Dspark.kubernetes.test.imageTag=sometag \
                             -Dspark.kubernetes.test.imageRepo=docker.io/somerepo \
