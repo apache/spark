@@ -212,9 +212,9 @@ private[client] object GrpcExceptionConverter {
       sqlState: Option[String])
 
   /**
-   * Returns the errorClass to use for exception construction.
-   * If sqlState is present, the server provided structured error data, so use errorClass as-is.
-   * If sqlState is missing, the server didn't provide structured error info, so use fallback.
+   * Returns the errorClass to use for exception construction. If sqlState is present, the server
+   * provided structured error data, so use errorClass as-is. If sqlState is missing, the server
+   * didn't provide structured error info, so use fallback.
    */
   private def getErrorClassOrFallback(params: ErrorParams): String = {
     if (params.sqlState.isDefined) params.errorClass.orNull
@@ -270,9 +270,7 @@ private[client] object GrpcExceptionConverter {
         params.messageParameters,
         params.cause)),
     errorConstructor(params =>
-      new NoSuchNamespaceException(
-        getErrorClassOrFallback(params),
-        params.messageParameters)),
+      new NoSuchNamespaceException(getErrorClassOrFallback(params), params.messageParameters)),
     errorConstructor(params =>
       new NoSuchTableException(
         getErrorClassOrFallback(params),
@@ -334,8 +332,9 @@ private[client] object GrpcExceptionConverter {
       new SparkException(
         message = params.message,
         cause = params.cause.orNull,
-        errorClass = if (params.sqlState.isDefined) params.errorClass
-                     else Option("CONNECT_CLIENT_UNEXPECTED_MISSING_SQL_STATE"),
+        errorClass =
+          if (params.sqlState.isDefined) params.errorClass
+          else Option("CONNECT_CLIENT_UNEXPECTED_MISSING_SQL_STATE"),
         messageParameters = params.messageParameters,
         context = params.queryContext,
         sqlState = params.sqlState)))

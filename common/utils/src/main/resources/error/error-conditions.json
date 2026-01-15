@@ -912,7 +912,6 @@
     },
     "sqlState" : "56K00"
   },
-  },
   "CONNECT_CLIENT_INTERNAL_ERROR" : {
     "message" : [
       "<message>"

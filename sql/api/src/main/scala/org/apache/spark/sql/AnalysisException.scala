@@ -153,8 +153,7 @@ class AnalysisException protected (
       errorClass = errorClass,
       messageParameters = messageParameters,
       context = context,
-      sqlState = sqlState
-    )
+      sqlState = sqlState)
 
   def copy(
       message: String,
