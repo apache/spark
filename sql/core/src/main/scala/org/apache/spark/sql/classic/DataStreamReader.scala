@@ -20,7 +20,7 @@ package org.apache.spark.sql.classic
 import scala.jdk.CollectionConverters._
 import scala.util.matching.Regex
 
-import org.apache.spark.annotation.Evolving
+import org.apache.spark.annotation.{Evolving, Incubating}
 import org.apache.spark.sql.catalyst.analysis.{NamedStreamingRelation, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.plans.logical.UnresolvedDataSource
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
@@ -96,8 +96,9 @@ final class DataStreamReader private[sql](sparkSession: SparkSession)
    * in checkpoint metadata and enables stable checkpoint locations for source evolution.
    *
    * @param sourceName the name to assign to this streaming source
-   * @since 4.1.0
+   * @since 4.2.0
    */
+  @Incubating
   private[sql] def name(sourceName: String): this.type = {
     DataStreamReader.validateSourceName(sourceName)
     this.userProvidedSourceName = Option(sourceName)
