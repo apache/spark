@@ -16,11 +16,25 @@
 #
 import ctypes
 import unittest
-import pyarrow as pa
-import pandas as pd
 import pyspark.pandas as ps
+from pyspark.testing.utils import (
+    have_pandas,
+    have_pyarrow,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+)
+
+if have_pyarrow:
+    import pyarrow as pa
+
+if have_pandas:
+    import pandas as pd
 
 
+@unittest.skipIf(
+    not have_pyarrow or not have_pandas,
+    pyarrow_requirement_message or pandas_requirement_message,  # type: ignore[arg-type]
+)
 class TestSparkArrowCStreamer(unittest.TestCase):
     def test_spark_arrow_c_streamer_arrow_consumer(self):
         pdf = pd.DataFrame([[1, "a"], [2, "b"], [3, "c"], [4, "d"]], columns=["id", "value"])
