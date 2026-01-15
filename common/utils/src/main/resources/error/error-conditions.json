@@ -5975,6 +5975,11 @@
       "Streaming query evolution error:"
     ],
     "subClass" : {
+      "SOURCE_NAMING_NOT_SUPPORTED" : {
+        "message" : [
+          "Streaming source naming is not supported. Source name '<name>' was provided but the feature is disabled. Please enable the feature by setting spark.sql.streaming.queryEvolution.enableSourceEvolution to true."
+        ]
+      },
       "UNNAMED_STREAMING_SOURCES_WITH_ENFORCEMENT" : {
         "message" : [
           "All streaming sources must be named when spark.sql.streaming.queryEvolution.enableSourceEvolution is enabled. Unnamed sources found: <sourceInfo>. Use the name() method to assign names to all streaming sources."
@@ -7136,6 +7141,12 @@
       }
     },
     "sqlState" : "42809"
+  },
+  "UNSUPPORTED_INSERT_WITH_SCHEMA_EVOLUTION" : {
+    "message" : [
+      "INSERT WITH SCHEMA EVOLUTION ... is unsupported for this table format."
+    ],
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_JOIN_TYPE" : {
     "message" : [

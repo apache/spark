@@ -20,8 +20,6 @@ package org.apache.spark.sql.hive
 import java.io.File
 import java.util.concurrent.{Executors, TimeUnit}
 
-import org.scalatest.BeforeAndAfterEach
-
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.datasources.FileStatusCache
@@ -30,7 +28,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 
 class PartitionedTablePerfStatsSuite
-  extends QueryTest with TestHiveSingleton with SQLTestUtils with BeforeAndAfterEach {
+  extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
   override def beforeEach(): Unit = {
     super.beforeEach()

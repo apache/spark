@@ -44,6 +44,7 @@ Sketches are compact data structures that summarize large datasets, supporting d
   * [theta_difference](#theta_difference)
 * [KLL Quantile Sketch Functions](#kll-quantile-sketch-functions)
   * [kll_sketch_agg_*](#kll_sketch_agg_)
+  * [kll_merge_agg_*](#kll_merge_agg_)
   * [kll_sketch_to_string_*](#kll_sketch_to_string_)
   * [kll_sketch_get_n_*](#kll_sketch_get_n_)
   * [kll_sketch_merge_*](#kll_sketch_merge_)
@@ -480,6 +481,60 @@ FROM VALUES (1), (2), (3), (4), (5), (6), (7) tab(col);
 
 ---
 
+### kll_merge_agg_*
+
+Aggregates multiple KLL sketches of the same type by merging them together. This is useful for combining sketches created in separate aggregations (e.g., from different partitions or time windows). These are aggregate functions.
+
+**Syntax:**
+```sql
+kll_merge_agg_bigint(sketch [, k])
+kll_merge_agg_float(sketch [, k])
+kll_merge_agg_double(sketch [, k])
+```
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `sketch` | BINARY | A KLL sketch in binary format (e.g., from `kll_sketch_agg_*`) |
+| `k` | INT (optional) | Controls accuracy and size of the merged sketch. Range: 8-65535. If not specified, the merged sketch adopts the k value from the first input sketch. |
+
+Returns a BINARY containing the merged KLL sketch.
+
+**Examples:**
+```sql
+-- Merge sketches from different partitions
+SELECT kll_sketch_get_quantile_bigint(
+  kll_merge_agg_bigint(sketch),
+  0.5
+)
+FROM (
+  SELECT kll_sketch_agg_bigint(col) as sketch
+  FROM VALUES (1), (2), (3) tab(col)
+  UNION ALL
+  SELECT kll_sketch_agg_bigint(col) as sketch
+  FROM VALUES (4), (5), (6) tab(col)
+);
+-- Result: 3
+
+-- Get the total count from merged sketches
+SELECT kll_sketch_get_n_bigint(kll_merge_agg_bigint(sketch))
+FROM (
+  SELECT kll_sketch_agg_bigint(col) as sketch
+  FROM VALUES (1), (2), (3) tab(col)
+  UNION ALL
+  SELECT kll_sketch_agg_bigint(col) as sketch
+  FROM VALUES (4), (5), (6) tab(col)
+);
+-- Result: 6
+```
+
+**Notes:**
+- When `k` is not specified, the merged sketch adopts the k value from the first input sketch.
+- The merge operation can handle input sketches with different k values.
+- NULL values are ignored during aggregation.
+- Use this function when you need to merge multiple sketches in an aggregation context. For merging exactly two sketches, use the scalar `kll_sketch_merge_*` functions instead.
+
+---
+
 ### kll_sketch_to_string_*
 
 Returns a human-readable summary of the sketch.
@@ -527,7 +582,7 @@ FROM VALUES (1), (2), (3), (4), (5), (6), (7) tab(col);
 
 ### kll_sketch_merge_*
 
-Merges two KLL sketches of the same type.
+Merges two KLL sketches of the same type. These are scalar functions.
 
 **Syntax:**
 ```sql
@@ -556,6 +611,10 @@ FROM VALUES (1, 6), (2, 7), (3, 8), (4, 9), (5, 10) tab(col1, col2);
 
 **Errors:**
 - Throws an error if sketches are of incompatible types or formats.
+
+**Notes:**
+- The merge operation can handle input sketches with different k values.
+- Use this function when you need to merge exactly two sketches in an scalar context. For merging multiple sketches in an aggregation context, use the aggregate `kll_merge_agg_*` functions instead.
 
 ---
 
@@ -842,19 +901,11 @@ WHERE hour_ts = TIMESTAMP'2024-01-15 14:00:00';
 
 -- Query: Get percentiles across a full day by merging hourly sketches
 WITH daily_sketch AS (
-  SELECT kll_sketch_merge_bigint(
-    FIRST(latency_sketch),
-    COALESCE(
-      AGGREGATE(SLICE(COLLECT_LIST(latency_sketch), 2, 999999), 
-                FIRST(latency_sketch), 
-                (acc, x) -> kll_sketch_merge_bigint(acc, x)),
-      FIRST(latency_sketch)
-    )
-  ) as merged_sketch
+  SELECT kll_merge_agg_bigint(latency_sketch) as merged_sketch
   FROM hourly_latency_sketches
   WHERE DATE(hour_ts) = DATE'2024-01-15'
 )
-SELECT 
+SELECT
   kll_sketch_get_quantile_bigint(merged_sketch, 0.5) as p50_ms,
   kll_sketch_get_quantile_bigint(merged_sketch, 0.95) as p95_ms,
   kll_sketch_get_quantile_bigint(merged_sketch, 0.99) as p99_ms

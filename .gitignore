@@ -129,3 +129,10 @@ sql/api/src/main/antlr4/org/apache/spark/sql/catalyst/parser/gen/
 tpcds-sf-1/
 tpcds-sf-1-text/
 tpcds-kit/
+
+# For GitHub Copilot
+.github/copilot-instructions.md
+.github/agents/
+.github/instructions/
+.github/prompts/
+.github/skills/
