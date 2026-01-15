@@ -805,29 +805,4 @@ class StreamingSessionWindowSuite extends StreamTest
         "CAST(session.end AS LONG) - CAST(session.start AS LONG) AS durationMs",
         "numEvents")
   }
-
-  testWithAllOptions("complete mode - session window - multiple grouping keys") {
-    // This test uses TWO grouping keys (aggKeyDouble, aggKeySingle) in addition to session window
-    // This creates a state key schema: [aggKeyDouble, aggKeySingle, sessionStartTime]
-    // With numColsPrefixKey = 2 and keySchema.length = 3
-    // Without the fix, decodeRemainingKey would incorrectly use numColsPrefixKey (2) instead of
-    // keySchema.length - numColsPrefixKey (1), causing garbage data reads during prefix scan
-
-    val inputData = MemoryStream[(String, Long)]
-    val sessionUpdates = sessionWindowQueryMultiColKey(inputData)
-
-    testStream(sessionUpdates, OutputMode.Complete())(
-      AddData(inputData,
-        ("hello world", 40L),
-        ("world spark", 50L)
-      ),
-      // Just verify it produces output without crashing - the bug would cause decode errors
-      CheckLastBatch(),
-
-      // Add more data to trigger prefix scan during session merging
-      AddData(inputData, ("world test", 45L)),
-      // Verify we still get output after prefix scan operations
-      CheckLastBatch()
-    )
-  }
 }

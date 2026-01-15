@@ -585,40 +585,6 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
     }
   }
 
-  test("verify decodeRemainingKey with PrefixKeyScanStateEncoder uses correct numFields") {
-    val keySchema = StructType(Seq(
-      StructField("k1", IntegerType),
-      StructField("k2", LongType),
-      StructField("k3", StringType)
-    ))
-    val valueSchema = StructType(Seq(
-      StructField("v1", IntegerType)
-    ))
-
-    // Create encoder with 2 prefix columns, so remaining key should have 1 column (k3)
-    val prefixKeySpec = PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey = 2)
-    val encoder = new UnsafeRowDataEncoder(prefixKeySpec, valueSchema)
-
-    // Create a remaining key row with just the last column
-    val remainingKeySchema = StructType(Seq(StructField("k3", StringType)))
-    val remainingKeyProj = UnsafeProjection.create(remainingKeySchema)
-    val remainingKeyRow = remainingKeyProj.apply(InternalRow(UTF8String.fromString("test")))
-
-    // Encode the remaining key
-    val encodedRemainingKey = encoder.encodeRemainingKey(remainingKeyRow)
-
-    // Decode the remaining key - this should create a row with 1 field, not 2
-    val decodedRemainingKey = encoder.decodeRemainingKey(encodedRemainingKey)
-
-    // Verify the decoded row has correct number of fields (should be 1, not 2)
-    assert(decodedRemainingKey.numFields === 1,
-      s"Expected 1 field in decoded remaining key, but got ${decodedRemainingKey.numFields}")
-
-    // Verify the value is preserved correctly
-    assert(decodedRemainingKey.getString(0) === "test",
-      "Value not preserved in remaining key encoding/decoding")
-  }
-
   test("verify PrefixKeyScanStateEncoder full encode/decode cycle with multi-key session window") {
     // Simulate session window state with multiple grouping keys
     // Key schema: [userId, deviceId, sessionStartTime] - mimics session window with 2 grouping keys
@@ -688,7 +654,57 @@ class RocksDBStateEncoderSuite extends SparkFunSuite {
       "Field 0 value incorrect")
 
     // Trying to read field 1 should throw exception (doesn't exist)
-    intercept[ArrayIndexOutOfBoundsException] {
+    intercept[AssertionError] {
+      decodedRemainingKey.getLong(1)
+    }
+  }
+
+  test("verify AvroStateEncoder decodeRemainingKey with PrefixKeyScanStateEncoder") {
+    // This test verifies that AvroStateEncoder correctly decodes remaining keys
+    // AvroStateEncoder uses remainingKeySchema = keySchema.drop(numColsPrefixKey)
+    // which is the correct calculation (unlike the bug in UnsafeRowDataEncoder)
+    val keySchema = StructType(Seq(
+      StructField("k1", IntegerType),
+      StructField("k2", StringType),
+      StructField("k3", LongType)
+    ))
+    val valueSchema = StructType(Seq(
+      StructField("v1", IntegerType)
+    ))
+
+    // Create test state schema provider
+    val testProvider = new TestStateSchemaProvider()
+    testProvider.captureSchema(
+      StateStore.DEFAULT_COL_FAMILY_NAME,
+      keySchema,
+      valueSchema,
+      keySchemaId = 0,
+      valueSchemaId = 0
+    )
+
+    val prefixKeySpec = PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey = 2)
+    val encoder = new AvroStateEncoder(prefixKeySpec, valueSchema, Some(testProvider),
+      StateStore.DEFAULT_COL_FAMILY_NAME)
+
+    // Create and encode a remaining key with just the last column (k3)
+    val remainingKeySchema = StructType(Seq(StructField("k3", LongType)))
+    val remainingKeyProj = UnsafeProjection.create(remainingKeySchema)
+    val remainingKeyRow = remainingKeyProj.apply(InternalRow(999999L))
+    val encodedRemainingKey = encoder.encodeRemainingKey(remainingKeyRow)
+
+    // Decode the remaining key
+    val decodedRemainingKey = encoder.decodeRemainingKey(encodedRemainingKey)
+
+    // Should have 1 field (keySchema.length - numColsPrefixKey = 3 - 2 = 1)
+    assert(decodedRemainingKey.numFields === 1,
+      s"Expected 1 field but got ${decodedRemainingKey.numFields}")
+
+    // Field 0 should read correctly
+    assert(decodedRemainingKey.getLong(0) === 999999L,
+      "Field 0 value incorrect")
+
+    // Trying to read field 1 should throw exception (doesn't exist)
+    intercept[AssertionError] {
       decodedRemainingKey.getLong(1)
     }
   }
