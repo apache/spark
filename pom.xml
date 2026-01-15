@@ -127,7 +127,7 @@
     <slf4j.version>2.0.17</slf4j.version>
     <log4j.version>2.25.3</log4j.version>
     <!-- make sure to update IsolatedClientLoader whenever this version is changed -->
-    <hadoop.version>3.4.2</hadoop.version>
+    <hadoop.version>3.4.3</hadoop.version>
     <!-- SPARK-41247: When updating `protobuf.version`, also need to update `protoVersion` in `SparkBuild.scala` -->
     <protobuf.version>4.33.0</protobuf.version>
     <protoc-jar-maven-plugin.version>3.11.4</protoc-jar-maven-plugin.version>
@@ -384,6 +384,16 @@
       <id>jitpack.io</id>
       <name>JitPack</name>
       <url>https://jitpack.io</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <id>hadoop-staging</id>
+      <url>https://repository.apache.org/content/repositories/orgapachehadoop-1461</url>
       <releases>
         <enabled>true</enabled>
       </releases>
