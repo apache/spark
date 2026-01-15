@@ -782,23 +782,25 @@ END;
 
 -- Test 27: FETCH INTO with session variables
 -- EXPECTED: Success - session variables work with FETCH INTO
+DECLARE session_x INT DEFAULT 0;
+DECLARE session_y STRING DEFAULT '';
 --QUERY-DELIMITER-START
-SET VAR session_x = 0;
-SET VAR session_y = '';
 BEGIN
   DECLARE cur CURSOR FOR SELECT 42 AS num, 'hello' AS text;
   OPEN cur;
   FETCH cur INTO session_x, session_y;
   CLOSE cur;
 END;
+--QUERY-DELIMITER-END
+--QUERY-DELIMITER-START
 SELECT session_x, session_y;  -- Should return 42, 'hello'
 --QUERY-DELIMITER-END
 
 
 -- Test 28: FETCH INTO mixing local and session variables
 -- EXPECTED: Success - can mix local and session variables in FETCH INTO
+DECLARE session_var INT DEFAULT 0;
 --QUERY-DELIMITER-START
-SET VAR session_var = 0;
 BEGIN
   DECLARE local_var STRING;
   DECLARE cur CURSOR FOR SELECT 100 AS a, 'world' AS b;
@@ -812,23 +814,25 @@ END;
 
 -- Test 29: FETCH INTO session variables with type casting
 -- EXPECTED: Success - ANSI store assignment rules apply to session variables
+DECLARE session_int INT DEFAULT 0;
+DECLARE session_str STRING DEFAULT '';
 --QUERY-DELIMITER-START
-SET VAR session_int = 0;
-SET VAR session_str = '';
 BEGIN
   DECLARE cur CURSOR FOR SELECT 99.9 AS double_val, 42 AS int_val;
   OPEN cur;
   FETCH cur INTO session_int, session_str;  -- double->int cast, int->string cast
   CLOSE cur;
 END;
+--QUERY-DELIMITER-END
+--QUERY-DELIMITER-START
 SELECT session_int, session_str;  -- Should return 99, '42' (with ANSI rounding)
 --QUERY-DELIMITER-END
 
 
 -- Test 30: FETCH INTO mixing local and session with duplicate session variable
 -- EXPECTED: Error - DUPLICATE_ASSIGNMENTS (applies to session variables too)
+DECLARE session_dup INT DEFAULT 0;
 --QUERY-DELIMITER-START
-SET VAR session_dup = 0;
 BEGIN
   DECLARE cur CURSOR FOR SELECT 1, 2;
   OPEN cur;
@@ -839,8 +843,8 @@ END;
 
 -- Test 31: FETCH INTO mixing with duplicate across local and session
 -- EXPECTED: Error - DUPLICATE_ASSIGNMENTS (same variable name in local and session scope)
+DECLARE dup_var INT DEFAULT 0;
 --QUERY-DELIMITER-START
-SET VAR dup_var = 0;
 BEGIN
   DECLARE dup_var INT;
   DECLARE cur CURSOR FOR SELECT 1, 2;
