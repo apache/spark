@@ -847,7 +847,7 @@ class ArrowTableToRowsConversion:
                 return [_create_row(fields, tuple())] * table.num_rows
 
 
-class ArrowTimeStampeConversion:
+class ArrowTimestampeConversion:
     @staticmethod
     def _need_localization(at: "pa.DataType") -> bool:
         import pyarrow.types as types
@@ -860,13 +860,13 @@ class ArrowTimeStampeConversion:
             or types.is_fixed_size_list(at)
             or types.is_dictionary(at)
         ):
-            return ArrowTimeStampeConversion._need_localization(at.value_type)
+            return ArrowTimestampeConversion._need_localization(at.value_type)
         elif types.is_map(at):
-            return ArrowTimeStampeConversion._need_localization(
+            return ArrowTimestampeConversion._need_localization(
                 at.key_type
-            ) or ArrowTimeStampeConversion._need_localization(at.item_type)
+            ) or ArrowTimestampeConversion._need_localization(at.item_type)
         elif types.is_struct(at):
-            return any(ArrowTimeStampeConversion._need_localization(field.type) for field in at)
+            return any(ArrowTimestampeConversion._need_localization(field.type) for field in at)
         else:
             return False
 
@@ -903,7 +903,7 @@ class ArrowTimeStampeConversion:
 
         at = a.type
 
-        if not ArrowTimeStampeConversion._need_localization(at):
+        if not ArrowTimestampeConversion._need_localization(at):
             return a
 
         if types.is_timestamp(at) and at.tz is not None:
@@ -921,32 +921,32 @@ class ArrowTimeStampeConversion:
         elif types.is_list(a.type):
             return pa.ListArray.from_arrays(
                 offsets=a.offsets,
-                values=ArrowTimeStampeConversion.localize_tz(a.values),
+                values=ArrowTimestampeConversion.localize_tz(a.values),
             )
         elif types.is_large_list(a.type):
             return pa.LargeListType.from_arrays(
                 offsets=a.offsets,
-                values=ArrowTimeStampeConversion.localize_tz(a.values),
+                values=ArrowTimestampeConversion.localize_tz(a.values),
             )
         elif types.is_fixed_size_list(at):
             return pa.FixedSizeListArray.from_arrays(
-                values=ArrowTimeStampeConversion.localize_tz(a.values),
+                values=ArrowTimestampeConversion.localize_tz(a.values),
             )
         elif types.is_dictionary(a.type):
             return pa.DictionaryArray.from_arrays(
                 indices=a.indices,
-                dictionary=ArrowTimeStampeConversion.localize_tz(a.dictionary),
+                dictionary=ArrowTimestampeConversion.localize_tz(a.dictionary),
             )
         elif types.is_map(at):
             return pa.MapArray.from_arrays(
                 offsets=a.offsets,
-                keys=ArrowTimeStampeConversion.localize_tz(a.keys),
-                items=ArrowTimeStampeConversion.localize_tz(a.items),
+                keys=ArrowTimestampeConversion.localize_tz(a.keys),
+                items=ArrowTimestampeConversion.localize_tz(a.items),
             )
         elif types.is_struct(a.type):
             return pa.StructArray.from_arrays(
                 arrays=[
-                    ArrowTimeStampeConversion.localize_tz(a.field(i)) for i in range(len(a.type))
+                    ArrowTimestampeConversion.localize_tz(a.field(i)) for i in range(len(a.type))
                 ],
                 names=a.type.names,
             )
