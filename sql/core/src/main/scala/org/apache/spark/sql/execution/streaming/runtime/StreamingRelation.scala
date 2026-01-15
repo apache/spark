@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{ExposesMetadataColumns, LeafNode, LogicalPlan, Statistics}
-import org.apache.spark.sql.catalyst.streaming.{StreamingSourceIdentifyingName, Unassigned}
+import org.apache.spark.sql.catalyst.streaming.{HasStreamingSourceIdentifyingName, StreamingSourceIdentifyingName, Unassigned}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -43,6 +43,14 @@ object StreamingRelation {
       dataSource, dataSource.sourceInfo.name, toAttributes(dataSource.sourceInfo.schema),
       sourceIdentifyingName)
   }
+
+  def apply(
+      dataSource: DataSource,
+      sourceIdentifyingName: StreamingSourceIdentifyingName): StreamingRelation = {
+    StreamingRelation(
+      dataSource, dataSource.sourceInfo.name, toAttributes(dataSource.sourceInfo.schema),
+      sourceIdentifyingName)
+  }
 }
 
 /**
@@ -57,9 +65,13 @@ case class StreamingRelation(
     sourceName: String,
     output: Seq[Attribute],
     sourceIdentifyingName: StreamingSourceIdentifyingName = Unassigned)
-  extends LeafNode with MultiInstanceRelation with ExposesMetadataColumns {
+  extends LeafNode with MultiInstanceRelation with ExposesMetadataColumns
+    with HasStreamingSourceIdentifyingName {
   override def isStreaming: Boolean = true
   override def toString: String = sourceName
+
+  override def withSourceIdentifyingName(name: StreamingSourceIdentifyingName): LogicalPlan =
+    copy(sourceIdentifyingName = name)
 
   // Provide a concise representation for plan comparison output
   override def simpleString(maxFields: Int): String = {
