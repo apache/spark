@@ -26,21 +26,30 @@
 --
 -- ============================================================================
 
--- Test 0a: Verify DECLARE CURSOR is disabled by default
+-- ============================================================================
+-- TEST SUITE - ORGANIZED BY THEME
+-- ============================================================================
+
+
+-- ============================================================================
+-- FEATURE GATING
+-- ============================================================================
+
+-- Test 1: Verify DECLARE CURSOR is disabled by default
 --QUERY-DELIMITER-START
 BEGIN
   DECLARE cur CURSOR FOR SELECT 1;
 END;
 --QUERY-DELIMITER-END
 
--- Test 0b: Verify OPEN is disabled by default
+-- Test 2: Verify OPEN is disabled by default
 --QUERY-DELIMITER-START
 BEGIN
   OPEN cur;
 END;
 --QUERY-DELIMITER-END
 
--- Test 0c: Verify FETCH is disabled by default
+-- Test 3: Verify FETCH is disabled by default
 --QUERY-DELIMITER-START
 BEGIN
   DECLARE x INT;
@@ -48,7 +57,7 @@ BEGIN
 END;
 --QUERY-DELIMITER-END
 
--- Test 0d: Verify CLOSE is disabled by default
+-- Test 4: Verify CLOSE is disabled by default
 --QUERY-DELIMITER-START
 BEGIN
   CLOSE cur;
@@ -61,7 +70,12 @@ SET spark.sql.scripting.continueHandlerEnabled=true;
 
 -- Cursor scoping and state management tests
 
--- Test 1a: Cursors have a separate namespace from local variables
+
+-- ============================================================================
+-- BASIC LIFECYCLE & STATE
+-- ============================================================================
+
+-- Test 5: Cursors have a separate namespace from local variables
 -- EXPECTED: Success - cursor and variable can have same name
 --QUERY-DELIMITER-START
 BEGIN
@@ -74,7 +88,7 @@ BEGIN
 END;
 --QUERY-DELIMITER-END
 
--- Test 1b: Duplicate cursor names in same compound statement are not allowed
+-- Test 6: Duplicate cursor names in same compound statement are not allowed
 -- EXPECTED: Error - CURSOR_ALREADY_EXISTS
 --QUERY-DELIMITER-START
 BEGIN
@@ -83,7 +97,7 @@ BEGIN
 END;
 --QUERY-DELIMITER-END
 
--- Test 1c: Inner scope cursors shadow outer scope cursors
+-- Test 7: Inner scope cursors shadow outer scope cursors
 -- EXPECTED: Success - inner cursor shadows outer cursor with same name
 --QUERY-DELIMITER-START
 BEGIN
@@ -104,7 +118,7 @@ BEGIN
 END;
 --QUERY-DELIMITER-END
 
--- Test 2a: A cursor cannot be opened twice
+-- Test 8: A cursor cannot be opened twice
 -- EXPECTED: Error - CURSOR_ALREADY_OPEN
 --QUERY-DELIMITER-START
 BEGIN
@@ -114,7 +128,7 @@ BEGIN
 END;
 --QUERY-DELIMITER-END
 
--- Test 2b: A cursor can be closed and then re-opened
+-- Test 9: A cursor can be closed and then re-opened
 -- EXPECTED: Success
 --QUERY-DELIMITER-START
 BEGIN
@@ -131,7 +145,7 @@ BEGIN
 END;
 --QUERY-DELIMITER-END
 
--- Test 2c: A cursor that is not open cannot be closed
+-- Test 10: A cursor that is not open cannot be closed
 -- EXPECTED: Error - CURSOR_NOT_OPEN
 --QUERY-DELIMITER-START
 BEGIN
@@ -140,7 +154,7 @@ BEGIN
 END;
 --QUERY-DELIMITER-END
 
--- Test 2d: A cursor cannot be closed twice
+-- Test 11: A cursor cannot be closed twice
 -- EXPECTED: Error - CURSOR_NOT_OPEN
 --QUERY-DELIMITER-START
 BEGIN
@@ -151,7 +165,7 @@ BEGIN
 END;
 --QUERY-DELIMITER-END
 
--- Test 2e: A cursor that is not open cannot be fetched
+-- Test 12: A cursor that is not open cannot be fetched
 -- EXPECTED: Error - CURSOR_NOT_OPEN
 --QUERY-DELIMITER-START
 BEGIN
@@ -161,7 +175,7 @@ BEGIN
 END;
 --QUERY-DELIMITER-END
 
--- Test 2f: Cannot fetch after closing
+-- Test 13: Cannot fetch after closing
 -- EXPECTED: Error - CURSOR_NOT_OPEN
 --QUERY-DELIMITER-START
 BEGIN
@@ -174,7 +188,7 @@ BEGIN
 END;
 --QUERY-DELIMITER-END
 
--- Test 2g: Cursor is implicitly closed when it goes out of scope.
+-- Test 14: Cursor is implicitly closed when it goes out of scope.
 -- EXPECTED: Success, return 10
 --QUERY-DELIMITER-START
 BEGIN
@@ -212,7 +226,97 @@ BEGIN
 END;
 --QUERY-DELIMITER-END
 
--- Test 3: Cursor sensitivity - cursor captures snapshot when opened
+
+-- ============================================================================
+-- DECLARATION ORDER VALIDATION
+-- ============================================================================
+
+-- Test 15: Invalid declaration order - cursor before variable
+-- EXPECTED: Error - variables must be declared before cursors
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE cur CURSOR FOR SELECT 123 AS val;
+  DECLARE result INT;  -- Invalid: variable after cursor
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 16: Invalid declaration order - cursor after handler
+-- EXPECTED: Error - cursors must be declared before handlers
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE result INT;
+  DECLARE CONTINUE HANDLER FOR SQLSTATE '02000' BEGIN END;
+  DECLARE cur CURSOR FOR SELECT 123 AS val;  -- Invalid: cursor after handler
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 17: Invalid declaration - cursor after statement
+-- EXPECTED: Error - INVALID_CURSOR_DECLARATION - cursors must be declared before statements
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE x INT DEFAULT 0;
+  SET x = 42;  -- Statement
+  DECLARE cur CURSOR FOR SELECT 123 AS val;  -- Invalid: cursor after statement
+END;
+--QUERY-DELIMITER-END
+
+
+
+-- ============================================================================
+-- CURSOR SCOPE & LIFECYCLE
+-- ============================================================================
+
+-- Test 18: Cursor implicitly closed when exiting DECLARE scope (not OPEN scope)
+-- EXPECTED: Success - cursor declared in outer scope, opened in inner scope,
+--           implicitly closed when exiting outer scope (where it was declared)
+--QUERY-DELIMITER-START
+BEGIN
+  outer: BEGIN
+    DECLARE x INT;
+    DECLARE cur CURSOR FOR SELECT 42 AS val;
+
+    inner_block: BEGIN
+      OPEN cur;  -- Open in inner scope
+      FETCH cur INTO x;
+      -- Cursor remains open when exiting inner scope
+    END;
+
+    -- Cursor should still be open here (we're still in outer scope where it was declared)
+    FETCH cur INTO x;  -- This should succeed
+    VALUES (x);  -- Should return 42
+
+    -- Cursor will be implicitly closed when exiting outer scope
+  END;
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 19: Verify cursor closed when exiting DECLARE scope, not OPEN scope
+-- EXPECTED: Error - cursor not open after exiting the scope where it was declared
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE y INT;
+
+  scope1: BEGIN
+    DECLARE cur CURSOR FOR SELECT 99 AS val;
+    OPEN cur;
+    FETCH cur INTO y;
+  END;  -- cursor is implicitly closed here (exiting DECLARE scope)
+
+  -- This should fail because cursor no longer exists (declared in scope1)
+  FETCH cur INTO y;
+END;
+--QUERY-DELIMITER-END
+
+
+
+-- ============================================================================
+-- CURSOR SENSITIVITY
+-- ============================================================================
+
+-- Test 20: Cursor sensitivity - cursor captures snapshot when opened
 -- Setup: Create table with initial rows
 CREATE TABLE cursor_sensitivity_test (id INT, value STRING) USING parquet;
 INSERT INTO cursor_sensitivity_test VALUES (1, 'row1'), (2, 'row2');
@@ -279,7 +383,12 @@ END;
 DROP TABLE cursor_sensitivity_test;
 
 
--- Test 4: Basic parameterized cursor with positional parameters
+
+-- ============================================================================
+-- PARAMETERIZED CURSORS - BASIC
+-- ============================================================================
+
+-- Test 21: Basic parameterized cursor with positional parameters
 --QUERY-DELIMITER-START
 BEGIN
   DECLARE min_id INT DEFAULT 2;
@@ -306,7 +415,7 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 5: Parameterized cursor with named parameters
+-- Test 22: Parameterized cursor with named parameters
 --QUERY-DELIMITER-START
 BEGIN
   DECLARE search_value STRING DEFAULT 'c';
@@ -332,7 +441,7 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 6: Parameterized cursor - reopen with different parameters
+-- Test 23: Parameterized cursor - reopen with different parameters
 --QUERY-DELIMITER-START
 BEGIN
   DECLARE fetched_id INT;
@@ -368,7 +477,7 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 7: Parameterized cursor with expressions
+-- Test 24: Parameterized cursor with expressions
 --QUERY-DELIMITER-START
 BEGIN
   DECLARE base INT DEFAULT 10;
@@ -394,38 +503,46 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 7a: USING clause - various data types (matching EXECUTE IMMEDIATE behavior)
+
+-- ============================================================================
+-- USING CLAUSE - DATA TYPES & EDGE CASES
+-- ============================================================================
+
+-- Test 25: USING clause - various data types (matching EXECUTE IMMEDIATE behavior)
 -- EXPECTED: Success - test that USING clause handles various types correctly
 --QUERY-DELIMITER-START
 BEGIN
   DECLARE int_val INT;
   DECLARE str_val STRING;
+  DECLARE str_val2 STRING;
   DECLARE date_val DATE;
   DECLARE bool_val BOOLEAN;
 
-  -- Integer type
+  -- Declare all cursors upfront (SQL/PSM declaration order)
   DECLARE cur_int CURSOR FOR SELECT typeof(:p) as type, :p as val;
+  DECLARE cur_str CURSOR FOR SELECT typeof(:p) as type, :p as val;
+  DECLARE cur_date CURSOR FOR SELECT typeof(:p) as type, :p as val;
+  DECLARE cur_bool CURSOR FOR SELECT typeof(:p) as type, :p as val;
+
+  -- Integer type
   OPEN cur_int USING 42 AS p;
   FETCH cur_int INTO str_val, int_val;
   CLOSE cur_int;
   VALUES ('INT', int_val);
 
   -- String type
-  DECLARE cur_str CURSOR FOR SELECT typeof(:p) as type, :p as val;
   OPEN cur_str USING 'hello' AS p;
-  FETCH cur_str INTO str_val, str_val;
+  FETCH cur_str INTO str_val, str_val2;
   CLOSE cur_str;
-  VALUES ('STRING', str_val);
+  VALUES ('STRING', str_val2);
 
   -- Date type
-  DECLARE cur_date CURSOR FOR SELECT typeof(:p) as type, :p as val;
   OPEN cur_date USING DATE '2023-12-25' AS p;
   FETCH cur_date INTO str_val, date_val;
   CLOSE cur_date;
   VALUES ('DATE', date_val);
 
   -- Boolean type
-  DECLARE cur_bool CURSOR FOR SELECT typeof(:p) as type, :p as val;
   OPEN cur_bool USING true AS p;
   FETCH cur_bool INTO str_val, bool_val;
   CLOSE cur_bool;
@@ -434,29 +551,31 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 7b: USING clause - positional vs named parameters
+-- Test 26: USING clause - positional vs named parameters
 -- EXPECTED: Success - verify positional and named parameter binding work correctly
 --QUERY-DELIMITER-START
 BEGIN
   DECLARE result INT;
+  DECLARE x INT DEFAULT 100;
+
+  -- Declare all cursors upfront (SQL/PSM declaration order)
+  DECLARE cur_pos CURSOR FOR SELECT ? + ? AS sum;
+  DECLARE cur_named CURSOR FOR SELECT :a + :b AS sum;
+  DECLARE cur_var CURSOR FOR SELECT ? + 1 AS val;
 
   -- Positional parameters (no aliases)
-  DECLARE cur_pos CURSOR FOR SELECT ? + ? AS sum;
   OPEN cur_pos USING 10, 20;
   FETCH cur_pos INTO result;
   CLOSE cur_pos;
   VALUES ('positional', result); -- Should be 30
 
   -- Named parameters (with aliases)
-  DECLARE cur_named CURSOR FOR SELECT :a + :b AS sum;
   OPEN cur_named USING 15 AS a, 25 AS b;
   FETCH cur_named INTO result;
   CLOSE cur_named;
   VALUES ('named', result); -- Should be 40
 
   -- Mixed: variable reference without alias (positional)
-  DECLARE x INT DEFAULT 100;
-  DECLARE cur_var CURSOR FOR SELECT ? + 1 AS val;
   OPEN cur_var USING x;
   FETCH cur_var INTO result;
   CLOSE cur_var;
@@ -465,22 +584,24 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 7c: USING clause - expressions (matching EXECUTE IMMEDIATE)
+-- Test 27: USING clause - expressions (matching EXECUTE IMMEDIATE)
 -- EXPECTED: Success - test constant expressions in USING clause
 --QUERY-DELIMITER-START
 BEGIN
   DECLARE result INT;
   DECLARE base INT DEFAULT 5;
 
-  -- Arithmetic expression
+  -- Declare all cursors upfront (SQL/PSM declaration order)
   DECLARE cur1 CURSOR FOR SELECT :p AS val;
+  DECLARE cur2 CURSOR FOR SELECT :p AS val;
+
+  -- Arithmetic expression
   OPEN cur1 USING 5 + 10 AS p;
   FETCH cur1 INTO result;
   CLOSE cur1;
   VALUES ('arithmetic', result); -- Should be 15
 
   -- Variable reference with expression
-  DECLARE cur2 CURSOR FOR SELECT :p AS val;
   OPEN cur2 USING base * 2 AS p;
   FETCH cur2 INTO result;
   CLOSE cur2;
@@ -489,7 +610,218 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 8: Label-qualified cursor - basic case
+-- Test 28: USING clause with MORE expressions than needed (allowed - extras ignored)
+-- EXPECTED: Success - extra parameters are allowed and ignored
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT ? + 10 AS val;
+
+  OPEN cur USING 5, 99, 100;  -- Only first parameter (5) is used, others ignored
+  FETCH cur INTO result;
+  CLOSE cur;
+
+  VALUES (result);  -- Should return 15 (5 + 10)
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 29: USING clause with TOO FEW expressions for positional parameters
+-- EXPECTED: Error - UNBOUND_SQL_PARAMETER
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT ? + ? AS val;
+
+  OPEN cur USING 10;  -- Only 1 parameter provided, but 2 needed
+  FETCH cur INTO result;
+  CLOSE cur;
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 30: USING clause missing a named parameter
+-- EXPECTED: Error - UNRESOLVED_COLUMN (missing parameter 'y')
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT :x + :y AS val;
+
+  OPEN cur USING 42 AS x;  -- Missing parameter 'y'
+  FETCH cur INTO result;
+  CLOSE cur;
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 31: USING clause with named parameters but wrong name
+-- EXPECTED: Error - UNBOUND_SQL_PARAMETER
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT :alpha + :beta AS val;
+
+  OPEN cur USING (5 AS alpha, 10 AS gamma);  -- 'gamma' provided but 'beta' expected
+  FETCH cur INTO result;
+  CLOSE cur;
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 32: DECLARE mixes named and unnamed parameter markers
+-- EXPECTED: Error - UNRECOGNIZED_SQL_TYPE (due to invalid parameter marker syntax)
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT ? + :named AS val;  -- Mixed positional and named
+
+  OPEN cur USING 10, (20 AS named);
+  FETCH cur INTO result;
+  CLOSE cur;
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 33: Local variable with same name as named parameter (implicit alias)
+-- EXPECTED: Success - variable name becomes the parameter name implicitly
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE x INT DEFAULT 100;
+  DECLARE y INT DEFAULT 200;
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT :x + :y AS val;
+
+  -- Variable names match parameter names, so no explicit alias needed
+  OPEN cur USING (x AS x, y AS y);
+  FETCH cur INTO result;
+  CLOSE cur;
+
+  VALUES (result);  -- Should return 300 (100 + 200)
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 34: Named parameters with expressions (not just variable references)
+-- EXPECTED: Success - expressions can be used with explicit aliases
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE base INT DEFAULT 10;
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT :a * :b AS val;
+
+  OPEN cur USING base * 2 AS a, base + 5 AS b;  -- Expressions with aliases
+  FETCH cur INTO result;
+  CLOSE cur;
+
+  VALUES (result);  -- Should return 300 (20 * 15)
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 35: Positional parameters with complex expressions
+-- EXPECTED: Success - expressions work for positional parameters
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE x INT DEFAULT 5;
+  DECLARE y INT DEFAULT 3;
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT ? * ? + ? AS val;
+
+  OPEN cur USING x * 2, y + 1, 10;  -- (5*2) * (3+1) + 10 = 10 * 4 + 10 = 50
+  FETCH cur INTO result;
+  CLOSE cur;
+
+  VALUES (result);  -- Should return 50
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 36: Reopen cursor with different parameter values (positional)
+-- EXPECTED: Success - cursor can be reopened with different positional parameters
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE result1 INT;
+  DECLARE result2 INT;
+  DECLARE cur CURSOR FOR SELECT ? * 10 AS val;
+
+  -- First open with parameter 5
+  OPEN cur USING 5;
+  FETCH cur INTO result1;
+  CLOSE cur;
+
+  -- Reopen with parameter 8
+  OPEN cur USING 8;
+  FETCH cur INTO result2;
+  CLOSE cur;
+
+  VALUES (result1, result2);  -- Should return (50, 80)
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 37: Reopen cursor with different parameter values (named)
+-- EXPECTED: Success - cursor can be reopened with different named parameters
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE result1 INT;
+  DECLARE result2 INT;
+  DECLARE cur CURSOR FOR SELECT :factor * 10 AS val;
+
+  -- First open with factor = 3
+  OPEN cur USING (3 AS factor);
+  FETCH cur INTO result1;
+  CLOSE cur;
+
+  -- Reopen with factor = 7
+  OPEN cur USING (7 AS factor);
+  FETCH cur INTO result2;
+  CLOSE cur;
+
+  VALUES (result1, result2);  -- Should return (30, 70)
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 38: ALL_PARAMETERS_MUST_BE_NAMED - Mix of named and positional in USING
+-- EXPECTED: Error - ALL_PARAMETERS_MUST_BE_NAMED
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT :x + :y AS val;
+
+  -- USING clause mixes positional (10) and named (y AS y)
+  OPEN cur USING 10, (20 AS y);
+  FETCH cur INTO result;
+  CLOSE cur;
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 39: Verify variable name inference for parameters (without explicit AS)
+-- EXPECTED: Success - variable names inferred from identifiers in USING clause
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE multiplier INT DEFAULT 4;
+  DECLARE addend INT DEFAULT 6;
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT :multiplier * 10 + :addend AS val;
+
+  -- Variable names match parameter names, implicit binding
+  OPEN cur USING multiplier AS multiplier, addend AS addend;
+  FETCH cur INTO result;
+  CLOSE cur;
+
+  VALUES (result);  -- Should return 46 (4 * 10 + 6)
+END;
+--QUERY-DELIMITER-END
+
+
+
+-- ============================================================================
+-- LABEL QUALIFICATION
+-- ============================================================================
+
+-- Test 40: Label-qualified cursor - basic case
 -- EXPECTED: Success - cursor qualified with label
 --QUERY-DELIMITER-START
 BEGIN
@@ -505,7 +837,7 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 9: Label-qualified cursor - nested scopes
+-- Test 41: Label-qualified cursor - nested scopes
 -- EXPECTED: Success - inner and outer cursors with same name, qualified access
 --QUERY-DELIMITER-START
 BEGIN
@@ -538,7 +870,7 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 10: Label-qualified cursor with parameterized query
+-- Test 42: Label-qualified cursor with parameterized query
 -- EXPECTED: Success - qualified cursor with parameters
 --QUERY-DELIMITER-START
 BEGIN
@@ -563,7 +895,77 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 11: FETCH INTO with duplicate variable names
+
+-- ============================================================================
+-- CASE INSENSITIVITY
+-- ============================================================================
+
+-- Test 43: Case insensitivity - DECLARE lowercase, OPEN uppercase
+-- EXPECTED: Success - cursor names should be case-insensitive by default
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE result INT;
+  DECLARE my_cursor CURSOR FOR SELECT 42 AS val;
+  OPEN MY_CURSOR;
+  FETCH MY_CURSOR INTO result;
+  CLOSE MY_CURSOR;
+  VALUES (result);  -- Should return 42
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 44: Case insensitivity - DECLARE MixedCase, OPEN lowercase
+-- EXPECTED: Success - cursor names should be case-insensitive by default
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE result INT;
+  DECLARE MyCursor CURSOR FOR SELECT 99 AS val;
+  OPEN mycursor;
+  FETCH mycursor INTO result;
+  CLOSE mycursor;
+  VALUES (result);  -- Should return 99
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 45: Case insensitivity - Label-qualified cursor with different cases
+-- EXPECTED: Success - both label and cursor name should be case-insensitive
+--QUERY-DELIMITER-START
+BEGIN
+  outer_lbl: BEGIN
+    DECLARE result INT;
+    DECLARE cur CURSOR FOR SELECT 123 AS val;
+
+    OPEN OUTER_LBL.cur;  -- Label in different case
+    FETCH OUTER_LBL.CUR INTO result;  -- Both in different case
+    CLOSE outer_lbl.CUR;  -- Cursor in different case
+
+    VALUES (result);  -- Should return 123
+  END;
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 46: Case insensitivity with IDENTIFIER() - resolution still case-insensitive
+-- EXPECTED: Success - IDENTIFIER() preserves literal but resolution uses caseSensitiveAnalysis
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE result INT;
+  DECLARE IDENTIFIER('MyCase') CURSOR FOR SELECT 42;
+  OPEN IDENTIFIER('mycase');  -- Different case but should work (case-insensitive resolution)
+  FETCH IDENTIFIER('MYCASE') INTO result;  -- Another case variation
+  CLOSE IDENTIFIER('MyCaSe');  -- Yet another variation
+  VALUES (result);  -- Should return 42
+END;
+--QUERY-DELIMITER-END
+
+
+
+-- ============================================================================
+-- FETCH INTO - VALIDATION
+-- ============================================================================
+
+-- Test 47: FETCH INTO with duplicate variable names
 -- EXPECTED: Error - DUPLICATE_ASSIGNMENTS
 --QUERY-DELIMITER-START
 BEGIN
@@ -575,7 +977,7 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 12: FETCH INTO with type casting (store assignment)
+-- Test 48: FETCH INTO with type casting (store assignment)
 -- EXPECTED: Success - values should be cast according to ANSI store assignment rules
 --QUERY-DELIMITER-START
 BEGIN
@@ -592,7 +994,7 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 13: FETCH INTO with arity mismatch - too few variables
+-- Test 49: FETCH INTO with arity mismatch - too few variables
 -- EXPECTED: Error - ASSIGNMENT_ARITY_MISMATCH
 --QUERY-DELIMITER-START
 BEGIN
@@ -604,7 +1006,7 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 14: FETCH INTO with arity mismatch - too many variables
+-- Test 50: FETCH INTO with arity mismatch - too many variables
 -- EXPECTED: Error - ASSIGNMENT_ARITY_MISMATCH
 --QUERY-DELIMITER-START
 BEGIN
@@ -616,105 +1018,12 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 15: DECLARE CURSOR with INSENSITIVE keyword
--- EXPECTED: Success - INSENSITIVE is a valid optional keyword
---QUERY-DELIMITER-START
-BEGIN
-  DECLARE x INT;
-  DECLARE cur INSENSITIVE CURSOR FOR SELECT 42 AS val;
-  OPEN cur;
-  FETCH cur INTO x;
-  CLOSE cur;
-  VALUES (x); -- Should return 42
-END;
---QUERY-DELIMITER-END
 
+-- ============================================================================
+-- FETCH INTO - STRUCT SUPPORT
+-- ============================================================================
 
--- Test 16: DECLARE CURSOR with ASENSITIVE keyword
--- EXPECTED: Success - ASENSITIVE is a valid optional keyword
---QUERY-DELIMITER-START
-BEGIN
-  DECLARE y INT;
-  DECLARE cur ASENSITIVE CURSOR FOR SELECT 99 AS val;
-  OPEN cur;
-  FETCH cur INTO y;
-  CLOSE cur;
-  VALUES (y); -- Should return 99
-END;
---QUERY-DELIMITER-END
-
-
--- Test 17: DECLARE CURSOR with FOR READ ONLY clause
--- EXPECTED: Success - FOR READ ONLY is a valid optional clause
---QUERY-DELIMITER-START
-BEGIN
-  DECLARE z INT;
-  DECLARE cur CURSOR FOR SELECT 77 AS val FOR READ ONLY;
-  OPEN cur;
-  FETCH cur INTO z;
-  CLOSE cur;
-  VALUES (z); -- Should return 77
-END;
---QUERY-DELIMITER-END
-
-
--- Test 18: DECLARE CURSOR with all optional keywords
--- EXPECTED: Success - Combination of INSENSITIVE and FOR READ ONLY
---QUERY-DELIMITER-START
-BEGIN
-  DECLARE w INT;
-  DECLARE cur INSENSITIVE CURSOR FOR SELECT 123 AS val FOR READ ONLY;
-  OPEN cur;
-  FETCH cur INTO w;
-  CLOSE cur;
-  VALUES (w); -- Should return 123
-END;
---QUERY-DELIMITER-END
-
-
--- Test 19: FETCH with NEXT FROM keywords
--- EXPECTED: Success - NEXT FROM is a valid optional keyword combination
---QUERY-DELIMITER-START
-BEGIN
-  DECLARE a INT;
-  DECLARE cur CURSOR FOR SELECT 55 AS val;
-  OPEN cur;
-  FETCH NEXT FROM cur INTO a;
-  CLOSE cur;
-  VALUES (a); -- Should return 55
-END;
---QUERY-DELIMITER-END
-
-
--- Test 20: FETCH with FROM keyword
--- EXPECTED: Success - FROM is a valid optional keyword
---QUERY-DELIMITER-START
-BEGIN
-  DECLARE b INT;
-  DECLARE cur CURSOR FOR SELECT 66 AS val;
-  OPEN cur;
-  FETCH FROM cur INTO b;
-  CLOSE cur;
-  VALUES (b); -- Should return 66
-END;
---QUERY-DELIMITER-END
-
-
--- Test 21: FETCH with NEXT FROM keywords
--- EXPECTED: Success - NEXT FROM is a valid optional keyword combination
---QUERY-DELIMITER-START
-BEGIN
-  DECLARE c INT;
-  DECLARE cur CURSOR FOR SELECT 88 AS val;
-  OPEN cur;
-  FETCH NEXT FROM cur INTO c;
-  CLOSE cur;
-  VALUES (c); -- Should return 88
-END;
---QUERY-DELIMITER-END
-
-
--- Test 22: FETCH INTO single STRUCT variable - basic case
+-- Test 51: FETCH INTO single STRUCT variable - basic case
 -- EXPECTED: Success - SQL Standard allows multi-column fetch into single struct
 --QUERY-DELIMITER-START
 BEGIN
@@ -728,7 +1037,7 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 23: FETCH INTO STRUCT with type casting
+-- Test 52: FETCH INTO STRUCT with type casting
 -- EXPECTED: Success - ANSI casting should apply to struct fields
 --QUERY-DELIMITER-START
 BEGIN
@@ -742,7 +1051,7 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 24: FETCH INTO STRUCT - field count mismatch
+-- Test 53: FETCH INTO STRUCT - field count mismatch
 -- EXPECTED: Error - ASSIGNMENT_ARITY_MISMATCH
 --QUERY-DELIMITER-START
 BEGIN
@@ -754,7 +1063,7 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 25: FETCH INTO non-STRUCT single variable with multiple columns
+-- Test 54: FETCH INTO non-STRUCT single variable with multiple columns
 -- EXPECTED: Error - ASSIGNMENT_ARITY_MISMATCH (not a struct, so arity must match)
 --QUERY-DELIMITER-START
 BEGIN
@@ -766,7 +1075,7 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 26: FETCH INTO STRUCT with complex types
+-- Test 55: FETCH INTO STRUCT with complex types
 -- EXPECTED: Success - Struct with mixed types
 --QUERY-DELIMITER-START
 BEGIN
@@ -780,7 +1089,12 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 27: FETCH INTO with session variables
+
+-- ============================================================================
+-- FETCH INTO - SESSION VARIABLES
+-- ============================================================================
+
+-- Test 56: FETCH INTO with session variables
 -- EXPECTED: Success - session variables work with FETCH INTO
 DECLARE session_x INT DEFAULT 0;
 DECLARE session_y STRING DEFAULT '';
@@ -797,7 +1111,7 @@ SELECT session_x, session_y;  -- Should return 42, 'hello'
 --QUERY-DELIMITER-END
 
 
--- Test 28: FETCH INTO mixing local and session variables
+-- Test 57: FETCH INTO mixing local and session variables
 -- EXPECTED: Success - can mix local and session variables in FETCH INTO
 DECLARE session_var INT DEFAULT 0;
 --QUERY-DELIMITER-START
@@ -812,7 +1126,7 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 29: FETCH INTO session variables with type casting
+-- Test 58: FETCH INTO session variables with type casting
 -- EXPECTED: Success - ANSI store assignment rules apply to session variables
 DECLARE session_int INT DEFAULT 0;
 DECLARE session_str STRING DEFAULT '';
@@ -829,7 +1143,7 @@ SELECT session_int, session_str;  -- Should return 99, '42' (with ANSI rounding)
 --QUERY-DELIMITER-END
 
 
--- Test 30: FETCH INTO mixing local and session with duplicate session variable
+-- Test 59: FETCH INTO mixing local and session with duplicate session variable
 -- EXPECTED: Error - DUPLICATE_ASSIGNMENTS (applies to session variables too)
 DECLARE session_dup INT DEFAULT 0;
 --QUERY-DELIMITER-START
@@ -841,7 +1155,7 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 31: FETCH INTO mixing with duplicate across local and session
+-- Test 60: FETCH INTO mixing with duplicate across local and session
 -- EXPECTED: Error - DUPLICATE_ASSIGNMENTS (same variable name in local and session scope)
 DECLARE dup_var INT DEFAULT 0;
 --QUERY-DELIMITER-START
@@ -853,89 +1167,124 @@ BEGIN
 END;
 --QUERY-DELIMITER-END
 
-
--- Test 32: Cursor implicitly closed when exiting DECLARE scope (not OPEN scope)
--- EXPECTED: Success - cursor declared in outer scope, opened in inner scope,
---           implicitly closed when exiting outer scope (where it was declared)
---QUERY-DELIMITER-START
-BEGIN
-  outer: BEGIN
-    DECLARE x INT;
-    DECLARE cur CURSOR FOR SELECT 42 AS val;
-
-    inner: BEGIN
-      OPEN cur;  -- Open in inner scope
-      FETCH cur INTO x;
-      -- Cursor remains open when exiting inner scope
-    END;
-
-    -- Cursor should still be open here (we're still in outer scope where it was declared)
-    FETCH cur INTO x;  -- This should succeed
-    VALUES (x);  -- Should return 42
-
-    -- Cursor will be implicitly closed when exiting outer scope
-  END;
-END;
---QUERY-DELIMITER-END
+-- Cleanup session variables from Tests 56-60
+DROP TEMPORARY VARIABLE IF EXISTS session_x;
+DROP TEMPORARY VARIABLE IF EXISTS session_y;
+DROP TEMPORARY VARIABLE IF EXISTS session_var;
+DROP TEMPORARY VARIABLE IF EXISTS session_int;
+DROP TEMPORARY VARIABLE IF EXISTS session_str;
+DROP TEMPORARY VARIABLE IF EXISTS session_dup;
+DROP TEMPORARY VARIABLE IF EXISTS dup_var;
 
 
--- Test 33: Verify cursor closed when exiting DECLARE scope, not OPEN scope
--- EXPECTED: Error - cursor not open after exiting the scope where it was declared
---QUERY-DELIMITER-START
-BEGIN
-  DECLARE y INT;
+-- ============================================================================
+-- CURSOR KEYWORDS & SYNTAX VARIANTS
+-- ============================================================================
 
-  scope1: BEGIN
-    DECLARE cur CURSOR FOR SELECT 99 AS val;
-    OPEN cur;
-    FETCH cur INTO y;
-  END;  -- cursor is implicitly closed here (exiting DECLARE scope)
-
-  -- This should fail because cursor no longer exists (declared in scope1)
-  FETCH cur INTO y;
-END;
---QUERY-DELIMITER-END
-
-
--- Test 34: Unhandled CURSOR_NO_MORE_ROWS continues execution (SQL Standard completion condition)
--- EXPECTED: Success - SQLSTATE '02xxx' is a completion condition (no data), continues without handler
--- Note: This is distinct from warnings (SQLSTATE '01xxx') which Spark doesn't currently raise
---QUERY-DELIMITER-START
-BEGIN
-  DECLARE x INT DEFAULT 0;
-  DECLARE result STRING DEFAULT '';
-  DECLARE cur CURSOR FOR SELECT 42 AS val;
-
-  -- No NOT FOUND handler declared
-  OPEN cur;
-  FETCH cur INTO x;  -- OK: gets value 42
-  SET result = result || CAST(x AS STRING);
-
-  -- This FETCH will hit CURSOR_NO_MORE_ROWS (SQLSTATE 02000)
-  -- As a completion condition (warning), it should CONTINUE execution without throwing
-  FETCH cur INTO x;  -- Continues execution (no handler needed for completion conditions)
-
-  SET result = result || '-after-fetch';
-  CLOSE cur;
-
-  VALUES (result);  -- Should return '42-after-fetch', proving execution continued
-END;
---QUERY-DELIMITER-END
-
-
--- Test 35: Verify unhandled exception conditions still throw (not completion conditions)
--- EXPECTED: Error - DIVIDE_BY_ZERO is an exception condition, should throw without handler
+-- Test 61: DECLARE CURSOR with INSENSITIVE keyword
+-- EXPECTED: Success - INSENSITIVE is a valid optional keyword
 --QUERY-DELIMITER-START
 BEGIN
   DECLARE x INT;
-  -- No handler declared
-  SET x = 1 / 0;  -- Should throw DIVIDE_BY_ZERO (SQLSTATE 22012), not continue
-  VALUES ('This should not be reached');
+  DECLARE cur INSENSITIVE CURSOR FOR SELECT 42 AS val;
+  OPEN cur;
+  FETCH cur INTO x;
+  CLOSE cur;
+  VALUES (x); -- Should return 42
 END;
 --QUERY-DELIMITER-END
 
 
--- Test 36: IDENTIFIER() clause for cursor names - basic case
+-- Test 62: DECLARE CURSOR with ASENSITIVE keyword
+-- EXPECTED: Success - ASENSITIVE is a valid optional keyword
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE y INT;
+  DECLARE cur ASENSITIVE CURSOR FOR SELECT 99 AS val;
+  OPEN cur;
+  FETCH cur INTO y;
+  CLOSE cur;
+  VALUES (y); -- Should return 99
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 63: DECLARE CURSOR with FOR READ ONLY clause
+-- EXPECTED: Success - FOR READ ONLY is a valid optional clause
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE z INT;
+  DECLARE cur CURSOR FOR SELECT 77 AS val FOR READ ONLY;
+  OPEN cur;
+  FETCH cur INTO z;
+  CLOSE cur;
+  VALUES (z); -- Should return 77
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 64: DECLARE CURSOR with all optional keywords
+-- EXPECTED: Success - Combination of INSENSITIVE and FOR READ ONLY
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE w INT;
+  DECLARE cur INSENSITIVE CURSOR FOR SELECT 123 AS val FOR READ ONLY;
+  OPEN cur;
+  FETCH cur INTO w;
+  CLOSE cur;
+  VALUES (w); -- Should return 123
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 65: FETCH with NEXT FROM keywords
+-- EXPECTED: Success - NEXT FROM is a valid optional keyword combination
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE a INT;
+  DECLARE cur CURSOR FOR SELECT 55 AS val;
+  OPEN cur;
+  FETCH NEXT FROM cur INTO a;
+  CLOSE cur;
+  VALUES (a); -- Should return 55
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 66: FETCH with FROM keyword
+-- EXPECTED: Success - FROM is a valid optional keyword
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE b INT;
+  DECLARE cur CURSOR FOR SELECT 66 AS val;
+  OPEN cur;
+  FETCH FROM cur INTO b;
+  CLOSE cur;
+  VALUES (b); -- Should return 66
+END;
+--QUERY-DELIMITER-END
+
+
+-- Test 67: FETCH with NEXT FROM keywords
+-- EXPECTED: Success - NEXT FROM is a valid optional keyword combination
+--QUERY-DELIMITER-START
+BEGIN
+  DECLARE c INT;
+  DECLARE cur CURSOR FOR SELECT 88 AS val;
+  OPEN cur;
+  FETCH NEXT FROM cur INTO c;
+  CLOSE cur;
+  VALUES (c); -- Should return 88
+END;
+--QUERY-DELIMITER-END
+
+
+
+-- ============================================================================
+-- IDENTIFIER() CLAUSE
+-- ============================================================================
+
+-- Test 68: IDENTIFIER() clause for cursor names - basic case
 -- EXPECTED: Success - cursor name specified using IDENTIFIER()
 --QUERY-DELIMITER-START
 BEGIN
@@ -949,7 +1298,7 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 37: IDENTIFIER() clause for cursor names - preserves literal case
+-- Test 69: IDENTIFIER() clause for cursor names - preserves literal case
 -- EXPECTED: Success - IDENTIFIER() preserves the literal, but resolution is still case-insensitive
 --QUERY-DELIMITER-START
 BEGIN
@@ -963,7 +1312,7 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 37a: IDENTIFIER() clause in FETCH INTO statement
+-- Test 70: IDENTIFIER() clause in FETCH INTO statement
 -- EXPECTED: Success - IDENTIFIER() works for variable names in FETCH INTO
 --QUERY-DELIMITER-START
 BEGIN
@@ -977,7 +1326,7 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 37b: IDENTIFIER() in FETCH INTO with multiple variables
+-- Test 71: IDENTIFIER() in FETCH INTO with multiple variables
 -- EXPECTED: Success - IDENTIFIER() works with multiple target variables
 --QUERY-DELIMITER-START
 BEGIN
@@ -992,7 +1341,12 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 38: Complex SQL in DECLARE - Recursive CTE
+
+-- ============================================================================
+-- COMPLEX SQL IN CURSORS
+-- ============================================================================
+
+-- Test 72: Complex SQL in DECLARE - Recursive CTE
 -- EXPECTED: Success - cursor with recursive common table expression
 --QUERY-DELIMITER-START
 BEGIN
@@ -1022,7 +1376,7 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 39: Complex SQL in DECLARE - Subqueries and joins
+-- Test 73: Complex SQL in DECLARE - Subqueries and joins
 -- EXPECTED: Success - cursor with complex query
 --QUERY-DELIMITER-START
 CREATE TEMPORARY VIEW customers AS SELECT 1 AS id, 'Alice' AS name
@@ -1058,13 +1412,13 @@ BEGIN
 
   VALUES (result); -- Should return 'Alice:300,Bob:150,'
 END;
+--QUERY-DELIMITER-END
 
 DROP VIEW customers;
 DROP VIEW orders;
---QUERY-DELIMITER-END
 
 
--- Test 40: Nested cursors (3 levels)
+-- Test 74: Nested cursors (3 levels)
 -- EXPECTED: Success - demonstrates proper nesting and scope management
 --QUERY-DELIMITER-START
 BEGIN
@@ -1123,273 +1477,50 @@ END;
 -- Parameter Marker Tests - Edge Cases and Error Conditions
 -- ============================================================================
 
--- Test 41: USING clause with MORE expressions than needed (allowed - extras ignored)
--- EXPECTED: Success - extra parameters are allowed and ignored
+
+-- ============================================================================
+-- EXCEPTION HANDLING - NOT FOUND & COMPLETION CONDITIONS
+-- ============================================================================
+
+-- Test 75: Unhandled CURSOR_NO_MORE_ROWS continues execution (SQL Standard completion condition)
+-- EXPECTED: Success - SQLSTATE '02xxx' is a completion condition (no data), continues without handler
+-- Note: This is distinct from warnings (SQLSTATE '01xxx') which Spark doesn't currently raise
 --QUERY-DELIMITER-START
 BEGIN
-  DECLARE result INT;
-  DECLARE cur CURSOR FOR SELECT ? + 10 AS val;
+  DECLARE x INT DEFAULT 0;
+  DECLARE result STRING DEFAULT '';
+  DECLARE cur CURSOR FOR SELECT 42 AS val;
 
-  OPEN cur USING 5, 99, 100;  -- Only first parameter (5) is used, others ignored
-  FETCH cur INTO result;
+  -- No NOT FOUND handler declared
+  OPEN cur;
+  FETCH cur INTO x;  -- OK: gets value 42
+  SET result = result || CAST(x AS STRING);
+
+  -- This FETCH will hit CURSOR_NO_MORE_ROWS (SQLSTATE 02000)
+  -- As a completion condition (warning), it should CONTINUE execution without throwing
+  FETCH cur INTO x;  -- Continues execution (no handler needed for completion conditions)
+
+  SET result = result || '-after-fetch';
   CLOSE cur;
 
-  VALUES (result);  -- Should return 15 (5 + 10)
+  VALUES (result);  -- Should return '42-after-fetch', proving execution continued
 END;
 --QUERY-DELIMITER-END
 
 
--- Test 42: USING clause with TOO FEW expressions for positional parameters
--- EXPECTED: Error - UNBOUND_SQL_PARAMETER
+-- Test 76: Verify unhandled exception conditions still throw (not completion conditions)
+-- EXPECTED: Error - DIVIDE_BY_ZERO is an exception condition, should throw without handler
 --QUERY-DELIMITER-START
 BEGIN
-  DECLARE result INT;
-  DECLARE cur CURSOR FOR SELECT ? + ? AS val;
-
-  OPEN cur USING 10;  -- Only 1 parameter provided, but 2 needed
-  FETCH cur INTO result;
-  CLOSE cur;
+  DECLARE x INT;
+  -- No handler declared
+  SET x = 1 / 0;  -- Should throw DIVIDE_BY_ZERO (SQLSTATE 22012), not continue
+  VALUES ('This should not be reached');
 END;
 --QUERY-DELIMITER-END
 
 
--- Test 43: USING clause missing a named parameter
--- EXPECTED: Error - UNBOUND_SQL_PARAMETER
---QUERY-DELIMITER-START
-BEGIN
-  DECLARE result INT;
-  DECLARE cur CURSOR FOR SELECT :x + :y AS val;
-
-  OPEN cur USING (x AS x);  -- Missing parameter 'y'
-  FETCH cur INTO result;
-  CLOSE cur;
-END;
---QUERY-DELIMITER-END
-
-
--- Test 44: USING clause with named parameters but wrong name
--- EXPECTED: Error - UNBOUND_SQL_PARAMETER
---QUERY-DELIMITER-START
-BEGIN
-  DECLARE result INT;
-  DECLARE cur CURSOR FOR SELECT :alpha + :beta AS val;
-
-  OPEN cur USING (5 AS alpha, 10 AS gamma);  -- 'gamma' provided but 'beta' expected
-  FETCH cur INTO result;
-  CLOSE cur;
-END;
---QUERY-DELIMITER-END
-
-
--- Test 45: DECLARE mixes named and unnamed parameter markers
--- EXPECTED: Error - UNRECOGNIZED_SQL_TYPE (due to invalid parameter marker syntax)
---QUERY-DELIMITER-START
-BEGIN
-  DECLARE result INT;
-  DECLARE cur CURSOR FOR SELECT ? + :named AS val;  -- Mixed positional and named
-
-  OPEN cur USING 10, (20 AS named);
-  FETCH cur INTO result;
-  CLOSE cur;
-END;
---QUERY-DELIMITER-END
-
-
--- Test 46: Local variable with same name as named parameter (implicit alias)
--- EXPECTED: Success - variable name becomes the parameter name implicitly
---QUERY-DELIMITER-START
-BEGIN
-  DECLARE x INT DEFAULT 100;
-  DECLARE y INT DEFAULT 200;
-  DECLARE result INT;
-  DECLARE cur CURSOR FOR SELECT :x + :y AS val;
-
-  -- Variable names match parameter names, so no explicit alias needed
-  OPEN cur USING (x AS x, y AS y);
-  FETCH cur INTO result;
-  CLOSE cur;
-
-  VALUES (result);  -- Should return 300 (100 + 200)
-END;
---QUERY-DELIMITER-END
-
-
--- Test 47: Named parameters with expressions (not just variable references)
--- EXPECTED: Success - expressions can be used with explicit aliases
---QUERY-DELIMITER-START
-BEGIN
-  DECLARE base INT DEFAULT 10;
-  DECLARE result INT;
-  DECLARE cur CURSOR FOR SELECT :a * :b AS val;
-
-  OPEN cur USING (base * 2 AS a, base + 5 AS b);  -- Expressions with aliases
-  FETCH cur INTO result;
-  CLOSE cur;
-
-  VALUES (result);  -- Should return 300 (20 * 15)
-END;
---QUERY-DELIMITER-END
-
-
--- Test 48: Positional parameters with complex expressions
--- EXPECTED: Success - expressions work for positional parameters
---QUERY-DELIMITER-START
-BEGIN
-  DECLARE x INT DEFAULT 5;
-  DECLARE y INT DEFAULT 3;
-  DECLARE result INT;
-  DECLARE cur CURSOR FOR SELECT ? * ? + ? AS val;
-
-  OPEN cur USING x * 2, y + 1, 10;  -- (5*2) * (3+1) + 10 = 10 * 4 + 10 = 50
-  FETCH cur INTO result;
-  CLOSE cur;
-
-  VALUES (result);  -- Should return 50
-END;
---QUERY-DELIMITER-END
-
-
--- Test 49: Reopen cursor with different parameter values (positional)
--- EXPECTED: Success - cursor can be reopened with different positional parameters
---QUERY-DELIMITER-START
-BEGIN
-  DECLARE result1 INT;
-  DECLARE result2 INT;
-  DECLARE cur CURSOR FOR SELECT ? * 10 AS val;
-
-  -- First open with parameter 5
-  OPEN cur USING 5;
-  FETCH cur INTO result1;
-  CLOSE cur;
-
-  -- Reopen with parameter 8
-  OPEN cur USING 8;
-  FETCH cur INTO result2;
-  CLOSE cur;
-
-  VALUES (result1, result2);  -- Should return (50, 80)
-END;
---QUERY-DELIMITER-END
-
-
--- Test 50: Reopen cursor with different parameter values (named)
--- EXPECTED: Success - cursor can be reopened with different named parameters
---QUERY-DELIMITER-START
-BEGIN
-  DECLARE result1 INT;
-  DECLARE result2 INT;
-  DECLARE cur CURSOR FOR SELECT :factor * 10 AS val;
-
-  -- First open with factor = 3
-  OPEN cur USING (3 AS factor);
-  FETCH cur INTO result1;
-  CLOSE cur;
-
-  -- Reopen with factor = 7
-  OPEN cur USING (7 AS factor);
-  FETCH cur INTO result2;
-  CLOSE cur;
-
-  VALUES (result1, result2);  -- Should return (30, 70)
-END;
---QUERY-DELIMITER-END
-
-
--- Test 51: ALL_PARAMETERS_MUST_BE_NAMED - Mix of named and positional in USING
--- EXPECTED: Error - ALL_PARAMETERS_MUST_BE_NAMED
---QUERY-DELIMITER-START
-BEGIN
-  DECLARE result INT;
-  DECLARE cur CURSOR FOR SELECT :x + :y AS val;
-
-  -- USING clause mixes positional (10) and named (y AS y)
-  OPEN cur USING 10, (20 AS y);
-  FETCH cur INTO result;
-  CLOSE cur;
-END;
---QUERY-DELIMITER-END
-
-
--- Test 52: Verify variable name inference for parameters (without explicit AS)
--- EXPECTED: Success - variable names inferred from identifiers in USING clause
---QUERY-DELIMITER-START
-BEGIN
-  DECLARE multiplier INT DEFAULT 4;
-  DECLARE addend INT DEFAULT 6;
-  DECLARE result INT;
-  DECLARE cur CURSOR FOR SELECT :multiplier * 10 + :addend AS val;
-
-  -- Variable names match parameter names, implicit binding
-  OPEN cur USING (multiplier AS multiplier, addend AS addend);
-  FETCH cur INTO result;
-  CLOSE cur;
-
-  VALUES (result);  -- Should return 46 (4 * 10 + 6)
-END;
---QUERY-DELIMITER-END
-
-
--- Test 53: Case insensitivity - DECLARE lowercase, OPEN uppercase
--- EXPECTED: Success - cursor names should be case-insensitive by default
---QUERY-DELIMITER-START
-BEGIN
-  DECLARE result INT;
-  DECLARE my_cursor CURSOR FOR SELECT 42 AS val;
-  OPEN MY_CURSOR;
-  FETCH MY_CURSOR INTO result;
-  CLOSE MY_CURSOR;
-  VALUES (result);  -- Should return 42
-END;
---QUERY-DELIMITER-END
-
-
--- Test 54: Case insensitivity - DECLARE MixedCase, OPEN lowercase
--- EXPECTED: Success - cursor names should be case-insensitive by default
---QUERY-DELIMITER-START
-BEGIN
-  DECLARE result INT;
-  DECLARE MyCursor CURSOR FOR SELECT 99 AS val;
-  OPEN mycursor;
-  FETCH mycursor INTO result;
-  CLOSE mycursor;
-  VALUES (result);  -- Should return 99
-END;
---QUERY-DELIMITER-END
-
-
--- Test 55: Case insensitivity - Label-qualified cursor with different cases
--- EXPECTED: Success - both label and cursor name should be case-insensitive
---QUERY-DELIMITER-START
-BEGIN
-  outer_lbl: BEGIN
-    DECLARE result INT;
-    DECLARE cur CURSOR FOR SELECT 123 AS val;
-
-    OPEN OUTER_LBL.cur;  -- Label in different case
-    FETCH OUTER_LBL.CUR INTO result;  -- Both in different case
-    CLOSE outer_lbl.CUR;  -- Cursor in different case
-
-    VALUES (result);  -- Should return 123
-  END;
-END;
---QUERY-DELIMITER-END
-
-
--- Test 56: Case insensitivity with IDENTIFIER() - resolution still case-insensitive
--- EXPECTED: Success - IDENTIFIER() preserves literal but resolution uses caseSensitiveAnalysis
---QUERY-DELIMITER-START
-BEGIN
-  DECLARE result INT;
-  DECLARE IDENTIFIER('MyCase') CURSOR FOR SELECT 42;
-  OPEN IDENTIFIER('mycase');  -- Different case but should work (case-insensitive resolution)
-  FETCH IDENTIFIER('MYCASE') INTO result;  -- Another case variation
-  CLOSE IDENTIFIER('MyCaSe');  -- Yet another variation
-  VALUES (result);  -- Should return 42
-END;
---QUERY-DELIMITER-END
-
-
--- Test 57: Unhandled NO DATA condition - should continue silently per SQL Standard
+-- Test 77: Unhandled NO DATA condition - should continue silently per SQL Standard
 -- EXPECTED: Success - Script continues after CURSOR_NO_MORE_ROWS without aborting
 --QUERY-DELIMITER-START
 BEGIN
@@ -1410,7 +1541,7 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 58: CONTINUE HANDLER for specific CURSOR_NO_MORE_ROWS condition
+-- Test 78: CONTINUE HANDLER for specific CURSOR_NO_MORE_ROWS condition
 -- EXPECTED: Success - Handler catches specific error and sets flag
 --QUERY-DELIMITER-START
 BEGIN
@@ -1433,7 +1564,7 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 59: CONTINUE HANDLER for generic NOT FOUND class
+-- Test 79: CONTINUE HANDLER for generic NOT FOUND class
 -- EXPECTED: Success - Handler catches all SQLSTATE 02xxx conditions
 --QUERY-DELIMITER-START
 BEGIN
@@ -1456,7 +1587,7 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 60: EXIT HANDLER for NOT FOUND - exits immediately
+-- Test 80: EXIT HANDLER for NOT FOUND - exits immediately
 -- EXPECTED: Success - Handler executes and exits, statements after handler don't run
 --QUERY-DELIMITER-START
 BEGIN
@@ -1481,7 +1612,7 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 61: EXIT HANDLER vs CONTINUE HANDLER precedence with loops
+-- Test 81: EXIT HANDLER vs CONTINUE HANDLER precedence with loops
 -- EXPECTED: Success - CONTINUE handler keeps loop going, EXIT would exit
 --QUERY-DELIMITER-START
 BEGIN
@@ -1509,7 +1640,7 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 62: Multiple handlers - specific condition takes precedence over generic
+-- Test 82: Multiple handlers - specific condition takes precedence over generic
 -- EXPECTED: Success - CURSOR_NO_MORE_ROWS handler runs instead of NOT FOUND
 --QUERY-DELIMITER-START
 BEGIN
@@ -1536,7 +1667,7 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 63: Nested blocks with different NOT FOUND handlers
+-- Test 83: Nested blocks with different NOT FOUND handlers
 -- EXPECTED: Success - Inner handler doesn't affect outer cursor
 --QUERY-DELIMITER-START
 BEGIN
@@ -1575,7 +1706,7 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 64: Variable access in CONTINUE handler BEGIN...END (no cursors)
+-- Test 84: Variable access in CONTINUE handler BEGIN...END (no cursors)
 -- EXPECTED: Handler should be able to read and write outer scope variable
 --QUERY-DELIMITER-START
 BEGIN
@@ -1596,7 +1727,7 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 65: CLOSE cursor in CONTINUE handler (cross-frame cursor access)
+-- Test 85: CLOSE cursor in CONTINUE handler (cross-frame cursor access)
 -- EXPECTED: Handler closes cursor, subsequent FETCH fails
 --QUERY-DELIMITER-START
 BEGIN
@@ -1623,7 +1754,7 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 66: FETCH and CLOSE in handler BEGIN block (cross-frame cursor access)
+-- Test 86: FETCH and CLOSE in handler BEGIN block (cross-frame cursor access)
 -- EXPECTED: Handler fetches and closes cursor, subsequent FETCH fails
 --QUERY-DELIMITER-START
 BEGIN
@@ -1651,28 +1782,12 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 67: Invalid declaration order - cursor before variable
--- EXPECTED: Error - variables must be declared before cursors
---QUERY-DELIMITER-START
-BEGIN
-  DECLARE cur CURSOR FOR SELECT 123 AS val;
-  DECLARE result INT;  -- Invalid: variable after cursor
-END;
---QUERY-DELIMITER-END
 
+-- ============================================================================
+-- ADVANCED SHADOWING
+-- ============================================================================
 
--- Test 68: Invalid declaration order - cursor after handler
--- EXPECTED: Error - cursors must be declared before handlers
---QUERY-DELIMITER-START
-BEGIN
-  DECLARE result INT;
-  DECLARE CONTINUE HANDLER FOR SQLSTATE '02000' BEGIN END;
-  DECLARE cur CURSOR FOR SELECT 123 AS val;  -- Invalid: cursor after handler
-END;
---QUERY-DELIMITER-END
-
-
--- Test 69: Cursor shadowing in handler - handler's cursor should shadow script's cursor
+-- Test 87: Cursor shadowing in handler - handler's cursor should shadow script's cursor
 -- EXPECTED: Success - handler's cursor (returns 999) shadows script's cursor (returns 42)
 --QUERY-DELIMITER-START
 BEGIN

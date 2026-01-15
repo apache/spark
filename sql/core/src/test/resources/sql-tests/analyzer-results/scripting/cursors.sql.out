@@ -254,6 +254,93 @@ LocalRelation [col1#x]
 
 
 -- !query
+BEGIN
+  DECLARE cur CURSOR FOR SELECT 123 AS val;
+  DECLARE result INT;  -- Invalid: variable after cursor
+END
+-- !query analysis
+org.apache.spark.sql.exceptions.SqlScriptingException
+{
+  "errorClass" : "INVALID_VARIABLE_DECLARATION.ONLY_AT_BEGINNING",
+  "sqlState" : "42K0M",
+  "messageParameters" : {
+    "varName" : "`result`"
+  }
+}
+
+
+-- !query
+BEGIN
+  DECLARE result INT;
+  DECLARE CONTINUE HANDLER FOR SQLSTATE '02000' BEGIN END;
+  DECLARE cur CURSOR FOR SELECT 123 AS val;  -- Invalid: cursor after handler
+END
+-- !query analysis
+org.apache.spark.sql.exceptions.SqlScriptingException
+{
+  "errorClass" : "INVALID_CURSOR_DECLARATION",
+  "sqlState" : "42601"
+}
+
+
+-- !query
+BEGIN
+  DECLARE x INT DEFAULT 0;
+  SET x = 42;  -- Statement
+  DECLARE cur CURSOR FOR SELECT 123 AS val;  -- Invalid: cursor after statement
+END
+-- !query analysis
+org.apache.spark.sql.exceptions.SqlScriptingException
+{
+  "errorClass" : "INVALID_CURSOR_DECLARATION",
+  "sqlState" : "42601"
+}
+
+
+-- !query
+BEGIN
+  outer: BEGIN
+    DECLARE x INT;
+    DECLARE cur CURSOR FOR SELECT 42 AS val;
+
+    inner_block: BEGIN
+      OPEN cur;  -- Open in inner scope
+      FETCH cur INTO x;
+    END;
+
+    FETCH cur INTO x;  -- This should succeed
+    VALUES (x);  -- Should return 42
+
+  END;
+END
+-- !query analysis
+LocalRelation [col1#x]
+
+
+-- !query
+BEGIN
+  DECLARE y INT;
+
+  scope1: BEGIN
+    DECLARE cur CURSOR FOR SELECT 99 AS val;
+    OPEN cur;
+    FETCH cur INTO y;
+  END;  -- cursor is implicitly closed here (exiting DECLARE scope)
+
+  FETCH cur INTO y;
+END
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "CURSOR_NOT_FOUND",
+  "sqlState" : "42883",
+  "messageParameters" : {
+    "cursorName" : "cur"
+  }
+}
+
+
+-- !query
 CREATE TABLE cursor_sensitivity_test (id INT, value STRING) USING parquet
 -- !query analysis
 CreateDataSourceTableCommand `spark_catalog`.`default`.`cursor_sensitivity_test`, false
@@ -435,70 +522,65 @@ LocalRelation [col1#x]
 BEGIN
   DECLARE int_val INT;
   DECLARE str_val STRING;
+  DECLARE str_val2 STRING;
   DECLARE date_val DATE;
   DECLARE bool_val BOOLEAN;
 
   DECLARE cur_int CURSOR FOR SELECT typeof(:p) as type, :p as val;
+  DECLARE cur_str CURSOR FOR SELECT typeof(:p) as type, :p as val;
+  DECLARE cur_date CURSOR FOR SELECT typeof(:p) as type, :p as val;
+  DECLARE cur_bool CURSOR FOR SELECT typeof(:p) as type, :p as val;
+
   OPEN cur_int USING 42 AS p;
   FETCH cur_int INTO str_val, int_val;
   CLOSE cur_int;
   VALUES ('INT', int_val);
 
-  DECLARE cur_str CURSOR FOR SELECT typeof(:p) as type, :p as val;
   OPEN cur_str USING 'hello' AS p;
-  FETCH cur_str INTO str_val, str_val;
+  FETCH cur_str INTO str_val, str_val2;
   CLOSE cur_str;
-  VALUES ('STRING', str_val);
+  VALUES ('STRING', str_val2);
 
-  DECLARE cur_date CURSOR FOR SELECT typeof(:p) as type, :p as val;
   OPEN cur_date USING DATE '2023-12-25' AS p;
   FETCH cur_date INTO str_val, date_val;
   CLOSE cur_date;
   VALUES ('DATE', date_val);
 
-  DECLARE cur_bool CURSOR FOR SELECT typeof(:p) as type, :p as val;
   OPEN cur_bool USING true AS p;
   FETCH cur_bool INTO str_val, bool_val;
   CLOSE cur_bool;
   VALUES ('BOOLEAN', bool_val);
 END
 -- !query analysis
-org.apache.spark.sql.exceptions.SqlScriptingException
-{
-  "errorClass" : "INVALID_CURSOR_DECLARATION",
-  "sqlState" : "42601"
-}
+LocalRelation [col1#x, col2#x]
 
 
 -- !query
 BEGIN
   DECLARE result INT;
+  DECLARE x INT DEFAULT 100;
 
   DECLARE cur_pos CURSOR FOR SELECT ? + ? AS sum;
+  DECLARE cur_named CURSOR FOR SELECT :a + :b AS sum;
+  DECLARE cur_var CURSOR FOR SELECT ? + 1 AS val;
+
   OPEN cur_pos USING 10, 20;
   FETCH cur_pos INTO result;
   CLOSE cur_pos;
   VALUES ('positional', result); -- Should be 30
 
-  DECLARE cur_named CURSOR FOR SELECT :a + :b AS sum;
   OPEN cur_named USING 15 AS a, 25 AS b;
   FETCH cur_named INTO result;
   CLOSE cur_named;
   VALUES ('named', result); -- Should be 40
 
-  DECLARE x INT DEFAULT 100;
-  DECLARE cur_var CURSOR FOR SELECT ? + 1 AS val;
   OPEN cur_var USING x;
   FETCH cur_var INTO result;
   CLOSE cur_var;
   VALUES ('variable', result); -- Should be 101
 END
 -- !query analysis
-org.apache.spark.sql.exceptions.SqlScriptingException
-{
-  "errorClass" : "INVALID_CURSOR_DECLARATION",
-  "sqlState" : "42601"
-}
+LocalRelation [col1#x, col2#x]
 
 
 -- !query
@@ -507,23 +589,265 @@ BEGIN
   DECLARE base INT DEFAULT 5;
 
   DECLARE cur1 CURSOR FOR SELECT :p AS val;
+  DECLARE cur2 CURSOR FOR SELECT :p AS val;
+
   OPEN cur1 USING 5 + 10 AS p;
   FETCH cur1 INTO result;
   CLOSE cur1;
   VALUES ('arithmetic', result); -- Should be 15
 
-  DECLARE cur2 CURSOR FOR SELECT :p AS val;
   OPEN cur2 USING base * 2 AS p;
   FETCH cur2 INTO result;
   CLOSE cur2;
   VALUES ('variable_expr', result); -- Should be 10
 END
 -- !query analysis
-org.apache.spark.sql.exceptions.SqlScriptingException
+LocalRelation [col1#x, col2#x]
+
+
+-- !query
+BEGIN
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT ? + 10 AS val;
+
+  OPEN cur USING 5, 99, 100;  -- Only first parameter (5) is used, others ignored
+  FETCH cur INTO result;
+  CLOSE cur;
+
+  VALUES (result);  -- Should return 15 (5 + 10)
+END
+-- !query analysis
+LocalRelation [col1#x]
+
+
+-- !query
+BEGIN
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT ? + ? AS val;
+
+  OPEN cur USING 10;  -- Only 1 parameter provided, but 2 needed
+  FETCH cur INTO result;
+  CLOSE cur;
+END
+-- !query analysis
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_CURSOR_DECLARATION",
-  "sqlState" : "42601"
+  "errorClass" : "UNBOUND_SQL_PARAMETER",
+  "sqlState" : "42P02",
+  "messageParameters" : {
+    "name" : "_11"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 12,
+    "fragment" : "?"
+  } ]
 }
+
+
+-- !query
+BEGIN
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT :x + :y AS val;
+
+  OPEN cur USING 42 AS x;  -- Missing parameter 'y'
+  FETCH cur INTO result;
+  CLOSE cur;
+END
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNBOUND_SQL_PARAMETER",
+  "sqlState" : "42P02",
+  "messageParameters" : {
+    "name" : "y"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 13,
+    "stopIndex" : 14,
+    "fragment" : ":y"
+  } ]
+}
+
+
+-- !query
+BEGIN
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT :alpha + :beta AS val;
+
+  OPEN cur USING (5 AS alpha, 10 AS gamma);  -- 'gamma' provided but 'beta' expected
+  FETCH cur INTO result;
+  CLOSE cur;
+END
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNBOUND_SQL_PARAMETER",
+  "sqlState" : "42P02",
+  "messageParameters" : {
+    "name" : "beta"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 17,
+    "stopIndex" : 21,
+    "fragment" : ":beta"
+  } ]
+}
+
+
+-- !query
+BEGIN
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT ? + :named AS val;  -- Mixed positional and named
+
+  OPEN cur USING 10, (20 AS named);
+  FETCH cur INTO result;
+  CLOSE cur;
+END
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "')'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+BEGIN
+  DECLARE x INT DEFAULT 100;
+  DECLARE y INT DEFAULT 200;
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT :x + :y AS val;
+
+  OPEN cur USING (x AS x, y AS y);
+  FETCH cur INTO result;
+  CLOSE cur;
+
+  VALUES (result);  -- Should return 300 (100 + 200)
+END
+-- !query analysis
+LocalRelation [col1#x]
+
+
+-- !query
+BEGIN
+  DECLARE base INT DEFAULT 10;
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT :a * :b AS val;
+
+  OPEN cur USING base * 2 AS a, base + 5 AS b;  -- Expressions with aliases
+  FETCH cur INTO result;
+  CLOSE cur;
+
+  VALUES (result);  -- Should return 300 (20 * 15)
+END
+-- !query analysis
+LocalRelation [col1#x]
+
+
+-- !query
+BEGIN
+  DECLARE x INT DEFAULT 5;
+  DECLARE y INT DEFAULT 3;
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT ? * ? + ? AS val;
+
+  OPEN cur USING x * 2, y + 1, 10;  -- (5*2) * (3+1) + 10 = 10 * 4 + 10 = 50
+  FETCH cur INTO result;
+  CLOSE cur;
+
+  VALUES (result);  -- Should return 50
+END
+-- !query analysis
+LocalRelation [col1#x]
+
+
+-- !query
+BEGIN
+  DECLARE result1 INT;
+  DECLARE result2 INT;
+  DECLARE cur CURSOR FOR SELECT ? * 10 AS val;
+
+  OPEN cur USING 5;
+  FETCH cur INTO result1;
+  CLOSE cur;
+
+  OPEN cur USING 8;
+  FETCH cur INTO result2;
+  CLOSE cur;
+
+  VALUES (result1, result2);  -- Should return (50, 80)
+END
+-- !query analysis
+LocalRelation [col1#x, col2#x]
+
+
+-- !query
+BEGIN
+  DECLARE result1 INT;
+  DECLARE result2 INT;
+  DECLARE cur CURSOR FOR SELECT :factor * 10 AS val;
+
+  OPEN cur USING (3 AS factor);
+  FETCH cur INTO result1;
+  CLOSE cur;
+
+  OPEN cur USING (7 AS factor);
+  FETCH cur INTO result2;
+  CLOSE cur;
+
+  VALUES (result1, result2);  -- Should return (30, 70)
+END
+-- !query analysis
+LocalRelation [col1#x, col2#x]
+
+
+-- !query
+BEGIN
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT :x + :y AS val;
+
+  OPEN cur USING 10, (20 AS y);
+  FETCH cur INTO result;
+  CLOSE cur;
+END
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "')'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+BEGIN
+  DECLARE multiplier INT DEFAULT 4;
+  DECLARE addend INT DEFAULT 6;
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT :multiplier * 10 + :addend AS val;
+
+  OPEN cur USING multiplier AS multiplier, addend AS addend;
+  FETCH cur INTO result;
+  CLOSE cur;
+
+  VALUES (result);  -- Should return 46 (4 * 10 + 6)
+END
+-- !query analysis
+LocalRelation [col1#x]
 
 
 -- !query
@@ -588,6 +912,62 @@ BEGIN
     CLOSE lbl.cur;
     VALUES (result); -- Should be '34'
   END;
+END
+-- !query analysis
+LocalRelation [col1#x]
+
+
+-- !query
+BEGIN
+  DECLARE result INT;
+  DECLARE my_cursor CURSOR FOR SELECT 42 AS val;
+  OPEN MY_CURSOR;
+  FETCH MY_CURSOR INTO result;
+  CLOSE MY_CURSOR;
+  VALUES (result);  -- Should return 42
+END
+-- !query analysis
+LocalRelation [col1#x]
+
+
+-- !query
+BEGIN
+  DECLARE result INT;
+  DECLARE MyCursor CURSOR FOR SELECT 99 AS val;
+  OPEN mycursor;
+  FETCH mycursor INTO result;
+  CLOSE mycursor;
+  VALUES (result);  -- Should return 99
+END
+-- !query analysis
+LocalRelation [col1#x]
+
+
+-- !query
+BEGIN
+  outer_lbl: BEGIN
+    DECLARE result INT;
+    DECLARE cur CURSOR FOR SELECT 123 AS val;
+
+    OPEN OUTER_LBL.cur;  -- Label in different case
+    FETCH OUTER_LBL.CUR INTO result;  -- Both in different case
+    CLOSE outer_lbl.CUR;  -- Cursor in different case
+
+    VALUES (result);  -- Should return 123
+  END;
+END
+-- !query analysis
+LocalRelation [col1#x]
+
+
+-- !query
+BEGIN
+  DECLARE result INT;
+  DECLARE IDENTIFIER('MyCase') CURSOR FOR SELECT 42;
+  OPEN IDENTIFIER('mycase');  -- Different case but should work (case-insensitive resolution)
+  FETCH IDENTIFIER('MYCASE') INTO result;  -- Another case variation
+  CLOSE IDENTIFIER('MyCaSe');  -- Yet another variation
+  VALUES (result);  -- Should return 42
 END
 -- !query analysis
 LocalRelation [col1#x]
@@ -663,6 +1043,265 @@ org.apache.spark.sql.AnalysisException
     "numTarget" : "4"
   }
 }
+
+
+-- !query
+BEGIN
+  DECLARE person_record STRUCT<name STRING, age INT>;
+  DECLARE cur CURSOR FOR SELECT 'Alice' AS name, 30 AS age;
+  OPEN cur;
+  FETCH cur INTO person_record;
+  CLOSE cur;
+  VALUES (person_record.name, person_record.age); -- Should return 'Alice', 30
+END
+-- !query analysis
+LocalRelation [col1#x, col2#x]
+
+
+-- !query
+BEGIN
+  DECLARE record_var STRUCT<id INT, value STRING>;
+  DECLARE cur CURSOR FOR SELECT 42.7 AS id, 100 AS value;
+  OPEN cur;
+  FETCH cur INTO record_var;
+  CLOSE cur;
+  VALUES (record_var.id, record_var.value); -- Should return 42, '100' (with casting)
+END
+-- !query analysis
+LocalRelation [col1#x, col2#x]
+
+
+-- !query
+BEGIN
+  DECLARE record_var STRUCT<a INT, b INT>;
+  DECLARE cur CURSOR FOR SELECT 1, 2, 3;
+  OPEN cur;
+  FETCH cur INTO record_var;  -- Should fail - 2 struct fields but 3 cursor columns
+END
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ASSIGNMENT_ARITY_MISMATCH",
+  "sqlState" : "42802",
+  "messageParameters" : {
+    "numExpr" : "3",
+    "numTarget" : "2"
+  }
+}
+
+
+-- !query
+BEGIN
+  DECLARE x INT;
+  DECLARE cur CURSOR FOR SELECT 1, 2;
+  OPEN cur;
+  FETCH cur INTO x;  -- Should fail - single non-struct variable but 2 columns
+END
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ASSIGNMENT_ARITY_MISMATCH",
+  "sqlState" : "42802",
+  "messageParameters" : {
+    "numExpr" : "2",
+    "numTarget" : "1"
+  }
+}
+
+
+-- !query
+BEGIN
+  DECLARE complex_record STRUCT<id BIGINT, name STRING, value DOUBLE>;
+  DECLARE cur CURSOR FOR SELECT 100 AS id, 'test' AS name, 99.5 AS value;
+  OPEN cur;
+  FETCH cur INTO complex_record;
+  CLOSE cur;
+  VALUES (complex_record); -- Should return struct(100, 'test', 99.5)
+END
+-- !query analysis
+LocalRelation [col1#x]
+
+
+-- !query
+DECLARE session_x INT DEFAULT 0
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(0 as int), 0), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.session_x
+
+
+-- !query
+DECLARE session_y STRING DEFAULT ''
+-- !query analysis
+CreateVariable defaultvalueexpression(cast( as string), ''), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.session_y
+
+
+-- !query
+BEGIN
+  DECLARE cur CURSOR FOR SELECT 42 AS num, 'hello' AS text;
+  OPEN cur;
+  FETCH cur INTO session_x, session_y;
+  CLOSE cur;
+END
+-- !query analysis
+LocalRelation <empty>
+
+
+-- !query
+SELECT session_x, session_y;  -- Should return 42, 'hello'
+-- !query analysis
+Project [variablereference(system.session.session_x=42) AS session_x#x, variablereference(system.session.session_y='hello') AS session_y#x]
++- OneRowRelation
+
+
+-- !query
+DECLARE session_var INT DEFAULT 0
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(0 as int), 0), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.session_var
+
+
+-- !query
+BEGIN
+  DECLARE local_var STRING;
+  DECLARE cur CURSOR FOR SELECT 100 AS a, 'world' AS b;
+  OPEN cur;
+  FETCH cur INTO session_var, local_var;
+  CLOSE cur;
+  VALUES (session_var, local_var);  -- Should return 100, 'world'
+END
+-- !query analysis
+LocalRelation [col1#x, col2#x]
+
+
+-- !query
+DECLARE session_int INT DEFAULT 0
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(0 as int), 0), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.session_int
+
+
+-- !query
+DECLARE session_str STRING DEFAULT ''
+-- !query analysis
+CreateVariable defaultvalueexpression(cast( as string), ''), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.session_str
+
+
+-- !query
+BEGIN
+  DECLARE cur CURSOR FOR SELECT 99.9 AS double_val, 42 AS int_val;
+  OPEN cur;
+  FETCH cur INTO session_int, session_str;  -- double->int cast, int->string cast
+  CLOSE cur;
+END
+-- !query analysis
+LocalRelation <empty>
+
+
+-- !query
+SELECT session_int, session_str;  -- Should return 99, '42' (with ANSI rounding)
+-- !query analysis
+Project [variablereference(system.session.session_int=99) AS session_int#x, variablereference(system.session.session_str='42') AS session_str#x]
++- OneRowRelation
+
+
+-- !query
+DECLARE session_dup INT DEFAULT 0
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(0 as int), 0), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.session_dup
+
+
+-- !query
+BEGIN
+  DECLARE cur CURSOR FOR SELECT 1, 2;
+  OPEN cur;
+  FETCH cur INTO session_dup, session_dup;  -- Should fail - duplicate session variable
+END
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DUPLICATE_ASSIGNMENTS",
+  "sqlState" : "42701",
+  "messageParameters" : {
+    "nameList" : "`session_dup`"
+  }
+}
+
+
+-- !query
+DECLARE dup_var INT DEFAULT 0
+-- !query analysis
+CreateVariable defaultvalueexpression(cast(0 as int), 0), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.dup_var
+
+
+-- !query
+BEGIN
+  DECLARE dup_var INT;
+  DECLARE cur CURSOR FOR SELECT 1, 2;
+  OPEN cur;
+  FETCH cur INTO dup_var, dup_var;  -- Should fail - duplicate variable name
+END
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DUPLICATE_ASSIGNMENTS",
+  "sqlState" : "42701",
+  "messageParameters" : {
+    "nameList" : "`dup_var`"
+  }
+}
+
+
+-- !query
+DROP TEMPORARY VARIABLE IF EXISTS session_x
+-- !query analysis
+DropVariable true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.session_x
+
+
+-- !query
+DROP TEMPORARY VARIABLE IF EXISTS session_y
+-- !query analysis
+DropVariable true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.session_y
+
+
+-- !query
+DROP TEMPORARY VARIABLE IF EXISTS session_var
+-- !query analysis
+DropVariable true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.session_var
+
+
+-- !query
+DROP TEMPORARY VARIABLE IF EXISTS session_int
+-- !query analysis
+DropVariable true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.session_int
+
+
+-- !query
+DROP TEMPORARY VARIABLE IF EXISTS session_str
+-- !query analysis
+DropVariable true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.session_str
+
+
+-- !query
+DROP TEMPORARY VARIABLE IF EXISTS session_dup
+-- !query analysis
+DropVariable true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.session_dup
+
+
+-- !query
+DROP TEMPORARY VARIABLE IF EXISTS dup_var
+-- !query analysis
+DropVariable true
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.dup_var
 
 
 -- !query
@@ -754,412 +1393,6 @@ BEGIN
 END
 -- !query analysis
 LocalRelation [col1#x]
-
-
--- !query
-BEGIN
-  DECLARE person_record STRUCT<name STRING, age INT>;
-  DECLARE cur CURSOR FOR SELECT 'Alice' AS name, 30 AS age;
-  OPEN cur;
-  FETCH cur INTO person_record;
-  CLOSE cur;
-  VALUES (person_record.name, person_record.age); -- Should return 'Alice', 30
-END
--- !query analysis
-LocalRelation [col1#x, col2#x]
-
-
--- !query
-BEGIN
-  DECLARE record_var STRUCT<id INT, value STRING>;
-  DECLARE cur CURSOR FOR SELECT 42.7 AS id, 100 AS value;
-  OPEN cur;
-  FETCH cur INTO record_var;
-  CLOSE cur;
-  VALUES (record_var.id, record_var.value); -- Should return 42, '100' (with casting)
-END
--- !query analysis
-LocalRelation [col1#x, col2#x]
-
-
--- !query
-BEGIN
-  DECLARE record_var STRUCT<a INT, b INT>;
-  DECLARE cur CURSOR FOR SELECT 1, 2, 3;
-  OPEN cur;
-  FETCH cur INTO record_var;  -- Should fail - 2 struct fields but 3 cursor columns
-END
--- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "ASSIGNMENT_ARITY_MISMATCH",
-  "sqlState" : "42802",
-  "messageParameters" : {
-    "numExpr" : "3",
-    "numTarget" : "2"
-  }
-}
-
-
--- !query
-BEGIN
-  DECLARE x INT;
-  DECLARE cur CURSOR FOR SELECT 1, 2;
-  OPEN cur;
-  FETCH cur INTO x;  -- Should fail - single non-struct variable but 2 columns
-END
--- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "ASSIGNMENT_ARITY_MISMATCH",
-  "sqlState" : "42802",
-  "messageParameters" : {
-    "numExpr" : "2",
-    "numTarget" : "1"
-  }
-}
-
-
--- !query
-BEGIN
-  DECLARE complex_record STRUCT<id BIGINT, name STRING, value DOUBLE>;
-  DECLARE cur CURSOR FOR SELECT 100 AS id, 'test' AS name, 99.5 AS value;
-  OPEN cur;
-  FETCH cur INTO complex_record;
-  CLOSE cur;
-  VALUES (complex_record); -- Should return struct(100, 'test', 99.5)
-END
--- !query analysis
-LocalRelation [col1#x]
-
-
--- !query
-SET VAR session_x = 0
--- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_VARIABLE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "searchPath" : "`SYSTEM`.`SESSION`",
-    "variableName" : "`session_x`"
-  }
-}
-
-
--- !query
-SET VAR session_y = ''
--- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_VARIABLE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "searchPath" : "`SYSTEM`.`SESSION`",
-    "variableName" : "`session_y`"
-  }
-}
-
-
--- !query
-BEGIN
-  DECLARE cur CURSOR FOR SELECT 42 AS num, 'hello' AS text;
-  OPEN cur;
-  FETCH cur INTO session_x, session_y;
-  CLOSE cur;
-END
--- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_VARIABLE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "searchPath" : "`SYSTEM`.`SESSION`",
-    "variableName" : "`session_x`"
-  }
-}
-
-
--- !query
-SELECT session_x, session_y;  -- Should return 42, 'hello'
--- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`session_x`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 16,
-    "fragment" : "session_x"
-  } ]
-}
-
-
--- !query
-SET VAR session_var = 0
--- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_VARIABLE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "searchPath" : "`SYSTEM`.`SESSION`",
-    "variableName" : "`session_var`"
-  }
-}
-
-
--- !query
-BEGIN
-  DECLARE local_var STRING;
-  DECLARE cur CURSOR FOR SELECT 100 AS a, 'world' AS b;
-  OPEN cur;
-  FETCH cur INTO session_var, local_var;
-  CLOSE cur;
-  VALUES (session_var, local_var);  -- Should return 100, 'world'
-END
--- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_VARIABLE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "searchPath" : "`SYSTEM`.`SESSION`",
-    "variableName" : "`session_var`"
-  }
-}
-
-
--- !query
-SET VAR session_int = 0
--- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_VARIABLE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "searchPath" : "`SYSTEM`.`SESSION`",
-    "variableName" : "`session_int`"
-  }
-}
-
-
--- !query
-SET VAR session_str = ''
--- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_VARIABLE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "searchPath" : "`SYSTEM`.`SESSION`",
-    "variableName" : "`session_str`"
-  }
-}
-
-
--- !query
-BEGIN
-  DECLARE cur CURSOR FOR SELECT 99.9 AS double_val, 42 AS int_val;
-  OPEN cur;
-  FETCH cur INTO session_int, session_str;  -- double->int cast, int->string cast
-  CLOSE cur;
-END
--- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_VARIABLE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "searchPath" : "`SYSTEM`.`SESSION`",
-    "variableName" : "`session_int`"
-  }
-}
-
-
--- !query
-SELECT session_int, session_str;  -- Should return 99, '42' (with ANSI rounding)
--- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`session_int`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 18,
-    "fragment" : "session_int"
-  } ]
-}
-
-
--- !query
-SET VAR session_dup = 0
--- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_VARIABLE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "searchPath" : "`SYSTEM`.`SESSION`",
-    "variableName" : "`session_dup`"
-  }
-}
-
-
--- !query
-BEGIN
-  DECLARE cur CURSOR FOR SELECT 1, 2;
-  OPEN cur;
-  FETCH cur INTO session_dup, session_dup;  -- Should fail - duplicate session variable
-END
--- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_VARIABLE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "searchPath" : "`SYSTEM`.`SESSION`",
-    "variableName" : "`session_dup`"
-  }
-}
-
-
--- !query
-SET VAR dup_var = 0
--- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_VARIABLE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "searchPath" : "`SYSTEM`.`SESSION`",
-    "variableName" : "`dup_var`"
-  }
-}
-
-
--- !query
-BEGIN
-  DECLARE dup_var INT;
-  DECLARE cur CURSOR FOR SELECT 1, 2;
-  OPEN cur;
-  FETCH cur INTO dup_var, dup_var;  -- Should fail - duplicate variable name
-END
--- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "DUPLICATE_ASSIGNMENTS",
-  "sqlState" : "42701",
-  "messageParameters" : {
-    "nameList" : "`dup_var`"
-  }
-}
-
-
--- !query
-BEGIN
-  outer: BEGIN
-    DECLARE x INT;
-    DECLARE cur CURSOR FOR SELECT 42 AS val;
-
-    inner: BEGIN
-      OPEN cur;  -- Open in inner scope
-      FETCH cur INTO x;
-    END;
-
-    FETCH cur INTO x;  -- This should succeed
-    VALUES (x);  -- Should return 42
-
-  END;
-END
--- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'inner'",
-    "hint" : ""
-  }
-}
-
-
--- !query
-BEGIN
-  DECLARE y INT;
-
-  scope1: BEGIN
-    DECLARE cur CURSOR FOR SELECT 99 AS val;
-    OPEN cur;
-    FETCH cur INTO y;
-  END;  -- cursor is implicitly closed here (exiting DECLARE scope)
-
-  FETCH cur INTO y;
-END
--- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "CURSOR_NOT_FOUND",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "cursorName" : "cur"
-  }
-}
-
-
--- !query
-BEGIN
-  DECLARE x INT DEFAULT 0;
-  DECLARE result STRING DEFAULT '';
-  DECLARE cur CURSOR FOR SELECT 42 AS val;
-
-  OPEN cur;
-  FETCH cur INTO x;  -- OK: gets value 42
-  SET result = result || CAST(x AS STRING);
-
-  FETCH cur INTO x;  -- Continues execution (no handler needed for completion conditions)
-
-  SET result = result || '-after-fetch';
-  CLOSE cur;
-
-  VALUES (result);  -- Should return '42-after-fetch', proving execution continued
-END
--- !query analysis
-LocalRelation [col1#x]
-
-
--- !query
-BEGIN
-  DECLARE x INT;
-  SET x = 1 / 0;  -- Should throw DIVIDE_BY_ZERO (SQLSTATE 22012), not continue
-  VALUES ('This should not be reached');
-END
--- !query analysis
-org.apache.spark.SparkArithmeticException
-{
-  "errorClass" : "DIVIDE_BY_ZERO",
-  "sqlState" : "22012",
-  "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 34,
-    "stopIndex" : 38,
-    "fragment" : "1 / 0"
-  } ]
-}
 
 
 -- !query
@@ -1277,10 +1510,7 @@ BEGIN
   CLOSE cur;
 
   VALUES (result); -- Should return 'Alice:300,Bob:150,'
-END;
-
-DROP VIEW customers;
-DROP VIEW orders
+END
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
@@ -1289,6 +1519,32 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "messageParameters" : {
     "error" : "'CREATE'",
     "hint" : ": extra input 'CREATE'"
+  }
+}
+
+
+-- !query
+DROP VIEW customers
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`spark_catalog`.`default`.`customers`"
+  }
+}
+
+
+-- !query
+DROP VIEW orders
+-- !query analysis
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`spark_catalog`.`default`.`orders`"
   }
 }
 
@@ -1353,14 +1609,20 @@ org.apache.spark.sql.exceptions.SqlScriptingException
 
 -- !query
 BEGIN
-  DECLARE result INT;
-  DECLARE cur CURSOR FOR SELECT ? + 10 AS val;
+  DECLARE x INT DEFAULT 0;
+  DECLARE result STRING DEFAULT '';
+  DECLARE cur CURSOR FOR SELECT 42 AS val;
 
-  OPEN cur USING 5, 99, 100;  -- Only first parameter (5) is used, others ignored
-  FETCH cur INTO result;
+  OPEN cur;
+  FETCH cur INTO x;  -- OK: gets value 42
+  SET result = result || CAST(x AS STRING);
+
+  FETCH cur INTO x;  -- Continues execution (no handler needed for completion conditions)
+
+  SET result = result || '-after-fetch';
   CLOSE cur;
 
-  VALUES (result);  -- Should return 15 (5 + 10)
+  VALUES (result);  -- Should return '42-after-fetch', proving execution continued
 END
 -- !query analysis
 LocalRelation [col1#x]
@@ -1368,288 +1630,26 @@ LocalRelation [col1#x]
 
 -- !query
 BEGIN
-  DECLARE result INT;
-  DECLARE cur CURSOR FOR SELECT ? + ? AS val;
-
-  OPEN cur USING 10;  -- Only 1 parameter provided, but 2 needed
-  FETCH cur INTO result;
-  CLOSE cur;
+  DECLARE x INT;
+  SET x = 1 / 0;  -- Should throw DIVIDE_BY_ZERO (SQLSTATE 22012), not continue
+  VALUES ('This should not be reached');
 END
 -- !query analysis
-org.apache.spark.sql.AnalysisException
+org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "UNBOUND_SQL_PARAMETER",
-  "sqlState" : "42P02",
+  "errorClass" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
   "messageParameters" : {
-    "name" : "_11"
+    "config" : "\"spark.sql.ansi.enabled\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 12,
-    "stopIndex" : 12,
-    "fragment" : "?"
+    "startIndex" : 34,
+    "stopIndex" : 38,
+    "fragment" : "1 / 0"
   } ]
 }
-
-
--- !query
-BEGIN
-  DECLARE result INT;
-  DECLARE cur CURSOR FOR SELECT :x + :y AS val;
-
-  OPEN cur USING (x AS x);  -- Missing parameter 'y'
-  FETCH cur INTO result;
-  CLOSE cur;
-END
--- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`x`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 96,
-    "stopIndex" : 96,
-    "fragment" : "x"
-  } ]
-}
-
-
--- !query
-BEGIN
-  DECLARE result INT;
-  DECLARE cur CURSOR FOR SELECT :alpha + :beta AS val;
-
-  OPEN cur USING (5 AS alpha, 10 AS gamma);  -- 'gamma' provided but 'beta' expected
-  FETCH cur INTO result;
-  CLOSE cur;
-END
--- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNBOUND_SQL_PARAMETER",
-  "sqlState" : "42P02",
-  "messageParameters" : {
-    "name" : "beta"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 17,
-    "stopIndex" : 21,
-    "fragment" : ":beta"
-  } ]
-}
-
-
--- !query
-BEGIN
-  DECLARE result INT;
-  DECLARE cur CURSOR FOR SELECT ? + :named AS val;  -- Mixed positional and named
-
-  OPEN cur USING 10, (20 AS named);
-  FETCH cur INTO result;
-  CLOSE cur;
-END
--- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "')'",
-    "hint" : ""
-  }
-}
-
-
--- !query
-BEGIN
-  DECLARE x INT DEFAULT 100;
-  DECLARE y INT DEFAULT 200;
-  DECLARE result INT;
-  DECLARE cur CURSOR FOR SELECT :x + :y AS val;
-
-  OPEN cur USING (x AS x, y AS y);
-  FETCH cur INTO result;
-  CLOSE cur;
-
-  VALUES (result);  -- Should return 300 (100 + 200)
-END
--- !query analysis
-LocalRelation [col1#x]
-
-
--- !query
-BEGIN
-  DECLARE base INT DEFAULT 10;
-  DECLARE result INT;
-  DECLARE cur CURSOR FOR SELECT :a * :b AS val;
-
-  OPEN cur USING (base * 2 AS a, base + 5 AS b);  -- Expressions with aliases
-  FETCH cur INTO result;
-  CLOSE cur;
-
-  VALUES (result);  -- Should return 300 (20 * 15)
-END
--- !query analysis
-LocalRelation [col1#x]
-
-
--- !query
-BEGIN
-  DECLARE x INT DEFAULT 5;
-  DECLARE y INT DEFAULT 3;
-  DECLARE result INT;
-  DECLARE cur CURSOR FOR SELECT ? * ? + ? AS val;
-
-  OPEN cur USING x * 2, y + 1, 10;  -- (5*2) * (3+1) + 10 = 10 * 4 + 10 = 50
-  FETCH cur INTO result;
-  CLOSE cur;
-
-  VALUES (result);  -- Should return 50
-END
--- !query analysis
-LocalRelation [col1#x]
-
-
--- !query
-BEGIN
-  DECLARE result1 INT;
-  DECLARE result2 INT;
-  DECLARE cur CURSOR FOR SELECT ? * 10 AS val;
-
-  OPEN cur USING 5;
-  FETCH cur INTO result1;
-  CLOSE cur;
-
-  OPEN cur USING 8;
-  FETCH cur INTO result2;
-  CLOSE cur;
-
-  VALUES (result1, result2);  -- Should return (50, 80)
-END
--- !query analysis
-LocalRelation [col1#x, col2#x]
-
-
--- !query
-BEGIN
-  DECLARE result1 INT;
-  DECLARE result2 INT;
-  DECLARE cur CURSOR FOR SELECT :factor * 10 AS val;
-
-  OPEN cur USING (3 AS factor);
-  FETCH cur INTO result1;
-  CLOSE cur;
-
-  OPEN cur USING (7 AS factor);
-  FETCH cur INTO result2;
-  CLOSE cur;
-
-  VALUES (result1, result2);  -- Should return (30, 70)
-END
--- !query analysis
-LocalRelation [col1#x, col2#x]
-
-
--- !query
-BEGIN
-  DECLARE result INT;
-  DECLARE cur CURSOR FOR SELECT :x + :y AS val;
-
-  OPEN cur USING 10, (20 AS y);
-  FETCH cur INTO result;
-  CLOSE cur;
-END
--- !query analysis
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "')'",
-    "hint" : ""
-  }
-}
-
-
--- !query
-BEGIN
-  DECLARE multiplier INT DEFAULT 4;
-  DECLARE addend INT DEFAULT 6;
-  DECLARE result INT;
-  DECLARE cur CURSOR FOR SELECT :multiplier * 10 + :addend AS val;
-
-  OPEN cur USING (multiplier AS multiplier, addend AS addend);
-  FETCH cur INTO result;
-  CLOSE cur;
-
-  VALUES (result);  -- Should return 46 (4 * 10 + 6)
-END
--- !query analysis
-LocalRelation [col1#x]
-
-
--- !query
-BEGIN
-  DECLARE result INT;
-  DECLARE my_cursor CURSOR FOR SELECT 42 AS val;
-  OPEN MY_CURSOR;
-  FETCH MY_CURSOR INTO result;
-  CLOSE MY_CURSOR;
-  VALUES (result);  -- Should return 42
-END
--- !query analysis
-LocalRelation [col1#x]
-
-
--- !query
-BEGIN
-  DECLARE result INT;
-  DECLARE MyCursor CURSOR FOR SELECT 99 AS val;
-  OPEN mycursor;
-  FETCH mycursor INTO result;
-  CLOSE mycursor;
-  VALUES (result);  -- Should return 99
-END
--- !query analysis
-LocalRelation [col1#x]
-
-
--- !query
-BEGIN
-  outer_lbl: BEGIN
-    DECLARE result INT;
-    DECLARE cur CURSOR FOR SELECT 123 AS val;
-
-    OPEN OUTER_LBL.cur;  -- Label in different case
-    FETCH OUTER_LBL.CUR INTO result;  -- Both in different case
-    CLOSE outer_lbl.CUR;  -- Cursor in different case
-
-    VALUES (result);  -- Should return 123
-  END;
-END
--- !query analysis
-LocalRelation [col1#x]
-
-
--- !query
-BEGIN
-  DECLARE result INT;
-  DECLARE IDENTIFIER('MyCase') CURSOR FOR SELECT 42;
-  OPEN IDENTIFIER('mycase');  -- Different case but should work (case-insensitive resolution)
-  FETCH IDENTIFIER('MYCASE') INTO result;  -- Another case variation
-  CLOSE IDENTIFIER('MyCaSe');  -- Yet another variation
-  VALUES (result);  -- Should return 42
-END
--- !query analysis
-LocalRelation [col1#x]
 
 
 -- !query
@@ -1899,36 +1899,6 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "cursorName" : "`cur`"
   }
-}
-
-
--- !query
-BEGIN
-  DECLARE cur CURSOR FOR SELECT 123 AS val;
-  DECLARE result INT;  -- Invalid: variable after cursor
-END
--- !query analysis
-org.apache.spark.sql.exceptions.SqlScriptingException
-{
-  "errorClass" : "INVALID_VARIABLE_DECLARATION.ONLY_AT_BEGINNING",
-  "sqlState" : "42K0M",
-  "messageParameters" : {
-    "varName" : "`result`"
-  }
-}
-
-
--- !query
-BEGIN
-  DECLARE result INT;
-  DECLARE CONTINUE HANDLER FOR SQLSTATE '02000' BEGIN END;
-  DECLARE cur CURSOR FOR SELECT 123 AS val;  -- Invalid: cursor after handler
-END
--- !query analysis
-org.apache.spark.sql.exceptions.SqlScriptingException
-{
-  "errorClass" : "INVALID_CURSOR_DECLARATION",
-  "sqlState" : "42601"
 }
 
 

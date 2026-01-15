@@ -288,6 +288,103 @@ struct<col1:int>
 
 
 -- !query
+BEGIN
+  DECLARE cur CURSOR FOR SELECT 123 AS val;
+  DECLARE result INT;  -- Invalid: variable after cursor
+END
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.exceptions.SqlScriptingException
+{
+  "errorClass" : "INVALID_VARIABLE_DECLARATION.ONLY_AT_BEGINNING",
+  "sqlState" : "42K0M",
+  "messageParameters" : {
+    "varName" : "`result`"
+  }
+}
+
+
+-- !query
+BEGIN
+  DECLARE result INT;
+  DECLARE CONTINUE HANDLER FOR SQLSTATE '02000' BEGIN END;
+  DECLARE cur CURSOR FOR SELECT 123 AS val;  -- Invalid: cursor after handler
+END
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.exceptions.SqlScriptingException
+{
+  "errorClass" : "INVALID_CURSOR_DECLARATION",
+  "sqlState" : "42601"
+}
+
+
+-- !query
+BEGIN
+  DECLARE x INT DEFAULT 0;
+  SET x = 42;  -- Statement
+  DECLARE cur CURSOR FOR SELECT 123 AS val;  -- Invalid: cursor after statement
+END
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.exceptions.SqlScriptingException
+{
+  "errorClass" : "INVALID_CURSOR_DECLARATION",
+  "sqlState" : "42601"
+}
+
+
+-- !query
+BEGIN
+  outer: BEGIN
+    DECLARE x INT;
+    DECLARE cur CURSOR FOR SELECT 42 AS val;
+
+    inner_block: BEGIN
+      OPEN cur;  -- Open in inner scope
+      FETCH cur INTO x;
+    END;
+
+    FETCH cur INTO x;  -- This should succeed
+    VALUES (x);  -- Should return 42
+
+  END;
+END
+-- !query schema
+struct<col1:int>
+-- !query output
+42
+
+
+-- !query
+BEGIN
+  DECLARE y INT;
+
+  scope1: BEGIN
+    DECLARE cur CURSOR FOR SELECT 99 AS val;
+    OPEN cur;
+    FETCH cur INTO y;
+  END;  -- cursor is implicitly closed here (exiting DECLARE scope)
+
+  FETCH cur INTO y;
+END
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "CURSOR_NOT_FOUND",
+  "sqlState" : "42883",
+  "messageParameters" : {
+    "cursorName" : "cur"
+  }
+}
+
+
+-- !query
 CREATE TABLE cursor_sensitivity_test (id INT, value STRING) USING parquet
 -- !query schema
 struct<>
@@ -482,74 +579,69 @@ struct<col1:int>
 BEGIN
   DECLARE int_val INT;
   DECLARE str_val STRING;
+  DECLARE str_val2 STRING;
   DECLARE date_val DATE;
   DECLARE bool_val BOOLEAN;
 
   DECLARE cur_int CURSOR FOR SELECT typeof(:p) as type, :p as val;
+  DECLARE cur_str CURSOR FOR SELECT typeof(:p) as type, :p as val;
+  DECLARE cur_date CURSOR FOR SELECT typeof(:p) as type, :p as val;
+  DECLARE cur_bool CURSOR FOR SELECT typeof(:p) as type, :p as val;
+
   OPEN cur_int USING 42 AS p;
   FETCH cur_int INTO str_val, int_val;
   CLOSE cur_int;
   VALUES ('INT', int_val);
 
-  DECLARE cur_str CURSOR FOR SELECT typeof(:p) as type, :p as val;
   OPEN cur_str USING 'hello' AS p;
-  FETCH cur_str INTO str_val, str_val;
+  FETCH cur_str INTO str_val, str_val2;
   CLOSE cur_str;
-  VALUES ('STRING', str_val);
+  VALUES ('STRING', str_val2);
 
-  DECLARE cur_date CURSOR FOR SELECT typeof(:p) as type, :p as val;
   OPEN cur_date USING DATE '2023-12-25' AS p;
   FETCH cur_date INTO str_val, date_val;
   CLOSE cur_date;
   VALUES ('DATE', date_val);
 
-  DECLARE cur_bool CURSOR FOR SELECT typeof(:p) as type, :p as val;
   OPEN cur_bool USING true AS p;
   FETCH cur_bool INTO str_val, bool_val;
   CLOSE cur_bool;
   VALUES ('BOOLEAN', bool_val);
 END
 -- !query schema
-struct<>
+struct<col1:string,col2:boolean>
 -- !query output
-org.apache.spark.sql.exceptions.SqlScriptingException
-{
-  "errorClass" : "INVALID_CURSOR_DECLARATION",
-  "sqlState" : "42601"
-}
+BOOLEAN	true
 
 
 -- !query
 BEGIN
   DECLARE result INT;
+  DECLARE x INT DEFAULT 100;
 
   DECLARE cur_pos CURSOR FOR SELECT ? + ? AS sum;
+  DECLARE cur_named CURSOR FOR SELECT :a + :b AS sum;
+  DECLARE cur_var CURSOR FOR SELECT ? + 1 AS val;
+
   OPEN cur_pos USING 10, 20;
   FETCH cur_pos INTO result;
   CLOSE cur_pos;
   VALUES ('positional', result); -- Should be 30
 
-  DECLARE cur_named CURSOR FOR SELECT :a + :b AS sum;
   OPEN cur_named USING 15 AS a, 25 AS b;
   FETCH cur_named INTO result;
   CLOSE cur_named;
   VALUES ('named', result); -- Should be 40
 
-  DECLARE x INT DEFAULT 100;
-  DECLARE cur_var CURSOR FOR SELECT ? + 1 AS val;
   OPEN cur_var USING x;
   FETCH cur_var INTO result;
   CLOSE cur_var;
   VALUES ('variable', result); -- Should be 101
 END
 -- !query schema
-struct<>
+struct<col1:string,col2:int>
 -- !query output
-org.apache.spark.sql.exceptions.SqlScriptingException
-{
-  "errorClass" : "INVALID_CURSOR_DECLARATION",
-  "sqlState" : "42601"
-}
+variable	101
 
 
 -- !query
@@ -558,25 +650,291 @@ BEGIN
   DECLARE base INT DEFAULT 5;
 
   DECLARE cur1 CURSOR FOR SELECT :p AS val;
+  DECLARE cur2 CURSOR FOR SELECT :p AS val;
+
   OPEN cur1 USING 5 + 10 AS p;
   FETCH cur1 INTO result;
   CLOSE cur1;
   VALUES ('arithmetic', result); -- Should be 15
 
-  DECLARE cur2 CURSOR FOR SELECT :p AS val;
   OPEN cur2 USING base * 2 AS p;
   FETCH cur2 INTO result;
   CLOSE cur2;
   VALUES ('variable_expr', result); -- Should be 10
 END
 -- !query schema
+struct<col1:string,col2:int>
+-- !query output
+variable_expr	10
+
+
+-- !query
+BEGIN
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT ? + 10 AS val;
+
+  OPEN cur USING 5, 99, 100;  -- Only first parameter (5) is used, others ignored
+  FETCH cur INTO result;
+  CLOSE cur;
+
+  VALUES (result);  -- Should return 15 (5 + 10)
+END
+-- !query schema
+struct<col1:int>
+-- !query output
+15
+
+
+-- !query
+BEGIN
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT ? + ? AS val;
+
+  OPEN cur USING 10;  -- Only 1 parameter provided, but 2 needed
+  FETCH cur INTO result;
+  CLOSE cur;
+END
+-- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.exceptions.SqlScriptingException
+org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "INVALID_CURSOR_DECLARATION",
-  "sqlState" : "42601"
+  "errorClass" : "UNBOUND_SQL_PARAMETER",
+  "sqlState" : "42P02",
+  "messageParameters" : {
+    "name" : "_11"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 12,
+    "fragment" : "?"
+  } ]
 }
+
+
+-- !query
+BEGIN
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT :x + :y AS val;
+
+  OPEN cur USING 42 AS x;  -- Missing parameter 'y'
+  FETCH cur INTO result;
+  CLOSE cur;
+END
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNBOUND_SQL_PARAMETER",
+  "sqlState" : "42P02",
+  "messageParameters" : {
+    "name" : "y"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 13,
+    "stopIndex" : 14,
+    "fragment" : ":y"
+  } ]
+}
+
+
+-- !query
+BEGIN
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT :alpha + :beta AS val;
+
+  OPEN cur USING (5 AS alpha, 10 AS gamma);  -- 'gamma' provided but 'beta' expected
+  FETCH cur INTO result;
+  CLOSE cur;
+END
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNBOUND_SQL_PARAMETER",
+  "sqlState" : "42P02",
+  "messageParameters" : {
+    "name" : "beta"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 17,
+    "stopIndex" : 21,
+    "fragment" : ":beta"
+  } ]
+}
+
+
+-- !query
+BEGIN
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT ? + :named AS val;  -- Mixed positional and named
+
+  OPEN cur USING 10, (20 AS named);
+  FETCH cur INTO result;
+  CLOSE cur;
+END
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "')'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+BEGIN
+  DECLARE x INT DEFAULT 100;
+  DECLARE y INT DEFAULT 200;
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT :x + :y AS val;
+
+  OPEN cur USING (x AS x, y AS y);
+  FETCH cur INTO result;
+  CLOSE cur;
+
+  VALUES (result);  -- Should return 300 (100 + 200)
+END
+-- !query schema
+struct<col1:int>
+-- !query output
+300
+
+
+-- !query
+BEGIN
+  DECLARE base INT DEFAULT 10;
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT :a * :b AS val;
+
+  OPEN cur USING base * 2 AS a, base + 5 AS b;  -- Expressions with aliases
+  FETCH cur INTO result;
+  CLOSE cur;
+
+  VALUES (result);  -- Should return 300 (20 * 15)
+END
+-- !query schema
+struct<col1:int>
+-- !query output
+300
+
+
+-- !query
+BEGIN
+  DECLARE x INT DEFAULT 5;
+  DECLARE y INT DEFAULT 3;
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT ? * ? + ? AS val;
+
+  OPEN cur USING x * 2, y + 1, 10;  -- (5*2) * (3+1) + 10 = 10 * 4 + 10 = 50
+  FETCH cur INTO result;
+  CLOSE cur;
+
+  VALUES (result);  -- Should return 50
+END
+-- !query schema
+struct<col1:int>
+-- !query output
+50
+
+
+-- !query
+BEGIN
+  DECLARE result1 INT;
+  DECLARE result2 INT;
+  DECLARE cur CURSOR FOR SELECT ? * 10 AS val;
+
+  OPEN cur USING 5;
+  FETCH cur INTO result1;
+  CLOSE cur;
+
+  OPEN cur USING 8;
+  FETCH cur INTO result2;
+  CLOSE cur;
+
+  VALUES (result1, result2);  -- Should return (50, 80)
+END
+-- !query schema
+struct<col1:int,col2:int>
+-- !query output
+50	80
+
+
+-- !query
+BEGIN
+  DECLARE result1 INT;
+  DECLARE result2 INT;
+  DECLARE cur CURSOR FOR SELECT :factor * 10 AS val;
+
+  OPEN cur USING (3 AS factor);
+  FETCH cur INTO result1;
+  CLOSE cur;
+
+  OPEN cur USING (7 AS factor);
+  FETCH cur INTO result2;
+  CLOSE cur;
+
+  VALUES (result1, result2);  -- Should return (30, 70)
+END
+-- !query schema
+struct<col1:int,col2:int>
+-- !query output
+30	70
+
+
+-- !query
+BEGIN
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT :x + :y AS val;
+
+  OPEN cur USING 10, (20 AS y);
+  FETCH cur INTO result;
+  CLOSE cur;
+END
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "PARSE_SYNTAX_ERROR",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "error" : "')'",
+    "hint" : ""
+  }
+}
+
+
+-- !query
+BEGIN
+  DECLARE multiplier INT DEFAULT 4;
+  DECLARE addend INT DEFAULT 6;
+  DECLARE result INT;
+  DECLARE cur CURSOR FOR SELECT :multiplier * 10 + :addend AS val;
+
+  OPEN cur USING multiplier AS multiplier, addend AS addend;
+  FETCH cur INTO result;
+  CLOSE cur;
+
+  VALUES (result);  -- Should return 46 (4 * 10 + 6)
+END
+-- !query schema
+struct<col1:int>
+-- !query output
+46
 
 
 -- !query
@@ -650,6 +1008,70 @@ END
 struct<col1:string>
 -- !query output
 34
+
+
+-- !query
+BEGIN
+  DECLARE result INT;
+  DECLARE my_cursor CURSOR FOR SELECT 42 AS val;
+  OPEN MY_CURSOR;
+  FETCH MY_CURSOR INTO result;
+  CLOSE MY_CURSOR;
+  VALUES (result);  -- Should return 42
+END
+-- !query schema
+struct<col1:int>
+-- !query output
+42
+
+
+-- !query
+BEGIN
+  DECLARE result INT;
+  DECLARE MyCursor CURSOR FOR SELECT 99 AS val;
+  OPEN mycursor;
+  FETCH mycursor INTO result;
+  CLOSE mycursor;
+  VALUES (result);  -- Should return 99
+END
+-- !query schema
+struct<col1:int>
+-- !query output
+99
+
+
+-- !query
+BEGIN
+  outer_lbl: BEGIN
+    DECLARE result INT;
+    DECLARE cur CURSOR FOR SELECT 123 AS val;
+
+    OPEN OUTER_LBL.cur;  -- Label in different case
+    FETCH OUTER_LBL.CUR INTO result;  -- Both in different case
+    CLOSE outer_lbl.CUR;  -- Cursor in different case
+
+    VALUES (result);  -- Should return 123
+  END;
+END
+-- !query schema
+struct<col1:int>
+-- !query output
+123
+
+
+-- !query
+BEGIN
+  DECLARE result INT;
+  DECLARE IDENTIFIER('MyCase') CURSOR FOR SELECT 42;
+  OPEN IDENTIFIER('mycase');  -- Different case but should work (case-insensitive resolution)
+  FETCH IDENTIFIER('MYCASE') INTO result;  -- Another case variation
+  CLOSE IDENTIFIER('MyCaSe');  -- Yet another variation
+  VALUES (result);  -- Should return 42
+END
+-- !query schema
+struct<col1:int>
+-- !query output
+42
 
 
 -- !query
@@ -730,111 +1152,6 @@ org.apache.spark.sql.AnalysisException
     "numTarget" : "4"
   }
 }
-
-
--- !query
-BEGIN
-  DECLARE x INT;
-  DECLARE cur INSENSITIVE CURSOR FOR SELECT 42 AS val;
-  OPEN cur;
-  FETCH cur INTO x;
-  CLOSE cur;
-  VALUES (x); -- Should return 42
-END
--- !query schema
-struct<col1:int>
--- !query output
-42
-
-
--- !query
-BEGIN
-  DECLARE y INT;
-  DECLARE cur ASENSITIVE CURSOR FOR SELECT 99 AS val;
-  OPEN cur;
-  FETCH cur INTO y;
-  CLOSE cur;
-  VALUES (y); -- Should return 99
-END
--- !query schema
-struct<col1:int>
--- !query output
-99
-
-
--- !query
-BEGIN
-  DECLARE z INT;
-  DECLARE cur CURSOR FOR SELECT 77 AS val FOR READ ONLY;
-  OPEN cur;
-  FETCH cur INTO z;
-  CLOSE cur;
-  VALUES (z); -- Should return 77
-END
--- !query schema
-struct<col1:int>
--- !query output
-77
-
-
--- !query
-BEGIN
-  DECLARE w INT;
-  DECLARE cur INSENSITIVE CURSOR FOR SELECT 123 AS val FOR READ ONLY;
-  OPEN cur;
-  FETCH cur INTO w;
-  CLOSE cur;
-  VALUES (w); -- Should return 123
-END
--- !query schema
-struct<col1:int>
--- !query output
-123
-
-
--- !query
-BEGIN
-  DECLARE a INT;
-  DECLARE cur CURSOR FOR SELECT 55 AS val;
-  OPEN cur;
-  FETCH NEXT FROM cur INTO a;
-  CLOSE cur;
-  VALUES (a); -- Should return 55
-END
--- !query schema
-struct<col1:int>
--- !query output
-55
-
-
--- !query
-BEGIN
-  DECLARE b INT;
-  DECLARE cur CURSOR FOR SELECT 66 AS val;
-  OPEN cur;
-  FETCH FROM cur INTO b;
-  CLOSE cur;
-  VALUES (b); -- Should return 66
-END
--- !query schema
-struct<col1:int>
--- !query output
-66
-
-
--- !query
-BEGIN
-  DECLARE c INT;
-  DECLARE cur CURSOR FOR SELECT 88 AS val;
-  OPEN cur;
-  FETCH NEXT FROM cur INTO c;
-  CLOSE cur;
-  VALUES (c); -- Should return 88
-END
--- !query schema
-struct<col1:int>
--- !query output
-88
 
 
 -- !query
@@ -950,15 +1267,7 @@ END
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_VARIABLE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "searchPath" : "`session`",
-    "variableName" : "`session_x`"
-  }
-}
+
 
 
 -- !query
@@ -966,7 +1275,7 @@ SELECT session_x, session_y;  -- Should return 42, 'hello'
 -- !query schema
 struct<session_x:int,session_y:string>
 -- !query output
-0
+42	hello
 
 
 -- !query
@@ -987,17 +1296,9 @@ BEGIN
   VALUES (session_var, local_var);  -- Should return 100, 'world'
 END
 -- !query schema
-struct<>
+struct<col1:int,col2:string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_VARIABLE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "searchPath" : "`session`",
-    "variableName" : "`session_var`"
-  }
-}
+100	world
 
 
 -- !query
@@ -1026,15 +1327,7 @@ END
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_VARIABLE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "searchPath" : "`session`",
-    "variableName" : "`session_int`"
-  }
-}
+
 
 
 -- !query
@@ -1042,7 +1335,7 @@ SELECT session_int, session_str;  -- Should return 99, '42' (with ANSI rounding)
 -- !query schema
 struct<session_int:int,session_str:string>
 -- !query output
-0
+99	42
 
 
 -- !query
@@ -1101,107 +1394,164 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-BEGIN
-  outer: BEGIN
-    DECLARE x INT;
-    DECLARE cur CURSOR FOR SELECT 42 AS val;
-
-    inner: BEGIN
-      OPEN cur;  -- Open in inner scope
-      FETCH cur INTO x;
-    END;
-
-    FETCH cur INTO x;  -- This should succeed
-    VALUES (x);  -- Should return 42
-
-  END;
-END
+DROP TEMPORARY VARIABLE IF EXISTS session_x
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "'inner'",
-    "hint" : ""
-  }
-}
+
 
 
 -- !query
-BEGIN
-  DECLARE y INT;
-
-  scope1: BEGIN
-    DECLARE cur CURSOR FOR SELECT 99 AS val;
-    OPEN cur;
-    FETCH cur INTO y;
-  END;  -- cursor is implicitly closed here (exiting DECLARE scope)
-
-  FETCH cur INTO y;
-END
+DROP TEMPORARY VARIABLE IF EXISTS session_y
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "CURSOR_NOT_FOUND",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "cursorName" : "cur"
-  }
-}
+
 
 
 -- !query
-BEGIN
-  DECLARE x INT DEFAULT 0;
-  DECLARE result STRING DEFAULT '';
-  DECLARE cur CURSOR FOR SELECT 42 AS val;
-
-  OPEN cur;
-  FETCH cur INTO x;  -- OK: gets value 42
-  SET result = result || CAST(x AS STRING);
-
-  FETCH cur INTO x;  -- Continues execution (no handler needed for completion conditions)
-
-  SET result = result || '-after-fetch';
-  CLOSE cur;
-
-  VALUES (result);  -- Should return '42-after-fetch', proving execution continued
-END
+DROP TEMPORARY VARIABLE IF EXISTS session_var
 -- !query schema
-struct<col1:string>
+struct<>
 -- !query output
-42-after-fetch
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE IF EXISTS session_int
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE IF EXISTS session_str
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE IF EXISTS session_dup
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY VARIABLE IF EXISTS dup_var
+-- !query schema
+struct<>
+-- !query output
+
 
 
 -- !query
 BEGIN
   DECLARE x INT;
-  SET x = 1 / 0;  -- Should throw DIVIDE_BY_ZERO (SQLSTATE 22012), not continue
-  VALUES ('This should not be reached');
+  DECLARE cur INSENSITIVE CURSOR FOR SELECT 42 AS val;
+  OPEN cur;
+  FETCH cur INTO x;
+  CLOSE cur;
+  VALUES (x); -- Should return 42
 END
 -- !query schema
-struct<>
+struct<col1:int>
 -- !query output
-org.apache.spark.SparkArithmeticException
-{
-  "errorClass" : "DIVIDE_BY_ZERO",
-  "sqlState" : "22012",
-  "messageParameters" : {
-    "config" : "\"spark.sql.ansi.enabled\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 34,
-    "stopIndex" : 38,
-    "fragment" : "1 / 0"
-  } ]
-}
+42
+
+
+-- !query
+BEGIN
+  DECLARE y INT;
+  DECLARE cur ASENSITIVE CURSOR FOR SELECT 99 AS val;
+  OPEN cur;
+  FETCH cur INTO y;
+  CLOSE cur;
+  VALUES (y); -- Should return 99
+END
+-- !query schema
+struct<col1:int>
+-- !query output
+99
+
+
+-- !query
+BEGIN
+  DECLARE z INT;
+  DECLARE cur CURSOR FOR SELECT 77 AS val FOR READ ONLY;
+  OPEN cur;
+  FETCH cur INTO z;
+  CLOSE cur;
+  VALUES (z); -- Should return 77
+END
+-- !query schema
+struct<col1:int>
+-- !query output
+77
+
+
+-- !query
+BEGIN
+  DECLARE w INT;
+  DECLARE cur INSENSITIVE CURSOR FOR SELECT 123 AS val FOR READ ONLY;
+  OPEN cur;
+  FETCH cur INTO w;
+  CLOSE cur;
+  VALUES (w); -- Should return 123
+END
+-- !query schema
+struct<col1:int>
+-- !query output
+123
+
+
+-- !query
+BEGIN
+  DECLARE a INT;
+  DECLARE cur CURSOR FOR SELECT 55 AS val;
+  OPEN cur;
+  FETCH NEXT FROM cur INTO a;
+  CLOSE cur;
+  VALUES (a); -- Should return 55
+END
+-- !query schema
+struct<col1:int>
+-- !query output
+55
+
+
+-- !query
+BEGIN
+  DECLARE b INT;
+  DECLARE cur CURSOR FOR SELECT 66 AS val;
+  OPEN cur;
+  FETCH FROM cur INTO b;
+  CLOSE cur;
+  VALUES (b); -- Should return 66
+END
+-- !query schema
+struct<col1:int>
+-- !query output
+66
+
+
+-- !query
+BEGIN
+  DECLARE c INT;
+  DECLARE cur CURSOR FOR SELECT 88 AS val;
+  OPEN cur;
+  FETCH NEXT FROM cur INTO c;
+  CLOSE cur;
+  VALUES (c); -- Should return 88
+END
+-- !query schema
+struct<col1:int>
+-- !query output
+88
 
 
 -- !query
@@ -1329,10 +1679,7 @@ BEGIN
   CLOSE cur;
 
   VALUES (result); -- Should return 'Alice:300,Bob:150,'
-END;
-
-DROP VIEW customers;
-DROP VIEW orders
+END
 -- !query schema
 struct<>
 -- !query output
@@ -1343,6 +1690,36 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "messageParameters" : {
     "error" : "'CREATE'",
     "hint" : ": extra input 'CREATE'"
+  }
+}
+
+
+-- !query
+DROP VIEW customers
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`spark_catalog`.`default`.`customers`"
+  }
+}
+
+
+-- !query
+DROP VIEW orders
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+{
+  "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
+  "sqlState" : "42P01",
+  "messageParameters" : {
+    "relationName" : "`spark_catalog`.`default`.`orders`"
   }
 }
 
@@ -1409,335 +1786,51 @@ org.apache.spark.sql.exceptions.SqlScriptingException
 
 -- !query
 BEGIN
-  DECLARE result INT;
-  DECLARE cur CURSOR FOR SELECT ? + 10 AS val;
+  DECLARE x INT DEFAULT 0;
+  DECLARE result STRING DEFAULT '';
+  DECLARE cur CURSOR FOR SELECT 42 AS val;
 
-  OPEN cur USING 5, 99, 100;  -- Only first parameter (5) is used, others ignored
-  FETCH cur INTO result;
+  OPEN cur;
+  FETCH cur INTO x;  -- OK: gets value 42
+  SET result = result || CAST(x AS STRING);
+
+  FETCH cur INTO x;  -- Continues execution (no handler needed for completion conditions)
+
+  SET result = result || '-after-fetch';
   CLOSE cur;
 
-  VALUES (result);  -- Should return 15 (5 + 10)
+  VALUES (result);  -- Should return '42-after-fetch', proving execution continued
 END
 -- !query schema
-struct<col1:int>
+struct<col1:string>
 -- !query output
-15
+42-after-fetch
 
 
 -- !query
 BEGIN
-  DECLARE result INT;
-  DECLARE cur CURSOR FOR SELECT ? + ? AS val;
-
-  OPEN cur USING 10;  -- Only 1 parameter provided, but 2 needed
-  FETCH cur INTO result;
-  CLOSE cur;
+  DECLARE x INT;
+  SET x = 1 / 0;  -- Should throw DIVIDE_BY_ZERO (SQLSTATE 22012), not continue
+  VALUES ('This should not be reached');
 END
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
+org.apache.spark.SparkArithmeticException
 {
-  "errorClass" : "UNBOUND_SQL_PARAMETER",
-  "sqlState" : "42P02",
+  "errorClass" : "DIVIDE_BY_ZERO",
+  "sqlState" : "22012",
   "messageParameters" : {
-    "name" : "_11"
+    "config" : "\"spark.sql.ansi.enabled\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 12,
-    "stopIndex" : 12,
-    "fragment" : "?"
+    "startIndex" : 34,
+    "stopIndex" : 38,
+    "fragment" : "1 / 0"
   } ]
 }
-
-
--- !query
-BEGIN
-  DECLARE result INT;
-  DECLARE cur CURSOR FOR SELECT :x + :y AS val;
-
-  OPEN cur USING (x AS x);  -- Missing parameter 'y'
-  FETCH cur INTO result;
-  CLOSE cur;
-END
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`x`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 96,
-    "stopIndex" : 96,
-    "fragment" : "x"
-  } ]
-}
-
-
--- !query
-BEGIN
-  DECLARE result INT;
-  DECLARE cur CURSOR FOR SELECT :alpha + :beta AS val;
-
-  OPEN cur USING (5 AS alpha, 10 AS gamma);  -- 'gamma' provided but 'beta' expected
-  FETCH cur INTO result;
-  CLOSE cur;
-END
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNBOUND_SQL_PARAMETER",
-  "sqlState" : "42P02",
-  "messageParameters" : {
-    "name" : "beta"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 17,
-    "stopIndex" : 21,
-    "fragment" : ":beta"
-  } ]
-}
-
-
--- !query
-BEGIN
-  DECLARE result INT;
-  DECLARE cur CURSOR FOR SELECT ? + :named AS val;  -- Mixed positional and named
-
-  OPEN cur USING 10, (20 AS named);
-  FETCH cur INTO result;
-  CLOSE cur;
-END
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "')'",
-    "hint" : ""
-  }
-}
-
-
--- !query
-BEGIN
-  DECLARE x INT DEFAULT 100;
-  DECLARE y INT DEFAULT 200;
-  DECLARE result INT;
-  DECLARE cur CURSOR FOR SELECT :x + :y AS val;
-
-  OPEN cur USING (x AS x, y AS y);
-  FETCH cur INTO result;
-  CLOSE cur;
-
-  VALUES (result);  -- Should return 300 (100 + 200)
-END
--- !query schema
-struct<col1:int>
--- !query output
-300
-
-
--- !query
-BEGIN
-  DECLARE base INT DEFAULT 10;
-  DECLARE result INT;
-  DECLARE cur CURSOR FOR SELECT :a * :b AS val;
-
-  OPEN cur USING (base * 2 AS a, base + 5 AS b);  -- Expressions with aliases
-  FETCH cur INTO result;
-  CLOSE cur;
-
-  VALUES (result);  -- Should return 300 (20 * 15)
-END
--- !query schema
-struct<col1:int>
--- !query output
-300
-
-
--- !query
-BEGIN
-  DECLARE x INT DEFAULT 5;
-  DECLARE y INT DEFAULT 3;
-  DECLARE result INT;
-  DECLARE cur CURSOR FOR SELECT ? * ? + ? AS val;
-
-  OPEN cur USING x * 2, y + 1, 10;  -- (5*2) * (3+1) + 10 = 10 * 4 + 10 = 50
-  FETCH cur INTO result;
-  CLOSE cur;
-
-  VALUES (result);  -- Should return 50
-END
--- !query schema
-struct<col1:int>
--- !query output
-50
-
-
--- !query
-BEGIN
-  DECLARE result1 INT;
-  DECLARE result2 INT;
-  DECLARE cur CURSOR FOR SELECT ? * 10 AS val;
-
-  OPEN cur USING 5;
-  FETCH cur INTO result1;
-  CLOSE cur;
-
-  OPEN cur USING 8;
-  FETCH cur INTO result2;
-  CLOSE cur;
-
-  VALUES (result1, result2);  -- Should return (50, 80)
-END
--- !query schema
-struct<col1:int,col2:int>
--- !query output
-50	80
-
-
--- !query
-BEGIN
-  DECLARE result1 INT;
-  DECLARE result2 INT;
-  DECLARE cur CURSOR FOR SELECT :factor * 10 AS val;
-
-  OPEN cur USING (3 AS factor);
-  FETCH cur INTO result1;
-  CLOSE cur;
-
-  OPEN cur USING (7 AS factor);
-  FETCH cur INTO result2;
-  CLOSE cur;
-
-  VALUES (result1, result2);  -- Should return (30, 70)
-END
--- !query schema
-struct<col1:int,col2:int>
--- !query output
-30	70
-
-
--- !query
-BEGIN
-  DECLARE result INT;
-  DECLARE cur CURSOR FOR SELECT :x + :y AS val;
-
-  OPEN cur USING 10, (20 AS y);
-  FETCH cur INTO result;
-  CLOSE cur;
-END
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-{
-  "errorClass" : "PARSE_SYNTAX_ERROR",
-  "sqlState" : "42601",
-  "messageParameters" : {
-    "error" : "')'",
-    "hint" : ""
-  }
-}
-
-
--- !query
-BEGIN
-  DECLARE multiplier INT DEFAULT 4;
-  DECLARE addend INT DEFAULT 6;
-  DECLARE result INT;
-  DECLARE cur CURSOR FOR SELECT :multiplier * 10 + :addend AS val;
-
-  OPEN cur USING (multiplier AS multiplier, addend AS addend);
-  FETCH cur INTO result;
-  CLOSE cur;
-
-  VALUES (result);  -- Should return 46 (4 * 10 + 6)
-END
--- !query schema
-struct<col1:int>
--- !query output
-46
-
-
--- !query
-BEGIN
-  DECLARE result INT;
-  DECLARE my_cursor CURSOR FOR SELECT 42 AS val;
-  OPEN MY_CURSOR;
-  FETCH MY_CURSOR INTO result;
-  CLOSE MY_CURSOR;
-  VALUES (result);  -- Should return 42
-END
--- !query schema
-struct<col1:int>
--- !query output
-42
-
-
--- !query
-BEGIN
-  DECLARE result INT;
-  DECLARE MyCursor CURSOR FOR SELECT 99 AS val;
-  OPEN mycursor;
-  FETCH mycursor INTO result;
-  CLOSE mycursor;
-  VALUES (result);  -- Should return 99
-END
--- !query schema
-struct<col1:int>
--- !query output
-99
-
-
--- !query
-BEGIN
-  outer_lbl: BEGIN
-    DECLARE result INT;
-    DECLARE cur CURSOR FOR SELECT 123 AS val;
-
-    OPEN OUTER_LBL.cur;  -- Label in different case
-    FETCH OUTER_LBL.CUR INTO result;  -- Both in different case
-    CLOSE outer_lbl.CUR;  -- Cursor in different case
-
-    VALUES (result);  -- Should return 123
-  END;
-END
--- !query schema
-struct<col1:int>
--- !query output
-123
-
-
--- !query
-BEGIN
-  DECLARE result INT;
-  DECLARE IDENTIFIER('MyCase') CURSOR FOR SELECT 42;
-  OPEN IDENTIFIER('mycase');  -- Different case but should work (case-insensitive resolution)
-  FETCH IDENTIFIER('MYCASE') INTO result;  -- Another case variation
-  CLOSE IDENTIFIER('MyCaSe');  -- Yet another variation
-  VALUES (result);  -- Should return 42
-END
--- !query schema
-struct<col1:int>
--- !query output
-42
 
 
 -- !query
@@ -2007,40 +2100,6 @@ org.apache.spark.sql.AnalysisException
   "messageParameters" : {
     "cursorName" : "`cur`"
   }
-}
-
-
--- !query
-BEGIN
-  DECLARE cur CURSOR FOR SELECT 123 AS val;
-  DECLARE result INT;  -- Invalid: variable after cursor
-END
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.exceptions.SqlScriptingException
-{
-  "errorClass" : "INVALID_VARIABLE_DECLARATION.ONLY_AT_BEGINNING",
-  "sqlState" : "42K0M",
-  "messageParameters" : {
-    "varName" : "`result`"
-  }
-}
-
-
--- !query
-BEGIN
-  DECLARE result INT;
-  DECLARE CONTINUE HANDLER FOR SQLSTATE '02000' BEGIN END;
-  DECLARE cur CURSOR FOR SELECT 123 AS val;  -- Invalid: cursor after handler
-END
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.exceptions.SqlScriptingException
-{
-  "errorClass" : "INVALID_CURSOR_DECLARATION",
-  "sqlState" : "42601"
 }
 
 

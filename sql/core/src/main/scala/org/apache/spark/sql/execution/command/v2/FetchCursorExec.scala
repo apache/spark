@@ -19,12 +19,15 @@ package org.apache.spark.sql.execution.command.v2
 
 import java.util.Locale
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{InternalRow, SqlScriptingContextManager}
+import org.apache.spark.sql.catalyst.analysis.{FakeLocalCatalog, FakeSystemCatalog}
 import org.apache.spark.sql.catalyst.catalog.VariableDefinition
 import org.apache.spark.sql.catalyst.expressions.{Attribute, CursorReference, Expression, Literal, VariableReference}
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.errors.DataTypeErrorsBase
+import org.apache.spark.sql.errors.QueryCompilationErrors.unresolvedVariableError
 import org.apache.spark.sql.execution.datasources.v2.LeafV2CommandExec
 import org.apache.spark.sql.scripting.{CursorFetching, CursorOpened}
 
@@ -47,7 +50,6 @@ case class FetchCursorExec(
     val cursorRef = cursor.asInstanceOf[CursorReference]
 
     val scriptingContext = CursorCommandUtils.getScriptingContext(cursorRef.definition.name)
-    val variableManager = SqlScriptingContextManager.get().get.getVariableManager
 
     // Get current cursor state
     val currentState = scriptingContext.getCursorState(cursorRef).getOrElse(
@@ -101,11 +103,10 @@ case class FetchCursorExec(
         targetVariables.head,
         targetVariables.head.dataType.asInstanceOf[org.apache.spark.sql.types.StructType],
         currentRow,
-        analyzedQuery,
-        variableManager)
+        analyzedQuery)
     } else {
       // Regular case: one-to-one column-to-variable assignment
-      fetchIntoVariables(targetVariables, currentRow, analyzedQuery, variableManager)
+      fetchIntoVariables(targetVariables, currentRow, analyzedQuery)
     }
 
     Nil
@@ -131,8 +132,7 @@ case class FetchCursorExec(
   private def fetchIntoVariables(
       targetVariables: Seq[VariableReference],
       currentRow: InternalRow,
-      analyzedQuery: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan,
-      variableManager: org.apache.spark.sql.catalyst.catalog.VariableManager): Unit = {
+      analyzedQuery: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan): Unit = {
     // Validate arity
     if (targetVariables.length != currentRow.numFields) {
       throw new AnalysisException(
@@ -150,7 +150,7 @@ case class FetchCursorExec(
         analyzedQuery.output(idx).dataType,
         varRef.dataType)
 
-      assignToVariable(varRef, castedValue, variableManager)
+      assignToVariable(varRef, castedValue)
     }
   }
 
@@ -178,12 +178,35 @@ case class FetchCursorExec(
    */
   private def assignToVariable(
       varRef: VariableReference,
-      value: Any,
-      variableManager: org.apache.spark.sql.catalyst.catalog.VariableManager): Unit = {
+      value: Any): Unit = {
     val namePartsCaseAdjusted = if (session.sessionState.conf.caseSensitiveAnalysis) {
       varRef.originalNameParts
     } else {
       varRef.originalNameParts.map(_.toLowerCase(Locale.ROOT))
+    }
+
+    // Select the appropriate variable manager based on the catalog
+    // This logic matches SetVariableExec.setVariable()
+    val tempVariableManager = session.sessionState.catalogManager.tempVariableManager
+    val scriptingVariableManager = SqlScriptingContextManager.get().map(_.getVariableManager)
+
+    val variableManager = varRef.catalog match {
+      case FakeLocalCatalog if scriptingVariableManager.isEmpty =>
+        throw SparkException.internalError("FetchCursorExec: Variable has FakeLocalCatalog, " +
+          "but ScriptingVariableManager is None.")
+
+      case FakeLocalCatalog if scriptingVariableManager.get.get(namePartsCaseAdjusted).isEmpty =>
+        throw SparkException.internalError("Local variable should be present in FetchCursorExec " +
+          "because ResolveFetchCursor has already determined it exists.")
+
+      case FakeLocalCatalog => scriptingVariableManager.get
+
+      case FakeSystemCatalog if tempVariableManager.get(namePartsCaseAdjusted).isEmpty =>
+        throw unresolvedVariableError(namePartsCaseAdjusted, Seq("SYSTEM", "SESSION"))
+
+      case FakeSystemCatalog => tempVariableManager
+
+      case c => throw SparkException.internalError("Unexpected catalog in FetchCursorExec: " + c)
     }
 
     val varDef = VariableDefinition(
@@ -207,8 +230,7 @@ case class FetchCursorExec(
       targetVar: VariableReference,
       structType: org.apache.spark.sql.types.StructType,
       currentRow: InternalRow,
-      analyzedQuery: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan,
-      variableManager: org.apache.spark.sql.catalyst.catalog.VariableManager): Unit = {
+      analyzedQuery: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan): Unit = {
     import org.apache.spark.sql.catalyst.expressions.{Cast, CreateStruct, Literal}
     import org.apache.spark.sql.catalyst.InternalRow
 
@@ -243,7 +265,7 @@ case class FetchCursorExec(
     val structValue = structExpr.eval(InternalRow.empty)
 
     // Assign struct to variable
-    assignToVariable(targetVar, structValue, variableManager)
+    assignToVariable(targetVar, structValue)
   }
 
   override def output: Seq[Attribute] = Nil
