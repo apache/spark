@@ -566,4 +566,70 @@ class StreamRelationParserSuite extends AnalysisTest {
     }
     assert(e.getMessage.contains("IDENTIFIED BY clause is only supported for streaming sources"))
   }
+
+  // ==========================================
+  // Negative tests for IDENTIFIED BY clause
+  // ==========================================
+
+  test("Parse Exception: IDENTIFIED BY without source name") {
+    interceptParseException(parsePlan)(
+      "SELECT * FROM STREAM t IDENTIFIED BY"
+    )(None)
+  }
+
+  test("Parse Exception: Multiple IDENTIFIED BY clauses") {
+    // The grammar should prevent multiple IDENTIFIED BY clauses
+    interceptParseException(parsePlan)(
+      "SELECT * FROM STREAM t IDENTIFIED BY src1 IDENTIFIED BY src2"
+    )(None)
+  }
+
+  test("Parse Exception: IDENTIFIED BY on non-streaming table") {
+    // Regular (non-streaming) tables should not allow IDENTIFIED BY
+    interceptParseException(parsePlan)(
+      "SELECT * FROM t IDENTIFIED BY my_source"
+    )(None)
+  }
+
+  test("Parse Exception: IDENTIFIED BY on subquery") {
+    // Subqueries should not allow IDENTIFIED BY
+    interceptParseException(parsePlan)(
+      "SELECT * FROM (SELECT * FROM t) IDENTIFIED BY my_source"
+    )(None)
+  }
+
+  test("Parse Exception: IDENTIFIED BY before WITH options") {
+    // IDENTIFIED BY should come after WITH options
+    interceptParseException(parsePlan)(
+      "SELECT * FROM STREAM t IDENTIFIED BY src WITH ('key' = 'value')"
+    )(None)
+  }
+
+  test("Parse Exception: IDENTIFIED BY after alias") {
+    // IDENTIFIED BY should come before alias
+    interceptParseException(parsePlan)(
+      "SELECT * FROM STREAM t AS src IDENTIFIED BY my_source"
+    )(None)
+  }
+
+  test("Parse Exception: IDENTIFIED BY after WATERMARK") {
+    // IDENTIFIED BY should come before WATERMARK
+    interceptParseException(parsePlan)(
+      "SELECT * FROM STREAM t WATERMARK col DELAY OF INTERVAL 1 MINUTE IDENTIFIED BY src"
+    )(None)
+  }
+
+  test("Parse Exception: TVF IDENTIFIED BY after alias") {
+    // IDENTIFIED BY should come before alias for TVFs too
+    interceptParseException(parsePlan)(
+      "SELECT * FROM STREAM range(10) AS t IDENTIFIED BY src"
+    )(None)
+  }
+
+  test("Parse Exception: TVF IDENTIFIED BY after WATERMARK") {
+    // IDENTIFIED BY should come before WATERMARK for TVFs too
+    interceptParseException(parsePlan)(
+      "SELECT * FROM STREAM range(10) WATERMARK col DELAY OF INTERVAL 1 MINUTE IDENTIFIED BY src"
+    )(None)
+  }
 }
