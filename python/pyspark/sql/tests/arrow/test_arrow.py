@@ -1854,6 +1854,40 @@ class ArrowTestsMixin:
                     self.assertEqual(t.column_names, ["id", "str_col", "mod_col"])
 
 
+
+    def test_toPandas_double_nested_array_empty_outer(self):
+        schema = StructType([StructField("data", ArrayType(ArrayType(StringType())))])
+        df = self.spark.createDataFrame([Row(data=[])], schema=schema)
+        pdf = df.toPandas()
+        self.assertEqual(len(pdf), 1)
+        self.assertEqual(len(pdf["data"][0]), 0)
+
+    def test_toPandas_array_of_map_empty_outer(self):
+        schema = StructType([StructField("data", ArrayType(MapType(StringType(), StringType())))])
+        df = self.spark.createDataFrame([Row(data=[])], schema=schema)
+        pdf = df.toPandas()
+        self.assertEqual(len(pdf), 1)
+        self.assertEqual(len(pdf["data"][0]), 0)
+
+    def test_toPandas_triple_nested_array_empty_outer(self):
+        # SPARK-55056: This triggers SIGSEGV without the fix.
+        # When the outer array is empty, the second-level ArrayWriter is never
+        # invoked, so its count stays 0. Arrow format requires ListArray offset
+        # buffer to have N+1 entries even when N=0, but getBufferSizeFor(0)
+        # returns 0 and the buffer is omitted in IPC serialization.
+        schema = StructType([StructField("data", ArrayType(ArrayType(ArrayType(StringType()))))])
+        df = self.spark.createDataFrame([Row(data=[])], schema=schema)
+        pdf = df.toPandas()
+        self.assertEqual(len(pdf), 1)
+        self.assertEqual(len(pdf["data"][0]), 0)
+
+    def test_toPandas_nested_array_with_map_empty_outer(self):
+        schema = StructType([StructField("data", ArrayType(ArrayType(MapType(StringType(), StringType()))))])
+        df = self.spark.createDataFrame([Row(data=[])], schema=schema)
+        pdf = df.toPandas()
+        self.assertEqual(len(pdf), 1)
+        self.assertEqual(len(pdf["data"][0]), 0)
+
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
     cast(str, pandas_requirement_message or pyarrow_requirement_message),

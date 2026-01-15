@@ -402,6 +402,17 @@ private[arrow] class ArrayWriter(
   }
 
   override def finish(): Unit = {
+    // SPARK-55056: Arrow format requires ListArray offset buffer to have N+1 entries.
+    // Even when N=0, the buffer must contain [0]. When the outer array is empty,
+    // nested ArrayWriters are never invoked, so their count stays 0. Then
+    // getBufferSizeFor(0) returns 0, and the offset buffer is omitted in IPC
+    // serialization — violating Arrow spec. Simulate one empty write to ensure
+    // the offset buffer is properly initialized.
+    if (count == 0) {
+      valueVector.startNewValue(0)
+      valueVector.endValue(0, 0)
+      count = 1
+    }
     super.finish()
     elementWriter.finish()
   }
