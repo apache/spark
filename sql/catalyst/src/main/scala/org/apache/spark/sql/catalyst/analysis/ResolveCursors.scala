@@ -76,28 +76,34 @@ class ResolveCursors extends Rule[LogicalPlan] {
     }
 
     // Look up cursor definition from scripting context using the extension API
-    val contextOpt = SqlScriptingContextManager.get().map(_.getContext)
-
-    val cursorDefOpt = contextOpt.flatMap { context =>
-      // Use the SqlScriptingExecutionContextExtension API for cursor lookup
-      normalizedScopeLabel match {
-        case Some(label) =>
-          // Qualified cursor: look up in specific labeled scope
-          context.findCursorInScope(label, normalizedName)
-        case None =>
-          // Unqualified cursor: search current and parent scopes
-          context.findCursorByName(normalizedName)
+    val context = SqlScriptingContextManager.get()
+      .map(_.getContext)
+      .getOrElse {
+        // Cursors are only allowed within SQL scripts
+        throw new AnalysisException(
+          errorClass = "CURSOR_OUTSIDE_SCRIPT",
+          messageParameters = Map("cursorName" -> nameParts.mkString(".")))
       }
+
+    // Use the SqlScriptingExecutionContextExtension API for cursor lookup
+    val cursorDef = normalizedScopeLabel match {
+      case Some(label) =>
+        // Qualified cursor: look up in specific labeled scope
+        context.findCursorInScope(label, normalizedName)
+      case None =>
+        // Unqualified cursor: search current and parent scopes
+        context.findCursorByName(normalizedName)
     }
 
-    // If cursor not found and we're in a scripting context, fail immediately
-    if (contextOpt.isDefined && cursorDefOpt.isEmpty) {
-      throw new AnalysisException(
-        errorClass = "CURSOR_NOT_FOUND",
-        messageParameters = Map("cursorName" -> nameParts.mkString(".")))
+    // If cursor not found, fail with appropriate error
+    cursorDef match {
+      case Some(definition) =>
+        // Create CursorReference with the cursor definition
+        CursorReference(nameParts, normalizedName, normalizedScopeLabel, definition)
+      case None =>
+        throw new AnalysisException(
+          errorClass = "CURSOR_NOT_FOUND",
+          messageParameters = Map("cursorName" -> nameParts.mkString(".")))
     }
-
-    // Create CursorReference with the cursor definition
-    CursorReference(nameParts, normalizedName, normalizedScopeLabel, cursorDefOpt.get)
   }
 }

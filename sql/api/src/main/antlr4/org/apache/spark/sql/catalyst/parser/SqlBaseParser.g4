@@ -157,7 +157,7 @@ openCursorStatement
     ;
 
 fetchCursorStatement
-    : FETCH ((NEXT FROM) | FROM | NEXT)? cursorName=multipartIdentifier INTO targets=multipartIdentifierList
+    : FETCH (NEXT? FROM)? cursorName=multipartIdentifier INTO targets=multipartIdentifierList
     ;
 
 closeCursorStatement

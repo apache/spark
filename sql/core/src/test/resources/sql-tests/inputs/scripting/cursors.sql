@@ -672,14 +672,14 @@ END;
 --QUERY-DELIMITER-END
 
 
--- Test 19: FETCH with NEXT keyword
--- EXPECTED: Success - NEXT is a valid optional keyword
+-- Test 19: FETCH with NEXT FROM keywords
+-- EXPECTED: Success - NEXT FROM is a valid optional keyword combination
 --QUERY-DELIMITER-START
 BEGIN
   DECLARE a INT;
   DECLARE cur CURSOR FOR SELECT 55 AS val;
   OPEN cur;
-  FETCH NEXT cur INTO a;
+  FETCH NEXT FROM cur INTO a;
   CLOSE cur;
   VALUES (a); -- Should return 55
 END;
