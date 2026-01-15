@@ -19,9 +19,7 @@ from typing import ClassVar, Type, TypeVar, Dict, List, Optional, Union, cast, T
 from pyspark.util import local_connect_and_auth
 from pyspark.serializers import read_int, write_int, write_with_length, UTF8Deserializer
 from pyspark.errors import PySparkRuntimeError
-
-if TYPE_CHECKING:
-    from pyspark.resource import ResourceInformation
+from pyspark.resource import ResourceInformation
 
 
 T = TypeVar("T", bound="TaskContext")
