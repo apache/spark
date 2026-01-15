@@ -492,6 +492,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
             }
           }.start()
         }
+        var boundPort: Int = -1
         if (isBarrier) {
           // Close ServerSocket on task completion.
           serverSocketChannel.foreach { server =>
@@ -502,46 +503,25 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
           }
           if (isUnixDomainSock) {
             logDebug(s"Started ServerSocket on with Unix Domain Socket $sockPath.")
-            dataOut.writeBoolean(/* isBarrier = */true)
-            dataOut.writeInt(-1)
-            PythonRDD.writeUTF(sockPath.getPath, dataOut)
           } else {
-            val boundPort: Int = serverSocketChannel.map(_.socket().getLocalPort).getOrElse(-1)
+            boundPort = serverSocketChannel.map(_.socket().getLocalPort).getOrElse(-1)
             if (boundPort == -1) {
               val message = "ServerSocket failed to bind to Java side."
               logError(message)
               throw new SparkException(message)
             }
             logDebug(s"Started ServerSocket on port $boundPort.")
-            dataOut.writeBoolean(/* isBarrier = */true)
-            dataOut.writeInt(boundPort)
-            PythonRDD.writeUTF(authHelper.secret, dataOut)
           }
-        } else {
-          dataOut.writeBoolean(/* isBarrier = */false)
         }
+
         // Write out the TaskContextInfo
-        dataOut.writeInt(context.stageId())
-        dataOut.writeInt(context.partitionId())
-        dataOut.writeInt(context.attemptNumber())
-        dataOut.writeLong(context.taskAttemptId())
-        dataOut.writeInt(context.cpus())
-        val resources = context.resources()
-        dataOut.writeInt(resources.size)
-        resources.foreach { case (k, v) =>
-          PythonRDD.writeUTF(k, dataOut)
-          PythonRDD.writeUTF(v.name, dataOut)
-          dataOut.writeInt(v.addresses.length)
-          v.addresses.foreach { case addr =>
-            PythonRDD.writeUTF(addr, dataOut)
-          }
-        }
-        val localProps = context.getLocalProperties.asScala
-        dataOut.writeInt(localProps.size)
-        localProps.foreach { case (k, v) =>
-          PythonRDD.writeUTF(k, dataOut)
-          PythonRDD.writeUTF(v, dataOut)
-        }
+        PythonWorkerUtils.writeTaskContext(
+          context,
+          if (isUnixDomainSock) Some(sockPath.getPath) else None,
+          if (!isUnixDomainSock) Some(authHelper.secret) else None,
+          boundPort,
+          dataOut
+        )
 
         PythonWorkerUtils.writeSparkFiles(jobArtifactUUID, pythonIncludes, dataOut)
         PythonWorkerUtils.writeBroadcasts(broadcastVars, worker, env, dataOut)
