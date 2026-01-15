@@ -324,6 +324,111 @@ class StreamRelationParserSuite extends AnalysisTest {
     assert(namedStreamingRelations.head.sourceIdentifyingName == UserProvided("my-source-name"))
   }
 
+  // =============================================================
+  // Comprehensive tests for all clause combinations with tables
+  // =============================================================
+
+  test("STREAM table non-parenthesized form with various clause combinations") {
+    // Non-parenthesized form: STREAM table clauses
+    val wm = "WATERMARK col DELAY OF INTERVAL 1 MINUTE"
+    val testCases = Seq(
+      // (query, expectedSourceName)
+      ("SELECT * FROM STREAM t AS src", Unassigned),
+      ("SELECT * FROM STREAM t IDENTIFIED BY src1", UserProvided("src1")),
+      ("SELECT * FROM STREAM t IDENTIFIED BY src1 AS tbl", UserProvided("src1")),
+      (s"SELECT * FROM STREAM t $wm", Unassigned),
+      (s"SELECT * FROM STREAM t $wm AS tbl", Unassigned),
+      (s"SELECT * FROM STREAM t IDENTIFIED BY src1 $wm", UserProvided("src1")),
+      (s"SELECT * FROM STREAM t IDENTIFIED BY src1 $wm AS tbl", UserProvided("src1"))
+    )
+
+    testCases.foreach { case (query, expectedSourceName) =>
+      val plan = parsePlan(query)
+      assert(plan.isStreaming, s"Expected streaming plan for: $query")
+      val namedStreamingRelations = plan.collect {
+        case n: NamedStreamingRelation => n
+      }
+      assert(namedStreamingRelations.size == 1,
+        s"Expected 1 NamedStreamingRelation node in: $query")
+      assert(namedStreamingRelations.head.sourceIdentifyingName == expectedSourceName,
+        s"Expected source name $expectedSourceName in: $query")
+    }
+  }
+
+  test("STREAM table parenthesized form with various clause combinations") {
+    // Parenthesized form: STREAM(table) clauses
+    val wm = "WATERMARK col DELAY OF INTERVAL 1 MINUTE"
+    val testCases = Seq(
+      // (query, expectedSourceName)
+      ("SELECT * FROM STREAM(t) AS src", Unassigned),
+      ("SELECT * FROM STREAM(t) IDENTIFIED BY src1", UserProvided("src1")),
+      ("SELECT * FROM STREAM(t) IDENTIFIED BY src1 AS tbl", UserProvided("src1")),
+      (s"SELECT * FROM STREAM(t) $wm", Unassigned),
+      (s"SELECT * FROM STREAM(t) $wm AS tbl", Unassigned),
+      (s"SELECT * FROM STREAM(t) IDENTIFIED BY src1 $wm", UserProvided("src1")),
+      (s"SELECT * FROM STREAM(t) IDENTIFIED BY src1 $wm AS tbl", UserProvided("src1"))
+    )
+
+    testCases.foreach { case (query, expectedSourceName) =>
+      val plan = parsePlan(query)
+      assert(plan.isStreaming, s"Expected streaming plan for: $query")
+      val namedStreamingRelations = plan.collect {
+        case n: NamedStreamingRelation => n
+      }
+      assert(namedStreamingRelations.size == 1,
+        s"Expected 1 NamedStreamingRelation node in: $query")
+      assert(namedStreamingRelations.head.sourceIdentifyingName == expectedSourceName,
+        s"Expected source name $expectedSourceName in: $query")
+    }
+  }
+
+  test("STREAM table with IDENTIFIED BY and alias verifies SubqueryAlias structure") {
+    // Verify that SubqueryAlias wraps NamedStreamingRelation when both are present
+    comparePlans(
+      parsePlan("SELECT * FROM STREAM t IDENTIFIED BY my_source AS src"),
+      Project(
+        projectList = Seq(UnresolvedStar(None)),
+        child = SubqueryAlias(
+          identifier = AliasIdentifier(
+            name = "src",
+            qualifier = Seq.empty
+          ),
+          child = NamedStreamingRelation(
+            child = UnresolvedRelation(
+              multipartIdentifier = Seq("t"),
+              isStreaming = true
+            ),
+            sourceIdentifyingName = UserProvided("my_source")
+          )
+        )
+      )
+    )
+  }
+
+  test("STREAM table with options, IDENTIFIED BY, and alias verifies plan structure") {
+    // Verify complete plan structure with all clauses
+    comparePlans(
+      parsePlan("SELECT * FROM STREAM t WITH ('key'='value') IDENTIFIED BY my_source AS src"),
+      Project(
+        projectList = Seq(UnresolvedStar(None)),
+        child = SubqueryAlias(
+          identifier = AliasIdentifier(
+            name = "src",
+            qualifier = Seq.empty
+          ),
+          child = NamedStreamingRelation(
+            child = UnresolvedRelation(
+              multipartIdentifier = Seq("t"),
+              options = new CaseInsensitiveStringMap(Map("key" -> "value").asJava),
+              isStreaming = true
+            ),
+            sourceIdentifyingName = UserProvided("my_source")
+          )
+        )
+      )
+    )
+  }
+
   // ===================================
   // IDENTIFIED BY syntax tests for TVFs
   // ===================================
@@ -386,6 +491,71 @@ class StreamRelationParserSuite extends AnalysisTest {
         s"Expected 1 NamedStreamingRelation node in: $query")
       assert(namedStreamingRelations.head.sourceIdentifyingName == expectedSourceName,
         s"Expected source name $expectedSourceName in: $query")
+    }
+  }
+
+  test("STREAM TVF with IDENTIFIED BY and alias verifies SubqueryAlias structure") {
+    // Verify that SubqueryAlias wraps NamedStreamingRelation when both are present
+    val plan = parsePlan("SELECT * FROM STREAM range(10) IDENTIFIED BY my_source AS src")
+
+    // Check that we have a SubqueryAlias wrapping NamedStreamingRelation
+    plan match {
+      case Project(_, SubqueryAlias(aliasId, namedStream: NamedStreamingRelation)) =>
+        assert(aliasId.name == "src", "Expected alias name 'src'")
+        assert(namedStream.sourceIdentifyingName == UserProvided("my_source"),
+          "Expected source name 'my_source'")
+        namedStream.child match {
+          case tvf: UnresolvedTableValuedFunction =>
+            assert(tvf.isStreaming, "TVF should be marked as streaming")
+            assert(tvf.name == Seq("range"), "Expected 'range' TVF")
+          case other => fail(s"Expected UnresolvedTableValuedFunction but got: $other")
+        }
+      case other => fail(s"Expected Project(SubqueryAlias(NamedStreamingRelation)) but got: $other")
+    }
+  }
+
+  test("STREAM TVF with all clauses verifies complete plan structure") {
+    // Verify the complete plan structure with IDENTIFIED BY, WATERMARK, and alias
+    // The structure should be:
+    // Project -> SubqueryAlias -> UnresolvedEventTimeWatermark -> NamedStreamingRelation -> TVF
+    val query = """SELECT * FROM STREAM range(10)
+                  |  IDENTIFIED BY my_source
+                  |  WATERMARK col DELAY OF INTERVAL 1 MINUTE
+                  |  AS src""".stripMargin
+    val plan = parsePlan(query)
+
+    // Verify the complete structure including watermark
+    val namedStreamingRelations = plan.collect {
+      case n: NamedStreamingRelation => n
+    }
+    assert(namedStreamingRelations.size == 1,
+      "Expected 1 NamedStreamingRelation node")
+    assert(namedStreamingRelations.head.sourceIdentifyingName == UserProvided("my_source"),
+      "Expected source name 'my_source'")
+
+    // Verify SubqueryAlias is present
+    plan match {
+      case Project(_, SubqueryAlias(aliasId, _)) =>
+        assert(aliasId.name == "src", "Expected alias name 'src'")
+      case other => fail(s"Expected Project with SubqueryAlias but got: $other")
+    }
+  }
+
+  test("STREAM TVF parenthesized form with alias verifies SubqueryAlias structure") {
+    // Verify parenthesized form: STREAM(tvf()) IDENTIFIED BY ... AS ...
+    val plan = parsePlan("SELECT * FROM STREAM(range(10)) IDENTIFIED BY my_source AS src")
+
+    plan match {
+      case Project(_, SubqueryAlias(aliasId, namedStream: NamedStreamingRelation)) =>
+        assert(aliasId.name == "src", "Expected alias name 'src'")
+        assert(namedStream.sourceIdentifyingName == UserProvided("my_source"),
+          "Expected source name 'my_source'")
+        namedStream.child match {
+          case tvf: UnresolvedTableValuedFunction =>
+            assert(tvf.isStreaming, "TVF should be marked as streaming")
+          case other => fail(s"Expected UnresolvedTableValuedFunction but got: $other")
+        }
+      case other => fail(s"Expected Project(SubqueryAlias(NamedStreamingRelation)) but got: $other")
     }
   }
 

@@ -2448,7 +2448,10 @@ class AstBuilder extends DataTypeAstBuilder
       Nil,
       (ident, _) => {
         if (ident.length > 1) {
-          throw QueryParsingErrors.invalidTableValuedFunctionNameError(ident, funcCallCtx)
+          throw new ParseException(
+            errorClass = "INVALID_SQL_SYNTAX.INVALID_TABLE_VALUED_FUNC_NAME",
+            messageParameters = Map("funcName" -> toSQLId(ident)),
+            ctx = funcCallCtx)
         }
         val funcName = funcCallCtx.funcName.getText
         val args = funcCallCtx.functionTableArgument.asScala.map { e =>
@@ -2522,16 +2525,18 @@ class AstBuilder extends DataTypeAstBuilder
       Option(ctx.functionTable).map { funcTable =>
         // Form: STREAM functionTable
         val sourceName = extractSourceName(funcTable.identifiedByClause)
-        buildTvfFromTableFunctionCall(
-          funcTable.tableFunctionCall, funcTable.tableAlias, funcTable.watermarkClause).transformUp {
+        val tvfPlan = buildTvfFromTableFunctionCall(
+          funcTable.tableFunctionCall, funcTable.tableAlias, funcTable.watermarkClause)
+        tvfPlan.transformUp {
           case tvf: UnresolvedTableValuedFunction =>
             NamedStreamingRelation.withUserProvidedName(tvf.copy(isStreaming = true), sourceName)
         }
       }.getOrElse {
         // Form: STREAM(tableFunctionCall) identifiedByClause? watermarkClause? tableAlias
         val sourceName = extractSourceName(ctx.identifiedByClause)
-        buildTvfFromTableFunctionCall(
-          ctx.tableFunctionCall, ctx.tableAlias, ctx.watermarkClause).transformUp {
+        val tvfPlan = buildTvfFromTableFunctionCall(
+          ctx.tableFunctionCall, ctx.tableAlias, ctx.watermarkClause)
+        tvfPlan.transformUp {
           case tvf: UnresolvedTableValuedFunction =>
             NamedStreamingRelation.withUserProvidedName(tvf.copy(isStreaming = true), sourceName)
         }
