@@ -21,6 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, CursorReference, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.execution.datasources.v2.LeafV2CommandExec
 import org.apache.spark.sql.scripting.{CursorClosed, CursorDeclared, CursorOpened}
 
@@ -41,13 +42,13 @@ import org.apache.spark.sql.scripting.{CursorClosed, CursorDeclared, CursorOpene
 case class OpenCursorExec(
     cursor: Expression,
     args: Seq[Expression] = Seq.empty,
-    paramNames: Seq[String] = Seq.empty) extends LeafV2CommandExec {
+    paramNames: Seq[String] = Seq.empty) extends LeafV2CommandExec with DataTypeErrorsBase {
 
   override protected def run(): Seq[InternalRow] = {
     // Extract CursorReference from the resolved cursor expression
     val cursorRef = cursor.asInstanceOf[CursorReference]
 
-    val scriptingContext = CursorCommandUtils.getScriptingContext(cursorRef.sql)
+    val scriptingContext = CursorCommandUtils.getScriptingContext(cursorRef.definition.name)
 
     // Get cursor definition from CursorReference (looked up during analysis)
     val cursorDef = cursorRef.definition
@@ -56,14 +57,14 @@ case class OpenCursorExec(
     val currentState = scriptingContext.getCursorState(cursorRef).getOrElse(
       throw new AnalysisException(
         errorClass = "CURSOR_NOT_FOUND",
-        messageParameters = Map("cursorName" -> cursorRef.sql)))
+        messageParameters = Map("cursorName" -> toSQLId(cursorRef.definition.name))))
 
     currentState match {
       case CursorDeclared | CursorClosed => // Expected states - new or closed cursor
       case _ =>
         throw new AnalysisException(
           errorClass = "CURSOR_ALREADY_OPEN",
-          messageParameters = Map("cursorName" -> cursorRef.sql))
+          messageParameters = Map("cursorName" -> toSQLId(cursorRef.definition.name)))
     }
 
     // Parse and analyze the query from the stored SQL text

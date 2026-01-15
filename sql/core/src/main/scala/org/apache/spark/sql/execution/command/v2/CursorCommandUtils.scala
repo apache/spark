@@ -19,12 +19,13 @@ package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SqlScriptingContextManager
+import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.scripting.SqlScriptingExecutionContext
 
 /**
  * Utility methods for cursor commands.
  */
-private[v2] object CursorCommandUtils {
+private[v2] object CursorCommandUtils extends DataTypeErrorsBase {
 
   /**
    * Gets the current SQL scripting execution context.
@@ -37,7 +38,7 @@ private[v2] object CursorCommandUtils {
     val scriptingContextManager = SqlScriptingContextManager.get()
       .getOrElse(throw new AnalysisException(
         errorClass = "CURSOR_OUTSIDE_SCRIPT",
-        messageParameters = Map("cursorName" -> cursorName)))
+        messageParameters = Map("cursorName" -> toSQLId(cursorName))))
 
     scriptingContextManager.getContext
       .asInstanceOf[SqlScriptingExecutionContext]

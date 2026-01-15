@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.command.v2
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, CursorReference, Expression}
+import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.execution.datasources.v2.LeafV2CommandExec
 import org.apache.spark.sql.scripting.{CursorClosed, CursorDeclared}
 
@@ -31,26 +32,26 @@ import org.apache.spark.sql.scripting.{CursorClosed, CursorDeclared}
  *
  * @param cursor CursorReference resolved during analysis phase
  */
-case class CloseCursorExec(cursor: Expression) extends LeafV2CommandExec {
+case class CloseCursorExec(cursor: Expression) extends LeafV2CommandExec with DataTypeErrorsBase {
 
   override protected def run(): Seq[InternalRow] = {
     // Extract CursorReference from the resolved cursor expression
     val cursorRef = cursor.asInstanceOf[CursorReference]
 
-    val scriptingContext = CursorCommandUtils.getScriptingContext(cursorRef.sql)
+    val scriptingContext = CursorCommandUtils.getScriptingContext(cursorRef.definition.name)
 
     // Get current cursor state and validate it exists
     val currentState = scriptingContext.getCursorState(cursorRef).getOrElse(
       throw new AnalysisException(
         errorClass = "CURSOR_NOT_FOUND",
-        messageParameters = Map("cursorName" -> cursorRef.sql)))
+        messageParameters = Map("cursorName" -> toSQLId(cursorRef.definition.name))))
 
     // Validate cursor is in an open state (Opened or Fetching)
     currentState match {
       case CursorClosed | CursorDeclared =>
         throw new AnalysisException(
           errorClass = "CURSOR_NOT_OPEN",
-          messageParameters = Map("cursorName" -> cursorRef.sql))
+          messageParameters = Map("cursorName" -> toSQLId(cursorRef.definition.name)))
       case _ => // Opened or Fetching - proceed with close
     }
 

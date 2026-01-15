@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, SqlScriptingContextManager}
 import org.apache.spark.sql.catalyst.catalog.VariableDefinition
 import org.apache.spark.sql.catalyst.expressions.{Attribute, CursorReference, Expression, Literal, VariableReference}
 import org.apache.spark.sql.classic.Dataset
+import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.execution.datasources.v2.LeafV2CommandExec
 import org.apache.spark.sql.scripting.{CursorFetching, CursorOpened}
 
@@ -39,20 +40,20 @@ import org.apache.spark.sql.scripting.{CursorFetching, CursorOpened}
  */
 case class FetchCursorExec(
     cursor: Expression,
-    targetVariables: Seq[VariableReference]) extends LeafV2CommandExec {
+    targetVariables: Seq[VariableReference]) extends LeafV2CommandExec with DataTypeErrorsBase {
 
   override protected def run(): Seq[InternalRow] = {
     // Extract CursorReference from the resolved cursor expression
     val cursorRef = cursor.asInstanceOf[CursorReference]
 
-    val scriptingContext = CursorCommandUtils.getScriptingContext(cursorRef.sql)
+    val scriptingContext = CursorCommandUtils.getScriptingContext(cursorRef.definition.name)
     val variableManager = SqlScriptingContextManager.get().get.getVariableManager
 
     // Get current cursor state
     val currentState = scriptingContext.getCursorState(cursorRef).getOrElse(
       throw new AnalysisException(
         errorClass = "CURSOR_NOT_FOUND",
-        messageParameters = Map("cursorName" -> cursorRef.sql)))
+        messageParameters = Map("cursorName" -> toSQLId(cursorRef.definition.name))))
 
     // Get or create iterator based on current state
     val (iterator, analyzedQuery) = currentState match {
@@ -75,14 +76,14 @@ case class FetchCursorExec(
       case _ =>
         throw new AnalysisException(
           errorClass = "CURSOR_NOT_OPEN",
-          messageParameters = Map("cursorName" -> cursorRef.sql))
+          messageParameters = Map("cursorName" -> toSQLId(cursorRef.definition.name)))
     }
 
     // Get next row from iterator
     if (!iterator.hasNext) {
       throw new AnalysisException(
         errorClass = "CURSOR_NO_MORE_ROWS",
-        messageParameters = Map("cursorName" -> cursorRef.sql))
+        messageParameters = Map("cursorName" -> toSQLId(cursorRef.definition.name)))
     }
 
     val externalRow = iterator.next()

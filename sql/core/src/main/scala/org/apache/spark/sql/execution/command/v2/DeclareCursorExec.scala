@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.command.v2
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, CursorDefinition}
+import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.execution.datasources.v2.LeafV2CommandExec
 import org.apache.spark.sql.scripting.CursorDeclared
 
@@ -38,7 +39,7 @@ import org.apache.spark.sql.scripting.CursorDeclared
 case class DeclareCursorExec(
     cursorName: String,
     queryText: String,
-    asensitive: Boolean) extends LeafV2CommandExec {
+    asensitive: Boolean) extends LeafV2CommandExec with DataTypeErrorsBase {
 
   override protected def run(): Seq[InternalRow] = {
     val scriptingContext = CursorCommandUtils.getScriptingContext(cursorName)
@@ -55,7 +56,7 @@ case class DeclareCursorExec(
     if (currentScope.cursors.contains(normalizedName)) {
       throw new AnalysisException(
         errorClass = "CURSOR_ALREADY_EXISTS",
-        messageParameters = Map("cursorName" -> cursorName))
+        messageParameters = Map("cursorName" -> toSQLId(cursorName)))
     }
 
     // Create immutable cursor definition with name and SQL text
