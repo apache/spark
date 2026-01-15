@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.VariableReference
+import org.apache.spark.sql.catalyst.expressions.{Expression, VariableReference}
 import org.apache.spark.sql.catalyst.plans.logical.{FetchCursor, LogicalPlan, SingleStatement}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
@@ -51,47 +51,41 @@ class ResolveFetchCursor(val catalogManager: CatalogManager) extends Rule[Logica
     }
   }
 
+  /**
+   * Resolves and validates the target variables for a FetchCursor command.
+   * Returns a sequence of resolved VariableReference expressions.
+   */
+  private def resolveAndValidateTargetVariables(
+      targetVariables: Seq[Expression]): Seq[VariableReference] = {
+    val resolvedVars = targetVariables.map {
+      case u: UnresolvedAttribute =>
+        variableResolution.lookupVariable(
+          nameParts = u.nameParts
+        ) match {
+          case Some(variable) => variable.copy(canFold = false)
+          case _ => throw unresolvedVariableError(u.nameParts, Seq("SYSTEM", "SESSION"))
+        }
+
+      case other => throw SparkException.internalError(
+        "Unexpected target variable expression in FetchCursor: " + other)
+    }
+
+    // Check for duplicates immediately after resolution
+    checkForDuplicateVariables(resolvedVars)
+    resolvedVars
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(COMMAND), ruleId) {
     // Resolve FetchCursor wrapped in SingleStatement
     case s @ SingleStatement(fetchCursor: FetchCursor)
         if !fetchCursor.targetVariables.forall(_.resolved) =>
-      val resolvedVars = fetchCursor.targetVariables.map {
-        case u: UnresolvedAttribute =>
-          variableResolution.lookupVariable(
-            nameParts = u.nameParts
-          ) match {
-            case Some(variable) => variable.copy(canFold = false)
-            case _ => throw unresolvedVariableError(u.nameParts, Seq("SYSTEM", "SESSION"))
-          }
-
-        case other => throw SparkException.internalError(
-          "Unexpected target variable expression in FetchCursor: " + other)
-      }
-
-      // Check for duplicates immediately after resolution
-      checkForDuplicateVariables(resolvedVars)
-
+      val resolvedVars = resolveAndValidateTargetVariables(fetchCursor.targetVariables)
       s.copy(parsedPlan = fetchCursor.copy(targetVariables = resolvedVars))
 
     // Also resolve unwrapped FetchCursor (when extracted from SingleStatement for execution)
     case fetchCursor: FetchCursor if !fetchCursor.targetVariables.forall(_.resolved) =>
-      val resolvedVars = fetchCursor.targetVariables.map {
-        case u: UnresolvedAttribute =>
-          variableResolution.lookupVariable(
-            nameParts = u.nameParts
-          ) match {
-            case Some(variable) => variable.copy(canFold = false)
-            case _ => throw unresolvedVariableError(u.nameParts, Seq("SYSTEM", "SESSION"))
-          }
-
-        case other => throw SparkException.internalError(
-          "Unexpected target variable expression in FetchCursor: " + other)
-      }
-
-      // Check for duplicates immediately after resolution
-      checkForDuplicateVariables(resolvedVars)
-
+      val resolvedVars = resolveAndValidateTargetVariables(fetchCursor.targetVariables)
       fetchCursor.copy(targetVariables = resolvedVars)
   }
 }
