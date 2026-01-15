@@ -4334,6 +4334,17 @@ object SQLConf {
           " must be more than one.")
       .createOptional
 
+  val PYTHON_UDF_ARROW_CONCURRENCY_BATCH_SIZE =
+    buildConf("spark.sql.execution.pythonUDF.arrow.concurrency.batchSize")
+      .doc("The number of rows to process per batch when executing Arrow-optimized Python UDF " +
+        "with concurrency enabled. Larger values may improve throughput but use more memory.")
+      .version("4.0.0")
+      .intConf
+      .checkValue(_ > 0,
+        "The value of spark.sql.execution.pythonUDF.arrow.concurrency.batchSize" +
+          " must be positive.")
+      .createWithDefault(1024)
+
   val PYTHON_UDF_ARROW_FALLBACK_ON_UDT =
     buildConf("spark.sql.execution.pythonUDF.arrow.legacy.fallbackOnUDT")
       .internal()
@@ -7668,6 +7679,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pythonWorkerLoggingEnabled: Boolean = getConf(PYTHON_WORKER_LOGGING_ENABLED)
 
   def pythonUDFArrowConcurrencyLevel: Option[Int] = getConf(PYTHON_UDF_ARROW_CONCURRENCY_LEVEL)
+
+  def pythonUDFArrowConcurrencyBatchSize: Int = getConf(PYTHON_UDF_ARROW_CONCURRENCY_BATCH_SIZE)
 
   def pythonUDFArrowFallbackOnUDT: Boolean = getConf(PYTHON_UDF_ARROW_FALLBACK_ON_UDT)
 

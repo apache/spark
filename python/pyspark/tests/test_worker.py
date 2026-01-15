@@ -292,13 +292,14 @@ class ArrowBatchedUDFThreadPoolTests(unittest.TestCase):
         pool2 = self.pool_class.get_pool(4)
         self.assertIs(pool1, pool2)
 
-    def test_pool_recreation_on_worker_change(self):
-        """Test that pool is recreated when max_workers changes."""
-        pool1 = self.pool_class.get_pool(4)
-        pool2 = self.pool_class.get_pool(8)
-        self.assertIsNot(pool1, pool2)
-        # New pool should have correct worker count
-        self.assertEqual(self.pool_class._max_workers, 8)
+    def test_resize_raises_error(self):
+        """Test that attempting to resize the pool raises RuntimeError."""
+        from pyspark.errors import PySparkRuntimeError
+
+        self.pool_class.get_pool(4)
+        with self.assertRaises(PySparkRuntimeError) as context:
+            self.pool_class.get_pool(8)
+        self.assertIn("Cannot resize thread pool", str(context.exception))
 
     def test_shutdown_clears_instance(self):
         """Test that shutdown clears the singleton instance."""
@@ -308,21 +309,36 @@ class ArrowBatchedUDFThreadPoolTests(unittest.TestCase):
         self.assertIsNone(self.pool_class._instance)
         self.assertEqual(self.pool_class._max_workers, 0)
 
-    def test_map_chunked_basic(self):
-        """Test basic chunked map functionality."""
-        result = self.pool_class.map_chunked(lambda x: x * 2, [1, 2, 3, 4, 5], 2)
+    def test_shutdown_allows_new_pool_size(self):
+        """Test that after shutdown, a new pool with different size can be created."""
+        self.pool_class.get_pool(4)
+        self.pool_class.shutdown(wait=True)
+        # Should not raise - pool was shut down so resize is allowed
+        pool = self.pool_class.get_pool(8)
+        self.assertIsNotNone(pool)
+        self.assertEqual(self.pool_class._max_workers, 8)
+
+    def test_map_batched_basic(self):
+        """Test basic batched map functionality."""
+        result = list(self.pool_class.map_batched(lambda x: x * 2, [1, 2, 3, 4, 5], 2))
         self.assertEqual(result, [2, 4, 6, 8, 10])
 
-    def test_map_chunked_empty_data(self):
-        """Test chunked map with empty data."""
-        result = self.pool_class.map_chunked(lambda x: x * 2, [], 4)
+    def test_map_batched_empty_data(self):
+        """Test batched map with empty data."""
+        result = list(self.pool_class.map_batched(lambda x: x * 2, [], 4))
         self.assertEqual(result, [])
 
-    def test_map_chunked_preserves_order(self):
-        """Test that chunked map preserves result order."""
+    def test_map_batched_preserves_order(self):
+        """Test that batched map preserves result order."""
         data = list(range(100))
-        result = self.pool_class.map_chunked(lambda x: x, data, 4)
+        result = list(self.pool_class.map_batched(lambda x: x, data, 4))
         self.assertEqual(result, data)
+
+    def test_map_batched_with_batch_size(self):
+        """Test batched map with custom batch size."""
+        data = list(range(50))
+        result = list(self.pool_class.map_batched(lambda x: x * 2, data, 4, batch_size=10))
+        self.assertEqual(result, [x * 2 for x in data])
 
 
 if __name__ == "__main__":

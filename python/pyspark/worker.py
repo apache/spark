@@ -28,7 +28,7 @@ import inspect
 import itertools
 import json
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Callable, ClassVar, Iterable, Iterator, Optional, Tuple
+from typing import Any, Callable, ClassVar, Iterable, Iterator, List, Optional, Tuple, TypeVar
 
 from pyspark.accumulators import (
     SpecialAccumulatorIds,
@@ -112,11 +112,15 @@ except Exception:
     has_memory_profiler = False
 
 
+_T = TypeVar("_T")
+_R = TypeVar("_R")
+
+
 class ArrowBatchedUDFThreadPool:
     """
     Singleton ThreadPoolExecutor for Arrow UDF concurrent execution.
 
-    This class is NOT thread-safe. Its methods (get_pool, shutdown, map_chunked) should
+    This class is NOT thread-safe. Its methods (get_pool, shutdown, map_batched) should
     only be called sequentially from a single thread. The worker processes batches
     sequentially, so concurrent access to this class is not expected.
     """
@@ -127,9 +131,12 @@ class ArrowBatchedUDFThreadPool:
     @classmethod
     def get_pool(cls, max_workers: int) -> ThreadPoolExecutor:
         """Get or create the singleton thread pool with the specified number of workers."""
-        if cls._instance is None or cls._max_workers != max_workers:
-            if cls._instance is not None:
-                cls._instance.shutdown(wait=False)
+        if cls._instance is not None and cls._max_workers != max_workers:
+            raise PySparkRuntimeError(
+                f"Cannot resize thread pool from {cls._max_workers} to {max_workers} workers. "
+                "The pool size is fixed once created."
+            )
+        if cls._instance is None:
             cls._max_workers = max_workers
             cls._instance = ThreadPoolExecutor(max_workers=max_workers)
         return cls._instance
@@ -143,24 +150,71 @@ class ArrowBatchedUDFThreadPool:
             cls._max_workers = 0
 
     @classmethod
-    def map_chunked(cls, func: Callable, data: Iterable, max_workers: int) -> list:
-        """Apply func to data using chunked parallel execution (one task per worker)."""
-        data_list = list(data)
-        if not data_list:
-            return []
+    def _process_batch(
+        cls,
+        batch: List[_T],
+        func: Callable[[_T], _R],
+        pool: ThreadPoolExecutor,
+        max_workers: int,
+    ) -> Iterator[_R]:
+        """Split batch into chunks and process in parallel."""
+        chunk_size = (len(batch) + max_workers - 1) // max_workers
+        chunks = [batch[i : i + chunk_size] for i in range(0, len(batch), chunk_size)]
 
-        chunk_size = (len(data_list) + max_workers - 1) // max_workers
-        chunks = [data_list[i : i + chunk_size] for i in range(0, len(data_list), chunk_size)]
-
-        def process_chunk(chunk):
+        def process_chunk(chunk: List[_T]) -> List[_R]:
             return [func(item) for item in chunk]
 
+        for chunk_result in pool.map(process_chunk, chunks):
+            yield from chunk_result
+
+    @classmethod
+    def map_batched(
+        cls,
+        func: Callable[[_T], _R],
+        data: Iterable[_T],
+        max_workers: int,
+        batch_size: int = 2048,
+    ) -> Iterator[_R]:
+        """
+        Apply func to data using batched parallel execution.
+
+        Processes data in fixed-size batches to avoid loading the entire dataset into memory.
+        Each batch is split into max_workers chunks for parallel processing.
+
+        Parameters
+        ----------
+        func : Callable[[_T], _R]
+            Function to apply to each item
+        data : Iterable[_T]
+            Input data to process
+        max_workers : int
+            Number of worker threads
+        batch_size : int
+            Number of items to process per batch (default: 2048)
+
+        Yields
+        ------
+        _R
+            Results from applying func to each item, in order
+        """
         pool = cls.get_pool(max_workers)
-        chunk_results = pool.map(process_chunk, chunks)
-        return list(itertools.chain.from_iterable(chunk_results))
+
+        batch: List[_T] = []
+        for item in data:
+            batch.append(item)
+            if len(batch) >= batch_size:
+                yield from cls._process_batch(batch, func, pool, max_workers)
+                batch = []
+
+        # Process remaining items
+        if batch:
+            yield from cls._process_batch(batch, func, pool, max_workers)
 
 
-# Register shutdown handler to clean up thread pool on process exit
+# Register shutdown handler to clean up thread pool on process exit.
+# When spark.python.worker.reuse=True, workers are reused across tasks
+# and the pool persists, which is the intended behavior for performance.
+# The atexit handler ensures cleanup when the worker process finally exits.
 atexit.register(ArrowBatchedUDFThreadPool.shutdown)
 
 
@@ -250,6 +304,10 @@ class RunnerConf:
     @property
     def arrow_concurrency_level(self) -> int:
         return int(self.get("spark.sql.execution.pythonUDF.arrow.concurrency.level", -1))
+
+    @property
+    def arrow_concurrency_batch_size(self) -> int:
+        return int(self.get("spark.sql.execution.pythonUDF.arrow.concurrency.batchSize", 1024))
 
     @property
     def profiler(self) -> Optional[str]:
@@ -395,11 +453,14 @@ def wrap_arrow_batch_udf_arrow(f, args_offsets, kwargs_offsets, return_type, run
 
         @fail_on_stopiteration
         def evaluate(*args):
-            """Evaluate UDF with chunked parallel execution."""
-            return ArrowBatchedUDFThreadPool.map_chunked(
-                lambda row: func(*row),
-                get_args(*args),
-                runner_conf.arrow_concurrency_level,
+            """Evaluate UDF with batched parallel execution."""
+            return list(
+                ArrowBatchedUDFThreadPool.map_batched(
+                    lambda row: func(*row),
+                    get_args(*args),
+                    runner_conf.arrow_concurrency_level,
+                    runner_conf.arrow_concurrency_batch_size,
+                )
             )
 
     else:
