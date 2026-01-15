@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 
-import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.concurrent.{Future, Promise}
 import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters.MapHasAsJava
 
@@ -57,15 +57,12 @@ class Observation(val name: String) {
 
   private val isRegistered = new AtomicBoolean()
 
-  private val promise = Promise[() => Row]()
-
-  private val lazyMetricsFuture: Future[() => Row] = promise.future
+  private val promise = Promise[Row]()
 
   /**
-   * Future holding the (yet to be completed) observation. Lazy to avoid collecting the metrics
-   * until it is needed.
+   * Future holding the (yet to be completed) observation.
    */
-  lazy val future: Future[Row] = lazyMetricsFuture.map(_())(ExecutionContext.global)
+  val future: Future[Row] = promise.future
 
   /**
    * (Scala-specific) Get the observed metrics. This waits for the observed dataset to finish its
@@ -121,8 +118,8 @@ class Observation(val name: String) {
    * @return
    *   `true` if all waiting threads were notified, `false` if otherwise.
    */
-  private[sql] def setMetricsAndNotify(lazyMetrics: () => Row): Boolean = {
-    promise.trySuccess(lazyMetrics)
+  private[sql] def setMetricsAndNotify(metrics: Row): Boolean = {
+    promise.trySuccess(metrics)
   }
 
   /**
@@ -132,7 +129,7 @@ class Observation(val name: String) {
    *   the observed metrics as a `Row`, or None if the metrics are not available.
    */
   private[sql] def getRowOrEmpty: Option[Row] = {
-    lazyMetricsFuture.value.flatMap(_.map(_()).toOption)
+    future.value.flatMap(_.toOption)
   }
 
   /**
@@ -142,8 +139,7 @@ class Observation(val name: String) {
    *   the observed metrics as a `Row`.
    */
   private[sql] def getRow: Row = {
-    val lazyMetrics = SparkThreadUtils.awaitResult(lazyMetricsFuture, Duration.Inf)
-    lazyMetrics()
+    SparkThreadUtils.awaitResult(future, Duration.Inf)
   }
 }
 

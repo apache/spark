@@ -747,8 +747,7 @@ class SparkSession private[sql] (
       // All metrics, whether registered or not, will be collected by `SparkResult`.
       val observationOrNull = observationRegistry.remove(metric.getPlanId)
       if (observationOrNull != null) {
-        val metricsRow = SparkResult.transformObservedMetrics(metric)
-        observationOrNull.setMetricsAndNotify(() => metricsRow)
+        observationOrNull.setMetricsAndNotify(SparkResult.transformObservedMetrics(metric))
       }
     }
   }

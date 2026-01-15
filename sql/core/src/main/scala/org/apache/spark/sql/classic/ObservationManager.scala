@@ -54,7 +54,7 @@ private[sql] class ObservationManager(session: SparkSession) {
   private[sql] def tryComplete(qe: QueryExecution): Unit = {
     // Use lazy val to defer collecting the observed metrics until it is needed so that tryComplete
     // can finish faster (e.g., when the logical plan doesn't contain CollectMetrics).
-    lazy val allMetrics = qe.observedMetrics
+    lazy val lazyObservedMetrics = qe.observedMetrics
     qe.logical.foreachWithSubqueriesAndPruning(
       _.containsPattern(TreePattern.COLLECT_METRICS)) {
       case c: CollectMetrics =>
@@ -63,7 +63,7 @@ private[sql] class ObservationManager(session: SparkSession) {
           // If the key exists but no metrics were collected, it means for some reason the
           // metrics could not be collected. This can happen e.g., if the CollectMetricsExec
           // was optimized away.
-          observation.setMetricsAndNotify(() => allMetrics.getOrElse(c.name, Row.empty))
+          observation.setMetricsAndNotify(lazyObservedMetrics.getOrElse(c.name, Row.empty))
         }
       case _ =>
     }
