@@ -101,7 +101,6 @@ compoundBody
 
 compoundStatement
     : declareConditionStatement
-    | declareCursorStatement
     | statement
     | setStatementInsideSqlScript
     | beginEndCompoundBlock
@@ -114,9 +113,6 @@ compoundStatement
     | iterateStatement
     | loopStatement
     | forStatement
-    | openCursorStatement
-    | fetchCursorStatement
-    | closeCursorStatement
     ;
 
 setStatementInsideSqlScript
@@ -146,22 +142,6 @@ conditionValues
 
 declareHandlerStatement
     : DECLARE (CONTINUE | EXIT) HANDLER FOR conditionValues (beginEndCompoundBlock | statement | setStatementInsideSqlScript)
-    ;
-
-declareCursorStatement
-    : DECLARE name=errorCapturingIdentifier (ASENSITIVE | INSENSITIVE)? CURSOR FOR query (FOR READ ONLY)?
-    ;
-
-openCursorStatement
-    : OPEN multipartIdentifier (USING (LEFT_PAREN params=namedExpressionSeq RIGHT_PAREN | params=namedExpressionSeq))?
-    ;
-
-fetchCursorStatement
-    : FETCH (NEXT? FROM)? cursorName=multipartIdentifier INTO targets=multipartIdentifierList
-    ;
-
-closeCursorStatement
-    : CLOSE multipartIdentifier
     ;
 
 whileStatement
@@ -370,6 +350,13 @@ statement
         (COMMA identifierReferences+=identifierReference)*
         dataType? variableDefaultExpression?                           #createVariable
     | DROP TEMPORARY variable (IF EXISTS)? identifierReference         #dropVariable
+    | DECLARE name=errorCapturingIdentifier (ASENSITIVE | INSENSITIVE)? CURSOR FOR query (FOR READ ONLY)?
+                                                                       #declareCursorStatement
+    | OPEN multipartIdentifier (USING (LEFT_PAREN params=namedExpressionSeq RIGHT_PAREN | params=namedExpressionSeq))?
+                                                                       #openCursorStatement
+    | FETCH ((NEXT? FROM) | FROM)? cursorName=multipartIdentifier INTO targets=multipartIdentifierList
+                                                                       #fetchCursorStatement
+    | CLOSE multipartIdentifier                                        #closeCursorStatement
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
         (statement|setResetStatement)                                  #explain
     | SHOW TABLES ((FROM | IN) identifierReference)?

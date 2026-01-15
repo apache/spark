@@ -6602,7 +6602,7 @@ class AstBuilder extends DataTypeAstBuilder
     val queryText = getOriginalText(ctx.query())
 
     val asensitive = if (ctx.INSENSITIVE() != null) false else true
-    SingleStatement(DeclareCursor(cursorName, queryText, asensitive))
+    DeclareCursor(cursorName, queryText, asensitive)
   }
 
   /**
@@ -6621,7 +6621,7 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
-   * Create an [[OpenCursor]] command wrapped in SingleStatement.
+   * Create an [[OpenCursor]] command.
    *
    * For example:
    * {{{
@@ -6652,11 +6652,11 @@ class AstBuilder extends DataTypeAstBuilder
       }.unzip
     }.getOrElse((Seq.empty, Seq.empty))
 
-    SingleStatement(OpenCursor(cursor, args, paramNames))
+    OpenCursor(cursor, args, paramNames)
   }
 
   /**
-   * Create a [[FetchCursor]] command wrapped in SingleStatement.
+   * Create a [[FetchCursor]] command.
    *
    * For example:
    * {{{
@@ -6674,11 +6674,11 @@ class AstBuilder extends DataTypeAstBuilder
     val cursor = createUnresolvedCursor(nameParts)
 
     val targetVariables = visitMultipartIdentifierList(ctx.targets)
-    SingleStatement(FetchCursor(cursor, targetVariables))
+    FetchCursor(cursor, targetVariables)
   }
 
   /**
-   * Create a [[CloseCursor]] command wrapped in SingleStatement.
+   * Create a [[CloseCursor]] command.
    *
    * For example:
    * {{{
@@ -6694,7 +6694,7 @@ class AstBuilder extends DataTypeAstBuilder
     // Create UnresolvedCursor from the cursor name
     val nameParts = visitMultipartIdentifier(ctx.multipartIdentifier())
     val cursor = createUnresolvedCursor(nameParts)
-    SingleStatement(CloseCursor(cursor))
+    CloseCursor(cursor)
   }
 
   private def visitSetVariableImpl(
