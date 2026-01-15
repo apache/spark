@@ -449,78 +449,84 @@ class RocksDB(
     // (inclusive in both ends)
     var currVersionLineage: Array[LineageItem] = lineageManager.getLineageForCurrVersion()
     try {
-      if (loadEmpty || loadedVersion != version || loadedStateStoreCkptId.isEmpty ||
-        stateStoreCkptId.get != loadedStateStoreCkptId.get) {
+      if (loadEmpty) {
+        // Handle empty store loading separately for clarity
+        require(stateStoreCkptId.isEmpty,
+          "stateStoreCkptId should be empty when loadEmpty is true")
         closeDB(ignoreException = false)
-        if (loadEmpty) {
-          require(stateStoreCkptId.isEmpty,
-            "stateStoreCkptId should be empty when loadEmpty is true")
-          loadEmptyStore(version)
-          lineageManager.clear()
-        } else {
-          val (latestSnapshotVersion, latestSnapshotUniqueId) = {
-            // Special handling when version is 0.
-            // When loading the very first version (0), stateStoreCkptId does not need to be defined
-            // because there won't be 0.changelog / 0.zip file created in RocksDB under v2.
-            if (version == 0) {
-              assert(stateStoreCkptId.isEmpty,
-                "stateStoreCkptId should be empty when version is zero")
-              (0L, None)
-              // When there is a snapshot file, it is the ground truth, we can skip
-              // reconstructing the lineage from changelog file.
-            } else if (fileManager.existsSnapshotFile(version, stateStoreCkptId)) {
-              currVersionLineage = Array(LineageItem(version, stateStoreCkptId.get))
-              (version, stateStoreCkptId)
-            } else {
-              currVersionLineage = getLineageFromChangelogFile(version, stateStoreCkptId) :+
-                LineageItem(version, stateStoreCkptId.get)
-              currVersionLineage = currVersionLineage.sortBy(_.version)
+        loadEmptyStore(version)
+        lineageManager.clear()
+        // After loading empty store, set the key counts and metrics
+        numKeysOnLoadedVersion = numKeysOnWritingVersion
+        numInternalKeysOnLoadedVersion = numInternalKeysOnWritingVersion
+        fileManagerMetrics = fileManager.latestLoadCheckpointMetrics
+      } else if (loadedVersion != version || loadedStateStoreCkptId.isEmpty ||
+        stateStoreCkptId.get != loadedStateStoreCkptId.get) {
+        // Handle normal checkpoint loading
+        closeDB(ignoreException = false)
 
-              val latestSnapshotVersionsAndUniqueId =
-                fileManager.getLatestSnapshotVersionAndUniqueIdFromLineage(currVersionLineage)
-              latestSnapshotVersionsAndUniqueId match {
-                case Some(pair) => (pair._1, Option(pair._2))
-                case None if currVersionLineage.head.version == 1L =>
-                  logDebug(log"Cannot find latest snapshot based on lineage but first version " +
-                    log"is 1, use 0 as default. Lineage: ${MDC(LogKeys.LINEAGE, lineageManager)}")
-                  (0L, None)
-                case _ =>
-                  throw QueryExecutionErrors.cannotFindBaseSnapshotCheckpoint(
-                    printLineageItems(currVersionLineage))
-              }
+        val (latestSnapshotVersion, latestSnapshotUniqueId) = {
+          // Special handling when version is 0.
+          // When loading the very first version (0), stateStoreCkptId does not need to be defined
+          // because there won't be 0.changelog / 0.zip file created in RocksDB under v2.
+          if (version == 0) {
+            assert(stateStoreCkptId.isEmpty,
+              "stateStoreCkptId should be empty when version is zero")
+            (0L, None)
+          // When there is a snapshot file, it is the ground truth, we can skip
+          // reconstructing the lineage from changelog file.
+          } else if (fileManager.existsSnapshotFile(version, stateStoreCkptId)) {
+            currVersionLineage = Array(LineageItem(version, stateStoreCkptId.get))
+            (version, stateStoreCkptId)
+          } else {
+            currVersionLineage = getLineageFromChangelogFile(version, stateStoreCkptId) :+
+              LineageItem(version, stateStoreCkptId.get)
+            currVersionLineage = currVersionLineage.sortBy(_.version)
+
+            val latestSnapshotVersionsAndUniqueId =
+              fileManager.getLatestSnapshotVersionAndUniqueIdFromLineage(currVersionLineage)
+            latestSnapshotVersionsAndUniqueId match {
+              case Some(pair) => (pair._1, Option(pair._2))
+              case None if currVersionLineage.head.version == 1L =>
+                logDebug(log"Cannot find latest snapshot based on lineage but first version " +
+                  log"is 1, use 0 as default. Lineage: ${MDC(LogKeys.LINEAGE, lineageManager)}")
+                (0L, None)
+              case _ =>
+                throw QueryExecutionErrors.cannotFindBaseSnapshotCheckpoint(
+                  printLineageItems(currVersionLineage))
             }
           }
+        }
 
-          logInfo(log"Loaded latestSnapshotVersion: ${
-            MDC(LogKeys.SNAPSHOT_VERSION, latestSnapshotVersion)}, latestSnapshotUniqueId: ${
-            MDC(LogKeys.UUID, latestSnapshotUniqueId)}")
+        logInfo(log"Loaded latestSnapshotVersion: ${
+          MDC(LogKeys.SNAPSHOT_VERSION, latestSnapshotVersion)}, latestSnapshotUniqueId: ${
+          MDC(LogKeys.UUID, latestSnapshotUniqueId)}")
 
-          val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion,
-            workingDir, rocksDBFileMapping, latestSnapshotUniqueId)
+        val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion,
+          workingDir, rocksDBFileMapping, latestSnapshotUniqueId)
 
-          loadedVersion = latestSnapshotVersion
+        loadedVersion = latestSnapshotVersion
 
-          // reset the last snapshot version to the latest available snapshot version
-          lastSnapshotVersion = latestSnapshotVersion
+        // reset the last snapshot version to the latest available snapshot version
+        lastSnapshotVersion = latestSnapshotVersion
+        lineageManager.resetLineage(currVersionLineage)
+
+        // Initialize maxVersion upon successful load from DFS
+        fileManager.setMaxSeenVersion(version)
+
+        // Report this snapshot version to the coordinator
+        reportSnapshotUploadToCoordinator(latestSnapshotVersion)
+
+        openLocalRocksDB(metadata)
+
+        if (loadedVersion != version) {
+          val versionsAndUniqueIds = currVersionLineage.collect {
+            case i if i.version > loadedVersion && i.version <= version =>
+              (i.version, Option(i.checkpointUniqueId))
+          }
+          replayChangelog(versionsAndUniqueIds)
+          loadedVersion = version
           lineageManager.resetLineage(currVersionLineage)
-
-          // Initialize maxVersion upon successful load from DFS
-          fileManager.setMaxSeenVersion(version)
-
-          // Report this snapshot version to the coordinator
-          reportSnapshotUploadToCoordinator(latestSnapshotVersion)
-
-          openLocalRocksDB(metadata)
-
-          if (loadedVersion != version) {
-            val versionsAndUniqueIds = currVersionLineage.collect {
-              case i if i.version > loadedVersion && i.version <= version =>
-                (i.version, Option(i.checkpointUniqueId))
-            }
-            replayChangelog(versionsAndUniqueIds)
-            loadedVersion = version
-            lineageManager.resetLineage(currVersionLineage)
-          }
         }
         // After changelog replay the numKeysOnWritingVersion will be updated to
         // the correct number of keys in the loaded version.
@@ -539,7 +545,7 @@ class RocksDB(
       }
       if (loadEmpty) {
         logInfo(log"Loaded empty store at version ${MDC(LogKeys.VERSION_NUM, version)} " +
-          log"with uniqueId")
+          log"with empty uniqueId")
       } else {
         logInfo(log"Loaded ${MDC(LogKeys.VERSION_NUM, version)} " +
           log"with uniqueId ${MDC(LogKeys.UUID, stateStoreCkptId)}")

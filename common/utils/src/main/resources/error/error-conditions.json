@@ -5606,7 +5606,7 @@
       "STATE_CHECKPOINT_FORMAT_VERSION_MISMATCH" : {
         "message" : [
           "The checkpoint format version in SQLConf does not match the checkpoint version in the commit log.",
-          "Expected version v<expectedVersion>, but found v<actualVersion>.",
+          "Expected version <expectedVersion>, but found <actualVersion>.",
           "Please set '<sqlConfKey>' to <expectedVersion> in your SQLConf before retrying."
         ]
       },
