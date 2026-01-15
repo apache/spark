@@ -1044,8 +1044,22 @@ class RocksDB(
 
     val keysList = java.util.Arrays.asList(finalKeys: _*)
 
-    // Call RocksDB multiGetAsList and return iterator directly
-    db.multiGetAsList(readOptions, keysList).asScala.iterator
+    // Call RocksDB multiGetAsList
+    val valuesList = db.multiGetAsList(readOptions, keysList)
+
+    // Decode and verify checksums if enabled, then return iterator
+    if (conf.rowChecksumEnabled) {
+      valuesList.asScala.iterator.zipWithIndex.map { case (value, idx) =>
+        if (value != null) {
+          KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
+            readVerifier, finalKeys(idx), value)
+        } else {
+          null
+        }
+      }
+    } else {
+      valuesList.asScala.iterator
+    }
   }
 
   /**
