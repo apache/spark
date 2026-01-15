@@ -96,7 +96,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession)
    * in checkpoint metadata and enables stable checkpoint locations for source evolution.
    *
    * @param sourceName the name to assign to this streaming source
-   * @since 4.1.0
+   * @since 4.2.0
    */
   private[sql] def name(sourceName: String): this.type = {
     DataStreamReader.validateSourceName(sourceName)
