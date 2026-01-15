@@ -28,6 +28,7 @@ from pyspark.serializers import (
 from pyspark.util import (
     start_faulthandler_periodic_traceback,
     handle_worker_exception,
+    with_faulthandler,
 )
 from pyspark.worker_util import (
     check_python_version,
@@ -35,7 +36,6 @@ from pyspark.worker_util import (
     setup_memory_limits,
     setup_spark_files,
     setup_broadcasts,
-    with_faulthandler,
 )
 
 
