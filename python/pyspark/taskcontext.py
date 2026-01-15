@@ -412,8 +412,7 @@ class BarrierTaskContext(TaskContext):
         """
         Create a BarrierTaskContext from a JSON dictionary.
         """
-        conn_info = json["boundPort"] if json["boundPort"] != -1 else json["socketPath"]
-        cls._initialize(conn_info, json["secret"])
+        cls._initialize(json["connInfo"], json["secret"])
         return super().from_json(json)
 
     def barrier(self) -> None:

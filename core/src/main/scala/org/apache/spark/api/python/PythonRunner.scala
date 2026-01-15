@@ -517,9 +517,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         // Write out the TaskContextInfo
         PythonWorkerUtils.writeTaskContext(
           context,
-          if (isUnixDomainSock) Some(sockPath.getPath) else None,
-          if (!isUnixDomainSock) Some(authHelper.secret) else None,
-          boundPort,
+          if (isUnixDomainSock) Left(sockPath.getPath) else Right(boundPort),
+          if (isUnixDomainSock) None else Some(authHelper.secret),
           dataOut
         )
 
