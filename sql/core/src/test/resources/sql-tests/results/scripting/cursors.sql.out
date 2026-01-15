@@ -925,35 +925,19 @@ struct<col1:struct<id:bigint,name:string,value:double>>
 
 
 -- !query
-SET VAR session_x = 0
+DECLARE session_x INT DEFAULT 0
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_VARIABLE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "searchPath" : "`SYSTEM`.`SESSION`",
-    "variableName" : "`session_x`"
-  }
-}
+
 
 
 -- !query
-SET VAR session_y = ''
+DECLARE session_y STRING DEFAULT ''
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_VARIABLE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "searchPath" : "`SYSTEM`.`SESSION`",
-    "variableName" : "`session_y`"
-  }
-}
+
 
 
 -- !query
@@ -971,7 +955,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNRESOLVED_VARIABLE",
   "sqlState" : "42883",
   "messageParameters" : {
-    "searchPath" : "`SYSTEM`.`SESSION`",
+    "searchPath" : "`session`",
     "variableName" : "`session_x`"
   }
 }
@@ -980,39 +964,17 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT session_x, session_y;  -- Should return 42, 'hello'
 -- !query schema
-struct<>
+struct<session_x:int,session_y:string>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`session_x`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 16,
-    "fragment" : "session_x"
-  } ]
-}
+0
 
 
 -- !query
-SET VAR session_var = 0
+DECLARE session_var INT DEFAULT 0
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_VARIABLE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "searchPath" : "`SYSTEM`.`SESSION`",
-    "variableName" : "`session_var`"
-  }
-}
+
 
 
 -- !query
@@ -1032,42 +994,26 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNRESOLVED_VARIABLE",
   "sqlState" : "42883",
   "messageParameters" : {
-    "searchPath" : "`SYSTEM`.`SESSION`",
+    "searchPath" : "`session`",
     "variableName" : "`session_var`"
   }
 }
 
 
 -- !query
-SET VAR session_int = 0
+DECLARE session_int INT DEFAULT 0
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_VARIABLE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "searchPath" : "`SYSTEM`.`SESSION`",
-    "variableName" : "`session_int`"
-  }
-}
+
 
 
 -- !query
-SET VAR session_str = ''
+DECLARE session_str STRING DEFAULT ''
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_VARIABLE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "searchPath" : "`SYSTEM`.`SESSION`",
-    "variableName" : "`session_str`"
-  }
-}
+
 
 
 -- !query
@@ -1085,7 +1031,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNRESOLVED_VARIABLE",
   "sqlState" : "42883",
   "messageParameters" : {
-    "searchPath" : "`SYSTEM`.`SESSION`",
+    "searchPath" : "`session`",
     "variableName" : "`session_int`"
   }
 }
@@ -1094,39 +1040,17 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT session_int, session_str;  -- Should return 99, '42' (with ANSI rounding)
 -- !query schema
-struct<>
+struct<session_int:int,session_str:string>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
-  "sqlState" : "42703",
-  "messageParameters" : {
-    "objectName" : "`session_int`"
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 18,
-    "fragment" : "session_int"
-  } ]
-}
+0
 
 
 -- !query
-SET VAR session_dup = 0
+DECLARE session_dup INT DEFAULT 0
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_VARIABLE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "searchPath" : "`SYSTEM`.`SESSION`",
-    "variableName" : "`session_dup`"
-  }
-}
+
 
 
 -- !query
@@ -1140,29 +1064,20 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "UNRESOLVED_VARIABLE",
-  "sqlState" : "42883",
+  "errorClass" : "DUPLICATE_ASSIGNMENTS",
+  "sqlState" : "42701",
   "messageParameters" : {
-    "searchPath" : "`SYSTEM`.`SESSION`",
-    "variableName" : "`session_dup`"
+    "nameList" : "`session_dup`"
   }
 }
 
 
 -- !query
-SET VAR dup_var = 0
+DECLARE dup_var INT DEFAULT 0
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "UNRESOLVED_VARIABLE",
-  "sqlState" : "42883",
-  "messageParameters" : {
-    "searchPath" : "`SYSTEM`.`SESSION`",
-    "variableName" : "`dup_var`"
-  }
-}
+
 
 
 -- !query
