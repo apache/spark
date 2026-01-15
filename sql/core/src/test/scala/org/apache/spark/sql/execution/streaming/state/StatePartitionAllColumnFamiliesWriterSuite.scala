@@ -962,16 +962,16 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
   test("SPARK-54590: Rewriter throw exception if checkpoint version is not set correct") {
     withSQLConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2") {
       withTempDir { sourceDir =>
-        withTempDir { targetDir =>
-          // Step 1: Create state by running a streaming aggregation
-          runDropDuplicatesQuery(sourceDir.getAbsolutePath)
-          val sourceCheckpointMetadata = new StreamingQueryCheckpointMetadata(
-            spark, sourceDir.getAbsolutePath)
-          val readBatchId = sourceCheckpointMetadata.commitLog.getLatestBatchId().get
-          // Forced set STATE_STORE_CHECKPOINT_FORMAT_VERSION to 1 to mimic when user forgot to
-          // update checkpoint version to 2 in sqlConfig when running stateRewriter
-          // on checkpointV2 query.
-          spark.conf.unset(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key)
+        // Step 1: Create state by running a streaming aggregation
+        runDropDuplicatesQuery(sourceDir.getAbsolutePath)
+        val sourceCheckpointMetadata = new StreamingQueryCheckpointMetadata(
+          spark, sourceDir.getAbsolutePath)
+        val readBatchId = sourceCheckpointMetadata.commitLog.getLatestBatchId().get
+        // Forced set STATE_STORE_CHECKPOINT_FORMAT_VERSION to 1 to mimic when user forgot to
+        // update checkpoint version to 2 in sqlConfig when running stateRewriter
+        // on checkpointV2 query.
+        spark.conf.unset(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key)
+        val ex = intercept[StateRewriterInvalidCheckpointError] {
           val rewriter = new StateRewriter(
             spark,
             readBatchId,
@@ -979,17 +979,19 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
             sourceDir.getAbsolutePath,
             spark.sessionState.newHadoopConf()
           )
-          val ex = intercept[StateRewriterInvalidCheckpointError] {
-            rewriter.run()
-          }
-
-          assert(ex.getCondition == "STATE_REWRITER_INVALID_CHECKPOINT.CHECKPOINT_VERSION_MISMATCH")
-          val params = ex.getMessageParameters
-          assert(params.get("expectedVersion") == "2")
-          assert(params.get("actualVersion") == "1")
-          assert(params.get("sqlConfKey") == SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key)
-          assert(ex.getMessage.contains("spark.sql.streaming.stateStore.checkpointFormatVersion"))
+          rewriter.run()
         }
+
+        checkError(
+          ex,
+          "STATE_REWRITER_INVALID_CHECKPOINT.STATE_CHECKPOINT_FORMAT_VERSION_MISMATCH",
+          "55019",
+          parameters = Map(
+            "checkpointLocation" -> sourceDir.getAbsolutePath,
+            "expectedVersion" -> "2",
+            "actualVersion" -> "1",
+            "sqlConfKey" -> SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key)
+        )
       }
     }
   }

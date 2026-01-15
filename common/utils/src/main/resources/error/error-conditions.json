@@ -5603,17 +5603,17 @@
           "Ensure that the checkpoint is for a stateful streaming query and the query ran on a Spark version that supports operator metadata (Spark 4.0+)."
         ]
       },
+      "STATE_CHECKPOINT_FORMAT_VERSION_MISMATCH" : {
+        "message" : [
+          "The checkpoint format version in SQLConf does not match the checkpoint version in the commit log.",
+          "Expected version v<expectedVersion>, but found v<actualVersion>.",
+          "Please set '<sqlConfKey>' to <expectedVersion> in your SQLConf before retrying."
+        ]
+      },
       "UNSUPPORTED_STATE_STORE_METADATA_VERSION" : {
         "message" : [
           "Unsupported state store metadata version encountered.",
           "Only StateStoreMetadataV1 and StateStoreMetadataV2 are supported."
-        ]
-      },
-      "CHECKPOINT_VERSION_MISMATCH" : {
-        "message" : [
-          "The checkpoint format version in SQLConf does not match the checkpoint version in the commit log.",
-          "Expected version v<expectedVersion>, but found v<actualVersion>.",
-          "Please set '<sqlConfKey>' to <expectedVersion> in your SQLConf before running StateRewriter."
         ]
       }
     },
