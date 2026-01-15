@@ -4944,7 +4944,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
 
     val shuffleIndeterminateStage = scheduler.stageIdToStage(3).asInstanceOf[ShuffleMapStage]
-    assert(shuffleIndeterminateStage.isIndeterminate)
+    assert(shuffleIndeterminateStage.isStaticallyIndeterminate)
     scheduler.handleShuffleMergeFinalized(shuffleIndeterminateStage, 2)
     assert(shuffleIndeterminateStage.shuffleDep.shuffleMergeEnabled)
     assert(!shuffleIndeterminateStage.shuffleDep.isShuffleMergeFinalizedMarked)
