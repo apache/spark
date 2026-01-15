@@ -133,16 +133,8 @@ def _convert_arrow_table_to_pandas(
         error_on_duplicated_field_names = True
         struct_handling_mode = "dict"
 
-    # SPARK-51112: If the table is empty, we avoid using pyarrow to_pandas to create the
-    # DataFrame, as it may fail with a segmentation fault.
-    if arrow_table.num_rows == 0:
-        # For empty tables, create empty Series to preserve dtypes
-        column_data = (
-            pd.Series([], name=temp_col_names[i], dtype="object") for i in range(len(schema.fields))
-        )
-    else:
-        # For non-empty tables, convert arrow columns directly
-        column_data = (arrow_col.to_pandas(**pandas_options) for arrow_col in arrow_table.columns)
+    # Convert arrow columns to pandas Series
+    column_data = (arrow_col.to_pandas(**pandas_options) for arrow_col in arrow_table.columns)
 
     # Apply Spark-specific type converters to each column
     pdf = pd.concat(
