@@ -41,7 +41,6 @@ import org.apache.spark.sql.catalyst.expressions.json.PathInstruction.Named
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.streaming.Unassigned
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -2468,18 +2467,30 @@ class AstBuilder extends DataTypeAstBuilder
       })
   }
 
+  /**
+   * Extract the source name from an identifiedByClause context.
+   */
+  private def extractSourceName(ctx: IdentifiedByClauseContext): Option[String] = {
+    Option(ctx).map(c => c.sourceName.identifier.getText)
+  }
+
   override def visitStreamTableName(ctx: StreamTableNameContext): LogicalPlan = {
     val ident = visitMultipartIdentifier(ctx.multipartIdentifier)
-    val tableStreamingRelation = createUnresolvedRelation(
+    val relation = createUnresolvedRelation(
       ctx = ctx,
       ident = ident,
       optionsClause = Option(ctx.optionsClause),
       writePrivileges = Seq.empty,
       isStreaming = true)
 
-    val namedStreamingRelation = NamedStreamingRelation(tableStreamingRelation, Unassigned)
-    val tableWithWatermark = namedStreamingRelation.optionalMap(ctx.watermarkClause)(withWatermark)
-    mayApplyAliasPlan(ctx.tableAlias, tableWithWatermark)
+    val table = mayApplyAliasPlan(ctx.tableAlias, relation)
+    val tableWithWatermark = table.optionalMap(ctx.watermarkClause)(withWatermark)
+    val sourceNameOpt = extractSourceName(ctx.identifiedByClause)
+    tableWithWatermark.transformUp {
+      case r: UnresolvedRelation =>
+        NamedStreamingRelation.withUserProvidedName(
+          r.copy(isStreaming = true), sourceNameOpt)
+    }
   }
 
   /**

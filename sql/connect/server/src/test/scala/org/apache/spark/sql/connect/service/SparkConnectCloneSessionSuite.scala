@@ -27,7 +27,7 @@ class SparkConnectCloneSessionSuite extends SharedSparkSession {
   override def beforeEach(): Unit = {
     super.beforeEach()
     SparkConnectService.sessionManager.invalidateAllSessions()
-    SparkConnectService.sessionManager.initializeBaseSession(spark.sparkContext)
+    SparkConnectService.sessionManager.initializeBaseSession(() => spark.newSession())
   }
 
   test("clone session with invalid target session ID format") {
