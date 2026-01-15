@@ -100,7 +100,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "CURSOR_ALREADY_EXISTS",
   "sqlState" : "42723",
   "messageParameters" : {
-    "cursorName" : "c1"
+    "cursorName" : "`c1`"
   }
 }
 
@@ -142,7 +142,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "CURSOR_ALREADY_OPEN",
   "sqlState" : "24502",
   "messageParameters" : {
-    "cursorName" : "c1"
+    "cursorName" : "`c1`"
   }
 }
 
@@ -179,7 +179,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "CURSOR_NOT_OPEN",
   "sqlState" : "24501",
   "messageParameters" : {
-    "cursorName" : "c1"
+    "cursorName" : "`c1`"
   }
 }
 
@@ -199,7 +199,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "CURSOR_NOT_OPEN",
   "sqlState" : "24501",
   "messageParameters" : {
-    "cursorName" : "c1"
+    "cursorName" : "`c1`"
   }
 }
 
@@ -218,7 +218,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "CURSOR_NOT_OPEN",
   "sqlState" : "24501",
   "messageParameters" : {
-    "cursorName" : "c1"
+    "cursorName" : "`c1`"
   }
 }
 
@@ -240,7 +240,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "CURSOR_NOT_OPEN",
   "sqlState" : "24501",
   "messageParameters" : {
-    "cursorName" : "c1"
+    "cursorName" : "`c1`"
   }
 }
 
@@ -1104,7 +1104,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "CURSOR_NOT_FOUND",
   "sqlState" : "42883",
   "messageParameters" : {
-    "cursorName" : "cur"
+    "cursorName" : "`cur`"
   }
 }
 
@@ -1925,7 +1925,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "CURSOR_NOT_OPEN",
   "sqlState" : "24501",
   "messageParameters" : {
-    "cursorName" : "cur"
+    "cursorName" : "`cur`"
   }
 }
 
@@ -1959,7 +1959,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "CURSOR_NOT_OPEN",
   "sqlState" : "24501",
   "messageParameters" : {
-    "cursorName" : "cur"
+    "cursorName" : "`cur`"
   }
 }
 
