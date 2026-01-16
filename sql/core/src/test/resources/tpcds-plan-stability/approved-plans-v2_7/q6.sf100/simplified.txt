@@ -23,7 +23,7 @@ TakeOrderedAndProject [cnt,state]
                                             WholeStageCodegen (3)
                                               Project [i_item_sk]
                                                 BroadcastHashJoin [i_category,i_category,i_current_price,avg(i_current_price)]
-                                                  Filter [i_current_price,i_category,i_item_sk]
+                                                  Filter [i_current_price,i_item_sk,i_category]
                                                     ColumnarToRow
                                                       InputAdapter
                                                         Scan parquet spark_catalog.default.item [i_item_sk,i_current_price,i_category]

@@ -159,15 +159,11 @@ abstract class Optimizer(catalogManager: CatalogManager)
         OptimizeCsvJsonExprs,
         CombineConcats,
         PushdownPredicatesAndPruneColumnsForCTEDef) ++
-        extendedOperatorOptimizationRules
+        extendedOperatorOptimizationRules ++
+        Seq(InferFiltersFromGenerate, InferFiltersFromConstraints)
 
     val operatorOptimizationBatch: Seq[Batch] = Seq(
-      Batch("Operator Optimization before Inferring Filters", fixedPoint,
-        operatorOptimizationRuleSet: _*),
-      Batch("Infer Filters", Once,
-        InferFiltersFromGenerate,
-        InferFiltersFromConstraints),
-      Batch("Operator Optimization after Inferring Filters", fixedPoint,
+      Batch("Operator Optimization and then Inferring Filters", fixedPoint,
         operatorOptimizationRuleSet: _*),
       Batch("Push extra predicate through join", fixedPoint,
         PushExtraPredicateThroughJoin,

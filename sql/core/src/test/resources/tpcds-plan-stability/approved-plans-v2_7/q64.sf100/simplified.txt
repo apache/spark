@@ -88,12 +88,12 @@ WholeStageCodegen (88)
                                                                                                                                                                               WholeStageCodegen (1)
                                                                                                                                                                                 Filter [ss_item_sk,ss_ticket_number,ss_store_sk,ss_customer_sk,ss_cdemo_sk,ss_promo_sk,ss_hdemo_sk,ss_addr_sk]
                                                                                                                                                                                   Subquery #2
-                                                                                                                                                                                    ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(i_item_sk, 42), 1250, 30121, 0, 0),bloomFilter,buf]
+                                                                                                                                                                                    ObjectHashAggregate [buf] [bloom_filter_agg(xxhash64(i_item_sk, 42), 1254, 30209, 0, 0),bloomFilter,buf]
                                                                                                                                                                                       Exchange #11
                                                                                                                                                                                         ObjectHashAggregate [i_item_sk] [buf,buf]
                                                                                                                                                                                           WholeStageCodegen (1)
                                                                                                                                                                                             Project [i_item_sk]
-                                                                                                                                                                                              Filter [i_current_price,i_color,i_item_sk]
+                                                                                                                                                                                              Filter [i_color,i_current_price,i_item_sk]
                                                                                                                                                                                                 ColumnarToRow
                                                                                                                                                                                                   InputAdapter
                                                                                                                                                                                                     Scan parquet spark_catalog.default.item [i_item_sk,i_current_price,i_color]
@@ -239,7 +239,7 @@ WholeStageCodegen (88)
                                           BroadcastExchange #25
                                             WholeStageCodegen (40)
                                               Project [i_item_sk,i_product_name]
-                                                Filter [i_current_price,i_color,i_item_sk]
+                                                Filter [i_color,i_current_price,i_item_sk]
                                                   ColumnarToRow
                                                     InputAdapter
                                                       Scan parquet spark_catalog.default.item [i_item_sk,i_current_price,i_color,i_product_name]

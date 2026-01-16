@@ -41,7 +41,7 @@ TakeOrderedAndProject [sales_cnt_diff,prev_year,year,i_brand_id,i_class_id,i_cat
                                                                                 SubqueryBroadcast [d_date_sk] #1
                                                                                   BroadcastExchange #5
                                                                                     WholeStageCodegen (1)
-                                                                                      Filter [d_year,d_date_sk]
+                                                                                      Filter [d_date_sk,d_year]
                                                                                         ColumnarToRow
                                                                                           InputAdapter
                                                                                             Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year]
@@ -49,7 +49,7 @@ TakeOrderedAndProject [sales_cnt_diff,prev_year,year,i_brand_id,i_class_id,i_cat
                                                                           BroadcastExchange #6
                                                                             WholeStageCodegen (1)
                                                                               Project [i_item_sk,i_brand_id,i_class_id,i_category_id,i_manufact_id]
-                                                                                Filter [i_category,i_item_sk,i_brand_id,i_class_id,i_category_id,i_manufact_id]
+                                                                                Filter [i_item_sk,i_category,i_brand_id,i_class_id,i_category_id,i_manufact_id]
                                                                                   ColumnarToRow
                                                                                     InputAdapter
                                                                                       Scan parquet spark_catalog.default.item [i_item_sk,i_brand_id,i_class_id,i_category_id,i_category,i_manufact_id]
@@ -171,7 +171,7 @@ TakeOrderedAndProject [sales_cnt_diff,prev_year,year,i_brand_id,i_class_id,i_cat
                                                                                 SubqueryBroadcast [d_date_sk] #2
                                                                                   BroadcastExchange #16
                                                                                     WholeStageCodegen (1)
-                                                                                      Filter [d_year,d_date_sk]
+                                                                                      Filter [d_date_sk,d_year]
                                                                                         ColumnarToRow
                                                                                           InputAdapter
                                                                                             Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year]

@@ -647,7 +647,7 @@ Input [19]: [ss_item_sk#1, ss_wholesale_cost#9, ss_list_price#10, ss_coupon_amt#
 Output [4]: [i_item_sk#73, i_current_price#74, i_color#75, i_product_name#76]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_current_price), In(i_color, [burlywood           ,floral              ,indian              ,medium              ,purple              ,spring              ]), GreaterThanOrEqual(i_current_price,64.00), LessThanOrEqual(i_current_price,74.00), GreaterThanOrEqual(i_current_price,65.00), LessThanOrEqual(i_current_price,79.00), IsNotNull(i_item_sk)]
+PushedFilters: [In(i_color, [burlywood           ,floral              ,indian              ,medium              ,purple              ,spring              ]), GreaterThanOrEqual(i_current_price,64.00), LessThanOrEqual(i_current_price,74.00), GreaterThanOrEqual(i_current_price,65.00), LessThanOrEqual(i_current_price,79.00), IsNotNull(i_item_sk), IsNotNull(i_current_price)]
 ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2),i_color:string,i_product_name:string>
 
 (102) ColumnarToRow [codegen id : 24]
@@ -655,7 +655,7 @@ Input [4]: [i_item_sk#73, i_current_price#74, i_color#75, i_product_name#76]
 
 (103) Filter [codegen id : 24]
 Input [4]: [i_item_sk#73, i_current_price#74, i_color#75, i_product_name#76]
-Condition : ((((((isnotnull(i_current_price#74) AND i_color#75 IN (purple              ,burlywood           ,indian              ,spring              ,floral              ,medium              )) AND (i_current_price#74 >= 64.00)) AND (i_current_price#74 <= 74.00)) AND (i_current_price#74 >= 65.00)) AND (i_current_price#74 <= 79.00)) AND isnotnull(i_item_sk#73))
+Condition : ((((((i_color#75 IN (purple              ,burlywood           ,indian              ,spring              ,floral              ,medium              ) AND (i_current_price#74 >= 64.00)) AND (i_current_price#74 <= 74.00)) AND (i_current_price#74 >= 65.00)) AND (i_current_price#74 <= 79.00)) AND isnotnull(i_item_sk#73)) AND isnotnull(i_current_price#74))
 
 (104) Project [codegen id : 24]
 Output [2]: [i_item_sk#73, i_product_name#76]

@@ -50,7 +50,7 @@ TakeOrderedAndProject (45)
 Output [3]: [i_item_sk#1, i_current_price#2, i_category#3]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_current_price), IsNotNull(i_category), IsNotNull(i_item_sk)]
+PushedFilters: [IsNotNull(i_current_price), IsNotNull(i_item_sk), IsNotNull(i_category)]
 ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2),i_category:string>
 
 (2) ColumnarToRow [codegen id : 3]
@@ -58,7 +58,7 @@ Input [3]: [i_item_sk#1, i_current_price#2, i_category#3]
 
 (3) Filter [codegen id : 3]
 Input [3]: [i_item_sk#1, i_current_price#2, i_category#3]
-Condition : ((isnotnull(i_current_price#2) AND isnotnull(i_category#3)) AND isnotnull(i_item_sk#1))
+Condition : ((isnotnull(i_current_price#2) AND isnotnull(i_item_sk#1)) AND isnotnull(i_category#3))
 
 (4) Scan parquet spark_catalog.default.item
 Output [2]: [i_current_price#4, i_category#5]

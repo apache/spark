@@ -32,7 +32,7 @@ TakeOrderedAndProject [ratio,ss_qty,ss_wc,ss_sp,other_chan_qty,other_chan_wholes
                                                               SubqueryBroadcast [d_date_sk] #1
                                                                 BroadcastExchange #3
                                                                   WholeStageCodegen (1)
-                                                                    Filter [d_year,d_date_sk]
+                                                                    Filter [d_date_sk,d_year]
                                                                       ColumnarToRow
                                                                         InputAdapter
                                                                           Scan parquet spark_catalog.default.date_dim [d_date_sk,d_year]

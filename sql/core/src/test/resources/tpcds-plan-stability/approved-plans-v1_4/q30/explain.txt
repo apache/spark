@@ -255,7 +255,7 @@ Input [16]: [ctr_customer_sk#12, ctr_total_return#14, c_customer_sk#32, c_custom
 Output [2]: [ca_address_sk#46, ca_state#47]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
-PushedFilters: [IsNotNull(ca_state), EqualTo(ca_state,GA), IsNotNull(ca_address_sk)]
+PushedFilters: [EqualTo(ca_state,GA), IsNotNull(ca_address_sk), IsNotNull(ca_state)]
 ReadSchema: struct<ca_address_sk:int,ca_state:string>
 
 (43) ColumnarToRow [codegen id : 10]
@@ -263,7 +263,7 @@ Input [2]: [ca_address_sk#46, ca_state#47]
 
 (44) Filter [codegen id : 10]
 Input [2]: [ca_address_sk#46, ca_state#47]
-Condition : ((isnotnull(ca_state#47) AND (ca_state#47 = GA)) AND isnotnull(ca_address_sk#46))
+Condition : (((ca_state#47 = GA) AND isnotnull(ca_address_sk#46)) AND isnotnull(ca_state#47))
 
 (45) Project [codegen id : 10]
 Output [1]: [ca_address_sk#46]

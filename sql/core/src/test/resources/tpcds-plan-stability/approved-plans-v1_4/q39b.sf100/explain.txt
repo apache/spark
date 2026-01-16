@@ -282,7 +282,7 @@ BroadcastExchange (52)
 Output [3]: [d_date_sk#6, d_year#49, d_moy#7]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2001), EqualTo(d_moy,1), IsNotNull(d_date_sk)]
+PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2001), IsNotNull(d_date_sk), IsNotNull(d_moy), EqualTo(d_moy,1)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (49) ColumnarToRow [codegen id : 1]
@@ -290,7 +290,7 @@ Input [3]: [d_date_sk#6, d_year#49, d_moy#7]
 
 (50) Filter [codegen id : 1]
 Input [3]: [d_date_sk#6, d_year#49, d_moy#7]
-Condition : ((((isnotnull(d_year#49) AND isnotnull(d_moy#7)) AND (d_year#49 = 2001)) AND (d_moy#7 = 1)) AND isnotnull(d_date_sk#6))
+Condition : ((((isnotnull(d_year#49) AND (d_year#49 = 2001)) AND isnotnull(d_date_sk#6)) AND isnotnull(d_moy#7)) AND (d_moy#7 = 1))
 
 (51) Project [codegen id : 1]
 Output [2]: [d_date_sk#6, d_moy#7]
@@ -312,7 +312,7 @@ BroadcastExchange (57)
 Output [3]: [d_date_sk#31, d_year#50, d_moy#32]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2001), EqualTo(d_moy,2), IsNotNull(d_date_sk)]
+PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2001), IsNotNull(d_date_sk), IsNotNull(d_moy), EqualTo(d_moy,2)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (54) ColumnarToRow [codegen id : 1]
@@ -320,7 +320,7 @@ Input [3]: [d_date_sk#31, d_year#50, d_moy#32]
 
 (55) Filter [codegen id : 1]
 Input [3]: [d_date_sk#31, d_year#50, d_moy#32]
-Condition : ((((isnotnull(d_year#50) AND isnotnull(d_moy#32)) AND (d_year#50 = 2001)) AND (d_moy#32 = 2)) AND isnotnull(d_date_sk#31))
+Condition : ((((isnotnull(d_year#50) AND (d_year#50 = 2001)) AND isnotnull(d_date_sk#31)) AND isnotnull(d_moy#32)) AND (d_moy#32 = 2))
 
 (56) Project [codegen id : 1]
 Output [2]: [d_date_sk#31, d_moy#32]

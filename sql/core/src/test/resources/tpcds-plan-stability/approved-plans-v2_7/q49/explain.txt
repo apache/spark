@@ -104,7 +104,7 @@ Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[1, int, true] 
 Output [5]: [wr_item_sk#8, wr_order_number#9, wr_return_quantity#10, wr_return_amt#11, wr_returned_date_sk#12]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_returns]
-PushedFilters: [IsNotNull(wr_return_amt), GreaterThan(wr_return_amt,10000.00), IsNotNull(wr_order_number), IsNotNull(wr_item_sk)]
+PushedFilters: [IsNotNull(wr_order_number), IsNotNull(wr_item_sk), IsNotNull(wr_return_amt), GreaterThan(wr_return_amt,10000.00)]
 ReadSchema: struct<wr_item_sk:int,wr_order_number:int,wr_return_quantity:int,wr_return_amt:decimal(7,2)>
 
 (7) ColumnarToRow
@@ -112,7 +112,7 @@ Input [5]: [wr_item_sk#8, wr_order_number#9, wr_return_quantity#10, wr_return_am
 
 (8) Filter
 Input [5]: [wr_item_sk#8, wr_order_number#9, wr_return_quantity#10, wr_return_amt#11, wr_returned_date_sk#12]
-Condition : (((isnotnull(wr_return_amt#11) AND (wr_return_amt#11 > 10000.00)) AND isnotnull(wr_order_number#9)) AND isnotnull(wr_item_sk#8))
+Condition : (((isnotnull(wr_order_number#9) AND isnotnull(wr_item_sk#8)) AND isnotnull(wr_return_amt#11)) AND (wr_return_amt#11 > 10000.00))
 
 (9) Project
 Output [4]: [wr_item_sk#8, wr_order_number#9, wr_return_quantity#10, wr_return_amt#11]
@@ -214,7 +214,7 @@ Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[1, int, true] 
 Output [5]: [cr_item_sk#42, cr_order_number#43, cr_return_quantity#44, cr_return_amount#45, cr_returned_date_sk#46]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/catalog_returns]
-PushedFilters: [IsNotNull(cr_return_amount), GreaterThan(cr_return_amount,10000.00), IsNotNull(cr_order_number), IsNotNull(cr_item_sk)]
+PushedFilters: [IsNotNull(cr_order_number), IsNotNull(cr_item_sk), IsNotNull(cr_return_amount), GreaterThan(cr_return_amount,10000.00)]
 ReadSchema: struct<cr_item_sk:int,cr_order_number:int,cr_return_quantity:int,cr_return_amount:decimal(7,2)>
 
 (31) ColumnarToRow
@@ -222,7 +222,7 @@ Input [5]: [cr_item_sk#42, cr_order_number#43, cr_return_quantity#44, cr_return_
 
 (32) Filter
 Input [5]: [cr_item_sk#42, cr_order_number#43, cr_return_quantity#44, cr_return_amount#45, cr_returned_date_sk#46]
-Condition : (((isnotnull(cr_return_amount#45) AND (cr_return_amount#45 > 10000.00)) AND isnotnull(cr_order_number#43)) AND isnotnull(cr_item_sk#42))
+Condition : (((isnotnull(cr_order_number#43) AND isnotnull(cr_item_sk#42)) AND isnotnull(cr_return_amount#45)) AND (cr_return_amount#45 > 10000.00))
 
 (33) Project
 Output [4]: [cr_item_sk#42, cr_order_number#43, cr_return_quantity#44, cr_return_amount#45]
@@ -324,7 +324,7 @@ Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[1, int, true] 
 Output [5]: [sr_item_sk#76, sr_ticket_number#77, sr_return_quantity#78, sr_return_amt#79, sr_returned_date_sk#80]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_returns]
-PushedFilters: [IsNotNull(sr_return_amt), GreaterThan(sr_return_amt,10000.00), IsNotNull(sr_ticket_number), IsNotNull(sr_item_sk)]
+PushedFilters: [IsNotNull(sr_ticket_number), IsNotNull(sr_item_sk), IsNotNull(sr_return_amt), GreaterThan(sr_return_amt,10000.00)]
 ReadSchema: struct<sr_item_sk:int,sr_ticket_number:int,sr_return_quantity:int,sr_return_amt:decimal(7,2)>
 
 (55) ColumnarToRow
@@ -332,7 +332,7 @@ Input [5]: [sr_item_sk#76, sr_ticket_number#77, sr_return_quantity#78, sr_return
 
 (56) Filter
 Input [5]: [sr_item_sk#76, sr_ticket_number#77, sr_return_quantity#78, sr_return_amt#79, sr_returned_date_sk#80]
-Condition : (((isnotnull(sr_return_amt#79) AND (sr_return_amt#79 > 10000.00)) AND isnotnull(sr_ticket_number#77)) AND isnotnull(sr_item_sk#76))
+Condition : (((isnotnull(sr_ticket_number#77) AND isnotnull(sr_item_sk#76)) AND isnotnull(sr_return_amt#79)) AND (sr_return_amt#79 > 10000.00))
 
 (57) Project
 Output [4]: [sr_item_sk#76, sr_ticket_number#77, sr_return_quantity#78, sr_return_amt#79]
