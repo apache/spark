@@ -51,6 +51,9 @@ object JDBCRDD extends Logging {
    * schema.
    *
    * @param options - JDBC options that contains url, table and other information.
+   * @param conn - JDBC connection to use for fetching the schema.
+   * @param ident - Optional table identifier used for error reporting.
+   * @param catalogName - Optional catalog name used for error reporting.
    *
    * @return A StructType giving the table's Catalyst schema.
    * @throws java.sql.SQLException if the table specification is garbage.
