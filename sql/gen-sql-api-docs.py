@@ -97,24 +97,25 @@ def _get_file_name(group):
     Convert group name to file name.
 
     Parameters:
-    group (str): The group name (e.g., "agg_funcs", "window_funcs").
+    group (str): The group name (e.g., "agg_funcs", "window_funcs", "operator").
 
     Returns:
-    str: The file name (e.g., "agg-functions", "window-functions").
+    str: The file name (e.g., "agg-functions", "window-functions", "operator-functions").
     """
     if group is None or group == "":
         return "misc-functions"
     # Replace _funcs with -functions, replace underscores with hyphens
-    return group.replace("_funcs", "-functions").replace("_", "-")
+    file_name = group.replace("_funcs", "-functions").replace("_", "-")
+    # If the group doesn't end with _funcs, append -functions
+    if not group.endswith("_funcs") and not file_name.endswith("-functions"):
+        file_name = file_name + "-functions"
+    return file_name
 
 
 # Groups that should be merged into other groups
 GROUP_MERGES = {
     "lambda_funcs": "collection_funcs",  # SPARK-45232
 }
-
-# Virtual operators belong to this category
-VIRTUAL_OPERATORS_CATEGORY = "misc_funcs"
 
 _virtual_operator_infos = [
     ExpressionInfo(
@@ -139,7 +140,7 @@ _virtual_operator_infos = [
         note="",
         since="1.0.0",
         deprecated="",
-        group=VIRTUAL_OPERATORS_CATEGORY),
+        group="predicate_funcs"),
     ExpressionInfo(
         className="",
         name="<>",
@@ -162,7 +163,7 @@ _virtual_operator_infos = [
         note="",
         since="1.0.0",
         deprecated="",
-        group=VIRTUAL_OPERATORS_CATEGORY),
+        group="predicate_funcs"),
     ExpressionInfo(
         className="",
         name="case",
@@ -190,7 +191,7 @@ _virtual_operator_infos = [
         note="",
         since="1.0.1",
         deprecated="",
-        group=VIRTUAL_OPERATORS_CATEGORY),
+        group="conditional_funcs"),
     ExpressionInfo(
         className="",
         name="||",
@@ -204,7 +205,7 @@ _virtual_operator_infos = [
         note="\n    || for arrays is available since 2.4.0.\n",
         since="2.3.0",
         deprecated="",
-        group=VIRTUAL_OPERATORS_CATEGORY)
+        group="string_funcs")
 ]
 
 
@@ -493,7 +494,7 @@ def generate_sql_api_markdown(jvm, docs_dir):
             mdfile.write('<div class="func-grid">\n')
             for info in category_infos:
                 anchor = _make_anchor(info.name)
-                mdfile.write('<a href="%s.md#%s">%s</a>\n' % (file_name, anchor, info.name))
+                mdfile.write('<a href="%s/#%s">%s</a>\n' % (file_name, anchor, info.name))
             mdfile.write('</div>\n\n')
 
     # Auto-generate mkdocs.yml with navigation
