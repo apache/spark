@@ -159,12 +159,17 @@ abstract class Optimizer(catalogManager: CatalogManager)
         OptimizeCsvJsonExprs,
         CombineConcats,
         PushdownPredicatesAndPruneColumnsForCTEDef) ++
-        extendedOperatorOptimizationRules ++
-        Seq(InferFiltersFromGenerate, InferFiltersFromConstraints)
+        extendedOperatorOptimizationRules
 
     val operatorOptimizationBatch: Seq[Batch] = Seq(
-      Batch("Operator Optimization and then Inferring Filters", fixedPoint,
+      Batch("Operator Optimization before Inferring Filters", fixedPoint,
         operatorOptimizationRuleSet: _*),
+      Batch("Infer Filters", Once,
+        InferFiltersFromGenerate,
+        InferFiltersFromConstraints),
+      Batch("Operator Optimization after Inferring Filters", fixedPoint,
+        operatorOptimizationRuleSet ++
+          Seq(InferFiltersFromGenerate, InferFiltersFromConstraints): _*),
       Batch("Push extra predicate through join", fixedPoint,
         PushExtraPredicateThroughJoin,
         PushDownPredicates))
@@ -1761,7 +1766,21 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
           val allConstraints = getAllConstraints(left, right, conditionOpt)
           val newLeft = inferNewFilter(left, allConstraints)
           val newRight = inferNewFilter(right, allConstraints)
-          join.copy(left = newLeft, right = newRight)
+          val isLeftModified = newLeft.ne(left) && newLeft.canonicalized != left.canonicalized
+          val isRightModified = newRight.ne(right) && newRight.canonicalized != right.canonicalized
+          if (isLeftModified || isRightModified) {
+            join.copy(left = if (isLeftModified) {
+              newLeft
+            } else {
+              left
+            }, right = if (isRightModified) {
+              newRight
+            } else {
+              right
+            })
+          } else {
+            join
+          }
 
         // For right outer join, we can only infer additional filters for left side.
         case RightOuter =>
