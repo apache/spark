@@ -115,6 +115,18 @@ except Exception:
 _T = TypeVar("_T")
 _R = TypeVar("_R")
 
+# Use itertools.batched if available (Python 3.12+), otherwise use fallback from stdlib docs
+if sys.version_info >= (3, 12):
+    _batched = itertools.batched
+else:
+
+    def _batched(iterable: Iterable[_T], n: int) -> Iterator[Tuple[_T, ...]]:
+        if n < 1:
+            raise ValueError("n must be at least one")
+        it = iter(iterable)
+        while batch := tuple(itertools.islice(it, n)):
+            yield batch
+
 
 class ArrowBatchedUDFThreadPool:
     """
@@ -199,16 +211,8 @@ class ArrowBatchedUDFThreadPool:
         """
         pool = cls.get_pool(max_workers)
 
-        batch: List[_T] = []
-        for item in data:
-            batch.append(item)
-            if len(batch) >= batch_size:
-                yield from cls._process_batch(batch, func, pool, max_workers)
-                batch = []
-
-        # Process remaining items
-        if batch:
-            yield from cls._process_batch(batch, func, pool, max_workers)
+        for batch in _batched(data, batch_size):
+            yield from cls._process_batch(list(batch), func, pool, max_workers)
 
 
 # Register shutdown handler to clean up thread pool on process exit.
@@ -530,12 +534,13 @@ def wrap_arrow_batch_udf_legacy(f, args_offsets, kwargs_offsets, return_type, ru
         @fail_on_stopiteration
         def evaluate(*args: pd.Series) -> pd.Series:
             """Evaluate UDF with chunked parallel execution."""
-            results = ArrowBatchedUDFThreadPool.map_chunked(
+            results = ArrowBatchedUDFThreadPool.map_batched(
                 lambda row: result_func(func(*row)),
                 get_args(*args),
                 runner_conf.arrow_concurrency_level,
+                runner_conf.arrow_concurrency_batch_size,
             )
-            return pd.Series(results)
+            return pd.Series(list(results))
 
     else:
 
