@@ -40,7 +40,8 @@ private[sql] class ProtobufDeserializer(
     filters: StructFilters = new NoopFilters,
     typeRegistry: TypeRegistry = TypeRegistry.getEmptyTypeRegistry,
     emitDefaultValues: Boolean = false,
-    enumsAsInts: Boolean = false) {
+    enumsAsInts: Boolean = false,
+    fullNamesToExtensions: Map[String, Seq[FieldDescriptor]] = Map.empty) {
 
   def this(rootDescriptor: Descriptor, rootCatalystType: DataType) = {
     this(
@@ -59,7 +60,8 @@ private[sql] class ProtobufDeserializer(
           val resultRow = new SpecificInternalRow(st.map(_.dataType))
           val fieldUpdater = new RowUpdater(resultRow)
           val applyFilters = filters.skipRow(resultRow, _)
-          val writer = getRecordWriter(rootDescriptor, st, Nil, Nil, applyFilters)
+          val writer =
+            getRecordWriter(rootDescriptor, st, Nil, Nil, applyFilters, fullNamesToExtensions)
           (data: Any) => {
             val record = data.asInstanceOf[DynamicMessage]
             val skipRow = writer(fieldUpdater, record)
@@ -97,11 +99,18 @@ private[sql] class ProtobufDeserializer(
       protoPath: Seq[String],
       catalystPath: Seq[String],
       elementType: DataType,
-      containsNull: Boolean): (CatalystDataUpdater, Int, Any) => Unit = {
+      containsNull: Boolean,
+      protoFullNamesToExtensions: Map[String, Seq[FieldDescriptor]] = Map.empty)
+      : (CatalystDataUpdater, Int, Any) => Unit = {
 
     val protoElementPath = protoPath :+ "element"
     val elementWriter =
-      newWriter(protoField, elementType, protoElementPath, catalystPath :+ "element")
+      newWriter(
+        protoField,
+        elementType,
+        protoElementPath,
+        catalystPath :+ "element",
+        protoFullNamesToExtensions)
     (updater, ordinal, value) =>
       val collection = value.asInstanceOf[java.util.Collection[Any]]
       val result = createArrayData(elementType, collection.size())
@@ -133,12 +142,24 @@ private[sql] class ProtobufDeserializer(
       catalystPath: Seq[String],
       keyType: DataType,
       valueType: DataType,
-      valueContainsNull: Boolean): (CatalystDataUpdater, Int, Any) => Unit = {
+      valueContainsNull: Boolean,
+      protoFullNamesToExtensions: Map[String, Seq[FieldDescriptor]] = Map.empty)
+      : (CatalystDataUpdater, Int, Any) => Unit = {
     val keyField = protoType.getMessageType.getFields.get(0)
     val valueField = protoType.getMessageType.getFields.get(1)
-    val keyWriter = newWriter(keyField, keyType, protoPath :+ "key", catalystPath :+ "key")
+    val keyWriter = newWriter(
+      keyField,
+      keyType,
+      protoPath :+ "key",
+      catalystPath :+ "key",
+      protoFullNamesToExtensions)
     val valueWriter =
-      newWriter(valueField, valueType, protoPath :+ "value", catalystPath :+ "value")
+      newWriter(
+        valueField,
+        valueType,
+        protoPath :+ "value",
+        catalystPath :+ "value",
+        protoFullNamesToExtensions)
     (updater, ordinal, value) =>
       if (value != null) {
         val messageList = value.asInstanceOf[java.util.List[com.google.protobuf.Message]]
@@ -174,7 +195,9 @@ private[sql] class ProtobufDeserializer(
       protoType: FieldDescriptor,
       catalystType: DataType,
       protoPath: Seq[String],
-      catalystPath: Seq[String]): (CatalystDataUpdater, Int, Any) => Unit = {
+      catalystPath: Seq[String],
+      protoFullNamesToExtensions: Map[String, Seq[FieldDescriptor]] = Map.empty)
+      : (CatalystDataUpdater, Int, Any) => Unit = {
 
     (protoType.getJavaType, catalystType) match {
 
@@ -201,7 +224,13 @@ private[sql] class ProtobufDeserializer(
       case  (
         MESSAGE | BOOLEAN | INT | FLOAT | DOUBLE | LONG | STRING | ENUM | BYTE_STRING,
         ArrayType(dataType: DataType, containsNull)) if protoType.isRepeated =>
-        newArrayWriter(protoType, protoPath, catalystPath, dataType, containsNull)
+        newArrayWriter(
+          protoType,
+          protoPath,
+          catalystPath,
+          dataType,
+          containsNull,
+          protoFullNamesToExtensions)
 
       case (LONG, LongType) =>
         (updater, ordinal, value) => updater.setLong(ordinal, value.asInstanceOf[Long])
@@ -236,7 +265,14 @@ private[sql] class ProtobufDeserializer(
           updater.set(ordinal, byte_array)
 
       case (MESSAGE, MapType(keyType, valueType, valueContainsNull)) =>
-        newMapWriter(protoType, protoPath, catalystPath, keyType, valueType, valueContainsNull)
+        newMapWriter(
+          protoType,
+          protoPath,
+          catalystPath,
+          keyType,
+          valueType,
+          valueContainsNull,
+          protoFullNamesToExtensions)
 
       case (MESSAGE, TimestampType) =>
         (updater, ordinal, value) =>
@@ -368,7 +404,8 @@ private[sql] class ProtobufDeserializer(
           st,
           protoPath,
           catalystPath,
-          applyFilters = _ => false)
+          applyFilters = _ => false,
+          protoFullNamesToExtensions)
         (updater, ordinal, value) =>
           val row = new SpecificInternalRow(st)
           writeRecord(new RowUpdater(row), value.asInstanceOf[DynamicMessage])
@@ -399,10 +436,20 @@ private[sql] class ProtobufDeserializer(
       catalystType: StructType,
       protoPath: Seq[String],
       catalystPath: Seq[String],
-      applyFilters: Int => Boolean): (CatalystDataUpdater, DynamicMessage) => Boolean = {
+      applyFilters: Int => Boolean,
+      protoFullNamesToExtensions: Map[String, Seq[FieldDescriptor]] = Map.empty)
+      : (CatalystDataUpdater, DynamicMessage) => Boolean = {
 
+    // Get extension fields for this specific message type
+    val protoExtensionFields =
+      protoFullNamesToExtensions.getOrElse(protoType.getFullName, Seq.empty)
     val protoSchemaHelper =
-      new ProtobufUtils.ProtoSchemaHelper(protoType, catalystType, protoPath, catalystPath)
+      new ProtobufUtils.ProtoSchemaHelper(
+        protoType,
+        catalystType,
+        protoPath,
+        catalystPath,
+        protoExtensionFields)
 
     // TODO revisit validation of protobuf-catalyst fields.
     // protoSchemaHelper.validateNoExtraCatalystFields(ignoreNullable = true)
@@ -414,7 +461,8 @@ private[sql] class ProtobufDeserializer(
           protoField,
           catalystField.dataType,
           protoPath :+ protoField.getName,
-          catalystPath :+ catalystField.name)
+          catalystPath :+ catalystField.name,
+          protoFullNamesToExtensions)
         val fieldWriter = (fieldUpdater: CatalystDataUpdater, value: Any) => {
           if (value == null) {
             fieldUpdater.setNullAt(ordinal)
