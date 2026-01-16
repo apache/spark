@@ -1856,7 +1856,7 @@ class ArrowTestsMixin:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class ArrowTests(ArrowTestsMixin, ReusedSQLTestCase):
     pass
@@ -1864,7 +1864,7 @@ class ArrowTests(ArrowTestsMixin, ReusedSQLTestCase):
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    cast(str, pandas_requirement_message or pyarrow_requirement_message),
+    pandas_requirement_message or pyarrow_requirement_message,
 )
 class MaxResultArrowTests(unittest.TestCase):
     # These tests are separate as 'spark.driver.maxResultSize' configuration
