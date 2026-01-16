@@ -479,12 +479,13 @@ class SparkSessionE2ESuite extends ConnectFunSuite with RemoteSparkSession {
 
   test("large local relation size limit exceeded") {
     // Set a low limit so we don't need to create a huge dataset
-    val originalLimit = spark.conf.get("spark.sql.session.localRelationSizeLimit")
+    val conf_key = "spark.sql.session.localRelationSizeLimit"
+    val originalLimit = spark.conf.get(conf_key)
     try {
-      val newLimit = (100 * 1024 * 1024).toString
-      spark.conf.set("spark.sql.session.localRelationSizeLimit", newLimit)
+      val newLimit = (50 * 1024 * 1024).toString
+      spark.conf.set(conf_key, newLimit)
       val rowSize = 1000
-      val rowCount = 128 * 1000
+      val rowCount = 64 * 1000
       val suffix = "abcdef"
       val str = scala.util.Random.alphanumeric.take(rowSize).mkString + suffix
       val data = Seq.tabulate(rowCount)(i => (i, str))
@@ -496,7 +497,7 @@ class SparkSessionE2ESuite extends ConnectFunSuite with RemoteSparkSession {
       assert(e.getMessage.contains("LOCAL_RELATION_SIZE_LIMIT_EXCEEDED"))
       assert(e.getMessage.contains(newLimit))
     } finally {
-      spark.conf.set("spark.sql.session.localRelationSizeLimit", originalLimit)
+      spark.conf.set(conf_key, originalLimit)
     }
   }
 }

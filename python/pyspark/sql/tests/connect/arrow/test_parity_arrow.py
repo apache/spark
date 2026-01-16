@@ -24,14 +24,6 @@ from pyspark.testing.pandasutils import PandasOnSparkTestUtils
 
 
 class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTestUtils):
-    @classmethod
-    def thisSetUpClass(cls):
-        super().thisSetUpClass()
-
-        # set the local relations size limit to 80MB for
-        # test_large_local_relation_size_limit_exceeded
-        cls.spark.conf.set("spark.sql.session.localRelationSizeLimit", str(80 * 1024 * 1024))
-
     @unittest.skip("Spark Connect does not support fallback.")
     def test_createDataFrame_fallback_disabled(self):
         super().test_createDataFrame_fallback_disabled()
@@ -97,19 +89,27 @@ class ArrowParityTests(ArrowTestsMixin, ReusedConnectTestCase, PandasOnSparkTest
         import random
         import string
 
-        row_size = 1000
-        row_count = 128 * 1000
-        suffix = "abcdef"
-        str_value = (
-            "".join(random.choices(string.ascii_letters + string.digits, k=row_size)) + suffix
-        )
-        data = [(i, str_value) for i in range(row_count)]
+        conf_key = "spark.sql.session.localRelationSizeLimit"
+        original_limit = self.spark.conf.get(conf_key)
+        try:
+            new_limit = 50 * 1024 * 1024
+            self.spark.conf.set(conf_key, new_limit)
 
-        with self.assertRaisesRegex(
-            AnalysisException, f"LOCAL_RELATION_SIZE_LIMIT_EXCEEDED.*{80 * 1024 * 1024}"
-        ):
-            df = self.spark.createDataFrame(data, ["col1", "col2"])
-            df.count()
+            row_size = 1000
+            row_count = 64 * 1000
+            suffix = "abcdef"
+            str_value = (
+                "".join(random.choices(string.ascii_letters + string.digits, k=row_size)) + suffix
+            )
+            data = [(i, str_value) for i in range(row_count)]
+
+            with self.assertRaisesRegex(
+                AnalysisException, f"LOCAL_RELATION_SIZE_LIMIT_EXCEEDED.*{new_limit}"
+            ):
+                df = self.spark.createDataFrame(data, ["col1", "col2"])
+                df.count()
+        finally:
+            self.spark.conf.set(conf_key, original_limit)
 
     def test_toPandas_with_array_type(self):
         self.check_toPandas_with_array_type(True)
