@@ -105,7 +105,7 @@ class ArrowUtilsSuite extends SparkFunSuite {
       new StructType().add("i", IntegerType).add("arr", ArrayType(IntegerType))))
   }
 
-  test("metadata") {
+  test("metadata should be kept after roundtrip") {
     roundtrip(new StructType()
       .add("i", IntegerType, true, Metadata.empty)
       .add("j", LongType, true,
